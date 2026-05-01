@@ -49,6 +49,7 @@ export class CharacteristicsConfig extends FormApplication {
     this.characteristics = this.#readCharacteristicsFromForm();
     this.characteristics.push({
       key: this.#getUniqueKey("newCharacteristic"),
+      abbr: this.#getUniqueAbbr("new"),
       label: "Новая характеристика"
     });
     this.render(true);
@@ -73,17 +74,23 @@ export class CharacteristicsConfig extends FormApplication {
     const rows = Array.from(this.form?.querySelectorAll("[data-characteristic-row]") ?? []);
     return rows.map(row => ({
       key: row.querySelector("[data-field='key']")?.value?.trim() ?? "",
+      abbr: row.querySelector("[data-field='abbr']")?.value?.trim() ?? "",
       label: row.querySelector("[data-field='label']")?.value?.trim() ?? ""
     }));
   }
 
   #validateCharacteristics(characteristics) {
     const keys = new Set();
+    const abbreviations = new Set();
     for (const [index, characteristic] of characteristics.entries()) {
       const key = String(characteristic.key ?? "").trim();
+      const abbr = String(characteristic.abbr ?? "").trim();
       if (!IDENTIFIER_PATTERN.test(key)) throwValidationError(`Характеристика ${index + 1}: ключ должен быть идентификатором латиницей.`);
       if (keys.has(key)) throwValidationError(`Ключ характеристики "${key}" повторяется.`);
+      if (!IDENTIFIER_PATTERN.test(abbr)) throwValidationError(`Характеристика ${index + 1}: код должен быть идентификатором латиницей.`);
+      if (abbreviations.has(abbr)) throwValidationError(`Код характеристики "${abbr}" повторяется.`);
       keys.add(key);
+      abbreviations.add(abbr);
     }
   }
 
@@ -93,6 +100,14 @@ export class CharacteristicsConfig extends FormApplication {
     let index = 2;
     while (keys.has(`${baseKey}${index}`)) index += 1;
     return `${baseKey}${index}`;
+  }
+
+  #getUniqueAbbr(baseAbbr) {
+    const abbreviations = new Set(this.characteristics.map(characteristic => characteristic.abbr));
+    if (!abbreviations.has(baseAbbr)) return baseAbbr;
+    let index = 2;
+    while (abbreviations.has(`${baseAbbr}${index}`)) index += 1;
+    return `${baseAbbr}${index}`;
   }
 }
 

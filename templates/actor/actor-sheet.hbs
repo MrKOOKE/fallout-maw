@@ -82,6 +82,18 @@
   </section>
 
   <section class="fallout-maw-sheet-section">
+    <h2>Сопротивления урону</h2>
+    <div class="fallout-maw-stat-grid">
+      {{#each damageResistances}}
+        <label>
+          <span>{{label}}</span>
+          <input type="number" value="{{value}}" disabled>
+        </label>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-sheet-section">
     <h2>Приросты</h2>
     <div class="fallout-maw-stat-grid compact">
       <label>

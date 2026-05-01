@@ -11,9 +11,14 @@
       <ol class="fallout-maw-entity-list">
         {{#each types}}
           <li>
-            <button type="button" class="{{#if active}}active{{/if}}" data-action="select" data-kind="type" data-id="{{id}}">
-              <span>{{name}}</span>
-            </button>
+            <div class="fallout-maw-entity-list-row">
+              <button type="button" class="{{#if active}}active{{/if}}" data-action="select" data-kind="type" data-id="{{id}}">
+                <span>{{name}}</span>
+              </button>
+              <button type="button" class="icon-only" data-action="delete-type" data-id="{{id}}" title="Удалить тип">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
           </li>
         {{else}}
           <li class="empty">Типы еще не созданы</li>
@@ -32,10 +37,15 @@
       <ol class="fallout-maw-entity-list">
         {{#each races}}
           <li>
-            <button type="button" class="{{#if active}}active{{/if}}" data-action="select" data-kind="race" data-id="{{id}}">
-              <span>{{name}}</span>
-              <small>{{typeName}}</small>
-            </button>
+            <div class="fallout-maw-entity-list-row">
+              <button type="button" class="{{#if active}}active{{/if}}" data-action="select" data-kind="race" data-id="{{id}}">
+                <span>{{name}}</span>
+                <small>{{typeName}}</small>
+              </button>
+              <button type="button" class="icon-only" data-action="delete-race" data-id="{{id}}" title="Удалить расу">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
           </li>
         {{else}}
           <li class="empty">Расы еще не созданы</li>
@@ -107,6 +117,20 @@
             <span>Прирост очков исследований за уровень</span>
             <input type="number" step="1" name="progression.researchPointsPerLevel" value="{{selectedRace.progression.researchPointsPerLevel}}">
           </label>
+        </div>
+      </section>
+
+      <section class="fallout-maw-panel">
+        <header>
+          <h2>Сопротивления урону</h2>
+        </header>
+        <div class="fallout-maw-formula-grid">
+          {{#each damageResistances}}
+            <label>
+              <span>{{label}}</span>
+              <input type="text" name="damageResistances.{{key}}" value="{{formula}}" placeholder="0">
+            </label>
+          {{/each}}
         </div>
       </section>
     {{/if}}

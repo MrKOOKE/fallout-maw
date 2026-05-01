@@ -1,16 +1,20 @@
 import { FALLOUT_MAW } from "./config.mjs";
 import {
+  evaluateFormulaMap,
   evaluateActionMovementFormulas,
   evaluateSkillFormulas,
   normalizeActionMovementFormulas,
   normalizeCharacteristicSettings,
+  normalizeDamageTypeSettings,
+  normalizeFormulaMap,
   normalizeNumberMap,
-  normalizeSkillFormulas
+  normalizeSkillSettings
 } from "./formulas.mjs";
 
+const CREATURE_OPTIONS_SETTING = "creatureOptions";
 const CHARACTERISTICS_SETTING = "characteristics";
 const SKILL_SETTINGS_SETTING = "skillSettings";
-const LEGACY_SKILL_FORMULAS_SETTING = "skillFormulas";
+const DAMAGE_TYPES_SETTING = "damageTypes";
 const ACTION_MOVEMENT_FORMULAS_SETTING = "actionMovementFormulas";
 
 const {
@@ -51,6 +55,7 @@ class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       }),
       characteristics: new ObjectField({ required: true, initial: {} }),
       skills: new ObjectField({ required: true, initial: {} }, { persisted: false }),
+      damageResistances: new ObjectField({ required: true, initial: {} }, { persisted: false }),
       progression: new SchemaField({
         skillPointsPerLevel: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
         researchPointsPerLevel: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
@@ -77,6 +82,7 @@ class BaseActorDataModel extends foundry.abstract.TypeDataModel {
   prepareDerivedData() {
     const characteristicSettings = getCharacteristicSetting();
     const skillSettings = getSkillSetting();
+    const damageTypeSettings = getDamageTypeSetting();
     replaceObjectContents(this.characteristics, normalizeNumberMap(this.characteristics, characteristicSettings));
     replaceObjectContents(this.skills, evaluateSkillFormulas(skillSettings, characteristicSettings, this.characteristics));
 
@@ -89,6 +95,15 @@ class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     );
     this.attributes.actionPoints = attributes.actionPoints;
     this.attributes.movementPoints = attributes.movementPoints;
+
+    replaceObjectContents(this.damageResistances, evaluateFormulaMap(
+      getRaceDamageResistanceFormulas(this.creature?.raceId, damageTypeSettings),
+      damageTypeSettings,
+      characteristicSettings,
+      skillSettings,
+      this.characteristics,
+      this.skills
+    ));
   }
 }
 
@@ -177,13 +192,9 @@ function getCharacteristicSetting() {
 
 function getSkillSetting() {
   try {
-    return normalizeSkillFormulas(game.settings.get(FALLOUT_MAW.id, SKILL_SETTINGS_SETTING));
+    return normalizeSkillSettings(game.settings.get(FALLOUT_MAW.id, SKILL_SETTINGS_SETTING));
   } catch (_error) {
-    try {
-      return normalizeSkillFormulas(game.settings.get(FALLOUT_MAW.id, LEGACY_SKILL_FORMULAS_SETTING));
-    } catch (_innerError) {
-      return normalizeSkillFormulas();
-    }
+    return normalizeSkillSettings();
   }
 }
 
@@ -192,6 +203,24 @@ function getActionMovementFormulaSetting() {
     return normalizeActionMovementFormulas(game.settings.get(FALLOUT_MAW.id, ACTION_MOVEMENT_FORMULAS_SETTING));
   } catch (_error) {
     return normalizeActionMovementFormulas();
+  }
+}
+
+function getDamageTypeSetting() {
+  try {
+    return normalizeDamageTypeSettings(game.settings.get(FALLOUT_MAW.id, DAMAGE_TYPES_SETTING));
+  } catch (_error) {
+    return normalizeDamageTypeSettings();
+  }
+}
+
+function getRaceDamageResistanceFormulas(raceId, damageTypeSettings) {
+  try {
+    const options = game.settings.get(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING);
+    const race = options?.races?.find(race => race.id === raceId);
+    return normalizeFormulaMap(race?.damageResistances, damageTypeSettings);
+  } catch (_error) {
+    return normalizeFormulaMap({}, damageTypeSettings);
   }
 }
 

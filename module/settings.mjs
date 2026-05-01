@@ -2,23 +2,25 @@ import { FALLOUT_MAW } from "./config.mjs";
 import { ActionMovementFormulasConfig } from "./apps/action-movement-formulas-config.mjs";
 import { CharacteristicsConfig } from "./apps/characteristics-config.mjs";
 import { CreatureOptionsConfig } from "./apps/creature-options-config.mjs";
+import { DamageTypesConfig } from "./apps/damage-types-config.mjs";
 import { SkillFormulasConfig } from "./apps/skill-formulas-config.mjs";
 import {
   createDefaultActionMovementFormulas,
   createDefaultCharacteristicSettings,
-  createDefaultSkillFormulas,
+  createDefaultDamageTypeSettings,
   createDefaultSkillSettings,
   normalizeActionMovementFormulas,
   normalizeCharacteristicSettings,
+  normalizeDamageTypeSettings,
+  normalizeFormulaMap,
   normalizeNumberMap,
-  normalizeSkillFormulas,
   normalizeSkillSettings
 } from "./formulas.mjs";
 
 export const CREATURE_OPTIONS_SETTING = "creatureOptions";
 export const CHARACTERISTICS_SETTING = "characteristics";
 export const SKILL_SETTINGS_SETTING = "skillSettings";
-export const LEGACY_SKILL_FORMULAS_SETTING = "skillFormulas";
+export const DAMAGE_TYPES_SETTING = "damageTypes";
 export const ACTION_MOVEMENT_FORMULAS_SETTING = "actionMovementFormulas";
 
 export function createEmptyCreatureOptions() {
@@ -28,9 +30,10 @@ export function createEmptyCreatureOptions() {
   };
 }
 
-export function createRaceDefaults(characteristics = getCharacteristicSettings()) {
+export function createRaceDefaults(characteristics = getCharacteristicSettings(), damageTypes = getDamageTypeSettings()) {
   return {
     characteristics: Object.fromEntries(characteristics.map(entry => [entry.key, 0])),
+    damageResistances: Object.fromEntries(damageTypes.map(entry => [entry.key, "0"])),
     progression: {
       skillPointsPerLevel: 0,
       researchPointsPerLevel: 0
@@ -38,7 +41,11 @@ export function createRaceDefaults(characteristics = getCharacteristicSettings()
   };
 }
 
-export function normalizeCreatureOptions(options = {}, characteristics = getCharacteristicSettings()) {
+export function normalizeCreatureOptions(
+  options = {},
+  characteristics = getCharacteristicSettings(),
+  damageTypes = getDamageTypeSettings()
+) {
   const defaults = createEmptyCreatureOptions();
   const normalized = {
     types: Array.isArray(options.types) ? options.types : defaults.types,
@@ -62,6 +69,7 @@ export function normalizeCreatureOptions(options = {}, characteristics = getChar
         typeId,
         name: String(race.name || "Без названия"),
         characteristics: normalizeNumberMap(race.characteristics, characteristics),
+        damageResistances: normalizeFormulaMap(race.damageResistances, damageTypes),
         progression: {
           skillPointsPerLevel: toInteger(race.progression?.skillPointsPerLevel),
           researchPointsPerLevel: toInteger(race.progression?.researchPointsPerLevel)
@@ -83,7 +91,7 @@ export function getCharacteristicSettings() {
 export async function setCharacteristicSettings(settings) {
   const normalized = normalizeCharacteristicSettings(settings);
   await game.settings.set(FALLOUT_MAW.id, CHARACTERISTICS_SETTING, normalized);
-  await setCreatureOptions(getCreatureOptions(normalized), normalized);
+  await setCreatureOptions(getCreatureOptions(normalized), normalized, getDamageTypeSettings());
   return normalized;
 }
 
@@ -96,7 +104,7 @@ export function getSkillSettings() {
     const configured = game.settings.get(FALLOUT_MAW.id, SKILL_SETTINGS_SETTING);
     return normalizeSkillSettings(configured);
   } catch (_error) {
-    return getLegacySkillSettings();
+    return createDefaultSkillSettings();
   }
 }
 
@@ -109,24 +117,39 @@ export async function resetSkillSettings() {
   return setSkillSettings(createDefaultSkillSettings());
 }
 
-export function getSkillFormulas() {
-  return Object.fromEntries(getSkillSettings().map(skill => [skill.key, skill.formula]));
+export function getDamageTypeSettings() {
+  try {
+    return normalizeDamageTypeSettings(game.settings.get(FALLOUT_MAW.id, DAMAGE_TYPES_SETTING));
+  } catch (_error) {
+    return createDefaultDamageTypeSettings();
+  }
 }
 
-export async function setSkillFormulas(formulas) {
-  return setSkillSettings(normalizeSkillFormulas(formulas));
+export async function setDamageTypeSettings(settings) {
+  const normalized = normalizeDamageTypeSettings(settings);
+  await game.settings.set(FALLOUT_MAW.id, DAMAGE_TYPES_SETTING, normalized);
+  await setCreatureOptions(getCreatureOptions(getCharacteristicSettings(), normalized), getCharacteristicSettings(), normalized);
+  return normalized;
 }
 
-export async function resetSkillFormulas() {
-  return resetSkillSettings();
+export async function resetDamageTypeSettings() {
+  return setDamageTypeSettings(createDefaultDamageTypeSettings());
 }
 
-export function getCreatureOptions(characteristics = getCharacteristicSettings()) {
-  return normalizeCreatureOptions(game.settings.get(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING), characteristics);
+export function getCreatureOptions(characteristics = getCharacteristicSettings(), damageTypes = getDamageTypeSettings()) {
+  return normalizeCreatureOptions(game.settings.get(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING), characteristics, damageTypes);
 }
 
-export async function setCreatureOptions(options, characteristics = getCharacteristicSettings()) {
-  return game.settings.set(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING, normalizeCreatureOptions(options, characteristics));
+export async function setCreatureOptions(
+  options,
+  characteristics = getCharacteristicSettings(),
+  damageTypes = getDamageTypeSettings()
+) {
+  return game.settings.set(
+    FALLOUT_MAW.id,
+    CREATURE_OPTIONS_SETTING,
+    normalizeCreatureOptions(options, characteristics, damageTypes)
+  );
 }
 
 export function getActionMovementFormulas() {
@@ -148,16 +171,15 @@ export async function resetActionMovementFormulas() {
 export function registerSystemSettings() {
   game.settings.register(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING, {
     name: "Типы и расы существ",
-    hint: "Список типов существ и рас с базовыми характеристиками и приростами.",
     scope: "world",
     config: false,
     type: Object,
-    default: createEmptyCreatureOptions()
+    default: createEmptyCreatureOptions(),
+    onChange: refreshPreparedActors
   });
 
   game.settings.register(FALLOUT_MAW.id, CHARACTERISTICS_SETTING, {
     name: "Настройка характеристик",
-    hint: "Список характеристик системы: ключи и отображаемые названия.",
     scope: "world",
     config: false,
     type: Object,
@@ -167,7 +189,6 @@ export function registerSystemSettings() {
 
   game.settings.register(FALLOUT_MAW.id, SKILL_SETTINGS_SETTING, {
     name: "Настройки навыков",
-    hint: "Список навыков системы: ключи, отображаемые названия и формулы.",
     scope: "world",
     config: false,
     type: Object,
@@ -175,19 +196,17 @@ export function registerSystemSettings() {
     onChange: refreshPreparedActors
   });
 
-  game.settings.register(FALLOUT_MAW.id, LEGACY_SKILL_FORMULAS_SETTING, {
-    name: "Базовые формулы навыков",
-    hint: "Старая скрытая настройка для миграции формул в настройки навыков.",
+  game.settings.register(FALLOUT_MAW.id, DAMAGE_TYPES_SETTING, {
+    name: "Настройка типов урона",
     scope: "world",
     config: false,
     type: Object,
-    default: createDefaultSkillFormulas(),
+    default: createDefaultDamageTypeSettings(),
     onChange: refreshPreparedActors
   });
 
   game.settings.register(FALLOUT_MAW.id, ACTION_MOVEMENT_FORMULAS_SETTING, {
     name: "Базовые формулы ОД/ОП",
-    hint: "Формулы для вычисления базовых очков действия и очков перемещения.",
     scope: "world",
     config: false,
     type: Object,
@@ -198,7 +217,6 @@ export function registerSystemSettings() {
   game.settings.registerMenu(FALLOUT_MAW.id, "creatureOptionsMenu", {
     name: "Типы и расы существ",
     label: "Открыть",
-    hint: "Настроить типы существ, расы и базовые значения для новых персонажей.",
     icon: "fa-solid fa-users-gear",
     type: CreatureOptionsConfig,
     restricted: true
@@ -207,7 +225,6 @@ export function registerSystemSettings() {
   game.settings.registerMenu(FALLOUT_MAW.id, "characteristicsMenu", {
     name: "Настройка характеристик",
     label: "Открыть",
-    hint: "Настроить ключи и названия характеристик.",
     icon: "fa-solid fa-list-check",
     type: CharacteristicsConfig,
     restricted: true
@@ -216,16 +233,22 @@ export function registerSystemSettings() {
   game.settings.registerMenu(FALLOUT_MAW.id, "skillSettingsMenu", {
     name: "Настройки навыков",
     label: "Открыть",
-    hint: "Настроить ключи, названия и формулы навыков. Доступны числа, скобки, +, -, *, / и ключи характеристик.",
     icon: "fa-solid fa-square-root-variable",
     type: SkillFormulasConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "damageTypesMenu", {
+    name: "Настройка типов урона",
+    label: "Открыть",
+    icon: "fa-solid fa-shield-halved",
+    type: DamageTypesConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "actionMovementFormulasMenu", {
     name: "Базовые формулы ОД/ОП",
     label: "Открыть",
-    hint: "Настроить формулы базовых очков действия и очков перемещения.",
     icon: "fa-solid fa-person-running",
     type: ActionMovementFormulasConfig,
     restricted: true
@@ -233,9 +256,6 @@ export function registerSystemSettings() {
 }
 
 export async function finalizeSystemSettings() {
-  if (!hasWorldSetting(SKILL_SETTINGS_SETTING) && hasWorldSetting(LEGACY_SKILL_FORMULAS_SETTING)) {
-    await game.settings.set(FALLOUT_MAW.id, SKILL_SETTINGS_SETTING, getLegacySkillSettings());
-  }
   syncSystemConfig();
   refreshPreparedActors();
 }
@@ -243,21 +263,11 @@ export async function finalizeSystemSettings() {
 export function syncSystemConfig() {
   const characteristics = getCharacteristicSettings();
   const skills = getSkillSettings();
+  const damageTypes = getDamageTypeSettings();
   FALLOUT_MAW.characteristics = Object.fromEntries(characteristics.map(entry => [entry.key, entry.label]));
   FALLOUT_MAW.skills = Object.fromEntries(skills.map(entry => [entry.key, entry.label]));
+  FALLOUT_MAW.damageTypes = Object.fromEntries(damageTypes.map(entry => [entry.key, entry.label]));
   if (CONFIG.FalloutMaW) CONFIG.FalloutMaW = FALLOUT_MAW;
-}
-
-function getLegacySkillSettings() {
-  try {
-    return normalizeSkillFormulas(game.settings.get(FALLOUT_MAW.id, LEGACY_SKILL_FORMULAS_SETTING));
-  } catch (_error) {
-    return createDefaultSkillSettings();
-  }
-}
-
-function hasWorldSetting(key) {
-  return game.settings.storage?.get("world")?.has(`${FALLOUT_MAW.id}.${key}`) === true;
 }
 
 export function refreshPreparedActors() {

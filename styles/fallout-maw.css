@@ -196,11 +196,16 @@
 
 .fallout-maw-settings-table.skill-settings .fallout-maw-settings-table-head,
 .fallout-maw-settings-table.skill-settings .fallout-maw-settings-row {
-  grid-template-columns: minmax(120px, 0.8fr) minmax(150px, 1fr) minmax(240px, 1.5fr) 34px;
+  grid-template-columns: 76px minmax(120px, 0.8fr) minmax(150px, 1fr) minmax(240px, 1.5fr) 34px;
 }
 
 .fallout-maw-settings-table.characteristic-settings .fallout-maw-settings-table-head,
 .fallout-maw-settings-table.characteristic-settings .fallout-maw-settings-row {
+  grid-template-columns: 76px minmax(140px, 1fr) minmax(180px, 1.4fr) 34px;
+}
+
+.fallout-maw-settings-table.key-label-settings .fallout-maw-settings-table-head,
+.fallout-maw-settings-table.key-label-settings .fallout-maw-settings-row {
   grid-template-columns: minmax(140px, 1fr) minmax(180px, 1.4fr) 34px;
 }
 
@@ -280,6 +285,13 @@
   list-style: none;
 }
 
+.fallout-maw-entity-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  gap: 6px;
+  align-items: stretch;
+}
+
 .fallout-maw-entity-list button {
   width: 100%;
   min-height: 36px;
@@ -294,6 +306,15 @@
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.42);
   text-align: left;
+}
+
+.fallout-maw-entity-list-row .icon-only {
+  width: 32px;
+  min-height: 36px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  color: #7a2f2f;
 }
 
 .fallout-maw-entity-list button.active {

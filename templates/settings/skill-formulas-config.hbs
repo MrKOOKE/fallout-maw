@@ -16,6 +16,7 @@
 
     <div class="fallout-maw-settings-table skill-settings">
       <div class="fallout-maw-settings-table-head">
+        <span>Код</span>
         <span>Ключ</span>
         <span>Название</span>
         <span>Формула</span>
@@ -23,6 +24,7 @@
       </div>
       {{#each skills}}
         <div class="fallout-maw-settings-row" data-skill-row>
+          <input type="text" name="skills.{{@index}}.abbr" value="{{abbr}}" data-field="abbr" placeholder="ath">
           <input type="text" name="skills.{{@index}}.key" value="{{key}}" data-field="key" placeholder="skillKey">
           <input type="text" name="skills.{{@index}}.label" value="{{label}}" data-field="label" placeholder="Название навыка">
           <input type="text" name="skills.{{@index}}.formula" value="{{formula}}" data-field="formula" placeholder="0">

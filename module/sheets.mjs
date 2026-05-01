@@ -1,5 +1,5 @@
 import { FALLOUT_MAW } from "./config.mjs";
-import { getCharacteristicSettings, getCreatureOptions, getSkillSettings } from "./settings.mjs";
+import { getCharacteristicSettings, getCreatureOptions, getDamageTypeSettings, getSkillSettings } from "./settings.mjs";
 
 export class FalloutMaWActorSheet extends ActorSheet {
   constructor(...args) {
@@ -22,6 +22,7 @@ export class FalloutMaWActorSheet extends ActorSheet {
     const data = super.getData(options);
     const creatureOptions = getCreatureOptions();
     const characteristicSettings = getCharacteristicSettings();
+    const damageTypeSettings = getDamageTypeSettings();
     const skillSettings = getSkillSettings();
     const typeId = data.actor.system?.creature?.typeId;
     const raceId = data.actor.system?.creature?.raceId;
@@ -46,6 +47,10 @@ export class FalloutMaWActorSheet extends ActorSheet {
     data.skills = skillSettings.map(skill => ({
       ...skill,
       value: data.actor.system.skills?.[skill.key] ?? 0
+    }));
+    data.damageResistances = damageTypeSettings.map(damageType => ({
+      ...damageType,
+      value: data.actor.system.damageResistances?.[damageType.key] ?? 0
     }));
     return data;
   }

@@ -49,6 +49,7 @@ export class SkillFormulasConfig extends FormApplication {
     this.skills = this.#readSkillsFromForm();
     this.skills.push({
       key: this.#getUniqueKey("newSkill"),
+      abbr: this.#getUniqueAbbr("new"),
       label: "Новый навык",
       formula: "0"
     });
@@ -74,6 +75,7 @@ export class SkillFormulasConfig extends FormApplication {
     const rows = Array.from(this.form?.querySelectorAll("[data-skill-row]") ?? []);
     return rows.map(row => ({
       key: row.querySelector("[data-field='key']")?.value?.trim() ?? "",
+      abbr: row.querySelector("[data-field='abbr']")?.value?.trim() ?? "",
       label: row.querySelector("[data-field='label']")?.value?.trim() ?? "",
       formula: row.querySelector("[data-field='formula']")?.value?.trim() ?? "0"
     }));
@@ -81,12 +83,17 @@ export class SkillFormulasConfig extends FormApplication {
 
   #validateSkills(skills) {
     const keys = new Set();
+    const abbreviations = new Set();
     const characteristics = getCharacteristicSettings();
     for (const [index, skill] of skills.entries()) {
       const key = String(skill.key ?? "").trim();
+      const abbr = String(skill.abbr ?? "").trim();
       if (!IDENTIFIER_PATTERN.test(key)) throwValidationError(`Навык ${index + 1}: ключ должен быть идентификатором латиницей.`);
       if (keys.has(key)) throwValidationError(`Ключ навыка "${key}" повторяется.`);
+      if (!IDENTIFIER_PATTERN.test(abbr)) throwValidationError(`Навык ${index + 1}: код должен быть идентификатором латиницей.`);
+      if (abbreviations.has(abbr)) throwValidationError(`Код навыка "${abbr}" повторяется.`);
       keys.add(key);
+      abbreviations.add(abbr);
       try {
         validateFormula(skill.formula, { characteristics });
       } catch (error) {
@@ -101,6 +108,14 @@ export class SkillFormulasConfig extends FormApplication {
     let index = 2;
     while (keys.has(`${baseKey}${index}`)) index += 1;
     return `${baseKey}${index}`;
+  }
+
+  #getUniqueAbbr(baseAbbr) {
+    const abbreviations = new Set(this.skills.map(skill => skill.abbr));
+    if (!abbreviations.has(baseAbbr)) return baseAbbr;
+    let index = 2;
+    while (abbreviations.has(`${baseAbbr}${index}`)) index += 1;
+    return `${baseAbbr}${index}`;
   }
 }
 
