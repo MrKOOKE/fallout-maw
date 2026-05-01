@@ -1,0 +1,7 @@
+.fallout-maw {
+  --fallout-maw-accent: #2f7d63;
+}
+
+.fallout-maw .window-content {
+  font-family: var(--font-primary);
+}

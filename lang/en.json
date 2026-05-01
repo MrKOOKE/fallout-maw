@@ -1,0 +1,20 @@
+{
+  "TYPES": {
+    "Actor": {
+      "character": "Character",
+      "npc": "NPC",
+      "vehicle": "Vehicle",
+      "hazard": "Hazard"
+    },
+    "Item": {
+      "gear": "Gear",
+      "weapon": "Weapon",
+      "armor": "Armor",
+      "ability": "Ability",
+      "effect": "Effect"
+    }
+  },
+  "FALLOUTMAW": {
+    "SystemTitle": "Fallout-MaW"
+  }
+}
