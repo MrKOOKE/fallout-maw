@@ -11,6 +11,8 @@ import {
   WeaponDataModel
 } from "./module/data-models.mjs";
 import { FalloutMaWActor, FalloutMaWItem } from "./module/documents.mjs";
+import { registerSystemSheets } from "./module/sheets.mjs";
+import { registerSystemSettings } from "./module/settings.mjs";
 
 Hooks.once("init", () => {
   console.log(`${FALLOUT_MAW.title} | Initializing system`);
@@ -19,6 +21,9 @@ Hooks.once("init", () => {
 
   CONFIG.Actor.documentClass = FalloutMaWActor;
   CONFIG.Item.documentClass = FalloutMaWItem;
+
+  registerSystemSettings();
+  registerSystemSheets();
 
   Object.assign(CONFIG.Actor.dataModels, {
     character: CharacterDataModel,
@@ -38,15 +43,15 @@ Hooks.once("init", () => {
   CONFIG.Actor.trackableAttributes = {
     character: {
       bar: ["resources.health", "resources.stamina", "resources.energy"],
-      value: ["attributes.level", "attributes.armor"]
+      value: ["attributes.level", "attributes.dodge", "attributes.actionPoints", "attributes.movementPoints"]
     },
     npc: {
       bar: ["resources.health", "resources.stamina", "resources.energy"],
-      value: ["attributes.level", "attributes.armor"]
+      value: ["attributes.level", "attributes.dodge", "attributes.actionPoints", "attributes.movementPoints"]
     },
     vehicle: {
       bar: ["resources.health", "resources.energy"],
-      value: ["attributes.armor"]
+      value: ["attributes.dodge"]
     },
     hazard: {
       bar: ["resources.health"],

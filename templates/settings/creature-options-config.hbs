@@ -1,0 +1,127 @@
+<form class="fallout-maw-config-form" autocomplete="off">
+  <aside class="fallout-maw-config-sidebar">
+    <section class="fallout-maw-config-block">
+      <div class="fallout-maw-config-heading">
+        <h2>Типы</h2>
+        <button type="button" data-action="create-type" title="Создать тип">
+          <i class="fa-solid fa-plus"></i>
+          <span>Создать тип</span>
+        </button>
+      </div>
+      <ol class="fallout-maw-entity-list">
+        {{#each types}}
+          <li>
+            <button type="button" class="{{#if active}}active{{/if}}" data-action="select" data-kind="type" data-id="{{id}}">
+              <span>{{name}}</span>
+            </button>
+          </li>
+        {{else}}
+          <li class="empty">Типы еще не созданы</li>
+        {{/each}}
+      </ol>
+    </section>
+
+    <section class="fallout-maw-config-block">
+      <div class="fallout-maw-config-heading">
+        <h2>Расы</h2>
+        <button type="button" data-action="create-race" title="Создать расу">
+          <i class="fa-solid fa-plus"></i>
+          <span>Создать расу</span>
+        </button>
+      </div>
+      <ol class="fallout-maw-entity-list">
+        {{#each races}}
+          <li>
+            <button type="button" class="{{#if active}}active{{/if}}" data-action="select" data-kind="race" data-id="{{id}}">
+              <span>{{name}}</span>
+              <small>{{typeName}}</small>
+            </button>
+          </li>
+        {{else}}
+          <li class="empty">Расы еще не созданы</li>
+        {{/each}}
+      </ol>
+    </section>
+  </aside>
+
+  <main class="fallout-maw-config-editor">
+    {{#if selectedType}}
+      <section class="fallout-maw-panel">
+        <header>
+          <h2>Тип существа</h2>
+        </header>
+        <div class="form-group">
+          <label>Название</label>
+          <div class="form-fields">
+            <input type="text" name="name" value="{{selectedType.name}}" placeholder="Например, гуманоид">
+          </div>
+        </div>
+      </section>
+    {{/if}}
+
+    {{#if selectedRace}}
+      <section class="fallout-maw-panel">
+        <header>
+          <h2>Раса</h2>
+        </header>
+        <div class="form-group">
+          <label>Название</label>
+          <div class="form-fields">
+            <input type="text" name="name" value="{{selectedRace.name}}" placeholder="Название расы">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Тип</label>
+          <div class="form-fields">
+            <select name="typeId">
+              {{selectOptions typeOptions selected=selectedRace.typeId}}
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section class="fallout-maw-panel">
+        <header>
+          <h2>Характеристики</h2>
+        </header>
+        <div class="fallout-maw-stat-grid compact">
+          {{#each characteristics}}
+            <label>
+              <span>{{label}}</span>
+              <input type="number" step="1" name="characteristics.{{key}}" value="{{value}}">
+            </label>
+          {{/each}}
+        </div>
+      </section>
+
+      <section class="fallout-maw-panel">
+        <header>
+          <h2>Приросты</h2>
+        </header>
+        <div class="fallout-maw-stat-grid compact">
+          <label>
+            <span>Прирост очков навыков за уровень</span>
+            <input type="number" step="1" name="progression.skillPointsPerLevel" value="{{selectedRace.progression.skillPointsPerLevel}}">
+          </label>
+          <label>
+            <span>Прирост очков исследований за уровень</span>
+            <input type="number" step="1" name="progression.researchPointsPerLevel" value="{{selectedRace.progression.researchPointsPerLevel}}">
+          </label>
+        </div>
+      </section>
+    {{/if}}
+
+    {{#unless activeId}}
+      <section class="fallout-maw-panel empty-editor">
+        <h2>Создайте тип или расу</h2>
+      </section>
+    {{/unless}}
+
+    <footer class="sheet-footer flexrow">
+      <button type="submit">
+        <i class="fa-solid fa-floppy-disk"></i>
+        Сохранить изменения
+      </button>
+    </footer>
+  </main>
+</form>

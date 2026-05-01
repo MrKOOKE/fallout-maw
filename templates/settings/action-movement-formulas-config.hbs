@@ -1,0 +1,28 @@
+<form class="fallout-maw-formula-config" autocomplete="off">
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>Формулы ОД/ОП</h2>
+      <button type="button" data-action="reset-defaults">
+        <i class="fa-solid fa-rotate-left"></i>
+        Установить по умолчанию
+      </button>
+    </header>
+    <div class="fallout-maw-formula-grid single">
+      <label>
+        <span>Базовые очки действия</span>
+        <input type="text" name="formulas.actionPoints" value="{{formulas.actionPoints}}">
+      </label>
+      <label>
+        <span>Базовые очки перемещения</span>
+        <input type="text" name="formulas.movementPoints" value="{{formulas.movementPoints}}">
+      </label>
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit">
+      <i class="fa-solid fa-floppy-disk"></i>
+      Сохранить изменения
+    </button>
+  </footer>
+</form>

@@ -1,0 +1,58 @@
+<form id="document-create" class="fallout-maw-create-dialog" autocomplete="off">
+  <div class="form-group">
+    <label>{{localize "DOCUMENT.FIELDS.name.label"}}</label>
+    <div class="form-fields">
+      <input type="text" name="name" placeholder="{{defaultName}}" value="{{name}}" autofocus>
+    </div>
+  </div>
+
+  {{#if hasTypes}}
+    <div class="form-group">
+      <label>{{localize "DOCUMENT.FIELDS.type.label"}}</label>
+      <div class="form-fields">
+        <select name="type">
+          {{selectOptions types selected=type}}
+        </select>
+      </div>
+      <p class="hint">{{typeHint}}</p>
+    </div>
+  {{/if}}
+
+  {{#if hasFolders}}
+    <div class="form-group">
+      <label>{{localize "DOCUMENT.FIELDS.folder.label"}}</label>
+      <div class="form-fields">
+        <select name="folder">
+          {{selectOptions folders selected=folder blank="" valueAttr="id" labelAttr="name"}}
+        </select>
+      </div>
+    </div>
+  {{/if}}
+
+  <fieldset class="fallout-maw-creation-fieldset">
+    <legend>Основа персонажа</legend>
+    <div class="form-group">
+      <label>Тип существа</label>
+      <div class="form-fields">
+        <select name="system.creature.typeId" data-creature-type-select>
+          <option value="">Не выбран</option>
+          {{selectOptions creatureTypes selected=selectedCreatureType}}
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Раса</label>
+      <div class="form-fields">
+        <select name="system.creature.raceId" data-creature-race-select>
+          <option value="">Не выбрана</option>
+          {{#each creatureRaces}}
+            <option value="{{id}}" data-type-id="{{typeId}}" {{#if selected}}selected{{/if}}>{{name}}</option>
+          {{/each}}
+        </select>
+      </div>
+      <p class="hint">Список рас зависит от выбранного типа существа.</p>
+    </div>
+  </fieldset>
+
+  {{{content}}}
+</form>
