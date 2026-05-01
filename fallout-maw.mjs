@@ -12,7 +12,7 @@ import {
 } from "./module/data-models.mjs";
 import { FalloutMaWActor, FalloutMaWItem } from "./module/documents.mjs";
 import { registerSystemSheets } from "./module/sheets.mjs";
-import { registerSystemSettings } from "./module/settings.mjs";
+import { finalizeSystemSettings, registerSystemSettings } from "./module/settings.mjs";
 
 Hooks.once("init", () => {
   console.log(`${FALLOUT_MAW.title} | Initializing system`);
@@ -58,4 +58,8 @@ Hooks.once("init", () => {
       value: []
     }
   };
+});
+
+Hooks.once("ready", async () => {
+  await finalizeSystemSettings();
 });

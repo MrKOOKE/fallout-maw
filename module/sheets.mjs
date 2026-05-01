@@ -18,6 +18,7 @@ export class FalloutMaWActorSheet extends ActorSheet {
   }
 
   getData(options = {}) {
+    this.actor.prepareData();
     const data = super.getData(options);
     const creatureOptions = getCreatureOptions();
     const characteristicSettings = getCharacteristicSettings();

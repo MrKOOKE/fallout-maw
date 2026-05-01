@@ -93,9 +93,6 @@ export async function resetCharacteristicSettings() {
 
 export function getSkillSettings() {
   try {
-    if (!hasWorldSetting(SKILL_SETTINGS_SETTING) && hasWorldSetting(LEGACY_SKILL_FORMULAS_SETTING)) {
-      return getLegacySkillSettings();
-    }
     const configured = game.settings.get(FALLOUT_MAW.id, SKILL_SETTINGS_SETTING);
     return normalizeSkillSettings(configured);
   } catch (_error) {
@@ -164,7 +161,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: createDefaultCharacteristicSettings()
+    default: createDefaultCharacteristicSettings(),
+    onChange: refreshPreparedActors
   });
 
   game.settings.register(FALLOUT_MAW.id, SKILL_SETTINGS_SETTING, {
@@ -173,7 +171,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: createDefaultSkillSettings()
+    default: createDefaultSkillSettings(),
+    onChange: refreshPreparedActors
   });
 
   game.settings.register(FALLOUT_MAW.id, LEGACY_SKILL_FORMULAS_SETTING, {
@@ -182,7 +181,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: createDefaultSkillFormulas()
+    default: createDefaultSkillFormulas(),
+    onChange: refreshPreparedActors
   });
 
   game.settings.register(FALLOUT_MAW.id, ACTION_MOVEMENT_FORMULAS_SETTING, {
@@ -191,7 +191,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: createDefaultActionMovementFormulas()
+    default: createDefaultActionMovementFormulas(),
+    onChange: refreshPreparedActors
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "creatureOptionsMenu", {
@@ -231,6 +232,22 @@ export function registerSystemSettings() {
   });
 }
 
+export async function finalizeSystemSettings() {
+  if (!hasWorldSetting(SKILL_SETTINGS_SETTING) && hasWorldSetting(LEGACY_SKILL_FORMULAS_SETTING)) {
+    await game.settings.set(FALLOUT_MAW.id, SKILL_SETTINGS_SETTING, getLegacySkillSettings());
+  }
+  syncSystemConfig();
+  refreshPreparedActors();
+}
+
+export function syncSystemConfig() {
+  const characteristics = getCharacteristicSettings();
+  const skills = getSkillSettings();
+  FALLOUT_MAW.characteristics = Object.fromEntries(characteristics.map(entry => [entry.key, entry.label]));
+  FALLOUT_MAW.skills = Object.fromEntries(skills.map(entry => [entry.key, entry.label]));
+  if (CONFIG.FalloutMaW) CONFIG.FalloutMaW = FALLOUT_MAW;
+}
+
 function getLegacySkillSettings() {
   try {
     return normalizeSkillFormulas(game.settings.get(FALLOUT_MAW.id, LEGACY_SKILL_FORMULAS_SETTING));
@@ -241,6 +258,22 @@ function getLegacySkillSettings() {
 
 function hasWorldSetting(key) {
   return game.settings.storage?.get("world")?.has(`${FALLOUT_MAW.id}.${key}`) === true;
+}
+
+export function refreshPreparedActors() {
+  syncSystemConfig();
+  for (const actor of getLoadedActors()) {
+    actor.prepareData();
+    actor.sheet?.render(false);
+  }
+}
+
+function getLoadedActors() {
+  const actors = new Set(game.actors?.contents ?? []);
+  for (const token of globalThis.canvas?.tokens?.placeables ?? []) {
+    if (token.actor) actors.add(token.actor);
+  }
+  return actors;
 }
 
 function toInteger(value) {
