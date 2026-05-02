@@ -15,6 +15,8 @@ export const DEFAULT_BASE_PARAMETER_POOLS = Object.freeze({
   proficiencyPoints: 500
 });
 
+export const DEFAULT_LOAD_FORMULA = "20 + 10*str";
+
 export const DEFAULT_SKILLS = Object.freeze([
   { key: "rangedCombat", abbr: "ran", label: "Дальний бой", formula: "10 + dex + wis*3" },
   { key: "meleeCombat", abbr: "mel", label: "Ближний бой", formula: "10 + 2 * (str + dex)" },

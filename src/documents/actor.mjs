@@ -1,7 +1,7 @@
 import { TEMPLATES } from "../constants.mjs";
-import { getCreatureOptions } from "../settings/accessors.mjs";
-import { clampNumber } from "../utils/numbers.mjs";
 import { clampPreparedResource } from "../data/models/resources.mjs";
+import { evaluateFormula, getSkillValues } from "../formulas/index.mjs";
+import { getCharacteristicSettings, getCreatureOptions, getSkillSettings } from "../settings/accessors.mjs";
 
 export class FalloutMaWActor extends Actor {
   static async createDialog(data = {}, createOptions = {}, dialogOptions = {}, renderOptions = {}) {
@@ -41,6 +41,13 @@ export class FalloutMaWActor extends Actor {
     return undefined;
   }
 
+  async _preUpdate(changes, options, user) {
+    if ((await super._preUpdate(changes, options, user)) === false) return false;
+    if (!["character", "npc"].includes(this.type)) return undefined;
+    syncTrackedResourceValueUpdates(this, changes);
+    return undefined;
+  }
+
   prepareDerivedData() {
     super.prepareDerivedData();
     const resources = this.system?.resources;
@@ -57,18 +64,36 @@ export class FalloutMaWActor extends Actor {
     if (limbs) {
       for (const limb of Object.values(limbs)) clampPreparedResource(limb);
     }
+
+    this.#prepareLoadData();
   }
 
   get health() {
     return this.system?.resources?.health;
   }
 
-  async applyDamage(amount = 0) {
-    const damage = Math.max(0, Math.floor(Number(amount) || 0));
-    if (!this.health || damage === 0) return this;
+  getDamageResistance(damageTypeKey, limbKey = "") {
+    const resolvedLimbKey = limbKey || Object.keys(this.system?.limbs ?? {})[0] || "";
+    return Math.max(0, Math.floor(Number(this.system?.damageResistances?.[resolvedLimbKey]?.[damageTypeKey]) || 0));
+  }
+
+  async applyDamage(amount = 0, { damageTypeKey = "", limbKey = "" } = {}) {
+    const incomingDamage = Math.max(0, Math.floor(Number(amount) || 0));
+    if (!this.health || (incomingDamage === 0)) return this;
+
+    const resistance = damageTypeKey ? this.getDamageResistance(damageTypeKey, limbKey) : 0;
+    const damage = Math.max(0, incomingDamage - resistance);
+    if (damage === 0) return this;
 
     const nextValue = Math.max(this.health.min, this.health.value - damage);
-    return this.update({ "system.resources.health.value": nextValue });
+    const updateData = { "system.resources.health.value": nextValue };
+
+    if (limbKey && this.system?.limbs?.[limbKey]) {
+      const limb = this.system.limbs[limbKey];
+      updateData[`system.limbs.${limbKey}.value`] = Math.max(Number(limb.min) || 0, (Number(limb.value) || 0) - damage);
+    }
+
+    return this.update(updateData);
   }
 
   #applyCreatureRaceDefaults() {
@@ -98,6 +123,24 @@ export class FalloutMaWActor extends Actor {
         limbs: maximizeResourceMap(this.system?.limbs)
       }
     });
+  }
+
+  #prepareLoadData() {
+    const race = getCreatureOptions().races.find(entry => entry.id === this.system?.creature?.raceId);
+    const characteristics = this.system?.characteristics ?? {};
+    const skills = getSkillValues(this.system?.skills ?? {});
+    const max = race?.baseParameters?.loadFormula
+      ? Math.max(0, evaluateFormula(race.baseParameters.loadFormula, {
+        characteristicSettings: getCharacteristicSettings(),
+        skillSettings: getSkillSettings(),
+        characteristics,
+        skills
+      }))
+      : 0;
+    const value = Number(
+      this.items.reduce((total, item) => total + (Number(item.totalWeight) || 0), 0).toFixed(1)
+    );
+    this.system.load = { min: 0, spent: 0, value, max };
   }
 
   static #activateCreatureCreateDialog(dialog) {
@@ -140,3 +183,49 @@ function maximizeResourceMap(resources = {}) {
     })
   );
 }
+
+function syncTrackedResourceValueUpdates(actor, changes) {
+  for (const resourceKey of TRACKED_RESOURCE_KEYS) {
+    const currentResource = actor.system?.resources?.[resourceKey];
+    if (!currentResource) continue;
+    foundry.utils.setProperty(
+      changes,
+      `system.resources.${resourceKey}.spent`,
+      Math.max(0, toInteger(currentResource?.max) - toInteger(currentResource?.value))
+    );
+
+    const valuePath = `system.resources.${resourceKey}.value`;
+    if (!hasUpdatePath(changes, valuePath)) continue;
+
+    const min = Math.max(0, getUpdatedResourceBound(changes, resourceKey, "min", actor.system?.resources?.[resourceKey]?.min));
+    const max = Math.max(min, getUpdatedResourceBound(changes, resourceKey, "max", actor.system?.resources?.[resourceKey]?.max));
+    const nextValue = Math.min(
+      Math.max(getUpdatedResourceBound(changes, resourceKey, "value", actor.system?.resources?.[resourceKey]?.value), min),
+      max
+    );
+
+    foundry.utils.setProperty(changes, `system.resources.${resourceKey}.spent`, Math.max(0, max - nextValue));
+  }
+}
+
+function getUpdatedResourceBound(changes, resourceKey, field, fallback) {
+  const path = `system.resources.${resourceKey}.${field}`;
+  const value = getUpdatePath(changes, path);
+  return toInteger(value ?? fallback);
+}
+
+function hasUpdatePath(object, path) {
+  return foundry.utils.hasProperty(object, path) || Object.hasOwn(object, path);
+}
+
+function getUpdatePath(object, path) {
+  if (foundry.utils.hasProperty(object, path)) return foundry.utils.getProperty(object, path);
+  return object[path];
+}
+
+function toInteger(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.trunc(number) : 0;
+}
+
+const TRACKED_RESOURCE_KEYS = ["actionPoints", "movementPoints"];

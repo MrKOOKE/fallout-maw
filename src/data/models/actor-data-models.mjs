@@ -15,17 +15,19 @@ import {
   getResourceSettings,
   getSkillSettings
 } from "../../settings/accessors.mjs";
+import { resourceField } from "./resources.mjs";
 import { toInteger } from "../../utils/numbers.mjs";
 
-const { HTMLField, NumberField, ObjectField, SchemaField, StringField } = foundry.data.fields;
+const { HTMLField, NumberField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
 
 export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     return {
       description: new HTMLField({ required: false, blank: true, initial: "" }),
-      resources: new ObjectField({ required: true, initial: {} }),
-      needs: new ObjectField({ required: true, initial: {} }),
-      limbs: new ObjectField({ required: true, initial: {} }),
+      resources: new TypedObjectField(resourceField(), { required: true, initial: {} }),
+      needs: new TypedObjectField(resourceField(), { required: true, initial: {} }),
+      load: resourceField(0, 0, { required: true, persisted: false }),
+      limbs: new TypedObjectField(limbField(), { required: true, initial: {} }),
       attributes: new SchemaField({
         level: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
       }),
@@ -33,9 +35,18 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         typeId: new StringField({ required: true, blank: true, initial: "" }),
         raceId: new StringField({ required: true, blank: true, initial: "" })
       }),
-      characteristics: new ObjectField({ required: true, initial: {} }),
-      skills: new ObjectField({ required: true, initial: {} }),
-      damageResistances: new ObjectField({ required: false, initial: {} }, { persisted: false }),
+      characteristics: new TypedObjectField(
+        new NumberField({ required: true, integer: true, initial: 0 }),
+        { required: true, initial: {} }
+      ),
+      skills: new TypedObjectField(skillField(), { required: true, initial: {} }),
+      damageResistances: new TypedObjectField(
+        new TypedObjectField(new NumberField({ required: true, integer: true, min: 0, initial: 0 }), {
+          required: true,
+          initial: {}
+        }),
+        { required: true, initial: {}, persisted: false }
+      ),
       progression: new SchemaField({
         skillPointsPerLevel: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
         researchPointsPerLevel: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
@@ -91,13 +102,16 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
 
     replaceObjectContents(
       this.damageResistances,
-      evaluateFormulaMap(
-        getRaceDamageResistanceFormulas(race, damageTypeSettings),
-        damageTypeSettings,
-        characteristicSettings,
-        skillSettings,
-        this.characteristics,
-        skillValues
+      buildLimbDamageResistanceMap(
+        this.limbs,
+        evaluateFormulaMap(
+          getRaceDamageResistanceFormulas(race, damageTypeSettings),
+          damageTypeSettings,
+          characteristicSettings,
+          skillSettings,
+          this.characteristics,
+          skillValues
+        )
       )
     );
   }
@@ -128,6 +142,23 @@ function getRaceDamageResistanceFormulas(race, damageTypeSettings) {
   return normalizeFormulaMap(race?.damageResistances, damageTypeSettings);
 }
 
+function skillField() {
+  return new SchemaField({
+    base: new NumberField({ required: true, integer: true, initial: 0 }),
+    bonus: new NumberField({ required: true, integer: true, initial: 0 }),
+    value: new NumberField({ required: true, integer: true, initial: 0 })
+  });
+}
+
+function limbField() {
+  return new SchemaField({
+    label: new StringField({ required: true, blank: true, initial: "" }),
+    min: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    value: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    max: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+  });
+}
+
 function replaceObjectContents(target, source) {
   for (const key of Object.keys(target ?? {})) delete target[key];
   Object.assign(target, source);
@@ -150,9 +181,16 @@ function normalizeResourceMap(currentResources = {}, settings = [], maximums = {
       const current = currentResources?.[setting.key];
       const min = Math.max(0, toInteger(current?.min));
       const max = Math.max(min, toInteger(maximums?.[setting.key]));
-      const fallbackValue = current && typeof current === "object" ? current.value : max;
+      const spent = shouldTrackSpent(setting?.key)
+        ? getTrackedResourceSpent(current, min, max)
+        : Math.max(0, toInteger(current?.spent));
+      const fallbackValue = shouldTrackSpent(setting?.key)
+        ? max - spent
+        : current && typeof current === "object"
+          ? current.value
+          : max;
       const value = Math.min(Math.max(toInteger(fallbackValue), min), max);
-      return [setting.key, { min, value, max }];
+      return [setting.key, { min, spent, value, max }];
     })
   );
 }
@@ -173,4 +211,23 @@ function normalizeLimbMap(currentLimbs = {}, settings = []) {
       }];
     })
   );
+}
+
+function buildLimbDamageResistanceMap(limbs = {}, resistanceValues = {}) {
+  return Object.fromEntries(
+    Object.keys(limbs ?? {}).map(limbKey => [limbKey, { ...resistanceValues }])
+  );
+}
+
+function shouldTrackSpent(resourceKey) {
+  return (resourceKey === "actionPoints") || (resourceKey === "movementPoints");
+}
+
+function getTrackedResourceSpent(resource, min, max) {
+  if (resource && (typeof resource === "object") && ("spent" in resource)) {
+    return Math.min(Math.max(0, toInteger(resource.spent)), Math.max(0, max - min));
+  }
+
+  const value = resource && (typeof resource === "object") ? toInteger(resource.value) : max;
+  return Math.min(Math.max(0, max - Math.min(Math.max(value, min), max)), Math.max(0, max - min));
 }

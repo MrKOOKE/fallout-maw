@@ -1,11 +1,12 @@
 const { NumberField, SchemaField } = foundry.data.fields;
 
-export function resourceField(value = 0, max = value) {
+export function resourceField(value = 0, max = value, options = {}) {
   return new SchemaField({
     min: new NumberField({ required: true, integer: true, initial: 0 }),
+    spent: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     value: new NumberField({ required: true, integer: true, initial: value }),
     max: new NumberField({ required: true, integer: true, initial: max })
-  });
+  }, options);
 }
 
 export function clampPreparedResource(resource) {

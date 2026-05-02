@@ -15,6 +15,7 @@ const { HandlebarsApplicationMixin } = foundry.applications.api;
 
 export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
   #freeEdit = false;
+  #activeLimbKey = "";
 
   static DEFAULT_OPTIONS = {
     classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-actor-sheet", "sheet", "actor"],
@@ -29,7 +30,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       resizable: true
     },
     actions: {
-      toggleFreeEdit: this.#onToggleFreeEdit
+      toggleFreeEdit: this.#onToggleFreeEdit,
+      selectLimb: this.#onSelectLimb
     }
   };
 
@@ -80,6 +82,19 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const typeId = actor.system?.creature?.typeId;
     const raceId = actor.system?.creature?.raceId;
     const sourceSystem = actor.system?._source ?? actor.system;
+    const limbEntries = Object.entries(actor.system?.limbs ?? {});
+    const activeLimbKey = limbEntries.some(([key]) => key === this.#activeLimbKey)
+      ? this.#activeLimbKey
+      : (limbEntries[0]?.[0] ?? "");
+    const limbs = limbEntries.map(([key, limb]) => ({
+      key,
+      label: String(limb?.label ?? key),
+      value: toInteger(limb?.value),
+      max: toInteger(limb?.max),
+      active: key === activeLimbKey
+    }));
+
+    this.#activeLimbKey = activeLimbKey;
 
     return foundry.utils.mergeObject(context, {
       actor,
@@ -90,6 +105,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       editable: this.isEditable,
       freeEdit: this.#freeEdit,
       editLockAttribute: this.#freeEdit ? "" : "disabled",
+      load: {
+        value: formatWeight(actor.system.load?.value),
+        max: formatWeight(actor.system.load?.max)
+      },
       creatureTypeName: creatureOptions.types.find(type => type.id === typeId)?.name || "",
       creatureRaceName: creatureOptions.races.find(race => race.id === raceId)?.name || "",
       creatureTypes: creatureOptions.types.map(type => ({ ...type, selected: type.id === typeId })),
@@ -108,12 +127,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         value: toInteger(actor.system.needs?.[need.key]?.value),
         max: toInteger(actor.system.needs?.[need.key]?.max)
       })),
-      limbs: Object.entries(actor.system.limbs ?? {}).map(([key, limb]) => ({
-        key,
-        label: String(limb?.label ?? key),
-        value: toInteger(limb?.value),
-        max: toInteger(limb?.max)
-      })),
+      limbs,
+      activeLimb: limbs.find(limb => limb.active) ?? null,
       skills: skillSettings.map(skill => {
         const current = actor.system.skills?.[skill.key] ?? {};
         const source = sourceSystem.skills?.[skill.key] ?? {};
@@ -126,7 +141,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       }),
       damageResistances: damageTypeSettings.map(damageType => ({
         ...damageType,
-        value: toInteger(actor.system.damageResistances?.[damageType.key])
+        value: toInteger(actor.system.damageResistances?.[activeLimbKey]?.[damageType.key])
       }))
     }, { inplace: false });
   }
@@ -140,6 +155,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     event.preventDefault();
     this.#freeEdit = !this.#freeEdit;
     return this.render({ force: true });
+  }
+
+  static #onSelectLimb(event, target) {
+    event.preventDefault();
+    const limbKey = target.dataset.limbKey ?? "";
+    if (!limbKey || (limbKey === this.#activeLimbKey)) return undefined;
+    this.#activeLimbKey = limbKey;
+    return this.render({ parts: ["indicators"] });
   }
 
   #activateCreatureSelectors() {
@@ -171,4 +194,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     typeSelect.addEventListener("change", updateRaceOptions);
     updateRaceOptions();
   }
+}
+
+function formatWeight(value) {
+  const numeric = Number(value) || 0;
+  if (Number.isInteger(numeric)) return String(numeric);
+  return numeric.toFixed(1).replace(/\.0$/, "");
 }

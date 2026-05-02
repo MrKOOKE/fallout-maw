@@ -1,4 +1,4 @@
-import { DEFAULT_BASE_PARAMETER_POOLS, DEFAULT_LIMBS } from "../config/defaults.mjs";
+import { DEFAULT_BASE_PARAMETER_POOLS, DEFAULT_LIMBS, DEFAULT_LOAD_FORMULA } from "../config/defaults.mjs";
 import { localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { normalizeFormulaMap } from "../formulas/index.mjs";
@@ -25,7 +25,7 @@ export function createDefaultLimbs() {
 }
 
 export function createDefaultRaceBaseParameters() {
-  return { ...DEFAULT_BASE_PARAMETER_POOLS };
+  return { ...DEFAULT_BASE_PARAMETER_POOLS, loadFormula: DEFAULT_LOAD_FORMULA };
 }
 
 export function normalizeCreatureOptions(options = {}, characteristics = [], damageTypes = []) {
@@ -75,7 +75,8 @@ function normalizeRaceBaseParameters(values = {}) {
     characteristicDistributionPoints: toInteger(values?.characteristicDistributionPoints ?? defaults.characteristicDistributionPoints),
     signatureSkillPoints: toInteger(values?.signatureSkillPoints ?? defaults.signatureSkillPoints),
     traitPoints: toInteger(values?.traitPoints ?? defaults.traitPoints),
-    proficiencyPoints: toInteger(values?.proficiencyPoints ?? defaults.proficiencyPoints)
+    proficiencyPoints: toInteger(values?.proficiencyPoints ?? defaults.proficiencyPoints),
+    loadFormula: String(values?.loadFormula ?? defaults.loadFormula).trim() || defaults.loadFormula
   };
 }
 

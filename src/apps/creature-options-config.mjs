@@ -7,7 +7,7 @@ import {
   getSkillSettings,
   setCreatureOptions
 } from "../settings/accessors.mjs";
-import { createRaceDefaults } from "../settings/creature-options.mjs";
+import { createDefaultRaceBaseParameters, createRaceDefaults } from "../settings/creature-options.mjs";
 import { format, localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
@@ -88,7 +88,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         ...characteristic,
         value: toInteger(selectedRace?.characteristics?.[characteristic.key])
       })),
-      baseParameters: selectedRace?.baseParameters ?? {},
+      baseParameters: selectedRace?.baseParameters ?? createDefaultRaceBaseParameters(),
       limbs: selectedRace?.limbs ?? [],
       damageTypes: damageTypes.map(damageType => ({
         ...damageType,
@@ -243,7 +243,10 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       characteristicDistributionPoints: toInteger(formData.race?.baseParameters?.characteristicDistributionPoints),
       signatureSkillPoints: toInteger(formData.race?.baseParameters?.signatureSkillPoints),
       traitPoints: toInteger(formData.race?.baseParameters?.traitPoints),
-      proficiencyPoints: toInteger(formData.race?.baseParameters?.proficiencyPoints)
+      proficiencyPoints: toInteger(formData.race?.baseParameters?.proficiencyPoints),
+      loadFormula: String(
+        formData.race?.baseParameters?.loadFormula ?? createDefaultRaceBaseParameters().loadFormula
+      ).trim() || createDefaultRaceBaseParameters().loadFormula
     };
     race.limbs = this.#readLimbsFromForm();
     race.damageResistances = Object.fromEntries(
@@ -282,6 +285,14 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
           ui.notifications.error(`${label}: ${error.message}`);
           throw error;
         }
+      }
+
+      const loadFormula = race.baseParameters?.loadFormula ?? createDefaultRaceBaseParameters().loadFormula;
+      try {
+        validateFormula(loadFormula, { allowSkills: true, characteristics, skills });
+      } catch (error) {
+        ui.notifications.error(`${race.name || race.id} / ${localize("FALLOUTMAW.Common.Load")}: ${error.message}`);
+        throw error;
       }
     }
   }

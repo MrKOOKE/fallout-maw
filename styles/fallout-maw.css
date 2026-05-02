@@ -196,9 +196,41 @@
   padding: 0.35rem 0.45rem;
 }
 
+.fallout-maw-resource-card.active {
+  background: rgba(210, 185, 145, 0.14);
+  border-color: rgba(210, 185, 145, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(210, 185, 145, 0.2);
+}
+
 .fallout-maw-resource-name {
   font-weight: 700;
   line-height: 1.2;
+}
+
+.fallout-maw-limb-select {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: block;
+  flex: 1 1 auto;
+  font: inherit;
+  height: auto;
+  justify-content: flex-start;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-limb-select:focus,
+.fallout-maw-limb-select:focus-visible {
+  box-shadow: none;
+  outline: none;
 }
 
 .fallout-maw-resource-value {
