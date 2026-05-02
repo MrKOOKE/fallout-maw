@@ -32,15 +32,19 @@
       "Energy": "Energy",
       "Formula": "Formula",
       "Health": "Health",
+      "Hunger": "Hunger",
       "Key": "Key",
       "Label": "Name",
       "MovementPoints": "Movement Points",
+      "Needs": "Needs",
       "Reorder": "Reorder",
       "ResetDefaults": "Reset to Defaults",
       "Resources": "Resources",
       "SaveChanges": "Save Changes",
       "Skill": "Skill",
       "Skills": "Skills",
+      "Sleepiness": "Sleepiness",
+      "Thirst": "Thirst",
       "Total": "Total",
       "Untitled": "Untitled"
     },
@@ -81,13 +85,6 @@
     },
     "Settings": {
       "Open": "Open",
-      "ActionMovement": {
-        "ActionPointsFormula": "Base Action Points",
-        "FormulaHint": "Formulas can use characteristic codes and skill codes, for example: 5 + dex/3 + ath/50.",
-        "MovementPointsFormula": "Base Movement Points",
-        "ShortTitle": "AP/MP Settings",
-        "Title": "AP/MP Settings"
-      },
       "Characteristics": {
         "Create": "Create Characteristic",
         "Delete": "Delete Characteristic",
@@ -127,6 +124,18 @@
         "LabelPlaceholder": "Damage type name",
         "Title": "Damage Type Settings"
       },
+      "Needs": {
+        "Create": "Create Need",
+        "Empty": "No needs created.",
+        "FormulaHint": "Need formulas can use characteristic and skill codes.",
+        "Title": "Need Settings"
+      },
+      "Resources": {
+        "Create": "Create Resource",
+        "Empty": "No resources created.",
+        "FormulaHint": "Resource formulas can use characteristic and skill codes.",
+        "Title": "Resource Settings"
+      },
       "Skills": {
         "Create": "Create Skill",
         "Delete": "Delete Skill",
@@ -137,11 +146,12 @@
       }
     },
     "Messages": {
-      "ActionMovementSaved": "AP/MP formulas saved.",
       "CharacteristicsSaved": "Characteristic settings saved.",
       "CreateTypeFirst": "Create a creature type first.",
       "CreatureOptionsSaved": "Creature options saved.",
       "DamageTypesSaved": "Damage type settings saved.",
+      "NeedsSaved": "Need settings saved.",
+      "ResourcesSaved": "Resource settings saved.",
       "DeleteRaceContent": "Delete race \"{name}\"?",
       "DeleteTypeContent": "Delete type \"{name}\" and all races assigned to it?",
       "SkillsSaved": "Skill settings saved."
@@ -165,6 +175,14 @@
       "CharacteristicKeyInvalid": "Characteristic {index}: key must be a Latin identifier.",
       "DamageTypeKeyDuplicate": "Damage type key \"{key}\" is duplicated.",
       "DamageTypeKeyInvalid": "Damage type {index}: key must be a Latin identifier.",
+      "NeedAbbrDuplicate": "Need code \"{abbr}\" is duplicated.",
+      "NeedAbbrInvalid": "Need {index}: code must be a Latin identifier.",
+      "NeedKeyDuplicate": "Need key \"{key}\" is duplicated.",
+      "NeedKeyInvalid": "Need {index}: key must be a Latin identifier.",
+      "ResourceAbbrDuplicate": "Resource code \"{abbr}\" is duplicated.",
+      "ResourceAbbrInvalid": "Resource {index}: code must be a Latin identifier.",
+      "ResourceKeyDuplicate": "Resource key \"{key}\" is duplicated.",
+      "ResourceKeyInvalid": "Resource {index}: key must be a Latin identifier.",
       "SkillAbbrDuplicate": "Skill code \"{abbr}\" is duplicated.",
       "SkillAbbrInvalid": "Skill {index}: code must be a Latin identifier.",
       "SkillKeyDuplicate": "Skill key \"{key}\" is duplicated.",

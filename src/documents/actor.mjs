@@ -44,9 +44,14 @@ export class FalloutMaWActor extends Actor {
   prepareDerivedData() {
     super.prepareDerivedData();
     const resources = this.system?.resources;
-    if (!resources) return;
+    if (resources) {
+      for (const resource of Object.values(resources)) clampPreparedResource(resource);
+    }
 
-    for (const resource of Object.values(resources)) clampPreparedResource(resource);
+    const needs = this.system?.needs;
+    if (needs) {
+      for (const need of Object.values(needs)) clampPreparedResource(need);
+    }
   }
 
   get health() {
@@ -80,15 +85,11 @@ export class FalloutMaWActor extends Actor {
 
   #applyNewActorResourceDefaults() {
     this.system?.prepareDerivedData?.();
-    const actionPoints = Number(this.system?.resources?.actionPoints?.max) || 0;
-    const movementPoints = Number(this.system?.resources?.movementPoints?.max) || 0;
 
     this.updateSource({
       system: {
-        resources: {
-          actionPoints: { value: actionPoints, max: actionPoints },
-          movementPoints: { value: movementPoints, max: movementPoints }
-        }
+        resources: maximizeResourceMap(this.system?.resources),
+        needs: maximizeResourceMap(this.system?.needs)
       }
     });
   }
@@ -122,4 +123,14 @@ export class FalloutMaWActor extends Actor {
     typeSelect.addEventListener("change", updateRaceOptions);
     updateRaceOptions();
   }
+}
+
+function maximizeResourceMap(resources = {}) {
+  return Object.fromEntries(
+    Object.entries(resources ?? {}).map(([key, resource]) => {
+      const min = Number(resource?.min) || 0;
+      const max = Number(resource?.max) || min;
+      return [key, { min, value: max, max }];
+    })
+  );
 }

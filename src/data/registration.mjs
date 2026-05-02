@@ -1,4 +1,5 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
+import { getNeedSettings, getResourceSettings } from "../settings/accessors.mjs";
 import {
   AbilityDataModel,
   ArmorDataModel,
@@ -10,14 +11,6 @@ import {
   VehicleDataModel,
   WeaponDataModel
 } from "./models/index.mjs";
-
-const ACTOR_BAR_ATTRIBUTES = [
-  "resources.health",
-  "resources.energy",
-  "resources.dodge",
-  "resources.actionPoints",
-  "resources.movementPoints"
-];
 
 const ACTOR_VALUE_ATTRIBUTES = ["attributes.level"];
 
@@ -39,11 +32,16 @@ export function registerDataModels() {
 }
 
 export function registerTrackableAttributes() {
+  const barAttributes = [
+    ...getResourceSettings().map(resource => `resources.${resource.key}`),
+    ...getNeedSettings().map(need => `needs.${need.key}`)
+  ];
+
   CONFIG.Actor.trackableAttributes = Object.fromEntries(
     FALLOUT_MAW.actorTypes.map(type => [
       type,
       {
-        bar: [...ACTOR_BAR_ATTRIBUTES],
+        bar: [...barAttributes],
         value: [...ACTOR_VALUE_ATTRIBUTES]
       }
     ])

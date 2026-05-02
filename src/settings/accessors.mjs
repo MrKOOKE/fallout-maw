@@ -1,19 +1,22 @@
 import { FALLOUT_MAW, syncSystemConfig } from "../config/system-config.mjs";
 import {
-  createDefaultActionMovementFormulas,
   createDefaultCharacteristicSettings,
   createDefaultDamageTypeSettings,
+  createDefaultNeedSettings,
+  createDefaultResourceSettings,
   createDefaultSkillSettings,
-  normalizeActionMovementFormulas,
   normalizeCharacteristicSettings,
   normalizeDamageTypeSettings,
+  normalizeNeedSettings,
+  normalizeResourceSettings,
   normalizeSkillSettings
 } from "../formulas/index.mjs";
 import {
-  ACTION_MOVEMENT_FORMULAS_SETTING,
   CHARACTERISTICS_SETTING,
   CREATURE_OPTIONS_SETTING,
   DAMAGE_TYPES_SETTING,
+  NEED_SETTINGS_SETTING,
+  RESOURCE_SETTINGS_SETTING,
   SKILL_SETTINGS_SETTING
 } from "./constants.mjs";
 import { createEmptyCreatureOptions, normalizeCreatureOptions } from "./creature-options.mjs";
@@ -87,38 +90,79 @@ export async function setCreatureOptions(options, characteristics = getCharacter
   return game.settings.set(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING, normalizeCreatureOptions(options, characteristics, damageTypes));
 }
 
-export function getActionMovementFormulas() {
+export function getResourceSettings() {
   try {
-    return normalizeActionMovementFormulas(game.settings.get(FALLOUT_MAW.id, ACTION_MOVEMENT_FORMULAS_SETTING));
+    return normalizeResourceSettings(game.settings.get(FALLOUT_MAW.id, RESOURCE_SETTINGS_SETTING));
   } catch (_error) {
-    return createDefaultActionMovementFormulas();
+    return createDefaultResourceSettings();
   }
 }
 
-export async function setActionMovementFormulas(formulas) {
-  const normalized = normalizeActionMovementFormulas(formulas);
-  await game.settings.set(FALLOUT_MAW.id, ACTION_MOVEMENT_FORMULAS_SETTING, normalized);
+export async function setResourceSettings(settings) {
+  const normalized = normalizeResourceSettings(settings);
+  await game.settings.set(FALLOUT_MAW.id, RESOURCE_SETTINGS_SETTING, normalized);
   return normalized;
 }
 
-export async function resetActionMovementFormulas() {
-  return setActionMovementFormulas(createDefaultActionMovementFormulas());
+export async function resetResourceSettings() {
+  return setResourceSettings(createDefaultResourceSettings());
+}
+
+export function getNeedSettings() {
+  try {
+    return normalizeNeedSettings(game.settings.get(FALLOUT_MAW.id, NEED_SETTINGS_SETTING));
+  } catch (_error) {
+    return createDefaultNeedSettings();
+  }
+}
+
+export async function setNeedSettings(settings) {
+  const normalized = normalizeNeedSettings(settings);
+  await game.settings.set(FALLOUT_MAW.id, NEED_SETTINGS_SETTING, normalized);
+  return normalized;
+}
+
+export async function resetNeedSettings() {
+  return setNeedSettings(createDefaultNeedSettings());
 }
 
 export function syncSettingsIntoSystemConfig() {
   return syncSystemConfig({
     characteristics: getCharacteristicSettings(),
     skills: getSkillSettings(),
+    resources: getResourceSettings(),
+    needs: getNeedSettings(),
     damageTypes: getDamageTypeSettings()
   });
 }
 
 export function refreshPreparedActors() {
   syncSettingsIntoSystemConfig();
+  syncActorTrackableAttributes();
   for (const actor of getLoadedActors()) {
     actor.prepareData();
     actor.sheet?.render(false);
   }
+}
+
+export function syncActorTrackableAttributes() {
+  if (!globalThis.CONFIG?.Actor?.trackableAttributes) return;
+
+  const bar = [
+    ...getResourceSettings().map(resource => `resources.${resource.key}`),
+    ...getNeedSettings().map(need => `needs.${need.key}`)
+  ];
+  const value = ["attributes.level"];
+
+  CONFIG.Actor.trackableAttributes = Object.fromEntries(
+    FALLOUT_MAW.actorTypes.map(type => [
+      type,
+      {
+        bar: [...bar],
+        value: [...value]
+      }
+    ])
+  );
 }
 
 function getLoadedActors() {

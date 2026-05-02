@@ -15,10 +15,11 @@ export const TEMPLATES = Object.freeze({
   }),
   itemSheet: `systems/${SYSTEM_ID}/templates/item/item-sheet.hbs`,
   settings: Object.freeze({
-    actionMovementFormulas: `systems/${SYSTEM_ID}/templates/settings/action-movement-formulas-config.hbs`,
     characteristics: `systems/${SYSTEM_ID}/templates/settings/characteristics-config.hbs`,
     creatureOptions: `systems/${SYSTEM_ID}/templates/settings/creature-options-config.hbs`,
     damageTypes: `systems/${SYSTEM_ID}/templates/settings/damage-types-config.hbs`,
+    needs: `systems/${SYSTEM_ID}/templates/settings/need-settings-config.hbs`,
+    resources: `systems/${SYSTEM_ID}/templates/settings/resource-settings-config.hbs`,
     skillFormulas: `systems/${SYSTEM_ID}/templates/settings/skill-formulas-config.hbs`
   })
 });

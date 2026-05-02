@@ -281,7 +281,9 @@
   grid-template-columns: 2rem minmax(130px, 1fr) minmax(160px, 1.4fr) 2.5rem;
 }
 
-.skill-settings .fallout-maw-settings-row {
+.skill-settings .fallout-maw-settings-row,
+.resource-settings .fallout-maw-settings-row,
+.need-settings .fallout-maw-settings-row {
   grid-template-columns: 2rem 80px minmax(120px, 1fr) minmax(130px, 1fr) minmax(220px, 1.4fr) 2.5rem;
 }
 
@@ -401,6 +403,8 @@
   }
 
   .skill-settings .fallout-maw-settings-row,
+  .resource-settings .fallout-maw-settings-row,
+  .need-settings .fallout-maw-settings-row,
   .characteristic-settings .fallout-maw-settings-row,
   .damage-type-settings .fallout-maw-settings-row,
   .fallout-maw-skill-row {

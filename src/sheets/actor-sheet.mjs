@@ -4,6 +4,8 @@ import {
   getCharacteristicSettings,
   getCreatureOptions,
   getDamageTypeSettings,
+  getNeedSettings,
+  getResourceSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -72,6 +74,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const creatureOptions = getCreatureOptions();
     const characteristicSettings = getCharacteristicSettings();
     const damageTypeSettings = getDamageTypeSettings();
+    const resourceSettings = getResourceSettings();
+    const needSettings = getNeedSettings();
     const skillSettings = getSkillSettings();
     const typeId = actor.system?.creature?.typeId;
     const raceId = actor.system?.creature?.raceId;
@@ -93,6 +97,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       characteristics: characteristicSettings.map(characteristic => ({
         ...characteristic,
         value: toInteger(sourceSystem.characteristics?.[characteristic.key])
+      })),
+      resources: resourceSettings.map(resource => ({
+        ...resource,
+        value: toInteger(actor.system.resources?.[resource.key]?.value),
+        max: toInteger(actor.system.resources?.[resource.key]?.max)
+      })),
+      needs: needSettings.map(need => ({
+        ...need,
+        value: toInteger(actor.system.needs?.[need.key]?.value),
+        max: toInteger(actor.system.needs?.[need.key]?.max)
       })),
       skills: skillSettings.map(skill => {
         const current = actor.system.skills?.[skill.key] ?? {};

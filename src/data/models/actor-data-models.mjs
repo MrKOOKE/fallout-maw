@@ -1,20 +1,21 @@
 import {
-  evaluateActionMovementFormulas,
   evaluateFormulaMap,
+  evaluateNeedSettings,
+  evaluateResourceSettings,
   evaluateSkillFormulas,
   getSkillValues,
   normalizeFormulaMap,
   normalizeNumberMap
 } from "../../formulas/index.mjs";
 import {
-  getActionMovementFormulas,
   getCharacteristicSettings,
   getCreatureOptions,
   getDamageTypeSettings,
+  getNeedSettings,
+  getResourceSettings,
   getSkillSettings
 } from "../../settings/accessors.mjs";
 import { toInteger } from "../../utils/numbers.mjs";
-import { resourceField, setResourceMaximum } from "./resources.mjs";
 
 const { HTMLField, NumberField, ObjectField, SchemaField, StringField } = foundry.data.fields;
 
@@ -22,13 +23,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     return {
       description: new HTMLField({ required: false, blank: true, initial: "" }),
-      resources: new SchemaField({
-        health: resourceField(10, 10),
-        energy: resourceField(0, 0),
-        dodge: resourceField(0, 0),
-        actionPoints: resourceField(0, 0),
-        movementPoints: resourceField(0, 0)
-      }),
+      resources: new ObjectField({ required: true, initial: {} }),
+      needs: new ObjectField({ required: true, initial: {} }),
       attributes: new SchemaField({
         level: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
       }),
@@ -50,9 +46,13 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     const characteristicSettings = getCharacteristicSettings();
     const skillSettings = getSkillSettings();
     const damageTypeSettings = getDamageTypeSettings();
+    const resourceSettings = getResourceSettings();
+    const needSettings = getNeedSettings();
 
     this.characteristics ??= {};
     this.skills ??= {};
+    this.resources ??= {};
+    this.needs ??= {};
     this.damageResistances ??= {};
 
     replaceObjectContents(this.characteristics, normalizeNumberMap(this.characteristics, characteristicSettings));
@@ -67,16 +67,23 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     replaceObjectContents(this.skills, normalizeSkillMap(this.skills, skillSettings, skillBases));
 
     const skillValues = getSkillValues(this.skills);
-    const resourceMaximums = evaluateActionMovementFormulas(
-      getActionMovementFormulas(),
+    const resourceMaximums = evaluateResourceSettings(
+      resourceSettings,
       characteristicSettings,
       skillSettings,
       this.characteristics,
       skillValues
     );
+    replaceObjectContents(this.resources, normalizeResourceMap(this.resources, resourceSettings, resourceMaximums));
 
-    setResourceMaximum(this.resources.actionPoints, resourceMaximums.actionPoints);
-    setResourceMaximum(this.resources.movementPoints, resourceMaximums.movementPoints);
+    const needMaximums = evaluateNeedSettings(
+      needSettings,
+      characteristicSettings,
+      skillSettings,
+      this.characteristics,
+      skillValues
+    );
+    replaceObjectContents(this.needs, normalizeResourceMap(this.needs, needSettings, needMaximums));
 
     replaceObjectContents(
       this.damageResistances,
@@ -129,6 +136,19 @@ function normalizeSkillMap(currentSkills = {}, skillSettings = [], skillBases = 
       const bonus = current && typeof current === "object" ? toInteger(current.bonus) : 0;
       const base = toInteger(skillBases?.[skill.key]);
       return [skill.key, { base, bonus, value: Math.max(0, base + bonus) }];
+    })
+  );
+}
+
+function normalizeResourceMap(currentResources = {}, settings = [], maximums = {}) {
+  return Object.fromEntries(
+    settings.map(setting => {
+      const current = currentResources?.[setting.key];
+      const min = Math.max(0, toInteger(current?.min));
+      const max = Math.max(min, toInteger(maximums?.[setting.key]));
+      const fallbackValue = current && typeof current === "object" ? current.value : max;
+      const value = Math.min(Math.max(toInteger(fallbackValue), min), max);
+      return [setting.key, { min, value, max }];
     })
   );
 }

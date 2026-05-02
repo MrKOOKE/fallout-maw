@@ -2,12 +2,7 @@ import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { format, localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { parseFormula, normalizeFormulaOptions } from "./parser.mjs";
-import {
-  normalizeActionMovementFormulas,
-  normalizeCharacteristicSettings,
-  normalizeFormulaMap,
-  normalizeSkillSettings
-} from "./normalization.mjs";
+import { normalizeCharacteristicSettings, normalizeFormulaMap, normalizeNeedSettings, normalizeResourceSettings, normalizeSkillSettings } from "./normalization.mjs";
 
 export function evaluateFormula(formula, data = {}) {
   const options = normalizeFormulaOptions({
@@ -61,25 +56,38 @@ export function evaluateSkillFormulas(skillSettings, characteristicSettings, cha
   );
 }
 
-export function evaluateActionMovementFormulas(
-  formulas = {},
+export function evaluateResourceSettings(
+  resourceSettings = [],
   characteristicSettings,
   skillSettings,
   characteristics = {},
   skills = {}
 ) {
-  const normalized = normalizeActionMovementFormulas(formulas);
+  return evaluateFormulaSettings(normalizeResourceSettings(resourceSettings), characteristicSettings, skillSettings, characteristics, skills);
+}
+
+export function evaluateNeedSettings(
+  needSettings = [],
+  characteristicSettings,
+  skillSettings,
+  characteristics = {},
+  skills = {}
+) {
+  return evaluateFormulaSettings(normalizeNeedSettings(needSettings), characteristicSettings, skillSettings, characteristics, skills);
+}
+
+function evaluateFormulaSettings(settings = [], characteristicSettings, skillSettings, characteristics = {}, skills = {}) {
   const normalizedCharacteristics = normalizeCharacteristicSettings(characteristicSettings);
   const normalizedSkills = normalizeSkillSettings(skillSettings);
 
   return Object.fromEntries(
-    Object.entries(normalized).map(([key, formula]) => {
+    settings.map(setting => {
       try {
         return [
-          key,
+          setting.key,
           Math.max(
             0,
-            evaluateFormula(formula, {
+            evaluateFormula(setting.formula, {
               characteristicSettings: normalizedCharacteristics,
               skillSettings: normalizedSkills,
               characteristics,
@@ -90,11 +98,11 @@ export function evaluateActionMovementFormulas(
       } catch (error) {
         console.warn(
           `${FALLOUT_MAW.title} | ${format("FALLOUTMAW.Formula.FormulaError", {
-            key,
+            key: setting.key,
             message: error.message
           })}`
         );
-        return [key, 0];
+        return [setting.key, 0];
       }
     })
   );

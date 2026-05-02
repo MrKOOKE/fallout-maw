@@ -32,15 +32,19 @@
       "Energy": "Энергия",
       "Formula": "Формула",
       "Health": "Здоровье",
+      "Hunger": "Голод",
       "Key": "Ключ",
       "Label": "Название",
       "MovementPoints": "Очки передвижения",
+      "Needs": "Потребности",
       "Reorder": "Изменить порядок",
       "ResetDefaults": "Установить по умолчанию",
       "Resources": "Ресурсы",
       "SaveChanges": "Сохранить изменения",
       "Skill": "Навык",
       "Skills": "Навыки",
+      "Sleepiness": "Сонливость",
+      "Thirst": "Жажда",
       "Total": "Итого",
       "Untitled": "Без названия"
     },
@@ -81,13 +85,6 @@
     },
     "Settings": {
       "Open": "Открыть",
-      "ActionMovement": {
-        "ActionPointsFormula": "Базовые очки действия",
-        "FormulaHint": "В формулах можно использовать коды характеристик и навыков, например: 5 + dex/3 + ath/50.",
-        "MovementPointsFormula": "Базовые очки перемещения",
-        "ShortTitle": "Настройка ОД/ОП",
-        "Title": "Настройка ОД/ОП"
-      },
       "Characteristics": {
         "Create": "Создать характеристику",
         "Delete": "Удалить характеристику",
@@ -127,21 +124,34 @@
         "LabelPlaceholder": "Название типа урона",
         "Title": "Настройка типов урона"
       },
+      "Needs": {
+        "Create": "Создать потребность",
+        "Empty": "Потребности не созданы.",
+        "FormulaHint": "Формулы потребностей могут использовать коды характеристик и навыков.",
+        "Title": "Настройка потребностей"
+      },
+      "Resources": {
+        "Create": "Создать ресурс",
+        "Empty": "Ресурсы не созданы.",
+        "FormulaHint": "Формулы ресурсов могут использовать коды характеристик и навыков.",
+        "Title": "Настройка ресурсов"
+      },
       "Skills": {
         "Create": "Создать навык",
         "Delete": "Удалить навык",
         "Empty": "Навыки не созданы.",
-        "FormulaHint": "Формулы навыков могут использовать ключи и коды характеристик. Ключи и коды лучше держать латиницей.",
+        "FormulaHint": "Формулы навыков могут использовать ключи и коды характеристик.",
         "LabelPlaceholder": "Название навыка",
         "Title": "Настройка навыков"
       }
     },
     "Messages": {
-      "ActionMovementSaved": "Формулы ОД/ОП сохранены.",
       "CharacteristicsSaved": "Настройки характеристик сохранены.",
       "CreateTypeFirst": "Сначала создайте тип существа.",
       "CreatureOptionsSaved": "Типы и расы сохранены.",
       "DamageTypesSaved": "Настройка типов урона сохранена.",
+      "NeedsSaved": "Настройки потребностей сохранены.",
+      "ResourcesSaved": "Настройки ресурсов сохранены.",
       "DeleteRaceContent": "Удалить расу \"{name}\"?",
       "DeleteTypeContent": "Удалить тип \"{name}\" и все связанные с ним расы?",
       "SkillsSaved": "Настройки навыков сохранены."
@@ -160,15 +170,23 @@
     },
     "Validation": {
       "CharacteristicAbbrDuplicate": "Код характеристики \"{abbr}\" повторяется.",
-      "CharacteristicAbbrInvalid": "Характеристика {index}: код должен быть идентификатором латиницей.",
+      "CharacteristicAbbrInvalid": "Характеристика {index}: код должен быть идентификатором.",
       "CharacteristicKeyDuplicate": "Ключ характеристики \"{key}\" повторяется.",
-      "CharacteristicKeyInvalid": "Характеристика {index}: ключ должен быть идентификатором латиницей.",
+      "CharacteristicKeyInvalid": "Характеристика {index}: ключ должен быть идентификатором.",
       "DamageTypeKeyDuplicate": "Ключ типа урона \"{key}\" повторяется.",
-      "DamageTypeKeyInvalid": "Тип урона {index}: ключ должен быть идентификатором латиницей.",
+      "DamageTypeKeyInvalid": "Тип урона {index}: ключ должен быть идентификатором.",
+      "NeedAbbrDuplicate": "Код потребности \"{abbr}\" повторяется.",
+      "NeedAbbrInvalid": "Потребность {index}: код должен быть идентификатором.",
+      "NeedKeyDuplicate": "Ключ потребности \"{key}\" повторяется.",
+      "NeedKeyInvalid": "Потребность {index}: ключ должен быть идентификатором.",
+      "ResourceAbbrDuplicate": "Код ресурса \"{abbr}\" повторяется.",
+      "ResourceAbbrInvalid": "Ресурс {index}: код должен быть идентификатором.",
+      "ResourceKeyDuplicate": "Ключ ресурса \"{key}\" повторяется.",
+      "ResourceKeyInvalid": "Ресурс {index}: ключ должен быть идентификатором.",
       "SkillAbbrDuplicate": "Код навыка \"{abbr}\" повторяется.",
-      "SkillAbbrInvalid": "Навык {index}: код должен быть идентификатором латиницей.",
+      "SkillAbbrInvalid": "Навык {index}: код должен быть идентификатором.",
       "SkillKeyDuplicate": "Ключ навыка \"{key}\" повторяется.",
-      "SkillKeyInvalid": "Навык {index}: ключ должен быть идентификатором латиницей."
+      "SkillKeyInvalid": "Навык {index}: ключ должен быть идентификатором."
     }
   }
 }

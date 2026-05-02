@@ -2,41 +2,30 @@
   <section class="fallout-maw-panel">
     <h2>{{localize "FALLOUTMAW.Common.Resources"}}</h2>
     <div class="fallout-maw-resource-grid">
+      {{#each resources}}
       <label class="fallout-maw-resource-card">
-        <span class="fallout-maw-resource-name">{{localize "FALLOUTMAW.Common.Health"}}:</span>
+        <span class="fallout-maw-resource-name">{{label}}:</span>
         <span class="fallout-maw-resource-value">
-          {{#if freeEdit}}<input type="number" name="system.resources.health.value" value="{{system.resources.health.value}}">{{else}}<strong>{{system.resources.health.value}}</strong>{{/if}}
-          <span class="fallout-maw-resource-max">/ {{system.resources.health.max}}</span>
+          {{#if ../freeEdit}}<input type="number" name="system.resources.{{key}}.value" value="{{value}}">{{else}}<strong>{{value}}</strong>{{/if}}
+          <span class="fallout-maw-resource-max">/ {{max}}</span>
         </span>
       </label>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Common.Needs"}}</h2>
+    <div class="fallout-maw-resource-grid">
+      {{#each needs}}
       <label class="fallout-maw-resource-card">
-        <span class="fallout-maw-resource-name">{{localize "FALLOUTMAW.Common.Energy"}}:</span>
+        <span class="fallout-maw-resource-name">{{label}}:</span>
         <span class="fallout-maw-resource-value">
-          {{#if freeEdit}}<input type="number" name="system.resources.energy.value" value="{{system.resources.energy.value}}">{{else}}<strong>{{system.resources.energy.value}}</strong>{{/if}}
-          <span class="fallout-maw-resource-max">/ {{system.resources.energy.max}}</span>
+          {{#if ../freeEdit}}<input type="number" name="system.needs.{{key}}.value" value="{{value}}">{{else}}<strong>{{value}}</strong>{{/if}}
+          <span class="fallout-maw-resource-max">/ {{max}}</span>
         </span>
       </label>
-      <label class="fallout-maw-resource-card">
-        <span class="fallout-maw-resource-name">{{localize "FALLOUTMAW.Actor.Dodge"}}:</span>
-        <span class="fallout-maw-resource-value">
-          {{#if freeEdit}}<input type="number" name="system.resources.dodge.value" value="{{system.resources.dodge.value}}">{{else}}<strong>{{system.resources.dodge.value}}</strong>{{/if}}
-          <span class="fallout-maw-resource-max">/ {{system.resources.dodge.max}}</span>
-        </span>
-      </label>
-      <label class="fallout-maw-resource-card">
-        <span class="fallout-maw-resource-name">{{localize "FALLOUTMAW.Common.ActionPoints"}}:</span>
-        <span class="fallout-maw-resource-value">
-          {{#if freeEdit}}<input type="number" name="system.resources.actionPoints.value" value="{{system.resources.actionPoints.value}}">{{else}}<strong>{{system.resources.actionPoints.value}}</strong>{{/if}}
-          <span class="fallout-maw-resource-max">/ {{system.resources.actionPoints.max}}</span>
-        </span>
-      </label>
-      <label class="fallout-maw-resource-card">
-        <span class="fallout-maw-resource-name">{{localize "FALLOUTMAW.Common.MovementPoints"}}:</span>
-        <span class="fallout-maw-resource-value">
-          {{#if freeEdit}}<input type="number" name="system.resources.movementPoints.value" value="{{system.resources.movementPoints.value}}">{{else}}<strong>{{system.resources.movementPoints.value}}</strong>{{/if}}
-          <span class="fallout-maw-resource-max">/ {{system.resources.movementPoints.max}}</span>
-        </span>
-      </label>
+      {{/each}}
     </div>
   </section>
 

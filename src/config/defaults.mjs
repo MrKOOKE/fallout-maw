@@ -29,6 +29,20 @@ export const DEFAULT_SKILLS = Object.freeze([
   { key: "gambling", abbr: "gam", label: "Азарт", formula: "6 * luc" }
 ]);
 
+export const DEFAULT_RESOURCES = Object.freeze([
+  { key: "health", abbr: "hea", label: "Здоровье", formula: "10 + str + con*2" },
+  { key: "energy", abbr: "ene", label: "Энергия", formula: "100 + ene" },
+  { key: "dodge", abbr: "dod", label: "Уклонение", formula: "60 + ath/3" },
+  { key: "actionPoints", abbr: "act", label: "Очки действия", formula: "5 + (dex/3 + str/5)" },
+  { key: "movementPoints", abbr: "mov", label: "Очки передвижения", formula: "2 + ath/50" }
+]);
+
+export const DEFAULT_NEEDS = Object.freeze([
+  { key: "hunger", abbr: "hun", label: "Голод", formula: "1000" },
+  { key: "thirst", abbr: "thi", label: "Жажда", formula: "1000" },
+  { key: "sleepiness", abbr: "sle", label: "Сонливость", formula: "1000" }
+]);
+
 export const DEFAULT_DAMAGE_TYPES = Object.freeze([
   { key: "piercing", label: "Колющий" },
   { key: "slashing", label: "Режущий" },

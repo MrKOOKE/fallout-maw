@@ -1,4 +1,4 @@
-import { DEFAULT_CHARACTERISTICS, DEFAULT_DAMAGE_TYPES, DEFAULT_SKILLS } from "../config/defaults.mjs";
+import { DEFAULT_CHARACTERISTICS, DEFAULT_DAMAGE_TYPES, DEFAULT_NEEDS, DEFAULT_RESOURCES, DEFAULT_SKILLS } from "../config/defaults.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 export const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -11,15 +11,16 @@ export function createDefaultSkillSettings() {
   return DEFAULT_SKILLS.map(entry => ({ ...entry }));
 }
 
-export function createDefaultDamageTypeSettings() {
-  return DEFAULT_DAMAGE_TYPES.map(entry => ({ ...entry }));
+export function createDefaultResourceSettings() {
+  return DEFAULT_RESOURCES.map(entry => ({ ...entry }));
 }
 
-export function createDefaultActionMovementFormulas() {
-  return {
-    actionPoints: "5 + (dex/3 + str/5)",
-    movementPoints: "2 + ath/50"
-  };
+export function createDefaultNeedSettings() {
+  return DEFAULT_NEEDS.map(entry => ({ ...entry }));
+}
+
+export function createDefaultDamageTypeSettings() {
+  return DEFAULT_DAMAGE_TYPES.map(entry => ({ ...entry }));
 }
 
 export function normalizeCharacteristicSettings(settings) {
@@ -55,6 +56,14 @@ export function normalizeSkillSettings(settings) {
   );
 }
 
+export function normalizeResourceSettings(settings) {
+  return normalizeFormulaSettings(settings, createDefaultResourceSettings(), "Ресурс");
+}
+
+export function normalizeNeedSettings(settings) {
+  return normalizeFormulaSettings(settings, createDefaultNeedSettings(), "Потребность");
+}
+
 export function normalizeDamageTypeSettings(settings) {
   const source = normalizeCollectionInput(settings, createDefaultDamageTypeSettings());
   return normalizeKeyedEntries(
@@ -72,16 +81,6 @@ export function normalizeFormulaMap(values = {}, definitions = [], defaultFormul
     definitions.map(definition => {
       const formula = String(values?.[definition.key] ?? defaultFormula).trim();
       return [definition.key, formula || defaultFormula];
-    })
-  );
-}
-
-export function normalizeActionMovementFormulas(formulas = {}) {
-  const defaults = createDefaultActionMovementFormulas();
-  return Object.fromEntries(
-    Object.keys(defaults).map(key => {
-      const formula = String(formulas?.[key] ?? defaults[key]).trim();
-      return [key, formula || defaults[key]];
     })
   );
 }
@@ -109,6 +108,23 @@ function normalizeSkillSettingsInput(settings) {
   if (Array.isArray(settings)) return settings;
   if (settings && typeof settings === "object" && Array.isArray(settings.entries)) return settings.entries;
   return createDefaultSkillSettings();
+}
+
+function normalizeFormulaSettings(settings, defaults, defaultLabel) {
+  const source = normalizeCollectionInput(settings, defaults);
+  return normalizeKeyedEntries(
+    source,
+    entry => {
+      const key = String(entry?.key ?? "").trim();
+      return {
+        key,
+        abbr: String(entry?.abbr ?? "").trim(),
+        label: String(entry?.label ?? entry?.name ?? "").trim(),
+        formula: String(entry?.formula ?? "0").trim() || "0"
+      };
+    },
+    defaultLabel
+  );
 }
 
 function normalizeCollectionInput(settings, defaults) {
