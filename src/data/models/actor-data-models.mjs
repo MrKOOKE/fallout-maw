@@ -25,6 +25,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       description: new HTMLField({ required: false, blank: true, initial: "" }),
       resources: new ObjectField({ required: true, initial: {} }),
       needs: new ObjectField({ required: true, initial: {} }),
+      limbs: new ObjectField({ required: true, initial: {} }),
       attributes: new SchemaField({
         level: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
       }),
@@ -53,6 +54,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.skills ??= {};
     this.resources ??= {};
     this.needs ??= {};
+    this.limbs ??= {};
     this.damageResistances ??= {};
 
     replaceObjectContents(this.characteristics, normalizeNumberMap(this.characteristics, characteristicSettings));
@@ -62,6 +64,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       this.progression.skillPointsPerLevel = toInteger(race.progression.skillPointsPerLevel);
       this.progression.researchPointsPerLevel = toInteger(race.progression.researchPointsPerLevel);
     }
+
+    replaceObjectContents(this.limbs, normalizeLimbMap(this.limbs, race?.limbs ?? []));
 
     const skillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, this.characteristics);
     replaceObjectContents(this.skills, normalizeSkillMap(this.skills, skillSettings, skillBases));
@@ -149,6 +153,24 @@ function normalizeResourceMap(currentResources = {}, settings = [], maximums = {
       const fallbackValue = current && typeof current === "object" ? current.value : max;
       const value = Math.min(Math.max(toInteger(fallbackValue), min), max);
       return [setting.key, { min, value, max }];
+    })
+  );
+}
+
+function normalizeLimbMap(currentLimbs = {}, settings = []) {
+  return Object.fromEntries(
+    settings.map(setting => {
+      const current = currentLimbs?.[setting.key];
+      const min = Math.max(0, toInteger(current?.min));
+      const max = Math.max(min, toInteger(setting?.stateMax));
+      const fallbackValue = current && typeof current === "object" ? current.value : max;
+      const value = Math.min(Math.max(toInteger(fallbackValue), min), max);
+      return [setting.key, {
+        label: String(setting?.label ?? setting?.name ?? setting?.key ?? ""),
+        min,
+        value,
+        max
+      }];
     })
   );
 }

@@ -108,6 +108,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         value: toInteger(actor.system.needs?.[need.key]?.value),
         max: toInteger(actor.system.needs?.[need.key]?.max)
       })),
+      limbs: Object.entries(actor.system.limbs ?? {}).map(([key, limb]) => ({
+        key,
+        label: String(limb?.label ?? key),
+        value: toInteger(limb?.value),
+        max: toInteger(limb?.max)
+      })),
       skills: skillSettings.map(skill => {
         const current = actor.system.skills?.[skill.key] ?? {};
         const source = sourceSystem.skills?.[skill.key] ?? {};

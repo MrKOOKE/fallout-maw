@@ -52,6 +52,11 @@ export class FalloutMaWActor extends Actor {
     if (needs) {
       for (const need of Object.values(needs)) clampPreparedResource(need);
     }
+
+    const limbs = this.system?.limbs;
+    if (limbs) {
+      for (const limb of Object.values(limbs)) clampPreparedResource(limb);
+    }
   }
 
   get health() {
@@ -89,7 +94,8 @@ export class FalloutMaWActor extends Actor {
     this.updateSource({
       system: {
         resources: maximizeResourceMap(this.system?.resources),
-        needs: maximizeResourceMap(this.system?.needs)
+        needs: maximizeResourceMap(this.system?.needs),
+        limbs: maximizeResourceMap(this.system?.limbs)
       }
     });
   }
@@ -130,7 +136,7 @@ function maximizeResourceMap(resources = {}) {
     Object.entries(resources ?? {}).map(([key, resource]) => {
       const min = Number(resource?.min) || 0;
       const max = Number(resource?.max) || min;
-      return [key, { min, value: max, max }];
+      return [key, { ...resource, min, value: max, max }];
     })
   );
 }

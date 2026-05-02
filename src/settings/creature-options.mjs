@@ -80,14 +80,21 @@ function normalizeRaceBaseParameters(values = {}) {
 }
 
 function normalizeLimbs(limbs) {
-  const labelsByKey = new Map(
+  const limbDataByKey = new Map(
     Array.isArray(limbs)
-      ? limbs.map(limb => [String(limb?.key ?? "").trim(), String(limb?.label ?? limb?.name ?? "").trim()])
+      ? limbs.map(limb => {
+        const key = String(limb?.key ?? "").trim();
+        return [key, {
+          label: String(limb?.label ?? limb?.name ?? "").trim(),
+          stateMax: Math.max(0, toInteger(limb?.stateMax ?? 100))
+        }];
+      })
       : []
   );
 
   return createDefaultLimbs().map(limb => ({
     ...limb,
-    label: labelsByKey.get(limb.key) || limb.label
+    label: limbDataByKey.get(limb.key)?.label || limb.label,
+    stateMax: limbDataByKey.get(limb.key)?.stateMax ?? limb.stateMax
   }));
 }

@@ -37,14 +37,14 @@ export const DEFAULT_SKILLS = Object.freeze([
 ]);
 
 export const DEFAULT_LIMBS = Object.freeze([
-  { key: "head", label: "Голова" },
-  { key: "eyes", label: "Глаза" },
-  { key: "torso", label: "Туловище" },
-  { key: "groin", label: "Пах" },
-  { key: "leftArm", label: "Левая рука" },
-  { key: "rightArm", label: "Правая рука" },
-  { key: "leftLeg", label: "Левая нога" },
-  { key: "rightLeg", label: "Правая нога" }
+  { key: "head", label: "Голова", stateMax: 100 },
+  { key: "eyes", label: "Глаза", stateMax: 100 },
+  { key: "torso", label: "Туловище", stateMax: 100 },
+  { key: "groin", label: "Пах", stateMax: 100 },
+  { key: "leftArm", label: "Левая рука", stateMax: 100 },
+  { key: "rightArm", label: "Правая рука", stateMax: 100 },
+  { key: "leftLeg", label: "Левая нога", stateMax: 100 },
+  { key: "rightLeg", label: "Правая нога", stateMax: 100 }
 ]);
 
 export const DEFAULT_RESOURCES = Object.freeze([

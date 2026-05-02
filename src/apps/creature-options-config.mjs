@@ -17,11 +17,14 @@ const { DialogV2 } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
 
 export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
+  #editorMode = "type";
+
   constructor(options = {}) {
     super(options);
     this.creatureOptions = getCreatureOptions();
     this.activeTypeId = this.creatureOptions.types[0]?.id ?? "";
     this.activeRaceId = this.creatureOptions.races.find(race => race.typeId === this.activeTypeId)?.id ?? "";
+    this.#editorMode = this.activeRaceId ? "race" : "type";
   }
 
   static DEFAULT_OPTIONS = {
@@ -67,6 +70,8 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     return {
       ...(await super._prepareContext(options)),
       creatureOptions: this.creatureOptions,
+      editingType: Boolean(selectedType) && (!selectedRace || (this.#editorMode === "type")),
+      editingRace: Boolean(selectedRace) && (this.#editorMode === "race"),
       selectedType,
       selectedRace,
       typeOptions: this.creatureOptions.types.map(type => ({ ...type, selected: type.id === this.activeTypeId })),
@@ -110,14 +115,22 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
 
   static #onSelectType(event, target) {
     event.preventDefault();
+    this.#updateFromCurrentForm();
     this.activeTypeId = target.dataset.id ?? "";
     this.activeRaceId = this.creatureOptions.races.find(race => race.typeId === this.activeTypeId)?.id ?? "";
+    this.#editorMode = "type";
     return this.forceRender();
   }
 
   static #onSelectRace(event, target) {
     event.preventDefault();
-    this.activeRaceId = target.dataset.id ?? "";
+    this.#updateFromCurrentForm();
+    const raceId = target.dataset.id ?? "";
+    const race = this.creatureOptions.races.find(entry => entry.id === raceId);
+    if (!race) return undefined;
+    this.activeTypeId = race.typeId;
+    this.activeRaceId = race.id;
+    this.#editorMode = "race";
     return this.forceRender();
   }
 
@@ -129,6 +142,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     this.creatureOptions.types.push({ id, name: localize("FALLOUTMAW.Settings.CreatureOptions.NewType") });
     this.activeTypeId = id;
     this.activeRaceId = "";
+    this.#editorMode = "type";
     return this.forceRender();
   }
 
@@ -149,7 +163,9 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       name: localize("FALLOUTMAW.Settings.CreatureOptions.NewRace"),
       ...createRaceDefaults(getCharacteristicSettings(), getDamageTypeSettings())
     });
+    this.activeTypeId = typeId;
     this.activeRaceId = id;
+    this.#editorMode = "race";
     return this.forceRender();
   }
 
@@ -170,6 +186,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     this.creatureOptions.races = this.creatureOptions.races.filter(race => race.typeId !== typeId);
     this.activeTypeId = this.creatureOptions.types[0]?.id ?? "";
     this.activeRaceId = this.creatureOptions.races.find(race => race.typeId === this.activeTypeId)?.id ?? "";
+    this.#editorMode = this.activeRaceId ? "race" : "type";
     return this.#saveAndRender(localize("FALLOUTMAW.Messages.CreatureOptionsSaved"));
   }
 
@@ -188,7 +205,9 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
 
     const race = this.creatureOptions.races.find(entry => entry.id === raceId);
     this.creatureOptions.races = this.creatureOptions.races.filter(entry => entry.id !== raceId);
+    this.activeTypeId = race?.typeId ?? this.activeTypeId;
     this.activeRaceId = this.creatureOptions.races.find(entry => entry.typeId === race?.typeId)?.id ?? "";
+    this.#editorMode = this.activeRaceId ? "race" : "type";
     return this.#saveAndRender(localize("FALLOUTMAW.Messages.CreatureOptionsSaved"));
   }
 
@@ -213,6 +232,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     race.name = String(formData.race?.name ?? race.name ?? "").trim() || localize("FALLOUTMAW.Common.Untitled");
     const nextTypeId = String(formData.race?.typeId ?? race.typeId ?? "");
     if (this.creatureOptions.types.some(type => type.id === nextTypeId)) race.typeId = nextTypeId;
+    this.activeTypeId = race.typeId;
     race.characteristics = Object.fromEntries(
       getCharacteristicSettings().map(characteristic => [
         characteristic.key,
@@ -242,7 +262,8 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     const rows = Array.from(this.form?.querySelectorAll("[data-limb-row]") ?? []);
     return rows.map(row => ({
       key: row.querySelector("[data-field='key']")?.value?.trim() ?? "",
-      label: row.querySelector("[data-field='label']")?.value?.trim() || localize("FALLOUTMAW.Common.Untitled")
+      label: row.querySelector("[data-field='label']")?.value?.trim() || localize("FALLOUTMAW.Common.Untitled"),
+      stateMax: Math.max(0, toInteger(row.querySelector("[data-field='stateMax']")?.value))
     })).filter(limb => limb.key);
   }
 

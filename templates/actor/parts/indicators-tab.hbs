@@ -30,6 +30,21 @@
   </section>
 
   <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Common.Limbs"}}</h2>
+    <div class="fallout-maw-resource-grid">
+      {{#each limbs}}
+      <label class="fallout-maw-resource-card">
+        <span class="fallout-maw-resource-name">{{label}}:</span>
+        <span class="fallout-maw-resource-value">
+          {{#if ../freeEdit}}<input type="number" name="system.limbs.{{key}}.value" value="{{value}}" min="0" max="{{max}}">{{else}}<strong>{{value}}</strong>{{/if}}
+          <span class="fallout-maw-resource-max">/ {{max}}</span>
+        </span>
+      </label>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
     <h2>{{localize "FALLOUTMAW.Common.DamageResistances"}}</h2>
     <div class="fallout-maw-summary-grid three-columns">
       {{#each damageResistances}}

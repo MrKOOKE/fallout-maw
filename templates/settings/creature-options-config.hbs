@@ -46,7 +46,7 @@
     </aside>
 
     <main class="fallout-maw-editor-pane">
-      {{#if selectedType}}
+      {{#if editingType}}
       <section class="fallout-maw-panel">
         <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.TypeSection"}}</h2>
         <label>
@@ -54,9 +54,8 @@
           <input type="text" name="type.name" value="{{selectedType.name}}">
         </label>
       </section>
-      {{/if}}
-
-      {{#if selectedRace}}
+      {{else}}
+      {{#if editingRace}}
       <section class="fallout-maw-panel">
         <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.RaceSection"}}</h2>
         <div class="fallout-maw-list-grid two-columns">
@@ -129,6 +128,7 @@
           <div class="fallout-maw-settings-row" data-limb-row>
             <input type="hidden" data-field="key" value="{{key}}">
             <input type="text" data-field="label" value="{{label}}">
+            <input type="number" data-field="stateMax" value="{{stateMax}}" min="0" placeholder="{{localize 'FALLOUTMAW.Settings.CreatureOptions.LimbStateMax'}}" title="{{localize 'FALLOUTMAW.Settings.CreatureOptions.LimbStateMax'}}">
           </div>
           {{else}}
           <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoLimbs"}}</p>
@@ -153,6 +153,7 @@
         <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.EmptyEditor"}}</h2>
         <p class="hint">{{localize "FALLOUTMAW.Settings.CreatureOptions.EmptyEditorHint"}}</p>
       </section>
+      {{/if}}
       {{/if}}
     </main>
   </div>
