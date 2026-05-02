@@ -25,11 +25,18 @@
           <button type="button" data-action="createRace"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Settings.CreatureOptions.CreateRace"}}</button>
         </header>
 
-        <div class="fallout-maw-option-list">
-          {{#each raceOptions}}
-          <div class="fallout-maw-option-row {{#if selected}}active{{/if}}">
-            <button type="button" data-action="selectRace" data-id="{{id}}">{{name}}</button>
-            <button type="button" data-action="deleteRace" data-id="{{id}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        <div class="fallout-maw-race-group-list">
+          {{#each raceGroups}}
+          <div class="fallout-maw-race-group">
+            <h3>{{name}}</h3>
+            <div class="fallout-maw-option-list">
+              {{#each races}}
+              <div class="fallout-maw-option-row {{#if selected}}active{{/if}}">
+                <button type="button" data-action="selectRace" data-id="{{id}}">{{name}}</button>
+                <button type="button" data-action="deleteRace" data-id="{{id}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+              </div>
+              {{/each}}
+            </div>
           </div>
           {{else}}
           <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoRaces"}}</p>
@@ -70,28 +77,28 @@
 
       <section class="fallout-maw-panel">
         <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.BaseParameters"}}</h2>
-        <div class="fallout-maw-characteristic-grid">
+        <div class="fallout-maw-race-characteristic-grid">
           {{#each characteristics}}
-          <label>
-            <span title="{{label}}">{{abbr}}</span>
+          <label class="fallout-maw-stacked-field">
+            <span title="{{abbr}}">{{label}}</span>
             <input type="number" name="race.characteristics.{{key}}" value="{{value}}">
           </label>
           {{/each}}
         </div>
-        <div class="fallout-maw-list-grid two-columns">
-          <label>
+        <div class="fallout-maw-race-pool-grid">
+          <label class="fallout-maw-stacked-field">
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.CharacteristicDistributionPoints"}}</span>
             <input type="number" name="race.baseParameters.characteristicDistributionPoints" value="{{baseParameters.characteristicDistributionPoints}}" min="0">
           </label>
-          <label>
+          <label class="fallout-maw-stacked-field">
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.SignatureSkillPoints"}}</span>
             <input type="number" name="race.baseParameters.signatureSkillPoints" value="{{baseParameters.signatureSkillPoints}}" min="0">
           </label>
-          <label>
+          <label class="fallout-maw-stacked-field">
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.TraitPoints"}}</span>
             <input type="number" name="race.baseParameters.traitPoints" value="{{baseParameters.traitPoints}}" min="0">
           </label>
-          <label>
+          <label class="fallout-maw-stacked-field">
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.ProficiencyPoints"}}</span>
             <input type="number" name="race.baseParameters.proficiencyPoints" value="{{baseParameters.proficiencyPoints}}" min="0">
           </label>

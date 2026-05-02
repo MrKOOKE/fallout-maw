@@ -12,6 +12,13 @@
   width: 100%;
 }
 
+.fallout-maw-config-form {
+  max-height: calc(100vh - 120px);
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
 .fallout-maw-sheet-header {
   align-items: flex-start;
   display: flex;
@@ -50,6 +57,38 @@
 
 .fallout-maw-characteristic-grid {
   grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+}
+
+.fallout-maw-race-characteristic-grid,
+.fallout-maw-race-pool-grid {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.fallout-maw-race-characteristic-grid {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  margin-bottom: 0.75rem;
+}
+
+.fallout-maw-race-pool-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fallout-maw-stacked-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.fallout-maw-stacked-field > span {
+  line-height: 1.2;
+  min-height: 2.35em;
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-race-characteristic-grid .fallout-maw-stacked-field > span {
+  min-height: 1.2em;
 }
 
 .fallout-maw-list-grid {
@@ -230,6 +269,19 @@
   gap: 0.35rem;
 }
 
+.fallout-maw-race-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.fallout-maw-race-group h3 {
+  border: 0;
+  font-size: 0.95rem;
+  margin: 0 0 0.35rem;
+  opacity: 0.85;
+}
+
 .fallout-maw-skill-row,
 .fallout-maw-settings-row,
 .fallout-maw-option-row {
@@ -397,6 +449,7 @@
   }
 
   .fallout-maw-resource-grid,
+  .fallout-maw-race-pool-grid,
   .fallout-maw-summary-grid.two-columns,
   .fallout-maw-summary-grid.three-columns {
     grid-template-columns: 1fr;

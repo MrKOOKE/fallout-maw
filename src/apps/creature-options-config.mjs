@@ -71,6 +71,14 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       selectedRace,
       typeOptions: this.creatureOptions.types.map(type => ({ ...type, selected: type.id === this.activeTypeId })),
       raceOptions: racesForType.map(race => ({ ...race, selected: race.id === this.activeRaceId })),
+      raceGroups: this.creatureOptions.types
+        .map(type => ({
+          ...type,
+          races: this.creatureOptions.races
+            .filter(race => race.typeId === type.id)
+            .map(race => ({ ...race, selected: race.id === this.activeRaceId }))
+        }))
+        .filter(group => group.races.length),
       characteristics: characteristics.map(characteristic => ({
         ...characteristic,
         value: toInteger(selectedRace?.characteristics?.[characteristic.key])
