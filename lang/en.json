@@ -22,7 +22,9 @@
       "Create": "Create",
       "DamageResistances": "Damage Resistances",
       "Delete": "Delete",
+      "Energy": "Energy",
       "Formula": "Formula",
+      "Health": "Health",
       "Key": "Key",
       "Label": "Name",
       "MovementPoints": "Movement Points",
@@ -52,8 +54,8 @@
       "ActionMovement": {
         "ActionPointsFormula": "Base Action Points",
         "MovementPointsFormula": "Base Movement Points",
-        "ShortTitle": "AP/MP Formulas",
-        "Title": "Base AP/MP Formulas"
+        "ShortTitle": "AP/MP Settings",
+        "Title": "AP/MP Settings"
       },
       "Characteristics": {
         "Create": "Create Characteristic",

@@ -146,6 +146,32 @@
   text-align: center;
 }
 
+.fallout-maw-resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.fallout-maw-resource-grid label {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 58px 58px;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  min-height: 32px;
+}
+
+.fallout-maw-resource-grid span {
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
+
+.fallout-maw-resource-grid input {
+  width: 58px;
+  text-align: center;
+}
+
 .fallout-maw-formula-config {
   display: flex;
   flex-direction: column;

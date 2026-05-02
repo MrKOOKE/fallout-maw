@@ -22,7 +22,9 @@
       "Create": "Создать",
       "DamageResistances": "Сопротивления урону",
       "Delete": "Удалить",
+      "Energy": "Энергия",
       "Formula": "Формула",
+      "Health": "Здоровье",
       "Key": "Ключ",
       "Label": "Название",
       "MovementPoints": "Очки передвижения",
@@ -52,8 +54,8 @@
       "ActionMovement": {
         "ActionPointsFormula": "Базовые очки действия",
         "MovementPointsFormula": "Базовые очки перемещения",
-        "ShortTitle": "Формулы ОД/ОП",
-        "Title": "Базовые формулы ОД/ОП"
+        "ShortTitle": "Настройка ОД/ОП",
+        "Title": "Настройка ОД/ОП"
       },
       "Characteristics": {
         "Create": "Создать характеристику",
@@ -94,7 +96,7 @@
         "Delete": "Удалить навык",
         "Empty": "Навыки не созданы.",
         "LabelPlaceholder": "Название навыка",
-        "Title": "Настройки навыков"
+        "Title": "Настройка навыков"
       }
     },
     "Messages": {

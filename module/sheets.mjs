@@ -46,7 +46,7 @@ export class FalloutMaWActorSheet extends ActorSheet {
     }));
     data.skills = skillSettings.map(skill => ({
       ...skill,
-      value: data.actor.system.skills?.[skill.key] ?? 0
+      value: data.actor.system.skills?.[skill.key]?.value ?? 0
     }));
     data.damageResistances = damageTypeSettings.map(damageType => ({
       ...damageType,

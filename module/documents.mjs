@@ -35,6 +35,7 @@ export class FalloutMaWActor extends Actor {
     if ((await super._preCreate(data, options, user)) === false) return false;
     if (!["character", "npc"].includes(this.type)) return;
     this.#applyCreatureRaceDefaults();
+    this.#applyNewActorResourceDefaults();
   }
 
   prepareDerivedData() {
@@ -45,7 +46,8 @@ export class FalloutMaWActor extends Actor {
 
     for (const resource of Object.values(resources)) {
       const min = Number(resource.min) || 0;
-      const max = Number(resource.max) || min;
+      const max = Math.max(Number(resource.max) || min, min);
+      resource.max = max;
       resource.value = clampNumber(Number(resource.value) || min, min, max);
     }
   }
@@ -83,6 +85,21 @@ export class FalloutMaWActor extends Actor {
     }
 
     this.updateSource({ system });
+  }
+
+  #applyNewActorResourceDefaults() {
+    this.system?.prepareDerivedData?.();
+    const actionPoints = Number(this.system?.resources?.actionPoints?.max) || 0;
+    const movementPoints = Number(this.system?.resources?.movementPoints?.max) || 0;
+
+    this.updateSource({
+      system: {
+        resources: {
+          actionPoints: { value: actionPoints, max: actionPoints },
+          movementPoints: { value: movementPoints, max: movementPoints }
+        }
+      }
+    });
   }
 
   static #activateCreatureCreateDialog(dialog) {

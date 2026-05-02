@@ -42,17 +42,32 @@
         <span>{{localize "FALLOUTMAW.Actor.Level"}}</span>
         <input type="number" step="1" min="1" name="system.attributes.level" value="{{sourceSystem.attributes.level}}" {{editLockAttribute}}>
       </label>
+    </div>
+    <div class="fallout-maw-resource-grid">
+      <label>
+        <span>{{localize "FALLOUTMAW.Common.Health"}}</span>
+        <input type="number" step="1" min="0" name="system.resources.health.value" value="{{sourceSystem.resources.health.value}}" {{editLockAttribute}}>
+        <input type="number" step="1" min="0" name="system.resources.health.max" value="{{sourceSystem.resources.health.max}}" {{editLockAttribute}}>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Common.Energy"}}</span>
+        <input type="number" step="1" min="0" name="system.resources.energy.value" value="{{sourceSystem.resources.energy.value}}" {{editLockAttribute}}>
+        <input type="number" step="1" min="0" name="system.resources.energy.max" value="{{sourceSystem.resources.energy.max}}" {{editLockAttribute}}>
+      </label>
       <label>
         <span>{{localize "FALLOUTMAW.Actor.Dodge"}}</span>
-        <input type="number" step="1" min="0" name="system.attributes.dodge" value="{{sourceSystem.attributes.dodge}}" {{editLockAttribute}}>
+        <input type="number" step="1" min="0" name="system.resources.dodge.value" value="{{sourceSystem.resources.dodge.value}}" {{editLockAttribute}}>
+        <input type="number" step="1" min="0" name="system.resources.dodge.max" value="{{sourceSystem.resources.dodge.max}}" {{editLockAttribute}}>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Common.ActionPoints"}}</span>
-        <input type="number" value="{{system.attributes.actionPoints}}" disabled>
+        <input type="number" step="1" min="0" name="system.resources.actionPoints.value" value="{{sourceSystem.resources.actionPoints.value}}" {{editLockAttribute}}>
+        <input type="number" value="{{system.resources.actionPoints.max}}" disabled>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Common.MovementPoints"}}</span>
-        <input type="number" value="{{system.attributes.movementPoints}}" disabled>
+        <input type="number" step="1" min="0" name="system.resources.movementPoints.value" value="{{sourceSystem.resources.movementPoints.value}}" {{editLockAttribute}}>
+        <input type="number" value="{{system.resources.movementPoints.max}}" disabled>
       </label>
     </div>
   </section>

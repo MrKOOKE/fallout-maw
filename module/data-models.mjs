@@ -40,22 +40,21 @@ class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       description: new HTMLField({ required: false, blank: true, initial: "" }),
       resources: new SchemaField({
         health: resourceField(10, 10),
-        stamina: resourceField(10, 10),
-        energy: resourceField(0, 0)
+        energy: resourceField(0, 0),
+        dodge: resourceField(0, 0),
+        actionPoints: resourceField(0, 0),
+        movementPoints: resourceField(0, 0)
       }),
       attributes: new SchemaField({
-        level: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
-        dodge: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-        actionPoints: new NumberField({ required: true, integer: true, min: 0, initial: 0 }, { persisted: false }),
-        movementPoints: new NumberField({ required: true, integer: true, min: 0, initial: 0 }, { persisted: false })
+        level: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
       }),
       creature: new SchemaField({
         typeId: new StringField({ required: true, blank: true, initial: "" }),
         raceId: new StringField({ required: true, blank: true, initial: "" })
       }),
       characteristics: new ObjectField({ required: true, initial: {} }),
-      skills: new ObjectField({ required: true, initial: {} }, { persisted: false }),
-      damageResistances: new ObjectField({ required: true, initial: {} }, { persisted: false }),
+      skills: new ObjectField({ required: true, initial: {} }),
+      damageResistances: new ObjectField({ required: false, initial: {} }, { persisted: false }),
       progression: new SchemaField({
         skillPointsPerLevel: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
         researchPointsPerLevel: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
@@ -65,17 +64,6 @@ class BaseActorDataModel extends foundry.abstract.TypeDataModel {
 
   static migrateData(source) {
     source = super.migrateData(source);
-    if (source.attributes) {
-      if ((source.attributes.dodge === undefined) && (source.attributes.armor !== undefined)) {
-        source.attributes.dodge = source.attributes.armor;
-      }
-      if ((source.attributes.movementPoints === undefined) && (source.attributes.speed !== undefined)) {
-        source.attributes.movementPoints = source.attributes.speed;
-      }
-      delete source.attributes.armor;
-      delete source.attributes.speed;
-    }
-    delete source.skills;
     return source;
   }
 
@@ -84,17 +72,20 @@ class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     const skillSettings = getSkillSetting();
     const damageTypeSettings = getDamageTypeSetting();
     replaceObjectContents(this.characteristics, normalizeNumberMap(this.characteristics, characteristicSettings));
-    replaceObjectContents(this.skills, evaluateSkillFormulas(skillSettings, characteristicSettings, this.characteristics));
+    this.damageResistances ??= {};
+    const skillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, this.characteristics);
+    replaceObjectContents(this.skills, normalizeSkillMap(this.skills, skillSettings, skillBases));
+    const skillValues = getSkillValues(this.skills);
 
-    const attributes = evaluateActionMovementFormulas(
+    const resourceMaximums = evaluateActionMovementFormulas(
       getActionMovementFormulaSetting(),
       characteristicSettings,
       skillSettings,
       this.characteristics,
-      this.skills
+      skillValues
     );
-    this.attributes.actionPoints = attributes.actionPoints;
-    this.attributes.movementPoints = attributes.movementPoints;
+    setResourceMax(this.resources.actionPoints, resourceMaximums.actionPoints);
+    setResourceMax(this.resources.movementPoints, resourceMaximums.movementPoints);
 
     replaceObjectContents(this.damageResistances, evaluateFormulaMap(
       getRaceDamageResistanceFormulas(this.creature?.raceId, damageTypeSettings),
@@ -102,7 +93,7 @@ class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       characteristicSettings,
       skillSettings,
       this.characteristics,
-      this.skills
+      skillValues
     ));
   }
 }
@@ -227,4 +218,34 @@ function getRaceDamageResistanceFormulas(raceId, damageTypeSettings) {
 function replaceObjectContents(target, source) {
   for (const key of Object.keys(target ?? {})) delete target[key];
   Object.assign(target, source);
+}
+
+function normalizeSkillMap(currentSkills = {}, skillSettings = [], skillBases = {}) {
+  return Object.fromEntries(skillSettings.map(skill => {
+    const current = currentSkills?.[skill.key];
+    const bonus = (current && typeof current === "object") ? toInteger(current.bonus) : 0;
+    const base = toInteger(skillBases?.[skill.key]);
+    return [skill.key, {
+      base,
+      bonus,
+      value: Math.max(0, base + bonus)
+    }];
+  }));
+}
+
+function getSkillValues(skills = {}) {
+  return Object.fromEntries(Object.entries(skills).map(([key, skill]) => [
+    key,
+    (skill && typeof skill === "object") ? toInteger(skill.value) : toInteger(skill)
+  ]));
+}
+
+function setResourceMax(resource, value) {
+  if (!resource) return;
+  resource.max = Math.max(Number(resource.min) || 0, toInteger(value));
+}
+
+function toInteger(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.trunc(number) : 0;
 }

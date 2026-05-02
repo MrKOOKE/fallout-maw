@@ -42,20 +42,20 @@ Hooks.once("init", () => {
 
   CONFIG.Actor.trackableAttributes = {
     character: {
-      bar: ["resources.health", "resources.stamina", "resources.energy"],
-      value: ["attributes.level", "attributes.dodge", "attributes.actionPoints", "attributes.movementPoints"]
+      bar: ["resources.health", "resources.energy", "resources.dodge", "resources.actionPoints", "resources.movementPoints"],
+      value: ["attributes.level"]
     },
     npc: {
-      bar: ["resources.health", "resources.stamina", "resources.energy"],
-      value: ["attributes.level", "attributes.dodge", "attributes.actionPoints", "attributes.movementPoints"]
+      bar: ["resources.health", "resources.energy", "resources.dodge", "resources.actionPoints", "resources.movementPoints"],
+      value: ["attributes.level"]
     },
     vehicle: {
-      bar: ["resources.health", "resources.energy"],
-      value: ["attributes.dodge"]
+      bar: ["resources.health", "resources.energy", "resources.dodge", "resources.actionPoints", "resources.movementPoints"],
+      value: ["attributes.level"]
     },
     hazard: {
-      bar: ["resources.health"],
-      value: []
+      bar: ["resources.health", "resources.energy", "resources.dodge", "resources.actionPoints", "resources.movementPoints"],
+      value: ["attributes.level"]
     }
   };
 });
