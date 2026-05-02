@@ -174,6 +174,57 @@
   width: 100%;
 }
 
+.fallout-maw-formula-autocomplete {
+  position: fixed;
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--fallout-maw-border, rgba(0, 0, 0, 0.22));
+  border-radius: 5px;
+  background: rgba(246, 243, 232, 0.98);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+}
+
+.fallout-maw-formula-autocomplete[hidden] {
+  display: none;
+}
+
+.fallout-maw-formula-autocomplete-option {
+  width: 100%;
+  min-height: 28px;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #1d1b17;
+  text-align: left;
+  line-height: 1.15;
+}
+
+.fallout-maw-formula-autocomplete-option strong {
+  font-family: var(--font-monospace, monospace);
+  font-weight: 700;
+}
+
+.fallout-maw-formula-autocomplete-option span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-formula-autocomplete-option:hover,
+.fallout-maw-formula-autocomplete-option.active {
+  background: rgba(47, 125, 99, 0.18);
+}
+
 .fallout-maw-settings-table {
   display: flex;
   flex-direction: column;
@@ -196,17 +247,17 @@
 
 .fallout-maw-settings-table.skill-settings .fallout-maw-settings-table-head,
 .fallout-maw-settings-table.skill-settings .fallout-maw-settings-row {
-  grid-template-columns: 76px minmax(120px, 0.8fr) minmax(150px, 1fr) minmax(240px, 1.5fr) 34px;
+  grid-template-columns: 24px 76px minmax(120px, 0.8fr) minmax(150px, 1fr) minmax(240px, 1.5fr) 34px;
 }
 
 .fallout-maw-settings-table.characteristic-settings .fallout-maw-settings-table-head,
 .fallout-maw-settings-table.characteristic-settings .fallout-maw-settings-row {
-  grid-template-columns: 76px minmax(140px, 1fr) minmax(180px, 1.4fr) 34px;
+  grid-template-columns: 24px 76px minmax(140px, 1fr) minmax(180px, 1.4fr) 34px;
 }
 
 .fallout-maw-settings-table.key-label-settings .fallout-maw-settings-table-head,
 .fallout-maw-settings-table.key-label-settings .fallout-maw-settings-row {
-  grid-template-columns: minmax(140px, 1fr) minmax(180px, 1.4fr) 34px;
+  grid-template-columns: 24px minmax(140px, 1fr) minmax(180px, 1.4fr) 34px;
 }
 
 .fallout-maw-settings-row input {
@@ -221,6 +272,27 @@
   margin: 0;
   padding: 0;
   color: #7a2f2f;
+}
+
+.fallout-maw-drag-handle {
+  width: 24px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fallout-maw-muted);
+  cursor: grab;
+}
+
+.fallout-maw-drag-handle:active {
+  cursor: grabbing;
+}
+
+.fallout-maw-settings-row.dragging {
+  opacity: 0.55;
 }
 
 .fallout-maw-empty-list {
@@ -249,6 +321,27 @@
 
 .fallout-maw-config-block {
   min-height: 0;
+}
+
+.fallout-maw-race-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fallout-maw-race-group + .fallout-maw-race-group {
+  margin-top: 10px;
+}
+
+.fallout-maw-race-group h3 {
+  margin: 0;
+  padding: 0 2px;
+  border: 0;
+  color: var(--fallout-maw-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 
 .fallout-maw-config-heading {

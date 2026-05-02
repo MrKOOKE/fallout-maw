@@ -6,6 +6,7 @@ import {
   resetActionMovementFormulas,
   setActionMovementFormulas
 } from "../settings.mjs";
+import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 
 export class ActionMovementFormulasConfig extends FormApplication {
   static get defaultOptions() {
@@ -30,6 +31,10 @@ export class ActionMovementFormulasConfig extends FormApplication {
 
   activateListeners(html) {
     super.activateListeners(html);
+    activateFormulaAutocomplete(html, {
+      characteristics: getCharacteristicSettings(),
+      skills: getSkillSettings()
+    });
     html.find("[data-action='reset-defaults']").on("click", this.#onResetDefaults.bind(this));
   }
 

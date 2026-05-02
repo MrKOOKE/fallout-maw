@@ -1,5 +1,6 @@
 import { IDENTIFIER_PATTERN } from "../formulas.mjs";
 import { getCharacteristicSettings, resetCharacteristicSettings, setCharacteristicSettings } from "../settings.mjs";
+import { activateSettingsReorder } from "./settings-reorder.mjs";
 
 export class CharacteristicsConfig extends FormApplication {
   constructor(object = {}, options = {}) {
@@ -29,14 +30,14 @@ export class CharacteristicsConfig extends FormApplication {
 
   activateListeners(html) {
     super.activateListeners(html);
+    activateSettingsReorder(html, "[data-characteristic-row]");
     html.find("[data-action='create-characteristic']").on("click", this.#onCreateCharacteristic.bind(this));
     html.find("[data-action='delete-characteristic']").on("click", this.#onDeleteCharacteristic.bind(this));
     html.find("[data-action='reset-defaults']").on("click", this.#onResetDefaults.bind(this));
   }
 
   async _updateObject(_event, formData) {
-    const expanded = foundry.utils.expandObject(formData);
-    const characteristics = Object.values(expanded.characteristics ?? {});
+    const characteristics = this.#readCharacteristicsFromForm();
     this.#validateCharacteristics(characteristics);
     await setCharacteristicSettings(characteristics);
     this.characteristics = getCharacteristicSettings();
@@ -57,7 +58,9 @@ export class CharacteristicsConfig extends FormApplication {
 
   #onDeleteCharacteristic(event) {
     event.preventDefault();
-    const index = Number(event.currentTarget.dataset.index);
+    const rows = Array.from(this.form?.querySelectorAll("[data-characteristic-row]") ?? []);
+    const index = rows.indexOf(event.currentTarget.closest("[data-characteristic-row]"));
+    if (index < 0) return;
     this.characteristics = this.#readCharacteristicsFromForm();
     this.characteristics.splice(index, 1);
     this.render(true);

@@ -1,5 +1,6 @@
 import { IDENTIFIER_PATTERN } from "../formulas.mjs";
 import { getDamageTypeSettings, resetDamageTypeSettings, setDamageTypeSettings } from "../settings.mjs";
+import { activateSettingsReorder } from "./settings-reorder.mjs";
 
 export class DamageTypesConfig extends FormApplication {
   constructor(object = {}, options = {}) {
@@ -29,14 +30,14 @@ export class DamageTypesConfig extends FormApplication {
 
   activateListeners(html) {
     super.activateListeners(html);
+    activateSettingsReorder(html, "[data-damage-type-row]");
     html.find("[data-action='create-damage-type']").on("click", this.#onCreateDamageType.bind(this));
     html.find("[data-action='delete-damage-type']").on("click", this.#onDeleteDamageType.bind(this));
     html.find("[data-action='reset-defaults']").on("click", this.#onResetDefaults.bind(this));
   }
 
   async _updateObject(_event, formData) {
-    const expanded = foundry.utils.expandObject(formData);
-    const damageTypes = Object.values(expanded.damageTypes ?? {});
+    const damageTypes = this.#readDamageTypesFromForm();
     this.#validateDamageTypes(damageTypes);
     await setDamageTypeSettings(damageTypes);
     this.damageTypes = getDamageTypeSettings();
@@ -56,7 +57,9 @@ export class DamageTypesConfig extends FormApplication {
 
   #onDeleteDamageType(event) {
     event.preventDefault();
-    const index = Number(event.currentTarget.dataset.index);
+    const rows = Array.from(this.form?.querySelectorAll("[data-damage-type-row]") ?? []);
+    const index = rows.indexOf(event.currentTarget.closest("[data-damage-type-row]"));
+    if (index < 0) return;
     this.damageTypes = this.#readDamageTypesFromForm();
     this.damageTypes.splice(index, 1);
     this.render(true);

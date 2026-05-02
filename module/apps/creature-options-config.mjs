@@ -7,6 +7,7 @@ import {
   getSkillSettings,
   setCreatureOptions
 } from "../settings.mjs";
+import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 
 export class CreatureOptionsConfig extends FormApplication {
   constructor(object = {}, options = {}) {
@@ -47,11 +48,7 @@ export class CreatureOptionsConfig extends FormApplication {
         ...type,
         active: this.activeKind === "type" && this.activeId === type.id
       })),
-      races: this.creatureOptions.races.map(race => ({
-        ...race,
-        active: this.activeKind === "race" && this.activeId === race.id,
-        typeName: this.creatureOptions.types.find(type => type.id === race.typeId)?.name || "Без типа"
-      })),
+      raceGroups: this.#getRaceGroups(),
       typeOptions,
       activeId: this.activeId,
       selectedType,
@@ -69,6 +66,10 @@ export class CreatureOptionsConfig extends FormApplication {
 
   activateListeners(html) {
     super.activateListeners(html);
+    activateFormulaAutocomplete(html, {
+      characteristics: getCharacteristicSettings(),
+      skills: getSkillSettings()
+    });
     html.find("[data-action='select']").on("click", this.#onSelect.bind(this));
     html.find("[data-action='create-type']").on("click", this.#onCreateType.bind(this));
     html.find("[data-action='create-race']").on("click", this.#onCreateRace.bind(this));
@@ -207,6 +208,20 @@ export class CreatureOptionsConfig extends FormApplication {
     const type = this.creatureOptions.types[0];
     this.activeKind = type ? "type" : "race";
     this.activeId = type?.id || null;
+  }
+
+  #getRaceGroups() {
+    return this.creatureOptions.types
+      .map(type => ({
+        ...type,
+        races: this.creatureOptions.races
+          .filter(race => race.typeId === type.id)
+          .map(race => ({
+            ...race,
+            active: this.activeKind === "race" && this.activeId === race.id
+          }))
+      }))
+      .filter(group => group.races.length);
   }
 
   #getUniqueName(baseName, collection) {

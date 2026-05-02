@@ -34,23 +34,29 @@
           <span>Создать расу</span>
         </button>
       </div>
-      <ol class="fallout-maw-entity-list">
-        {{#each races}}
-          <li>
-            <div class="fallout-maw-entity-list-row">
-              <button type="button" class="{{#if active}}active{{/if}}" data-action="select" data-kind="race" data-id="{{id}}">
-                <span>{{name}}</span>
-                <small>{{typeName}}</small>
-              </button>
-              <button type="button" class="icon-only" data-action="delete-race" data-id="{{id}}" title="Удалить расу">
-                <i class="fa-solid fa-trash"></i>
-              </button>
-            </div>
-          </li>
-        {{else}}
+      {{#each raceGroups}}
+        <div class="fallout-maw-race-group">
+          <h3>{{name}}</h3>
+          <ol class="fallout-maw-entity-list">
+            {{#each races}}
+              <li>
+                <div class="fallout-maw-entity-list-row">
+                  <button type="button" class="{{#if active}}active{{/if}}" data-action="select" data-kind="race" data-id="{{id}}">
+                    <span>{{name}}</span>
+                  </button>
+                  <button type="button" class="icon-only" data-action="delete-race" data-id="{{id}}" title="Удалить расу">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </div>
+              </li>
+            {{/each}}
+          </ol>
+        </div>
+      {{else}}
+        <ol class="fallout-maw-entity-list">
           <li class="empty">Расы еще не созданы</li>
-        {{/each}}
-      </ol>
+        </ol>
+      {{/each}}
     </section>
   </aside>
 
@@ -128,7 +134,7 @@
           {{#each damageResistances}}
             <label>
               <span>{{label}}</span>
-              <input type="text" name="damageResistances.{{key}}" value="{{formula}}" placeholder="0">
+              <input type="text" name="damageResistances.{{key}}" value="{{formula}}" data-formula-autocomplete="all" placeholder="0">
             </label>
           {{/each}}
         </div>

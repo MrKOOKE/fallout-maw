@@ -16,6 +16,7 @@
 
     <div class="fallout-maw-settings-table characteristic-settings">
       <div class="fallout-maw-settings-table-head">
+        <span></span>
         <span>Код</span>
         <span>Ключ</span>
         <span>Название</span>
@@ -23,6 +24,9 @@
       </div>
       {{#each characteristics}}
         <div class="fallout-maw-settings-row" data-characteristic-row>
+          <button type="button" class="fallout-maw-drag-handle" data-drag-handle draggable="true" title="Изменить порядок">
+            <i class="fa-solid fa-grip-vertical"></i>
+          </button>
           <input type="text" name="characteristics.{{@index}}.abbr" value="{{abbr}}" data-field="abbr" placeholder="str">
           <input type="text" name="characteristics.{{@index}}.key" value="{{key}}" data-field="key" placeholder="characteristicKey">
           <input type="text" name="characteristics.{{@index}}.label" value="{{label}}" data-field="label" placeholder="Название характеристики">

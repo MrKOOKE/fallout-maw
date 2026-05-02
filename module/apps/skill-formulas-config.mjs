@@ -1,5 +1,7 @@
 import { IDENTIFIER_PATTERN, validateFormula } from "../formulas.mjs";
 import { getCharacteristicSettings, getSkillSettings, resetSkillSettings, setSkillSettings } from "../settings.mjs";
+import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
+import { activateSettingsReorder } from "./settings-reorder.mjs";
 
 export class SkillFormulasConfig extends FormApplication {
   constructor(object = {}, options = {}) {
@@ -29,14 +31,15 @@ export class SkillFormulasConfig extends FormApplication {
 
   activateListeners(html) {
     super.activateListeners(html);
+    activateFormulaAutocomplete(html, { characteristics: getCharacteristicSettings() });
+    activateSettingsReorder(html, "[data-skill-row]");
     html.find("[data-action='create-skill']").on("click", this.#onCreateSkill.bind(this));
     html.find("[data-action='delete-skill']").on("click", this.#onDeleteSkill.bind(this));
     html.find("[data-action='reset-defaults']").on("click", this.#onResetDefaults.bind(this));
   }
 
   async _updateObject(_event, formData) {
-    const expanded = foundry.utils.expandObject(formData);
-    const skills = Object.values(expanded.skills ?? {});
+    const skills = this.#readSkillsFromForm();
     this.#validateSkills(skills);
     await setSkillSettings(skills);
     this.skills = getSkillSettings();
@@ -58,7 +61,9 @@ export class SkillFormulasConfig extends FormApplication {
 
   #onDeleteSkill(event) {
     event.preventDefault();
-    const index = Number(event.currentTarget.dataset.index);
+    const rows = Array.from(this.form?.querySelectorAll("[data-skill-row]") ?? []);
+    const index = rows.indexOf(event.currentTarget.closest("[data-skill-row]"));
+    if (index < 0) return;
     this.skills = this.#readSkillsFromForm();
     this.skills.splice(index, 1);
     this.render(true);
