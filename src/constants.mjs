@@ -9,9 +9,9 @@ export const TEMPLATES = Object.freeze({
   actorSheet: Object.freeze({
     header: `systems/${SYSTEM_ID}/templates/actor/parts/header.hbs`,
     tabs: `systems/${SYSTEM_ID}/templates/actor/parts/tabs.hbs`,
-    overview: `systems/${SYSTEM_ID}/templates/actor/parts/overview-tab.hbs`,
-    skills: `systems/${SYSTEM_ID}/templates/actor/parts/skills-tab.hbs`,
-    details: `systems/${SYSTEM_ID}/templates/actor/parts/details-tab.hbs`
+    inventory: `systems/${SYSTEM_ID}/templates/actor/parts/inventory-tab.hbs`,
+    indicators: `systems/${SYSTEM_ID}/templates/actor/parts/indicators-tab.hbs`,
+    identity: `systems/${SYSTEM_ID}/templates/actor/parts/identity-tab.hbs`
   }),
   itemSheet: `systems/${SYSTEM_ID}/templates/item/item-sheet.hbs`,
   settings: Object.freeze({

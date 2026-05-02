@@ -10,6 +10,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       width: 620,
       height: "auto"
     },
+    form: {
+      submitOnChange: true
+    },
     window: {
       resizable: true
     }

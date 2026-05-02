@@ -40,11 +40,12 @@
 }
 
 .fallout-maw-header-grid {
-  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  align-items: center;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(2.25rem, auto);
 }
 
 .fallout-maw-resource-grid {
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .fallout-maw-characteristic-grid {
@@ -89,8 +90,129 @@
   justify-content: flex-end;
 }
 
+.fallout-maw-config-body,
+.fallout-maw-sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
 .fallout-maw-toggle-edit {
-  align-self: end;
+  height: 2.1rem;
+  justify-self: end;
+  min-width: 2.25rem;
+  padding: 0;
+  width: 2.25rem;
+}
+
+.fallout-maw-level-field input {
+  min-width: 4.5rem;
+}
+
+.fallout-maw-header-stat,
+.fallout-maw-resource-card {
+  align-items: center;
+  display: flex;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.fallout-maw-header-stat > span,
+.fallout-maw-resource-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-header-stat > strong,
+.fallout-maw-resource-value {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.fallout-maw-header-stat select,
+.fallout-maw-header-stat input {
+  min-width: 0;
+}
+
+.fallout-maw-resource-card {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(120, 120, 120, 0.25);
+  border-radius: 5px;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.fallout-maw-resource-name {
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.fallout-maw-resource-value {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.25rem;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.fallout-maw-resource-value input {
+  font-weight: 700;
+  height: 1.7rem;
+  min-width: 3.5rem;
+  text-align: center;
+  width: 3.5rem;
+}
+
+.fallout-maw-resource-max {
+  font-weight: 700;
+  opacity: 0.8;
+}
+
+.fallout-maw-summary-grid {
+  display: grid;
+  gap: 0.35rem 0.75rem;
+}
+
+.fallout-maw-summary-grid.two-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fallout-maw-summary-grid.three-columns {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.fallout-maw-inline-stat {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(120, 120, 120, 0.16);
+  border-radius: 4px;
+  display: flex;
+  gap: 0.35rem;
+  min-height: 1.9rem;
+  min-width: 0;
+  padding: 0.25rem 0.45rem;
+}
+
+.fallout-maw-inline-stat > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-inline-stat > strong {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.fallout-maw-inline-stat > input {
+  margin-left: auto;
+  max-width: 6rem;
+  min-width: 4rem;
+  width: 6rem;
 }
 
 .fallout-maw-fieldset {
@@ -120,6 +242,37 @@
   grid-template-columns: minmax(160px, 1fr) 70px 70px 70px;
 }
 
+.fallout-maw-identity-skill-grid {
+  display: grid;
+  gap: 0.35rem 0.75rem;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+}
+
+.fallout-maw-identity-skill {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(120, 120, 120, 0.18);
+  border-radius: 4px;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 2rem;
+  padding: 0.28rem 0.45rem;
+}
+
+.fallout-maw-identity-skill span {
+  min-width: 0;
+}
+
+.fallout-maw-identity-skill strong {
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(120, 120, 120, 0.18);
+  border-radius: 4px;
+  min-width: 2.5rem;
+  padding: 0.1rem 0.35rem;
+  text-align: center;
+}
+
 .characteristic-settings .fallout-maw-settings-row {
   grid-template-columns: 2rem 90px minmax(130px, 1fr) minmax(160px, 1.2fr) 2.5rem;
 }
@@ -139,9 +292,12 @@
 
 .fallout-maw-drag-handle {
   cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
 
 .fallout-maw-settings-row.dragging {
+  cursor: grabbing;
   opacity: 0.45;
 }
 
@@ -213,10 +369,28 @@
     grid-template-columns: 1fr;
   }
 
+  .fallout-maw-header-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fallout-maw-resource-grid,
+  .fallout-maw-summary-grid.two-columns,
+  .fallout-maw-summary-grid.three-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .fallout-maw-toggle-edit {
+    justify-self: start;
+  }
+
   .skill-settings .fallout-maw-settings-row,
   .characteristic-settings .fallout-maw-settings-row,
   .damage-type-settings .fallout-maw-settings-row,
   .fallout-maw-skill-row {
+    grid-template-columns: 1fr;
+  }
+
+  .fallout-maw-identity-skill-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -17,11 +17,13 @@
   "FALLOUTMAW": {
     "SystemTitle": "Fallout-MaW",
     "Tabs": {
-      "Overview": "Overview",
-      "Details": "Details"
+      "IdentityData": "Identity Data",
+      "Indicators": "Indicators",
+      "InventoryEquipment": "Inventory/Equipment"
     },
     "Common": {
       "ActionPoints": "Action Points",
+      "Characteristics": "Characteristics",
       "Code": "Code",
       "Create": "Create",
       "DamageResistances": "Damage Resistances",
@@ -38,6 +40,7 @@
       "Resources": "Resources",
       "SaveChanges": "Save Changes",
       "Skill": "Skill",
+      "Skills": "Skills",
       "Total": "Total",
       "Untitled": "Untitled"
     },

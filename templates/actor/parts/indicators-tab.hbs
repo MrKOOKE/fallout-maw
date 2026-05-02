@@ -1,0 +1,76 @@
+<section class="tab {{tabs.indicators.cssClass}}" data-group="{{tabs.indicators.group}}" data-tab="{{tabs.indicators.id}}">
+  <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Common.Resources"}}</h2>
+    <div class="fallout-maw-resource-grid">
+      <label class="fallout-maw-resource-card">
+        <span class="fallout-maw-resource-name">{{localize "FALLOUTMAW.Common.Health"}}:</span>
+        <span class="fallout-maw-resource-value">
+          {{#if freeEdit}}<input type="number" name="system.resources.health.value" value="{{system.resources.health.value}}">{{else}}<strong>{{system.resources.health.value}}</strong>{{/if}}
+          <span class="fallout-maw-resource-max">/ {{system.resources.health.max}}</span>
+        </span>
+      </label>
+      <label class="fallout-maw-resource-card">
+        <span class="fallout-maw-resource-name">{{localize "FALLOUTMAW.Common.Energy"}}:</span>
+        <span class="fallout-maw-resource-value">
+          {{#if freeEdit}}<input type="number" name="system.resources.energy.value" value="{{system.resources.energy.value}}">{{else}}<strong>{{system.resources.energy.value}}</strong>{{/if}}
+          <span class="fallout-maw-resource-max">/ {{system.resources.energy.max}}</span>
+        </span>
+      </label>
+      <label class="fallout-maw-resource-card">
+        <span class="fallout-maw-resource-name">{{localize "FALLOUTMAW.Actor.Dodge"}}:</span>
+        <span class="fallout-maw-resource-value">
+          {{#if freeEdit}}<input type="number" name="system.resources.dodge.value" value="{{system.resources.dodge.value}}">{{else}}<strong>{{system.resources.dodge.value}}</strong>{{/if}}
+          <span class="fallout-maw-resource-max">/ {{system.resources.dodge.max}}</span>
+        </span>
+      </label>
+      <label class="fallout-maw-resource-card">
+        <span class="fallout-maw-resource-name">{{localize "FALLOUTMAW.Common.ActionPoints"}}:</span>
+        <span class="fallout-maw-resource-value">
+          {{#if freeEdit}}<input type="number" name="system.resources.actionPoints.value" value="{{system.resources.actionPoints.value}}">{{else}}<strong>{{system.resources.actionPoints.value}}</strong>{{/if}}
+          <span class="fallout-maw-resource-max">/ {{system.resources.actionPoints.max}}</span>
+        </span>
+      </label>
+      <label class="fallout-maw-resource-card">
+        <span class="fallout-maw-resource-name">{{localize "FALLOUTMAW.Common.MovementPoints"}}:</span>
+        <span class="fallout-maw-resource-value">
+          {{#if freeEdit}}<input type="number" name="system.resources.movementPoints.value" value="{{system.resources.movementPoints.value}}">{{else}}<strong>{{system.resources.movementPoints.value}}</strong>{{/if}}
+          <span class="fallout-maw-resource-max">/ {{system.resources.movementPoints.max}}</span>
+        </span>
+      </label>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Common.DamageResistances"}}</h2>
+    <div class="fallout-maw-summary-grid three-columns">
+      {{#each damageResistances}}
+      <div class="fallout-maw-inline-stat">
+        <span>{{label}}:</span>
+        <strong>{{value}}</strong>
+      </div>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Actor.Progression"}}</h2>
+    <div class="fallout-maw-summary-grid two-columns">
+      <label class="fallout-maw-inline-stat">
+        <span>{{localize "FALLOUTMAW.Actor.SkillPointsPerLevel"}}:</span>
+        {{#if freeEdit}}
+        <input type="number" name="system.progression.skillPointsPerLevel" value="{{system.progression.skillPointsPerLevel}}" {{editLockAttribute}}>
+        {{else}}
+        <strong>{{system.progression.skillPointsPerLevel}}</strong>
+        {{/if}}
+      </label>
+      <label class="fallout-maw-inline-stat">
+        <span>{{localize "FALLOUTMAW.Actor.ResearchPointsPerLevel"}}:</span>
+        {{#if freeEdit}}
+        <input type="number" name="system.progression.researchPointsPerLevel" value="{{system.progression.researchPointsPerLevel}}" {{editLockAttribute}}>
+        {{else}}
+        <strong>{{system.progression.researchPointsPerLevel}}</strong>
+        {{/if}}
+      </label>
+    </div>
+  </section>
+</section>

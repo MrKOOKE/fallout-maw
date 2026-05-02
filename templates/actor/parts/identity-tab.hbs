@@ -1,0 +1,25 @@
+<section class="tab {{tabs.identity.cssClass}}" data-group="{{tabs.identity.group}}" data-tab="{{tabs.identity.id}}">
+  <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Common.Characteristics"}}</h2>
+    <div class="fallout-maw-characteristic-grid">
+      {{#each characteristics}}
+      <label>
+        <span title="{{abbr}} / {{key}}">{{label}}</span>
+        <input type="number" name="system.characteristics.{{key}}" value="{{value}}" {{../editLockAttribute}}>
+      </label>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Common.Skills"}}</h2>
+    <div class="fallout-maw-identity-skill-grid">
+      {{#each skills}}
+      <div class="fallout-maw-identity-skill">
+        <span>{{label}}</span>
+        <strong>{{value}}</strong>
+      </div>
+      {{/each}}
+    </div>
+  </section>
+</section>

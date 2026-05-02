@@ -33,6 +33,10 @@ export class FalloutMaWFormApplicationV2 extends HandlebarsApplicationMixin(Appl
     throw new Error(`${this.constructor.name} must implement _processFormData().`);
   }
 
+  get form() {
+    return this.element instanceof HTMLFormElement ? this.element : this.element?.querySelector("form");
+  }
+
   forceRender() {
     return this.render({ force: true });
   }

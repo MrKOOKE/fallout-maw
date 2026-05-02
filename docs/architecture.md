@@ -49,11 +49,11 @@ Actor sheet templates are split into V2 parts:
 
 ```text
 templates/actor/parts/
-├─ header.hbs
-├─ tabs.hbs
-├─ overview-tab.hbs
-├─ skills-tab.hbs
-└─ details-tab.hbs
+|- header.hbs
+|- tabs.hbs
+|- inventory-tab.hbs
+|- indicators-tab.hbs
+`- identity-tab.hbs
 ```
 
 ### `src/apps/`
@@ -68,10 +68,10 @@ Create a folder for the domain first. Example for combat automation:
 
 ```text
 src/combat/
-├─ initiative.mjs
-├─ damage-resolution.mjs
-├─ chat-cards.mjs
-└─ registration.mjs
+|- initiative.mjs
+|- damage-resolution.mjs
+|- chat-cards.mjs
+`- registration.mjs
 ```
 
 Then call `registerCombatAutomation()` from `src/main.mjs` or a higher-level registration module. Do not mix combat calculations into sheets.

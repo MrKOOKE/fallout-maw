@@ -20,6 +20,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       width: 760,
       height: 820
     },
+    form: {
+      submitOnChange: true
+    },
     window: {
       resizable: true
     },
@@ -35,25 +38,25 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     tabs: {
       template: TEMPLATES.actorSheet.tabs
     },
-    overview: {
-      template: TEMPLATES.actorSheet.overview
+    inventory: {
+      template: TEMPLATES.actorSheet.inventory
     },
-    skills: {
-      template: TEMPLATES.actorSheet.skills
+    indicators: {
+      template: TEMPLATES.actorSheet.indicators
     },
-    details: {
-      template: TEMPLATES.actorSheet.details
+    identity: {
+      template: TEMPLATES.actorSheet.identity
     }
   };
 
   static TABS = {
     primary: {
       tabs: [
-        { id: "overview", group: "primary", label: "FALLOUTMAW.Tabs.Overview" },
-        { id: "skills", group: "primary", label: "FALLOUTMAW.Settings.Skills.Title" },
-        { id: "details", group: "primary", label: "FALLOUTMAW.Tabs.Details" }
+        { id: "inventory", group: "primary", label: "FALLOUTMAW.Tabs.InventoryEquipment" },
+        { id: "indicators", group: "primary", label: "FALLOUTMAW.Tabs.Indicators" },
+        { id: "identity", group: "primary", label: "FALLOUTMAW.Tabs.IdentityData" }
       ],
-      initial: "overview"
+      initial: "inventory"
     }
   };
 

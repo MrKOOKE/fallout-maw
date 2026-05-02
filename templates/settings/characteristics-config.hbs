@@ -1,3 +1,4 @@
+<div class="fallout-maw-config-body">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
       <h2>{{localize "FALLOUTMAW.Settings.Characteristics.Title"}}</h2>
@@ -17,7 +18,7 @@
       </div>
       {{#each characteristics}}
       <div class="fallout-maw-settings-row" data-characteristic-row>
-        <button type="button" class="fallout-maw-drag-handle" data-drag-handle draggable="true" title="{{localize 'FALLOUTMAW.Common.Reorder'}}"><i class="fa-solid fa-grip-lines"></i></button>
+        <button type="button" class="fallout-maw-drag-handle" data-drag-handle title="{{localize 'FALLOUTMAW.Common.Reorder'}}"><i class="fa-solid fa-grip-lines"></i></button>
         <input type="text" data-field="abbr" value="{{abbr}}">
         <input type="text" data-field="key" value="{{key}}">
         <input type="text" data-field="label" value="{{label}}">
@@ -32,3 +33,4 @@
   <footer class="sheet-footer flexrow">
     <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
   </footer>
+</div>

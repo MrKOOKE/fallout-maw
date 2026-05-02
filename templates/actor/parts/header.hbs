@@ -3,8 +3,8 @@
   <div class="fallout-maw-header-fields">
     <input class="fallout-maw-title-input" name="name" type="text" value="{{actor.name}}" placeholder="{{localize 'DOCUMENT.FIELDS.name.label'}}">
     <div class="fallout-maw-header-grid">
-      <label>
-        <span>{{localize "FALLOUTMAW.Actor.CreatureType"}}</span>
+      <label class="fallout-maw-header-stat">
+        <span>{{localize "FALLOUTMAW.Actor.CreatureType"}}:</span>
         {{#if freeEdit}}
         <select name="system.creature.typeId" data-creature-type-select>
           <option value="">{{localize "FALLOUTMAW.Actor.NoCreatureType"}}</option>
@@ -16,8 +16,8 @@
         <strong>{{creatureTypeName}}</strong>
         {{/if}}
       </label>
-      <label>
-        <span>{{localize "FALLOUTMAW.Actor.Race"}}</span>
+      <label class="fallout-maw-header-stat">
+        <span>{{localize "FALLOUTMAW.Actor.Race"}}:</span>
         {{#if freeEdit}}
         <select name="system.creature.raceId" data-creature-race-select>
           <option value="">{{localize "FALLOUTMAW.Actor.NoRace"}}</option>
@@ -29,12 +29,26 @@
         <strong>{{creatureRaceName}}</strong>
         {{/if}}
       </label>
-      <label>
-        <span>{{localize "FALLOUTMAW.Actor.Level"}}</span>
+      <label class="fallout-maw-header-stat fallout-maw-level-field">
+        <span>{{localize "FALLOUTMAW.Actor.Level"}}:</span>
+        {{#if freeEdit}}
         <input type="number" name="system.attributes.level" value="{{system.attributes.level}}" min="1">
+        {{else}}
+        <strong>{{system.attributes.level}}</strong>
+        {{/if}}
       </label>
-      <button type="button" class="fallout-maw-toggle-edit" data-action="toggleFreeEdit">
-        {{#if freeEdit}}{{localize "FALLOUTMAW.Actor.LockCoreFields"}}{{else}}{{localize "FALLOUTMAW.Actor.UnlockCoreFields"}}{{/if}}
+      <button
+        type="button"
+        class="fallout-maw-toggle-edit"
+        data-action="toggleFreeEdit"
+        title="{{#if freeEdit}}{{localize 'FALLOUTMAW.Actor.LockCoreFields'}}{{else}}{{localize 'FALLOUTMAW.Actor.UnlockCoreFields'}}{{/if}}"
+        aria-label="{{#if freeEdit}}{{localize 'FALLOUTMAW.Actor.LockCoreFields'}}{{else}}{{localize 'FALLOUTMAW.Actor.UnlockCoreFields'}}{{/if}}"
+      >
+        {{#if freeEdit}}
+        <i class="fa-solid fa-lock-open"></i>
+        {{else}}
+        <i class="fa-solid fa-lock"></i>
+        {{/if}}
       </button>
     </div>
   </div>
