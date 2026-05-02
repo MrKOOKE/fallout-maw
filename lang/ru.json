@@ -16,43 +16,71 @@
   },
   "FALLOUTMAW": {
     "SystemTitle": "Fallout-MaW",
+    "Tabs": {
+      "Overview": "Обзор",
+      "Details": "Детали"
+    },
     "Common": {
       "ActionPoints": "Очки действия",
       "Code": "Код",
       "Create": "Создать",
       "DamageResistances": "Сопротивления урону",
       "Delete": "Удалить",
+      "Description": "Описание",
       "Energy": "Энергия",
       "Formula": "Формула",
       "Health": "Здоровье",
       "Key": "Ключ",
       "Label": "Название",
       "MovementPoints": "Очки передвижения",
-      "ResetDefaults": "Установить по умолчанию",
-      "SaveChanges": "Сохранить изменения",
       "Reorder": "Изменить порядок",
+      "ResetDefaults": "Установить по умолчанию",
+      "Resources": "Ресурсы",
+      "SaveChanges": "Сохранить изменения",
+      "Skill": "Навык",
+      "Total": "Итого",
       "Untitled": "Без названия"
     },
     "Actor": {
+      "Base": "База",
+      "Bonus": "Бонус",
       "Character": "Персонаж",
       "CreatureType": "Тип существа",
       "Dodge": "Уклонение",
       "FreeEdit": "Свободное редактирование",
       "Level": "Уровень",
+      "LockCoreFields": "Заблокировать основу",
       "NoCreatureType": "Не выбран",
       "NoRace": "Не выбрана",
       "Progression": "Приросты",
       "Race": "Раса",
       "ResearchPointsPerLevel": "Очки исследований за уровень",
-      "SkillPointsPerLevel": "Очки навыков за уровень"
+      "SkillPointsPerLevel": "Очки навыков за уровень",
+      "UnlockCoreFields": "Разблокировать основу"
+    },
+    "Item": {
+      "Core": "Данные предмета",
+      "Cost": "Стоимость",
+      "Damage": "Урон",
+      "Defense": "Защита",
+      "Duration": "Длительность",
+      "Equipped": "Экипировано",
+      "Price": "Цена",
+      "Quantity": "Количество",
+      "Range": "Дистанция",
+      "Target": "Цель",
+      "TotalWeight": "Общий вес",
+      "Weight": "Вес"
     },
     "Creation": {
       "Base": "Основа персонажа",
       "RaceFilterHint": "Список рас зависит от выбранного типа существа."
     },
     "Settings": {
+      "Open": "Открыть",
       "ActionMovement": {
         "ActionPointsFormula": "Базовые очки действия",
+        "FormulaHint": "В формулах можно использовать коды характеристик и навыков, например: 5 + dex/3 + ath/50.",
         "MovementPointsFormula": "Базовые очки перемещения",
         "ShortTitle": "Настройка ОД/ОП",
         "Title": "Настройка ОД/ОП"
@@ -67,9 +95,15 @@
       "CreatureOptions": {
         "CreateRace": "Создать расу",
         "CreateType": "Создать тип",
+        "DamageFormulaHint": "Формулы сопротивления могут использовать коды характеристик и навыков.",
         "DeleteRace": "Удалить расу",
+        "DeleteRaceConfirm": "Удалить расу \"{id}\"?",
         "DeleteType": "Удалить тип",
+        "DeleteTypeConfirm": "Удалить тип \"{id}\" и все связанные с ним расы?",
         "EmptyEditor": "Создайте тип или расу",
+        "EmptyEditorHint": "В левой панели сначала создайте тип существа, а затем добавьте для него расы.",
+        "NewRace": "Новая раса",
+        "NewType": "Новый тип",
         "NoRaces": "Расы еще не созданы",
         "NoTypes": "Типы еще не созданы",
         "Progression": "Приросты",
@@ -90,11 +124,11 @@
         "LabelPlaceholder": "Название типа урона",
         "Title": "Настройка типов урона"
       },
-      "Open": "Открыть",
       "Skills": {
         "Create": "Создать навык",
         "Delete": "Удалить навык",
         "Empty": "Навыки не созданы.",
+        "FormulaHint": "Формулы навыков могут использовать ключи и коды характеристик. Ключи и коды лучше держать латиницей.",
         "LabelPlaceholder": "Название навыка",
         "Title": "Настройка навыков"
       }
@@ -103,6 +137,7 @@
       "ActionMovementSaved": "Формулы ОД/ОП сохранены.",
       "CharacteristicsSaved": "Настройки характеристик сохранены.",
       "CreateTypeFirst": "Сначала создайте тип существа.",
+      "CreatureOptionsSaved": "Типы и расы сохранены.",
       "DamageTypesSaved": "Настройка типов урона сохранена.",
       "DeleteRaceContent": "Удалить расу \"{name}\"?",
       "DeleteTypeContent": "Удалить тип \"{name}\" и все связанные с ним расы?",
@@ -121,16 +156,16 @@
       "UnknownParameter": "Неизвестный параметр \"{identifier}\""
     },
     "Validation": {
-      "CharacteristicAbbrInvalid": "Характеристика {index}: код должен быть идентификатором латиницей.",
       "CharacteristicAbbrDuplicate": "Код характеристики \"{abbr}\" повторяется.",
-      "CharacteristicKeyInvalid": "Характеристика {index}: ключ должен быть идентификатором латиницей.",
+      "CharacteristicAbbrInvalid": "Характеристика {index}: код должен быть идентификатором латиницей.",
       "CharacteristicKeyDuplicate": "Ключ характеристики \"{key}\" повторяется.",
-      "DamageTypeKeyInvalid": "Тип урона {index}: ключ должен быть идентификатором латиницей.",
+      "CharacteristicKeyInvalid": "Характеристика {index}: ключ должен быть идентификатором латиницей.",
       "DamageTypeKeyDuplicate": "Ключ типа урона \"{key}\" повторяется.",
-      "SkillAbbrInvalid": "Навык {index}: код должен быть идентификатором латиницей.",
+      "DamageTypeKeyInvalid": "Тип урона {index}: ключ должен быть идентификатором латиницей.",
       "SkillAbbrDuplicate": "Код навыка \"{abbr}\" повторяется.",
-      "SkillKeyInvalid": "Навык {index}: ключ должен быть идентификатором латиницей.",
-      "SkillKeyDuplicate": "Ключ навыка \"{key}\" повторяется."
+      "SkillAbbrInvalid": "Навык {index}: код должен быть идентификатором латиницей.",
+      "SkillKeyDuplicate": "Ключ навыка \"{key}\" повторяется.",
+      "SkillKeyInvalid": "Навык {index}: ключ должен быть идентификатором латиницей."
     }
   }
 }

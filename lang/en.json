@@ -16,43 +16,71 @@
   },
   "FALLOUTMAW": {
     "SystemTitle": "Fallout-MaW",
+    "Tabs": {
+      "Overview": "Overview",
+      "Details": "Details"
+    },
     "Common": {
       "ActionPoints": "Action Points",
       "Code": "Code",
       "Create": "Create",
       "DamageResistances": "Damage Resistances",
       "Delete": "Delete",
+      "Description": "Description",
       "Energy": "Energy",
       "Formula": "Formula",
       "Health": "Health",
       "Key": "Key",
       "Label": "Name",
       "MovementPoints": "Movement Points",
-      "ResetDefaults": "Reset to Defaults",
-      "SaveChanges": "Save Changes",
       "Reorder": "Reorder",
+      "ResetDefaults": "Reset to Defaults",
+      "Resources": "Resources",
+      "SaveChanges": "Save Changes",
+      "Skill": "Skill",
+      "Total": "Total",
       "Untitled": "Untitled"
     },
     "Actor": {
+      "Base": "Base",
+      "Bonus": "Bonus",
       "Character": "Character",
       "CreatureType": "Creature Type",
       "Dodge": "Dodge",
       "FreeEdit": "Free Editing",
       "Level": "Level",
+      "LockCoreFields": "Lock Core Fields",
       "NoCreatureType": "Not selected",
       "NoRace": "Not selected",
       "Progression": "Progression",
       "Race": "Race",
       "ResearchPointsPerLevel": "Research Points per Level",
-      "SkillPointsPerLevel": "Skill Points per Level"
+      "SkillPointsPerLevel": "Skill Points per Level",
+      "UnlockCoreFields": "Unlock Core Fields"
+    },
+    "Item": {
+      "Core": "Item Data",
+      "Cost": "Cost",
+      "Damage": "Damage",
+      "Defense": "Defense",
+      "Duration": "Duration",
+      "Equipped": "Equipped",
+      "Price": "Price",
+      "Quantity": "Quantity",
+      "Range": "Range",
+      "Target": "Target",
+      "TotalWeight": "Total Weight",
+      "Weight": "Weight"
     },
     "Creation": {
       "Base": "Character Base",
       "RaceFilterHint": "The race list depends on the selected creature type."
     },
     "Settings": {
+      "Open": "Open",
       "ActionMovement": {
         "ActionPointsFormula": "Base Action Points",
+        "FormulaHint": "Formulas can use characteristic codes and skill codes, for example: 5 + dex/3 + ath/50.",
         "MovementPointsFormula": "Base Movement Points",
         "ShortTitle": "AP/MP Settings",
         "Title": "AP/MP Settings"
@@ -67,9 +95,15 @@
       "CreatureOptions": {
         "CreateRace": "Create Race",
         "CreateType": "Create Type",
+        "DamageFormulaHint": "Resistance formulas can use characteristic and skill codes.",
         "DeleteRace": "Delete Race",
+        "DeleteRaceConfirm": "Delete race \"{id}\"?",
         "DeleteType": "Delete Type",
+        "DeleteTypeConfirm": "Delete type \"{id}\" and all races assigned to it?",
         "EmptyEditor": "Create a type or race",
+        "EmptyEditorHint": "Use the left panel to create a creature type first, then add races for it.",
+        "NewRace": "New Race",
+        "NewType": "New Type",
         "NoRaces": "No races created yet",
         "NoTypes": "No types created yet",
         "Progression": "Progression",
@@ -90,11 +124,11 @@
         "LabelPlaceholder": "Damage type name",
         "Title": "Damage Type Settings"
       },
-      "Open": "Open",
       "Skills": {
         "Create": "Create Skill",
         "Delete": "Delete Skill",
         "Empty": "No skills created.",
+        "FormulaHint": "Skill formulas can use characteristic keys and codes. Keep keys and codes in Latin characters.",
         "LabelPlaceholder": "Skill name",
         "Title": "Skill Settings"
       }
@@ -103,6 +137,7 @@
       "ActionMovementSaved": "AP/MP formulas saved.",
       "CharacteristicsSaved": "Characteristic settings saved.",
       "CreateTypeFirst": "Create a creature type first.",
+      "CreatureOptionsSaved": "Creature options saved.",
       "DamageTypesSaved": "Damage type settings saved.",
       "DeleteRaceContent": "Delete race \"{name}\"?",
       "DeleteTypeContent": "Delete type \"{name}\" and all races assigned to it?",
@@ -121,16 +156,16 @@
       "UnknownParameter": "Unknown parameter \"{identifier}\""
     },
     "Validation": {
-      "CharacteristicAbbrInvalid": "Characteristic {index}: code must be a Latin identifier.",
       "CharacteristicAbbrDuplicate": "Characteristic code \"{abbr}\" is duplicated.",
-      "CharacteristicKeyInvalid": "Characteristic {index}: key must be a Latin identifier.",
+      "CharacteristicAbbrInvalid": "Characteristic {index}: code must be a Latin identifier.",
       "CharacteristicKeyDuplicate": "Characteristic key \"{key}\" is duplicated.",
-      "DamageTypeKeyInvalid": "Damage type {index}: key must be a Latin identifier.",
+      "CharacteristicKeyInvalid": "Characteristic {index}: key must be a Latin identifier.",
       "DamageTypeKeyDuplicate": "Damage type key \"{key}\" is duplicated.",
-      "SkillAbbrInvalid": "Skill {index}: code must be a Latin identifier.",
+      "DamageTypeKeyInvalid": "Damage type {index}: key must be a Latin identifier.",
       "SkillAbbrDuplicate": "Skill code \"{abbr}\" is duplicated.",
-      "SkillKeyInvalid": "Skill {index}: key must be a Latin identifier.",
-      "SkillKeyDuplicate": "Skill key \"{key}\" is duplicated."
+      "SkillAbbrInvalid": "Skill {index}: code must be a Latin identifier.",
+      "SkillKeyDuplicate": "Skill key \"{key}\" is duplicated.",
+      "SkillKeyInvalid": "Skill {index}: key must be a Latin identifier."
     }
   }
 }

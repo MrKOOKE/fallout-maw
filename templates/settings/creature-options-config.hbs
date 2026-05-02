@@ -1,157 +1,119 @@
-<form class="fallout-maw-config-form" autocomplete="off">
-  <aside class="fallout-maw-config-sidebar">
-    <section class="fallout-maw-config-block">
-      <div class="fallout-maw-config-heading">
-        <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.Types"}}</h2>
-        <button type="button" data-action="create-type" title="{{localize 'FALLOUTMAW.Settings.CreatureOptions.CreateType'}}">
-          <i class="fa-solid fa-plus"></i>
-          <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.CreateType"}}</span>
-        </button>
-      </div>
-      <ol class="fallout-maw-entity-list">
-        {{#each types}}
-          <li>
-            <div class="fallout-maw-entity-list-row">
-              <button type="button" class="{{#if active}}active{{/if}}" data-action="select" data-kind="type" data-id="{{id}}">
-                <span>{{name}}</span>
-              </button>
-              <button type="button" class="icon-only" data-action="delete-type" data-id="{{id}}" title="{{localize 'FALLOUTMAW.Settings.CreatureOptions.DeleteType'}}">
-                <i class="fa-solid fa-trash"></i>
-              </button>
-            </div>
-          </li>
-        {{else}}
-          <li class="empty">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoTypes"}}</li>
-        {{/each}}
-      </ol>
-    </section>
-
-    <section class="fallout-maw-config-block">
-      <div class="fallout-maw-config-heading">
-        <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.Races"}}</h2>
-        <button type="button" data-action="create-race" title="{{localize 'FALLOUTMAW.Settings.CreatureOptions.CreateRace'}}">
-          <i class="fa-solid fa-plus"></i>
-          <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.CreateRace"}}</span>
-        </button>
-      </div>
-      {{#each raceGroups}}
-        <div class="fallout-maw-race-group">
-          <h3>{{name}}</h3>
-          <ol class="fallout-maw-entity-list">
-            {{#each races}}
-              <li>
-                <div class="fallout-maw-entity-list-row">
-                  <button type="button" class="{{#if active}}active{{/if}}" data-action="select" data-kind="race" data-id="{{id}}">
-                    <span>{{name}}</span>
-                  </button>
-                  <button type="button" class="icon-only" data-action="delete-race" data-id="{{id}}" title="{{localize 'FALLOUTMAW.Settings.CreatureOptions.DeleteRace'}}">
-                    <i class="fa-solid fa-trash"></i>
-                  </button>
-                </div>
-              </li>
-            {{/each}}
-          </ol>
-        </div>
-      {{else}}
-        <ol class="fallout-maw-entity-list">
-          <li class="empty">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoRaces"}}</li>
-        </ol>
-      {{/each}}
-    </section>
-  </aside>
-
-  <main class="fallout-maw-config-editor">
-    {{#if selectedType}}
+  <div class="fallout-maw-two-pane">
+    <aside class="fallout-maw-sidebar">
       <section class="fallout-maw-panel">
-        <header>
-          <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.TypeSection"}}</h2>
+        <header class="fallout-maw-panel-header">
+          <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.Types"}}</h2>
+          <button type="button" data-action="createType"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Settings.CreatureOptions.CreateType"}}</button>
         </header>
-        <div class="form-group">
-          <label>{{localize "FALLOUTMAW.Common.Label"}}</label>
-          <div class="form-fields">
-            <input type="text" name="name" value="{{selectedType.name}}" placeholder="{{localize 'FALLOUTMAW.Settings.CreatureOptions.TypeNamePlaceholder'}}">
-          </div>
-        </div>
-      </section>
-    {{/if}}
 
-    {{#if selectedRace}}
-      <section class="fallout-maw-panel">
-        <header>
-          <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.RaceSection"}}</h2>
-        </header>
-        <div class="form-group">
-          <label>{{localize "FALLOUTMAW.Common.Label"}}</label>
-          <div class="form-fields">
-            <input type="text" name="name" value="{{selectedRace.name}}" placeholder="{{localize 'FALLOUTMAW.Settings.CreatureOptions.RaceNamePlaceholder'}}">
+        <div class="fallout-maw-option-list">
+          {{#each typeOptions}}
+          <div class="fallout-maw-option-row {{#if selected}}active{{/if}}">
+            <button type="button" data-action="selectType" data-id="{{id}}">{{name}}</button>
+            <button type="button" data-action="deleteType" data-id="{{id}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
           </div>
-        </div>
-        <div class="form-group">
-          <label>{{localize "FALLOUTMAW.Settings.CreatureOptions.TypeSection"}}</label>
-          <div class="form-fields">
-            <select name="typeId">
-              {{selectOptions typeOptions selected=selectedRace.typeId}}
-            </select>
-          </div>
-        </div>
-      </section>
-
-      <section class="fallout-maw-panel">
-        <header>
-          <h2>{{localize "FALLOUTMAW.Settings.Characteristics.Title"}}</h2>
-        </header>
-        <div class="fallout-maw-stat-grid compact">
-          {{#each characteristics}}
-            <label>
-              <span>{{label}}</span>
-              <input type="number" step="1" name="characteristics.{{key}}" value="{{value}}">
-            </label>
+          {{else}}
+          <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoTypes"}}</p>
           {{/each}}
         </div>
       </section>
 
       <section class="fallout-maw-panel">
-        <header>
-          <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.Progression"}}</h2>
+        <header class="fallout-maw-panel-header">
+          <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.Races"}}</h2>
+          <button type="button" data-action="createRace"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Settings.CreatureOptions.CreateRace"}}</button>
         </header>
-        <div class="fallout-maw-stat-grid compact">
+
+        <div class="fallout-maw-option-list">
+          {{#each raceOptions}}
+          <div class="fallout-maw-option-row {{#if selected}}active{{/if}}">
+            <button type="button" data-action="selectRace" data-id="{{id}}">{{name}}</button>
+            <button type="button" data-action="deleteRace" data-id="{{id}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          {{else}}
+          <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoRaces"}}</p>
+          {{/each}}
+        </div>
+      </section>
+    </aside>
+
+    <main class="fallout-maw-editor-pane">
+      {{#if selectedType}}
+      <section class="fallout-maw-panel">
+        <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.TypeSection"}}</h2>
+        <label>
+          <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
+          <input type="text" name="type.name" value="{{selectedType.name}}">
+        </label>
+      </section>
+      {{/if}}
+
+      {{#if selectedRace}}
+      <section class="fallout-maw-panel">
+        <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.RaceSection"}}</h2>
+        <div class="fallout-maw-list-grid two-columns">
+          <label>
+            <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
+            <input type="text" name="race.name" value="{{selectedRace.name}}">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.TypeSection"}}</span>
+            <select name="race.typeId">
+              {{#each typeOptions}}
+              <option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>
+              {{/each}}
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="fallout-maw-panel">
+        <h2>{{localize "FALLOUTMAW.Settings.Characteristics.Title"}}</h2>
+        <div class="fallout-maw-characteristic-grid">
+          {{#each characteristics}}
+          <label>
+            <span title="{{label}}">{{abbr}}</span>
+            <input type="number" name="race.characteristics.{{key}}" value="{{value}}">
+          </label>
+          {{/each}}
+        </div>
+      </section>
+
+      <section class="fallout-maw-panel">
+        <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.Progression"}}</h2>
+        <div class="fallout-maw-list-grid two-columns">
           <label>
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.SkillPointsPerLevel"}}</span>
-            <input type="number" step="1" name="progression.skillPointsPerLevel" value="{{selectedRace.progression.skillPointsPerLevel}}">
+            <input type="number" name="race.progression.skillPointsPerLevel" value="{{selectedRace.progression.skillPointsPerLevel}}" min="0">
           </label>
           <label>
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.ResearchPointsPerLevel"}}</span>
-            <input type="number" step="1" name="progression.researchPointsPerLevel" value="{{selectedRace.progression.researchPointsPerLevel}}">
+            <input type="number" name="race.progression.researchPointsPerLevel" value="{{selectedRace.progression.researchPointsPerLevel}}" min="0">
           </label>
         </div>
       </section>
 
       <section class="fallout-maw-panel">
-        <header>
-          <h2>{{localize "FALLOUTMAW.Common.DamageResistances"}}</h2>
-        </header>
-        <div class="fallout-maw-formula-grid">
-          {{#each damageResistances}}
-            <label>
-              <span>{{label}}</span>
-              <input type="text" name="damageResistances.{{key}}" value="{{formula}}" data-formula-autocomplete="all" placeholder="0">
-            </label>
+        <h2>{{localize "FALLOUTMAW.Common.DamageResistances"}}</h2>
+        <p class="hint">{{localize "FALLOUTMAW.Settings.CreatureOptions.DamageFormulaHint"}}</p>
+        <div class="fallout-maw-list-grid two-columns">
+          {{#each damageTypes}}
+          <label>
+            <span>{{label}}</span>
+            <input type="text" name="race.damageResistances.{{key}}" value="{{formula}}" data-formula-autocomplete="all">
+          </label>
           {{/each}}
         </div>
       </section>
-    {{/if}}
-
-    {{#unless activeId}}
-      <section class="fallout-maw-panel empty-editor">
+      {{else}}
+      <section class="fallout-maw-panel fallout-maw-empty-editor">
         <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.EmptyEditor"}}</h2>
+        <p class="hint">{{localize "FALLOUTMAW.Settings.CreatureOptions.EmptyEditorHint"}}</p>
       </section>
-    {{/unless}}
+      {{/if}}
+    </main>
+  </div>
 
-    <footer class="sheet-footer flexrow">
-      <button type="submit">
-        <i class="fa-solid fa-floppy-disk"></i>
-        {{localize "FALLOUTMAW.Common.SaveChanges"}}
-      </button>
-    </footer>
-  </main>
-</form>
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  </footer>

@@ -3,10 +3,10 @@
   "type": "system",
   "title": "Fallout-MaW",
   "description": "A universal automation-focused tabletop system for Foundry Virtual Tabletop.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "compatibility": {
     "minimum": "14",
-    "verified": "14"
+    "verified": "14.360"
   },
   "authors": [
     {
@@ -14,7 +14,7 @@
     }
   ],
   "esmodules": [
-    "fallout-maw.mjs"
+    "src/main.mjs"
   ],
   "styles": [
     "styles/fallout-maw.css"

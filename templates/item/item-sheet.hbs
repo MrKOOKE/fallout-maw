@@ -1,6 +1,79 @@
-<form class="fallout-maw item-sheet {{item.type}}" autocomplete="off">
-  <header class="sheet-header">
-    <img class="profile-img" src="{{item.img}}" data-edit="img" title="{{item.name}}" height="100" width="100">
-    <h1><input name="name" type="text" value="{{item.name}}" placeholder="Name"></h1>
-  </header>
-</form>
+<header class="sheet-header fallout-maw-sheet-header">
+  <img class="profile-img" src="{{item.img}}" data-action="editImage" data-field="img" title="{{item.name}}" height="80" width="80">
+  <div class="fallout-maw-header-fields">
+    <input class="fallout-maw-title-input" name="name" type="text" value="{{item.name}}" placeholder="{{localize 'DOCUMENT.FIELDS.name.label'}}">
+    <div class="fallout-maw-header-grid">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.Quantity"}}</span>
+        <input type="number" name="system.quantity" value="{{system.quantity}}" min="0">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.Weight"}}</span>
+        <input type="number" name="system.weight" value="{{system.weight}}" min="0" step="0.1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TotalWeight"}}</span>
+        <input type="number" value="{{totalWeight}}" disabled>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.Price"}}</span>
+        <input type="number" name="system.price" value="{{system.price}}" min="0">
+      </label>
+    </div>
+  </div>
+</header>
+
+<section class="fallout-maw-panel">
+  <h2>{{localize "FALLOUTMAW.Item.Core"}}</h2>
+  <div class="fallout-maw-list-grid two-columns">
+    <label class="checkbox">
+      <input type="checkbox" name="system.equipped" {{checked system.equipped}}>
+      <span>{{localize "FALLOUTMAW.Item.Equipped"}}</span>
+    </label>
+
+    {{#if isWeapon}}
+    <label>
+      <span>{{localize "FALLOUTMAW.Item.Damage"}}</span>
+      <input type="text" name="system.damage" value="{{system.damage}}">
+    </label>
+    <label>
+      <span>{{localize "FALLOUTMAW.Item.Range"}}</span>
+      <input type="number" name="system.range" value="{{system.range}}" min="0">
+    </label>
+    {{/if}}
+
+    {{#if isArmor}}
+    <label>
+      <span>{{localize "FALLOUTMAW.Item.Defense"}}</span>
+      <input type="number" name="system.defense" value="{{system.defense}}" min="0">
+    </label>
+    {{/if}}
+
+    {{#if isAbility}}
+    <label>
+      <span>{{localize "FALLOUTMAW.Item.Cost"}}</span>
+      <input type="number" name="system.cost" value="{{system.cost}}" min="0">
+    </label>
+    <label>
+      <span>{{localize "FALLOUTMAW.Common.Formula"}}</span>
+      <input type="text" name="system.formula" value="{{system.formula}}">
+    </label>
+    {{/if}}
+
+    {{#if isEffect}}
+    <label>
+      <span>{{localize "FALLOUTMAW.Item.Target"}}</span>
+      <input type="text" name="system.target" value="{{system.target}}">
+    </label>
+    <label>
+      <span>{{localize "FALLOUTMAW.Item.Duration"}}</span>
+      <input type="text" name="system.duration" value="{{system.duration}}">
+    </label>
+    {{/if}}
+  </div>
+</section>
+
+<section class="fallout-maw-panel">
+  <h2>{{localize "FALLOUTMAW.Common.Description"}}</h2>
+  {{editor system.description target="system.description" button=true owner=owner editable=editable}}
+</section>

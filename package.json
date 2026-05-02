@@ -1,0 +1,15 @@
+{
+  "name": "fallout-maw",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Fallout-MaW game system for Foundry Virtual Tabletop.",
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/validate-manifest.mjs && node scripts/check-syntax.mjs",
+    "check:manifest": "node scripts/validate-manifest.mjs",
+    "check:syntax": "node scripts/check-syntax.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

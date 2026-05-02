@@ -1,0 +1,21 @@
+<section class="tab {{tabs.skills.cssClass}}" data-group="{{tabs.skills.group}}" data-tab="{{tabs.skills.id}}">
+  <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Settings.Skills.Title"}}</h2>
+    <div class="fallout-maw-skill-list">
+      <div class="fallout-maw-skill-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Skill"}}</span>
+        <span>{{localize "FALLOUTMAW.Actor.Base"}}</span>
+        <span>{{localize "FALLOUTMAW.Actor.Bonus"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Total"}}</span>
+      </div>
+      {{#each skills}}
+      <div class="fallout-maw-skill-row">
+        <span>{{label}}</span>
+        <input type="number" value="{{base}}" disabled>
+        <input type="number" name="system.skills.{{key}}.bonus" value="{{bonus}}">
+        <strong>{{value}}</strong>
+      </div>
+      {{/each}}
+    </div>
+  </section>
+</section>

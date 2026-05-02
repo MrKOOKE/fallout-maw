@@ -1,0 +1,41 @@
+<header class="sheet-header fallout-maw-sheet-header">
+  <img class="profile-img" src="{{actor.img}}" data-action="editImage" data-field="img" title="{{actor.name}}" height="96" width="96">
+  <div class="fallout-maw-header-fields">
+    <input class="fallout-maw-title-input" name="name" type="text" value="{{actor.name}}" placeholder="{{localize 'DOCUMENT.FIELDS.name.label'}}">
+    <div class="fallout-maw-header-grid">
+      <label>
+        <span>{{localize "FALLOUTMAW.Actor.CreatureType"}}</span>
+        {{#if freeEdit}}
+        <select name="system.creature.typeId" data-creature-type-select>
+          <option value="">{{localize "FALLOUTMAW.Actor.NoCreatureType"}}</option>
+          {{#each creatureTypes}}
+          <option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>
+          {{/each}}
+        </select>
+        {{else}}
+        <strong>{{creatureTypeName}}</strong>
+        {{/if}}
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Actor.Race"}}</span>
+        {{#if freeEdit}}
+        <select name="system.creature.raceId" data-creature-race-select>
+          <option value="">{{localize "FALLOUTMAW.Actor.NoRace"}}</option>
+          {{#each creatureRaces}}
+          <option value="{{id}}" data-type-id="{{typeId}}" {{#if selected}}selected{{/if}}>{{name}}</option>
+          {{/each}}
+        </select>
+        {{else}}
+        <strong>{{creatureRaceName}}</strong>
+        {{/if}}
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Actor.Level"}}</span>
+        <input type="number" name="system.attributes.level" value="{{system.attributes.level}}" min="1">
+      </label>
+      <button type="button" class="fallout-maw-toggle-edit" data-action="toggleFreeEdit">
+        {{#if freeEdit}}{{localize "FALLOUTMAW.Actor.LockCoreFields"}}{{else}}{{localize "FALLOUTMAW.Actor.UnlockCoreFields"}}{{/if}}
+      </button>
+    </div>
+  </div>
+</header>

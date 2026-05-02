@@ -1,13 +1,14 @@
-<form class="fallout-maw-formula-config" autocomplete="off">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
       <h2>{{localize "FALLOUTMAW.Settings.ActionMovement.ShortTitle"}}</h2>
-      <button type="button" data-action="reset-defaults">
-        <i class="fa-solid fa-rotate-left"></i>
-        {{localize "FALLOUTMAW.Common.ResetDefaults"}}
-      </button>
+      <div class="fallout-maw-button-row">
+        <button type="button" data-action="resetDefaults"><i class="fa-solid fa-rotate-left"></i> {{localize "FALLOUTMAW.Common.ResetDefaults"}}</button>
+      </div>
     </header>
-    <div class="fallout-maw-formula-grid single">
+
+    <p class="hint">{{localize "FALLOUTMAW.Settings.ActionMovement.FormulaHint"}}</p>
+
+    <div class="fallout-maw-list-grid">
       <label>
         <span>{{localize "FALLOUTMAW.Settings.ActionMovement.ActionPointsFormula"}}</span>
         <input type="text" name="formulas.actionPoints" value="{{formulas.actionPoints}}" data-formula-autocomplete="all">
@@ -20,9 +21,5 @@
   </section>
 
   <footer class="sheet-footer flexrow">
-    <button type="submit">
-      <i class="fa-solid fa-floppy-disk"></i>
-      {{localize "FALLOUTMAW.Common.SaveChanges"}}
-    </button>
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
   </footer>
-</form>

@@ -1,47 +1,32 @@
-<form class="fallout-maw-formula-config" autocomplete="off">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
       <h2>{{localize "FALLOUTMAW.Settings.DamageTypes.Title"}}</h2>
-      <div class="fallout-maw-header-actions">
-        <button type="button" data-action="create-damage-type">
-          <i class="fa-solid fa-plus"></i>
-          {{localize "FALLOUTMAW.Settings.DamageTypes.Create"}}
-        </button>
-        <button type="button" data-action="reset-defaults">
-          <i class="fa-solid fa-rotate-left"></i>
-          {{localize "FALLOUTMAW.Common.ResetDefaults"}}
-        </button>
+      <div class="fallout-maw-button-row">
+        <button type="button" data-action="createDamageType"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Settings.DamageTypes.Create"}}</button>
+        <button type="button" data-action="resetDefaults"><i class="fa-solid fa-rotate-left"></i> {{localize "FALLOUTMAW.Common.ResetDefaults"}}</button>
       </div>
     </header>
 
-    <div class="fallout-maw-settings-table key-label-settings">
-      <div class="fallout-maw-settings-table-head">
+    <div class="fallout-maw-settings-table damage-type-settings">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
         <span></span>
         <span>{{localize "FALLOUTMAW.Common.Key"}}</span>
         <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
         <span></span>
       </div>
       {{#each damageTypes}}
-        <div class="fallout-maw-settings-row" data-damage-type-row>
-          <button type="button" class="fallout-maw-drag-handle" data-drag-handle draggable="true" title="{{localize 'FALLOUTMAW.Common.Reorder'}}">
-            <i class="fa-solid fa-grip-vertical"></i>
-          </button>
-          <input type="text" name="damageTypes.{{@index}}.key" value="{{key}}" data-field="key" placeholder="damageKey">
-          <input type="text" name="damageTypes.{{@index}}.label" value="{{label}}" data-field="label" placeholder="{{localize 'FALLOUTMAW.Settings.DamageTypes.LabelPlaceholder'}}">
-          <button type="button" class="icon-only" data-action="delete-damage-type" data-index="{{@index}}" title="{{localize 'FALLOUTMAW.Settings.DamageTypes.Delete'}}">
-            <i class="fa-solid fa-trash"></i>
-          </button>
-        </div>
+      <div class="fallout-maw-settings-row" data-damage-type-row>
+        <button type="button" class="fallout-maw-drag-handle" data-drag-handle draggable="true" title="{{localize 'FALLOUTMAW.Common.Reorder'}}"><i class="fa-solid fa-grip-lines"></i></button>
+        <input type="text" data-field="key" value="{{key}}">
+        <input type="text" data-field="label" value="{{label}}">
+        <button type="button" data-action="deleteDamageType" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
       {{else}}
-        <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.DamageTypes.Empty"}}</p>
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.DamageTypes.Empty"}}</p>
       {{/each}}
     </div>
   </section>
 
   <footer class="sheet-footer flexrow">
-    <button type="submit">
-      <i class="fa-solid fa-floppy-disk"></i>
-      {{localize "FALLOUTMAW.Common.SaveChanges"}}
-    </button>
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
   </footer>
-</form>

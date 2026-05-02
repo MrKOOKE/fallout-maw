@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "checkJs": false,
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "strict": false,
+    "baseUrl": "."
+  },
+  "include": ["src/**/*.mjs", "scripts/**/*.mjs"]
+}

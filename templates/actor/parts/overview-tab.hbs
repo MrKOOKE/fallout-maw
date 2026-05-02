@@ -1,0 +1,56 @@
+<section class="tab {{tabs.overview.cssClass}}" data-group="{{tabs.overview.group}}" data-tab="{{tabs.overview.id}}">
+  <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Common.Resources"}}</h2>
+    <div class="fallout-maw-resource-grid">
+      <label>
+        <span>{{localize "FALLOUTMAW.Common.Health"}}</span>
+        <input type="number" name="system.resources.health.value" value="{{system.resources.health.value}}">
+        <small>/ {{system.resources.health.max}}</small>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Common.Energy"}}</span>
+        <input type="number" name="system.resources.energy.value" value="{{system.resources.energy.value}}">
+        <small>/ {{system.resources.energy.max}}</small>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Actor.Dodge"}}</span>
+        <input type="number" name="system.resources.dodge.value" value="{{system.resources.dodge.value}}">
+        <small>/ {{system.resources.dodge.max}}</small>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Common.ActionPoints"}}</span>
+        <input type="number" name="system.resources.actionPoints.value" value="{{system.resources.actionPoints.value}}">
+        <small>/ {{system.resources.actionPoints.max}}</small>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Common.MovementPoints"}}</span>
+        <input type="number" name="system.resources.movementPoints.value" value="{{system.resources.movementPoints.value}}">
+        <small>/ {{system.resources.movementPoints.max}}</small>
+      </label>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Settings.Characteristics.Title"}}</h2>
+    <div class="fallout-maw-characteristic-grid">
+      {{#each characteristics}}
+      <label>
+        <span title="{{label}}">{{abbr}}</span>
+        <input type="number" name="system.characteristics.{{key}}" value="{{value}}" {{../editLockAttribute}}>
+      </label>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Common.DamageResistances"}}</h2>
+    <div class="fallout-maw-list-grid two-columns">
+      {{#each damageResistances}}
+      <label>
+        <span>{{label}}</span>
+        <input type="number" value="{{value}}" disabled>
+      </label>
+      {{/each}}
+    </div>
+  </section>
+</section>

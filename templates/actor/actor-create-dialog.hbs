@@ -1,55 +1,49 @@
-<form id="document-create" class="fallout-maw-create-dialog" autocomplete="off">
+<form class="fallout-maw create-dialog" autocomplete="off">
   <div class="form-group">
     <label>{{localize "DOCUMENT.FIELDS.name.label"}}</label>
-    <div class="form-fields">
-      <input type="text" name="name" placeholder="{{defaultName}}" value="{{name}}" autofocus>
-    </div>
+    <input type="text" name="name" value="{{name}}" autofocus>
   </div>
 
   {{#if hasTypes}}
-    <div class="form-group">
-      <label>{{localize "DOCUMENT.FIELDS.type.label"}}</label>
-      <div class="form-fields">
-        <select name="type">
-          {{selectOptions types selected=type}}
-        </select>
-      </div>
-      <p class="hint">{{typeHint}}</p>
-    </div>
+  <div class="form-group">
+    <label>{{localize "DOCUMENT.FIELDS.type.label"}}</label>
+    <select name="type">
+      {{selectOptions types selected=type}}
+    </select>
+    {{#if typeHint}}<p class="hint">{{typeHint}}</p>{{/if}}
+  </div>
   {{/if}}
 
   {{#if hasFolders}}
-    <div class="form-group">
-      <label>{{localize "DOCUMENT.FIELDS.folder.label"}}</label>
-      <div class="form-fields">
-        <select name="folder">
-          {{selectOptions folders selected=folder blank="" valueAttr="id" labelAttr="name"}}
-        </select>
-      </div>
-    </div>
+  <div class="form-group">
+    <label>{{localize "DOCUMENT.FIELDS.folder.label"}}</label>
+    <select name="folder">
+      {{selectOptions folders selected=folder blank="" valueAttr="id" labelAttr="name"}}
+    </select>
+  </div>
   {{/if}}
 
-  <fieldset class="fallout-maw-creation-fieldset">
+  <fieldset class="fallout-maw-fieldset">
     <legend>{{localize "FALLOUTMAW.Creation.Base"}}</legend>
+
     <div class="form-group">
       <label>{{localize "FALLOUTMAW.Actor.CreatureType"}}</label>
-      <div class="form-fields">
-        <select name="system.creature.typeId" data-creature-type-select>
-          <option value="">{{localize "FALLOUTMAW.Actor.NoCreatureType"}}</option>
-          {{selectOptions creatureTypes selected=selectedCreatureType}}
-        </select>
-      </div>
+      <select name="system.creature.typeId" data-creature-type-select>
+        <option value="">{{localize "FALLOUTMAW.Actor.NoCreatureType"}}</option>
+        {{#each creatureTypes}}
+        <option value="{{value}}">{{label}}</option>
+        {{/each}}
+      </select>
     </div>
+
     <div class="form-group">
       <label>{{localize "FALLOUTMAW.Actor.Race"}}</label>
-      <div class="form-fields">
-        <select name="system.creature.raceId" data-creature-race-select>
-          <option value="">{{localize "FALLOUTMAW.Actor.NoRace"}}</option>
-          {{#each creatureRaces}}
-            <option value="{{id}}" data-type-id="{{typeId}}" {{#if selected}}selected{{/if}}>{{name}}</option>
-          {{/each}}
-        </select>
-      </div>
+      <select name="system.creature.raceId" data-creature-race-select>
+        <option value="">{{localize "FALLOUTMAW.Actor.NoRace"}}</option>
+        {{#each creatureRaces}}
+        <option value="{{id}}" data-type-id="{{typeId}}" {{#if selected}}selected{{/if}}>{{name}}</option>
+        {{/each}}
+      </select>
       <p class="hint">{{localize "FALLOUTMAW.Creation.RaceFilterHint"}}</p>
     </div>
   </fieldset>

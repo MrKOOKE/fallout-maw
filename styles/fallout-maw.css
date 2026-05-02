@@ -1,475 +1,222 @@
-.fallout-maw {
-  --fallout-maw-accent: #2f7d63;
-  --fallout-maw-accent-strong: #23614d;
-  --fallout-maw-border: rgba(0, 0, 0, 0.18);
-  --fallout-maw-surface: rgba(255, 255, 255, 0.48);
-  --fallout-maw-muted: rgba(0, 0, 0, 0.58);
+.fallout-maw,
+.fallout-maw-sheet {
+  --fallout-maw-gap: 0.5rem;
+  --fallout-maw-border: rgba(120, 120, 120, 0.35);
+  --fallout-maw-panel-bg: rgba(0, 0, 0, 0.05);
 }
 
-.fallout-maw .window-content {
-  font-family: var(--font-primary);
+.fallout-maw-sheet input,
+.fallout-maw-sheet select,
+.fallout-maw-config-form input,
+.fallout-maw-config-form select {
+  width: 100%;
 }
 
-.fallout-maw.actor-sheet {
+.fallout-maw-sheet-header {
+  align-items: flex-start;
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 560px;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
 }
 
-.fallout-maw .sheet-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  position: relative;
-}
-
-.fallout-maw .sheet-header h1 {
+.fallout-maw-header-fields {
   flex: 1;
-  margin: 0;
+  min-width: 0;
 }
 
-.fallout-maw .profile-img {
-  flex: 0 0 100px;
-  border: 1px solid var(--fallout-maw-border);
-  border-radius: 6px;
-  object-fit: cover;
+.fallout-maw-title-input {
+  font-size: 1.4rem;
+  font-weight: 700;
+  height: 2.25rem;
+  margin-bottom: 0.5rem;
 }
 
-.fallout-maw-edit-toggle {
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
-  display: inline-grid;
-  place-items: center;
-  margin: 0;
-  color: var(--fallout-maw-accent-strong);
-}
-
-.fallout-maw.actor-sheet.locked input:disabled,
-.fallout-maw.actor-sheet input:disabled {
-  color: inherit;
-  opacity: 0.82;
-}
-
-.fallout-maw-sheet-section,
-.fallout-maw-panel {
-  border: 1px solid var(--fallout-maw-border);
-  border-radius: 6px;
-  background: var(--fallout-maw-surface);
-  padding: 12px;
-}
-
-.fallout-maw-sheet-section h2,
-.fallout-maw-panel h2,
-.fallout-maw-config-heading h2 {
-  margin: 0 0 10px;
-  border: 0;
-  font-size: 1.05rem;
-  line-height: 1.2;
-}
-
-.fallout-maw-panel header h2 {
-  margin-bottom: 0;
-}
-
-.fallout-maw-panel header {
-  margin-bottom: 10px;
-}
-
-.fallout-maw-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.fallout-maw-panel-header button {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: auto;
-  height: 30px;
-  margin: 0;
-  padding: 0 10px;
-}
-
-.fallout-maw-header-actions {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.fallout-maw-stat-grid {
+.fallout-maw-header-grid,
+.fallout-maw-list-grid,
+.fallout-maw-resource-grid,
+.fallout-maw-characteristic-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(154px, 1fr));
-  gap: 8px;
+  gap: var(--fallout-maw-gap);
 }
 
-.fallout-maw-form-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.fallout-maw-form-grid label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 0;
-}
-
-.fallout-maw-stat-grid.compact {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
-.fallout-maw-stat-grid label {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 66px;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  min-height: 32px;
-}
-
-.fallout-maw-stat-grid span {
-  overflow-wrap: anywhere;
-  line-height: 1.2;
-}
-
-.fallout-maw-stat-grid input {
-  width: 66px;
-  text-align: center;
+.fallout-maw-header-grid {
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
 }
 
 .fallout-maw-resource-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: 8px;
-  margin-top: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
 }
 
-.fallout-maw-resource-grid label {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 58px 58px;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  min-height: 32px;
+.fallout-maw-characteristic-grid {
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
 }
 
-.fallout-maw-resource-grid span {
-  overflow-wrap: anywhere;
-  line-height: 1.2;
-}
-
-.fallout-maw-resource-grid input {
-  width: 58px;
-  text-align: center;
-}
-
-.fallout-maw-formula-config {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.fallout-maw-formula-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 10px 14px;
-}
-
-.fallout-maw-formula-grid.single {
+.fallout-maw-list-grid {
   grid-template-columns: 1fr;
 }
 
-.fallout-maw-formula-grid label {
-  display: grid;
-  grid-template-columns: minmax(0, 120px) minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  margin: 0;
+.fallout-maw-list-grid.two-columns {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
-.fallout-maw-formula-grid input {
-  width: 100%;
+.fallout-maw-panel {
+  background: var(--fallout-maw-panel-bg);
+  border: 1px solid var(--fallout-maw-border);
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
 }
 
-.fallout-maw-formula-autocomplete {
-  position: fixed;
-  z-index: 100000;
-  display: flex;
-  flex-direction: column;
-  max-height: 220px;
-  overflow-y: auto;
-  border: 1px solid var(--fallout-maw-border, rgba(0, 0, 0, 0.22));
-  border-radius: 5px;
-  background: rgba(246, 243, 232, 0.98);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
-}
-
-.fallout-maw-formula-autocomplete[hidden] {
-  display: none;
-}
-
-.fallout-maw-formula-autocomplete-option {
-  width: 100%;
-  min-height: 28px;
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 8px;
-  align-items: center;
-  margin: 0;
-  padding: 5px 8px;
+.fallout-maw-panel h2,
+.fallout-maw-panel-header h2 {
   border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: #1d1b17;
-  text-align: left;
-  line-height: 1.15;
+  font-size: 1.05rem;
+  margin: 0 0 0.5rem;
 }
 
-.fallout-maw-formula-autocomplete-option strong {
-  font-family: var(--font-monospace, monospace);
-  font-weight: 700;
+.fallout-maw-panel-header {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
 }
 
-.fallout-maw-formula-autocomplete-option span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.fallout-maw-button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
 }
 
-.fallout-maw-formula-autocomplete-option:hover,
-.fallout-maw-formula-autocomplete-option.active {
-  background: rgba(47, 125, 99, 0.18);
+.fallout-maw-toggle-edit {
+  align-self: end;
 }
 
-.fallout-maw-settings-table {
+.fallout-maw-fieldset {
+  border: 1px solid var(--fallout-maw-border);
+  border-radius: 6px;
+  margin: 0.5rem 0;
+  padding: 0.75rem;
+}
+
+.fallout-maw-skill-list,
+.fallout-maw-settings-table,
+.fallout-maw-option-list {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 0.35rem;
 }
 
-.fallout-maw-settings-table-head,
-.fallout-maw-settings-row {
-  display: grid;
+.fallout-maw-skill-row,
+.fallout-maw-settings-row,
+.fallout-maw-option-row {
   align-items: center;
-  gap: 8px;
+  display: grid;
+  gap: 0.35rem;
 }
 
-.fallout-maw-settings-table-head {
-  color: var(--fallout-maw-muted);
-  font-size: 0.78rem;
+.fallout-maw-skill-row {
+  grid-template-columns: minmax(160px, 1fr) 70px 70px 70px;
+}
+
+.characteristic-settings .fallout-maw-settings-row {
+  grid-template-columns: 2rem 90px minmax(130px, 1fr) minmax(160px, 1.2fr) 2.5rem;
+}
+
+.damage-type-settings .fallout-maw-settings-row {
+  grid-template-columns: 2rem minmax(130px, 1fr) minmax(160px, 1.4fr) 2.5rem;
+}
+
+.skill-settings .fallout-maw-settings-row {
+  grid-template-columns: 2rem 80px minmax(120px, 1fr) minmax(130px, 1fr) minmax(220px, 1.4fr) 2.5rem;
+}
+
+.fallout-maw-grid-header {
   font-weight: 700;
-  text-transform: uppercase;
-}
-
-.fallout-maw-settings-table.skill-settings .fallout-maw-settings-table-head,
-.fallout-maw-settings-table.skill-settings .fallout-maw-settings-row {
-  grid-template-columns: 24px 76px minmax(120px, 0.8fr) minmax(150px, 1fr) minmax(240px, 1.5fr) 34px;
-}
-
-.fallout-maw-settings-table.characteristic-settings .fallout-maw-settings-table-head,
-.fallout-maw-settings-table.characteristic-settings .fallout-maw-settings-row {
-  grid-template-columns: 24px 76px minmax(140px, 1fr) minmax(180px, 1.4fr) 34px;
-}
-
-.fallout-maw-settings-table.key-label-settings .fallout-maw-settings-table-head,
-.fallout-maw-settings-table.key-label-settings .fallout-maw-settings-row {
-  grid-template-columns: 24px minmax(140px, 1fr) minmax(180px, 1.4fr) 34px;
-}
-
-.fallout-maw-settings-row input {
-  width: 100%;
-}
-
-.fallout-maw-settings-row .icon-only {
-  width: 32px;
-  height: 30px;
-  display: inline-grid;
-  place-items: center;
-  margin: 0;
-  padding: 0;
-  color: #7a2f2f;
+  opacity: 0.82;
 }
 
 .fallout-maw-drag-handle {
-  width: 24px;
-  height: 30px;
-  display: inline-grid;
-  place-items: center;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--fallout-maw-muted);
   cursor: grab;
 }
 
-.fallout-maw-drag-handle:active {
-  cursor: grabbing;
-}
-
 .fallout-maw-settings-row.dragging {
-  opacity: 0.55;
+  opacity: 0.45;
 }
 
-.fallout-maw-empty-list {
-  margin: 4px 0 0;
-  color: var(--fallout-maw-muted);
-}
-
-.creature-options-config .window-content {
-  padding: 0;
-}
-
-.fallout-maw-config-form {
+.fallout-maw-two-pane {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  min-height: 620px;
+  gap: 0.75rem;
+  grid-template-columns: 260px minmax(0, 1fr);
 }
 
-.fallout-maw-config-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 14px;
-  border-right: 1px solid var(--fallout-maw-border);
-  background: rgba(0, 0, 0, 0.04);
+.fallout-maw-sidebar {
+  min-width: 0;
 }
 
-.fallout-maw-config-block {
-  min-height: 0;
+.fallout-maw-editor-pane {
+  min-width: 0;
 }
 
-.fallout-maw-race-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.fallout-maw-option-row {
+  grid-template-columns: minmax(0, 1fr) 2.5rem;
 }
 
-.fallout-maw-race-group + .fallout-maw-race-group {
-  margin-top: 10px;
-}
-
-.fallout-maw-race-group h3 {
-  margin: 0;
-  padding: 0 2px;
-  border: 0;
-  color: var(--fallout-maw-muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1.2;
-  text-transform: uppercase;
-}
-
-.fallout-maw-config-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.fallout-maw-config-heading h2 {
-  margin: 0;
-}
-
-.fallout-maw-config-heading button {
-  width: auto;
-  height: 30px;
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  padding: 0 8px;
-  color: var(--fallout-maw-accent-strong);
-  font-size: 0.82rem;
-}
-
-.fallout-maw-entity-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.fallout-maw-entity-list-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px;
-  gap: 6px;
-  align-items: stretch;
-}
-
-.fallout-maw-entity-list button {
-  width: 100%;
-  min-height: 36px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 2px;
-  margin: 0;
-  padding: 7px 9px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.42);
+.fallout-maw-option-row > button:first-child {
   text-align: left;
 }
 
-.fallout-maw-entity-list-row .icon-only {
-  width: 32px;
-  min-height: 36px;
-  display: inline-grid;
-  place-items: center;
-  padding: 0;
-  color: #7a2f2f;
+.fallout-maw-option-row.active > button:first-child {
+  font-weight: 700;
 }
 
-.fallout-maw-entity-list button.active {
-  border-color: var(--fallout-maw-accent);
-  background: rgba(47, 125, 99, 0.16);
+.fallout-maw-empty-list,
+.fallout-maw-empty-editor {
+  opacity: 0.75;
 }
 
-.fallout-maw-entity-list small,
-.fallout-maw-entity-list .empty {
-  color: var(--fallout-maw-muted);
-  font-size: 0.78rem;
-}
-
-.fallout-maw-entity-list .empty {
-  padding: 8px;
-}
-
-.fallout-maw-config-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-  padding: 14px;
-}
-
-.fallout-maw-config-editor .sheet-footer {
-  position: sticky;
-  bottom: 0;
-  margin-top: auto;
-  padding-top: 10px;
-  background: var(--color-bg);
-}
-
-.fallout-maw-create-dialog .fallout-maw-creation-fieldset {
-  margin: 10px 0 0;
-  padding: 10px;
+.fallout-maw-formula-autocomplete {
+  background: var(--color-bg, #f0f0e8);
   border: 1px solid var(--fallout-maw-border);
-  border-radius: 6px;
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  max-height: 220px;
+  overflow-y: auto;
+  position: fixed;
+  z-index: 99999;
+}
+
+.fallout-maw-formula-autocomplete-option {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-start;
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  width: 100%;
+}
+
+.fallout-maw-formula-autocomplete-option.active,
+.fallout-maw-formula-autocomplete-option:hover {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.fallout-maw-formula-autocomplete-option span {
+  opacity: 0.75;
+}
+
+@media (max-width: 760px) {
+  .fallout-maw-two-pane {
+    grid-template-columns: 1fr;
+  }
+
+  .skill-settings .fallout-maw-settings-row,
+  .characteristic-settings .fallout-maw-settings-row,
+  .damage-type-settings .fallout-maw-settings-row,
+  .fallout-maw-skill-row {
+    grid-template-columns: 1fr;
+  }
 }
