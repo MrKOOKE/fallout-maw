@@ -11,7 +11,7 @@ export class DamageTypesConfig extends FormApplication {
   static get defaultOptions() {
     return foundry.utils.mergeObject(super.defaultOptions, {
       id: "fallout-maw-damage-types",
-      title: "Настройка типов урона",
+      title: localize("FALLOUTMAW.Settings.DamageTypes.Title"),
       template: "systems/fallout-maw/templates/settings/damage-types-config.hbs",
       classes: ["fallout-maw", "damage-types-config"],
       width: 720,
@@ -41,7 +41,7 @@ export class DamageTypesConfig extends FormApplication {
     this.#validateDamageTypes(damageTypes);
     await setDamageTypeSettings(damageTypes);
     this.damageTypes = getDamageTypeSettings();
-    ui.notifications.info("Настройка типов урона сохранена.");
+    ui.notifications.info(localize("FALLOUTMAW.Messages.DamageTypesSaved"));
     this.render(true);
   }
 
@@ -84,8 +84,8 @@ export class DamageTypesConfig extends FormApplication {
     const keys = new Set();
     for (const [index, damageType] of damageTypes.entries()) {
       const key = String(damageType.key ?? "").trim();
-      if (!IDENTIFIER_PATTERN.test(key)) throwValidationError(`Тип урона ${index + 1}: ключ должен быть идентификатором латиницей.`);
-      if (keys.has(key)) throwValidationError(`Ключ типа урона "${key}" повторяется.`);
+      if (!IDENTIFIER_PATTERN.test(key)) throwValidationError(format("FALLOUTMAW.Validation.DamageTypeKeyInvalid", { index: index + 1 }));
+      if (keys.has(key)) throwValidationError(format("FALLOUTMAW.Validation.DamageTypeKeyDuplicate", { key }));
       keys.add(key);
     }
   }
@@ -102,4 +102,12 @@ export class DamageTypesConfig extends FormApplication {
 function throwValidationError(message) {
   ui.notifications.error(message);
   throw new Error(message);
+}
+
+function localize(key) {
+  return game.i18n.localize(key);
+}
+
+function format(key, data) {
+  return game.i18n.format(key, data);
 }

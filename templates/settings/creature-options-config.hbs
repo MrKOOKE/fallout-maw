@@ -2,10 +2,10 @@
   <aside class="fallout-maw-config-sidebar">
     <section class="fallout-maw-config-block">
       <div class="fallout-maw-config-heading">
-        <h2>Типы</h2>
-        <button type="button" data-action="create-type" title="Создать тип">
+        <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.Types"}}</h2>
+        <button type="button" data-action="create-type" title="{{localize 'FALLOUTMAW.Settings.CreatureOptions.CreateType'}}">
           <i class="fa-solid fa-plus"></i>
-          <span>Создать тип</span>
+          <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.CreateType"}}</span>
         </button>
       </div>
       <ol class="fallout-maw-entity-list">
@@ -15,23 +15,23 @@
               <button type="button" class="{{#if active}}active{{/if}}" data-action="select" data-kind="type" data-id="{{id}}">
                 <span>{{name}}</span>
               </button>
-              <button type="button" class="icon-only" data-action="delete-type" data-id="{{id}}" title="Удалить тип">
+              <button type="button" class="icon-only" data-action="delete-type" data-id="{{id}}" title="{{localize 'FALLOUTMAW.Settings.CreatureOptions.DeleteType'}}">
                 <i class="fa-solid fa-trash"></i>
               </button>
             </div>
           </li>
         {{else}}
-          <li class="empty">Типы еще не созданы</li>
+          <li class="empty">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoTypes"}}</li>
         {{/each}}
       </ol>
     </section>
 
     <section class="fallout-maw-config-block">
       <div class="fallout-maw-config-heading">
-        <h2>Расы</h2>
-        <button type="button" data-action="create-race" title="Создать расу">
+        <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.Races"}}</h2>
+        <button type="button" data-action="create-race" title="{{localize 'FALLOUTMAW.Settings.CreatureOptions.CreateRace'}}">
           <i class="fa-solid fa-plus"></i>
-          <span>Создать расу</span>
+          <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.CreateRace"}}</span>
         </button>
       </div>
       {{#each raceGroups}}
@@ -44,7 +44,7 @@
                   <button type="button" class="{{#if active}}active{{/if}}" data-action="select" data-kind="race" data-id="{{id}}">
                     <span>{{name}}</span>
                   </button>
-                  <button type="button" class="icon-only" data-action="delete-race" data-id="{{id}}" title="Удалить расу">
+                  <button type="button" class="icon-only" data-action="delete-race" data-id="{{id}}" title="{{localize 'FALLOUTMAW.Settings.CreatureOptions.DeleteRace'}}">
                     <i class="fa-solid fa-trash"></i>
                   </button>
                 </div>
@@ -54,7 +54,7 @@
         </div>
       {{else}}
         <ol class="fallout-maw-entity-list">
-          <li class="empty">Расы еще не созданы</li>
+          <li class="empty">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoRaces"}}</li>
         </ol>
       {{/each}}
     </section>
@@ -64,12 +64,12 @@
     {{#if selectedType}}
       <section class="fallout-maw-panel">
         <header>
-          <h2>Тип существа</h2>
+          <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.TypeSection"}}</h2>
         </header>
         <div class="form-group">
-          <label>Название</label>
+          <label>{{localize "FALLOUTMAW.Common.Label"}}</label>
           <div class="form-fields">
-            <input type="text" name="name" value="{{selectedType.name}}" placeholder="Например, гуманоид">
+            <input type="text" name="name" value="{{selectedType.name}}" placeholder="{{localize 'FALLOUTMAW.Settings.CreatureOptions.TypeNamePlaceholder'}}">
           </div>
         </div>
       </section>
@@ -78,16 +78,16 @@
     {{#if selectedRace}}
       <section class="fallout-maw-panel">
         <header>
-          <h2>Раса</h2>
+          <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.RaceSection"}}</h2>
         </header>
         <div class="form-group">
-          <label>Название</label>
+          <label>{{localize "FALLOUTMAW.Common.Label"}}</label>
           <div class="form-fields">
-            <input type="text" name="name" value="{{selectedRace.name}}" placeholder="Название расы">
+            <input type="text" name="name" value="{{selectedRace.name}}" placeholder="{{localize 'FALLOUTMAW.Settings.CreatureOptions.RaceNamePlaceholder'}}">
           </div>
         </div>
         <div class="form-group">
-          <label>Тип</label>
+          <label>{{localize "FALLOUTMAW.Settings.CreatureOptions.TypeSection"}}</label>
           <div class="form-fields">
             <select name="typeId">
               {{selectOptions typeOptions selected=selectedRace.typeId}}
@@ -98,7 +98,7 @@
 
       <section class="fallout-maw-panel">
         <header>
-          <h2>Характеристики</h2>
+          <h2>{{localize "FALLOUTMAW.Settings.Characteristics.Title"}}</h2>
         </header>
         <div class="fallout-maw-stat-grid compact">
           {{#each characteristics}}
@@ -112,15 +112,15 @@
 
       <section class="fallout-maw-panel">
         <header>
-          <h2>Приросты</h2>
+          <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.Progression"}}</h2>
         </header>
         <div class="fallout-maw-stat-grid compact">
           <label>
-            <span>Прирост очков навыков за уровень</span>
+            <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.SkillPointsPerLevel"}}</span>
             <input type="number" step="1" name="progression.skillPointsPerLevel" value="{{selectedRace.progression.skillPointsPerLevel}}">
           </label>
           <label>
-            <span>Прирост очков исследований за уровень</span>
+            <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.ResearchPointsPerLevel"}}</span>
             <input type="number" step="1" name="progression.researchPointsPerLevel" value="{{selectedRace.progression.researchPointsPerLevel}}">
           </label>
         </div>
@@ -128,7 +128,7 @@
 
       <section class="fallout-maw-panel">
         <header>
-          <h2>Сопротивления урону</h2>
+          <h2>{{localize "FALLOUTMAW.Common.DamageResistances"}}</h2>
         </header>
         <div class="fallout-maw-formula-grid">
           {{#each damageResistances}}
@@ -143,14 +143,14 @@
 
     {{#unless activeId}}
       <section class="fallout-maw-panel empty-editor">
-        <h2>Создайте тип или расу</h2>
+        <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.EmptyEditor"}}</h2>
       </section>
     {{/unless}}
 
     <footer class="sheet-footer flexrow">
       <button type="submit">
         <i class="fa-solid fa-floppy-disk"></i>
-        Сохранить изменения
+        {{localize "FALLOUTMAW.Common.SaveChanges"}}
       </button>
     </footer>
   </main>

@@ -56,7 +56,7 @@ export function normalizeCreatureOptions(
     .filter(type => type?.id)
     .map(type => ({
       id: String(type.id),
-      name: String(type.name || "Без названия")
+      name: String(type.name || localize("FALLOUTMAW.Common.Untitled"))
     }));
 
   const typeIds = new Set(normalized.types.map(type => type.id));
@@ -67,7 +67,7 @@ export function normalizeCreatureOptions(
       return {
         id: String(race.id),
         typeId,
-        name: String(race.name || "Без названия"),
+        name: String(race.name || localize("FALLOUTMAW.Common.Untitled")),
         characteristics: normalizeNumberMap(race.characteristics, characteristics),
         damageResistances: normalizeFormulaMap(race.damageResistances, damageTypes),
         progression: {
@@ -170,7 +170,7 @@ export async function resetActionMovementFormulas() {
 
 export function registerSystemSettings() {
   game.settings.register(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING, {
-    name: "Типы и расы существ",
+    name: localize("FALLOUTMAW.Settings.CreatureOptions.Title"),
     scope: "world",
     config: false,
     type: Object,
@@ -179,7 +179,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, CHARACTERISTICS_SETTING, {
-    name: "Настройка характеристик",
+    name: localize("FALLOUTMAW.Settings.Characteristics.Title"),
     scope: "world",
     config: false,
     type: Object,
@@ -188,7 +188,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, SKILL_SETTINGS_SETTING, {
-    name: "Настройки навыков",
+    name: localize("FALLOUTMAW.Settings.Skills.Title"),
     scope: "world",
     config: false,
     type: Object,
@@ -197,7 +197,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, DAMAGE_TYPES_SETTING, {
-    name: "Настройка типов урона",
+    name: localize("FALLOUTMAW.Settings.DamageTypes.Title"),
     scope: "world",
     config: false,
     type: Object,
@@ -206,7 +206,7 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, ACTION_MOVEMENT_FORMULAS_SETTING, {
-    name: "Базовые формулы ОД/ОП",
+    name: localize("FALLOUTMAW.Settings.ActionMovement.Title"),
     scope: "world",
     config: false,
     type: Object,
@@ -215,40 +215,40 @@ export function registerSystemSettings() {
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "creatureOptionsMenu", {
-    name: "Типы и расы существ",
-    label: "Открыть",
+    name: localize("FALLOUTMAW.Settings.CreatureOptions.Title"),
+    label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-users-gear",
     type: CreatureOptionsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "characteristicsMenu", {
-    name: "Настройка характеристик",
-    label: "Открыть",
+    name: localize("FALLOUTMAW.Settings.Characteristics.Title"),
+    label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-list-check",
     type: CharacteristicsConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "skillSettingsMenu", {
-    name: "Настройки навыков",
-    label: "Открыть",
+    name: localize("FALLOUTMAW.Settings.Skills.Title"),
+    label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-square-root-variable",
     type: SkillFormulasConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "damageTypesMenu", {
-    name: "Настройка типов урона",
-    label: "Открыть",
+    name: localize("FALLOUTMAW.Settings.DamageTypes.Title"),
+    label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-shield-halved",
     type: DamageTypesConfig,
     restricted: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "actionMovementFormulasMenu", {
-    name: "Базовые формулы ОД/ОП",
-    label: "Открыть",
+    name: localize("FALLOUTMAW.Settings.ActionMovement.Title"),
+    label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-person-running",
     type: ActionMovementFormulasConfig,
     restricted: true
@@ -289,4 +289,8 @@ function getLoadedActors() {
 function toInteger(value) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.trunc(number) : 0;
+}
+
+function localize(key) {
+  return game.i18n.localize(key);
 }

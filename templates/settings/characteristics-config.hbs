@@ -1,15 +1,15 @@
 <form class="fallout-maw-formula-config" autocomplete="off">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Настройка характеристик</h2>
+      <h2>{{localize "FALLOUTMAW.Settings.Characteristics.Title"}}</h2>
       <div class="fallout-maw-header-actions">
         <button type="button" data-action="create-characteristic">
           <i class="fa-solid fa-plus"></i>
-          Создать характеристику
+          {{localize "FALLOUTMAW.Settings.Characteristics.Create"}}
         </button>
         <button type="button" data-action="reset-defaults">
           <i class="fa-solid fa-rotate-left"></i>
-          Установить по умолчанию
+          {{localize "FALLOUTMAW.Common.ResetDefaults"}}
         </button>
       </div>
     </header>
@@ -17,25 +17,25 @@
     <div class="fallout-maw-settings-table characteristic-settings">
       <div class="fallout-maw-settings-table-head">
         <span></span>
-        <span>Код</span>
-        <span>Ключ</span>
-        <span>Название</span>
+        <span>{{localize "FALLOUTMAW.Common.Code"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Key"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
         <span></span>
       </div>
       {{#each characteristics}}
         <div class="fallout-maw-settings-row" data-characteristic-row>
-          <button type="button" class="fallout-maw-drag-handle" data-drag-handle draggable="true" title="Изменить порядок">
+          <button type="button" class="fallout-maw-drag-handle" data-drag-handle draggable="true" title="{{localize 'FALLOUTMAW.Common.Reorder'}}">
             <i class="fa-solid fa-grip-vertical"></i>
           </button>
           <input type="text" name="characteristics.{{@index}}.abbr" value="{{abbr}}" data-field="abbr" placeholder="str">
           <input type="text" name="characteristics.{{@index}}.key" value="{{key}}" data-field="key" placeholder="characteristicKey">
-          <input type="text" name="characteristics.{{@index}}.label" value="{{label}}" data-field="label" placeholder="Название характеристики">
-          <button type="button" class="icon-only" data-action="delete-characteristic" data-index="{{@index}}" title="Удалить характеристику">
+          <input type="text" name="characteristics.{{@index}}.label" value="{{label}}" data-field="label" placeholder="{{localize 'FALLOUTMAW.Settings.Characteristics.LabelPlaceholder'}}">
+          <button type="button" class="icon-only" data-action="delete-characteristic" data-index="{{@index}}" title="{{localize 'FALLOUTMAW.Settings.Characteristics.Delete'}}">
             <i class="fa-solid fa-trash"></i>
           </button>
         </div>
       {{else}}
-        <p class="fallout-maw-empty-list">Характеристики не созданы.</p>
+        <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.Characteristics.Empty"}}</p>
       {{/each}}
     </div>
   </section>
@@ -43,7 +43,7 @@
   <footer class="sheet-footer flexrow">
     <button type="submit">
       <i class="fa-solid fa-floppy-disk"></i>
-      Сохранить изменения
+      {{localize "FALLOUTMAW.Common.SaveChanges"}}
     </button>
   </footer>
 </form>

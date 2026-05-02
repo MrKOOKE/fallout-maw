@@ -1,6 +1,6 @@
 <form class="fallout-maw actor-sheet {{actor.type}} {{#if freeEdit}}free-edit{{else}}locked{{/if}}" autocomplete="off">
   <header class="sheet-header">
-    <button type="button" class="fallout-maw-edit-toggle" data-action="toggle-free-edit" title="Свободное редактирование">
+    <button type="button" class="fallout-maw-edit-toggle" data-action="toggle-free-edit" title="{{localize 'FALLOUTMAW.Actor.FreeEdit'}}">
       <i class="fa-solid {{#if freeEdit}}fa-lock-open{{else}}fa-lock{{/if}}"></i>
     </button>
     <img class="profile-img" src="{{actor.img}}" {{#if freeEdit}}data-edit="img"{{/if}} title="{{actor.name}}" height="100" width="100">
@@ -10,13 +10,13 @@
   </header>
 
   <section class="fallout-maw-sheet-section">
-    <h2>Персонаж</h2>
+    <h2>{{localize "FALLOUTMAW.Actor.Character"}}</h2>
     <div class="fallout-maw-form-grid">
       <label>
-        <span>Тип существа</span>
+        <span>{{localize "FALLOUTMAW.Actor.CreatureType"}}</span>
         {{#if freeEdit}}
           <select name="system.creature.typeId" data-creature-type-select>
-            <option value="">Не выбран</option>
+            <option value="">{{localize "FALLOUTMAW.Actor.NoCreatureType"}}</option>
             {{selectOptions creatureTypes selected=sourceSystem.creature.typeId}}
           </select>
         {{else}}
@@ -24,10 +24,10 @@
         {{/if}}
       </label>
       <label>
-        <span>Раса</span>
+        <span>{{localize "FALLOUTMAW.Actor.Race"}}</span>
         {{#if freeEdit}}
           <select name="system.creature.raceId" data-creature-race-select>
-            <option value="">Не выбрана</option>
+            <option value="">{{localize "FALLOUTMAW.Actor.NoRace"}}</option>
             {{#each creatureRaces}}
               <option value="{{id}}" data-type-id="{{typeId}}" {{#if selected}}selected{{/if}}>{{name}}</option>
             {{/each}}
@@ -39,26 +39,26 @@
     </div>
     <div class="fallout-maw-stat-grid compact">
       <label>
-        <span>Уровень</span>
+        <span>{{localize "FALLOUTMAW.Actor.Level"}}</span>
         <input type="number" step="1" min="1" name="system.attributes.level" value="{{sourceSystem.attributes.level}}" {{editLockAttribute}}>
       </label>
       <label>
-        <span>Уклонение</span>
+        <span>{{localize "FALLOUTMAW.Actor.Dodge"}}</span>
         <input type="number" step="1" min="0" name="system.attributes.dodge" value="{{sourceSystem.attributes.dodge}}" {{editLockAttribute}}>
       </label>
       <label>
-        <span>Очки действия</span>
+        <span>{{localize "FALLOUTMAW.Common.ActionPoints"}}</span>
         <input type="number" value="{{system.attributes.actionPoints}}" disabled>
       </label>
       <label>
-        <span>Очки передвижения</span>
+        <span>{{localize "FALLOUTMAW.Common.MovementPoints"}}</span>
         <input type="number" value="{{system.attributes.movementPoints}}" disabled>
       </label>
     </div>
   </section>
 
   <section class="fallout-maw-sheet-section">
-    <h2>Характеристики</h2>
+    <h2>{{localize "FALLOUTMAW.Settings.Characteristics.Title"}}</h2>
     <div class="fallout-maw-stat-grid compact">
       {{#each characteristics}}
         <label>
@@ -70,7 +70,7 @@
   </section>
 
   <section class="fallout-maw-sheet-section">
-    <h2>Навыки</h2>
+    <h2>{{localize "FALLOUTMAW.Settings.Skills.Title"}}</h2>
     <div class="fallout-maw-stat-grid">
       {{#each skills}}
         <label>
@@ -82,7 +82,7 @@
   </section>
 
   <section class="fallout-maw-sheet-section">
-    <h2>Сопротивления урону</h2>
+    <h2>{{localize "FALLOUTMAW.Common.DamageResistances"}}</h2>
     <div class="fallout-maw-stat-grid">
       {{#each damageResistances}}
         <label>
@@ -94,14 +94,14 @@
   </section>
 
   <section class="fallout-maw-sheet-section">
-    <h2>Приросты</h2>
+    <h2>{{localize "FALLOUTMAW.Actor.Progression"}}</h2>
     <div class="fallout-maw-stat-grid compact">
       <label>
-        <span>Очки навыков за уровень</span>
+        <span>{{localize "FALLOUTMAW.Actor.SkillPointsPerLevel"}}</span>
         <input type="number" value="{{system.progression.skillPointsPerLevel}}" disabled>
       </label>
       <label>
-        <span>Очки исследований за уровень</span>
+        <span>{{localize "FALLOUTMAW.Actor.ResearchPointsPerLevel"}}</span>
         <input type="number" value="{{system.progression.researchPointsPerLevel}}" disabled>
       </label>
     </div>

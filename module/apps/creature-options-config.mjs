@@ -20,7 +20,7 @@ export class CreatureOptionsConfig extends FormApplication {
   static get defaultOptions() {
     return foundry.utils.mergeObject(super.defaultOptions, {
       id: "fallout-maw-creature-options",
-      title: "Типы и расы существ",
+      title: localize("FALLOUTMAW.Settings.CreatureOptions.Title"),
       template: "systems/fallout-maw/templates/settings/creature-options-config.hbs",
       classes: ["fallout-maw", "creature-options-config"],
       width: 980,
@@ -105,7 +105,7 @@ export class CreatureOptionsConfig extends FormApplication {
   async #onCreateRace(event) {
     event.preventDefault();
     if (!this.creatureOptions.types.length) {
-      ui.notifications.warn("Сначала создайте тип существа.");
+      ui.notifications.warn(localize("FALLOUTMAW.Messages.CreateTypeFirst"));
       return;
     }
 
@@ -131,8 +131,8 @@ export class CreatureOptionsConfig extends FormApplication {
     if (!type) return;
 
     const confirmed = await Dialog.confirm({
-      title: "Удалить тип",
-      content: `<p>Удалить тип "${type.name}" и все связанные с ним расы?</p>`,
+      title: localize("FALLOUTMAW.Settings.CreatureOptions.DeleteType"),
+      content: `<p>${format("FALLOUTMAW.Messages.DeleteTypeContent", { name: type.name })}</p>`,
       yes: () => true,
       no: () => false,
       defaultYes: false
@@ -152,8 +152,8 @@ export class CreatureOptionsConfig extends FormApplication {
     if (!race) return;
 
     const confirmed = await Dialog.confirm({
-      title: "Удалить расу",
-      content: `<p>Удалить расу "${race.name}"?</p>`,
+      title: localize("FALLOUTMAW.Settings.CreatureOptions.DeleteRace"),
+      content: `<p>${format("FALLOUTMAW.Messages.DeleteRaceContent", { name: race.name })}</p>`,
       yes: () => true,
       no: () => false,
       defaultYes: false
@@ -168,14 +168,14 @@ export class CreatureOptionsConfig extends FormApplication {
   #updateActiveType(formData) {
     const type = this.creatureOptions.types.find(type => type.id === this.activeId);
     if (!type) return;
-    type.name = String(formData.name || "").trim() || "Без названия";
+    type.name = String(formData.name || "").trim() || localize("FALLOUTMAW.Common.Untitled");
   }
 
   #updateActiveRace(formData) {
     const race = this.creatureOptions.races.find(race => race.id === this.activeId);
     if (!race) return;
 
-    race.name = String(formData.name || "").trim() || "Без названия";
+    race.name = String(formData.name || "").trim() || localize("FALLOUTMAW.Common.Untitled");
     race.typeId = formData.typeId || this.creatureOptions.types[0]?.id || "";
     race.characteristics = Object.fromEntries(getCharacteristicSettings().map(characteristic => [
       characteristic.key,
@@ -249,4 +249,12 @@ export class CreatureOptionsConfig extends FormApplication {
       throw error;
     }
   }
+}
+
+function localize(key) {
+  return game.i18n.localize(key);
+}
+
+function format(key, data) {
+  return game.i18n.format(key, data);
 }

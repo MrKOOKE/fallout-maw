@@ -12,7 +12,7 @@ export class ActionMovementFormulasConfig extends FormApplication {
   static get defaultOptions() {
     return foundry.utils.mergeObject(super.defaultOptions, {
       id: "fallout-maw-action-movement-formulas",
-      title: "Базовые формулы ОД/ОП",
+      title: localize("FALLOUTMAW.Settings.ActionMovement.Title"),
       template: "systems/fallout-maw/templates/settings/action-movement-formulas-config.hbs",
       classes: ["fallout-maw", "action-movement-formulas-config"],
       width: 640,
@@ -51,7 +51,7 @@ export class ActionMovementFormulasConfig extends FormApplication {
       }
     }
     await setActionMovementFormulas(formulas);
-    ui.notifications.info("Формулы ОД/ОП сохранены.");
+    ui.notifications.info(localize("FALLOUTMAW.Messages.ActionMovementSaved"));
     this.render(true);
   }
 
@@ -63,5 +63,11 @@ export class ActionMovementFormulasConfig extends FormApplication {
 }
 
 function getFormulaLabel(key) {
-  return key === "actionPoints" ? "Базовые очки действия" : "Базовые очки перемещения";
+  return key === "actionPoints"
+    ? localize("FALLOUTMAW.Settings.ActionMovement.ActionPointsFormula")
+    : localize("FALLOUTMAW.Settings.ActionMovement.MovementPointsFormula");
+}
+
+function localize(key) {
+  return game.i18n.localize(key);
 }

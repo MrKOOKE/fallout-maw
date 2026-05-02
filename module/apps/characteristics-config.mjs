@@ -11,7 +11,7 @@ export class CharacteristicsConfig extends FormApplication {
   static get defaultOptions() {
     return foundry.utils.mergeObject(super.defaultOptions, {
       id: "fallout-maw-characteristics",
-      title: "Настройка характеристик",
+      title: localize("FALLOUTMAW.Settings.Characteristics.Title"),
       template: "systems/fallout-maw/templates/settings/characteristics-config.hbs",
       classes: ["fallout-maw", "characteristics-config"],
       width: 720,
@@ -41,7 +41,7 @@ export class CharacteristicsConfig extends FormApplication {
     this.#validateCharacteristics(characteristics);
     await setCharacteristicSettings(characteristics);
     this.characteristics = getCharacteristicSettings();
-    ui.notifications.info("Настройки характеристик сохранены.");
+    ui.notifications.info(localize("FALLOUTMAW.Messages.CharacteristicsSaved"));
     this.render(true);
   }
 
@@ -88,10 +88,10 @@ export class CharacteristicsConfig extends FormApplication {
     for (const [index, characteristic] of characteristics.entries()) {
       const key = String(characteristic.key ?? "").trim();
       const abbr = String(characteristic.abbr ?? "").trim();
-      if (!IDENTIFIER_PATTERN.test(key)) throwValidationError(`Характеристика ${index + 1}: ключ должен быть идентификатором латиницей.`);
-      if (keys.has(key)) throwValidationError(`Ключ характеристики "${key}" повторяется.`);
-      if (!IDENTIFIER_PATTERN.test(abbr)) throwValidationError(`Характеристика ${index + 1}: код должен быть идентификатором латиницей.`);
-      if (abbreviations.has(abbr)) throwValidationError(`Код характеристики "${abbr}" повторяется.`);
+      if (!IDENTIFIER_PATTERN.test(key)) throwValidationError(format("FALLOUTMAW.Validation.CharacteristicKeyInvalid", { index: index + 1 }));
+      if (keys.has(key)) throwValidationError(format("FALLOUTMAW.Validation.CharacteristicKeyDuplicate", { key }));
+      if (!IDENTIFIER_PATTERN.test(abbr)) throwValidationError(format("FALLOUTMAW.Validation.CharacteristicAbbrInvalid", { index: index + 1 }));
+      if (abbreviations.has(abbr)) throwValidationError(format("FALLOUTMAW.Validation.CharacteristicAbbrDuplicate", { abbr }));
       keys.add(key);
       abbreviations.add(abbr);
     }
@@ -117,4 +117,12 @@ export class CharacteristicsConfig extends FormApplication {
 function throwValidationError(message) {
   ui.notifications.error(message);
   throw new Error(message);
+}
+
+function localize(key) {
+  return game.i18n.localize(key);
+}
+
+function format(key, data) {
+  return game.i18n.format(key, data);
 }

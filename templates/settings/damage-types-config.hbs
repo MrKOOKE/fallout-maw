@@ -1,15 +1,15 @@
 <form class="fallout-maw-formula-config" autocomplete="off">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Настройка типов урона</h2>
+      <h2>{{localize "FALLOUTMAW.Settings.DamageTypes.Title"}}</h2>
       <div class="fallout-maw-header-actions">
         <button type="button" data-action="create-damage-type">
           <i class="fa-solid fa-plus"></i>
-          Создать тип урона
+          {{localize "FALLOUTMAW.Settings.DamageTypes.Create"}}
         </button>
         <button type="button" data-action="reset-defaults">
           <i class="fa-solid fa-rotate-left"></i>
-          Установить по умолчанию
+          {{localize "FALLOUTMAW.Common.ResetDefaults"}}
         </button>
       </div>
     </header>
@@ -17,23 +17,23 @@
     <div class="fallout-maw-settings-table key-label-settings">
       <div class="fallout-maw-settings-table-head">
         <span></span>
-        <span>Ключ</span>
-        <span>Название</span>
+        <span>{{localize "FALLOUTMAW.Common.Key"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
         <span></span>
       </div>
       {{#each damageTypes}}
         <div class="fallout-maw-settings-row" data-damage-type-row>
-          <button type="button" class="fallout-maw-drag-handle" data-drag-handle draggable="true" title="Изменить порядок">
+          <button type="button" class="fallout-maw-drag-handle" data-drag-handle draggable="true" title="{{localize 'FALLOUTMAW.Common.Reorder'}}">
             <i class="fa-solid fa-grip-vertical"></i>
           </button>
           <input type="text" name="damageTypes.{{@index}}.key" value="{{key}}" data-field="key" placeholder="damageKey">
-          <input type="text" name="damageTypes.{{@index}}.label" value="{{label}}" data-field="label" placeholder="Название типа урона">
-          <button type="button" class="icon-only" data-action="delete-damage-type" data-index="{{@index}}" title="Удалить тип урона">
+          <input type="text" name="damageTypes.{{@index}}.label" value="{{label}}" data-field="label" placeholder="{{localize 'FALLOUTMAW.Settings.DamageTypes.LabelPlaceholder'}}">
+          <button type="button" class="icon-only" data-action="delete-damage-type" data-index="{{@index}}" title="{{localize 'FALLOUTMAW.Settings.DamageTypes.Delete'}}">
             <i class="fa-solid fa-trash"></i>
           </button>
         </div>
       {{else}}
-        <p class="fallout-maw-empty-list">Типы урона не созданы.</p>
+        <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.DamageTypes.Empty"}}</p>
       {{/each}}
     </div>
   </section>
@@ -41,7 +41,7 @@
   <footer class="sheet-footer flexrow">
     <button type="submit">
       <i class="fa-solid fa-floppy-disk"></i>
-      Сохранить изменения
+      {{localize "FALLOUTMAW.Common.SaveChanges"}}
     </button>
   </footer>
 </form>

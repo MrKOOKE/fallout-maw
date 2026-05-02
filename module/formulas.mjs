@@ -89,7 +89,7 @@ export function evaluateFormulaMap(
         skills
       }))];
     } catch (error) {
-      console.warn(`${FALLOUT_MAW.title} | Ошибка формулы ${definition.key}: ${error.message}`);
+      console.warn(`${FALLOUT_MAW.title} | ${format("FALLOUTMAW.Formula.FormulaError", { key: definition.key, message: error.message })}`);
       return [definition.key, 0];
     }
   }));
@@ -120,9 +120,9 @@ export function evaluateFormula(formula, data = {}) {
     if (characteristic) return Number(data.characteristics?.[characteristic] ?? data[characteristic]) || 0;
     const skill = options.skillAliases[normalized];
     if (skill) return Number(data.skills?.[skill] ?? data[skill]) || 0;
-    throw new Error(`Неизвестный параметр "${identifier}"`);
+    throw new Error(format("FALLOUTMAW.Formula.UnknownParameter", { identifier }));
   });
-  if (!Number.isFinite(value)) throw new Error("Формула дала некорректное числовое значение");
+  if (!Number.isFinite(value)) throw new Error(localize("FALLOUTMAW.Formula.InvalidNumberValue"));
   return Math.trunc(value);
 }
 
@@ -136,7 +136,7 @@ export function evaluateSkillFormulas(skillSettings, characteristicSettings, cha
         characteristics
       }))];
     } catch (error) {
-      console.warn(`${FALLOUT_MAW.title} | Ошибка формулы навыка ${skill.key}: ${error.message}`);
+      console.warn(`${FALLOUT_MAW.title} | ${format("FALLOUTMAW.Formula.SkillFormulaError", { key: skill.key, message: error.message })}`);
       return [skill.key, 0];
     }
   }));
@@ -161,7 +161,7 @@ export function evaluateActionMovementFormulas(
         skills
       }))];
     } catch (error) {
-      console.warn(`${FALLOUT_MAW.title} | Ошибка формулы ${key}: ${error.message}`);
+      console.warn(`${FALLOUT_MAW.title} | ${format("FALLOUTMAW.Formula.FormulaError", { key, message: error.message })}`);
       return [key, 0];
     }
   }));
@@ -280,20 +280,20 @@ class FormulaParser {
       this.index += 1;
       const expression = this.parseExpression();
       this.skipWhitespace();
-      if (this.peek() !== ")") throw this.error("Ожидалась закрывающая скобка");
+      if (this.peek() !== ")") throw this.error(localize("FALLOUTMAW.Formula.ClosingParenthesisExpected"));
       this.index += 1;
       return expression;
     }
     if (/[0-9.]/.test(character)) return this.parseNumber();
     if (/[A-Za-z_]/.test(character)) return this.parseIdentifier();
-    throw this.error("Ожидалось число, параметр или скобка");
+    throw this.error(localize("FALLOUTMAW.Formula.ExpectedTerm"));
   }
 
   parseNumber() {
     const start = this.index;
     while (/[0-9.]/.test(this.peek())) this.index += 1;
     const token = this.source.slice(start, this.index);
-    if (!/^(?:\d+|\d+\.\d+|\.\d+)$/.test(token)) throw this.error(`Некорректное число "${token}"`);
+    if (!/^(?:\d+|\d+\.\d+|\.\d+)$/.test(token)) throw this.error(format("FALLOUTMAW.Formula.InvalidNumber", { token }));
     const value = Number(token);
     return { evaluate: () => value };
   }
@@ -307,14 +307,14 @@ class FormulaParser {
       !this.options.characteristicAliases[normalized]
       && !(this.options.allowSkills && this.options.skillAliases[normalized])
     ) {
-      throw this.error(`Неизвестный параметр "${identifier}"`);
+      throw this.error(format("FALLOUTMAW.Formula.UnknownParameter", { identifier }));
     }
     return { evaluate: resolve => resolve(identifier) };
   }
 
   expectEnd() {
     this.skipWhitespace();
-    if (this.index < this.source.length) throw this.error(`Лишний символ "${this.peek()}"`);
+    if (this.index < this.source.length) throw this.error(format("FALLOUTMAW.Formula.ExtraCharacter", { character: this.peek() }));
   }
 
   skipWhitespace() {
@@ -326,7 +326,7 @@ class FormulaParser {
   }
 
   error(message) {
-    return new Error(`${message} на позиции ${this.index + 1}`);
+    return new Error(`${message} ${format("FALLOUTMAW.Formula.OnPosition", { position: this.index + 1 })}`);
   }
 }
 
@@ -340,7 +340,7 @@ function binaryExpression(operator, left, right) {
         case "-": return leftValue - rightValue;
         case "*": return leftValue * rightValue;
         case "/":
-          if (rightValue === 0) throw new Error("Деление на ноль");
+          if (rightValue === 0) throw new Error(localize("FALLOUTMAW.Formula.DivisionByZero"));
           return leftValue / rightValue;
       }
     }
@@ -350,4 +350,12 @@ function binaryExpression(operator, left, right) {
 function toInteger(value) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.trunc(number) : 0;
+}
+
+function localize(key) {
+  return game.i18n.localize(key);
+}
+
+function format(key, data) {
+  return game.i18n.format(key, data);
 }

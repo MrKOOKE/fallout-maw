@@ -15,6 +15,120 @@
     }
   },
   "FALLOUTMAW": {
-    "SystemTitle": "Fallout-MaW"
+    "SystemTitle": "Fallout-MaW",
+    "Common": {
+      "ActionPoints": "Очки действия",
+      "Code": "Код",
+      "Create": "Создать",
+      "DamageResistances": "Сопротивления урону",
+      "Delete": "Удалить",
+      "Formula": "Формула",
+      "Key": "Ключ",
+      "Label": "Название",
+      "MovementPoints": "Очки передвижения",
+      "ResetDefaults": "Установить по умолчанию",
+      "SaveChanges": "Сохранить изменения",
+      "Reorder": "Изменить порядок",
+      "Untitled": "Без названия"
+    },
+    "Actor": {
+      "Character": "Персонаж",
+      "CreatureType": "Тип существа",
+      "Dodge": "Уклонение",
+      "FreeEdit": "Свободное редактирование",
+      "Level": "Уровень",
+      "NoCreatureType": "Не выбран",
+      "NoRace": "Не выбрана",
+      "Progression": "Приросты",
+      "Race": "Раса",
+      "ResearchPointsPerLevel": "Очки исследований за уровень",
+      "SkillPointsPerLevel": "Очки навыков за уровень"
+    },
+    "Creation": {
+      "Base": "Основа персонажа",
+      "RaceFilterHint": "Список рас зависит от выбранного типа существа."
+    },
+    "Settings": {
+      "ActionMovement": {
+        "ActionPointsFormula": "Базовые очки действия",
+        "MovementPointsFormula": "Базовые очки перемещения",
+        "ShortTitle": "Формулы ОД/ОП",
+        "Title": "Базовые формулы ОД/ОП"
+      },
+      "Characteristics": {
+        "Create": "Создать характеристику",
+        "Delete": "Удалить характеристику",
+        "Empty": "Характеристики не созданы.",
+        "LabelPlaceholder": "Название характеристики",
+        "Title": "Настройка характеристик"
+      },
+      "CreatureOptions": {
+        "CreateRace": "Создать расу",
+        "CreateType": "Создать тип",
+        "DeleteRace": "Удалить расу",
+        "DeleteType": "Удалить тип",
+        "EmptyEditor": "Создайте тип или расу",
+        "NoRaces": "Расы еще не созданы",
+        "NoTypes": "Типы еще не созданы",
+        "Progression": "Приросты",
+        "RaceNamePlaceholder": "Название расы",
+        "RaceSection": "Раса",
+        "Races": "Расы",
+        "ResearchPointsPerLevel": "Прирост очков исследований за уровень",
+        "SkillPointsPerLevel": "Прирост очков навыков за уровень",
+        "Title": "Типы и расы существ",
+        "TypeNamePlaceholder": "Например, гуманоид",
+        "TypeSection": "Тип существа",
+        "Types": "Типы"
+      },
+      "DamageTypes": {
+        "Create": "Создать тип урона",
+        "Delete": "Удалить тип урона",
+        "Empty": "Типы урона не созданы.",
+        "LabelPlaceholder": "Название типа урона",
+        "Title": "Настройка типов урона"
+      },
+      "Open": "Открыть",
+      "Skills": {
+        "Create": "Создать навык",
+        "Delete": "Удалить навык",
+        "Empty": "Навыки не созданы.",
+        "LabelPlaceholder": "Название навыка",
+        "Title": "Настройки навыков"
+      }
+    },
+    "Messages": {
+      "ActionMovementSaved": "Формулы ОД/ОП сохранены.",
+      "CharacteristicsSaved": "Настройки характеристик сохранены.",
+      "CreateTypeFirst": "Сначала создайте тип существа.",
+      "DamageTypesSaved": "Настройка типов урона сохранена.",
+      "DeleteRaceContent": "Удалить расу \"{name}\"?",
+      "DeleteTypeContent": "Удалить тип \"{name}\" и все связанные с ним расы?",
+      "SkillsSaved": "Настройки навыков сохранены."
+    },
+    "Formula": {
+      "ClosingParenthesisExpected": "Ожидалась закрывающая скобка",
+      "DivisionByZero": "Деление на ноль",
+      "ExpectedTerm": "Ожидалось число, параметр или скобка",
+      "ExtraCharacter": "Лишний символ \"{character}\"",
+      "FormulaError": "Ошибка формулы {key}: {message}",
+      "InvalidNumber": "Некорректное число \"{token}\"",
+      "InvalidNumberValue": "Формула дала некорректное числовое значение",
+      "OnPosition": "на позиции {position}",
+      "SkillFormulaError": "Ошибка формулы навыка {key}: {message}",
+      "UnknownParameter": "Неизвестный параметр \"{identifier}\""
+    },
+    "Validation": {
+      "CharacteristicAbbrInvalid": "Характеристика {index}: код должен быть идентификатором латиницей.",
+      "CharacteristicAbbrDuplicate": "Код характеристики \"{abbr}\" повторяется.",
+      "CharacteristicKeyInvalid": "Характеристика {index}: ключ должен быть идентификатором латиницей.",
+      "CharacteristicKeyDuplicate": "Ключ характеристики \"{key}\" повторяется.",
+      "DamageTypeKeyInvalid": "Тип урона {index}: ключ должен быть идентификатором латиницей.",
+      "DamageTypeKeyDuplicate": "Ключ типа урона \"{key}\" повторяется.",
+      "SkillAbbrInvalid": "Навык {index}: код должен быть идентификатором латиницей.",
+      "SkillAbbrDuplicate": "Код навыка \"{abbr}\" повторяется.",
+      "SkillKeyInvalid": "Навык {index}: ключ должен быть идентификатором латиницей.",
+      "SkillKeyDuplicate": "Ключ навыка \"{key}\" повторяется."
+    }
   }
 }

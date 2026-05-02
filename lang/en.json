@@ -15,6 +15,120 @@
     }
   },
   "FALLOUTMAW": {
-    "SystemTitle": "Fallout-MaW"
+    "SystemTitle": "Fallout-MaW",
+    "Common": {
+      "ActionPoints": "Action Points",
+      "Code": "Code",
+      "Create": "Create",
+      "DamageResistances": "Damage Resistances",
+      "Delete": "Delete",
+      "Formula": "Formula",
+      "Key": "Key",
+      "Label": "Name",
+      "MovementPoints": "Movement Points",
+      "ResetDefaults": "Reset to Defaults",
+      "SaveChanges": "Save Changes",
+      "Reorder": "Reorder",
+      "Untitled": "Untitled"
+    },
+    "Actor": {
+      "Character": "Character",
+      "CreatureType": "Creature Type",
+      "Dodge": "Dodge",
+      "FreeEdit": "Free Editing",
+      "Level": "Level",
+      "NoCreatureType": "Not selected",
+      "NoRace": "Not selected",
+      "Progression": "Progression",
+      "Race": "Race",
+      "ResearchPointsPerLevel": "Research Points per Level",
+      "SkillPointsPerLevel": "Skill Points per Level"
+    },
+    "Creation": {
+      "Base": "Character Base",
+      "RaceFilterHint": "The race list depends on the selected creature type."
+    },
+    "Settings": {
+      "ActionMovement": {
+        "ActionPointsFormula": "Base Action Points",
+        "MovementPointsFormula": "Base Movement Points",
+        "ShortTitle": "AP/MP Formulas",
+        "Title": "Base AP/MP Formulas"
+      },
+      "Characteristics": {
+        "Create": "Create Characteristic",
+        "Delete": "Delete Characteristic",
+        "Empty": "No characteristics created.",
+        "LabelPlaceholder": "Characteristic name",
+        "Title": "Characteristic Settings"
+      },
+      "CreatureOptions": {
+        "CreateRace": "Create Race",
+        "CreateType": "Create Type",
+        "DeleteRace": "Delete Race",
+        "DeleteType": "Delete Type",
+        "EmptyEditor": "Create a type or race",
+        "NoRaces": "No races created yet",
+        "NoTypes": "No types created yet",
+        "Progression": "Progression",
+        "RaceNamePlaceholder": "Race name",
+        "RaceSection": "Race",
+        "Races": "Races",
+        "ResearchPointsPerLevel": "Research point growth per level",
+        "SkillPointsPerLevel": "Skill point growth per level",
+        "Title": "Creature Types and Races",
+        "TypeNamePlaceholder": "For example, humanoid",
+        "TypeSection": "Creature Type",
+        "Types": "Types"
+      },
+      "DamageTypes": {
+        "Create": "Create Damage Type",
+        "Delete": "Delete Damage Type",
+        "Empty": "No damage types created.",
+        "LabelPlaceholder": "Damage type name",
+        "Title": "Damage Type Settings"
+      },
+      "Open": "Open",
+      "Skills": {
+        "Create": "Create Skill",
+        "Delete": "Delete Skill",
+        "Empty": "No skills created.",
+        "LabelPlaceholder": "Skill name",
+        "Title": "Skill Settings"
+      }
+    },
+    "Messages": {
+      "ActionMovementSaved": "AP/MP formulas saved.",
+      "CharacteristicsSaved": "Characteristic settings saved.",
+      "CreateTypeFirst": "Create a creature type first.",
+      "DamageTypesSaved": "Damage type settings saved.",
+      "DeleteRaceContent": "Delete race \"{name}\"?",
+      "DeleteTypeContent": "Delete type \"{name}\" and all races assigned to it?",
+      "SkillsSaved": "Skill settings saved."
+    },
+    "Formula": {
+      "ClosingParenthesisExpected": "Expected a closing parenthesis",
+      "DivisionByZero": "Division by zero",
+      "ExpectedTerm": "Expected a number, parameter, or parenthesis",
+      "ExtraCharacter": "Extra character \"{character}\"",
+      "FormulaError": "Formula error {key}: {message}",
+      "InvalidNumber": "Invalid number \"{token}\"",
+      "InvalidNumberValue": "Formula produced an invalid numeric value",
+      "OnPosition": "at position {position}",
+      "SkillFormulaError": "Skill formula error {key}: {message}",
+      "UnknownParameter": "Unknown parameter \"{identifier}\""
+    },
+    "Validation": {
+      "CharacteristicAbbrInvalid": "Characteristic {index}: code must be a Latin identifier.",
+      "CharacteristicAbbrDuplicate": "Characteristic code \"{abbr}\" is duplicated.",
+      "CharacteristicKeyInvalid": "Characteristic {index}: key must be a Latin identifier.",
+      "CharacteristicKeyDuplicate": "Characteristic key \"{key}\" is duplicated.",
+      "DamageTypeKeyInvalid": "Damage type {index}: key must be a Latin identifier.",
+      "DamageTypeKeyDuplicate": "Damage type key \"{key}\" is duplicated.",
+      "SkillAbbrInvalid": "Skill {index}: code must be a Latin identifier.",
+      "SkillAbbrDuplicate": "Skill code \"{abbr}\" is duplicated.",
+      "SkillKeyInvalid": "Skill {index}: key must be a Latin identifier.",
+      "SkillKeyDuplicate": "Skill key \"{key}\" is duplicated."
+    }
   }
 }

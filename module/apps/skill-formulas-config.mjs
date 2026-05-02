@@ -12,7 +12,7 @@ export class SkillFormulasConfig extends FormApplication {
   static get defaultOptions() {
     return foundry.utils.mergeObject(super.defaultOptions, {
       id: "fallout-maw-skill-settings",
-      title: "Настройки навыков",
+      title: localize("FALLOUTMAW.Settings.Skills.Title"),
       template: "systems/fallout-maw/templates/settings/skill-formulas-config.hbs",
       classes: ["fallout-maw", "skill-settings-config"],
       width: 900,
@@ -43,7 +43,7 @@ export class SkillFormulasConfig extends FormApplication {
     this.#validateSkills(skills);
     await setSkillSettings(skills);
     this.skills = getSkillSettings();
-    ui.notifications.info("Настройки навыков сохранены.");
+    ui.notifications.info(localize("FALLOUTMAW.Messages.SkillsSaved"));
     this.render(true);
   }
 
@@ -93,10 +93,10 @@ export class SkillFormulasConfig extends FormApplication {
     for (const [index, skill] of skills.entries()) {
       const key = String(skill.key ?? "").trim();
       const abbr = String(skill.abbr ?? "").trim();
-      if (!IDENTIFIER_PATTERN.test(key)) throwValidationError(`Навык ${index + 1}: ключ должен быть идентификатором латиницей.`);
-      if (keys.has(key)) throwValidationError(`Ключ навыка "${key}" повторяется.`);
-      if (!IDENTIFIER_PATTERN.test(abbr)) throwValidationError(`Навык ${index + 1}: код должен быть идентификатором латиницей.`);
-      if (abbreviations.has(abbr)) throwValidationError(`Код навыка "${abbr}" повторяется.`);
+      if (!IDENTIFIER_PATTERN.test(key)) throwValidationError(format("FALLOUTMAW.Validation.SkillKeyInvalid", { index: index + 1 }));
+      if (keys.has(key)) throwValidationError(format("FALLOUTMAW.Validation.SkillKeyDuplicate", { key }));
+      if (!IDENTIFIER_PATTERN.test(abbr)) throwValidationError(format("FALLOUTMAW.Validation.SkillAbbrInvalid", { index: index + 1 }));
+      if (abbreviations.has(abbr)) throwValidationError(format("FALLOUTMAW.Validation.SkillAbbrDuplicate", { abbr }));
       keys.add(key);
       abbreviations.add(abbr);
       try {
@@ -127,4 +127,12 @@ export class SkillFormulasConfig extends FormApplication {
 function throwValidationError(message) {
   ui.notifications.error(message);
   throw new Error(message);
+}
+
+function localize(key) {
+  return game.i18n.localize(key);
+}
+
+function format(key, data) {
+  return game.i18n.format(key, data);
 }
