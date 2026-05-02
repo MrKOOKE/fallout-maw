@@ -69,7 +69,7 @@
       </section>
 
       <section class="fallout-maw-panel">
-        <h2>{{localize "FALLOUTMAW.Settings.Characteristics.Title"}}</h2>
+        <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.BaseParameters"}}</h2>
         <div class="fallout-maw-characteristic-grid">
           {{#each characteristics}}
           <label>
@@ -78,10 +78,28 @@
           </label>
           {{/each}}
         </div>
+        <div class="fallout-maw-list-grid two-columns">
+          <label>
+            <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.CharacteristicDistributionPoints"}}</span>
+            <input type="number" name="race.baseParameters.characteristicDistributionPoints" value="{{baseParameters.characteristicDistributionPoints}}" min="0">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.SignatureSkillPoints"}}</span>
+            <input type="number" name="race.baseParameters.signatureSkillPoints" value="{{baseParameters.signatureSkillPoints}}" min="0">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.TraitPoints"}}</span>
+            <input type="number" name="race.baseParameters.traitPoints" value="{{baseParameters.traitPoints}}" min="0">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.ProficiencyPoints"}}</span>
+            <input type="number" name="race.baseParameters.proficiencyPoints" value="{{baseParameters.proficiencyPoints}}" min="0">
+          </label>
+        </div>
       </section>
 
       <section class="fallout-maw-panel">
-        <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.Progression"}}</h2>
+        <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.Development"}}</h2>
         <div class="fallout-maw-list-grid two-columns">
           <label>
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.SkillPointsPerLevel"}}</span>
@@ -91,6 +109,23 @@
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.ResearchPointsPerLevel"}}</span>
             <input type="number" name="race.progression.researchPointsPerLevel" value="{{selectedRace.progression.researchPointsPerLevel}}" min="0">
           </label>
+        </div>
+      </section>
+
+      <section class="fallout-maw-panel">
+        <header class="fallout-maw-panel-header">
+          <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.Limbs"}}</h2>
+        </header>
+
+        <div class="fallout-maw-settings-table limb-settings">
+          {{#each limbs}}
+          <div class="fallout-maw-settings-row" data-limb-row>
+            <input type="hidden" data-field="key" value="{{key}}">
+            <input type="text" data-field="label" value="{{label}}">
+          </div>
+          {{else}}
+          <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoLimbs"}}</p>
+          {{/each}}
         </div>
       </section>
 

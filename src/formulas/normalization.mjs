@@ -1,4 +1,10 @@
-import { DEFAULT_CHARACTERISTICS, DEFAULT_DAMAGE_TYPES, DEFAULT_NEEDS, DEFAULT_RESOURCES, DEFAULT_SKILLS } from "../config/defaults.mjs";
+import {
+  DEFAULT_CHARACTERISTICS,
+  DEFAULT_DAMAGE_TYPES,
+  DEFAULT_NEEDS,
+  DEFAULT_RESOURCES,
+  DEFAULT_SKILLS
+} from "../config/defaults.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 export const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -24,7 +30,7 @@ export function createDefaultDamageTypeSettings() {
 }
 
 export function normalizeCharacteristicSettings(settings) {
-  const source = normalizeCollectionInput(settings, createDefaultCharacteristicSettings());
+  const source = normalizeCollectionInput(settings?.characteristics ?? settings, createDefaultCharacteristicSettings());
   return normalizeKeyedEntries(
     source,
     entry => {

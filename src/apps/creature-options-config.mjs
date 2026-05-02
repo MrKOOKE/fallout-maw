@@ -75,6 +75,8 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         ...characteristic,
         value: toInteger(selectedRace?.characteristics?.[characteristic.key])
       })),
+      baseParameters: selectedRace?.baseParameters ?? {},
+      limbs: selectedRace?.limbs ?? [],
       damageTypes: damageTypes.map(damageType => ({
         ...damageType,
         formula: String(selectedRace?.damageResistances?.[damageType.key] ?? "0")
@@ -209,6 +211,13 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         toInteger(formData.race?.characteristics?.[characteristic.key])
       ])
     );
+    race.baseParameters = {
+      characteristicDistributionPoints: toInteger(formData.race?.baseParameters?.characteristicDistributionPoints),
+      signatureSkillPoints: toInteger(formData.race?.baseParameters?.signatureSkillPoints),
+      traitPoints: toInteger(formData.race?.baseParameters?.traitPoints),
+      proficiencyPoints: toInteger(formData.race?.baseParameters?.proficiencyPoints)
+    };
+    race.limbs = this.#readLimbsFromForm();
     race.damageResistances = Object.fromEntries(
       getDamageTypeSettings().map(damageType => [
         damageType.key,
@@ -219,6 +228,14 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       skillPointsPerLevel: toInteger(formData.race?.progression?.skillPointsPerLevel),
       researchPointsPerLevel: toInteger(formData.race?.progression?.researchPointsPerLevel)
     };
+  }
+
+  #readLimbsFromForm() {
+    const rows = Array.from(this.form?.querySelectorAll("[data-limb-row]") ?? []);
+    return rows.map(row => ({
+      key: row.querySelector("[data-field='key']")?.value?.trim() ?? "",
+      label: row.querySelector("[data-field='label']")?.value?.trim() || localize("FALLOUTMAW.Common.Untitled")
+    })).filter(limb => limb.key);
   }
 
   #validateRaceFormulas() {

@@ -8,6 +8,13 @@ export const DEFAULT_CHARACTERISTICS = Object.freeze([
   { key: "luck", abbr: "luc", label: "Удача" }
 ]);
 
+export const DEFAULT_BASE_PARAMETER_POOLS = Object.freeze({
+  characteristicDistributionPoints: 33,
+  signatureSkillPoints: 3,
+  traitPoints: 2,
+  proficiencyPoints: 500
+});
+
 export const DEFAULT_SKILLS = Object.freeze([
   { key: "rangedCombat", abbr: "ran", label: "Дальний бой", formula: "10 + dex + wis*3" },
   { key: "meleeCombat", abbr: "mel", label: "Ближний бой", formula: "10 + 2 * (str + dex)" },
@@ -27,6 +34,17 @@ export const DEFAULT_SKILLS = Object.freeze([
   { key: "speech", abbr: "spe", label: "Красноречие", formula: "5 * cha" },
   { key: "barter", abbr: "bar", label: "Бартер", formula: "cha*3 + int" },
   { key: "gambling", abbr: "gam", label: "Азарт", formula: "6 * luc" }
+]);
+
+export const DEFAULT_LIMBS = Object.freeze([
+  { key: "head", label: "Голова" },
+  { key: "eyes", label: "Глаза" },
+  { key: "torso", label: "Туловище" },
+  { key: "groin", label: "Пах" },
+  { key: "leftArm", label: "Левая рука" },
+  { key: "rightArm", label: "Правая рука" },
+  { key: "leftLeg", label: "Левая нога" },
+  { key: "rightLeg", label: "Правая нога" }
 ]);
 
 export const DEFAULT_RESOURCES = Object.freeze([
