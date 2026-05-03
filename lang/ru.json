@@ -85,12 +85,15 @@
       "Defense": "Защита",
       "Duration": "Длительность",
       "Equipped": "Экипировано",
+      "Equip": "Надеть",
+      "OccupiedSlots": "Занимаемые слоты",
       "Price": "Цена",
       "PriceCurrency": "Валюта",
       "Quantity": "Количество",
       "Range": "Дистанция",
       "Target": "Цель",
       "TotalWeight": "Общий вес",
+      "Unequip": "Снять",
       "Weight": "Вес"
     },
     "Creation": {

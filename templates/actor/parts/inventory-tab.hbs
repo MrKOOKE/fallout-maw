@@ -32,16 +32,16 @@
   </section>
 
   <div class="fallout-maw-inventory-layout" data-inventory-drop-surface>
-    <section class="fallout-maw-panel fallout-maw-equipment-pane">
+    <section class="fallout-maw-panel fallout-maw-equipment-pane" data-equipment-drop-surface>
       <h2>{{localize "FALLOUTMAW.Common.Equipment"}}</h2>
       <div class="fallout-maw-equipment-slot-list">
         {{#each inventory.equipmentSlots}}
-        <div class="fallout-maw-equipment-slot" data-equipment-slot="{{key}}" data-drop-zone>
-          <span>{{label}}</span>
+        <div class="fallout-maw-equipment-slot" data-equipment-slot="{{key}}" data-drop-zone title="{{label}}">
           {{#if item}}
-          <strong class="draggable fallout-maw-draggable-item" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">{{item.name}}</strong>
-          {{else}}
-          <strong>{{localize "FALLOUTMAW.Actor.EmptySlot"}}</strong>
+          <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+            <img src="{{item.img}}" alt="{{item.name}}">
+            {{#if item.quantity}}<strong>{{item.quantity}}</strong>{{/if}}
+          </article>
           {{/if}}
         </div>
         {{else}}
@@ -56,12 +56,12 @@
           <h3>{{label}}</h3>
           <div class="fallout-maw-equipment-slot-list">
             {{#each slots}}
-            <div class="fallout-maw-equipment-slot" data-weapon-set="{{../key}}" data-weapon-slot="{{key}}" data-drop-zone>
-              <span>{{label}}</span>
+            <div class="fallout-maw-equipment-slot" data-weapon-set="{{../key}}" data-weapon-slot="{{key}}" data-drop-zone title="{{label}}">
               {{#if item}}
-              <strong class="draggable fallout-maw-draggable-item" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">{{item.name}}</strong>
-              {{else}}
-              <strong>{{localize "FALLOUTMAW.Actor.EmptySlot"}}</strong>
+              <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+                <img src="{{item.img}}" alt="{{item.name}}">
+                {{#if item.quantity}}<strong>{{item.quantity}}</strong>{{/if}}
+              </article>
               {{/if}}
             </div>
             {{/each}}
@@ -79,9 +79,8 @@
         {{#each inventory.grid.cells}}
         <div class="fallout-maw-inventory-cell" data-inventory-cell data-x="{{x}}" data-y="{{y}}" data-drop-zone>
           {{#if item}}
-          <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+          <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
             <img src="{{item.img}}" alt="{{item.name}}">
-            <span>{{item.name}}</span>
             {{#if item.quantity}}<strong>{{item.quantity}}</strong>{{/if}}
           </article>
           {{/if}}

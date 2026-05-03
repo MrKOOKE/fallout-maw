@@ -392,9 +392,16 @@
 
 .fallout-maw-equipment-slot-list,
 .fallout-maw-weapon-set-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 0.4rem;
+}
+
+.fallout-maw-equipment-slot-list {
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+}
+
+.fallout-maw-weapon-set-list {
+  grid-template-columns: 1fr;
 }
 
 .fallout-maw-equipment-pane h2 + .fallout-maw-weapon-set-list,
@@ -403,15 +410,13 @@
 }
 
 .fallout-maw-equipment-slot {
-  align-items: center;
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(120, 120, 120, 0.18);
-  border-radius: 4px;
-  display: grid;
-  gap: 0.45rem;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
-  min-height: 2.2rem;
-  padding: 0.35rem 0.45rem;
+  aspect-ratio: 1 / 1;
+  background: rgba(0, 0, 0, 0.16);
+  border: 1px solid rgba(120, 120, 120, 0.24);
+  border-radius: 3px;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
 }
 
 .fallout-maw-equipment-slot.drop-preview,
@@ -421,19 +426,6 @@
   background: rgba(235, 190, 80, 0.16);
   border-color: rgba(235, 190, 80, 0.72);
   box-shadow: inset 0 0 0 1px rgba(235, 190, 80, 0.25);
-}
-
-.fallout-maw-equipment-slot > span,
-.fallout-maw-equipment-slot > strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.fallout-maw-equipment-slot > strong {
-  opacity: 0.78;
-  text-align: right;
 }
 
 .fallout-maw-weapon-set {
@@ -469,10 +461,13 @@
   background: rgba(210, 185, 145, 0.12);
   cursor: grab;
   display: grid;
-  gap: 0.15rem;
-  grid-template-rows: minmax(0, 1fr) auto;
   height: 100%;
   padding: 0.2rem;
+  position: relative;
+}
+
+.fallout-maw-inventory-item.equipped {
+  box-shadow: inset 0 0 0 2px rgba(235, 190, 80, 0.82);
 }
 
 .fallout-maw-draggable-item.dragging,
@@ -493,15 +488,6 @@
   object-fit: contain;
 }
 
-.fallout-maw-inventory-item span {
-  font-size: 0.72rem;
-  line-height: 1.05;
-  overflow: hidden;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .fallout-maw-inventory-item strong {
   background: rgba(0, 0, 0, 0.42);
   border-radius: 3px;
@@ -513,6 +499,53 @@
   position: absolute;
   right: 0.15rem;
   text-align: center;
+}
+
+.fallout-maw-hidden-controls {
+  display: none;
+}
+
+.fallout-maw-occupied-slots-field {
+  grid-column: 1 / -1;
+}
+
+.fallout-maw-occupied-slots-field h3 {
+  border: 0;
+  font-size: 0.95rem;
+  margin: 0 0 0.4rem;
+}
+
+.fallout-maw-occupied-slot-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fallout-maw-occupied-slot-group {
+  border: 1px solid rgba(120, 120, 120, 0.18);
+  border-radius: 5px;
+  padding: 0.45rem;
+}
+
+.fallout-maw-occupied-slot-group > strong {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.fallout-maw-occupied-slot-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.fallout-maw-occupied-slot-choice {
+  flex: 0 1 auto;
+}
+
+.fallout-maw-occupied-slot-choice.active {
+  background: rgba(235, 190, 80, 0.18);
+  border-color: rgba(235, 190, 80, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(235, 190, 80, 0.25);
 }
 
 .fallout-maw-inventory-tooltip,

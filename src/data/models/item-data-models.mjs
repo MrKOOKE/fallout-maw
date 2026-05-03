@@ -1,4 +1,4 @@
-const { BooleanField, HTMLField, NumberField, SchemaField, StringField } = foundry.data.fields;
+const { BooleanField, HTMLField, NumberField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
 
 export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
   static defineSchema() {
@@ -9,6 +9,10 @@ export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
       price: new NumberField({ required: true, min: 0, initial: 0 }),
       priceCurrency: new StringField({ required: true, blank: true, initial: "" }),
       equipped: new BooleanField({ required: true, initial: false }),
+      occupiedSlots: new TypedObjectField(new BooleanField({ required: true, initial: false }), {
+        required: true,
+        initial: {}
+      }),
       placement: new SchemaField({
         mode: new StringField({ required: true, blank: true, initial: "inventory" }),
         equipmentSlot: new StringField({ required: true, blank: true, initial: "" }),

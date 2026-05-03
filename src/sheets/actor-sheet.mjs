@@ -10,6 +10,11 @@ import {
   getSkillSettings
 } from "../settings/accessors.mjs";
 import { createDefaultInventorySize } from "../settings/creature-options.mjs";
+import {
+  getEquipmentSlotSelectionKey,
+  getRaceEquipmentSlotsForItem,
+  getSelectedEquipmentSlotKeys
+} from "../utils/equipment-slots.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const { ActorSheetV2 } = foundry.applications.sheets;
@@ -194,7 +199,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const zone = this.#getDropZone(event.target);
     if (!zone) return;
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-    this.#setInventoryDropPreview(zone);
+    this.#setInventoryDropPreview(zone, this.#getDroppedItemDataSync(event));
   }
 
   static #onToggleFreeEdit(event) {
@@ -257,9 +262,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #onInventoryDragLeave(event) {
-    const zone = event.target?.closest?.("[data-drop-zone], [data-inventory-drop-surface]");
+    const zone = event.target?.closest?.("[data-drop-zone], [data-equipment-drop-surface], [data-inventory-drop-surface]");
     if (!zone || zone.contains(event.relatedTarget)) return;
-    zone.classList.remove("drop-preview");
+    this.#clearInventoryDropPreview();
   }
 
   #onInventoryContextMenu(event) {
@@ -301,15 +306,33 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #getDropZone(target) {
     const specificZone = target?.closest?.("[data-inventory-cell], [data-equipment-slot], [data-weapon-slot]");
     if (specificZone) return specificZone;
+    const equipmentSurface = target?.closest?.("[data-equipment-drop-surface]");
+    if (equipmentSurface) return equipmentSurface;
     const surface = target?.closest?.("[data-inventory-drop-surface]");
     if (surface) return surface;
     if (target?.closest?.(".fallout-maw-actor-sheet")) return this.element.querySelector('[data-tab="inventory"]');
     return this.element?.querySelector('[data-tab="inventory"]') ?? null;
   }
 
-  #setInventoryDropPreview(zone) {
+  #setInventoryDropPreview(zone, itemData = null) {
     this.#clearInventoryDropPreview();
+    if ((zone.dataset.equipmentSlot || zone.dataset.equipmentDropSurface !== undefined) && itemData) {
+      const highlighted = this.#highlightEquipmentSlotsForItem(itemData, zone.dataset.equipmentSlot);
+      if (highlighted) return;
+    }
     zone.classList.add("drop-preview");
+  }
+
+  #highlightEquipmentSlotsForItem(itemData, hoveredSlotKey = "") {
+    const race = this.#getCurrentRace();
+    const selectedSlots = getRaceEquipmentSlotsForItem(race, itemData);
+    if (!selectedSlots.length) return false;
+    if (hoveredSlotKey && !selectedSlots.some(slot => slot.key === hoveredSlotKey)) return false;
+
+    for (const slot of selectedSlots) {
+      this.element?.querySelector(`[data-equipment-slot="${CSS.escape(slot.key)}"]`)?.classList.add("drop-preview");
+    }
+    return true;
   }
 
   #clearInventoryDropPreview() {
@@ -327,6 +350,17 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       return {
         mode: "equipment",
         equipmentSlot: zone.dataset.equipmentSlot,
+        weaponSet: "",
+        weaponSlot: "",
+        x: 1,
+        y: 1
+      };
+    }
+
+    if (zone.dataset.equipmentDropSurface !== undefined) {
+      return {
+        mode: "equipment",
+        equipmentSlot: "",
         weaponSet: "",
         weaponSlot: "",
         x: 1,
@@ -387,6 +421,17 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return { item, itemData: item.toObject() };
   }
 
+  #getDroppedItemDataSync(event) {
+    const data = this.#getDragEventData(event);
+    if (data?.type !== "Item") return null;
+
+    const ownedItem = data.itemId ? this.actor.items.get(data.itemId) : null;
+    if (ownedItem) return ownedItem.toObject();
+
+    const document = data.uuid && typeof fromUuidSync === "function" ? fromUuidSync(data.uuid) : null;
+    return document instanceof Item ? document.toObject() : null;
+  }
+
   #getDragEventData(event) {
     try {
       const textEditor = foundry.applications.ux.TextEditor?.implementation ?? globalThis.TextEditor?.implementation ?? globalThis.TextEditor;
@@ -412,6 +457,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #getTargetStackItem(target, sourceItemId = "") {
     const itemElement = target?.closest?.("[data-item-id]");
     if (itemElement && itemElement.dataset.itemId !== sourceItemId) {
+      if (!itemElement.closest("[data-inventory-cell]")) return null;
       return this.actor.items.get(itemElement.dataset.itemId) ?? null;
     }
 
@@ -440,21 +486,31 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       return this.actor.deleteEmbeddedDocuments("Item", [item.id]);
     }
 
+    const resolvedPlacement = this.#resolveEquipmentPlacement(item.toObject(), placement, item.id);
+    if (!resolvedPlacement) return null;
+    const wasEquipment = item.system?.placement?.mode === "equipment";
+    const isEquipment = resolvedPlacement.mode === "equipment";
+
     return item.update({
-      "system.placement.mode": placement.mode,
-      "system.placement.equipmentSlot": placement.equipmentSlot,
-      "system.placement.weaponSet": placement.weaponSet,
-      "system.placement.weaponSlot": placement.weaponSlot,
-      "system.placement.x": placement.x,
-      "system.placement.y": placement.y
+      "system.equipped": isEquipment ? true : (wasEquipment ? false : Boolean(item.system?.equipped)),
+      "system.placement.mode": resolvedPlacement.mode,
+      "system.placement.equipmentSlot": resolvedPlacement.equipmentSlot,
+      "system.placement.weaponSet": resolvedPlacement.weaponSet,
+      "system.placement.weaponSlot": resolvedPlacement.weaponSlot,
+      "system.placement.x": resolvedPlacement.x,
+      "system.placement.y": resolvedPlacement.y
     });
   }
 
   async #createOrStackDroppedItem(itemData, placement, targetItem = null) {
     if (!itemData) return null;
-    const stackTarget = targetItem && this.#areStackable(itemData, targetItem)
-      ? targetItem
-      : this.#findStackTarget(itemData);
+    const resolvedPlacement = this.#resolveEquipmentPlacement(itemData, placement);
+    if (!resolvedPlacement) return null;
+    const stackTarget = resolvedPlacement.mode !== "equipment"
+      ? (targetItem && this.#areStackable(itemData, targetItem)
+        ? targetItem
+        : this.#findStackTarget(itemData))
+      : null;
 
     if (stackTarget) {
       const nextQuantity = toInteger(stackTarget.system?.quantity) + Math.max(1, toInteger(itemData.system?.quantity));
@@ -468,13 +524,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     delete createData._id;
     foundry.utils.mergeObject(createData, {
       system: {
+        equipped: resolvedPlacement.mode === "equipment",
         placement: {
-          mode: placement.mode,
-          equipmentSlot: placement.equipmentSlot,
-          weaponSet: placement.weaponSet,
-          weaponSlot: placement.weaponSlot,
-          x: placement.x,
-          y: placement.y
+          mode: resolvedPlacement.mode,
+          equipmentSlot: resolvedPlacement.equipmentSlot,
+          weaponSet: resolvedPlacement.weaponSet,
+          weaponSlot: resolvedPlacement.weaponSlot,
+          x: resolvedPlacement.x,
+          y: resolvedPlacement.y
         }
       }
     });
@@ -488,6 +545,41 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     )) ?? null;
   }
 
+  #resolveEquipmentPlacement(itemData, placement, excludeItemId = "") {
+    if (placement.mode !== "equipment") return placement;
+
+    const race = this.#getCurrentRace();
+    const selectedSlots = getRaceEquipmentSlotsForItem(race, itemData);
+    const targetSlot = placement.equipmentSlot
+      ? selectedSlots.find(slot => slot.key === placement.equipmentSlot)
+      : selectedSlots[0];
+    if (!targetSlot) return null;
+
+    const blocked = selectedSlots.some(slot => {
+      const occupyingItem = this.#getEquipmentItemForSlot(slot, excludeItemId);
+      return Boolean(occupyingItem);
+    });
+    if (blocked) return null;
+
+    return {
+      ...placement,
+      equipmentSlot: targetSlot.key
+    };
+  }
+
+  #getEquipmentItemForSlot(slot, excludeItemId = "") {
+    const slotSelectionKey = getEquipmentSlotSelectionKey(slot.label);
+    return this.actor.items.contents.find(item => {
+      if (item.id === excludeItemId) return false;
+      if (item.system?.placement?.mode !== "equipment") return false;
+      return getSelectedEquipmentSlotKeys(item).has(slotSelectionKey);
+    }) ?? null;
+  }
+
+  #getCurrentRace() {
+    return getCreatureOptions().races.find(entry => entry.id === this.actor.system?.creature?.raceId) ?? null;
+  }
+
   #areStackable(sourceData, targetItem) {
     const sourceSystem = sourceData?.system ?? {};
     const targetSystem = targetItem?.system ?? {};
@@ -498,18 +590,31 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       && Number(sourceSystem.weight) === Number(targetSystem.weight)
       && Number(sourceSystem.price) === Number(targetSystem.price)
       && String(sourceSystem.priceCurrency ?? "") === String(targetSystem.priceCurrency ?? "")
+      && serializeSet(getSelectedEquipmentSlotKeys(sourceSystem)) === serializeSet(getSelectedEquipmentSlotKeys(targetSystem))
     );
   }
 
   #showInventoryContextMenu(item, event) {
     this.#closeInventoryContextMenu();
+    const isSlottedEquipment = item.system?.placement?.mode === "equipment";
+    const isEquipped = Boolean(item.system?.equipped);
     const menu = document.createElement("nav");
     menu.className = "fallout-maw-inventory-context-menu";
-    menu.innerHTML = `
-      <button type="button" data-action="edit"><i class="fa-solid fa-pen-to-square"></i>${game.i18n.localize("FALLOUTMAW.Common.Edit")}</button>
-      <button type="button" data-action="copy"><i class="fa-solid fa-copy"></i>${game.i18n.localize("FALLOUTMAW.Common.Copy")}</button>
-      <button type="button" data-action="delete"><i class="fa-solid fa-trash"></i>${game.i18n.localize("FALLOUTMAW.Common.Delete")}</button>
-    `;
+    const menuOptions = [
+      ["edit", "fa-pen-to-square", game.i18n.localize("FALLOUTMAW.Common.Edit")]
+    ];
+    if (isSlottedEquipment || isEquipped) {
+      menuOptions.push(["unequip", "fa-hand", game.i18n.localize("FALLOUTMAW.Item.Unequip")]);
+    } else {
+      menuOptions.push(["equip", "fa-shirt", game.i18n.localize("FALLOUTMAW.Item.Equip")]);
+    }
+    if (!isSlottedEquipment) {
+      menuOptions.push(["copy", "fa-copy", game.i18n.localize("FALLOUTMAW.Common.Copy")]);
+    }
+    menuOptions.push(["delete", "fa-trash", game.i18n.localize("FALLOUTMAW.Common.Delete")]);
+    menu.innerHTML = menuOptions
+      .map(([action, icon, label]) => `<button type="button" data-action="${action}"><i class="fa-solid ${icon}"></i>${label}</button>`)
+      .join("");
     menu.style.left = `${event.clientX}px`;
     menu.style.top = `${event.clientY}px`;
     document.body.append(menu);
@@ -520,6 +625,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       clickEvent.preventDefault();
       this.#closeInventoryContextMenu();
       if (action === "edit") return item.sheet?.render(true);
+      if (action === "equip") return this.#equipInventoryItem(item);
+      if (action === "unequip") return this.#unequipInventoryItem(item);
       if (action === "copy") return this.#copyInventoryItem(item);
       if (action === "delete") return item.delete();
       return undefined;
@@ -535,6 +642,42 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     delete data._id;
     foundry.utils.setProperty(data, "system.placement", this.#getFirstAvailableInventoryPlacement());
     return this.actor.createEmbeddedDocuments("Item", [data]);
+  }
+
+  async #equipInventoryItem(item) {
+    const race = this.#getCurrentRace();
+    const selectedSlots = getRaceEquipmentSlotsForItem(race, item);
+    if (!selectedSlots.length) return item.update({ "system.equipped": true });
+
+    const blocked = selectedSlots.some(slot => Boolean(this.#getEquipmentItemForSlot(slot, item.id)));
+    if (blocked) return item.update({ "system.equipped": true });
+
+    const slot = selectedSlots[0];
+    return item.update({
+      "system.equipped": true,
+      "system.placement.mode": "equipment",
+      "system.placement.equipmentSlot": slot.key,
+      "system.placement.weaponSet": "",
+      "system.placement.weaponSlot": "",
+      "system.placement.x": 1,
+      "system.placement.y": 1
+    });
+  }
+
+  async #unequipInventoryItem(item) {
+    const currentPlacement = item.system?.placement ?? {};
+    const placement = currentPlacement.mode === "inventory"
+      ? currentPlacement
+      : this.#getFirstAvailableInventoryPlacement(item.id);
+    return item.update({
+      "system.equipped": false,
+      "system.placement.mode": placement.mode,
+      "system.placement.equipmentSlot": placement.equipmentSlot,
+      "system.placement.weaponSet": placement.weaponSet,
+      "system.placement.weaponSlot": placement.weaponSlot,
+      "system.placement.x": placement.x,
+      "system.placement.y": placement.y
+    });
   }
 
   #showInventoryTooltip(item) {
@@ -597,6 +740,10 @@ function escapeHTML(value) {
   return element.innerHTML;
 }
 
+function serializeSet(set) {
+  return Array.from(set).sort().join("|");
+}
+
 function createInventoryPlacement(x = 1, y = 1) {
   return {
     mode: "inventory",
@@ -625,6 +772,8 @@ function prepareInventoryContext(actor, race) {
     price: Number(item.system?.price) || 0,
     priceCurrency: item.system?.priceCurrency ?? "",
     priceCurrencyLabel: currencies.find(currency => currency.key === item.system?.priceCurrency)?.label ?? "",
+    equipped: Boolean(item.system?.equipped),
+    occupiedSlots: item.system?.occupiedSlots ?? {},
     placement: item.system?.placement ?? {}
   }));
   const assignedItemIds = new Set();
@@ -632,7 +781,7 @@ function prepareInventoryContext(actor, race) {
   const equipmentSlots = (race?.equipmentSlots ?? []).map(slot => {
     const item = allItems.find(candidate => (
       candidate.placement?.mode === "equipment"
-      && candidate.placement?.equipmentSlot === slot.key
+      && getSelectedEquipmentSlotKeys(candidate).has(getEquipmentSlotSelectionKey(slot.label))
     ));
     if (item) assignedItemIds.add(item.id);
     return { ...slot, item };

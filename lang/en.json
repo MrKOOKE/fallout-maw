@@ -85,12 +85,15 @@
       "Defense": "Defense",
       "Duration": "Duration",
       "Equipped": "Equipped",
+      "Equip": "Equip",
+      "OccupiedSlots": "Occupied Slots",
       "Price": "Price",
       "PriceCurrency": "Currency",
       "Quantity": "Quantity",
       "Range": "Range",
       "Target": "Target",
       "TotalWeight": "Total Weight",
+      "Unequip": "Unequip",
       "Weight": "Weight"
     },
     "Creation": {

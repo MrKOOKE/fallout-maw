@@ -1,5 +1,6 @@
 import { TEMPLATES } from "../constants.mjs";
-import { getCurrencySettings } from "../settings/accessors.mjs";
+import { getCreatureOptions, getCurrencySettings } from "../settings/accessors.mjs";
+import { groupRaceEquipmentSlotsBySet } from "../utils/equipment-slots.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { HandlebarsApplicationMixin } = foundry.applications.api;
@@ -34,6 +35,21 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const item = this.item;
     const type = item.type;
     const priceCurrency = item.system?.priceCurrency ?? "";
+    const occupiedSlots = item.system?.occupiedSlots ?? {};
+    const equipmentSlotGroups = groupRaceEquipmentSlotsBySet(getCreatureOptions());
+    const equipmentSlotSelections = new Map();
+
+    for (const group of equipmentSlotGroups) {
+      for (const slot of group.slots) {
+        if (!equipmentSlotSelections.has(slot.selectionKey)) {
+          equipmentSlotSelections.set(slot.selectionKey, {
+            selectionKey: slot.selectionKey,
+            label: slot.label,
+            selected: Boolean(occupiedSlots[slot.selectionKey])
+          });
+        }
+      }
+    }
 
     return foundry.utils.mergeObject(context, {
       item,
@@ -51,7 +67,38 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         ...currency,
         selected: currency.key === priceCurrency
       })),
+      equipmentSlotSelections: Array.from(equipmentSlotSelections.values()),
+      equipmentSlotGroups: equipmentSlotGroups.map(group => ({
+        raceNames: group.races.join(", "),
+        slots: group.slots.map(slot => ({
+          ...slot,
+          selected: Boolean(occupiedSlots[slot.selectionKey])
+        }))
+      })),
       totalWeight: item.totalWeight
     }, { inplace: false });
+  }
+
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    this.element?.querySelectorAll("[data-equipment-slot-choice]").forEach(button => {
+      button.addEventListener("click", event => this.#onEquipmentSlotChoice(event));
+    });
+  }
+
+  #onEquipmentSlotChoice(event) {
+    event.preventDefault();
+    const key = event.currentTarget.dataset.equipmentSlotChoice;
+    if (!key) return;
+
+    const input = this.element.querySelector(`[data-equipment-slot-input="${key}"]`);
+    if (!input) return;
+
+    input.checked = !input.checked;
+    this.element.querySelectorAll(`[data-equipment-slot-choice="${key}"]`).forEach(button => {
+      button.classList.toggle("active", input.checked);
+      button.setAttribute("aria-pressed", String(input.checked));
+    });
+    return this.item.update({ [`system.occupiedSlots.${key}`]: input.checked });
   }
 }

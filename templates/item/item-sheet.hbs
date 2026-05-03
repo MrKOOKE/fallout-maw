@@ -41,6 +41,33 @@
       <span>{{localize "FALLOUTMAW.Item.Equipped"}}</span>
     </label>
 
+    {{#if isGear}}
+    <section class="fallout-maw-occupied-slots-field">
+      <h3>{{localize "FALLOUTMAW.Item.OccupiedSlots"}}</h3>
+      <div class="fallout-maw-hidden-controls">
+        {{#each equipmentSlotSelections}}
+        <input type="checkbox" name="system.occupiedSlots.{{selectionKey}}" data-equipment-slot-input="{{selectionKey}}" {{checked selected}}>
+        {{/each}}
+      </div>
+      <div class="fallout-maw-occupied-slot-groups">
+        {{#each equipmentSlotGroups}}
+        <section class="fallout-maw-occupied-slot-group">
+          <strong>{{raceNames}}</strong>
+          <div class="fallout-maw-occupied-slot-list">
+            {{#each slots}}
+            <button type="button" class="fallout-maw-occupied-slot-choice {{#if selected}}active{{/if}}" data-equipment-slot-choice="{{selectionKey}}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}">
+              {{label}}
+            </button>
+            {{/each}}
+          </div>
+        </section>
+        {{else}}
+        <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoEquipmentSlots"}}</p>
+        {{/each}}
+      </div>
+    </section>
+    {{/if}}
+
     {{#if isWeapon}}
     <label>
       <span>{{localize "FALLOUTMAW.Item.Damage"}}</span>
