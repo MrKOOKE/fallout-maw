@@ -229,9 +229,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const dropped = await this.#getDroppedItemFromData(data);
     if (!dropped) return null;
 
-    const zone = this.#getDropZone(event.target);
+    const zone = this.#getDropZone(event);
     const parentId = this.#getInventoryContextParentId(zone);
-    const targetItem = this.#getTargetStackItem(event.target, dropped.item?.id ?? "", parentId);
+    const targetItem = this.#getTargetStackItem(zone, dropped.item?.id ?? "", parentId);
     let placement = this.#getPlacementForDropZone(zone, dropped.itemData, [dropped.item?.id ?? ""], parentId);
     if (!placement) return null;
     if (targetItem && !this.#areStackable(dropped.itemData, targetItem)) {
@@ -250,7 +250,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   _onDragOver(event) {
-    const zone = this.#getDropZone(event.target);
+    const zone = this.#getDropZone(event);
     if (!zone) return;
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
     this.#draggedItemData = this.#getPreviewItemData(event);
@@ -387,17 +387,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#clearInventoryTooltip();
   }
 
-  #getDropZone(target) {
-    const inventoryItem = target?.closest?.("[data-inventory-grid-item]");
-    if (inventoryItem) {
-      const x = toInteger(inventoryItem.dataset.x);
-      const y = toInteger(inventoryItem.dataset.y);
-      const parentId = inventoryItem.dataset.inventoryParentId ?? ROOT_CONTAINER_ID;
-      const escapedParentId = CSS.escape(parentId);
-      return this.element?.querySelector(
-        `[data-inventory-cell][data-inventory-parent-id="${escapedParentId}"][data-x="${x}"][data-y="${y}"]`
-      ) ?? null;
-    }
+  #getDropZone(eventOrTarget) {
+    const target = eventOrTarget?.target ?? eventOrTarget;
+    const pointedCell = this.#getInventoryCellAtPointer(eventOrTarget, target);
+    if (pointedCell) return pointedCell;
+
     const specificZone = target?.closest?.("[data-inventory-cell], [data-equipment-slot], [data-weapon-slot]");
     if (specificZone) return specificZone;
     const equipmentSurface = target?.closest?.("[data-equipment-drop-surface]");
@@ -408,6 +402,31 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (surface) return surface;
     if (target?.closest?.(".fallout-maw-actor-sheet")) return this.element.querySelector('[data-tab="inventory"]');
     return this.element?.querySelector('[data-tab="inventory"]') ?? null;
+  }
+
+  #getInventoryCellAtPointer(eventOrTarget, target = null) {
+    const clientX = Number(eventOrTarget?.clientX);
+    const clientY = Number(eventOrTarget?.clientY);
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+
+    const pointedElement = document.elementFromPoint(clientX, clientY);
+    const grid = (
+      target?.closest?.("[data-inventory-grid]")
+      ?? pointedElement?.closest?.("[data-inventory-grid]")
+      ?? null
+    );
+    if (!grid || !this.element?.contains(grid)) return null;
+
+    for (const cell of grid.querySelectorAll("[data-inventory-cell]")) {
+      const rect = cell.getBoundingClientRect();
+      if (
+        clientX >= rect.left
+        && clientX <= rect.right
+        && clientY >= rect.top
+        && clientY <= rect.bottom
+      ) return cell;
+    }
+    return null;
   }
 
   #getInventoryContextParentId(zone = null) {

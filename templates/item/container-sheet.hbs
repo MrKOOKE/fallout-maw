@@ -2,15 +2,11 @@
   <header class="sheet-header fallout-maw-sheet-header">
     <img class="profile-img" src="{{item.img}}" data-action="editImage" data-field="img" title="{{item.name}}" height="80" width="80">
     <div class="fallout-maw-header-fields">
-      <input class="fallout-maw-title-input" name="name" type="text" value="{{item.name}}" placeholder="{{localize 'DOCUMENT.FIELDS.name.label'}}">
-      <div class="fallout-maw-summary-grid three-columns">
+      <h1 class="fallout-maw-title-display">{{item.name}}</h1>
+      <div class="fallout-maw-summary-grid">
         <div class="fallout-maw-inline-stat">
           <span>{{localize "FALLOUTMAW.Item.ContainerCurrentLoad"}}:</span>
           <strong>{{load.value}} / {{load.max}} {{localize "FALLOUTMAW.Common.Kg"}}</strong>
-        </div>
-        <div class="fallout-maw-inline-stat">
-          <span>{{localize "FALLOUTMAW.Item.TotalWeight"}}:</span>
-          <strong>{{totalWeight}} {{localize "FALLOUTMAW.Common.Kg"}}</strong>
         </div>
       </div>
     </div>

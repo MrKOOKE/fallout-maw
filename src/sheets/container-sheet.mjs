@@ -103,8 +103,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       load: {
         value: formatWeight(getContainerContentsWeight(this.item, allItems)),
         max: formatWeight(getContainerMaxLoad(this.item))
-      },
-      totalWeight: formatWeight(getItemTotalWeight(this.item, allItems))
+      }
     }, { inplace: false });
   }
 
@@ -141,7 +140,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   }
 
   _onDragOver(event) {
-    const zone = this.#getDropZone(event.target);
+    const zone = this.#getDropZone(event);
     if (!zone) return;
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
     this.#draggedItemData = this.#getPreviewItemData(event);
@@ -165,8 +164,8 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     const dropped = await this.#getDroppedItemFromData(data);
     if (!dropped) return null;
 
-    const zone = this.#getDropZone(event.target);
-    const targetItem = this.#getTargetStackItem(event.target, dropped.item?.id ?? "");
+    const zone = this.#getDropZone(event);
+    const targetItem = this.#getTargetStackItem(zone, dropped.item?.id ?? "");
     let placement = this.#getPlacementForDropZone(zone, dropped.itemData, [dropped.item?.id ?? ""]);
     if (!placement) return null;
     if (targetItem && !this.#areStackable(dropped.itemData, targetItem)) {
@@ -184,16 +183,39 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     return this.#createOrStackDroppedItem(dropped.itemData, placement, targetItem);
   }
 
-  #getDropZone(target) {
-    const inventoryItem = target?.closest?.("[data-inventory-grid-item]");
-    if (inventoryItem) {
-      const x = toInteger(inventoryItem.dataset.x);
-      const y = toInteger(inventoryItem.dataset.y);
-      return this.element?.querySelector(`[data-inventory-cell][data-x="${x}"][data-y="${y}"]`) ?? null;
-    }
+  #getDropZone(eventOrTarget) {
+    const target = eventOrTarget?.target ?? eventOrTarget;
+    const pointedCell = this.#getInventoryCellAtPointer(eventOrTarget, target);
+    if (pointedCell) return pointedCell;
+
     const cell = target?.closest?.("[data-inventory-cell]");
     if (cell) return cell;
-    return target?.closest?.("[data-container-drop-surface]") ?? this.element?.querySelector("[data-container-drop-surface]") ?? null;
+    return target?.closest?.("[data-container-drop-surface]") ?? null;
+  }
+
+  #getInventoryCellAtPointer(eventOrTarget, target = null) {
+    const clientX = Number(eventOrTarget?.clientX);
+    const clientY = Number(eventOrTarget?.clientY);
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+
+    const pointedElement = document.elementFromPoint(clientX, clientY);
+    const grid = (
+      target?.closest?.("[data-inventory-grid]")
+      ?? pointedElement?.closest?.("[data-inventory-grid]")
+      ?? null
+    );
+    if (!grid || !this.element?.contains(grid)) return null;
+
+    for (const cell of grid.querySelectorAll("[data-inventory-cell]")) {
+      const rect = cell.getBoundingClientRect();
+      if (
+        clientX >= rect.left
+        && clientX <= rect.right
+        && clientY >= rect.top
+        && clientY <= rect.bottom
+      ) return cell;
+    }
+    return null;
   }
 
   async #getDroppedItemFromData(data) {
@@ -319,9 +341,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     if (!zone) return;
     if (zone.dataset.inventoryCell !== undefined) {
       this.#setInventoryCellHoverPreview(zone);
-      return;
     }
-    this.#setContainerSurfaceHoverPreview();
   }
 
   #setInventoryCellHoverPreview(zone) {
@@ -348,14 +368,6 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     );
     const excludeItemIds = sourceItemId ? [sourceItemId] : [];
     if (!this.#isInventoryPlacementAvailable(placement, excludeItemIds)) return;
-    this.#applyInventoryPlacementPreview(placement);
-  }
-
-  #setContainerSurfaceHoverPreview() {
-    if (!this.#draggedItemData) return;
-    const excludeItemIds = this.#draggedItemId ? [this.#draggedItemId] : [];
-    const placement = this.#getFirstAvailableInventoryPlacement(this.#draggedItemData, excludeItemIds);
-    if (!placement) return;
     this.#applyInventoryPlacementPreview(placement);
   }
 

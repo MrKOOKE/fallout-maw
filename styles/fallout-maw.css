@@ -38,6 +38,20 @@
   margin-bottom: 0.5rem;
 }
 
+.fallout-maw-title-display {
+  background: rgba(255, 255, 255, 0.04);
+  border: 0;
+  border-radius: 4px;
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 2.25rem;
+  margin: 0 0 0.5rem;
+  overflow: hidden;
+  padding: 0 0.55rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .fallout-maw-header-grid,
 .fallout-maw-list-grid,
 .fallout-maw-resource-grid,
