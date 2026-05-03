@@ -2,6 +2,7 @@ import { TEMPLATES } from "../constants.mjs";
 import { clampPreparedResource } from "../data/models/resources.mjs";
 import { evaluateFormula, getSkillValues } from "../formulas/index.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
+import { getItemContainerParentId } from "../utils/inventory-containers.mjs";
 
 export class FalloutMaWActor extends Actor {
   static async createDialog(data = {}, createOptions = {}, dialogOptions = {}, renderOptions = {}) {
@@ -139,7 +140,11 @@ export class FalloutMaWActor extends Actor {
       }))
       : 0;
     const value = Number(
-      this.items.reduce((total, item) => total + (Number(item.totalWeight) || 0), 0).toFixed(1)
+      this.items.reduce((total, item) => (
+        getItemContainerParentId(item)
+          ? total
+          : total + (Number(item.totalWeight) || 0)
+      ), 0).toFixed(1)
     );
     this.system.load = { min: 0, spent: 0, value, max };
   }

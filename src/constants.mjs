@@ -14,6 +14,7 @@ export const TEMPLATES = Object.freeze({
     identity: `systems/${SYSTEM_ID}/templates/actor/parts/identity-tab.hbs`
   }),
   itemSheet: `systems/${SYSTEM_ID}/templates/item/item-sheet.hbs`,
+  containerSheet: `systems/${SYSTEM_ID}/templates/item/container-sheet.hbs`,
   settings: Object.freeze({
     characteristics: `systems/${SYSTEM_ID}/templates/settings/characteristics-config.hbs`,
     creatureOptions: `systems/${SYSTEM_ID}/templates/settings/creature-options-config.hbs`,

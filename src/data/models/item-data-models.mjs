@@ -10,6 +10,9 @@ export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
       price: new NumberField({ required: true, min: 0, initial: 0 }),
       priceCurrency: new StringField({ required: true, blank: true, initial: "" }),
       equipped: new BooleanField({ required: true, initial: false }),
+      container: new SchemaField({
+        parentId: new StringField({ required: true, blank: true, initial: "" })
+      }),
       occupiedSlots: new TypedObjectField(new BooleanField({ required: true, initial: false }), {
         required: true,
         initial: {}
@@ -28,7 +31,20 @@ export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
   }
 }
 
-export class GearDataModel extends BaseItemDataModel {}
+export class GearDataModel extends BaseItemDataModel {
+  static defineSchema() {
+    return {
+      ...super.defineSchema(),
+      itemFunction: new StringField({ required: true, blank: true, initial: "" }),
+      container: new SchemaField({
+        parentId: new StringField({ required: true, blank: true, initial: "" }),
+        columns: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+        rows: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+        maxLoad: new NumberField({ required: true, min: 0, initial: 0 })
+      })
+    };
+  }
+}
 
 export class WeaponDataModel extends BaseItemDataModel {
   static defineSchema() {

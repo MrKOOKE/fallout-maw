@@ -36,6 +36,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const type = item.type;
     const priceCurrency = item.system?.priceCurrency ?? "";
     const occupiedSlots = item.system?.occupiedSlots ?? {};
+    const itemFunction = item.system?.itemFunction ?? "";
     const equipmentSlotGroups = groupRaceEquipmentSlotsBySet(getCreatureOptions());
     const equipmentSlotSelections = new Map();
 
@@ -59,10 +60,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       editable: this.isEditable,
       itemType: type,
       isGear: type === "gear",
+      isContainerFunction: itemFunction === "container",
       isWeapon: type === "weapon",
       isArmor: type === "armor",
       isAbility: type === "ability",
       isEffect: type === "effect",
+      itemFunctionChoices: [
+        { value: "", label: game.i18n.localize("FALLOUTMAW.Item.FunctionNone"), selected: itemFunction === "" },
+        { value: "container", label: game.i18n.localize("FALLOUTMAW.Item.FunctionContainer"), selected: itemFunction === "container" }
+      ],
       currencies: getCurrencySettings().map(currency => ({
         ...currency,
         selected: currency.key === priceCurrency
@@ -84,6 +90,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-equipment-slot-choice]").forEach(button => {
       button.addEventListener("click", event => this.#onEquipmentSlotChoice(event));
     });
+    this.element?.querySelector('select[name="system.itemFunction"]')?.addEventListener("change", event => {
+      this.#onItemFunctionChange(event);
+    });
   }
 
   #onEquipmentSlotChoice(event) {
@@ -100,5 +109,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.setAttribute("aria-pressed", String(input.checked));
     });
     return this.item.update({ [`system.occupiedSlots.${key}`]: input.checked });
+  }
+
+  #onItemFunctionChange(event) {
+    const nextValue = String(event.currentTarget?.value ?? "");
+    if (nextValue !== "container") return;
+    return this.item.update({
+      "system.quantity": 1,
+      "system.maxStack": 1
+    });
   }
 }

@@ -1,0 +1,33 @@
+<div class="fallout-maw-sheet-body fallout-maw-container-sheet-body">
+  <header class="sheet-header fallout-maw-sheet-header">
+    <img class="profile-img" src="{{item.img}}" data-action="editImage" data-field="img" title="{{item.name}}" height="80" width="80">
+    <div class="fallout-maw-header-fields">
+      <input class="fallout-maw-title-input" name="name" type="text" value="{{item.name}}" placeholder="{{localize 'DOCUMENT.FIELDS.name.label'}}">
+      <div class="fallout-maw-summary-grid three-columns">
+        <div class="fallout-maw-inline-stat">
+          <span>{{localize "FALLOUTMAW.Item.ContainerCurrentLoad"}}:</span>
+          <strong>{{load.value}} / {{load.max}} {{localize "FALLOUTMAW.Common.Kg"}}</strong>
+        </div>
+        <div class="fallout-maw-inline-stat">
+          <span>{{localize "FALLOUTMAW.Item.TotalWeight"}}:</span>
+          <strong>{{totalWeight}} {{localize "FALLOUTMAW.Common.Kg"}}</strong>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="fallout-maw-panel fallout-maw-container-panel" data-container-drop-surface data-container-id="{{item.id}}" data-drop-zone>
+    <h2>{{localize "FALLOUTMAW.Item.FunctionContainer"}}</h2>
+    <div class="fallout-maw-inventory-grid" data-inventory-grid style="--fallout-maw-inventory-columns: {{grid.columns}};">
+      {{#each grid.cells}}
+      <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}}" data-inventory-cell data-x="{{x}}" data-y="{{y}}" data-drop-zone style="{{style}}"></div>
+      {{/each}}
+      {{#each grid.items}}
+      <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if equipped}}equipped{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
+        <img src="{{img}}" alt="{{name}}">
+        {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
+      </article>
+      {{/each}}
+    </div>
+  </section>
+</div>

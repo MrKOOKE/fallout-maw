@@ -103,6 +103,10 @@
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
+.fallout-maw-list-grid.three-columns {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
 .fallout-maw-panel {
   background: var(--fallout-maw-panel-bg);
   border: 1px solid var(--fallout-maw-border);
@@ -388,6 +392,41 @@
   gap: 0.75rem;
   grid-template-columns: minmax(220px, 0.35fr) minmax(0, 1fr);
   min-height: 0;
+}
+
+.fallout-maw-container-section,
+.fallout-maw-container-panel {
+  margin-top: 0.75rem;
+}
+
+.fallout-maw-container-section {
+  border-top: 1px solid rgba(120, 120, 120, 0.2);
+  padding-top: 0.75rem;
+}
+
+.fallout-maw-container-header {
+  margin-bottom: 0.5rem;
+}
+
+.fallout-maw-container-title {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.fallout-maw-container-title img {
+  border-radius: 4px;
+  height: 28px;
+  width: 28px;
+}
+
+.fallout-maw-container-title strong {
+  line-height: 1.1;
+}
+
+.fallout-maw-container-sheet-body {
+  gap: 0.5rem;
 }
 
 .fallout-maw-equipment-slot-list,

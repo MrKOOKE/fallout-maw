@@ -6,7 +6,7 @@
     <div class="fallout-maw-header-grid">
       <label>
         <span>{{localize "FALLOUTMAW.Item.Quantity"}}</span>
-        <input type="number" name="system.quantity" value="{{system.quantity}}" min="0">
+        <input type="number" name="system.quantity" value="{{system.quantity}}" min="{{#if isContainerFunction}}1{{else}}0{{/if}}" {{#if isContainerFunction}}disabled{{/if}}>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.Weight"}}</span>
@@ -41,9 +41,20 @@
       <span>{{localize "FALLOUTMAW.Item.Equipped"}}</span>
     </label>
 
+    {{#if isGear}}
+    <label>
+      <span>{{localize "FALLOUTMAW.Item.Function"}}</span>
+      <select name="system.itemFunction">
+        {{#each itemFunctionChoices}}
+        <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+        {{/each}}
+      </select>
+    </label>
+    {{/if}}
+
     <label>
       <span>{{localize "FALLOUTMAW.Item.MaxStack"}}</span>
-      <input type="number" name="system.maxStack" value="{{system.maxStack}}" min="1" step="1">
+      <input type="number" name="system.maxStack" value="{{system.maxStack}}" min="1" step="1" {{#if isContainerFunction}}disabled{{/if}}>
     </label>
 
     <label>
@@ -55,6 +66,26 @@
       <span>{{localize "FALLOUTMAW.Item.InventoryHeight"}}</span>
       <input type="number" name="system.placement.height" value="{{system.placement.height}}" min="1" step="1">
     </label>
+
+    {{#if isContainerFunction}}
+    <section class="fallout-maw-occupied-slots-field">
+      <h3>{{localize "FALLOUTMAW.Item.ContainerSettings"}}</h3>
+      <div class="fallout-maw-list-grid three-columns">
+        <label>
+          <span>{{localize "FALLOUTMAW.Item.ContainerColumns"}}</span>
+          <input type="number" name="system.container.columns" value="{{system.container.columns}}" min="1" step="1">
+        </label>
+        <label>
+          <span>{{localize "FALLOUTMAW.Item.ContainerRows"}}</span>
+          <input type="number" name="system.container.rows" value="{{system.container.rows}}" min="1" step="1">
+        </label>
+        <label>
+          <span>{{localize "FALLOUTMAW.Item.ContainerMaxLoad"}}</span>
+          <input type="number" name="system.container.maxLoad" value="{{system.container.maxLoad}}" min="0" step="0.1">
+        </label>
+      </div>
+    </section>
+    {{/if}}
 
     {{#if isGear}}
     <section class="fallout-maw-occupied-slots-field">
