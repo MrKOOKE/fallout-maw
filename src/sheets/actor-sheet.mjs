@@ -23,6 +23,8 @@ const { HandlebarsApplicationMixin } = foundry.applications.api;
 export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
   #freeEdit = false;
   #activeLimbKey = "";
+  #draggedItemData = null;
+  #dragDrop = null;
   #tooltipTimer = null;
   #tooltipElement = null;
   #tooltipPointer = { x: 0, y: 0 };
@@ -76,6 +78,22 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   get actor() {
     return this.document;
+  }
+
+  get _dragDrop() {
+    return this.#dragDrop ??= new foundry.applications.ux.DragDrop.implementation({
+      dragSelector: ".draggable",
+      permissions: {
+        dragstart: this._canDragStart.bind(this),
+        drop: this._canDragDrop.bind(this)
+      },
+      callbacks: {
+        dragstart: this._onDragStart.bind(this),
+        dragover: this._onDragOver.bind(this),
+        drop: this._onDrop.bind(this),
+        dragend: this._onDragEnd.bind(this)
+      }
+    });
   }
 
   async _prepareContext(options) {
@@ -176,6 +194,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const data = this.#getDragEventData(event);
     if (data?.type !== "Item") return super._onDrop(event);
 
+    this.#draggedItemData = null;
     this.#clearInventoryDropPreview();
     const dropped = await this.#getDroppedItemFromData(data);
     if (!dropped) return null;
@@ -199,7 +218,23 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const zone = this.#getDropZone(event.target);
     if (!zone) return;
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-    this.#setInventoryDropPreview(zone, this.#getDroppedItemDataSync(event));
+    this.#setInventoryHoverPreview(zone);
+  }
+
+  async _onDragStart(event) {
+    await super._onDragStart(event);
+    this.#clearInventoryTooltip();
+    this.#clearInventoryDropPreview();
+    const item = this.actor.items.get(event.currentTarget?.dataset?.itemId ?? "");
+    this.#draggedItemData = item?.toObject() ?? null;
+    event.currentTarget?.classList?.add("dragging");
+    this.#highlightEquipmentSlotsForItem(this.#draggedItemData);
+  }
+
+  _onDragEnd() {
+    this.#draggedItemData = null;
+    this.#clearInventoryDropPreview();
+    this.#clearInventoryDraggingState();
   }
 
   static #onToggleFreeEdit(event) {
@@ -263,7 +298,18 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #onInventoryDragLeave(event) {
     const zone = event.target?.closest?.("[data-drop-zone], [data-equipment-drop-surface], [data-inventory-drop-surface]");
-    if (!zone || zone.contains(event.relatedTarget)) return;
+    if (!zone) return;
+
+    const hoveredElement = document.elementFromPoint(event.clientX, event.clientY);
+    const hoveredZone = hoveredElement?.closest?.("[data-drop-zone], [data-equipment-drop-surface], [data-inventory-drop-surface]") ?? null;
+    if (hoveredZone === zone) return;
+
+    const hoveredSheet = hoveredElement?.closest?.(".fallout-maw-actor-sheet");
+    if (hoveredSheet === this.element) {
+      this.#clearInventoryHoverPreview();
+      return;
+    }
+
     this.#clearInventoryDropPreview();
   }
 
@@ -314,30 +360,40 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return this.element?.querySelector('[data-tab="inventory"]') ?? null;
   }
 
-  #setInventoryDropPreview(zone, itemData = null) {
-    this.#clearInventoryDropPreview();
-    if ((zone.dataset.equipmentSlot || zone.dataset.equipmentDropSurface !== undefined) && itemData) {
-      const highlighted = this.#highlightEquipmentSlotsForItem(itemData, zone.dataset.equipmentSlot);
-      if (highlighted) return;
-    }
-    zone.classList.add("drop-preview");
-  }
-
-  #highlightEquipmentSlotsForItem(itemData, hoveredSlotKey = "") {
+  #highlightEquipmentSlotsForItem(itemData) {
     const race = this.#getCurrentRace();
     const selectedSlots = getRaceEquipmentSlotsForItem(race, itemData);
     if (!selectedSlots.length) return false;
-    if (hoveredSlotKey && !selectedSlots.some(slot => slot.key === hoveredSlotKey)) return false;
 
     for (const slot of selectedSlots) {
-      this.element?.querySelector(`[data-equipment-slot="${CSS.escape(slot.key)}"]`)?.classList.add("drop-preview");
+      this.element?.querySelector(`[data-equipment-slot="${CSS.escape(slot.key)}"]`)?.classList.add("drop-match-preview");
     }
     return true;
   }
 
+  #setInventoryHoverPreview(zone = null) {
+    this.#clearInventoryHoverPreview();
+    if (!zone || zone.dataset.dropZone === undefined) return;
+    if (zone.classList.contains("drop-match-preview")) return;
+    zone.classList.add("drop-preview");
+  }
+
+  #clearInventoryHoverPreview() {
+    this.element?.querySelectorAll(".drop-preview").forEach(element => {
+      element.classList.remove("drop-preview");
+    });
+  }
+
   #clearInventoryDropPreview() {
-    this.element?.querySelectorAll(".drop-preview, .dragging").forEach(element => {
-      element.classList.remove("drop-preview", "dragging");
+    this.#clearInventoryHoverPreview();
+    this.element?.querySelectorAll(".drop-match-preview").forEach(element => {
+      element.classList.remove("drop-match-preview");
+    });
+  }
+
+  #clearInventoryDraggingState() {
+    this.element?.querySelectorAll(".dragging").forEach(element => {
+      element.classList.remove("dragging");
     });
   }
 
@@ -419,17 +475,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       : null;
     if (!(item instanceof Item)) return null;
     return { item, itemData: item.toObject() };
-  }
-
-  #getDroppedItemDataSync(event) {
-    const data = this.#getDragEventData(event);
-    if (data?.type !== "Item") return null;
-
-    const ownedItem = data.itemId ? this.actor.items.get(data.itemId) : null;
-    if (ownedItem) return ownedItem.toObject();
-
-    const document = data.uuid && typeof fromUuidSync === "function" ? fromUuidSync(data.uuid) : null;
-    return document instanceof Item ? document.toObject() : null;
   }
 
   #getDragEventData(event) {

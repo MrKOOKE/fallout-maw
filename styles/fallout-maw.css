@@ -420,9 +420,8 @@
 }
 
 .fallout-maw-equipment-slot.drop-preview,
-.fallout-maw-inventory-cell.drop-preview,
-.fallout-maw-actor-sheet .tab.drop-preview,
-.fallout-maw-inventory-layout.drop-preview {
+.fallout-maw-equipment-slot.drop-match-preview,
+.fallout-maw-inventory-cell.drop-preview {
   background: rgba(235, 190, 80, 0.16);
   border-color: rgba(235, 190, 80, 0.72);
   box-shadow: inset 0 0 0 1px rgba(235, 190, 80, 0.25);
