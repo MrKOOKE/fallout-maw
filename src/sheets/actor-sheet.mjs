@@ -24,6 +24,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #freeEdit = false;
   #activeLimbKey = "";
   #draggedItemData = null;
+  #draggedItemId = "";
   #dragDrop = null;
   #tooltipTimer = null;
   #tooltipElement = null;
@@ -195,16 +196,21 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (data?.type !== "Item") return super._onDrop(event);
 
     this.#draggedItemData = null;
+    this.#draggedItemId = "";
     this.#clearInventoryDropPreview();
     const dropped = await this.#getDroppedItemFromData(data);
     if (!dropped) return null;
 
     const zone = this.#getDropZone(event.target);
     const targetItem = this.#getTargetStackItem(event.target, dropped.item?.id ?? "");
-    let placement = this.#getPlacementForDropZone(zone, dropped.item?.id ?? "");
+    let placement = this.#getPlacementForDropZone(zone, dropped.itemData, [dropped.item?.id ?? ""]);
     if (!placement) return null;
     if (targetItem && !this.#areStackable(dropped.itemData, targetItem)) {
-      placement = this.#getFirstAvailableInventoryPlacement(dropped.item?.id ?? "");
+      placement = this.#getFirstAvailableInventoryPlacement(dropped.itemData, [dropped.item?.id ?? ""]);
+      if (!placement) {
+        this.#warnInventoryNoSpace();
+        return null;
+      }
     }
 
     if (dropped.item?.parent === this.actor) {
@@ -218,6 +224,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const zone = this.#getDropZone(event.target);
     if (!zone) return;
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    this.#draggedItemData = this.#getPreviewItemData(event);
     this.#setInventoryHoverPreview(zone);
   }
 
@@ -226,6 +233,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#clearInventoryTooltip();
     this.#clearInventoryDropPreview();
     const item = this.actor.items.get(event.currentTarget?.dataset?.itemId ?? "");
+    this.#draggedItemId = item?.id ?? "";
     this.#draggedItemData = item?.toObject() ?? null;
     event.currentTarget?.classList?.add("dragging");
     this.#highlightEquipmentSlotsForItem(this.#draggedItemData);
@@ -233,6 +241,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   _onDragEnd() {
     this.#draggedItemData = null;
+    this.#draggedItemId = "";
     this.#clearInventoryDropPreview();
     this.#clearInventoryDraggingState();
   }
@@ -350,6 +359,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #getDropZone(target) {
+    const inventoryItem = target?.closest?.("[data-inventory-grid-item]");
+    if (inventoryItem) {
+      const x = toInteger(inventoryItem.dataset.x);
+      const y = toInteger(inventoryItem.dataset.y);
+      return this.element?.querySelector(`[data-inventory-cell][data-x="${x}"][data-y="${y}"]`) ?? null;
+    }
     const specificZone = target?.closest?.("[data-inventory-cell], [data-equipment-slot], [data-weapon-slot]");
     if (specificZone) return specificZone;
     const equipmentSurface = target?.closest?.("[data-equipment-drop-surface]");
@@ -374,8 +389,43 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #setInventoryHoverPreview(zone = null) {
     this.#clearInventoryHoverPreview();
     if (!zone || zone.dataset.dropZone === undefined) return;
+    if (zone.dataset.inventoryCell !== undefined) {
+      this.#setInventoryCellHoverPreview(zone);
+      return;
+    }
     if (zone.classList.contains("drop-match-preview")) return;
     zone.classList.add("drop-preview");
+  }
+
+  #setInventoryCellHoverPreview(zone) {
+    if (!this.#draggedItemData) {
+      zone.classList.add("drop-preview");
+      return;
+    }
+
+    const sourceItemId = this.#draggedItemId || "";
+    const targetItem = this.#getTargetStackItem(zone, sourceItemId);
+    const targetHasStackRoom = targetItem
+      && this.#areStackable(this.#draggedItemData, targetItem)
+      && (getItemQuantity(targetItem) < getItemMaxStack(targetItem));
+    if (targetHasStackRoom) {
+      this.#applyInventoryPlacementPreview(normalizeInventoryPlacement(targetItem.system?.placement ?? {}, targetItem));
+      return;
+    }
+
+    const placement = createInventoryPlacement(toInteger(zone.dataset.x), toInteger(zone.dataset.y), this.#draggedItemData);
+    const excludeItemIds = sourceItemId ? [sourceItemId] : [];
+    if (!this.#isInventoryPlacementAvailable(placement, excludeItemIds)) return;
+    this.#applyInventoryPlacementPreview(placement);
+  }
+
+  #applyInventoryPlacementPreview(placement) {
+    if (!placement) return;
+    for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
+      for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
+        this.element?.querySelector(`[data-inventory-cell][data-x="${x}"][data-y="${y}"]`)?.classList.add("drop-preview");
+      }
+    }
   }
 
   #clearInventoryHoverPreview() {
@@ -397,71 +447,82 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     });
   }
 
-  #getPlacementForDropZone(zone, excludeItemId = "") {
+  #getPlacementForDropZone(zone, itemData = null, excludeItemIds = []) {
     if (zone.dataset.inventoryCell !== undefined) {
-      return createInventoryPlacement(toInteger(zone.dataset.x), toInteger(zone.dataset.y));
+      return createInventoryPlacement(toInteger(zone.dataset.x), toInteger(zone.dataset.y), itemData);
     }
 
     if (zone.dataset.equipmentSlot) {
+      const footprint = getItemFootprint(itemData);
       return {
         mode: "equipment",
         equipmentSlot: zone.dataset.equipmentSlot,
         weaponSet: "",
         weaponSlot: "",
         x: 1,
-        y: 1
+        y: 1,
+        width: footprint.width,
+        height: footprint.height
       };
     }
 
     if (zone.dataset.equipmentDropSurface !== undefined) {
+      const footprint = getItemFootprint(itemData);
       return {
         mode: "equipment",
         equipmentSlot: "",
         weaponSet: "",
         weaponSlot: "",
         x: 1,
-        y: 1
+        y: 1,
+        width: footprint.width,
+        height: footprint.height
       };
     }
 
     if (zone.dataset.weaponSet && zone.dataset.weaponSlot) {
+      const footprint = getItemFootprint(itemData);
       return {
         mode: "weapon",
         equipmentSlot: "",
         weaponSet: zone.dataset.weaponSet,
         weaponSlot: zone.dataset.weaponSlot,
         x: 1,
-        y: 1
+        y: 1,
+        width: footprint.width,
+        height: footprint.height
       };
     }
 
-    return this.#getFirstAvailableInventoryPlacement(excludeItemId);
+    return this.#getFirstAvailableInventoryPlacement(itemData, excludeItemIds);
   }
 
-  #getFirstAvailableInventoryPlacement(excludeItemId = "") {
-    const race = getCreatureOptions().races.find(entry => entry.id === this.actor.system?.creature?.raceId);
-    const columns = Math.max(1, toInteger(race?.inventorySize?.columns ?? 10));
-    const rows = Math.max(1, toInteger(race?.inventorySize?.rows ?? 2));
-
-    for (let y = 1; y <= rows; y += 1) {
-      for (let x = 1; x <= columns; x += 1) {
-        if (!this.#isInventoryCellOccupied(x, y, excludeItemId)) return createInventoryPlacement(x, y);
-      }
-    }
-
-    return createInventoryPlacement(1, 1);
+  #getInventoryGridDimensions() {
+    return getInventoryGridDimensions(this.#getCurrentRace());
   }
 
-  #isInventoryCellOccupied(x, y, excludeItemId = "") {
-    return this.actor.items.contents.some(item => {
-      if (item.id === excludeItemId) return false;
-      const placement = item.system?.placement ?? {};
-      return (
-        placement.mode === "inventory"
-        && toInteger(placement.x) === x
-        && toInteger(placement.y) === y
-      );
-    });
+  #getFirstAvailableInventoryPlacement(itemData = null, excludeItemIds = [], reservedPlacements = []) {
+    const { columns, rows } = this.#getInventoryGridDimensions();
+    return findFirstAvailableInventoryPlacement(
+      this.actor.items.contents,
+      columns,
+      rows,
+      itemData,
+      excludeItemIds,
+      reservedPlacements
+    );
+  }
+
+  #isInventoryPlacementAvailable(placement, excludeItemIds = [], reservedPlacements = []) {
+    const { columns, rows } = this.#getInventoryGridDimensions();
+    return isInventoryPlacementAvailable(
+      placement,
+      this.actor.items.contents,
+      columns,
+      rows,
+      excludeItemIds,
+      reservedPlacements
+    );
   }
 
   async #getDroppedItemFromData(data) {
@@ -477,7 +538,26 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return { item, itemData: item.toObject() };
   }
 
+  #getPreviewItemData(event) {
+    if (this.#draggedItemData) return this.#draggedItemData;
+    const data = this.#getDragEventData(event);
+    if (data?.type !== "Item") return null;
+
+    const ownedItem = data.itemId ? this.actor.items.get(data.itemId) : null;
+    if (ownedItem) {
+      this.#draggedItemId = ownedItem.id;
+      return ownedItem.toObject();
+    }
+
+    const droppedDocument = data.uuid ? foundry.utils.fromUuidSync(data.uuid) : null;
+    if (droppedDocument instanceof Item) return droppedDocument.toObject();
+    return null;
+  }
+
   #getDragEventData(event) {
+    const cachedPayload = CONFIG.ux.DragDrop?.getPayload?.();
+    if (cachedPayload && (typeof cachedPayload === "object")) return cachedPayload;
+
     try {
       const textEditor = foundry.applications.ux.TextEditor?.implementation ?? globalThis.TextEditor?.implementation ?? globalThis.TextEditor;
       const data = textEditor.getDragEventData(event);
@@ -502,7 +582,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #getTargetStackItem(target, sourceItemId = "") {
     const itemElement = target?.closest?.("[data-item-id]");
     if (itemElement && itemElement.dataset.itemId !== sourceItemId) {
-      if (!itemElement.closest("[data-inventory-cell]")) return null;
+      if (!itemElement.closest("[data-inventory-grid]")) return null;
       return this.actor.items.get(itemElement.dataset.itemId) ?? null;
     }
 
@@ -512,26 +592,17 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const y = toInteger(cell.dataset.y);
     return this.actor.items.contents.find(item => {
       if (item.id === sourceItemId) return false;
-      const placement = item.system?.placement ?? {};
-      return (
-        placement.mode === "inventory"
-        && toInteger(placement.x) === x
-        && toInteger(placement.y) === y
-      );
+      const placement = normalizeInventoryPlacement(item.system?.placement ?? {}, item);
+      return placement.mode === "inventory" && placementContainsInventoryCell(placement, x, y);
     }) ?? null;
   }
 
   async #moveOwnedItem(item, placement, targetItem = null) {
-    if (targetItem && this.#areStackable(item.toObject(), targetItem)) {
-      const nextQuantity = toInteger(targetItem.system?.quantity) + toInteger(item.system?.quantity);
-      await this.actor.updateEmbeddedDocuments("Item", [{
-        _id: targetItem.id,
-        "system.quantity": nextQuantity
-      }]);
-      return this.actor.deleteEmbeddedDocuments("Item", [item.id]);
+    if (placement.mode === "inventory") {
+      return this.#insertItemIntoInventory(item.toObject(), placement, { sourceItem: item, targetItem });
     }
 
-    const resolvedPlacement = this.#resolveEquipmentPlacement(item.toObject(), placement, item.id);
+    const resolvedPlacement = this.#resolvePlacement(item.toObject(), placement, [item.id]);
     if (!resolvedPlacement) return null;
     const wasEquipment = item.system?.placement?.mode === "equipment";
     const isEquipment = resolvedPlacement.mode === "equipment";
@@ -543,27 +614,20 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       "system.placement.weaponSet": resolvedPlacement.weaponSet,
       "system.placement.weaponSlot": resolvedPlacement.weaponSlot,
       "system.placement.x": resolvedPlacement.x,
-      "system.placement.y": resolvedPlacement.y
+      "system.placement.y": resolvedPlacement.y,
+      "system.placement.width": resolvedPlacement.width,
+      "system.placement.height": resolvedPlacement.height
     });
   }
 
   async #createOrStackDroppedItem(itemData, placement, targetItem = null) {
     if (!itemData) return null;
-    const resolvedPlacement = this.#resolveEquipmentPlacement(itemData, placement);
-    if (!resolvedPlacement) return null;
-    const stackTarget = resolvedPlacement.mode !== "equipment"
-      ? (targetItem && this.#areStackable(itemData, targetItem)
-        ? targetItem
-        : this.#findStackTarget(itemData))
-      : null;
-
-    if (stackTarget) {
-      const nextQuantity = toInteger(stackTarget.system?.quantity) + Math.max(1, toInteger(itemData.system?.quantity));
-      return this.actor.updateEmbeddedDocuments("Item", [{
-        _id: stackTarget.id,
-        "system.quantity": nextQuantity
-      }]);
+    if (placement.mode === "inventory") {
+      return this.#insertItemIntoInventory(itemData, placement, { targetItem });
     }
+
+    const resolvedPlacement = this.#resolvePlacement(itemData, placement);
+    if (!resolvedPlacement) return null;
 
     const createData = foundry.utils.deepClone(itemData);
     delete createData._id;
@@ -576,21 +640,187 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           weaponSet: resolvedPlacement.weaponSet,
           weaponSlot: resolvedPlacement.weaponSlot,
           x: resolvedPlacement.x,
-          y: resolvedPlacement.y
+          y: resolvedPlacement.y,
+          width: resolvedPlacement.width,
+          height: resolvedPlacement.height
         }
       }
     });
     return this.actor.createEmbeddedDocuments("Item", [createData]);
   }
 
-  #findStackTarget(itemData, excludeItemId = "") {
-    return this.actor.items.contents.find(item => (
-      item.id !== excludeItemId
-      && this.#areStackable(itemData, item)
-    )) ?? null;
+  async #insertItemIntoInventory(itemData, requestedPlacement, { sourceItem = null, targetItem = null } = {}) {
+    const maxStack = getItemMaxStack(itemData);
+    let remainingQuantity = Math.max(1, getItemQuantity(itemData));
+    const excludedIds = [sourceItem?.id ?? ""].filter(Boolean);
+    const preferredPlacement = normalizeInventoryPlacement(requestedPlacement, itemData);
+    const stackTargets = this.#findCompatibleStackTargets(itemData, targetItem, excludedIds);
+    const targetUpdates = [];
+
+    for (const stackTarget of stackTargets) {
+      const availableSpace = Math.max(0, getItemMaxStack(stackTarget) - getItemQuantity(stackTarget));
+      if (!availableSpace) continue;
+
+      const transferredQuantity = Math.min(remainingQuantity, availableSpace);
+      if (!transferredQuantity) continue;
+
+      targetUpdates.push({
+        _id: stackTarget.id,
+        "system.quantity": getItemQuantity(stackTarget) + transferredQuantity
+      });
+      remainingQuantity -= transferredQuantity;
+      if (!remainingQuantity) break;
+    }
+
+    const reservedPlacements = [];
+    const createData = [];
+    let sourceUpdate = null;
+    let deleteSource = Boolean(sourceItem);
+
+    if (sourceItem && remainingQuantity > 0) {
+      const sourcePlacement = this.#getSourceInventoryPlacement(
+        sourceItem,
+        itemData,
+        targetItem ? null : preferredPlacement,
+        targetItem,
+        reservedPlacements
+      );
+      if (!sourcePlacement) {
+        this.#warnInventoryNoSpace();
+        return null;
+      }
+
+      const sourceQuantity = Math.min(remainingQuantity, maxStack);
+      remainingQuantity -= sourceQuantity;
+      reservedPlacements.push(sourcePlacement);
+      sourceUpdate = {
+        _id: sourceItem.id,
+        "system.quantity": sourceQuantity,
+        "system.equipped": false,
+        "system.placement.mode": sourcePlacement.mode,
+        "system.placement.equipmentSlot": sourcePlacement.equipmentSlot,
+        "system.placement.weaponSet": sourcePlacement.weaponSet,
+        "system.placement.weaponSlot": sourcePlacement.weaponSlot,
+        "system.placement.x": sourcePlacement.x,
+        "system.placement.y": sourcePlacement.y,
+        "system.placement.width": sourcePlacement.width,
+        "system.placement.height": sourcePlacement.height
+      };
+      deleteSource = false;
+    }
+
+    let nextPlacement = this.#isInventoryPlacementAvailable(preferredPlacement, excludedIds, reservedPlacements)
+      ? preferredPlacement
+      : null;
+    while (remainingQuantity > 0) {
+      const stackQuantity = Math.min(remainingQuantity, maxStack);
+      const placement = nextPlacement ?? this.#getFirstAvailableInventoryPlacement(itemData, excludedIds, reservedPlacements);
+      if (!placement) {
+        this.#warnInventoryNoSpace();
+        return null;
+      }
+
+      createData.push(this.#createInventoryStackData(itemData, stackQuantity, placement));
+      reservedPlacements.push(placement);
+      remainingQuantity -= stackQuantity;
+      nextPlacement = null;
+    }
+
+    if (targetUpdates.length) await this.actor.updateEmbeddedDocuments("Item", targetUpdates);
+    if (sourceUpdate) await this.actor.updateEmbeddedDocuments("Item", [sourceUpdate]);
+    else if (deleteSource && sourceItem) await this.actor.deleteEmbeddedDocuments("Item", [sourceItem.id]);
+    if (createData.length) return this.actor.createEmbeddedDocuments("Item", createData);
+    if (sourceUpdate) return this.actor.items.get(sourceItem.id) ?? null;
+    if (targetUpdates.length) return this.actor.items.get(targetUpdates[0]._id) ?? null;
+    return null;
   }
 
-  #resolveEquipmentPlacement(itemData, placement, excludeItemId = "") {
+  #findCompatibleStackTargets(itemData, preferredTarget = null, excludeItemIds = []) {
+    const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+    const targets = [];
+    const canUsePreferredTarget = preferredTarget
+      && !excluded.has(preferredTarget.id)
+      && preferredTarget.system?.placement?.mode === "inventory"
+      && this.#areStackable(itemData, preferredTarget)
+      && (getItemQuantity(preferredTarget) < getItemMaxStack(preferredTarget));
+    if (canUsePreferredTarget) targets.push(preferredTarget);
+
+    for (const item of this.actor.items.contents) {
+      if (!item || excluded.has(item.id)) continue;
+      if (targets.some(target => target.id === item.id)) continue;
+      if (item.system?.placement?.mode !== "inventory") continue;
+      if (!this.#areStackable(itemData, item)) continue;
+      if (getItemQuantity(item) >= getItemMaxStack(item)) continue;
+      targets.push(item);
+    }
+
+    return targets;
+  }
+
+  #getSourceInventoryPlacement(sourceItem, itemData, preferredPlacement = null, targetItem = null, reservedPlacements = []) {
+    const excludedIds = [sourceItem.id, targetItem?.id ?? ""].filter(Boolean);
+    const currentPlacement = sourceItem.system?.placement?.mode === "inventory"
+      ? normalizeInventoryPlacement(sourceItem.system?.placement ?? {}, itemData)
+      : null;
+
+    if (targetItem && currentPlacement && this.#isInventoryPlacementAvailable(currentPlacement, excludedIds, reservedPlacements)) {
+      return currentPlacement;
+    }
+    if (preferredPlacement && this.#isInventoryPlacementAvailable(preferredPlacement, excludedIds, reservedPlacements)) {
+      return preferredPlacement;
+    }
+    if (currentPlacement && this.#isInventoryPlacementAvailable(currentPlacement, excludedIds, reservedPlacements)) {
+      return currentPlacement;
+    }
+    return this.#getFirstAvailableInventoryPlacement(itemData, excludedIds, reservedPlacements);
+  }
+
+  #createInventoryStackData(itemData, quantity, placement) {
+    const createData = foundry.utils.deepClone(itemData);
+    delete createData._id;
+    foundry.utils.mergeObject(createData, {
+      system: {
+        quantity,
+        equipped: false,
+        placement: {
+          mode: placement.mode,
+          equipmentSlot: placement.equipmentSlot,
+          weaponSet: placement.weaponSet,
+          weaponSlot: placement.weaponSlot,
+          x: placement.x,
+          y: placement.y,
+          width: placement.width,
+          height: placement.height
+        }
+      }
+    });
+    return createData;
+  }
+
+  #resolvePlacement(itemData, placement, excludeItemIds = [], reservedPlacements = []) {
+    if (placement.mode === "inventory") {
+      return this.#resolveInventoryPlacement(itemData, placement, excludeItemIds, reservedPlacements);
+    }
+    if (placement.mode === "equipment") {
+      return this.#resolveEquipmentPlacement(itemData, placement, excludeItemIds);
+    }
+
+    const footprint = getItemFootprint(itemData);
+    return {
+      ...placement,
+      width: footprint.width,
+      height: footprint.height
+    };
+  }
+
+  #resolveInventoryPlacement(itemData, placement, excludeItemIds = [], reservedPlacements = []) {
+    const normalizedPlacement = normalizeInventoryPlacement(placement, itemData);
+    return this.#isInventoryPlacementAvailable(normalizedPlacement, excludeItemIds, reservedPlacements)
+      ? normalizedPlacement
+      : null;
+  }
+
+  #resolveEquipmentPlacement(itemData, placement, excludeItemIds = []) {
     if (placement.mode !== "equipment") return placement;
 
     const race = this.#getCurrentRace();
@@ -600,22 +830,23 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       : selectedSlots[0];
     if (!targetSlot) return null;
 
-    const blocked = selectedSlots.some(slot => {
-      const occupyingItem = this.#getEquipmentItemForSlot(slot, excludeItemId);
-      return Boolean(occupyingItem);
-    });
+    const blocked = selectedSlots.some(slot => Boolean(this.#getEquipmentItemForSlot(slot, excludeItemIds)));
     if (blocked) return null;
 
+    const footprint = getItemFootprint(itemData);
     return {
       ...placement,
-      equipmentSlot: targetSlot.key
+      equipmentSlot: targetSlot.key,
+      width: footprint.width,
+      height: footprint.height
     };
   }
 
-  #getEquipmentItemForSlot(slot, excludeItemId = "") {
+  #getEquipmentItemForSlot(slot, excludeItemIds = []) {
+    const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
     const slotSelectionKey = getEquipmentSlotSelectionKey(slot.label);
     return this.actor.items.contents.find(item => {
-      if (item.id === excludeItemId) return false;
+      if (excluded.has(item.id)) return false;
       if (item.system?.placement?.mode !== "equipment") return false;
       return getSelectedEquipmentSlotKeys(item).has(slotSelectionKey);
     }) ?? null;
@@ -635,6 +866,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       && Number(sourceSystem.weight) === Number(targetSystem.weight)
       && Number(sourceSystem.price) === Number(targetSystem.price)
       && String(sourceSystem.priceCurrency ?? "") === String(targetSystem.priceCurrency ?? "")
+      && getItemMaxStack(sourceSystem) === getItemMaxStack(targetSystem)
+      && getItemFootprint(sourceSystem).width === getItemFootprint(targetSystem).width
+      && getItemFootprint(sourceSystem).height === getItemFootprint(targetSystem).height
       && serializeSet(getSelectedEquipmentSlotKeys(sourceSystem)) === serializeSet(getSelectedEquipmentSlotKeys(targetSystem))
     );
   }
@@ -685,7 +919,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   async #copyInventoryItem(item) {
     const data = item.toObject();
     delete data._id;
-    foundry.utils.setProperty(data, "system.placement", this.#getFirstAvailableInventoryPlacement());
+    const placement = this.#getFirstAvailableInventoryPlacement(data);
+    if (!placement) {
+      this.#warnInventoryNoSpace();
+      return null;
+    }
+    foundry.utils.setProperty(data, "system.placement", placement);
     return this.actor.createEmbeddedDocuments("Item", [data]);
   }
 
@@ -712,8 +951,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   async #unequipInventoryItem(item) {
     const currentPlacement = item.system?.placement ?? {};
     const placement = currentPlacement.mode === "inventory"
-      ? currentPlacement
-      : this.#getFirstAvailableInventoryPlacement(item.id);
+      ? normalizeInventoryPlacement(currentPlacement, item)
+      : this.#getFirstAvailableInventoryPlacement(item, [item.id]);
+    if (!placement) {
+      this.#warnInventoryNoSpace();
+      return null;
+    }
     return item.update({
       "system.equipped": false,
       "system.placement.mode": placement.mode,
@@ -721,8 +964,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       "system.placement.weaponSet": placement.weaponSet,
       "system.placement.weaponSlot": placement.weaponSlot,
       "system.placement.x": placement.x,
-      "system.placement.y": placement.y
+      "system.placement.y": placement.y,
+      "system.placement.width": placement.width,
+      "system.placement.height": placement.height
     });
+  }
+
+  #warnInventoryNoSpace() {
+    ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
   }
 
   #showInventoryTooltip(item) {
@@ -789,29 +1038,136 @@ function serializeSet(set) {
   return Array.from(set).sort().join("|");
 }
 
-function createInventoryPlacement(x = 1, y = 1) {
+function getInventoryGridDimensions(race) {
+  const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
+  return {
+    columns: Math.max(1, toInteger(inventorySize.columns)),
+    rows: Math.max(1, toInteger(inventorySize.rows))
+  };
+}
+
+function getItemQuantity(itemOrSystem) {
+  const system = itemOrSystem?.system ?? itemOrSystem ?? {};
+  return Math.max(0, toInteger(system.quantity));
+}
+
+function getItemMaxStack(itemOrSystem) {
+  const system = itemOrSystem?.system ?? itemOrSystem ?? {};
+  return Math.max(1, toInteger(system.maxStack) || 1);
+}
+
+function getItemFootprint(itemOrSystem) {
+  const system = itemOrSystem?.system ?? itemOrSystem ?? {};
+  const placement = system.placement ?? {};
+  return {
+    width: Math.max(1, toInteger(placement.width) || 1),
+    height: Math.max(1, toInteger(placement.height) || 1)
+  };
+}
+
+function createInventoryPlacement(x = 1, y = 1, itemOrSystem = null) {
+  const { width, height } = getItemFootprint(itemOrSystem);
   return {
     mode: "inventory",
     equipmentSlot: "",
     weaponSet: "",
     weaponSlot: "",
     x: Math.max(1, toInteger(x)),
-    y: Math.max(1, toInteger(y))
+    y: Math.max(1, toInteger(y)),
+    width,
+    height
   };
+}
+
+function normalizeInventoryPlacement(placement = {}, itemOrSystem = null) {
+  placement ??= {};
+  return {
+    ...createInventoryPlacement(placement.x, placement.y, itemOrSystem),
+    mode: placement.mode ?? "inventory",
+    equipmentSlot: String(placement.equipmentSlot ?? ""),
+    weaponSet: String(placement.weaponSet ?? ""),
+    weaponSlot: String(placement.weaponSlot ?? ""),
+    width: Math.max(1, toInteger(placement.width) || getItemFootprint(itemOrSystem).width),
+    height: Math.max(1, toInteger(placement.height) || getItemFootprint(itemOrSystem).height)
+  };
+}
+
+function isInventoryPlacementWithinBounds(placement, columns, rows) {
+  if (!placement) return false;
+  return (
+    placement.x >= 1
+    && placement.y >= 1
+    && (placement.x + placement.width - 1) <= columns
+    && (placement.y + placement.height - 1) <= rows
+  );
+}
+
+function placementContainsInventoryCell(placement, x, y) {
+  if (!placement) return false;
+  return (
+    x >= placement.x
+    && x < (placement.x + placement.width)
+    && y >= placement.y
+    && y < (placement.y + placement.height)
+  );
+}
+
+function inventoryPlacementsOverlap(left, right) {
+  if (!left || !right) return false;
+  return !(
+    (left.x + left.width - 1) < right.x
+    || (right.x + right.width - 1) < left.x
+    || (left.y + left.height - 1) < right.y
+    || (right.y + right.height - 1) < left.y
+  );
+}
+
+function isInventoryPlacementAvailable(placement, items, columns, rows, excludeItemIds = [], reservedPlacements = []) {
+  if (!isInventoryPlacementWithinBounds(placement, columns, rows)) return false;
+  const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+  if (reservedPlacements.some(existing => inventoryPlacementsOverlap(placement, existing))) return false;
+
+  return !items.some(item => {
+    if (!item || excluded.has(item.id)) return false;
+    const itemPlacement = normalizeInventoryPlacement(item.system?.placement ?? item.placement ?? {}, item);
+    return itemPlacement.mode === "inventory" && inventoryPlacementsOverlap(placement, itemPlacement);
+  });
+}
+
+function findFirstAvailableInventoryPlacement(items, columns, rows, itemOrSystem = null, excludeItemIds = [], reservedPlacements = []) {
+  for (let y = 1; y <= rows; y += 1) {
+    for (let x = 1; x <= columns; x += 1) {
+      const candidate = createInventoryPlacement(x, y, itemOrSystem);
+      if (isInventoryPlacementAvailable(candidate, items, columns, rows, excludeItemIds, reservedPlacements)) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+}
+
+function buildInventoryCellStyle(x, y, placement = null) {
+  if (placement) {
+    return [
+      `grid-column: ${placement.x} / span ${placement.width};`,
+      `grid-row: ${placement.y} / span ${placement.height};`
+    ].join(" ");
+  }
+  return `grid-column: ${x}; grid-row: ${y};`;
 }
 
 function prepareInventoryContext(actor, race) {
   const currencies = getCurrencySettings();
-  const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
-  const columns = Math.max(1, toInteger(inventorySize.columns));
-  const rows = Math.max(1, toInteger(inventorySize.rows));
+  const { columns, rows } = getInventoryGridDimensions(race);
   const allItems = actor.items.contents.map(item => ({
     id: item.id,
     uuid: item.uuid,
     name: item.name,
     img: item.img,
     type: item.type,
-    quantity: toInteger(item.system?.quantity),
+    quantity: getItemQuantity(item),
+    maxStack: getItemMaxStack(item),
+    showQuantity: getItemMaxStack(item) > 1,
     weight: Number(item.system?.weight) || 0,
     totalWeight: Number(item.totalWeight) || 0,
     price: Number(item.system?.price) || 0,
@@ -819,7 +1175,7 @@ function prepareInventoryContext(actor, race) {
     priceCurrencyLabel: currencies.find(currency => currency.key === item.system?.priceCurrency)?.label ?? "",
     equipped: Boolean(item.system?.equipped),
     occupiedSlots: item.system?.occupiedSlots ?? {},
-    placement: item.system?.placement ?? {}
+    placement: normalizeInventoryPlacement(item.system?.placement ?? {}, item)
   }));
   const assignedItemIds = new Set();
 
@@ -851,27 +1207,42 @@ function prepareInventoryContext(actor, race) {
   }));
 
   const inventoryItems = allItems.filter(item => !assignedItemIds.has(item.id));
-  const unplacedInventoryItems = inventoryItems.filter(item => (
-    item.placement?.mode !== "inventory"
-    || !toInteger(item.placement?.x)
-    || !toInteger(item.placement?.y)
-  ));
+  const placedInventoryItems = [];
+  const reservedPlacements = [];
+  const preferredItems = inventoryItems
+    .filter(item => item.placement?.mode === "inventory")
+    .sort((left, right) => {
+      const yDifference = toInteger(left.placement?.y) - toInteger(right.placement?.y);
+      if (yDifference !== 0) return yDifference;
+      return toInteger(left.placement?.x) - toInteger(right.placement?.x);
+    });
+  const deferredItems = inventoryItems.filter(item => item.placement?.mode !== "inventory");
+
+  for (const item of [...preferredItems, ...deferredItems]) {
+    const preferredPlacement = item.placement?.mode === "inventory"
+      ? normalizeInventoryPlacement(item.placement, item)
+      : null;
+    const placement = preferredPlacement && isInventoryPlacementAvailable(preferredPlacement, [], columns, rows, [], reservedPlacements)
+      ? preferredPlacement
+      : findFirstAvailableInventoryPlacement([], columns, rows, item, [], reservedPlacements);
+    if (!placement) continue;
+    reservedPlacements.push(placement);
+    placedInventoryItems.push({
+      ...item,
+      placement,
+      gridStyle: buildInventoryCellStyle(placement.x, placement.y, placement)
+    });
+  }
+
   const cells = [];
-  const placedGridItemIds = new Set();
   for (let y = 1; y <= rows; y += 1) {
     for (let x = 1; x <= columns; x += 1) {
-      const placedItem = inventoryItems.find(candidate => {
-        const placement = candidate.placement ?? {};
-        return (
-          !placedGridItemIds.has(candidate.id)
-          && placement.mode === "inventory"
-          && toInteger(placement.x) === x
-          && toInteger(placement.y) === y
-        );
+      cells.push({
+        x,
+        y,
+        occupied: reservedPlacements.some(placement => placementContainsInventoryCell(placement, x, y)),
+        style: buildInventoryCellStyle(x, y)
       });
-      const item = placedItem ?? unplacedInventoryItems.filter(candidate => !placedGridItemIds.has(candidate.id))[0] ?? null;
-      if (item) placedGridItemIds.add(item.id);
-      cells.push({ x, y, item });
     }
   }
 
@@ -881,7 +1252,8 @@ function prepareInventoryContext(actor, race) {
     grid: {
       columns,
       rows,
-      cells
+      cells,
+      items: placedInventoryItems
     }
   };
 }

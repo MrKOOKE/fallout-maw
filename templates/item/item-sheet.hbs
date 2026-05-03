@@ -41,6 +41,21 @@
       <span>{{localize "FALLOUTMAW.Item.Equipped"}}</span>
     </label>
 
+    <label>
+      <span>{{localize "FALLOUTMAW.Item.MaxStack"}}</span>
+      <input type="number" name="system.maxStack" value="{{system.maxStack}}" min="1" step="1">
+    </label>
+
+    <label>
+      <span>{{localize "FALLOUTMAW.Item.InventoryWidth"}}</span>
+      <input type="number" name="system.placement.width" value="{{system.placement.width}}" min="1" step="1">
+    </label>
+
+    <label>
+      <span>{{localize "FALLOUTMAW.Item.InventoryHeight"}}</span>
+      <input type="number" name="system.placement.height" value="{{system.placement.height}}" min="1" step="1">
+    </label>
+
     {{#if isGear}}
     <section class="fallout-maw-occupied-slots-field">
       <h3>{{localize "FALLOUTMAW.Item.OccupiedSlots"}}</h3>

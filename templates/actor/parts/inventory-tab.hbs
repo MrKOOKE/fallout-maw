@@ -40,7 +40,7 @@
           {{#if item}}
           <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
             <img src="{{item.img}}" alt="{{item.name}}">
-            {{#if item.quantity}}<strong>{{item.quantity}}</strong>{{/if}}
+            {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
           </article>
           {{/if}}
         </div>
@@ -60,7 +60,7 @@
               {{#if item}}
               <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
                 <img src="{{item.img}}" alt="{{item.name}}">
-                {{#if item.quantity}}<strong>{{item.quantity}}</strong>{{/if}}
+                {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
               </article>
               {{/if}}
             </div>
@@ -77,14 +77,13 @@
       <h2>{{localize "FALLOUTMAW.Common.Inventory"}}</h2>
       <div class="fallout-maw-inventory-grid" data-inventory-grid style="--fallout-maw-inventory-columns: {{inventory.grid.columns}};">
         {{#each inventory.grid.cells}}
-        <div class="fallout-maw-inventory-cell" data-inventory-cell data-x="{{x}}" data-y="{{y}}" data-drop-zone>
-          {{#if item}}
-          <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
-            <img src="{{item.img}}" alt="{{item.name}}">
-            {{#if item.quantity}}<strong>{{item.quantity}}</strong>{{/if}}
-          </article>
-          {{/if}}
-        </div>
+        <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}}" data-inventory-cell data-x="{{x}}" data-y="{{y}}" data-drop-zone style="{{style}}"></div>
+        {{/each}}
+        {{#each inventory.grid.items}}
+        <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if equipped}}equipped{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
+          <img src="{{img}}" alt="{{name}}">
+          {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
+        </article>
         {{/each}}
       </div>
     </section>

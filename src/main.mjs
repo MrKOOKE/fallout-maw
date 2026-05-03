@@ -3,6 +3,7 @@ import { registerDataModels, registerTrackableAttributes } from "./data/index.mj
 import { FalloutMaWActor, FalloutMaWItem } from "./documents/index.mjs";
 import { registerSystemSettings, finalizeSystemSettings } from "./settings/index.mjs";
 import { registerSystemSheets } from "./sheets/index.mjs";
+import { FalloutMaWDragDrop } from "./utils/drag-drop.mjs";
 
 Hooks.once("init", () => {
   console.log(`${FALLOUT_MAW.title} | Initializing system`);
@@ -10,6 +11,7 @@ Hooks.once("init", () => {
   CONFIG.FalloutMaW = syncSystemConfig();
   CONFIG.Actor.documentClass = FalloutMaWActor;
   CONFIG.Item.documentClass = FalloutMaWItem;
+  CONFIG.ux.DragDrop = FalloutMaWDragDrop;
 
   registerSystemSettings();
   registerSystemSheets();
