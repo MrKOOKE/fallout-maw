@@ -7,6 +7,7 @@ export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
       quantity: new NumberField({ required: true, integer: true, min: 0, initial: 1 }),
       weight: new NumberField({ required: true, min: 0, initial: 0 }),
       price: new NumberField({ required: true, min: 0, initial: 0 }),
+      priceCurrency: new StringField({ required: true, blank: true, initial: "" }),
       equipped: new BooleanField({ required: true, initial: false }),
       placement: new SchemaField({
         mode: new StringField({ required: true, blank: true, initial: "inventory" }),

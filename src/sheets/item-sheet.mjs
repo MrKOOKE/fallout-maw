@@ -1,4 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
+import { getCurrencySettings } from "../settings/accessors.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { HandlebarsApplicationMixin } = foundry.applications.api;
@@ -32,6 +33,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const context = await super._prepareContext(options);
     const item = this.item;
     const type = item.type;
+    const priceCurrency = item.system?.priceCurrency ?? "";
 
     return foundry.utils.mergeObject(context, {
       item,
@@ -45,6 +47,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       isArmor: type === "armor",
       isAbility: type === "ability",
       isEffect: type === "effect",
+      currencies: getCurrencySettings().map(currency => ({
+        ...currency,
+        selected: currency.key === priceCurrency
+      })),
       totalWeight: item.totalWeight
     }, { inplace: false });
   }

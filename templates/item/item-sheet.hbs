@@ -20,6 +20,15 @@
         <span>{{localize "FALLOUTMAW.Item.Price"}}</span>
         <input type="number" name="system.price" value="{{system.price}}" min="0">
       </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.PriceCurrency"}}</span>
+        <select name="system.priceCurrency">
+          <option value=""></option>
+          {{#each currencies}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
     </div>
   </div>
 </header>

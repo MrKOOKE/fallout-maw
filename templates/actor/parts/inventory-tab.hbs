@@ -31,15 +31,15 @@
     </section>
   </section>
 
-  <div class="fallout-maw-inventory-layout">
+  <div class="fallout-maw-inventory-layout" data-inventory-drop-surface>
     <section class="fallout-maw-panel fallout-maw-equipment-pane">
       <h2>{{localize "FALLOUTMAW.Common.Equipment"}}</h2>
       <div class="fallout-maw-equipment-slot-list">
         {{#each inventory.equipmentSlots}}
-        <div class="fallout-maw-equipment-slot">
+        <div class="fallout-maw-equipment-slot" data-equipment-slot="{{key}}" data-drop-zone>
           <span>{{label}}</span>
           {{#if item}}
-          <strong>{{item.name}}</strong>
+          <strong class="draggable fallout-maw-draggable-item" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">{{item.name}}</strong>
           {{else}}
           <strong>{{localize "FALLOUTMAW.Actor.EmptySlot"}}</strong>
           {{/if}}
@@ -56,10 +56,10 @@
           <h3>{{label}}</h3>
           <div class="fallout-maw-equipment-slot-list">
             {{#each slots}}
-            <div class="fallout-maw-equipment-slot">
+            <div class="fallout-maw-equipment-slot" data-weapon-set="{{../key}}" data-weapon-slot="{{key}}" data-drop-zone>
               <span>{{label}}</span>
               {{#if item}}
-              <strong>{{item.name}}</strong>
+              <strong class="draggable fallout-maw-draggable-item" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">{{item.name}}</strong>
               {{else}}
               <strong>{{localize "FALLOUTMAW.Actor.EmptySlot"}}</strong>
               {{/if}}
@@ -75,11 +75,11 @@
 
     <section class="fallout-maw-panel fallout-maw-inventory-pane">
       <h2>{{localize "FALLOUTMAW.Common.Inventory"}}</h2>
-      <div class="fallout-maw-inventory-grid" style="--fallout-maw-inventory-columns: {{inventory.grid.columns}};">
+      <div class="fallout-maw-inventory-grid" data-inventory-grid style="--fallout-maw-inventory-columns: {{inventory.grid.columns}};">
         {{#each inventory.grid.cells}}
-        <div class="fallout-maw-inventory-cell" data-x="{{x}}" data-y="{{y}}">
+        <div class="fallout-maw-inventory-cell" data-inventory-cell data-x="{{x}}" data-y="{{y}}" data-drop-zone>
           {{#if item}}
-          <article class="fallout-maw-inventory-item" data-item-id="{{item.id}}">
+          <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
             <img src="{{item.img}}" alt="{{item.name}}">
             <span>{{item.name}}</span>
             {{#if item.quantity}}<strong>{{item.quantity}}</strong>{{/if}}
