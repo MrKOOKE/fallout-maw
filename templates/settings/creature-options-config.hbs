@@ -141,6 +141,85 @@
       </section>
 
       <section class="fallout-maw-panel">
+        <header class="fallout-maw-panel-header">
+          <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.EquipmentWeaponSlots"}}</h2>
+        </header>
+
+        <div class="fallout-maw-equipment-config-grid">
+          <div class="fallout-maw-settings-block">
+            <header class="fallout-maw-panel-header">
+              <h3>{{localize "FALLOUTMAW.Settings.CreatureOptions.EquipmentSlots"}}</h3>
+              <button type="button" data-action="createEquipmentSlot"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Settings.CreatureOptions.CreateEquipmentSlot"}}</button>
+            </header>
+
+            <div class="fallout-maw-settings-table equipment-slot-settings">
+              {{#each equipmentSlots}}
+              <div class="fallout-maw-settings-row" data-equipment-slot-row>
+                <input type="hidden" data-field="key" value="{{key}}">
+                <input type="text" data-field="label" value="{{label}}">
+                <button type="button" data-action="deleteEquipmentSlot" data-key="{{key}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+              </div>
+              {{else}}
+              <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoEquipmentSlots"}}</p>
+              {{/each}}
+            </div>
+          </div>
+
+          <div class="fallout-maw-settings-block">
+            <header class="fallout-maw-panel-header">
+              <h3>{{localize "FALLOUTMAW.Settings.CreatureOptions.WeaponSets"}}</h3>
+              <button type="button" data-action="createWeaponSet"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Settings.CreatureOptions.CreateWeaponSet"}}</button>
+            </header>
+
+            <div class="fallout-maw-weapon-set-list">
+              {{#each weaponSets}}
+              <div class="fallout-maw-weapon-set-config" data-weapon-set-row>
+                <header class="fallout-maw-weapon-set-header">
+                  <input type="hidden" data-field="key" value="{{key}}">
+                  <input type="text" data-field="label" value="{{label}}">
+                  <button type="button" data-action="createWeaponSlot" data-set-key="{{key}}" title="{{localize 'FALLOUTMAW.Settings.CreatureOptions.CreateWeaponSlot'}}"><i class="fa-solid fa-plus"></i></button>
+                  <button type="button" data-action="deleteWeaponSet" data-key="{{key}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+                </header>
+
+                <div class="fallout-maw-settings-table weapon-slot-settings">
+                  {{#each slots}}
+                  <div class="fallout-maw-settings-row" data-weapon-slot-row>
+                    <input type="hidden" data-field="key" value="{{key}}">
+                    <select data-field="limbKey">
+                      {{#each limbOptions}}
+                      <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                      {{/each}}
+                    </select>
+                    <button type="button" data-action="deleteWeaponSlot" data-set-key="{{../key}}" data-slot-key="{{key}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}
+                  <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoWeaponSlots"}}</p>
+                  {{/each}}
+                </div>
+              </div>
+              {{else}}
+              <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoWeaponSets"}}</p>
+              {{/each}}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="fallout-maw-panel">
+        <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.InventorySize"}}</h2>
+        <div class="fallout-maw-list-grid two-columns">
+          <label>
+            <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.InventoryColumns"}}</span>
+            <input type="number" name="race.inventorySize.columns" value="{{inventorySize.columns}}" min="1">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.InventoryRows"}}</span>
+            <input type="number" name="race.inventorySize.rows" value="{{inventorySize.rows}}" min="1">
+          </label>
+        </div>
+      </section>
+
+      <section class="fallout-maw-panel">
         <h2>{{localize "FALLOUTMAW.Common.DamageResistances"}}</h2>
         <p class="hint">{{localize "FALLOUTMAW.Settings.CreatureOptions.DamageFormulaHint"}}</p>
         <div class="fallout-maw-list-grid two-columns">

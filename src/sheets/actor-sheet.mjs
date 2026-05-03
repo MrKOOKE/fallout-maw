@@ -9,6 +9,7 @@ import {
   getResourceSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
+import { createDefaultInventorySize } from "../settings/creature-options.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const { ActorSheetV2 } = foundry.applications.sheets;
@@ -83,6 +84,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const skillSettings = getSkillSettings();
     const typeId = actor.system?.creature?.typeId;
     const raceId = actor.system?.creature?.raceId;
+    const race = creatureOptions.races.find(entry => entry.id === raceId);
     const sourceSystem = actor.system?._source ?? actor.system;
     const limbEntries = Object.entries(actor.system?.limbs ?? {});
     const activeLimbKey = limbEntries.some(([key]) => key === this.#activeLimbKey)
@@ -97,6 +99,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }));
 
     this.#activeLimbKey = activeLimbKey;
+
+    const inventory = prepareInventoryContext(actor, race);
 
     return foundry.utils.mergeObject(context, {
       actor,
@@ -117,7 +121,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         hasImage: Boolean(currency.img)
       })),
       creatureTypeName: creatureOptions.types.find(type => type.id === typeId)?.name || "",
-      creatureRaceName: creatureOptions.races.find(race => race.id === raceId)?.name || "",
+      creatureRaceName: race?.name || "",
       creatureTypes: creatureOptions.types.map(type => ({ ...type, selected: type.id === typeId })),
       creatureRaces: creatureOptions.races.map(race => ({ ...race, selected: race.id === raceId })),
       characteristics: characteristicSettings.map(characteristic => ({
@@ -149,7 +153,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       damageResistances: damageTypeSettings.map(damageType => ({
         ...damageType,
         value: toInteger(actor.system.damageResistances?.[activeLimbKey]?.[damageType.key])
-      }))
+      })),
+      inventory
     }, { inplace: false });
   }
 
@@ -207,4 +212,79 @@ function formatWeight(value) {
   const numeric = Number(value) || 0;
   if (Number.isInteger(numeric)) return String(numeric);
   return numeric.toFixed(1).replace(/\.0$/, "");
+}
+
+function prepareInventoryContext(actor, race) {
+  const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
+  const columns = Math.max(1, toInteger(inventorySize.columns));
+  const rows = Math.max(1, toInteger(inventorySize.rows));
+  const allItems = actor.items.contents.map(item => ({
+    id: item.id,
+    uuid: item.uuid,
+    name: item.name,
+    img: item.img,
+    type: item.type,
+    quantity: toInteger(item.system?.quantity),
+    weight: Number(item.system?.weight) || 0,
+    totalWeight: Number(item.totalWeight) || 0,
+    placement: item.system?.placement ?? {}
+  }));
+  const assignedItemIds = new Set();
+
+  const equipmentSlots = (race?.equipmentSlots ?? []).map(slot => {
+    const item = allItems.find(candidate => (
+      candidate.placement?.mode === "equipment"
+      && candidate.placement?.equipmentSlot === slot.key
+    ));
+    if (item) assignedItemIds.add(item.id);
+    return { ...slot, item };
+  });
+
+  const weaponSets = (race?.weaponSets ?? []).map(set => ({
+    ...set,
+    slots: (set.slots ?? []).map(slot => {
+      const limb = (race?.limbs ?? []).find(entry => entry.key === slot.limbKey);
+      const item = allItems.find(candidate => (
+        candidate.placement?.mode === "weapon"
+        && candidate.placement?.weaponSet === set.key
+        && candidate.placement?.weaponSlot === slot.key
+      ));
+      if (item) assignedItemIds.add(item.id);
+      return {
+        ...slot,
+        label: limb?.label || slot.limbKey || slot.key,
+        item
+      };
+    })
+  }));
+
+  const inventoryItems = allItems.filter(item => !assignedItemIds.has(item.id));
+  const cells = [];
+  const placedGridItemIds = new Set();
+  for (let y = 1; y <= rows; y += 1) {
+    for (let x = 1; x <= columns; x += 1) {
+      const placedItem = inventoryItems.find(candidate => {
+        const placement = candidate.placement ?? {};
+        return (
+          !placedGridItemIds.has(candidate.id)
+          && placement.mode === "inventory"
+          && toInteger(placement.x) === x
+          && toInteger(placement.y) === y
+        );
+      });
+      const item = placedItem ?? inventoryItems.filter(candidate => !placedGridItemIds.has(candidate.id))[0] ?? null;
+      if (item) placedGridItemIds.add(item.id);
+      cells.push({ x, y, item });
+    }
+  }
+
+  return {
+    equipmentSlots,
+    weaponSets,
+    grid: {
+      columns,
+      rows,
+      cells
+    }
+  };
 }

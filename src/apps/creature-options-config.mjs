@@ -7,7 +7,11 @@ import {
   getSkillSettings,
   setCreatureOptions
 } from "../settings/accessors.mjs";
-import { createDefaultRaceBaseParameters, createRaceDefaults } from "../settings/creature-options.mjs";
+import {
+  createDefaultInventorySize,
+  createDefaultRaceBaseParameters,
+  createRaceDefaults
+} from "../settings/creature-options.mjs";
 import { format, localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
@@ -42,6 +46,12 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       selectRace: this.#onSelectRace,
       createType: this.#onCreateType,
       createRace: this.#onCreateRace,
+      createEquipmentSlot: this.#onCreateEquipmentSlot,
+      deleteEquipmentSlot: this.#onDeleteEquipmentSlot,
+      createWeaponSet: this.#onCreateWeaponSet,
+      deleteWeaponSet: this.#onDeleteWeaponSet,
+      createWeaponSlot: this.#onCreateWeaponSlot,
+      deleteWeaponSlot: this.#onDeleteWeaponSlot,
       deleteType: this.#onDeleteType,
       deleteRace: this.#onDeleteRace
     }
@@ -90,6 +100,18 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       })),
       baseParameters: selectedRace?.baseParameters ?? createDefaultRaceBaseParameters(),
       limbs: selectedRace?.limbs ?? [],
+      equipmentSlots: selectedRace?.equipmentSlots ?? [],
+      weaponSets: (selectedRace?.weaponSets ?? []).map(set => ({
+        ...set,
+        slots: (set.slots ?? []).map(slot => ({
+          ...slot,
+          limbOptions: (selectedRace?.limbs ?? []).map(limb => ({
+            ...limb,
+            selected: limb.key === slot.limbKey
+          }))
+        }))
+      })),
+      inventorySize: selectedRace?.inventorySize ?? createDefaultInventorySize(),
       damageTypes: damageTypes.map(damageType => ({
         ...damageType,
         formula: String(selectedRace?.damageResistances?.[damageType.key] ?? "0")
@@ -211,6 +233,86 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     return this.#saveAndRender(localize("FALLOUTMAW.Messages.CreatureOptionsSaved"));
   }
 
+  static #onCreateEquipmentSlot(event) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    if (!race) return undefined;
+    const id = getUniqueId("equipmentSlot", (race.equipmentSlots ?? []).map(slot => slot.key));
+    race.equipmentSlots ??= [];
+    race.equipmentSlots.push({ key: id, label: localize("FALLOUTMAW.Settings.CreatureOptions.NewEquipmentSlot") });
+    return this.forceRender();
+  }
+
+  static #onDeleteEquipmentSlot(event, target) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    if (!race) return undefined;
+    const key = target.dataset.key ?? "";
+    race.equipmentSlots = (race.equipmentSlots ?? []).filter(slot => slot.key !== key);
+    return this.forceRender();
+  }
+
+  static #onCreateWeaponSet(event) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    if (!race) return undefined;
+    const id = getUniqueId("weaponSet", (race.weaponSets ?? []).map(set => set.key));
+    race.weaponSets ??= [];
+    race.weaponSets.push({
+      key: id,
+      label: localize("FALLOUTMAW.Settings.CreatureOptions.NewWeaponSet"),
+      slots: []
+    });
+    return this.forceRender();
+  }
+
+  static #onDeleteWeaponSet(event, target) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    if (!race) return undefined;
+    const key = target.dataset.key ?? "";
+    race.weaponSets = (race.weaponSets ?? []).filter(set => set.key !== key);
+    return this.forceRender();
+  }
+
+  static #onCreateWeaponSlot(event, target) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    if (!race) return undefined;
+    const setKey = target.dataset.setKey ?? "";
+    const weaponSet = (race.weaponSets ?? []).find(set => set.key === setKey);
+    if (!weaponSet) return undefined;
+    weaponSet.slots ??= [];
+    const id = getUniqueId("weaponSlot", weaponSet.slots.map(slot => slot.key));
+    weaponSet.slots.push({
+      key: id,
+      limbKey: race.limbs?.[0]?.key ?? ""
+    });
+    return this.forceRender();
+  }
+
+  static #onDeleteWeaponSlot(event, target) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    if (!race) return undefined;
+    const setKey = target.dataset.setKey ?? "";
+    const slotKey = target.dataset.slotKey ?? "";
+    const weaponSet = (race.weaponSets ?? []).find(set => set.key === setKey);
+    if (!weaponSet) return undefined;
+    weaponSet.slots = (weaponSet.slots ?? []).filter(slot => slot.key !== slotKey);
+    return this.forceRender();
+  }
+
+  get #activeRace() {
+    return this.creatureOptions.races.find(entry => entry.id === this.activeRaceId);
+  }
+
   #updateFromCurrentForm() {
     if (!this.form) return;
     const formData = new FormDataExtended(this.form).object;
@@ -249,6 +351,12 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       ).trim() || createDefaultRaceBaseParameters().loadFormula
     };
     race.limbs = this.#readLimbsFromForm();
+    race.equipmentSlots = this.#readEquipmentSlotsFromForm();
+    race.weaponSets = this.#readWeaponSetsFromForm();
+    race.inventorySize = {
+      columns: Math.max(1, toInteger(formData.race?.inventorySize?.columns ?? createDefaultInventorySize().columns)),
+      rows: Math.max(1, toInteger(formData.race?.inventorySize?.rows ?? createDefaultInventorySize().rows))
+    };
     race.damageResistances = Object.fromEntries(
       getDamageTypeSettings().map(damageType => [
         damageType.key,
@@ -268,6 +376,31 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       label: row.querySelector("[data-field='label']")?.value?.trim() || localize("FALLOUTMAW.Common.Untitled"),
       stateMax: Math.max(0, toInteger(row.querySelector("[data-field='stateMax']")?.value))
     })).filter(limb => limb.key);
+  }
+
+  #readEquipmentSlotsFromForm() {
+    const rows = Array.from(this.form?.querySelectorAll("[data-equipment-slot-row]") ?? []);
+    return rows.map(row => ({
+      key: row.querySelector("[data-field='key']")?.value?.trim() ?? "",
+      label: row.querySelector("[data-field='label']")?.value?.trim() || localize("FALLOUTMAW.Common.Untitled")
+    })).filter(slot => slot.key);
+  }
+
+  #readWeaponSetsFromForm() {
+    const setRows = Array.from(this.form?.querySelectorAll("[data-weapon-set-row]") ?? []);
+    return setRows.map(setRow => {
+      const key = setRow.querySelector("[data-field='key']")?.value?.trim() ?? "";
+      const slots = Array.from(setRow.querySelectorAll("[data-weapon-slot-row]")).map(slotRow => ({
+        key: slotRow.querySelector("[data-field='key']")?.value?.trim() ?? "",
+        limbKey: slotRow.querySelector("[data-field='limbKey']")?.value?.trim() ?? ""
+      })).filter(slot => slot.key);
+
+      return {
+        key,
+        label: setRow.querySelector("[data-field='label']")?.value?.trim() || localize("FALLOUTMAW.Common.Untitled"),
+        slots
+      };
+    }).filter(set => set.key);
   }
 
   #validateRaceFormulas() {

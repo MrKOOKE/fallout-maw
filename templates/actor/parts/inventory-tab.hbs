@@ -1,31 +1,93 @@
 <section class="tab {{tabs.inventory.cssClass}}" data-group="{{tabs.inventory.group}}" data-tab="{{tabs.inventory.id}}">
-  <section class="fallout-maw-panel">
-    <h2>{{localize "FALLOUTMAW.Common.Currencies"}}</h2>
-    <div class="fallout-maw-currency-list">
-      {{#each currencies}}
-      <div class="fallout-maw-currency-chip" title="{{label}} | {{localize 'FALLOUTMAW.Common.Value'}}: {{value}}">
-        <span class="fallout-maw-currency-icon">
-          {{#if hasImage}}
-          <img src="{{img}}" alt="{{label}}">
-          {{else}}
-          <span class="fallout-maw-currency-icon-placeholder"></span>
-          {{/if}}
-        </span>
-        {{#if ../freeEdit}}<input class="fallout-maw-currency-amount-input" type="number" name="system.currencies.{{key}}" value="{{amount}}" min="0" step="1">{{else}}<strong class="fallout-maw-currency-amount">{{amount}}</strong>{{/if}}
+  <section class="fallout-maw-inventory-summary">
+    <section class="fallout-maw-panel">
+      <h2>{{localize "FALLOUTMAW.Common.Currencies"}}</h2>
+      <div class="fallout-maw-currency-list">
+        {{#each currencies}}
+        <div class="fallout-maw-currency-chip" title="{{label}} | {{localize 'FALLOUTMAW.Common.Value'}}: {{value}}">
+          <span class="fallout-maw-currency-icon">
+            {{#if hasImage}}
+            <img src="{{img}}" alt="{{label}}">
+            {{else}}
+            <span class="fallout-maw-currency-icon-placeholder"></span>
+            {{/if}}
+          </span>
+          {{#if ../freeEdit}}<input class="fallout-maw-currency-amount-input" type="number" name="system.currencies.{{key}}" value="{{amount}}" min="0" step="1">{{else}}<strong class="fallout-maw-currency-amount">{{amount}}</strong>{{/if}}
+        </div>
+        {{else}}
+        <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.Currencies.Empty"}}</p>
+        {{/each}}
       </div>
-      {{else}}
-      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.Currencies.Empty"}}</p>
-      {{/each}}
-    </div>
+    </section>
+
+    <section class="fallout-maw-panel">
+      <h2>{{localize "FALLOUTMAW.Common.Load"}}</h2>
+      <div class="fallout-maw-summary-grid">
+        <div class="fallout-maw-inline-stat">
+          <span>{{localize "FALLOUTMAW.Common.Load"}}:</span>
+          <strong>{{load.value}} / {{load.max}} {{localize "FALLOUTMAW.Common.Kg"}}</strong>
+        </div>
+      </div>
+    </section>
   </section>
 
-  <section class="fallout-maw-panel">
-    <h2>{{localize "FALLOUTMAW.Common.Load"}}</h2>
-    <div class="fallout-maw-summary-grid">
-      <div class="fallout-maw-inline-stat">
-        <span>{{localize "FALLOUTMAW.Common.Load"}}:</span>
-        <strong>{{load.value}} / {{load.max}} {{localize "FALLOUTMAW.Common.Kg"}}</strong>
+  <div class="fallout-maw-inventory-layout">
+    <section class="fallout-maw-panel fallout-maw-equipment-pane">
+      <h2>{{localize "FALLOUTMAW.Common.Equipment"}}</h2>
+      <div class="fallout-maw-equipment-slot-list">
+        {{#each inventory.equipmentSlots}}
+        <div class="fallout-maw-equipment-slot">
+          <span>{{label}}</span>
+          {{#if item}}
+          <strong>{{item.name}}</strong>
+          {{else}}
+          <strong>{{localize "FALLOUTMAW.Actor.EmptySlot"}}</strong>
+          {{/if}}
+        </div>
+        {{else}}
+        <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoEquipmentSlots"}}</p>
+        {{/each}}
       </div>
-    </div>
-  </section>
+
+      <h2>{{localize "FALLOUTMAW.Common.Weapon"}}</h2>
+      <div class="fallout-maw-weapon-set-list">
+        {{#each inventory.weaponSets}}
+        <section class="fallout-maw-weapon-set">
+          <h3>{{label}}</h3>
+          <div class="fallout-maw-equipment-slot-list">
+            {{#each slots}}
+            <div class="fallout-maw-equipment-slot">
+              <span>{{label}}</span>
+              {{#if item}}
+              <strong>{{item.name}}</strong>
+              {{else}}
+              <strong>{{localize "FALLOUTMAW.Actor.EmptySlot"}}</strong>
+              {{/if}}
+            </div>
+            {{/each}}
+          </div>
+        </section>
+        {{else}}
+        <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoWeaponSets"}}</p>
+        {{/each}}
+      </div>
+    </section>
+
+    <section class="fallout-maw-panel fallout-maw-inventory-pane">
+      <h2>{{localize "FALLOUTMAW.Common.Inventory"}}</h2>
+      <div class="fallout-maw-inventory-grid" style="--fallout-maw-inventory-columns: {{inventory.grid.columns}};">
+        {{#each inventory.grid.cells}}
+        <div class="fallout-maw-inventory-cell" data-x="{{x}}" data-y="{{y}}">
+          {{#if item}}
+          <article class="fallout-maw-inventory-item" data-item-id="{{item.id}}">
+            <img src="{{item.img}}" alt="{{item.name}}">
+            <span>{{item.name}}</span>
+            {{#if item.quantity}}<strong>{{item.quantity}}</strong>{{/if}}
+          </article>
+          {{/if}}
+        </div>
+        {{/each}}
+      </div>
+    </section>
+  </div>
 </section>

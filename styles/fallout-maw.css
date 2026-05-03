@@ -373,6 +373,125 @@
   box-shadow: 0 0 0 1px rgba(210, 185, 145, 0.2);
 }
 
+.fallout-maw-inventory-summary {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.35fr);
+}
+
+.fallout-maw-inventory-layout {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(220px, 0.35fr) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.fallout-maw-equipment-slot-list,
+.fallout-maw-weapon-set-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.fallout-maw-equipment-pane h2 + .fallout-maw-weapon-set-list,
+.fallout-maw-equipment-pane .fallout-maw-equipment-slot-list + h2 {
+  margin-top: 0.75rem;
+}
+
+.fallout-maw-equipment-slot {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(120, 120, 120, 0.18);
+  border-radius: 4px;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  min-height: 2.2rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.fallout-maw-equipment-slot > span,
+.fallout-maw-equipment-slot > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-equipment-slot > strong {
+  opacity: 0.78;
+  text-align: right;
+}
+
+.fallout-maw-weapon-set {
+  border: 1px solid rgba(120, 120, 120, 0.16);
+  border-radius: 5px;
+  padding: 0.45rem;
+}
+
+.fallout-maw-weapon-set h3 {
+  border: 0;
+  font-size: 0.95rem;
+  margin: 0 0 0.4rem;
+}
+
+.fallout-maw-inventory-grid {
+  display: grid;
+  gap: 0.25rem;
+  grid-template-columns: repeat(var(--fallout-maw-inventory-columns), minmax(38px, 1fr));
+}
+
+.fallout-maw-inventory-cell {
+  aspect-ratio: 1 / 1;
+  background: rgba(0, 0, 0, 0.16);
+  border: 1px solid rgba(120, 120, 120, 0.24);
+  border-radius: 3px;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.fallout-maw-inventory-item {
+  align-items: center;
+  background: rgba(210, 185, 145, 0.12);
+  display: grid;
+  gap: 0.15rem;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100%;
+  padding: 0.2rem;
+}
+
+.fallout-maw-inventory-item img {
+  align-self: center;
+  display: block;
+  justify-self: center;
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.fallout-maw-inventory-item span {
+  font-size: 0.72rem;
+  line-height: 1.05;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-inventory-item strong {
+  background: rgba(0, 0, 0, 0.42);
+  border-radius: 3px;
+  bottom: 0.15rem;
+  font-size: 0.75rem;
+  line-height: 1;
+  min-width: 1.2rem;
+  padding: 0.15rem;
+  position: absolute;
+  right: 0.15rem;
+  text-align: center;
+}
+
 .fallout-maw-fieldset {
   border: 1px solid var(--fallout-maw-border);
   border-radius: 6px;
@@ -484,6 +603,41 @@
 
 .limb-settings .fallout-maw-settings-row {
   grid-template-columns: minmax(160px, 1fr) 130px;
+}
+
+.fallout-maw-equipment-config-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(220px, 0.85fr) minmax(0, 1.15fr);
+}
+
+.fallout-maw-settings-block {
+  min-width: 0;
+}
+
+.fallout-maw-settings-block h3 {
+  border: 0;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.equipment-slot-settings .fallout-maw-settings-row,
+.weapon-slot-settings .fallout-maw-settings-row {
+  grid-template-columns: minmax(0, 1fr) 2.5rem;
+}
+
+.fallout-maw-weapon-set-config {
+  border: 1px solid rgba(120, 120, 120, 0.16);
+  border-radius: 5px;
+  padding: 0.45rem;
+}
+
+.fallout-maw-weapon-set-header {
+  align-items: center;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: minmax(0, 1fr) 2.5rem 2.5rem;
+  margin-bottom: 0.4rem;
 }
 
 .skill-settings .fallout-maw-settings-row,
@@ -598,6 +752,9 @@
   }
 
   .fallout-maw-resource-grid,
+  .fallout-maw-inventory-summary,
+  .fallout-maw-inventory-layout,
+  .fallout-maw-equipment-config-grid,
   .fallout-maw-race-pool-grid,
   .fallout-maw-summary-grid.two-columns,
   .fallout-maw-summary-grid.three-columns {
@@ -611,6 +768,9 @@
   .skill-settings .fallout-maw-settings-row,
   .resource-settings .fallout-maw-settings-row,
   .need-settings .fallout-maw-settings-row,
+  .equipment-slot-settings .fallout-maw-settings-row,
+  .weapon-slot-settings .fallout-maw-settings-row,
+  .fallout-maw-weapon-set-header,
   .characteristic-settings .fallout-maw-settings-row,
   .currency-settings .fallout-maw-settings-row,
   .damage-type-settings .fallout-maw-settings-row,

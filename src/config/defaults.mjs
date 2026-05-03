@@ -56,6 +56,42 @@ export const DEFAULT_LIMBS = Object.freeze([
   { key: "rightLeg", label: "Правая нога", stateMax: 100 }
 ]);
 
+export const DEFAULT_EQUIPMENT_SLOTS = Object.freeze([
+  { key: "helmet", label: "Шлем" },
+  { key: "glasses", label: "Очки" },
+  { key: "mask", label: "Маска" },
+  { key: "clothing", label: "Одежда" },
+  { key: "armor", label: "Броня" },
+  { key: "cloak", label: "Накидка" },
+  { key: "rig", label: "Разгрузка" },
+  { key: "belt", label: "Пояс" },
+  { key: "backpack", label: "Рюкзак" }
+]);
+
+export const DEFAULT_WEAPON_SETS = Object.freeze([
+  {
+    key: "weaponSet1",
+    label: "Набор 1",
+    slots: [
+      { key: "rightHand", limbKey: "rightArm" },
+      { key: "leftHand", limbKey: "leftArm" }
+    ]
+  },
+  {
+    key: "weaponSet2",
+    label: "Набор 2",
+    slots: [
+      { key: "rightHand", limbKey: "rightArm" },
+      { key: "leftHand", limbKey: "leftArm" }
+    ]
+  }
+]);
+
+export const DEFAULT_INVENTORY_SIZE = Object.freeze({
+  columns: 10,
+  rows: 2
+});
+
 export const DEFAULT_RESOURCES = Object.freeze([
   { key: "health", abbr: "hea", label: "Здоровье", formula: "10 + str + con*2" },
   { key: "energy", abbr: "ene", label: "Энергия", formula: "100 + ene" },
