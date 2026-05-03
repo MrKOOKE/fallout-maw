@@ -62,6 +62,18 @@
   </section>
 
   <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Common.DamageDefenses"}}{{#if activeLimb}} - {{activeLimb.label}}{{/if}}</h2>
+    <div class="fallout-maw-summary-grid three-columns">
+      {{#each damageDefenses}}
+      <div class="fallout-maw-inline-stat">
+        <span>{{label}}:</span>
+        <strong>{{value}}</strong>
+      </div>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
     <h2>{{localize "FALLOUTMAW.Actor.Progression"}}</h2>
     <div class="fallout-maw-summary-grid two-columns">
       <label class="fallout-maw-inline-stat">

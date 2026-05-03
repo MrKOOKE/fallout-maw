@@ -1,6 +1,7 @@
 import { toInteger } from "./numbers.mjs";
+import { ITEM_FUNCTIONS, hasItemFunction } from "./item-functions.mjs";
 
-export const CONTAINER_FUNCTION = "container";
+export const CONTAINER_FUNCTION = ITEM_FUNCTIONS.container;
 export const ROOT_CONTAINER_ID = "";
 
 export function getItemsArray(items) {
@@ -24,7 +25,7 @@ export function getItemType(itemOrSystem = null) {
 export function isContainerItem(itemOrSystem = null) {
   return (
     getItemType(itemOrSystem) === "gear"
-    && String(getItemSystem(itemOrSystem)?.itemFunction ?? "") === CONTAINER_FUNCTION
+    && hasItemFunction(itemOrSystem, CONTAINER_FUNCTION)
   );
 }
 

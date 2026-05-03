@@ -205,6 +205,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         ...damageType,
         value: toInteger(actor.system.damageResistances?.[activeLimbKey]?.[damageType.key])
       })),
+      damageDefenses: damageTypeSettings.map(damageType => ({
+        ...damageType,
+        value: toInteger(actor.system.damageDefenses?.[activeLimbKey]?.[damageType.key])
+      })),
       inventory
     }, { inplace: false });
   }
@@ -1008,6 +1012,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       && getItemFootprint(sourceSystem).width === getItemFootprint(targetSystem).width
       && getItemFootprint(sourceSystem).height === getItemFootprint(targetSystem).height
       && serializeSet(getSelectedEquipmentSlotKeys(sourceSystem)) === serializeSet(getSelectedEquipmentSlotKeys(targetSystem))
+      && serializeItemFunctions(sourceSystem.functions) === serializeItemFunctions(targetSystem.functions)
     );
   }
 
@@ -1228,6 +1233,10 @@ function escapeHTML(value) {
 
 function serializeSet(set) {
   return Array.from(set).sort().join("|");
+}
+
+function serializeItemFunctions(functions = {}) {
+  return JSON.stringify(functions ?? {});
 }
 
 function getInventoryGridDimensions(race) {

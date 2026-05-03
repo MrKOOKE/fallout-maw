@@ -1,6 +1,7 @@
 import { TEMPLATES } from "../constants.mjs";
-import { getCreatureOptions, getCurrencySettings } from "../settings/accessors.mjs";
+import { getCreatureOptions, getCurrencySettings, getDamageTypeSettings } from "../settings/accessors.mjs";
 import { groupRaceEquipmentSlotsBySet } from "../utils/equipment-slots.mjs";
+import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { HandlebarsApplicationMixin } = foundry.applications.api;
@@ -26,6 +27,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     }
   };
 
+  static TABS = {
+    primary: {
+      tabs: [
+        { id: "details", group: "primary", label: "FALLOUTMAW.Item.DetailsTab" },
+        { id: "functions", group: "primary", label: "FALLOUTMAW.Item.FunctionsTab" }
+      ],
+      initial: "details"
+    }
+  };
+
   get item() {
     return this.document;
   }
@@ -36,9 +47,29 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const type = item.type;
     const priceCurrency = item.system?.priceCurrency ?? "";
     const occupiedSlots = item.system?.occupiedSlots ?? {};
-    const itemFunction = item.system?.itemFunction ?? "";
-    const equipmentSlotGroups = groupRaceEquipmentSlotsBySet(getCreatureOptions());
+    const creatureOptions = getCreatureOptions();
+    const damageTypeSettings = getDamageTypeSettings();
+    const equipmentSlotGroups = groupRaceEquipmentSlotsBySet(creatureOptions);
     const equipmentSlotSelections = new Map();
+    const hasContainerFunction = hasItemFunction(item, ITEM_FUNCTIONS.container);
+    const hasDamageMitigationFunction = hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation);
+    const availableFunctionChoices = [
+      {
+        value: "",
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionNone"),
+        disabled: false
+      },
+      {
+        value: ITEM_FUNCTIONS.container,
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionContainer"),
+        disabled: hasContainerFunction
+      },
+      {
+        value: ITEM_FUNCTIONS.damageMitigation,
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionDamageMitigation"),
+        disabled: hasDamageMitigationFunction
+      }
+    ];
 
     for (const group of equipmentSlotGroups) {
       for (const slot of group.slots) {
@@ -60,15 +91,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       editable: this.isEditable,
       itemType: type,
       isGear: type === "gear",
-      isContainerFunction: itemFunction === "container",
+      isContainerFunction: hasContainerFunction,
+      hasDamageMitigationFunction,
       isWeapon: type === "weapon",
       isArmor: type === "armor",
       isAbility: type === "ability",
       isEffect: type === "effect",
-      itemFunctionChoices: [
-        { value: "", label: game.i18n.localize("FALLOUTMAW.Item.FunctionNone"), selected: itemFunction === "" },
-        { value: "container", label: game.i18n.localize("FALLOUTMAW.Item.FunctionContainer"), selected: itemFunction === "container" }
-      ],
+      itemFunctionChoices: availableFunctionChoices,
       currencies: getCurrencySettings().map(currency => ({
         ...currency,
         selected: currency.key === priceCurrency
@@ -81,6 +110,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
           selected: Boolean(occupiedSlots[slot.selectionKey])
         }))
       })),
+      damageMitigationModeChoices: buildDamageMitigationModeChoices(item),
+      damageMitigationTable: buildDamageMitigationTable(item, creatureOptions, damageTypeSettings),
       totalWeight: item.totalWeight
     }, { inplace: false });
   }
@@ -90,8 +121,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-equipment-slot-choice]").forEach(button => {
       button.addEventListener("click", event => this.#onEquipmentSlotChoice(event));
     });
-    this.element?.querySelector('select[name="system.itemFunction"]')?.addEventListener("change", event => {
-      this.#onItemFunctionChange(event);
+    this.element?.querySelector("[data-add-item-function]")?.addEventListener("click", event => this.#onAddItemFunction(event));
+    this.element?.querySelectorAll("[data-remove-item-function]").forEach(button => {
+      button.addEventListener("click", event => this.#onRemoveItemFunction(event));
     });
   }
 
@@ -111,12 +143,84 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.item.update({ [`system.occupiedSlots.${key}`]: input.checked });
   }
 
-  #onItemFunctionChange(event) {
-    const nextValue = String(event.currentTarget?.value ?? "");
-    if (nextValue !== "container") return;
-    return this.item.update({
-      "system.quantity": 1,
-      "system.maxStack": 1
-    });
+  #onAddItemFunction(event) {
+    event.preventDefault();
+    const select = this.element.querySelector("[data-item-function-select]");
+    const functionKey = String(select?.value ?? "");
+    if (!functionKey) return undefined;
+
+    if (functionKey === ITEM_FUNCTIONS.container) {
+      return this.item.update({
+        "system.itemFunction": ITEM_FUNCTIONS.container,
+        "system.functions.container.enabled": true,
+        "system.quantity": 1,
+        "system.maxStack": 1
+      });
+    }
+
+    if (functionKey === ITEM_FUNCTIONS.damageMitigation) {
+      return this.item.update({
+        "system.functions.damageMitigation.enabled": true,
+        "system.functions.damageMitigation.mode": "defense"
+      });
+    }
+
+    return undefined;
   }
+
+  #onRemoveItemFunction(event) {
+    event.preventDefault();
+    const functionKey = String(event.currentTarget?.dataset?.removeItemFunction ?? "");
+    if (functionKey === ITEM_FUNCTIONS.container) {
+      return this.item.update({
+        "system.itemFunction": "",
+        "system.functions.container.enabled": false
+      });
+    }
+    if (functionKey === ITEM_FUNCTIONS.damageMitigation) {
+      return this.item.update({ "system.functions.damageMitigation.enabled": false });
+    }
+    return undefined;
+  }
+}
+
+function buildDamageMitigationModeChoices(item) {
+  const mode = String(item.system?.functions?.damageMitigation?.mode || "defense");
+  return [
+    { value: "defense", label: game.i18n.localize("FALLOUTMAW.Item.MitigationModeDefense"), selected: mode === "defense" },
+    { value: "resistance", label: game.i18n.localize("FALLOUTMAW.Item.MitigationModeResistance"), selected: mode === "resistance" }
+  ];
+}
+
+function buildDamageMitigationTable(item, creatureOptions, damageTypeSettings) {
+  const limbs = getUniqueLimbs(creatureOptions);
+  const entries = item.system?.functions?.damageMitigation?.entries ?? {};
+
+  return {
+    limbs,
+    columns: Math.max(1, limbs.length),
+    rows: damageTypeSettings.map(damageType => ({
+      damageTypeKey: damageType.key,
+      damageTypeLabel: damageType.label,
+      cells: limbs.map(limb => ({
+        limbKey: limb.key,
+        damageTypeKey: damageType.key,
+        value: Number(entries?.[limb.key]?.[damageType.key]?.value) || 0
+      }))
+    }))
+  };
+}
+
+function getUniqueLimbs(creatureOptions) {
+  const limbs = new Map();
+  for (const race of creatureOptions?.races ?? []) {
+    for (const limb of race.limbs ?? []) {
+      if (limbs.has(limb.key)) continue;
+      limbs.set(limb.key, {
+        key: limb.key,
+        label: String(limb.label ?? limb.name ?? limb.key)
+      });
+    }
+  }
+  return Array.from(limbs.values());
 }

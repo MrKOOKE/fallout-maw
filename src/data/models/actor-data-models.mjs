@@ -17,6 +17,12 @@ import {
   getSkillSettings
 } from "../../settings/accessors.mjs";
 import { resourceField } from "./resources.mjs";
+import {
+  DAMAGE_MITIGATION_MODES,
+  ITEM_FUNCTIONS,
+  getDamageMitigationFunction,
+  hasItemFunction
+} from "../../utils/item-functions.mjs";
 import { toInteger } from "../../utils/numbers.mjs";
 
 const { HTMLField, NumberField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
@@ -52,6 +58,20 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         }),
         { required: true, initial: {}, persisted: false }
       ),
+      damageDefenses: new TypedObjectField(
+        new TypedObjectField(new NumberField({ required: true, integer: true, min: 0, initial: 0 }), {
+          required: true,
+          initial: {}
+        }),
+        { required: true, initial: {}, persisted: false }
+      ),
+      damageReductions: new TypedObjectField(
+        new TypedObjectField(new NumberField({ required: true, integer: true, min: 0, initial: 0 }), {
+          required: true,
+          initial: {}
+        }),
+        { required: true, initial: {}, persisted: false }
+      ),
       progression: new SchemaField({
         skillPointsPerLevel: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
         researchPointsPerLevel: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
@@ -74,6 +94,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.limbs ??= {};
     this.currencies ??= {};
     this.damageResistances ??= {};
+    this.damageDefenses ??= {};
+    this.damageReductions ??= {};
 
     replaceObjectContents(this.characteristics, normalizeNumberMap(this.characteristics, characteristicSettings));
     replaceObjectContents(this.currencies, normalizeNumberMap(this.currencies, currencySettings));
@@ -108,20 +130,21 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     );
     replaceObjectContents(this.needs, normalizeResourceMap(this.needs, needSettings, needMaximums));
 
-    replaceObjectContents(
-      this.damageResistances,
-      buildLimbDamageResistanceMap(
-        this.limbs,
-        evaluateFormulaMap(
-          getRaceDamageResistanceFormulas(race, damageTypeSettings),
-          damageTypeSettings,
-          characteristicSettings,
-          skillSettings,
-          this.characteristics,
-          skillValues
-        )
+    const baseDamageResistances = buildLimbDamageResistanceMap(
+      this.limbs,
+      evaluateFormulaMap(
+        getRaceDamageResistanceFormulas(race, damageTypeSettings),
+        damageTypeSettings,
+        characteristicSettings,
+        skillSettings,
+        this.characteristics,
+        skillValues
       )
     );
+    const itemMitigation = buildEquippedItemDamageMitigation(this.parent?.items, this.limbs, damageTypeSettings);
+    replaceObjectContents(this.damageResistances, mergeLimbDamageMaps(baseDamageResistances, itemMitigation.resistances));
+    replaceObjectContents(this.damageDefenses, itemMitigation.defenses);
+    replaceObjectContents(this.damageReductions, itemMitigation.reductions);
   }
 }
 
@@ -224,6 +247,61 @@ function normalizeLimbMap(currentLimbs = {}, settings = []) {
 function buildLimbDamageResistanceMap(limbs = {}, resistanceValues = {}) {
   return Object.fromEntries(
     Object.keys(limbs ?? {}).map(limbKey => [limbKey, { ...resistanceValues }])
+  );
+}
+
+function buildEmptyLimbDamageMap(limbs = {}, damageTypeSettings = []) {
+  return Object.fromEntries(
+    Object.keys(limbs ?? {}).map(limbKey => [
+      limbKey,
+      Object.fromEntries(damageTypeSettings.map(damageType => [damageType.key, 0]))
+    ])
+  );
+}
+
+function buildEquippedItemDamageMitigation(items, limbs = {}, damageTypeSettings = []) {
+  const defenses = buildEmptyLimbDamageMap(limbs, damageTypeSettings);
+  const resistances = buildEmptyLimbDamageMap(limbs, damageTypeSettings);
+  const reductions = buildEmptyLimbDamageMap(limbs, damageTypeSettings);
+  const limbKeys = new Set(Object.keys(limbs ?? {}));
+  const damageTypeKeys = new Set(damageTypeSettings.map(damageType => damageType.key));
+
+  for (const item of items?.contents ?? Array.from(items ?? [])) {
+    if (item.type !== "gear" || !item.system?.equipped || !hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation)) continue;
+    const mitigation = getDamageMitigationFunction(item);
+    const mode = String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense);
+    const finalReduction = Math.max(0, toInteger(mitigation.finalReduction));
+
+    for (const [limbKey, damageEntries] of Object.entries(mitigation.entries ?? {})) {
+      if (!limbKeys.has(limbKey)) continue;
+      for (const [damageTypeKey, entry] of Object.entries(damageEntries ?? {})) {
+        if (!damageTypeKeys.has(damageTypeKey)) continue;
+        const value = Math.max(0, toInteger(entry?.value));
+        if (!value) continue;
+
+        if (mode === DAMAGE_MITIGATION_MODES.defense) defenses[limbKey][damageTypeKey] += value;
+        else if (mode === DAMAGE_MITIGATION_MODES.resistance) resistances[limbKey][damageTypeKey] += value;
+        else continue;
+
+        reductions[limbKey][damageTypeKey] += finalReduction;
+      }
+    }
+  }
+
+  return { defenses, resistances, reductions };
+}
+
+function mergeLimbDamageMaps(base = {}, bonus = {}) {
+  return Object.fromEntries(
+    Object.entries(base ?? {}).map(([limbKey, damageTypes]) => [
+      limbKey,
+      Object.fromEntries(
+        Object.entries(damageTypes ?? {}).map(([damageTypeKey, value]) => [
+          damageTypeKey,
+          Math.max(0, toInteger(value)) + Math.max(0, toInteger(bonus?.[limbKey]?.[damageTypeKey]))
+        ])
+      )
+    ])
   );
 }
 

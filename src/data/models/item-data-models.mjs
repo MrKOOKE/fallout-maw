@@ -36,6 +36,18 @@ export class GearDataModel extends BaseItemDataModel {
     return {
       ...super.defineSchema(),
       itemFunction: new StringField({ required: true, blank: true, initial: "" }),
+      functions: new SchemaField({
+        container: itemFunctionField(),
+        damageMitigation: new SchemaField({
+          enabled: new BooleanField({ required: true, initial: false }),
+          mode: new StringField({ required: true, blank: false, initial: "defense" }),
+          finalReduction: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          entries: new TypedObjectField(
+            new TypedObjectField(damageMitigationEntryField(), { required: true, initial: {} }),
+            { required: true, initial: {} }
+          )
+        })
+      }),
       container: new SchemaField({
         parentId: new StringField({ required: true, blank: true, initial: "" }),
         columns: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
@@ -83,4 +95,16 @@ export class EffectDataModel extends BaseItemDataModel {
       duration: new StringField({ required: true, blank: true, initial: "" })
     };
   }
+}
+
+function itemFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false })
+  });
+}
+
+function damageMitigationEntryField() {
+  return new SchemaField({
+    value: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+  });
 }

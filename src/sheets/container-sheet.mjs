@@ -655,8 +655,13 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       && Number(sourceSystem.price) === Number(targetSystem.price)
       && String(sourceSystem.priceCurrency ?? "") === String(targetSystem.priceCurrency ?? "")
       && getItemMaxStack(sourceSystem) === getItemMaxStack(targetSystem)
+      && serializeItemFunctions(sourceSystem.functions) === serializeItemFunctions(targetSystem.functions)
     );
   }
+}
+
+function serializeItemFunctions(functions = {}) {
+  return JSON.stringify(functions ?? {});
 }
 
 function formatWeight(value) {

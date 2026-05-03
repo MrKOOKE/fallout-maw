@@ -78,12 +78,25 @@ export class FalloutMaWActor extends Actor {
     return Math.max(0, Math.floor(Number(this.system?.damageResistances?.[resolvedLimbKey]?.[damageTypeKey]) || 0));
   }
 
+  getDamageDefense(damageTypeKey, limbKey = "") {
+    const resolvedLimbKey = limbKey || Object.keys(this.system?.limbs ?? {})[0] || "";
+    return Math.max(0, Math.floor(Number(this.system?.damageDefenses?.[resolvedLimbKey]?.[damageTypeKey]) || 0));
+  }
+
+  getDamageReduction(damageTypeKey, limbKey = "") {
+    const resolvedLimbKey = limbKey || Object.keys(this.system?.limbs ?? {})[0] || "";
+    return Math.max(0, Math.floor(Number(this.system?.damageReductions?.[resolvedLimbKey]?.[damageTypeKey]) || 0));
+  }
+
   async applyDamage(amount = 0, { damageTypeKey = "", limbKey = "" } = {}) {
     const incomingDamage = Math.max(0, Math.floor(Number(amount) || 0));
     if (!this.health || (incomingDamage === 0)) return this;
 
     const resistance = damageTypeKey ? this.getDamageResistance(damageTypeKey, limbKey) : 0;
-    const damage = Math.max(0, incomingDamage - resistance);
+    const defense = damageTypeKey ? Math.min(100, this.getDamageDefense(damageTypeKey, limbKey)) : 0;
+    const reduction = damageTypeKey ? this.getDamageReduction(damageTypeKey, limbKey) : 0;
+    const defendedDamage = Math.floor(incomingDamage * (1 - (defense / 100)));
+    const damage = Math.max(0, defendedDamage - resistance - reduction);
     if (damage === 0) return this;
 
     const nextValue = Math.max(this.health.min, this.health.value - damage);

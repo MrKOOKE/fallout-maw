@@ -33,6 +33,142 @@
   </div>
 </header>
 
+{{#if isGear}}
+<nav class="sheet-tabs tabs fallout-maw-item-tabs" data-group="primary">
+  <a class="item {{tabs.details.cssClass}}" data-action="tab" data-group="{{tabs.details.group}}" data-tab="{{tabs.details.id}}">{{localize "FALLOUTMAW.Item.DetailsTab"}}</a>
+  <a class="item {{tabs.functions.cssClass}}" data-action="tab" data-group="{{tabs.functions.group}}" data-tab="{{tabs.functions.id}}">{{localize "FALLOUTMAW.Item.FunctionsTab"}}</a>
+</nav>
+
+<section class="tab {{tabs.details.cssClass}}" data-group="{{tabs.details.group}}" data-tab="{{tabs.details.id}}">
+  <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Item.Core"}}</h2>
+    <div class="fallout-maw-list-grid two-columns">
+      <label class="checkbox">
+        <input type="checkbox" name="system.equipped" {{checked system.equipped}}>
+        <span>{{localize "FALLOUTMAW.Item.Equipped"}}</span>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.MaxStack"}}</span>
+        <input type="number" name="system.maxStack" value="{{system.maxStack}}" min="1" step="1" {{#if isContainerFunction}}disabled{{/if}}>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.InventoryWidth"}}</span>
+        <input type="number" name="system.placement.width" value="{{system.placement.width}}" min="1" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.InventoryHeight"}}</span>
+        <input type="number" name="system.placement.height" value="{{system.placement.height}}" min="1" step="1">
+      </label>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Item.OccupiedSlots"}}</h2>
+    <div class="fallout-maw-hidden-controls">
+      {{#each equipmentSlotSelections}}
+      <input type="checkbox" name="system.occupiedSlots.{{selectionKey}}" data-equipment-slot-input="{{selectionKey}}" {{checked selected}}>
+      {{/each}}
+    </div>
+    <div class="fallout-maw-occupied-slot-groups">
+      {{#each equipmentSlotGroups}}
+      <section class="fallout-maw-occupied-slot-group">
+        <strong>{{raceNames}}</strong>
+        <div class="fallout-maw-occupied-slot-list">
+          {{#each slots}}
+          <button type="button" class="fallout-maw-occupied-slot-choice {{#if selected}}active{{/if}}" data-equipment-slot-choice="{{selectionKey}}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}">
+            {{label}}
+          </button>
+          {{/each}}
+        </div>
+      </section>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoEquipmentSlots"}}</p>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel fallout-maw-description-panel">
+    <h2>{{localize "FALLOUTMAW.Common.Description"}}</h2>
+    {{editor system.description target="system.description" button=true owner=owner editable=editable}}
+  </section>
+</section>
+
+<section class="tab {{tabs.functions.cssClass}}" data-group="{{tabs.functions.group}}" data-tab="{{tabs.functions.id}}">
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Item.FunctionsTab"}}</h2>
+      <div class="fallout-maw-inline-controls">
+        <select data-item-function-select>
+          {{#each itemFunctionChoices}}
+          <option value="{{value}}" {{#if disabled}}disabled{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <button type="button" data-add-item-function><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.AddFunction"}}</button>
+      </div>
+    </div>
+  </section>
+
+  {{#if isContainerFunction}}
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Item.FunctionContainer"}}</h2>
+      <button type="button" data-remove-item-function="container" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.ContainerColumns"}}</span>
+        <input type="number" name="system.container.columns" value="{{system.container.columns}}" min="1" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.ContainerRows"}}</span>
+        <input type="number" name="system.container.rows" value="{{system.container.rows}}" min="1" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.ContainerMaxLoad"}}</span>
+        <input type="number" name="system.container.maxLoad" value="{{system.container.maxLoad}}" min="0" step="0.1">
+      </label>
+    </div>
+  </section>
+  {{/if}}
+
+  {{#if hasDamageMitigationFunction}}
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Item.FunctionDamageMitigation"}}</h2>
+      <button type="button" data-remove-item-function="damageMitigation" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <div class="fallout-maw-mitigation-controls">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.MitigationMode"}}</span>
+        <select name="system.functions.damageMitigation.mode">
+          {{#each damageMitigationModeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.FinalDamageReduction"}}</span>
+        <input type="number" name="system.functions.damageMitigation.finalReduction" value="{{system.functions.damageMitigation.finalReduction}}" min="0" step="1">
+      </label>
+    </div>
+    <div class="fallout-maw-mitigation-matrix" style="--fallout-maw-mitigation-columns: {{damageMitigationTable.columns}};">
+      <div class="fallout-maw-mitigation-cell fallout-maw-grid-header">{{localize "FALLOUTMAW.Settings.DamageTypes.Title"}}</div>
+      {{#each damageMitigationTable.limbs}}
+      <div class="fallout-maw-mitigation-cell fallout-maw-grid-header">{{label}}</div>
+      {{/each}}
+      {{#each damageMitigationTable.rows}}
+      <div class="fallout-maw-mitigation-cell fallout-maw-mitigation-damage-type">{{damageTypeLabel}}</div>
+      {{#each cells}}
+      <label class="fallout-maw-mitigation-cell">
+        <input type="number" name="system.functions.damageMitigation.entries.{{limbKey}}.{{damageTypeKey}}.value" value="{{value}}" min="0" step="1">
+      </label>
+      {{/each}}
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+</section>
+{{else}}
 <section class="fallout-maw-panel">
   <h2>{{localize "FALLOUTMAW.Item.Core"}}</h2>
   <div class="fallout-maw-list-grid two-columns">
@@ -40,79 +176,18 @@
       <input type="checkbox" name="system.equipped" {{checked system.equipped}}>
       <span>{{localize "FALLOUTMAW.Item.Equipped"}}</span>
     </label>
-
-    {{#if isGear}}
-    <label>
-      <span>{{localize "FALLOUTMAW.Item.Function"}}</span>
-      <select name="system.itemFunction">
-        {{#each itemFunctionChoices}}
-        <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-        {{/each}}
-      </select>
-    </label>
-    {{/if}}
-
     <label>
       <span>{{localize "FALLOUTMAW.Item.MaxStack"}}</span>
-      <input type="number" name="system.maxStack" value="{{system.maxStack}}" min="1" step="1" {{#if isContainerFunction}}disabled{{/if}}>
+      <input type="number" name="system.maxStack" value="{{system.maxStack}}" min="1" step="1">
     </label>
-
     <label>
       <span>{{localize "FALLOUTMAW.Item.InventoryWidth"}}</span>
       <input type="number" name="system.placement.width" value="{{system.placement.width}}" min="1" step="1">
     </label>
-
     <label>
       <span>{{localize "FALLOUTMAW.Item.InventoryHeight"}}</span>
       <input type="number" name="system.placement.height" value="{{system.placement.height}}" min="1" step="1">
     </label>
-
-    {{#if isContainerFunction}}
-    <section class="fallout-maw-occupied-slots-field">
-      <h3>{{localize "FALLOUTMAW.Item.ContainerSettings"}}</h3>
-      <div class="fallout-maw-list-grid three-columns">
-        <label>
-          <span>{{localize "FALLOUTMAW.Item.ContainerColumns"}}</span>
-          <input type="number" name="system.container.columns" value="{{system.container.columns}}" min="1" step="1">
-        </label>
-        <label>
-          <span>{{localize "FALLOUTMAW.Item.ContainerRows"}}</span>
-          <input type="number" name="system.container.rows" value="{{system.container.rows}}" min="1" step="1">
-        </label>
-        <label>
-          <span>{{localize "FALLOUTMAW.Item.ContainerMaxLoad"}}</span>
-          <input type="number" name="system.container.maxLoad" value="{{system.container.maxLoad}}" min="0" step="0.1">
-        </label>
-      </div>
-    </section>
-    {{/if}}
-
-    {{#if isGear}}
-    <section class="fallout-maw-occupied-slots-field">
-      <h3>{{localize "FALLOUTMAW.Item.OccupiedSlots"}}</h3>
-      <div class="fallout-maw-hidden-controls">
-        {{#each equipmentSlotSelections}}
-        <input type="checkbox" name="system.occupiedSlots.{{selectionKey}}" data-equipment-slot-input="{{selectionKey}}" {{checked selected}}>
-        {{/each}}
-      </div>
-      <div class="fallout-maw-occupied-slot-groups">
-        {{#each equipmentSlotGroups}}
-        <section class="fallout-maw-occupied-slot-group">
-          <strong>{{raceNames}}</strong>
-          <div class="fallout-maw-occupied-slot-list">
-            {{#each slots}}
-            <button type="button" class="fallout-maw-occupied-slot-choice {{#if selected}}active{{/if}}" data-equipment-slot-choice="{{selectionKey}}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}">
-              {{label}}
-            </button>
-            {{/each}}
-          </div>
-        </section>
-        {{else}}
-        <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoEquipmentSlots"}}</p>
-        {{/each}}
-      </div>
-    </section>
-    {{/if}}
 
     {{#if isWeapon}}
     <label>
@@ -156,8 +231,9 @@
   </div>
 </section>
 
-<section class="fallout-maw-panel">
+<section class="fallout-maw-panel fallout-maw-description-panel">
   <h2>{{localize "FALLOUTMAW.Common.Description"}}</h2>
   {{editor system.description target="system.description" button=true owner=owner editable=editable}}
 </section>
+{{/if}}
 </div>
