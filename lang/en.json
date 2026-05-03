@@ -26,6 +26,7 @@
       "Characteristics": "Characteristics",
       "Code": "Code",
       "Create": "Create",
+      "Currencies": "Currencies",
       "DamageResistances": "Damage Resistances",
       "Delete": "Delete",
       "Description": "Description",
@@ -33,6 +34,7 @@
       "Formula": "Formula",
       "Health": "Health",
       "Hunger": "Hunger",
+      "Image": "Image",
       "Kg": "kg",
       "Key": "Key",
       "Label": "Name",
@@ -48,8 +50,10 @@
       "Skills": "Skills",
       "Sleepiness": "Sleepiness",
       "Thirst": "Thirst",
+      "Path": "Path",
       "Total": "Total",
-      "Untitled": "Untitled"
+      "Untitled": "Untitled",
+      "Value": "Value"
     },
     "Actor": {
       "Base": "Base",
@@ -136,6 +140,12 @@
         "LabelPlaceholder": "Damage type name",
         "Title": "Damage Type Settings"
       },
+      "Currencies": {
+        "Create": "Create Currency",
+        "Empty": "No currencies created.",
+        "ImageHint": "Store image files in systems/fallout-maw/assets/currencies and enter the full system path here.",
+        "Title": "Currency Settings"
+      },
       "Needs": {
         "Create": "Create Need",
         "Empty": "No needs created.",
@@ -159,6 +169,7 @@
     },
     "Messages": {
       "CharacteristicsSaved": "Characteristic settings saved.",
+      "CurrenciesSaved": "Currency settings saved.",
       "CreateTypeFirst": "Create a creature type first.",
       "CreatureOptionsSaved": "Creature options saved.",
       "DamageTypesSaved": "Damage type settings saved.",
@@ -185,6 +196,9 @@
       "CharacteristicAbbrInvalid": "Characteristic {index}: code must be a Latin identifier.",
       "CharacteristicKeyDuplicate": "Characteristic key \"{key}\" is duplicated.",
       "CharacteristicKeyInvalid": "Characteristic {index}: key must be a Latin identifier.",
+      "CurrencyKeyDuplicate": "Currency key \"{key}\" is duplicated.",
+      "CurrencyKeyInvalid": "Currency {index}: key must be a Latin identifier.",
+      "CurrencyValueInvalid": "Currency {index}: value must be a number greater than or equal to 0.",
       "DamageTypeKeyDuplicate": "Damage type key \"{key}\" is duplicated.",
       "DamageTypeKeyInvalid": "Damage type {index}: key must be a Latin identifier.",
       "NeedAbbrDuplicate": "Need code \"{abbr}\" is duplicated.",

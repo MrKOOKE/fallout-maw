@@ -298,6 +298,81 @@
   width: 6rem;
 }
 
+.fallout-maw-currency-list {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
+}
+
+.fallout-maw-currency-chip {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+  max-width: 100%;
+}
+
+.fallout-maw-currency-icon,
+.fallout-maw-currency-preview {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(120, 120, 120, 0.18);
+  border-radius: 2px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.fallout-maw-currency-icon {
+  height: 50px;
+  width: 50px;
+}
+
+.fallout-maw-currency-preview {
+  height: 24px;
+  width: 24px;
+}
+
+.fallout-maw-currency-icon > img,
+.fallout-maw-currency-preview > img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.fallout-maw-currency-icon-placeholder,
+.fallout-maw-currency-preview-placeholder {
+  background: linear-gradient(135deg, rgba(210, 185, 145, 0.28), rgba(120, 120, 120, 0.16));
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.fallout-maw-currency-amount,
+.fallout-maw-currency-amount-input {
+  display: inline-block;
+  text-align: right;
+  white-space: nowrap;
+  width: 7rem;
+}
+
+.fallout-maw-currency-preview-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  display: inline-flex;
+  justify-content: center;
+  padding: 0;
+}
+
+.fallout-maw-currency-preview-button:hover .fallout-maw-currency-preview,
+.fallout-maw-currency-preview-button:focus-visible .fallout-maw-currency-preview {
+  border-color: rgba(210, 185, 145, 0.55);
+  box-shadow: 0 0 0 1px rgba(210, 185, 145, 0.2);
+}
+
 .fallout-maw-fieldset {
   border: 1px solid var(--fallout-maw-border);
   border-radius: 6px;
@@ -332,6 +407,10 @@
   align-items: center;
   display: grid;
   gap: 0.35rem;
+}
+
+.fallout-maw-settings-row > * {
+  min-width: 0;
 }
 
 .fallout-maw-skill-row {
@@ -375,6 +454,32 @@
 
 .damage-type-settings .fallout-maw-settings-row {
   grid-template-columns: 2rem minmax(130px, 1fr) minmax(160px, 1.4fr) 2.5rem;
+}
+
+.currency-settings .fallout-maw-settings-row {
+  grid-template-columns: 2rem 6rem minmax(0, 0.68fr) minmax(0, 0.9fr) 110px 2.5rem;
+}
+
+.currency-settings {
+  overflow-x: auto;
+}
+
+.currency-settings .fallout-maw-grid-header > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.currency-settings .fallout-maw-grid-header > :nth-child(2),
+.currency-settings [data-currency-row] > :nth-child(2) {
+  justify-self: center;
+  text-align: center;
+}
+
+.currency-settings input[type="text"],
+.currency-settings input[type="number"] {
+  min-width: 0;
+  width: 100%;
 }
 
 .limb-settings .fallout-maw-settings-row {
@@ -507,6 +612,7 @@
   .resource-settings .fallout-maw-settings-row,
   .need-settings .fallout-maw-settings-row,
   .characteristic-settings .fallout-maw-settings-row,
+  .currency-settings .fallout-maw-settings-row,
   .damage-type-settings .fallout-maw-settings-row,
   .limb-settings .fallout-maw-settings-row,
   .fallout-maw-skill-row {

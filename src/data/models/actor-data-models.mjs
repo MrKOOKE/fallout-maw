@@ -10,6 +10,7 @@ import {
 import {
   getCharacteristicSettings,
   getCreatureOptions,
+  getCurrencySettings,
   getDamageTypeSettings,
   getNeedSettings,
   getResourceSettings,
@@ -28,6 +29,10 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       needs: new TypedObjectField(resourceField(), { required: true, initial: {} }),
       load: resourceField(0, 0, { required: true, persisted: false }),
       limbs: new TypedObjectField(limbField(), { required: true, initial: {} }),
+      currencies: new TypedObjectField(
+        new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+        { required: true, initial: {} }
+      ),
       attributes: new SchemaField({
         level: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
       }),
@@ -58,6 +63,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     const characteristicSettings = getCharacteristicSettings();
     const skillSettings = getSkillSettings();
     const damageTypeSettings = getDamageTypeSettings();
+    const currencySettings = getCurrencySettings();
     const resourceSettings = getResourceSettings();
     const needSettings = getNeedSettings();
 
@@ -66,9 +72,11 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.resources ??= {};
     this.needs ??= {};
     this.limbs ??= {};
+    this.currencies ??= {};
     this.damageResistances ??= {};
 
     replaceObjectContents(this.characteristics, normalizeNumberMap(this.characteristics, characteristicSettings));
+    replaceObjectContents(this.currencies, normalizeNumberMap(this.currencies, currencySettings));
 
     const race = getCreatureOptions(characteristicSettings, damageTypeSettings).races.find(entry => entry.id === this.creature?.raceId);
     if (race?.progression) {

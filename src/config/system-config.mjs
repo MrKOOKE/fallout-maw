@@ -1,6 +1,7 @@
 import { ACTOR_TYPES, ITEM_TYPES, SYSTEM_ID, SYSTEM_TITLE } from "../constants.mjs";
 import {
   DEFAULT_CHARACTERISTICS,
+  DEFAULT_CURRENCIES,
   DEFAULT_DAMAGE_TYPES,
   DEFAULT_NEEDS,
   DEFAULT_RESOURCES,
@@ -13,14 +14,16 @@ export const FALLOUT_MAW = {
   actorTypes: [...ACTOR_TYPES],
   itemTypes: [...ITEM_TYPES],
   characteristics: entriesToLabels(DEFAULT_CHARACTERISTICS),
+  currencies: cloneEntries(DEFAULT_CURRENCIES),
   skills: entriesToLabels(DEFAULT_SKILLS),
   resources: entriesToLabels(DEFAULT_RESOURCES),
   needs: entriesToLabels(DEFAULT_NEEDS),
   damageTypes: entriesToLabels(DEFAULT_DAMAGE_TYPES)
 };
 
-export function syncSystemConfig({ characteristics, skills, resources, needs, damageTypes } = {}) {
+export function syncSystemConfig({ characteristics, currencies, skills, resources, needs, damageTypes } = {}) {
   if (characteristics) FALLOUT_MAW.characteristics = entriesToLabels(characteristics);
+  if (currencies) FALLOUT_MAW.currencies = cloneEntries(currencies);
   if (skills) FALLOUT_MAW.skills = entriesToLabels(skills);
   if (resources) FALLOUT_MAW.resources = entriesToLabels(resources);
   if (needs) FALLOUT_MAW.needs = entriesToLabels(needs);
@@ -31,4 +34,8 @@ export function syncSystemConfig({ characteristics, skills, resources, needs, da
 
 function entriesToLabels(entries) {
   return Object.fromEntries(entries.map(entry => [entry.key, entry.label]));
+}
+
+function cloneEntries(entries) {
+  return entries.map(entry => ({ ...entry }));
 }

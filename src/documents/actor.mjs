@@ -1,7 +1,7 @@
 import { TEMPLATES } from "../constants.mjs";
 import { clampPreparedResource } from "../data/models/resources.mjs";
 import { evaluateFormula, getSkillValues } from "../formulas/index.mjs";
-import { getCharacteristicSettings, getCreatureOptions, getSkillSettings } from "../settings/accessors.mjs";
+import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
 
 export class FalloutMaWActor extends Actor {
   static async createDialog(data = {}, createOptions = {}, dialogOptions = {}, renderOptions = {}) {
@@ -118,6 +118,7 @@ export class FalloutMaWActor extends Actor {
 
     this.updateSource({
       system: {
+        currencies: initializeCurrencyMap(getCurrencySettings()),
         resources: maximizeResourceMap(this.system?.resources),
         needs: maximizeResourceMap(this.system?.needs),
         limbs: maximizeResourceMap(this.system?.limbs)
@@ -182,6 +183,10 @@ function maximizeResourceMap(resources = {}) {
       return [key, { ...resource, min, value: max, max }];
     })
   );
+}
+
+function initializeCurrencyMap(currencies = []) {
+  return Object.fromEntries(currencies.map(currency => [currency.key, 0]));
 }
 
 function syncTrackedResourceValueUpdates(actor, changes) {

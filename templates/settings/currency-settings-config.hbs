@@ -1,0 +1,47 @@
+<div class="fallout-maw-config-body">
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Settings.Currencies.Title"}}</h2>
+      <div class="fallout-maw-button-row">
+        <button type="button" data-action="createCurrency"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Settings.Currencies.Create"}}</button>
+        <button type="button" data-action="resetDefaults"><i class="fa-solid fa-rotate-left"></i> {{localize "FALLOUTMAW.Common.ResetDefaults"}}</button>
+      </div>
+    </header>
+
+    <div class="fallout-maw-settings-table currency-settings">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span></span>
+        <span>{{localize "FALLOUTMAW.Common.Image"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Key"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span></span>
+      </div>
+      {{#each currencies}}
+      <div class="fallout-maw-settings-row" data-currency-row>
+        <button type="button" class="fallout-maw-drag-handle" data-drag-handle title="{{localize 'FALLOUTMAW.Common.Reorder'}}"><i class="fa-solid fa-grip-lines"></i></button>
+        <button type="button" class="fallout-maw-currency-preview-button" data-action="browseCurrencyImage" title="{{label}}">
+          <span class="fallout-maw-currency-preview">
+            {{#if hasImage}}
+            <img src="{{img}}" alt="{{label}}">
+            {{else}}
+            <span class="fallout-maw-currency-preview-placeholder"></span>
+            {{/if}}
+          </span>
+        </button>
+        <input type="hidden" data-field="img" value="{{img}}">
+        <input type="text" data-field="key" value="{{key}}">
+        <input type="text" data-field="label" value="{{label}}">
+        <input type="number" data-field="value" value="{{value}}" min="0" step="0.01">
+        <button type="button" data-action="deleteCurrency" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.Currencies.Empty"}}</p>
+      {{/each}}
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  </footer>
+</div>

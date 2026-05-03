@@ -6,9 +6,11 @@ import {
   createDefaultResourceSettings,
   createDefaultSkillSettings
 } from "../formulas/index.mjs";
+import { createDefaultCurrencySettings } from "./currency-settings.mjs";
 import { localize } from "../utils/i18n.mjs";
 import { CharacteristicsConfig } from "../apps/characteristics-config.mjs";
 import { CreatureOptionsConfig } from "../apps/creature-options-config.mjs";
+import { CurrencySettingsConfig } from "../apps/currency-settings-config.mjs";
 import { DamageTypesConfig } from "../apps/damage-types-config.mjs";
 import { NeedSettingsConfig } from "../apps/need-settings-config.mjs";
 import { ResourceSettingsConfig } from "../apps/resource-settings-config.mjs";
@@ -17,6 +19,7 @@ import { refreshPreparedActors, syncSettingsIntoSystemConfig } from "./accessors
 import {
   CHARACTERISTICS_SETTING,
   CREATURE_OPTIONS_SETTING,
+  CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
   NEED_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
@@ -58,6 +61,15 @@ export function registerSystemSettings() {
     config: false,
     type: Object,
     default: createDefaultDamageTypeSettings(),
+    onChange: refreshPreparedActors
+  });
+
+  game.settings.register(FALLOUT_MAW.id, CURRENCY_SETTINGS_SETTING, {
+    name: localize("FALLOUTMAW.Settings.Currencies.Title"),
+    scope: "world",
+    config: false,
+    type: Object,
+    default: createDefaultCurrencySettings(),
     onChange: refreshPreparedActors
   });
 
@@ -108,6 +120,14 @@ export function registerSystemSettings() {
     label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-shield-halved",
     type: DamageTypesConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "currencySettingsMenu", {
+    name: localize("FALLOUTMAW.Settings.Currencies.Title"),
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-coins",
+    type: CurrencySettingsConfig,
     restricted: true
   });
 

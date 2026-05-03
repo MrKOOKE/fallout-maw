@@ -3,6 +3,7 @@ import { TEMPLATES } from "../constants.mjs";
 import {
   getCharacteristicSettings,
   getCreatureOptions,
+  getCurrencySettings,
   getDamageTypeSettings,
   getNeedSettings,
   getResourceSettings,
@@ -75,6 +76,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const actor = this.actor;
     const creatureOptions = getCreatureOptions();
     const characteristicSettings = getCharacteristicSettings();
+    const currencySettings = getCurrencySettings();
     const damageTypeSettings = getDamageTypeSettings();
     const resourceSettings = getResourceSettings();
     const needSettings = getNeedSettings();
@@ -109,6 +111,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         value: formatWeight(actor.system.load?.value),
         max: formatWeight(actor.system.load?.max)
       },
+      currencies: currencySettings.map(currency => ({
+        ...currency,
+        amount: toInteger(sourceSystem.currencies?.[currency.key] ?? actor.system.currencies?.[currency.key]),
+        hasImage: Boolean(currency.img)
+      })),
       creatureTypeName: creatureOptions.types.find(type => type.id === typeId)?.name || "",
       creatureRaceName: creatureOptions.races.find(race => race.id === raceId)?.name || "",
       creatureTypes: creatureOptions.types.map(type => ({ ...type, selected: type.id === typeId })),

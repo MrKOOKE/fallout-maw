@@ -1,5 +1,25 @@
 <section class="tab {{tabs.inventory.cssClass}}" data-group="{{tabs.inventory.group}}" data-tab="{{tabs.inventory.id}}">
   <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Common.Currencies"}}</h2>
+    <div class="fallout-maw-currency-list">
+      {{#each currencies}}
+      <div class="fallout-maw-currency-chip" title="{{label}} | {{localize 'FALLOUTMAW.Common.Value'}}: {{value}}">
+        <span class="fallout-maw-currency-icon">
+          {{#if hasImage}}
+          <img src="{{img}}" alt="{{label}}">
+          {{else}}
+          <span class="fallout-maw-currency-icon-placeholder"></span>
+          {{/if}}
+        </span>
+        {{#if ../freeEdit}}<input class="fallout-maw-currency-amount-input" type="number" name="system.currencies.{{key}}" value="{{amount}}" min="0" step="1">{{else}}<strong class="fallout-maw-currency-amount">{{amount}}</strong>{{/if}}
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.Currencies.Empty"}}</p>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
     <h2>{{localize "FALLOUTMAW.Common.Load"}}</h2>
     <div class="fallout-maw-summary-grid">
       <div class="fallout-maw-inline-stat">

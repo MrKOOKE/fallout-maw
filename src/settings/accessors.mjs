@@ -11,9 +11,11 @@ import {
   normalizeResourceSettings,
   normalizeSkillSettings
 } from "../formulas/index.mjs";
+import { createDefaultCurrencySettings, normalizeCurrencySettings } from "./currency-settings.mjs";
 import {
   CHARACTERISTICS_SETTING,
   CREATURE_OPTIONS_SETTING,
+  CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
   NEED_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
@@ -78,6 +80,24 @@ export async function resetDamageTypeSettings() {
   return setDamageTypeSettings(createDefaultDamageTypeSettings());
 }
 
+export function getCurrencySettings() {
+  try {
+    return normalizeCurrencySettings(game.settings.get(FALLOUT_MAW.id, CURRENCY_SETTINGS_SETTING));
+  } catch (_error) {
+    return createDefaultCurrencySettings();
+  }
+}
+
+export async function setCurrencySettings(settings) {
+  const normalized = normalizeCurrencySettings(settings);
+  await game.settings.set(FALLOUT_MAW.id, CURRENCY_SETTINGS_SETTING, normalized);
+  return normalized;
+}
+
+export async function resetCurrencySettings() {
+  return setCurrencySettings(createDefaultCurrencySettings());
+}
+
 export function getCreatureOptions(characteristics = getCharacteristicSettings(), damageTypes = getDamageTypeSettings()) {
   try {
     return normalizeCreatureOptions(game.settings.get(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING), characteristics, damageTypes);
@@ -129,6 +149,7 @@ export async function resetNeedSettings() {
 export function syncSettingsIntoSystemConfig() {
   return syncSystemConfig({
     characteristics: getCharacteristicSettings(),
+    currencies: getCurrencySettings(),
     skills: getSkillSettings(),
     resources: getResourceSettings(),
     needs: getNeedSettings(),

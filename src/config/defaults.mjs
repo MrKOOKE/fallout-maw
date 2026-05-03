@@ -17,6 +17,13 @@ export const DEFAULT_BASE_PARAMETER_POOLS = Object.freeze({
 
 export const DEFAULT_LOAD_FORMULA = "20 + 10*str";
 
+export const DEFAULT_CURRENCIES = Object.freeze([
+  { key: "caps", label: "Крышки", img: "", value: 1 },
+  { key: "denarii", label: "Динарии", img: "", value: 2 },
+  { key: "ncrDollars", label: "Доллары НКР", img: "", value: 3 },
+  { key: "brotherhoodChecks", label: "Чеки братства", img: "", value: 6 }
+]);
+
 export const DEFAULT_SKILLS = Object.freeze([
   { key: "rangedCombat", abbr: "ran", label: "Дальний бой", formula: "10 + dex + wis*3" },
   { key: "meleeCombat", abbr: "mel", label: "Ближний бой", formula: "10 + 2 * (str + dex)" },

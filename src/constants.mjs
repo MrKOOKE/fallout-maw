@@ -17,6 +17,7 @@ export const TEMPLATES = Object.freeze({
   settings: Object.freeze({
     characteristics: `systems/${SYSTEM_ID}/templates/settings/characteristics-config.hbs`,
     creatureOptions: `systems/${SYSTEM_ID}/templates/settings/creature-options-config.hbs`,
+    currencies: `systems/${SYSTEM_ID}/templates/settings/currency-settings-config.hbs`,
     damageTypes: `systems/${SYSTEM_ID}/templates/settings/damage-types-config.hbs`,
     needs: `systems/${SYSTEM_ID}/templates/settings/need-settings-config.hbs`,
     resources: `systems/${SYSTEM_ID}/templates/settings/resource-settings-config.hbs`,

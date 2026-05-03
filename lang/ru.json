@@ -26,6 +26,7 @@
       "Characteristics": "Характеристики",
       "Code": "Код",
       "Create": "Создать",
+      "Currencies": "Валюты",
       "DamageResistances": "Сопротивления урону",
       "Delete": "Удалить",
       "Description": "Описание",
@@ -33,6 +34,7 @@
       "Formula": "Формула",
       "Health": "Здоровье",
       "Hunger": "Голод",
+      "Image": "Изображение",
       "Kg": "кг",
       "Key": "Ключ",
       "Label": "Название",
@@ -48,8 +50,10 @@
       "Skills": "Навыки",
       "Sleepiness": "Сонливость",
       "Thirst": "Жажда",
+      "Path": "Путь",
       "Total": "Итого",
-      "Untitled": "Без названия"
+      "Untitled": "Без названия",
+      "Value": "Ценность"
     },
     "Actor": {
       "Base": "База",
@@ -136,6 +140,12 @@
         "LabelPlaceholder": "Название типа урона",
         "Title": "Настройка типов урона"
       },
+      "Currencies": {
+        "Create": "Создать валюту",
+        "Empty": "Валюты не созданы.",
+        "ImageHint": "Файлы изображений можно складывать в systems/fallout-maw/assets/currencies и указывать сюда полный путь системы.",
+        "Title": "Настройка валют"
+      },
       "Needs": {
         "Create": "Создать потребность",
         "Empty": "Потребности не созданы.",
@@ -159,6 +169,7 @@
     },
     "Messages": {
       "CharacteristicsSaved": "Настройки характеристик сохранены.",
+      "CurrenciesSaved": "Настройки валют сохранены.",
       "CreateTypeFirst": "Сначала создайте тип существа.",
       "CreatureOptionsSaved": "Типы и расы сохранены.",
       "DamageTypesSaved": "Настройка типов урона сохранена.",
@@ -185,6 +196,9 @@
       "CharacteristicAbbrInvalid": "Характеристика {index}: код должен быть идентификатором.",
       "CharacteristicKeyDuplicate": "Ключ характеристики \"{key}\" повторяется.",
       "CharacteristicKeyInvalid": "Характеристика {index}: ключ должен быть идентификатором.",
+      "CurrencyKeyDuplicate": "Ключ валюты \"{key}\" повторяется.",
+      "CurrencyKeyInvalid": "Валюта {index}: ключ должен быть идентификатором.",
+      "CurrencyValueInvalid": "Валюта {index}: ценность должна быть числом не меньше 0.",
       "DamageTypeKeyDuplicate": "Ключ типа урона \"{key}\" повторяется.",
       "DamageTypeKeyInvalid": "Тип урона {index}: ключ должен быть идентификатором.",
       "NeedAbbrDuplicate": "Код потребности \"{abbr}\" повторяется.",
