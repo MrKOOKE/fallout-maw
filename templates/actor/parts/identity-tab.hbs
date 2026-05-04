@@ -5,7 +5,11 @@
       {{#each characteristics}}
       <label>
         <span title="{{abbr}} / {{key}}">{{label}}</span>
-        <input type="number" name="system.characteristics.{{key}}" value="{{value}}" {{../editLockAttribute}}>
+        {{#if ../freeEdit}}
+        <input type="number" name="system.characteristics.{{key}}" value="{{sourceValue}}">
+        {{else}}
+        <strong>{{value}}</strong>
+        {{/if}}
       </label>
       {{/each}}
     </div>

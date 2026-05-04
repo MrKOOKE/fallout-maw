@@ -55,9 +55,9 @@
       <div class="fallout-maw-advancement-row">
         <span class="fallout-maw-advancement-name" title="{{abbr}} / {{key}}">{{label}}</span>
         <div class="fallout-maw-advancement-controls">
-          <button type="button" data-action="decreaseCharacteristic" data-characteristic-key="{{key}}" {{#unless canDecrease}}disabled{{/unless}}><i class="fa-solid fa-minus"></i></button>
+          <button type="button" data-repeat-action="decreaseCharacteristic" data-characteristic-key="{{key}}" {{#unless canDecrease}}disabled{{/unless}}><i class="fa-solid fa-minus"></i></button>
           <strong>{{value}}</strong>
-          <button type="button" data-action="increaseCharacteristic" data-characteristic-key="{{key}}" {{#unless canIncrease}}disabled{{/unless}}><i class="fa-solid fa-plus"></i></button>
+          <button type="button" data-repeat-action="increaseCharacteristic" data-characteristic-key="{{key}}" {{#unless canIncrease}}disabled{{/unless}}><i class="fa-solid fa-plus"></i></button>
         </div>
       </div>
       {{/each}}
@@ -83,9 +83,9 @@
         <span class="fallout-maw-advancement-name">{{label}}</span>
 
         <div class="fallout-maw-advancement-controls">
-          <button type="button" data-action="decreaseSkill" data-skill-key="{{key}}" {{#unless canDecrease}}disabled{{/unless}}><i class="fa-solid fa-minus"></i></button>
+          <button type="button" data-repeat-action="decreaseSkill" data-skill-key="{{key}}" {{#unless canDecrease}}disabled{{/unless}}><i class="fa-solid fa-minus"></i></button>
           <strong>{{value}}</strong>
-          <button type="button" data-action="increaseSkill" data-skill-key="{{key}}" {{#unless canIncrease}}disabled{{/unless}}><i class="fa-solid fa-plus"></i></button>
+          <button type="button" data-repeat-action="increaseSkill" data-skill-key="{{key}}" {{#unless canIncrease}}disabled{{/unless}}><i class="fa-solid fa-plus"></i></button>
         </div>
       </div>
       {{/each}}

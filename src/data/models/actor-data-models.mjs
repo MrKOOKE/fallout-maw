@@ -201,6 +201,7 @@ function skillField() {
   return new SchemaField({
     base: new NumberField({ required: true, integer: true, initial: 0 }),
     bonus: new NumberField({ required: true, integer: true, initial: 0 }),
+    developmentBonus: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
     value: new NumberField({ required: true, integer: true, initial: 0 })
   });
 }
@@ -238,10 +239,11 @@ function replaceArrayContents(target, source) {
 function normalizeSkillMap(currentSkills = {}, skillSettings = [], skillBases = {}, skillBonuses = {}) {
   return Object.fromEntries(
     skillSettings.map(skill => {
-      const current = currentSkills?.[skill.key];
+      const current = currentSkills?.[skill.key] ?? {};
       const base = toInteger(skillBases?.[skill.key]);
-      const bonus = toInteger(skillBonuses?.[skill.key]);
-      return [skill.key, { base, bonus, value: base + bonus }];
+      const bonus = toInteger(current.bonus);
+      const developmentBonus = toInteger(skillBonuses?.[skill.key]);
+      return [skill.key, { base, bonus, developmentBonus, value: base + bonus + developmentBonus }];
     })
   );
 }

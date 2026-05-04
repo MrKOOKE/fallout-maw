@@ -140,7 +140,8 @@ export class FalloutMaWActor extends Actor {
   }
 
   canLevelUp(level = this.system?.attributes?.level, experience = this.system?.development?.experience) {
-    const nextThreshold = getLevelThreshold(getLevelSettings(), Math.max(0, toInteger(level)));
+    const normalizedLevel = Math.max(1, toInteger(level));
+    const nextThreshold = getLevelThreshold(getLevelSettings(), normalizedLevel);
     if (!nextThreshold) return false;
     return Math.max(0, toInteger(experience)) >= nextThreshold;
   }

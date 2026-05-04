@@ -205,7 +205,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       creatureRaces: creatureOptions.races.map(race => ({ ...race, selected: race.id === raceId })),
       characteristics: characteristicSettings.map(characteristic => ({
         ...characteristic,
-        value: toInteger(sourceSystem.characteristics?.[characteristic.key])
+        value: toInteger(actor.system?.characteristics?.[characteristic.key]),
+        sourceValue: toInteger(sourceSystem.characteristics?.[characteristic.key] ?? actor.system?.characteristics?.[characteristic.key])
       })),
       resources: resourceSettings.map(resource => ({
         ...resource,
