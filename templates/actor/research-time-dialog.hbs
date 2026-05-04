@@ -1,0 +1,28 @@
+<div class="fallout-maw-skill-check-dialog">
+  <section class="fallout-maw-panel">
+    <h2>{{research.name}}</h2>
+    <dl class="fallout-maw-check-breakdown">
+      <div>
+        <dt>{{localize "FALLOUTMAW.Research.Progress"}}</dt>
+        <dd>{{research.progressLabel}} / {{research.targetLabel}}</dd>
+      </div>
+      <div>
+        <dt>{{localize "FALLOUTMAW.SkillCheck.Difficulty"}}</dt>
+        <dd>{{research.difficulty}}</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-list-grid">
+      <label>
+        <span>{{localize "FALLOUTMAW.Research.Hours"}}</span>
+        <input type="number" name="hours" value="0" min="0" step="1">
+      </label>
+      <label class="fallout-maw-inline-checkbox">
+        <span>{{localize "FALLOUTMAW.Research.ThirtyMinutes"}}</span>
+        <input type="checkbox" name="halfHour" value="true">
+      </label>
+    </div>
+  </section>
+</div>

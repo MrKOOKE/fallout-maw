@@ -16,6 +16,13 @@ import {
   getRaceEquipmentSlotsForItem,
   getSelectedEquipmentSlotKeys
 } from "../utils/equipment-slots.mjs";
+import {
+  completeResearch,
+  openCreateResearchDialog,
+  openManageResearchDialog,
+  openResearchTimeDialog,
+  prepareResearchesForDisplay
+} from "../research/index.mjs";
 import { openSkillCheckDialog } from "../rolls/skill-check.mjs";
 import {
   ROOT_CONTAINER_ID,
@@ -71,6 +78,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     actions: {
       toggleFreeEdit: this.#onToggleFreeEdit,
       selectLimb: this.#onSelectLimb,
+      createResearch: this.#onCreateResearch,
+      manageResearch: this.#onManageResearch,
+      openResearchTime: this.#onOpenResearchTime,
       createEffect: this.#onCreateEffect,
       editEffect: this.#onEditEffect,
       toggleEffect: this.#onToggleEffect,
@@ -95,6 +105,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     identity: {
       template: TEMPLATES.actorSheet.identity
     },
+    research: {
+      template: TEMPLATES.actorSheet.research
+    },
     effects: {
       template: TEMPLATES.actorSheet.effects
     }
@@ -106,6 +119,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         { id: "inventory", group: "primary", label: "FALLOUTMAW.Tabs.InventoryEquipment" },
         { id: "indicators", group: "primary", label: "FALLOUTMAW.Tabs.Indicators" },
         { id: "identity", group: "primary", label: "FALLOUTMAW.Tabs.IdentityData" },
+        { id: "research", group: "primary", label: "FALLOUTMAW.Tabs.Research" },
         { id: "effects", group: "primary", label: "FALLOUTMAW.Tabs.Effects" }
       ],
       initial: "inventory"
@@ -222,6 +236,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           max: toInteger(current.max)
         };
       }),
+      researches: prepareResearchesForDisplay(actor.system?.researches, skillSettings, actor.system?.skills),
       damageResistances: damageTypeSettings.map(damageType => ({
         ...damageType,
         value: toInteger(actor.system.damageResistances?.[activeLimbKey]?.[damageType.key])
@@ -310,6 +325,29 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!limbKey || (limbKey === this.#activeLimbKey)) return undefined;
     this.#activeLimbKey = limbKey;
     return this.render({ parts: ["indicators"] });
+  }
+
+  static #onCreateResearch(event) {
+    event.preventDefault();
+    return openCreateResearchDialog(this.actor);
+  }
+
+  static #onManageResearch(event, target) {
+    event.preventDefault();
+    const researchId = target.closest("[data-research-id]")?.dataset.researchId ?? "";
+    if (!researchId) return undefined;
+    return openManageResearchDialog(this.actor, researchId);
+  }
+
+  static #onOpenResearchTime(event, target) {
+    event.preventDefault();
+    const researchId = target.closest("[data-research-id]")?.dataset.researchId ?? "";
+    if (!researchId) return undefined;
+    const research = this.actor.getResearch(researchId);
+    if (research && (Number(research.progress) >= Number(research.target))) {
+      return completeResearch(this.actor, researchId);
+    }
+    return openResearchTimeDialog(this.actor, researchId);
   }
 
   static async #onCreateEffect(event) {

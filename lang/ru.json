@@ -19,7 +19,8 @@
       "IdentityData": "Данные о личности",
       "Effects": "Эффекты",
       "Indicators": "Показатели",
-      "InventoryEquipment": "Инвентарь/Снаряжение"
+      "InventoryEquipment": "Инвентарь/Снаряжение",
+      "Research": "Исследования"
     },
     "Common": {
       "ActionPoints": "Очки действия",
@@ -160,9 +161,29 @@
       "Origin": "Источник эффекта",
       "Priority": "Вес"
     },
+    "Research": {
+      "ApplyTime": "Применить время",
+      "Completed": "Завершено",
+      "CompletedChatMessage": "{actor} завершил исследование \"{name}\".",
+      "CreateTitle": "Начать исследование",
+      "DeleteContent": "Удалить исследование \"{name}\"?",
+      "DeleteTitle": "Удаление исследования",
+      "Empty": "Список исследований пока пуст.",
+      "Hours": "Часы",
+      "Manage": "Управление исследованием",
+      "ManageTitle": "Исследование: {name}",
+      "Name": "Название",
+      "Progress": "Прогресс",
+      "Start": "Начать исследование",
+      "Target": "Цель",
+      "ThirtyMinutes": "Добавить 30 минут",
+      "TimeTitle": "Время исследования: {name}",
+      "UnassignedSkill": "Навык не выбран"
+    },
     "SkillCheck": {
       "Advantage": "Преимущество",
       "AdvantageSummary": "Преимущество {count}, бонус {bonus}",
+      "AutomaticFailure": "Автоматический провал",
       "CriticalFailure": "Критический провал",
       "CriticalFailureBonus": "Бонус к критическому провалу",
       "CriticalSuccess": "Критический успех",
@@ -296,6 +317,13 @@
       "InventoryNoSpace": "В инвентаре недостаточно места для этого предмета.",
       "NeedsSaved": "Настройки потребностей сохранены.",
       "ProficienciesSaved": "Настройки владений сохранены.",
+      "ResearchCreated": "Исследование создано.",
+      "ResearchCompleted": "{actor} завершил исследование \"{name}\".",
+      "ResearchDeleted": "Исследование удалено.",
+      "ResearchProgressApplied": "{name}: +{gain} прогресса, {progress}/{target}, проверок {checks}.",
+      "ResearchSkillMissing": "Для этого исследования не задан корректный навык.",
+      "ResearchTimeRequired": "Задайте минимум 30 минут исследования.",
+      "ResearchUpdated": "Исследование обновлено.",
       "ResourcesSaved": "Настройки ресурсов сохранены.",
       "DeleteRaceContent": "Удалить расу \"{name}\"?",
       "DeleteTypeContent": "Удалить тип \"{name}\" и все связанные с ним расы?",

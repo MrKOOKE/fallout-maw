@@ -1,0 +1,30 @@
+<div class="fallout-maw-skill-check-dialog">
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-list-grid">
+      <label>
+        <span>{{localize "FALLOUTMAW.Research.Name"}}</span>
+        <input type="text" name="name" value="{{research.name}}">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Common.Skill"}}</span>
+        <select name="skillKey">
+          {{#each skills}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Research.Progress"}}</span>
+        <input type="number" name="progress" value="{{research.progress}}" min="0" step="0.01">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Research.Target"}}</span>
+        <input type="number" name="target" value="{{research.target}}" min="1" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.SkillCheck.Difficulty"}}</span>
+        <input type="number" name="difficulty" value="{{research.difficulty}}" min="0" step="1">
+      </label>
+    </div>
+  </section>
+</div>

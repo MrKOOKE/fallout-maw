@@ -42,7 +42,16 @@ export async function openSkillCheckDialog(actor, skillKey) {
   return rollSkillCheck(actor, skill, normalizeDialogData(formData));
 }
 
-export async function rollSkillCheck(actor, skill, data = {}) {
+export async function rollSkillCheck(actor, skill, data = {}, options = {}) {
+  return executeSkillCheck(actor, skill, data, { createMessage: true, ...options });
+}
+
+export async function executeSkillCheck(actor, skillOrKey, data = {}, { createMessage = true } = {}) {
+  const skill = typeof skillOrKey === "string"
+    ? prepareSkill(actor, skillOrKey)
+    : { ...skillOrKey };
+  if (!skill) return undefined;
+
   const check = createMutableCheck(actor, skill, data);
   Hooks.callAll("fallout-maw.modifySkillCheck", check);
 
@@ -52,7 +61,28 @@ export async function rollSkillCheck(actor, skill, data = {}) {
   const finalSkillValue = toInteger(check.skill.value) + toInteger(check.situationalModifier) + edge.skillModifier;
   const total = finalSkillValue + selectedRoll.total;
   const critical = calculateCriticalThresholds(check);
-  const result = determineResult(selectedRoll.total, total, check.difficulty, critical);
+  const result = determineResult(
+    selectedRoll.total,
+    total,
+    check.difficulty,
+    critical,
+    isAutomaticFailure(finalSkillValue, check.difficulty)
+  );
+
+  const outcome = {
+    actor,
+    check,
+    skill: check.skill,
+    rolls,
+    selectedRoll,
+    edge,
+    finalSkillValue,
+    total,
+    critical,
+    result
+  };
+
+  if (!createMessage) return outcome;
 
   const cardContext = {
     actor,
@@ -75,7 +105,7 @@ export async function rollSkillCheck(actor, skill, data = {}) {
   };
 
   const content = await renderTemplate(TEMPLATES.skillCheckChatCard, cardContext);
-  return ChatMessage.create({
+  const message = await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content,
     sound: CONFIG.sounds.dice,
@@ -86,11 +116,17 @@ export async function rollSkillCheck(actor, skill, data = {}) {
           skillKey: check.skill.key,
           difficulty: check.difficulty,
           total,
-          result: result.key
+          result: result.key,
+          autoFailure: result.autoFailure
         }
       }
     }
   });
+
+  return {
+    ...outcome,
+    message
+  };
 }
 
 function prepareSkill(actor, skillKey) {
@@ -187,33 +223,41 @@ function calculateCriticalThresholds(check) {
   };
 }
 
-function determineResult(roll, total, difficulty, critical) {
+function determineResult(roll, total, difficulty, critical, autoFailure = false) {
   if (critical.failureMaximum > 0 && roll <= critical.failureMaximum) {
     return {
       key: "criticalFailure",
       label: game.i18n.localize("FALLOUTMAW.SkillCheck.CriticalFailure"),
-      cssClass: "critical-failure"
+      cssClass: "critical-failure",
+      autoFailure: false
     };
   }
   if (critical.successMinimum <= 100 && roll >= critical.successMinimum) {
     return {
       key: "criticalSuccess",
       label: game.i18n.localize("FALLOUTMAW.SkillCheck.CriticalSuccess"),
-      cssClass: "critical-success"
+      cssClass: "critical-success",
+      autoFailure: false
     };
   }
   if (total >= toInteger(difficulty)) {
     return {
       key: "success",
       label: game.i18n.localize("FALLOUTMAW.SkillCheck.Success"),
-      cssClass: "success"
+      cssClass: "success",
+      autoFailure: false
     };
   }
   return {
     key: "failure",
-    label: game.i18n.localize("FALLOUTMAW.SkillCheck.Failure"),
-    cssClass: "failure"
+    label: game.i18n.localize(autoFailure ? "FALLOUTMAW.SkillCheck.AutomaticFailure" : "FALLOUTMAW.SkillCheck.Failure"),
+    cssClass: "failure",
+    autoFailure
   };
+}
+
+function isAutomaticFailure(finalSkillValue, difficulty) {
+  return (toInteger(difficulty) - toInteger(finalSkillValue)) >= 100;
 }
 
 function activateSkillCheckDialog(dialog) {

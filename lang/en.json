@@ -19,7 +19,8 @@
       "IdentityData": "Identity Data",
       "Effects": "Effects",
       "Indicators": "Indicators",
-      "InventoryEquipment": "Inventory/Equipment"
+      "InventoryEquipment": "Inventory/Equipment",
+      "Research": "Research"
     },
     "Common": {
       "ActionPoints": "Action Points",
@@ -160,9 +161,29 @@
       "Origin": "Effect Origin",
       "Priority": "Weight"
     },
+    "Research": {
+      "ApplyTime": "Apply Time",
+      "Completed": "Completed",
+      "CompletedChatMessage": "{actor} completed research \"{name}\".",
+      "CreateTitle": "Start Research",
+      "DeleteContent": "Delete research \"{name}\"?",
+      "DeleteTitle": "Delete Research",
+      "Empty": "No research projects yet.",
+      "Hours": "Hours",
+      "Manage": "Manage Research",
+      "ManageTitle": "Manage Research: {name}",
+      "Name": "Name",
+      "Progress": "Progress",
+      "Start": "Start Research",
+      "Target": "Target Points",
+      "ThirtyMinutes": "Add 30 minutes",
+      "TimeTitle": "Research Time: {name}",
+      "UnassignedSkill": "Skill not selected"
+    },
     "SkillCheck": {
       "Advantage": "Advantage",
       "AdvantageSummary": "Advantage {count}, bonus {bonus}",
+      "AutomaticFailure": "Automatic Failure",
       "CriticalFailure": "Critical Failure",
       "CriticalFailureBonus": "Critical Failure Bonus",
       "CriticalSuccess": "Critical Success",
@@ -296,6 +317,13 @@
       "InventoryNoSpace": "Not enough room in the inventory for this item.",
       "NeedsSaved": "Need settings saved.",
       "ProficienciesSaved": "Proficiency settings saved.",
+      "ResearchCreated": "Research created.",
+      "ResearchCompleted": "{actor} completed research \"{name}\".",
+      "ResearchDeleted": "Research deleted.",
+      "ResearchProgressApplied": "{name}: +{gain} progress, {progress}/{target}, checks {checks}.",
+      "ResearchSkillMissing": "No usable skill is assigned to this research.",
+      "ResearchTimeRequired": "Set at least 30 minutes of research time.",
+      "ResearchUpdated": "Research updated.",
       "ResourcesSaved": "Resource settings saved.",
       "DeleteRaceContent": "Delete race \"{name}\"?",
       "DeleteTypeContent": "Delete type \"{name}\" and all races assigned to it?",

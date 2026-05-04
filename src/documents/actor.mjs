@@ -1,6 +1,11 @@
 import { TEMPLATES } from "../constants.mjs";
 import { clampPreparedResource } from "../data/models/resources.mjs";
 import { evaluateFormula, getSkillValues } from "../formulas/index.mjs";
+import {
+  getResearchById,
+  normalizeResearchCollection,
+  prepareResearchForStorage
+} from "../research/storage.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import { getItemContainerParentId } from "../utils/inventory-containers.mjs";
 
@@ -78,6 +83,39 @@ export class FalloutMaWActor extends Actor {
     return this.system?.resources?.health;
   }
 
+  getResearch(researchId = "") {
+    return getResearchById(this.system?.researches, researchId);
+  }
+
+  async createResearch(data = {}) {
+    const researches = normalizeResearchCollection(foundry.utils.deepClone(this.system?.researches ?? []));
+    researches.push(prepareResearchForStorage(data));
+    return this.update({ "system.researches": researches });
+  }
+
+  async updateResearch(researchId = "", data = {}) {
+    const researches = normalizeResearchCollection(foundry.utils.deepClone(this.system?.researches ?? []));
+    const index = researches.findIndex(research => research.id === researchId);
+    if (index < 0) return this;
+
+    researches[index] = prepareResearchForStorage({
+      ...researches[index],
+      ...data,
+      id: researches[index].id
+    }, {
+      generateId: false
+    });
+
+    return this.update({ "system.researches": researches });
+  }
+
+  async deleteResearch(researchId = "") {
+    const researches = normalizeResearchCollection(foundry.utils.deepClone(this.system?.researches ?? []));
+    const nextResearches = researches.filter(research => research.id !== researchId);
+    if (nextResearches.length === researches.length) return this;
+    return this.update({ "system.researches": nextResearches });
+  }
+
   getDamageResistance(damageTypeKey, limbKey = "") {
     const resolvedLimbKey = limbKey || Object.keys(this.system?.limbs ?? {})[0] || "";
     return Math.floor(Number(this.system?.damageResistances?.[resolvedLimbKey]?.[damageTypeKey]) || 0);
@@ -140,6 +178,7 @@ export class FalloutMaWActor extends Actor {
         currencies: initializeCurrencyMap(getCurrencySettings()),
         resources: maximizeResourceMap(this.system?.resources),
         needs: maximizeResourceMap(this.system?.needs),
+        researches: normalizeResearchCollection(this.system?.researches),
         proficiencies: initializeProficiencyMap(this.system?.proficiencies),
         limbs: maximizeResourceMap(this.system?.limbs)
       }

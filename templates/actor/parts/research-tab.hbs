@@ -1,0 +1,49 @@
+<section class="tab {{tabs.research.cssClass}} fallout-maw-research-tab" data-group="{{tabs.research.group}}" data-tab="{{tabs.research.id}}">
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Tabs.Research"}}</h2>
+      <button type="button" data-action="createResearch">
+        <i class="fa-solid fa-flask"></i>
+        {{localize "FALLOUTMAW.Research.Start"}}
+      </button>
+    </div>
+
+    <div class="fallout-maw-research-list">
+      {{#each researches}}
+      <article class="fallout-maw-research-row{{#if completed}} completed{{/if}}" data-research-id="{{id}}">
+        <button type="button" class="fallout-maw-research-main" data-action="openResearchTime">
+          {{#if completed}}
+          <span class="fallout-maw-research-complete-banner">{{localize "FALLOUTMAW.Research.Completed"}}</span>
+          {{/if}}
+
+          <div class="fallout-maw-research-main-header">
+            <strong>{{name}}</strong>
+            <span>{{skillLabel}}</span>
+          </div>
+
+          <div class="fallout-maw-research-progress-bar">
+            <span style="{{progressStyle}}"></span>
+          </div>
+
+          <div class="fallout-maw-research-meta">
+            <span>{{localize "FALLOUTMAW.Research.Progress"}}: {{progressLabel}} / {{targetLabel}}</span>
+            <span>{{localize "FALLOUTMAW.SkillCheck.Difficulty"}}: {{difficulty}}</span>
+            <span>{{localize "FALLOUTMAW.SkillCheck.SkillValue"}}: {{skillValue}}</span>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          class="fallout-maw-research-manage"
+          data-action="manageResearch"
+          title="{{localize 'FALLOUTMAW.Research.Manage'}}"
+        >
+          <i class="fa-solid fa-gear"></i>
+        </button>
+      </article>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Research.Empty"}}</p>
+      {{/each}}
+    </div>
+  </section>
+</section>

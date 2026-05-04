@@ -24,9 +24,10 @@ import {
   getDamageMitigationFunction,
   hasItemFunction
 } from "../../utils/item-functions.mjs";
+import { normalizeResearchCollection } from "../../research/storage.mjs";
 import { toInteger } from "../../utils/numbers.mjs";
 
-const { HTMLField, NumberField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
+const { ArrayField, HTMLField, NumberField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
 
 export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
   static defineSchema() {
@@ -52,6 +53,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         { required: true, initial: {} }
       ),
       skills: new TypedObjectField(skillField(), { required: true, initial: {} }),
+      researches: new ArrayField(researchField(), { required: true, initial: [] }),
       proficiencies: new TypedObjectField(resourceField(), { required: true, initial: {} }),
       damageResistances: new TypedObjectField(
         new TypedObjectField(new NumberField({ required: true, integer: true, initial: 0 }), {
@@ -92,6 +94,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
 
     this.characteristics ??= {};
     this.skills ??= {};
+    this.researches ??= [];
     this.proficiencies ??= {};
     this.resources ??= {};
     this.needs ??= {};
@@ -114,6 +117,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
 
     const skillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, this.characteristics);
     replaceObjectContents(this.skills, normalizeSkillMap(this.skills, skillSettings, skillBases));
+    replaceArrayContents(this.researches, normalizeResearchCollection(this.researches));
     replaceObjectContents(this.proficiencies, normalizeProficiencyMap(this.proficiencies, proficiencySettings));
 
     const skillValues = getSkillValues(this.skills);
@@ -186,6 +190,17 @@ function skillField() {
   });
 }
 
+function researchField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: false, initial: () => foundry.utils.randomID() }),
+    name: new StringField({ required: true, blank: true, initial: "" }),
+    skillKey: new StringField({ required: true, blank: true, initial: "" }),
+    progress: new NumberField({ required: true, min: 0, initial: 0 }),
+    target: new NumberField({ required: true, min: 1, initial: 1 }),
+    difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 })
+  });
+}
+
 function limbField() {
   return new SchemaField({
     label: new StringField({ required: true, blank: true, initial: "" }),
@@ -198,6 +213,11 @@ function limbField() {
 function replaceObjectContents(target, source) {
   for (const key of Object.keys(target ?? {})) delete target[key];
   Object.assign(target, source);
+}
+
+function replaceArrayContents(target, source) {
+  target.length = 0;
+  target.push(...source);
 }
 
 function normalizeSkillMap(currentSkills = {}, skillSettings = [], skillBases = {}) {
