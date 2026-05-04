@@ -231,8 +231,7 @@
 
 .fallout-maw-effects-tab {
   min-height: 420px;
-  padding-bottom: 3.75rem;
-  position: relative;
+  padding-bottom: 4.25rem;
 }
 
 .fallout-maw-effect-category-list,
@@ -305,13 +304,18 @@
 .fallout-maw-floating-add {
   align-items: center;
   border-radius: 999px;
-  bottom: 0.75rem;
+  bottom: 1.25rem;
   display: inline-flex;
   height: 2.75rem;
   justify-content: center;
   position: absolute;
-  right: 0.75rem;
+  right: 1.25rem;
   width: 2.75rem;
+  z-index: 10;
+}
+
+.application.fallout-maw-actor-sheet:not(:has(.fallout-maw-effects-tab.active)) > .fallout-maw-floating-add {
+  display: none;
 }
 
 .fallout-maw-active-effect-summary {

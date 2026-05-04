@@ -235,6 +235,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#relocateEffectsAddButton();
     this.#activateCreatureSelectors();
     this.#activateInventoryInteractions();
   }
@@ -345,6 +346,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     event.preventDefault();
     const effect = this.actor.effects.get(target.closest("[data-effect-id]")?.dataset.effectId ?? "");
     return effect?.delete();
+  }
+
+  #relocateEffectsAddButton() {
+    const root = this.element;
+    const button = root?.querySelector(".fallout-maw-effects-tab .fallout-maw-floating-add");
+    if (!root || !button) return;
+    for (const existing of root.querySelectorAll(":scope > .fallout-maw-floating-add")) {
+      if (existing !== button) existing.remove();
+    }
+    root.append(button);
   }
 
   #activateCreatureSelectors() {
