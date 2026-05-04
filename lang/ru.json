@@ -160,6 +160,28 @@
       "Origin": "Источник эффекта",
       "Priority": "Вес"
     },
+    "SkillCheck": {
+      "Advantage": "Преимущество",
+      "AdvantageSummary": "Преимущество {count}, бонус {bonus}",
+      "CriticalFailure": "Критический провал",
+      "CriticalFailureBonus": "Бонус к критическому провалу",
+      "CriticalSuccess": "Критический успех",
+      "CriticalSuccessBonus": "Бонус к критическому успеху",
+      "Difficulty": "Сложность",
+      "Disadvantage": "Помеха",
+      "DisadvantageSummary": "Помеха {count}, бонус {bonus}",
+      "Edge": "Преимущество/Помеха",
+      "Failure": "Провал",
+      "FinalSkillValue": "Итоговое значение навыка",
+      "None": "Нет",
+      "Normal": "Обычная проверка",
+      "Roll": "Бросок",
+      "RollButton": "Бросить",
+      "SituationalModifier": "Ситуативное изменение",
+      "SkillValue": "Значение навыка",
+      "Success": "Успех",
+      "Title": "Проверка: {skill}"
+    },
     "Creation": {
       "Base": "Основа персонажа",
       "RaceFilterHint": "Список рас зависит от выбранного типа существа."

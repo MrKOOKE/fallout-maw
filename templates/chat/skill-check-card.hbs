@@ -1,0 +1,42 @@
+<article class="fallout-maw-chat-card fallout-maw-skill-check-card {{result.cssClass}}">
+  <header>
+    <h2>{{skill.label}}</h2>
+    <span>{{actor.name}}</span>
+  </header>
+
+  <div class="fallout-maw-check-result">
+    <strong>{{result.label}}</strong>
+    <span>{{total}} / {{difficulty}}</span>
+  </div>
+
+  <dl class="fallout-maw-check-breakdown">
+    <div>
+      <dt>{{localize "FALLOUTMAW.SkillCheck.Roll"}}</dt>
+      <dd>{{rollSummary}}</dd>
+    </div>
+    <div>
+      <dt>{{localize "FALLOUTMAW.SkillCheck.SkillValue"}}</dt>
+      <dd>{{skill.value}}</dd>
+    </div>
+    <div>
+      <dt>{{localize "FALLOUTMAW.SkillCheck.FinalSkillValue"}}</dt>
+      <dd>{{finalSkillValue}}</dd>
+    </div>
+    <div>
+      <dt>{{localize "FALLOUTMAW.SkillCheck.SituationalModifier"}}</dt>
+      <dd>{{situationalModifier}}</dd>
+    </div>
+    <div>
+      <dt>{{localize "FALLOUTMAW.SkillCheck.Edge"}}</dt>
+      <dd>{{edge.label}}</dd>
+    </div>
+    <div>
+      <dt>{{localize "FALLOUTMAW.SkillCheck.CriticalFailure"}}</dt>
+      <dd>{{critical.failureLabel}}</dd>
+    </div>
+    <div>
+      <dt>{{localize "FALLOUTMAW.SkillCheck.CriticalSuccess"}}</dt>
+      <dd>{{critical.successLabel}}</dd>
+    </div>
+  </dl>
+</article>

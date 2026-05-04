@@ -160,6 +160,28 @@
       "Origin": "Effect Origin",
       "Priority": "Weight"
     },
+    "SkillCheck": {
+      "Advantage": "Advantage",
+      "AdvantageSummary": "Advantage {count}, bonus {bonus}",
+      "CriticalFailure": "Critical Failure",
+      "CriticalFailureBonus": "Critical Failure Bonus",
+      "CriticalSuccess": "Critical Success",
+      "CriticalSuccessBonus": "Critical Success Bonus",
+      "Difficulty": "Difficulty",
+      "Disadvantage": "Disadvantage",
+      "DisadvantageSummary": "Disadvantage {count}, bonus {bonus}",
+      "Edge": "Advantage/Disadvantage",
+      "Failure": "Failure",
+      "FinalSkillValue": "Final Skill Value",
+      "None": "None",
+      "Normal": "Normal",
+      "Roll": "Roll",
+      "RollButton": "Roll",
+      "SituationalModifier": "Situational Modifier",
+      "SkillValue": "Skill Value",
+      "Success": "Success",
+      "Title": "{skill} Check"
+    },
     "Creation": {
       "Base": "Character Base",
       "RaceFilterHint": "The race list depends on the selected creature type."

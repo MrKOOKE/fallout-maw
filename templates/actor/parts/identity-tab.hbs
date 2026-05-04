@@ -15,10 +15,10 @@
     <h2>{{localize "FALLOUTMAW.Common.Skills"}}</h2>
     <div class="fallout-maw-identity-skill-grid">
       {{#each skills}}
-      <div class="fallout-maw-identity-skill">
+      <button type="button" class="fallout-maw-identity-skill fallout-maw-identity-skill-button" data-action="rollSkill" data-skill-key="{{key}}">
         <span>{{label}}</span>
         <strong>{{value}}</strong>
-      </div>
+      </button>
       {{/each}}
     </div>
   </section>

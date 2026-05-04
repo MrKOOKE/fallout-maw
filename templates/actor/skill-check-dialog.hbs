@@ -1,0 +1,47 @@
+<div class="fallout-maw-skill-check-dialog">
+  <section class="fallout-maw-panel">
+    <h2>{{skill.label}}</h2>
+    <div class="fallout-maw-check-summary">
+      <span>{{localize "FALLOUTMAW.SkillCheck.SkillValue"}}</span>
+      <strong>{{skill.value}}</strong>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-list-grid two-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.SkillCheck.Difficulty"}}</span>
+        <input type="number" name="difficulty" value="{{defaults.difficulty}}" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.SkillCheck.SituationalModifier"}}</span>
+        <input type="number" name="situationalModifier" value="{{defaults.situationalModifier}}" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.SkillCheck.CriticalSuccessBonus"}}</span>
+        <input type="number" name="criticalSuccessBonus" value="{{defaults.criticalSuccessBonus}}" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.SkillCheck.CriticalFailureBonus"}}</span>
+        <input type="number" name="criticalFailureBonus" value="{{defaults.criticalFailureBonus}}" step="1">
+      </label>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel fallout-maw-check-edge-grid">
+    <label class="fallout-maw-check-edge">
+      <span>
+        <input type="checkbox" name="advantage" value="true" data-skill-check-advantage>
+        {{localize "FALLOUTMAW.SkillCheck.Advantage"}}
+      </span>
+      <input type="number" name="advantageCount" value="1" min="1" step="1">
+    </label>
+    <label class="fallout-maw-check-edge">
+      <span>
+        <input type="checkbox" name="disadvantage" value="true" data-skill-check-disadvantage>
+        {{localize "FALLOUTMAW.SkillCheck.Disadvantage"}}
+      </span>
+      <input type="number" name="disadvantageCount" value="1" min="1" step="1">
+    </label>
+  </section>
+</div>

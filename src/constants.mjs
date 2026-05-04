@@ -6,6 +6,8 @@ export const ITEM_TYPES = Object.freeze(["gear", "weapon", "armor", "ability"]);
 
 export const TEMPLATES = Object.freeze({
   actorCreateDialog: `systems/${SYSTEM_ID}/templates/actor/actor-create-dialog.hbs`,
+  skillCheckDialog: `systems/${SYSTEM_ID}/templates/actor/skill-check-dialog.hbs`,
+  skillCheckChatCard: `systems/${SYSTEM_ID}/templates/chat/skill-check-card.hbs`,
   actorSheet: Object.freeze({
     header: `systems/${SYSTEM_ID}/templates/actor/parts/header.hbs`,
     tabs: `systems/${SYSTEM_ID}/templates/actor/parts/tabs.hbs`,

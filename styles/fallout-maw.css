@@ -988,6 +988,21 @@
   padding: 0.28rem 0.45rem;
 }
 
+.fallout-maw-identity-skill-button {
+  color: inherit;
+  font: inherit;
+  margin: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.fallout-maw-identity-skill-button:hover,
+.fallout-maw-identity-skill-button:focus-visible {
+  background: rgba(210, 185, 145, 0.12);
+  border-color: rgba(210, 185, 145, 0.5);
+  box-shadow: 0 0 0 1px rgba(210, 185, 145, 0.18);
+}
+
 .fallout-maw-identity-skill span {
   min-width: 0;
 }
@@ -999,6 +1014,103 @@
   min-width: 2.5rem;
   padding: 0.1rem 0.35rem;
   text-align: center;
+}
+
+.fallout-maw-skill-check-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.fallout-maw-check-summary {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.fallout-maw-check-edge-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fallout-maw-check-edge {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) 4.5rem;
+}
+
+.fallout-maw-check-edge span {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+.fallout-maw-chat-card.fallout-maw-skill-check-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.fallout-maw-skill-check-card header {
+  align-items: baseline;
+  border-bottom: 1px solid rgba(120, 120, 120, 0.28);
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+  padding-bottom: 0.35rem;
+}
+
+.fallout-maw-skill-check-card h2 {
+  border: 0;
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.fallout-maw-skill-check-card header span {
+  opacity: 0.72;
+}
+
+.fallout-maw-check-result {
+  align-items: center;
+  border: 1px solid rgba(120, 120, 120, 0.22);
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  padding: 0.45rem 0.55rem;
+}
+
+.fallout-maw-skill-check-card.success .fallout-maw-check-result,
+.fallout-maw-skill-check-card.critical-success .fallout-maw-check-result {
+  border-color: rgba(89, 170, 95, 0.55);
+}
+
+.fallout-maw-skill-check-card.failure .fallout-maw-check-result,
+.fallout-maw-skill-check-card.critical-failure .fallout-maw-check-result {
+  border-color: rgba(190, 80, 80, 0.6);
+}
+
+.fallout-maw-check-breakdown {
+  display: grid;
+  gap: 0.25rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.fallout-maw-check-breakdown div {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.fallout-maw-check-breakdown dt {
+  opacity: 0.72;
+}
+
+.fallout-maw-check-breakdown dd {
+  font-weight: 700;
+  margin: 0;
 }
 
 .characteristic-settings .fallout-maw-settings-row {

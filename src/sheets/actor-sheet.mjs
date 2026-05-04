@@ -16,6 +16,7 @@ import {
   getRaceEquipmentSlotsForItem,
   getSelectedEquipmentSlotKeys
 } from "../utils/equipment-slots.mjs";
+import { openSkillCheckDialog } from "../rolls/skill-check.mjs";
 import {
   ROOT_CONTAINER_ID,
   buildInventoryCellStyle as buildInventoryCellStyleHelper,
@@ -73,7 +74,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       createEffect: this.#onCreateEffect,
       editEffect: this.#onEditEffect,
       toggleEffect: this.#onToggleEffect,
-      deleteEffect: this.#onDeleteEffect
+      deleteEffect: this.#onDeleteEffect,
+      rollSkill: this.#onRollSkill
     }
   };
 
@@ -346,6 +348,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     event.preventDefault();
     const effect = this.actor.effects.get(target.closest("[data-effect-id]")?.dataset.effectId ?? "");
     return effect?.delete();
+  }
+
+  static #onRollSkill(event, target) {
+    event.preventDefault();
+    const skillKey = target.dataset.skillKey ?? "";
+    if (!skillKey) return undefined;
+    return openSkillCheckDialog(this.actor, skillKey);
   }
 
   #relocateEffectsAddButton() {
