@@ -62,6 +62,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #activeLimbKey = "";
   #draggedItemData = null;
   #draggedItemId = "";
+  #dragPreviewSourceKey = "";
   #dragDrop = null;
   #tooltipTimer = null;
   #tooltipElement = null;
@@ -277,8 +278,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const data = this.#getDragEventData(event);
     if (data?.type !== "Item") return super._onDrop(event);
 
-    this.#draggedItemData = null;
-    this.#draggedItemId = "";
+    this.#clearDragPreviewCache();
     this.#clearInventoryDropPreview();
     const dropped = await this.#getDroppedItemFromData(data);
     if (!dropped) return null;
@@ -317,14 +317,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#clearInventoryDropPreview();
     const item = this.actor.items.get(event.currentTarget?.dataset?.itemId ?? "");
     this.#draggedItemId = item?.id ?? "";
+    this.#dragPreviewSourceKey = this.#draggedItemId ? `owned:${this.#draggedItemId}` : "";
     this.#draggedItemData = item?.toObject() ?? null;
     event.currentTarget?.classList?.add("dragging");
     this.#highlightEquipmentSlotsForItem(this.#draggedItemData);
   }
 
   _onDragEnd() {
-    this.#draggedItemData = null;
-    this.#draggedItemId = "";
+    this.#clearDragPreviewCache();
     this.#clearInventoryDropPreview();
     this.#clearInventoryDraggingState();
   }
@@ -492,6 +492,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       return;
     }
 
+    this.#clearDragPreviewCache();
     this.#clearInventoryDropPreview();
   }
 
@@ -657,6 +658,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     });
   }
 
+  #clearDragPreviewCache() {
+    this.#draggedItemData = null;
+    this.#draggedItemId = "";
+    this.#dragPreviewSourceKey = "";
+  }
+
   #clearInventoryDraggingState() {
     this.element?.querySelectorAll(".dragging").forEach(element => {
       element.classList.remove("dragging");
@@ -760,19 +767,38 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #getPreviewItemData(event) {
-    if (this.#draggedItemData) return this.#draggedItemData;
     const data = this.#getDragEventData(event);
-    if (data?.type !== "Item") return null;
+    if (data?.type !== "Item") {
+      this.#clearDragPreviewCache();
+      return null;
+    }
+
+    const sourceKey = this.#getDragPreviewSourceKey(data);
+    if (this.#draggedItemData && sourceKey && (sourceKey === this.#dragPreviewSourceKey)) return this.#draggedItemData;
 
     const ownedItem = data.itemId ? this.actor.items.get(data.itemId) : null;
     if (ownedItem) {
       this.#draggedItemId = ownedItem.id;
-      return ownedItem.toObject();
+      this.#dragPreviewSourceKey = sourceKey;
+      this.#draggedItemData = ownedItem.toObject();
+      return this.#draggedItemData;
     }
 
     const droppedDocument = data.uuid ? foundry.utils.fromUuidSync(data.uuid) : null;
-    if (droppedDocument instanceof Item) return droppedDocument.toObject();
+    if (droppedDocument instanceof Item) {
+      this.#dragPreviewSourceKey = sourceKey;
+      this.#draggedItemData = droppedDocument.toObject();
+      return this.#draggedItemData;
+    }
+    this.#clearDragPreviewCache();
     return null;
+  }
+
+  #getDragPreviewSourceKey(data = {}) {
+    if (data?.itemId) return `owned:${data.itemId}`;
+    if (data?.uuid) return `uuid:${data.uuid}`;
+    if (data?._id) return `id:${data._id}`;
+    return "";
   }
 
   #getDragEventData(event) {

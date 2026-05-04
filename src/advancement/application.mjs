@@ -22,15 +22,24 @@ const { DialogV2 } = foundry.applications.api;
 const ADVANCEMENT_COMMIT_FLAG = "advancementCommit";
 
 export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
+  #activeEffectHooks = [];
+  #actorUpdateHookId = null;
   #draft = null;
   #experienceSyncTimer = null;
   #floor = null;
   #repeatState = null;
+  #suppressNextRepeatClick = false;
   #snapshot = null;
 
   constructor(actor, options = {}) {
     super(options);
     this.actor = actor;
+    this.#actorUpdateHookId = Hooks.on("updateActor", (updatedActor, changes) => this.#onActorUpdated(updatedActor, changes));
+    this.#activeEffectHooks = [
+      { event: "createActiveEffect", id: Hooks.on("createActiveEffect", effect => this.#onActiveEffectChanged(effect)) },
+      { event: "updateActiveEffect", id: Hooks.on("updateActiveEffect", effect => this.#onActiveEffectChanged(effect)) },
+      { event: "deleteActiveEffect", id: Hooks.on("deleteActiveEffect", effect => this.#onActiveEffectChanged(effect)) }
+    ];
   }
 
   static DEFAULT_OPTIONS = {
@@ -148,6 +157,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#stopRepeat();
     this.#syncDraftFromForm();
     await this.#saveDraft({ notify: false });
+    if (this.#actorUpdateHookId !== null) {
+      Hooks.off("updateActor", this.#actorUpdateHookId);
+      this.#actorUpdateHookId = null;
+    }
+    for (const hook of this.#activeEffectHooks) Hooks.off(hook.event, hook.id);
+    this.#activeEffectHooks = [];
     await super._preClose(options);
   }
 
@@ -294,7 +309,6 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       if (remaining.characteristics < 1) return false;
 
       this.#draft.development.characteristics[key] = toInteger(this.#draft.development.characteristics[key]) + 1;
-      this.#draft.characteristics[key] = toInteger(this.#draft.characteristics[key]) + 1;
       await this.#applyDraftToActor();
       return true;
     }
@@ -304,7 +318,6 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (currentPoints <= minimumPoints) return false;
 
     this.#draft.development.characteristics[key] = currentPoints - 1;
-    this.#draft.characteristics[key] = Math.max(0, toInteger(this.#draft.characteristics[key]) - 1);
     await this.#applyDraftToActor();
     return true;
   }
@@ -343,7 +356,10 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     event.stopPropagation();
 
-    if (event.detail !== 0) return;
+    if (this.#suppressNextRepeatClick) {
+      this.#suppressNextRepeatClick = false;
+      return;
+    }
     const target = event.currentTarget;
     if (!(target instanceof HTMLElement) || target.hasAttribute("disabled")) return;
 
@@ -366,18 +382,16 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const key = target.dataset.characteristicKey ?? target.dataset.skillKey ?? "";
     if (!action || !key) return;
 
-    if (!(await this.#applyRepeatAction(action, key))) return;
-    await this.forceRender();
-
+    this.#stopRepeat();
     const controller = new AbortController();
     const state = {
       action,
       key,
       controller,
+      hasRepeated: false,
       timer: window.setTimeout(() => this.#runRepeatTick(state), 300)
     };
 
-    this.#stopRepeat();
     this.#repeatState = state;
     window.addEventListener("pointerup", () => this.#stopRepeat(), { signal: controller.signal });
     window.addEventListener("pointercancel", () => this.#stopRepeat(), { signal: controller.signal });
@@ -391,6 +405,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       return;
     }
 
+    state.hasRepeated = true;
+    this.#suppressNextRepeatClick = true;
     await this.forceRender();
     if (this.#repeatState !== state) return;
     state.timer = window.setTimeout(() => this.#runRepeatTick(state), 70);
@@ -401,6 +417,29 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     window.clearTimeout(this.#repeatState.timer);
     this.#repeatState.controller.abort();
     this.#repeatState = null;
+  }
+
+  async #onActorUpdated(updatedActor, changes) {
+    if (updatedActor?.id !== this.actor?.id) return;
+    if (!this.rendered) return;
+
+    const affectsDraft = [
+      "system.attributes.level",
+      "system.characteristics",
+      "system.development",
+      "system.creature.raceId",
+      "system.progression",
+      "name"
+    ].some(path => foundry.utils.hasProperty(changes, path));
+
+    if (affectsDraft && this.#draft) this.#syncDraftFromActor();
+    await this.forceRender();
+  }
+
+  async #onActiveEffectChanged(effect) {
+    if (effect?.parent?.id !== this.actor?.id) return;
+    if (!this.rendered) return;
+    await this.forceRender();
   }
 
   async #saveDraft({ notify = true } = {}) {
@@ -427,6 +466,23 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       "system.characteristics": foundry.utils.deepClone(this.#draft.characteristics),
       "system.development": foundry.utils.deepClone(this.#draft.development)
     });
+  }
+
+  #syncDraftFromActor() {
+    const characteristicSettings = getCharacteristicSettings();
+    const skillSettings = getSkillSettings();
+    const development = cloneActorDevelopment(this.actor.getDevelopment(), characteristicSettings, skillSettings);
+
+    this.#draft = {
+      level: Math.max(1, toInteger(this.actor.system?.attributes?.level)),
+      characteristics: Object.fromEntries(
+        characteristicSettings.map(characteristic => [
+          characteristic.key,
+          toInteger(this.actor.system?._source?.characteristics?.[characteristic.key] ?? this.actor.system?.characteristics?.[characteristic.key])
+        ])
+      ),
+      development
+    };
   }
 
   #readCommittedState(characteristicSettings, skillSettings) {

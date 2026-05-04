@@ -112,7 +112,9 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.damageReductions ??= {};
     this.development ??= {};
 
-    replaceObjectContents(this.characteristics, normalizeNumberMap(this.characteristics, characteristicSettings));
+    const baseCharacteristics = normalizeNumberMap(this.characteristics, characteristicSettings);
+    const characteristicBonuses = normalizeNumberMap(this.development?.characteristics, characteristicSettings);
+    replaceObjectContents(this.characteristics, normalizeCharacteristicMap(baseCharacteristics, characteristicSettings, characteristicBonuses));
     replaceObjectContents(this.currencies, normalizeNumberMap(this.currencies, currencySettings));
 
     const race = getCreatureOptions(characteristicSettings, damageTypeSettings).races.find(entry => entry.id === this.creature?.raceId);
@@ -245,6 +247,15 @@ function normalizeSkillMap(currentSkills = {}, skillSettings = [], skillBases = 
       const developmentBonus = toInteger(skillBonuses?.[skill.key]);
       return [skill.key, { base, bonus, developmentBonus, value: base + bonus + developmentBonus }];
     })
+  );
+}
+
+function normalizeCharacteristicMap(currentCharacteristics = {}, characteristicSettings = [], developmentBonuses = {}) {
+  return Object.fromEntries(
+    characteristicSettings.map(characteristic => [
+      characteristic.key,
+      toInteger(currentCharacteristics?.[characteristic.key]) + toInteger(developmentBonuses?.[characteristic.key])
+    ])
   );
 }
 
