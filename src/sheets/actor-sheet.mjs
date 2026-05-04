@@ -184,11 +184,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       resources: resourceSettings.map(resource => ({
         ...resource,
         value: toInteger(actor.system.resources?.[resource.key]?.value),
+        bonus: toInteger(actor.system.resources?.[resource.key]?.bonus),
         max: toInteger(actor.system.resources?.[resource.key]?.max)
       })),
       needs: needSettings.map(need => ({
         ...need,
         value: toInteger(actor.system.needs?.[need.key]?.value),
+        bonus: toInteger(actor.system.needs?.[need.key]?.bonus),
         max: toInteger(actor.system.needs?.[need.key]?.max)
       })),
       limbs,
@@ -208,6 +210,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         return {
           ...proficiency,
           value: toInteger(current.value),
+          bonus: toInteger(current.bonus),
           max: toInteger(current.max)
         };
       }),

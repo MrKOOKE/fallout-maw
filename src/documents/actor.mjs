@@ -165,7 +165,7 @@ export class FalloutMaWActor extends Actor {
           : total + (Number(item.totalWeight) || 0)
       ), 0).toFixed(1)
     );
-    this.system.load = { min: 0, spent: 0, value, max };
+    this.system.load = { min: 0, spent: 0, bonus: 0, value, max };
   }
 
   static #activateCreatureCreateDialog(dialog) {
@@ -203,8 +203,9 @@ function maximizeResourceMap(resources = {}) {
   return Object.fromEntries(
     Object.entries(resources ?? {}).map(([key, resource]) => {
       const min = Number(resource?.min) || 0;
+      const bonus = toInteger(resource?.bonus);
       const max = Number(resource?.max) || min;
-      return [key, { ...resource, min, value: max, max }];
+      return [key, { ...resource, min, bonus, value: max, max }];
     })
   );
 }
@@ -217,7 +218,7 @@ function initializeProficiencyMap(proficiencies = {}) {
   return Object.fromEntries(
     Object.entries(proficiencies ?? {}).map(([key, proficiency]) => [
       key,
-      { ...proficiency, min: 0, spent: 0, value: 0 }
+      { ...proficiency, min: 0, spent: 0, bonus: toInteger(proficiency?.bonus), value: 0 }
     ])
   );
 }
@@ -266,4 +267,4 @@ function toInteger(value) {
   return Number.isFinite(number) ? Math.trunc(number) : 0;
 }
 
-const TRACKED_RESOURCE_KEYS = ["actionPoints", "movementPoints"];
+const TRACKED_RESOURCE_KEYS = ["dodge", "actionPoints", "movementPoints"];

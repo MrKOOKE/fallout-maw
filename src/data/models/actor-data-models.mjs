@@ -216,7 +216,8 @@ function normalizeResourceMap(currentResources = {}, settings = [], maximums = {
     settings.map(setting => {
       const current = currentResources?.[setting.key];
       const min = Math.max(0, toInteger(current?.min));
-      const max = Math.max(min, toInteger(maximums?.[setting.key]));
+      const bonus = current && typeof current === "object" ? toInteger(current.bonus) : 0;
+      const max = Math.max(min, toInteger(maximums?.[setting.key]) + bonus);
       const spent = shouldTrackSpent(setting?.key)
         ? getTrackedResourceSpent(current, min, max)
         : Math.max(0, toInteger(current?.spent));
@@ -226,7 +227,7 @@ function normalizeResourceMap(currentResources = {}, settings = [], maximums = {
           ? current.value
           : max;
       const value = Math.min(Math.max(toInteger(fallbackValue), min), max);
-      return [setting.key, { min, spent, value, max }];
+      return [setting.key, { min, spent, bonus, value, max }];
     })
   );
 }
@@ -260,9 +261,10 @@ function normalizeProficiencyMap(currentProficiencies = {}, proficiencySettings 
     proficiencySettings.map(proficiency => {
       const current = currentProficiencies?.[proficiency.key];
       const min = 0;
-      const max = Math.max(min, toInteger(proficiency.max));
+      const bonus = current && typeof current === "object" ? toInteger(current.bonus) : 0;
+      const max = Math.max(min, toInteger(proficiency.max) + bonus);
       const value = Math.min(Math.max(toInteger(current?.value), min), max);
-      return [proficiency.key, { min, spent: 0, value, max }];
+      return [proficiency.key, { min, spent: 0, bonus, value, max }];
     })
   );
 }
@@ -323,7 +325,7 @@ function mergeLimbDamageMaps(base = {}, bonus = {}) {
 }
 
 function shouldTrackSpent(resourceKey) {
-  return (resourceKey === "actionPoints") || (resourceKey === "movementPoints");
+  return ["dodge", "actionPoints", "movementPoints"].includes(resourceKey);
 }
 
 function getTrackedResourceSpent(resource, min, max) {
