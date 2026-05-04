@@ -2250,6 +2250,24 @@
   min-width: 0;
 }
 
+.application.fallout-maw-actor-sheet .window-content > .fallout-maw-sheet-header,
+.application.fallout-maw-actor-sheet .window-content > .fallout-maw-sheet-tabs {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.application.fallout-maw-actor-sheet .window-content > .tab {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.application.fallout-maw-actor-sheet .window-content > .tab.active {
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 0.15rem;
+  scrollbar-gutter: stable;
+}
+
 .application.fallout-maw-actor-sheet .fallout-maw-panel {
   background:
     linear-gradient(180deg, rgba(12, 15, 11, 0.92), rgba(7, 9, 7, 0.9));

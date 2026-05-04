@@ -68,6 +68,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #tooltipElement = null;
   #tooltipPointer = { x: 0, y: 0 };
   #viewportResizeHandler = null;
+  #tabScrollPositions = new Map();
 
   static DEFAULT_OPTIONS = {
     classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-actor-sheet", "sheet", "actor"],
@@ -290,6 +291,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#relocateEffectsAddButton();
     this.#activateCreatureSelectors();
     this.#activateInventoryInteractions();
+    this.#activateTabScrollPersistence();
+    this.#restoreActiveTabScroll();
   }
 
   _onClose(options) {
@@ -499,6 +502,33 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     root.addEventListener("mousemove", event => this.#onInventoryItemMouseMove(event));
     root.addEventListener("mouseout", event => this.#onInventoryItemMouseOut(event));
     root.addEventListener("click", () => this.#closeInventoryContextMenu());
+  }
+
+  #activateTabScrollPersistence() {
+    const root = this.element;
+    if (!root || (root.dataset.falloutMawTabScrollPersistence === "true")) return;
+    root.dataset.falloutMawTabScrollPersistence = "true";
+    root.addEventListener("scroll", event => this.#onTabScroll(event), true);
+  }
+
+  #onTabScroll(event) {
+    const tab = event.target?.closest?.(".tab[data-tab]");
+    if (!tab) return;
+    this.#tabScrollPositions.set(tab.dataset.tab, tab.scrollTop ?? 0);
+  }
+
+  #restoreActiveTabScroll() {
+    const activeTab = this.element?.querySelector?.(".tab.active[data-tab]");
+    if (!activeTab) return;
+
+    const scrollTop = this.#tabScrollPositions.get(activeTab.dataset.tab) ?? 0;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    view.requestAnimationFrame(() => {
+      if (!this.element?.isConnected) return;
+      const nextActiveTab = this.element.querySelector(".tab.active[data-tab]");
+      if (!nextActiveTab || (nextActiveTab.dataset.tab !== activeTab.dataset.tab)) return;
+      nextActiveTab.scrollTop = scrollTop;
+    });
   }
 
   #onInventoryDragLeave(event) {
