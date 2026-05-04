@@ -1,6 +1,7 @@
 import { TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN, validateFormula } from "../formulas/index.mjs";
 import {
+  getSkillAdvancementSettings,
   getCharacteristicSettings,
   getSkillSettings,
   resetSkillSettings,
@@ -15,6 +16,7 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
     super(options);
     this.skills = getSkillSettings();
+    this.skillAdvancement = getSkillAdvancementSettings();
   }
 
   static DEFAULT_OPTIONS = {
@@ -45,9 +47,23 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
   }
 
   async _prepareContext(options) {
+    const characteristics = getCharacteristicSettings();
     return {
       ...(await super._prepareContext(options)),
-      skills: this.skills
+      characteristics,
+      signatureMultiplier: this.skillAdvancement.signatureMultiplier,
+      signatureFlatBonus: this.skillAdvancement.signatureFlatBonus,
+      skills: this.skills.map(skill => ({
+        ...skill,
+        advancement: this.skillAdvancement.entries?.[skill.key] ?? {
+          base: 0,
+          characteristics: Object.fromEntries(characteristics.map(characteristic => [characteristic.key, 0]))
+        },
+        characteristics: characteristics.map(characteristic => ({
+          ...characteristic,
+          value: Number(this.skillAdvancement.entries?.[skill.key]?.characteristics?.[characteristic.key] ?? 0)
+        }))
+      }))
     };
   }
 
@@ -59,9 +75,11 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
 
   async _processFormData(_event, _form, _formData) {
     const skills = this.#readSkillsFromForm();
+    const advancement = this.#readSkillAdvancementFromForm();
     this.#validateSkills(skills);
-    await setSkillSettings(skills);
+    await setSkillSettings({ entries: skills, advancement });
     this.skills = getSkillSettings();
+    this.skillAdvancement = getSkillAdvancementSettings();
     ui.notifications.info(localize("FALLOUTMAW.Messages.SkillsSaved"));
     return this.forceRender();
   }
@@ -93,6 +111,7 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     await resetSkillSettings();
     this.skills = getSkillSettings();
+    this.skillAdvancement = getSkillAdvancementSettings();
     return this.forceRender();
   }
 
@@ -104,6 +123,27 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
       label: row.querySelector("[data-field='label']")?.value?.trim() ?? "",
       formula: row.querySelector("[data-field='formula']")?.value?.trim() ?? "0"
     }));
+  }
+
+  #readSkillAdvancementFromForm() {
+    const rows = Array.from(this.form?.querySelectorAll("[data-skill-advancement-row]") ?? []);
+    return {
+      signatureMultiplier: Number(this.form?.querySelector("[data-field='signatureMultiplier']")?.value ?? 0),
+      signatureFlatBonus: Number(this.form?.querySelector("[data-field='signatureFlatBonus']")?.value ?? 0),
+      entries: Object.fromEntries(
+        rows.map(row => {
+          const key = row.dataset.skillKey ?? "";
+          const base = Number(row.querySelector("[data-field='baseMultiplier']")?.value ?? 0);
+          const characteristics = Object.fromEntries(
+            Array.from(row.querySelectorAll("[data-characteristic-key]") ?? []).map(input => [
+              input.dataset.characteristicKey,
+              Number(input.value ?? 0)
+            ])
+          );
+          return [key, { base, characteristics }];
+        })
+      )
+    };
   }
 
   #validateSkills(skills) {

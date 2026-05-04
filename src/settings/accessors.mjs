@@ -5,12 +5,14 @@ import {
   createDefaultNeedSettings,
   createDefaultProficiencySettings,
   createDefaultResourceSettings,
+  createDefaultSkillAdvancementSettings,
   createDefaultSkillSettings,
   normalizeCharacteristicSettings,
   normalizeDamageTypeSettings,
   normalizeNeedSettings,
   normalizeProficiencySettings,
   normalizeResourceSettings,
+  normalizeSkillAdvancementSettings,
   normalizeSkillSettings
 } from "../formulas/index.mjs";
 import { createDefaultCurrencySettings, normalizeCurrencySettings } from "./currency-settings.mjs";
@@ -19,12 +21,14 @@ import {
   CREATURE_OPTIONS_SETTING,
   CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
+  LEVELS_SETTING,
   NEED_SETTINGS_SETTING,
   PROFICIENCY_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
   SKILL_SETTINGS_SETTING
 } from "./constants.mjs";
 import { createEmptyCreatureOptions, normalizeCreatureOptions } from "./creature-options.mjs";
+import { createDefaultLevelSettings, normalizeLevelSettings } from "./levels.mjs";
 
 export function getCharacteristicSettings() {
   try {
@@ -53,14 +57,27 @@ export function getSkillSettings() {
   }
 }
 
+export function getSkillAdvancementSettings(characteristics = getCharacteristicSettings(), skills = getSkillSettings()) {
+  try {
+    return normalizeSkillAdvancementSettings(game.settings.get(FALLOUT_MAW.id, SKILL_SETTINGS_SETTING), skills, characteristics);
+  } catch (_error) {
+    return createDefaultSkillAdvancementSettings(skills, characteristics);
+  }
+}
+
 export async function setSkillSettings(settings) {
-  const normalized = normalizeSkillSettings(settings);
+  const skillEntries = normalizeSkillSettings(settings);
+  const advancement = normalizeSkillAdvancementSettings(settings, skillEntries, getCharacteristicSettings());
+  const normalized = { entries: skillEntries, advancement };
   await game.settings.set(FALLOUT_MAW.id, SKILL_SETTINGS_SETTING, normalized);
   return normalized;
 }
 
 export async function resetSkillSettings() {
-  return setSkillSettings(createDefaultSkillSettings());
+  return setSkillSettings({
+    entries: createDefaultSkillSettings(),
+    advancement: createDefaultSkillAdvancementSettings()
+  });
 }
 
 export function getProficiencySettings() {
@@ -165,6 +182,24 @@ export async function setNeedSettings(settings) {
 
 export async function resetNeedSettings() {
   return setNeedSettings(createDefaultNeedSettings());
+}
+
+export function getLevelSettings() {
+  try {
+    return normalizeLevelSettings(game.settings.get(FALLOUT_MAW.id, LEVELS_SETTING));
+  } catch (_error) {
+    return createDefaultLevelSettings();
+  }
+}
+
+export async function setLevelSettings(settings) {
+  const normalized = normalizeLevelSettings(settings);
+  await game.settings.set(FALLOUT_MAW.id, LEVELS_SETTING, normalized);
+  return normalized;
+}
+
+export async function resetLevelSettings() {
+  return setLevelSettings(createDefaultLevelSettings());
 }
 
 export function syncSettingsIntoSystemConfig() {

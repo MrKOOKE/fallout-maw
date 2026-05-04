@@ -6,6 +6,9 @@ export const ITEM_TYPES = Object.freeze(["gear", "weapon", "armor", "ability"]);
 
 export const TEMPLATES = Object.freeze({
   actorCreateDialog: `systems/${SYSTEM_ID}/templates/actor/actor-create-dialog.hbs`,
+  advancement: Object.freeze({
+    dialog: `systems/${SYSTEM_ID}/templates/actor/advancement-dialog.hbs`
+  }),
   skillCheckDialog: `systems/${SYSTEM_ID}/templates/actor/skill-check-dialog.hbs`,
   skillCheckChatCard: `systems/${SYSTEM_ID}/templates/chat/skill-check-card.hbs`,
   researchCompleteChatCard: `systems/${SYSTEM_ID}/templates/chat/research-complete-card.hbs`,
@@ -31,6 +34,7 @@ export const TEMPLATES = Object.freeze({
     creatureOptions: `systems/${SYSTEM_ID}/templates/settings/creature-options-config.hbs`,
     currencies: `systems/${SYSTEM_ID}/templates/settings/currency-settings-config.hbs`,
     damageTypes: `systems/${SYSTEM_ID}/templates/settings/damage-types-config.hbs`,
+    levels: `systems/${SYSTEM_ID}/templates/settings/level-settings-config.hbs`,
     needs: `systems/${SYSTEM_ID}/templates/settings/need-settings-config.hbs`,
     proficiencies: `systems/${SYSTEM_ID}/templates/settings/proficiency-settings-config.hbs`,
     resources: `systems/${SYSTEM_ID}/templates/settings/resource-settings-config.hbs`,

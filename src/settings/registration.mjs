@@ -5,6 +5,7 @@ import {
   createDefaultNeedSettings,
   createDefaultProficiencySettings,
   createDefaultResourceSettings,
+  createDefaultSkillAdvancementSettings,
   createDefaultSkillSettings
 } from "../formulas/index.mjs";
 import { createDefaultCurrencySettings } from "./currency-settings.mjs";
@@ -13,6 +14,7 @@ import { CharacteristicsConfig } from "../apps/characteristics-config.mjs";
 import { CreatureOptionsConfig } from "../apps/creature-options-config.mjs";
 import { CurrencySettingsConfig } from "../apps/currency-settings-config.mjs";
 import { DamageTypesConfig } from "../apps/damage-types-config.mjs";
+import { LevelSettingsConfig } from "../apps/level-settings-config.mjs";
 import { NeedSettingsConfig } from "../apps/need-settings-config.mjs";
 import { ProficiencySettingsConfig } from "../apps/proficiency-settings-config.mjs";
 import { ResourceSettingsConfig } from "../apps/resource-settings-config.mjs";
@@ -23,12 +25,14 @@ import {
   CREATURE_OPTIONS_SETTING,
   CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
+  LEVELS_SETTING,
   NEED_SETTINGS_SETTING,
   PROFICIENCY_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
   SKILL_SETTINGS_SETTING
 } from "./constants.mjs";
 import { createEmptyCreatureOptions } from "./creature-options.mjs";
+import { createDefaultLevelSettings } from "./levels.mjs";
 
 export function registerSystemSettings() {
   game.settings.register(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING, {
@@ -54,7 +58,19 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: createDefaultSkillSettings(),
+    default: {
+      entries: createDefaultSkillSettings(),
+      advancement: createDefaultSkillAdvancementSettings()
+    },
+    onChange: refreshPreparedActors
+  });
+
+  game.settings.register(FALLOUT_MAW.id, LEVELS_SETTING, {
+    name: localize("FALLOUTMAW.Settings.Levels.Title"),
+    scope: "world",
+    config: false,
+    type: Object,
+    default: createDefaultLevelSettings(),
     onChange: refreshPreparedActors
   });
 
@@ -124,6 +140,14 @@ export function registerSystemSettings() {
     label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-square-root-variable",
     type: SkillFormulasConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "levelSettingsMenu", {
+    name: localize("FALLOUTMAW.Settings.Levels.Title"),
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-arrow-trend-up",
+    type: LevelSettingsConfig,
     restricted: true
   });
 

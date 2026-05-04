@@ -39,6 +39,15 @@
       </label>
       <button
         type="button"
+        class="fallout-maw-development-button"
+        data-action="openDevelopment"
+        title="{{localize 'FALLOUTMAW.Advancement.Title'}}"
+        aria-label="{{localize 'FALLOUTMAW.Advancement.Title'}}"
+      >
+        <i class="fa-solid fa-star"></i>
+      </button>
+      <button
+        type="button"
         class="fallout-maw-toggle-edit"
         data-action="toggleFreeEdit"
         title="{{#if freeEdit}}{{localize 'FALLOUTMAW.Actor.LockCoreFields'}}{{else}}{{localize 'FALLOUTMAW.Actor.UnlockCoreFields'}}{{/if}}"

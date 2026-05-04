@@ -1,0 +1,98 @@
+<div class="fallout-maw-config-body fallout-maw-advancement-body">
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Advancement.Title"}}</h2>
+      <div class="fallout-maw-button-row">
+        <button type="button" data-action="resetDevelopment">
+          <i class="fa-solid fa-rotate-left"></i>
+          {{localize "FALLOUTMAW.Advancement.Reset"}}
+        </button>
+        <button type="button" data-action="levelUp" {{#unless canLevelUp}}disabled{{/unless}}>
+          <i class="fa-solid fa-arrow-up"></i>
+          {{localize "FALLOUTMAW.Advancement.LevelUp"}}
+        </button>
+      </div>
+    </div>
+
+    <div class="fallout-maw-advancement-summary">
+      <label class="fallout-maw-stacked-field">
+        <span>{{localize "FALLOUTMAW.Actor.Level"}}</span>
+        <strong>{{level}}</strong>
+      </label>
+      <label class="fallout-maw-stacked-field">
+        <span>{{localize "FALLOUTMAW.Advancement.Experience"}}</span>
+        <input type="number" name="experience" value="{{experience}}" min="0">
+      </label>
+      <label class="fallout-maw-stacked-field">
+        <span>{{localize "FALLOUTMAW.Advancement.SkillPoints"}}</span>
+        <strong>{{skillPointsDisplay}}</strong>
+      </label>
+      <label class="fallout-maw-stacked-field">
+        <span>{{localize "FALLOUTMAW.Advancement.SignatureSkillPoints"}}</span>
+        <strong>{{signatureSkillPointsDisplay}}</strong>
+      </label>
+      <label class="fallout-maw-stacked-field">
+        <span>{{localize "FALLOUTMAW.Advancement.CharacteristicPoints"}}</span>
+        <strong>{{characteristicPointsDisplay}}</strong>
+      </label>
+    </div>
+
+    <div class="fallout-maw-advancement-xp">
+      <div class="fallout-maw-advancement-xp-values">
+        <span>{{experienceFloor}}</span>
+        <strong>{{experienceCurrent}} / {{experienceNext}}</strong>
+      </div>
+      <div class="fallout-maw-research-progress-bar fallout-maw-advancement-xp-bar">
+        <span style="{{experienceBarStyle}}"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Common.Characteristics"}}</h2>
+    <div class="fallout-maw-advancement-characteristics">
+      {{#each characteristics}}
+      <div class="fallout-maw-advancement-row">
+        <span class="fallout-maw-advancement-name" title="{{abbr}} / {{key}}">{{label}}</span>
+        <div class="fallout-maw-advancement-controls">
+          <button type="button" data-action="decreaseCharacteristic" data-characteristic-key="{{key}}" {{#unless canDecrease}}disabled{{/unless}}><i class="fa-solid fa-minus"></i></button>
+          <strong>{{value}}</strong>
+          <button type="button" data-action="increaseCharacteristic" data-characteristic-key="{{key}}" {{#unless canIncrease}}disabled{{/unless}}><i class="fa-solid fa-plus"></i></button>
+        </div>
+      </div>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Common.Skills"}}</h2>
+    <div class="fallout-maw-advancement-skills">
+      {{#each skills}}
+      <div class="fallout-maw-advancement-skill-row">
+        <button
+          type="button"
+          class="fallout-maw-advancement-signature{{#if signature}} active{{/if}}"
+          data-action="toggleSignatureSkill"
+          data-skill-key="{{key}}"
+          {{#unless canToggleSignature}}disabled{{/unless}}
+          title="{{localize 'FALLOUTMAW.Advancement.ToggleSignatureSkill'}}"
+        >
+          <i class="fa-solid fa-star"></i>
+        </button>
+
+        <span class="fallout-maw-advancement-name">{{label}}</span>
+
+        <div class="fallout-maw-advancement-controls">
+          <button type="button" data-action="decreaseSkill" data-skill-key="{{key}}" {{#unless canDecrease}}disabled{{/unless}}><i class="fa-solid fa-minus"></i></button>
+          <strong>{{value}}</strong>
+          <button type="button" data-action="increaseSkill" data-skill-key="{{key}}" {{#unless canIncrease}}disabled{{/unless}}><i class="fa-solid fa-plus"></i></button>
+        </div>
+      </div>
+      {{/each}}
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  </footer>
+</div>

@@ -1,4 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
+import { cloneActorDevelopment, normalizeActorDevelopment } from "../advancement/index.mjs";
 import { clampPreparedResource } from "../data/models/resources.mjs";
 import { evaluateFormula, getSkillValues } from "../formulas/index.mjs";
 import {
@@ -6,7 +7,14 @@ import {
   normalizeResearchCollection,
   prepareResearchForStorage
 } from "../research/storage.mjs";
-import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
+import {
+  getCharacteristicSettings,
+  getCreatureOptions,
+  getCurrencySettings,
+  getLevelSettings,
+  getSkillSettings
+} from "../settings/accessors.mjs";
+import { getLevelThreshold } from "../settings/levels.mjs";
 import { getItemContainerParentId } from "../utils/inventory-containers.mjs";
 
 export class FalloutMaWActor extends Actor {
@@ -81,6 +89,60 @@ export class FalloutMaWActor extends Actor {
 
   get health() {
     return this.system?.resources?.health;
+  }
+
+  getDevelopment() {
+    return normalizeActorDevelopment(this.system?.development, getCharacteristicSettings(), getSkillSettings());
+  }
+
+  prepareDevelopmentResetData({
+    level = this.system?.attributes?.level,
+    experience = this.system?.development?.experience
+  } = {}) {
+    const characteristicSettings = getCharacteristicSettings();
+    const skillSettings = getSkillSettings();
+    const race = getCreatureOptions().races.find(entry => entry.id === this.system?.creature?.raceId);
+    const normalizedLevel = Math.max(1, toInteger(level));
+    const skillPointsPerLevel = Math.max(0, toInteger(race?.progression?.skillPointsPerLevel ?? this.system?.progression?.skillPointsPerLevel));
+    const researchPointsPerLevel = Math.max(0, toInteger(race?.progression?.researchPointsPerLevel ?? this.system?.progression?.researchPointsPerLevel));
+
+    const characteristics = Object.fromEntries(
+      characteristicSettings.map(characteristic => [
+        characteristic.key,
+        toInteger(race?.characteristics?.[characteristic.key] ?? this.system?.characteristics?.[characteristic.key])
+      ])
+    );
+
+    const development = cloneActorDevelopment({}, characteristicSettings, skillSettings);
+    development.initialized = true;
+    development.experience = Math.max(0, toInteger(experience));
+    development.points.characteristics = Math.max(0, toInteger(race?.baseParameters?.characteristicDistributionPoints));
+    development.points.signatureSkills = Math.max(0, toInteger(race?.baseParameters?.signatureSkillPoints));
+    development.points.traits = Math.max(0, toInteger(race?.baseParameters?.traitPoints));
+    development.points.proficiencies = Math.max(0, toInteger(race?.baseParameters?.proficiencyPoints));
+    development.points.skills = skillPointsPerLevel * Math.max(0, normalizedLevel - 1);
+    development.points.researches = researchPointsPerLevel * Math.max(0, normalizedLevel - 1);
+
+    return { characteristics, development };
+  }
+
+  async ensureDevelopmentInitialized() {
+    const development = this.getDevelopment();
+    if (development.initialized) return development;
+
+    const initialized = this.prepareDevelopmentResetData({
+      level: this.system?.attributes?.level,
+      experience: development.experience
+    }).development;
+
+    await this.update({ "system.development": initialized });
+    return initialized;
+  }
+
+  canLevelUp(level = this.system?.attributes?.level, experience = this.system?.development?.experience) {
+    const nextThreshold = getLevelThreshold(getLevelSettings(), Math.max(0, toInteger(level)));
+    if (!nextThreshold) return false;
+    return Math.max(0, toInteger(experience)) >= nextThreshold;
   }
 
   getResearch(researchId = "") {

@@ -6,3 +6,4 @@ export const DAMAGE_TYPES_SETTING = "damageTypes";
 export const CURRENCY_SETTINGS_SETTING = "currencySettings";
 export const RESOURCE_SETTINGS_SETTING = "resourceSettings";
 export const NEED_SETTINGS_SETTING = "needSettings";
+export const LEVELS_SETTING = "levels";

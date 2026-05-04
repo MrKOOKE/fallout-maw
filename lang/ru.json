@@ -185,6 +185,19 @@
       "TimeTitle": "Время исследования: {name}",
       "UnassignedSkill": "Навык не выбран"
     },
+    "Advancement": {
+      "Title": "Развитие",
+      "LevelUp": "Повысить уровень",
+      "Reset": "Сбросить",
+      "ResetConfirm": "Сбросить развитие, вернуть характеристики к расовым значениям и заново выдать все доступные очки под текущий уровень?",
+      "Experience": "Опыт",
+      "SkillPoints": "Очки навыков",
+      "SignatureSkillPoints": "Очки коронных навыков",
+      "CharacteristicPoints": "Очки характеристик",
+      "BaseSkill": "База навыка",
+      "DevelopmentBonus": "Бонус развития",
+      "ToggleSignatureSkill": "Переключить коронный навык"
+    },
     "SkillCheck": {
       "Advantage": "Преимущество",
       "AdvantageSummary": "Преимущество {count}, бонус {bonus}",
@@ -303,23 +316,36 @@
         "Title": "Настройка ресурсов"
       },
       "Skills": {
+        "AdvancementTitle": "Формулы развития навыков",
+        "BaseMultiplier": "База за очко",
         "Create": "Создать навык",
         "Delete": "Удалить навык",
         "Empty": "Навыки не созданы.",
-        "FormulaHint": "Формулы навыков могут использовать ключи и коды характеристик.",
+        "FormulaHint": "Формулы навыков могут использовать ключи и коды характеристик. Ключи и коды держите в латинице.",
         "LabelPlaceholder": "Название навыка",
+        "SignatureFlatBonus": "Плоский бонус коронного навыка",
+        "SignatureMultiplier": "Множитель коронного навыка",
         "Title": "Настройка навыков"
+      },
+      "Levels": {
+        "Create": "Добавить уровень",
+        "Hint": "Настройте список порогов опыта для повышения уровня.",
+        "Title": "Настройка уровней"
       }
     },
     "Messages": {
+      "AdvancementSaved": "Развитие сохранено.",
       "CharacteristicsSaved": "Настройки характеристик сохранены.",
-      "ContainerMaxLoadExceeded": "Контейнер не выдерживает такой вес содержимого.",
+      "ContainerMaxLoadExceeded": "Этот контейнер не выдерживает такой вес.",
       "ContainerRecursiveError": "Нельзя поместить контейнер внутрь самого себя или его потомка.",
       "CurrenciesSaved": "Настройки валют сохранены.",
       "CreateTypeFirst": "Сначала создайте тип существа.",
       "CreatureOptionsSaved": "Типы и расы сохранены.",
-      "DamageTypesSaved": "Настройка типов урона сохранена.",
+      "DamageTypesSaved": "Настройки типов урона сохранены.",
+      "DeleteRaceContent": "Удалить расу \"{name}\"?",
+      "DeleteTypeContent": "Удалить тип \"{name}\" и все связанные с ним расы?",
       "InventoryNoSpace": "В инвентаре недостаточно места для этого предмета.",
+      "LevelsSaved": "Настройки уровней сохранены.",
       "NeedsSaved": "Настройки потребностей сохранены.",
       "ProficienciesSaved": "Настройки владений сохранены.",
       "ResearchCreated": "Исследование создано.",
@@ -330,8 +356,6 @@
       "ResearchTimeRequired": "Задайте минимум 30 минут исследования.",
       "ResearchUpdated": "Исследование обновлено.",
       "ResourcesSaved": "Настройки ресурсов сохранены.",
-      "DeleteRaceContent": "Удалить расу \"{name}\"?",
-      "DeleteTypeContent": "Удалить тип \"{name}\" и все связанные с ним расы?",
       "SkillsSaved": "Настройки навыков сохранены."
     },
     "Formula": {

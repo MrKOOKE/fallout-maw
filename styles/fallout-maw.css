@@ -487,6 +487,14 @@
   width: 2.25rem;
 }
 
+.fallout-maw-development-button {
+  height: 2.1rem;
+  justify-self: end;
+  min-width: 2.25rem;
+  padding: 0;
+  width: 2.25rem;
+}
+
 .fallout-maw-level-field input {
   min-width: 4.5rem;
 }
@@ -1088,6 +1096,90 @@
   grid-template-columns: repeat(2, minmax(220px, 1fr));
 }
 
+.fallout-maw-advancement-summary {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.fallout-maw-advancement-xp {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.fallout-maw-advancement-xp-values {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  opacity: 0.8;
+}
+
+.fallout-maw-advancement-xp-bar {
+  height: 0.9rem;
+}
+
+.fallout-maw-advancement-characteristics,
+.fallout-maw-advancement-skills {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.fallout-maw-advancement-characteristics,
+.fallout-maw-advancement-skills {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fallout-maw-advancement-row,
+.fallout-maw-advancement-skill-row {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(120, 120, 120, 0.2);
+  border-radius: 6px;
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
+}
+
+.fallout-maw-advancement-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.fallout-maw-advancement-skill-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.fallout-maw-advancement-controls {
+  align-items: center;
+  display: inline-grid;
+  gap: 0.4rem;
+  grid-auto-flow: column;
+}
+
+.fallout-maw-advancement-controls > strong {
+  min-width: 2rem;
+  text-align: center;
+}
+
+.fallout-maw-advancement-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-advancement-signature {
+  align-self: stretch;
+  min-width: 2.5rem;
+}
+
+.fallout-maw-advancement-signature.active {
+  background: rgba(89, 170, 95, 0.18);
+  border-color: rgba(89, 170, 95, 0.6);
+  color: #74d67f;
+}
+
 .fallout-maw-identity-skill {
   align-items: center;
   background: rgba(255, 255, 255, 0.025);
@@ -1465,6 +1557,10 @@
     justify-self: start;
   }
 
+  .fallout-maw-development-button {
+    justify-self: start;
+  }
+
   .skill-settings .fallout-maw-settings-row,
   .proficiency-settings .fallout-maw-settings-row,
   .resource-settings .fallout-maw-settings-row,
@@ -1481,6 +1577,13 @@
   }
 
   .fallout-maw-identity-skill-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fallout-maw-advancement-characteristics,
+  .fallout-maw-advancement-skills,
+  .fallout-maw-advancement-skill-row,
+  .fallout-maw-advancement-row {
     grid-template-columns: 1fr;
   }
 }

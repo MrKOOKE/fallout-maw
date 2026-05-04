@@ -1,4 +1,8 @@
 import {
+  calculateSkillDevelopmentBonuses,
+  normalizeActorDevelopment
+} from "../../advancement/index.mjs";
+import {
   evaluateFormulaMap,
   evaluateNeedSettings,
   evaluateResourceSettings,
@@ -15,6 +19,7 @@ import {
   getNeedSettings,
   getProficiencySettings,
   getResourceSettings,
+  getSkillAdvancementSettings,
   getSkillSettings
 } from "../../settings/accessors.mjs";
 import { resourceField } from "./resources.mjs";
@@ -27,7 +32,7 @@ import {
 import { normalizeResearchCollection } from "../../research/storage.mjs";
 import { toInteger } from "../../utils/numbers.mjs";
 
-const { ArrayField, HTMLField, NumberField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
+const { ArrayField, BooleanField, HTMLField, NumberField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
 
 export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
   static defineSchema() {
@@ -79,7 +84,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       progression: new SchemaField({
         skillPointsPerLevel: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
         researchPointsPerLevel: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
-      })
+      }),
+      development: developmentField()
     };
   }
 
@@ -91,6 +97,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     const resourceSettings = getResourceSettings();
     const needSettings = getNeedSettings();
     const proficiencySettings = getProficiencySettings();
+    const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
 
     this.characteristics ??= {};
     this.skills ??= {};
@@ -103,6 +110,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.damageResistances ??= {};
     this.damageDefenses ??= {};
     this.damageReductions ??= {};
+    this.development ??= {};
 
     replaceObjectContents(this.characteristics, normalizeNumberMap(this.characteristics, characteristicSettings));
     replaceObjectContents(this.currencies, normalizeNumberMap(this.currencies, currencySettings));
@@ -114,9 +122,16 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     }
 
     replaceObjectContents(this.limbs, normalizeLimbMap(this.limbs, race?.limbs ?? []));
+    replaceObjectContents(this.development, normalizeActorDevelopment(this.development, characteristicSettings, skillSettings));
 
     const skillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, this.characteristics);
-    replaceObjectContents(this.skills, normalizeSkillMap(this.skills, skillSettings, skillBases));
+    const skillBonuses = calculateSkillDevelopmentBonuses(
+      skillSettings,
+      this.characteristics,
+      skillAdvancementSettings,
+      this.development
+    );
+    replaceObjectContents(this.skills, normalizeSkillMap(this.skills, skillSettings, skillBases, skillBonuses));
     replaceArrayContents(this.researches, normalizeResearchCollection(this.researches));
     replaceObjectContents(this.proficiencies, normalizeProficiencyMap(this.proficiencies, proficiencySettings));
 
@@ -220,15 +235,41 @@ function replaceArrayContents(target, source) {
   target.push(...source);
 }
 
-function normalizeSkillMap(currentSkills = {}, skillSettings = [], skillBases = {}) {
+function normalizeSkillMap(currentSkills = {}, skillSettings = [], skillBases = {}, skillBonuses = {}) {
   return Object.fromEntries(
     skillSettings.map(skill => {
       const current = currentSkills?.[skill.key];
-      const bonus = current && typeof current === "object" ? toInteger(current.bonus) : 0;
       const base = toInteger(skillBases?.[skill.key]);
+      const bonus = toInteger(skillBonuses?.[skill.key]);
       return [skill.key, { base, bonus, value: base + bonus }];
     })
   );
+}
+
+function developmentField() {
+  return new SchemaField({
+    initialized: new BooleanField({ required: true, initial: false }),
+    experience: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    points: new SchemaField({
+      characteristics: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      signatureSkills: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      traits: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      proficiencies: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      skills: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      researches: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+    }),
+    characteristics: new TypedObjectField(
+      new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      { required: true, initial: {} }
+    ),
+    skills: new TypedObjectField(
+      new SchemaField({
+        points: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+        signature: new BooleanField({ required: true, initial: false })
+      }),
+      { required: true, initial: {} }
+    )
+  });
 }
 
 function normalizeResourceMap(currentResources = {}, settings = [], maximums = {}) {

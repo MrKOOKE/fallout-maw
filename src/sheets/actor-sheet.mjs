@@ -1,5 +1,6 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { TEMPLATES } from "../constants.mjs";
+import { AdvancementApplication } from "../advancement/application.mjs";
 import {
   getCharacteristicSettings,
   getCreatureOptions,
@@ -77,6 +78,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       resizable: true
     },
     actions: {
+        openDevelopment: this.#onOpenDevelopment,
         toggleFreeEdit: this.#onToggleFreeEdit,
         selectLimb: this.#onSelectLimb,
         createResearch: this.#onCreateResearch,
@@ -319,6 +321,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     event.preventDefault();
     this.#freeEdit = !this.#freeEdit;
     return this.render({ force: true });
+  }
+
+  static #onOpenDevelopment(event) {
+    event.preventDefault();
+    return new AdvancementApplication(this.actor).render(true);
   }
 
   static #onSelectLimb(event, target) {

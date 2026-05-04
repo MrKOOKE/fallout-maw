@@ -185,6 +185,19 @@
       "TimeTitle": "Research Time: {name}",
       "UnassignedSkill": "Skill not selected"
     },
+    "Advancement": {
+      "Title": "Development",
+      "LevelUp": "Level Up",
+      "Reset": "Reset",
+      "ResetConfirm": "Reset development, restore racial characteristics, and reissue all available points for the current level?",
+      "Experience": "Experience",
+      "SkillPoints": "Skill Points",
+      "SignatureSkillPoints": "Signature Skill Points",
+      "CharacteristicPoints": "Characteristic Points",
+      "BaseSkill": "Base Skill",
+      "DevelopmentBonus": "Development Bonus",
+      "ToggleSignatureSkill": "Toggle Signature Skill"
+    },
     "SkillCheck": {
       "Advantage": "Advantage",
       "AdvantageSummary": "Advantage {count}, bonus {bonus}",
@@ -303,15 +316,25 @@
         "Title": "Resource Settings"
       },
       "Skills": {
+        "AdvancementTitle": "Skill Development Formulas",
+        "BaseMultiplier": "Base per Point",
         "Create": "Create Skill",
         "Delete": "Delete Skill",
         "Empty": "No skills created.",
         "FormulaHint": "Skill formulas can use characteristic keys and codes. Keep keys and codes in Latin characters.",
         "LabelPlaceholder": "Skill name",
+        "SignatureFlatBonus": "Signature Flat Bonus",
+        "SignatureMultiplier": "Signature Multiplier",
         "Title": "Skill Settings"
+      },
+      "Levels": {
+        "Create": "Create Level",
+        "Hint": "Configure the XP threshold list used for leveling.",
+        "Title": "Level Settings"
       }
     },
     "Messages": {
+      "AdvancementSaved": "Development saved.",
       "CharacteristicsSaved": "Characteristic settings saved.",
       "ContainerMaxLoadExceeded": "This container cannot hold that much weight.",
       "ContainerRecursiveError": "A container cannot be placed inside itself or one of its descendants.",
@@ -332,6 +355,7 @@
       "ResourcesSaved": "Resource settings saved.",
       "DeleteRaceContent": "Delete race \"{name}\"?",
       "DeleteTypeContent": "Delete type \"{name}\" and all races assigned to it?",
+      "LevelsSaved": "Level settings saved.",
       "SkillsSaved": "Skill settings saved."
     },
     "Formula": {

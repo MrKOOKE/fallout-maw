@@ -4,6 +4,9 @@ import {
   DEFAULT_NEEDS,
   DEFAULT_PROFICIENCIES,
   DEFAULT_RESOURCES,
+  DEFAULT_SIGNATURE_SKILL_FLAT_BONUS,
+  DEFAULT_SIGNATURE_SKILL_MULTIPLIER,
+  DEFAULT_SKILL_ADVANCEMENT,
   DEFAULT_SKILLS
 } from "../config/defaults.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -16,6 +19,33 @@ export function createDefaultCharacteristicSettings() {
 
 export function createDefaultSkillSettings() {
   return DEFAULT_SKILLS.map(entry => ({ ...entry }));
+}
+
+export function createDefaultSkillAdvancementSettings(
+  skillSettings = createDefaultSkillSettings(),
+  characteristicSettings = createDefaultCharacteristicSettings()
+) {
+  const skills = normalizeSkillSettings(skillSettings);
+  const characteristics = normalizeCharacteristicSettings(characteristicSettings);
+
+  return {
+    signatureMultiplier: DEFAULT_SIGNATURE_SKILL_MULTIPLIER,
+    signatureFlatBonus: DEFAULT_SIGNATURE_SKILL_FLAT_BONUS,
+    entries: Object.fromEntries(
+      skills.map(skill => {
+        const defaults = DEFAULT_SKILL_ADVANCEMENT[skill.key] ?? {};
+        return [skill.key, {
+          base: toDecimal(defaults.base, 0),
+          characteristics: Object.fromEntries(
+            characteristics.map(characteristic => [
+              characteristic.key,
+              toDecimal(defaults.characteristics?.[characteristic.key], 0)
+            ])
+          )
+        }];
+      })
+    )
+  };
 }
 
 export function createDefaultProficiencySettings() {
@@ -65,6 +95,40 @@ export function normalizeSkillSettings(settings) {
     },
     "Навык"
   );
+}
+
+export function normalizeSkillAdvancementSettings(
+  settings,
+  skillSettings = createDefaultSkillSettings(),
+  characteristicSettings = createDefaultCharacteristicSettings()
+) {
+  const skills = normalizeSkillSettings(skillSettings);
+  const characteristics = normalizeCharacteristicSettings(characteristicSettings);
+  const defaults = createDefaultSkillAdvancementSettings(skills, characteristics);
+  const source = settings?.advancement ?? settings ?? {};
+
+  return {
+    signatureMultiplier: toDecimal(source?.signatureMultiplier ?? source?.signature?.multiplier, defaults.signatureMultiplier),
+    signatureFlatBonus: toDecimal(source?.signatureFlatBonus ?? source?.signature?.flatBonus, defaults.signatureFlatBonus),
+    entries: Object.fromEntries(
+      skills.map(skill => {
+        const sourceEntry = source?.entries?.[skill.key] ?? source?.skills?.[skill.key] ?? source?.[skill.key] ?? {};
+        const defaultEntry = defaults.entries[skill.key];
+        return [skill.key, {
+          base: toDecimal(sourceEntry?.base ?? sourceEntry?.baseMultiplier, defaultEntry.base),
+          characteristics: Object.fromEntries(
+            characteristics.map(characteristic => [
+              characteristic.key,
+              toDecimal(
+                sourceEntry?.characteristics?.[characteristic.key] ?? sourceEntry?.[characteristic.key],
+                defaultEntry.characteristics[characteristic.key]
+              )
+            ])
+          )
+        }];
+      })
+    )
+  };
 }
 
 export function normalizeProficiencySettings(settings) {
@@ -182,4 +246,9 @@ function normalizeKeyedEntries(source, mapEntry, defaultLabel) {
 function addEntryAliases(aliases, entry) {
   aliases[entry.key.toLowerCase()] = entry.key;
   if (entry.abbr) aliases[entry.abbr.toLowerCase()] = entry.key;
+}
+
+function toDecimal(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }

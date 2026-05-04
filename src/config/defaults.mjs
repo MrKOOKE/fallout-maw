@@ -45,6 +45,30 @@ export const DEFAULT_SKILLS = Object.freeze([
   { key: "gambling", abbr: "gam", label: "Азарт", formula: "6 * luc" }
 ]);
 
+export const DEFAULT_SIGNATURE_SKILL_MULTIPLIER = 1.5;
+export const DEFAULT_SIGNATURE_SKILL_FLAT_BONUS = 15;
+
+export const DEFAULT_SKILL_ADVANCEMENT = Object.freeze({
+  rangedCombat: Object.freeze({ base: 0.7, characteristics: Object.freeze({ dexterity: 0.02, perception: 0.06 }) }),
+  meleeCombat: Object.freeze({ base: 0.7, characteristics: Object.freeze({ strength: 0.06, dexterity: 0.02 }) }),
+  athletics: Object.freeze({ base: 0.7, characteristics: Object.freeze({ dexterity: 0.04, strength: 0.04 }) }),
+  energy: Object.freeze({ base: 0.7, characteristics: Object.freeze({ intelligence: 0.08 }) }),
+  resilience: Object.freeze({ base: 0.7, characteristics: Object.freeze({ endurance: 0.08 }) }),
+  throwing: Object.freeze({ base: 0.7, characteristics: Object.freeze({ dexterity: 0.04, strength: 0.02 }) }),
+  firstAid: Object.freeze({ base: 0.7, characteristics: Object.freeze({ perception: 0.06, intelligence: 0.03 }) }),
+  doctor: Object.freeze({ base: 0.7, characteristics: Object.freeze({ perception: 0.02, intelligence: 0.06 }) }),
+  naturalist: Object.freeze({ base: 0.7, characteristics: Object.freeze({ perception: 0.08 }) }),
+  stealth: Object.freeze({ base: 0.7, characteristics: Object.freeze({ dexterity: 0.08 }) }),
+  lockpicking: Object.freeze({ base: 0.7, characteristics: Object.freeze({ perception: 0.04, dexterity: 0.02 }) }),
+  theft: Object.freeze({ base: 0.7, characteristics: Object.freeze({ dexterity: 0.06, perception: 0.02 }) }),
+  traps: Object.freeze({ base: 0.7, characteristics: Object.freeze({ perception: 0.04, dexterity: 0.04 }) }),
+  science: Object.freeze({ base: 0.7, characteristics: Object.freeze({ intelligence: 0.08 }) }),
+  repair: Object.freeze({ base: 0.7, characteristics: Object.freeze({ intelligence: 0.08 }) }),
+  speech: Object.freeze({ base: 0.7, characteristics: Object.freeze({ charisma: 0.08 }) }),
+  barter: Object.freeze({ base: 0.7, characteristics: Object.freeze({ charisma: 0.06, intelligence: 0.02 }) }),
+  gambling: Object.freeze({ base: 0.7, characteristics: Object.freeze({ luck: 0.08 }) })
+});
+
 export const DEFAULT_PROFICIENCIES = Object.freeze([
   { key: "pistol", abbr: "pis", label: "Пистолет", max: 1000 },
   { key: "automatic", abbr: "aut", label: "Автомат", max: 1000 },

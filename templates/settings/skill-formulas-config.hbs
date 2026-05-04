@@ -34,6 +34,45 @@
     </div>
   </section>
 
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Settings.Skills.AdvancementTitle"}}</h2>
+    </header>
+
+    <div class="fallout-maw-list-grid two-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Settings.Skills.SignatureMultiplier"}}</span>
+        <input type="number" data-field="signatureMultiplier" value="{{signatureMultiplier}}" step="0.01">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Settings.Skills.SignatureFlatBonus"}}</span>
+        <input type="number" data-field="signatureFlatBonus" value="{{signatureFlatBonus}}" step="0.01">
+      </label>
+    </div>
+
+    <div class="fallout-maw-weapon-set-list fallout-maw-skill-advancement-list">
+      {{#each skills}}
+      <fieldset class="fallout-maw-weapon-set-config fallout-maw-skill-advancement-block" data-skill-advancement-row data-skill-key="{{key}}">
+        <legend>{{label}}</legend>
+        <div class="fallout-maw-list-grid two-columns">
+          <label>
+            <span>{{localize "FALLOUTMAW.Settings.Skills.BaseMultiplier"}}</span>
+            <input type="number" data-field="baseMultiplier" value="{{advancement.base}}" step="0.01">
+          </label>
+        </div>
+        <div class="fallout-maw-list-grid two-columns">
+          {{#each characteristics}}
+          <label>
+            <span>{{label}}</span>
+            <input type="number" data-characteristic-key="{{key}}" value="{{value}}" step="0.01">
+          </label>
+          {{/each}}
+        </div>
+      </fieldset>
+      {{/each}}
+    </div>
+  </section>
+
   <footer class="sheet-footer flexrow">
     <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
   </footer>
