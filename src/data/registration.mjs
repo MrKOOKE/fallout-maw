@@ -4,7 +4,6 @@ import {
   AbilityDataModel,
   ArmorDataModel,
   CharacterDataModel,
-  EffectDataModel,
   GearDataModel,
   HazardDataModel,
   NpcDataModel,
@@ -26,8 +25,7 @@ export function registerDataModels() {
     gear: GearDataModel,
     weapon: WeaponDataModel,
     armor: ArmorDataModel,
-    ability: AbilityDataModel,
-    effect: EffectDataModel
+    ability: AbilityDataModel
   });
 }
 

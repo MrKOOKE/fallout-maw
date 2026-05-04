@@ -1,0 +1,111 @@
+<div class="fallout-maw-sheet-body fallout-maw-active-effect-body">
+  <header class="sheet-header fallout-maw-sheet-header">
+    <img class="profile-img" src="{{source.img}}" data-action="editImage" data-edit="img" title="{{effect.name}}" height="72" width="72">
+    <div class="fallout-maw-header-fields">
+      <input class="fallout-maw-title-input" name="name" type="text" value="{{source.name}}" placeholder="{{localize 'EFFECT.FIELDS.name.label'}}">
+      <div class="fallout-maw-active-effect-summary">
+        <label class="checkbox">
+          <input type="hidden" name="disabled" value="false">
+          <input type="checkbox" name="disabled" value="true" {{checked source.disabled}}>
+          <span>{{localize "FALLOUTMAW.Effects.Disabled"}}</span>
+        </label>
+        <label>
+          <span>{{localize "FALLOUTMAW.Effects.Kind"}}</span>
+          <select name="flags.fallout-maw.kind">
+            {{#each kindChoices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <nav class="sheet-tabs tabs fallout-maw-item-tabs" data-group="primary">
+    <a class="item {{tabs.main.cssClass}}" data-action="tab" data-group="{{tabs.main.group}}" data-tab="{{tabs.main.id}}">{{localize "FALLOUTMAW.Effects.MainTab"}}</a>
+    <a class="item {{tabs.effects.cssClass}}" data-action="tab" data-group="{{tabs.effects.group}}" data-tab="{{tabs.effects.id}}">{{localize "FALLOUTMAW.Effects.EffectsTab"}}</a>
+  </nav>
+
+  <section class="tab {{tabs.main.cssClass}}" data-group="{{tabs.main.group}}" data-tab="{{tabs.main.id}}">
+    <section class="fallout-maw-panel">
+      <h2>{{localize "FALLOUTMAW.Effects.MainTab"}}</h2>
+      <div class="fallout-maw-list-grid two-columns">
+        <label>
+          <span>{{localize "EFFECT.FIELDS.tint.label"}}</span>
+          <input type="color" name="tint" value="{{source.tint}}">
+        </label>
+        <label>
+          <span>{{localize "EFFECT.FIELDS.origin.label"}}</span>
+          <input type="text" name="origin" value="{{source.origin}}" disabled>
+        </label>
+      </div>
+    </section>
+
+    <section class="fallout-maw-panel">
+      <h2>{{localize "EFFECT.DURATION.Header"}}</h2>
+      <div class="fallout-maw-list-grid three-columns">
+        <label>
+          <span>{{localize "EFFECT.FIELDS.duration.value.label"}}</span>
+          <input type="number" name="duration.value" value="{{source.duration.value}}" step="1">
+        </label>
+        <label>
+          <span>{{localize "EFFECT.FIELDS.duration.units.label"}}</span>
+          <select name="duration.units">
+            {{#each durationUnitChoices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+        </label>
+        <label>
+          <span>{{localize "EFFECT.FIELDS.duration.expiry.label"}}</span>
+          <select name="duration.expiry">
+            {{#each expiryChoices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <section class="fallout-maw-panel fallout-maw-active-effect-description">
+      {{formGroup fields.description value=source.description rootId=rootId}}
+    </section>
+  </section>
+
+  <section class="tab {{tabs.effects.cssClass}}" data-group="{{tabs.effects.group}}" data-tab="{{tabs.effects.id}}">
+    <section class="fallout-maw-panel">
+      <div class="fallout-maw-panel-header">
+        <h2>{{localize "FALLOUTMAW.Effects.EffectsTab"}}</h2>
+        <button type="button" data-action="addChange"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Effects.AddChange"}}</button>
+      </div>
+      <div class="fallout-maw-effect-change-list">
+        <div class="fallout-maw-effect-change-row fallout-maw-grid-header">
+          <span>{{localize "FALLOUTMAW.Common.Path"}}</span>
+          <span>{{localize "FALLOUTMAW.Effects.Mode"}}</span>
+          <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+          <span>{{localize "FALLOUTMAW.Effects.Priority"}}</span>
+          <span></span>
+        </div>
+        {{#each changes}}
+        <div class="fallout-maw-effect-change-row" data-change-index="{{index}}">
+          <input type="text" name="{{paths.key}}" value="{{key}}" data-effect-key-autocomplete>
+          <select name="{{paths.type}}">
+            {{#each typeChoices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+          <input type="text" name="{{paths.value}}" value="{{value}}">
+          <input type="number" name="{{paths.priority}}" value="{{priority}}" placeholder="{{priorityPlaceholder}}" step="1">
+          <button type="button" data-action="deleteChange" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        </div>
+        {{else}}
+        <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Effects.NoChanges"}}</p>
+        {{/each}}
+      </div>
+    </section>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-floppy-disk"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  </footer>
+</div>

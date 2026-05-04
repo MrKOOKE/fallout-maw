@@ -69,7 +69,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     },
     actions: {
       toggleFreeEdit: this.#onToggleFreeEdit,
-      selectLimb: this.#onSelectLimb
+      selectLimb: this.#onSelectLimb,
+      createEffect: this.#onCreateEffect,
+      editEffect: this.#onEditEffect,
+      toggleEffect: this.#onToggleEffect,
+      deleteEffect: this.#onDeleteEffect
     }
   };
 
@@ -88,6 +92,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     },
     identity: {
       template: TEMPLATES.actorSheet.identity
+    },
+    effects: {
+      template: TEMPLATES.actorSheet.effects
     }
   };
 
@@ -96,7 +103,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       tabs: [
         { id: "inventory", group: "primary", label: "FALLOUTMAW.Tabs.InventoryEquipment" },
         { id: "indicators", group: "primary", label: "FALLOUTMAW.Tabs.Indicators" },
-        { id: "identity", group: "primary", label: "FALLOUTMAW.Tabs.IdentityData" }
+        { id: "identity", group: "primary", label: "FALLOUTMAW.Tabs.IdentityData" },
+        { id: "effects", group: "primary", label: "FALLOUTMAW.Tabs.Effects" }
       ],
       initial: "inventory"
     }
@@ -222,7 +230,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         ...damageType,
         value: toInteger(actor.system.damageDefenses?.[activeLimbKey]?.[damageType.key])
       })),
-      inventory
+      inventory,
+      effectCategories: prepareEffectCategories(actor.effects.contents)
     }, { inplace: false });
   }
 
@@ -300,6 +309,44 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!limbKey || (limbKey === this.#activeLimbKey)) return undefined;
     this.#activeLimbKey = limbKey;
     return this.render({ parts: ["indicators"] });
+  }
+
+  static async #onCreateEffect(event) {
+    event.preventDefault();
+    const [effect] = await this.actor.createEmbeddedDocuments("ActiveEffect", [{
+      type: "base",
+      name: game.i18n.localize("FALLOUTMAW.Effects.NewEffect"),
+      img: "icons/svg/aura.svg",
+      disabled: false,
+      flags: {
+        "fallout-maw": {
+          kind: "active"
+        }
+      },
+      system: {
+        changes: []
+      }
+    }]);
+    effect?.sheet?.render(true);
+    return this.render({ parts: ["effects"] });
+  }
+
+  static #onEditEffect(event, target) {
+    event.preventDefault();
+    const effect = this.actor.effects.get(target.closest("[data-effect-id]")?.dataset.effectId ?? "");
+    return effect?.sheet?.render(true);
+  }
+
+  static #onToggleEffect(event, target) {
+    event.preventDefault();
+    const effect = this.actor.effects.get(target.closest("[data-effect-id]")?.dataset.effectId ?? "");
+    return effect?.update({ disabled: !effect.disabled });
+  }
+
+  static #onDeleteEffect(event, target) {
+    event.preventDefault();
+    const effect = this.actor.effects.get(target.closest("[data-effect-id]")?.dataset.effectId ?? "");
+    return effect?.delete();
   }
 
   #activateCreatureSelectors() {
@@ -1415,4 +1462,57 @@ function createInventoryItemData(item, allItems, currencies = [], placement = nu
       maxLoad: Math.max(0, Number(container.maxLoad) || 0)
     }
   };
+}
+
+function prepareEffectCategories(effects = []) {
+  const categories = [
+    {
+      key: "temporary",
+      label: game.i18n.localize("FALLOUTMAW.Effects.KindTemporary"),
+      effects: []
+    },
+    {
+      key: "active",
+      label: game.i18n.localize("FALLOUTMAW.Effects.KindActive"),
+      effects: []
+    },
+    {
+      key: "passive",
+      label: game.i18n.localize("FALLOUTMAW.Effects.KindPassive"),
+      effects: []
+    },
+    {
+      key: "inactive",
+      label: game.i18n.localize("FALLOUTMAW.Effects.KindInactive"),
+      effects: []
+    }
+  ];
+  const categoryMap = new Map(categories.map(category => [category.key, category]));
+
+  for (const effect of effects) {
+    effect.updateDuration?.();
+    const kind = effect.disabled ? "inactive" : getEffectCategoryKey(effect);
+    categoryMap.get(kind)?.effects.push({
+      id: effect.id,
+      name: effect.name,
+      img: effect.img,
+      disabled: effect.disabled,
+      changes: effect.system?.changes?.length ?? effect.changes?.length ?? 0,
+      duration: getEffectDurationLabel(effect)
+    });
+  }
+
+  return categories;
+}
+
+function getEffectCategoryKey(effect) {
+  const kind = String(effect.getFlag("fallout-maw", "kind") || "");
+  if (["temporary", "active", "passive"].includes(kind)) return kind;
+  if (effect.isTemporary) return "temporary";
+  return "active";
+}
+
+function getEffectDurationLabel(effect) {
+  if (!effect.duration?.remaining) return "";
+  return effect.duration.label ?? "";
 }

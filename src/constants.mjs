@@ -2,7 +2,7 @@ export const SYSTEM_ID = "fallout-maw";
 export const SYSTEM_TITLE = "Fallout-MaW";
 
 export const ACTOR_TYPES = Object.freeze(["character", "npc", "vehicle", "hazard"]);
-export const ITEM_TYPES = Object.freeze(["gear", "weapon", "armor", "ability", "effect"]);
+export const ITEM_TYPES = Object.freeze(["gear", "weapon", "armor", "ability"]);
 
 export const TEMPLATES = Object.freeze({
   actorCreateDialog: `systems/${SYSTEM_ID}/templates/actor/actor-create-dialog.hbs`,
@@ -11,9 +11,11 @@ export const TEMPLATES = Object.freeze({
     tabs: `systems/${SYSTEM_ID}/templates/actor/parts/tabs.hbs`,
     inventory: `systems/${SYSTEM_ID}/templates/actor/parts/inventory-tab.hbs`,
     indicators: `systems/${SYSTEM_ID}/templates/actor/parts/indicators-tab.hbs`,
-    identity: `systems/${SYSTEM_ID}/templates/actor/parts/identity-tab.hbs`
+    identity: `systems/${SYSTEM_ID}/templates/actor/parts/identity-tab.hbs`,
+    effects: `systems/${SYSTEM_ID}/templates/actor/parts/effects-tab.hbs`
   }),
   itemSheet: `systems/${SYSTEM_ID}/templates/item/item-sheet.hbs`,
+  activeEffectSheet: `systems/${SYSTEM_ID}/templates/effects/active-effect-sheet.hbs`,
   containerSheet: `systems/${SYSTEM_ID}/templates/item/container-sheet.hbs`,
   settings: Object.freeze({
     characteristics: `systems/${SYSTEM_ID}/templates/settings/characteristics-config.hbs`,

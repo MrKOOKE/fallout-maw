@@ -1,0 +1,34 @@
+<section class="tab {{tabs.effects.cssClass}} fallout-maw-effects-tab" data-group="{{tabs.effects.group}}" data-tab="{{tabs.effects.id}}">
+  <div class="fallout-maw-effect-category-list">
+    {{#each effectCategories}}
+    <section class="fallout-maw-panel fallout-maw-effect-category">
+      <h2>{{label}}</h2>
+      <div class="fallout-maw-effect-list">
+        {{#each effects}}
+        <article class="fallout-maw-effect-row" data-effect-id="{{id}}">
+          <img src="{{img}}" alt="{{name}}">
+          <div class="fallout-maw-effect-name">
+            <strong>{{name}}</strong>
+            {{#if duration}}<span>{{duration}}</span>{{/if}}
+          </div>
+          <span class="fallout-maw-effect-count">{{changes}}</span>
+          <div class="fallout-maw-effect-controls">
+            <button type="button" data-action="toggleEffect" title="{{#if disabled}}{{localize 'FALLOUTMAW.Effects.Enable'}}{{else}}{{localize 'FALLOUTMAW.Effects.Disable'}}{{/if}}">
+              <i class="fa-solid fa-toggle-{{#if disabled}}off{{else}}on{{/if}}"></i>
+            </button>
+            <button type="button" data-action="editEffect" title="{{localize 'FALLOUTMAW.Common.Edit'}}"><i class="fa-solid fa-pen-to-square"></i></button>
+            <button type="button" data-action="deleteEffect" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </article>
+        {{else}}
+        <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Effects.EmptyCategory"}}</p>
+        {{/each}}
+      </div>
+    </section>
+    {{/each}}
+  </div>
+
+  <button type="button" class="fallout-maw-floating-add" data-action="createEffect" title="{{localize 'FALLOUTMAW.Effects.Create'}}">
+    <i class="fa-solid fa-plus"></i>
+  </button>
+</section>

@@ -87,16 +87,6 @@ export class AbilityDataModel extends BaseItemDataModel {
   }
 }
 
-export class EffectDataModel extends BaseItemDataModel {
-  static defineSchema() {
-    return {
-      ...super.defineSchema(),
-      target: new StringField({ required: true, blank: true, initial: "" }),
-      duration: new StringField({ required: true, blank: true, initial: "" })
-    };
-  }
-}
-
 function itemFunctionField() {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false })

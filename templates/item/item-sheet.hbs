@@ -89,7 +89,15 @@
 
   <section class="fallout-maw-panel fallout-maw-description-panel">
     <h2>{{localize "FALLOUTMAW.Common.Description"}}</h2>
-    {{editor system.description target="system.description" button=true owner=owner editable=editable}}
+    {{#if editable}}
+    <prose-mirror name="system.description" value="{{sourceSystem.description}}" document-uuid="{{item.uuid}}" class="sized" compact>
+      {{{descriptionHTML}}}
+    </prose-mirror>
+    {{else}}
+    <div class="editor editor-content">
+      {{{descriptionHTML}}}
+    </div>
+    {{/if}}
   </section>
 </section>
 
@@ -218,22 +226,20 @@
     </label>
     {{/if}}
 
-    {{#if isEffect}}
-    <label>
-      <span>{{localize "FALLOUTMAW.Item.Target"}}</span>
-      <input type="text" name="system.target" value="{{system.target}}">
-    </label>
-    <label>
-      <span>{{localize "FALLOUTMAW.Item.Duration"}}</span>
-      <input type="text" name="system.duration" value="{{system.duration}}">
-    </label>
-    {{/if}}
   </div>
 </section>
 
 <section class="fallout-maw-panel fallout-maw-description-panel">
   <h2>{{localize "FALLOUTMAW.Common.Description"}}</h2>
-  {{editor system.description target="system.description" button=true owner=owner editable=editable}}
+  {{#if editable}}
+  <prose-mirror name="system.description" value="{{sourceSystem.description}}" document-uuid="{{item.uuid}}" class="sized" compact>
+    {{{descriptionHTML}}}
+  </prose-mirror>
+  {{else}}
+  <div class="editor editor-content">
+    {{{descriptionHTML}}}
+  </div>
+  {{/if}}
 </section>
 {{/if}}
 </div>

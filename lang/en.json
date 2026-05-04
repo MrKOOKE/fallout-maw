@@ -10,14 +10,14 @@
       "gear": "Gear",
       "weapon": "Weapon",
       "armor": "Armor",
-      "ability": "Ability",
-      "effect": "Effect"
+      "ability": "Ability"
     }
   },
   "FALLOUTMAW": {
     "SystemTitle": "Fallout-MaW",
     "Tabs": {
       "IdentityData": "Identity Data",
+      "Effects": "Effects",
       "Indicators": "Indicators",
       "InventoryEquipment": "Inventory/Equipment"
     },
@@ -118,6 +118,27 @@
       "TotalWeight": "Total Weight",
       "Unequip": "Unequip",
       "Weight": "Weight"
+    },
+    "Effects": {
+      "AddChange": "Add Effect Change",
+      "ChangeAdd": "Modify",
+      "ChangeOverride": "Override",
+      "Create": "Create Effect",
+      "Disable": "Disable",
+      "Disabled": "Disabled",
+      "EffectsTab": "Effects",
+      "EmptyCategory": "No effects.",
+      "Enable": "Enable",
+      "Kind": "Category",
+      "KindActive": "Active",
+      "KindInactive": "Inactive",
+      "KindPassive": "Passive",
+      "KindTemporary": "Temporary",
+      "MainTab": "Main",
+      "Mode": "Mode",
+      "NewEffect": "New Effect",
+      "NoChanges": "No changes created.",
+      "Priority": "Weight"
     },
     "Creation": {
       "Base": "Character Base",

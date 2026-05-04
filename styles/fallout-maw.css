@@ -188,6 +188,121 @@
   color: #fff3d8;
 }
 
+.fallout-maw-effects-tab {
+  min-height: 420px;
+  padding-bottom: 3.75rem;
+  position: relative;
+}
+
+.fallout-maw-effect-category-list,
+.fallout-maw-effect-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fallout-maw-effect-category h2 {
+  margin-bottom: 0.45rem;
+}
+
+.fallout-maw-effect-row {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(120, 120, 120, 0.18);
+  border-radius: 5px;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: 38px minmax(0, 1fr) 3rem auto;
+  min-height: 3rem;
+  padding: 0.35rem;
+}
+
+.fallout-maw-effect-row img {
+  border-radius: 4px;
+  height: 38px;
+  object-fit: contain;
+  width: 38px;
+}
+
+.fallout-maw-effect-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fallout-maw-effect-name strong,
+.fallout-maw-effect-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-effect-name span {
+  opacity: 0.72;
+}
+
+.fallout-maw-effect-count {
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(120, 120, 120, 0.18);
+  border-radius: 4px;
+  font-weight: 700;
+  justify-self: stretch;
+  padding: 0.15rem 0.35rem;
+  text-align: center;
+}
+
+.fallout-maw-effect-controls {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.fallout-maw-effect-controls button {
+  min-width: 2rem;
+  padding: 0.25rem 0.35rem;
+}
+
+.fallout-maw-floating-add {
+  align-items: center;
+  border-radius: 999px;
+  bottom: 0.75rem;
+  display: inline-flex;
+  height: 2.75rem;
+  justify-content: center;
+  position: absolute;
+  right: 0.75rem;
+  width: 2.75rem;
+}
+
+.fallout-maw-active-effect-summary {
+  align-items: end;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(130px, 0.4fr) minmax(180px, 0.6fr);
+}
+
+.fallout-maw-effect-change-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  overflow-x: auto;
+}
+
+.fallout-maw-effect-change-row {
+  align-items: center;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: minmax(220px, 1.35fr) minmax(130px, 0.65fr) minmax(120px, 0.75fr) 90px 2.5rem;
+  min-width: 680px;
+}
+
+.fallout-maw-effect-change-row > * {
+  min-width: 0;
+}
+
+.fallout-maw-effect-change-row button {
+  min-width: 2.25rem;
+}
+
 .fallout-maw-config-body,
 .fallout-maw-sheet-body {
   display: flex;
@@ -1027,6 +1142,11 @@
   }
 
   .fallout-maw-header-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fallout-maw-active-effect-summary,
+  .fallout-maw-effect-row {
     grid-template-columns: 1fr;
   }
 

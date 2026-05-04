@@ -1,4 +1,5 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
+import { FalloutMaWActiveEffectSheet } from "./active-effect-sheet.mjs";
 import { FalloutMaWActorSheet } from "./actor-sheet.mjs";
 import { FalloutMaWItemSheet } from "./item-sheet.mjs";
 
@@ -14,6 +15,11 @@ export function registerSystemSheets() {
   sheetConfig.registerSheet(Item, FALLOUT_MAW.id, FalloutMaWItemSheet, {
     label: "Fallout-MaW V2",
     types: FALLOUT_MAW.itemTypes,
+    makeDefault: true
+  });
+
+  sheetConfig.registerSheet(ActiveEffect, FALLOUT_MAW.id, FalloutMaWActiveEffectSheet, {
+    label: "Fallout-MaW V2",
     makeDefault: true
   });
 }

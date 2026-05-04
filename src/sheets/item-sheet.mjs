@@ -5,6 +5,7 @@ import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { HandlebarsApplicationMixin } = foundry.applications.api;
+const TextEditor = foundry.applications.ux.TextEditor.implementation;
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   static DEFAULT_OPTIONS = {
@@ -53,6 +54,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const equipmentSlotSelections = new Map();
     const hasContainerFunction = hasItemFunction(item, ITEM_FUNCTIONS.container);
     const hasDamageMitigationFunction = hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation);
+    const descriptionHTML = await TextEditor.enrichHTML(item.system?.description ?? "", {
+      secrets: item.isOwner,
+      relativeTo: item,
+      rollData: item.getRollData?.() ?? {}
+    });
     const availableFunctionChoices = [
       {
         value: "",
@@ -90,13 +96,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       owner: item.isOwner,
       editable: this.isEditable,
       itemType: type,
+      descriptionHTML,
       isGear: type === "gear",
       isContainerFunction: hasContainerFunction,
       hasDamageMitigationFunction,
       isWeapon: type === "weapon",
       isArmor: type === "armor",
       isAbility: type === "ability",
-      isEffect: type === "effect",
       itemFunctionChoices: availableFunctionChoices,
       currencies: getCurrencySettings().map(currency => ({
         ...currency,

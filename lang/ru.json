@@ -10,14 +10,14 @@
       "gear": "Снаряжение",
       "weapon": "Оружие",
       "armor": "Броня",
-      "ability": "Способность",
-      "effect": "Эффект"
+      "ability": "Способность"
     }
   },
   "FALLOUTMAW": {
     "SystemTitle": "Fallout-MaW",
     "Tabs": {
       "IdentityData": "Данные о личности",
+      "Effects": "Эффекты",
       "Indicators": "Показатели",
       "InventoryEquipment": "Инвентарь/Снаряжение"
     },
@@ -60,7 +60,7 @@
       "Path": "Путь",
       "Total": "Итого",
       "Untitled": "Без названия",
-      "Value": "Ценность",
+      "Value": "Значение",
       "Weapon": "Оружие"
     },
     "Actor": {
@@ -118,6 +118,27 @@
       "TotalWeight": "Общий вес",
       "Unequip": "Снять",
       "Weight": "Вес"
+    },
+    "Effects": {
+      "AddChange": "Добавить изменение",
+      "ChangeAdd": "Изменение",
+      "ChangeOverride": "Перезапись",
+      "Create": "Создать эффект",
+      "Disable": "Отключить",
+      "Disabled": "Отключен",
+      "EffectsTab": "Эффекты",
+      "EmptyCategory": "Эффектов нет.",
+      "Enable": "Включить",
+      "Kind": "Раздел",
+      "KindActive": "Активные",
+      "KindInactive": "Неактивные",
+      "KindPassive": "Пассивные",
+      "KindTemporary": "Временные",
+      "MainTab": "Основное",
+      "Mode": "Режим",
+      "NewEffect": "Новый эффект",
+      "NoChanges": "Изменения не созданы.",
+      "Priority": "Вес"
     },
     "Creation": {
       "Base": "Основа персонажа",
