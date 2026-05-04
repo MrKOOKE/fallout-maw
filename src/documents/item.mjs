@@ -8,6 +8,19 @@ import {
 export class FalloutMaWItem extends Item {
   async _preCreate(data, options, user) {
     if ((await super._preCreate(data, options, user)) === false) return false;
+    if (!this.parent) {
+      this.updateSource({
+        system: {
+          equipped: false,
+          placement: {
+            mode: "inventory",
+            equipmentSlot: "",
+            weaponSet: "",
+            weaponSlot: ""
+          }
+        }
+      });
+    }
     if (isContainerItem(data ?? this)) {
       this.updateSource({
         system: {

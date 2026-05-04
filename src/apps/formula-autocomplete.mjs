@@ -14,6 +14,8 @@ export function activateFormulaAutocomplete(html, { characteristics = [], skills
   };
 
   for (const input of root.querySelectorAll(FORMULA_INPUT_SELECTOR)) {
+    if (input.dataset.formulaAutocompleteActive === "true") continue;
+    input.dataset.formulaAutocompleteActive = "true";
     const mode = input.dataset.formulaAutocomplete || "characteristics";
     const tokens = tokenGroups[mode] ?? tokenGroups.characteristics;
     if (tokens.length) new FormulaAutocomplete(input, tokens);
@@ -45,13 +47,16 @@ class FormulaAutocomplete {
     this.activeIndex = 0;
     this.tokenStart = 0;
     this.menu = null;
+    this.abortController = new AbortController();
+    const { signal } = this.abortController;
 
-    this.input.addEventListener("input", this.#onInput);
-    this.input.addEventListener("click", this.#onInput);
-    this.input.addEventListener("keydown", this.#onKeydown);
-    this.input.addEventListener("blur", this.#onBlur);
-    window.addEventListener("resize", this.#hide);
-    window.addEventListener("scroll", this.#hide, true);
+    this.input.addEventListener("input", this.#onInput, { signal });
+    this.input.addEventListener("click", this.#onInput, { signal });
+    this.input.addEventListener("keydown", this.#onKeydown, { signal });
+    this.input.addEventListener("blur", this.#onBlur, { signal });
+    document.addEventListener("pointerdown", this.#onDocumentPointerDown, { capture: true, signal });
+    window.addEventListener("resize", this.#position, { signal });
+    window.addEventListener("scroll", this.#onWindowScroll, { capture: true, signal });
   }
 
   #onInput = () => {
@@ -93,7 +98,21 @@ class FormulaAutocomplete {
   };
 
   #onBlur = () => {
-    window.setTimeout(this.#hide, 120);
+    window.setTimeout(() => {
+      if (this.menu?.matches(":hover")) return;
+      this.#hide();
+    }, 120);
+  };
+
+  #onDocumentPointerDown = event => {
+    if (event.target === this.input) return;
+    if (this.menu?.contains(event.target)) return;
+    this.#hide();
+  };
+
+  #onWindowScroll = event => {
+    if (this.menu?.contains(event.target)) return;
+    this.#position();
   };
 
   #hide = () => {
@@ -124,6 +143,7 @@ class FormulaAutocomplete {
     if (!this.menu) {
       this.menu = document.createElement("div");
       this.menu.className = "fallout-maw-formula-autocomplete";
+      this.menu.addEventListener("mousedown", event => event.preventDefault());
       document.body.appendChild(this.menu);
     }
 

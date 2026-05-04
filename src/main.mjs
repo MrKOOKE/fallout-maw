@@ -11,6 +11,9 @@ Hooks.once("init", () => {
   CONFIG.FalloutMaW = syncSystemConfig();
   CONFIG.Actor.documentClass = FalloutMaWActor;
   CONFIG.Item.documentClass = FalloutMaWItem;
+  CONFIG.time.roundTime = 6;
+  CONFIG.time.turnTime = 0;
+  CONFIG.ActiveEffect.expiryAction = "delete";
   CONFIG.ux.DragDrop = FalloutMaWDragDrop;
 
   registerSystemSettings();

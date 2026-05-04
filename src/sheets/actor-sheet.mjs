@@ -131,8 +131,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   async _prepareContext(options) {
-    this.actor.prepareData();
-
     const context = await super._prepareContext(options);
     const actor = this.actor;
     const creatureOptions = getCreatureOptions();

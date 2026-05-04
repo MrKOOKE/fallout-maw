@@ -29,6 +29,10 @@
           {{/each}}
         </select>
       </label>
+      <label class="fallout-maw-inline-checkbox">
+        <span>{{localize "FALLOUTMAW.Item.Equipped"}}</span>
+        <input type="checkbox" name="system.equipped" {{checked system.equipped}}>
+      </label>
     </div>
   </div>
 </header>
@@ -43,10 +47,6 @@
   <section class="fallout-maw-panel">
     <h2>{{localize "FALLOUTMAW.Item.Core"}}</h2>
     <div class="fallout-maw-list-grid two-columns">
-      <label class="checkbox">
-        <input type="checkbox" name="system.equipped" {{checked system.equipped}}>
-        <span>{{localize "FALLOUTMAW.Item.Equipped"}}</span>
-      </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.MaxStack"}}</span>
         <input type="number" name="system.maxStack" value="{{system.maxStack}}" min="1" step="1" {{#if isContainerFunction}}disabled{{/if}}>
@@ -180,10 +180,6 @@
 <section class="fallout-maw-panel">
   <h2>{{localize "FALLOUTMAW.Item.Core"}}</h2>
   <div class="fallout-maw-list-grid two-columns">
-    <label class="checkbox">
-      <input type="checkbox" name="system.equipped" {{checked system.equipped}}>
-      <span>{{localize "FALLOUTMAW.Item.Equipped"}}</span>
-    </label>
     <label>
       <span>{{localize "FALLOUTMAW.Item.MaxStack"}}</span>
       <input type="number" name="system.maxStack" value="{{system.maxStack}}" min="1" step="1">

@@ -12,6 +12,33 @@
   scrollbar-gutter: stable;
 }
 
+.application.fallout-maw-active-effect-sheet .window-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fallout-maw-active-effect-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-bottom: 0.75rem;
+  scrollbar-gutter: stable;
+}
+
+.fallout-maw-active-effect-body .sheet-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--fallout-maw-border);
+  background: var(--background, #17131b);
+  box-shadow: 0 -10px 16px rgba(0, 0, 0, 0.18);
+}
+
 .fallout-maw-sheet input,
 .fallout-maw-sheet select,
 .fallout-maw-config-form input,
@@ -67,6 +94,20 @@
 
 .fallout-maw-item-sheet .fallout-maw-header-grid {
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.fallout-maw-inline-checkbox {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+  min-height: 3.2rem;
+}
+
+.fallout-maw-inline-checkbox input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin: 0;
+  width: auto;
 }
 
 .fallout-maw-resource-grid {

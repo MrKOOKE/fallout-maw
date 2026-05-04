@@ -9,6 +9,8 @@ export function activateEffectKeyAutocomplete(html, tokens = []) {
   if (!root || !tokens.length) return;
 
   for (const input of root.querySelectorAll(EFFECT_KEY_INPUT_SELECTOR)) {
+    if (input.dataset.effectKeyAutocompleteActive === "true") continue;
+    input.dataset.effectKeyAutocompleteActive = "true";
     new EffectKeyAutocomplete(input, tokens);
   }
 }
@@ -38,13 +40,16 @@ class EffectKeyAutocomplete {
     this.activeIndex = 0;
     this.tokenStart = 0;
     this.menu = null;
+    this.abortController = new AbortController();
+    const { signal } = this.abortController;
 
-    this.input.addEventListener("input", this.#onInput);
-    this.input.addEventListener("click", this.#onInput);
-    this.input.addEventListener("keydown", this.#onKeydown);
-    this.input.addEventListener("blur", this.#onBlur);
-    window.addEventListener("resize", this.#hide);
-    window.addEventListener("scroll", this.#hide, true);
+    this.input.addEventListener("input", this.#onInput, { signal });
+    this.input.addEventListener("click", this.#onInput, { signal });
+    this.input.addEventListener("keydown", this.#onKeydown, { signal });
+    this.input.addEventListener("blur", this.#onBlur, { signal });
+    document.addEventListener("pointerdown", this.#onDocumentPointerDown, { capture: true, signal });
+    window.addEventListener("resize", this.#position, { signal });
+    window.addEventListener("scroll", this.#onWindowScroll, { capture: true, signal });
   }
 
   #onInput = () => {
@@ -86,7 +91,21 @@ class EffectKeyAutocomplete {
   };
 
   #onBlur = () => {
-    window.setTimeout(this.#hide, 120);
+    window.setTimeout(() => {
+      if (this.menu?.matches(":hover")) return;
+      this.#hide();
+    }, 120);
+  };
+
+  #onDocumentPointerDown = event => {
+    if (event.target === this.input) return;
+    if (this.menu?.contains(event.target)) return;
+    this.#hide();
+  };
+
+  #onWindowScroll = event => {
+    if (this.menu?.contains(event.target)) return;
+    this.#position();
   };
 
   #hide = () => {
@@ -117,6 +136,7 @@ class EffectKeyAutocomplete {
     if (!this.menu) {
       this.menu = document.createElement("div");
       this.menu.className = "fallout-maw-formula-autocomplete";
+      this.menu.addEventListener("mousedown", event => event.preventDefault());
       document.body.appendChild(this.menu);
     }
 

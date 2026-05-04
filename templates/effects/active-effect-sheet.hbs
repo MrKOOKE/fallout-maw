@@ -2,7 +2,7 @@
   <header class="sheet-header fallout-maw-sheet-header">
     <img class="profile-img" src="{{source.img}}" data-action="editImage" data-edit="img" title="{{effect.name}}" height="72" width="72">
     <div class="fallout-maw-header-fields">
-      <input class="fallout-maw-title-input" name="name" type="text" value="{{source.name}}" placeholder="{{localize 'EFFECT.FIELDS.name.label'}}">
+      <input class="fallout-maw-title-input" name="name" type="text" value="{{source.name}}" placeholder="{{localize 'FALLOUTMAW.Effects.Name'}}">
       <div class="fallout-maw-active-effect-summary">
         <label class="checkbox">
           <input type="hidden" name="disabled" value="false">
@@ -31,25 +31,25 @@
       <h2>{{localize "FALLOUTMAW.Effects.MainTab"}}</h2>
       <div class="fallout-maw-list-grid two-columns">
         <label>
-          <span>{{localize "EFFECT.FIELDS.tint.label"}}</span>
+          <span>{{localize "FALLOUTMAW.Effects.IconTintColor"}}</span>
           <input type="color" name="tint" value="{{source.tint}}">
         </label>
         <label>
-          <span>{{localize "EFFECT.FIELDS.origin.label"}}</span>
+          <span>{{localize "FALLOUTMAW.Effects.Origin"}}</span>
           <input type="text" name="origin" value="{{source.origin}}" disabled>
         </label>
       </div>
     </section>
 
     <section class="fallout-maw-panel">
-      <h2>{{localize "EFFECT.DURATION.Header"}}</h2>
+      <h2>{{localize "FALLOUTMAW.Effects.Duration"}}</h2>
       <div class="fallout-maw-list-grid three-columns">
         <label>
-          <span>{{localize "EFFECT.FIELDS.duration.value.label"}}</span>
+          <span>{{localize "FALLOUTMAW.Effects.DurationValue"}}</span>
           <input type="number" name="duration.value" value="{{source.duration.value}}" step="1">
         </label>
         <label>
-          <span>{{localize "EFFECT.FIELDS.duration.units.label"}}</span>
+          <span>{{localize "FALLOUTMAW.Effects.DurationUnit"}}</span>
           <select name="duration.units">
             {{#each durationUnitChoices}}
             <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
@@ -57,7 +57,7 @@
           </select>
         </label>
         <label>
-          <span>{{localize "EFFECT.FIELDS.duration.expiry.label"}}</span>
+          <span>{{localize "FALLOUTMAW.Effects.ExpiryEvent"}}</span>
           <select name="duration.expiry">
             {{#each expiryChoices}}
             <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
@@ -68,7 +68,7 @@
     </section>
 
     <section class="fallout-maw-panel fallout-maw-active-effect-description">
-      {{formGroup fields.description value=source.description rootId=rootId}}
+      {{formGroup fields.description value=source.description rootId=rootId label="FALLOUTMAW.Effects.Description" localize=true}}
     </section>
   </section>
 
@@ -94,6 +94,7 @@
             <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
             {{/each}}
           </select>
+          <input type="hidden" name="{{paths.phase}}" value="{{phase}}">
           <input type="text" name="{{paths.value}}" value="{{value}}">
           <input type="number" name="{{paths.priority}}" value="{{priority}}" placeholder="{{priorityPlaceholder}}" step="1">
           <button type="button" data-action="deleteChange" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>

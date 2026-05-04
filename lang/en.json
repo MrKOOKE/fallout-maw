@@ -126,9 +126,27 @@
       "Create": "Create Effect",
       "Disable": "Disable",
       "Disabled": "Disabled",
+      "Description": "Effect Description",
+      "Duration": "Effect Duration",
+      "DurationUnit": "Duration Unit",
+      "DurationUnits": {
+        "Days": "Days",
+        "Hours": "Hours",
+        "Minutes": "Minutes",
+        "Rounds": "Rounds",
+        "Seconds": "Seconds",
+        "Turns": "Turns"
+      },
+      "DurationValue": "Duration Value",
       "EffectsTab": "Effects",
       "EmptyCategory": "No effects.",
       "Enable": "Enable",
+      "ExpiryEvent": "Expiry Event",
+      "ExpiryEvents": {
+        "TurnEnd": "End of Turn",
+        "TurnStart": "Start of Turn"
+      },
+      "IconTintColor": "Icon Tint Color",
       "Kind": "Category",
       "KindActive": "Active",
       "KindInactive": "Inactive",
@@ -136,8 +154,10 @@
       "KindTemporary": "Temporary",
       "MainTab": "Main",
       "Mode": "Mode",
+      "Name": "Effect Name",
       "NewEffect": "New Effect",
       "NoChanges": "No changes created.",
+      "Origin": "Effect Origin",
       "Priority": "Weight"
     },
     "Creation": {

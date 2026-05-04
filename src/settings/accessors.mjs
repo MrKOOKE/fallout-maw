@@ -183,7 +183,7 @@ export function refreshPreparedActors() {
   syncSettingsIntoSystemConfig();
   syncActorTrackableAttributes();
   for (const actor of getLoadedActors()) {
-    actor.prepareData();
+    actor.reset();
     actor.sheet?.render(false);
   }
 }

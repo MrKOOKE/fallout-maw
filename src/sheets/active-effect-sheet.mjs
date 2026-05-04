@@ -92,16 +92,19 @@ export class FalloutMaWActiveEffectSheet extends ActiveEffectConfig {
 
 function prepareChangeContext(change, index) {
   const type = String(change?.type || "add");
+  const phase = String(change?.phase || "initial");
   return {
     index,
     key: String(change?.key ?? ""),
     type,
+    phase,
     value: stringifyChangeValue(change?.value),
     priority: change?.priority ?? "",
     priorityPlaceholder: ActiveEffect.CHANGE_TYPES[type]?.defaultPriority ?? "",
     paths: {
       key: `system.changes.${index}.key`,
       type: `system.changes.${index}.type`,
+      phase: `system.changes.${index}.phase`,
       value: `system.changes.${index}.value`,
       priority: `system.changes.${index}.priority`
     },
@@ -125,20 +128,20 @@ function buildKindChoices(selected) {
 function buildDurationUnitChoices(selected) {
   return [
     { value: "", label: "", selected: selected === "" },
-    { value: "rounds", label: game.i18n.localize("EFFECT.DURATION.UNITS.rounds"), selected: selected === "rounds" },
-    { value: "turns", label: game.i18n.localize("EFFECT.DURATION.UNITS.turns"), selected: selected === "turns" },
-    { value: "seconds", label: game.i18n.localize("EFFECT.DURATION.UNITS.seconds"), selected: selected === "seconds" },
-    { value: "minutes", label: game.i18n.localize("EFFECT.DURATION.UNITS.minutes"), selected: selected === "minutes" },
-    { value: "hours", label: game.i18n.localize("EFFECT.DURATION.UNITS.hours"), selected: selected === "hours" },
-    { value: "days", label: game.i18n.localize("EFFECT.DURATION.UNITS.days"), selected: selected === "days" }
+    { value: "rounds", label: game.i18n.localize("FALLOUTMAW.Effects.DurationUnits.Rounds"), selected: selected === "rounds" },
+    { value: "turns", label: game.i18n.localize("FALLOUTMAW.Effects.DurationUnits.Turns"), selected: selected === "turns" },
+    { value: "seconds", label: game.i18n.localize("FALLOUTMAW.Effects.DurationUnits.Seconds"), selected: selected === "seconds" },
+    { value: "minutes", label: game.i18n.localize("FALLOUTMAW.Effects.DurationUnits.Minutes"), selected: selected === "minutes" },
+    { value: "hours", label: game.i18n.localize("FALLOUTMAW.Effects.DurationUnits.Hours"), selected: selected === "hours" },
+    { value: "days", label: game.i18n.localize("FALLOUTMAW.Effects.DurationUnits.Days"), selected: selected === "days" }
   ];
 }
 
 function buildExpiryChoices(selected) {
   return [
     { value: "", label: "", selected: selected === "" },
-    { value: "turnStart", label: game.i18n.localize("EFFECT.EXPIRY.turnStart"), selected: selected === "turnStart" },
-    { value: "turnEnd", label: game.i18n.localize("EFFECT.EXPIRY.turnEnd"), selected: selected === "turnEnd" }
+    { value: "turnStart", label: game.i18n.localize("FALLOUTMAW.Effects.ExpiryEvents.TurnStart"), selected: selected === "turnStart" },
+    { value: "turnEnd", label: game.i18n.localize("FALLOUTMAW.Effects.ExpiryEvents.TurnEnd"), selected: selected === "turnEnd" }
   ];
 }
 

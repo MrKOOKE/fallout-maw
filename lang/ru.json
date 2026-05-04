@@ -126,9 +126,27 @@
       "Create": "Создать эффект",
       "Disable": "Отключить",
       "Disabled": "Отключен",
+      "Description": "Описание эффекта",
+      "Duration": "Длительность эффекта",
+      "DurationUnit": "Единицы длительности",
+      "DurationUnits": {
+        "Days": "Дни",
+        "Hours": "Часы",
+        "Minutes": "Минуты",
+        "Rounds": "Раунды",
+        "Seconds": "Секунды",
+        "Turns": "Ходы"
+      },
+      "DurationValue": "Значение длительности",
       "EffectsTab": "Эффекты",
       "EmptyCategory": "Эффектов нет.",
       "Enable": "Включить",
+      "ExpiryEvent": "Событие истечения",
+      "ExpiryEvents": {
+        "TurnEnd": "Конец хода",
+        "TurnStart": "Начало хода"
+      },
+      "IconTintColor": "Цвет иконки",
       "Kind": "Раздел",
       "KindActive": "Активные",
       "KindInactive": "Неактивные",
@@ -136,8 +154,10 @@
       "KindTemporary": "Временные",
       "MainTab": "Основное",
       "Mode": "Режим",
+      "Name": "Название эффекта",
       "NewEffect": "Новый эффект",
       "NoChanges": "Изменения не созданы.",
+      "Origin": "Источник эффекта",
       "Priority": "Вес"
     },
     "Creation": {
