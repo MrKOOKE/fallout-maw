@@ -32,14 +32,25 @@
           </div>
         </button>
 
-        <button
-          type="button"
-          class="fallout-maw-research-manage"
-          data-action="manageResearch"
-          title="{{localize 'FALLOUTMAW.Research.Manage'}}"
-        >
-          <i class="fa-solid fa-gear"></i>
-        </button>
+        <div class="fallout-maw-research-actions">
+          <button
+            type="button"
+            class="fallout-maw-research-manage"
+            data-action="manageResearch"
+            title="{{localize 'FALLOUTMAW.Research.Manage'}}"
+          >
+            <i class="fa-solid fa-gear"></i>
+          </button>
+
+          <button
+            type="button"
+            class="fallout-maw-research-delete"
+            data-action="deleteResearch"
+            title="{{localize 'COMMON.Delete'}}"
+          >
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </div>
       </article>
       {{else}}
       <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Research.Empty"}}</p>

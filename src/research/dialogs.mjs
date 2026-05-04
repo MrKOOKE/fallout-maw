@@ -75,13 +75,6 @@ export async function openManageResearchDialog(actor, researchId) {
         })
       },
       {
-        action: "delete",
-        label: "COMMON.Delete",
-        icon: "fa-solid fa-trash",
-        type: "button",
-        class: "delete"
-      },
-      {
         action: "cancel",
         label: "COMMON.Cancel",
         icon: "fa-solid fa-xmark",
@@ -96,31 +89,34 @@ export async function openManageResearchDialog(actor, researchId) {
 
   if (!result || (result === "cancel")) return null;
 
-  if (result === "delete") {
-    const confirmed = await DialogV2.confirm({
-      window: {
-        title: format("FALLOUTMAW.Research.DeleteTitle", { name: research.name })
-      },
-      content: `<p>${format("FALLOUTMAW.Research.DeleteContent", { name: research.name })}</p>`,
-      yes: {
-        label: "COMMON.Delete",
-        icon: "fa-solid fa-trash"
-      },
-      no: {
-        label: "COMMON.Cancel"
-      },
-      rejectClose: false
-    });
-
-    if (!confirmed) return null;
-
-    await actor.deleteResearch(researchId);
-    ui.notifications.info(localize("FALLOUTMAW.Messages.ResearchDeleted"));
-    return true;
-  }
-
   await actor.updateResearch(researchId, normalizeResearchFormData(result.data));
   ui.notifications.info(localize("FALLOUTMAW.Messages.ResearchUpdated"));
+  return true;
+}
+
+export async function deleteResearchWithConfirm(actor, researchId) {
+  const research = getResearchById(actor.system?.researches, researchId);
+  if (!research) return null;
+
+  const confirmed = await DialogV2.confirm({
+    window: {
+      title: format("FALLOUTMAW.Research.DeleteTitle", { name: research.name })
+    },
+    content: `<p>${format("FALLOUTMAW.Research.DeleteContent", { name: research.name })}</p>`,
+    yes: {
+      label: "COMMON.Delete",
+      icon: "fa-solid fa-trash"
+    },
+    no: {
+      label: "COMMON.Cancel"
+    },
+    rejectClose: false
+  });
+
+  if (!confirmed) return null;
+
+  await actor.deleteResearch(researchId);
+  ui.notifications.info(localize("FALLOUTMAW.Messages.ResearchDeleted"));
   return true;
 }
 

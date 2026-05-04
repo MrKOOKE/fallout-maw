@@ -247,6 +247,13 @@
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.fallout-maw-research-actions {
+  align-self: stretch;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+
 .fallout-maw-research-main {
   align-items: stretch;
   background: rgba(255, 255, 255, 0.025);
@@ -328,6 +335,12 @@
 }
 
 .fallout-maw-research-manage {
+  align-self: start;
+  min-width: 2.4rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.fallout-maw-research-delete {
   align-self: start;
   min-width: 2.4rem;
   padding: 0.45rem 0.6rem;

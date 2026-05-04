@@ -16,11 +16,12 @@ import {
   getRaceEquipmentSlotsForItem,
   getSelectedEquipmentSlotKeys
 } from "../utils/equipment-slots.mjs";
-import {
-  completeResearch,
-  openCreateResearchDialog,
-  openManageResearchDialog,
-  openResearchTimeDialog,
+  import {
+    completeResearch,
+    deleteResearchWithConfirm,
+    openCreateResearchDialog,
+    openManageResearchDialog,
+    openResearchTimeDialog,
   prepareResearchesForDisplay
 } from "../research/index.mjs";
 import { openSkillCheckDialog } from "../rolls/skill-check.mjs";
@@ -76,12 +77,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       resizable: true
     },
     actions: {
-      toggleFreeEdit: this.#onToggleFreeEdit,
-      selectLimb: this.#onSelectLimb,
-      createResearch: this.#onCreateResearch,
-      manageResearch: this.#onManageResearch,
-      openResearchTime: this.#onOpenResearchTime,
-      createEffect: this.#onCreateEffect,
+        toggleFreeEdit: this.#onToggleFreeEdit,
+        selectLimb: this.#onSelectLimb,
+        createResearch: this.#onCreateResearch,
+        deleteResearch: this.#onDeleteResearch,
+        manageResearch: this.#onManageResearch,
+        openResearchTime: this.#onOpenResearchTime,
+        createEffect: this.#onCreateEffect,
       editEffect: this.#onEditEffect,
       toggleEffect: this.#onToggleEffect,
       deleteEffect: this.#onDeleteEffect,
@@ -337,6 +339,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const researchId = target.closest("[data-research-id]")?.dataset.researchId ?? "";
     if (!researchId) return undefined;
     return openManageResearchDialog(this.actor, researchId);
+  }
+
+  static #onDeleteResearch(event, target) {
+    event.preventDefault();
+    const researchId = target.closest("[data-research-id]")?.dataset.researchId ?? "";
+    if (!researchId) return undefined;
+    return deleteResearchWithConfirm(this.actor, researchId);
   }
 
   static #onOpenResearchTime(event, target) {

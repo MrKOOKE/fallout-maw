@@ -13,6 +13,11 @@
       "ability": "Ability"
     }
   },
+  "COMMON": {
+    "Cancel": "Cancel",
+    "Confirm": "Confirm",
+    "Delete": "Delete"
+  },
   "FALLOUTMAW": {
     "SystemTitle": "Fallout-MaW",
     "Tabs": {
