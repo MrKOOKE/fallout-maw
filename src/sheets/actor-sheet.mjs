@@ -6,6 +6,7 @@ import {
   getCurrencySettings,
   getDamageTypeSettings,
   getNeedSettings,
+  getProficiencySettings,
   getResourceSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
@@ -132,6 +133,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const damageTypeSettings = getDamageTypeSettings();
     const resourceSettings = getResourceSettings();
     const needSettings = getNeedSettings();
+    const proficiencySettings = getProficiencySettings();
     const skillSettings = getSkillSettings();
     const typeId = actor.system?.creature?.typeId;
     const raceId = actor.system?.creature?.raceId;
@@ -199,6 +201,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           base: toInteger(current.base),
           bonus: toInteger(source.bonus),
           value: toInteger(current.value)
+        };
+      }),
+      proficiencies: proficiencySettings.map(proficiency => {
+        const current = actor.system.proficiencies?.[proficiency.key] ?? {};
+        return {
+          ...proficiency,
+          value: toInteger(current.value),
+          max: toInteger(current.max)
         };
       }),
       damageResistances: damageTypeSettings.map(damageType => ({

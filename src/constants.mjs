@@ -21,6 +21,7 @@ export const TEMPLATES = Object.freeze({
     currencies: `systems/${SYSTEM_ID}/templates/settings/currency-settings-config.hbs`,
     damageTypes: `systems/${SYSTEM_ID}/templates/settings/damage-types-config.hbs`,
     needs: `systems/${SYSTEM_ID}/templates/settings/need-settings-config.hbs`,
+    proficiencies: `systems/${SYSTEM_ID}/templates/settings/proficiency-settings-config.hbs`,
     resources: `systems/${SYSTEM_ID}/templates/settings/resource-settings-config.hbs`,
     skillFormulas: `systems/${SYSTEM_ID}/templates/settings/skill-formulas-config.hbs`
   })

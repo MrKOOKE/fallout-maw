@@ -3,11 +3,13 @@ import {
   createDefaultCharacteristicSettings,
   createDefaultDamageTypeSettings,
   createDefaultNeedSettings,
+  createDefaultProficiencySettings,
   createDefaultResourceSettings,
   createDefaultSkillSettings,
   normalizeCharacteristicSettings,
   normalizeDamageTypeSettings,
   normalizeNeedSettings,
+  normalizeProficiencySettings,
   normalizeResourceSettings,
   normalizeSkillSettings
 } from "../formulas/index.mjs";
@@ -18,6 +20,7 @@ import {
   CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
   NEED_SETTINGS_SETTING,
+  PROFICIENCY_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
   SKILL_SETTINGS_SETTING
 } from "./constants.mjs";
@@ -58,6 +61,24 @@ export async function setSkillSettings(settings) {
 
 export async function resetSkillSettings() {
   return setSkillSettings(createDefaultSkillSettings());
+}
+
+export function getProficiencySettings() {
+  try {
+    return normalizeProficiencySettings(game.settings.get(FALLOUT_MAW.id, PROFICIENCY_SETTINGS_SETTING));
+  } catch (_error) {
+    return createDefaultProficiencySettings();
+  }
+}
+
+export async function setProficiencySettings(settings) {
+  const normalized = normalizeProficiencySettings(settings);
+  await game.settings.set(FALLOUT_MAW.id, PROFICIENCY_SETTINGS_SETTING, normalized);
+  return normalized;
+}
+
+export async function resetProficiencySettings() {
+  return setProficiencySettings(createDefaultProficiencySettings());
 }
 
 export function getDamageTypeSettings() {
@@ -151,6 +172,7 @@ export function syncSettingsIntoSystemConfig() {
     characteristics: getCharacteristicSettings(),
     currencies: getCurrencySettings(),
     skills: getSkillSettings(),
+    proficiencies: getProficiencySettings(),
     resources: getResourceSettings(),
     needs: getNeedSettings(),
     damageTypes: getDamageTypeSettings()

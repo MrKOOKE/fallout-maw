@@ -61,6 +61,11 @@ export class FalloutMaWActor extends Actor {
       for (const need of Object.values(needs)) clampPreparedResource(need);
     }
 
+    const proficiencies = this.system?.proficiencies;
+    if (proficiencies) {
+      for (const proficiency of Object.values(proficiencies)) clampPreparedResource(proficiency);
+    }
+
     const limbs = this.system?.limbs;
     if (limbs) {
       for (const limb of Object.values(limbs)) clampPreparedResource(limb);
@@ -135,6 +140,7 @@ export class FalloutMaWActor extends Actor {
         currencies: initializeCurrencyMap(getCurrencySettings()),
         resources: maximizeResourceMap(this.system?.resources),
         needs: maximizeResourceMap(this.system?.needs),
+        proficiencies: initializeProficiencyMap(this.system?.proficiencies),
         limbs: maximizeResourceMap(this.system?.limbs)
       }
     });
@@ -205,6 +211,15 @@ function maximizeResourceMap(resources = {}) {
 
 function initializeCurrencyMap(currencies = []) {
   return Object.fromEntries(currencies.map(currency => [currency.key, 0]));
+}
+
+function initializeProficiencyMap(proficiencies = {}) {
+  return Object.fromEntries(
+    Object.entries(proficiencies ?? {}).map(([key, proficiency]) => [
+      key,
+      { ...proficiency, min: 0, spent: 0, value: 0 }
+    ])
+  );
 }
 
 function syncTrackedResourceValueUpdates(actor, changes) {

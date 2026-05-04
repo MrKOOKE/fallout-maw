@@ -4,6 +4,7 @@ import {
   DEFAULT_CURRENCIES,
   DEFAULT_DAMAGE_TYPES,
   DEFAULT_NEEDS,
+  DEFAULT_PROFICIENCIES,
   DEFAULT_RESOURCES,
   DEFAULT_SKILLS
 } from "./defaults.mjs";
@@ -16,15 +17,17 @@ export const FALLOUT_MAW = {
   characteristics: entriesToLabels(DEFAULT_CHARACTERISTICS),
   currencies: cloneEntries(DEFAULT_CURRENCIES),
   skills: entriesToLabels(DEFAULT_SKILLS),
+  proficiencies: entriesToLabels(DEFAULT_PROFICIENCIES),
   resources: entriesToLabels(DEFAULT_RESOURCES),
   needs: entriesToLabels(DEFAULT_NEEDS),
   damageTypes: entriesToLabels(DEFAULT_DAMAGE_TYPES)
 };
 
-export function syncSystemConfig({ characteristics, currencies, skills, resources, needs, damageTypes } = {}) {
+export function syncSystemConfig({ characteristics, currencies, skills, proficiencies, resources, needs, damageTypes } = {}) {
   if (characteristics) FALLOUT_MAW.characteristics = entriesToLabels(characteristics);
   if (currencies) FALLOUT_MAW.currencies = cloneEntries(currencies);
   if (skills) FALLOUT_MAW.skills = entriesToLabels(skills);
+  if (proficiencies) FALLOUT_MAW.proficiencies = entriesToLabels(proficiencies);
   if (resources) FALLOUT_MAW.resources = entriesToLabels(resources);
   if (needs) FALLOUT_MAW.needs = entriesToLabels(needs);
   if (damageTypes) FALLOUT_MAW.damageTypes = entriesToLabels(damageTypes);

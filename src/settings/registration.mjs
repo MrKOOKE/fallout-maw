@@ -3,6 +3,7 @@ import {
   createDefaultCharacteristicSettings,
   createDefaultDamageTypeSettings,
   createDefaultNeedSettings,
+  createDefaultProficiencySettings,
   createDefaultResourceSettings,
   createDefaultSkillSettings
 } from "../formulas/index.mjs";
@@ -13,6 +14,7 @@ import { CreatureOptionsConfig } from "../apps/creature-options-config.mjs";
 import { CurrencySettingsConfig } from "../apps/currency-settings-config.mjs";
 import { DamageTypesConfig } from "../apps/damage-types-config.mjs";
 import { NeedSettingsConfig } from "../apps/need-settings-config.mjs";
+import { ProficiencySettingsConfig } from "../apps/proficiency-settings-config.mjs";
 import { ResourceSettingsConfig } from "../apps/resource-settings-config.mjs";
 import { SkillFormulasConfig } from "../apps/skill-formulas-config.mjs";
 import { refreshPreparedActors, syncSettingsIntoSystemConfig } from "./accessors.mjs";
@@ -22,6 +24,7 @@ import {
   CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
   NEED_SETTINGS_SETTING,
+  PROFICIENCY_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
   SKILL_SETTINGS_SETTING
 } from "./constants.mjs";
@@ -91,6 +94,15 @@ export function registerSystemSettings() {
     onChange: refreshPreparedActors
   });
 
+  game.settings.register(FALLOUT_MAW.id, PROFICIENCY_SETTINGS_SETTING, {
+    name: localize("FALLOUTMAW.Settings.Proficiencies.Title"),
+    scope: "world",
+    config: false,
+    type: Object,
+    default: createDefaultProficiencySettings(),
+    onChange: refreshPreparedActors
+  });
+
   game.settings.registerMenu(FALLOUT_MAW.id, "creatureOptionsMenu", {
     name: localize("FALLOUTMAW.Settings.CreatureOptions.Title"),
     label: localize("FALLOUTMAW.Settings.Open"),
@@ -112,6 +124,14 @@ export function registerSystemSettings() {
     label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-square-root-variable",
     type: SkillFormulasConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "proficiencySettingsMenu", {
+    name: localize("FALLOUTMAW.Settings.Proficiencies.Title"),
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-crosshairs",
+    type: ProficiencySettingsConfig,
     restricted: true
   });
 

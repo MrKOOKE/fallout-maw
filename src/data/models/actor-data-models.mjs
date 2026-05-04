@@ -13,6 +13,7 @@ import {
   getCurrencySettings,
   getDamageTypeSettings,
   getNeedSettings,
+  getProficiencySettings,
   getResourceSettings,
   getSkillSettings
 } from "../../settings/accessors.mjs";
@@ -51,6 +52,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         { required: true, initial: {} }
       ),
       skills: new TypedObjectField(skillField(), { required: true, initial: {} }),
+      proficiencies: new TypedObjectField(resourceField(), { required: true, initial: {} }),
       damageResistances: new TypedObjectField(
         new TypedObjectField(new NumberField({ required: true, integer: true, min: 0, initial: 0 }), {
           required: true,
@@ -86,9 +88,11 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     const currencySettings = getCurrencySettings();
     const resourceSettings = getResourceSettings();
     const needSettings = getNeedSettings();
+    const proficiencySettings = getProficiencySettings();
 
     this.characteristics ??= {};
     this.skills ??= {};
+    this.proficiencies ??= {};
     this.resources ??= {};
     this.needs ??= {};
     this.limbs ??= {};
@@ -110,6 +114,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
 
     const skillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, this.characteristics);
     replaceObjectContents(this.skills, normalizeSkillMap(this.skills, skillSettings, skillBases));
+    replaceObjectContents(this.proficiencies, normalizeProficiencyMap(this.proficiencies, proficiencySettings));
 
     const skillValues = getSkillValues(this.skills);
     const resourceMaximums = evaluateResourceSettings(
@@ -247,6 +252,18 @@ function normalizeLimbMap(currentLimbs = {}, settings = []) {
 function buildLimbDamageResistanceMap(limbs = {}, resistanceValues = {}) {
   return Object.fromEntries(
     Object.keys(limbs ?? {}).map(limbKey => [limbKey, { ...resistanceValues }])
+  );
+}
+
+function normalizeProficiencyMap(currentProficiencies = {}, proficiencySettings = []) {
+  return Object.fromEntries(
+    proficiencySettings.map(proficiency => {
+      const current = currentProficiencies?.[proficiency.key];
+      const min = 0;
+      const max = Math.max(min, toInteger(proficiency.max));
+      const value = Math.min(Math.max(toInteger(current?.value), min), max);
+      return [proficiency.key, { min, spent: 0, value, max }];
+    })
   );
 }
 

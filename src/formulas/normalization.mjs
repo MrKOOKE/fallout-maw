@@ -2,6 +2,7 @@ import {
   DEFAULT_CHARACTERISTICS,
   DEFAULT_DAMAGE_TYPES,
   DEFAULT_NEEDS,
+  DEFAULT_PROFICIENCIES,
   DEFAULT_RESOURCES,
   DEFAULT_SKILLS
 } from "../config/defaults.mjs";
@@ -15,6 +16,10 @@ export function createDefaultCharacteristicSettings() {
 
 export function createDefaultSkillSettings() {
   return DEFAULT_SKILLS.map(entry => ({ ...entry }));
+}
+
+export function createDefaultProficiencySettings() {
+  return DEFAULT_PROFICIENCIES.map(entry => ({ ...entry }));
 }
 
 export function createDefaultResourceSettings() {
@@ -59,6 +64,23 @@ export function normalizeSkillSettings(settings) {
       };
     },
     "Навык"
+  );
+}
+
+export function normalizeProficiencySettings(settings) {
+  const source = normalizeCollectionInput(settings, createDefaultProficiencySettings());
+  return normalizeKeyedEntries(
+    source,
+    entry => {
+      const key = String(entry?.key ?? "").trim();
+      return {
+        key,
+        abbr: String(entry?.abbr ?? "").trim(),
+        label: String(entry?.label ?? entry?.name ?? "").trim(),
+        max: Math.max(0, toInteger(entry?.max))
+      };
+    },
+    "Владение"
   );
 }
 
