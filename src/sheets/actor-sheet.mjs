@@ -6,11 +6,13 @@ import {
   getCreatureOptions,
   getCurrencySettings,
   getDamageTypeSettings,
+  getLevelSettings,
   getNeedSettings,
   getProficiencySettings,
   getResourceSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
+import { getLevelThreshold } from "../settings/levels.mjs";
 import { createDefaultInventorySize } from "../settings/creature-options.mjs";
 import {
   getEquipmentSlotSelectionKey,
@@ -161,6 +163,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const needSettings = getNeedSettings();
     const proficiencySettings = getProficiencySettings();
     const skillSettings = getSkillSettings();
+    const levelSettings = getLevelSettings();
     const typeId = actor.system?.creature?.typeId;
     const raceId = actor.system?.creature?.raceId;
     const race = creatureOptions.races.find(entry => entry.id === raceId);
@@ -180,6 +183,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#activeLimbKey = activeLimbKey;
 
     const inventory = prepareInventoryContext(actor, race);
+    const level = Math.max(1, toInteger(actor.system?.attributes?.level));
+    const currentExperience = Math.max(0, toInteger(actor.system?.development?.experience));
+    const maxLevel = levelSettings[levelSettings.length - 1]?.level ?? 100;
+    const nextThreshold = level >= maxLevel
+      ? getLevelThreshold(levelSettings, Math.max(1, level))
+      : getLevelThreshold(levelSettings, Math.max(1, level));
 
     return foundry.utils.mergeObject(context, {
       actor,
@@ -203,6 +212,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       creatureRaceName: race?.name || "",
       creatureTypes: creatureOptions.types.map(type => ({ ...type, selected: type.id === typeId })),
       creatureRaces: creatureOptions.races.map(race => ({ ...race, selected: race.id === raceId })),
+      progressionExperienceDisplay: `${currentExperience} / ${nextThreshold}`,
+      progressionExperienceNext: nextThreshold,
       characteristics: characteristicSettings.map(characteristic => ({
         ...characteristic,
         value: toInteger(actor.system?.characteristics?.[characteristic.key]),

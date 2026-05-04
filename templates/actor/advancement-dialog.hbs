@@ -1,77 +1,86 @@
 <div class="fallout-maw-config-body fallout-maw-advancement-body">
-  <section class="fallout-maw-panel">
-    <div class="fallout-maw-panel-header">
-      <h2>{{localize "FALLOUTMAW.Advancement.Title"}}</h2>
-      <div class="fallout-maw-button-row">
-        <button type="button" data-action="resetDevelopment">
-          <i class="fa-solid fa-rotate-left"></i>
-          {{localize "FALLOUTMAW.Advancement.Reset"}}
-        </button>
-        <button type="button" data-action="levelUp" {{#unless canLevelUp}}disabled{{/unless}}>
+  <section class="fallout-maw-panel fallout-maw-advancement-hero">
+    <div class="fallout-maw-advancement-hero-layout">
+      <div class="fallout-maw-advancement-hero-main">
+        <div class="fallout-maw-advancement-info-grid">
+          <div class="fallout-maw-advancement-info-row">
+            <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
+            <strong>{{actor.name}}</strong>
+          </div>
+          <div class="fallout-maw-advancement-info-row">
+            <span>{{localize "FALLOUTMAW.Actor.Race"}}</span>
+            <strong>{{raceName}}</strong>
+          </div>
+          <div class="fallout-maw-advancement-info-row">
+            <span>{{localize "FALLOUTMAW.Actor.Level"}}</span>
+            <strong>{{level}}</strong>
+          </div>
+          <div class="fallout-maw-advancement-info-row">
+            <span>{{localize "FALLOUTMAW.Advancement.Experience"}}</span>
+            <strong>{{experienceCurrent}} / {{experienceNext}}</strong>
+          </div>
+        </div>
+
+        <div class="fallout-maw-advancement-xp">
+          <div class="fallout-maw-research-progress-bar fallout-maw-advancement-xp-bar">
+            <span style="{{experienceBarStyle}}"></span>
+          </div>
+        </div>
+
+        <button type="button" class="fallout-maw-advancement-action-button fallout-maw-advancement-major-button" data-action="levelUp" {{#unless canLevelUp}}disabled{{/unless}}>
           <i class="fa-solid fa-arrow-up"></i>
           {{localize "FALLOUTMAW.Advancement.LevelUp"}}
         </button>
       </div>
-    </div>
 
-    <div class="fallout-maw-advancement-summary">
-      <label class="fallout-maw-stacked-field">
-        <span>{{localize "FALLOUTMAW.Actor.Level"}}</span>
-        <strong>{{level}}</strong>
-      </label>
-      <label class="fallout-maw-stacked-field">
-        <span>{{localize "FALLOUTMAW.Advancement.Experience"}}</span>
-        <input type="number" name="experience" value="{{experience}}" min="0">
-      </label>
-      <label class="fallout-maw-stacked-field">
-        <span>{{localize "FALLOUTMAW.Advancement.SkillPoints"}}</span>
-        <strong>{{skillPointsDisplay}}</strong>
-      </label>
-      <label class="fallout-maw-stacked-field">
-        <span>{{localize "FALLOUTMAW.Advancement.SignatureSkillPoints"}}</span>
-        <strong>{{signatureSkillPointsDisplay}}</strong>
-      </label>
-      <label class="fallout-maw-stacked-field">
-        <span>{{localize "FALLOUTMAW.Advancement.CharacteristicPoints"}}</span>
-        <strong>{{characteristicPointsDisplay}}</strong>
-      </label>
-    </div>
-
-    <div class="fallout-maw-advancement-xp">
-      <div class="fallout-maw-advancement-xp-values">
-        <span>{{experienceFloor}}</span>
-        <strong>{{experienceCurrent}} / {{experienceNext}}</strong>
-      </div>
-      <div class="fallout-maw-research-progress-bar fallout-maw-advancement-xp-bar">
-        <span style="{{experienceBarStyle}}"></span>
+      <div class="fallout-maw-advancement-hero-side">
+        <div class="fallout-maw-advancement-side-stat">
+          <span>{{localize "FALLOUTMAW.Actor.SkillPointsPerLevel"}}</span>
+          <strong>{{skillPointsPerLevel}}</strong>
+        </div>
+        <button type="button" class="fallout-maw-advancement-action-button fallout-maw-advancement-reset-button" data-action="resetDevelopment">
+          <i class="fa-solid fa-rotate-left"></i>
+          {{localize "FALLOUTMAW.Advancement.Reset"}}
+        </button>
       </div>
     </div>
   </section>
 
-  <section class="fallout-maw-panel">
-    <h2>{{localize "FALLOUTMAW.Common.Characteristics"}}</h2>
+  <section class="fallout-maw-panel fallout-maw-advancement-section">
+    <div class="fallout-maw-advancement-section-title">
+      <h2>{{localize "FALLOUTMAW.Common.Characteristics"}}</h2>
+    </div>
     <div class="fallout-maw-advancement-characteristics">
       {{#each characteristics}}
       <div class="fallout-maw-advancement-row">
         <span class="fallout-maw-advancement-name" title="{{abbr}} / {{key}}">{{label}}</span>
         <div class="fallout-maw-advancement-controls">
-          <button type="button" data-repeat-action="decreaseCharacteristic" data-characteristic-key="{{key}}" {{#unless canDecrease}}disabled{{/unless}}><i class="fa-solid fa-minus"></i></button>
+          <button type="button" class="fallout-maw-advancement-control-button" data-repeat-action="decreaseCharacteristic" data-characteristic-key="{{key}}" {{#unless canDecrease}}disabled{{/unless}}><i class="fa-solid fa-minus"></i></button>
           <strong>{{value}}</strong>
-          <button type="button" data-repeat-action="increaseCharacteristic" data-characteristic-key="{{key}}" {{#unless canIncrease}}disabled{{/unless}}><i class="fa-solid fa-plus"></i></button>
+          <button type="button" class="fallout-maw-advancement-control-button" data-repeat-action="increaseCharacteristic" data-characteristic-key="{{key}}" {{#unless canIncrease}}disabled{{/unless}}><i class="fa-solid fa-plus"></i></button>
         </div>
       </div>
       {{/each}}
     </div>
+    <div class="fallout-maw-advancement-section-footer fallout-maw-advancement-characteristics-footer">
+      <div></div>
+      <div class="fallout-maw-advancement-meter">
+        <span>{{localize "FALLOUTMAW.Advancement.CharacteristicPoints"}}</span>
+        <strong>{{characteristicPointsDisplay}}</strong>
+      </div>
+    </div>
   </section>
 
-  <section class="fallout-maw-panel">
-    <h2>{{localize "FALLOUTMAW.Common.Skills"}}</h2>
+  <section class="fallout-maw-panel fallout-maw-advancement-section">
+    <div class="fallout-maw-advancement-section-title">
+      <h2>{{localize "FALLOUTMAW.Common.Skills"}}</h2>
+    </div>
     <div class="fallout-maw-advancement-skills">
       {{#each skills}}
       <div class="fallout-maw-advancement-skill-row">
         <button
           type="button"
-          class="fallout-maw-advancement-signature{{#if signature}} active{{/if}}"
+          class="fallout-maw-advancement-signature fallout-maw-advancement-control-button{{#if signature}} active{{/if}}"
           data-action="toggleSignatureSkill"
           data-skill-key="{{key}}"
           {{#unless canToggleSignature}}disabled{{/unless}}
@@ -83,16 +92,26 @@
         <span class="fallout-maw-advancement-name">{{label}}</span>
 
         <div class="fallout-maw-advancement-controls">
-          <button type="button" data-repeat-action="decreaseSkill" data-skill-key="{{key}}" {{#unless canDecrease}}disabled{{/unless}}><i class="fa-solid fa-minus"></i></button>
+          <button type="button" class="fallout-maw-advancement-control-button" data-repeat-action="decreaseSkill" data-skill-key="{{key}}" {{#unless canDecrease}}disabled{{/unless}}><i class="fa-solid fa-minus"></i></button>
           <strong>{{value}}</strong>
-          <button type="button" data-repeat-action="increaseSkill" data-skill-key="{{key}}" {{#unless canIncrease}}disabled{{/unless}}><i class="fa-solid fa-plus"></i></button>
+          <button type="button" class="fallout-maw-advancement-control-button" data-repeat-action="increaseSkill" data-skill-key="{{key}}" {{#unless canIncrease}}disabled{{/unless}}><i class="fa-solid fa-plus"></i></button>
         </div>
       </div>
       {{/each}}
     </div>
+    <div class="fallout-maw-advancement-section-footer fallout-maw-advancement-skills-footer">
+      <div class="fallout-maw-advancement-meter">
+        <span>{{localize "FALLOUTMAW.Advancement.SignatureSkillPoints"}}</span>
+        <strong>{{signatureSkillPointsDisplay}}</strong>
+      </div>
+      <div class="fallout-maw-advancement-meter">
+        <span>{{localize "FALLOUTMAW.Advancement.SkillPoints"}}</span>
+        <strong>{{skillPointsDisplay}}</strong>
+      </div>
+    </div>
   </section>
 
-  <footer class="sheet-footer flexrow">
-    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  <footer class="sheet-footer flexrow fallout-maw-advancement-footer">
+    <button type="submit" class="fallout-maw-advancement-save-button"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
   </footer>
 </div>

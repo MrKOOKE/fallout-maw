@@ -89,7 +89,27 @@
 
 .fallout-maw-header-grid {
   align-items: center;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(2.25rem, auto);
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.fallout-maw-header-meta {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.fallout-maw-header-meta-row {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fallout-maw-header-actions {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+  justify-self: end;
 }
 
 .fallout-maw-item-sheet .fallout-maw-header-grid {
@@ -470,7 +490,7 @@
 .application.fallout-maw-config-form .sheet-footer {
   position: sticky;
   bottom: 0;
-  z-index: 2;
+  z-index: 5;
   flex: 0 0 auto;
   margin-top: auto;
   padding-top: 0.75rem;
@@ -481,7 +501,6 @@
 
 .fallout-maw-toggle-edit {
   height: 2.1rem;
-  justify-self: end;
   min-width: 2.25rem;
   padding: 0;
   width: 2.25rem;
@@ -489,7 +508,6 @@
 
 .fallout-maw-development-button {
   height: 2.1rem;
-  justify-self: end;
   min-width: 2.25rem;
   padding: 0;
   width: 2.25rem;
@@ -525,6 +543,19 @@
 .fallout-maw-header-stat select,
 .fallout-maw-header-stat input {
   min-width: 0;
+}
+
+.fallout-maw-header-experience-edit {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.fallout-maw-header-experience-edit input {
+  max-width: 6rem;
+  min-width: 4.5rem;
 }
 
 .fallout-maw-resource-card {
@@ -1099,47 +1130,343 @@
 .fallout-maw-advancement-summary {
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.application.fallout-maw-advancement-app {
+  --fallout-maw-adv-shell: #0c0c0b;
+  --fallout-maw-adv-shell-2: #11110f;
+  --fallout-maw-adv-panel: rgba(9, 9, 8, 0.92);
+  --fallout-maw-adv-panel-soft: rgba(239, 201, 112, 0.02);
+  --fallout-maw-adv-border: rgba(212, 181, 93, 0.34);
+  --fallout-maw-adv-border-strong: rgba(241, 214, 151, 0.62);
+  --fallout-maw-adv-text: #dfcf9d;
+  --fallout-maw-adv-text-soft: #a99869;
+  --fallout-maw-adv-accent: #d8ba67;
+  --fallout-maw-adv-accent-strong: #f6dd94;
+  --fallout-maw-adv-shadow: rgba(0, 0, 0, 0.78);
+  --fallout-maw-adv-ui-font: var(--font-primary);
+  --fallout-maw-adv-mono-font: "Cascadia Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+}
+
+.application.fallout-maw-advancement-app .window-header {
+  background:
+    linear-gradient(180deg, rgba(34, 34, 31, 0.98), rgba(16, 16, 14, 0.99));
+  border-bottom: 1px solid var(--fallout-maw-adv-border);
+  color: var(--fallout-maw-adv-text);
+  box-shadow: inset 0 -1px 0 rgba(241, 214, 151, 0.08);
+}
+
+.application.fallout-maw-advancement-app .window-title {
+  color: var(--fallout-maw-adv-text);
+  font-family: var(--fallout-maw-adv-ui-font);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.application.fallout-maw-advancement-app .window-header .header-button {
+  border-radius: 0;
+  background: rgba(239, 201, 112, 0.03);
+  border: 1px solid rgba(212, 181, 93, 0.18);
+  color: var(--fallout-maw-adv-text-soft);
+}
+
+.application.fallout-maw-advancement-app .window-header .header-button:hover,
+.application.fallout-maw-advancement-app .window-header .header-button:focus-visible {
+  background: rgba(231, 198, 120, 0.12);
+  border-color: rgba(231, 198, 120, 0.28);
+  color: var(--fallout-maw-adv-accent-strong);
+}
+
+.application.fallout-maw-advancement-app .window-content {
+  background:
+    linear-gradient(90deg, rgba(212, 181, 93, 0.035) 0 1px, transparent 1px 42px),
+    linear-gradient(180deg, rgba(212, 181, 93, 0.028) 0 1px, transparent 1px 18px),
+    linear-gradient(180deg, rgba(15, 15, 13, 0.995), rgba(9, 9, 8, 0.995));
+  color: var(--fallout-maw-adv-text);
+  position: relative;
+}
+
+.application.fallout-maw-advancement-app .window-content::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(241, 214, 151, 0.015), transparent 20%, transparent 80%, rgba(241, 214, 151, 0.015));
+  opacity: 1;
+}
+
+.fallout-maw-advancement-body {
+  position: relative;
+  z-index: 1;
+  color: var(--fallout-maw-adv-text);
+}
+
+.fallout-maw-advancement-body .fallout-maw-panel {
+  background: var(--fallout-maw-adv-panel);
+  border: 1px solid var(--fallout-maw-adv-border);
+  border-radius: 0;
+  box-shadow:
+    inset 0 0 0 1px rgba(241, 214, 151, 0.05),
+    0 12px 26px rgba(0, 0, 0, 0.22);
+  padding: 0.95rem 1rem 0.95rem;
+}
+
+.fallout-maw-advancement-body .fallout-maw-panel h2,
+.fallout-maw-advancement-body .fallout-maw-panel-header h2 {
+  color: var(--fallout-maw-adv-accent-strong);
+  font-family: var(--fallout-maw-adv-ui-font);
+  font-size: 1.05rem;
+  letter-spacing: 0.03em;
+}
+
+.fallout-maw-advancement-hero {
+  position: relative;
+  overflow: hidden;
+}
+
+.fallout-maw-advancement-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 0, rgba(241, 214, 151, 0.015) 100%);
+  opacity: 0.8;
+}
+
+.fallout-maw-advancement-action-button,
+.fallout-maw-advancement-save-button,
+.fallout-maw-advancement-control-button {
+  border-radius: 0;
+  border: 1px solid var(--fallout-maw-adv-border);
+  background: rgba(34, 33, 29, 0.78);
+  color: var(--fallout-maw-adv-text);
+  box-shadow: inset 0 0 0 1px rgba(241, 214, 151, 0.03);
+}
+
+.fallout-maw-advancement-action-button:hover,
+.fallout-maw-advancement-action-button:focus-visible,
+.fallout-maw-advancement-save-button:hover,
+.fallout-maw-advancement-save-button:focus-visible,
+.fallout-maw-advancement-control-button:hover,
+.fallout-maw-advancement-control-button:focus-visible {
+  border-color: var(--fallout-maw-adv-border-strong);
+  background: rgba(62, 56, 39, 0.9);
+  box-shadow:
+    inset 0 0 0 1px rgba(241, 214, 151, 0.05),
+    0 0 0 1px rgba(241, 214, 151, 0.08);
+  color: var(--fallout-maw-adv-accent-strong);
+}
+
+.fallout-maw-advancement-action-button[disabled],
+.fallout-maw-advancement-save-button[disabled],
+.fallout-maw-advancement-control-button[disabled] {
+  background: rgba(231, 198, 120, 0.02);
+  border-color: rgba(202, 168, 92, 0.08);
+  color: rgba(158, 146, 119, 0.4);
+}
+
+.fallout-maw-advancement-hero-layout {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  position: relative;
+  z-index: 1;
+}
+
+.fallout-maw-advancement-hero-main,
+.fallout-maw-advancement-hero-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fallout-maw-advancement-hero-side {
+  border-left: 1px solid rgba(212, 181, 93, 0.22);
+  gap: 0.75rem;
+  padding-left: 1rem;
+}
+
+.fallout-maw-advancement-info-grid {
+  display: grid;
+  gap: 0.45rem;
+  margin-bottom: 0.5rem;
+}
+
+.fallout-maw-advancement-info-row,
+.fallout-maw-advancement-side-stat {
+  align-items: baseline;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1fr);
+}
+
+.fallout-maw-advancement-info-row > span,
+.fallout-maw-advancement-side-stat > span {
+  color: var(--fallout-maw-adv-text);
+  font-family: var(--fallout-maw-adv-ui-font);
+  font-size: 1.02rem;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+
+.fallout-maw-advancement-info-row > strong,
+.fallout-maw-advancement-side-stat > strong {
+  color: var(--fallout-maw-adv-accent-strong);
+  font-family: var(--fallout-maw-adv-mono-font);
+  font-size: 1.1rem;
+  font-weight: 700;
+  justify-self: end;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
 }
 
 .fallout-maw-advancement-xp {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+  margin: 0;
 }
 
 .fallout-maw-advancement-xp-values {
-  align-items: center;
-  display: flex;
-  gap: 0.75rem;
-  justify-content: space-between;
-  opacity: 0.8;
+  display: none;
+  color: var(--fallout-maw-adv-text-soft);
+  font-family: var(--font-monospace, monospace);
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
 }
 
 .fallout-maw-advancement-xp-bar {
-  height: 0.9rem;
+  background:
+    linear-gradient(180deg, rgba(8, 9, 8, 0.95), rgba(13, 15, 13, 0.98)),
+    repeating-linear-gradient(90deg, rgba(231, 198, 120, 0.05) 0 18px, transparent 18px 19px);
+  border: 1px solid rgba(202, 168, 92, 0.18);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(231, 198, 120, 0.03);
+  height: 0.7rem;
+}
+
+.fallout-maw-advancement-xp-bar > span {
+  background: linear-gradient(90deg, rgba(166, 128, 58, 0.9), rgba(231, 198, 120, 0.92));
+  box-shadow:
+    inset 0 1px 0 rgba(245, 227, 184, 0.24),
+    0 0 10px rgba(231, 198, 120, 0.16);
+  border-radius: 999px;
+}
+
+.fallout-maw-advancement-major-button,
+.fallout-maw-advancement-reset-button {
+  margin-top: auto;
+  font-family: var(--font-monospace, monospace);
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  min-height: 3rem;
+  width: 100%;
+}
+
+.fallout-maw-advancement-reset-button {
+  background: rgba(74, 31, 24, 0.78);
+  border-color: rgba(188, 94, 68, 0.42);
+  color: #d47f6a;
+}
+
+.fallout-maw-advancement-reset-button:hover,
+.fallout-maw-advancement-reset-button:focus-visible {
+  background: rgba(106, 44, 34, 0.92);
+  border-color: rgba(222, 117, 87, 0.62);
+  color: #f0a18e;
+}
+
+.fallout-maw-advancement-section-title {
+  border-bottom: 1px solid rgba(212, 181, 93, 0.22);
+  margin-bottom: 0.8rem;
+  padding-bottom: 0.45rem;
+  text-align: center;
+}
+
+.fallout-maw-advancement-section-title h2 {
+  margin: 0;
+}
+
+.fallout-maw-advancement-section-footer {
+  display: grid;
+  gap: 1rem;
+  margin-top: 0.8rem;
+}
+
+.fallout-maw-advancement-characteristics-footer,
+.fallout-maw-advancement-skills-footer {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fallout-maw-advancement-meter {
+  align-items: center;
+  background: rgba(18, 18, 16, 0.9);
+  border: 1px solid rgba(212, 181, 93, 0.34);
+  border-radius: 0;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 2.8rem;
+  padding: 0.45rem 0.7rem;
+}
+
+.fallout-maw-advancement-meter > span {
+  color: var(--fallout-maw-adv-text);
+  font-family: var(--fallout-maw-adv-ui-font);
+  font-size: 0.96rem;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  min-height: 0;
+}
+
+.fallout-maw-advancement-meter > strong {
+  color: var(--fallout-maw-adv-accent-strong);
+  font-family: var(--fallout-maw-adv-mono-font);
+  font-size: 1rem;
+  align-self: center;
+  justify-self: end;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
 }
 
 .fallout-maw-advancement-characteristics,
 .fallout-maw-advancement-skills {
   display: grid;
-  gap: 0.55rem;
+  gap: 0 1.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  position: relative;
 }
 
-.fallout-maw-advancement-characteristics,
-.fallout-maw-advancement-skills {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.fallout-maw-advancement-characteristics::before,
+.fallout-maw-advancement-skills::before {
+  background: rgba(212, 181, 93, 0.16);
+  content: "";
+  inset: 0 auto 0 50%;
+  position: absolute;
+  transform: translateX(-0.5px);
+  width: 1px;
 }
 
 .fallout-maw-advancement-row,
 .fallout-maw-advancement-skill-row {
   align-items: center;
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(120, 120, 120, 0.2);
-  border-radius: 6px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(212, 181, 93, 0.12);
+  border-radius: 0;
   display: grid;
   gap: 0.65rem;
-  padding: 0.75rem 0.85rem;
+  min-height: 3rem;
+  padding: 0.32rem 0.3rem;
+  transition: background 180ms ease;
+}
+
+.fallout-maw-advancement-row:hover,
+.fallout-maw-advancement-skill-row:hover {
+  background: rgba(212, 181, 93, 0.035);
 }
 
 .fallout-maw-advancement-row {
@@ -1153,16 +1480,32 @@
 .fallout-maw-advancement-controls {
   align-items: center;
   display: inline-grid;
-  gap: 0.4rem;
+  gap: 0.35rem;
   grid-auto-flow: column;
 }
 
+.fallout-maw-advancement-control-button {
+  min-height: 1.9rem;
+  min-width: 1.9rem;
+  padding: 0 0.3rem;
+}
+
 .fallout-maw-advancement-controls > strong {
-  min-width: 2rem;
+  color: var(--fallout-maw-adv-accent-strong);
+  font-family: var(--fallout-maw-adv-mono-font);
+  font-size: 1.2rem;
+  min-width: 2.2rem;
   text-align: center;
+  line-height: 1.1;
 }
 
 .fallout-maw-advancement-name {
+  color: var(--fallout-maw-adv-text);
+  font-size: 1rem;
+  font-family: var(--fallout-maw-adv-ui-font);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1171,13 +1514,44 @@
 
 .fallout-maw-advancement-signature {
   align-self: stretch;
-  min-width: 2.5rem;
+  min-width: 1.9rem;
+  padding-inline: 0.2rem;
 }
 
 .fallout-maw-advancement-signature.active {
-  background: rgba(89, 170, 95, 0.18);
-  border-color: rgba(89, 170, 95, 0.6);
-  color: #74d67f;
+  background: rgba(82, 71, 39, 0.9);
+  border-color: rgba(231, 198, 120, 0.44);
+  color: var(--fallout-maw-adv-accent-strong);
+  box-shadow: inset 0 0 0 1px rgba(241, 214, 151, 0.06);
+}
+
+.fallout-maw-advancement-footer {
+  background: rgba(14, 15, 14, 0.98);
+  border-top: 1px solid rgba(202, 168, 92, 0.12);
+  margin-top: 0.25rem;
+  padding-bottom: 0.65rem;
+  padding-top: 0.9rem;
+  position: relative;
+}
+
+.fallout-maw-advancement-footer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(14, 15, 14, 0.9), rgba(14, 15, 14, 0.98) 30%, rgba(14, 15, 14, 0.99));
+  pointer-events: none;
+  z-index: 0;
+}
+
+.fallout-maw-advancement-save-button {
+  font-family: var(--font-monospace, monospace);
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  min-height: 2.9rem;
+  position: relative;
+  z-index: 1;
 }
 
 .fallout-maw-identity-skill {
@@ -1537,6 +1911,10 @@
     grid-template-columns: 1fr;
   }
 
+  .fallout-maw-header-meta-row {
+    grid-template-columns: 1fr;
+  }
+
   .fallout-maw-active-effect-summary,
   .fallout-maw-effect-row,
   .fallout-maw-research-row {
@@ -1553,11 +1931,7 @@
     grid-template-columns: 1fr;
   }
 
-  .fallout-maw-toggle-edit {
-    justify-self: start;
-  }
-
-  .fallout-maw-development-button {
+  .fallout-maw-header-actions {
     justify-self: start;
   }
 
@@ -1580,10 +1954,25 @@
     grid-template-columns: 1fr;
   }
 
+  .fallout-maw-advancement-hero-layout,
+  .fallout-maw-advancement-characteristics-footer,
+  .fallout-maw-advancement-skills-footer,
   .fallout-maw-advancement-characteristics,
   .fallout-maw-advancement-skills,
   .fallout-maw-advancement-skill-row,
   .fallout-maw-advancement-row {
     grid-template-columns: 1fr;
+  }
+
+  .fallout-maw-advancement-hero-side {
+    border-left: 0;
+    border-top: 1px solid rgba(212, 181, 93, 0.22);
+    padding-left: 0;
+    padding-top: 0.8rem;
+  }
+
+  .fallout-maw-advancement-characteristics::before,
+  .fallout-maw-advancement-skills::before {
+    display: none;
   }
 }

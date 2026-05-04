@@ -8,6 +8,7 @@ import {
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import {
   getCharacteristicSettings,
+  getCreatureOptions,
   getLevelSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
@@ -37,7 +38,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     classes: ["fallout-maw", "fallout-maw-config-form", "fallout-maw-advancement-app"],
     position: {
       width: 820,
-      height: 860
+      height: "auto"
     },
     window: {
       resizable: true
@@ -60,7 +61,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return localize("FALLOUTMAW.Advancement.Title");
+    return this.actor?.name || localize("FALLOUTMAW.Advancement.Title");
   }
 
   async _prepareContext(options) {
@@ -69,6 +70,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const characteristicSettings = getCharacteristicSettings();
     const skillSettings = getSkillSettings();
     const levelSettings = getLevelSettings();
+    const creatureOptions = getCreatureOptions();
+    const race = creatureOptions.races.find(entry => entry.id === this.actor.system?.creature?.raceId) ?? null;
     const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
     const floorCharacteristicSpent = calculateSpentCharacteristicPoints(this.#floor.development);
     const floorSkillSpent = calculateSpentSkillPoints(this.#floor.development);
@@ -92,13 +95,13 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     return {
       ...(await super._prepareContext(options)),
       actor: this.actor,
+      raceName: race?.name || "\u2014",
       level: this.#draft.level,
-      experience: currentExperience,
       canLevelUp,
       experienceBarStyle: `width: ${experiencePercent.toFixed(2)}%;`,
       experienceCurrent: currentExperience,
-      experienceFloor: currentThreshold,
       experienceNext: nextThreshold,
+      skillPointsPerLevel: Math.max(0, toInteger(this.actor.system?.progression?.skillPointsPerLevel)),
       characteristicPointsDisplay: `${remaining.characteristics} / ${Math.max(remaining.characteristics, toInteger(this.#draft.development.points.characteristics) - floorCharacteristicSpent)}`,
       skillPointsDisplay: `${remaining.skills} / ${Math.max(remaining.skills, toInteger(this.#draft.development.points.skills) - floorSkillSpent)}`,
       signatureSkillPointsDisplay: `${remaining.signatureSkills} / ${Math.max(remaining.signatureSkills, toInteger(this.#draft.development.points.signatureSkills) - floorSignatureSpent)}`,
@@ -138,7 +141,6 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   async _onRender(context, options) {
     await super._onRender(context, options);
     this.#activateRepeatButtons();
-    this.#activateExperienceInput();
   }
 
   async _preClose(options) {
@@ -280,29 +282,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   }
 
   #syncDraftFromForm() {
-    const experienceInput = this.form?.querySelector("[name='experience']");
-    if (experienceInput) this.#draft.development.experience = Math.max(0, toInteger(experienceInput.value));
-  }
-
-  #activateExperienceInput() {
-    const input = this.form?.querySelector("[name='experience']");
-    if (!(input instanceof HTMLInputElement)) return;
-
-    input.addEventListener("input", () => {
-      window.clearTimeout(this.#experienceSyncTimer);
-      this.#experienceSyncTimer = window.setTimeout(async () => {
-        this.#syncDraftFromForm();
-        await this.#applyDraftToActor();
-        this.forceRender();
-      }, 150);
-    });
-
-    input.addEventListener("change", async () => {
-      window.clearTimeout(this.#experienceSyncTimer);
-      this.#syncDraftFromForm();
-      await this.#applyDraftToActor();
-      this.forceRender();
-    });
+    return undefined;
   }
 
   async #changeCharacteristic(key, delta) {
