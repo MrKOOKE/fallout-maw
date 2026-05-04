@@ -80,17 +80,17 @@ export class FalloutMaWActor extends Actor {
 
   getDamageResistance(damageTypeKey, limbKey = "") {
     const resolvedLimbKey = limbKey || Object.keys(this.system?.limbs ?? {})[0] || "";
-    return Math.max(0, Math.floor(Number(this.system?.damageResistances?.[resolvedLimbKey]?.[damageTypeKey]) || 0));
+    return Math.floor(Number(this.system?.damageResistances?.[resolvedLimbKey]?.[damageTypeKey]) || 0);
   }
 
   getDamageDefense(damageTypeKey, limbKey = "") {
     const resolvedLimbKey = limbKey || Object.keys(this.system?.limbs ?? {})[0] || "";
-    return Math.max(0, Math.floor(Number(this.system?.damageDefenses?.[resolvedLimbKey]?.[damageTypeKey]) || 0));
+    return Math.floor(Number(this.system?.damageDefenses?.[resolvedLimbKey]?.[damageTypeKey]) || 0);
   }
 
   getDamageReduction(damageTypeKey, limbKey = "") {
     const resolvedLimbKey = limbKey || Object.keys(this.system?.limbs ?? {})[0] || "";
-    return Math.max(0, Math.floor(Number(this.system?.damageReductions?.[resolvedLimbKey]?.[damageTypeKey]) || 0));
+    return Math.floor(Number(this.system?.damageReductions?.[resolvedLimbKey]?.[damageTypeKey]) || 0);
   }
 
   async applyDamage(amount = 0, { damageTypeKey = "", limbKey = "" } = {}) {

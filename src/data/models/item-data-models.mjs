@@ -72,7 +72,7 @@ export class ArmorDataModel extends BaseItemDataModel {
   static defineSchema() {
     return {
       ...super.defineSchema(),
-      defense: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+      defense: new NumberField({ required: true, integer: true, initial: 0 })
     };
   }
 }
@@ -105,6 +105,6 @@ function itemFunctionField() {
 
 function damageMitigationEntryField() {
   return new SchemaField({
-    value: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+    value: new NumberField({ required: true, integer: true, initial: 0 })
   });
 }

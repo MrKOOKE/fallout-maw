@@ -35,13 +35,10 @@ export function evaluateSkillFormulas(skillSettings, characteristicSettings, cha
       try {
         return [
           skill.key,
-          Math.max(
-            0,
-            evaluateFormula(skill.formula, {
-              characteristicSettings: normalizedCharacteristics,
-              characteristics
-            })
-          )
+          evaluateFormula(skill.formula, {
+            characteristicSettings: normalizedCharacteristics,
+            characteristics
+          })
         ];
       } catch (error) {
         console.warn(
@@ -125,15 +122,12 @@ export function evaluateFormulaMap(
       try {
         return [
           definition.key,
-          Math.max(
-            0,
-            evaluateFormula(normalized[definition.key], {
-              characteristicSettings: normalizedCharacteristics,
-              skillSettings: normalizedSkills,
-              characteristics,
-              skills
-            })
-          )
+          evaluateFormula(normalized[definition.key], {
+            characteristicSettings: normalizedCharacteristics,
+            skillSettings: normalizedSkills,
+            characteristics,
+            skills
+          })
         ];
       } catch (error) {
         console.warn(

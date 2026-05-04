@@ -160,7 +160,7 @@
       <div class="fallout-maw-mitigation-cell fallout-maw-mitigation-damage-type">{{damageTypeLabel}}</div>
       {{#each cells}}
       <label class="fallout-maw-mitigation-cell">
-        <input type="number" name="system.functions.damageMitigation.entries.{{limbKey}}.{{damageTypeKey}}.value" value="{{value}}" min="0" step="1">
+        <input type="number" name="system.functions.damageMitigation.entries.{{limbKey}}.{{damageTypeKey}}.value" value="{{value}}" step="1">
       </label>
       {{/each}}
       {{/each}}
@@ -203,7 +203,7 @@
     {{#if isArmor}}
     <label>
       <span>{{localize "FALLOUTMAW.Item.Defense"}}</span>
-      <input type="number" name="system.defense" value="{{system.defense}}" min="0">
+      <input type="number" name="system.defense" value="{{system.defense}}">
     </label>
     {{/if}}
 

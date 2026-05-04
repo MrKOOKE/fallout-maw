@@ -54,21 +54,21 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       skills: new TypedObjectField(skillField(), { required: true, initial: {} }),
       proficiencies: new TypedObjectField(resourceField(), { required: true, initial: {} }),
       damageResistances: new TypedObjectField(
-        new TypedObjectField(new NumberField({ required: true, integer: true, min: 0, initial: 0 }), {
+        new TypedObjectField(new NumberField({ required: true, integer: true, initial: 0 }), {
           required: true,
           initial: {}
         }),
         { required: true, initial: {}, persisted: false }
       ),
       damageDefenses: new TypedObjectField(
-        new TypedObjectField(new NumberField({ required: true, integer: true, min: 0, initial: 0 }), {
+        new TypedObjectField(new NumberField({ required: true, integer: true, initial: 0 }), {
           required: true,
           initial: {}
         }),
         { required: true, initial: {}, persisted: false }
       ),
       damageReductions: new TypedObjectField(
-        new TypedObjectField(new NumberField({ required: true, integer: true, min: 0, initial: 0 }), {
+        new TypedObjectField(new NumberField({ required: true, integer: true, initial: 0 }), {
           required: true,
           initial: {}
         }),
@@ -206,7 +206,7 @@ function normalizeSkillMap(currentSkills = {}, skillSettings = [], skillBases = 
       const current = currentSkills?.[skill.key];
       const bonus = current && typeof current === "object" ? toInteger(current.bonus) : 0;
       const base = toInteger(skillBases?.[skill.key]);
-      return [skill.key, { base, bonus, value: Math.max(0, base + bonus) }];
+      return [skill.key, { base, bonus, value: base + bonus }];
     })
   );
 }
@@ -295,7 +295,7 @@ function buildEquippedItemDamageMitigation(items, limbs = {}, damageTypeSettings
       if (!limbKeys.has(limbKey)) continue;
       for (const [damageTypeKey, entry] of Object.entries(damageEntries ?? {})) {
         if (!damageTypeKeys.has(damageTypeKey)) continue;
-        const value = Math.max(0, toInteger(entry?.value));
+        const value = toInteger(entry?.value);
         if (!value) continue;
 
         if (mode === DAMAGE_MITIGATION_MODES.defense) defenses[limbKey][damageTypeKey] += value;
@@ -317,7 +317,7 @@ function mergeLimbDamageMaps(base = {}, bonus = {}) {
       Object.fromEntries(
         Object.entries(damageTypes ?? {}).map(([damageTypeKey, value]) => [
           damageTypeKey,
-          Math.max(0, toInteger(value)) + Math.max(0, toInteger(bonus?.[limbKey]?.[damageTypeKey]))
+          toInteger(value) + toInteger(bonus?.[limbKey]?.[damageTypeKey])
         ])
       )
     ])
