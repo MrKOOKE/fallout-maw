@@ -67,18 +67,19 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #tooltipTimer = null;
   #tooltipElement = null;
   #tooltipPointer = { x: 0, y: 0 };
+  #viewportResizeHandler = null;
 
   static DEFAULT_OPTIONS = {
     classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-actor-sheet", "sheet", "actor"],
     position: {
-      width: 760,
-      height: 820
+      width: 1280,
+      height: 720
     },
     form: {
       submitOnChange: true
     },
     window: {
-      resizable: true
+      resizable: false
     },
     actions: {
         openDevelopment: this.#onOpenDevelopment,
@@ -137,6 +138,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return this.document;
   }
 
+  setPosition(position = {}) {
+    return super.setPosition(this.#getFullscreenSheetPosition(position));
+  }
+
   get _dragDrop() {
     return this.#dragDrop ??= new foundry.applications.ux.DragDrop.implementation({
       dragSelector: ".draggable",
@@ -187,9 +192,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const level = Math.max(1, toInteger(actor.system?.attributes?.level));
     const currentExperience = Math.max(0, toInteger(actor.system?.development?.experience));
     const maxLevel = levelSettings[levelSettings.length - 1]?.level ?? 100;
+    const loadValue = Math.max(0, Number(actor.system.load?.value) || 0);
+    const loadMax = Math.max(0, Number(actor.system.load?.max) || 0);
+    const loadRatio = loadMax > 0 ? (loadValue / loadMax) : 0;
+    const loadPercent = Math.max(0, Math.min(100, loadRatio * 100));
     const nextThreshold = level >= maxLevel
       ? getLevelThreshold(levelSettings, Math.max(1, level))
       : getLevelThreshold(levelSettings, Math.max(1, level));
+    const progressionPercent = nextThreshold > 0
+      ? Math.max(0, Math.min(100, (currentExperience / nextThreshold) * 100))
+      : 0;
 
     return foundry.utils.mergeObject(context, {
       actor,
@@ -201,8 +213,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       freeEdit: this.#freeEdit,
       editLockAttribute: this.#freeEdit ? "" : "disabled",
       load: {
-        value: formatWeight(actor.system.load?.value),
-        max: formatWeight(actor.system.load?.max)
+        value: formatWeight(loadValue),
+        max: formatWeight(loadMax),
+        percent: Number(loadPercent.toFixed(2)),
+        trend: "negative",
+        state: loadRatio >= 1 ? "critical" : loadRatio >= 0.75 ? "warning" : "normal"
       },
       currencies: currencySettings.map(currency => ({
         ...currency,
@@ -215,6 +230,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       creatureRaces: creatureOptions.races.map(race => ({ ...race, selected: race.id === raceId })),
       progressionExperienceDisplay: `${currentExperience} / ${nextThreshold}`,
       progressionExperienceNext: nextThreshold,
+      progressionExperiencePercent: Number(progressionPercent.toFixed(2)),
       characteristics: characteristicSettings.map(characteristic => ({
         ...characteristic,
         value: toInteger(actor.system?.characteristics?.[characteristic.key]),
@@ -269,9 +285,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    super.setPosition(this.#getFullscreenSheetPosition());
+    this.#bindViewportResize();
     this.#relocateEffectsAddButton();
     this.#activateCreatureSelectors();
     this.#activateInventoryInteractions();
+  }
+
+  _onClose(options) {
+    super._onClose(options);
+    this.#unbindViewportResize();
   }
 
   async _onDrop(event) {
@@ -1400,6 +1423,34 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#tooltipElement?.remove();
     this.#tooltipElement = null;
   }
+
+  #getFullscreenSheetPosition(position = {}) {
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    const viewportWidth = view.innerWidth || document.documentElement?.clientWidth || 1280;
+    const viewportHeight = view.innerHeight || document.documentElement?.clientHeight || 720;
+    const margin = 0;
+
+    return foundry.utils.mergeObject({
+      left: margin,
+      top: margin,
+      width: Math.max(320, viewportWidth - (margin * 2)),
+      height: Math.max(240, viewportHeight - (margin * 2))
+    }, position ?? {}, { inplace: false, overwrite: false });
+  }
+
+  #bindViewportResize() {
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    if (this.#viewportResizeHandler) return;
+    this.#viewportResizeHandler = () => this.setPosition();
+    view.addEventListener("resize", this.#viewportResizeHandler);
+  }
+
+  #unbindViewportResize() {
+    if (!this.#viewportResizeHandler) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    view.removeEventListener("resize", this.#viewportResizeHandler);
+    this.#viewportResizeHandler = null;
+  }
 }
 
 function formatWeight(value) {
@@ -1521,6 +1572,9 @@ function prepareInventoryContext(actor, race) {
       const containerDocument = actor.items.get(item.id);
       const dimensions = getContainerDimensions(containerDocument);
       const contents = getContextInventoryItems(item.id, allItems);
+      const containerLoadValue = Math.max(0, Number(getContainerContentsWeight(containerDocument, allItems)) || 0);
+      const containerLoadMax = Math.max(0, Number(getContainerMaxLoad(containerDocument)) || 0);
+      const containerLoadRatio = containerLoadMax > 0 ? (containerLoadValue / containerLoadMax) : 0;
       return {
         ...item,
         grid: prepareInventoryGridContext(contents, dimensions.columns, dimensions.rows, allItems, (childItem, placement) => ({
@@ -1528,8 +1582,11 @@ function prepareInventoryContext(actor, race) {
           gridStyle: buildInventoryCellStyle(placement.x, placement.y, placement)
         })),
         load: {
-          value: formatWeight(getContainerContentsWeight(containerDocument, allItems)),
-          max: formatWeight(getContainerMaxLoad(containerDocument))
+          value: formatWeight(containerLoadValue),
+          max: formatWeight(containerLoadMax),
+          percent: Number(Math.max(0, Math.min(100, containerLoadRatio * 100)).toFixed(2)),
+          trend: "negative",
+          state: containerLoadRatio >= 1 ? "critical" : containerLoadRatio >= 0.75 ? "warning" : "normal"
         }
       };
     });
