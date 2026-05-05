@@ -10,6 +10,7 @@ import {
   getCharacteristicSettings,
   getCreatureOptions,
   getLevelSettings,
+  getSkillAdvancementSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
@@ -78,6 +79,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
     const characteristicSettings = getCharacteristicSettings();
     const skillSettings = getSkillSettings();
+    const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
+    const skillDevelopmentLimit = Math.max(0, toInteger(skillAdvancementSettings.developmentLimit));
     const levelSettings = getLevelSettings();
     const creatureOptions = getCreatureOptions();
     const race = creatureOptions.races.find(entry => entry.id === this.actor.system?.creature?.raceId) ?? null;
@@ -132,7 +135,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
           ...skill,
           value: toInteger(liveSkills?.[skill.key]?.value),
           signature: Boolean(currentSkill.signature),
-          canIncrease: remaining.skills > 0,
+          canIncrease: remaining.skills > 0 && toInteger(liveSkills?.[skill.key]?.value) < skillDevelopmentLimit,
           canDecrease: toInteger(currentSkill.points) > toInteger(floorSkill.points),
           canToggleSignature: Boolean(currentSkill.signature)
             ? canUnsetSignature
@@ -329,6 +332,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (delta > 0) {
       const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
       if (remaining.skills < 1) return false;
+      if (toInteger(this.actor.system?.skills?.[key]?.value) >= this.#getSkillDevelopmentLimit()) return false;
 
       this.#draft.development.skills[key].points = toInteger(this.#draft.development.skills[key]?.points) + 1;
       await this.#applyDraftToActor();
@@ -342,6 +346,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#draft.development.skills[key].points = currentPoints - 1;
     await this.#applyDraftToActor();
     return true;
+  }
+
+  #getSkillDevelopmentLimit() {
+    const characteristicSettings = getCharacteristicSettings();
+    const skillSettings = getSkillSettings();
+    return Math.max(0, toInteger(getSkillAdvancementSettings(characteristicSettings, skillSettings).developmentLimit));
   }
 
   async #applyRepeatAction(action, key) {

@@ -326,6 +326,7 @@
         "Empty": "No skills created.",
         "FormulaHint": "Skill formulas can use characteristic keys and codes. Keep keys and codes in Latin characters.",
         "LabelPlaceholder": "Skill name",
+        "DevelopmentLimit": "Skill Development Limit",
         "SignatureFlatBonus": "Signature Flat Bonus",
         "SignatureMultiplier": "Signature Multiplier",
         "Title": "Skill Settings"

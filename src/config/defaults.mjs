@@ -47,6 +47,7 @@ export const DEFAULT_SKILLS = Object.freeze([
 
 export const DEFAULT_SIGNATURE_SKILL_MULTIPLIER = 1.5;
 export const DEFAULT_SIGNATURE_SKILL_FLAT_BONUS = 15;
+export const DEFAULT_SKILL_DEVELOPMENT_LIMIT = 300;
 
 export const DEFAULT_SKILL_ADVANCEMENT = Object.freeze({
   rangedCombat: Object.freeze({ base: 0.7, characteristics: Object.freeze({ dexterity: 0.02, perception: 0.06 }) }),

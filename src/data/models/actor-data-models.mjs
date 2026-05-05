@@ -22,6 +22,7 @@ import {
   getSkillAdvancementSettings,
   getSkillSettings
 } from "../../settings/accessors.mjs";
+import { DEFAULT_SKILL_DEVELOPMENT_LIMIT } from "../../config/defaults.mjs";
 import { resourceField } from "./resources.mjs";
 import {
   DAMAGE_MITIGATION_MODES,
@@ -133,7 +134,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       skillAdvancementSettings,
       this.development
     );
-    replaceObjectContents(this.skills, normalizeSkillMap(this.skills, skillSettings, skillBases, skillBonuses));
+    replaceObjectContents(this.skills, normalizeSkillMap(this.skills, skillSettings, skillBases, skillBonuses, skillAdvancementSettings));
     replaceArrayContents(this.researches, normalizeResearchCollection(this.researches));
     replaceObjectContents(this.proficiencies, normalizeProficiencyMap(this.proficiencies, proficiencySettings));
 
@@ -202,8 +203,10 @@ function getRaceDamageResistanceFormulas(race, damageTypeSettings) {
 function skillField() {
   return new SchemaField({
     base: new NumberField({ required: true, integer: true, initial: 0 }),
+    min: new NumberField({ required: true, integer: true, initial: 0 }),
     bonus: new NumberField({ required: true, integer: true, initial: 0 }),
     developmentBonus: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+    max: new NumberField({ required: true, integer: true, min: 0, initial: DEFAULT_SKILL_DEVELOPMENT_LIMIT }),
     value: new NumberField({ required: true, integer: true, initial: 0 })
   });
 }
@@ -238,14 +241,17 @@ function replaceArrayContents(target, source) {
   target.push(...source);
 }
 
-function normalizeSkillMap(currentSkills = {}, skillSettings = [], skillBases = {}, skillBonuses = {}) {
+function normalizeSkillMap(currentSkills = {}, skillSettings = [], skillBases = {}, skillBonuses = {}, skillAdvancementSettings = {}) {
+  const min = 0;
+  const max = Math.max(min, toInteger(skillAdvancementSettings?.developmentLimit ?? DEFAULT_SKILL_DEVELOPMENT_LIMIT));
   return Object.fromEntries(
     skillSettings.map(skill => {
       const current = currentSkills?.[skill.key] ?? {};
       const base = toInteger(skillBases?.[skill.key]);
       const bonus = toInteger(current.bonus);
       const developmentBonus = toInteger(skillBonuses?.[skill.key]);
-      return [skill.key, { base, bonus, developmentBonus, value: base + bonus + developmentBonus }];
+      const value = Math.min(Math.max(base + bonus + developmentBonus, min), max);
+      return [skill.key, { base, min, bonus, developmentBonus, value, max }];
     })
   );
 }

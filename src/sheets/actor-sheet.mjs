@@ -10,6 +10,7 @@ import {
   getNeedSettings,
   getProficiencySettings,
   getResourceSettings,
+  getSkillAdvancementSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
@@ -176,6 +177,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const needSettings = getNeedSettings();
     const proficiencySettings = getProficiencySettings();
     const skillSettings = getSkillSettings();
+    const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
     const levelSettings = getLevelSettings();
     const typeId = actor.system?.creature?.typeId;
     const raceId = actor.system?.creature?.raceId;
@@ -259,21 +261,29 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       skills: skillSettings.map(skill => {
         const current = actor.system.skills?.[skill.key] ?? {};
         const source = sourceSystem.skills?.[skill.key] ?? {};
-        return {
+        return prepareIndicatorEntry({
           ...skill,
+          color: "#7fa85a",
+          data: {
+            min: current.min,
+            value: current.value,
+            max: current.max ?? skillAdvancementSettings.developmentLimit
+          },
           base: toInteger(current.base),
           bonus: toInteger(source.bonus),
-          value: toInteger(current.value)
-        };
+          developmentBonus: toInteger(current.developmentBonus)
+        });
       }),
       proficiencies: proficiencySettings.map(proficiency => {
         const current = actor.system.proficiencies?.[proficiency.key] ?? {};
-        return {
+        return prepareIndicatorEntry({
           ...proficiency,
-          value: toInteger(current.value),
+          color: "#b08a4a",
+          data: current,
+          inputName: `system.proficiencies.${proficiency.key}.value`,
           bonus: toInteger(current.bonus),
-          max: toInteger(current.max)
-        };
+          settingMax: toInteger(proficiency.max)
+        });
       }),
       researches: prepareResearchesForDisplay(actor.system?.researches, skillSettings, actor.system?.skills),
       damageResistances: damageTypeSettings.map(damageType => ({
@@ -1670,7 +1680,8 @@ function prepareIndicatorEntry({
   color = "#8f8456",
   data = {},
   inputName = "",
-  active = false
+  active = false,
+  ...extra
 } = {}) {
   const min = Math.max(-100, toInteger(data?.min));
   const max = Math.max(min, toInteger(data?.max));
@@ -1686,6 +1697,7 @@ function prepareIndicatorEntry({
   const normalizedColor = normalizeIndicatorColor(isNegative ? "#c8463d" : color);
 
   return {
+    ...extra,
     key,
     label,
     color: normalizedColor,

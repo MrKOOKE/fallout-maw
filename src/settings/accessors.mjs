@@ -228,7 +228,9 @@ export function syncActorTrackableAttributes() {
 
   const bar = [
     ...getResourceSettings().map(resource => `resources.${resource.key}`),
-    ...getNeedSettings().map(need => `needs.${need.key}`)
+    ...getNeedSettings().map(need => `needs.${need.key}`),
+    ...getSkillSettings().map(skill => `skills.${skill.key}`),
+    ...getProficiencySettings().map(proficiency => `proficiencies.${proficiency.key}`)
   ];
   const value = ["attributes.level"];
 

@@ -4,6 +4,7 @@ import {
   DEFAULT_NEEDS,
   DEFAULT_PROFICIENCIES,
   DEFAULT_RESOURCES,
+  DEFAULT_SKILL_DEVELOPMENT_LIMIT,
   DEFAULT_SIGNATURE_SKILL_FLAT_BONUS,
   DEFAULT_SIGNATURE_SKILL_MULTIPLIER,
   DEFAULT_SKILL_ADVANCEMENT,
@@ -44,6 +45,7 @@ export function createDefaultSkillAdvancementSettings(
   return {
     signatureMultiplier: DEFAULT_SIGNATURE_SKILL_MULTIPLIER,
     signatureFlatBonus: DEFAULT_SIGNATURE_SKILL_FLAT_BONUS,
+    developmentLimit: DEFAULT_SKILL_DEVELOPMENT_LIMIT,
     entries: Object.fromEntries(
       skills.map(skill => {
         const defaults = DEFAULT_SKILL_ADVANCEMENT[skill.key] ?? {};
@@ -123,6 +125,7 @@ export function normalizeSkillAdvancementSettings(
   return {
     signatureMultiplier: toDecimal(source?.signatureMultiplier ?? source?.signature?.multiplier, defaults.signatureMultiplier),
     signatureFlatBonus: toDecimal(source?.signatureFlatBonus ?? source?.signature?.flatBonus, defaults.signatureFlatBonus),
+    developmentLimit: Math.max(0, toInteger(source?.developmentLimit ?? source?.limit ?? defaults.developmentLimit)),
     entries: Object.fromEntries(
       skills.map(skill => {
         const sourceEntry = source?.entries?.[skill.key] ?? source?.skills?.[skill.key] ?? source?.[skill.key] ?? {};

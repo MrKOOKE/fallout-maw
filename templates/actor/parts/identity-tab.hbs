@@ -112,23 +112,39 @@
 
   <section class="fallout-maw-panel">
     <h2>{{localize "FALLOUTMAW.Common.Skills"}}</h2>
-    <div class="fallout-maw-identity-skill-grid">
+    <div class="fallout-maw-resource-grid">
       {{#each skills}}
-      <button type="button" class="fallout-maw-identity-skill fallout-maw-identity-skill-button" data-action="rollSkill" data-skill-key="{{key}}">
-        <span>{{label}}</span>
-        <strong>{{value}}</strong>
-      </button>
+      <div class="fallout-maw-resource-card fallout-maw-resource-meter-card fallout-maw-skill-roll-card" data-action="rollSkill" data-skill-key="{{key}}" role="button" tabindex="0">
+        <div class="fallout-maw-resource-card-header">
+          <span class="fallout-maw-resource-name" title="{{abbr}} / {{key}}">{{label}}</span>
+          <span class="fallout-maw-resource-value">
+            <strong>{{value}}</strong>
+            <span class="fallout-maw-resource-max">/ {{max}}</span>
+          </span>
+        </div>
+        <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
+          <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
+        </div>
+      </div>
       {{/each}}
     </div>
   </section>
 
   <section class="fallout-maw-panel">
     <h2>{{localize "FALLOUTMAW.Common.Proficiencies"}}</h2>
-    <div class="fallout-maw-identity-skill-grid">
+    <div class="fallout-maw-resource-grid">
       {{#each proficiencies}}
-      <div class="fallout-maw-identity-skill">
-        <span>{{label}}</span>
-        <strong>{{value}} / {{max}}</strong>
+      <div class="fallout-maw-resource-card fallout-maw-resource-meter-card">
+        <div class="fallout-maw-resource-card-header">
+          <span class="fallout-maw-resource-name" title="{{abbr}} / {{key}}">{{label}}</span>
+          <span class="fallout-maw-resource-value">
+            {{#if ../freeEdit}}<input type="number" name="{{inputName}}" value="{{value}}" min="{{min}}" max="{{max}}">{{else}}<strong>{{value}}</strong>{{/if}}
+            <span class="fallout-maw-resource-max">/ {{max}}</span>
+          </span>
+        </div>
+        <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
+          <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
+        </div>
       </div>
       {{/each}}
     </div>

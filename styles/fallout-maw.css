@@ -2740,6 +2740,20 @@
   transform: none;
 }
 
+.application.fallout-maw-actor-sheet .fallout-maw-skill-roll-card {
+  cursor: pointer;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-skill-roll-card:hover,
+.application.fallout-maw-actor-sheet .fallout-maw-skill-roll-card:focus-visible {
+  border-color: rgba(148, 177, 111, 0.58);
+  box-shadow:
+    inset 3px 3px 0 rgba(0, 0, 0, 0.72),
+    inset -1px -1px 0 rgba(219, 219, 186, 0.1),
+    0 0 0 1px rgba(148, 177, 111, 0.14);
+  outline: none;
+}
+
 .application.fallout-maw-actor-sheet .fallout-maw-currency-list {
   display: grid;
   gap: 0.45rem;

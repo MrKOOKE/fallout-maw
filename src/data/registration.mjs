@@ -1,5 +1,5 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
-import { getNeedSettings, getResourceSettings } from "../settings/accessors.mjs";
+import { getNeedSettings, getProficiencySettings, getResourceSettings, getSkillSettings } from "../settings/accessors.mjs";
 import {
   AbilityDataModel,
   CharacterDataModel,
@@ -28,7 +28,9 @@ export function registerDataModels() {
 export function registerTrackableAttributes() {
   const barAttributes = [
     ...getResourceSettings().map(resource => `resources.${resource.key}`),
-    ...getNeedSettings().map(need => `needs.${need.key}`)
+    ...getNeedSettings().map(need => `needs.${need.key}`),
+    ...getSkillSettings().map(skill => `skills.${skill.key}`),
+    ...getProficiencySettings().map(proficiency => `proficiencies.${proficiency.key}`)
   ];
 
   CONFIG.Actor.trackableAttributes = Object.fromEntries(
