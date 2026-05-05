@@ -10,6 +10,7 @@ export const TEMPLATES = Object.freeze({
     dialog: `systems/${SYSTEM_ID}/templates/actor/advancement-dialog.hbs`
   }),
   skillCheckDialog: `systems/${SYSTEM_ID}/templates/actor/skill-check-dialog.hbs`,
+  skillCheckAnimation: `systems/${SYSTEM_ID}/templates/actor/skill-check-animation.hbs`,
   skillCheckChatCard: `systems/${SYSTEM_ID}/templates/chat/skill-check-card.hbs`,
   researchCompleteChatCard: `systems/${SYSTEM_ID}/templates/chat/research-complete-card.hbs`,
   actorSheet: Object.freeze({

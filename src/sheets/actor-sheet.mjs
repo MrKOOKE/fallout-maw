@@ -459,6 +459,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return requestSkillCheck({
       actor: this.actor,
       skillKey,
+      animate: true,
       prompt: true,
       requester: "actorSheet"
     });

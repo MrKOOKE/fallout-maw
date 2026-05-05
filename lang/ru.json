@@ -204,14 +204,18 @@
     "SkillCheck": {
       "Advantage": "Преимущество",
       "AutomaticFailure": "Автоматический провал",
+      "AutomaticFailureShort": "АП",
       "CriticalFailure": "Критический провал",
       "CriticalFailureBonus": "Бонус к критическому провалу",
+      "CriticalFailureShort": "КП",
       "CriticalSuccess": "Критический успех",
       "CriticalSuccessBonus": "Бонус к критическому успеху",
+      "CriticalSuccessShort": "КУ",
       "Difficulty": "Сложность",
       "Disadvantage": "Помеха",
       "Edge": "Преимущество/Помеха",
       "Failure": "Провал",
+      "FailureShort": "П",
       "FinalSkillValue": "Итоговое значение навыка",
       "None": "Нет",
       "Normal": "Обычная проверка",
@@ -223,10 +227,12 @@
       "SituationalModifier": "Ситуативное изменение",
       "SkillValue": "Значение навыка",
       "Success": "Успех",
+      "SuccessShort": "У",
       "TerminalTitle": "Проверка навыка",
       "Thresholds": "Диапазоны",
       "Title": "Проверка: {skill}",
-      "Total": "Итог"
+      "Total": "Итог",
+      "AnimationClickHint": "Нажмите по проверке для фиксации результата"
     },
     "Creation": {
       "Base": "Основа персонажа",

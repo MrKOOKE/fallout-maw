@@ -204,14 +204,18 @@
     "SkillCheck": {
       "Advantage": "Advantage",
       "AutomaticFailure": "Automatic Failure",
+      "AutomaticFailureShort": "AF",
       "CriticalFailure": "Critical Failure",
       "CriticalFailureBonus": "Critical Failure Bonus",
+      "CriticalFailureShort": "CF",
       "CriticalSuccess": "Critical Success",
       "CriticalSuccessBonus": "Critical Success Bonus",
+      "CriticalSuccessShort": "CS",
       "Difficulty": "Difficulty",
       "Disadvantage": "Disadvantage",
       "Edge": "Advantage/Disadvantage",
       "Failure": "Failure",
+      "FailureShort": "F",
       "FinalSkillValue": "Final Skill Value",
       "None": "None",
       "Normal": "Normal",
@@ -223,10 +227,12 @@
       "SituationalModifier": "Situational Modifier",
       "SkillValue": "Skill Value",
       "Success": "Success",
+      "SuccessShort": "S",
       "TerminalTitle": "Skill Check",
       "Thresholds": "Thresholds",
       "Title": "{skill} Check",
-      "Total": "Total"
+      "Total": "Total",
+      "AnimationClickHint": "Click the check to lock in the result"
     },
     "Creation": {
       "Base": "Character Base",

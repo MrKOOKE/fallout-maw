@@ -39,7 +39,7 @@ export class FalloutMaWActor extends Actor {
         },
         render: (event, dialog) => {
           priorRender?.(event, dialog);
-          this.#activateCreatureCreateDialog(dialog);
+          activateCreatureCreateDialog(dialog);
         }
       },
       renderOptions
@@ -50,8 +50,8 @@ export class FalloutMaWActor extends Actor {
     if ((await super._preCreate(data, options, user)) === false) return false;
     if (!["character", "npc"].includes(this.type)) return undefined;
 
-    this.#applyCreatureRaceDefaults();
-    this.#applyNewActorResourceDefaults();
+    applyCreatureRaceDefaults(this);
+    applyNewActorResourceDefaults(this);
     return undefined;
   }
 
@@ -84,7 +84,7 @@ export class FalloutMaWActor extends Actor {
       for (const limb of Object.values(limbs)) clampPreparedResource(limb);
     }
 
-    this.#prepareLoadData();
+    prepareActorLoadData(this);
   }
 
   get health() {
@@ -216,89 +216,90 @@ export class FalloutMaWActor extends Actor {
     return this.update(updateData);
   }
 
-  #applyCreatureRaceDefaults() {
-    const creatureOptions = getCreatureOptions();
-    const creature = this.system?.creature;
-    const race = creatureOptions.races.find(entry => entry.id === creature?.raceId);
-    const typeId = race?.typeId || creature?.typeId || "";
+}
 
-    if (!race && !typeId) return;
+function applyCreatureRaceDefaults(actor) {
+  const creatureOptions = getCreatureOptions();
+  const creature = actor.system?.creature;
+  const race = creatureOptions.races.find(entry => entry.id === creature?.raceId);
+  const typeId = race?.typeId || creature?.typeId || "";
 
-    const system = { creature: { typeId, raceId: race?.id || "" } };
-    if (race) {
-      system.characteristics = { ...race.characteristics };
-      system.progression = { ...race.progression };
+  if (!race && !typeId) return;
+
+  const system = { creature: { typeId, raceId: race?.id || "" } };
+  if (race) {
+    system.characteristics = { ...race.characteristics };
+    system.progression = { ...race.progression };
+  }
+
+  actor.updateSource({ system });
+}
+
+function applyNewActorResourceDefaults(actor) {
+  actor.system?.prepareDerivedData?.();
+
+  actor.updateSource({
+    system: {
+      currencies: initializeCurrencyMap(getCurrencySettings()),
+      resources: maximizeResourceMap(actor.system?.resources),
+      needs: maximizeResourceMap(actor.system?.needs),
+      researches: normalizeResearchCollection(actor.system?.researches),
+      proficiencies: initializeProficiencyMap(actor.system?.proficiencies),
+      limbs: maximizeResourceMap(actor.system?.limbs)
+    }
+  });
+}
+
+function prepareActorLoadData(actor) {
+  const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
+  const characteristics = actor.system?.characteristics ?? {};
+  const skills = getSkillValues(actor.system?.skills ?? {});
+  const max = race?.baseParameters?.loadFormula
+    ? Math.max(0, evaluateFormula(race.baseParameters.loadFormula, {
+      characteristicSettings: getCharacteristicSettings(),
+      skillSettings: getSkillSettings(),
+      characteristics,
+      skills
+    }))
+    : 0;
+  const value = Number(
+    actor.items.reduce((total, item) => (
+      getItemContainerParentId(item)
+        ? total
+        : total + (Number(getItemActorLoadWeight(item, actor.items)) || 0)
+    ), 0).toFixed(1)
+  );
+  actor.system.load = { min: 0, spent: 0, bonus: 0, value, max };
+}
+
+function activateCreatureCreateDialog(dialog) {
+  const root = dialog.element instanceof HTMLElement ? dialog.element : dialog.element?.[0] ?? dialog.element;
+  const typeSelect = root?.querySelector("[data-creature-type-select]");
+  const raceSelect = root?.querySelector("[data-creature-race-select]");
+  if (!typeSelect || !raceSelect) return;
+
+  const updateRaceOptions = () => {
+    const typeId = typeSelect.value;
+    let selectedAvailable = false;
+
+    for (const option of raceSelect.options) {
+      const optionTypeId = option.dataset.typeId;
+      const visible = !option.value || (typeId && optionTypeId === typeId);
+      option.hidden = !visible;
+      option.disabled = !visible;
+      if (visible && option.selected) selectedAvailable = true;
     }
 
-    this.updateSource({ system });
-  }
+    if (!selectedAvailable) raceSelect.value = "";
+  };
 
-  #applyNewActorResourceDefaults() {
-    this.system?.prepareDerivedData?.();
-
-    this.updateSource({
-      system: {
-        currencies: initializeCurrencyMap(getCurrencySettings()),
-        resources: maximizeResourceMap(this.system?.resources),
-        needs: maximizeResourceMap(this.system?.needs),
-        researches: normalizeResearchCollection(this.system?.researches),
-        proficiencies: initializeProficiencyMap(this.system?.proficiencies),
-        limbs: maximizeResourceMap(this.system?.limbs)
-      }
-    });
-  }
-
-  #prepareLoadData() {
-    const race = getCreatureOptions().races.find(entry => entry.id === this.system?.creature?.raceId);
-    const characteristics = this.system?.characteristics ?? {};
-    const skills = getSkillValues(this.system?.skills ?? {});
-    const max = race?.baseParameters?.loadFormula
-      ? Math.max(0, evaluateFormula(race.baseParameters.loadFormula, {
-        characteristicSettings: getCharacteristicSettings(),
-        skillSettings: getSkillSettings(),
-        characteristics,
-        skills
-      }))
-      : 0;
-    const value = Number(
-      this.items.reduce((total, item) => (
-        getItemContainerParentId(item)
-          ? total
-          : total + (Number(getItemActorLoadWeight(item, this.items)) || 0)
-      ), 0).toFixed(1)
-    );
-    this.system.load = { min: 0, spent: 0, bonus: 0, value, max };
-  }
-
-  static #activateCreatureCreateDialog(dialog) {
-    const root = dialog.element instanceof HTMLElement ? dialog.element : dialog.element?.[0] ?? dialog.element;
-    const typeSelect = root?.querySelector("[data-creature-type-select]");
-    const raceSelect = root?.querySelector("[data-creature-race-select]");
-    if (!typeSelect || !raceSelect) return;
-
-    const updateRaceOptions = () => {
-      const typeId = typeSelect.value;
-      let selectedAvailable = false;
-
-      for (const option of raceSelect.options) {
-        const optionTypeId = option.dataset.typeId;
-        const visible = !option.value || (typeId && optionTypeId === typeId);
-        option.hidden = !visible;
-        option.disabled = !visible;
-        if (visible && option.selected) selectedAvailable = true;
-      }
-
-      if (!selectedAvailable) raceSelect.value = "";
-    };
-
-    raceSelect.addEventListener("change", event => {
-      const selected = event.currentTarget.selectedOptions[0];
-      if (selected?.dataset.typeId) typeSelect.value = selected.dataset.typeId;
-      updateRaceOptions();
-    });
-    typeSelect.addEventListener("change", updateRaceOptions);
+  raceSelect.addEventListener("change", event => {
+    const selected = event.currentTarget.selectedOptions[0];
+    if (selected?.dataset.typeId) typeSelect.value = selected.dataset.typeId;
     updateRaceOptions();
-  }
+  });
+  typeSelect.addEventListener("change", updateRaceOptions);
+  updateRaceOptions();
 }
 
 function maximizeResourceMap(resources = {}) {

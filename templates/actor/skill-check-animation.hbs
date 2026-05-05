@@ -1,0 +1,32 @@
+<div class="fallout-maw-skill-check-animation {{result.cssClass}}" data-skill-check-animation>
+  <header>
+    <span>{{localize "FALLOUTMAW.SkillCheck.TerminalTitle"}}</span>
+    <strong>{{skill.label}}</strong>
+  </header>
+
+  <div class="fallout-maw-skill-check-animation-track">
+    {{#each progressCells}}
+    <span
+      class="fallout-maw-skill-check-animation-cell"
+      data-skill-check-animation-cell
+      data-cell-start="{{start}}"
+      data-cell-end="{{end}}"
+      style="--cell-gradient: {{{gradient}}};"
+      aria-hidden="true"
+    >
+      <span class="fallout-maw-skill-check-animation-cell-fill"></span>
+    </span>
+    {{/each}}
+  </div>
+
+  <div class="fallout-maw-skill-check-animation-ruler">
+    {{#each scaleSegments}}
+    <div class="fallout-maw-skill-check-animation-segment {{cssClass}}{{#if active}} active{{/if}}" style="flex-basis: {{width}}%;">
+      <span class="fallout-maw-skill-check-animation-label-short">{{shortLabel}}</span>
+      <span class="fallout-maw-skill-check-animation-label-full">{{label}}</span>
+    </div>
+    {{/each}}
+  </div>
+
+  <footer>{{localize "FALLOUTMAW.SkillCheck.AnimationClickHint"}}</footer>
+</div>

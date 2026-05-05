@@ -51,6 +51,7 @@ export async function applyResearchTime(actor, researchId, duration = {}, { crea
       actor,
       skillKey: research.skillKey,
       requester: "research",
+      animate: false,
       createMessage: createMessages,
       data: {
         difficulty: research.difficulty
