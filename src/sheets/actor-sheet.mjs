@@ -56,6 +56,10 @@ import { FalloutMaWContainerSheet } from "./container-sheet.mjs";
 
 const { ActorSheetV2 } = foundry.applications.sheets;
 const { HandlebarsApplicationMixin } = foundry.applications.api;
+const ACTOR_SHEET_REFERENCE_WIDTH = 2560;
+const ACTOR_SHEET_REFERENCE_HEIGHT = 1440;
+const ACTOR_SHEET_FALLBACK_VIEWPORT_WIDTH = 1280;
+const ACTOR_SHEET_FALLBACK_VIEWPORT_HEIGHT = 720;
 
 export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
   #freeEdit = false;
@@ -67,14 +71,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #tooltipTimer = null;
   #tooltipElement = null;
   #tooltipPointer = { x: 0, y: 0 };
+  #uiScale = 1;
   #viewportResizeHandler = null;
   #tabScrollPositions = new Map();
 
   static DEFAULT_OPTIONS = {
     classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-actor-sheet", "sheet", "actor"],
     position: {
-      width: 1280,
-      height: 720
+      width: ACTOR_SHEET_REFERENCE_WIDTH,
+      height: ACTOR_SHEET_REFERENCE_HEIGHT
     },
     form: {
       submitOnChange: true
@@ -99,9 +104,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   };
 
   static PARTS = {
-    header: {
-      template: TEMPLATES.actorSheet.header
-    },
     tabs: {
       template: TEMPLATES.actorSheet.tabs
     },
@@ -140,7 +142,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   setPosition(position = {}) {
-    return super.setPosition(this.#getFullscreenSheetPosition(position));
+    const fullscreenPosition = this.#getFullscreenSheetPosition(position);
+    const result = super.setPosition(fullscreenPosition);
+    this.#applyUiScale(fullscreenPosition.scale);
+    this.#syncOverlayScale();
+    return result;
   }
 
   get _dragDrop() {
@@ -285,18 +291,21 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   async _onRender(context, options) {
     await super._onRender(context, options);
-    super.setPosition(this.#getFullscreenSheetPosition());
+    this.setPosition();
     this.#bindViewportResize();
     this.#relocateEffectsAddButton();
     this.#activateCreatureSelectors();
     this.#activateInventoryInteractions();
     this.#activateTabScrollPersistence();
     this.#restoreActiveTabScroll();
+    this.#debugInventorySplitLayout();
   }
 
   _onClose(options) {
     super._onClose(options);
     this.#unbindViewportResize();
+    this.#closeInventoryContextMenu();
+    this.#clearInventoryTooltip();
   }
 
   async _onDrop(event) {
@@ -1352,6 +1361,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const isContainer = isContainerItem(item);
     const menu = document.createElement("nav");
     menu.className = "fallout-maw-inventory-context-menu";
+    menu.dataset.pointerX = String(event.clientX);
+    menu.dataset.pointerY = String(event.clientY);
+    this.#applyOverlayUiScale(menu);
     const menuOptions = [
       ["edit", "fa-pen-to-square", game.i18n.localize("FALLOUTMAW.Common.Edit")]
     ];
@@ -1370,9 +1382,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     menu.innerHTML = menuOptions
       .map(([action, icon, label]) => `<button type="button" data-action="${action}"><i class="fa-solid ${icon}"></i>${label}</button>`)
       .join("");
-    menu.style.left = `${event.clientX}px`;
-    menu.style.top = `${event.clientY}px`;
     document.body.append(menu);
+    this.#positionOverlayAtPointer(menu, { x: event.clientX, y: event.clientY }, 8);
 
     menu.addEventListener("click", async clickEvent => {
       const action = clickEvent.target.closest("button")?.dataset.action;
@@ -1511,6 +1522,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     const tooltip = document.createElement("aside");
     tooltip.className = "fallout-maw-inventory-tooltip";
+    this.#applyOverlayUiScale(tooltip);
     tooltip.innerHTML = `
       <strong>${escapeHTML(item.name)}</strong>
       <span>${game.i18n.localize("FALLOUTMAW.Item.Weight")}: ${formatNumber(unitWeight)} / ${formatNumber(totalWeight)} ${game.i18n.localize("FALLOUTMAW.Common.Kg")}</span>
@@ -1524,12 +1536,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #positionInventoryTooltip() {
     if (!this.#tooltipElement) return;
-    const margin = 14;
-    const rect = this.#tooltipElement.getBoundingClientRect();
-    const x = Math.min(this.#tooltipPointer.x + margin, window.innerWidth - rect.width - margin);
-    const y = Math.min(this.#tooltipPointer.y + margin, window.innerHeight - rect.height - margin);
-    this.#tooltipElement.style.left = `${Math.max(margin, x)}px`;
-    this.#tooltipElement.style.top = `${Math.max(margin, y)}px`;
+    this.#positionOverlayAtPointer(this.#tooltipElement, this.#tooltipPointer, 14);
   }
 
   #clearInventoryTooltip() {
@@ -1542,24 +1549,131 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #getFullscreenSheetPosition(position = {}) {
-    const view = this.element?.ownerDocument?.defaultView ?? window;
-    const viewportWidth = view.innerWidth || document.documentElement?.clientWidth || 1280;
-    const viewportHeight = view.innerHeight || document.documentElement?.clientHeight || 720;
-    const margin = 0;
+    const { viewportWidth, viewportHeight } = this.#getViewportMetrics();
+    const scale = Math.max(
+      0.1,
+      Math.min(
+        viewportWidth / ACTOR_SHEET_REFERENCE_WIDTH,
+        viewportHeight / ACTOR_SHEET_REFERENCE_HEIGHT
+      ) || 1
+    );
+    const width = ACTOR_SHEET_REFERENCE_WIDTH;
+    const height = ACTOR_SHEET_REFERENCE_HEIGHT;
+    const resolvedPosition = {
+      left: Math.max(0, (viewportWidth - (width * scale)) / 2),
+      top: Math.max(0, (viewportHeight - (height * scale)) / 2),
+      width,
+      height,
+      scale
+    };
 
-    return foundry.utils.mergeObject({
-      left: margin,
-      top: margin,
-      width: Math.max(320, viewportWidth - (margin * 2)),
-      height: Math.max(240, viewportHeight - (margin * 2))
-    }, position ?? {}, { inplace: false, overwrite: false });
+    return resolvedPosition;
+  }
+
+  #getViewportMetrics() {
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    const documentElement = view.document?.documentElement ?? document.documentElement;
+    return {
+      view,
+      viewportWidth: view.innerWidth || documentElement?.clientWidth || ACTOR_SHEET_FALLBACK_VIEWPORT_WIDTH,
+      viewportHeight: view.innerHeight || documentElement?.clientHeight || ACTOR_SHEET_FALLBACK_VIEWPORT_HEIGHT
+    };
+  }
+
+  #applyUiScale(scale = 1) {
+    const normalizedScale = Math.max(0.1, Number(scale) || 1);
+    this.#uiScale = normalizedScale;
+    this.element?.style?.setProperty("--fallout-maw-ui-scale", String(normalizedScale));
+  }
+
+  #applyOverlayUiScale(element) {
+    if (!element) return;
+    element.style.setProperty("--fallout-maw-ui-scale", String(this.#uiScale));
+  }
+
+  #positionOverlayAtPointer(element, pointer = {}, baseMargin = 14) {
+    if (!element) return;
+    const { viewportWidth, viewportHeight } = this.#getViewportMetrics();
+    const rect = element.getBoundingClientRect();
+    const margin = Math.max(8, baseMargin * this.#uiScale);
+    const pointerX = Number(pointer?.x);
+    const pointerY = Number(pointer?.y);
+    const x = Math.min(
+      (Number.isFinite(pointerX) ? pointerX : 0) + margin,
+      viewportWidth - rect.width - margin
+    );
+    const y = Math.min(
+      (Number.isFinite(pointerY) ? pointerY : 0) + margin,
+      viewportHeight - rect.height - margin
+    );
+    element.style.left = `${Math.max(margin, x)}px`;
+    element.style.top = `${Math.max(margin, y)}px`;
+  }
+
+  #syncOverlayScale() {
+    if (this.#tooltipElement) {
+      this.#applyOverlayUiScale(this.#tooltipElement);
+      this.#positionInventoryTooltip();
+    }
+
+    for (const menu of document.querySelectorAll(".fallout-maw-inventory-context-menu")) {
+      this.#applyOverlayUiScale(menu);
+      this.#positionOverlayAtPointer(menu, {
+        x: Number(menu.dataset.pointerX),
+        y: Number(menu.dataset.pointerY)
+      }, 8);
+    }
   }
 
   #bindViewportResize() {
-    const view = this.element?.ownerDocument?.defaultView ?? window;
+    const { view } = this.#getViewportMetrics();
     if (this.#viewportResizeHandler) return;
     this.#viewportResizeHandler = () => this.setPosition();
     view.addEventListener("resize", this.#viewportResizeHandler);
+  }
+
+  #debugInventorySplitLayout() {
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    view.requestAnimationFrame(() => {
+      if (!this.element?.isConnected) return;
+      const activeTab = this.element.querySelector(".tab.active[data-tab]");
+      const inventoryTab = this.element.querySelector('.tab[data-tab="inventory"]');
+      const layout = inventoryTab?.querySelector?.(".fallout-maw-inventory-layout") ?? null;
+      const leftPane = inventoryTab?.querySelector?.(".fallout-maw-equipment-pane") ?? null;
+      const rightColumn = inventoryTab?.querySelector?.(".fallout-maw-inventory-main-column") ?? null;
+      const loadPanel = inventoryTab?.querySelector?.(".fallout-maw-load-panel") ?? null;
+      const inventoryPane = inventoryTab?.querySelector?.(".fallout-maw-inventory-pane") ?? null;
+      const sheetBody = this.element.querySelector(".fallout-maw-sheet-body");
+      const windowContent = this.element.querySelector(".window-content") ?? this.element;
+
+      const measure = element => {
+        if (!element) return null;
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return {
+          classes: Array.from(element.classList ?? []),
+          clientHeight: element.clientHeight,
+          scrollHeight: element.scrollHeight,
+          offsetHeight: element.offsetHeight,
+          rectHeight: rect.height,
+          minHeight: style.minHeight,
+          height: style.height,
+          maxHeight: style.maxHeight,
+          overflowY: style.overflowY,
+          overflowX: style.overflowX,
+          display: style.display,
+          position: style.position
+        };
+      };
+
+      // #region agent log
+      fetch('http://127.0.0.1:7934/ingest/64986afb-0ba2-40e0-b9f1-1caef59e22bc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f97974'},body:JSON.stringify({sessionId:'f97974',runId:'inventory-split-debug',hypothesisId:'H1',location:'actor-sheet.mjs:_onRender:301',message:'inventory split parent chain',data:{activeTab:activeTab?.dataset?.tab ?? null,sheetBody:measure(sheetBody),windowContent:measure(windowContent),inventoryTab:measure(inventoryTab),layout:measure(layout)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+
+      // #region agent log
+      fetch('http://127.0.0.1:7934/ingest/64986afb-0ba2-40e0-b9f1-1caef59e22bc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f97974'},body:JSON.stringify({sessionId:'f97974',runId:'inventory-split-debug',hypothesisId:'H2',location:'actor-sheet.mjs:_onRender:302',message:'inventory split panes',data:{leftPane:measure(leftPane),rightColumn:measure(rightColumn),loadPanel:measure(loadPanel),inventoryPane:measure(inventoryPane)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+    });
   }
 
   #unbindViewportResize() {
