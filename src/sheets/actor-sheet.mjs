@@ -311,15 +311,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const zone = this.#getDropZone(event);
     const parentId = this.#getInventoryContextParentId(zone);
     const targetItem = this.#getTargetStackItem(zone, dropped.item?.id ?? "", parentId);
-    let placement = this.#getPlacementForDropZone(zone, dropped.itemData, [dropped.item?.id ?? ""], parentId);
+    const placement = this.#getPlacementForDropZone(zone, dropped.itemData, [dropped.item?.id ?? ""], parentId, event);
     if (!placement) return null;
-    if (targetItem && !this.#areStackable(dropped.itemData, targetItem)) {
-      placement = this.#getFirstAvailableInventoryPlacement(dropped.itemData, [dropped.item?.id ?? ""], [], parentId);
-      if (!placement) {
-        this.#warnInventoryNoSpace();
-        return null;
-      }
-    }
 
     if (dropped.item?.parent === this.actor) {
       return this.#moveOwnedItem(dropped.item, placement, targetItem, parentId);
@@ -333,7 +326,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!zone) return;
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
     this.#draggedItemData = this.#getPreviewItemData(event);
-    this.#setInventoryHoverPreview(zone);
+    this.#setInventoryHoverPreview(zone, event);
   }
 
   async _onDragStart(event) {
@@ -623,7 +616,33 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         && clientY <= rect.bottom
       ) return cell;
     }
+
+    const gridRect = grid.getBoundingClientRect();
+    if (
+      clientX >= gridRect.left
+      && clientX <= gridRect.right
+      && clientY >= gridRect.top
+      && clientY <= gridRect.bottom
+    ) {
+      return this.#getNearestInventoryCellInGrid(grid, clientX, clientY);
+    }
+
     return null;
+  }
+
+  #getNearestInventoryCellInGrid(grid, clientX, clientY) {
+    let nearestCell = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const cell of grid.querySelectorAll("[data-inventory-cell]")) {
+      const rect = cell.getBoundingClientRect();
+      const centerX = rect.left + (rect.width / 2);
+      const centerY = rect.top + (rect.height / 2);
+      const distance = ((centerX - clientX) ** 2) + ((centerY - clientY) ** 2);
+      if (distance >= nearestDistance) continue;
+      nearestDistance = distance;
+      nearestCell = cell;
+    }
+    return nearestCell;
   }
 
   #getInventoryContextParentId(zone = null) {
@@ -646,18 +665,18 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return true;
   }
 
-  #setInventoryHoverPreview(zone = null) {
+  #setInventoryHoverPreview(zone = null, event = null) {
     this.#clearInventoryHoverPreview();
     if (!zone || zone.dataset.dropZone === undefined) return;
     if (zone.dataset.inventoryCell !== undefined) {
-      this.#setInventoryCellHoverPreview(zone);
+      this.#setInventoryCellHoverPreview(zone, event);
       return;
     }
     if (zone.classList.contains("drop-match-preview")) return;
     zone.classList.add("drop-preview");
   }
 
-  #setInventoryCellHoverPreview(zone) {
+  #setInventoryCellHoverPreview(zone, event = null) {
     if (!this.#draggedItemData) {
       zone.classList.add("drop-preview");
       return;
@@ -674,14 +693,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       return;
     }
 
-    const placement = createInventoryPlacement(
-      toInteger(zone.dataset.x),
-      toInteger(zone.dataset.y),
-      this.#draggedItemData,
-      this.actor.items
-    );
     const excludeItemIds = sourceItemId ? [sourceItemId] : [];
-    if (!this.#isInventoryPlacementAvailable(placement, excludeItemIds, [], parentId)) return;
+    const placement = this.#getNearestInventoryPlacementForPointer(event, zone, this.#draggedItemData, excludeItemIds, [], parentId);
+    if (!placement) return;
     this.#applyInventoryPlacementPreview(placement, parentId);
   }
 
@@ -722,9 +736,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     });
   }
 
-  #getPlacementForDropZone(zone, itemData = null, excludeItemIds = [], parentId = ROOT_CONTAINER_ID) {
+  #getPlacementForDropZone(zone, itemData = null, excludeItemIds = [], parentId = ROOT_CONTAINER_ID, event = null) {
     if (zone.dataset.inventoryCell !== undefined) {
-      return createInventoryPlacement(toInteger(zone.dataset.x), toInteger(zone.dataset.y), itemData, this.actor.items);
+      return this.#getNearestInventoryPlacementForPointer(event, zone, itemData, excludeItemIds, [], parentId);
     }
 
     if (zone.dataset.equipmentSlot) {
@@ -770,6 +784,83 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }
 
     return this.#getFirstAvailableInventoryPlacement(itemData, excludeItemIds, [], parentId);
+  }
+
+  #getNearestInventoryPlacementForPointer(
+    event = null,
+    zone = null,
+    itemData = null,
+    excludeItemIds = [],
+    reservedPlacements = [],
+    parentId = ROOT_CONTAINER_ID
+  ) {
+    if (!itemData) return null;
+
+    const grid = zone?.closest?.("[data-inventory-grid]");
+    const pointer = this.#getInventoryGridPointerPosition(event, grid);
+    const fallbackCellX = toInteger(zone?.dataset?.x);
+    const fallbackCellY = toInteger(zone?.dataset?.y);
+    const anchor = pointer ?? {
+      x: fallbackCellX,
+      y: fallbackCellY
+    };
+    if (!anchor.x || !anchor.y) return null;
+
+    const { columns, rows } = this.#getInventoryGridDimensions(parentId);
+    const footprintPlacement = createInventoryPlacement(1, 1, itemData, this.actor.items);
+    const maxX = Math.max(1, columns - footprintPlacement.width + 1);
+    const maxY = Math.max(1, rows - footprintPlacement.height + 1);
+
+    const candidates = [];
+    for (let y = 1; y <= maxY; y += 1) {
+      for (let x = 1; x <= maxX; x += 1) {
+        const placement = createInventoryPlacement(x, y, itemData, this.actor.items);
+        if (!this.#isInventoryPlacementAvailable(placement, excludeItemIds, reservedPlacements, parentId)) continue;
+        const centerX = x + ((placement.width - 1) / 2);
+        const centerY = y + ((placement.height - 1) / 2);
+        candidates.push({
+          placement,
+          distance: ((centerX - anchor.x) ** 2) + ((centerY - anchor.y) ** 2)
+        });
+      }
+    }
+
+    candidates.sort((left, right) => (
+      (left.distance - right.distance)
+      || (left.placement.y - right.placement.y)
+      || (left.placement.x - right.placement.x)
+    ));
+    return candidates[0]?.placement ?? null;
+  }
+
+  #getInventoryGridPointerPosition(event = null, grid = null) {
+    const clientX = Number(event?.clientX);
+    const clientY = Number(event?.clientY);
+    if (!grid || !Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+
+    const cells = Array.from(grid.querySelectorAll("[data-inventory-cell]"));
+    if (!cells.length) return null;
+
+    const columnOneCells = cells
+      .filter(cell => toInteger(cell.dataset.x) === 1)
+      .sort((left, right) => toInteger(left.dataset.y) - toInteger(right.dataset.y));
+    const rowOneCells = cells
+      .filter(cell => toInteger(cell.dataset.y) === 1)
+      .sort((left, right) => toInteger(left.dataset.x) - toInteger(right.dataset.x));
+    const firstCell = cells.find(cell => toInteger(cell.dataset.x) === 1 && toInteger(cell.dataset.y) === 1) ?? cells[0];
+    const firstRect = firstCell.getBoundingClientRect();
+    const secondColumnRect = rowOneCells[1]?.getBoundingClientRect();
+    const secondRowRect = columnOneCells[1]?.getBoundingClientRect();
+    const pitchX = secondColumnRect ? Math.max(1, secondColumnRect.left - firstRect.left) : Math.max(1, firstRect.width);
+    const pitchY = secondRowRect ? Math.max(1, secondRowRect.top - firstRect.top) : Math.max(1, firstRect.height);
+    const firstCenterX = firstRect.left + (firstRect.width / 2);
+    const firstCenterY = firstRect.top + (firstRect.height / 2);
+    const { columns, rows } = this.#getInventoryGridDimensions(this.#getInventoryContextParentId(grid));
+
+    return {
+      x: Math.max(1, Math.min(columns, ((clientX - firstCenterX) / pitchX) + 1)),
+      y: Math.max(1, Math.min(rows, ((clientY - firstCenterY) / pitchY) + 1))
+    };
   }
 
   #getInventoryGridDimensions(parentId = ROOT_CONTAINER_ID) {
