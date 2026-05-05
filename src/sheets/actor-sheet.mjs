@@ -532,10 +532,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (hoveredZone === zone) return;
 
     const hoveredSheet = hoveredElement?.closest?.(".fallout-maw-actor-sheet");
-    if (hoveredSheet === this.element) {
-      this.#clearInventoryHoverPreview();
-      return;
-    }
+    if (hoveredSheet === this.element) return;
 
     this.#clearDragPreviewCache();
     this.#clearInventoryDropPreview();
