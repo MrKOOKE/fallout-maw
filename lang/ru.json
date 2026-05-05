@@ -11,11 +11,6 @@
       "ability": "Способность"
     }
   },
-  "COMMON": {
-    "Cancel": "Отмена",
-    "Confirm": "Подтвердить",
-    "Delete": "Удалить"
-  },
   "FALLOUTMAW": {
     "SystemTitle": "Fallout-MaW",
     "Tabs": {

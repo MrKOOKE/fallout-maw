@@ -76,7 +76,7 @@ export async function openManageResearchDialog(actor, researchId) {
       },
       {
         action: "cancel",
-        label: "COMMON.Cancel",
+        label: "Cancel",
         icon: "fa-solid fa-xmark",
         type: "button"
       }
@@ -104,11 +104,11 @@ export async function deleteResearchWithConfirm(actor, researchId) {
     },
     content: `<p>${format("FALLOUTMAW.Research.DeleteContent", { name: research.name })}</p>`,
     yes: {
-      label: "COMMON.Delete",
+      label: "Delete",
       icon: "fa-solid fa-trash"
     },
     no: {
-      label: "COMMON.Cancel"
+      label: "Cancel"
     },
     rejectClose: false
   });
