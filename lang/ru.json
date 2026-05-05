@@ -232,7 +232,8 @@
       "Thresholds": "Диапазоны",
       "Title": "Проверка: {skill}",
       "Total": "Итог",
-      "AnimationClickHint": "Нажмите по проверке для фиксации результата"
+      "AnimationClickHint": "Нажмите по проверке для фиксации результата",
+      "AnimationWaitHint": "Ожидание фиксации результата"
     },
     "Creation": {
       "Base": "Основа персонажа",

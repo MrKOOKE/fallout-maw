@@ -1,4 +1,4 @@
-import { TEMPLATES } from "../constants.mjs";
+import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getSkillSettings } from "../settings/accessors.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
@@ -12,6 +12,12 @@ const DEFAULT_CHECK = Object.freeze({
   criticalSuccessBonus: 0,
   criticalFailureBonus: 0
 });
+const SKILL_CHECK_SOCKET = `system.${SYSTEM_ID}`;
+const ACTIVE_SKILL_CHECK_ANIMATIONS = new Map();
+
+export function registerSkillCheckSocket() {
+  game.socket.on(SKILL_CHECK_SOCKET, handleSkillCheckSocketMessage);
+}
 
 export async function requestSkillCheck({
   actor,
@@ -148,8 +154,42 @@ function buildSkillCheckViewContext(outcome) {
 }
 
 async function playSkillCheckAnimation(outcome) {
+  const checkId = foundry.utils.randomID();
+  const context = buildSkillCheckAnimationContext(outcome, {
+    checkId,
+    ownerUserId: game.user.id
+  });
+  const animationPromise = showSkillCheckAnimation(context);
+  emitSkillCheckSocket({
+    action: "start",
+    context
+  });
+  await animationPromise;
+}
+
+function buildSkillCheckAnimationContext(outcome, { checkId, ownerUserId }) {
   const context = buildSkillCheckViewContext(outcome);
-  const content = await renderTemplate(TEMPLATES.skillCheckAnimation, context);
+  return {
+    checkId,
+    ownerUserId,
+    skill: context.skill,
+    result: context.result,
+    scaleSegments: context.scaleSegments,
+    progressCells: context.progressCells,
+    progressTarget: context.progressTarget,
+    autoFailure: context.autoFailure
+  };
+}
+
+async function showSkillCheckAnimation(context) {
+  const existing = ACTIVE_SKILL_CHECK_ANIMATIONS.get(context.checkId);
+  if (existing) return existing.promise;
+
+  const canComplete = canCompleteSkillCheckAnimation(context);
+  const content = await renderTemplate(TEMPLATES.skillCheckAnimation, {
+    ...context,
+    canComplete
+  });
   const host = document.createElement("div");
   host.className = "fallout-maw-skill-check-animation-host";
   host.innerHTML = content.trim();
@@ -162,29 +202,47 @@ async function playSkillCheckAnimation(outcome) {
     throw new Error("Skill check animation template is missing required elements.");
   }
 
+  let resolvePromise;
+  const promise = new Promise(resolve => {
+    resolvePromise = resolve;
+  });
+  const controller = {
+    context,
+    close: () => {
+      host.remove();
+      ACTIVE_SKILL_CHECK_ANIMATIONS.delete(context.checkId);
+      resolvePromise();
+    },
+    promise
+  };
+  ACTIVE_SKILL_CHECK_ANIMATIONS.set(context.checkId, controller);
+
   await waitForAnimationFrame();
   if (context.autoFailure) {
     clearProgressCells(cells);
     activateProgressCells(cells, new Set(), cells.length, 100);
-    animationElement.classList.add("complete");
-    await waitForClick(animationElement);
-    host.remove();
-    return;
+  } else {
+    await animateSkillCheckCells(cells, context.progressTarget);
   }
 
-  await animateSkillCheckCells(cells, context.progressTarget);
   animationElement.classList.add("complete");
-  await waitForClick(animationElement);
-  host.remove();
+  if (canComplete) {
+    animationElement.classList.add("can-complete");
+    animationElement.addEventListener("click", () => completeSkillCheckAnimation(context.checkId), { once: true });
+  }
+
+  return promise;
 }
 
 function animateSkillCheckCells(cells, target) {
   const targetPercent = clamp(target, 1, 100);
-  const fastDuration = 1000;
+  const fullScaleDuration = 2000;
   const brakeDuration = 500;
   const targetCellCount = Math.ceil(targetPercent / 5);
   const brakeCellCount = Math.max(1, Math.ceil(targetCellCount * 0.2));
   const fastCellCount = Math.max(0, targetCellCount - brakeCellCount);
+  const fastDuration = (targetPercent / 100) * fullScaleDuration;
+  const targetDuration = fastDuration + brakeDuration;
   const targetCells = cells.slice(0, targetCellCount);
   clearProgressCells(cells);
 
@@ -194,16 +252,16 @@ function animateSkillCheckCells(cells, target) {
     const tick = now => {
       const elapsed = now - startedAt;
       let visibleCellCount = targetCellCount;
-      if (elapsed <= fastDuration) {
+      if (elapsed <= fastDuration && fastDuration > 0) {
         visibleCellCount = Math.floor(fastCellCount * (elapsed / fastDuration));
-      } else if (elapsed < fastDuration + brakeDuration) {
+      } else if (elapsed < targetDuration) {
         const brakeProgress = (elapsed - fastDuration) / brakeDuration;
         const eased = 1 - ((1 - brakeProgress) ** 3);
         visibleCellCount = fastCellCount + Math.floor(brakeCellCount * eased);
       }
 
       activateProgressCells(targetCells, activatedCells, visibleCellCount, targetPercent);
-      if (elapsed < fastDuration + brakeDuration) {
+      if (elapsed < targetDuration) {
         requestAnimationFrame(tick);
         return;
       }
@@ -212,6 +270,45 @@ function animateSkillCheckCells(cells, target) {
     };
     requestAnimationFrame(tick);
   });
+}
+
+function completeSkillCheckAnimation(checkId) {
+  closeSkillCheckAnimation(checkId);
+  emitSkillCheckSocket({
+    action: "complete",
+    checkId,
+    userId: game.user.id
+  });
+}
+
+function closeSkillCheckAnimation(checkId) {
+  ACTIVE_SKILL_CHECK_ANIMATIONS.get(checkId)?.close();
+}
+
+function canCompleteSkillCheckAnimation(context) {
+  return game.user.isGM || (game.user.id === context.ownerUserId);
+}
+
+function emitSkillCheckSocket(payload) {
+  game.socket.emit(SKILL_CHECK_SOCKET, payload);
+}
+
+function handleSkillCheckSocketMessage(payload = {}) {
+  if (!payload || typeof payload !== "object") return;
+  if (payload.action === "start" && payload.context) {
+    void showSkillCheckAnimation(payload.context);
+    return;
+  }
+  if (payload.action === "complete") {
+    const controller = ACTIVE_SKILL_CHECK_ANIMATIONS.get(payload.checkId);
+    if (!controller || !canSocketUserCompleteSkillCheckAnimation(payload.userId, controller.context)) return;
+    closeSkillCheckAnimation(payload.checkId);
+  }
+}
+
+function canSocketUserCompleteSkillCheckAnimation(userId, context) {
+  const user = game.users.get(userId);
+  return Boolean(user?.isGM || (userId === context.ownerUserId));
 }
 
 function clearProgressCells(cells) {
@@ -241,12 +338,6 @@ function getFinalCellFill(cell, targetPercent) {
 
 function waitForAnimationFrame() {
   return new Promise(resolve => requestAnimationFrame(resolve));
-}
-
-function waitForClick(element) {
-  return new Promise(resolve => {
-    element.addEventListener("click", resolve, { once: true });
-  });
 }
 
 function resolveSkill(actor, skillKey) {

@@ -67,7 +67,7 @@
       }
     }
   },
-  "socket": false,
+  "socket": true,
   "initiative": "1d20",
   "grid": {
     "distance": 1,

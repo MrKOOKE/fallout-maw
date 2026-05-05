@@ -4,6 +4,7 @@ import { FalloutMaWActor, FalloutMaWItem } from "./documents/index.mjs";
 import { getCreatureOptions } from "./settings/accessors.mjs";
 import { createDefaultInventorySize } from "./settings/creature-options.mjs";
 import { registerSystemSettings, finalizeSystemSettings } from "./settings/index.mjs";
+import { registerSkillCheckSocket } from "./rolls/skill-check.mjs";
 import { registerSystemSheets } from "./sheets/index.mjs";
 import { FalloutMaWDragDrop } from "./utils/drag-drop.mjs";
 import {
@@ -36,6 +37,7 @@ Hooks.once("init", () => {
 
 Hooks.once("ready", async () => {
   await finalizeSystemSettings();
+  registerSkillCheckSocket();
 });
 
 Hooks.on("dropCanvasData", async (canvas, data, event) => {

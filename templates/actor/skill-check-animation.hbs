@@ -28,5 +28,11 @@
     {{/each}}
   </div>
 
-  <footer>{{localize "FALLOUTMAW.SkillCheck.AnimationClickHint"}}</footer>
+  <footer>
+    {{#if canComplete}}
+    {{localize "FALLOUTMAW.SkillCheck.AnimationClickHint"}}
+    {{else}}
+    {{localize "FALLOUTMAW.SkillCheck.AnimationWaitHint"}}
+    {{/if}}
+  </footer>
 </div>

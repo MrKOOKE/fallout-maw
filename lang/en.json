@@ -232,7 +232,8 @@
       "Thresholds": "Thresholds",
       "Title": "{skill} Check",
       "Total": "Total",
-      "AnimationClickHint": "Click the check to lock in the result"
+      "AnimationClickHint": "Click the check to lock in the result",
+      "AnimationWaitHint": "Waiting for the result to be locked in"
     },
     "Creation": {
       "Base": "Character Base",

@@ -2072,7 +2072,7 @@
   width: min(720px, 62vw);
 }
 
-.fallout-maw-skill-check-animation.complete {
+.fallout-maw-skill-check-animation.complete.can-complete {
   cursor: pointer;
 }
 
