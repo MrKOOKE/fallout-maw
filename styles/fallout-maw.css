@@ -1979,9 +1979,9 @@
   --fallout-maw-actor-panel-soft: rgba(16, 18, 13, 0.82);
   --fallout-maw-actor-border: rgba(164, 146, 85, 0.62);
   --fallout-maw-actor-border-soft: rgba(131, 119, 74, 0.28);
-  --fallout-maw-actor-text: #d9ce9d;
-  --fallout-maw-actor-text-soft: #a49a71;
-  --fallout-maw-actor-text-strong: #f0e1a4;
+  --fallout-maw-actor-text: #e8d889;
+  --fallout-maw-actor-text-soft: #d9c76f;
+  --fallout-maw-actor-text-strong: #f7e8a6;
   --fallout-maw-actor-accent: #dcc56e;
   --fallout-maw-actor-accent-dim: rgba(220, 197, 110, 0.14);
   --fallout-maw-actor-danger: #8a4331;
@@ -2245,9 +2245,9 @@
 .application.fallout-maw-actor-sheet .fallout-maw-sheet-tabs > a {
   border: 0;
   border-right: 1px solid rgba(131, 119, 74, 0.2);
-  color: var(--fallout-maw-actor-text-soft);
-  font-size: 0.98rem;
-  padding: 0.68rem 0.8rem;
+  color: var(--fallout-maw-actor-text);
+  font-size: 1.47rem;
+  padding: 0.95rem 0.95rem;
   position: relative;
   text-align: center;
   text-decoration: none;
@@ -2299,6 +2299,7 @@
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-sheet-body > .tab.active {
+  font-size: 1.18rem;
   overflow-x: hidden;
   overflow-y: auto;
   padding-right: 0.15rem;
@@ -2358,7 +2359,7 @@
   align-items: center;
   color: var(--fallout-maw-actor-text-strong);
   display: flex;
-  font-size: 1.12rem;
+  font-size: 1.4rem;
   font-weight: 700;
   gap: 0.75rem;
   margin: 0 0 0.8rem;
@@ -2379,7 +2380,8 @@
 
 .application.fallout-maw-actor-sheet .fallout-maw-empty-list,
 .application.fallout-maw-actor-sheet .fallout-maw-empty-editor {
-  color: var(--fallout-maw-actor-text-soft);
+  color: var(--fallout-maw-actor-text);
+  font-size: 1.08rem;
   opacity: 1;
 }
 
@@ -2407,7 +2409,8 @@
 
 .application.fallout-maw-actor-sheet .fallout-maw-resource-name,
 .application.fallout-maw-actor-sheet .fallout-maw-inline-stat > span {
-  color: var(--fallout-maw-actor-text-soft);
+  color: var(--fallout-maw-actor-text);
+  font-size: 1.12rem;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-resource-value,
@@ -2415,6 +2418,7 @@
 .application.fallout-maw-actor-sheet .fallout-maw-inline-stat > input {
   color: var(--fallout-maw-actor-text-strong);
   font-family: var(--fallout-maw-actor-mono-font);
+  font-size: 1.12rem;
   font-weight: 700;
 }
 
@@ -2460,13 +2464,14 @@
 .application.fallout-maw-actor-sheet .fallout-maw-characteristic-grid label span {
   color: var(--fallout-maw-actor-text-strong);
   flex: 1 1 auto;
+  font-size: 1.12rem;
   min-width: 0;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-characteristic-grid label strong {
   color: var(--fallout-maw-actor-text-strong);
   font-family: var(--fallout-maw-actor-mono-font);
-  font-size: 1.06rem;
+  font-size: 1.22rem;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-characteristic-grid label input {
@@ -2502,12 +2507,14 @@
 
 .application.fallout-maw-actor-sheet .fallout-maw-identity-skill span {
   color: var(--fallout-maw-actor-text-strong);
+  font-size: 1.12rem;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-identity-skill strong {
   color: var(--fallout-maw-actor-text-strong);
   flex: 0 0 auto;
   font-family: var(--fallout-maw-actor-mono-font);
+  font-size: 1.12rem;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-identity-skill-button:hover,
@@ -2544,7 +2551,7 @@
   align-self: center;
   color: var(--fallout-maw-actor-text-strong);
   font-family: var(--fallout-maw-actor-mono-font);
-  font-size: 1rem;
+  font-size: 1.15rem;
   font-weight: 700;
   min-width: 0;
   width: 100%;
@@ -2848,7 +2855,8 @@
 .application.fallout-maw-actor-sheet .fallout-maw-research-main-header span,
 .application.fallout-maw-actor-sheet .fallout-maw-research-meta,
 .application.fallout-maw-actor-sheet .fallout-maw-effect-name span {
-  color: var(--fallout-maw-actor-text-soft);
+  color: var(--fallout-maw-actor-text);
+  font-size: 1.08rem;
   opacity: 1;
 }
 
@@ -2858,6 +2866,12 @@
   border-radius: 0;
   color: var(--fallout-maw-actor-text-strong);
   font-family: var(--fallout-maw-actor-mono-font);
+  font-size: 1.08rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-research-main-header strong,
+.application.fallout-maw-actor-sheet .fallout-maw-effect-name strong {
+  font-size: 1.18rem;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-floating-add {
