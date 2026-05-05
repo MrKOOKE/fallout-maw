@@ -2034,13 +2034,24 @@
 }
 
 .fallout-maw-skill-check-animation-host {
-  align-items: center;
-  display: flex;
-  inset: 0;
-  justify-content: center;
   pointer-events: none;
   position: fixed;
+  transition:
+    left 180ms ease,
+    top 180ms ease;
   z-index: 100000;
+}
+
+.fallout-maw-skill-check-animation-host.is-closing {
+  pointer-events: none;
+}
+
+.fallout-maw-skill-check-animation-host.is-positioning {
+  visibility: hidden;
+}
+
+.fallout-maw-skill-check-animation-host.no-layout-transition {
+  transition: none;
 }
 
 .fallout-maw-skill-check-animation {
@@ -2069,7 +2080,25 @@
   min-width: 460px;
   padding: 0.7rem 0.85rem 0.65rem;
   pointer-events: auto;
-  width: min(720px, 62vw);
+  width: clamp(460px, 42vw, 720px);
+}
+
+.fallout-maw-skill-check-animation-host.is-closing .fallout-maw-skill-check-animation {
+  animation: fallout-maw-skill-check-window-close 180ms ease forwards;
+}
+
+@keyframes fallout-maw-skill-check-window-close {
+  0% {
+    filter: brightness(1);
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  100% {
+    filter: brightness(1.45);
+    opacity: 0;
+    transform: scale(0.96);
+  }
 }
 
 .fallout-maw-skill-check-animation.complete.can-complete {
@@ -2079,10 +2108,22 @@
 .fallout-maw-skill-check-animation header {
   align-items: baseline;
   border-bottom: 1px solid rgba(240, 207, 85, 0.55);
-  display: flex;
+  display: grid;
   gap: 0.7rem;
-  justify-content: space-between;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   padding-bottom: 0.3rem;
+}
+
+.fallout-maw-skill-check-animation header div {
+  align-items: baseline;
+  display: flex;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.fallout-maw-skill-check-animation header div:last-child {
+  justify-content: flex-end;
+  text-align: right;
 }
 
 .fallout-maw-skill-check-animation header span {
@@ -2096,6 +2137,10 @@
 .fallout-maw-skill-check-animation header strong {
   color: var(--fallout-maw-animation-text);
   font-size: 1.2rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fallout-maw-skill-check-animation-track {

@@ -1,7 +1,13 @@
 <div class="fallout-maw-skill-check-animation {{result.cssClass}}" data-skill-check-animation>
   <header>
-    <span>{{localize "FALLOUTMAW.SkillCheck.TerminalTitle"}}</span>
-    <strong>{{skill.label}}</strong>
+    <div>
+      <span>{{localize "FALLOUTMAW.SkillCheck.Operator"}}:</span>
+      <strong>{{actor.name}}</strong>
+    </div>
+    <div>
+      <span>{{localize "FALLOUTMAW.Common.Skill"}}:</span>
+      <strong>{{skill.label}}</strong>
+    </div>
   </header>
 
   <div class="fallout-maw-skill-check-animation-track">

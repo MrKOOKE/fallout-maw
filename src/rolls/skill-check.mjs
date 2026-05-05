@@ -14,9 +14,17 @@ const DEFAULT_CHECK = Object.freeze({
 });
 const SKILL_CHECK_SOCKET = `system.${SYSTEM_ID}`;
 const ACTIVE_SKILL_CHECK_ANIMATIONS = new Map();
+const SKILL_CHECK_ANIMATION_LAYOUT = Object.freeze({
+  margin: 18,
+  maxRows: 4,
+  leftReservedRatio: 0.2,
+  closeAnimationMs: 180,
+  closeLayoutDelayMs: 650
+});
 
 export function registerSkillCheckSocket() {
   game.socket.on(SKILL_CHECK_SOCKET, handleSkillCheckSocketMessage);
+  window.addEventListener("resize", scheduleSkillCheckAnimationLayout);
 }
 
 export async function requestSkillCheck({
@@ -112,7 +120,7 @@ async function publishSkillCheckMessage(outcome, { requester = "" } = {}) {
   return ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content,
-    sound: CONFIG.sounds.dice,
+    sound: null,
     rolls: rolls.map(roll => roll.toJSON()),
     flags: {
       "fallout-maw": {
@@ -172,6 +180,10 @@ function buildSkillCheckAnimationContext(outcome, { checkId, ownerUserId }) {
   return {
     checkId,
     ownerUserId,
+    startedAt: Date.now(),
+    actor: {
+      name: context.actor.name
+    },
     skill: context.skill,
     result: context.result,
     scaleSegments: context.scaleSegments,
@@ -185,39 +197,59 @@ async function showSkillCheckAnimation(context) {
   const existing = ACTIVE_SKILL_CHECK_ANIMATIONS.get(context.checkId);
   if (existing) return existing.promise;
 
-  const canComplete = canCompleteSkillCheckAnimation(context);
-  const content = await renderTemplate(TEMPLATES.skillCheckAnimation, {
-    ...context,
-    canComplete
-  });
-  const host = document.createElement("div");
-  host.className = "fallout-maw-skill-check-animation-host";
-  host.innerHTML = content.trim();
-  document.body.append(host);
-
-  const animationElement = host.querySelector("[data-skill-check-animation]");
-  const cells = Array.from(host.querySelectorAll("[data-skill-check-animation-cell]"));
-  if (!animationElement || !cells.length) {
-    host.remove();
-    throw new Error("Skill check animation template is missing required elements.");
-  }
-
   let resolvePromise;
   const promise = new Promise(resolve => {
     resolvePromise = resolve;
   });
   const controller = {
     context,
+    host: null,
+    closing: false,
     close: () => {
-      host.remove();
+      if (controller.closing) return;
+      controller.closing = true;
+      const hostToRemove = controller.host;
+      hostToRemove?.classList.add("is-closing");
+      window.setTimeout(() => hostToRemove?.remove(), SKILL_CHECK_ANIMATION_LAYOUT.closeAnimationMs);
       ACTIVE_SKILL_CHECK_ANIMATIONS.delete(context.checkId);
+      scheduleSkillCheckAnimationLayoutAfterClose();
       resolvePromise();
     },
     promise
   };
   ACTIVE_SKILL_CHECK_ANIMATIONS.set(context.checkId, controller);
 
+  const canComplete = canCompleteSkillCheckAnimation(context);
+  let content;
+  try {
+    content = await renderTemplate(TEMPLATES.skillCheckAnimation, {
+      ...context,
+      canComplete
+    });
+  } catch (error) {
+    ACTIVE_SKILL_CHECK_ANIMATIONS.delete(context.checkId);
+    resolvePromise();
+    throw error;
+  }
+
+  const host = document.createElement("div");
+  host.className = "fallout-maw-skill-check-animation-host is-positioning";
+  host.dataset.skillCheckAnimationId = context.checkId;
+  host.innerHTML = content.trim();
+  controller.host = host;
+  document.body.append(host);
+
+  const animationElement = host.querySelector("[data-skill-check-animation]");
+  const cells = Array.from(host.querySelectorAll("[data-skill-check-animation-cell]"));
+  if (!animationElement || !cells.length) {
+    controller.close();
+    throw new Error("Skill check animation template is missing required elements.");
+  }
+
+  layoutSkillCheckAnimations({ immediate: true });
+
   await waitForAnimationFrame();
+  host.classList.remove("is-positioning");
   if (context.autoFailure) {
     clearProgressCells(cells);
     activateProgressCells(cells, new Set(), cells.length, 100);
@@ -232,6 +264,157 @@ async function showSkillCheckAnimation(context) {
   }
 
   return promise;
+}
+
+let skillCheckAnimationLayoutFrame = null;
+let skillCheckAnimationCloseLayoutTimeout = null;
+
+function scheduleSkillCheckAnimationLayout() {
+  if (skillCheckAnimationCloseLayoutTimeout) {
+    window.clearTimeout(skillCheckAnimationCloseLayoutTimeout);
+    skillCheckAnimationCloseLayoutTimeout = null;
+  }
+  if (skillCheckAnimationLayoutFrame) return;
+  skillCheckAnimationLayoutFrame = requestAnimationFrame(() => {
+    skillCheckAnimationLayoutFrame = null;
+    layoutSkillCheckAnimations();
+  });
+}
+
+function scheduleSkillCheckAnimationLayoutAfterClose() {
+  if (skillCheckAnimationCloseLayoutTimeout) window.clearTimeout(skillCheckAnimationCloseLayoutTimeout);
+  skillCheckAnimationCloseLayoutTimeout = window.setTimeout(() => {
+    skillCheckAnimationCloseLayoutTimeout = null;
+    scheduleSkillCheckAnimationLayout();
+  }, SKILL_CHECK_ANIMATION_LAYOUT.closeLayoutDelayMs);
+}
+
+function layoutSkillCheckAnimations({ immediate = false } = {}) {
+  const entries = Array.from(ACTIVE_SKILL_CHECK_ANIMATIONS.values())
+    .filter(controller => controller.host?.isConnected)
+    .sort(compareSkillCheckAnimationControllers)
+    .map(controller => ({
+      controller,
+      host: controller.host,
+      ...measureSkillCheckAnimationHost(controller.host)
+    }))
+    .filter(entry => entry.width > 0 && entry.height > 0);
+
+  if (!entries.length) return;
+
+  const positions = calculateSkillCheckAnimationPositions(entries);
+  for (const position of positions) {
+    position.entry.host.classList.toggle("no-layout-transition", immediate);
+    position.entry.host.style.left = `${position.x}px`;
+    position.entry.host.style.top = `${position.y}px`;
+  }
+
+  if (immediate) {
+    requestAnimationFrame(() => {
+      for (const entry of entries) entry.host.classList.remove("no-layout-transition");
+    });
+  }
+}
+
+function compareSkillCheckAnimationControllers(left, right) {
+  const leftStartedAt = Number(left.context.startedAt) || 0;
+  const rightStartedAt = Number(right.context.startedAt) || 0;
+  return (leftStartedAt - rightStartedAt) || String(left.context.checkId).localeCompare(String(right.context.checkId));
+}
+
+function measureSkillCheckAnimationHost(host) {
+  const rect = host.getBoundingClientRect();
+  return {
+    width: rect.width,
+    height: rect.height
+  };
+}
+
+function calculateSkillCheckAnimationPositions(entries) {
+  const { margin } = SKILL_CHECK_ANIMATION_LAYOUT;
+  const area = getSkillCheckAnimationAvailableArea(margin);
+  const maxRows = getSkillCheckAnimationMaxRows(entries, area, margin);
+  const rows = groupSkillCheckAnimationsIntoRows(entries, area.width, margin, maxRows);
+  const totalHeight = rows.reduce((sum, row, index) => {
+    const rowHeight = Math.max(...row.map(entry => entry.height));
+    return sum + rowHeight + (index > 0 ? margin : 0);
+  }, 0);
+  let currentY = clampNumber(area.top + ((area.height - totalHeight) / 2), area.top, area.bottom);
+  const positions = [];
+
+  for (const row of rows) {
+    const rowWidth = row.reduce((sum, entry, index) => sum + entry.width + (index > 0 ? margin : 0), 0);
+    const rowHeight = Math.max(...row.map(entry => entry.height));
+    let currentX = clampNumber(area.left + ((area.width - rowWidth) / 2), area.left, area.right - Math.min(rowWidth, area.width));
+
+    for (const entry of row) {
+      const x = clampNumber(currentX, area.left, area.right - entry.width);
+      const y = clampNumber(currentY + ((rowHeight - entry.height) / 2), area.top, area.bottom - entry.height);
+      positions.push({ entry, x, y });
+      currentX += entry.width + margin;
+    }
+
+    currentY += rowHeight + margin;
+  }
+
+  return positions;
+}
+
+function getSkillCheckAnimationMaxRows(entries, area, margin) {
+  const maxEntryHeight = Math.max(...entries.map(entry => entry.height), 1);
+  const rowsByHeight = Math.max(1, Math.floor((area.height + margin) / (maxEntryHeight + margin)));
+  return Math.min(entries.length, SKILL_CHECK_ANIMATION_LAYOUT.maxRows, rowsByHeight);
+}
+
+function groupSkillCheckAnimationsIntoRows(entries, availableWidth, margin, maxRows) {
+  if (entries.length <= 1) return entries.map(entry => [entry]);
+
+  const rows = [];
+  let currentRow = [];
+  let currentRowWidth = 0;
+
+  for (const entry of entries) {
+    const nextWidth = currentRowWidth + entry.width + (currentRow.length ? margin : 0);
+    const canFit = nextWidth <= availableWidth || !currentRow.length;
+    const mustUseLastRow = rows.length >= maxRows - 1;
+
+    if (!canFit && currentRow.length && !mustUseLastRow) {
+      rows.push(currentRow);
+      currentRow = [entry];
+      currentRowWidth = entry.width;
+      continue;
+    }
+
+    currentRow.push(entry);
+    currentRowWidth = nextWidth;
+  }
+
+  if (currentRow.length) rows.push(currentRow);
+  while (rows.length > maxRows) rows[rows.length - 2].push(...rows.pop());
+  return rows;
+}
+
+function getSkillCheckAnimationAvailableArea(margin) {
+  const reservedLeft = Math.floor(window.innerWidth * SKILL_CHECK_ANIMATION_LAYOUT.leftReservedRatio);
+  const left = Math.min(window.innerWidth - margin, reservedLeft + margin);
+  const top = margin;
+  const right = Math.max(left, window.innerWidth - margin);
+  const bottom = Math.max(top, window.innerHeight - margin);
+  return {
+    left,
+    top,
+    right,
+    bottom,
+    width: Math.max(1, right - left),
+    height: Math.max(1, bottom - top)
+  };
+}
+
+function clampNumber(value, min, max) {
+  const safeMin = Number.isFinite(min) ? min : 0;
+  const safeMax = Number.isFinite(max) ? Math.max(safeMin, max) : safeMin;
+  const safeValue = Number.isFinite(value) ? value : safeMin;
+  return Math.min(safeMax, Math.max(safeMin, safeValue));
 }
 
 function animateSkillCheckCells(cells, target) {
