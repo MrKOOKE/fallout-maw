@@ -78,7 +78,8 @@ export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
       key: this.#getUniqueKey("newResource"),
       abbr: this.#getUniqueAbbr("new"),
       label: "Новый ресурс",
-      formula: "0"
+      formula: "0",
+      color: "#8f8456"
     });
     return this.forceRender();
   }
@@ -107,7 +108,8 @@ export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
       key: row.querySelector("[data-field='key']")?.value?.trim() ?? "",
       abbr: row.querySelector("[data-field='abbr']")?.value?.trim() ?? "",
       label: row.querySelector("[data-field='label']")?.value?.trim() ?? "",
-      formula: row.querySelector("[data-field='formula']")?.value?.trim() ?? "0"
+      formula: row.querySelector("[data-field='formula']")?.value?.trim() ?? "0",
+      color: row.querySelector("[data-field='color']")?.value?.trim() ?? "#8f8456"
     }));
   }
 

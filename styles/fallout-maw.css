@@ -342,11 +342,29 @@
 }
 
 .fallout-maw-research-progress-bar {
-  background: rgba(0, 0, 0, 0.22);
+  --meter-sections: 12;
+  --meter-step: calc(100% / var(--meter-sections));
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.22), rgba(255, 255, 255, 0.02)),
+    linear-gradient(180deg, rgba(18, 20, 15, 0.95), rgba(8, 9, 7, 0.98));
   border: 1px solid rgba(120, 120, 120, 0.18);
-  border-radius: 999px;
+  padding: 1px;
   height: 0.7rem;
   overflow: hidden;
+  position: relative;
+}
+
+.fallout-maw-research-progress-bar::after {
+  background: repeating-linear-gradient(
+    to right,
+    transparent 0 calc(var(--meter-step) - 2px),
+    rgba(8, 10, 7, 0.78) calc(var(--meter-step) - 2px) var(--meter-step)
+  );
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
 }
 
 .fallout-maw-research-progress-bar > span {
@@ -354,6 +372,8 @@
   display: block;
   height: 100%;
   max-width: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .fallout-maw-research-manage {
@@ -568,6 +588,19 @@
   padding: 0.35rem 0.45rem;
 }
 
+.fallout-maw-resource-meter-card {
+  align-items: stretch;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.fallout-maw-resource-card-header {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
 .fallout-maw-resource-card.active {
   background: rgba(210, 185, 145, 0.14);
   border-color: rgba(210, 185, 145, 0.55);
@@ -624,6 +657,47 @@
 .fallout-maw-resource-max {
   font-weight: 700;
   opacity: 0.8;
+}
+
+.fallout-maw-resource-meter {
+  --meter-sections: 10;
+  --meter-step: calc(100% / var(--meter-sections));
+  --meter-color: #8f8456;
+  --meter-color-strong: #aa9d67;
+  --meter-color-dark: #6f6641;
+  --meter-color-soft: rgba(143, 132, 86, 0.2);
+  --meter-color-glow: rgba(143, 132, 86, 0.34);
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.28), rgba(255, 255, 255, 0.015)),
+    linear-gradient(180deg, rgba(18, 20, 15, 0.95), rgba(8, 9, 7, 0.98));
+  border: 1px solid rgba(120, 120, 120, 0.24);
+  height: 0.95rem;
+  min-width: 0;
+  overflow: hidden;
+  padding: 1px;
+  position: relative;
+}
+
+.fallout-maw-resource-meter::after {
+  background: repeating-linear-gradient(
+    to right,
+    transparent 0 calc(var(--meter-step) - 2px),
+    rgba(8, 10, 7, 0.78) calc(var(--meter-step) - 2px) var(--meter-step)
+  );
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+.fallout-maw-resource-meter-fill {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .fallout-maw-summary-grid {
@@ -1812,6 +1886,11 @@
   grid-template-columns: 2rem 80px minmax(120px, 1fr) minmax(130px, 1fr) minmax(220px, 1.4fr) 2.5rem;
 }
 
+.resource-settings .fallout-maw-settings-row,
+.need-settings .fallout-maw-settings-row {
+  grid-template-columns: 2rem 80px minmax(120px, 1fr) minmax(150px, 1.1fr) 74px minmax(220px, 1.4fr) 2.5rem;
+}
+
 .proficiency-settings .fallout-maw-settings-row {
   grid-template-columns: 2rem 80px minmax(120px, 1fr) minmax(170px, 1.5fr) 110px 2.5rem;
 }
@@ -1819,6 +1898,13 @@
 .fallout-maw-grid-header {
   font-weight: 700;
   opacity: 0.82;
+}
+
+.resource-settings input[type="color"],
+.need-settings input[type="color"] {
+  cursor: pointer;
+  min-height: 2rem;
+  padding: 0.15rem;
 }
 
 .fallout-maw-drag-handle {
@@ -2335,6 +2421,15 @@
   padding: 0.45rem 0.65rem;
 }
 
+.application.fallout-maw-actor-sheet .fallout-maw-resource-meter-card {
+  gap: 0.55rem;
+  min-height: 4rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-resource-card-header {
+  align-items: flex-start;
+}
+
 .application.fallout-maw-actor-sheet .fallout-maw-resource-name,
 .application.fallout-maw-actor-sheet .fallout-maw-inline-stat > span {
   color: var(--fallout-maw-actor-text-soft);
@@ -2346,6 +2441,31 @@
   color: var(--fallout-maw-actor-text-strong);
   font-family: var(--fallout-maw-actor-mono-font);
   font-weight: 700;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-resource-meter {
+  background:
+    linear-gradient(180deg, rgba(220, 197, 110, 0.04), rgba(0, 0, 0, 0) 38%),
+    linear-gradient(180deg, rgba(5, 6, 5, 0.98), rgba(18, 20, 14, 0.94));
+  border: 1px solid rgba(131, 119, 74, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(220, 197, 110, 0.04);
+  height: 1.05rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-resource-meter::after {
+  background: repeating-linear-gradient(
+    to right,
+    transparent 0 calc(var(--meter-step) - 2px),
+    rgba(10, 11, 8, 0.82) calc(var(--meter-step) - 2px) var(--meter-step)
+  );
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-resource-meter-fill {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 0 14px var(--meter-color-glow);
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-resource-meter-card.active {
+  box-shadow: inset 0 0 0 1px rgba(220, 197, 110, 0.24);
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-characteristic-grid {
@@ -2477,12 +2597,13 @@
 
 .application.fallout-maw-actor-sheet .fallout-maw-load-meter-track {
   background:
+    linear-gradient(180deg, rgba(220, 197, 110, 0.04), rgba(0, 0, 0, 0) 38%),
     linear-gradient(180deg, rgba(9, 10, 7, 0.94), rgba(18, 20, 14, 0.9)),
     repeating-linear-gradient(
       to right,
       rgba(0, 0, 0, 0) 0,
-      rgba(0, 0, 0, 0) calc(5% - 1px),
-      rgba(197, 183, 123, 0.18) calc(5% - 1px),
+      rgba(0, 0, 0, 0) calc(5% - 2px),
+      rgba(197, 183, 123, 0.18) calc(5% - 2px),
       rgba(197, 183, 123, 0.18) 5%
     );
   border: 1px solid rgba(131, 119, 74, 0.34);
@@ -2491,6 +2612,7 @@
   height: 1.05rem;
   min-width: 0;
   overflow: hidden;
+  padding: 1px;
   position: relative;
 }
 
@@ -2511,6 +2633,7 @@
 
 .application.fallout-maw-actor-sheet .fallout-maw-load-meter-fill {
   height: 100%;
+  max-width: 100%;
   position: relative;
   z-index: 1;
 }
@@ -2708,10 +2831,19 @@
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-research-progress-bar {
-  background: rgba(6, 8, 6, 0.95);
+  background:
+    linear-gradient(180deg, rgba(220, 197, 110, 0.04), rgba(0, 0, 0, 0) 38%),
+    linear-gradient(180deg, rgba(6, 8, 6, 0.95), rgba(18, 20, 14, 0.94));
   border: 1px solid rgba(131, 119, 74, 0.24);
-  border-radius: 0;
   height: 0.55rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-research-progress-bar::after {
+  background: repeating-linear-gradient(
+    to right,
+    transparent 0 calc(var(--meter-step) - 2px),
+    rgba(10, 11, 8, 0.82) calc(var(--meter-step) - 2px) var(--meter-step)
+  );
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-research-progress-bar > span {

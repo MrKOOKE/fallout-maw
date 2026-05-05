@@ -12,6 +12,19 @@ import {
 import { toInteger } from "../utils/numbers.mjs";
 
 export const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const DEFAULT_TRACK_COLOR = "#8f8456";
+const DEFAULT_RESOURCE_COLORS = Object.freeze({
+  health: "#c64b44",
+  energy: "#4f9f61",
+  dodge: "#4f97a5",
+  actionPoints: "#74b84e",
+  movementPoints: "#d7b14a"
+});
+const DEFAULT_NEED_COLORS = Object.freeze({
+  hunger: "#c9a24a",
+  thirst: "#58a6d6",
+  sleepiness: "#8f63c9"
+});
 
 export function createDefaultCharacteristicSettings() {
   return DEFAULT_CHARACTERISTICS.map(entry => ({ ...entry }));
@@ -212,7 +225,8 @@ function normalizeFormulaSettings(settings, defaults, defaultLabel) {
         key,
         abbr: String(entry?.abbr ?? "").trim(),
         label: String(entry?.label ?? entry?.name ?? "").trim(),
-        formula: String(entry?.formula ?? "0").trim() || "0"
+        formula: String(entry?.formula ?? "0").trim() || "0",
+        color: normalizeHexColor(entry?.color, getDefaultColorForKey(key))
       };
     },
     defaultLabel
@@ -246,6 +260,28 @@ function normalizeKeyedEntries(source, mapEntry, defaultLabel) {
 function addEntryAliases(aliases, entry) {
   aliases[entry.key.toLowerCase()] = entry.key;
   if (entry.abbr) aliases[entry.abbr.toLowerCase()] = entry.key;
+}
+
+function getDefaultColorForKey(key = "") {
+  return normalizeHexColor(
+    DEFAULT_RESOURCE_COLORS[key]
+    ?? DEFAULT_NEED_COLORS[key]
+    ?? DEFAULT_TRACK_COLOR,
+    DEFAULT_TRACK_COLOR
+  );
+}
+
+function normalizeHexColor(value, fallback = DEFAULT_TRACK_COLOR) {
+  const normalized = normalizeHexColorString(value);
+  if (normalized) return normalized;
+  return normalizeHexColorString(fallback) ?? DEFAULT_TRACK_COLOR;
+}
+
+function normalizeHexColorString(value) {
+  const trimmed = String(value ?? "").trim().replace(/^#/, "").toLowerCase();
+  if (/^[0-9a-f]{6}$/.test(trimmed)) return `#${trimmed}`;
+  if (/^[0-9a-f]{3}$/.test(trimmed)) return `#${trimmed.split("").map(char => `${char}${char}`).join("")}`;
+  return null;
 }
 
 function toDecimal(value, fallback = 0) {
