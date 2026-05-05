@@ -42,7 +42,8 @@ export function prepareResearchesForDisplay(researches = [], skillSettings = [],
       skillValue: Math.max(0, toInteger(actorSkills?.[research.skillKey]?.value)),
       completed: progress >= research.target,
       progressPercent: roundResearchValue(completion * 100),
-      progressStyle: `width: ${roundResearchValue(completion * 100)}%;`
+      meterStyle: buildResearchMeterStyle(),
+      fillStyle: buildResearchFillStyle(roundResearchValue(completion * 100))
     };
   });
 }
@@ -59,4 +60,60 @@ export function formatResearchValue(value) {
   const numeric = roundResearchValue(value);
   if (Number.isInteger(numeric)) return String(numeric);
   return numeric.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function buildResearchMeterStyle() {
+  const baseColor = "#8cb264";
+  return [
+    "--meter-sections: 12",
+    `--meter-color: ${baseColor}`,
+    `--meter-color-strong: ${mixHexColor(baseColor, "#ffffff", 0.2)}`,
+    `--meter-color-dark: ${mixHexColor(baseColor, "#000000", 0.28)}`,
+    `--meter-color-soft: ${hexToRgba(baseColor, 0.2)}`,
+    `--meter-color-glow: ${hexToRgba(baseColor, 0.34)}`
+  ].join("; ");
+}
+
+function buildResearchFillStyle(percent) {
+  const baseColor = "#8cb264";
+  const strongColor = mixHexColor(baseColor, "#ffffff", 0.2);
+  const darkColor = mixHexColor(baseColor, "#000000", 0.28);
+  return [
+    `width: ${roundResearchValue(percent)}%`,
+    `background: linear-gradient(180deg, ${strongColor}, ${darkColor})`,
+    `box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 0 14px ${hexToRgba(baseColor, 0.34)}`
+  ].join("; ");
+}
+
+function normalizeIndicatorColor(color) {
+  const normalized = String(color ?? "").trim().replace(/^#/, "").toLowerCase();
+  if (/^[0-9a-f]{6}$/.test(normalized)) return `#${normalized}`;
+  if (/^[0-9a-f]{3}$/.test(normalized)) return `#${normalized.split("").map(char => `${char}${char}`).join("")}`;
+  return "#8f8456";
+}
+
+function mixHexColor(hexColor, mixWith, amount = 0.5) {
+  const base = hexToRgb(normalizeIndicatorColor(hexColor));
+  const mix = hexToRgb(normalizeIndicatorColor(mixWith));
+  const ratio = Math.max(0, Math.min(1, Number(amount) || 0));
+  const channels = [base.r, base.g, base.b].map((channel, index) => {
+    const target = [mix.r, mix.g, mix.b][index];
+    return Math.round(channel + ((target - channel) * ratio));
+  });
+  return `#${channels.map(channel => channel.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function hexToRgba(hexColor, alpha = 1) {
+  const { r, g, b } = hexToRgb(normalizeIndicatorColor(hexColor));
+  const normalizedAlpha = Math.max(0, Math.min(1, Number(alpha) || 0));
+  return `rgba(${r}, ${g}, ${b}, ${normalizedAlpha})`;
+}
+
+function hexToRgb(hexColor) {
+  const normalized = normalizeIndicatorColor(hexColor).slice(1);
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16)
+  };
 }

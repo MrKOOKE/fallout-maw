@@ -342,38 +342,9 @@
 }
 
 .fallout-maw-research-progress-bar {
-  --meter-sections: 12;
-  --meter-step: calc(100% / var(--meter-sections));
-  background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.22), rgba(255, 255, 255, 0.02)),
-    linear-gradient(180deg, rgba(18, 20, 15, 0.95), rgba(8, 9, 7, 0.98));
-  border: 1px solid rgba(120, 120, 120, 0.18);
-  padding: 1px;
-  height: 0.7rem;
-  overflow: hidden;
-  position: relative;
-}
-
-.fallout-maw-research-progress-bar::after {
-  background: repeating-linear-gradient(
-    to right,
-    transparent 0 calc(var(--meter-step) - 2px),
-    rgba(8, 10, 7, 0.78) calc(var(--meter-step) - 2px) var(--meter-step)
-  );
-  content: "";
-  inset: 0;
-  pointer-events: none;
-  position: absolute;
-  z-index: 2;
-}
-
-.fallout-maw-research-progress-bar > span {
-  background: linear-gradient(90deg, rgba(89, 170, 95, 0.7), rgba(210, 185, 145, 0.9));
-  display: block;
-  height: 100%;
-  max-width: 100%;
-  position: relative;
-  z-index: 1;
+  align-self: stretch;
+  flex: 0 0 auto;
+  width: 100%;
 }
 
 .fallout-maw-research-manage {
@@ -711,6 +682,10 @@
 
 .fallout-maw-summary-grid.three-columns {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.fallout-maw-summary-grid.six-columns {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .fallout-maw-inline-stat {
@@ -2501,11 +2476,12 @@
 
 .application.fallout-maw-actor-sheet .fallout-maw-identity-skill-grid {
   gap: 0;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-identity-skill,
 .application.fallout-maw-actor-sheet .fallout-maw-identity-skill-button {
-  align-items: center;
+  align-items: flex-start;
   background: rgba(17, 19, 14, 0.74);
   border: 0;
   border-bottom: 1px solid rgba(131, 119, 74, 0.18);
@@ -2518,12 +2494,19 @@
   text-align: left;
 }
 
+.application.fallout-maw-actor-sheet .fallout-maw-identity-skill span,
+.application.fallout-maw-actor-sheet .fallout-maw-identity-skill-button span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .application.fallout-maw-actor-sheet .fallout-maw-identity-skill span {
   color: var(--fallout-maw-actor-text-strong);
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-identity-skill strong {
   color: var(--fallout-maw-actor-text-strong);
+  flex: 0 0 auto;
   font-family: var(--fallout-maw-actor-mono-font);
 }
 
@@ -2822,6 +2805,21 @@
   border-radius: 0;
 }
 
+.application.fallout-maw-actor-sheet .fallout-maw-research-list {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-research-row {
+  height: 100%;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-research-list > .fallout-maw-empty-list,
+.application.fallout-maw-actor-sheet .fallout-maw-effect-list > .fallout-maw-empty-list {
+  grid-column: 1 / -1;
+}
+
 .application.fallout-maw-actor-sheet .fallout-maw-research-main:hover,
 .application.fallout-maw-actor-sheet .fallout-maw-research-main:focus-visible,
 .application.fallout-maw-actor-sheet .fallout-maw-effect-row:hover {
@@ -2831,23 +2829,14 @@
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-research-progress-bar {
-  background:
-    linear-gradient(180deg, rgba(220, 197, 110, 0.04), rgba(0, 0, 0, 0) 38%),
-    linear-gradient(180deg, rgba(6, 8, 6, 0.95), rgba(18, 20, 14, 0.94));
-  border: 1px solid rgba(131, 119, 74, 0.24);
-  height: 0.55rem;
+  height: 0.78rem;
+  margin-top: 0.1rem;
 }
 
-.application.fallout-maw-actor-sheet .fallout-maw-research-progress-bar::after {
-  background: repeating-linear-gradient(
-    to right,
-    transparent 0 calc(var(--meter-step) - 2px),
-    rgba(10, 11, 8, 0.82) calc(var(--meter-step) - 2px) var(--meter-step)
-  );
-}
-
-.application.fallout-maw-actor-sheet .fallout-maw-research-progress-bar > span {
-  background: linear-gradient(90deg, rgba(118, 163, 94, 0.82), rgba(220, 197, 110, 0.88));
+.application.fallout-maw-actor-sheet .fallout-maw-effect-list {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-effect-row img {
@@ -2901,7 +2890,8 @@
   .fallout-maw-equipment-config-grid,
   .fallout-maw-race-pool-grid,
   .fallout-maw-summary-grid.two-columns,
-  .fallout-maw-summary-grid.three-columns {
+  .fallout-maw-summary-grid.three-columns,
+  .fallout-maw-summary-grid.six-columns {
     grid-template-columns: 1fr;
   }
 
@@ -2934,6 +2924,12 @@
   }
 
   .fallout-maw-identity-skill-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .application.fallout-maw-actor-sheet .fallout-maw-identity-skill-grid,
+  .application.fallout-maw-actor-sheet .fallout-maw-research-list,
+  .application.fallout-maw-actor-sheet .fallout-maw-effect-list {
     grid-template-columns: 1fr;
   }
 

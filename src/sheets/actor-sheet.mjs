@@ -1508,15 +1508,18 @@ function prepareIndicatorEntry({
   inputName = "",
   active = false
 } = {}) {
-  const min = Math.max(0, toInteger(data?.min));
+  const min = Math.max(-100, toInteger(data?.min));
   const max = Math.max(min, toInteger(data?.max));
   const value = Math.min(Math.max(toInteger(data?.value), min), max);
-  const range = Math.max(0, max - min);
-  const percent = range > 0
-    ? ((value - min) / range) * 100
-    : (max > 0 ? 100 : 0);
-  const segments = getIndicatorSegmentCount(range || max);
-  const normalizedColor = normalizeIndicatorColor(color);
+  const negativeRange = min < 0 ? Math.abs(min) : 0;
+  const positiveFloor = Math.max(0, min);
+  const positiveRange = Math.max(0, max - positiveFloor);
+  const isNegative = value < 0 && negativeRange > 0;
+  const percent = isNegative
+    ? ((Math.abs(value) / negativeRange) * 100)
+    : (positiveRange > 0 ? (((Math.max(value, positiveFloor) - positiveFloor) / positiveRange) * 100) : 0);
+  const segments = getIndicatorSegmentCount(isNegative ? negativeRange : positiveRange || max);
+  const normalizedColor = normalizeIndicatorColor(isNegative ? "#c8463d" : color);
 
   return {
     key,
@@ -1527,10 +1530,11 @@ function prepareIndicatorEntry({
     max,
     active,
     inputName,
+    isNegative,
     percent: Number(percent.toFixed(2)),
     segments,
     meterStyle: buildIndicatorMeterStyle(normalizedColor, segments),
-    fillStyle: buildIndicatorFillStyle(normalizedColor, percent)
+    fillStyle: buildIndicatorFillStyle(normalizedColor, percent, { reverse: isNegative })
   };
 }
 
@@ -1551,15 +1555,16 @@ function buildIndicatorMeterStyle(color, segments) {
   ].join("; ");
 }
 
-function buildIndicatorFillStyle(color, percent) {
+function buildIndicatorFillStyle(color, percent, { reverse = false } = {}) {
   const baseColor = normalizeIndicatorColor(color);
   const strongColor = mixHexColor(baseColor, "#ffffff", 0.2);
   const darkColor = mixHexColor(baseColor, "#000000", 0.28);
   return [
+    reverse ? "margin-left: auto" : "",
     `width: ${Number(percent.toFixed(2))}%`,
     `background: linear-gradient(180deg, ${strongColor}, ${darkColor})`,
     `box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 0 14px ${hexToRgba(baseColor, 0.34)}`
-  ].join("; ");
+  ].filter(Boolean).join("; ");
 }
 
 function normalizeIndicatorColor(color) {

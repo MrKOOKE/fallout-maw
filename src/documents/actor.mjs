@@ -210,7 +210,7 @@ export class FalloutMaWActor extends Actor {
 
     if (limbKey && this.system?.limbs?.[limbKey]) {
       const limb = this.system.limbs[limbKey];
-      updateData[`system.limbs.${limbKey}.value`] = Math.max(Number(limb.min) || 0, (Number(limb.value) || 0) - damage);
+      updateData[`system.limbs.${limbKey}.value`] = Math.max(toInteger(limb.min), toInteger(limb.value) - damage);
     }
 
     return this.update(updateData);

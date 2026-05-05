@@ -21,8 +21,15 @@
             <span>{{skillLabel}}</span>
           </div>
 
-          <div class="fallout-maw-research-progress-bar">
-            <span style="{{progressStyle}}"></span>
+          <div
+            class="fallout-maw-resource-meter fallout-maw-research-progress-bar"
+            style="{{meterStyle}}"
+            role="meter"
+            aria-valuemin="0"
+            aria-valuenow="{{progress}}"
+            aria-valuemax="{{target}}"
+          >
+            <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
           </div>
 
           <div class="fallout-maw-research-meta">
