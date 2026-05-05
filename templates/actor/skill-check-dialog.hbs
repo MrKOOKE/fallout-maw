@@ -1,7 +1,7 @@
 <div class="fallout-maw-skill-check-dialog">
   <section class="fallout-maw-panel">
     <h2>{{skill.label}}</h2>
-    <div class="fallout-maw-check-summary">
+    <div class="fallout-maw-skill-check-dialog-summary">
       <span>{{localize "FALLOUTMAW.SkillCheck.SkillValue"}}</span>
       <strong>{{skill.value}}</strong>
     </div>
@@ -28,15 +28,15 @@
     </div>
   </section>
 
-  <section class="fallout-maw-panel fallout-maw-check-edge-grid">
-    <label class="fallout-maw-check-edge">
+  <section class="fallout-maw-panel fallout-maw-skill-check-dialog-edge-grid">
+    <label class="fallout-maw-skill-check-dialog-edge">
       <span>
         <input type="checkbox" name="advantage" value="true" data-skill-check-advantage>
         {{localize "FALLOUTMAW.SkillCheck.Advantage"}}
       </span>
       <input type="number" name="advantageCount" value="1" min="1" step="1">
     </label>
-    <label class="fallout-maw-check-edge">
+    <label class="fallout-maw-skill-check-dialog-edge">
       <span>
         <input type="checkbox" name="disadvantage" value="true" data-skill-check-disadvantage>
         {{localize "FALLOUTMAW.SkillCheck.Disadvantage"}}

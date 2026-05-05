@@ -1,42 +1,61 @@
 <article class="fallout-maw-chat-card fallout-maw-skill-check-card {{result.cssClass}}">
-  <header>
-    <h2>{{skill.label}}</h2>
-    <span>{{actor.name}}</span>
+  <header class="fallout-maw-skill-check-terminal-header">
+    <div>
+      <span class="fallout-maw-skill-check-kicker">{{localize "FALLOUTMAW.SkillCheck.TerminalTitle"}}</span>
+      <h2>{{skill.label}}</h2>
+    </div>
   </header>
 
-  <div class="fallout-maw-check-result">
-    <strong>{{result.label}}</strong>
-    <span>{{total}} / {{difficulty}}</span>
-  </div>
+  <section class="fallout-maw-skill-check-operator">
+    <img src="{{actor.img}}" alt="{{actor.name}}">
+    <div>
+      <span>{{localize "FALLOUTMAW.SkillCheck.Operator"}}</span>
+      <strong>{{actor.name}}</strong>
+    </div>
+  </section>
 
-  <dl class="fallout-maw-check-breakdown">
+  <section class="fallout-maw-skill-check-summary">
     <div>
-      <dt>{{localize "FALLOUTMAW.SkillCheck.Roll"}}</dt>
-      <dd>{{rollSummary}}</dd>
+      <span>{{localize "FALLOUTMAW.Common.Skill"}}:</span>
+      <strong>{{skill.value}}</strong>
     </div>
     <div>
-      <dt>{{localize "FALLOUTMAW.SkillCheck.SkillValue"}}</dt>
-      <dd>{{skill.value}}</dd>
+      <span>{{localize "FALLOUTMAW.SkillCheck.Modifier"}}:</span>
+      <strong>{{situationalModifier}}</strong>
     </div>
     <div>
-      <dt>{{localize "FALLOUTMAW.SkillCheck.FinalSkillValue"}}</dt>
-      <dd>{{finalSkillValue}}</dd>
+      <span>{{localize "FALLOUTMAW.SkillCheck.Total"}}:</span>
+      <strong>{{finalSkillValue}}</strong>
     </div>
     <div>
-      <dt>{{localize "FALLOUTMAW.SkillCheck.SituationalModifier"}}</dt>
-      <dd>{{situationalModifier}}</dd>
+      <span>{{localize "FALLOUTMAW.SkillCheck.Difficulty"}}:</span>
+      <strong>{{difficulty}}</strong>
     </div>
-    <div>
-      <dt>{{localize "FALLOUTMAW.SkillCheck.Edge"}}</dt>
-      <dd>{{edge.label}}</dd>
+  </section>
+
+  <section class="fallout-maw-skill-check-thresholds">
+    <h3>{{localize "FALLOUTMAW.SkillCheck.Thresholds"}}</h3>
+    <ul>
+      {{#each thresholdRows}}
+      <li class="{{cssClass}}"><span>{{range}}</span><strong>{{label}}</strong></li>
+      {{/each}}
+    </ul>
+  </section>
+
+  <section class="fallout-maw-skill-check-rolls">
+    <div class="fallout-maw-skill-check-mode">
+      <span>{{localize "FALLOUTMAW.SkillCheck.Mode"}}</span>
+      <strong>{{edge.modeLabel}}</strong>
     </div>
-    <div>
-      <dt>{{localize "FALLOUTMAW.SkillCheck.CriticalFailure"}}</dt>
-      <dd>{{critical.failureLabel}}</dd>
+
+    <div class="fallout-maw-skill-check-roll-grid{{#unless edge.hasMultipleRolls}} single{{/unless}}">
+      {{#each rollEntries}}
+      <div class="fallout-maw-skill-check-roll {{result.cssClass}}{{#if selected}} selected{{/if}}">
+        <span>{{localize "FALLOUTMAW.SkillCheck.Roll"}} {{index}}</span>
+        <strong>{{total}}</strong>
+        <em>{{result.label}}</em>
+      </div>
+      {{/each}}
     </div>
-    <div>
-      <dt>{{localize "FALLOUTMAW.SkillCheck.CriticalSuccess"}}</dt>
-      <dd>{{critical.successLabel}}</dd>
-    </div>
-  </dl>
+  </section>
 </article>

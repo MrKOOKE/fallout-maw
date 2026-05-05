@@ -203,7 +203,6 @@
     },
     "SkillCheck": {
       "Advantage": "Advantage",
-      "AdvantageSummary": "Advantage {count}, bonus {bonus}",
       "AutomaticFailure": "Automatic Failure",
       "CriticalFailure": "Critical Failure",
       "CriticalFailureBonus": "Critical Failure Bonus",
@@ -211,7 +210,6 @@
       "CriticalSuccessBonus": "Critical Success Bonus",
       "Difficulty": "Difficulty",
       "Disadvantage": "Disadvantage",
-      "DisadvantageSummary": "Disadvantage {count}, bonus {bonus}",
       "Edge": "Advantage/Disadvantage",
       "Failure": "Failure",
       "FinalSkillValue": "Final Skill Value",
@@ -219,10 +217,16 @@
       "Normal": "Normal",
       "Roll": "Roll",
       "RollButton": "Roll",
+      "Mode": "Mode",
+      "Modifier": "Modifier",
+      "Operator": "Operator",
       "SituationalModifier": "Situational Modifier",
       "SkillValue": "Skill Value",
       "Success": "Success",
-      "Title": "{skill} Check"
+      "TerminalTitle": "Skill Check",
+      "Thresholds": "Thresholds",
+      "Title": "{skill} Check",
+      "Total": "Total"
     },
     "Creation": {
       "Base": "Character Base",

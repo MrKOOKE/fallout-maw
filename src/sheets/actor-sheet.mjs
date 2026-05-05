@@ -28,7 +28,7 @@ import {
     openResearchTimeDialog,
   prepareResearchesForDisplay
 } from "../research/index.mjs";
-import { openSkillCheckDialog } from "../rolls/skill-check.mjs";
+import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import {
   ROOT_CONTAINER_ID,
   buildInventoryCellStyle as buildInventoryCellStyleHelper,
@@ -456,7 +456,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     event.preventDefault();
     const skillKey = target.dataset.skillKey ?? "";
     if (!skillKey) return undefined;
-    return openSkillCheckDialog(this.actor, skillKey);
+    return requestSkillCheck({
+      actor: this.actor,
+      skillKey,
+      prompt: true,
+      requester: "actorSheet"
+    });
   }
 
   #relocateEffectsAddButton() {

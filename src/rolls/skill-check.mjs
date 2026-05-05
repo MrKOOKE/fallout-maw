@@ -13,17 +13,38 @@ const DEFAULT_CHECK = Object.freeze({
   criticalFailureBonus: 0
 });
 
-export async function openSkillCheckDialog(actor, skillKey) {
-  const skill = prepareSkill(actor, skillKey);
-  if (!skill) return undefined;
+export async function requestSkillCheck({
+  actor,
+  skillKey = "",
+  data = {},
+  createMessage = true,
+  prompt = false,
+  requester = ""
+} = {}) {
+  const resolvedSkill = resolveSkill(actor, skillKey);
+  if (!resolvedSkill) return undefined;
 
+  const requestData = prompt ? await promptSkillCheckData(actor, resolvedSkill) : data;
+  if (!requestData) return undefined;
+
+  const outcome = await performSkillCheck(actor, resolvedSkill, normalizeRequestData(requestData));
+  if (!createMessage) return outcome;
+
+  const message = await publishSkillCheckMessage(outcome, { requester });
+  return {
+    ...outcome,
+    message
+  };
+}
+
+async function promptSkillCheckData(actor, skill) {
   const content = await renderTemplate(TEMPLATES.skillCheckDialog, {
     actor,
     skill,
     defaults: DEFAULT_CHECK
   });
 
-  const formData = await DialogV2.prompt({
+  return DialogV2.prompt({
     window: {
       title: game.i18n.format("FALLOUTMAW.SkillCheck.Title", { skill: skill.label })
     },
@@ -37,19 +58,9 @@ export async function openSkillCheckDialog(actor, skillKey) {
       callback: (_event, button) => new FormDataExtended(button.form).object
     }
   });
-
-  if (!formData) return undefined;
-  return rollSkillCheck(actor, skill, normalizeDialogData(formData));
 }
 
-export async function rollSkillCheck(actor, skill, data = {}, options = {}) {
-  return executeSkillCheck(actor, skill, data, { createMessage: true, ...options });
-}
-
-export async function executeSkillCheck(actor, skillOrKey, data = {}, { createMessage = true } = {}) {
-  const skill = typeof skillOrKey === "string"
-    ? prepareSkill(actor, skillOrKey)
-    : { ...skillOrKey };
+async function performSkillCheck(actor, skill, data = {}) {
   if (!skill) return undefined;
 
   const check = createMutableCheck(actor, skill, data);
@@ -69,7 +80,7 @@ export async function executeSkillCheck(actor, skillOrKey, data = {}, { createMe
     isAutomaticFailure(finalSkillValue, check.difficulty)
   );
 
-  const outcome = {
+  return {
     actor,
     check,
     skill: check.skill,
@@ -81,31 +92,29 @@ export async function executeSkillCheck(actor, skillOrKey, data = {}, { createMe
     critical,
     result
   };
+}
 
-  if (!createMessage) return outcome;
-
+async function publishSkillCheckMessage(outcome, { requester = "" } = {}) {
+  const { actor, check, skill, rolls, selectedRoll, edge, finalSkillValue, total, critical, result } = outcome;
   const cardContext = {
     actor,
-    skill: check.skill,
+    skill,
     difficulty: toInteger(check.difficulty),
     situationalModifier: toInteger(check.situationalModifier),
     finalSkillValue,
     total,
-    rollSummary: rolls.map(roll => roll.total).join(" / "),
+    rollEntries: buildRollEntries(rolls, selectedRoll, check.difficulty, critical, finalSkillValue),
+    thresholdRows: buildThresholdRows(check.difficulty, critical, finalSkillValue),
     edge: {
       ...edge,
-      label: formatEdge(edge)
-    },
-    critical: {
-      ...critical,
-      failureLabel: critical.failureMaximum > 0 ? `<= ${critical.failureMaximum}` : game.i18n.localize("FALLOUTMAW.SkillCheck.None"),
-      successLabel: critical.successMinimum <= 100 ? `>= ${critical.successMinimum}` : game.i18n.localize("FALLOUTMAW.SkillCheck.None")
+      modeLabel: formatEdgeMode(edge),
+      hasMultipleRolls: rolls.length > 1
     },
     result
   };
 
   const content = await renderTemplate(TEMPLATES.skillCheckChatCard, cardContext);
-  const message = await ChatMessage.create({
+  return ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content,
     sound: CONFIG.sounds.dice,
@@ -115,6 +124,7 @@ export async function executeSkillCheck(actor, skillOrKey, data = {}, { createMe
         skillCheck: {
           skillKey: check.skill.key,
           difficulty: check.difficulty,
+          requester,
           total,
           result: result.key,
           autoFailure: result.autoFailure
@@ -122,16 +132,12 @@ export async function executeSkillCheck(actor, skillOrKey, data = {}, { createMe
       }
     }
   });
-
-  return {
-    ...outcome,
-    message
-  };
 }
 
-function prepareSkill(actor, skillKey) {
-  const setting = getSkillSettings().find(skill => skill.key === skillKey);
-  const actorSkill = actor.system?.skills?.[skillKey];
+function resolveSkill(actor, skillKey) {
+  const normalizedSkillKey = String(skillKey ?? "").trim();
+  const setting = getSkillSettings().find(skill => skill.key === normalizedSkillKey);
+  const actorSkill = actor.system?.skills?.[normalizedSkillKey];
   if (!setting || !actorSkill) return null;
   return {
     key: setting.key,
@@ -141,7 +147,7 @@ function prepareSkill(actor, skillKey) {
   };
 }
 
-function normalizeDialogData(data) {
+function normalizeRequestData(data) {
   const advantage = Boolean(data.advantage);
   const disadvantage = Boolean(data.disadvantage);
   return {
@@ -282,16 +288,54 @@ function activateSkillCheckDialog(dialog) {
   syncCounters();
 }
 
-function formatEdge(edge) {
-  if (edge.rollMode === "advantage") return game.i18n.format("FALLOUTMAW.SkillCheck.AdvantageSummary", {
-    count: edge.net,
-    bonus: edge.skillModifier
-  });
-  if (edge.rollMode === "disadvantage") return game.i18n.format("FALLOUTMAW.SkillCheck.DisadvantageSummary", {
-    count: Math.abs(edge.net),
-    bonus: edge.skillModifier
-  });
+function formatEdgeMode(edge) {
+  if (edge.rollMode === "advantage") return game.i18n.localize("FALLOUTMAW.SkillCheck.Advantage");
+  if (edge.rollMode === "disadvantage") return game.i18n.localize("FALLOUTMAW.SkillCheck.Disadvantage");
   return game.i18n.localize("FALLOUTMAW.SkillCheck.Normal");
+}
+
+function buildRollEntries(rolls, selectedRoll, difficulty, critical, finalSkillValue) {
+  return rolls.map((roll, index) => {
+    const result = determineResult(
+      roll.total,
+      toInteger(finalSkillValue) + toInteger(roll.total),
+      difficulty,
+      critical,
+      isAutomaticFailure(finalSkillValue, difficulty)
+    );
+    return {
+      index: index + 1,
+      total: roll.total,
+      selected: roll === selectedRoll,
+      result
+    };
+  });
+}
+
+function buildThresholdRows(difficulty, critical, finalSkillValue) {
+  const successMinimum = clamp(toInteger(difficulty) - toInteger(finalSkillValue), 1, 100);
+  const criticalFailureMaximum = Math.min(critical.failureMaximum, 100);
+  const criticalSuccessMinimum = Math.max(critical.successMinimum, 1);
+  const failureMinimum = Math.max(1, criticalFailureMaximum + 1);
+  const failureMaximum = Math.min(100, successMinimum - 1);
+  const normalSuccessMinimum = Math.max(successMinimum, criticalFailureMaximum + 1);
+  const normalSuccessMaximum = Math.min(100, criticalSuccessMinimum - 1);
+
+  return [
+    buildThresholdRow("critical-success", game.i18n.localize("FALLOUTMAW.SkillCheck.CriticalSuccess"), criticalSuccessMinimum, 100),
+    buildThresholdRow("success", game.i18n.localize("FALLOUTMAW.SkillCheck.Success"), normalSuccessMinimum, normalSuccessMaximum),
+    buildThresholdRow("failure", game.i18n.localize("FALLOUTMAW.SkillCheck.Failure"), failureMinimum, failureMaximum),
+    buildThresholdRow("critical-failure", game.i18n.localize("FALLOUTMAW.SkillCheck.CriticalFailure"), 1, criticalFailureMaximum)
+  ].filter(Boolean);
+}
+
+function buildThresholdRow(cssClass, label, minimum, maximum) {
+  if (maximum < minimum) return null;
+  return {
+    cssClass,
+    label,
+    range: minimum === maximum ? String(minimum) : `${minimum}-${maximum}`
+  };
 }
 
 function clamp(value, min, max) {

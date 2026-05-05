@@ -1,5 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
-import { executeSkillCheck } from "../rolls/skill-check.mjs";
+import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { format, localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
@@ -47,10 +47,14 @@ export async function applyResearchTime(actor, researchId, duration = {}, { crea
   let totalGain = 0;
 
   for (let index = 0; index < checks; index += 1) {
-    const outcome = await executeSkillCheck(actor, research.skillKey, {
-      difficulty: research.difficulty
-    }, {
-      createMessage: createMessages
+    const outcome = await requestSkillCheck({
+      actor,
+      skillKey: research.skillKey,
+      requester: "research",
+      createMessage: createMessages,
+      data: {
+        difficulty: research.difficulty
+      }
     });
 
     if (!outcome) throw new Error(localize("FALLOUTMAW.Messages.ResearchSkillMissing"));

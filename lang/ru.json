@@ -203,7 +203,6 @@
     },
     "SkillCheck": {
       "Advantage": "Преимущество",
-      "AdvantageSummary": "Преимущество {count}, бонус {bonus}",
       "AutomaticFailure": "Автоматический провал",
       "CriticalFailure": "Критический провал",
       "CriticalFailureBonus": "Бонус к критическому провалу",
@@ -211,7 +210,6 @@
       "CriticalSuccessBonus": "Бонус к критическому успеху",
       "Difficulty": "Сложность",
       "Disadvantage": "Помеха",
-      "DisadvantageSummary": "Помеха {count}, бонус {bonus}",
       "Edge": "Преимущество/Помеха",
       "Failure": "Провал",
       "FinalSkillValue": "Итоговое значение навыка",
@@ -219,10 +217,16 @@
       "Normal": "Обычная проверка",
       "Roll": "Бросок",
       "RollButton": "Бросить",
+      "Mode": "Режим",
+      "Modifier": "Изменение",
+      "Operator": "Исполнитель",
       "SituationalModifier": "Ситуативное изменение",
       "SkillValue": "Значение навыка",
       "Success": "Успех",
-      "Title": "Проверка: {skill}"
+      "TerminalTitle": "Проверка навыка",
+      "Thresholds": "Диапазоны",
+      "Title": "Проверка: {skill}",
+      "Total": "Итог"
     },
     "Creation": {
       "Base": "Основа персонажа",
