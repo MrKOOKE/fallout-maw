@@ -231,6 +231,28 @@
   width: auto;
 }
 
+.fallout-maw-function-picker {
+  display: grid;
+  margin-top: 0.5rem;
+}
+
+.fallout-maw-range-field {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+}
+
+.fallout-maw-range-control {
+  align-items: center;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr) 5rem auto;
+}
+
+.fallout-maw-range-control input[type="number"] {
+  text-align: right;
+}
+
 .fallout-maw-item-tabs {
   border-bottom: 1px solid var(--fallout-maw-border);
   display: grid;
@@ -2007,6 +2029,9 @@
   --fallout-maw-actor-danger: #8a4331;
   --fallout-maw-actor-ui-font: var(--font-primary);
   --fallout-maw-actor-mono-font: "Cascadia Mono", "Consolas", "Lucida Console", "Courier New", monospace;
+  --fallout-maw-actor-text-size: 1.3rem;
+  --fallout-maw-actor-text-size-small: 1.2rem;
+  --fallout-maw-actor-section-title-size: 1.6rem;
   --fallout-maw-ui-scale: 1;
   --fallout-maw-inventory-cell-size: 5rem;
   --fallout-maw-actor-large-slot-size: calc(var(--fallout-maw-inventory-cell-size) * 1.5);
@@ -2238,7 +2263,7 @@
 
 .application.fallout-maw-actor-sheet .fallout-maw-header-stat > span {
   color: var(--fallout-maw-actor-text-strong);
-  font-size: 0.96rem;
+  font-size: var(--fallout-maw-actor-text-size);
   letter-spacing: 0.01em;
 }
 
@@ -2246,7 +2271,7 @@
 .application.fallout-maw-actor-sheet .fallout-maw-header-experience-edit strong {
   color: var(--fallout-maw-actor-text-strong);
   font-family: var(--fallout-maw-actor-mono-font);
-  font-size: 1rem;
+  font-size: var(--fallout-maw-actor-text-size);
   font-weight: 700;
 }
 
@@ -2404,7 +2429,7 @@
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-sheet-body > .tab.active {
-  font-size: 1.18rem;
+  font-size: var(--fallout-maw-actor-text-size);
   overflow-x: hidden;
   overflow-y: auto;
   padding-right: 0.15rem;
@@ -2502,7 +2527,7 @@
   align-items: center;
   color: var(--fallout-maw-actor-text-strong);
   display: flex;
-  font-size: 1.4rem;
+  font-size: var(--fallout-maw-actor-section-title-size);
   font-weight: 700;
   gap: 0.75rem;
   margin: 0 0 0.8rem;
@@ -2524,7 +2549,7 @@
 .application.fallout-maw-actor-sheet .fallout-maw-empty-list,
 .application.fallout-maw-actor-sheet .fallout-maw-empty-editor {
   color: var(--fallout-maw-actor-text);
-  font-size: 1.08rem;
+  font-size: var(--fallout-maw-actor-text-size);
   opacity: 1;
 }
 
@@ -2559,7 +2584,7 @@
 .application.fallout-maw-actor-sheet .fallout-maw-resource-name,
 .application.fallout-maw-actor-sheet .fallout-maw-inline-stat > span {
   color: var(--fallout-maw-actor-text);
-  font-size: 1.12rem;
+  font-size: var(--fallout-maw-actor-text-size);
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-resource-value,
@@ -2567,7 +2592,7 @@
 .application.fallout-maw-actor-sheet .fallout-maw-inline-stat > input {
   color: var(--fallout-maw-actor-text-strong);
   font-family: var(--fallout-maw-actor-mono-font);
-  font-size: 1.12rem;
+  font-size: var(--fallout-maw-actor-text-size);
   font-weight: 700;
 }
 
@@ -2619,7 +2644,7 @@
 
 .application.fallout-maw-actor-sheet .fallout-maw-characteristic-grid label span {
   color: var(--fallout-maw-actor-text-strong);
-  font-size: 1.12rem;
+  font-size: var(--fallout-maw-actor-text-size);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2631,7 +2656,7 @@
   border-left: 1px solid rgba(131, 119, 74, 0.34);
   color: var(--fallout-maw-actor-text-strong);
   font-family: var(--fallout-maw-actor-mono-font);
-  font-size: 1.22rem;
+  font-size: var(--fallout-maw-actor-text-size);
   justify-self: stretch;
   min-width: 3.4rem;
   padding-left: 0.45rem;
@@ -2679,7 +2704,7 @@
 
 .application.fallout-maw-actor-sheet .fallout-maw-identity-skill span {
   color: var(--fallout-maw-actor-text-strong);
-  font-size: 1.12rem;
+  font-size: var(--fallout-maw-actor-text-size);
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-identity-skill strong {
@@ -2687,7 +2712,7 @@
   border-left: 1px solid rgba(131, 119, 74, 0.34);
   color: var(--fallout-maw-actor-text-strong);
   font-family: var(--fallout-maw-actor-mono-font);
-  font-size: 1.12rem;
+  font-size: var(--fallout-maw-actor-text-size);
   justify-self: stretch;
   min-width: 3.2rem;
   padding-left: 0.45rem;
@@ -2753,7 +2778,7 @@
   align-self: center;
   color: var(--fallout-maw-actor-text-strong);
   font-family: var(--fallout-maw-actor-mono-font);
-  font-size: 1.15rem;
+  font-size: var(--fallout-maw-actor-text-size);
   font-weight: 700;
   min-width: 0;
   width: 100%;
@@ -2766,7 +2791,7 @@
 
 .application.fallout-maw-actor-sheet .fallout-maw-inventory-layout {
   gap: 0.9rem;
-  grid-template-columns: minmax(260px, 0.42fr) minmax(0, 1fr);
+  grid-template-columns: minmax(260px, 0.35fr) minmax(0, 1fr);
   flex: 1 1 auto;
   align-items: stretch;
   min-height: 0;
@@ -2894,7 +2919,7 @@
   color: var(--fallout-maw-actor-text-strong);
   flex: none;
   font-family: var(--fallout-maw-actor-mono-font);
-  font-size: 1rem;
+  font-size: var(--fallout-maw-actor-text-size);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -2921,7 +2946,7 @@
 
 .application.fallout-maw-actor-sheet .fallout-maw-container-title strong {
   color: var(--fallout-maw-actor-text-strong);
-  font-size: 1.12rem;
+  font-size: var(--fallout-maw-actor-text-size);
   font-weight: 700;
 }
 
@@ -2980,7 +3005,7 @@
 
 .application.fallout-maw-actor-sheet .fallout-maw-slot-card-label {
   color: var(--fallout-maw-actor-text-soft);
-  font-size: 1.3rem;
+  font-size: var(--fallout-maw-actor-text-size);
   font-weight: 700;
   line-height: 1;
   min-height: 0;
@@ -3040,7 +3065,7 @@
 
 .application.fallout-maw-actor-sheet .fallout-maw-weapon-set h3 {
   color: var(--fallout-maw-actor-text-soft);
-  font-size: 0.92rem;
+  font-size: var(--fallout-maw-actor-text-size-small);
   letter-spacing: 0.02em;
   margin: 0 0 0.55rem;
 }

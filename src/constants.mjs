@@ -2,7 +2,7 @@ export const SYSTEM_ID = "fallout-maw";
 export const SYSTEM_TITLE = "Fallout-MaW";
 
 export const ACTOR_TYPES = Object.freeze(["character", "npc", "vehicle", "hazard"]);
-export const ITEM_TYPES = Object.freeze(["gear", "weapon", "armor", "ability"]);
+export const ITEM_TYPES = Object.freeze(["gear", "ability"]);
 
 export const TEMPLATES = Object.freeze({
   actorCreateDialog: `systems/${SYSTEM_ID}/templates/actor/actor-create-dialog.hbs`,

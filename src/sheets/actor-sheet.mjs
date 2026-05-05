@@ -298,7 +298,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#activateInventoryInteractions();
     this.#activateTabScrollPersistence();
     this.#restoreActiveTabScroll();
-    this.#debugInventorySplitLayout();
   }
 
   _onClose(options) {
@@ -515,20 +514,27 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #onTabScroll(event) {
     const tab = event.target?.closest?.(".tab[data-tab]");
     if (!tab) return;
-    this.#tabScrollPositions.set(tab.dataset.tab, tab.scrollTop ?? 0);
+    const scrollContainer = event.target?.closest?.("[data-scroll-key]");
+    const key = scrollContainer
+      ? `${tab.dataset.tab}:${scrollContainer.dataset.scrollKey}`
+      : tab.dataset.tab;
+    this.#tabScrollPositions.set(key, event.target?.scrollTop ?? tab.scrollTop ?? 0);
   }
 
   #restoreActiveTabScroll() {
     const activeTab = this.element?.querySelector?.(".tab.active[data-tab]");
     if (!activeTab) return;
 
-    const scrollTop = this.#tabScrollPositions.get(activeTab.dataset.tab) ?? 0;
     const view = this.element?.ownerDocument?.defaultView ?? window;
     view.requestAnimationFrame(() => {
       if (!this.element?.isConnected) return;
       const nextActiveTab = this.element.querySelector(".tab.active[data-tab]");
       if (!nextActiveTab || (nextActiveTab.dataset.tab !== activeTab.dataset.tab)) return;
-      nextActiveTab.scrollTop = scrollTop;
+      nextActiveTab.scrollTop = this.#tabScrollPositions.get(nextActiveTab.dataset.tab) ?? 0;
+      for (const container of nextActiveTab.querySelectorAll("[data-scroll-key]")) {
+        const key = `${nextActiveTab.dataset.tab}:${container.dataset.scrollKey}`;
+        container.scrollTop = this.#tabScrollPositions.get(key) ?? 0;
+      }
     });
   }
 
@@ -1630,50 +1636,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (this.#viewportResizeHandler) return;
     this.#viewportResizeHandler = () => this.setPosition();
     view.addEventListener("resize", this.#viewportResizeHandler);
-  }
-
-  #debugInventorySplitLayout() {
-    const view = this.element?.ownerDocument?.defaultView ?? window;
-    view.requestAnimationFrame(() => {
-      if (!this.element?.isConnected) return;
-      const activeTab = this.element.querySelector(".tab.active[data-tab]");
-      const inventoryTab = this.element.querySelector('.tab[data-tab="inventory"]');
-      const layout = inventoryTab?.querySelector?.(".fallout-maw-inventory-layout") ?? null;
-      const leftPane = inventoryTab?.querySelector?.(".fallout-maw-equipment-pane") ?? null;
-      const rightColumn = inventoryTab?.querySelector?.(".fallout-maw-inventory-main-column") ?? null;
-      const loadPanel = inventoryTab?.querySelector?.(".fallout-maw-load-panel") ?? null;
-      const inventoryPane = inventoryTab?.querySelector?.(".fallout-maw-inventory-pane") ?? null;
-      const sheetBody = this.element.querySelector(".fallout-maw-sheet-body");
-      const windowContent = this.element.querySelector(".window-content") ?? this.element;
-
-      const measure = element => {
-        if (!element) return null;
-        const rect = element.getBoundingClientRect();
-        const style = getComputedStyle(element);
-        return {
-          classes: Array.from(element.classList ?? []),
-          clientHeight: element.clientHeight,
-          scrollHeight: element.scrollHeight,
-          offsetHeight: element.offsetHeight,
-          rectHeight: rect.height,
-          minHeight: style.minHeight,
-          height: style.height,
-          maxHeight: style.maxHeight,
-          overflowY: style.overflowY,
-          overflowX: style.overflowX,
-          display: style.display,
-          position: style.position
-        };
-      };
-
-      // #region agent log
-      fetch('http://127.0.0.1:7934/ingest/64986afb-0ba2-40e0-b9f1-1caef59e22bc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f97974'},body:JSON.stringify({sessionId:'f97974',runId:'inventory-split-debug',hypothesisId:'H1',location:'actor-sheet.mjs:_onRender:301',message:'inventory split parent chain',data:{activeTab:activeTab?.dataset?.tab ?? null,sheetBody:measure(sheetBody),windowContent:measure(windowContent),inventoryTab:measure(inventoryTab),layout:measure(layout)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-
-      // #region agent log
-      fetch('http://127.0.0.1:7934/ingest/64986afb-0ba2-40e0-b9f1-1caef59e22bc',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f97974'},body:JSON.stringify({sessionId:'f97974',runId:'inventory-split-debug',hypothesisId:'H2',location:'actor-sheet.mjs:_onRender:302',message:'inventory split panes',data:{leftPane:measure(leftPane),rightColumn:measure(rightColumn),loadPanel:measure(loadPanel),inventoryPane:measure(inventoryPane)},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-    });
   }
 
   #unbindViewportResize() {

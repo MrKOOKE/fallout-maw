@@ -3,6 +3,14 @@
   <img class="profile-img" src="{{item.img}}" data-action="editImage" data-field="img" title="{{item.name}}" height="80" width="80">
   <div class="fallout-maw-header-fields">
     <input class="fallout-maw-title-input" name="name" type="text" value="{{item.name}}" placeholder="{{localize 'DOCUMENT.FIELDS.name.label'}}">
+    {{#if isGear}}
+    <div class="fallout-maw-header-grid">
+      <label class="fallout-maw-inline-checkbox">
+        <span>{{localize "FALLOUTMAW.Item.Equipped"}}</span>
+        <input type="checkbox" name="system.equipped" {{checked system.equipped}}>
+      </label>
+    </div>
+    {{else}}
     <div class="fallout-maw-header-grid">
       <label>
         <span>{{localize "FALLOUTMAW.Item.Quantity"}}</span>
@@ -34,6 +42,7 @@
         <input type="checkbox" name="system.equipped" {{checked system.equipped}}>
       </label>
     </div>
+    {{/if}}
   </div>
 </header>
 
@@ -45,11 +54,36 @@
 
 <section class="tab {{tabs.details.cssClass}}" data-group="{{tabs.details.group}}" data-tab="{{tabs.details.id}}">
   <section class="fallout-maw-panel">
-    <h2>{{localize "FALLOUTMAW.Item.Core"}}</h2>
+    <h2>{{localize "FALLOUTMAW.Item.GeneralData"}}</h2>
     <div class="fallout-maw-list-grid two-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.Quantity"}}</span>
+        <input type="number" name="system.quantity" value="{{system.quantity}}" min="{{#if isContainerFunction}}1{{else}}0{{/if}}" {{#if isContainerFunction}}disabled{{/if}}>
+      </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.MaxStack"}}</span>
         <input type="number" name="system.maxStack" value="{{system.maxStack}}" min="1" step="1" {{#if isContainerFunction}}disabled{{/if}}>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.Weight"}}</span>
+        <input type="number" name="system.weight" value="{{system.weight}}" min="0" step="0.1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TotalWeight"}}</span>
+        <input type="number" value="{{totalWeight}}" disabled>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.Price"}}</span>
+        <input type="number" name="system.price" value="{{system.price}}" min="0">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.PriceCurrency"}}</span>
+        <select name="system.priceCurrency">
+          <option value=""></option>
+          {{#each currencies}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.InventoryWidth"}}</span>
@@ -106,14 +140,18 @@
     <div class="fallout-maw-panel-header">
       <h2>{{localize "FALLOUTMAW.Item.FunctionsTab"}}</h2>
       <div class="fallout-maw-inline-controls">
-        <select data-item-function-select>
-          {{#each itemFunctionChoices}}
-          <option value="{{value}}" {{#if disabled}}disabled{{/if}}>{{label}}</option>
-          {{/each}}
-        </select>
-        <button type="button" data-add-item-function><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.AddFunction"}}</button>
+        <button type="button" data-add-item-function {{#unless canAddItemFunction}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.AddFunction"}}</button>
       </div>
     </div>
+    {{#if showFunctionPicker}}
+    <div class="fallout-maw-function-picker">
+      <select data-choose-item-function>
+        {{#each itemFunctionChoices}}
+        <option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>
+        {{/each}}
+      </select>
+    </div>
+    {{/if}}
   </section>
 
   {{#if isContainerFunction}}
@@ -136,6 +174,14 @@
         <input type="number" name="system.container.maxLoad" value="{{system.container.maxLoad}}" min="0" step="0.1">
       </label>
     </div>
+    <label class="fallout-maw-range-field">
+      <span>{{localize "FALLOUTMAW.Item.ContainerLoadReduction"}}</span>
+      <div class="fallout-maw-range-control">
+        <input type="range" data-container-load-reduction value="{{containerLoadReduction}}" min="0" max="100" step="1">
+        <input type="number" data-container-load-reduction value="{{containerLoadReduction}}" min="0" max="100" step="1">
+        <strong>%</strong>
+      </div>
+    </label>
   </section>
   {{/if}}
 
@@ -192,24 +238,6 @@
       <span>{{localize "FALLOUTMAW.Item.InventoryHeight"}}</span>
       <input type="number" name="system.placement.height" value="{{system.placement.height}}" min="1" step="1">
     </label>
-
-    {{#if isWeapon}}
-    <label>
-      <span>{{localize "FALLOUTMAW.Item.Damage"}}</span>
-      <input type="text" name="system.damage" value="{{system.damage}}">
-    </label>
-    <label>
-      <span>{{localize "FALLOUTMAW.Item.Range"}}</span>
-      <input type="number" name="system.range" value="{{system.range}}" min="0">
-    </label>
-    {{/if}}
-
-    {{#if isArmor}}
-    <label>
-      <span>{{localize "FALLOUTMAW.Item.Defense"}}</span>
-      <input type="number" name="system.defense" value="{{system.defense}}">
-    </label>
-    {{/if}}
 
     {{#if isAbility}}
     <label>

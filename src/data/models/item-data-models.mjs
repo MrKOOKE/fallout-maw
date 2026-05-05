@@ -37,7 +37,7 @@ export class GearDataModel extends BaseItemDataModel {
       ...super.defineSchema(),
       itemFunction: new StringField({ required: true, blank: true, initial: "" }),
       functions: new SchemaField({
-        container: itemFunctionField(),
+        container: containerFunctionField(),
         damageMitigation: new SchemaField({
           enabled: new BooleanField({ required: true, initial: false }),
           mode: new StringField({ required: true, blank: false, initial: "defense" }),
@@ -58,25 +58,6 @@ export class GearDataModel extends BaseItemDataModel {
   }
 }
 
-export class WeaponDataModel extends BaseItemDataModel {
-  static defineSchema() {
-    return {
-      ...super.defineSchema(),
-      damage: new StringField({ required: true, blank: true, initial: "" }),
-      range: new NumberField({ required: true, min: 0, initial: 0 })
-    };
-  }
-}
-
-export class ArmorDataModel extends BaseItemDataModel {
-  static defineSchema() {
-    return {
-      ...super.defineSchema(),
-      defense: new NumberField({ required: true, integer: true, initial: 0 })
-    };
-  }
-}
-
 export class AbilityDataModel extends BaseItemDataModel {
   static defineSchema() {
     return {
@@ -87,9 +68,10 @@ export class AbilityDataModel extends BaseItemDataModel {
   }
 }
 
-function itemFunctionField() {
+function containerFunctionField() {
   return new SchemaField({
-    enabled: new BooleanField({ required: true, initial: false })
+    enabled: new BooleanField({ required: true, initial: false }),
+    loadReduction: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 0 })
   });
 }
 

@@ -2,13 +2,11 @@ import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { getNeedSettings, getResourceSettings } from "../settings/accessors.mjs";
 import {
   AbilityDataModel,
-  ArmorDataModel,
   CharacterDataModel,
   GearDataModel,
   HazardDataModel,
   NpcDataModel,
-  VehicleDataModel,
-  WeaponDataModel
+  VehicleDataModel
 } from "./models/index.mjs";
 
 const ACTOR_VALUE_ATTRIBUTES = ["attributes.level"];
@@ -23,8 +21,6 @@ export function registerDataModels() {
 
   Object.assign(CONFIG.Item.dataModels, {
     gear: GearDataModel,
-    weapon: WeaponDataModel,
-    armor: ArmorDataModel,
     ability: AbilityDataModel
   });
 }

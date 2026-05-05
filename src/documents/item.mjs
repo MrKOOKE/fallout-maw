@@ -6,6 +6,19 @@ import {
 } from "../utils/inventory-containers.mjs";
 
 export class FalloutMaWItem extends Item {
+  static migrateData(source) {
+    source = super.migrateData(source);
+    if (["weapon", "armor"].includes(source?.type)) source.type = "gear";
+    return source;
+  }
+
+  _initializeSource(data, options = {}) {
+    if (["weapon", "armor"].includes(data?.type)) {
+      data.type = "gear";
+    }
+    return super._initializeSource(data, options);
+  }
+
   async _preCreate(data, options, user) {
     if ((await super._preCreate(data, options, user)) === false) return false;
     if (!this.parent) {

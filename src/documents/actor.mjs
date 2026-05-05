@@ -15,7 +15,7 @@ import {
   getSkillSettings
 } from "../settings/accessors.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
-import { getItemContainerParentId } from "../utils/inventory-containers.mjs";
+import { getItemActorLoadWeight, getItemContainerParentId } from "../utils/inventory-containers.mjs";
 
 export class FalloutMaWActor extends Actor {
   static async createDialog(data = {}, createOptions = {}, dialogOptions = {}, renderOptions = {}) {
@@ -264,7 +264,7 @@ export class FalloutMaWActor extends Actor {
       this.items.reduce((total, item) => (
         getItemContainerParentId(item)
           ? total
-          : total + (Number(item.totalWeight) || 0)
+          : total + (Number(getItemActorLoadWeight(item, this.items)) || 0)
       ), 0).toFixed(1)
     );
     this.system.load = { min: 0, spent: 0, bonus: 0, value, max };

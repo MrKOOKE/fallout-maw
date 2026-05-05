@@ -7,9 +7,7 @@
       "hazard": "Hazard"
     },
     "Item": {
-      "gear": "Gear",
-      "weapon": "Weapon",
-      "armor": "Armor",
+      "gear": "Item",
       "ability": "Ability"
     }
   },
@@ -91,6 +89,7 @@
     "Item": {
       "ContainerColumns": "Container Volume Horizontal",
       "ContainerCurrentLoad": "Container Load",
+      "ContainerLoadReduction": "Load Reduction",
       "ContainerMaxLoad": "Maximum Load",
       "ContainerRows": "Container Volume Vertical",
       "ContainerSettings": "Container Settings",
@@ -98,16 +97,19 @@
       "Cost": "Cost",
       "Damage": "Damage",
       "Defense": "Defense",
-      "DetailsTab": "Description",
+      "DetailsTab": "General Data",
       "Duration": "Duration",
       "Equipped": "Equipped",
       "Equip": "Equip",
       "Function": "Item Function",
       "FunctionContainer": "Container",
       "FunctionDamageMitigation": "Defense/Resistance",
+      "FunctionChoose": "Choose Function",
+      "DeleteFunctionConfirm": "Delete function \"{function}\"?",
       "FunctionNone": "None",
       "FunctionsTab": "Functions",
       "AddFunction": "Add Function",
+      "GeneralData": "General Data",
       "FinalDamageReduction": "Final Damage Reduction",
       "InventoryHeight": "Height in Inventory",
       "InventoryWidth": "Width in Inventory",

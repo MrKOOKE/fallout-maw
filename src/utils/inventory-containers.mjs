@@ -47,6 +47,12 @@ export function getItemUnitWeight(itemOrSystem = null) {
   return Math.max(0, Number(getItemSystem(itemOrSystem)?.weight) || 0);
 }
 
+export function getContainerLoadReduction(itemOrSystem = null) {
+  if (!isContainerItem(itemOrSystem)) return 0;
+  const value = Number(getItemSystem(itemOrSystem)?.functions?.container?.loadReduction) || 0;
+  return Math.max(0, Math.min(100, value));
+}
+
 export function getContainerDimensions(itemOrSystem = null) {
   const container = getItemSystem(itemOrSystem)?.container ?? {};
   return {
@@ -133,6 +139,32 @@ export function getItemTotalWeight(itemOrSystem = null, items = null, memo = new
   visiting.delete(itemId);
   memo.set(itemId, totalWeight);
   return totalWeight;
+}
+
+export function getItemActorLoadWeight(itemOrSystem = null, items = null, memo = new Map(), visiting = new Set()) {
+  const itemId = getItemId(itemOrSystem);
+  if (itemId && memo.has(itemId)) return memo.get(itemId);
+
+  const ownWeight = getItemQuantity(itemOrSystem) * getItemUnitWeight(itemOrSystem);
+  if (!isContainerItem(itemOrSystem) || !items || !itemId) {
+    if (itemId) memo.set(itemId, ownWeight);
+    return ownWeight;
+  }
+
+  if (visiting.has(itemId)) return ownWeight;
+  visiting.add(itemId);
+
+  const contentsWeight = getContainerContents(itemId, items).reduce(
+    (total, item) => total + getItemActorLoadWeight(item, items, memo, visiting),
+    0
+  );
+  const isEquipped = Boolean(getItemSystem(itemOrSystem)?.equipped);
+  const reduction = isEquipped ? getContainerLoadReduction(itemOrSystem) / 100 : 0;
+  const actorLoadWeight = ownWeight + (contentsWeight * (1 - reduction));
+
+  visiting.delete(itemId);
+  memo.set(itemId, actorLoadWeight);
+  return actorLoadWeight;
 }
 
 export function getContainerContentsWeight(containerOrId, items) {

@@ -60,16 +60,6 @@
           "description"
         ]
       },
-      "weapon": {
-        "htmlFields": [
-          "description"
-        ]
-      },
-      "armor": {
-        "htmlFields": [
-          "description"
-        ]
-      },
       "ability": {
         "htmlFields": [
           "description"

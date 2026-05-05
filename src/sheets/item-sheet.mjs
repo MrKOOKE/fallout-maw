@@ -8,6 +8,8 @@ const { HandlebarsApplicationMixin } = foundry.applications.api;
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
+  #functionPickerActive = false;
+
   static DEFAULT_OPTIONS = {
     classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-item-sheet", "sheet", "item"],
     position: {
@@ -54,6 +56,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const equipmentSlotSelections = new Map();
     const hasContainerFunction = hasItemFunction(item, ITEM_FUNCTIONS.container);
     const hasDamageMitigationFunction = hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation);
+    const containerLoadReduction = Math.max(0, Math.min(100, Number(item.system?.functions?.container?.loadReduction) || 0));
     const descriptionHTML = await TextEditor.enrichHTML(item.system?.description ?? "", {
       secrets: item.isOwner,
       relativeTo: item,
@@ -62,8 +65,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const availableFunctionChoices = [
       {
         value: "",
-        label: game.i18n.localize("FALLOUTMAW.Item.FunctionNone"),
-        disabled: false
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionChoose"),
+        disabled: true,
+        selected: true
       },
       {
         value: ITEM_FUNCTIONS.container,
@@ -100,8 +104,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       isGear: type === "gear",
       isContainerFunction: hasContainerFunction,
       hasDamageMitigationFunction,
-      isWeapon: type === "weapon",
-      isArmor: type === "armor",
+      containerLoadReduction,
+      canAddItemFunction: availableFunctionChoices.some(choice => choice.value && !choice.disabled),
+      showFunctionPicker: this.#functionPickerActive,
       isAbility: type === "ability",
       itemFunctionChoices: availableFunctionChoices,
       currencies: getCurrencySettings().map(currency => ({
@@ -128,6 +133,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onEquipmentSlotChoice(event));
     });
     this.element?.querySelector("[data-add-item-function]")?.addEventListener("click", event => this.#onAddItemFunction(event));
+    this.element?.querySelector("[data-choose-item-function]")?.addEventListener("change", event => this.#onChooseItemFunction(event));
+    this.element?.querySelectorAll("[data-container-load-reduction]").forEach(input => {
+      input.addEventListener("input", event => this.#onContainerLoadReductionInput(event));
+      input.addEventListener("change", event => this.#onContainerLoadReductionChange(event));
+    });
     this.element?.querySelectorAll("[data-remove-item-function]").forEach(button => {
       button.addEventListener("click", event => this.#onRemoveItemFunction(event));
     });
@@ -151,20 +161,28 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   #onAddItemFunction(event) {
     event.preventDefault();
-    const select = this.element.querySelector("[data-item-function-select]");
-    const functionKey = String(select?.value ?? "");
+    this.#functionPickerActive = true;
+    return this.render({ force: true });
+  }
+
+  #onChooseItemFunction(event) {
+    event.preventDefault();
+    const functionKey = String(event.currentTarget?.value ?? "");
     if (!functionKey) return undefined;
 
     if (functionKey === ITEM_FUNCTIONS.container) {
+      this.#functionPickerActive = false;
       return this.item.update({
         "system.itemFunction": ITEM_FUNCTIONS.container,
         "system.functions.container.enabled": true,
+        "system.functions.container.loadReduction": Number(this.item.system?.functions?.container?.loadReduction) || 0,
         "system.quantity": 1,
         "system.maxStack": 1
       });
     }
 
     if (functionKey === ITEM_FUNCTIONS.damageMitigation) {
+      this.#functionPickerActive = false;
       return this.item.update({
         "system.functions.damageMitigation.enabled": true,
         "system.functions.damageMitigation.mode": "defense"
@@ -177,10 +195,17 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   #onRemoveItemFunction(event) {
     event.preventDefault();
     const functionKey = String(event.currentTarget?.dataset?.removeItemFunction ?? "");
+    const functionLabel = getItemFunctionLabel(functionKey);
+    const confirmed = window.confirm(game.i18n.format("FALLOUTMAW.Item.DeleteFunctionConfirm", {
+      function: functionLabel
+    }));
+    if (!confirmed) return undefined;
+
     if (functionKey === ITEM_FUNCTIONS.container) {
       return this.item.update({
         "system.itemFunction": "",
-        "system.functions.container.enabled": false
+        "system.functions.container.enabled": false,
+        "system.functions.container.loadReduction": 0
       });
     }
     if (functionKey === ITEM_FUNCTIONS.damageMitigation) {
@@ -188,6 +213,34 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     }
     return undefined;
   }
+
+  #onContainerLoadReductionInput(event) {
+    const value = normalizePercentInput(event.currentTarget?.value);
+    this.#syncContainerLoadReductionInputs(value);
+  }
+
+  #onContainerLoadReductionChange(event) {
+    event.preventDefault();
+    const value = normalizePercentInput(event.currentTarget?.value);
+    this.#syncContainerLoadReductionInputs(value);
+    return this.item.update({ "system.functions.container.loadReduction": value });
+  }
+
+  #syncContainerLoadReductionInputs(value) {
+    this.element?.querySelectorAll("[data-container-load-reduction]").forEach(input => {
+      input.value = String(value);
+    });
+  }
+}
+
+function getItemFunctionLabel(functionKey = "") {
+  if (functionKey === ITEM_FUNCTIONS.container) return game.i18n.localize("FALLOUTMAW.Item.FunctionContainer");
+  if (functionKey === ITEM_FUNCTIONS.damageMitigation) return game.i18n.localize("FALLOUTMAW.Item.FunctionDamageMitigation");
+  return game.i18n.localize("FALLOUTMAW.Item.Function");
+}
+
+function normalizePercentInput(value) {
+  return Math.max(0, Math.min(100, Math.trunc(Number(value) || 0)));
 }
 
 function buildDamageMitigationModeChoices(item) {

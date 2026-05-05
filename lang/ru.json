@@ -7,9 +7,7 @@
       "hazard": "Опасность"
     },
     "Item": {
-      "gear": "Снаряжение",
-      "weapon": "Оружие",
-      "armor": "Броня",
+      "gear": "Предмет",
       "ability": "Способность"
     }
   },
@@ -91,6 +89,7 @@
     "Item": {
       "ContainerColumns": "Объем контейнера по горизонтали",
       "ContainerCurrentLoad": "Текущая нагрузка контейнера",
+      "ContainerLoadReduction": "Снижение нагрузки",
       "ContainerMaxLoad": "Максимальная нагрузка",
       "ContainerRows": "Объем контейнера по вертикали",
       "ContainerSettings": "Настройки контейнера",
@@ -98,16 +97,19 @@
       "Cost": "Стоимость",
       "Damage": "Урон",
       "Defense": "Защита",
-      "DetailsTab": "Описание",
+      "DetailsTab": "Общие данные",
       "Duration": "Длительность",
       "Equipped": "Экипировано",
       "Equip": "Надеть",
       "Function": "Функция предмета",
       "FunctionContainer": "Контейнер",
       "FunctionDamageMitigation": "Защита/Сопротивление",
+      "FunctionChoose": "Выберите функцию",
+      "DeleteFunctionConfirm": "Удалить функцию \"{function}\"?",
       "FunctionNone": "Отсутствует",
       "FunctionsTab": "Функции",
       "AddFunction": "Добавить функцию",
+      "GeneralData": "Общие данные",
       "FinalDamageReduction": "Итоговое снижение урона",
       "InventoryHeight": "Размер по вертикали",
       "InventoryWidth": "Размер по горизонтали",

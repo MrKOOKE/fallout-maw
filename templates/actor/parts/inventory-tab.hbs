@@ -24,7 +24,7 @@
   <div class="fallout-maw-inventory-layout" data-inventory-drop-surface data-inventory-parent-id="">
     <section class="fallout-maw-panel fallout-maw-equipment-pane" data-equipment-drop-surface>
       <h2>{{localize "FALLOUTMAW.Common.Equipment"}}</h2>
-      <div class="fallout-maw-pane-scroll fallout-maw-equipment-scroll">
+      <div class="fallout-maw-pane-scroll fallout-maw-equipment-scroll" data-scroll-key="equipment">
         <div class="fallout-maw-equipment-slot-list">
           {{#each inventory.equipmentSlots}}
           <div class="fallout-maw-slot-card">
@@ -84,7 +84,7 @@
 
       <section class="fallout-maw-panel fallout-maw-inventory-pane">
         <h2>{{localize "FALLOUTMAW.Common.Inventory"}}</h2>
-        <div class="fallout-maw-pane-scroll fallout-maw-inventory-scroll">
+        <div class="fallout-maw-pane-scroll fallout-maw-inventory-scroll" data-scroll-key="inventory">
           <div class="fallout-maw-inventory-grid" data-inventory-grid data-inventory-parent-id="" style="--fallout-maw-inventory-columns: {{inventory.grid.columns}};">
             {{#each inventory.grid.cells}}
             <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}}" data-inventory-cell data-inventory-parent-id="" data-x="{{x}}" data-y="{{y}}" data-drop-zone style="{{style}}"></div>
