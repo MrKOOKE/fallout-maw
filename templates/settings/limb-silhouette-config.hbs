@@ -1,17 +1,47 @@
 <div class="fallout-maw-silhouette-editor">
-  <header class="fallout-maw-silhouette-toolbar">
-    <button type="button" data-action="chooseImage"><i class="fa-solid fa-image"></i> Загрузить контур</button>
-    <button type="button" data-action="finishPolygon" {{#unless canFinishPolygon}}disabled{{/unless}}><i class="fa-solid fa-vector-square"></i> Завершить вырез</button>
-    <button type="button" data-action="cancelPolygon" {{#unless canFinishPolygon}}disabled{{/unless}}><i class="fa-solid fa-xmark"></i> Сбросить точки</button>
-    <button type="button" data-action="undo" {{#unless canUndo}}disabled{{/unless}}><i class="fa-solid fa-rotate-left"></i> Отменить</button>
-    <button type="button" data-action="clearActive" {{#unless canClearActive}}disabled{{/unless}}><i class="fa-solid fa-eraser"></i> Очистить часть</button>
-    <button type="button" data-action="reset" {{#unless hasSilhouette}}disabled{{/unless}}><i class="fa-solid fa-trash"></i> Удалить силуэт</button>
-  </header>
-
   <div class="fallout-maw-silhouette-body">
+    <aside class="fallout-maw-silhouette-tools" aria-label="Инструменты силуэта">
+      <button type="button" class="fallout-maw-silhouette-tool command" data-action="chooseImage" title="Загрузить контур">
+        <i class="fa-solid fa-image"></i>
+        <span>Загрузить</span>
+      </button>
+
+      <div class="fallout-maw-silhouette-tool-group">
+        {{#each tools}}
+        <button type="button" class="fallout-maw-silhouette-tool {{#if active}}active{{/if}}" data-action="setTool" data-tool="{{key}}" title="{{label}}">
+          <i class="fa-solid {{icon}}"></i>
+          <span>{{label}}</span>
+        </button>
+        {{/each}}
+      </div>
+
+      <div class="fallout-maw-silhouette-tool-group">
+        <button type="button" class="fallout-maw-silhouette-tool command" data-action="finishPolygon" {{#unless canFinishPolygon}}disabled{{/unless}} title="Завершить вырез">
+          <i class="fa-solid fa-check"></i>
+          <span>Вырез</span>
+        </button>
+        <button type="button" class="fallout-maw-silhouette-tool command" data-action="cancelPolygon" title="Сбросить черновик">
+          <i class="fa-solid fa-xmark"></i>
+          <span>Сброс</span>
+        </button>
+        <button type="button" class="fallout-maw-silhouette-tool command" data-action="undo" {{#unless canUndo}}disabled{{/unless}} title="Отменить">
+          <i class="fa-solid fa-rotate-left"></i>
+          <span>Назад</span>
+        </button>
+        <button type="button" class="fallout-maw-silhouette-tool command" data-action="clearActive" {{#unless canClearActive}}disabled{{/unless}} title="Очистить активную часть">
+          <i class="fa-solid fa-eraser"></i>
+          <span>Очистить</span>
+        </button>
+        <button type="button" class="fallout-maw-silhouette-tool command danger" data-action="reset" {{#unless hasSilhouette}}disabled{{/unless}} title="Удалить силуэт">
+          <i class="fa-solid fa-trash"></i>
+          <span>Удалить</span>
+        </button>
+      </div>
+    </aside>
+
     <div class="fallout-maw-silhouette-stage">
       {{#if hasSilhouette}}
-      <svg class="fallout-maw-silhouette-svg" viewBox="{{viewBox}}" data-action="addPoint">
+      <svg class="fallout-maw-silhouette-svg" viewBox="{{viewBox}}" data-action="addPoint" data-silhouette-svg>
         {{#each remaining}}
         <path class="fallout-maw-silhouette-remaining" d="{{d}}" fill="{{fill}}"></path>
         {{/each}}
@@ -26,6 +56,7 @@
         {{#if draftPoints}}
         <polyline class="fallout-maw-silhouette-draft-line" points="{{draftPoints}}"></polyline>
         {{/if}}
+        <polygon class="fallout-maw-silhouette-preview" points="{{previewPoints}}" data-silhouette-preview></polygon>
         {{#each draftPointMarkers}}
         <circle class="fallout-maw-silhouette-draft-point" cx="{{x}}" cy="{{y}}" r="3"></circle>
         {{/each}}
@@ -51,7 +82,7 @@
         <p class="fallout-maw-empty-list">Сначала добавьте конечности в расу.</p>
         {{/each}}
       </div>
-      <p class="hint">Активная часть получает область, которую вы замыкаете точками на силуэте. Остаток: {{unassignedPercent}}%.</p>
+      <p class="hint">Активная часть получает область выбранным инструментом. Колесо масштабирует, зажатое колесо двигает камеру. Остаток: {{unassignedPercent}}%.</p>
     </aside>
   </div>
 
