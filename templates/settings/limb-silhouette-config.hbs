@@ -28,9 +28,9 @@
           <i class="fa-solid fa-rotate-left"></i>
           <span>Назад</span>
         </button>
-        <button type="button" class="fallout-maw-silhouette-tool command" data-action="clearActive" {{#unless canClearActive}}disabled{{/unless}} title="Очистить активную часть">
+        <button type="button" class="fallout-maw-silhouette-tool command" data-action="clearActive" title="Включить ластик">
           <i class="fa-solid fa-eraser"></i>
-          <span>Очистить</span>
+          <span>Ластик</span>
         </button>
         <button type="button" class="fallout-maw-silhouette-tool command danger" data-action="reset" {{#unless hasSilhouette}}disabled{{/unless}} title="Удалить силуэт">
           <i class="fa-solid fa-trash"></i>
@@ -82,7 +82,7 @@
         <p class="fallout-maw-empty-list">Сначала добавьте конечности в расу.</p>
         {{/each}}
       </div>
-      <p class="hint">Активная часть получает область выбранным инструментом. Колесо масштабирует, зажатое колесо двигает камеру. Остаток: {{unassignedPercent}}%.</p>
+      <p class="hint">Активная часть получает область выбранным инструментом. Ластик стирает из активной части. Shift+колесо меняет радиус кисти/ластика: {{brushRadius}}. Alt фиксирует квадрат, круг или равностороннюю фигуру. Остаток: {{unassignedPercent}}%.</p>
     </aside>
   </div>
 

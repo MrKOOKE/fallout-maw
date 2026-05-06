@@ -21,9 +21,11 @@ const VIEW_ZOOM_MIN = 1;
 const VIEW_ZOOM_MAX = 8;
 const VIEW_ZOOM_STEP = 1.18;
 const DRAWING_POINT_DISTANCE = 1.5;
-const BRUSH_WIDTH = 18;
+const BRUSH_RADIUS_DEFAULT = 9;
+const BRUSH_RADIUS_MIN = 2;
+const BRUSH_RADIUS_MAX = 80;
 const ELLIPSE_SEGMENTS = 48;
-const TOOL_KEYS = Object.freeze(["polygon", "brush", "rectangle", "ellipse", "triangle"]);
+const TOOL_KEYS = Object.freeze(["polygon", "brush", "eraser", "rectangle", "ellipse", "triangle"]);
 const EDITOR_COLORS = Object.freeze([
   "#6abf69",
   "#d8c85c",
@@ -46,6 +48,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
   #view = { x: 0, y: 0, width: 1, height: 1, zoom: 1 };
   #panning = null;
   #activeTool = "polygon";
+  #brushRadius = BRUSH_RADIUS_DEFAULT;
   #drawing = null;
   #suppressNextClick = false;
 
@@ -130,7 +133,8 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       canUndo: this.#history.length > 0,
       canClearActive: Boolean(partsByLimb.get(this.#activeLimbKey)?.paths?.length),
       canSave: !this.#silhouette || unassignedRatio <= SILHOUETTE_AREA_TOLERANCE,
-      unassignedPercent: totalArea > 0 ? Math.round(unassignedRatio * 1000) / 10 : 0
+      unassignedPercent: totalArea > 0 ? Math.round(unassignedRatio * 1000) / 10 : 0,
+      brushRadius: this.#brushRadius
     };
   }
 
@@ -165,6 +169,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     return [
       { key: "polygon", label: "Контур", icon: "fa-vector-polygon", active: this.#activeTool === "polygon" },
       { key: "brush", label: "Кисть", icon: "fa-paintbrush", active: this.#activeTool === "brush" },
+      { key: "eraser", label: "Ластик", icon: "fa-eraser", active: this.#activeTool === "eraser" },
       { key: "rectangle", label: "Прямоугольник", icon: "fa-vector-square", active: this.#activeTool === "rectangle" },
       { key: "ellipse", label: "Эллипс", icon: "fa-circle", active: this.#activeTool === "ellipse" },
       { key: "triangle", label: "Треугольник", icon: "fa-play", active: this.#activeTool === "triangle" }
@@ -206,6 +211,14 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
   #onWheel(event) {
     if (!this.#silhouette) return;
     event.preventDefault();
+    if (event.shiftKey && ["brush", "eraser"].includes(this.#activeTool)) {
+      const delta = event.deltaY < 0 ? 1 : -1;
+      const step = event.altKey ? 5 : 1;
+      this.#brushRadius = Math.max(BRUSH_RADIUS_MIN, Math.min(BRUSH_RADIUS_MAX, this.#brushRadius + (delta * step)));
+      this.element?.style?.setProperty("--fallout-maw-silhouette-brush-radius", `${this.#brushRadius}px`);
+      return;
+    }
+
     const svg = event.currentTarget;
     const point = getSvgEventPoint(svg, event);
     if (!point) return;
@@ -256,7 +269,8 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       pointerId: event.pointerId,
       start: point,
       current: point,
-      points: [point]
+      points: [point],
+      constrain: event.altKey
     };
     this.#applyPreview(svg);
   }
@@ -268,7 +282,8 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       const point = getSvgEventPoint(svg, event);
       if (!point) return;
       this.#drawing.current = point;
-      if (this.#activeTool === "brush") this.#appendBrushPoint(point);
+      this.#drawing.constrain = event.altKey;
+      if (["brush", "eraser"].includes(this.#activeTool)) this.#appendBrushPoint(point);
       this.#applyPreview(svg);
       return;
     }
@@ -297,7 +312,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       this.#suppressNextClick = true;
       this.#clearPreview(event.currentTarget);
       if (points.length >= 3) {
-        void this.#commitCut(points, { render: true });
+        void this.#applyDrawnPath(points, { render: true });
       }
       return;
     }
@@ -330,11 +345,16 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
   }
 
   #buildToolPath(start, current, brushPoints = []) {
-    if (this.#activeTool === "brush") return createBrushStrokePath(brushPoints, BRUSH_WIDTH);
-    if (this.#activeTool === "rectangle") return createRectanglePath(start, current);
-    if (this.#activeTool === "ellipse") return createEllipsePath(start, current);
-    if (this.#activeTool === "triangle") return createTrianglePath(start, current);
+    if (["brush", "eraser"].includes(this.#activeTool)) return createBrushStrokePath(brushPoints, this.#brushRadius * 2);
+    if (this.#activeTool === "rectangle") return createRectanglePath(start, current, this.#drawing?.constrain);
+    if (this.#activeTool === "ellipse") return createEllipsePath(start, current, this.#drawing?.constrain);
+    if (this.#activeTool === "triangle") return createTrianglePath(start, current, this.#drawing?.constrain);
     return [];
+  }
+
+  async #applyDrawnPath(points, { render = false } = {}) {
+    if (this.#activeTool === "eraser") return this.#erasePath(points, { render });
+    return this.#commitCut(points, { render });
   }
 
   async #commitCut(points, { render = false } = {}) {
@@ -360,6 +380,33 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     if (existing) existing.paths = clipperUnion([...existing.paths, ...cutPaths]);
     else parts.push({ limbKey: this.#activeLimbKey, paths: cutPaths });
     this.#remaining = clipperDifference(this.#remaining, cutPaths);
+    this.#draftPoints = [];
+    if (render) return this.render({ force: true });
+    return undefined;
+  }
+
+  async #erasePath(points, { render = false } = {}) {
+    if (!this.#silhouette || !this.#activeLimbKey) return undefined;
+    const paths = normalizePaths([points]);
+    if (!paths.length) return undefined;
+
+    const parts = this.#silhouette.parts ?? [];
+    const part = parts.find(entry => entry.limbKey === this.#activeLimbKey);
+    if (!part?.paths?.length) return undefined;
+
+    let erasedPaths;
+    try {
+      erasedPaths = clipperIntersect(part.paths, paths);
+    } catch (error) {
+      ui.notifications.error(error.message);
+      return undefined;
+    }
+    if (!erasedPaths.length) return undefined;
+
+    this.#pushHistory();
+    part.paths = clipperDifference(part.paths, erasedPaths);
+    this.#remaining = clipperUnion([...this.#remaining, ...erasedPaths]);
+    this.#silhouette.parts = parts.filter(entry => entry.paths?.length);
     this.#draftPoints = [];
     if (render) return this.render({ force: true });
     return undefined;
@@ -431,6 +478,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     };
     this.#remaining = outline;
     this.#draftPoints = [];
+    this.#drawing = null;
     this.#resetCamera();
     await this.render({ force: true });
   }
@@ -478,26 +526,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
   static #onFinishPolygon(event) {
     event.preventDefault();
     if (!this.#silhouette || this.#draftPoints.length < 3 || !this.#activeLimbKey) return undefined;
-    let cutPaths;
-    try {
-      cutPaths = clipperIntersect(this.#remaining, [this.#draftPoints]);
-    } catch (error) {
-      ui.notifications.error(error.message);
-      return undefined;
-    }
-    if (!cutPaths.length) {
-      ui.notifications.warn("Полигон не пересек доступный остаток силуэта.");
-      return undefined;
-    }
-
-    this.#pushHistory();
-    const parts = this.#silhouette.parts ?? [];
-    const existing = parts.find(part => part.limbKey === this.#activeLimbKey);
-    if (existing) existing.paths = clipperUnion([...existing.paths, ...cutPaths]);
-    else parts.push({ limbKey: this.#activeLimbKey, paths: cutPaths });
-    this.#remaining = clipperDifference(this.#remaining, cutPaths);
-    this.#draftPoints = [];
-    return this.render({ force: true });
+    return this.#commitCut(this.#draftPoints, { render: true });
   }
 
   static #onCancelPolygon(event) {
@@ -517,13 +546,9 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
 
   static #onClearActive(event) {
     event.preventDefault();
-    if (!this.#silhouette || !this.#activeLimbKey) return undefined;
-    const part = (this.#silhouette.parts ?? []).find(entry => entry.limbKey === this.#activeLimbKey);
-    if (!part?.paths?.length) return undefined;
-    this.#pushHistory();
-    this.#remaining = clipperUnion([...this.#remaining, ...part.paths]);
-    this.#silhouette.parts = (this.#silhouette.parts ?? []).filter(entry => entry.limbKey !== this.#activeLimbKey);
+    this.#activeTool = "eraser";
     this.#draftPoints = [];
+    this.#drawing = null;
     return this.render({ force: true });
   }
 
@@ -573,7 +598,9 @@ function getRemainingSilhouette(silhouette) {
   return assigned.length ? clipperDifference(silhouette.outline, assigned) : normalizePaths(silhouette.outline);
 }
 
-function createRectanglePath(start, current) {
+function createRectanglePath(start, current, constrain = false) {
+  const adjusted = constrainRectPoint(start, current, constrain);
+  current = adjusted;
   const left = Math.min(start.x, current.x);
   const right = Math.max(start.x, current.x);
   const top = Math.min(start.y, current.y);
@@ -635,7 +662,9 @@ function createRoundCap(point, neighbor, radius) {
   });
 }
 
-function createEllipsePath(start, current) {
+function createEllipsePath(start, current, constrain = false) {
+  const adjusted = constrainRectPoint(start, current, constrain);
+  current = adjusted;
   const left = Math.min(start.x, current.x);
   const right = Math.max(start.x, current.x);
   const top = Math.min(start.y, current.y);
@@ -654,7 +683,9 @@ function createEllipsePath(start, current) {
   });
 }
 
-function createTrianglePath(start, current) {
+function createTrianglePath(start, current, constrain = false) {
+  const adjusted = constrainRectPoint(start, current, constrain);
+  current = adjusted;
   const left = Math.min(start.x, current.x);
   const right = Math.max(start.x, current.x);
   const top = Math.min(start.y, current.y);
@@ -674,6 +705,17 @@ function createTrianglePath(start, current) {
     ];
 }
 
+function constrainRectPoint(start, current, constrain) {
+  if (!constrain) return current;
+  const dx = current.x - start.x;
+  const dy = current.y - start.y;
+  const side = Math.max(Math.abs(dx), Math.abs(dy));
+  return {
+    x: start.x + (Math.sign(dx || 1) * side),
+    y: start.y + (Math.sign(dy || 1) * side)
+  };
+}
+
 function loadImageElement(src) {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -691,8 +733,9 @@ function extractAlphaOutlinePaths(imageData) {
   if (marchingPaths.length) {
     const smoothed = smoothSilhouettePaths(marchingPaths, {
       iterations: 4,
-      simplifyTolerance: 2.25,
-      finalSimplifyTolerance: 0.7
+      simplifyTolerance: 1.05,
+      finalSimplifyTolerance: 0.2,
+      maxSegmentLength: 3
     });
     return clipperUnion(smoothed);
   }

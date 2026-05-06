@@ -9,6 +9,7 @@ const MAX_SVG_DECIMALS = 2;
 const DEFAULT_SMOOTHING_ITERATIONS = 3;
 const DEFAULT_SIMPLIFY_TOLERANCE = 1.15;
 const DEFAULT_FINAL_SIMPLIFY_TOLERANCE = 0.35;
+const DEFAULT_MAX_SEGMENT_LENGTH = 4;
 
 export function normalizeLimbSilhouette(silhouette, limbs = []) {
   if (!silhouette || typeof silhouette !== "object") return null;
@@ -79,12 +80,14 @@ export function pathsToCompoundSvgData(paths) {
 export function smoothSilhouettePaths(paths, {
   iterations = DEFAULT_SMOOTHING_ITERATIONS,
   simplifyTolerance = DEFAULT_SIMPLIFY_TOLERANCE,
-  finalSimplifyTolerance = DEFAULT_FINAL_SIMPLIFY_TOLERANCE
+  finalSimplifyTolerance = DEFAULT_FINAL_SIMPLIFY_TOLERANCE,
+  maxSegmentLength = DEFAULT_MAX_SEGMENT_LENGTH
 } = {}) {
   return normalizePaths(paths)
     .map(path => simplifyPathByDistance(path, simplifyTolerance))
     .map(path => smoothClosedPath(path, iterations))
     .map(path => simplifyPathByDistance(path, finalSimplifyTolerance))
+    .map(path => densifyClosedPath(path, maxSegmentLength))
     .filter(path => path.length >= MIN_PATH_POINTS);
 }
 
@@ -209,6 +212,29 @@ function fromClipperPaths(paths) {
 
 function simplifyPath(path) {
   return removeCollinearPoints(removeDuplicateClosingPoint(removeConsecutiveDuplicatePoints(path)));
+}
+
+function densifyClosedPath(path, maxSegmentLength = DEFAULT_MAX_SEGMENT_LENGTH) {
+  const normalized = normalizePath(path);
+  const limit = Math.max(1, Number(maxSegmentLength) || DEFAULT_MAX_SEGMENT_LENGTH);
+  if (normalized.length < MIN_PATH_POINTS) return normalized;
+
+  const result = [];
+  for (let index = 0; index < normalized.length; index += 1) {
+    const current = normalized[index];
+    const next = normalized[(index + 1) % normalized.length];
+    result.push(current);
+    const distance = Math.hypot(next.x - current.x, next.y - current.y);
+    const steps = Math.floor(distance / limit);
+    for (let step = 1; step <= steps; step += 1) {
+      const ratio = step / (steps + 1);
+      result.push({
+        x: current.x + ((next.x - current.x) * ratio),
+        y: current.y + ((next.y - current.y) * ratio)
+      });
+    }
+  }
+  return result;
 }
 
 function smoothClosedPath(path, iterations = DEFAULT_SMOOTHING_ITERATIONS) {
