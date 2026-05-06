@@ -92,7 +92,8 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
       key: this.#getUniqueKey("newSkill"),
       abbr: this.#getUniqueAbbr("new"),
       label: "Новый навык",
-      formula: "0"
+      formula: "0",
+      img: "icons/svg/d20-grey.svg"
     });
     return this.forceRender();
   }
@@ -122,7 +123,8 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
       key: row.querySelector("[data-field='key']")?.value?.trim() ?? "",
       abbr: row.querySelector("[data-field='abbr']")?.value?.trim() ?? "",
       label: row.querySelector("[data-field='label']")?.value?.trim() ?? "",
-      formula: row.querySelector("[data-field='formula']")?.value?.trim() ?? "0"
+      formula: row.querySelector("[data-field='formula']")?.value?.trim() ?? "0",
+      img: row.querySelector("[data-field='img']")?.value?.trim() ?? ""
     }));
   }
 

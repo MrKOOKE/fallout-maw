@@ -30,7 +30,8 @@ import {
   PROFICIENCY_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
   SKILL_CHECK_CONTROL_SETTING,
-  SKILL_SETTINGS_SETTING
+  SKILL_SETTINGS_SETTING,
+  TOKEN_ACTION_HUD_ENABLED_SETTING
 } from "./constants.mjs";
 import { createEmptyCreatureOptions } from "./creature-options.mjs";
 import { createDefaultLevelSettings } from "./levels.mjs";
@@ -127,6 +128,14 @@ export function registerSystemSettings() {
     config: false,
     type: Object,
     default: normalizeSkillCheckControl(DEFAULT_SKILL_CHECK_CONTROL)
+  });
+
+  game.settings.register(FALLOUT_MAW.id, TOKEN_ACTION_HUD_ENABLED_SETTING, {
+    name: "Token Action HUD",
+    scope: "client",
+    config: false,
+    type: Boolean,
+    default: true
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "creatureOptionsMenu", {

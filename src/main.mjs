@@ -9,6 +9,11 @@ import {
   registerSkillCheckControlHooks,
   registerSkillCheckControlSocket
 } from "./rolls/skill-check-control.mjs";
+import {
+  refreshTokenActionHudControlButton,
+  registerTokenActionHudHooks,
+  syncTokenActionHud
+} from "./apps/token-action-hud.mjs";
 import { registerSkillCheckSocket } from "./rolls/skill-check.mjs";
 import { registerSystemSheets } from "./sheets/index.mjs";
 import { FalloutMaWDragDrop } from "./utils/drag-drop.mjs";
@@ -39,6 +44,7 @@ Hooks.once("init", () => {
   registerDataModels();
   registerTrackableAttributes();
   registerSkillCheckControlHooks();
+  registerTokenActionHudHooks();
 });
 
 Hooks.once("ready", async () => {
@@ -46,6 +52,8 @@ Hooks.once("ready", async () => {
   registerSkillCheckControlSocket();
   refreshSkillCheckControlButton();
   registerSkillCheckSocket();
+  refreshTokenActionHudControlButton();
+  syncTokenActionHud();
 });
 
 Hooks.on("dropCanvasData", async (canvas, data, event) => {

@@ -1,4 +1,4 @@
-export const DEFAULT_CHARACTERISTICS = Object.freeze([
+﻿export const DEFAULT_CHARACTERISTICS = Object.freeze([
   { key: "strength", abbr: "str", label: "Сила" },
   { key: "dexterity", abbr: "dex", label: "Ловкость" },
   { key: "endurance", abbr: "con", label: "Выносливость" },
@@ -25,24 +25,24 @@ export const DEFAULT_CURRENCIES = Object.freeze([
 ]);
 
 export const DEFAULT_SKILLS = Object.freeze([
-  { key: "rangedCombat", abbr: "ran", label: "Дальний бой", formula: "10 + dex + wis*3" },
-  { key: "meleeCombat", abbr: "mel", label: "Ближний бой", formula: "10 + 2 * (str + dex)" },
-  { key: "athletics", abbr: "ath", label: "Атлетика", formula: "10 + (dex + str)*2" },
-  { key: "energy", abbr: "ene", label: "Энергия", formula: "4 * int" },
-  { key: "resilience", abbr: "res", label: "Стойкость", formula: "10 + 4 * con" },
-  { key: "throwing", abbr: "thr", label: "Метание", formula: "(dex + str)*2" },
-  { key: "firstAid", abbr: "fir", label: "Первая помощь", formula: "(wis + int)*2" },
-  { key: "doctor", abbr: "doc", label: "Доктор", formula: "wis + int*3" },
-  { key: "naturalist", abbr: "nat", label: "Натуралист", formula: "4 * (wis)" },
-  { key: "stealth", abbr: "ste", label: "Скрытность", formula: "(3 * dex)" },
-  { key: "lockpicking", abbr: "loc", label: "Взлом", formula: "wis + dex" },
-  { key: "theft", abbr: "the", label: "Кража", formula: "dex + wis*2" },
-  { key: "traps", abbr: "tra", label: "Ловушки", formula: "(wis + dex)*2" },
-  { key: "science", abbr: "sci", label: "Наука", formula: "4 * int" },
-  { key: "repair", abbr: "rep", label: "Ремонт", formula: "int*3 + str" },
-  { key: "speech", abbr: "spe", label: "Красноречие", formula: "5 * cha" },
-  { key: "barter", abbr: "bar", label: "Бартер", formula: "cha*3 + int" },
-  { key: "gambling", abbr: "gam", label: "Азарт", formula: "6 * luc" }
+  { key: "rangedCombat", abbr: "ran", label: "Дальний бой", formula: "10 + dex + wis*3", img: "icons/weapons/guns/gun-pistol-flintlock.webp" },
+  { key: "meleeCombat", abbr: "mel", label: "Ближний бой", formula: "10 + 2 * (str + dex)", img: "icons/svg/combat.svg" },
+  { key: "athletics", abbr: "ath", label: "Атлетика", formula: "10 + (dex + str)*2", img: "icons/svg/jump.svg" },
+  { key: "energy", abbr: "ene", label: "Энергия", formula: "4 * int", img: "icons/svg/lightning.svg" },
+  { key: "resilience", abbr: "res", label: "Стойкость", formula: "10 + 4 * con", img: "icons/svg/holy-shield.svg" },
+  { key: "throwing", abbr: "thr", label: "Метание", formula: "(dex + str)*2", img: "icons/weapons/thrown/throwing-knife-flat-steel.webp" },
+  { key: "firstAid", abbr: "fir", label: "Первая помощь", formula: "(wis + int)*2", img: "icons/svg/heal.svg" },
+  { key: "doctor", abbr: "doc", label: "Доктор", formula: "wis + int*3", img: "icons/svg/pill.svg" },
+  { key: "naturalist", abbr: "nat", label: "Натуралист", formula: "4 * (wis)", img: "icons/svg/oak.svg" },
+  { key: "stealth", abbr: "ste", label: "Скрытность", formula: "(3 * dex)", img: "icons/svg/invisible.svg" },
+  { key: "lockpicking", abbr: "loc", label: "Взлом", formula: "wis + dex", img: "icons/svg/padlock.svg" },
+  { key: "theft", abbr: "the", label: "Кража", formula: "dex + wis*2", img: "icons/svg/chest.svg" },
+  { key: "traps", abbr: "tra", label: "Ловушки", formula: "(wis + dex)*2", img: "icons/svg/net.svg" },
+  { key: "science", abbr: "sci", label: "Наука", formula: "4 * int", img: "icons/svg/book.svg" },
+  { key: "repair", abbr: "rep", label: "Ремонт", formula: "int*3 + str", img: "icons/tools/smithing/tongs-steel-grey.webp" },
+  { key: "speech", abbr: "spe", label: "Красноречие", formula: "5 * cha", img: "icons/svg/mystery-man.svg" },
+  { key: "barter", abbr: "bar", label: "Бартер", formula: "cha*3 + int", img: "icons/svg/coins.svg" },
+  { key: "gambling", abbr: "gam", label: "Азарт", formula: "6 * luc", img: "icons/sundries/gaming/gaming-set-dice.webp" }
 ]);
 
 export const DEFAULT_SIGNATURE_SKILL_MULTIPLIER = 1.5;
@@ -136,7 +136,7 @@ export const DEFAULT_INVENTORY_SIZE = Object.freeze({
 
 export const DEFAULT_RESOURCES = Object.freeze([
   { key: "health", abbr: "hea", label: "Здоровье", formula: "10 + str + con*2" },
-  { key: "energy", abbr: "ene", label: "Энергия", formula: "100 + ene" },
+  { key: "energy", abbr: "ene", label: "Энергия", formula: "100 + ene", img: "icons/svg/lightning.svg" },
   { key: "dodge", abbr: "dod", label: "Уклонение", formula: "60 + ath/3" },
   { key: "actionPoints", abbr: "act", label: "Очки действия", formula: "5 + (dex/3 + str/5)" },
   { key: "movementPoints", abbr: "mov", label: "Очки передвижения", formula: "2 + ath/50" }

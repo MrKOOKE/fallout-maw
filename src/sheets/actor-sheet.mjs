@@ -30,6 +30,10 @@ import {
 } from "../research/index.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import {
+  prepareIndicatorEntry as prepareDisplayIndicatorEntry,
+  prepareInventoryContext as prepareDisplayInventoryContext
+} from "../utils/actor-display-data.mjs";
+import {
   ROOT_CONTAINER_ID,
   buildInventoryCellStyle as buildInventoryCellStyleHelper,
   createStoredPlacement,
@@ -187,7 +191,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const activeLimbKey = limbEntries.some(([key]) => key === this.#activeLimbKey)
       ? this.#activeLimbKey
       : (limbEntries[0]?.[0] ?? "");
-    const limbs = limbEntries.map(([key, limb]) => prepareIndicatorEntry({
+    const limbs = limbEntries.map(([key, limb]) => prepareDisplayIndicatorEntry({
       key,
       label: String(limb?.label ?? key),
       color: "#8f8456",
@@ -198,7 +202,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     this.#activeLimbKey = activeLimbKey;
 
-    const inventory = prepareInventoryContext(actor, race);
+    const inventory = prepareDisplayInventoryContext(actor, race);
     const level = Math.max(1, toInteger(actor.system?.attributes?.level));
     const currentExperience = Math.max(0, toInteger(actor.system?.development?.experience));
     const maxLevel = levelSettings[levelSettings.length - 1]?.level ?? 100;
@@ -246,12 +250,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         value: toInteger(actor.system?.characteristics?.[characteristic.key]),
         sourceValue: toInteger(sourceSystem.characteristics?.[characteristic.key] ?? actor.system?.characteristics?.[characteristic.key])
       })),
-      resources: resourceSettings.map(resource => prepareIndicatorEntry({
+      resources: resourceSettings.map(resource => prepareDisplayIndicatorEntry({
         ...resource,
         data: actor.system.resources?.[resource.key],
         inputName: `system.resources.${resource.key}.value`
       })),
-      needs: needSettings.map(need => prepareIndicatorEntry({
+      needs: needSettings.map(need => prepareDisplayIndicatorEntry({
         ...need,
         data: actor.system.needs?.[need.key],
         inputName: `system.needs.${need.key}.value`
@@ -261,7 +265,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       skills: skillSettings.map(skill => {
         const current = actor.system.skills?.[skill.key] ?? {};
         const source = sourceSystem.skills?.[skill.key] ?? {};
-        return prepareIndicatorEntry({
+        return prepareDisplayIndicatorEntry({
           ...skill,
           color: "#7fa85a",
           data: {
@@ -276,7 +280,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       }),
       proficiencies: proficiencySettings.map(proficiency => {
         const current = actor.system.proficiencies?.[proficiency.key] ?? {};
-        return prepareIndicatorEntry({
+        return prepareDisplayIndicatorEntry({
           ...proficiency,
           color: "#b08a4a",
           data: current,

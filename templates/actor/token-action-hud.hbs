@@ -1,0 +1,123 @@
+<div class="fallout-maw-token-hud-layout">
+  <div class="fallout-maw-token-hud-left-stack">
+    <section class="fallout-maw-token-hud-block fallout-maw-token-hud-weapons">
+      <div class="fallout-maw-token-hud-block-title">{{#if activeWeaponSet}}{{activeWeaponSet.label}}{{else}}Оружие{{/if}}</div>
+      <div class="fallout-maw-token-hud-slot-row">
+        {{#if activeWeaponSet}}
+        {{#each activeWeaponSet.slots}}
+        <button type="button" class="fallout-maw-token-hud-tile {{#unless item}}empty{{/unless}}" data-action="openItem" data-item-id="{{item.id}}" {{#unless item}}disabled{{/unless}} title="{{label}}">
+          {{#if item}}
+          <img src="{{item.img}}" alt="{{item.name}}" onerror="this.src='{{../fallbackIcon}}'">
+          <span>{{item.name}}</span>
+          {{else}}
+          <img src="icons/svg/combat.svg" alt="">
+          <span>{{label}}</span>
+          {{/if}}
+        </button>
+        {{/each}}
+        {{else}}
+        <div class="fallout-maw-token-hud-empty">Нет слотов</div>
+        {{/if}}
+      </div>
+    </section>
+
+    <section class="fallout-maw-token-hud-block fallout-maw-token-hud-limbs">
+      <div class="fallout-maw-token-hud-block-title">Части тела</div>
+      <div class="fallout-maw-token-hud-meter-list">
+        {{#each limbs}}
+        <div class="fallout-maw-token-hud-meter-card">
+          <div class="fallout-maw-token-hud-meter-header">
+            <span>{{label}}</span>
+            <strong>{{value}} / {{max}}</strong>
+          </div>
+          <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
+            <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
+          </div>
+        </div>
+        {{/each}}
+      </div>
+    </section>
+  </div>
+
+  <section class="fallout-maw-token-hud-block fallout-maw-token-hud-resources">
+    <div class="fallout-maw-token-hud-block-title">Ресурсы</div>
+    <div class="fallout-maw-token-hud-meter-list">
+      {{#each resources}}
+      <div class="fallout-maw-token-hud-meter-card">
+        <div class="fallout-maw-token-hud-meter-header">
+          <span>{{label}}</span>
+          <strong>{{value}} / {{max}}</strong>
+        </div>
+        <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
+          <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
+        </div>
+      </div>
+      {{/each}}
+    </div>
+
+    <div class="fallout-maw-token-hud-block-title secondary">Показатели</div>
+    <div class="fallout-maw-token-hud-stat-grid">
+      {{#each characteristics}}
+      <div class="fallout-maw-token-hud-stat">
+        <span>{{abbr}}</span>
+        <strong>{{value}}</strong>
+      </div>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-token-hud-actions-wrap">
+    {{#if tray.visible}}
+    <div class="fallout-maw-token-hud-popup" data-token-action-hud-popup>
+      {{#if (eq activeTray "skills")}}
+      {{#each tray.skills}}
+      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="rollSkill" data-skill-key="{{key}}" title="{{label}}">
+        <img src="{{img}}" alt="{{label}}" onerror="this.src='{{../fallbackIcon}}'">
+        <span>{{label}}</span>
+        <strong>{{value}}</strong>
+      </button>
+      {{/each}}
+      {{/if}}
+
+      {{#if (eq activeTray "items")}}
+      {{#each tray.items}}
+      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="openItem" data-item-id="{{id}}" title="{{name}}">
+        <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../fallbackIcon}}'">
+        <span>{{name}}</span>
+        {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
+      </button>
+      {{else}}
+      <div class="fallout-maw-token-hud-empty">Нет предметов</div>
+      {{/each}}
+      {{/if}}
+
+      {{#if (eq activeTray "abilities")}}
+      {{#each tray.abilities}}
+      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="openItem" data-item-id="{{id}}" title="{{name}}">
+        <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../fallbackIcon}}'">
+        <span>{{name}}</span>
+      </button>
+      {{else}}
+      <div class="fallout-maw-token-hud-empty">Нет способностей</div>
+      {{/each}}
+      {{/if}}
+    </div>
+    {{/if}}
+
+    <div class="fallout-maw-token-hud-actions" data-token-action-hud-actions>
+      {{#each actions}}
+      {{#if (eq key "weapon")}}
+      <button type="button" class="fallout-maw-token-hud-main-action" data-action="cycleWeaponSet" title="{{caption}}">
+        <img src="{{icon}}" alt="{{caption}}" onerror="this.src='{{../fallbackIcon}}'">
+        <span>{{caption}}</span>
+      </button>
+      {{else}}
+      <button type="button" class="fallout-maw-token-hud-main-action {{#if active}}active{{/if}}" data-action="toggleTray" data-tray="{{key}}" title="{{label}}">
+        <img src="{{icon}}" alt="{{label}}" onerror="this.src='{{../fallbackIcon}}'">
+        <span>{{label}}</span>
+      </button>
+      {{/if}}
+      {{/each}}
+    </div>
+  </section>
+</div>

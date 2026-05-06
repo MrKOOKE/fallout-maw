@@ -12,6 +12,8 @@ import {
 } from "../config/defaults.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
+const FALLBACK_ICON = "icons/svg/d20-grey.svg";
+
 export const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const DEFAULT_TRACK_COLOR = "#8f8456";
 const DEFAULT_RESOURCE_COLORS = Object.freeze({
@@ -105,7 +107,8 @@ export function normalizeSkillSettings(settings) {
         key,
         abbr: String(entry?.abbr ?? "").trim(),
         label: String(entry?.label ?? entry?.name ?? "").trim(),
-        formula: String(entry?.formula ?? "0").trim() || "0"
+        formula: String(entry?.formula ?? "0").trim() || "0",
+        img: normalizeImagePath(entry?.img)
       };
     },
     "Навык"
@@ -285,6 +288,10 @@ function normalizeHexColorString(value) {
   if (/^[0-9a-f]{6}$/.test(trimmed)) return `#${trimmed}`;
   if (/^[0-9a-f]{3}$/.test(trimmed)) return `#${trimmed.split("").map(char => `${char}${char}`).join("")}`;
   return null;
+}
+
+function normalizeImagePath(value) {
+  return String(value ?? "").trim() || FALLBACK_ICON;
 }
 
 function toDecimal(value, fallback = 0) {
