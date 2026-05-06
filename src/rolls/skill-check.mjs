@@ -156,6 +156,7 @@ function buildSkillCheckViewContext(outcome) {
     difficulty: toInteger(check.difficulty),
     situationalModifier: toInteger(check.situationalModifier),
     finalSkillValue,
+    critical,
     total,
     rollEntries: buildRollEntries(rolls, selectedRoll, check.difficulty, critical, finalSkillValue, check.forcedResult, autoFailure),
     thresholdRows: buildThresholdRows(check.difficulty, critical, finalSkillValue, autoFailure),
@@ -188,6 +189,7 @@ async function playSkillCheckAnimation(outcome) {
 
 function buildSkillCheckAnimationContext(outcome, { checkId, ownerUserId }) {
   const context = buildSkillCheckViewContext(outcome);
+  const tracks = buildSkillCheckAnimationTracks(context);
   return {
     checkId,
     ownerUserId,
@@ -200,8 +202,44 @@ function buildSkillCheckAnimationContext(outcome, { checkId, ownerUserId }) {
     scaleSegments: context.scaleSegments,
     progressCells: context.progressCells,
     progressTarget: context.progressTarget,
+    tracks,
+    hasMultipleTracks: tracks.length > 1,
+    edge: context.edge,
     autoFailure: context.autoFailure
   };
+}
+
+function buildSkillCheckAnimationTracks(context) {
+  if (context.autoFailure || !context.edge?.hasMultipleRolls) {
+    return [{
+      index: 1,
+      label: "",
+      selected: true,
+      result: context.result,
+      scaleSegments: context.scaleSegments,
+      progressCells: buildProgressCellsForTarget(context.progressCells, context.progressTarget),
+      progressTarget: context.progressTarget,
+      progressMarker: context.progressTarget
+    }];
+  }
+
+  return context.rollEntries.map(entry => ({
+    index: entry.index,
+    label: `${game.i18n.localize("FALLOUTMAW.SkillCheck.Roll")} ${entry.index}`,
+    selected: entry.selected,
+    result: entry.result,
+    scaleSegments: buildScaleSegments(
+      context.difficulty,
+      context.critical,
+      context.finalSkillValue,
+      entry.total,
+      "",
+      false
+    ),
+    progressCells: buildProgressCellsForTarget(context.progressCells, entry.total),
+    progressTarget: clamp(entry.total, 1, 100),
+    progressMarker: clamp(entry.total, 1, 100)
+  }));
 }
 
 async function showSkillCheckAnimation(context) {
@@ -251,8 +289,8 @@ async function showSkillCheckAnimation(context) {
   document.body.append(host);
 
   const animationElement = host.querySelector("[data-skill-check-animation]");
-  const cells = Array.from(host.querySelectorAll("[data-skill-check-animation-cell]"));
-  if (!animationElement || !cells.length) {
+  const tracks = getSkillCheckAnimationTracks(host);
+  if (!animationElement || !tracks.length || tracks.some(track => !track.cells.length)) {
     controller.close();
     throw new Error("Skill check animation template is missing required elements.");
   }
@@ -262,10 +300,12 @@ async function showSkillCheckAnimation(context) {
   await waitForAnimationFrame();
   host.classList.remove("is-positioning");
   if (context.autoFailure) {
-    clearProgressCells(cells);
-    activateProgressCells(cells, new Set(), cells.length, 100);
+    for (const track of tracks) {
+      clearProgressCells(track.cells);
+      activateProgressCells(track.cells, new Set(), track.cells.length, 100);
+    }
   } else {
-    await animateSkillCheckCells(cells, context.progressTarget);
+    await Promise.all(tracks.map(track => animateSkillCheckCells(track.cells, track.target)));
   }
 
   animationElement.classList.add("complete");
@@ -275,6 +315,14 @@ async function showSkillCheckAnimation(context) {
   }
 
   return promise;
+}
+
+function getSkillCheckAnimationTracks(host) {
+  return Array.from(host.querySelectorAll("[data-skill-check-animation-roll-track]")).map(track => ({
+    element: track,
+    target: Number(track.dataset.progressTarget) || 1,
+    cells: Array.from(track.querySelectorAll("[data-skill-check-animation-cell]"))
+  }));
 }
 
 let skillCheckAnimationLayoutFrame = null;
@@ -804,9 +852,45 @@ function buildProgressCells(difficulty, critical, finalSkillValue, autoFailure =
       index: index + 1,
       start,
       end,
-      gradient: buildProgressCellGradient(start, end, definitions)
+      gradient: buildProgressCellGradient(start, end, definitions),
+      definitions
     };
   });
+}
+
+function buildProgressCellsForTarget(progressCells, targetPercent) {
+  const target = clamp(targetPercent, 1, 100);
+  const targetCellIndex = Math.ceil(target / 5);
+  return progressCells.map(cell => {
+    if (cell.index !== targetCellIndex) return cell;
+    return {
+      ...cell,
+      gradient: buildProgressCellFillGradient(cell, target)
+    };
+  });
+}
+
+function buildProgressCellFillGradient(cell, targetPercent) {
+  const cellStart = Number(cell.start) || 0;
+  const cellEnd = Number(cell.end) || cellStart + 5;
+  const fillEnd = clamp(targetPercent, cellStart, cellEnd);
+  const fillWidth = Math.max(0.01, fillEnd - cellStart);
+  const stops = [];
+
+  for (const definition of cell.definitions ?? []) {
+    const rangeStart = definition.minimum - 1;
+    const rangeEnd = definition.maximum;
+    const overlapStart = Math.max(cellStart, rangeStart);
+    const overlapEnd = Math.min(fillEnd, rangeEnd);
+    if (overlapEnd <= overlapStart) continue;
+
+    const color = getThresholdColorVariable(definition.cssClass);
+    const localStart = ((overlapStart - cellStart) / fillWidth) * 100;
+    const localEnd = ((overlapEnd - cellStart) / fillWidth) * 100;
+    stops.push(`${color} ${formatPercent(localStart)} ${formatPercent(localEnd)}`);
+  }
+
+  return stops.length ? stops.join(", ") : cell.gradient;
 }
 
 function buildProgressCellGradient(cellStart, cellEnd, definitions) {

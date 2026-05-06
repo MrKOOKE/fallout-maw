@@ -213,8 +213,9 @@
       {{#each damageMitigationTable.rows}}
       <div class="fallout-maw-mitigation-cell fallout-maw-mitigation-damage-type">{{damageTypeLabel}}</div>
       {{#each cells}}
-      <label class="fallout-maw-mitigation-cell">
+      <label class="fallout-maw-mitigation-cell" data-mitigation-cell data-mitigation-row="{{rowIndex}}" data-mitigation-column="{{columnIndex}}">
         <input type="number" name="system.functions.damageMitigation.entries.{{limbKey}}.{{damageTypeKey}}.value" value="{{value}}" step="1">
+        <button type="button" class="fallout-maw-mitigation-fill-handle" data-mitigation-fill-handle title="{{localize 'FALLOUTMAW.Item.FillMitigationValues'}}" aria-label="{{localize 'FALLOUTMAW.Item.FillMitigationValues'}}"><i class="fa-solid fa-grip"></i></button>
       </label>
       {{/each}}
       {{/each}}

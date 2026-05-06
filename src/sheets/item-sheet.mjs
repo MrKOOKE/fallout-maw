@@ -4,11 +4,12 @@ import { groupRaceEquipmentSlotsBySet } from "../utils/equipment-slots.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
-const { HandlebarsApplicationMixin } = foundry.applications.api;
+const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #functionPickerActive = false;
+  #mitigationFillDrag = null;
 
   static DEFAULT_OPTIONS = {
     classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-item-sheet", "sheet", "item"],
@@ -141,6 +142,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-remove-item-function]").forEach(button => {
       button.addEventListener("click", event => this.#onRemoveItemFunction(event));
     });
+    this.element?.querySelectorAll("[data-mitigation-fill-handle]").forEach(handle => {
+      handle.addEventListener("pointerdown", event => this.#onMitigationFillStart(event));
+    });
   }
 
   #onEquipmentSlotChoice(event) {
@@ -192,13 +196,25 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return undefined;
   }
 
-  #onRemoveItemFunction(event) {
+  async #onRemoveItemFunction(event) {
     event.preventDefault();
     const functionKey = String(event.currentTarget?.dataset?.removeItemFunction ?? "");
     const functionLabel = getItemFunctionLabel(functionKey);
-    const confirmed = window.confirm(game.i18n.format("FALLOUTMAW.Item.DeleteFunctionConfirm", {
-      function: functionLabel
-    }));
+    const confirmed = await DialogV2.confirm({
+      window: {
+        title: game.i18n.localize("FALLOUTMAW.Item.DeleteFunction")
+      },
+      content: `<p>${game.i18n.format("FALLOUTMAW.Item.DeleteFunctionConfirm", { function: functionLabel })}</p>`,
+      yes: {
+        icon: "fa-solid fa-trash",
+        label: game.i18n.localize("FALLOUTMAW.Common.Delete")
+      },
+      no: {
+        label: game.i18n.localize("Cancel")
+      },
+      rejectClose: false,
+      modal: true
+    });
     if (!confirmed) return undefined;
 
     if (functionKey === ITEM_FUNCTIONS.container) {
@@ -212,6 +228,135 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return this.item.update({ "system.functions.damageMitigation.enabled": false });
     }
     return undefined;
+  }
+
+  #onMitigationFillStart(event) {
+    if (event.button !== 0) return;
+
+    const handle = event.currentTarget;
+    const input = handle.closest(".fallout-maw-mitigation-cell")?.querySelector("input");
+    if (!input) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.#endMitigationFillDrag(false);
+
+    const originCell = input.closest("[data-mitigation-cell]");
+    const cells = this.#getMitigationFillCells();
+    if (!originCell || !cells.length) return;
+
+    this.#mitigationFillDrag = {
+      pointerId: event.pointerId,
+      value: input.value,
+      origin: {
+        row: Number(originCell.dataset.mitigationRow) || 0,
+        column: Number(originCell.dataset.mitigationColumn) || 0
+      },
+      cells,
+      activeInputs: new Set()
+    };
+    handle.setPointerCapture?.(event.pointerId);
+    this.#updateMitigationFillRectangle(originCell);
+    document.addEventListener("pointermove", this.#onMitigationFillMove);
+    document.addEventListener("pointerup", this.#onMitigationFillEnd);
+    document.addEventListener("pointercancel", this.#onMitigationFillCancel);
+  }
+
+  #onMitigationFillMove = event => {
+    const drag = this.#mitigationFillDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+
+    const element = document.elementFromPoint(event.clientX, event.clientY);
+    const cell = element?.closest?.("[data-mitigation-cell]");
+    if (!cell || !this.element?.contains(cell)) return;
+
+    this.#updateMitigationFillRectangle(cell);
+  };
+
+  #onMitigationFillEnd = event => {
+    const drag = this.#mitigationFillDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    this.#endMitigationFillDrag(true);
+  };
+
+  #onMitigationFillCancel = event => {
+    const drag = this.#mitigationFillDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    this.#endMitigationFillDrag(false);
+  };
+
+  #getMitigationFillCells() {
+    return Array.from(this.element?.querySelectorAll("[data-mitigation-cell]") ?? [])
+      .map(cell => {
+        const input = cell.querySelector("input");
+        if (!input) return null;
+        return {
+          cell,
+          input,
+          row: Number(cell.dataset.mitigationRow) || 0,
+          column: Number(cell.dataset.mitigationColumn) || 0,
+          originalValue: input.value
+        };
+      })
+      .filter(Boolean);
+  }
+
+  #updateMitigationFillRectangle(targetCell) {
+    const drag = this.#mitigationFillDrag;
+    if (!drag) return;
+
+    const target = {
+      row: Number(targetCell.dataset.mitigationRow) || 0,
+      column: Number(targetCell.dataset.mitigationColumn) || 0
+    };
+    const minRow = Math.min(drag.origin.row, target.row);
+    const maxRow = Math.max(drag.origin.row, target.row);
+    const minColumn = Math.min(drag.origin.column, target.column);
+    const maxColumn = Math.max(drag.origin.column, target.column);
+    const nextActiveInputs = new Set();
+
+    for (const entry of drag.cells) {
+      const inRectangle = entry.row >= minRow
+        && entry.row <= maxRow
+        && entry.column >= minColumn
+        && entry.column <= maxColumn;
+
+      if (inRectangle) {
+        entry.input.value = drag.value;
+        entry.cell.classList.add("fill-target");
+        nextActiveInputs.add(entry.input);
+      } else {
+        entry.input.value = entry.originalValue;
+        entry.cell.classList.remove("fill-target");
+      }
+    }
+
+    drag.activeInputs = nextActiveInputs;
+  }
+
+  #endMitigationFillDrag(save) {
+    const drag = this.#mitigationFillDrag;
+    if (!drag) return;
+
+    document.removeEventListener("pointermove", this.#onMitigationFillMove);
+    document.removeEventListener("pointerup", this.#onMitigationFillEnd);
+    document.removeEventListener("pointercancel", this.#onMitigationFillCancel);
+    this.#mitigationFillDrag = null;
+
+    const inputs = Array.from(drag.activeInputs);
+    window.setTimeout(() => {
+      for (const input of inputs) input.closest(".fallout-maw-mitigation-cell")?.classList.remove("fill-target");
+    }, 180);
+
+    if (!save) {
+      for (const entry of drag.cells) entry.input.value = entry.originalValue;
+      return;
+    }
+
+    if (!inputs.length) return;
+    const updateData = {};
+    for (const input of inputs) updateData[input.name] = Number(input.value) || 0;
+    return this.item.update(updateData);
   }
 
   #onContainerLoadReductionInput(event) {
@@ -258,12 +403,14 @@ function buildDamageMitigationTable(item, creatureOptions, damageTypeSettings) {
   return {
     limbs,
     columns: Math.max(1, limbs.length),
-    rows: damageTypeSettings.map(damageType => ({
+    rows: damageTypeSettings.map((damageType, rowIndex) => ({
       damageTypeKey: damageType.key,
       damageTypeLabel: damageType.label,
-      cells: limbs.map(limb => ({
+      cells: limbs.map((limb, columnIndex) => ({
         limbKey: limb.key,
         damageTypeKey: damageType.key,
+        rowIndex,
+        columnIndex,
         value: Number(entries?.[limb.key]?.[damageType.key]?.value) || 0
       }))
     }))

@@ -1,4 +1,4 @@
-<div class="fallout-maw-skill-check-animation {{result.cssClass}}" data-skill-check-animation>
+<div class="fallout-maw-skill-check-animation {{result.cssClass}}{{#if hasMultipleTracks}} multi-roll{{/if}}" data-skill-check-animation>
   <header>
     <div>
       <span>{{localize "FALLOUTMAW.SkillCheck.Operator"}}:</span>
@@ -10,27 +10,39 @@
     </div>
   </header>
 
-  <div class="fallout-maw-skill-check-animation-track">
+  <div class="fallout-maw-skill-check-animation-tracks">
+    {{#each tracks}}
+    <section class="fallout-maw-skill-check-animation-roll-track {{result.cssClass}}{{#if selected}} selected{{/if}}" data-skill-check-animation-roll-track data-progress-target="{{progressTarget}}">
+      {{#if ../hasMultipleTracks}}
+      <div class="fallout-maw-skill-check-animation-roll-header">
+        <span>{{label}}</span>
+        {{#if selected}}<em>{{localize "FALLOUTMAW.SkillCheck.SelectedRoll"}}</em>{{/if}}
+      </div>
+      {{/if}}
+      <div class="fallout-maw-skill-check-animation-track" style="--roll-marker: {{progressMarker}}%;">
     {{#each progressCells}}
-    <span
-      class="fallout-maw-skill-check-animation-cell"
-      data-skill-check-animation-cell
-      data-cell-start="{{start}}"
-      data-cell-end="{{end}}"
-      style="--cell-gradient: {{{gradient}}};"
-      aria-hidden="true"
-    >
-      <span class="fallout-maw-skill-check-animation-cell-fill"></span>
-    </span>
+        <span
+          class="fallout-maw-skill-check-animation-cell"
+          data-skill-check-animation-cell
+          data-cell-start="{{start}}"
+          data-cell-end="{{end}}"
+          style="--cell-gradient: {{{gradient}}};"
+          aria-hidden="true"
+        >
+          <span class="fallout-maw-skill-check-animation-cell-fill"></span>
+        </span>
     {{/each}}
-  </div>
+      </div>
 
-  <div class="fallout-maw-skill-check-animation-ruler">
+      <div class="fallout-maw-skill-check-animation-ruler">
     {{#each scaleSegments}}
-    <div class="fallout-maw-skill-check-animation-segment {{cssClass}}{{#if active}} active{{/if}}" style="flex-basis: {{width}}%;">
-      <span class="fallout-maw-skill-check-animation-label-short">{{shortLabel}}</span>
-      <span class="fallout-maw-skill-check-animation-label-full">{{label}}</span>
-    </div>
+        <div class="fallout-maw-skill-check-animation-segment {{cssClass}}{{#if active}} active{{/if}}" style="flex-basis: {{width}}%;">
+          <span class="fallout-maw-skill-check-animation-label-short">{{shortLabel}}</span>
+          <span class="fallout-maw-skill-check-animation-label-full">{{label}}</span>
+        </div>
+    {{/each}}
+      </div>
+    </section>
     {{/each}}
   </div>
 
