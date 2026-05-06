@@ -253,6 +253,27 @@
   text-align: right;
 }
 
+.fallout-maw-token-action-hud-scale-field {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: max-content 4rem minmax(0, 1fr);
+}
+
+.fallout-maw-token-action-hud-scale-field > span {
+  color: var(--fallout-maw-text);
+  font-weight: 700;
+}
+
+.fallout-maw-token-action-hud-scale-field > strong {
+  color: var(--fallout-maw-accent);
+  text-align: right;
+}
+
+.fallout-maw-token-action-hud-scale-field input[type="range"] {
+  width: 100%;
+}
+
 .fallout-maw-item-tabs {
   border-bottom: 1px solid var(--fallout-maw-border);
   display: grid;
@@ -2840,6 +2861,8 @@ label.fallout-maw-mitigation-cell {
   position: fixed;
   right: auto;
   top: auto;
+  transform: scale(var(--fallout-maw-token-action-hud-scale, 1));
+  transform-origin: left bottom;
   width: max-content;
   z-index: calc(var(--z-index-app, 30) + 3);
 }
@@ -3011,6 +3034,7 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-token-hud-main-action span {
   display: block;
   font-size: 0.8rem;
+  font-weight: 700;
   line-height: 1.12;
   max-width: 100%;
   overflow: hidden;

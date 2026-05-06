@@ -116,6 +116,11 @@
         <img src="{{icon}}" alt="{{caption}}" onerror="this.src='{{../fallbackIcon}}'">
         <span>{{caption}}</span>
       </button>
+      {{else if (eq key "settings")}}
+      <button type="button" class="fallout-maw-token-hud-main-action" data-action="openSettings" title="{{label}}">
+        <img src="{{icon}}" alt="{{label}}" onerror="this.src='{{../fallbackIcon}}'">
+        <span>{{label}}</span>
+      </button>
       {{else}}
       <button type="button" class="fallout-maw-token-hud-main-action {{#if active}}active{{/if}}" data-action="toggleTray" data-tray="{{key}}" title="{{label}}">
         <img src="{{icon}}" alt="{{label}}" onerror="this.src='{{../fallbackIcon}}'">

@@ -31,7 +31,8 @@ import {
   RESOURCE_SETTINGS_SETTING,
   SKILL_CHECK_CONTROL_SETTING,
   SKILL_SETTINGS_SETTING,
-  TOKEN_ACTION_HUD_ENABLED_SETTING
+  TOKEN_ACTION_HUD_ENABLED_SETTING,
+  TOKEN_ACTION_HUD_SCALE_SETTING
 } from "./constants.mjs";
 import { createEmptyCreatureOptions } from "./creature-options.mjs";
 import { createDefaultLevelSettings } from "./levels.mjs";
@@ -136,6 +137,14 @@ export function registerSystemSettings() {
     config: false,
     type: Boolean,
     default: true
+  });
+
+  game.settings.register(FALLOUT_MAW.id, TOKEN_ACTION_HUD_SCALE_SETTING, {
+    name: "Token Action HUD Scale",
+    scope: "client",
+    config: false,
+    type: Number,
+    default: 50
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "creatureOptionsMenu", {
