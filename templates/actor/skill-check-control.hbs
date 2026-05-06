@@ -1,0 +1,71 @@
+<section class="fallout-maw-skill-check-control-panel">
+  <header>
+    <span>{{localize "FALLOUTMAW.SkillCheckControl.Kicker"}}</span>
+    <strong>{{localize "FALLOUTMAW.SkillCheckControl.Title"}}</strong>
+  </header>
+
+  <div class="fallout-maw-skill-check-control-section">
+    <h3>{{localize "FALLOUTMAW.SkillCheckControl.Modifiers"}}</h3>
+    <div class="fallout-maw-skill-check-control-grid">
+      <label>
+        <span>{{localize "FALLOUTMAW.SkillCheckControl.SkillModifier"}}</span>
+        <input type="number" name="skillModifier" value="{{control.skillModifier}}" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.SkillCheckControl.DifficultyModifier"}}</span>
+        <input type="number" name="difficultyModifier" value="{{control.difficultyModifier}}" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.SkillCheck.CriticalSuccessBonus"}}</span>
+        <input type="number" name="criticalSuccessBonus" value="{{control.criticalSuccessBonus}}" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.SkillCheck.CriticalFailureBonus"}}</span>
+        <input type="number" name="criticalFailureBonus" value="{{control.criticalFailureBonus}}" step="1">
+      </label>
+    </div>
+    <label class="fallout-maw-skill-check-control-check">
+      <span>{{localize "FALLOUTMAW.SkillCheckControl.ResetModifiersAfterUse"}}</span>
+      <input type="checkbox" name="resetModifiersAfterUse" {{checked control.resetModifiersAfterUse}}>
+    </label>
+  </div>
+
+  <div class="fallout-maw-skill-check-control-section">
+    <h3>{{localize "FALLOUTMAW.SkillCheckControl.ForcedResult"}}</h3>
+    <div class="fallout-maw-skill-check-control-modes">
+      {{#each resultModes}}
+      <label class="fallout-maw-skill-check-control-mode">
+        <input type="radio" name="resultMode" value="{{value}}" {{checked checked}}>
+        <span>{{localize label}}</span>
+      </label>
+      {{/each}}
+    </div>
+    <label class="fallout-maw-skill-check-control-check">
+      <span>{{localize "FALLOUTMAW.SkillCheckControl.ResetResultAfterUse"}}</span>
+      <input type="checkbox" name="resetResultAfterUse" {{checked control.resetResultAfterUse}}>
+    </label>
+  </div>
+
+  <div class="fallout-maw-skill-check-control-section">
+    <h3>{{localize "FALLOUTMAW.SkillCheckControl.EdgeMode"}}</h3>
+    <div class="fallout-maw-skill-check-control-edge">
+      {{#each edgeModes}}
+      <label>
+        <input type="radio" name="edgeMode" value="{{value}}" {{checked checked}}>
+        <span>{{localize label}}</span>
+      </label>
+      {{/each}}
+    </div>
+    <label class="fallout-maw-skill-check-control-check">
+      <span>{{localize "FALLOUTMAW.SkillCheckControl.ResetEdgeModeAfterUse"}}</span>
+      <input type="checkbox" name="resetEdgeModeAfterUse" {{checked control.resetEdgeModeAfterUse}}>
+    </label>
+  </div>
+
+  <footer>
+    <button type="button" data-action="reset">
+      <i class="fa-solid fa-rotate-left"></i>
+      {{localize "FALLOUTMAW.SkillCheckControl.Reset"}}
+    </button>
+  </footer>
+</section>

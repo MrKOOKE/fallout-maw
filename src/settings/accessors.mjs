@@ -25,10 +25,50 @@ import {
   NEED_SETTINGS_SETTING,
   PROFICIENCY_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
+  SKILL_CHECK_CONTROL_SETTING,
   SKILL_SETTINGS_SETTING
 } from "./constants.mjs";
 import { createEmptyCreatureOptions, normalizeCreatureOptions } from "./creature-options.mjs";
 import { createDefaultLevelSettings, normalizeLevelSettings } from "./levels.mjs";
+
+export const DEFAULT_SKILL_CHECK_CONTROL = Object.freeze({
+  resultMode: "standard",
+  skillModifier: 0,
+  difficultyModifier: 0,
+  criticalSuccessBonus: 0,
+  criticalFailureBonus: 0,
+  edgeMode: "none",
+  resetResultAfterUse: false,
+  resetModifiersAfterUse: false,
+  resetEdgeModeAfterUse: false
+});
+
+const SKILL_CHECK_RESULT_MODES = new Set(["standard", "criticalSuccess", "success", "failure", "criticalFailure"]);
+const SKILL_CHECK_EDGE_MODES = new Set(["none", "advantage", "disadvantage"]);
+
+export function normalizeSkillCheckControl(value = {}) {
+  const source = foundry.utils.mergeObject(
+    foundry.utils.deepClone(DEFAULT_SKILL_CHECK_CONTROL),
+    value && typeof value === "object" ? value : {},
+    { inplace: false }
+  );
+  return {
+    resultMode: SKILL_CHECK_RESULT_MODES.has(source.resultMode) ? source.resultMode : DEFAULT_SKILL_CHECK_CONTROL.resultMode,
+    skillModifier: toInteger(source.skillModifier),
+    difficultyModifier: toInteger(source.difficultyModifier),
+    criticalSuccessBonus: toInteger(source.criticalSuccessBonus),
+    criticalFailureBonus: toInteger(source.criticalFailureBonus),
+    edgeMode: SKILL_CHECK_EDGE_MODES.has(source.edgeMode) ? source.edgeMode : DEFAULT_SKILL_CHECK_CONTROL.edgeMode,
+    resetResultAfterUse: Boolean(source.resetResultAfterUse),
+    resetModifiersAfterUse: Boolean(source.resetModifiersAfterUse),
+    resetEdgeModeAfterUse: Boolean(source.resetEdgeModeAfterUse)
+  };
+}
+
+function toInteger(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.trunc(number) : 0;
+}
 
 export function getCharacteristicSettings() {
   try {
@@ -200,6 +240,20 @@ export async function setLevelSettings(settings) {
 
 export async function resetLevelSettings() {
   return setLevelSettings(createDefaultLevelSettings());
+}
+
+export function getSkillCheckControl() {
+  try {
+    return normalizeSkillCheckControl(game.settings.get(FALLOUT_MAW.id, SKILL_CHECK_CONTROL_SETTING));
+  } catch (_error) {
+    return normalizeSkillCheckControl();
+  }
+}
+
+export async function setSkillCheckControl(value) {
+  const normalized = normalizeSkillCheckControl(value);
+  await game.settings.set(FALLOUT_MAW.id, SKILL_CHECK_CONTROL_SETTING, normalized);
+  return normalized;
 }
 
 export function syncSettingsIntoSystemConfig() {

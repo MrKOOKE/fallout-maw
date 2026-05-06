@@ -21,6 +21,12 @@ const SKILL_CHECK_ANIMATION_LAYOUT = Object.freeze({
   closeAnimationMs: 180,
   closeLayoutDelayMs: 650
 });
+const FORCED_RESULT_TO_SEGMENT = Object.freeze({
+  criticalFailure: "critical-failure",
+  failure: "failure",
+  success: "success",
+  criticalSuccess: "critical-success"
+});
 
 export function registerSkillCheckSocket() {
   game.socket.on(SKILL_CHECK_SOCKET, handleSkillCheckSocketMessage);
@@ -83,18 +89,23 @@ async function performSkillCheck(actor, skill, data = {}) {
   Hooks.callAll("fallout-maw.modifySkillCheck", check);
 
   const edge = calculateEdge(check.advantageCount, check.disadvantageCount);
-  const rolls = await rollD100(edge.rollMode === "normal" ? 1 : 2);
-  const selectedRoll = selectRoll(rolls, edge.rollMode);
   const finalSkillValue = toInteger(check.skill.value) + toInteger(check.situationalModifier) + edge.skillModifier;
-  const total = finalSkillValue + selectedRoll.total;
   const critical = calculateCriticalThresholds(check);
-  const autoFailure = isAutomaticFailure(finalSkillValue, check.difficulty);
+  const forcedResult = normalizeForcedResult(check.forcedResult);
+  const autoFailure = isAutomaticFailure(finalSkillValue, check.difficulty) && !forcedResult;
+  const forcedRollTotal = forcedResult
+    ? getForcedRollTotal(forcedResult, check.difficulty, critical, finalSkillValue)
+    : null;
+  const rolls = await rollD100(edge.rollMode === "normal" ? 1 : 2, forcedRollTotal);
+  const selectedRoll = selectRoll(rolls, edge.rollMode);
+  const total = finalSkillValue + selectedRoll.total;
   const result = determineResult(
     selectedRoll.total,
     total,
     check.difficulty,
     critical,
-    autoFailure
+    autoFailure,
+    forcedResult
   );
 
   return {
@@ -146,10 +157,10 @@ function buildSkillCheckViewContext(outcome) {
     situationalModifier: toInteger(check.situationalModifier),
     finalSkillValue,
     total,
-    rollEntries: buildRollEntries(rolls, selectedRoll, check.difficulty, critical, finalSkillValue),
-    thresholdRows: buildThresholdRows(check.difficulty, critical, finalSkillValue),
-    scaleSegments: buildScaleSegments(check.difficulty, critical, finalSkillValue, selectedRoll.total),
-    progressCells: buildProgressCells(check.difficulty, critical, finalSkillValue),
+    rollEntries: buildRollEntries(rolls, selectedRoll, check.difficulty, critical, finalSkillValue, check.forcedResult, autoFailure),
+    thresholdRows: buildThresholdRows(check.difficulty, critical, finalSkillValue, autoFailure),
+    scaleSegments: buildScaleSegments(check.difficulty, critical, finalSkillValue, selectedRoll.total, check.forcedResult, autoFailure),
+    progressCells: buildProgressCells(check.difficulty, critical, finalSkillValue, autoFailure),
     autoFailure,
     progressTarget: autoFailure ? 100 : clamp(selectedRoll.total, 1, 100),
     edge: {
@@ -559,14 +570,15 @@ function createMutableCheck(actor, skill, data) {
     criticalFailureBonus: toInteger(data.criticalFailureBonus ?? DEFAULT_CHECK.criticalFailureBonus),
     advantageCount: Math.max(0, toInteger(data.advantageCount)),
     disadvantageCount: Math.max(0, toInteger(data.disadvantageCount)),
+    forcedResult: "",
     modifiers: []
   };
 }
 
-async function rollD100(count) {
+async function rollD100(count, forcedTotal = null) {
   const rolls = [];
   for (let index = 0; index < count; index += 1) {
-    const roll = new Roll("1d100");
+    const roll = new Roll(forcedTotal ? String(clamp(forcedTotal, 1, 100)) : "1d100");
     rolls.push(await roll.evaluate());
   }
   return rolls;
@@ -618,7 +630,28 @@ function calculateCriticalThresholds(check) {
   };
 }
 
-function determineResult(roll, total, difficulty, critical, autoFailure = false) {
+function normalizeForcedResult(value) {
+  const normalized = String(value ?? "").trim();
+  return Object.hasOwn(FORCED_RESULT_TO_SEGMENT, normalized) ? normalized : "";
+}
+
+function getForcedRollTotal(forcedResult, difficulty, critical, finalSkillValue) {
+  const segmentClass = FORCED_RESULT_TO_SEGMENT[forcedResult];
+  const definitions = buildThresholdDefinitions(difficulty, critical, finalSkillValue, false);
+  const target = definitions.find(definition => definition.cssClass === segmentClass);
+  if (target) return Math.round((target.minimum + target.maximum) / 2);
+
+  if (forcedResult === "criticalFailure") return Math.max(1, Math.min(5, critical.failureMaximum || 1));
+  if (forcedResult === "criticalSuccess") return Math.min(100, Math.max(96, critical.successMinimum || 100));
+  if (forcedResult === "failure") return Math.max(1, clamp(toInteger(difficulty) - toInteger(finalSkillValue) - 1, 1, 100));
+  if (forcedResult === "success") return Math.min(100, clamp(toInteger(difficulty) - toInteger(finalSkillValue), 1, 100));
+  return null;
+}
+
+function determineResult(roll, total, difficulty, critical, autoFailure = false, forcedResult = "") {
+  const forced = normalizeForcedResult(forcedResult);
+  if (forced) return buildForcedResult(forced);
+
   if (autoFailure) {
     return {
       key: "failure",
@@ -659,6 +692,39 @@ function determineResult(roll, total, difficulty, critical, autoFailure = false)
   };
 }
 
+function buildForcedResult(forcedResult) {
+  if (forcedResult === "criticalFailure") {
+    return {
+      key: "criticalFailure",
+      label: game.i18n.localize("FALLOUTMAW.SkillCheck.CriticalFailure"),
+      cssClass: "critical-failure",
+      autoFailure: false
+    };
+  }
+  if (forcedResult === "criticalSuccess") {
+    return {
+      key: "criticalSuccess",
+      label: game.i18n.localize("FALLOUTMAW.SkillCheck.CriticalSuccess"),
+      cssClass: "critical-success",
+      autoFailure: false
+    };
+  }
+  if (forcedResult === "success") {
+    return {
+      key: "success",
+      label: game.i18n.localize("FALLOUTMAW.SkillCheck.Success"),
+      cssClass: "success",
+      autoFailure: false
+    };
+  }
+  return {
+    key: "failure",
+    label: game.i18n.localize("FALLOUTMAW.SkillCheck.Failure"),
+    cssClass: "failure",
+    autoFailure: false
+  };
+}
+
 function isAutomaticFailure(finalSkillValue, difficulty) {
   return (toInteger(difficulty) - toInteger(finalSkillValue)) >= 100;
 }
@@ -691,15 +757,15 @@ function formatEdgeMode(edge) {
   return game.i18n.localize("FALLOUTMAW.SkillCheck.Normal");
 }
 
-function buildRollEntries(rolls, selectedRoll, difficulty, critical, finalSkillValue) {
-  const autoFailure = isAutomaticFailure(finalSkillValue, difficulty);
+function buildRollEntries(rolls, selectedRoll, difficulty, critical, finalSkillValue, forcedResult = "", autoFailure = isAutomaticFailure(finalSkillValue, difficulty)) {
   return rolls.map((roll, index) => {
     const result = determineResult(
       roll.total,
       toInteger(finalSkillValue) + toInteger(roll.total),
       difficulty,
       critical,
-      autoFailure
+      autoFailure,
+      forcedResult
     );
     return {
       index: index + 1,
@@ -710,26 +776,27 @@ function buildRollEntries(rolls, selectedRoll, difficulty, critical, finalSkillV
   });
 }
 
-function buildThresholdRows(difficulty, critical, finalSkillValue) {
-  return buildThresholdDefinitions(difficulty, critical, finalSkillValue)
+function buildThresholdRows(difficulty, critical, finalSkillValue, autoFailure = isAutomaticFailure(finalSkillValue, difficulty)) {
+  return buildThresholdDefinitions(difficulty, critical, finalSkillValue, autoFailure)
     .slice()
     .reverse()
     .map(definition => buildThresholdRow(definition.cssClass, definition.label, definition.minimum, definition.maximum))
     .filter(Boolean);
 }
 
-function buildScaleSegments(difficulty, critical, finalSkillValue, selectedRollTotal) {
+function buildScaleSegments(difficulty, critical, finalSkillValue, selectedRollTotal, forcedResult = "", autoFailure = isAutomaticFailure(finalSkillValue, difficulty)) {
   const roll = clamp(selectedRollTotal, 1, 100);
-  return buildThresholdDefinitions(difficulty, critical, finalSkillValue)
+  const forcedSegment = FORCED_RESULT_TO_SEGMENT[normalizeForcedResult(forcedResult)] ?? "";
+  return buildThresholdDefinitions(difficulty, critical, finalSkillValue, autoFailure)
     .map(definition => ({
       ...definition,
-      active: roll >= definition.minimum && roll <= definition.maximum,
+      active: forcedSegment ? definition.cssClass === forcedSegment : roll >= definition.minimum && roll <= definition.maximum,
       width: (((definition.maximum - definition.minimum) + 1) / 100) * 100
     }));
 }
 
-function buildProgressCells(difficulty, critical, finalSkillValue) {
-  const definitions = buildThresholdDefinitions(difficulty, critical, finalSkillValue);
+function buildProgressCells(difficulty, critical, finalSkillValue, autoFailure = isAutomaticFailure(finalSkillValue, difficulty)) {
+  const definitions = buildThresholdDefinitions(difficulty, critical, finalSkillValue, autoFailure);
   return Array.from({ length: 20 }, (_value, index) => {
     const start = index * 5;
     const end = start + 5;
@@ -774,8 +841,8 @@ function formatPercent(value) {
   return `${rounded}%`;
 }
 
-function buildThresholdDefinitions(difficulty, critical, finalSkillValue) {
-  if (isAutomaticFailure(finalSkillValue, difficulty)) {
+function buildThresholdDefinitions(difficulty, critical, finalSkillValue, autoFailure = isAutomaticFailure(finalSkillValue, difficulty)) {
+  if (autoFailure) {
     return [
       buildThresholdDefinition(
         "automatic-failure",

@@ -29,10 +29,12 @@ import {
   NEED_SETTINGS_SETTING,
   PROFICIENCY_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
+  SKILL_CHECK_CONTROL_SETTING,
   SKILL_SETTINGS_SETTING
 } from "./constants.mjs";
 import { createEmptyCreatureOptions } from "./creature-options.mjs";
 import { createDefaultLevelSettings } from "./levels.mjs";
+import { DEFAULT_SKILL_CHECK_CONTROL, normalizeSkillCheckControl } from "./accessors.mjs";
 
 export function registerSystemSettings() {
   game.settings.register(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING, {
@@ -117,6 +119,14 @@ export function registerSystemSettings() {
     type: Object,
     default: createDefaultProficiencySettings(),
     onChange: refreshPreparedActors
+  });
+
+  game.settings.register(FALLOUT_MAW.id, SKILL_CHECK_CONTROL_SETTING, {
+    name: localize("FALLOUTMAW.SkillCheckControl.Title"),
+    scope: "world",
+    config: false,
+    type: Object,
+    default: normalizeSkillCheckControl(DEFAULT_SKILL_CHECK_CONTROL)
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "creatureOptionsMenu", {

@@ -4,6 +4,11 @@ import { FalloutMaWActor, FalloutMaWItem } from "./documents/index.mjs";
 import { getCreatureOptions } from "./settings/accessors.mjs";
 import { createDefaultInventorySize } from "./settings/creature-options.mjs";
 import { registerSystemSettings, finalizeSystemSettings } from "./settings/index.mjs";
+import {
+  refreshSkillCheckControlButton,
+  registerSkillCheckControlHooks,
+  registerSkillCheckControlSocket
+} from "./rolls/skill-check-control.mjs";
 import { registerSkillCheckSocket } from "./rolls/skill-check.mjs";
 import { registerSystemSheets } from "./sheets/index.mjs";
 import { FalloutMaWDragDrop } from "./utils/drag-drop.mjs";
@@ -33,10 +38,13 @@ Hooks.once("init", () => {
   registerSystemSheets();
   registerDataModels();
   registerTrackableAttributes();
+  registerSkillCheckControlHooks();
 });
 
 Hooks.once("ready", async () => {
   await finalizeSystemSettings();
+  registerSkillCheckControlSocket();
+  refreshSkillCheckControlButton();
   registerSkillCheckSocket();
 });
 

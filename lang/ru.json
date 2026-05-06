@@ -230,6 +230,22 @@
       "AnimationClickHint": "Нажмите по проверке для фиксации результата",
       "AnimationWaitHint": "Ожидание фиксации результата"
     },
+    "SkillCheckControl": {
+      "DifficultyModifier": "Изменение сложности",
+      "EdgeMode": "Режим броска",
+      "ForcedResult": "Текущий режим проверок",
+      "Kicker": "GM-терминал",
+      "Modifiers": "Модификаторы проверки",
+      "Reset": "Сбросить",
+      "ResetEdgeModeAfterUse": "Сбросить режим после применения",
+      "ResetModifiersAfterUse": "Сбросить модификаторы после применения",
+      "ResetResultAfterUse": "Сбросить результат после применения",
+      "ResultModes": {
+        "Standard": "Стандарт"
+      },
+      "SkillModifier": "Изменение навыка",
+      "Title": "Управление проверками"
+    },
     "Creation": {
       "Base": "Основа персонажа",
       "RaceFilterHint": "Список рас зависит от выбранного типа существа."

@@ -230,6 +230,22 @@
       "AnimationClickHint": "Click the check to lock in the result",
       "AnimationWaitHint": "Waiting for the result to be locked in"
     },
+    "SkillCheckControl": {
+      "DifficultyModifier": "Difficulty Modifier",
+      "EdgeMode": "Roll Mode",
+      "ForcedResult": "Current Check Mode",
+      "Kicker": "GM terminal",
+      "Modifiers": "Check modifiers",
+      "Reset": "Reset",
+      "ResetEdgeModeAfterUse": "Reset roll mode after use",
+      "ResetModifiersAfterUse": "Reset modifiers after use",
+      "ResetResultAfterUse": "Reset result after use",
+      "ResultModes": {
+        "Standard": "Standard"
+      },
+      "SkillModifier": "Skill Modifier",
+      "Title": "Skill Check Control"
+    },
     "Creation": {
       "Base": "Character Base",
       "RaceFilterHint": "The race list depends on the selected creature type."

@@ -2322,6 +2322,166 @@
   opacity: 1;
 }
 
+.fallout-maw-skill-check-control {
+  --fallout-maw-control-bg: #10130d;
+  --fallout-maw-control-bg-2: #1c1e15;
+  --fallout-maw-control-border: #f0cf55;
+  --fallout-maw-control-text: #fff1b6;
+  --fallout-maw-control-muted: #d5c98b;
+  --fallout-maw-control-active: #35c9e8;
+  background:
+    repeating-linear-gradient(180deg, rgba(235, 218, 132, 0.04) 0 1px, transparent 1px 4px),
+    linear-gradient(180deg, var(--fallout-maw-control-bg-2), var(--fallout-maw-control-bg));
+  border: 2px solid var(--fallout-maw-control-border);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.86),
+    0 0 18px rgba(240, 207, 85, 0.2),
+    inset 0 0 18px rgba(0, 0, 0, 0.56);
+  color: var(--fallout-maw-control-text);
+  font-family: var(--fallout-maw-actor-ui-font, var(--font-primary, serif));
+}
+
+.fallout-maw-skill-check-control .window-content {
+  background: transparent;
+  padding: 0;
+}
+
+.fallout-maw-skill-check-control-panel {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.8rem;
+}
+
+.fallout-maw-skill-check-control-panel header {
+  border-bottom: 1px solid rgba(240, 207, 85, 0.55);
+  display: grid;
+  gap: 0.1rem;
+  padding-bottom: 0.45rem;
+}
+
+.fallout-maw-skill-check-control-panel header span,
+.fallout-maw-skill-check-control-section h3 {
+  color: var(--fallout-maw-control-border);
+  font-family: var(--font-monospace, monospace);
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
+  margin: 0;
+}
+
+.fallout-maw-skill-check-control-panel header strong {
+  color: var(--fallout-maw-control-text);
+  font-size: 1.25rem;
+}
+
+.fallout-maw-skill-check-control-section {
+  border: 1px solid rgba(240, 207, 85, 0.32);
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.65rem;
+}
+
+.fallout-maw-skill-check-control-modes,
+.fallout-maw-skill-check-control-edge {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.fallout-maw-skill-check-control-modes {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.fallout-maw-skill-check-control-edge {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.fallout-maw-skill-check-control-mode,
+.fallout-maw-skill-check-control-edge label {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(240, 207, 85, 0.34);
+  color: var(--fallout-maw-control-muted);
+  cursor: pointer;
+  display: flex;
+  font-weight: 800;
+  gap: 0.35rem;
+  justify-content: center;
+  min-height: 2.25rem;
+  padding: 0.35rem;
+  text-align: center;
+}
+
+.fallout-maw-skill-check-control-mode:has(input:checked),
+.fallout-maw-skill-check-control-edge label:has(input:checked) {
+  border-color: var(--fallout-maw-control-active);
+  box-shadow: 0 0 10px rgba(53, 201, 232, 0.22);
+  color: var(--fallout-maw-control-active);
+  text-shadow: 0 0 8px rgba(53, 201, 232, 0.7);
+}
+
+.fallout-maw-skill-check-control-mode input,
+.fallout-maw-skill-check-control-edge input {
+  display: none;
+}
+
+.fallout-maw-skill-check-control-grid {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fallout-maw-skill-check-control-grid label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.fallout-maw-skill-check-control-grid span,
+.fallout-maw-skill-check-control-check span {
+  color: var(--fallout-maw-control-muted);
+  font-weight: 800;
+}
+
+.fallout-maw-skill-check-control-grid input[type="number"] {
+  background: rgba(0, 0, 0, 0.36);
+  border: 1px solid rgba(240, 207, 85, 0.42);
+  color: var(--fallout-maw-control-text);
+  font: 900 1rem var(--font-monospace, monospace);
+  height: 2rem;
+  padding: 0 0.45rem;
+}
+
+.fallout-maw-skill-check-control-check {
+  align-items: center;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  justify-self: stretch;
+  text-align: left;
+  width: 100%;
+}
+
+.fallout-maw-skill-check-control-check input {
+  justify-self: end;
+}
+
+.fallout-maw-skill-check-control-panel footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.fallout-maw-skill-check-control-panel button {
+  background: rgba(0, 0, 0, 0.34);
+  border: 1px solid rgba(240, 207, 85, 0.58);
+  color: var(--fallout-maw-control-text);
+  cursor: pointer;
+  font-weight: 900;
+  padding: 0.45rem 0.7rem;
+}
+
+.fallout-maw-skill-check-control-panel button:hover {
+  border-color: var(--fallout-maw-control-active);
+  color: var(--fallout-maw-control-active);
+}
+
 .characteristic-settings .fallout-maw-settings-row {
   grid-template-columns: 2rem 90px minmax(130px, 1fr) minmax(160px, 1.2fr) 2.5rem;
 }
