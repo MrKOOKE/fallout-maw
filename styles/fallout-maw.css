@@ -2944,6 +2944,66 @@ label.fallout-maw-mitigation-cell {
   margin-top: 8px;
 }
 
+.fallout-maw-token-hud-collapse-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #f2d581;
+  cursor: pointer;
+  display: flex;
+  gap: 5px;
+  justify-content: flex-start;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.fallout-maw-token-hud-collapse-toggle:hover,
+.fallout-maw-token-hud-collapse-toggle:focus-visible {
+  color: #fff0b3;
+  outline: 0;
+}
+
+.fallout-maw-token-hud-collapse-toggle.secondary {
+  margin-top: 0;
+}
+
+.fallout-maw-token-hud-collapse-toggle i {
+  color: #c9b06a;
+  flex: 0 0 auto;
+  font-size: 0.82em;
+  transition: transform 180ms ease;
+}
+
+.fallout-maw-token-hud-meter-section.collapsed .fallout-maw-token-hud-collapse-toggle i {
+  transform: rotate(-90deg);
+}
+
+.fallout-maw-token-hud-meter-section + .fallout-maw-token-hud-meter-section {
+  margin-top: 8px;
+}
+
+.fallout-maw-token-hud-meter-section.collapsed + .fallout-maw-token-hud-meter-section {
+  margin-top: 5px;
+}
+
+.fallout-maw-token-hud-collapsible {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition: grid-template-rows 180ms ease, opacity 140ms ease;
+}
+
+.fallout-maw-token-hud-meter-section.collapsed .fallout-maw-token-hud-collapsible {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.fallout-maw-token-hud-collapsible-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
 .fallout-maw-token-hud-slot-row,
 .fallout-maw-token-hud-actions,
 .fallout-maw-token-hud-popup {

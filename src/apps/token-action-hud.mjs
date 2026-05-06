@@ -7,6 +7,7 @@ import {
   getSkillSettings
 } from "../settings/accessors.mjs";
 import {
+  TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING,
   TOKEN_ACTION_HUD_ENABLED_SETTING,
   TOKEN_ACTION_HUD_SCALE_SETTING
 } from "../settings/constants.mjs";
@@ -30,6 +31,7 @@ const HUD_ACTION_TILE_MAX_WIDTH = 260;
 const HUD_ACTION_TILE_HORIZONTAL_CHROME = 30;
 const HUD_ACTION_TILE_LABEL_FONT_WEIGHT = 700;
 const HUD_ACTION_TILE_LABEL_FONT_SIZE_REM = 0.8;
+const HUD_METER_SECTION_KEYS = Object.freeze(["resources", "needs"]);
 const HUD_ACTIONS = Object.freeze([
   { key: "weapon", label: "Оружие", icon: "icons/svg/combat.svg" },
   { key: "items", label: "Предметы", icon: "icons/svg/item-bag.svg" },
@@ -105,6 +107,7 @@ function scheduleTokenActionHudRefreshForSetting(setting) {
   if (setting.key === `${FALLOUT_MAW.id}.${TOKEN_ACTION_HUD_SCALE_SETTING}`) {
     applyTokenActionHudScale(getTokenActionHudScalePercent());
   }
+  if (setting.key === `${FALLOUT_MAW.id}.${TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING}`) return;
   scheduleTokenActionHudRefresh();
 }
 
@@ -203,6 +206,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     },
     actions: {
       toggleTray: TokenActionHud.#onToggleTray,
+      toggleMeterSection: TokenActionHud.#onToggleMeterSection,
       cycleWeaponSet: TokenActionHud.#onCycleWeaponSet,
       openSettings: TokenActionHud.#onOpenSettings,
       rollSkill: TokenActionHud.#onRollSkill,
@@ -241,6 +245,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const abilities = prepareOwnedItemButtons(actor, "ability", "icons/svg/aura.svg");
     const actions = prepareActions(this.#activeTray, activeWeaponSet, items, abilities);
     const tray = prepareTrayContext(this.#activeTray, skills, items, abilities);
+    const meterSections = prepareMeterSectionStates();
 
     return {
       ...context,
@@ -252,6 +257,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       activeTray: this.#activeTray,
       activeWeaponSet,
       actions,
+      meterSections,
       tray,
       fallbackIcon: FALLBACK_ICON
     };
@@ -283,6 +289,23 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#activeTray = this.#activeTray === tray ? "" : tray;
     this.element?.classList.remove("layout-ready");
     return this.render({ force: true });
+  }
+
+  static async #onToggleMeterSection(event, target) {
+    event.preventDefault();
+    const section = String(target.dataset.section ?? "");
+    if (!HUD_METER_SECTION_KEYS.includes(section)) return undefined;
+
+    const sectionElement = this.element?.querySelector(`[data-token-hud-meter-section="${section}"]`);
+    const collapsed = !sectionElement?.classList.contains("collapsed");
+    applyMeterSectionCollapsedState(this.element, section, collapsed);
+    this.#scheduleLayout();
+    window.setTimeout(() => this.#scheduleLayout(), 220);
+
+    const current = getTokenActionHudCollapsedSections();
+    current[section] = collapsed;
+    await game.settings.set(FALLOUT_MAW.id, TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING, current);
+    return undefined;
   }
 
   static #onOpenSettings(event) {
@@ -324,6 +347,44 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const item = this.actor?.items.get(target.dataset.itemId ?? "");
     return item?.sheet?.render(true);
   }
+}
+
+function prepareMeterSectionStates() {
+  const collapsed = getTokenActionHudCollapsedSections();
+  return {
+    resources: prepareMeterSectionState(collapsed.resources),
+    needs: prepareMeterSectionState(collapsed.needs)
+  };
+}
+
+function prepareMeterSectionState(collapsed) {
+  return {
+    collapsed: Boolean(collapsed),
+    expanded: !collapsed
+  };
+}
+
+function getTokenActionHudCollapsedSections() {
+  try {
+    const value = game.settings.get(FALLOUT_MAW.id, TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING);
+    return HUD_METER_SECTION_KEYS.reduce((result, key) => {
+      result[key] = Boolean(value?.[key]);
+      return result;
+    }, {});
+  } catch (_error) {
+    return HUD_METER_SECTION_KEYS.reduce((result, key) => {
+      result[key] = false;
+      return result;
+    }, {});
+  }
+}
+
+function applyMeterSectionCollapsedState(element, section, collapsed) {
+  const sectionElement = element?.querySelector(`[data-token-hud-meter-section="${section}"]`);
+  if (!sectionElement) return;
+  sectionElement.classList.toggle("collapsed", collapsed);
+  const button = sectionElement.querySelector("[data-token-hud-meter-toggle]");
+  button?.setAttribute("aria-expanded", String(!collapsed));
 }
 
 class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {

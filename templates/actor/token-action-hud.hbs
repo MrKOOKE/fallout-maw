@@ -40,35 +40,49 @@
   </div>
 
   <section class="fallout-maw-token-hud-block fallout-maw-token-hud-resources">
-    <div class="fallout-maw-token-hud-block-title">Ресурсы</div>
-    <div class="fallout-maw-token-hud-meter-list">
-      {{#each resources}}
-      <div class="fallout-maw-token-hud-meter-card">
-        <div class="fallout-maw-token-hud-meter-header">
-          <span>{{label}}</span>
-          <strong>{{value}} / {{max}}</strong>
-        </div>
-        <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
-          <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
+    <section class="fallout-maw-token-hud-meter-section {{#if meterSections.resources.collapsed}}collapsed{{/if}}" data-token-hud-meter-section="resources">
+      <button type="button" class="fallout-maw-token-hud-block-title fallout-maw-token-hud-collapse-toggle" data-action="toggleMeterSection" data-section="resources" data-token-hud-meter-toggle aria-expanded="{{meterSections.resources.expanded}}">
+        <i class="fa-solid fa-caret-down" inert></i>
+        <span>Ресурсы</span>
+      </button>
+      <div class="fallout-maw-token-hud-collapsible">
+        <div class="fallout-maw-token-hud-collapsible-inner fallout-maw-token-hud-meter-list">
+          {{#each resources}}
+          <div class="fallout-maw-token-hud-meter-card">
+            <div class="fallout-maw-token-hud-meter-header">
+              <span>{{label}}</span>
+              <strong>{{value}} / {{max}}</strong>
+            </div>
+            <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
+              <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
+            </div>
+          </div>
+          {{/each}}
         </div>
       </div>
-      {{/each}}
-    </div>
+    </section>
 
-    <div class="fallout-maw-token-hud-block-title secondary">Потребности</div>
-    <div class="fallout-maw-token-hud-meter-list">
-      {{#each needs}}
-      <div class="fallout-maw-token-hud-meter-card">
-        <div class="fallout-maw-token-hud-meter-header">
-          <span>{{label}}</span>
-          <strong>{{value}} / {{max}}</strong>
-        </div>
-        <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
-          <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
+    <section class="fallout-maw-token-hud-meter-section {{#if meterSections.needs.collapsed}}collapsed{{/if}}" data-token-hud-meter-section="needs">
+      <button type="button" class="fallout-maw-token-hud-block-title fallout-maw-token-hud-collapse-toggle secondary" data-action="toggleMeterSection" data-section="needs" data-token-hud-meter-toggle aria-expanded="{{meterSections.needs.expanded}}">
+        <i class="fa-solid fa-caret-down" inert></i>
+        <span>Потребности</span>
+      </button>
+      <div class="fallout-maw-token-hud-collapsible">
+        <div class="fallout-maw-token-hud-collapsible-inner fallout-maw-token-hud-meter-list">
+          {{#each needs}}
+          <div class="fallout-maw-token-hud-meter-card">
+            <div class="fallout-maw-token-hud-meter-header">
+              <span>{{label}}</span>
+              <strong>{{value}} / {{max}}</strong>
+            </div>
+            <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
+              <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
+            </div>
+          </div>
+          {{/each}}
         </div>
       </div>
-      {{/each}}
-    </div>
+    </section>
   </section>
 
   <section class="fallout-maw-token-hud-actions-wrap">

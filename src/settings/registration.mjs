@@ -31,6 +31,7 @@ import {
   RESOURCE_SETTINGS_SETTING,
   SKILL_CHECK_CONTROL_SETTING,
   SKILL_SETTINGS_SETTING,
+  TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING,
   TOKEN_ACTION_HUD_ENABLED_SETTING,
   TOKEN_ACTION_HUD_SCALE_SETTING
 } from "./constants.mjs";
@@ -145,6 +146,14 @@ export function registerSystemSettings() {
     config: false,
     type: Number,
     default: 50
+  });
+
+  game.settings.register(FALLOUT_MAW.id, TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING, {
+    name: "Token Action HUD Collapsed Sections",
+    scope: "client",
+    config: false,
+    type: Object,
+    default: {}
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "creatureOptionsMenu", {
