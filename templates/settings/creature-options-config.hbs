@@ -125,6 +125,7 @@
       <section class="fallout-maw-panel">
         <header class="fallout-maw-panel-header">
           <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.Limbs"}}</h2>
+          <button type="button" data-action="createLimb"><i class="fa-solid fa-plus"></i> Добавить конечность</button>
         </header>
 
         <div class="fallout-maw-settings-table limb-settings">
@@ -133,10 +134,16 @@
             <input type="hidden" data-field="key" value="{{key}}">
             <input type="text" data-field="label" value="{{label}}">
             <input type="number" data-field="stateMax" value="{{stateMax}}" min="0" placeholder="{{localize 'FALLOUTMAW.Settings.CreatureOptions.LimbStateMax'}}" title="{{localize 'FALLOUTMAW.Settings.CreatureOptions.LimbStateMax'}}">
+            <button type="button" data-action="deleteLimb" data-key="{{key}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
           </div>
           {{else}}
           <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoLimbs"}}</p>
           {{/each}}
+        </div>
+
+        <div class="fallout-maw-settings-actions">
+          <button type="button" data-action="configureLimbSilhouette"><i class="fa-solid fa-person"></i> Настроить силуэт</button>
+          {{#if hasLimbSilhouette}}<span class="hint">Силуэт настроен.</span>{{/if}}
         </div>
       </section>
 

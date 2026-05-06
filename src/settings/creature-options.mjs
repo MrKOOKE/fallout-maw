@@ -9,6 +9,7 @@ import {
 import { localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { normalizeFormulaMap } from "../formulas/index.mjs";
+import { normalizeLimbSilhouette } from "../utils/limb-silhouette.mjs";
 
 export function createEmptyCreatureOptions() {
   return { types: [], races: [] };
@@ -19,6 +20,7 @@ export function createRaceDefaults(characteristics = [], damageTypes = []) {
     characteristics: Object.fromEntries(characteristics.map(entry => [entry.key, 1])),
     baseParameters: createDefaultRaceBaseParameters(),
     limbs: createDefaultLimbs(),
+    limbSilhouette: null,
     equipmentSlots: createDefaultEquipmentSlots(),
     weaponSets: createDefaultWeaponSets(),
     inventorySize: createDefaultInventorySize(),
@@ -73,6 +75,7 @@ export function normalizeCreatureOptions(options = {}, characteristics = [], dam
     .map(race => {
       const typeId = typeIds.has(race.typeId) ? race.typeId : normalized.types[0]?.id || "";
       const limbs = normalizeLimbs(race.limbs);
+      const limbSilhouette = normalizeLimbSilhouette(race.limbSilhouette, limbs);
       return {
         id: String(race.id),
         typeId,
@@ -80,6 +83,7 @@ export function normalizeCreatureOptions(options = {}, characteristics = [], dam
         characteristics: normalizeRaceCharacteristics(race.characteristics, characteristics),
         baseParameters: normalizeRaceBaseParameters(race.baseParameters),
         limbs,
+        limbSilhouette,
         equipmentSlots: normalizeEquipmentSlots(race.equipmentSlots),
         weaponSets: normalizeWeaponSets(race.weaponSets, limbs),
         inventorySize: normalizeInventorySize(race.inventorySize),
@@ -110,23 +114,25 @@ function normalizeRaceBaseParameters(values = {}) {
 }
 
 function normalizeLimbs(limbs) {
-  const limbDataByKey = new Map(
-    Array.isArray(limbs)
-      ? limbs.map(limb => {
-        const key = String(limb?.key ?? "").trim();
-        return [key, {
-          label: String(limb?.label ?? limb?.name ?? "").trim(),
-          stateMax: Math.max(0, toInteger(limb?.stateMax ?? 100))
-        }];
-      })
-      : []
-  );
+  const defaults = createDefaultLimbs();
+  const defaultsByKey = new Map(defaults.map(limb => [limb.key, limb]));
+  const source = Array.isArray(limbs) && limbs.length ? limbs : defaults;
+  const usedKeys = new Set();
 
-  return createDefaultLimbs().map(limb => ({
-    ...limb,
-    label: limbDataByKey.get(limb.key)?.label || limb.label,
-    stateMax: limbDataByKey.get(limb.key)?.stateMax ?? limb.stateMax
-  }));
+  return source
+    .map((limb, index) => {
+      const fallback = defaults[index]?.key ?? `limb${index + 1}`;
+      const key = normalizeConfigKey(limb?.key, fallback);
+      if (!key || usedKeys.has(key)) return null;
+      usedKeys.add(key);
+      const defaultLimb = defaultsByKey.get(key);
+      return {
+        key,
+        label: String(limb?.label ?? limb?.name ?? "").trim() || defaultLimb?.label || localize("FALLOUTMAW.Common.Untitled"),
+        stateMax: Math.max(0, toInteger(limb?.stateMax ?? defaultLimb?.stateMax ?? 100))
+      };
+    })
+    .filter(Boolean);
 }
 
 function normalizeEquipmentSlots(slots) {

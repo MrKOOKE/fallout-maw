@@ -1,0 +1,62 @@
+<div class="fallout-maw-silhouette-editor">
+  <header class="fallout-maw-silhouette-toolbar">
+    <button type="button" data-action="chooseImage"><i class="fa-solid fa-image"></i> Загрузить контур</button>
+    <button type="button" data-action="finishPolygon" {{#unless canFinishPolygon}}disabled{{/unless}}><i class="fa-solid fa-vector-square"></i> Завершить вырез</button>
+    <button type="button" data-action="cancelPolygon" {{#unless canFinishPolygon}}disabled{{/unless}}><i class="fa-solid fa-xmark"></i> Сбросить точки</button>
+    <button type="button" data-action="undo" {{#unless canUndo}}disabled{{/unless}}><i class="fa-solid fa-rotate-left"></i> Отменить</button>
+    <button type="button" data-action="clearActive" {{#unless canClearActive}}disabled{{/unless}}><i class="fa-solid fa-eraser"></i> Очистить часть</button>
+    <button type="button" data-action="reset" {{#unless hasSilhouette}}disabled{{/unless}}><i class="fa-solid fa-trash"></i> Удалить силуэт</button>
+  </header>
+
+  <div class="fallout-maw-silhouette-body">
+    <div class="fallout-maw-silhouette-stage">
+      {{#if hasSilhouette}}
+      <svg class="fallout-maw-silhouette-svg" viewBox="{{viewBox}}" data-action="addPoint">
+        {{#each remaining}}
+        <path class="fallout-maw-silhouette-remaining" d="{{d}}" fill="{{fill}}"></path>
+        {{/each}}
+        {{#each parts}}
+        <path class="fallout-maw-silhouette-part" d="{{d}}" fill="{{fill}}">
+          <title>{{label}}</title>
+        </path>
+        {{/each}}
+        {{#each outline}}
+        <path class="fallout-maw-silhouette-outline" d="{{d}}"></path>
+        {{/each}}
+        {{#if draftPoints}}
+        <polyline class="fallout-maw-silhouette-draft-line" points="{{draftPoints}}"></polyline>
+        {{/if}}
+        {{#each draftPointMarkers}}
+        <circle class="fallout-maw-silhouette-draft-point" cx="{{x}}" cy="{{y}}" r="3"></circle>
+        {{/each}}
+      </svg>
+      {{else}}
+      <div class="fallout-maw-silhouette-empty">
+        <i class="fa-solid fa-image"></i>
+        <span>Загрузите прозрачное изображение, чтобы снять контур.</span>
+      </div>
+      {{/if}}
+    </div>
+
+    <aside class="fallout-maw-silhouette-side">
+      <div class="fallout-maw-silhouette-side-title">Части тела</div>
+      <div class="fallout-maw-silhouette-limb-list">
+        {{#each limbs}}
+        <button type="button" class="fallout-maw-silhouette-limb {{#if active}}active{{/if}}" data-action="selectLimb" data-limb-key="{{key}}">
+          <span class="fallout-maw-silhouette-limb-swatch" style="background: {{color}}"></span>
+          <span>{{label}}</span>
+          <strong>{{areaPercent}}%</strong>
+        </button>
+        {{else}}
+        <p class="fallout-maw-empty-list">Сначала добавьте конечности в расу.</p>
+        {{/each}}
+      </div>
+      <p class="hint">Активная часть получает область, которую вы замыкаете точками на силуэте. Остаток: {{unassignedPercent}}%.</p>
+    </aside>
+  </div>
+
+  <footer class="sheet-footer flexrow">
+    <button type="button" data-action="save" {{#unless canSave}}disabled{{/unless}}><i class="fa-solid fa-save"></i> Сохранить</button>
+    <button type="button" data-action="close"><i class="fa-solid fa-xmark"></i> Закрыть</button>
+  </footer>
+</div>

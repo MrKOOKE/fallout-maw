@@ -23,6 +23,18 @@
 
     <section class="fallout-maw-token-hud-block fallout-maw-token-hud-limbs">
       <div class="fallout-maw-token-hud-block-title">Части тела</div>
+      {{#if limbSilhouette.visible}}
+      <svg class="fallout-maw-token-hud-limb-silhouette" viewBox="{{limbSilhouette.viewBox}}" role="img" aria-label="Limbs">
+        {{#each limbSilhouette.parts}}
+        <path class="fallout-maw-token-hud-limb-silhouette-part" d="{{d}}" fill="{{fill}}">
+          <title>{{title}}</title>
+        </path>
+        {{/each}}
+        {{#each limbSilhouette.outline}}
+        <path class="fallout-maw-token-hud-limb-silhouette-outline" d="{{d}}"></path>
+        {{/each}}
+      </svg>
+      {{else}}
       <div class="fallout-maw-token-hud-meter-list">
         {{#each limbs}}
         <div class="fallout-maw-token-hud-meter-card">
@@ -36,6 +48,7 @@
         </div>
         {{/each}}
       </div>
+      {{/if}}
     </section>
   </div>
 

@@ -19,6 +19,7 @@ import {
   prepareInventoryContext
 } from "../utils/actor-display-data.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { FalloutMaWFormApplicationV2, getFlatFormData } from "./base-form-application-v2.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -246,12 +247,14 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const actions = prepareActions(this.#activeTray, activeWeaponSet, items, abilities);
     const tray = prepareTrayContext(this.#activeTray, skills, items, abilities);
     const meterSections = prepareMeterSectionStates();
+    const limbSilhouette = createLimbSilhouetteHud(race?.limbSilhouette, actor.system?.limbs);
 
     return {
       ...context,
       actor,
       token: this.#token,
-      limbs: prepareLimbEntries(actor),
+      limbs: limbSilhouette?.visible ? [] : prepareLimbEntries(actor),
+      limbSilhouette,
       resources: prepareResourceEntries(actor),
       needs: prepareNeedEntries(actor),
       activeTray: this.#activeTray,

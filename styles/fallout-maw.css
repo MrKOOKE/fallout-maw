@@ -2927,6 +2927,34 @@ label.fallout-maw-mitigation-cell {
   width: 298px;
 }
 
+.fallout-maw-token-hud-limb-silhouette {
+  background: rgba(3, 5, 4, 0.48);
+  border: 1px solid rgba(190, 174, 126, 0.16);
+  box-sizing: border-box;
+  display: block;
+  height: auto;
+  max-height: 390px;
+  min-height: 160px;
+  padding: 6px;
+  width: 100%;
+}
+
+.fallout-maw-token-hud-limb-silhouette-part {
+  fill-rule: evenodd;
+  stroke: rgba(255, 239, 173, 0.36);
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.fallout-maw-token-hud-limb-silhouette-outline {
+  fill: none;
+  stroke: rgba(255, 239, 173, 0.72);
+  stroke-linejoin: round;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
 .fallout-maw-token-hud-resources {
   width: 276px;
 }
@@ -3217,6 +3245,171 @@ label.fallout-maw-mitigation-cell {
   padding: 0 10px;
 }
 
+.fallout-maw-limb-silhouette-config {
+  min-height: 0;
+}
+
+.fallout-maw-silhouette-editor {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
+  min-height: 0;
+}
+
+.fallout-maw-silhouette-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.fallout-maw-silhouette-body {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  min-height: 0;
+}
+
+.fallout-maw-silhouette-stage {
+  align-items: center;
+  background: rgba(4, 5, 7, 0.48);
+  border: 1px solid rgba(212, 181, 93, 0.24);
+  display: flex;
+  justify-content: center;
+  min-height: 420px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0.75rem;
+}
+
+.fallout-maw-silhouette-svg {
+  background:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.045) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.045) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.045) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.045) 75%);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
+  cursor: crosshair;
+  display: block;
+  height: 100%;
+  max-height: 100%;
+  max-width: 100%;
+  width: 100%;
+}
+
+.fallout-maw-silhouette-part {
+  fill-rule: evenodd;
+  fill-opacity: 0.84;
+  pointer-events: none;
+  stroke: rgba(10, 10, 8, 0.72);
+  stroke-linejoin: round;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.fallout-maw-silhouette-remaining {
+  fill-rule: evenodd;
+  pointer-events: none;
+  stroke: rgba(240, 215, 135, 0.25);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.fallout-maw-silhouette-outline {
+  fill: none;
+  pointer-events: none;
+  stroke: rgba(255, 239, 173, 0.9);
+  stroke-linejoin: round;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.fallout-maw-silhouette-draft-line {
+  fill: none;
+  pointer-events: none;
+  stroke: #f2d581;
+  stroke-dasharray: 6 4;
+  stroke-linejoin: round;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.fallout-maw-silhouette-draft-point {
+  fill: #f2d581;
+  pointer-events: none;
+  stroke: #111;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.fallout-maw-silhouette-empty {
+  align-items: center;
+  color: #cbbd8f;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.fallout-maw-silhouette-empty i {
+  font-size: 3rem;
+}
+
+.fallout-maw-silhouette-side {
+  border: 1px solid rgba(212, 181, 93, 0.18);
+  min-height: 0;
+  overflow: auto;
+  padding: 0.65rem;
+}
+
+.fallout-maw-silhouette-side-title {
+  color: #f2d581;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+}
+
+.fallout-maw-silhouette-limb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.fallout-maw-silhouette-limb {
+  align-items: center;
+  background: rgba(35, 34, 28, 0.92);
+  border: 1px solid rgba(212, 181, 93, 0.24);
+  color: #e7d7a5;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+.fallout-maw-silhouette-limb.active,
+.fallout-maw-silhouette-limb:hover,
+.fallout-maw-silhouette-limb:focus-visible {
+  border-color: rgba(255, 219, 105, 0.78);
+  color: #fff0b3;
+  outline: 0;
+}
+
+.fallout-maw-silhouette-limb span:not(.fallout-maw-silhouette-limb-swatch) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-silhouette-limb-swatch {
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  height: 1rem;
+  width: 1rem;
+}
+
 @media (max-width: 980px) {
   .fallout-maw-token-action-hud {
     --fallout-maw-token-hud-tile: 72px;
@@ -3264,7 +3457,15 @@ label.fallout-maw-mitigation-cell {
 }
 
 .limb-settings .fallout-maw-settings-row {
-  grid-template-columns: minmax(160px, 1fr) 130px;
+  grid-template-columns: minmax(160px, 1fr) 130px 2.5rem;
+}
+
+.fallout-maw-settings-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
 }
 
 .fallout-maw-equipment-config-grid {
@@ -4679,6 +4880,7 @@ label.fallout-maw-mitigation-cell {
   .fallout-maw-resource-grid,
   .fallout-maw-inventory-summary,
   .fallout-maw-inventory-layout,
+  .fallout-maw-silhouette-body,
   .fallout-maw-equipment-config-grid,
   .fallout-maw-race-pool-grid,
   .fallout-maw-summary-grid.two-columns,

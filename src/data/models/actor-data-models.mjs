@@ -225,8 +225,8 @@ function researchField() {
 function limbField() {
   return new SchemaField({
     label: new StringField({ required: true, blank: true, initial: "" }),
-    min: new NumberField({ required: true, integer: true, min: -100, initial: -100 }),
-    value: new NumberField({ required: true, integer: true, min: -100, initial: 0 }),
+    min: new NumberField({ required: true, integer: true, initial: -100 }),
+    value: new NumberField({ required: true, integer: true, initial: 0 }),
     max: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
   });
 }
@@ -316,8 +316,8 @@ function normalizeLimbMap(currentLimbs = {}, settings = []) {
   return Object.fromEntries(
     settings.map(setting => {
       const current = currentLimbs?.[setting.key];
-      const min = -100;
       const max = Math.max(0, toInteger(setting?.stateMax));
+      const min = -max;
       const fallbackValue = current && typeof current === "object" ? current.value : max;
       const value = Math.min(Math.max(toInteger(fallbackValue), min), max);
       return [setting.key, {

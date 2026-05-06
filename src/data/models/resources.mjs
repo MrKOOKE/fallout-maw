@@ -12,10 +12,13 @@ export function resourceField(value = 0, max = value, options = {}) {
 
 export function clampPreparedResource(resource) {
   if (!resource) return;
-  const min = Number(resource.min) || 0;
-  const max = Math.max(Number(resource.max) || min, min);
+  const minValue = Number(resource.min);
+  const maxValue = Number(resource.max);
+  const currentValue = Number(resource.value);
+  const min = Number.isFinite(minValue) ? minValue : 0;
+  const max = Math.max(Number.isFinite(maxValue) ? maxValue : min, min);
   resource.max = max;
-  resource.value = Math.min(Math.max(Number(resource.value) || min, min), max);
+  resource.value = Math.min(Math.max(Number.isFinite(currentValue) ? currentValue : min, min), max);
 }
 
 export function setResourceMaximum(resource, value) {

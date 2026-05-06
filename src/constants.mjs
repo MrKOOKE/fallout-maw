@@ -42,6 +42,7 @@ export const TEMPLATES = Object.freeze({
     proficiencies: `systems/${SYSTEM_ID}/templates/settings/proficiency-settings-config.hbs`,
     resources: `systems/${SYSTEM_ID}/templates/settings/resource-settings-config.hbs`,
     skillFormulas: `systems/${SYSTEM_ID}/templates/settings/skill-formulas-config.hbs`,
+    limbSilhouette: `systems/${SYSTEM_ID}/templates/settings/limb-silhouette-config.hbs`,
     tokenActionHud: `systems/${SYSTEM_ID}/templates/settings/token-action-hud-config.hbs`
   })
 });

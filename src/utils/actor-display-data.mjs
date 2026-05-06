@@ -57,7 +57,7 @@ export function prepareIndicatorEntry({
   active = false,
   ...extra
 } = {}) {
-  const min = Math.max(-100, toInteger(data?.min));
+  const min = toInteger(data?.min);
   const max = Math.max(min, toInteger(data?.max));
   const value = Math.min(Math.max(toInteger(data?.value), min), max);
   const negativeRange = min < 0 ? Math.abs(min) : 0;

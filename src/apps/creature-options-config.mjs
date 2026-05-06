@@ -16,6 +16,7 @@ import { format, localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
+import { LimbSilhouetteConfig } from "./limb-silhouette-config.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
@@ -46,6 +47,9 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       selectRace: this.#onSelectRace,
       createType: this.#onCreateType,
       createRace: this.#onCreateRace,
+      createLimb: this.#onCreateLimb,
+      deleteLimb: this.#onDeleteLimb,
+      configureLimbSilhouette: this.#onConfigureLimbSilhouette,
       createEquipmentSlot: this.#onCreateEquipmentSlot,
       deleteEquipmentSlot: this.#onDeleteEquipmentSlot,
       createWeaponSet: this.#onCreateWeaponSet,
@@ -100,6 +104,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       })),
       baseParameters: selectedRace?.baseParameters ?? createDefaultRaceBaseParameters(),
       limbs: selectedRace?.limbs ?? [],
+      hasLimbSilhouette: Boolean(selectedRace?.limbSilhouette),
       equipmentSlots: selectedRace?.equipmentSlots ?? [],
       weaponSets: (selectedRace?.weaponSets ?? []).map(set => ({
         ...set,
@@ -242,6 +247,54 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     race.equipmentSlots ??= [];
     race.equipmentSlots.push({ key: id, label: localize("FALLOUTMAW.Settings.CreatureOptions.NewEquipmentSlot") });
     return this.forceRender();
+  }
+
+  static #onCreateLimb(event) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    if (!race) return undefined;
+    const id = getUniqueId("limb", (race.limbs ?? []).map(limb => limb.key));
+    race.limbs ??= [];
+    race.limbs.push({
+      key: id,
+      label: "Новая конечность",
+      stateMax: 100
+    });
+    return this.forceRender();
+  }
+
+  static #onDeleteLimb(event, target) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    if (!race) return undefined;
+    const key = target.dataset.key ?? "";
+    race.limbs = (race.limbs ?? []).filter(limb => limb.key !== key);
+    if (race.limbSilhouette) {
+      race.limbSilhouette.parts = (race.limbSilhouette.parts ?? []).filter(part => part.limbKey !== key);
+    }
+    return this.forceRender();
+  }
+
+  static #onConfigureLimbSilhouette(event) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    if (!race) return undefined;
+    if (!(race.limbs ?? []).length) {
+      ui.notifications.warn("Сначала добавьте хотя бы одну конечность.");
+      return undefined;
+    }
+
+    const app = new LimbSilhouetteConfig({
+      race,
+      onSave: async silhouette => {
+        race.limbSilhouette = silhouette;
+        await this.#saveAndRender(localize("FALLOUTMAW.Messages.CreatureOptionsSaved"));
+      }
+    });
+    return app.render({ force: true });
   }
 
   static #onDeleteEquipmentSlot(event, target) {
