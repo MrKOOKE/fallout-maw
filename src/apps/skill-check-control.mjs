@@ -10,7 +10,7 @@ export class SkillCheckControl extends FalloutMaWFormApplicationV2 {
     position: {
       left: 92,
       top: 36,
-      width: 560,
+      width: 650,
       height: "auto"
     },
     window: {

@@ -2323,61 +2323,134 @@
 }
 
 .fallout-maw-skill-check-control {
-  --fallout-maw-control-bg: #10130d;
-  --fallout-maw-control-bg-2: #1c1e15;
-  --fallout-maw-control-border: #f0cf55;
-  --fallout-maw-control-text: #fff1b6;
-  --fallout-maw-control-muted: #d5c98b;
-  --fallout-maw-control-active: #35c9e8;
+  --fallout-maw-actor-bg: #0a0c09;
+  --fallout-maw-actor-panel: rgba(9, 11, 8, 0.9);
+  --fallout-maw-actor-panel-soft: rgba(16, 18, 13, 0.82);
+  --fallout-maw-actor-border: rgba(164, 146, 85, 0.62);
+  --fallout-maw-actor-border-soft: rgba(131, 119, 74, 0.28);
+  --fallout-maw-actor-casing: #20221c;
+  --fallout-maw-actor-casing-top: #35382f;
+  --fallout-maw-actor-casing-bottom: #0e100d;
+  --fallout-maw-actor-plastic: #b8b29d;
+  --fallout-maw-actor-plastic-top: #d3cfbd;
+  --fallout-maw-actor-plastic-bottom: #79735f;
+  --fallout-maw-actor-plastic-dirt: rgba(61, 55, 38, 0.18);
+  --fallout-maw-actor-plastic-text: #2b2a21;
+  --fallout-maw-actor-screen-glow: rgba(132, 190, 105, 0.075);
+  --fallout-maw-actor-terminal-noise: rgba(171, 224, 132, 0.04);
+  --fallout-maw-actor-text: #e8d889;
+  --fallout-maw-actor-text-soft: #d9c76f;
+  --fallout-maw-actor-text-strong: #f7e8a6;
+  --fallout-maw-actor-accent: #dcc56e;
+  --fallout-maw-actor-edge-light: rgba(219, 219, 186, 0.26);
+  --fallout-maw-actor-edge-mid: rgba(120, 124, 94, 0.72);
+  --fallout-maw-actor-edge-dark: rgba(0, 0, 0, 0.88);
+  --fallout-maw-actor-ui-font: var(--font-primary);
+  --fallout-maw-actor-mono-font: "Cascadia Mono", "Consolas", "Lucida Console", "Courier New", monospace;
   background:
-    repeating-linear-gradient(180deg, rgba(235, 218, 132, 0.04) 0 1px, transparent 1px 4px),
-    linear-gradient(180deg, var(--fallout-maw-control-bg-2), var(--fallout-maw-control-bg));
-  border: 2px solid var(--fallout-maw-control-border);
+    linear-gradient(135deg, var(--fallout-maw-actor-casing-top), var(--fallout-maw-actor-casing) 46%, var(--fallout-maw-actor-casing-bottom));
+  border: 2px solid var(--fallout-maw-actor-edge-mid);
+  border-radius: 0;
   box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.86),
-    0 0 18px rgba(240, 207, 85, 0.2),
-    inset 0 0 18px rgba(0, 0, 0, 0.56);
-  color: var(--fallout-maw-control-text);
-  font-family: var(--fallout-maw-actor-ui-font, var(--font-primary, serif));
+    inset 3px 3px 0 var(--fallout-maw-actor-edge-light),
+    inset -4px -4px 0 var(--fallout-maw-actor-edge-dark),
+    0 5px 0 rgba(0, 0, 0, 0.82),
+    0 14px 28px rgba(0, 0, 0, 0.34),
+    0 0 18px var(--fallout-maw-actor-screen-glow);
+  color: var(--fallout-maw-actor-text);
+  font-family: var(--fallout-maw-actor-ui-font);
+}
+
+.fallout-maw-skill-check-control .window-header {
+  background: linear-gradient(180deg, rgba(53, 56, 47, 0.98), rgba(14, 16, 13, 0.98));
+  border-bottom: 1px solid var(--fallout-maw-actor-border);
+  box-shadow:
+    inset 0 2px 0 var(--fallout-maw-actor-edge-light),
+    inset 0 -2px 0 var(--fallout-maw-actor-edge-dark),
+    0 4px 0 rgba(0, 0, 0, 0.82);
+  color: var(--fallout-maw-actor-text-strong);
+  text-shadow: 0 0 6px rgba(220, 197, 110, 0.12);
 }
 
 .fallout-maw-skill-check-control .window-content {
-  background: transparent;
-  padding: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 22%, transparent 78%, rgba(255, 255, 255, 0.015)),
+    radial-gradient(circle at 18% 12%, rgba(220, 197, 110, 0.055), transparent 24rem),
+    radial-gradient(circle, var(--fallout-maw-actor-terminal-noise) 0 1px, transparent 1px 2px),
+    radial-gradient(circle, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(180deg, rgba(255, 238, 169, 0.028) 0 1px, transparent 1px 4px),
+    linear-gradient(180deg, rgba(255, 222, 124, 0.03), transparent 18%),
+    linear-gradient(90deg, rgba(220, 197, 110, 0.05) 0 1px, transparent 1px 64px),
+    linear-gradient(180deg, rgba(220, 197, 110, 0.03) 0 1px, transparent 1px 22px),
+    linear-gradient(180deg, #0d0f0c, #090a08 38%, #090a08);
+  background-position: 0 0, 0 0, 0 0, 2px 1px, 0 0, 0 0, 0 0, 0 0;
+  background-size: auto, auto, 5px 5px, 7px 7px, auto, auto, auto, auto;
+  color: var(--fallout-maw-actor-text);
+  padding: 0.9rem;
 }
 
 .fallout-maw-skill-check-control-panel {
   display: grid;
-  gap: 0.7rem;
-  padding: 0.8rem;
+  gap: 0.9rem;
 }
 
 .fallout-maw-skill-check-control-panel header {
-  border-bottom: 1px solid rgba(240, 207, 85, 0.55);
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 239, 168, 0.03) 0 1px, transparent 1px 5px),
+    linear-gradient(180deg, rgba(5, 8, 6, 0.98), rgba(9, 12, 8, 0.98));
+  border: 2px solid rgba(164, 146, 85, 0.56);
+  box-shadow:
+    inset 4px 4px 0 rgba(0, 0, 0, 0.72),
+    inset -2px -2px 0 rgba(255, 239, 168, 0.12);
   display: grid;
-  gap: 0.1rem;
-  padding-bottom: 0.45rem;
+  gap: 0.2rem;
+  padding: 0.65rem 0.8rem;
 }
 
 .fallout-maw-skill-check-control-panel header span,
 .fallout-maw-skill-check-control-section h3 {
-  color: var(--fallout-maw-control-border);
-  font-family: var(--font-monospace, monospace);
+  color: var(--fallout-maw-actor-text-soft);
+  font-family: var(--fallout-maw-actor-mono-font);
   font-size: 0.82rem;
   letter-spacing: 0.03em;
   margin: 0;
 }
 
 .fallout-maw-skill-check-control-panel header strong {
-  color: var(--fallout-maw-control-text);
-  font-size: 1.25rem;
+  color: var(--fallout-maw-actor-text-strong);
+  font-size: 1.35rem;
+  font-weight: 700;
 }
 
 .fallout-maw-skill-check-control-section {
-  border: 1px solid rgba(240, 207, 85, 0.32);
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 239, 168, 0.022) 0 1px, transparent 1px 5px),
+    linear-gradient(180deg, rgba(6, 9, 7, 0.98), rgba(11, 13, 9, 0.96));
+  border: 2px solid rgba(131, 119, 74, 0.42);
+  box-shadow:
+    inset 3px 3px 0 rgba(0, 0, 0, 0.74),
+    inset -1px -1px 0 rgba(255, 239, 168, 0.12),
+    0 1px 0 rgba(255, 239, 168, 0.08);
   display: grid;
-  gap: 0.55rem;
-  padding: 0.65rem;
+  gap: 0.65rem;
+  padding: 0.7rem;
+}
+
+.fallout-maw-skill-check-control-section h3 {
+  align-items: center;
+  color: var(--fallout-maw-actor-text-strong);
+  display: flex;
+  gap: 0.7rem;
+  font-family: var(--fallout-maw-actor-ui-font);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.fallout-maw-skill-check-control-section h3::after {
+  background: linear-gradient(90deg, rgba(120, 124, 94, 0.42), transparent);
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
 }
 
 .fallout-maw-skill-check-control-modes,
@@ -2396,26 +2469,115 @@
 
 .fallout-maw-skill-check-control-mode,
 .fallout-maw-skill-check-control-edge label {
+  --fallout-maw-control-key-color: rgba(220, 197, 110, 0.58);
+  --fallout-maw-control-key-glow: rgba(220, 197, 110, 0.16);
   align-items: center;
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(240, 207, 85, 0.34);
-  color: var(--fallout-maw-control-muted);
+  background:
+    radial-gradient(ellipse at 50% 118%, var(--fallout-maw-control-key-glow), transparent 64%),
+    repeating-linear-gradient(180deg, rgba(171, 224, 132, 0.014) 0 1px, transparent 1px 5px),
+    linear-gradient(180deg, rgba(23, 25, 19, 0.98) 0%, rgba(8, 11, 8, 0.98) 54%, rgba(2, 4, 3, 0.98) 100%);
+  border: 2px solid rgba(131, 119, 74, 0.42);
+  border-bottom-color: color-mix(in srgb, var(--fallout-maw-control-key-color) 58%, rgba(0, 0, 0, 0.72));
+  border-radius: 0;
+  box-shadow:
+    0 4px 0 rgba(0, 0, 0, 0.78),
+    0 8px 15px rgba(0, 0, 0, 0.28),
+    0 0 13px var(--fallout-maw-control-key-glow),
+    inset 3px 3px 0 rgba(0, 0, 0, 0.72),
+    inset -1px -1px 0 rgba(219, 219, 186, 0.1),
+    inset 0 -4px 0 color-mix(in srgb, var(--fallout-maw-control-key-color) 34%, transparent);
+  color: var(--fallout-maw-actor-text-strong);
   cursor: pointer;
   display: flex;
-  font-weight: 800;
+  font-size: 1rem;
+  font-weight: 700;
   gap: 0.35rem;
   justify-content: center;
-  min-height: 2.25rem;
-  padding: 0.35rem;
+  min-height: 2.6rem;
+  padding: 0.4rem 0.45rem;
+  position: relative;
   text-align: center;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.85);
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.fallout-maw-skill-check-control-mode::after,
+.fallout-maw-skill-check-control-edge label::after {
+  background: linear-gradient(90deg, transparent, var(--fallout-maw-control-key-color), transparent);
+  bottom: -0.35rem;
+  content: "";
+  height: 0.35rem;
+  left: 0.45rem;
+  opacity: 0.32;
+  pointer-events: none;
+  position: absolute;
+  right: 0.45rem;
+}
+
+.fallout-maw-skill-check-control-mode[data-mode="criticalSuccess"] {
+  --fallout-maw-control-key-color: #8be36f;
+  --fallout-maw-control-key-glow: rgba(139, 227, 111, 0.2);
+}
+
+.fallout-maw-skill-check-control-mode[data-mode="success"] {
+  --fallout-maw-control-key-color: #66cfe8;
+  --fallout-maw-control-key-glow: rgba(102, 207, 232, 0.18);
+}
+
+.fallout-maw-skill-check-control-mode[data-mode="failure"] {
+  --fallout-maw-control-key-color: #e1a14c;
+  --fallout-maw-control-key-glow: rgba(225, 161, 76, 0.2);
+}
+
+.fallout-maw-skill-check-control-mode[data-mode="criticalFailure"] {
+  --fallout-maw-control-key-color: #d85a45;
+  --fallout-maw-control-key-glow: rgba(216, 90, 69, 0.22);
+}
+
+.fallout-maw-skill-check-control-edge label[data-mode="advantage"] {
+  --fallout-maw-control-key-color: #a8d16b;
+  --fallout-maw-control-key-glow: rgba(168, 209, 107, 0.2);
+}
+
+.fallout-maw-skill-check-control-edge label[data-mode="disadvantage"] {
+  --fallout-maw-control-key-color: #c76d55;
+  --fallout-maw-control-key-glow: rgba(199, 109, 85, 0.2);
+}
+
+.fallout-maw-skill-check-control-mode:hover,
+.fallout-maw-skill-check-control-edge label:hover {
+  border-color: color-mix(in srgb, var(--fallout-maw-control-key-color) 62%, rgba(131, 119, 74, 0.42));
+  box-shadow:
+    0 4px 0 rgba(0, 0, 0, 0.78),
+    0 8px 15px rgba(0, 0, 0, 0.28),
+    0 0 18px color-mix(in srgb, var(--fallout-maw-control-key-glow) 72%, transparent),
+    inset 3px 3px 0 rgba(0, 0, 0, 0.72),
+    inset -1px -1px 0 rgba(219, 219, 186, 0.1),
+    inset 0 -4px 0 color-mix(in srgb, var(--fallout-maw-control-key-color) 42%, transparent);
 }
 
 .fallout-maw-skill-check-control-mode:has(input:checked),
 .fallout-maw-skill-check-control-edge label:has(input:checked) {
-  border-color: var(--fallout-maw-control-active);
-  box-shadow: 0 0 10px rgba(53, 201, 232, 0.22);
-  color: var(--fallout-maw-control-active);
-  text-shadow: 0 0 8px rgba(53, 201, 232, 0.7);
+  background:
+    radial-gradient(ellipse at 50% 118%, color-mix(in srgb, var(--fallout-maw-control-key-color) 38%, transparent), transparent 68%),
+    repeating-linear-gradient(180deg, rgba(171, 224, 132, 0.02) 0 1px, transparent 1px 5px),
+    linear-gradient(180deg, rgba(34, 37, 28, 0.98) 0%, rgba(12, 16, 10, 0.98) 54%, rgba(3, 6, 4, 0.98) 100%);
+  border-color: color-mix(in srgb, var(--fallout-maw-control-key-color) 78%, rgba(164, 146, 85, 0.42));
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.84),
+    0 0 0 1px color-mix(in srgb, var(--fallout-maw-control-key-color) 42%, transparent),
+    0 0 18px color-mix(in srgb, var(--fallout-maw-control-key-color) 34%, transparent),
+    inset 3px 3px 0 rgba(0, 0, 0, 0.72),
+    inset -1px -1px 0 rgba(219, 219, 186, 0.1),
+    inset 0 -5px 0 color-mix(in srgb, var(--fallout-maw-control-key-color) 52%, transparent);
+  color: var(--fallout-maw-actor-text-strong);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--fallout-maw-control-key-color) 34%, transparent);
+  transform: translateY(2px);
+}
+
+.fallout-maw-skill-check-control-mode:has(input:checked)::after,
+.fallout-maw-skill-check-control-edge label:has(input:checked)::after {
+  opacity: 0.78;
 }
 
 .fallout-maw-skill-check-control-mode input,
@@ -2436,17 +2598,25 @@
 
 .fallout-maw-skill-check-control-grid span,
 .fallout-maw-skill-check-control-check span {
-  color: var(--fallout-maw-control-muted);
-  font-weight: 800;
+  color: var(--fallout-maw-actor-text);
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .fallout-maw-skill-check-control-grid input[type="number"] {
-  background: rgba(0, 0, 0, 0.36);
-  border: 1px solid rgba(240, 207, 85, 0.42);
-  color: var(--fallout-maw-control-text);
-  font: 900 1rem var(--font-monospace, monospace);
+  background: rgba(18, 19, 14, 0.94);
+  border: 1px solid rgba(164, 146, 85, 0.42);
+  border-radius: 0;
+  box-shadow: inset 1px 1px 0 rgba(255, 239, 168, 0.07), inset -1px -1px 0 rgba(0, 0, 0, 0.68);
+  color: var(--fallout-maw-actor-text-strong);
+  font: 700 1rem var(--fallout-maw-actor-mono-font);
   height: 2rem;
   padding: 0 0.45rem;
+}
+
+.fallout-maw-skill-check-control-grid input[type="number"]:focus {
+  border-color: rgba(220, 197, 110, 0.82);
+  box-shadow: 0 0 0 1px rgba(220, 197, 110, 0.24), 0 0 14px rgba(220, 197, 110, 0.08);
 }
 
 .fallout-maw-skill-check-control-check {
@@ -2460,6 +2630,7 @@
 }
 
 .fallout-maw-skill-check-control-check input {
+  accent-color: var(--fallout-maw-actor-accent);
   justify-self: end;
 }
 
@@ -2469,17 +2640,39 @@
 }
 
 .fallout-maw-skill-check-control-panel button {
-  background: rgba(0, 0, 0, 0.34);
-  border: 1px solid rgba(240, 207, 85, 0.58);
-  color: var(--fallout-maw-control-text);
+  background:
+    radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.2), transparent 0.8rem),
+    radial-gradient(circle at 72% 68%, var(--fallout-maw-actor-plastic-dirt), transparent 1.1rem),
+    linear-gradient(180deg, var(--fallout-maw-actor-plastic-top) 0%, var(--fallout-maw-actor-plastic) 54%, var(--fallout-maw-actor-plastic-bottom) 100%);
+  border: 2px solid rgba(92, 88, 72, 0.9);
+  border-radius: 0;
+  box-shadow:
+    inset 2px 2px 0 rgba(255, 255, 241, 0.58),
+    inset -3px -3px 0 var(--fallout-maw-actor-edge-dark),
+    0 3px 0 rgba(0, 0, 0, 0.78),
+    0 5px 8px rgba(0, 0, 0, 0.34);
+  color: var(--fallout-maw-actor-plastic-text);
   cursor: pointer;
-  font-weight: 900;
+  font-weight: 700;
   padding: 0.45rem 0.7rem;
+  text-shadow: none;
 }
 
 .fallout-maw-skill-check-control-panel button:hover {
-  border-color: var(--fallout-maw-control-active);
-  color: var(--fallout-maw-control-active);
+  background:
+    radial-gradient(circle at 22% 24%, rgba(255, 255, 255, 0.24), transparent 0.9rem),
+    radial-gradient(circle at 72% 68%, rgba(61, 55, 38, 0.22), transparent 1.1rem),
+    linear-gradient(180deg, #ddd8c7 0%, #c2bca5 54%, #817a64 100%);
+  border-color: rgba(98, 94, 77, 0.95);
+  color: #17170f;
+}
+
+.fallout-maw-skill-check-control-panel button:active {
+  box-shadow:
+    inset 4px 4px 0 rgba(0, 0, 0, 0.46),
+    inset -1px -1px 0 rgba(255, 255, 241, 0.34),
+    0 1px 0 rgba(0, 0, 0, 0.84);
+  transform: translateY(2px);
 }
 
 .characteristic-settings .fallout-maw-settings-row {

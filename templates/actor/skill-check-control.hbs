@@ -34,7 +34,7 @@
     <h3>{{localize "FALLOUTMAW.SkillCheckControl.ForcedResult"}}</h3>
     <div class="fallout-maw-skill-check-control-modes">
       {{#each resultModes}}
-      <label class="fallout-maw-skill-check-control-mode">
+      <label class="fallout-maw-skill-check-control-mode" data-mode="{{value}}">
         <input type="radio" name="resultMode" value="{{value}}" {{checked checked}}>
         <span>{{localize label}}</span>
       </label>
@@ -50,7 +50,7 @@
     <h3>{{localize "FALLOUTMAW.SkillCheckControl.EdgeMode"}}</h3>
     <div class="fallout-maw-skill-check-control-edge">
       {{#each edgeModes}}
-      <label>
+      <label data-mode="{{value}}">
         <input type="radio" name="edgeMode" value="{{value}}" {{checked checked}}>
         <span>{{localize label}}</span>
       </label>
