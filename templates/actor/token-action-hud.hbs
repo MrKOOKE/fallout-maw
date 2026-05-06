@@ -55,12 +55,17 @@
       {{/each}}
     </div>
 
-    <div class="fallout-maw-token-hud-block-title secondary">Показатели</div>
-    <div class="fallout-maw-token-hud-stat-grid">
-      {{#each characteristics}}
-      <div class="fallout-maw-token-hud-stat">
-        <span>{{abbr}}</span>
-        <strong>{{value}}</strong>
+    <div class="fallout-maw-token-hud-block-title secondary">Потребности</div>
+    <div class="fallout-maw-token-hud-meter-list">
+      {{#each needs}}
+      <div class="fallout-maw-token-hud-meter-card">
+        <div class="fallout-maw-token-hud-meter-header">
+          <span>{{label}}</span>
+          <strong>{{value}} / {{max}}</strong>
+        </div>
+        <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
+          <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
+        </div>
       </div>
       {{/each}}
     </div>
@@ -68,7 +73,7 @@
 
   <section class="fallout-maw-token-hud-actions-wrap">
     {{#if tray.visible}}
-    <div class="fallout-maw-token-hud-popup" data-token-action-hud-popup>
+    <div class="fallout-maw-token-hud-popup" data-token-action-hud-popup style="{{tray.metrics.style}}">
       {{#if (eq activeTray "skills")}}
       {{#each tray.skills}}
       <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="rollSkill" data-skill-key="{{key}}" title="{{label}}">

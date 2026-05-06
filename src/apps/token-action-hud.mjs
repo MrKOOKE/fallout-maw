@@ -1,8 +1,8 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import {
-  getCharacteristicSettings,
   getCreatureOptions,
+  getNeedSettings,
   getResourceSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
@@ -188,6 +188,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg");
     const abilities = prepareOwnedItemButtons(actor, "ability", "icons/svg/aura.svg");
     const actions = prepareActions(this.#activeTray, activeWeaponSet, items, abilities);
+    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities);
 
     return {
       ...context,
@@ -195,22 +196,18 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       token: this.#token,
       limbs: prepareLimbEntries(actor),
       resources: prepareResourceEntries(actor),
-      characteristics: prepareCharacteristicEntries(actor),
+      needs: prepareNeedEntries(actor),
       activeTray: this.#activeTray,
       activeWeaponSet,
       actions,
-      tray: {
-        skills,
-        items,
-        abilities,
-        visible: Boolean(this.#activeTray)
-      },
+      tray,
       fallbackIcon: FALLBACK_ICON
     };
   }
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.element?.classList.remove("layout-ready");
     this.#scheduleLayout();
   }
 
@@ -286,10 +283,10 @@ function prepareResourceEntries(actor) {
   }));
 }
 
-function prepareCharacteristicEntries(actor) {
-  return getCharacteristicSettings().map(characteristic => ({
-    ...characteristic,
-    value: toInteger(actor.system?.characteristics?.[characteristic.key])
+function prepareNeedEntries(actor) {
+  return getNeedSettings().map(need => prepareIndicatorEntry({
+    ...need,
+    data: actor.system.needs?.[need.key]
   }));
 }
 
@@ -314,6 +311,34 @@ function prepareOwnedItemButtons(actor, type, fallbackIcon) {
       quantity: toInteger(item.system?.quantity),
       showQuantity: toInteger(item.system?.maxStack) > 1
     }));
+}
+
+function prepareTrayContext(activeTray, skills, items, abilities) {
+  const trayItems = activeTray === "skills"
+    ? skills
+    : activeTray === "items"
+      ? items
+      : activeTray === "abilities"
+        ? abilities
+        : [];
+  return {
+    skills,
+    items,
+    abilities,
+    metrics: prepareTrayMetrics(trayItems),
+    visible: Boolean(activeTray)
+  };
+}
+
+function prepareTrayMetrics(items) {
+  const maxLength = items.reduce((max, item) => {
+    const label = String(item.label ?? item.name ?? "");
+    return Math.max(max, label.length);
+  }, 0);
+  const tileWidth = Math.ceil(Math.min(360, Math.max(116, (maxLength * 8.2) + 34)));
+  return {
+    style: `--fallout-maw-token-hud-action-tile-width: ${tileWidth}px;`
+  };
 }
 
 function prepareActions(activeTray, activeWeaponSet, items, abilities) {
@@ -349,6 +374,7 @@ function getActiveWeaponSet(actor, weaponSets = []) {
 
 function layoutTokenActionHud(element) {
   if (!element?.isConnected) return;
+  normalizePopupTileMetrics(element);
 
   const margin = 12;
   const safeRight = getSafeRight(margin);
@@ -367,6 +393,30 @@ function layoutTokenActionHud(element) {
     const maxHeight = Math.max(72, popupBottom - margin);
     element.style.setProperty("--fallout-maw-token-hud-popup-max-height", `${Math.floor(maxHeight)}px`);
   }
+
+  element.classList.add("layout-ready");
+}
+
+function normalizePopupTileMetrics(element) {
+  const labels = Array.from(element.querySelectorAll(".fallout-maw-token-hud-action-tile span"));
+  if (!labels.length) return;
+
+  const canvas = normalizePopupTileMetrics.canvas ??= document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  const labelStyle = getComputedStyle(labels[0]);
+  context.font = `${labelStyle.fontWeight} ${labelStyle.fontSize} ${labelStyle.fontFamily}`;
+
+  const maxTextWidth = labels.reduce((max, label) => {
+    const text = label.textContent.trim();
+    return Math.max(max, context.measureText(text).width);
+  }, 0);
+  const tileWidth = Math.ceil(Math.min(360, Math.max(116, maxTextWidth + 30)));
+  const lineHeight = Number.parseFloat(labelStyle.lineHeight) || (Number.parseFloat(labelStyle.fontSize) * 1.15) || 12;
+  const labelHeight = Math.ceil(lineHeight);
+
+  element.style.setProperty("--fallout-maw-token-hud-action-tile-width", `${tileWidth}px`);
+  element.style.setProperty("--fallout-maw-token-hud-action-label-height", `${labelHeight}px`);
 }
 
 function getSafeRight(margin) {

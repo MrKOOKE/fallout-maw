@@ -2821,8 +2821,10 @@ label.fallout-maw-mitigation-cell {
 }
 
 .fallout-maw-token-action-hud {
-  --fallout-maw-token-hud-gap: 6px;
-  --fallout-maw-token-hud-tile: 64px;
+  --fallout-maw-token-hud-gap: 7px;
+  --fallout-maw-token-hud-tile: 100px;
+  --fallout-maw-token-hud-action-tile-width: 126px;
+  --fallout-maw-token-hud-action-label-height: 18px;
   --fallout-maw-token-hud-actions-width: 760px;
   --fallout-maw-token-hud-popup-max-height: 520px;
   bottom: 12px;
@@ -2899,16 +2901,16 @@ label.fallout-maw-mitigation-cell {
 }
 
 .fallout-maw-token-hud-limbs {
-  width: 286px;
+  width: 298px;
 }
 
 .fallout-maw-token-hud-resources {
-  width: 260px;
+  width: 276px;
 }
 
 .fallout-maw-token-hud-block-title {
   color: #f2d581;
-  font-size: 0.74rem;
+  font-size: 0.9rem;
   font-weight: 700;
   line-height: 1;
   margin: 0 0 5px;
@@ -2953,18 +2955,23 @@ label.fallout-maw-mitigation-cell {
   width: var(--fallout-maw-token-hud-actions-width);
 }
 
+.fallout-maw-token-action-hud:not(.layout-ready) .fallout-maw-token-hud-popup {
+  visibility: hidden;
+}
+
 .fallout-maw-token-hud-tile,
 .fallout-maw-token-hud-main-action {
   align-items: center;
   background:
     linear-gradient(180deg, rgba(67, 69, 57, 0.96), rgba(22, 23, 20, 0.98));
   border: 1px solid rgba(212, 181, 93, 0.34);
+  box-sizing: border-box;
   box-shadow: inset 0 1px 0 rgba(255, 240, 178, 0.13), 0 3px 9px rgba(0, 0, 0, 0.4);
   color: #e7d7a5;
   cursor: pointer;
   display: grid;
   flex: 0 0 var(--fallout-maw-token-hud-tile);
-  grid-template-rows: 39px minmax(15px, auto);
+  grid-template-rows: 52px minmax(26px, auto);
   justify-items: center;
   min-height: var(--fallout-maw-token-hud-tile);
   min-width: var(--fallout-maw-token-hud-tile);
@@ -2995,27 +3002,58 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-token-hud-tile img,
 .fallout-maw-token-hud-main-action img {
   border: 0;
-  height: 36px;
+  height: 48px;
   object-fit: cover;
-  width: 36px;
+  width: 48px;
 }
 
 .fallout-maw-token-hud-tile span,
 .fallout-maw-token-hud-main-action span {
   display: block;
-  font-size: 0.62rem;
-  line-height: 1.05;
+  font-size: 0.8rem;
+  line-height: 1.12;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.fallout-maw-token-hud-action-tile {
+  flex-basis: var(--fallout-maw-token-hud-action-tile-width);
+  grid-template-rows: 52px var(--fallout-maw-token-hud-action-label-height) 24px;
+  min-height: calc(90px + var(--fallout-maw-token-hud-action-label-height));
+  min-width: var(--fallout-maw-token-hud-action-tile-width);
+  width: var(--fallout-maw-token-hud-action-tile-width);
+}
+
+.fallout-maw-token-hud-action-tile span {
+  align-items: center;
+  display: flex;
+  height: var(--fallout-maw-token-hud-action-label-height);
+  justify-content: center;
+  overflow: hidden;
+  text-overflow: unset;
+  white-space: nowrap;
+}
+
+.fallout-maw-token-hud-main-action span {
+  align-items: center;
+  display: flex;
+  min-height: 34px;
+  justify-content: center;
+  text-overflow: unset;
+  white-space: normal;
+}
+
 .fallout-maw-token-hud-action-tile strong {
+  align-items: center;
   background: rgba(4, 5, 4, 0.72);
   border: 1px solid rgba(237, 209, 129, 0.28);
-  font-size: 0.66rem;
+  display: inline-flex;
+  font-size: 0.8rem;
+  justify-content: center;
   line-height: 1;
-  min-width: 1.45rem;
+  min-height: 20px;
+  min-width: 1.7rem;
   padding: 2px 4px;
 }
 
@@ -3034,7 +3072,7 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-token-hud-meter-header {
   align-items: center;
   display: flex;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   gap: 8px;
   justify-content: space-between;
   line-height: 1;
@@ -3051,7 +3089,7 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-token-hud-meter-header strong {
   color: #f3dda0;
   flex: none;
-  font-size: 0.68rem;
+  font-size: 0.8rem;
 }
 
 .fallout-maw-token-hud-stat-grid {
@@ -3097,7 +3135,8 @@ label.fallout-maw-mitigation-cell {
 
 @media (max-width: 980px) {
   .fallout-maw-token-action-hud {
-    --fallout-maw-token-hud-tile: 56px;
+    --fallout-maw-token-hud-tile: 72px;
+    --fallout-maw-token-hud-action-tile-width: 104px;
   }
 
   .fallout-maw-token-hud-limbs,
