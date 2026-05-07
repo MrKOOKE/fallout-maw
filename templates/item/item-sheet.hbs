@@ -72,6 +72,22 @@
       <span>Получено при состоянии</span>
       <input type="number" value="{{system.triggeredAtValue}}" disabled>
     </label>
+    <label>
+      <span>{{localize "FALLOUTMAW.Trauma.HealingDifficulty"}}</span>
+      <input type="number" value="{{system.healingDifficulty}}" disabled>
+    </label>
+    <label>
+      <span>{{localize "FALLOUTMAW.Trauma.HealingToolClass"}}</span>
+      <input type="text" value="{{system.healingToolClass}}" disabled>
+    </label>
+    <label>
+      <span>{{localize "FALLOUTMAW.Trauma.HealingProgress"}}</span>
+      <input type="text" value="{{system.healingProgress}} / {{system.healingProgressMax}}" disabled>
+    </label>
+    <label>
+      <span>{{localize "FALLOUTMAW.Trauma.HealingSkill"}}</span>
+      <input type="text" value="{{traumaHealingSkillLabel}}" disabled>
+    </label>
   </div>
 </section>
 
@@ -272,6 +288,47 @@
     </div>
   </section>
   {{/if}}
+
+  {{#each toolFunctions}}
+  {{#if enabled}}
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{label}}</h2>
+      <button type="button" data-remove-item-function="{{functionKey}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>Класс инструмента</span>
+        <select name="system.functions.tools.{{key}}.toolClass">
+          {{#each classChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label class="fallout-maw-split-number-field">
+        <span>Запас</span>
+        <div>
+          <input type="number" name="system.functions.tools.{{key}}.supply.value" value="{{supplyValue}}" min="0" step="1">
+          <strong>/</strong>
+          <input type="number" name="system.functions.tools.{{key}}.supply.max" value="{{supplyMax}}" min="0" step="1">
+        </div>
+      </label>
+      <label>
+        <span>Порог для использования</span>
+        <input type="number" name="system.functions.tools.{{key}}.skillValue" value="{{skillValue}}" min="0" step="1">
+      </label>
+      <label>
+        <span>Навык</span>
+        <select name="system.functions.tools.{{key}}.skillKey">
+          {{#each skillChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+    </div>
+  </section>
+  {{/if}}
+  {{/each}}
 </section>
 {{else}}
 <section class="fallout-maw-panel">

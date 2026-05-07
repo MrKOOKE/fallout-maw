@@ -12,6 +12,7 @@ export const TEMPLATES = Object.freeze({
   }),
   skillCheckDialog: `systems/${SYSTEM_ID}/templates/actor/skill-check-dialog.hbs`,
   limbDamageDialog: `systems/${SYSTEM_ID}/templates/actor/limb-damage-dialog.hbs`,
+  medicineDialog: `systems/${SYSTEM_ID}/templates/actor/medicine-dialog.hbs`,
   skillCheckControl: `systems/${SYSTEM_ID}/templates/actor/skill-check-control.hbs`,
   skillCheckAnimation: `systems/${SYSTEM_ID}/templates/actor/skill-check-animation.hbs`,
   tokenActionHud: `systems/${SYSTEM_ID}/templates/actor/token-action-hud.hbs`,
@@ -46,6 +47,8 @@ export const TEMPLATES = Object.freeze({
     skillFormulas: `systems/${SYSTEM_ID}/templates/settings/skill-formulas-config.hbs`,
     limbSilhouette: `systems/${SYSTEM_ID}/templates/settings/limb-silhouette-config.hbs`,
     tokenActionHud: `systems/${SYSTEM_ID}/templates/settings/token-action-hud-config.hbs`,
+    tools: `systems/${SYSTEM_ID}/templates/settings/tool-settings-config.hbs`,
+    systemActions: `systems/${SYSTEM_ID}/templates/settings/system-action-settings-config.hbs`,
     traumaSettings: `systems/${SYSTEM_ID}/templates/settings/trauma-settings-config.hbs`,
     traumaGroupSettings: `systems/${SYSTEM_ID}/templates/settings/trauma-group-settings-config.hbs`
   })

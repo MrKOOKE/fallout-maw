@@ -300,6 +300,11 @@ function buildTraumaItemData(actor, { limb, limbKey, limbSetId, stage, damageTyp
       thresholdPercent,
       thresholdValue,
       triggeredAtValue: nextValue,
+      healingDifficulty: toInteger(profileEntry.profile.healingDifficulty ?? 60),
+      healingToolClass: String(profileEntry.profile.healingToolClass ?? "D").trim().toUpperCase() || "D",
+      healingProgress: 0,
+      healingProgressMax: toInteger(profileEntry.profile.healingProgress ?? 100),
+      healingSkillKey: String(profileEntry.profile.healingSkillKey ?? "doctor").trim() || "doctor",
       damageSnapshot: snapshot,
       generated: true,
       effects: effectChanges

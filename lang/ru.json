@@ -30,6 +30,7 @@
       "Currencies": "Валюты",
       "DamageDefenses": "Защита от урона",
       "DamageResistances": "Сопротивления урону",
+      "DamageReductions": "Снижение урона",
       "Delete": "Удалить",
       "Description": "Описание",
       "Edit": "Изменить",
@@ -59,6 +60,7 @@
       "Thirst": "Жажда",
       "Path": "Путь",
       "Total": "Итого",
+      "Traumas": "Травмы",
       "Untitled": "Без названия",
       "Value": "Значение",
       "Weapon": "Оружие"
@@ -76,6 +78,7 @@
       "LockCoreFields": "Заблокировать основу",
       "NoCreatureType": "Не выбран",
       "NoRace": "Не выбрана",
+      "NoTraumas": "Травм нет.",
       "Progression": "Развитие",
       "Race": "Раса",
       "ResearchPointsPerLevel": "Очки исследований за уровень",
@@ -166,6 +169,12 @@
       "NoChanges": "Изменения не созданы.",
       "Origin": "Источник эффекта",
       "Priority": "Вес"
+    },
+    "Trauma": {
+      "HealingDifficulty": "Сложность лечения",
+      "HealingProgress": "Прогресс лечения",
+      "HealingSkill": "Навык лечения",
+      "HealingToolClass": "Класс инструмента для лечения"
     },
     "Research": {
       "ApplyTime": "Применить время",

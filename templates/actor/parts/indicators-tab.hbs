@@ -39,6 +39,56 @@
     </div>
   </section>
 
+  {{#if limbSilhouette.visible}}
+  <div class="fallout-maw-limb-trauma-layout">
+    <section class="fallout-maw-panel fallout-maw-limb-silhouette-section">
+      <h2>{{localize "FALLOUTMAW.Common.Limbs"}}</h2>
+      <svg class="fallout-maw-actor-limb-silhouette" viewBox="{{limbSilhouette.viewBox}}" role="img" aria-label="{{localize 'FALLOUTMAW.Common.Limbs'}}">
+        {{#each limbSilhouette.parts}}
+        <path class="fallout-maw-actor-limb-silhouette-part{{#if active}} active{{/if}}" d="{{d}}" fill="{{fill}}" data-limb-control-card data-limb-key="{{limbKey}}" role="button" tabindex="0"></path>
+        {{/each}}
+        {{#each limbSilhouette.outline}}
+        <path class="fallout-maw-actor-limb-silhouette-outline" d="{{d}}"></path>
+        {{/each}}
+      </svg>
+    </section>
+
+    <section class="fallout-maw-panel fallout-maw-trauma-inline-section">
+      <h2>{{localize "FALLOUTMAW.Common.Traumas"}}</h2>
+      <div class="fallout-maw-trauma-list">
+        {{#each traumas}}
+        <article class="fallout-maw-trauma-row" data-trauma-id="{{id}}">
+          <div class="fallout-maw-trauma-title">
+            <img src="{{img}}" alt="{{name}}">
+            <div class="fallout-maw-trauma-summary">
+              <strong>{{name}}</strong>
+              <span>{{limbLabel}} &middot; {{damageTypeLabel}}</span>
+            </div>
+          </div>
+          <div class="fallout-maw-trauma-treatment">
+            <span>{{localize "FALLOUTMAW.Trauma.HealingDifficulty"}}: <strong>{{healingDifficulty}}</strong></span>
+            <span>{{localize "FALLOUTMAW.Trauma.HealingToolClass"}}: <strong>{{healingToolClass}}</strong></span>
+            <span>{{localize "FALLOUTMAW.Trauma.HealingProgress"}}: <strong>{{healingProgress}} / {{healingProgressMax}}</strong></span>
+            <span>{{localize "FALLOUTMAW.Trauma.HealingSkill"}}: <strong>{{healingSkillLabel}}</strong></span>
+          </div>
+          <div class="fallout-maw-trauma-effects">
+            {{#each effects}}
+            <span title="{{title}}">{{summary}}</span>
+            {{else}}
+            <span>{{localize "FALLOUTMAW.Effects.NoChanges"}}</span>
+            {{/each}}
+          </div>
+          {{#if ../freeEdit}}
+          <button type="button" data-action="deleteTrauma" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          {{/if}}
+        </article>
+        {{else}}
+        <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Actor.NoTraumas"}}</p>
+        {{/each}}
+      </div>
+    </section>
+  </div>
+  {{else}}
   <section class="fallout-maw-panel">
     <h2>{{localize "FALLOUTMAW.Common.Limbs"}}</h2>
     <div class="fallout-maw-resource-grid">
@@ -65,6 +115,42 @@
   </section>
 
   <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Common.Traumas"}}</h2>
+    <div class="fallout-maw-trauma-list">
+      {{#each traumas}}
+      <article class="fallout-maw-trauma-row" data-trauma-id="{{id}}">
+        <div class="fallout-maw-trauma-title">
+          <img src="{{img}}" alt="{{name}}">
+          <div class="fallout-maw-trauma-summary">
+            <strong>{{name}}</strong>
+            <span>{{limbLabel}} &middot; {{damageTypeLabel}}</span>
+          </div>
+        </div>
+        <div class="fallout-maw-trauma-treatment">
+          <span>{{localize "FALLOUTMAW.Trauma.HealingDifficulty"}}: <strong>{{healingDifficulty}}</strong></span>
+          <span>{{localize "FALLOUTMAW.Trauma.HealingToolClass"}}: <strong>{{healingToolClass}}</strong></span>
+          <span>{{localize "FALLOUTMAW.Trauma.HealingProgress"}}: <strong>{{healingProgress}} / {{healingProgressMax}}</strong></span>
+          <span>{{localize "FALLOUTMAW.Trauma.HealingSkill"}}: <strong>{{healingSkillLabel}}</strong></span>
+        </div>
+        <div class="fallout-maw-trauma-effects">
+          {{#each effects}}
+          <span title="{{title}}">{{summary}}</span>
+          {{else}}
+          <span>{{localize "FALLOUTMAW.Effects.NoChanges"}}</span>
+          {{/each}}
+        </div>
+        {{#if ../freeEdit}}
+        <button type="button" data-action="deleteTrauma" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        {{/if}}
+      </article>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Actor.NoTraumas"}}</p>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+
+  <section class="fallout-maw-panel">
     <h2>{{localize "FALLOUTMAW.Common.DamageResistances"}}{{#if activeLimb}} - {{activeLimb.label}}{{/if}}</h2>
     <div class="fallout-maw-summary-grid six-columns">
       {{#each damageResistances}}
@@ -84,26 +170,6 @@
         <span>{{label}}:</span>
         <strong>{{value}}</strong>
       </div>
-      {{/each}}
-    </div>
-  </section>
-
-  <section class="fallout-maw-panel">
-    <h2>Травмы</h2>
-    <div class="fallout-maw-trauma-list">
-      {{#each traumas}}
-      <article class="fallout-maw-trauma-row" data-trauma-id="{{id}}">
-        <img src="{{img}}" alt="{{name}}">
-        <div>
-          <strong>{{name}}</strong>
-          <span>{{limbLabel}} · {{damageTypeLabel}} · {{thresholdPercent}}%</span>
-        </div>
-        {{#if ../freeEdit}}
-        <button type="button" data-action="deleteTrauma" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
-        {{/if}}
-      </article>
-      {{else}}
-      <p class="fallout-maw-empty-list">Травм нет.</p>
       {{/each}}
     </div>
   </section>

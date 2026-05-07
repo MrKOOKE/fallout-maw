@@ -1,6 +1,11 @@
 import { toInteger } from "../utils/numbers.mjs";
 
 const DEFAULT_TRAUMA_ICON = "icons/svg/blood.svg";
+const DEFAULT_HEALING_DIFFICULTY = 60;
+const DEFAULT_HEALING_TOOL_CLASS = "D";
+const DEFAULT_HEALING_PROGRESS = 100;
+const DEFAULT_HEALING_SKILL = "doctor";
+const HEALING_TOOL_CLASSES = new Set(["D", "C", "B", "A", "S"]);
 
 export function createDefaultTraumaSettings() {
   return { groups: {} };
@@ -88,6 +93,10 @@ export function createDefaultTraumaProfile(damageType = {}, thresholdPercent = 0
   return {
     name: `Травма ${damageType.label ?? damageType.key ?? ""}`.trim(),
     img: DEFAULT_TRAUMA_ICON,
+    healingDifficulty: DEFAULT_HEALING_DIFFICULTY,
+    healingToolClass: DEFAULT_HEALING_TOOL_CLASS,
+    healingProgress: DEFAULT_HEALING_PROGRESS,
+    healingSkillKey: DEFAULT_HEALING_SKILL,
     effects: [],
     thresholdPercent
   };
@@ -138,9 +147,18 @@ function normalizeTraumaProfile(value = {}, damageType = {}, thresholdPercent = 
   return {
     name: String(hasContent ? value.name ?? "" : "").trim(),
     img: String(hasContent ? value.img ?? "" : "").trim(),
+    healingDifficulty: Math.max(0, toInteger(hasContent ? value.healingDifficulty ?? DEFAULT_HEALING_DIFFICULTY : DEFAULT_HEALING_DIFFICULTY)),
+    healingToolClass: normalizeHealingToolClass(hasContent ? value.healingToolClass : DEFAULT_HEALING_TOOL_CLASS),
+    healingProgress: Math.max(0, toInteger(hasContent ? value.healingProgress ?? DEFAULT_HEALING_PROGRESS : DEFAULT_HEALING_PROGRESS)),
+    healingSkillKey: String(hasContent ? value.healingSkillKey ?? DEFAULT_HEALING_SKILL : DEFAULT_HEALING_SKILL).trim() || DEFAULT_HEALING_SKILL,
     effects: normalizeTraumaEffects(hasContent ? value.effects : []),
     thresholdPercent
   };
+}
+
+function normalizeHealingToolClass(value) {
+  const normalized = String(value ?? DEFAULT_HEALING_TOOL_CLASS).trim().toUpperCase();
+  return HEALING_TOOL_CLASSES.has(normalized) ? normalized : DEFAULT_HEALING_TOOL_CLASS;
 }
 
 function normalizeTraumaEffects(value = []) {

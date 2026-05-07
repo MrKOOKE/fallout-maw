@@ -126,6 +126,7 @@ export class TraumaGroupSettingsConfig extends FalloutMaWFormApplicationV2 {
 
   async _prepareContext(options) {
     const group = this.#getGroup();
+    const skillSettings = getSkillSettings();
     return {
       ...(await super._prepareContext(options)),
       group: group ? {
@@ -142,6 +143,8 @@ export class TraumaGroupSettingsConfig extends FalloutMaWFormApplicationV2 {
                 ...(stage.profiles?.[damageType.key] ?? {}),
                 damageTypeKey: damageType.key,
                 damageTypeLabel: damageType.label,
+                healingToolClassChoices: buildHealingToolClassChoices(stage.profiles?.[damageType.key]?.healingToolClass ?? "D"),
+                healingSkillChoices: buildHealingSkillChoices(stage.profiles?.[damageType.key]?.healingSkillKey ?? "doctor", skillSettings),
                 effects: (stage.profiles?.[damageType.key]?.effects ?? []).map((effect, index) => prepareEffectRow(effect, index))
               }))
             }))
@@ -237,6 +240,10 @@ export class TraumaGroupSettingsConfig extends FalloutMaWFormApplicationV2 {
               return [damageTypeKey, {
                 name: profileElement.querySelector("[data-trauma-profile-name]")?.value ?? "",
                 img: profileElement.querySelector("[data-trauma-profile-img]")?.value ?? "",
+                healingDifficulty: profileElement.querySelector("[data-trauma-profile-healing-difficulty]")?.value ?? "60",
+                healingToolClass: profileElement.querySelector("[data-trauma-profile-healing-tool-class]")?.value ?? "D",
+                healingProgress: profileElement.querySelector("[data-trauma-profile-healing-progress]")?.value ?? "100",
+                healingSkillKey: profileElement.querySelector("[data-trauma-profile-healing-skill]")?.value ?? "doctor",
                 effects: Array.from(profileElement.querySelectorAll("[data-trauma-effect]")).map(effectElement => ({
                   key: effectElement.querySelector("[data-trauma-effect-key]")?.value ?? "",
                   type: effectElement.querySelector("[data-trauma-effect-type]")?.value ?? "add",
@@ -283,6 +290,24 @@ function prepareEffectRow(effect, index) {
     overrideSelected: String(effect?.type ?? "") === "override",
     priority: effect?.priority ?? ""
   };
+}
+
+function buildHealingToolClassChoices(selected = "D") {
+  const normalized = String(selected || "D").trim().toUpperCase();
+  return ["D", "C", "B", "A", "S"].map(value => ({
+    value,
+    label: value,
+    selected: value === normalized
+  }));
+}
+
+function buildHealingSkillChoices(selected = "doctor", skills = []) {
+  const normalized = String(selected || "doctor");
+  return skills.map(skill => ({
+    key: skill.key,
+    label: skill.label,
+    selected: skill.key === normalized
+  }));
 }
 
 function countTraumaStages(group = {}) {

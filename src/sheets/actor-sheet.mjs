@@ -35,6 +35,7 @@ import {
   prepareIndicatorEntry as prepareDisplayIndicatorEntry,
   prepareInventoryContext as prepareDisplayInventoryContext
 } from "../utils/actor-display-data.mjs";
+import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import {
   ROOT_CONTAINER_ID,
   buildInventoryCellStyle as buildInventoryCellStyleHelper,
@@ -195,14 +196,19 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const activeLimbKey = limbEntries.some(([key]) => key === this.#activeLimbKey)
       ? this.#activeLimbKey
       : (limbEntries[0]?.[0] ?? "");
+    const displayLimbs = Object.fromEntries(limbEntries.map(([key, limb]) => [
+      key,
+      prepareLimbDisplayData(actor, key, limb)
+    ]));
     const limbs = limbEntries.map(([key, limb]) => prepareDisplayIndicatorEntry({
       key,
       label: String(limb?.label ?? key),
       color: "#8f8456",
-      data: prepareLimbDisplayData(actor, key, limb),
+      data: displayLimbs[key],
       inputName: `system.limbs.${key}.value`,
       active: key === activeLimbKey
     }));
+    const limbSilhouette = prepareSheetLimbSilhouette(race?.limbSilhouette, displayLimbs, activeLimbKey);
 
     this.#activeLimbKey = activeLimbKey;
 
@@ -302,7 +308,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         ...damageType,
         value: toInteger(actor.system.damageDefenses?.[activeLimbKey]?.[damageType.key])
       })),
-      traumas: prepareTraumaEntries(actor),
+      limbSilhouette,
+      traumas: prepareTraumaEntries(actor, {
+        characteristicSettings,
+        resourceSettings,
+        needSettings,
+        proficiencySettings,
+        skillSettings,
+        damageTypeSettings,
+        limbs
+      }),
       inventory,
       effectCategories: prepareEffectCategories(getActorEffectsForDisplay(actor))
     }, { inplace: false });
@@ -318,6 +333,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#activateLimbControlClicks();
     this.#activateTabScrollPersistence();
     this.#restoreActiveTabScroll();
+    this.#syncFreeEditHeaderButton();
   }
 
   _onClose(options) {
@@ -414,6 +430,41 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     root.dataset.limbControlClicksBound = "true";
     root.addEventListener("click", event => this.#onLimbControlClick(event), { capture: true });
     root.addEventListener("keydown", event => this.#onLimbControlKeyDown(event), { capture: true });
+  }
+
+  #syncFreeEditHeaderButton() {
+    const header = this.element?.querySelector(".window-header");
+    if (!header || !this.isEditable) return;
+
+    let button = header.querySelector(".fallout-maw-window-free-edit-toggle");
+    if (!button) {
+      button = document.createElement("button");
+      button.type = "button";
+      button.className = "fallout-maw-window-free-edit-toggle";
+      button.innerHTML = `<i class="fa-solid fa-lock" inert></i>`;
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        this.#freeEdit = !this.#freeEdit;
+        return this.render({ force: true });
+      });
+      header.querySelector(".window-title")?.after(button);
+    }
+
+    if (!button) return;
+    const label = this.#freeEdit
+      ? game.i18n.localize("FALLOUTMAW.Actor.LockCoreFields")
+      : game.i18n.localize("FALLOUTMAW.Actor.UnlockCoreFields");
+    button.classList.toggle("active", this.#freeEdit);
+    button.classList.toggle("locked", !this.#freeEdit);
+    button.classList.toggle("unlocked", this.#freeEdit);
+    button.setAttribute("aria-label", label);
+    button.setAttribute("title", label);
+    button.dataset.tooltip = label;
+
+    const icon = button.querySelector("i");
+    if (!icon) return;
+    icon.classList.toggle("fa-lock", !this.#freeEdit);
+    icon.classList.toggle("fa-lock-open", this.#freeEdit);
   }
 
   #onLimbControlKeyDown(event) {
@@ -1993,7 +2044,9 @@ function createInventoryItemData(item, allItems, currencies = [], placement = nu
   };
 }
 
-function prepareTraumaEntries(actor) {
+function prepareTraumaEntries(actor, settings = {}) {
+  const pathLabels = buildEffectPathLabelMap(settings);
+  const skillLabels = new Map((settings.skillSettings ?? []).map(skill => [skill.key, skill.label]));
   return getActorTraumas(actor).map(item => ({
     id: item.id,
     uuid: item.uuid,
@@ -2001,8 +2054,153 @@ function prepareTraumaEntries(actor) {
     img: item.img,
     limbLabel: item.system?.limbLabel ?? item.system?.limbKey ?? "",
     damageTypeLabel: item.system?.damageTypeLabel ?? item.system?.damageTypeKey ?? "",
-    thresholdPercent: toInteger(item.system?.thresholdPercent)
+    thresholdPercent: toInteger(item.system?.thresholdPercent),
+    healingDifficulty: toInteger(item.system?.healingDifficulty ?? 60),
+    healingToolClass: String(item.system?.healingToolClass ?? "D").trim().toUpperCase() || "D",
+    healingProgress: toInteger(item.system?.healingProgress),
+    healingProgressMax: toInteger(item.system?.healingProgressMax ?? item.system?.healingProgress ?? 100),
+    healingSkillLabel: skillLabels.get(item.system?.healingSkillKey) ?? item.system?.healingSkillKey ?? "doctor",
+    effects: prepareTraumaEffectEntries(item.system?.effects, pathLabels)
   }));
+}
+
+function prepareTraumaEffectEntries(effects = [], pathLabels = new Map()) {
+  const effectList = Array.isArray(effects) ? effects : Object.values(effects ?? {});
+  return effectList.map(effect => {
+    const pathLabel = getEffectPathLabel(effect?.key, pathLabels);
+    const type = String(effect?.type || "add");
+    const value = formatEffectChangeValue(type, effect?.value);
+    const typeLabel = getEffectTypeLabel(type);
+    return {
+      pathLabel,
+      typeLabel,
+      value,
+      summary: `${pathLabel}: ${value}`,
+      title: `${typeLabel}: ${pathLabel} ${value}`
+    };
+  });
+}
+
+function buildEffectPathLabelMap({
+  characteristicSettings = [],
+  resourceSettings = [],
+  needSettings = [],
+  proficiencySettings = [],
+  skillSettings = [],
+  damageTypeSettings = [],
+  limbs = []
+} = {}) {
+  const map = new Map();
+  const valueLabel = game.i18n.localize("FALLOUTMAW.Common.Value");
+  const maximumLabel = game.i18n.localize("FALLOUTMAW.Common.Maximum");
+  const bonusLabel = game.i18n.localize("FALLOUTMAW.Actor.Bonus");
+  const baseLabel = game.i18n.localize("FALLOUTMAW.Actor.Base");
+  const developmentBonusLabel = game.i18n.localize("FALLOUTMAW.Advancement.DevelopmentBonus");
+
+  for (const entry of characteristicSettings) {
+    map.set(`system.characteristics.${entry.key}`, entry.label);
+  }
+
+  addEffectPathLabels(map, "system.skills", skillSettings, {
+    value: valueLabel,
+    max: maximumLabel,
+    bonus: bonusLabel,
+    base: baseLabel,
+    developmentBonus: developmentBonusLabel
+  });
+  addEffectPathLabels(map, "system.resources", resourceSettings, {
+    value: valueLabel,
+    max: maximumLabel,
+    bonus: bonusLabel
+  });
+  addEffectPathLabels(map, "system.needs", needSettings, {
+    value: valueLabel,
+    max: maximumLabel,
+    bonus: bonusLabel
+  });
+  addEffectPathLabels(map, "system.proficiencies", proficiencySettings, {
+    value: valueLabel,
+    max: maximumLabel,
+    bonus: bonusLabel
+  });
+  addEffectPathLabels(map, "system.limbs", limbs, {
+    value: valueLabel,
+    max: maximumLabel
+  });
+  addDamageEffectPathLabels(map, "system.damageResistances", game.i18n.localize("FALLOUTMAW.Common.DamageResistances"), limbs, damageTypeSettings);
+  addDamageEffectPathLabels(map, "system.damageDefenses", game.i18n.localize("FALLOUTMAW.Common.DamageDefenses"), limbs, damageTypeSettings);
+  addDamageEffectPathLabels(map, "system.damageReductions", localizeOrFallback("FALLOUTMAW.Common.DamageReductions", "Damage Reduction"), limbs, damageTypeSettings);
+
+  return map;
+}
+
+function addEffectPathLabels(map, rootPath, entries = [], fields = {}) {
+  for (const entry of entries) {
+    const label = String(entry?.label ?? entry?.key ?? "");
+    const key = String(entry?.key ?? "");
+    if (!key) continue;
+    for (const [field, fieldLabel] of Object.entries(fields)) {
+      map.set(`${rootPath}.${key}.${field}`, `${label}: ${fieldLabel}`);
+    }
+  }
+}
+
+function addDamageEffectPathLabels(map, rootPath, rootLabel, limbs = [], damageTypes = []) {
+  for (const limb of limbs) {
+    const limbKey = String(limb?.key ?? "");
+    const limbLabel = String(limb?.label ?? limbKey);
+    if (!limbKey) continue;
+    for (const damageType of damageTypes) {
+      const damageTypeKey = String(damageType?.key ?? "");
+      const damageTypeLabel = String(damageType?.label ?? damageTypeKey);
+      if (!damageTypeKey) continue;
+      map.set(`${rootPath}.${limbKey}.${damageTypeKey}`, `${rootLabel}: ${limbLabel}, ${damageTypeLabel}`);
+    }
+  }
+}
+
+function getEffectPathLabel(path, pathLabels = new Map()) {
+  const normalized = String(path ?? "").trim();
+  if (!normalized) return localizeOrFallback("FALLOUTMAW.Common.Untitled", "Untitled");
+  return pathLabels.get(normalized) ?? humanizeEffectPath(normalized);
+}
+
+function humanizeEffectPath(path) {
+  const parts = String(path ?? "")
+    .replace(/^system\./, "")
+    .split(".")
+    .filter(Boolean)
+    .map(part => part.replace(/([a-z])([A-Z])/g, "$1 $2"))
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1));
+  return parts.join(" / ") || String(path ?? "");
+}
+
+function getEffectTypeLabel(type) {
+  return game.i18n.localize(type === "override" ? "FALLOUTMAW.Effects.ChangeOverride" : "FALLOUTMAW.Effects.ChangeAdd");
+}
+
+function formatEffectChangeValue(type, value) {
+  const text = String(value ?? "").trim() || "0";
+  if (type === "override") return `= ${text}`;
+  if (/^-/.test(text) || /^\+/.test(text)) return text;
+  return `+${text}`;
+}
+
+function localizeOrFallback(key, fallback) {
+  const localized = game.i18n.localize(key);
+  return localized === key ? fallback : localized;
+}
+
+function prepareSheetLimbSilhouette(silhouette, limbs = {}, activeLimbKey = "") {
+  const prepared = createLimbSilhouetteHud(silhouette, limbs);
+  if (!prepared?.visible) return prepared;
+  return {
+    ...prepared,
+    parts: prepared.parts.map(part => ({
+      ...part,
+      active: part.limbKey === activeLimbKey
+    }))
+  };
 }
 
 function getActorEffectsForDisplay(actor) {

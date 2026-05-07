@@ -4,7 +4,8 @@ import {
   getCreatureOptions,
   getNeedSettings,
   getResourceSettings,
-  getSkillSettings
+  getSkillSettings,
+  getSystemActionSettings
 } from "../settings/accessors.mjs";
 import {
   TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING,
@@ -15,6 +16,7 @@ import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getLimbHealingCap } from "../combat/damage-hub.mjs";
 import { MOVEMENT_RESOURCE_PREVIEW_HOOK } from "../combat/movement-resources.mjs";
 import { openLimbDamageDialog } from "./limb-damage-dialog.mjs";
+import { requestMedicineTarget } from "./medicine-dialog.mjs";
 import {
   FALLBACK_ICON,
   normalizeImagePath,
@@ -41,6 +43,7 @@ const HUD_ACTIONS = Object.freeze([
   { key: "items", label: "Предметы", icon: "icons/svg/item-bag.svg" },
   { key: "abilities", label: "Способности", icon: "icons/svg/aura.svg" },
   { key: "skills", label: "Испытания", icon: "icons/svg/dice-target.svg" },
+  { key: "actions", label: "Действия", icon: "icons/svg/aura.svg" },
   { key: "settings", label: "Настройки", icon: "icons/svg/lever.svg" }
 ]);
 
@@ -228,7 +231,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       cycleWeaponSet: TokenActionHud.#onCycleWeaponSet,
       openSettings: TokenActionHud.#onOpenSettings,
       rollSkill: TokenActionHud.#onRollSkill,
-      openItem: TokenActionHud.#onOpenItem
+      openItem: TokenActionHud.#onOpenItem,
+      useSystemAction: TokenActionHud.#onUseSystemAction
     }
   };
 
@@ -261,8 +265,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const skills = prepareSkillButtons(actor);
     const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg");
     const abilities = prepareOwnedItemButtons(actor, "ability", "icons/svg/aura.svg");
-    const actions = prepareActions(this.#activeTray, activeWeaponSet, items, abilities);
-    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities);
+    const systemActions = prepareSystemActionButtons();
+    const actions = prepareActions(this.#activeTray, activeWeaponSet, items, abilities, systemActions);
+    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, systemActions);
     const meterSections = prepareMeterSectionStates();
     const displayLimbs = prepareDisplayLimbs(actor);
     const limbSilhouette = createLimbSilhouetteHud(race?.limbSilhouette, displayLimbs);
@@ -393,6 +398,16 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     const item = this.actor?.items.get(target.dataset.itemId ?? "");
     return item?.sheet?.render(true);
+  }
+
+  static #onUseSystemAction(event, target) {
+    event.preventDefault();
+    const key = String(target.dataset.systemActionKey ?? "");
+    if (key !== "medicine") return undefined;
+
+    this.#activeTray = "";
+    void this.render({ force: true });
+    return requestMedicineTarget(this.token);
   }
 
   #activateLimbControlClicks() {
@@ -661,18 +676,28 @@ function prepareOwnedItemButtons(actor, type, fallbackIcon) {
     }));
 }
 
-function prepareTrayContext(activeTray, skills, items, abilities) {
+function prepareSystemActionButtons() {
+  return getSystemActionSettings().map(action => ({
+    ...action,
+    img: normalizeImagePath(action.img, "icons/svg/aura.svg")
+  }));
+}
+
+function prepareTrayContext(activeTray, skills, items, abilities, systemActions) {
   const trayItems = activeTray === "skills"
     ? skills
     : activeTray === "items"
       ? items
       : activeTray === "abilities"
         ? abilities
-        : [];
+        : activeTray === "actions"
+          ? systemActions
+          : [];
   return {
     skills,
     items,
     abilities,
+    systemActions,
     metrics: prepareTrayMetrics(trayItems),
     visible: Boolean(activeTray)
   };
@@ -712,7 +737,7 @@ function measureTrayMaxLabelWidth(items) {
   }, 0);
 }
 
-function prepareActions(activeTray, activeWeaponSet, items, abilities) {
+function prepareActions(activeTray, activeWeaponSet, items, abilities, systemActions) {
   return HUD_ACTIONS.map(action => {
     if (action.key === "weapon") {
       const firstItem = activeWeaponSet?.slots?.find(slot => slot.item)?.item;
@@ -726,7 +751,13 @@ function prepareActions(activeTray, activeWeaponSet, items, abilities) {
       };
     }
 
-    const count = action.key === "items" ? items.length : action.key === "abilities" ? abilities.length : 0;
+    const count = action.key === "items"
+      ? items.length
+      : action.key === "abilities"
+        ? abilities.length
+        : action.key === "actions"
+          ? systemActions.length
+          : 0;
     return {
       ...action,
       active: activeTray === action.key,

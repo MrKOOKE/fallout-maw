@@ -27,11 +27,19 @@ import {
   RESOURCE_SETTINGS_SETTING,
   SKILL_CHECK_CONTROL_SETTING,
   SKILL_SETTINGS_SETTING,
+  SYSTEM_ACTION_SETTINGS_SETTING,
+  TOOL_SETTINGS_SETTING,
   TRAUMA_SETTINGS_SETTING
 } from "./constants.mjs";
 import { createEmptyCreatureOptions, normalizeCreatureOptions } from "./creature-options.mjs";
 import { createDefaultLevelSettings, normalizeLevelSettings } from "./levels.mjs";
 import { createDefaultTraumaSettings, normalizeTraumaSettings } from "./traumas.mjs";
+import {
+  createDefaultSystemActionSettings,
+  createDefaultToolSettings,
+  normalizeSystemActionSettings,
+  normalizeToolSettings
+} from "./tools.mjs";
 
 export const DEFAULT_SKILL_CHECK_CONTROL = Object.freeze({
   resultMode: "standard",
@@ -260,6 +268,42 @@ export async function setTraumaSettings(settings, creatureOptions = getCreatureO
 
 export async function resetTraumaSettings() {
   return setTraumaSettings(createDefaultTraumaSettings());
+}
+
+export function getToolSettings() {
+  try {
+    return normalizeToolSettings(game.settings.get(FALLOUT_MAW.id, TOOL_SETTINGS_SETTING));
+  } catch (_error) {
+    return createDefaultToolSettings();
+  }
+}
+
+export async function setToolSettings(settings) {
+  const normalized = normalizeToolSettings(settings);
+  await game.settings.set(FALLOUT_MAW.id, TOOL_SETTINGS_SETTING, normalized);
+  return normalized;
+}
+
+export async function resetToolSettings() {
+  return setToolSettings(createDefaultToolSettings());
+}
+
+export function getSystemActionSettings() {
+  try {
+    return normalizeSystemActionSettings(game.settings.get(FALLOUT_MAW.id, SYSTEM_ACTION_SETTINGS_SETTING));
+  } catch (_error) {
+    return createDefaultSystemActionSettings();
+  }
+}
+
+export async function setSystemActionSettings(settings) {
+  const normalized = normalizeSystemActionSettings(settings);
+  await game.settings.set(FALLOUT_MAW.id, SYSTEM_ACTION_SETTINGS_SETTING, normalized);
+  return normalized;
+}
+
+export async function resetSystemActionSettings() {
+  return setSystemActionSettings(createDefaultSystemActionSettings());
 }
 
 export function getSkillCheckControl() {

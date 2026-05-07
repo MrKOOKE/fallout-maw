@@ -46,7 +46,8 @@ export class GearDataModel extends BaseItemDataModel {
             new TypedObjectField(damageMitigationEntryField(), { required: true, initial: {} }),
             { required: true, initial: {} }
           )
-        })
+        }),
+        tools: new TypedObjectField(toolFunctionField(), { required: true, initial: {} })
       }),
       container: new SchemaField({
         parentId: new StringField({ required: true, blank: true, initial: "" }),
@@ -75,6 +76,19 @@ function containerFunctionField() {
   });
 }
 
+function toolFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    toolClass: new StringField({ required: true, blank: false, choices: ["D", "C", "B", "A", "S"], initial: "D" }),
+    supply: new SchemaField({
+      value: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      max: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+    }),
+    skillValue: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    skillKey: new StringField({ required: true, blank: true, initial: "" })
+  });
+}
+
 export class TraumaDataModel extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     return {
@@ -88,6 +102,11 @@ export class TraumaDataModel extends foundry.abstract.TypeDataModel {
       thresholdPercent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 0 }),
       thresholdValue: new NumberField({ required: true, integer: true, initial: 0 }),
       triggeredAtValue: new NumberField({ required: true, integer: true, initial: 0 }),
+      healingDifficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
+      healingToolClass: new StringField({ required: true, blank: false, choices: ["D", "C", "B", "A", "S"], initial: "D" }),
+      healingProgress: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      healingProgressMax: new NumberField({ required: true, integer: true, min: 0, initial: 100 }),
+      healingSkillKey: new StringField({ required: true, blank: false, initial: "doctor" }),
       damageSnapshot: new TypedObjectField(new NumberField({ required: true, min: 0, initial: 0 }), {
         required: true,
         initial: {}

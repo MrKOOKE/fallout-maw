@@ -19,6 +19,8 @@ import { NeedSettingsConfig } from "../apps/need-settings-config.mjs";
 import { ProficiencySettingsConfig } from "../apps/proficiency-settings-config.mjs";
 import { ResourceSettingsConfig } from "../apps/resource-settings-config.mjs";
 import { SkillFormulasConfig } from "../apps/skill-formulas-config.mjs";
+import { SystemActionSettingsConfig } from "../apps/system-action-settings-config.mjs";
+import { ToolSettingsConfig } from "../apps/tool-settings-config.mjs";
 import { TraumaSettingsConfig } from "../apps/trauma-settings-config.mjs";
 import { refreshPreparedActors, syncSettingsIntoSystemConfig } from "./accessors.mjs";
 import {
@@ -32,6 +34,8 @@ import {
   RESOURCE_SETTINGS_SETTING,
   SKILL_CHECK_CONTROL_SETTING,
   SKILL_SETTINGS_SETTING,
+  SYSTEM_ACTION_SETTINGS_SETTING,
+  TOOL_SETTINGS_SETTING,
   TRAUMA_SETTINGS_SETTING,
   TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING,
   TOKEN_ACTION_HUD_ENABLED_SETTING,
@@ -39,6 +43,7 @@ import {
 } from "./constants.mjs";
 import { createEmptyCreatureOptions } from "./creature-options.mjs";
 import { createDefaultLevelSettings } from "./levels.mjs";
+import { createDefaultSystemActionSettings, createDefaultToolSettings } from "./tools.mjs";
 import { createDefaultTraumaSettings } from "./traumas.mjs";
 import { DEFAULT_SKILL_CHECK_CONTROL, normalizeSkillCheckControl } from "./accessors.mjs";
 
@@ -144,6 +149,24 @@ export function registerSystemSettings() {
     onChange: refreshPreparedActors
   });
 
+  game.settings.register(FALLOUT_MAW.id, TOOL_SETTINGS_SETTING, {
+    name: "Настройка инструментов",
+    scope: "world",
+    config: false,
+    type: Object,
+    default: createDefaultToolSettings(),
+    onChange: refreshPreparedActors
+  });
+
+  game.settings.register(FALLOUT_MAW.id, SYSTEM_ACTION_SETTINGS_SETTING, {
+    name: "Настройка действий",
+    scope: "world",
+    config: false,
+    type: Object,
+    default: createDefaultSystemActionSettings(),
+    onChange: refreshPreparedActors
+  });
+
   game.settings.register(FALLOUT_MAW.id, TOKEN_ACTION_HUD_ENABLED_SETTING, {
     name: "Token Action HUD",
     scope: "client",
@@ -221,6 +244,22 @@ export function registerSystemSettings() {
     label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-bone",
     type: TraumaSettingsConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "toolSettingsMenu", {
+    name: "Настройка инструментов",
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-screwdriver-wrench",
+    type: ToolSettingsConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "systemActionSettingsMenu", {
+    name: "Настройка действий",
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-hand-sparkles",
+    type: SystemActionSettingsConfig,
     restricted: true
   });
 

@@ -1,7 +1,12 @@
 import { TEMPLATES } from "../constants.mjs";
-import { getCreatureOptions, getCurrencySettings, getDamageTypeSettings } from "../settings/accessors.mjs";
+import { getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { groupRaceEquipmentSlotsBySet } from "../utils/equipment-slots.mjs";
-import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
+import {
+  ITEM_FUNCTIONS,
+  createToolFunctionKey,
+  getToolKeyFromFunctionKey,
+  hasItemFunction
+} from "../utils/item-functions.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -53,6 +58,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const occupiedSlots = item.system?.occupiedSlots ?? {};
     const creatureOptions = getCreatureOptions();
     const damageTypeSettings = getDamageTypeSettings();
+    const toolSettings = getToolSettings();
+    const skillSettings = getSkillSettings();
     const equipmentSlotGroups = groupRaceEquipmentSlotsBySet(creatureOptions);
     const equipmentSlotSelections = new Map();
     const hasContainerFunction = hasItemFunction(item, ITEM_FUNCTIONS.container);
@@ -63,6 +70,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       relativeTo: item,
       rollData: item.getRollData?.() ?? {}
     });
+    const toolFunctions = buildToolFunctionEntries(item, toolSettings, skillSettings);
     const availableFunctionChoices = [
       {
         value: "",
@@ -79,7 +87,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         value: ITEM_FUNCTIONS.damageMitigation,
         label: game.i18n.localize("FALLOUTMAW.Item.FunctionDamageMitigation"),
         disabled: hasDamageMitigationFunction
-      }
+      },
+      ...toolFunctions.map(tool => ({
+        value: createToolFunctionKey(tool.key),
+        label: tool.label,
+        disabled: tool.enabled
+      }))
     ];
 
     for (const group of equipmentSlotGroups) {
@@ -104,8 +117,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       descriptionHTML,
       isGear: type === "gear",
       isTrauma: type === "trauma",
+      traumaHealingSkillLabel: getTraumaHealingSkillLabel(item),
       isContainerFunction: hasContainerFunction,
       hasDamageMitigationFunction,
+      toolFunctions,
       containerLoadReduction,
       canAddItemFunction: availableFunctionChoices.some(choice => choice.value && !choice.disabled),
       showFunctionPicker: this.#functionPickerActive,
@@ -194,6 +209,19 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       });
     }
 
+    const toolKey = getToolKeyFromFunctionKey(functionKey);
+    if (toolKey) {
+      this.#functionPickerActive = false;
+      return this.item.update({
+        [`system.functions.tools.${toolKey}.enabled`]: true,
+        [`system.functions.tools.${toolKey}.toolClass`]: "D",
+        [`system.functions.tools.${toolKey}.supply.value`]: 0,
+        [`system.functions.tools.${toolKey}.supply.max`]: 0,
+        [`system.functions.tools.${toolKey}.skillValue`]: 0,
+        [`system.functions.tools.${toolKey}.skillKey`]: ""
+      });
+    }
+
     return undefined;
   }
 
@@ -227,6 +255,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     }
     if (functionKey === ITEM_FUNCTIONS.damageMitigation) {
       return this.item.update({ "system.functions.damageMitigation.enabled": false });
+    }
+    const toolKey = getToolKeyFromFunctionKey(functionKey);
+    if (toolKey) {
+      return this.item.update({ [`system.functions.tools.${toolKey}.enabled`]: false });
     }
     return undefined;
   }
@@ -379,10 +411,52 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   }
 }
 
+function getTraumaHealingSkillLabel(item) {
+  if (item?.type !== "trauma") return "";
+  const key = item.system?.healingSkillKey ?? "";
+  return getSkillSettings().find(skill => skill.key === key)?.label ?? key;
+}
+
 function getItemFunctionLabel(functionKey = "") {
   if (functionKey === ITEM_FUNCTIONS.container) return game.i18n.localize("FALLOUTMAW.Item.FunctionContainer");
   if (functionKey === ITEM_FUNCTIONS.damageMitigation) return game.i18n.localize("FALLOUTMAW.Item.FunctionDamageMitigation");
+  const toolKey = getToolKeyFromFunctionKey(functionKey);
+  if (toolKey) return getToolSettings().find(tool => tool.key === toolKey)?.label ?? toolKey;
   return game.i18n.localize("FALLOUTMAW.Item.Function");
+}
+
+function buildToolFunctionEntries(item, toolSettings, skillSettings) {
+  const skillChoices = [
+    { value: "", label: "Не используется" },
+    ...skillSettings.map(skill => ({ value: skill.key, label: skill.label }))
+  ];
+  const classChoices = ["D", "C", "B", "A", "S"];
+  const functions = item.system?.functions?.tools ?? {};
+
+  return toolSettings.map(tool => {
+    const data = functions?.[tool.key] ?? {};
+    const skillKey = String(data.skillKey ?? "");
+    const toolClass = String(data.toolClass ?? "D");
+    return {
+      ...tool,
+      functionKey: createToolFunctionKey(tool.key),
+      enabled: Boolean(data.enabled),
+      toolClass,
+      classChoices: classChoices.map(value => ({
+        value,
+        label: value,
+        selected: value === toolClass
+      })),
+      skillChoices: skillChoices.map(choice => ({
+        ...choice,
+        selected: choice.value === skillKey
+      })),
+      supplyValue: Number(data.supply?.value) || 0,
+      supplyMax: Number(data.supply?.max) || 0,
+      skillValue: Number(data.skillValue) || 0,
+      skillKey
+    };
+  });
 }
 
 function normalizePercentInput(value) {

@@ -132,6 +132,17 @@
       <div class="fallout-maw-token-hud-empty">Нет способностей</div>
       {{/each}}
       {{/if}}
+
+      {{#if (eq activeTray "actions")}}
+      {{#each tray.systemActions}}
+      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="useSystemAction" data-system-action-key="{{key}}" title="{{label}}">
+        <img src="{{img}}" alt="{{label}}" onerror="this.src='{{../fallbackIcon}}'">
+        <span>{{label}}</span>
+      </button>
+      {{else}}
+      <div class="fallout-maw-token-hud-empty">Действий нет</div>
+      {{/each}}
+      {{/if}}
     </div>
     {{/if}}
 

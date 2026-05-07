@@ -31,6 +31,7 @@
       "Currencies": "Currencies",
       "DamageDefenses": "Damage Defenses",
       "DamageResistances": "Damage Resistances",
+      "DamageReductions": "Damage Reductions",
       "Delete": "Delete",
       "Description": "Description",
       "Edit": "Edit",
@@ -60,6 +61,7 @@
       "Thirst": "Thirst",
       "Path": "Path",
       "Total": "Total",
+      "Traumas": "Traumas",
       "Untitled": "Untitled",
       "Value": "Value",
       "Weapon": "Weapon"
@@ -77,6 +79,7 @@
       "LockCoreFields": "Lock Core Fields",
       "NoCreatureType": "Not selected",
       "NoRace": "Not selected",
+      "NoTraumas": "No traumas.",
       "Progression": "Development",
       "Race": "Race",
       "ResearchPointsPerLevel": "Research Points per Level",
@@ -167,6 +170,12 @@
       "NoChanges": "No changes created.",
       "Origin": "Effect Origin",
       "Priority": "Weight"
+    },
+    "Trauma": {
+      "HealingDifficulty": "Healing difficulty",
+      "HealingProgress": "Healing progress",
+      "HealingSkill": "Healing skill",
+      "HealingToolClass": "Treatment tool class"
     },
     "Research": {
       "ApplyTime": "Apply Time",
