@@ -1,6 +1,10 @@
+import { FALLOUT_MAW } from "../config/system-config.mjs";
+
 export const MOVEMENT_RESOURCE_KEY = "movementPoints";
 export const ACTION_RESOURCE_KEY = "actionPoints";
 export const MOVEMENT_RESOURCE_PREVIEW_HOOK = "falloutMawMovementResourcePreview";
+const MOVEMENT_RESOURCE_SPENDING_FLAG = "movementResourceSpending";
+const MOVEMENT_RESOURCE_SPENDING_LIMIT = 50;
 const MOVEMENT_RESOURCE_LABEL = "ОП";
 const ACTION_RESOURCE_LABEL = "ОД";
 
@@ -110,6 +114,7 @@ export function isGMDebugMovementBypassActive() {
 
 function preventUnaffordableCombatMovement(tokenDocument, movement) {
   if (!isCombatMovementTracked(tokenDocument)) return true;
+  if (movement?.method === "undo") return true;
   if (isGMDebugMovementBypassActive()) return true;
 
   const cost = getCombatMovementCost(movement);
@@ -128,10 +133,13 @@ function preventUnaffordableCombatMovement(tokenDocument, movement) {
 async function spendCombatMovementResources(tokenDocument, movement, _operation, user) {
   if (!user?.isSelf) return;
   if (!isCombatMovementTracked(tokenDocument)) return;
+  if (movement?.method === "undo") return restoreLastMovementResourceSpending(tokenDocument);
   if (isGMDebugMovementBypassActive()) return;
 
   const cost = getCombatMovementCost(movement);
   if (cost <= 0) return;
+
+  await waitForMovementAnimation(movement);
 
   const actor = tokenDocument.actor;
   const state = getCombatMovementResourceState(actor);
@@ -144,6 +152,41 @@ async function spendCombatMovementResources(tokenDocument, movement, _operation,
   const updates = {};
   if (movementSpend) updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = state.movement.value - movementSpend;
   if (actionSpend) updates[`system.resources.${ACTION_RESOURCE_KEY}.value`] = state.action.value - actionSpend;
+  updates[`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`] = [
+    ...getMovementResourceSpendingStack(actor),
+    createMovementResourceSpendingEntry(tokenDocument, movement, {
+      [MOVEMENT_RESOURCE_KEY]: movementSpend,
+      [ACTION_RESOURCE_KEY]: actionSpend
+    })
+  ].slice(-MOVEMENT_RESOURCE_SPENDING_LIMIT);
+  await actor.update(updates);
+}
+
+async function restoreLastMovementResourceSpending(tokenDocument) {
+  const actor = tokenDocument.actor;
+  const stack = getMovementResourceSpendingStack(actor);
+  const index = findLastMovementResourceSpendingIndex(stack, tokenDocument);
+  if (index < 0) return;
+
+  const entry = stack[index];
+  const nextStack = stack.slice();
+  nextStack.splice(index, 1);
+  const updates = {
+    [`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`]: nextStack
+  };
+
+  for (const key of [MOVEMENT_RESOURCE_KEY, ACTION_RESOURCE_KEY]) {
+    const resource = actor.system?.resources?.[key];
+    if (!resource) continue;
+
+    const current = toInteger(resource.value);
+    const min = Math.max(0, toInteger(resource.min));
+    const max = Math.max(min, toInteger(resource.max));
+    const restored = Math.min(max, Math.max(min, current + Math.max(0, toInteger(entry?.resources?.[key]))));
+    updates[`system.resources.${key}.value`] = restored;
+    updates[`system.resources.${key}.spent`] = Math.max(0, max - restored);
+  }
+
   await actor.update(updates);
 }
 
@@ -164,7 +207,9 @@ async function restoreCombatMovementResources(combat) {
 async function restoreActorMovementResources(actor) {
   if (!actor?.isOwner) return;
 
-  const updates = {};
+  const updates = {
+    [`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`]: []
+  };
   for (const key of [MOVEMENT_RESOURCE_KEY, ACTION_RESOURCE_KEY]) {
     const resource = actor.system?.resources?.[key];
     if (!resource) continue;
@@ -174,6 +219,42 @@ async function restoreActorMovementResources(actor) {
   }
 
   if (Object.keys(updates).length) await actor.update(updates);
+}
+
+function createMovementResourceSpendingEntry(tokenDocument, movement, resources) {
+  return {
+    id: foundry.utils.randomID(),
+    movementId: movement?.id ?? "",
+    actorUuid: tokenDocument?.actor?.uuid ?? "",
+    sceneId: tokenDocument?.parent?.id ?? tokenDocument?.scene?.id ?? "",
+    tokenId: tokenDocument?.id ?? "",
+    round: game.combat?.round ?? 0,
+    resources
+  };
+}
+
+function getMovementResourceSpendingStack(actor) {
+  const stack = actor?.getFlag?.(FALLOUT_MAW.id, MOVEMENT_RESOURCE_SPENDING_FLAG);
+  return Array.isArray(stack) ? stack.filter(entry => entry && typeof entry === "object") : [];
+}
+
+function findLastMovementResourceSpendingIndex(stack, tokenDocument) {
+  const actorUuid = tokenDocument?.actor?.uuid ?? "";
+  const sceneId = tokenDocument?.parent?.id ?? tokenDocument?.scene?.id ?? "";
+  const tokenId = tokenDocument?.id ?? "";
+  return stack.findLastIndex(entry => (
+    entry?.actorUuid === actorUuid
+    && entry?.tokenId === tokenId
+    && (!entry?.sceneId || !sceneId || entry.sceneId === sceneId)
+  ));
+}
+
+async function waitForMovementAnimation(movement) {
+  try {
+    await movement?.animation?.ended;
+  } catch (_error) {
+    // Movement resource spending is best-effort after whatever animation state Foundry exposes.
+  }
 }
 
 function toInteger(value) {
