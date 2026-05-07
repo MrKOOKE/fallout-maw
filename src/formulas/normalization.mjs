@@ -23,13 +23,16 @@ const DEFAULT_RESOURCE_COLORS = Object.freeze({
   actionPoints: "#74b84e",
   movementPoints: "#d7b14a"
 });
+const DEFAULT_RESOURCE_LIMIT_RESOURCES = Object.freeze([
+  Object.freeze({ resourceKey: "actionPoints", percent: 100 }),
+  Object.freeze({ resourceKey: "movementPoints", percent: 100 })
+]);
 const DEFAULT_NEED_COLORS = Object.freeze({
   hunger: "#c9a24a",
   thirst: "#58a6d6",
   sleepiness: "#8f63c9"
 });
 const DEFAULT_DAMAGE_TYPE_SETTINGS = Object.freeze({
-  limbHealthMultiplier: Object.freeze({ enabled: true }),
   limbStateDamage: Object.freeze({ multiplier: 1 }),
   periodic: Object.freeze({
     enabled: false,
@@ -40,12 +43,13 @@ const DEFAULT_DAMAGE_TYPE_SETTINGS = Object.freeze({
     tickCount: 0,
     intervalSeconds: 6
   }),
-  resourceBlock: Object.freeze({
+  resourceLimit: Object.freeze({
     enabled: false,
     effectName: "",
     img: "",
     color: "#3f8cff",
-    durationSeconds: 12
+    durationSeconds: 12,
+    resources: Object.freeze([])
   })
 });
 const DEFAULT_DAMAGE_TYPE_SETTINGS_BY_KEY = Object.freeze({
@@ -73,12 +77,13 @@ const DEFAULT_DAMAGE_TYPE_SETTINGS_BY_KEY = Object.freeze({
     })
   }),
   cryo: Object.freeze({
-    resourceBlock: Object.freeze({
+    resourceLimit: Object.freeze({
       enabled: true,
-      effectName: "Крио-блок",
+      effectName: "Крио-ограничение",
       img: "icons/magic/water/barrier-ice-crystal-wall-jagged-blue.webp",
       color: "#3f8cff",
-      durationSeconds: 12
+      durationSeconds: 12,
+      resources: DEFAULT_RESOURCE_LIMIT_RESOURCES
     })
   })
 });
@@ -353,10 +358,14 @@ function normalizeDamageTypeEntry(entry = {}) {
 function normalizeDamageTypeBehavior(settings = {}, key = "") {
   const defaults = getDefaultDamageTypeSettings(key);
   const source = settings && typeof settings === "object" ? settings : {};
+  const resourceLimitSource = source.resourceLimit ?? source.resourceBlock ?? {};
+  const resourceLimitDefaults = source.resourceLimit
+    ? defaults.resourceLimit
+    : {
+      ...defaults.resourceLimit,
+      resources: source.resourceBlock ? DEFAULT_RESOURCE_LIMIT_RESOURCES : defaults.resourceLimit.resources
+    };
   return {
-    limbHealthMultiplier: {
-      enabled: source.limbHealthMultiplier?.enabled !== false
-    },
     limbStateDamage: {
       multiplier: Math.max(0, toDecimal(source.limbStateDamage?.multiplier, defaults.limbStateDamage.multiplier))
     },
@@ -369,14 +378,25 @@ function normalizeDamageTypeBehavior(settings = {}, key = "") {
       tickCount: Math.max(0, toInteger(source.periodic?.tickCount ?? defaults.periodic.tickCount)),
       intervalSeconds: Math.max(1, toInteger(source.periodic?.intervalSeconds ?? defaults.periodic.intervalSeconds))
     },
-    resourceBlock: {
-      enabled: Boolean(source.resourceBlock?.enabled ?? defaults.resourceBlock.enabled),
-      effectName: String(source.resourceBlock?.effectName ?? defaults.resourceBlock.effectName ?? "").trim(),
-      img: String(source.resourceBlock?.img ?? defaults.resourceBlock.img ?? "").trim(),
-      color: normalizeHexColor(source.resourceBlock?.color, defaults.resourceBlock.color),
-      durationSeconds: Math.max(1, toInteger(source.resourceBlock?.durationSeconds ?? defaults.resourceBlock.durationSeconds))
+    resourceLimit: {
+      enabled: Boolean(resourceLimitSource.enabled ?? resourceLimitDefaults.enabled),
+      effectName: String(resourceLimitSource.effectName ?? resourceLimitDefaults.effectName ?? "").trim(),
+      img: String(resourceLimitSource.img ?? resourceLimitDefaults.img ?? "").trim(),
+      color: normalizeHexColor(resourceLimitSource.color, resourceLimitDefaults.color),
+      durationSeconds: Math.max(1, toInteger(resourceLimitSource.durationSeconds ?? resourceLimitDefaults.durationSeconds)),
+      resources: normalizeResourceLimitEntries(resourceLimitSource.resources, resourceLimitDefaults.resources)
     }
   };
+}
+
+function normalizeResourceLimitEntries(entries, defaults = []) {
+  const source = Array.isArray(entries) ? entries : defaults;
+  return source
+    .map(entry => ({
+      resourceKey: String(entry?.resourceKey ?? entry?.key ?? "").trim(),
+      percent: Math.max(0, toDecimal(entry?.percent, 100))
+    }))
+    .filter(entry => IDENTIFIER_PATTERN.test(entry.resourceKey));
 }
 
 function getDefaultDamageTypeSettings(key = "") {

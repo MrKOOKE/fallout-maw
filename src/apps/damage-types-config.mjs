@@ -1,9 +1,16 @@
 import { TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN } from "../formulas/index.mjs";
-import { getDamageTypeSettings, resetDamageTypeSettings, setDamageTypeSettings } from "../settings/accessors.mjs";
+import {
+  getDamageTypeSettings,
+  getResourceSettings,
+  resetDamageTypeSettings,
+  setDamageTypeSettings
+} from "../settings/accessors.mjs";
 import { format, localize } from "../utils/i18n.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateSettingsReorder } from "./settings-reorder.mjs";
+
+const { FormDataExtended } = foundry.applications.ux;
 
 export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
@@ -160,6 +167,10 @@ class DamageTypeSettingsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    actions: {
+      addResourceLimit: this.#onAddResourceLimit,
+      deleteResourceLimit: this.#onDeleteResourceLimit
+    },
     form: {
       handler: FalloutMaWFormApplicationV2.handleFormSubmit,
       submitOnChange: false,
@@ -181,13 +192,35 @@ class DamageTypeSettingsConfig extends FalloutMaWFormApplicationV2 {
     return {
       ...(await super._prepareContext(options)),
       damageType: this.damageType,
-      settings: this.damageType.settings ?? {}
+      settings: this.damageType.settings ?? {},
+      resourceLimitRows: prepareResourceLimitRows(this.damageType.settings?.resourceLimit?.resources ?? [])
     };
   }
 
   async _processFormData(_event, _form, formData) {
     const data = getExpandedFormData(formData);
     this.onSave?.(normalizeSettingsFromForm(data.settings ?? {}));
+  }
+
+  static #onAddResourceLimit(event) {
+    event.preventDefault();
+    this.damageType.settings = normalizeSettingsFromCurrentForm(this.form, this.damageType.settings);
+    this.damageType.settings.resourceLimit.resources.push({
+      resourceKey: getDefaultResourceKey(),
+      percent: 100
+    });
+    return this.forceRender();
+  }
+
+  static #onDeleteResourceLimit(event, target) {
+    event.preventDefault();
+    const rows = Array.from(this.form?.querySelectorAll("[data-resource-limit-row]") ?? []);
+    const index = rows.indexOf(target.closest("[data-resource-limit-row]"));
+    if (index < 0) return undefined;
+
+    this.damageType.settings = normalizeSettingsFromCurrentForm(this.form, this.damageType.settings);
+    this.damageType.settings.resourceLimit.resources.splice(index, 1);
+    return this.forceRender();
   }
 }
 
@@ -202,10 +235,8 @@ function toDecimal(value, fallback = 0) {
 }
 
 function normalizeSettingsFromForm(settings = {}) {
+  const resourceLimit = settings.resourceLimit ?? settings.resourceBlock ?? {};
   return {
-    limbHealthMultiplier: {
-      enabled: toBoolean(settings.limbHealthMultiplier?.enabled, true)
-    },
     limbStateDamage: {
       multiplier: toDecimal(settings.limbStateDamage?.multiplier, 1)
     },
@@ -218,14 +249,49 @@ function normalizeSettingsFromForm(settings = {}) {
       tickCount: toInteger(settings.periodic?.tickCount),
       intervalSeconds: toInteger(settings.periodic?.intervalSeconds || 6)
     },
-    resourceBlock: {
-      enabled: toBoolean(settings.resourceBlock?.enabled, false),
-      effectName: String(settings.resourceBlock?.effectName ?? "").trim(),
-      img: String(settings.resourceBlock?.img ?? "").trim(),
-      color: String(settings.resourceBlock?.color ?? "#3f8cff").trim() || "#3f8cff",
-      durationSeconds: toInteger(settings.resourceBlock?.durationSeconds || 12)
+    resourceLimit: {
+      enabled: toBoolean(resourceLimit.enabled, false),
+      effectName: String(resourceLimit.effectName ?? "").trim(),
+      img: String(resourceLimit.img ?? "").trim(),
+      color: String(resourceLimit.color ?? "#3f8cff").trim() || "#3f8cff",
+      durationSeconds: toInteger(resourceLimit.durationSeconds || 12),
+      resources: normalizeResourceLimitRows(resourceLimit.resources)
     }
   };
+}
+
+function normalizeSettingsFromCurrentForm(form, fallback = {}) {
+  if (!form) return normalizeSettingsFromForm(fallback);
+  return normalizeSettingsFromForm(getExpandedFormData(new FormDataExtended(form)).settings ?? {});
+}
+
+function normalizeResourceLimitRows(resources) {
+  const entries = Array.isArray(resources)
+    ? resources
+    : Object.keys(resources ?? {})
+      .sort((left, right) => Number(left) - Number(right))
+      .map(key => resources[key]);
+  return entries
+    .map(entry => ({
+      resourceKey: String(entry?.resourceKey ?? "").trim(),
+      percent: Math.max(0, toDecimal(entry?.percent, 100))
+    }))
+    .filter(entry => entry.resourceKey);
+}
+
+function prepareResourceLimitRows(resources = []) {
+  const resourceSettings = getResourceSettings();
+  return resources.map(entry => ({
+    ...entry,
+    options: resourceSettings.map(resource => ({
+      ...resource,
+      selected: resource.key === entry.resourceKey
+    }))
+  }));
+}
+
+function getDefaultResourceKey() {
+  return getResourceSettings()[0]?.key ?? "";
 }
 
 function toBoolean(value, fallback = false) {

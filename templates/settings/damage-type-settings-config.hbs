@@ -6,11 +6,6 @@
     </header>
 
     <div class="fallout-maw-list-grid two-columns">
-      <label class="fallout-maw-inline-checkbox">
-        <span>Множитель части тела к ОЗ</span>
-        <input type="hidden" name="settings.limbHealthMultiplier.enabled" value="false">
-        <input type="checkbox" name="settings.limbHealthMultiplier.enabled" value="true" {{checked settings.limbHealthMultiplier.enabled}}>
-      </label>
       <label>
         <span>Множитель состояния конечности</span>
         <input type="number" name="settings.limbStateDamage.multiplier" value="{{settings.limbStateDamage.multiplier}}" min="0" step="0.1">
@@ -19,13 +14,14 @@
   </section>
 
   <section class="fallout-maw-panel">
-    <h2>Периодический урон</h2>
-    <div class="fallout-maw-list-grid two-columns">
-      <label class="fallout-maw-inline-checkbox">
-        <span>Включить</span>
+    <header class="fallout-maw-panel-header">
+      <label class="fallout-maw-section-toggle">
         <input type="hidden" name="settings.periodic.enabled" value="false">
         <input type="checkbox" name="settings.periodic.enabled" value="true" {{checked settings.periodic.enabled}}>
+        <span>Периодический урон</span>
       </label>
+    </header>
+    <div class="fallout-maw-list-grid two-columns">
       <label>
         <span>Название эффекта</span>
         <input type="text" name="settings.periodic.effectName" value="{{settings.periodic.effectName}}">
@@ -54,29 +50,48 @@
   </section>
 
   <section class="fallout-maw-panel">
-    <h2>Блок ОД/ОП</h2>
+    <header class="fallout-maw-panel-header">
+      <label class="fallout-maw-section-toggle">
+        <input type="hidden" name="settings.resourceLimit.enabled" value="false">
+        <input type="checkbox" name="settings.resourceLimit.enabled" value="true" {{checked settings.resourceLimit.enabled}}>
+        <span>Ограничение ресурсов</span>
+      </label>
+      <button type="button" data-action="addResourceLimit"><i class="fa-solid fa-plus"></i> Добавить ресурс</button>
+    </header>
     <div class="fallout-maw-list-grid two-columns">
-      <label class="fallout-maw-inline-checkbox">
-        <span>Включить</span>
-        <input type="hidden" name="settings.resourceBlock.enabled" value="false">
-        <input type="checkbox" name="settings.resourceBlock.enabled" value="true" {{checked settings.resourceBlock.enabled}}>
+      <label>
+        <span>Название эффекта</span>
+        <input type="text" name="settings.resourceLimit.effectName" value="{{settings.resourceLimit.effectName}}">
       </label>
       <label>
-        <span>Название блока</span>
-        <input type="text" name="settings.resourceBlock.effectName" value="{{settings.resourceBlock.effectName}}">
+        <span>Изображение эффекта</span>
+        <file-picker type="image" name="settings.resourceLimit.img" value="{{settings.resourceLimit.img}}"></file-picker>
       </label>
       <label>
-        <span>Изображение блока</span>
-        <file-picker type="image" name="settings.resourceBlock.img" value="{{settings.resourceBlock.img}}"></file-picker>
+        <span>Цвет ограничения</span>
+        <input type="color" name="settings.resourceLimit.color" value="{{settings.resourceLimit.color}}">
       </label>
       <label>
-        <span>Цвет блока</span>
-        <input type="color" name="settings.resourceBlock.color" value="{{settings.resourceBlock.color}}">
+        <span>Длительность, секунд</span>
+        <input type="number" name="settings.resourceLimit.durationSeconds" value="{{settings.resourceLimit.durationSeconds}}" min="1" step="1">
       </label>
-      <label>
-        <span>Длительность блока, секунд</span>
-        <input type="number" name="settings.resourceBlock.durationSeconds" value="{{settings.resourceBlock.durationSeconds}}" min="1" step="1">
-      </label>
+    </div>
+
+    <div class="fallout-maw-resource-limit-list">
+      {{#each resourceLimitRows}}
+      <div class="fallout-maw-settings-row fallout-maw-resource-limit-row" data-resource-limit-row>
+        <select name="settings.resourceLimit.resources.{{@index}}.resourceKey">
+          {{#each options}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <label>
+          <span>% ограничения</span>
+          <input type="number" name="settings.resourceLimit.resources.{{@index}}.percent" value="{{percent}}" min="0" step="1">
+        </label>
+        <button type="button" class="fallout-maw-icon-button" data-action="deleteResourceLimit" aria-label="Удалить ресурс"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{/each}}
     </div>
   </section>
 

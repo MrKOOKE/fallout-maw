@@ -14,8 +14,6 @@ const SCOPE_LIMB = "limb";
 const SCOPE_HEALTH = "health";
 const SCOPE_HEALTH_AND_LIMB = "healthAndLimb";
 const ROUND_SECONDS = 6;
-const ACTION_RESOURCE_KEY = "actionPoints";
-const MOVEMENT_RESOURCE_KEY = "movementPoints";
 let damageTimeHooksRegistered = false;
 const combatRoundWorldTimes = new Map();
 const processingPeriodicEffectUuids = new Set();
@@ -108,7 +106,7 @@ export async function applyDamageApplication(request = {}) {
       source: data.source
     });
     if (immediateResult.healthDelta > 0) {
-      await createResourceBlockEffect(actor, {
+      await createResourceLimitEffect(actor, {
         damageType,
         healthDelta: immediateResult.healthDelta,
         source: data.source
@@ -129,7 +127,7 @@ export async function applyDamageApplication(request = {}) {
     scope
   }, damageType);
   if (mode === MODE_DAMAGE && data.processDamageTypeSettings && result.healthDelta > 0) {
-    await createResourceBlockEffect(actor, {
+    await createResourceLimitEffect(actor, {
       damageType,
       healthDelta: result.healthDelta,
       source: data.source
@@ -223,12 +221,12 @@ export function getLimbHealingCap(actor, limbKey = "") {
     .reduce((cap, item) => Math.min(cap, toInteger(item.system?.thresholdValue)), max);
 }
 
-export function getResourceBlockState(actor) {
+export function getResourceLimitState(actor) {
   const resources = {};
   for (const effect of actor?.effects ?? []) {
     if (effect.disabled) continue;
     const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
-    if (data?.kind !== "resourceBlock") continue;
+    if (data?.kind !== "resourceLimit" && data?.kind !== "resourceBlock") continue;
     const color = String(data.color ?? "#3f8cff");
     for (const [key, amount] of Object.entries(data.resources ?? {})) {
       const value = Math.max(0, toInteger(amount));
@@ -240,6 +238,8 @@ export function getResourceBlockState(actor) {
   }
   return { resources };
 }
+
+export const getResourceBlockState = getResourceLimitState;
 
 async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = "", scope = SCOPE_HEALTH, amount = 0, settings = {}, source = {} } = {}) {
   const tickCount = Math.max(0, toInteger(settings.tickCount));
@@ -280,26 +280,29 @@ async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = ""
   return actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
 }
 
-async function createResourceBlockEffect(actor, { damageType = {}, healthDelta = 0, source = {} } = {}) {
-  const settings = damageType?.settings?.resourceBlock;
+async function createResourceLimitEffect(actor, { damageType = {}, healthDelta = 0, source = {} } = {}) {
+  const settings = damageType?.settings?.resourceLimit ?? damageType?.settings?.resourceBlock;
   if (!settings?.enabled) return [];
   const healthMax = Math.max(0, toInteger(actor.health?.max));
   if (!healthMax) return [];
   const percent = Math.max(0, Number(healthDelta) || 0) / healthMax;
-  const action = actor.system?.resources?.[ACTION_RESOURCE_KEY];
-  const movement = actor.system?.resources?.[MOVEMENT_RESOURCE_KEY];
   const resources = {};
-  const actionBlock = roundDamageAmount(percent * Math.max(0, toInteger(action?.max)));
-  const movementBlock = roundDamageAmount(percent * Math.max(0, toInteger(movement?.max)));
-  if (actionBlock) resources[ACTION_RESOURCE_KEY] = actionBlock;
-  if (movementBlock) resources[MOVEMENT_RESOURCE_KEY] = movementBlock;
+  for (const rule of settings.resources ?? []) {
+    const resourceKey = String(rule?.resourceKey ?? "").trim();
+    const resource = actor.system?.resources?.[resourceKey];
+    const resourceMax = Math.max(0, toInteger(resource?.max));
+    if (!resourceKey || !resourceMax) continue;
+    const rulePercent = Math.max(0, Number(rule?.percent) || 0) / 100;
+    const amount = roundDamageAmount(percent * resourceMax * rulePercent);
+    if (amount) resources[resourceKey] = (resources[resourceKey] ?? 0) + amount;
+  }
   if (!Object.keys(resources).length) return [];
 
   const durationSeconds = Math.max(1, toInteger(settings.durationSeconds || 12));
   const startTime = Number(game.time?.worldTime) || 0;
   return actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
-    name: String(settings.effectName || damageType.label || "Крио-блок"),
+    name: String(settings.effectName || damageType.label || "Ограничение ресурсов"),
     img: String(settings.img || "icons/svg/frozen.svg"),
     disabled: false,
     tint: settings.color,
@@ -311,7 +314,7 @@ async function createResourceBlockEffect(actor, { damageType = {}, healthDelta =
       [TRAUMA_FLAG_SCOPE]: {
         kind: "temporary",
         [DAMAGE_EFFECT_FLAG_KEY]: {
-          kind: "resourceBlock",
+          kind: "resourceLimit",
           damageTypeKey: damageType.key ?? "",
           resources,
           color: settings.color,
@@ -664,7 +667,7 @@ function calculateEffectiveDamage(actor, amount, damageTypeKey = "", limbKey = "
 
 function applyLimbHealthMultiplier(actor, amount, damageType = null, limbKey = "") {
   const incomingDamage = Math.max(0, Number(amount) || 0);
-  if (!incomingDamage || !limbKey || damageType?.settings?.limbHealthMultiplier?.enabled === false) {
+  if (!incomingDamage || !limbKey) {
     return roundDamageAmount(incomingDamage);
   }
   const multiplier = Math.max(0, Number(actor.system?.limbs?.[limbKey]?.damageMultiplier) || 1);

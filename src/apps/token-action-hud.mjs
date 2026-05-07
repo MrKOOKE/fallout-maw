@@ -13,7 +13,7 @@ import {
   TOKEN_ACTION_HUD_SCALE_SETTING
 } from "../settings/constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { getLimbHealingCap, getResourceBlockState } from "../combat/damage-hub.mjs";
+import { getLimbHealingCap, getResourceLimitState } from "../combat/damage-hub.mjs";
 import { MOVEMENT_RESOURCE_PREVIEW_HOOK } from "../combat/movement-resources.mjs";
 import { openLimbDamageDialog } from "./limb-damage-dialog.mjs";
 import { requestMedicineTarget } from "./medicine-dialog.mjs";
@@ -640,11 +640,11 @@ function prepareLimbEntries(limbs = {}) {
 }
 
 function prepareResourceEntries(actor) {
-  const blocked = getResourceBlockState(actor).resources;
+  const limited = getResourceLimitState(actor).resources;
   return getResourceSettings().map(resource => prepareIndicatorEntry({
     ...resource,
     data: actor.system.resources?.[resource.key]
-  })).map(entry => addBlockedResourceDisplay(entry, blocked[entry.key]));
+  })).map(entry => addLimitedResourceDisplay(entry, limited[entry.key]));
 }
 
 function prepareNeedEntries(actor) {
@@ -791,14 +791,14 @@ function applyMeterPreview(meter, spent) {
   meter.classList.add("preview-spend");
 }
 
-function addBlockedResourceDisplay(entry, block = null) {
-  const amount = Math.min(Math.max(0, toInteger(block?.amount)), Math.max(0, entry.value - entry.min));
+function addLimitedResourceDisplay(entry, limit = null) {
+  const amount = Math.min(Math.max(0, toInteger(limit?.amount)), Math.max(0, entry.value - entry.min));
   if (!amount) return entry;
   const range = Math.max(0, entry.max - entry.min);
   if (!range) return entry;
   const left = ((entry.value - amount - entry.min) / range) * 100;
   const width = (amount / range) * 100;
-  const color = String(block?.color || "#3f8cff");
+  const color = String(limit?.color || "#3f8cff");
   return {
     ...entry,
     blockedAmount: amount,

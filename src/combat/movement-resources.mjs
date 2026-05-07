@@ -1,5 +1,5 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
-import { getResourceBlockState } from "./damage-hub.mjs";
+import { getResourceLimitState } from "./damage-hub.mjs";
 
 export const MOVEMENT_RESOURCE_KEY = "movementPoints";
 export const ACTION_RESOURCE_KEY = "actionPoints";
@@ -42,23 +42,23 @@ export function getCombatMovementResourceState(actor) {
 
   const movementValue = Math.max(0, toInteger(movement.value));
   const actionValue = Math.max(0, toInteger(action.value));
-  const blocked = getResourceBlockState(actor).resources;
-  const blockedMovement = Math.min(movementValue, Math.max(0, toInteger(blocked[MOVEMENT_RESOURCE_KEY]?.amount)));
-  const blockedAction = Math.min(actionValue, Math.max(0, toInteger(blocked[ACTION_RESOURCE_KEY]?.amount)));
+  const limited = getResourceLimitState(actor).resources;
+  const limitedMovement = Math.min(movementValue, Math.max(0, toInteger(limited[MOVEMENT_RESOURCE_KEY]?.amount)));
+  const limitedAction = Math.min(actionValue, Math.max(0, toInteger(limited[ACTION_RESOURCE_KEY]?.amount)));
   return {
     movement: {
       key: MOVEMENT_RESOURCE_KEY,
       label: MOVEMENT_RESOURCE_LABEL,
-      value: Math.max(0, movementValue - blockedMovement),
+      value: Math.max(0, movementValue - limitedMovement),
       max: Math.max(0, toInteger(movement.max))
     },
     action: {
       key: ACTION_RESOURCE_KEY,
       label: ACTION_RESOURCE_LABEL,
-      value: Math.max(0, actionValue - blockedAction),
+      value: Math.max(0, actionValue - limitedAction),
       max: Math.max(0, toInteger(action.max))
     },
-    total: Math.max(0, movementValue - blockedMovement) + Math.max(0, actionValue - blockedAction)
+    total: Math.max(0, movementValue - limitedMovement) + Math.max(0, actionValue - limitedAction)
   };
 }
 
