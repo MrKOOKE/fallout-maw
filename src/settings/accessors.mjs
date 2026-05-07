@@ -26,10 +26,12 @@ import {
   PROFICIENCY_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
   SKILL_CHECK_CONTROL_SETTING,
-  SKILL_SETTINGS_SETTING
+  SKILL_SETTINGS_SETTING,
+  TRAUMA_SETTINGS_SETTING
 } from "./constants.mjs";
 import { createEmptyCreatureOptions, normalizeCreatureOptions } from "./creature-options.mjs";
 import { createDefaultLevelSettings, normalizeLevelSettings } from "./levels.mjs";
+import { createDefaultTraumaSettings, normalizeTraumaSettings } from "./traumas.mjs";
 
 export const DEFAULT_SKILL_CHECK_CONTROL = Object.freeze({
   resultMode: "standard",
@@ -240,6 +242,24 @@ export async function setLevelSettings(settings) {
 
 export async function resetLevelSettings() {
   return setLevelSettings(createDefaultLevelSettings());
+}
+
+export function getTraumaSettings(creatureOptions = getCreatureOptions(), damageTypes = getDamageTypeSettings()) {
+  try {
+    return normalizeTraumaSettings(game.settings.get(FALLOUT_MAW.id, TRAUMA_SETTINGS_SETTING), creatureOptions, damageTypes);
+  } catch (_error) {
+    return normalizeTraumaSettings(createDefaultTraumaSettings(), creatureOptions, damageTypes);
+  }
+}
+
+export async function setTraumaSettings(settings, creatureOptions = getCreatureOptions(), damageTypes = getDamageTypeSettings()) {
+  const normalized = normalizeTraumaSettings(settings, creatureOptions, damageTypes);
+  await game.settings.set(FALLOUT_MAW.id, TRAUMA_SETTINGS_SETTING, normalized);
+  return normalized;
+}
+
+export async function resetTraumaSettings() {
+  return setTraumaSettings(createDefaultTraumaSettings());
 }
 
 export function getSkillCheckControl() {

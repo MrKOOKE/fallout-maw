@@ -64,6 +64,11 @@
         "htmlFields": [
           "description"
         ]
+      },
+      "trauma": {
+        "htmlFields": [
+          "description"
+        ]
       }
     }
   },

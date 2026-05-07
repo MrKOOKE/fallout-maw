@@ -4,8 +4,24 @@ import {
   getItemTotalWeight,
   isContainerItem
 } from "../utils/inventory-containers.mjs";
+import { TRAUMA_CREATE_OPTION } from "../constants.mjs";
+
+const MANUALLY_CREATABLE_ITEM_TYPES = Object.freeze(["gear", "ability"]);
 
 export class FalloutMaWItem extends Item {
+  static TRAUMA_CREATE_OPTION = TRAUMA_CREATE_OPTION;
+
+  static async createDialog(data = {}, createOptions = {}, dialogOptions = {}, renderOptions = {}) {
+    const requestedTypes = Array.isArray(dialogOptions.types) ? dialogOptions.types : MANUALLY_CREATABLE_ITEM_TYPES;
+    const types = requestedTypes.filter(type => MANUALLY_CREATABLE_ITEM_TYPES.includes(type));
+    const createData = foundry.utils.deepClone(data ?? {});
+    if (!MANUALLY_CREATABLE_ITEM_TYPES.includes(createData.type)) delete createData.type;
+    return super.createDialog(createData, createOptions, {
+      ...dialogOptions,
+      types: types.length ? types : MANUALLY_CREATABLE_ITEM_TYPES
+    }, renderOptions);
+  }
+
   static migrateData(source) {
     source = super.migrateData(source);
     if (["weapon", "armor"].includes(source?.type)) source.type = "gear";
@@ -21,6 +37,23 @@ export class FalloutMaWItem extends Item {
 
   async _preCreate(data, options, user) {
     if ((await super._preCreate(data, options, user)) === false) return false;
+    if (this.type === "trauma" && options?.[TRAUMA_CREATE_OPTION] !== true) {
+      ui.notifications?.warn?.("Травмы создаются только системой при получении повреждения.");
+      return false;
+    }
+    if (this.type === "trauma") {
+      this.updateSource({
+        system: {
+          generated: true
+        },
+        flags: {
+          "fallout-maw": {
+            generatedTrauma: true
+          }
+        }
+      });
+      return undefined;
+    }
     if (!this.parent) {
       this.updateSource({
         system: {

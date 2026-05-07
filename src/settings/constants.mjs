@@ -7,6 +7,7 @@ export const CURRENCY_SETTINGS_SETTING = "currencySettings";
 export const RESOURCE_SETTINGS_SETTING = "resourceSettings";
 export const NEED_SETTINGS_SETTING = "needSettings";
 export const LEVELS_SETTING = "levels";
+export const TRAUMA_SETTINGS_SETTING = "traumaSettings";
 export const SKILL_CHECK_CONTROL_SETTING = "skillCheckControl";
 export const TOKEN_ACTION_HUD_ENABLED_SETTING = "tokenActionHudEnabled";
 export const TOKEN_ACTION_HUD_SCALE_SETTING = "tokenActionHudScale";

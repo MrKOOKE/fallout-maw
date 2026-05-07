@@ -103,6 +103,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       itemType: type,
       descriptionHTML,
       isGear: type === "gear",
+      isTrauma: type === "trauma",
       isContainerFunction: hasContainerFunction,
       hasDamageMitigationFunction,
       containerLoadReduction,

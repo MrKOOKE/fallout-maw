@@ -15,6 +15,7 @@ import {
   syncTokenActionHud
 } from "./apps/token-action-hud.mjs";
 import { registerSkillCheckSocket } from "./rolls/skill-check.mjs";
+import { registerDamageSocket } from "./combat/damage-hub.mjs";
 import { registerSystemSheets } from "./sheets/index.mjs";
 import { FalloutMaWDragDrop } from "./utils/drag-drop.mjs";
 import {
@@ -52,6 +53,7 @@ Hooks.once("ready", async () => {
   registerSkillCheckControlSocket();
   refreshSkillCheckControlButton();
   registerSkillCheckSocket();
+  registerDamageSocket();
   refreshTokenActionHudControlButton();
   syncTokenActionHud();
 });

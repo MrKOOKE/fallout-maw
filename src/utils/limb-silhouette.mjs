@@ -5,6 +5,8 @@ export const SILHOUETTE_AREA_TOLERANCE = 0.005;
 
 const CLIPPER_SCALE = 1000;
 const MIN_PATH_POINTS = 3;
+const MIN_BOOLEAN_PATH_AREA = 1.5;
+const BOOLEAN_CLEAN_DISTANCE = 0.25;
 const MAX_SVG_DECIMALS = 2;
 const DEFAULT_SMOOTHING_ITERATIONS = 3;
 const DEFAULT_SIMPLIFY_TOLERANCE = 1.15;
@@ -17,6 +19,7 @@ export function normalizeLimbSilhouette(silhouette, limbs = []) {
   const height = Math.max(1, toInteger(silhouette.height));
   const outline = normalizePaths(silhouette.outline);
   if (!width || !height || !outline.length) return null;
+  const image = String(silhouette.image ?? silhouette.img ?? "").trim();
 
   const limbKeys = new Set((limbs ?? []).map(limb => limb.key));
   const parts = Array.isArray(silhouette.parts)
@@ -28,7 +31,7 @@ export function normalizeLimbSilhouette(silhouette, limbs = []) {
       .filter(part => part.limbKey && limbKeys.has(part.limbKey) && part.paths.length)
     : [];
 
-  return { width, height, outline, parts };
+  return { width, height, image, outline, parts };
 }
 
 export function normalizePaths(paths) {
@@ -111,22 +114,42 @@ export function createLimbSilhouetteHud(silhouette, limbs = {}) {
       limbKey: part.limbKey,
       label,
       title,
+      value: toInteger(limb.value),
+      max: toInteger(limb.max),
       fill: color
     }];
   });
 
+  const contentBounds = getPathsBounds(normalized.parts.flatMap(part => part.paths ?? [])) ?? getPathsBounds(normalized.outline);
+  const viewBox = contentBounds
+    ? buildPaddedViewBox(contentBounds, normalized.width, normalized.height)
+    : `0 0 ${normalized.width} ${normalized.height}`;
+
   return {
     width: normalized.width,
     height: normalized.height,
-    viewBox: `0 0 ${normalized.width} ${normalized.height}`,
+    viewBox,
     outline: pathsToSvgData(normalized.outline),
     parts,
     visible: parts.length > 0
   };
 }
 
+export function getPathsBounds(paths = []) {
+  const points = normalizePaths(paths).flat();
+  if (!points.length) return null;
+  const xs = points.map(point => point.x);
+  const ys = points.map(point => point.y);
+  return {
+    minX: Math.min(...xs),
+    minY: Math.min(...ys),
+    maxX: Math.max(...xs),
+    maxY: Math.max(...ys)
+  };
+}
+
 export function getLimbStateColor(limb) {
-  const max = Math.max(1, toInteger(limb?.max));
+  const max = Math.max(1, toInteger(limb?.scaleMax ?? limb?.max));
   const value = Math.max(-max, Math.min(max, toInteger(limb?.value)));
   const ratio = value / max;
   if (ratio >= 0.5) return mixRgb([218, 199, 91], [61, 154, 70], (ratio - 0.5) / 0.5);
@@ -150,8 +173,8 @@ export function clipperUnion(paths = []) {
   clipper.Execute(
     ClipperLib.ClipType.ctUnion,
     solution,
-    ClipperLib.PolyFillType.pftEvenOdd,
-    ClipperLib.PolyFillType.pftEvenOdd
+    ClipperLib.PolyFillType.pftNonZero,
+    ClipperLib.PolyFillType.pftNonZero
   );
   return fromClipperPaths(solution);
 }
@@ -162,6 +185,25 @@ export function clipperIntersect(subject = [], clip = []) {
 
 export function clipperDifference(subject = [], clip = []) {
   return executeClipper(subject, clip, "ctDifference");
+}
+
+export function createRoundStrokePaths(points = [], radius = 1) {
+  const centerline = simplifyPathByDistance(normalizePath(points), 0.6);
+  if (centerline.length < 2) return [];
+  const ClipperLib = getClipperLib();
+  if (!ClipperLib.ClipperOffset || !("jtRound" in (ClipperLib.JoinType ?? {})) || !("etOpenRound" in (ClipperLib.EndType ?? {}))) return [];
+  const solution = new ClipperLib.Paths();
+  const offset = new ClipperLib.ClipperOffset(
+    2,
+    Math.max(0.05, Math.min(Number(radius) * 0.12, 0.8)) * CLIPPER_SCALE
+  );
+  offset.AddPath(
+    toClipperPath(centerline),
+    ClipperLib.JoinType.jtRound,
+    ClipperLib.EndType.etOpenRound
+  );
+  offset.Execute(solution, Math.max(0.5, Number(radius) || 1) * CLIPPER_SCALE);
+  return fromClipperPaths(solution);
 }
 
 export function getPathsArea(paths = []) {
@@ -202,12 +244,19 @@ function toClipperPath(path) {
 }
 
 function fromClipperPaths(paths) {
-  return Array.from(paths ?? []).map(path => simplifyPath(
-    path.map(point => ({
+  const ClipperLib = getClipperLib();
+  const source = typeof ClipperLib.Clipper.CleanPolygons === "function"
+    ? ClipperLib.Clipper.CleanPolygons(paths ?? [], BOOLEAN_CLEAN_DISTANCE * CLIPPER_SCALE)
+    : paths;
+  return Array.from(source ?? []).map(path => ({
+    area: Math.abs(ClipperLib.Clipper.Area(path) / (CLIPPER_SCALE * CLIPPER_SCALE)),
+    path: simplifyPath(path.map(point => ({
       x: point.X / CLIPPER_SCALE,
       y: point.Y / CLIPPER_SCALE
-    }))
-  )).filter(path => path.length >= MIN_PATH_POINTS);
+    })))
+  }))
+    .filter(entry => entry.area >= MIN_BOOLEAN_PATH_AREA && entry.path.length >= MIN_PATH_POINTS)
+    .map(entry => entry.path);
 }
 
 function simplifyPath(path) {
@@ -340,4 +389,15 @@ function formatSvgNumber(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "0";
   return Number(number.toFixed(MAX_SVG_DECIMALS)).toString();
+}
+
+function buildPaddedViewBox(bounds, fullWidth, fullHeight) {
+  const width = Math.max(1, bounds.maxX - bounds.minX);
+  const height = Math.max(1, bounds.maxY - bounds.minY);
+  const padding = Math.max(4, Math.min(width, height) * 0.04);
+  const x = Math.max(0, bounds.minX - padding);
+  const y = Math.max(0, bounds.minY - padding);
+  const right = Math.min(fullWidth, bounds.maxX + padding);
+  const bottom = Math.min(fullHeight, bounds.maxY + padding);
+  return `${formatSvgNumber(x)} ${formatSvgNumber(y)} ${formatSvgNumber(right - x)} ${formatSvgNumber(bottom - y)}`;
 }

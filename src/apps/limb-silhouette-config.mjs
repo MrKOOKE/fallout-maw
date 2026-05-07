@@ -6,6 +6,7 @@ import {
   clipperDifference,
   clipperIntersect,
   clipperUnion,
+  createRoundStrokePaths,
   getPathsArea,
   normalizeLimbSilhouette,
   normalizePaths,
@@ -21,6 +22,7 @@ const VIEW_ZOOM_MIN = 1;
 const VIEW_ZOOM_MAX = 8;
 const VIEW_ZOOM_STEP = 1.18;
 const DRAWING_POINT_DISTANCE = 1.5;
+const POLYGON_CLOSE_SCREEN_DISTANCE = 12;
 const BRUSH_RADIUS_DEFAULT = 9;
 const BRUSH_RADIUS_MIN = 2;
 const BRUSH_RADIUS_MAX = 80;
@@ -45,11 +47,14 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
   #history = [];
   #silhouette = null;
   #remaining = [];
+  #sourceImage = "";
   #view = { x: 0, y: 0, width: 1, height: 1, zoom: 1 };
   #panning = null;
   #activeTool = "polygon";
   #brushRadius = BRUSH_RADIUS_DEFAULT;
   #drawing = null;
+  #gesturePreviewFrame = 0;
+  #gesturePreviewSvg = null;
   #suppressNextClick = false;
 
   constructor({ race, onSave } = {}, options = {}) {
@@ -75,11 +80,8 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       setTool: LimbSilhouetteConfig.#onSetTool,
       selectLimb: LimbSilhouetteConfig.#onSelectLimb,
       addPoint: LimbSilhouetteConfig.#onAddPoint,
-      finishPolygon: LimbSilhouetteConfig.#onFinishPolygon,
-      cancelPolygon: LimbSilhouetteConfig.#onCancelPolygon,
       undo: LimbSilhouetteConfig.#onUndo,
-      clearActive: LimbSilhouetteConfig.#onClearActive,
-      reset: LimbSilhouetteConfig.#onReset,
+      clearSilhouette: LimbSilhouetteConfig.#onClearSilhouette,
       save: LimbSilhouetteConfig.#onSave,
       close: LimbSilhouetteConfig.#onClose
     }
@@ -117,11 +119,15 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       ...context,
       hasSilhouette: Boolean(this.#silhouette),
       viewBox: this.#getCameraViewBox(),
+      brushMaskId: `${this.id}-brush-mask`,
+      sourceImage: this.#silhouette?.image ?? this.#sourceImage,
+      imageWidth: this.#silhouette?.width ?? 1,
+      imageHeight: this.#silhouette?.height ?? 1,
       outline: pathsToSvgData(this.#silhouette?.outline ?? []),
       remaining: pathsToCompoundSvgData(this.#remaining)
         ? [{ ...pathsToCompoundSvgData(this.#remaining), fill: SILHOUETTE_UNASSIGNED_FILL }]
         : [],
-      parts: this.#preparePartPaths(limbs),
+      parts: this.#preparePartPaths(limbs, `${this.id}-brush-mask`),
       tools: this.#prepareTools(),
       limbs,
       activeLimb: limbs.find(limb => limb.active) ?? null,
@@ -129,9 +135,8 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       draftPointMarkers: this.#draftPoints,
       previewPoints: buildSvgPoints(this.#getPreviewPoints()),
       activeTool: this.#activeTool,
-      canFinishPolygon: this.#activeTool === "polygon" && this.#draftPoints.length >= 3,
       canUndo: this.#history.length > 0,
-      canClearActive: Boolean(partsByLimb.get(this.#activeLimbKey)?.paths?.length),
+      canClearSilhouette: Boolean(this.#silhouette?.parts?.some(part => part.paths?.length)),
       canSave: !this.#silhouette || unassignedRatio <= SILHOUETTE_AREA_TOLERANCE,
       unassignedPercent: totalArea > 0 ? Math.round(unassignedRatio * 1000) / 10 : 0,
       brushRadius: this.#brushRadius
@@ -147,9 +152,10 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     svg.addEventListener("pointermove", event => this.#onPointerMove(event));
     svg.addEventListener("pointerup", event => this.#onPointerUp(event));
     svg.addEventListener("pointercancel", event => this.#onPointerUp(event));
+    svg.addEventListener("pointerleave", () => this.#hideBrushCursor(svg));
   }
 
-  #preparePartPaths(limbs) {
+  #preparePartPaths(limbs, brushMaskId = "") {
     const limbData = new Map(limbs.map(limb => [limb.key, limb]));
     return (this.#silhouette?.parts ?? []).flatMap(part => {
       const limb = limbData.get(part.limbKey);
@@ -160,14 +166,17 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
         d: path.d,
         limbKey: part.limbKey,
         label: limb.label,
-        fill: limb.color
+        fill: limb.color,
+        mask: this.#activeTool === "eraser" && part.limbKey === this.#activeLimbKey && brushMaskId
+          ? `url(#${brushMaskId})`
+          : ""
       }];
     });
   }
 
   #prepareTools() {
     return [
-      { key: "polygon", label: "Контур", icon: "fa-vector-polygon", active: this.#activeTool === "polygon" },
+      { key: "polygon", label: "Полигон", icon: "fa-vector-polygon", active: this.#activeTool === "polygon" },
       { key: "brush", label: "Кисть", icon: "fa-paintbrush", active: this.#activeTool === "brush" },
       { key: "eraser", label: "Ластик", icon: "fa-eraser", active: this.#activeTool === "eraser" },
       { key: "rectangle", label: "Прямоугольник", icon: "fa-vector-square", active: this.#activeTool === "rectangle" },
@@ -184,9 +193,11 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
   #setSilhouette(silhouette) {
     this.#silhouette = normalizeLimbSilhouette(silhouette, this.#race?.limbs ?? []);
     this.#remaining = this.#silhouette ? getRemainingSilhouette(this.#silhouette) : [];
+    this.#sourceImage = this.#silhouette?.image ?? "";
     this.#draftPoints = [];
     this.#history = [];
     this.#drawing = null;
+    this.#cancelGesturePreview();
     this.#resetCamera();
   }
 
@@ -216,6 +227,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       const step = event.altKey ? 5 : 1;
       this.#brushRadius = Math.max(BRUSH_RADIUS_MIN, Math.min(BRUSH_RADIUS_MAX, this.#brushRadius + (delta * step)));
       this.element?.style?.setProperty("--fallout-maw-silhouette-brush-radius", `${this.#brushRadius}px`);
+      event.currentTarget?.querySelector?.("[data-silhouette-brush-cursor]")?.setAttribute("r", String(this.#brushRadius));
       return;
     }
 
@@ -270,8 +282,15 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       start: point,
       current: point,
       points: [point],
-      constrain: event.altKey
+      constrain: event.altKey,
+      immediate: ["brush", "eraser"].includes(this.#activeTool)
     };
+    this.#updateBrushCursor(svg, point);
+      if (this.#drawing.immediate) {
+        this.#pushHistory();
+        this.#applyGesturePreview(svg, { immediate: true });
+        return;
+      }
     this.#applyPreview(svg);
   }
 
@@ -283,9 +302,20 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       if (!point) return;
       this.#drawing.current = point;
       this.#drawing.constrain = event.altKey;
-      if (["brush", "eraser"].includes(this.#activeTool)) this.#appendBrushPoint(point);
+      this.#updateBrushCursor(svg, point);
+      if (this.#drawing.immediate) {
+        this.#appendBrushPoint(point);
+        this.#applyGesturePreview(svg);
+        return;
+      }
       this.#applyPreview(svg);
       return;
+    }
+
+    if (!this.#panning && ["brush", "eraser"].includes(this.#activeTool)) {
+      const svg = event.currentTarget;
+      const point = getSvgEventPoint(svg, event);
+      this.#updateBrushCursor(svg, point);
     }
 
     if (!this.#panning || event.pointerId !== this.#panning.pointerId) return;
@@ -307,6 +337,21 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     if (this.#drawing && event.pointerId === this.#drawing.pointerId) {
       event.preventDefault();
       event.currentTarget?.releasePointerCapture?.(event.pointerId);
+      if (this.#drawing.immediate) {
+        const points = this.#getBrushGesturePaths();
+        this.#drawing = null;
+        this.#suppressNextClick = true;
+        this.#cancelGesturePreview();
+        this.#clearGesturePreview(event.currentTarget);
+        if (points.length) {
+          void this.#applyDrawnPaths(points, { render: true, pushHistory: false, notify: false }).then(changed => {
+            if (!changed) this.#history.pop();
+          });
+        } else {
+          this.#history.pop();
+        }
+        return;
+      }
       const points = this.#getPreviewPoints();
       this.#drawing = null;
       this.#suppressNextClick = true;
@@ -337,11 +382,83 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     svg?.querySelector("[data-silhouette-preview]")?.setAttribute("points", "");
   }
 
+  #applyGesturePreview(svg, { immediate = false } = {}) {
+    if (!immediate) {
+      this.#gesturePreviewSvg = svg;
+      if (this.#gesturePreviewFrame) return;
+      this.#gesturePreviewFrame = requestAnimationFrame(() => {
+        const nextSvg = this.#gesturePreviewSvg;
+        this.#gesturePreviewFrame = 0;
+        this.#gesturePreviewSvg = null;
+        this.#applyGesturePreview(nextSvg, { immediate: true });
+      });
+      return;
+    }
+    const points = buildSvgPoints(this.#drawing?.points ?? []);
+    const strokeWidth = String(this.#brushRadius * 2);
+    const preview = svg?.querySelector?.("[data-silhouette-gesture-preview]");
+    const maskPath = svg?.querySelector?.("[data-silhouette-eraser-mask-path]");
+    if (preview) {
+      preview.setAttribute("points", this.#activeTool === "brush" ? points : "");
+      preview.setAttribute("stroke", this.#getActiveLimbColor());
+      preview.setAttribute("stroke-width", strokeWidth);
+    }
+    if (maskPath) {
+      maskPath.setAttribute("points", this.#activeTool === "eraser" ? points : "");
+      maskPath.setAttribute("stroke-width", strokeWidth);
+    }
+  }
+
+  #cancelGesturePreview() {
+    if (!this.#gesturePreviewFrame) return;
+    cancelAnimationFrame(this.#gesturePreviewFrame);
+    this.#gesturePreviewFrame = 0;
+    this.#gesturePreviewSvg = null;
+  }
+
+  #clearGesturePreview(svg) {
+    this.#clearPreview(svg);
+    svg?.querySelector?.("[data-silhouette-gesture-preview]")?.setAttribute("points", "");
+    svg?.querySelector?.("[data-silhouette-eraser-mask-path]")?.setAttribute("points", "");
+  }
+
+  #getActiveLimbColor() {
+    const index = Math.max(0, (this.#race?.limbs ?? []).findIndex(limb => limb.key === this.#activeLimbKey));
+    return EDITOR_COLORS[index % EDITOR_COLORS.length];
+  }
+
+  #updateBrushCursor(svg, point) {
+    const cursor = svg?.querySelector?.("[data-silhouette-brush-cursor]");
+    if (!cursor) return;
+    if (!point || !["brush", "eraser"].includes(this.#activeTool)) {
+      this.#hideBrushCursor(svg);
+      return;
+    }
+    cursor.setAttribute("cx", String(point.x));
+    cursor.setAttribute("cy", String(point.y));
+    cursor.setAttribute("r", String(this.#brushRadius));
+    cursor.classList.toggle("eraser", this.#activeTool === "eraser");
+    cursor.classList.add("visible");
+  }
+
+  #hideBrushCursor(svg) {
+    svg?.querySelector?.("[data-silhouette-brush-cursor]")?.classList.remove("visible");
+  }
+
   #appendBrushPoint(point) {
     const previous = this.#drawing?.points?.at(-1);
-    if (!previous || Math.hypot(point.x - previous.x, point.y - previous.y) >= DRAWING_POINT_DISTANCE) {
-      this.#drawing.points.push(point);
-    }
+    if (!previous) return;
+    const distance = Math.hypot(point.x - previous.x, point.y - previous.y);
+    if (distance < DRAWING_POINT_DISTANCE) return;
+    this.#drawing.points.push(point);
+  }
+
+  #getBrushGesturePaths() {
+    const points = this.#drawing?.points ?? [];
+    if (!points.length) return [];
+    if (points.length === 1) return [createCirclePath(points[0], this.#brushRadius)];
+    const paths = createRoundStrokePaths(points, this.#brushRadius);
+    return paths.length ? paths : [createBrushStrokePath(points, this.#brushRadius * 2)];
   }
 
   #buildToolPath(start, current, brushPoints = []) {
@@ -352,42 +469,56 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     return [];
   }
 
-  async #applyDrawnPath(points, { render = false } = {}) {
-    if (this.#activeTool === "eraser") return this.#erasePath(points, { render });
-    return this.#commitCut(points, { render });
+  #isPolygonClosingPoint(point) {
+    const first = this.#draftPoints[0];
+    if (!first || this.#draftPoints.length < 3) return false;
+    const threshold = Math.max(3, POLYGON_CLOSE_SCREEN_DISTANCE / Math.max(this.#view.zoom, VIEW_ZOOM_MIN));
+    return Math.hypot(point.x - first.x, point.y - first.y) <= threshold;
   }
 
-  async #commitCut(points, { render = false } = {}) {
+  async #applyDrawnPath(points, { render = false, pushHistory = true, notify = true } = {}) {
+    return this.#applyDrawnPaths([points], { render, pushHistory, notify });
+  }
+
+  async #applyDrawnPaths(paths, { render = false, pushHistory = true, notify = true } = {}) {
+    if (this.#activeTool === "eraser") return this.#erasePath(paths, { render, pushHistory, notify });
+    return this.#commitCut(paths, { render, pushHistory, notify });
+  }
+
+  async #commitCut(sourcePaths, { render = false, pushHistory = true, notify = true } = {}) {
     if (!this.#silhouette || !this.#activeLimbKey) return undefined;
-    const paths = normalizePaths([points]);
+    const paths = normalizePaths(coercePathList(sourcePaths));
     if (!paths.length) return undefined;
 
     let cutPaths;
     try {
       cutPaths = clipperIntersect(this.#remaining, paths);
     } catch (error) {
-      ui.notifications.error(error.message);
+      if (notify) ui.notifications.error(error.message);
       return undefined;
     }
     if (!cutPaths.length) {
-      ui.notifications.warn("Полигон не пересек доступный остаток силуэта.");
+      if (notify) ui.notifications.warn("Полигон не пересек доступный остаток силуэта.");
       return undefined;
     }
 
-    this.#pushHistory();
+    if (pushHistory) this.#pushHistory();
     const parts = this.#silhouette.parts ?? [];
     const existing = parts.find(part => part.limbKey === this.#activeLimbKey);
     if (existing) existing.paths = clipperUnion([...existing.paths, ...cutPaths]);
     else parts.push({ limbKey: this.#activeLimbKey, paths: cutPaths });
     this.#remaining = clipperDifference(this.#remaining, cutPaths);
     this.#draftPoints = [];
-    if (render) return this.render({ force: true });
-    return undefined;
+    if (render) {
+      await this.render({ force: true });
+      return true;
+    }
+    return true;
   }
 
-  async #erasePath(points, { render = false } = {}) {
+  async #erasePath(sourcePaths, { render = false, pushHistory = true, notify = true } = {}) {
     if (!this.#silhouette || !this.#activeLimbKey) return undefined;
-    const paths = normalizePaths([points]);
+    const paths = normalizePaths(coercePathList(sourcePaths));
     if (!paths.length) return undefined;
 
     const parts = this.#silhouette.parts ?? [];
@@ -398,18 +529,21 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     try {
       erasedPaths = clipperIntersect(part.paths, paths);
     } catch (error) {
-      ui.notifications.error(error.message);
+      if (notify) ui.notifications.error(error.message);
       return undefined;
     }
     if (!erasedPaths.length) return undefined;
 
-    this.#pushHistory();
+    if (pushHistory) this.#pushHistory();
     part.paths = clipperDifference(part.paths, erasedPaths);
     this.#remaining = clipperUnion([...this.#remaining, ...erasedPaths]);
     this.#silhouette.parts = parts.filter(entry => entry.paths?.length);
     this.#draftPoints = [];
-    if (render) return this.render({ force: true });
-    return undefined;
+    if (render) {
+      await this.render({ force: true });
+      return true;
+    }
+    return true;
   }
 
   #clampCamera(view) {
@@ -432,15 +566,22 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     this.#history.push(foundry.utils.deepClone({
       silhouette: this.#silhouette,
       remaining: this.#remaining,
-      draftPoints: this.#draftPoints
+      sourceImage: this.#sourceImage,
+      draftPoints: this.#draftPoints,
+      view: this.#view
     }));
   }
 
   #restoreSnapshot(snapshot) {
     this.#silhouette = snapshot?.silhouette ?? null;
     this.#remaining = snapshot?.remaining ?? [];
+    this.#sourceImage = snapshot?.sourceImage ?? this.#silhouette?.image ?? "";
     this.#draftPoints = snapshot?.draftPoints ?? [];
-    this.#resetCamera();
+    this.#view = this.#silhouette
+      ? this.#clampCamera(snapshot?.view ?? this.#view)
+      : { x: 0, y: 0, width: 1, height: 1, zoom: 1 };
+    this.#drawing = null;
+    this.#panning = null;
   }
 
   async #loadImage(path) {
@@ -473,10 +614,12 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     this.#silhouette = {
       width: canvas.width,
       height: canvas.height,
+      image: path,
       outline,
       parts: []
     };
     this.#remaining = outline;
+    this.#sourceImage = path;
     this.#draftPoints = [];
     this.#drawing = null;
     this.#resetCamera();
@@ -485,6 +628,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
 
   static #onChooseImage(event) {
     event.preventDefault();
+    if (this.#silhouette) return this.#deleteSilhouette();
     new FilePicker({
       type: "image",
       callback: path => this.#loadImage(path)
@@ -498,6 +642,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     this.#activeTool = tool;
     this.#draftPoints = [];
     this.#drawing = null;
+    this.#cancelGesturePreview();
     return this.render({ force: true });
   }
 
@@ -519,20 +664,10 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     if (!this.#silhouette || !this.#activeLimbKey) return undefined;
     const point = getSvgEventPoint(target, event);
     if (!point) return undefined;
+    if (this.#isPolygonClosingPoint(point)) {
+      return this.#commitCut(this.#draftPoints, { render: true });
+    }
     this.#draftPoints.push(point);
-    return this.render({ force: true });
-  }
-
-  static #onFinishPolygon(event) {
-    event.preventDefault();
-    if (!this.#silhouette || this.#draftPoints.length < 3 || !this.#activeLimbKey) return undefined;
-    return this.#commitCut(this.#draftPoints, { render: true });
-  }
-
-  static #onCancelPolygon(event) {
-    event.preventDefault();
-    this.#draftPoints = [];
-    this.#drawing = null;
     return this.render({ force: true });
   }
 
@@ -544,20 +679,27 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     return this.render({ force: true });
   }
 
-  static #onClearActive(event) {
+  static #onClearSilhouette(event) {
     event.preventDefault();
-    this.#activeTool = "eraser";
+    if (!this.#silhouette) return undefined;
+    if (!this.#silhouette.parts?.some(part => part.paths?.length)) return undefined;
+    this.#pushHistory();
+    this.#silhouette.parts = [];
+    this.#remaining = normalizePaths(this.#silhouette.outline);
     this.#draftPoints = [];
     this.#drawing = null;
+    this.#cancelGesturePreview();
     return this.render({ force: true });
   }
 
-  static #onReset(event) {
-    event.preventDefault();
+  #deleteSilhouette() {
     this.#pushHistory();
     this.#silhouette = null;
     this.#remaining = [];
+    this.#sourceImage = "";
     this.#draftPoints = [];
+    this.#drawing = null;
+    this.#cancelGesturePreview();
     this.#resetCamera();
     return this.render({ force: true });
   }
@@ -577,6 +719,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       ? {
         width: this.#silhouette.width,
         height: this.#silhouette.height,
+        image: this.#silhouette.image ?? this.#sourceImage ?? "",
         outline: normalizePaths(this.#silhouette.outline),
         parts: (this.#silhouette.parts ?? [])
           .map(part => ({ limbKey: part.limbKey, paths: normalizePaths(part.paths) }))
@@ -660,6 +803,22 @@ function createRoundCap(point, neighbor, radius) {
       y: point.y + (Math.sin(angle) * radius)
     };
   });
+}
+
+function createCirclePath(center, radius) {
+  const safeRadius = Math.max(0.5, Number(radius) || 0);
+  return Array.from({ length: ELLIPSE_SEGMENTS }, (_entry, index) => {
+    const angle = (Math.PI * 2 * index) / ELLIPSE_SEGMENTS;
+    return {
+      x: center.x + (Math.cos(angle) * safeRadius),
+      y: center.y + (Math.sin(angle) * safeRadius)
+    };
+  });
+}
+
+function coercePathList(source) {
+  if (!Array.isArray(source)) return [];
+  return Number.isFinite(source[0]?.x) && Number.isFinite(source[0]?.y) ? [source] : source;
 }
 
 function createEllipsePath(start, current, constrain = false) {

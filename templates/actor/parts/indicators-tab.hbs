@@ -43,7 +43,7 @@
     <h2>{{localize "FALLOUTMAW.Common.Limbs"}}</h2>
     <div class="fallout-maw-resource-grid">
       {{#each limbs}}
-      <div class="fallout-maw-resource-card fallout-maw-resource-meter-card{{#if active}} active{{/if}}">
+      <div class="fallout-maw-resource-card fallout-maw-resource-meter-card{{#if active}} active{{/if}}" data-limb-control-card data-limb-key="{{key}}" role="button" tabindex="0">
         <div class="fallout-maw-resource-card-header">
           <button
             type="button"
@@ -84,6 +84,26 @@
         <span>{{label}}:</span>
         <strong>{{value}}</strong>
       </div>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <h2>Травмы</h2>
+    <div class="fallout-maw-trauma-list">
+      {{#each traumas}}
+      <article class="fallout-maw-trauma-row" data-trauma-id="{{id}}">
+        <img src="{{img}}" alt="{{name}}">
+        <div>
+          <strong>{{name}}</strong>
+          <span>{{limbLabel}} · {{damageTypeLabel}} · {{thresholdPercent}}%</span>
+        </div>
+        {{#if ../freeEdit}}
+        <button type="button" data-action="deleteTrauma" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        {{/if}}
+      </article>
+      {{else}}
+      <p class="fallout-maw-empty-list">Травм нет.</p>
       {{/each}}
     </div>
   </section>

@@ -1,9 +1,9 @@
 <div class="fallout-maw-silhouette-editor">
   <div class="fallout-maw-silhouette-body">
     <aside class="fallout-maw-silhouette-tools" aria-label="Инструменты силуэта">
-      <button type="button" class="fallout-maw-silhouette-tool command" data-action="chooseImage" title="Загрузить контур">
-        <i class="fa-solid fa-image"></i>
-        <span>Загрузить</span>
+      <button type="button" class="fallout-maw-silhouette-tool command {{#if hasSilhouette}}danger{{/if}}" data-action="chooseImage" title="{{#if hasSilhouette}}Удалить силуэт{{else}}Загрузить контур{{/if}}">
+        <i class="fa-solid {{#if hasSilhouette}}fa-trash{{else}}fa-image{{/if}}"></i>
+        <span>{{#if hasSilhouette}}Удалить{{else}}Загрузить{{/if}}</span>
       </button>
 
       <div class="fallout-maw-silhouette-tool-group">
@@ -16,25 +16,13 @@
       </div>
 
       <div class="fallout-maw-silhouette-tool-group">
-        <button type="button" class="fallout-maw-silhouette-tool command" data-action="finishPolygon" {{#unless canFinishPolygon}}disabled{{/unless}} title="Завершить вырез">
-          <i class="fa-solid fa-check"></i>
-          <span>Вырез</span>
-        </button>
-        <button type="button" class="fallout-maw-silhouette-tool command" data-action="cancelPolygon" title="Сбросить черновик">
-          <i class="fa-solid fa-xmark"></i>
-          <span>Сброс</span>
-        </button>
         <button type="button" class="fallout-maw-silhouette-tool command" data-action="undo" {{#unless canUndo}}disabled{{/unless}} title="Отменить">
           <i class="fa-solid fa-rotate-left"></i>
           <span>Назад</span>
         </button>
-        <button type="button" class="fallout-maw-silhouette-tool command" data-action="clearActive" title="Включить ластик">
-          <i class="fa-solid fa-eraser"></i>
-          <span>Ластик</span>
-        </button>
-        <button type="button" class="fallout-maw-silhouette-tool command danger" data-action="reset" {{#unless hasSilhouette}}disabled{{/unless}} title="Удалить силуэт">
-          <i class="fa-solid fa-trash"></i>
-          <span>Удалить</span>
+        <button type="button" class="fallout-maw-silhouette-tool command" data-action="clearSilhouette" {{#unless canClearSilhouette}}disabled{{/unless}} title="Очистить области">
+          <i class="fa-solid fa-xmark"></i>
+          <span>Очистить</span>
         </button>
       </div>
     </aside>
@@ -42,21 +30,36 @@
     <div class="fallout-maw-silhouette-stage">
       {{#if hasSilhouette}}
       <svg class="fallout-maw-silhouette-svg" viewBox="{{viewBox}}" data-action="addPoint" data-silhouette-svg>
-        {{#each remaining}}
-        <path class="fallout-maw-silhouette-remaining" d="{{d}}" fill="{{fill}}"></path>
-        {{/each}}
-        {{#each parts}}
-        <path class="fallout-maw-silhouette-part" d="{{d}}" fill="{{fill}}">
-          <title>{{label}}</title>
-        </path>
-        {{/each}}
+        <defs>
+          <mask id="{{brushMaskId}}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x="0" y="0" width="{{imageWidth}}" height="{{imageHeight}}">
+            <rect x="0" y="0" width="{{imageWidth}}" height="{{imageHeight}}" fill="white"></rect>
+            <polyline data-silhouette-eraser-mask-path points="" fill="none" stroke="black" stroke-linecap="round" stroke-linejoin="round"></polyline>
+          </mask>
+        </defs>
+        {{#if sourceImage}}
+        <image class="fallout-maw-silhouette-source-image" href="{{sourceImage}}" x="0" y="0" width="{{imageWidth}}" height="{{imageHeight}}"></image>
+        {{/if}}
+        <g data-silhouette-remaining-layer>
+          {{#each remaining}}
+          <path class="fallout-maw-silhouette-remaining" d="{{d}}" fill="{{fill}}"></path>
+          {{/each}}
+        </g>
+        <g data-silhouette-parts-layer>
+          {{#each parts}}
+          <path class="fallout-maw-silhouette-part" d="{{d}}" fill="{{fill}}" data-limb-key="{{limbKey}}" {{#if mask}}mask="{{mask}}"{{/if}}>
+            <title>{{label}}</title>
+          </path>
+          {{/each}}
+        </g>
         {{#each outline}}
         <path class="fallout-maw-silhouette-outline" d="{{d}}"></path>
         {{/each}}
         {{#if draftPoints}}
         <polyline class="fallout-maw-silhouette-draft-line" points="{{draftPoints}}"></polyline>
         {{/if}}
+        <polyline class="fallout-maw-silhouette-gesture-preview" points="" data-silhouette-gesture-preview></polyline>
         <polygon class="fallout-maw-silhouette-preview" points="{{previewPoints}}" data-silhouette-preview></polygon>
+        <circle class="fallout-maw-silhouette-brush-cursor" cx="0" cy="0" r="{{brushRadius}}" data-silhouette-brush-cursor></circle>
         {{#each draftPointMarkers}}
         <circle class="fallout-maw-silhouette-draft-point" cx="{{x}}" cy="{{y}}" r="3"></circle>
         {{/each}}
@@ -82,7 +85,7 @@
         <p class="fallout-maw-empty-list">Сначала добавьте конечности в расу.</p>
         {{/each}}
       </div>
-      <p class="hint">Активная часть получает область выбранным инструментом. Ластик стирает из активной части. Shift+колесо меняет радиус кисти/ластика: {{brushRadius}}. Alt фиксирует квадрат, круг или равностороннюю фигуру. Остаток: {{unassignedPercent}}%.</p>
+      <p class="hint">Остаток: {{unassignedPercent}}%.</p>
     </aside>
   </div>
 

@@ -1,0 +1,35 @@
+<div class="fallout-maw-config-body fallout-maw-trauma-config-body">
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>Настройка травм</h2>
+      <div class="fallout-maw-button-row">
+        <button type="button" data-action="resetDefaults"><i class="fa-solid fa-rotate-left"></i> {{localize "FALLOUTMAW.Common.ResetDefaults"}}</button>
+      </div>
+    </header>
+    {{#unless hasGroups}}
+    <p class="fallout-maw-empty-list">Нет рас с наборами конечностей.</p>
+    {{/unless}}
+  </section>
+
+  {{#each groups}}
+  <section class="fallout-maw-panel fallout-maw-trauma-group-summary" data-trauma-group="{{id}}">
+    <header class="fallout-maw-panel-header">
+      <div>
+        <h2>{{raceNames}}</h2>
+        <p class="fallout-maw-help-text">{{limbsLabel}}</p>
+      </div>
+      <button type="button" data-action="openGroup"><i class="fa-solid fa-bone"></i> Настройка травм</button>
+    </header>
+    <div class="fallout-maw-summary-grid two-columns">
+      <div class="fallout-maw-inline-stat">
+        <span>Рас в наборе:</span>
+        <strong>{{races.length}}</strong>
+      </div>
+      <div class="fallout-maw-inline-stat">
+        <span>Порогов настроено:</span>
+        <strong>{{traumaStagesCount}}</strong>
+      </div>
+    </div>
+  </section>
+  {{/each}}
+</div>

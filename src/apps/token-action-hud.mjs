@@ -12,6 +12,8 @@ import {
   TOKEN_ACTION_HUD_SCALE_SETTING
 } from "../settings/constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
+import { getLimbHealingCap } from "../combat/damage-hub.mjs";
+import { openLimbDamageDialog } from "./limb-damage-dialog.mjs";
 import {
   FALLBACK_ICON,
   normalizeImagePath,
@@ -196,6 +198,13 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #token = null;
   #activeTray = "";
   #layoutFrame = null;
+  #limbPopover = {
+    element: null,
+    showTimer: null,
+    hideTimer: null,
+    hoveredPart: null,
+    boundRoot: null
+  };
 
   static DEFAULT_OPTIONS = {
     id: "fallout-maw-token-action-hud",
@@ -247,13 +256,14 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const actions = prepareActions(this.#activeTray, activeWeaponSet, items, abilities);
     const tray = prepareTrayContext(this.#activeTray, skills, items, abilities);
     const meterSections = prepareMeterSectionStates();
-    const limbSilhouette = createLimbSilhouetteHud(race?.limbSilhouette, actor.system?.limbs);
+    const displayLimbs = prepareDisplayLimbs(actor);
+    const limbSilhouette = createLimbSilhouetteHud(race?.limbSilhouette, displayLimbs);
 
     return {
       ...context,
       actor,
       token: this.#token,
-      limbs: limbSilhouette?.visible ? [] : prepareLimbEntries(actor),
+      limbs: limbSilhouette?.visible ? [] : prepareLimbEntries(displayLimbs),
       limbSilhouette,
       resources: prepareResourceEntries(actor),
       needs: prepareNeedEntries(actor),
@@ -268,6 +278,13 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#activateLimbControlClicks();
+    const silhouette = this.element?.querySelector("[data-limb-popover-root]");
+    if (silhouette && silhouette !== this.#limbPopover.boundRoot) {
+      silhouette.addEventListener("pointermove", event => this.#onLimbPopoverMove(event));
+      silhouette.addEventListener("pointerleave", () => this.#onLimbPopoverLeaveRoot());
+      this.#limbPopover.boundRoot = silhouette;
+    }
     this.element?.classList.remove("layout-ready");
     this.#scheduleLayout();
   }
@@ -276,6 +293,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     await super._onClose(options);
     if (this.#layoutFrame) cancelAnimationFrame(this.#layoutFrame);
     this.#layoutFrame = null;
+    this.#destroyLimbPopover();
   }
 
   #scheduleLayout() {
@@ -350,6 +368,101 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const item = this.actor?.items.get(target.dataset.itemId ?? "");
     return item?.sheet?.render(true);
   }
+
+  #activateLimbControlClicks() {
+    const root = this.element;
+    if (!root || root.dataset.limbControlClicksBound === "true") return;
+    root.dataset.limbControlClicksBound = "true";
+    root.addEventListener("click", event => this.#onLimbControlClick(event), { capture: true });
+    root.addEventListener("keydown", event => this.#onLimbControlKeyDown(event), { capture: true });
+  }
+
+  #onLimbControlKeyDown(event) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    this.#onLimbControlClick(event);
+  }
+
+  #onLimbControlClick(event) {
+    if (!(event.target instanceof Element)) return;
+    const limbsBlock = event.target.closest(".fallout-maw-token-hud-limbs");
+    if (!limbsBlock || !this.element?.contains(limbsBlock)) return;
+
+    const silhouette = event.target.closest("[data-limb-popover-root]");
+    const target = silhouette
+      ? getHoveredLimbPart(silhouette, event)
+      : event.target.closest("[data-limb-key]");
+    if (!target) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.#destroyLimbPopover();
+    void openLimbDamageDialog(this.actor, target.dataset.limbKey ?? "");
+  }
+
+  #onLimbPopoverMove(event) {
+    const target = getHoveredLimbPart(event.currentTarget, event);
+    if (target === this.#limbPopover.hoveredPart) return;
+    this.#limbPopover.hoveredPart = target;
+    if (!target) {
+      this.#scheduleLimbPopoverClose();
+      return;
+    }
+
+    this.#clearLimbPopoverTimers();
+    const delay = this.#limbPopover.element?.isConnected ? 200 : 400;
+    this.#limbPopover.showTimer = window.setTimeout(() => this.#showLimbPopover(target), delay);
+  }
+
+  #onLimbPopoverLeaveRoot() {
+    this.#limbPopover.hoveredPart = null;
+    this.#scheduleLimbPopoverClose();
+  }
+
+  #scheduleLimbPopoverClose() {
+    if (this.#limbPopover.showTimer) {
+      window.clearTimeout(this.#limbPopover.showTimer);
+      this.#limbPopover.showTimer = null;
+    }
+    this.#limbPopover.hideTimer = window.setTimeout(() => this.#destroyLimbPopover(), 200);
+  }
+
+  #showLimbPopover(target) {
+    if (!target?.isConnected) return;
+    this.#clearLimbPopoverTimers();
+    const label = String(target.dataset.label ?? "");
+    const value = String(target.dataset.value ?? "0");
+    const max = String(target.dataset.max ?? "0");
+
+    const element = this.#limbPopover.element ?? document.createElement("div");
+    element.className = "fallout-maw fallout-maw-token-hud-limb-popover";
+    element.replaceChildren();
+    const title = document.createElement("div");
+    title.className = "fallout-maw-token-hud-limb-popover-title";
+    title.textContent = label;
+    const valueRow = document.createElement("div");
+    valueRow.className = "fallout-maw-token-hud-limb-popover-value";
+    valueRow.textContent = `${value} / ${max}`;
+    element.append(title, valueRow);
+    document.body.append(element);
+    this.#limbPopover.element = element;
+    positionLimbPopover(element, target);
+  }
+
+  #clearLimbPopoverTimers() {
+    if (this.#limbPopover.showTimer) window.clearTimeout(this.#limbPopover.showTimer);
+    if (this.#limbPopover.hideTimer) window.clearTimeout(this.#limbPopover.hideTimer);
+    this.#limbPopover.showTimer = null;
+    this.#limbPopover.hideTimer = null;
+  }
+
+  #destroyLimbPopover() {
+    this.#clearLimbPopoverTimers();
+    this.#limbPopover.element?.remove();
+    this.#limbPopover.element = null;
+    this.#limbPopover.hoveredPart = null;
+    this.#limbPopover.boundRoot = null;
+  }
+
 }
 
 function prepareMeterSectionStates() {
@@ -459,8 +572,25 @@ class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
   }
 }
 
-function prepareLimbEntries(actor) {
-  return Object.entries(actor.system?.limbs ?? {}).map(([key, limb]) => prepareIndicatorEntry({
+function prepareDisplayLimbs(actor) {
+  return Object.fromEntries(Object.entries(actor.system?.limbs ?? {}).map(([key, limb]) => [
+    key,
+    prepareLimbDisplayData(actor, key, limb)
+  ]));
+}
+
+function prepareLimbDisplayData(actor, limbKey, limb = {}) {
+  const max = getLimbHealingCap(actor, limbKey);
+  if (max >= toInteger(limb?.max)) return limb;
+  return {
+    ...limb,
+    max,
+    scaleMax: limb.max
+  };
+}
+
+function prepareLimbEntries(limbs = {}) {
+  return Object.entries(limbs ?? {}).map(([key, limb]) => prepareIndicatorEntry({
     key,
     label: String(limb?.label ?? key),
     color: "#8f8456",
@@ -608,6 +738,38 @@ function layoutTokenActionHud(element) {
   }
 
   element.classList.add("layout-ready");
+}
+
+function positionLimbPopover(popover, target) {
+  const margin = 8;
+  const gap = 10;
+  const targetRect = target.getBoundingClientRect();
+  const popoverRect = popover.getBoundingClientRect();
+  let left = targetRect.left + ((targetRect.width - popoverRect.width) / 2);
+  let top = targetRect.top - popoverRect.height - gap;
+
+  if (top < margin) top = targetRect.bottom + gap;
+
+  left = Math.max(margin, Math.min(window.innerWidth - popoverRect.width - margin, left));
+  top = Math.max(margin, Math.min(window.innerHeight - popoverRect.height - margin, top));
+  popover.style.left = `${Math.round(left)}px`;
+  popover.style.top = `${Math.round(top)}px`;
+}
+
+function getHoveredLimbPart(svg, event) {
+  if (!(svg instanceof SVGSVGElement)) return null;
+  const screenPoint = svg.createSVGPoint();
+  screenPoint.x = event.clientX;
+  screenPoint.y = event.clientY;
+
+  const parts = Array.from(svg.querySelectorAll("[data-limb-popover]")).reverse();
+  for (const part of parts) {
+    const matrix = part.getScreenCTM()?.inverse();
+    if (!matrix) continue;
+    const localPoint = screenPoint.matrixTransform(matrix);
+    if (part.isPointInFill(localPoint)) return part;
+  }
+  return null;
 }
 
 function getActiveTokenActionHudScaleFactor() {

@@ -2,7 +2,8 @@ export const SYSTEM_ID = "fallout-maw";
 export const SYSTEM_TITLE = "Fallout-MaW";
 
 export const ACTOR_TYPES = Object.freeze(["character", "npc", "vehicle", "hazard"]);
-export const ITEM_TYPES = Object.freeze(["gear", "ability"]);
+export const ITEM_TYPES = Object.freeze(["gear", "ability", "trauma"]);
+export const TRAUMA_CREATE_OPTION = "falloutMawAllowTraumaCreate";
 
 export const TEMPLATES = Object.freeze({
   actorCreateDialog: `systems/${SYSTEM_ID}/templates/actor/actor-create-dialog.hbs`,
@@ -10,6 +11,7 @@ export const TEMPLATES = Object.freeze({
     dialog: `systems/${SYSTEM_ID}/templates/actor/advancement-dialog.hbs`
   }),
   skillCheckDialog: `systems/${SYSTEM_ID}/templates/actor/skill-check-dialog.hbs`,
+  limbDamageDialog: `systems/${SYSTEM_ID}/templates/actor/limb-damage-dialog.hbs`,
   skillCheckControl: `systems/${SYSTEM_ID}/templates/actor/skill-check-control.hbs`,
   skillCheckAnimation: `systems/${SYSTEM_ID}/templates/actor/skill-check-animation.hbs`,
   tokenActionHud: `systems/${SYSTEM_ID}/templates/actor/token-action-hud.hbs`,
@@ -43,6 +45,8 @@ export const TEMPLATES = Object.freeze({
     resources: `systems/${SYSTEM_ID}/templates/settings/resource-settings-config.hbs`,
     skillFormulas: `systems/${SYSTEM_ID}/templates/settings/skill-formulas-config.hbs`,
     limbSilhouette: `systems/${SYSTEM_ID}/templates/settings/limb-silhouette-config.hbs`,
-    tokenActionHud: `systems/${SYSTEM_ID}/templates/settings/token-action-hud-config.hbs`
+    tokenActionHud: `systems/${SYSTEM_ID}/templates/settings/token-action-hud-config.hbs`,
+    traumaSettings: `systems/${SYSTEM_ID}/templates/settings/trauma-settings-config.hbs`,
+    traumaGroupSettings: `systems/${SYSTEM_ID}/templates/settings/trauma-group-settings-config.hbs`
   })
 });

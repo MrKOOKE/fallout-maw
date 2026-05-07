@@ -16,6 +16,7 @@ import {
 } from "../settings/accessors.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
 import { getItemActorLoadWeight, getItemContainerParentId } from "../utils/inventory-containers.mjs";
+import { requestDamageApplication } from "../combat/damage-hub.mjs";
 
 export class FalloutMaWActor extends Actor {
   static async createDialog(data = {}, createOptions = {}, dialogOptions = {}, renderOptions = {}) {
@@ -195,25 +196,18 @@ export class FalloutMaWActor extends Actor {
   }
 
   async applyDamage(amount = 0, { damageTypeKey = "", limbKey = "" } = {}) {
-    const incomingDamage = Math.max(0, Math.floor(Number(amount) || 0));
-    if (!this.health || (incomingDamage === 0)) return this;
-
-    const resistance = damageTypeKey ? this.getDamageResistance(damageTypeKey, limbKey) : 0;
-    const defense = damageTypeKey ? Math.min(100, this.getDamageDefense(damageTypeKey, limbKey)) : 0;
-    const reduction = damageTypeKey ? this.getDamageReduction(damageTypeKey, limbKey) : 0;
-    const defendedDamage = Math.floor(incomingDamage * (1 - (defense / 100)));
-    const damage = Math.max(0, defendedDamage - resistance - reduction);
-    if (damage === 0) return this;
-
-    const nextValue = Math.max(this.health.min, this.health.value - damage);
-    const updateData = { "system.resources.health.value": nextValue };
-
-    if (limbKey && this.system?.limbs?.[limbKey]) {
-      const limb = this.system.limbs[limbKey];
-      updateData[`system.limbs.${limbKey}.value`] = Math.max(toInteger(limb.min), toInteger(limb.value) - damage);
-    }
-
-    return this.update(updateData);
+    await requestDamageApplication({
+      actor: this,
+      amount,
+      damageTypeKey,
+      limbKey,
+      mode: "damage",
+      scope: limbKey ? "healthAndLimb" : "health",
+      source: {
+        legacyActorApplyDamage: true
+      }
+    });
+    return this;
   }
 
 }

@@ -227,7 +227,11 @@ function limbField() {
     label: new StringField({ required: true, blank: true, initial: "" }),
     min: new NumberField({ required: true, integer: true, initial: -100 }),
     value: new NumberField({ required: true, integer: true, initial: 0 }),
-    max: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+    max: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    damageAccumulation: new TypedObjectField(new NumberField({ required: true, min: 0, initial: 0 }), {
+      required: true,
+      initial: {}
+    })
   });
 }
 
@@ -324,9 +328,18 @@ function normalizeLimbMap(currentLimbs = {}, settings = []) {
         label: String(setting?.label ?? setting?.name ?? setting?.key ?? ""),
         min,
         value,
-        max
+        max,
+        damageAccumulation: normalizeDamageAccumulation(current?.damageAccumulation)
       }];
     })
+  );
+}
+
+function normalizeDamageAccumulation(value = {}) {
+  return Object.fromEntries(
+    Object.entries(value ?? {})
+      .map(([key, amount]) => [key, Math.max(0, Number(amount) || 0)])
+      .filter(([_key, amount]) => amount > 0)
   );
 }
 

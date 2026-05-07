@@ -19,6 +19,7 @@ import { NeedSettingsConfig } from "../apps/need-settings-config.mjs";
 import { ProficiencySettingsConfig } from "../apps/proficiency-settings-config.mjs";
 import { ResourceSettingsConfig } from "../apps/resource-settings-config.mjs";
 import { SkillFormulasConfig } from "../apps/skill-formulas-config.mjs";
+import { TraumaSettingsConfig } from "../apps/trauma-settings-config.mjs";
 import { refreshPreparedActors, syncSettingsIntoSystemConfig } from "./accessors.mjs";
 import {
   CHARACTERISTICS_SETTING,
@@ -31,12 +32,14 @@ import {
   RESOURCE_SETTINGS_SETTING,
   SKILL_CHECK_CONTROL_SETTING,
   SKILL_SETTINGS_SETTING,
+  TRAUMA_SETTINGS_SETTING,
   TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING,
   TOKEN_ACTION_HUD_ENABLED_SETTING,
   TOKEN_ACTION_HUD_SCALE_SETTING
 } from "./constants.mjs";
 import { createEmptyCreatureOptions } from "./creature-options.mjs";
 import { createDefaultLevelSettings } from "./levels.mjs";
+import { createDefaultTraumaSettings } from "./traumas.mjs";
 import { DEFAULT_SKILL_CHECK_CONTROL, normalizeSkillCheckControl } from "./accessors.mjs";
 
 export function registerSystemSettings() {
@@ -132,6 +135,15 @@ export function registerSystemSettings() {
     default: normalizeSkillCheckControl(DEFAULT_SKILL_CHECK_CONTROL)
   });
 
+  game.settings.register(FALLOUT_MAW.id, TRAUMA_SETTINGS_SETTING, {
+    name: "Настройка травм",
+    scope: "world",
+    config: false,
+    type: Object,
+    default: createDefaultTraumaSettings(),
+    onChange: refreshPreparedActors
+  });
+
   game.settings.register(FALLOUT_MAW.id, TOKEN_ACTION_HUD_ENABLED_SETTING, {
     name: "Token Action HUD",
     scope: "client",
@@ -201,6 +213,14 @@ export function registerSystemSettings() {
     label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-shield-halved",
     type: DamageTypesConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "traumaSettingsMenu", {
+    name: "Настройка травм",
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-bone",
+    type: TraumaSettingsConfig,
     restricted: true
   });
 

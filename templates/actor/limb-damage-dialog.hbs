@@ -1,0 +1,33 @@
+<form class="fallout-maw fallout-maw-limb-damage-dialog">
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-inline-stat">
+      <span>{{limb.label}}</span>
+      <strong>{{limb.value}} / {{limb.max}}</strong>
+    </div>
+    <div class="fallout-maw-list-grid two-columns">
+      <label>
+        <span>Режим</span>
+        <select name="mode">
+          <option value="damage">Урон</option>
+          <option value="healing">Лечение</option>
+        </select>
+      </label>
+      <label>
+        <span>Значение</span>
+        <input type="number" name="amount" value="{{amount}}" min="0" step="1" autofocus>
+      </label>
+      <label>
+        <span>Тип урона</span>
+        <select name="damageTypeKey">
+          {{#each damageTypes}}
+          <option value="{{key}}" {{#if (eq key ../defaultDamageTypeKey)}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label class="fallout-maw-inline-checkbox">
+        <span>Затронуть здоровье</span>
+        <input type="checkbox" name="affectHealth">
+      </label>
+    </div>
+  </section>
+</form>

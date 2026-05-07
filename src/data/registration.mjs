@@ -6,6 +6,7 @@ import {
   GearDataModel,
   HazardDataModel,
   NpcDataModel,
+  TraumaDataModel,
   VehicleDataModel
 } from "./models/index.mjs";
 
@@ -21,7 +22,8 @@ export function registerDataModels() {
 
   Object.assign(CONFIG.Item.dataModels, {
     gear: GearDataModel,
-    ability: AbilityDataModel
+    ability: AbilityDataModel,
+    trauma: TraumaDataModel
   });
 }
 

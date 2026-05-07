@@ -1,4 +1,4 @@
-const { BooleanField, HTMLField, NumberField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
+const { ArrayField, BooleanField, HTMLField, NumberField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
 
 export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
   static defineSchema() {
@@ -75,8 +75,41 @@ function containerFunctionField() {
   });
 }
 
+export class TraumaDataModel extends foundry.abstract.TypeDataModel {
+  static defineSchema() {
+    return {
+      description: new HTMLField({ required: false, blank: true, initial: "" }),
+      limbSetId: new StringField({ required: true, blank: true, initial: "" }),
+      limbKey: new StringField({ required: true, blank: true, initial: "" }),
+      limbLabel: new StringField({ required: true, blank: true, initial: "" }),
+      stageId: new StringField({ required: true, blank: true, initial: "" }),
+      damageTypeKey: new StringField({ required: true, blank: true, initial: "" }),
+      damageTypeLabel: new StringField({ required: true, blank: true, initial: "" }),
+      thresholdPercent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 0 }),
+      thresholdValue: new NumberField({ required: true, integer: true, initial: 0 }),
+      triggeredAtValue: new NumberField({ required: true, integer: true, initial: 0 }),
+      damageSnapshot: new TypedObjectField(new NumberField({ required: true, min: 0, initial: 0 }), {
+        required: true,
+        initial: {}
+      }),
+      generated: new BooleanField({ required: true, initial: true }),
+      effects: new ArrayField(traumaEffectField(), { required: true, initial: [] })
+    };
+  }
+}
+
 function damageMitigationEntryField() {
   return new SchemaField({
     value: new NumberField({ required: true, integer: true, initial: 0 })
+  });
+}
+
+function traumaEffectField() {
+  return new SchemaField({
+    key: new StringField({ required: true, blank: true, initial: "" }),
+    type: new StringField({ required: true, blank: false, initial: "add" }),
+    value: new StringField({ required: true, blank: true, initial: "0" }),
+    phase: new StringField({ required: true, blank: false, initial: "initial" }),
+    priority: new NumberField({ required: false, nullable: true, integer: true, initial: null })
   });
 }

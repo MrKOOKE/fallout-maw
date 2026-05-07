@@ -29,6 +29,8 @@ import {
   prepareResearchesForDisplay
 } from "../research/index.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
+import { getActorTraumas, getLimbHealingCap } from "../combat/damage-hub.mjs";
+import { openLimbDamageDialog } from "../apps/limb-damage-dialog.mjs";
 import {
   prepareIndicatorEntry as prepareDisplayIndicatorEntry,
   prepareInventoryContext as prepareDisplayInventoryContext
@@ -96,6 +98,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         openDevelopment: this.#onOpenDevelopment,
         toggleFreeEdit: this.#onToggleFreeEdit,
         selectLimb: this.#onSelectLimb,
+        openLimbControl: this.#onOpenLimbControl,
+        deleteTrauma: this.#onDeleteTrauma,
         createResearch: this.#onCreateResearch,
         deleteResearch: this.#onDeleteResearch,
         manageResearch: this.#onManageResearch,
@@ -195,7 +199,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       key,
       label: String(limb?.label ?? key),
       color: "#8f8456",
-      data: limb,
+      data: prepareLimbDisplayData(actor, key, limb),
       inputName: `system.limbs.${key}.value`,
       active: key === activeLimbKey
     }));
@@ -298,8 +302,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         ...damageType,
         value: toInteger(actor.system.damageDefenses?.[activeLimbKey]?.[damageType.key])
       })),
+      traumas: prepareTraumaEntries(actor),
       inventory,
-      effectCategories: prepareEffectCategories(actor.effects.contents)
+      effectCategories: prepareEffectCategories(getActorEffectsForDisplay(actor))
     }, { inplace: false });
   }
 
@@ -310,6 +315,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#relocateEffectsAddButton();
     this.#activateCreatureSelectors();
     this.#activateInventoryInteractions();
+    this.#activateLimbControlClicks();
     this.#activateTabScrollPersistence();
     this.#restoreActiveTabScroll();
   }
@@ -388,6 +394,47 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return this.render({ parts: ["indicators"] });
   }
 
+  static #onOpenLimbControl(event, target) {
+    event.preventDefault();
+    const limbKey = target.closest("[data-limb-key]")?.dataset.limbKey ?? target.dataset.limbKey ?? "";
+    if (!limbKey) return undefined;
+    return openLimbDamageDialog(this.actor, limbKey);
+  }
+
+  static #onDeleteTrauma(event, target) {
+    event.preventDefault();
+    if (!this.#freeEdit) return undefined;
+    const itemId = target.closest("[data-trauma-id]")?.dataset.traumaId ?? "";
+    return this.actor.items.get(itemId)?.delete();
+  }
+
+  #activateLimbControlClicks() {
+    const root = this.element;
+    if (!root || root.dataset.limbControlClicksBound === "true") return;
+    root.dataset.limbControlClicksBound = "true";
+    root.addEventListener("click", event => this.#onLimbControlClick(event), { capture: true });
+    root.addEventListener("keydown", event => this.#onLimbControlKeyDown(event), { capture: true });
+  }
+
+  #onLimbControlKeyDown(event) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    this.#onLimbControlClick(event);
+  }
+
+  #onLimbControlClick(event) {
+    const target = event.target instanceof Element ? event.target : null;
+    const card = target?.closest("[data-limb-control-card]");
+    if (!card || !this.element?.contains(card)) return;
+    if (target.closest("input, select, textarea, [data-action='deleteTrauma']")) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const limbKey = card.dataset.limbKey ?? "";
+    if (!limbKey) return;
+    this.#activeLimbKey = limbKey;
+    void openLimbDamageDialog(this.actor, limbKey);
+  }
+
   static #onCreateResearch(event) {
     event.preventDefault();
     return openCreateResearchDialog(this.actor);
@@ -440,19 +487,19 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   static #onEditEffect(event, target) {
     event.preventDefault();
-    const effect = this.actor.effects.get(target.closest("[data-effect-id]")?.dataset.effectId ?? "");
+    const effect = getEffectFromTarget(this.actor, target);
     return effect?.sheet?.render(true);
   }
 
   static #onToggleEffect(event, target) {
     event.preventDefault();
-    const effect = this.actor.effects.get(target.closest("[data-effect-id]")?.dataset.effectId ?? "");
+    const effect = getEffectFromTarget(this.actor, target);
     return effect?.update({ disabled: !effect.disabled });
   }
 
   static #onDeleteEffect(event, target) {
     event.preventDefault();
-    const effect = this.actor.effects.get(target.closest("[data-effect-id]")?.dataset.effectId ?? "");
+    const effect = getEffectFromTarget(this.actor, target);
     return effect?.delete();
   }
 
@@ -1841,7 +1888,7 @@ function buildInventoryCellStyle(x, y, placement = null) {
 function prepareInventoryContext(actor, race) {
   const currencies = getCurrencySettings();
   const { columns, rows } = getInventoryGridDimensions(race);
-  const allItems = actor.items.contents;
+  const allItems = actor.items.contents.filter(item => item.type !== "trauma");
   const allItemData = allItems.map(item => createInventoryItemData(item, allItems, currencies));
   const assignedItemIds = new Set();
   const topLevelItems = allItemData.filter(item => !item.parentId);
@@ -1946,6 +1993,34 @@ function createInventoryItemData(item, allItems, currencies = [], placement = nu
   };
 }
 
+function prepareTraumaEntries(actor) {
+  return getActorTraumas(actor).map(item => ({
+    id: item.id,
+    uuid: item.uuid,
+    name: item.name,
+    img: item.img,
+    limbLabel: item.system?.limbLabel ?? item.system?.limbKey ?? "",
+    damageTypeLabel: item.system?.damageTypeLabel ?? item.system?.damageTypeKey ?? "",
+    thresholdPercent: toInteger(item.system?.thresholdPercent)
+  }));
+}
+
+function getActorEffectsForDisplay(actor) {
+  if (typeof actor.allApplicableEffects === "function") return Array.from(actor.allApplicableEffects());
+  return actor.effects.contents;
+}
+
+function getEffectFromTarget(actor, target) {
+  const row = target.closest("[data-effect-id]");
+  const effectId = row?.dataset.effectId ?? "";
+  const parentItemId = row?.dataset.effectParentItemId ?? "";
+  const itemEffect = parentItemId ? actor.items.get(parentItemId)?.effects.get(effectId) : null;
+  if (itemEffect) return itemEffect;
+  const uuid = row?.dataset.effectUuid ?? "";
+  if (uuid && typeof globalThis.fromUuidSync === "function") return globalThis.fromUuidSync(uuid);
+  return actor.effects.get(effectId);
+}
+
 function prepareEffectCategories(effects = []) {
   const categories = [
     {
@@ -1976,6 +2051,8 @@ function prepareEffectCategories(effects = []) {
     const kind = effect.disabled ? "inactive" : getEffectCategoryKey(effect);
     categoryMap.get(kind)?.effects.push({
       id: effect.id,
+      uuid: effect.uuid,
+      parentItemId: effect.parent?.documentName === "Item" ? effect.parent.id : "",
       name: effect.name,
       img: effect.img,
       disabled: effect.disabled,
@@ -1985,6 +2062,16 @@ function prepareEffectCategories(effects = []) {
   }
 
   return categories;
+}
+
+function prepareLimbDisplayData(actor, limbKey, limb = {}) {
+  const max = getLimbHealingCap(actor, limbKey);
+  if (max >= toInteger(limb?.max)) return limb;
+  return {
+    ...limb,
+    max,
+    scaleMax: limb.max
+  };
 }
 
 function getEffectCategoryKey(effect) {

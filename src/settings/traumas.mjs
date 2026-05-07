@@ -1,0 +1,170 @@
+import { toInteger } from "../utils/numbers.mjs";
+
+const DEFAULT_TRAUMA_ICON = "icons/svg/blood.svg";
+
+export function createDefaultTraumaSettings() {
+  return { groups: {} };
+}
+
+export function normalizeTraumaSettings(value = {}, creatureOptions = {}, damageTypes = []) {
+  const sourceGroups = value && typeof value === "object" ? value.groups ?? {} : {};
+  const normalizedGroups = {};
+
+  for (const limbSet of getUniqueLimbSets(creatureOptions)) {
+    normalizedGroups[limbSet.id] = normalizeTraumaGroup(sourceGroups[limbSet.id], limbSet, damageTypes);
+  }
+
+  return { groups: normalizedGroups };
+}
+
+export function getTraumaGroupForActor(actor, settings = null, creatureOptions = {}, damageTypes = []) {
+  const race = creatureOptions.races.find(entry => entry.id === actor?.system?.creature?.raceId);
+  const limbSetId = getLimbSetId(race?.limbs ?? []);
+  const normalized = settings ?? normalizeTraumaSettings({}, creatureOptions, damageTypes);
+  return {
+    id: limbSetId,
+    race,
+    config: normalized.groups?.[limbSetId] ?? normalizeTraumaGroup({}, { limbs: [] }, damageTypes)
+  };
+}
+
+export function getUniqueLimbSets(creatureOptions = {}) {
+  const groups = new Map();
+
+  for (const race of creatureOptions?.races ?? []) {
+    const limbs = normalizeLimbSetLimbs(race?.limbs ?? []);
+    const id = getLimbSetId(limbs);
+    if (!id) continue;
+
+    const group = groups.get(id) ?? {
+      id,
+      limbs,
+      races: [],
+      raceNames: ""
+    };
+    group.races.push({ id: race.id, name: race.name || race.id });
+    group.raceNames = group.races.map(entry => entry.name).join(", ");
+    groups.set(id, group);
+  }
+
+  return Array.from(groups.values()).sort((left, right) => left.raceNames.localeCompare(right.raceNames));
+}
+
+export function getLimbSetId(limbs = []) {
+  const normalized = normalizeLimbSetLimbs(limbs);
+  if (!normalized.length) return "";
+  return normalized
+    .map(limb => `${limb.key}:${limb.label}:${limb.stateMax}`)
+    .join("|");
+}
+
+export function normalizeTraumaGroup(value = {}, limbSet = { limbs: [] }, damageTypes = []) {
+  const sourceLimbs = value && typeof value === "object" ? value.limbs ?? {} : {};
+  const legacyStages = Array.isArray(value?.stages) ? value.stages : [];
+  return {
+    races: Array.isArray(value?.races) ? value.races : [],
+    limbs: Object.fromEntries(
+      (limbSet?.limbs ?? []).map(limb => [
+        limb.key,
+        normalizeTraumaLimb(sourceLimbs?.[limb.key], limb, damageTypes, legacyStages)
+      ])
+    )
+  };
+}
+
+export function createDefaultTraumaStage(index = 0, damageTypes = []) {
+  const thresholdPercent = index === 0 ? 60 : 0;
+  return normalizeTraumaStage({
+    id: foundry.utils.randomID(),
+    thresholdPercent,
+    profiles: Object.fromEntries(damageTypes.map(damageType => [
+      damageType.key,
+      createDefaultTraumaProfile(damageType, thresholdPercent)
+    ]))
+  }, index, damageTypes);
+}
+
+export function createDefaultTraumaProfile(damageType = {}, thresholdPercent = 0) {
+  return {
+    name: `Травма ${damageType.label ?? damageType.key ?? ""}`.trim(),
+    img: DEFAULT_TRAUMA_ICON,
+    effects: [],
+    thresholdPercent
+  };
+}
+
+function normalizeTraumaLimb(value = {}, limb = {}, damageTypes = [], legacyStages = []) {
+  const stagesSource = Array.isArray(value?.stages) && value.stages.length
+    ? value.stages
+    : legacyStages;
+
+  return {
+    label: String(limb?.label ?? limb?.name ?? limb?.key ?? ""),
+    stateMax: Math.max(0, toInteger(limb?.stateMax)),
+    stages: normalizeTraumaStages(stagesSource, damageTypes)
+  };
+}
+
+function normalizeTraumaStages(stages = [], damageTypes = []) {
+  const seenIds = new Set();
+  return stages
+    .map((stage, index) => normalizeTraumaStage(stage, index, damageTypes))
+    .filter(stage => {
+      if (seenIds.has(stage.id)) return false;
+      seenIds.add(stage.id);
+      return true;
+    })
+    .sort((left, right) => right.thresholdPercent - left.thresholdPercent);
+}
+
+function normalizeTraumaStage(value = {}, index = 0, damageTypes = []) {
+  const thresholdPercent = Math.max(0, Math.min(100, toInteger(value?.thresholdPercent ?? value?.threshold ?? (index === 0 ? 60 : 0))));
+  return {
+    id: String(value?.id || foundry.utils.randomID()),
+    thresholdPercent,
+    profiles: normalizeTraumaProfiles(value?.profiles, damageTypes, thresholdPercent)
+  };
+}
+
+function normalizeTraumaProfiles(value = {}, damageTypes = [], thresholdPercent = 0) {
+  return Object.fromEntries(damageTypes.map(damageType => [
+    damageType.key,
+    normalizeTraumaProfile(value?.[damageType.key], damageType, thresholdPercent)
+  ]));
+}
+
+function normalizeTraumaProfile(value = {}, damageType = {}, thresholdPercent = 0) {
+  const hasContent = value && typeof value === "object";
+  return {
+    name: String(hasContent ? value.name ?? "" : "").trim(),
+    img: String(hasContent ? value.img ?? "" : "").trim(),
+    effects: normalizeTraumaEffects(hasContent ? value.effects : []),
+    thresholdPercent
+  };
+}
+
+function normalizeTraumaEffects(value = []) {
+  const effects = Array.isArray(value) ? value : Object.values(value ?? {});
+  return effects
+    .map(effect => ({
+      key: String(effect?.key ?? "").trim(),
+      type: ["add", "override"].includes(String(effect?.type ?? "")) ? String(effect.type) : "add",
+      value: String(effect?.value ?? "0"),
+      phase: String(effect?.phase || "initial"),
+      priority: effect?.priority === "" || effect?.priority === null || effect?.priority === undefined
+        ? null
+        : toInteger(effect.priority)
+    }))
+    .filter(effect => effect.key);
+}
+
+function normalizeLimbSetLimbs(limbs = []) {
+  return Array.from(limbs ?? [])
+    .map(limb => ({
+      key: String(limb?.key ?? "").trim(),
+      label: String(limb?.label ?? limb?.name ?? limb?.key ?? "").trim(),
+      stateMax: Math.max(0, toInteger(limb?.stateMax))
+    }))
+    .filter(limb => limb.key)
+    .sort((left, right) => left.key.localeCompare(right.key));
+}
