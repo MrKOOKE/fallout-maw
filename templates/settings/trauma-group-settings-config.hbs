@@ -1,38 +1,37 @@
 <div class="fallout-maw-config-body fallout-maw-trauma-config-body">
   {{#if group}}
-  <section class="fallout-maw-panel fallout-maw-trauma-group" data-trauma-group="{{group.id}}">
-    <header class="fallout-maw-panel-header">
-      <div>
-        <h2>{{group.raceNames}}</h2>
-        <p class="fallout-maw-help-text">{{group.limbsLabel}}</p>
-      </div>
-    </header>
-
+  <section class="fallout-maw-trauma-group" data-trauma-group="{{group.id}}">
     {{#each group.limbs}}
-    <section class="fallout-maw-panel fallout-maw-trauma-limb" data-trauma-limb="{{key}}" data-trauma-limb-state-max="{{stateMax}}">
-      <header class="fallout-maw-panel-header">
+    <section class="fallout-maw-panel fallout-maw-trauma-limb fallout-maw-collapsible-panel {{collapse.cssClass}}" data-trauma-limb="{{key}}" data-trauma-limb-state-max="{{stateMax}}" data-trauma-collapse-section="limb:{{key}}">
+      <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
+        <button type="button" data-trauma-section-toggle aria-expanded="{{collapse.ariaExpanded}}">
+          <i class="fa-solid {{collapse.iconClass}}"></i>
+          <span data-trauma-limb-label>{{label}}</span>
+        </button>
         <div>
-          <h2><span data-trauma-limb-label>{{label}}</span></h2>
-          <p class="fallout-maw-help-text">{{stateMax}}</p>
+          <p class="fallout-maw-help-text">{{key}} / {{stateMax}}</p>
         </div>
-        <button type="button" data-action="createStage"><i class="fa-solid fa-plus"></i> Добавить порог</button>
       </header>
 
-      <div class="fallout-maw-trauma-stage-list">
-        {{#each stages}}
-        <section class="fallout-maw-panel fallout-maw-trauma-stage" data-trauma-stage="{{id}}">
+      <div class="fallout-maw-trauma-damage-type-list">
+        {{#each damageTypeGroups}}
+        <section class="fallout-maw-panel fallout-maw-trauma-damage-type" data-trauma-damage-type="{{key}}">
           <header class="fallout-maw-panel-header">
-            <label class="fallout-maw-inline-stat">
-              <span>Порог состояния, %</span>
-              <input type="number" data-trauma-stage-threshold value="{{thresholdPercent}}" min="0" max="100" step="1">
-            </label>
-            <button type="button" data-action="deleteStage" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+            <h3>{{label}}</h3>
+            <button type="button" data-action="createStage"><i class="fa-solid fa-plus"></i> Добавить травму</button>
           </header>
 
           <div class="fallout-maw-trauma-profile-list">
-            {{#each profiles}}
-            <section class="fallout-maw-trauma-profile" data-trauma-profile="{{damageTypeKey}}">
-              <h3>{{damageTypeLabel}}</h3>
+            {{#each traumaProfiles}}
+            <section class="fallout-maw-trauma-profile" data-trauma-stage="{{id}}" data-trauma-profile="{{damageTypeKey}}">
+              <header class="fallout-maw-panel-header">
+                <label class="fallout-maw-inline-stat">
+                  <span>Порог, %</span>
+                  <input type="number" data-trauma-stage-threshold value="{{thresholdPercent}}" min="0" max="100" step="1">
+                </label>
+                <button type="button" data-action="deleteStage" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+              </header>
+
               <div class="fallout-maw-list-grid two-columns">
                 <label>
                   <span>Название травмы</span>
@@ -40,7 +39,10 @@
                 </label>
                 <label>
                   <span>Картинка</span>
-                  <input type="text" data-trauma-profile-img value="{{img}}">
+                  <div class="fallout-maw-image-picker-field">
+                    <input type="text" data-trauma-profile-img value="{{img}}">
+                    <button type="button" data-action="browseTraumaImage" title="Выбрать картинку"><i class="fa-solid fa-folder-open"></i></button>
+                  </div>
                 </label>
               </div>
 
@@ -94,11 +96,11 @@
               </div>
               <button type="button" data-action="addEffect"><i class="fa-solid fa-plus"></i> Добавить эффект</button>
             </section>
+            {{else}}
+            <p class="fallout-maw-empty-list">Травмы этого типа не настроены.</p>
             {{/each}}
           </div>
         </section>
-        {{else}}
-        <p class="fallout-maw-empty-list">Пороги травм не настроены.</p>
         {{/each}}
       </div>
     </section>

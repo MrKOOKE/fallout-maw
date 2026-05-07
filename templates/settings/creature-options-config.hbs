@@ -47,9 +47,9 @@
 
     <main class="fallout-maw-editor-pane">
       {{#if editingType}}
-      <section class="fallout-maw-panel fallout-maw-collapsible-panel collapsed" data-creature-section>
+      <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.type.cssClass}}" data-creature-section="type">
         <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
-          <button type="button" data-creature-section-toggle aria-expanded="false"><i class="fa-solid fa-chevron-right"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.TypeSection"}}</span></button>
+          <button type="button" data-creature-section-toggle aria-expanded="{{sections.type.ariaExpanded}}"><i class="fa-solid {{sections.type.iconClass}}"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.TypeSection"}}</span></button>
         </header>
         <label>
           <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
@@ -58,9 +58,9 @@
       </section>
       {{else}}
       {{#if editingRace}}
-      <section class="fallout-maw-panel fallout-maw-collapsible-panel collapsed" data-creature-section>
+      <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.race.cssClass}}" data-creature-section="race">
         <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
-          <button type="button" data-creature-section-toggle aria-expanded="false"><i class="fa-solid fa-chevron-right"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.RaceSection"}}</span></button>
+          <button type="button" data-creature-section-toggle aria-expanded="{{sections.race.ariaExpanded}}"><i class="fa-solid {{sections.race.iconClass}}"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.RaceSection"}}</span></button>
         </header>
         <div class="fallout-maw-list-grid two-columns">
           <label>
@@ -78,9 +78,9 @@
         </div>
       </section>
 
-      <section class="fallout-maw-panel fallout-maw-collapsible-panel collapsed" data-creature-section>
+      <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.base.cssClass}}" data-creature-section="base">
         <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
-          <button type="button" data-creature-section-toggle aria-expanded="false"><i class="fa-solid fa-chevron-right"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.BaseParameters"}}</span></button>
+          <button type="button" data-creature-section-toggle aria-expanded="{{sections.base.ariaExpanded}}"><i class="fa-solid {{sections.base.iconClass}}"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.BaseParameters"}}</span></button>
         </header>
         <div class="fallout-maw-race-characteristic-grid">
           {{#each characteristics}}
@@ -114,9 +114,9 @@
         </div>
       </section>
 
-      <section class="fallout-maw-panel fallout-maw-collapsible-panel collapsed" data-creature-section>
+      <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.development.cssClass}}" data-creature-section="development">
         <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
-          <button type="button" data-creature-section-toggle aria-expanded="false"><i class="fa-solid fa-chevron-right"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.Development"}}</span></button>
+          <button type="button" data-creature-section-toggle aria-expanded="{{sections.development.ariaExpanded}}"><i class="fa-solid {{sections.development.iconClass}}"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.Development"}}</span></button>
         </header>
         <div class="fallout-maw-list-grid two-columns">
           <label>
@@ -130,16 +130,16 @@
         </div>
       </section>
 
-      <section class="fallout-maw-panel fallout-maw-collapsible-panel collapsed" data-creature-section>
+      <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.limbs.cssClass}}" data-creature-section="limbs">
         <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
-          <button type="button" data-creature-section-toggle aria-expanded="false"><i class="fa-solid fa-chevron-right"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.Limbs"}}</span></button>
+          <button type="button" data-creature-section-toggle aria-expanded="{{sections.limbs.ariaExpanded}}"><i class="fa-solid {{sections.limbs.iconClass}}"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.Limbs"}}</span></button>
           <button type="button" data-action="createLimb"><i class="fa-solid fa-plus"></i> Добавить конечность</button>
         </header>
 
         <div class="fallout-maw-settings-table limb-settings">
           {{#each limbs}}
           <div class="fallout-maw-settings-row" data-limb-row>
-            <input type="hidden" data-field="key" value="{{key}}">
+            <input type="text" data-field="key" value="{{key}}" placeholder="Код" title="Код конечности">
             <input type="text" data-field="label" value="{{label}}">
             <input type="number" data-field="stateMax" value="{{stateMax}}" min="0" placeholder="{{localize 'FALLOUTMAW.Settings.CreatureOptions.LimbStateMax'}}" title="{{localize 'FALLOUTMAW.Settings.CreatureOptions.LimbStateMax'}}">
             <button type="button" data-action="deleteLimb" data-key="{{key}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
@@ -155,9 +155,9 @@
         </div>
       </section>
 
-      <section class="fallout-maw-panel fallout-maw-collapsible-panel collapsed" data-creature-section>
+      <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.equipment.cssClass}}" data-creature-section="equipment">
         <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
-          <button type="button" data-creature-section-toggle aria-expanded="false"><i class="fa-solid fa-chevron-right"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.EquipmentWeaponSlots"}}</span></button>
+          <button type="button" data-creature-section-toggle aria-expanded="{{sections.equipment.ariaExpanded}}"><i class="fa-solid {{sections.equipment.iconClass}}"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.EquipmentWeaponSlots"}}</span></button>
         </header>
 
         <div class="fallout-maw-equipment-config-grid">
@@ -220,9 +220,9 @@
         </div>
       </section>
 
-      <section class="fallout-maw-panel fallout-maw-collapsible-panel collapsed" data-creature-section>
+      <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.inventory.cssClass}}" data-creature-section="inventory">
         <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
-          <button type="button" data-creature-section-toggle aria-expanded="false"><i class="fa-solid fa-chevron-right"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.InventorySize"}}</span></button>
+          <button type="button" data-creature-section-toggle aria-expanded="{{sections.inventory.ariaExpanded}}"><i class="fa-solid {{sections.inventory.iconClass}}"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.InventorySize"}}</span></button>
         </header>
         <div class="fallout-maw-list-grid two-columns">
           <label>
@@ -236,9 +236,9 @@
         </div>
       </section>
 
-      <section class="fallout-maw-panel fallout-maw-collapsible-panel collapsed" data-creature-section>
+      <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.resistances.cssClass}}" data-creature-section="resistances">
         <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
-          <button type="button" data-creature-section-toggle aria-expanded="false"><i class="fa-solid fa-chevron-right"></i><span>{{localize "FALLOUTMAW.Common.DamageResistances"}}</span></button>
+          <button type="button" data-creature-section-toggle aria-expanded="{{sections.resistances.ariaExpanded}}"><i class="fa-solid {{sections.resistances.iconClass}}"></i><span>{{localize "FALLOUTMAW.Common.DamageResistances"}}</span></button>
         </header>
         <p class="hint">{{localize "FALLOUTMAW.Settings.CreatureOptions.DamageFormulaHint"}}</p>
         <div class="fallout-maw-list-grid two-columns">

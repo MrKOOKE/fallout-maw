@@ -223,7 +223,8 @@
   margin-bottom: 0;
 }
 
-.fallout-maw-collapsible-header > button[data-creature-section-toggle] {
+.fallout-maw-collapsible-header > button[data-creature-section-toggle],
+.fallout-maw-collapsible-header > button[data-trauma-section-toggle] {
   align-items: center;
   background: transparent;
   border: 0;
@@ -241,11 +242,14 @@
 }
 
 .fallout-maw-collapsible-header > button[data-creature-section-toggle]:hover,
-.fallout-maw-collapsible-header > button[data-creature-section-toggle]:focus-visible {
+.fallout-maw-collapsible-header > button[data-creature-section-toggle]:focus-visible,
+.fallout-maw-collapsible-header > button[data-trauma-section-toggle]:hover,
+.fallout-maw-collapsible-header > button[data-trauma-section-toggle]:focus-visible {
   text-shadow: 0 0 6px rgba(230, 210, 150, 0.55);
 }
 
-.fallout-maw-collapsible-header > button[data-creature-section-toggle] i {
+.fallout-maw-collapsible-header > button[data-creature-section-toggle] i,
+.fallout-maw-collapsible-header > button[data-trauma-section-toggle] i {
   flex: 0 0 auto;
   width: 1rem;
 }
@@ -263,6 +267,18 @@
   flex-wrap: wrap;
   gap: 0.4rem;
   justify-content: flex-end;
+}
+
+.fallout-maw-image-picker-field {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: minmax(0, 1fr) 2.5rem;
+}
+
+.fallout-maw-image-picker-field button {
+  min-width: 2.5rem;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .fallout-maw-inline-controls select {
@@ -512,6 +528,18 @@
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
+}
+
+.fallout-maw-trauma-damage-type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.fallout-maw-trauma-damage-type > .fallout-maw-panel-header h3 {
+  border: 0;
+  font-size: 1.02rem;
+  margin: 0;
 }
 
 .fallout-maw-limb-trauma-layout {
@@ -4157,7 +4185,7 @@ label.fallout-maw-mitigation-cell {
 }
 
 .limb-settings .fallout-maw-settings-row {
-  grid-template-columns: minmax(160px, 1fr) 130px 2.5rem;
+  grid-template-columns: minmax(110px, 0.45fr) minmax(160px, 1fr) 130px 2.5rem;
 }
 
 .fallout-maw-settings-actions {

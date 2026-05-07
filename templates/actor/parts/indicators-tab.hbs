@@ -177,26 +177,4 @@
       {{/each}}
     </div>
   </section>
-
-  <section class="fallout-maw-panel">
-    <h2>{{localize "FALLOUTMAW.Actor.Progression"}}</h2>
-    <div class="fallout-maw-summary-grid two-columns">
-      <label class="fallout-maw-inline-stat">
-        <span>{{localize "FALLOUTMAW.Actor.SkillPointsPerLevel"}}:</span>
-        {{#if freeEdit}}
-        <input type="number" name="system.progression.skillPointsPerLevel" value="{{system.progression.skillPointsPerLevel}}" {{editLockAttribute}}>
-        {{else}}
-        <strong>{{system.progression.skillPointsPerLevel}}</strong>
-        {{/if}}
-      </label>
-      <label class="fallout-maw-inline-stat">
-        <span>{{localize "FALLOUTMAW.Actor.ResearchPointsPerLevel"}}:</span>
-        {{#if freeEdit}}
-        <input type="number" name="system.progression.researchPointsPerLevel" value="{{system.progression.researchPointsPerLevel}}" {{editLockAttribute}}>
-        {{else}}
-        <strong>{{system.progression.researchPointsPerLevel}}</strong>
-        {{/if}}
-      </label>
-    </div>
-  </section>
 </section>

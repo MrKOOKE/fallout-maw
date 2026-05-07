@@ -20,9 +20,11 @@ import { LimbSilhouetteConfig } from "./limb-silhouette-config.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
+const CREATURE_SECTION_KEYS = Object.freeze(["type", "race", "base", "development", "limbs", "equipment", "inventory", "resistances"]);
 
 export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
   #editorMode = "type";
+  #expandedSections = new Set();
 
   constructor(options = {}) {
     super(options);
@@ -86,6 +88,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       creatureOptions: this.creatureOptions,
       editingType: Boolean(selectedType) && (!selectedRace || (this.#editorMode === "type")),
       editingRace: Boolean(selectedRace) && (this.#editorMode === "race"),
+      sections: Object.fromEntries(CREATURE_SECTION_KEYS.map(key => [key, this.#getSectionState(key)])),
       selectedType,
       selectedRace,
       typeOptions: this.creatureOptions.types.map(type => ({ ...type, selected: type.id === this.activeTypeId })),
@@ -267,10 +270,12 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
 
   static #onDeleteLimb(event, target) {
     event.preventDefault();
+    const key = target.closest("[data-limb-row]")?.querySelector("[data-field='key']")?.value?.trim()
+      || target.dataset.key
+      || "";
     this.#updateFromCurrentForm();
     const race = this.#activeRace;
     if (!race) return undefined;
-    const key = target.dataset.key ?? "";
     race.limbs = (race.limbs ?? []).filter(limb => limb.key !== key);
     if (race.limbSilhouette) {
       race.limbSilhouette.parts = (race.limbSilhouette.parts ?? []).filter(part => part.limbKey !== key);
@@ -498,12 +503,27 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         const section = button.closest("[data-creature-section]");
         if (!section) return;
         const collapsed = section.classList.toggle("collapsed");
+        const key = String(section.dataset.creatureSection ?? "");
+        if (key) {
+          if (collapsed) this.#expandedSections.delete(key);
+          else this.#expandedSections.add(key);
+        }
         button.setAttribute("aria-expanded", String(!collapsed));
         const icon = button.querySelector("i");
         icon?.classList.toggle("fa-chevron-right", collapsed);
         icon?.classList.toggle("fa-chevron-down", !collapsed);
       });
     }
+  }
+
+  #getSectionState(key) {
+    const expanded = this.#expandedSections.has(key);
+    return {
+      expanded,
+      ariaExpanded: String(expanded),
+      cssClass: expanded ? "" : "collapsed",
+      iconClass: expanded ? "fa-chevron-down" : "fa-chevron-right"
+    };
   }
 }
 

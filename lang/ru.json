@@ -79,7 +79,7 @@
       "NoCreatureType": "Не выбран",
       "NoRace": "Не выбрана",
       "NoTraumas": "Травм нет.",
-      "Progression": "Развитие",
+      "Progression": "Повышение уровня",
       "Race": "Раса",
       "ResearchPointsPerLevel": "Очки исследований за уровень",
       "SkillPointsPerLevel": "Очки навыков за уровень",
@@ -196,7 +196,7 @@
       "UnassignedSkill": "Навык не выбран"
     },
     "Advancement": {
-      "Title": "Развитие",
+      "Title": "Повышение уровня",
       "LevelUp": "Повысить уровень",
       "Reset": "Сбросить",
       "ResetConfirm": "Сбросить развитие, вернуть характеристики к расовым значениям и заново выдать все доступные очки под текущий уровень?",
@@ -284,7 +284,7 @@
         "DeleteTypeConfirm": "Удалить тип \"{id}\" и все связанные с ним расы?",
         "EmptyEditor": "Создайте тип или расу",
         "EmptyEditorHint": "В левой панели сначала создайте тип существа, а затем добавьте для него расы.",
-        "Development": "Развитие",
+        "Development": "Повышение уровня",
         "CreateEquipmentSlot": "Создать слот",
         "CreateWeaponSet": "Создать набор",
         "CreateWeaponSlot": "Создать слот оружия",
@@ -309,7 +309,7 @@
         "NoWeaponSets": "Оружейные наборы не созданы.",
         "NoWeaponSlots": "Слоты оружия не созданы.",
         "ProficiencyPoints": "Очков владений",
-        "Progression": "Развитие",
+        "Progression": "Повышение уровня",
         "RaceNamePlaceholder": "Название расы",
         "RaceSection": "Раса",
         "Races": "Расы",
@@ -373,7 +373,7 @@
       }
     },
     "Messages": {
-      "AdvancementSaved": "Развитие сохранено.",
+      "AdvancementSaved": "Повышение уровня сохранено.",
       "CharacteristicsSaved": "Настройки характеристик сохранены.",
       "ContainerMaxLoadExceeded": "Этот контейнер не выдерживает такой вес.",
       "ContainerRecursiveError": "Нельзя поместить контейнер внутрь самого себя или его потомка.",

@@ -80,7 +80,7 @@
       "NoCreatureType": "Not selected",
       "NoRace": "Not selected",
       "NoTraumas": "No traumas.",
-      "Progression": "Development",
+      "Progression": "Level Up",
       "Race": "Race",
       "ResearchPointsPerLevel": "Research Points per Level",
       "SkillPointsPerLevel": "Skill Points per Level",
@@ -197,7 +197,7 @@
       "UnassignedSkill": "Skill not selected"
     },
     "Advancement": {
-      "Title": "Development",
+      "Title": "Level Up",
       "LevelUp": "Level Up",
       "Reset": "Reset",
       "ResetConfirm": "Reset development, restore racial characteristics, and reissue all available points for the current level?",
@@ -285,7 +285,7 @@
         "DeleteTypeConfirm": "Delete type \"{id}\" and all races assigned to it?",
         "EmptyEditor": "Create a type or race",
         "EmptyEditorHint": "Use the left panel to create a creature type first, then add races for it.",
-        "Development": "Development",
+        "Development": "Level Up",
         "CreateEquipmentSlot": "Create Slot",
         "CreateWeaponSet": "Create Weapon Set",
         "CreateWeaponSlot": "Create Weapon Slot",
@@ -310,7 +310,7 @@
         "NoWeaponSets": "No weapon sets.",
         "NoWeaponSlots": "No weapon slots.",
         "ProficiencyPoints": "Proficiency points",
-        "Progression": "Development",
+        "Progression": "Level Up",
         "RaceNamePlaceholder": "Race name",
         "RaceSection": "Race",
         "Races": "Races",
@@ -374,7 +374,7 @@
       }
     },
     "Messages": {
-      "AdvancementSaved": "Development saved.",
+      "AdvancementSaved": "Level up saved.",
       "CharacteristicsSaved": "Characteristic settings saved.",
       "ContainerMaxLoadExceeded": "This container cannot hold that much weight.",
       "ContainerRecursiveError": "A container cannot be placed inside itself or one of its descendants.",
