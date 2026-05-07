@@ -73,7 +73,7 @@
     }
   },
   "socket": true,
-  "initiative": "1d20",
+  "initiative": "1d20 + @attributes.initiative",
   "grid": {
     "distance": 1,
     "units": "m"

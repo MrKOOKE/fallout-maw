@@ -10,7 +10,7 @@ import {
   VehicleDataModel
 } from "./models/index.mjs";
 
-const ACTOR_VALUE_ATTRIBUTES = ["attributes.level"];
+const ACTOR_VALUE_ATTRIBUTES = ["attributes.level", "attributes.initiative"];
 
 export function registerDataModels() {
   Object.assign(CONFIG.Actor.dataModels, {

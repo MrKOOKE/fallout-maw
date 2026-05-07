@@ -65,6 +65,10 @@ export class FalloutMaWActor extends Actor {
 
   prepareDerivedData() {
     super.prepareDerivedData();
+    if (this.system?.attributes) {
+      this.system.attributes.initiative = toInteger(this.system?.characteristics?.perception);
+    }
+
     const resources = this.system?.resources;
     if (resources) {
       for (const resource of Object.values(resources)) clampPreparedResource(resource);
@@ -321,7 +325,7 @@ function initializeProficiencyMap(proficiencies = {}) {
 }
 
 function syncTrackedResourceValueUpdates(actor, changes) {
-  for (const resourceKey of TRACKED_RESOURCE_KEYS) {
+  for (const resourceKey of Object.keys(actor.system?.resources ?? {})) {
     const currentResource = actor.system?.resources?.[resourceKey];
     if (!currentResource) continue;
     foundry.utils.setProperty(
@@ -364,4 +368,3 @@ function toInteger(value) {
   return Number.isFinite(number) ? Math.trunc(number) : 0;
 }
 
-const TRACKED_RESOURCE_KEYS = ["dodge", "actionPoints", "movementPoints"];

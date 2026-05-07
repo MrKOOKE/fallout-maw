@@ -10,17 +10,25 @@
       <div class="fallout-maw-header-grid">
         <div class="fallout-maw-header-meta">
           <div class="fallout-maw-header-meta-row">
-            <label class="fallout-maw-header-stat">
-              <span>{{localize "FALLOUTMAW.Actor.CreatureType"}}:</span>
+            <label class="fallout-maw-header-stat fallout-maw-header-creature-field">
+              <span>{{localize "FALLOUTMAW.Actor.CreatureType"}} / {{localize "FALLOUTMAW.Actor.Race"}}:</span>
               {{#if freeEdit}}
+              <span class="fallout-maw-header-creature-selects">
               <select name="system.creature.typeId" data-creature-type-select>
                 <option value="">{{localize "FALLOUTMAW.Actor.NoCreatureType"}}</option>
                 {{#each creatureTypes}}
                 <option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>
                 {{/each}}
               </select>
+              <select name="system.creature.raceId" data-creature-race-select>
+                <option value="">{{localize "FALLOUTMAW.Actor.NoRace"}}</option>
+                {{#each creatureRaces}}
+                <option value="{{id}}" data-type-id="{{typeId}}" {{#if selected}}selected{{/if}}>{{name}}</option>
+                {{/each}}
+              </select>
+              </span>
               {{else}}
-              <strong>{{creatureTypeName}}</strong>
+              <strong>{{creatureTypeName}} / {{creatureRaceName}}</strong>
               {{/if}}
             </label>
             <label class="fallout-maw-header-stat fallout-maw-level-field">
@@ -34,17 +42,8 @@
           </div>
           <div class="fallout-maw-header-meta-row">
             <label class="fallout-maw-header-stat">
-              <span>{{localize "FALLOUTMAW.Actor.Race"}}:</span>
-              {{#if freeEdit}}
-              <select name="system.creature.raceId" data-creature-race-select>
-                <option value="">{{localize "FALLOUTMAW.Actor.NoRace"}}</option>
-                {{#each creatureRaces}}
-                <option value="{{id}}" data-type-id="{{typeId}}" {{#if selected}}selected{{/if}}>{{name}}</option>
-                {{/each}}
-              </select>
-              {{else}}
-              <strong>{{creatureRaceName}}</strong>
-              {{/if}}
+              <span>{{localize "FALLOUTMAW.Actor.Initiative"}}:</span>
+              <strong>{{system.attributes.initiative}}</strong>
             </label>
             <div class="fallout-maw-header-stat fallout-maw-header-experience-field">
               <span>{{localize "FALLOUTMAW.Advancement.Experience"}}:</span>

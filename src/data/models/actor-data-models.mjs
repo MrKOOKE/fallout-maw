@@ -48,7 +48,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         { required: true, initial: {} }
       ),
       attributes: new SchemaField({
-        level: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
+        level: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+        initiative: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
       }),
       creature: new SchemaField({
         typeId: new StringField({ required: true, blank: true, initial: "" }),
@@ -116,6 +117,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     const baseCharacteristics = normalizeNumberMap(this.characteristics, characteristicSettings);
     const characteristicBonuses = normalizeNumberMap(this.development?.characteristics, characteristicSettings);
     replaceObjectContents(this.characteristics, normalizeCharacteristicMap(baseCharacteristics, characteristicSettings, characteristicBonuses));
+    this.attributes.initiative = toInteger(this.characteristics.perception);
     replaceObjectContents(this.currencies, normalizeNumberMap(this.currencies, currencySettings));
 
     const race = getCreatureOptions(characteristicSettings, damageTypeSettings).races.find(entry => entry.id === this.creature?.raceId);
@@ -146,7 +148,9 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       this.characteristics,
       skillValues
     );
-    replaceObjectContents(this.resources, normalizeResourceMap(this.resources, resourceSettings, resourceMaximums));
+    replaceObjectContents(this.resources, normalizeResourceMap(this.resources, resourceSettings, resourceMaximums, {
+      trackSpent: true
+    }));
 
     const needMaximums = evaluateNeedSettings(
       needSettings,
@@ -295,17 +299,17 @@ function developmentField() {
   });
 }
 
-function normalizeResourceMap(currentResources = {}, settings = [], maximums = {}) {
+function normalizeResourceMap(currentResources = {}, settings = [], maximums = {}, { trackSpent = false } = {}) {
   return Object.fromEntries(
     settings.map(setting => {
       const current = currentResources?.[setting.key];
       const min = Math.max(0, toInteger(current?.min));
       const bonus = current && typeof current === "object" ? toInteger(current.bonus) : 0;
       const max = Math.max(min, toInteger(maximums?.[setting.key]) + bonus);
-      const spent = shouldTrackSpent(setting?.key)
+      const spent = trackSpent
         ? getTrackedResourceSpent(current, min, max)
         : Math.max(0, toInteger(current?.spent));
-      const fallbackValue = shouldTrackSpent(setting?.key)
+      const fallbackValue = trackSpent
         ? max - spent
         : current && typeof current === "object"
           ? current.value
@@ -415,10 +419,6 @@ function mergeLimbDamageMaps(base = {}, bonus = {}) {
       )
     ])
   );
-}
-
-function shouldTrackSpent(resourceKey) {
-  return ["dodge", "actionPoints", "movementPoints"].includes(resourceKey);
 }
 
 function getTrackedResourceSpent(resource, min, max) {
