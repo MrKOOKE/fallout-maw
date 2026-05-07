@@ -895,7 +895,7 @@ async function fullyRestoreActor(actor) {
   if (!actor?.isOwner) return;
 
   const traumaIds = actor.items
-    .filter(item => item.type === "trauma")
+    .filter(item => item.type === "trauma" || item.type === "disease")
     .map(item => item.id);
   if (traumaIds.length) await actor.deleteEmbeddedDocuments("Item", traumaIds);
 
@@ -926,7 +926,7 @@ async function fullyRestoreActor(actor) {
 function isDamageSystemEffect(effect) {
   if (!effect) return false;
   const flags = effect.flags?.[SYSTEM_ID] ?? effect.flags?.[FALLOUT_MAW.id] ?? {};
-  return Boolean(flags[DAMAGE_EFFECT_FLAG_KEY] || flags.traumaItem);
+  return Boolean(flags[DAMAGE_EFFECT_FLAG_KEY] || flags.traumaItem || flags.diseaseItem || flags.needEffect);
 }
 
 function getActiveWeaponSet(actor, weaponSets = []) {

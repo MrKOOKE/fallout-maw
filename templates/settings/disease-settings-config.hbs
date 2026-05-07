@@ -1,0 +1,115 @@
+<div class="fallout-maw-config-body">
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>Настройка болезней</h2>
+      <div class="fallout-maw-button-row">
+        <button type="button" data-action="addDisease"><i class="fa-solid fa-plus"></i> Создать болезнь</button>
+        <button type="button" data-action="resetDefaults"><i class="fa-solid fa-rotate-left"></i> {{localize "FALLOUTMAW.Common.ResetDefaults"}}</button>
+      </div>
+    </header>
+
+    {{#each settings.diseases}}
+    <article class="fallout-maw-panel {{collapse.cssClass}}" data-disease-row data-disease-id="{{id}}">
+      <input type="hidden" name="settings.diseases.{{@index}}.id" value="{{id}}">
+      <header class="fallout-maw-panel-header fallout-maw-disease-header">
+        <button type="button" class="fallout-maw-icon-button" data-action="toggleDisease" aria-expanded="{{collapse.ariaExpanded}}">
+          <i class="fa-solid {{collapse.iconClass}}"></i>
+        </button>
+        <label>
+          <span>Название</span>
+          <input type="text" name="settings.diseases.{{@index}}.name" value="{{name}}">
+        </label>
+        <label>
+          <span>Изображение</span>
+          <file-picker type="image" name="settings.diseases.{{@index}}.img" value="{{img}}"></file-picker>
+        </label>
+        <button type="button" data-action="deleteDisease"><i class="fa-solid fa-trash"></i> Удалить болезнь</button>
+      </header>
+
+      <div data-disease-collapse-body>
+      <header class="fallout-maw-panel-header">
+        <h3>Стадии</h3>
+        <button type="button" data-action="addDiseaseStage"><i class="fa-solid fa-plus"></i> Добавить стадию</button>
+      </header>
+
+      {{#each stages}}
+      <article class="fallout-maw-panel" data-disease-stage-row>
+        <input type="hidden" name="settings.diseases.{{@../index}}.stages.{{@index}}.id" value="{{id}}">
+        <header class="fallout-maw-panel-header fallout-maw-disease-stage-header">
+          <label>
+            <span>Название стадии</span>
+            <input type="text" name="settings.diseases.{{@../index}}.stages.{{@index}}.name" value="{{name}}">
+          </label>
+          <button type="button" data-action="deleteDiseaseStage"><i class="fa-solid fa-trash"></i> Удалить стадию</button>
+        </header>
+        <div class="fallout-maw-list-grid three-columns">
+          <label>
+            <span>Уровень</span>
+            <input type="number" name="settings.diseases.{{@../index}}.stages.{{@index}}.level" value="{{level}}" min="1" step="1">
+          </label>
+          <label>
+            <span>Изображение стадии</span>
+            <file-picker type="image" name="settings.diseases.{{@../index}}.stages.{{@index}}.img" value="{{img}}"></file-picker>
+          </label>
+          <label>
+            <span>Сложность лечения</span>
+            <input type="number" name="settings.diseases.{{@../index}}.stages.{{@index}}.healingDifficulty" value="{{healingDifficulty}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Класс инструмента</span>
+            <select name="settings.diseases.{{@../index}}.stages.{{@index}}.healingToolClass">
+              {{#each healingToolClassChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          <label>
+            <span>Прогресс лечения</span>
+            <input type="number" name="settings.diseases.{{@../index}}.stages.{{@index}}.healingProgress" value="{{healingProgress}}" min="1" step="1">
+          </label>
+          <label>
+            <span>Навык лечения</span>
+            <select name="settings.diseases.{{@../index}}.stages.{{@index}}.healingSkillKey">
+              {{#each healingSkillChoices}}
+              <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+        </div>
+
+        <header class="fallout-maw-panel-header">
+          <h4>Изменения от стадии</h4>
+          <button type="button" data-action="addDiseaseStageEffect"><i class="fa-solid fa-plus"></i> Добавить изменение</button>
+        </header>
+        <div class="fallout-maw-trauma-effect-table">
+          <div class="fallout-maw-trauma-effect-row fallout-maw-grid-header">
+            <span>Ключ</span><span>Тип</span><span>Значение</span><span>Приоритет</span><span></span>
+          </div>
+          {{#each effects}}
+          <div class="fallout-maw-trauma-effect-row" data-disease-effect-row>
+            <input type="text" name="settings.diseases.{{@../../index}}.stages.{{@../index}}.effects.{{@index}}.key" value="{{key}}" data-effect-key-autocomplete>
+            <select name="settings.diseases.{{@../../index}}.stages.{{@../index}}.effects.{{@index}}.type">
+              <option value="add" {{#if addSelected}}selected{{/if}}>{{localize "FALLOUTMAW.Effects.ChangeAdd"}}</option>
+              <option value="override" {{#if overrideSelected}}selected{{/if}}>{{localize "FALLOUTMAW.Effects.ChangeOverride"}}</option>
+            </select>
+            <input type="text" name="settings.diseases.{{@../../index}}.stages.{{@../index}}.effects.{{@index}}.value" value="{{value}}">
+            <input type="number" name="settings.diseases.{{@../../index}}.stages.{{@../index}}.effects.{{@index}}.priority" value="{{priority}}" step="1">
+            <button type="button" data-action="deleteDiseaseStageEffect"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          {{/each}}
+        </div>
+      </article>
+      {{else}}
+      <p class="fallout-maw-empty-list">Стадии не настроены.</p>
+      {{/each}}
+      </div>
+    </article>
+    {{else}}
+    <p class="fallout-maw-empty-list">Болезни не настроены.</p>
+    {{/each}}
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  </footer>
+</div>

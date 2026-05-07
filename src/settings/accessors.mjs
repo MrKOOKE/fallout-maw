@@ -21,6 +21,7 @@ import {
   CREATURE_OPTIONS_SETTING,
   CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
+  DISEASE_SETTINGS_SETTING,
   LEVELS_SETTING,
   NEED_SETTINGS_SETTING,
   PROFICIENCY_SETTINGS_SETTING,
@@ -32,6 +33,7 @@ import {
   TRAUMA_SETTINGS_SETTING
 } from "./constants.mjs";
 import { createEmptyCreatureOptions, normalizeCreatureOptions } from "./creature-options.mjs";
+import { createDefaultDiseaseSettings, normalizeDiseaseSettings } from "./diseases.mjs";
 import { createDefaultLevelSettings, normalizeLevelSettings } from "./levels.mjs";
 import { createDefaultTraumaSettings, normalizeTraumaSettings } from "./traumas.mjs";
 import {
@@ -232,6 +234,24 @@ export async function setNeedSettings(settings) {
 
 export async function resetNeedSettings() {
   return setNeedSettings(createDefaultNeedSettings());
+}
+
+export function getDiseaseSettings() {
+  try {
+    return normalizeDiseaseSettings(game.settings.get(FALLOUT_MAW.id, DISEASE_SETTINGS_SETTING));
+  } catch (_error) {
+    return createDefaultDiseaseSettings();
+  }
+}
+
+export async function setDiseaseSettings(settings) {
+  const normalized = normalizeDiseaseSettings(settings);
+  await game.settings.set(FALLOUT_MAW.id, DISEASE_SETTINGS_SETTING, normalized);
+  return normalized;
+}
+
+export async function resetDiseaseSettings() {
+  return setDiseaseSettings(createDefaultDiseaseSettings());
 }
 
 export function getLevelSettings() {

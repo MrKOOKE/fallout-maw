@@ -4254,6 +4254,50 @@ label.fallout-maw-mitigation-cell {
   width: 2.25rem;
 }
 
+.fallout-maw-medicine-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.fallout-maw-medicine-tabs button {
+  background: transparent;
+  border: 1px solid var(--color-border-light-primary, rgba(255, 255, 255, 0.25));
+  border-radius: 4px;
+  font-weight: 700;
+  padding: 0.35rem 0.75rem;
+}
+
+.fallout-maw-medicine-tabs button.active {
+  background: rgba(214, 183, 111, 0.16);
+}
+
+.fallout-maw-disease-stage-header {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(220px, 1fr) max-content;
+}
+
+.fallout-maw-disease-stage-header label {
+  margin: 0;
+}
+
+.fallout-maw-disease-header {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 2.25rem minmax(180px, 1fr) minmax(180px, 1fr) max-content;
+}
+
+.fallout-maw-disease-header label {
+  margin: 0;
+}
+
+.disease-settings-config [data-disease-row].collapsed [data-disease-collapse-body] {
+  display: none;
+}
+
 .currency-settings .fallout-maw-settings-row {
   grid-template-columns: 2rem 6rem minmax(0, 0.68fr) minmax(0, 0.9fr) 110px 2.5rem;
 }
@@ -4338,9 +4382,12 @@ label.fallout-maw-mitigation-cell {
   grid-template-columns: 2rem 80px minmax(120px, 0.8fr) minmax(130px, 0.9fr) minmax(160px, 1fr) minmax(220px, 1.25fr) 2.5rem;
 }
 
-.resource-settings .fallout-maw-settings-row,
-.need-settings .fallout-maw-settings-row {
+.resource-settings .fallout-maw-settings-row {
   grid-template-columns: 2rem 80px minmax(120px, 1fr) minmax(150px, 1.1fr) 74px minmax(220px, 1.4fr) 2.5rem;
+}
+
+.need-settings .fallout-maw-settings-row {
+  grid-template-columns: 2rem 80px minmax(120px, 1fr) minmax(150px, 1.1fr) 74px minmax(220px, 1.4fr) 2.5rem 2.5rem;
 }
 
 .proficiency-settings .fallout-maw-settings-row {

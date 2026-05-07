@@ -4,12 +4,13 @@ import {
   getItemTotalWeight,
   isContainerItem
 } from "../utils/inventory-containers.mjs";
-import { TRAUMA_CREATE_OPTION } from "../constants.mjs";
+import { DISEASE_CREATE_OPTION, TRAUMA_CREATE_OPTION } from "../constants.mjs";
 
 const MANUALLY_CREATABLE_ITEM_TYPES = Object.freeze(["gear", "ability"]);
 
 export class FalloutMaWItem extends Item {
   static TRAUMA_CREATE_OPTION = TRAUMA_CREATE_OPTION;
+  static DISEASE_CREATE_OPTION = DISEASE_CREATE_OPTION;
 
   static async createDialog(data = {}, createOptions = {}, dialogOptions = {}, renderOptions = {}) {
     const requestedTypes = Array.isArray(dialogOptions.types) ? dialogOptions.types : MANUALLY_CREATABLE_ITEM_TYPES;
@@ -41,6 +42,10 @@ export class FalloutMaWItem extends Item {
       ui.notifications?.warn?.("Травмы создаются только системой при получении повреждения.");
       return false;
     }
+    if (this.type === "disease" && options?.[DISEASE_CREATE_OPTION] !== true) {
+      ui.notifications?.warn?.("Болезни создаются только системой.");
+      return false;
+    }
     if (this.type === "trauma") {
       this.updateSource({
         system: {
@@ -49,6 +54,19 @@ export class FalloutMaWItem extends Item {
         flags: {
           "fallout-maw": {
             generatedTrauma: true
+          }
+        }
+      });
+      return undefined;
+    }
+    if (this.type === "disease") {
+      this.updateSource({
+        system: {
+          generated: true
+        },
+        flags: {
+          "fallout-maw": {
+            generatedDisease: true
           }
         }
       });

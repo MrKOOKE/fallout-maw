@@ -69,6 +69,11 @@
         "htmlFields": [
           "description"
         ]
+      },
+      "disease": {
+        "htmlFields": [
+          "description"
+        ]
       }
     }
   },

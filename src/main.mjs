@@ -19,6 +19,7 @@ import {
 import { registerSkillCheckSocket } from "./rolls/skill-check.mjs";
 import { registerDamageSocket } from "./combat/damage-hub.mjs";
 import { registerMedicineSocket } from "./apps/medicine-dialog.mjs";
+import { registerNeedThresholdHooks } from "./needs/need-thresholds.mjs";
 import { registerSystemSheets } from "./sheets/index.mjs";
 import { FalloutMaWDragDrop } from "./utils/drag-drop.mjs";
 import {
@@ -49,6 +50,7 @@ Hooks.once("init", () => {
   registerDataModels();
   registerTrackableAttributes();
   registerCombatMovementHooks();
+  registerNeedThresholdHooks();
   registerSkillCheckControlHooks();
   registerTokenActionHudHooks();
 });

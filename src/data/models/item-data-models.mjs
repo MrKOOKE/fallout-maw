@@ -118,6 +118,27 @@ export class TraumaDataModel extends foundry.abstract.TypeDataModel {
   }
 }
 
+export class DiseaseDataModel extends foundry.abstract.TypeDataModel {
+  static defineSchema() {
+    return {
+      description: new HTMLField({ required: false, blank: true, initial: "" }),
+      needKey: new StringField({ required: true, blank: true, initial: "" }),
+      needLabel: new StringField({ required: true, blank: true, initial: "" }),
+      diseaseId: new StringField({ required: true, blank: true, initial: "" }),
+      stageId: new StringField({ required: true, blank: true, initial: "" }),
+      level: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      thresholdPercent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 0 }),
+      healingDifficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
+      healingToolClass: new StringField({ required: true, blank: false, choices: ["D", "C", "B", "A", "S"], initial: "D" }),
+      healingProgress: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      healingProgressMax: new NumberField({ required: true, integer: true, min: 0, initial: 100 }),
+      healingSkillKey: new StringField({ required: true, blank: false, initial: "doctor" }),
+      generated: new BooleanField({ required: true, initial: true }),
+      effects: new ArrayField(traumaEffectField(), { required: true, initial: [] })
+    };
+  }
+}
+
 function damageMitigationEntryField() {
   return new SchemaField({
     value: new NumberField({ required: true, integer: true, initial: 0 })

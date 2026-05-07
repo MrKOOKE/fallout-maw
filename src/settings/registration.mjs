@@ -14,6 +14,7 @@ import { CharacteristicsConfig } from "../apps/characteristics-config.mjs";
 import { CreatureOptionsConfig } from "../apps/creature-options-config.mjs";
 import { CurrencySettingsConfig } from "../apps/currency-settings-config.mjs";
 import { DamageTypesConfig } from "../apps/damage-types-config.mjs";
+import { DiseaseSettingsConfig } from "../apps/disease-settings-config.mjs";
 import { LevelSettingsConfig } from "../apps/level-settings-config.mjs";
 import { NeedSettingsConfig } from "../apps/need-settings-config.mjs";
 import { ProficiencySettingsConfig } from "../apps/proficiency-settings-config.mjs";
@@ -28,6 +29,7 @@ import {
   CREATURE_OPTIONS_SETTING,
   CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
+  DISEASE_SETTINGS_SETTING,
   LEVELS_SETTING,
   NEED_SETTINGS_SETTING,
   PROFICIENCY_SETTINGS_SETTING,
@@ -42,6 +44,7 @@ import {
   TOKEN_ACTION_HUD_SCALE_SETTING
 } from "./constants.mjs";
 import { createEmptyCreatureOptions } from "./creature-options.mjs";
+import { createDefaultDiseaseSettings } from "./diseases.mjs";
 import { createDefaultLevelSettings } from "./levels.mjs";
 import { createDefaultSystemActionSettings, createDefaultToolSettings } from "./tools.mjs";
 import { createDefaultTraumaSettings } from "./traumas.mjs";
@@ -138,6 +141,15 @@ export function registerSystemSettings() {
     config: false,
     type: Object,
     default: normalizeSkillCheckControl(DEFAULT_SKILL_CHECK_CONTROL)
+  });
+
+  game.settings.register(FALLOUT_MAW.id, DISEASE_SETTINGS_SETTING, {
+    name: "Настройка болезней",
+    scope: "world",
+    config: false,
+    type: Object,
+    default: createDefaultDiseaseSettings(),
+    onChange: refreshPreparedActors
   });
 
   game.settings.register(FALLOUT_MAW.id, TRAUMA_SETTINGS_SETTING, {
@@ -244,6 +256,14 @@ export function registerSystemSettings() {
     label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-bone",
     type: TraumaSettingsConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "diseaseSettingsMenu", {
+    name: "Настройка болезней",
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-virus",
+    type: DiseaseSettingsConfig,
     restricted: true
   });
 

@@ -43,7 +43,9 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
   #targetContext = null;
   #targetToken = null;
   #toolKey = "medical";
-  #activeTraumaId = "";
+  #activeTreatmentType = "trauma";
+  #activeTreatmentId = "";
+  #activeTab = "trauma";
   #targetRefreshTimeout = null;
   #targetRefreshInFlight = false;
   #targetRefreshQueued = false;
@@ -70,6 +72,7 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
     },
     actions: {
       startTreatment: this.#onStartTreatment,
+      setMedicineTab: this.#onSetMedicineTab,
       treatWithInstrument: this.#onTreatWithInstrument
     }
   };
@@ -90,7 +93,8 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
     const instruments = prepareMedicalInstruments(this.#sourceActor, this.#toolKey);
-    const traumas = prepareTargetTraumas(this.#targetContext?.traumas ?? [], instruments, this.#activeTraumaId);
+    const traumas = prepareTargetTreatments(this.#targetContext?.traumas ?? [], instruments, this.#activeTreatmentType === "trauma" ? this.#activeTreatmentId : "");
+    const diseases = prepareTargetTreatments(this.#targetContext?.diseases ?? [], instruments, this.#activeTreatmentType === "disease" ? this.#activeTreatmentId : "");
     return {
       ...context,
       sourceActor: this.#sourceActor,
@@ -101,7 +105,19 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
       targetToken: this.#targetToken,
       toolLabel: getToolSettings().find(tool => tool.key === this.#toolKey)?.label ?? this.#toolKey,
       traumas,
+      diseases,
       hasTraumas: traumas.length > 0,
+      hasDiseases: diseases.length > 0,
+      tabs: {
+        trauma: {
+          active: this.#activeTab === "trauma",
+          cssClass: this.#activeTab === "trauma" ? "active" : ""
+        },
+        disease: {
+          active: this.#activeTab === "disease",
+          cssClass: this.#activeTab === "disease" ? "active" : ""
+        }
+      },
       fallbackIcon: "icons/svg/item-bag.svg"
     };
   }
@@ -113,8 +129,20 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
 
   static #onStartTreatment(event, target) {
     event.preventDefault();
-    const traumaId = String(target.dataset.traumaId ?? "");
-    this.#activeTraumaId = this.#activeTraumaId === traumaId ? "" : traumaId;
+    const treatmentType = String(target.dataset.treatmentType ?? "trauma");
+    const treatmentId = String(target.dataset.treatmentId ?? target.dataset.traumaId ?? "");
+    const alreadyActive = this.#activeTreatmentType === treatmentType && this.#activeTreatmentId === treatmentId;
+    this.#activeTreatmentType = treatmentType;
+    this.#activeTreatmentId = alreadyActive ? "" : treatmentId;
+    this.#activeTab = treatmentType;
+    return this.render({ force: true });
+  }
+
+  static #onSetMedicineTab(event, target) {
+    event.preventDefault();
+    const tab = String(target.dataset.medicineTab ?? "trauma");
+    if (!["trauma", "disease"].includes(tab)) return undefined;
+    this.#activeTab = tab;
     return this.render({ force: true });
   }
 
@@ -153,9 +181,9 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
 
       const currentActorUuid = String(this.#targetContext?.actorUuid ?? "");
       const nextActorUuid = String(nextTargetContext.actorUuid ?? "");
-      if (currentActorUuid !== nextActorUuid) this.#activeTraumaId = "";
-      else if (this.#activeTraumaId && !nextTargetContext.traumas.some(trauma => trauma.id === this.#activeTraumaId)) {
-        this.#activeTraumaId = "";
+      if (currentActorUuid !== nextActorUuid) this.#activeTreatmentId = "";
+      else if (this.#activeTreatmentId && !getTargetTreatments(nextTargetContext, this.#activeTreatmentType).some(item => item.id === this.#activeTreatmentId)) {
+        this.#activeTreatmentId = "";
       }
 
       this.#targetToken = nextTargetToken;
@@ -194,14 +222,16 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
 
   static async #onTreatWithInstrument(event, target) {
     event.preventDefault();
-    const traumaId = String(target.dataset.traumaId ?? "");
+    const treatmentType = String(target.dataset.treatmentType ?? "trauma");
+    const treatmentId = String(target.dataset.treatmentId ?? target.dataset.traumaId ?? "");
     const instrumentId = String(target.dataset.instrumentId ?? "");
-    if (!traumaId || !instrumentId) return undefined;
+    if (!treatmentId || !instrumentId) return undefined;
 
     const result = await performTreatment({
       sourceActor: this.#sourceActor,
       targetContext: this.#targetContext,
-      traumaId,
+      treatmentType,
+      treatmentId,
       instrumentId,
       toolKey: this.#toolKey
     });
@@ -234,20 +264,24 @@ async function getMedicineTargetContext(targetToken) {
   }
 }
 
-function prepareTargetTraumas(traumas, instruments, activeTraumaId) {
-  return traumas.map(trauma => {
-    const requiredClass = String(trauma.healingToolClass ?? "D");
+function prepareTargetTreatments(treatments, instruments, activeTreatmentId) {
+  return treatments.map(treatment => {
+    const requiredClass = String(treatment.healingToolClass ?? "D");
     const availableInstruments = instruments.map(instrument => ({
       ...instrument,
       classAccepted: isToolClassAccepted(instrument.toolClass, requiredClass),
       usable: isToolClassAccepted(instrument.toolClass, requiredClass) && instrument.supplyValue > 0 && instrument.requirementMet
     }));
     return {
-      ...trauma,
-      active: trauma.id === activeTraumaId,
+      ...treatment,
+      active: treatment.id === activeTreatmentId,
       availableInstruments
     };
   });
+}
+
+function getTargetTreatments(targetContext, treatmentType) {
+  return treatmentType === "disease" ? (targetContext?.diseases ?? []) : (targetContext?.traumas ?? []);
 }
 
 function prepareMedicalInstruments(actor, toolKey) {
@@ -277,13 +311,13 @@ function prepareMedicalInstruments(actor, toolKey) {
     });
 }
 
-async function performTreatment({ sourceActor, targetContext, traumaId, instrumentId, toolKey }) {
+async function performTreatment({ sourceActor, targetContext, treatmentType = "trauma", treatmentId, instrumentId, toolKey }) {
   if (!sourceActor?.isOwner && !game.user?.isGM) {
     ui.notifications.warn(`Нет прав на использование инструментов ${sourceActor?.name ?? ""}.`);
     return undefined;
   }
 
-  const trauma = targetContext?.traumas?.find(item => item.id === traumaId);
+  const trauma = getTargetTreatments(targetContext, treatmentType).find(item => item.id === treatmentId);
   const instrument = sourceActor?.items?.get(instrumentId);
   if (!trauma || !instrument || instrument.type !== "gear") {
     ui.notifications.warn("Не удалось найти травму или инструмент лечения.");
@@ -329,7 +363,8 @@ async function performTreatment({ sourceActor, targetContext, traumaId, instrume
   const completed = result.finalProgress >= maxProgress;
   const finalProgress = Math.min(maxProgress, result.finalProgress);
   const updatedTargetContext = await applyTreatmentToTarget(targetContext, {
-    traumaId,
+    treatmentType,
+    treatmentId,
     finalProgress,
     completed
   });
@@ -455,7 +490,7 @@ function calculateTreatmentResult({ trauma, tool, availableCharges, progressForC
   return { progress, chargesUsed, efficiency };
 }
 
-async function applyTreatmentToTarget(targetContext, { traumaId, finalProgress, completed }) {
+async function applyTreatmentToTarget(targetContext, { treatmentType = "trauma", treatmentId, finalProgress, completed }) {
   const actorUuid = String(targetContext?.actorUuid ?? "");
   if (!actorUuid) {
     ui.notifications.warn("Не удалось определить цель лечения.");
@@ -465,7 +500,7 @@ async function applyTreatmentToTarget(targetContext, { traumaId, finalProgress, 
   const actor = await fromUuid(actorUuid);
   if (actor && canUseActorLocally(actor)) {
     try {
-      return applyTreatmentToActor(actor, { traumaId, finalProgress, completed });
+      return await applyTreatmentToActor(actor, { treatmentType, treatmentId, finalProgress, completed });
     } catch (error) {
       console.error(`${SYSTEM_ID} | Medicine local apply failed`, error);
       ui.notifications.error(`Не удалось применить лечение: ${error.message}`);
@@ -482,7 +517,8 @@ async function applyTreatmentToTarget(targetContext, { traumaId, finalProgress, 
   try {
     const result = await requestMedicineSocket("applyTreatment", {
       actorUuid,
-      traumaId,
+      treatmentType,
+      treatmentId,
       finalProgress,
       completed
     }, gm);
@@ -494,19 +530,33 @@ async function applyTreatmentToTarget(targetContext, { traumaId, finalProgress, 
   }
 }
 
-async function applyTreatmentToActor(actor, { traumaId, finalProgress, completed }) {
-  const trauma = actor?.items?.get(String(traumaId ?? ""));
-  if (!trauma || trauma.type !== "trauma") throw new Error("травма не найдена");
+async function applyTreatmentToActor(actor, { treatmentType = "trauma", treatmentId, finalProgress, completed }) {
+  const trauma = actor?.items?.get(String(treatmentId ?? ""));
+  if (!trauma || trauma.type !== treatmentType) throw new Error("цель лечения не найдена");
 
   const maxProgress = Math.max(1, toInteger(trauma.system?.healingProgressMax));
   const nextProgress = Math.min(maxProgress, Math.max(0, toInteger(finalProgress)));
   if (completed || nextProgress >= maxProgress) {
+    if (trauma.type === "disease") await reduceNeedForTreatedDisease(actor, trauma);
     await trauma.delete();
   } else {
     await trauma.update({ "system.healingProgress": nextProgress });
   }
 
   return buildTargetContext(actor);
+}
+
+async function reduceNeedForTreatedDisease(actor, disease) {
+  const needKey = String(disease.system?.needKey ?? "");
+  const need = actor.system?.needs?.[needKey];
+  if (!need) return;
+
+  const min = toInteger(need.min);
+  const max = Math.max(min, toInteger(need.max));
+  const current = Math.min(max, Math.max(min, toInteger(need.value)));
+  const reduction = Math.ceil(Math.max(0, max - min) * (Math.max(0, toInteger(disease.system?.thresholdPercent)) / 100));
+  const next = Math.max(min, current - reduction);
+  if (next !== current) await actor.update({ [`system.needs.${needKey}.value`]: next });
 }
 
 function buildTargetContext(actor, token = null) {
@@ -517,7 +567,10 @@ function buildTargetContext(actor, token = null) {
     tokenName: token?.name ?? "",
     traumas: actor.items
       .filter(item => item.type === "trauma")
-      .map(snapshotTrauma)
+      .map(snapshotTrauma),
+    diseases: actor.items
+      .filter(item => item.type === "disease")
+      .map(snapshotDisease)
   };
 }
 
@@ -530,6 +583,27 @@ function snapshotTrauma(item) {
     limbLabel: system.limbLabel ?? "",
     damageTypeLabel: system.damageTypeLabel ?? "",
     sources: prepareTraumaSourceEntries(item),
+    healingDifficulty: toInteger(system.healingDifficulty),
+    healingToolClass: String(system.healingToolClass ?? "D"),
+    healingProgress: toInteger(system.healingProgress),
+    healingProgressMax: Math.max(1, toInteger(system.healingProgressMax)),
+    healingSkillKey: String(system.healingSkillKey ?? ""),
+    healingSkillLabel: getHealingSkillLabel(system.healingSkillKey)
+  };
+}
+
+function snapshotDisease(item) {
+  const system = item.system ?? {};
+  const level = toInteger(system.level);
+  const thresholdPercent = toInteger(system.thresholdPercent);
+  return {
+    id: item.id,
+    type: "disease",
+    name: item.name,
+    img: normalizeImagePath(item.img, "icons/svg/biohazard.svg"),
+    sources: [{
+      summary: `${system.needLabel ?? system.needKey}: ${thresholdPercent}% / уровень ${level}`
+    }],
     healingDifficulty: toInteger(system.healingDifficulty),
     healingToolClass: String(system.healingToolClass ?? "D"),
     healingProgress: toInteger(system.healingProgress),
@@ -643,7 +717,8 @@ async function handleMedicineSocketRequest(action, payload = {}) {
   if (action === "applyTreatment") {
     return {
       targetContext: await applyTreatmentToActor(actor, {
-        traumaId: payload.traumaId,
+        treatmentType: payload.treatmentType ?? "trauma",
+        treatmentId: payload.treatmentId ?? payload.traumaId,
         finalProgress: payload.finalProgress,
         completed: payload.completed
       })
@@ -654,6 +729,7 @@ async function handleMedicineSocketRequest(action, payload = {}) {
 }
 
 async function postTreatmentResultChat(actor, { trauma, instrument, initialProgress, finalProgress, maxProgress, spentCharges, entries, completed }) {
+  const completionLabel = trauma.type === "disease" ? "Болезнь вылечена." : "Травма полностью вылечена.";
   const rows = entries.map(entry => `
     <li>
       Проверка ${entry.index}/${entry.total}: ${entry.resultLabel},
@@ -671,7 +747,7 @@ async function postTreatmentResultChat(actor, { trauma, instrument, initialProgr
       `Прогресс: ${initialProgress}/${maxProgress} -> ${finalProgress}/${maxProgress}`,
       `Потрачено запаса: ${spentCharges}`,
       `<ul>${rows}</ul>`,
-      completed ? "Травма полностью вылечена." : ""
+      completed ? completionLabel : ""
     ].filter(Boolean)
   });
 }

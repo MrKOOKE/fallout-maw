@@ -2,8 +2,9 @@ export const SYSTEM_ID = "fallout-maw";
 export const SYSTEM_TITLE = "Fallout-MaW";
 
 export const ACTOR_TYPES = Object.freeze(["character", "npc", "vehicle", "hazard"]);
-export const ITEM_TYPES = Object.freeze(["gear", "ability", "trauma"]);
+export const ITEM_TYPES = Object.freeze(["gear", "ability", "trauma", "disease"]);
 export const TRAUMA_CREATE_OPTION = "falloutMawAllowTraumaCreate";
+export const DISEASE_CREATE_OPTION = "falloutMawAllowDiseaseCreate";
 
 export const TEMPLATES = Object.freeze({
   actorCreateDialog: `systems/${SYSTEM_ID}/templates/actor/actor-create-dialog.hbs`,
@@ -41,8 +42,10 @@ export const TEMPLATES = Object.freeze({
     currencies: `systems/${SYSTEM_ID}/templates/settings/currency-settings-config.hbs`,
     damageTypes: `systems/${SYSTEM_ID}/templates/settings/damage-types-config.hbs`,
     damageTypeSettings: `systems/${SYSTEM_ID}/templates/settings/damage-type-settings-config.hbs`,
+    diseases: `systems/${SYSTEM_ID}/templates/settings/disease-settings-config.hbs`,
     levels: `systems/${SYSTEM_ID}/templates/settings/level-settings-config.hbs`,
     needs: `systems/${SYSTEM_ID}/templates/settings/need-settings-config.hbs`,
+    needSettings: `systems/${SYSTEM_ID}/templates/settings/need-advanced-settings-config.hbs`,
     proficiencies: `systems/${SYSTEM_ID}/templates/settings/proficiency-settings-config.hbs`,
     resources: `systems/${SYSTEM_ID}/templates/settings/resource-settings-config.hbs`,
     skillFormulas: `systems/${SYSTEM_ID}/templates/settings/skill-formulas-config.hbs`,

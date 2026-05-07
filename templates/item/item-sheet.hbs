@@ -14,6 +14,18 @@
         <input type="text" value="{{system.damageTypeLabel}}" disabled>
       </label>
     </div>
+    {{else if isDisease}}
+    <h1 class="fallout-maw-title-display">{{item.name}}</h1>
+    <div class="fallout-maw-header-grid">
+      <label>
+        <span>Потребность</span>
+        <input type="text" value="{{system.needLabel}}" disabled>
+      </label>
+      <label>
+        <span>Уровень</span>
+        <input type="number" value="{{system.level}}" disabled>
+      </label>
+    </div>
     {{else}}
     <input class="fallout-maw-title-input" name="name" type="text" value="{{item.name}}" placeholder="{{localize 'DOCUMENT.FIELDS.name.label'}}">
     {{#if isGear}}
@@ -87,6 +99,54 @@
     <label>
       <span>{{localize "FALLOUTMAW.Trauma.HealingSkill"}}</span>
       <input type="text" value="{{traumaHealingSkillLabel}}" disabled>
+    </label>
+  </div>
+</section>
+
+<section class="fallout-maw-panel">
+  <h2>Эффекты</h2>
+  <div class="fallout-maw-trauma-effect-table">
+    <div class="fallout-maw-trauma-effect-row fallout-maw-grid-header">
+      <span>Ключ</span>
+      <span>Тип</span>
+      <span>Значение</span>
+      <span>Приоритет</span>
+    </div>
+    {{#each system.effects}}
+    <div class="fallout-maw-trauma-effect-row">
+      <span>{{key}}</span>
+      <span>{{type}}</span>
+      <span>{{value}}</span>
+      <span>{{priority}}</span>
+    </div>
+    {{else}}
+    <p class="fallout-maw-empty-list">Нет строк эффекта.</p>
+    {{/each}}
+  </div>
+</section>
+{{else if isDisease}}
+<section class="fallout-maw-panel">
+  <h2>Болезнь</h2>
+  <div class="fallout-maw-list-grid two-columns">
+    <label>
+      <span>Порог потребности</span>
+      <input type="text" value="{{system.thresholdPercent}}%" disabled>
+    </label>
+    <label>
+      <span>{{localize "FALLOUTMAW.Trauma.HealingDifficulty"}}</span>
+      <input type="number" value="{{system.healingDifficulty}}" disabled>
+    </label>
+    <label>
+      <span>{{localize "FALLOUTMAW.Trauma.HealingToolClass"}}</span>
+      <input type="text" value="{{system.healingToolClass}}" disabled>
+    </label>
+    <label>
+      <span>{{localize "FALLOUTMAW.Trauma.HealingProgress"}}</span>
+      <input type="text" value="{{system.healingProgress}} / {{system.healingProgressMax}}" disabled>
+    </label>
+    <label>
+      <span>{{localize "FALLOUTMAW.Trauma.HealingSkill"}}</span>
+      <input type="text" value="{{healingSkillLabel}}" disabled>
     </label>
   </div>
 </section>

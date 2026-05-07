@@ -3,6 +3,7 @@ import { getNeedSettings, getProficiencySettings, getResourceSettings, getSkillS
 import {
   AbilityDataModel,
   CharacterDataModel,
+  DiseaseDataModel,
   GearDataModel,
   HazardDataModel,
   NpcDataModel,
@@ -23,7 +24,8 @@ export function registerDataModels() {
   Object.assign(CONFIG.Item.dataModels, {
     gear: GearDataModel,
     ability: AbilityDataModel,
-    trauma: TraumaDataModel
+    trauma: TraumaDataModel,
+    disease: DiseaseDataModel
   });
 }
 

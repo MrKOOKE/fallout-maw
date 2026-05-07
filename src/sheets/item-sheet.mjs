@@ -117,7 +117,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       descriptionHTML,
       isGear: type === "gear",
       isTrauma: type === "trauma",
-      traumaHealingSkillLabel: getTraumaHealingSkillLabel(item),
+      isDisease: type === "disease",
+      traumaHealingSkillLabel: getHealingSkillLabel(item),
+      healingSkillLabel: getHealingSkillLabel(item),
       isContainerFunction: hasContainerFunction,
       hasDamageMitigationFunction,
       toolFunctions,
@@ -411,8 +413,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   }
 }
 
-function getTraumaHealingSkillLabel(item) {
-  if (item?.type !== "trauma") return "";
+function getHealingSkillLabel(item) {
+  if (!["trauma", "disease"].includes(item?.type)) return "";
   const key = item.system?.healingSkillKey ?? "";
   return getSkillSettings().find(skill => skill.key === key)?.label ?? key;
 }

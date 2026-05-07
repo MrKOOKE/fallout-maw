@@ -30,7 +30,44 @@ const DEFAULT_RESOURCE_LIMIT_RESOURCES = Object.freeze([
 const DEFAULT_NEED_COLORS = Object.freeze({
   hunger: "#c9a24a",
   thirst: "#58a6d6",
-  sleepiness: "#8f63c9"
+  sleepiness: "#8f63c9",
+  radcont: "#b620a7"
+});
+const ALL_CHARACTERISTIC_KEYS = Object.freeze(DEFAULT_CHARACTERISTICS.map(entry => entry.key));
+const DEFAULT_NEED_BEHAVIOR = Object.freeze({
+  thresholds: Object.freeze([]),
+  diseases: Object.freeze([])
+});
+const DEFAULT_NEED_SETTINGS_BY_KEY = Object.freeze({
+  hunger: Object.freeze({
+    thresholds: Object.freeze([
+      createNeedEffectThreshold(50, { strength: -2, dexterity: -2 }),
+      createNeedEffectThreshold(75, { strength: -2, dexterity: -2, endurance: -2 }),
+      createNeedEffectThreshold(100, { strength: -4, dexterity: -4, endurance: -3 })
+    ])
+  }),
+  thirst: Object.freeze({
+    thresholds: Object.freeze([
+      createNeedEffectThreshold(50, { perception: -2, intelligence: -2 }),
+      createNeedEffectThreshold(75, { perception: -2, intelligence: -2, charisma: -2 }),
+      createNeedEffectThreshold(100, { perception: -4, intelligence: -4, charisma: -3 })
+    ])
+  }),
+  sleepiness: Object.freeze({
+    thresholds: Object.freeze([
+      createNeedEffectThreshold(50, Object.fromEntries(ALL_CHARACTERISTIC_KEYS.map(key => [key, -1]))),
+      createNeedEffectThreshold(75, Object.fromEntries(ALL_CHARACTERISTIC_KEYS.map(key => [key, -2]))),
+      createNeedEffectThreshold(100, Object.fromEntries(ALL_CHARACTERISTIC_KEYS.map(key => [key, -3])))
+    ])
+  }),
+  radcont: Object.freeze({
+    thresholds: Object.freeze([
+      createNeedDiseaseThreshold(25, 1),
+      createNeedDiseaseThreshold(50, 2),
+      createNeedDiseaseThreshold(75, 3),
+      createNeedDiseaseThreshold(100, 4)
+    ])
+  })
 });
 const DEFAULT_DAMAGE_TYPE_SETTINGS = Object.freeze({
   limbStateDamage: Object.freeze({ multiplier: 1 }),
@@ -147,7 +184,7 @@ export function createDefaultResourceSettings() {
 }
 
 export function createDefaultNeedSettings() {
-  return DEFAULT_NEEDS.map(entry => ({ ...entry }));
+  return DEFAULT_NEEDS.map(entry => ({ ...entry, settings: getDefaultNeedBehavior(entry.key) }));
 }
 
 export function createDefaultDamageTypeSettings() {
@@ -245,7 +282,22 @@ export function normalizeResourceSettings(settings) {
 }
 
 export function normalizeNeedSettings(settings) {
-  return normalizeFormulaSettings(settings, createDefaultNeedSettings(), "Потребность");
+  const source = normalizeCollectionInput(settings, createDefaultNeedSettings());
+  return normalizeKeyedEntries(
+    source,
+    entry => {
+      const key = String(entry?.key ?? "").trim();
+      return {
+        key,
+        abbr: String(entry?.abbr ?? "").trim(),
+        label: String(entry?.label ?? entry?.name ?? "").trim(),
+        formula: String(entry?.formula ?? "0").trim() || "0",
+        color: normalizeHexColor(entry?.color, getDefaultColorForKey(key)),
+        settings: normalizeNeedBehavior(entry?.settings, key)
+      };
+    },
+    "Потребность"
+  );
 }
 
 export function normalizeDamageTypeSettings(settings) {
@@ -417,6 +469,102 @@ function normalizeResourceLimitEntries(entries, defaults = []) {
       percent: Math.max(0, toDecimal(entry?.percent, 100))
     }))
     .filter(entry => IDENTIFIER_PATTERN.test(entry.resourceKey));
+}
+
+function normalizeNeedBehavior(settings = {}, key = "") {
+  const defaults = getDefaultNeedBehavior(key);
+  const source = settings && typeof settings === "object" ? settings : {};
+  return {
+    thresholds: normalizeNeedThresholds(source.thresholds, defaults.thresholds),
+    diseases: normalizeNeedDiseases(source.diseases, defaults.diseases)
+  };
+}
+
+function normalizeNeedThresholds(thresholds, defaults = []) {
+  const source = Array.isArray(thresholds) ? thresholds : defaults;
+  return source.map((entry, index) => ({
+    id: String(entry?.id ?? `threshold-${index + 1}`).trim() || `threshold-${index + 1}`,
+    percent: clampPercent(toDecimal(entry?.percent, 0)),
+    diseaseLevel: Math.max(0, toInteger(entry?.diseaseLevel)),
+    effects: normalizeNeedEffects(entry?.effects)
+  })).sort((left, right) => left.percent - right.percent);
+}
+
+function normalizeNeedDiseases(diseases, defaults = []) {
+  const source = Array.isArray(diseases) ? diseases : defaults;
+  return source.map((entry, index) => ({
+    id: String(entry?.id ?? `disease-${index + 1}`).trim() || `disease-${index + 1}`,
+    name: String(entry?.name ?? "").trim() || `Болезнь ${index + 1}`,
+    img: String(entry?.img ?? "").trim(),
+    stages: normalizeNeedDiseaseStages(entry?.stages)
+  })).filter(entry => entry.stages.length);
+}
+
+function normalizeNeedDiseaseStages(stages) {
+  const source = Array.isArray(stages) ? stages : [];
+  return source.map((entry, index) => ({
+    id: String(entry?.id ?? `stage-${index + 1}`).trim() || `stage-${index + 1}`,
+    level: Math.max(0, toInteger(entry?.level)),
+    name: String(entry?.name ?? "").trim(),
+    img: String(entry?.img ?? "").trim(),
+    healingDifficulty: Math.max(0, toInteger(entry?.healingDifficulty ?? 60)),
+    healingToolClass: normalizeToolClass(entry?.healingToolClass),
+    healingProgress: Math.max(1, toInteger(entry?.healingProgress ?? entry?.healingProgressMax ?? 100)),
+    healingSkillKey: String(entry?.healingSkillKey ?? "doctor").trim() || "doctor",
+    effects: normalizeNeedEffects(entry?.effects)
+  })).filter(entry => entry.level > 0);
+}
+
+function normalizeNeedEffects(effects) {
+  const source = Array.isArray(effects) ? effects : [];
+  return source.map(entry => {
+    const priority = Number(entry?.priority);
+    const result = {
+      key: String(entry?.key ?? "").trim(),
+      type: String(entry?.type ?? "add").trim() || "add",
+      value: String(entry?.value ?? "0"),
+      phase: String(entry?.phase ?? "initial").trim() || "initial"
+    };
+    if (Number.isFinite(priority)) result.priority = Math.trunc(priority);
+    return result;
+  }).filter(entry => entry.key);
+}
+
+function getDefaultNeedBehavior(key = "") {
+  return foundry.utils.mergeObject(
+    foundry.utils.deepClone(DEFAULT_NEED_BEHAVIOR),
+    foundry.utils.deepClone(DEFAULT_NEED_SETTINGS_BY_KEY[key] ?? {}),
+    { inplace: false }
+  );
+}
+
+function createNeedEffectThreshold(percent, penalties = {}) {
+  return Object.freeze({
+    id: `at-${percent}`,
+    percent,
+    diseaseLevel: 0,
+    effects: Object.freeze(Object.entries(penalties).map(([key, value]) => Object.freeze({
+      key: `system.characteristics.${key}`,
+      type: "add",
+      value: String(value),
+      phase: "initial",
+      priority: null
+    })))
+  });
+}
+
+function createNeedDiseaseThreshold(percent, diseaseLevel) {
+  return Object.freeze({
+    id: `at-${percent}`,
+    percent,
+    diseaseLevel,
+    effects: Object.freeze([])
+  });
+}
+
+function normalizeToolClass(value) {
+  const normalized = String(value ?? "D").trim().toUpperCase();
+  return ["D", "C", "B", "A", "S"].includes(normalized) ? normalized : "D";
 }
 
 function getDefaultDamageTypeSettings(key = "") {

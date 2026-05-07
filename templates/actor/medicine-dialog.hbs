@@ -1,64 +1,121 @@
 <div class="fallout-maw-sheet fallout-maw-medicine-body">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header fallout-maw-medicine-panel-header">
-      <h2>Травмы цели: {{targetActor.name}}</h2>
+      <h2>Медицина: {{targetActor.name}}</h2>
       <strong>{{toolLabel}}</strong>
     </header>
 
-    <div class="fallout-maw-medicine-trauma-list">
-      {{#each traumas}}
-      <article class="fallout-maw-medicine-trauma-card {{#if active}}active{{/if}}">
-        <div class="fallout-maw-medicine-trauma-summary">
-          <div class="fallout-maw-medicine-trauma-identity">
-            <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../fallbackIcon}}'">
-            <div class="fallout-maw-medicine-trauma-title">
-              <h3>{{name}}</h3>
-              {{#each sources}}
-              <span>{{summary}}</span>
-              {{/each}}
+    <nav class="fallout-maw-medicine-tabs">
+      <button type="button" class="{{tabs.trauma.cssClass}}" data-action="setMedicineTab" data-medicine-tab="trauma">Травмы</button>
+      <button type="button" class="{{tabs.disease.cssClass}}" data-action="setMedicineTab" data-medicine-tab="disease">Болезни</button>
+    </nav>
+
+    {{#if tabs.trauma.active}}
+    <section class="fallout-maw-panel">
+      <header class="fallout-maw-panel-header">
+        <h3>Травмы</h3>
+      </header>
+      <div class="fallout-maw-medicine-trauma-list">
+        {{#each traumas}}
+        <article class="fallout-maw-medicine-trauma-card {{#if active}}active{{/if}}">
+          <div class="fallout-maw-medicine-trauma-summary">
+            <div class="fallout-maw-medicine-trauma-identity">
+              <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../fallbackIcon}}'">
+              <div class="fallout-maw-medicine-trauma-title">
+                <h3>{{name}}</h3>
+                {{#each sources}}<span>{{summary}}</span>{{/each}}
+              </div>
             </div>
+            <div class="fallout-maw-medicine-trauma-stats">
+              <span>Сложность: <strong>{{healingDifficulty}}</strong></span>
+              <span>Класс: <strong>{{healingToolClass}}</strong></span>
+              <span>Прогресс: <strong>{{healingProgress}} / {{healingProgressMax}}</strong></span>
+              <span>Навык: <strong>{{healingSkillLabel}}</strong></span>
+            </div>
+            <button type="button" data-action="startTreatment" data-treatment-type="trauma" data-treatment-id="{{id}}">
+              {{#if active}}Скрыть{{else}}Приступить к лечению{{/if}}
+            </button>
           </div>
-
-          <div class="fallout-maw-medicine-trauma-stats">
-            <span>Сложность: <strong>{{healingDifficulty}}</strong></span>
-            <span>Класс: <strong>{{healingToolClass}}</strong></span>
-            <span>Прогресс: <strong>{{healingProgress}} / {{healingProgressMax}}</strong></span>
-            <span>Навык: <strong>{{healingSkillLabel}}</strong></span>
+          {{#if active}}
+          <div class="fallout-maw-medicine-instrument-table">
+            <div class="fallout-maw-medicine-instrument-row fallout-maw-medicine-instrument-header">
+              <span>Меднабор</span><span>Класс</span><span>Запас</span><span>Требование</span>
+            </div>
+            {{#each availableInstruments}}
+            <button type="button" class="fallout-maw-medicine-instrument-row {{#unless usable}}disabled{{/unless}}" data-action="treatWithInstrument" data-treatment-type="trauma" data-treatment-id="{{../id}}" data-instrument-id="{{id}}" {{#unless usable}}disabled{{/unless}}>
+              <span class="fallout-maw-medicine-instrument-name">
+                <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../../fallbackIcon}}'">
+                <span>{{name}}</span>
+              </span>
+              <strong>{{toolClass}}</strong>
+              <em>{{supplyValue}} / {{supplyMax}}</em>
+              <small>{{skillRequirement}}</small>
+            </button>
+            {{else}}
+            <p class="fallout-maw-empty-list">Доступных инструментов нет.</p>
+            {{/each}}
           </div>
+          {{/if}}
+        </article>
+        {{else}}
+        <p class="fallout-maw-empty-list">У цели нет травм.</p>
+        {{/each}}
+      </div>
+    </section>
+    {{/if}}
 
-          <button type="button" data-action="startTreatment" data-trauma-id="{{id}}">
-            {{#if active}}Скрыть{{else}}Приступить к лечению{{/if}}
-          </button>
-        </div>
-
-        {{#if active}}
-        <div class="fallout-maw-medicine-instrument-table">
-          <div class="fallout-maw-medicine-instrument-row fallout-maw-medicine-instrument-header">
-            <span>Меднабор</span>
-            <span>Класс</span>
-            <span>Запас</span>
-            <span>Требование</span>
+    {{#if tabs.disease.active}}
+    <section class="fallout-maw-panel">
+      <header class="fallout-maw-panel-header">
+        <h3>Болезни</h3>
+      </header>
+      <div class="fallout-maw-medicine-trauma-list">
+        {{#each diseases}}
+        <article class="fallout-maw-medicine-trauma-card {{#if active}}active{{/if}}">
+          <div class="fallout-maw-medicine-trauma-summary">
+            <div class="fallout-maw-medicine-trauma-identity">
+              <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../fallbackIcon}}'">
+              <div class="fallout-maw-medicine-trauma-title">
+                <h3>{{name}}</h3>
+                {{#each sources}}<span>{{summary}}</span>{{/each}}
+              </div>
+            </div>
+            <div class="fallout-maw-medicine-trauma-stats">
+              <span>Сложность: <strong>{{healingDifficulty}}</strong></span>
+              <span>Класс: <strong>{{healingToolClass}}</strong></span>
+              <span>Прогресс: <strong>{{healingProgress}} / {{healingProgressMax}}</strong></span>
+              <span>Навык: <strong>{{healingSkillLabel}}</strong></span>
+            </div>
+            <button type="button" data-action="startTreatment" data-treatment-type="disease" data-treatment-id="{{id}}">
+              {{#if active}}Скрыть{{else}}Приступить к лечению{{/if}}
+            </button>
           </div>
-
-          {{#each availableInstruments}}
-          <button type="button" class="fallout-maw-medicine-instrument-row {{#unless usable}}disabled{{/unless}}" data-action="treatWithInstrument" data-trauma-id="{{../id}}" data-instrument-id="{{id}}" {{#unless usable}}disabled{{/unless}}>
-            <span class="fallout-maw-medicine-instrument-name">
-              <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../../fallbackIcon}}'">
-              <span>{{name}}</span>
-            </span>
-            <strong>{{toolClass}}</strong>
-            <em>{{supplyValue}} / {{supplyMax}}</em>
-            <small>{{skillRequirement}}</small>
-          </button>
-          {{else}}
-          <p class="fallout-maw-empty-list">Доступных инструментов нет.</p>
-          {{/each}}
-        </div>
-        {{/if}}
-      </article>
-      {{else}}
-      <p class="fallout-maw-empty-list">У цели нет травм.</p>
-      {{/each}}
-    </div>
+          {{#if active}}
+          <div class="fallout-maw-medicine-instrument-table">
+            <div class="fallout-maw-medicine-instrument-row fallout-maw-medicine-instrument-header">
+              <span>Меднабор</span><span>Класс</span><span>Запас</span><span>Требование</span>
+            </div>
+            {{#each availableInstruments}}
+            <button type="button" class="fallout-maw-medicine-instrument-row {{#unless usable}}disabled{{/unless}}" data-action="treatWithInstrument" data-treatment-type="disease" data-treatment-id="{{../id}}" data-instrument-id="{{id}}" {{#unless usable}}disabled{{/unless}}>
+              <span class="fallout-maw-medicine-instrument-name">
+                <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../../fallbackIcon}}'">
+                <span>{{name}}</span>
+              </span>
+              <strong>{{toolClass}}</strong>
+              <em>{{supplyValue}} / {{supplyMax}}</em>
+              <small>{{skillRequirement}}</small>
+            </button>
+            {{else}}
+            <p class="fallout-maw-empty-list">Доступных инструментов нет.</p>
+            {{/each}}
+          </div>
+          {{/if}}
+        </article>
+        {{else}}
+        <p class="fallout-maw-empty-list">У цели нет болезней.</p>
+        {{/each}}
+      </div>
+    </section>
+    {{/if}}
   </section>
 </div>
