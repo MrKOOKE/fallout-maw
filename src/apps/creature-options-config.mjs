@@ -130,6 +130,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       characteristics: getCharacteristicSettings(),
       skills: getSkillSettings()
     });
+    this.#activateCollapsibleSections();
   }
 
   async _processFormData(_event, _form, formData) {
@@ -488,6 +489,21 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     this.creatureOptions = getCreatureOptions();
     ui.notifications.info(message);
     return this.forceRender();
+  }
+
+  #activateCollapsibleSections() {
+    for (const button of this.element?.querySelectorAll("[data-creature-section-toggle]") ?? []) {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        const section = button.closest("[data-creature-section]");
+        if (!section) return;
+        const collapsed = section.classList.toggle("collapsed");
+        button.setAttribute("aria-expanded", String(!collapsed));
+        const icon = button.querySelector("i");
+        icon?.classList.toggle("fa-chevron-right", collapsed);
+        icon?.classList.toggle("fa-chevron-down", !collapsed);
+      });
+    }
   }
 }
 

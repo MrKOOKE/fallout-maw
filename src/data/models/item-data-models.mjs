@@ -111,6 +111,7 @@ export class TraumaDataModel extends foundry.abstract.TypeDataModel {
         required: true,
         initial: {}
       }),
+      sources: new ArrayField(traumaSourceField(), { required: true, initial: [] }),
       generated: new BooleanField({ required: true, initial: true }),
       effects: new ArrayField(traumaEffectField(), { required: true, initial: [] })
     };
@@ -130,5 +131,15 @@ function traumaEffectField() {
     value: new StringField({ required: true, blank: true, initial: "0" }),
     phase: new StringField({ required: true, blank: false, initial: "initial" }),
     priority: new NumberField({ required: false, nullable: true, integer: true, initial: null })
+  });
+}
+
+function traumaSourceField() {
+  return new SchemaField({
+    limbKey: new StringField({ required: true, blank: true, initial: "" }),
+    limbLabel: new StringField({ required: true, blank: true, initial: "" }),
+    damageTypeKey: new StringField({ required: true, blank: true, initial: "" }),
+    damageTypeLabel: new StringField({ required: true, blank: true, initial: "" }),
+    thresholdPercent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 0 })
   });
 }

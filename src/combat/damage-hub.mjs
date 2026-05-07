@@ -240,18 +240,20 @@ async function createTriggeredTraumas(actor, { limbKey, damageTypeKey, previousV
   const max = toInteger(limb.max);
   const previousPercent = (previousValue / max) * 100;
   const nextPercent = (nextValue / max) * 100;
+  const existingLimbTraumas = getActorTraumas(actor)
+    .filter(item => item.system?.limbKey === limbKey);
   const triggeredStages = stages.filter(stage => (
     previousPercent > Number(stage.thresholdPercent)
     && nextPercent <= Number(stage.thresholdPercent)
-    && !hasExistingTrauma(actor, limbKey, stage.id)
-  ));
+    && !existingLimbTraumas.some(item => item.system?.stageId === stage.id)
+  )).sort((left, right) => Number(right.thresholdPercent) - Number(left.thresholdPercent));
   if (!triggeredStages.length) return [];
 
   const snapshot = {
     ...(actor.system?.limbs?.[limbKey]?.damageAccumulation ?? {})
   };
 
-  const createData = triggeredStages
+  const progressionData = triggeredStages
     .map(stage => buildTraumaItemData(actor, {
       limb,
       limbKey,
@@ -265,10 +267,21 @@ async function createTriggeredTraumas(actor, { limbKey, damageTypeKey, previousV
     }))
     .filter(Boolean);
 
-  if (!createData.length) return [];
-  return actor.createEmbeddedDocuments("Item", createData, {
+  if (!progressionData.length) return [];
+  const finalTraumaData = mergeEscalatedTraumaData({
+    finalTraumaData: progressionData.at(-1),
+    previousTraumas: existingLimbTraumas,
+    intermediateTraumaData: progressionData.slice(0, -1),
+    damageTypes
+  });
+
+  const created = await actor.createEmbeddedDocuments("Item", [finalTraumaData], {
     [TRAUMA_CREATE_OPTION]: true
   });
+  if (existingLimbTraumas.length) {
+    await actor.deleteEmbeddedDocuments("Item", existingLimbTraumas.map(item => item.id));
+  }
+  return created;
 }
 
 function buildTraumaItemData(actor, { limb, limbKey, limbSetId, stage, damageTypes, damageTypeKey, latestDamage, snapshot, nextValue }) {
@@ -306,6 +319,13 @@ function buildTraumaItemData(actor, { limb, limbKey, limbSetId, stage, damageTyp
       healingProgressMax: toInteger(profileEntry.profile.healingProgress ?? 100),
       healingSkillKey: String(profileEntry.profile.healingSkillKey ?? "doctor").trim() || "doctor",
       damageSnapshot: snapshot,
+      sources: [{
+        limbKey,
+        limbLabel,
+        damageTypeKey: profileEntry.damageTypeKey,
+        damageTypeLabel: damageType?.label ?? profileEntry.damageTypeKey,
+        thresholdPercent
+      }],
       generated: true,
       effects: effectChanges
     },
@@ -350,6 +370,117 @@ function prepareEffectChange(effect = {}) {
   return change;
 }
 
+function mergeEscalatedTraumaData({ finalTraumaData, previousTraumas = [], intermediateTraumaData = [], damageTypes = [] } = {}) {
+  const effectChanges = [
+    ...previousTraumas.flatMap(item => item.system?.effects ?? []),
+    ...intermediateTraumaData.flatMap(data => data.system?.effects ?? []),
+    ...(finalTraumaData.system?.effects ?? [])
+  ].map(prepareEffectChange).filter(change => change.key);
+  const damageTypeEntries = [
+    ...previousTraumas.flatMap(item => getTraumaDamageTypeEntries(item, damageTypes)),
+    ...intermediateTraumaData.map(data => ({
+      key: data.system?.damageTypeKey ?? "",
+      label: data.system?.damageTypeLabel ?? ""
+    })),
+    {
+      key: finalTraumaData.system?.damageTypeKey ?? "",
+      label: finalTraumaData.system?.damageTypeLabel ?? ""
+    }
+  ];
+  const sources = [
+    ...previousTraumas.flatMap(item => getTraumaSourceEntries(item, damageTypes)),
+    ...intermediateTraumaData.flatMap(data => data.system?.sources?.length ? data.system.sources : [getTraumaSourceEntryFromData(data, damageTypes)]),
+    ...(finalTraumaData.system?.sources?.length ? finalTraumaData.system.sources : [getTraumaSourceEntryFromData(finalTraumaData, damageTypes)])
+  ].filter(source => source.limbLabel || source.damageTypeLabel);
+  const combinedDamageTypes = combineDamageTypeEntries(damageTypeEntries, damageTypes);
+
+  foundry.utils.setProperty(finalTraumaData, "system.effects", effectChanges);
+  foundry.utils.setProperty(finalTraumaData, "system.damageTypeLabel", combinedDamageTypes.label);
+  foundry.utils.setProperty(finalTraumaData, "system.sources", sources);
+  if (combinedDamageTypes.key) foundry.utils.setProperty(finalTraumaData, "system.damageTypeKey", combinedDamageTypes.key);
+
+  for (const effect of finalTraumaData.effects ?? []) {
+    foundry.utils.setProperty(effect, "system.changes", effectChanges);
+  }
+  return finalTraumaData;
+}
+
+function getTraumaSourceEntries(item, damageTypes = []) {
+  const sources = item.system?.sources;
+  if (Array.isArray(sources) && sources.length) {
+    return sources.map(source => normalizeTraumaSource(source, damageTypes));
+  }
+  return [normalizeTraumaSource({
+    limbKey: item.system?.limbKey,
+    limbLabel: item.system?.limbLabel,
+    damageTypeKey: item.system?.damageTypeKey,
+    damageTypeLabel: item.system?.damageTypeLabel,
+    thresholdPercent: item.system?.thresholdPercent
+  }, damageTypes)];
+}
+
+function getTraumaSourceEntryFromData(data, damageTypes = []) {
+  return normalizeTraumaSource({
+    limbKey: data.system?.limbKey,
+    limbLabel: data.system?.limbLabel,
+    damageTypeKey: data.system?.damageTypeKey,
+    damageTypeLabel: data.system?.damageTypeLabel,
+    thresholdPercent: data.system?.thresholdPercent
+  }, damageTypes);
+}
+
+function normalizeTraumaSource(source = {}, damageTypes = []) {
+  const damageTypeKey = String(source.damageTypeKey ?? "").trim();
+  return {
+    limbKey: String(source.limbKey ?? "").trim(),
+    limbLabel: String(source.limbLabel ?? source.limbKey ?? "").trim(),
+    damageTypeKey,
+    damageTypeLabel: String(source.damageTypeLabel ?? "").trim() || damageTypes.find(type => type.key === damageTypeKey)?.label || damageTypeKey,
+    thresholdPercent: Math.max(0, Math.min(100, toInteger(source.thresholdPercent)))
+  };
+}
+
+function getTraumaDamageTypeEntries(item, damageTypes = []) {
+  const keyParts = splitCombinedDamageTypeValue(item.system?.damageTypeKey);
+  const labelParts = splitCombinedDamageTypeValue(item.system?.damageTypeLabel);
+  const entries = [];
+  const maxLength = Math.max(keyParts.length, labelParts.length, 1);
+
+  for (let index = 0; index < maxLength; index += 1) {
+    const key = keyParts[index] ?? "";
+    const label = labelParts[index]
+      ?? damageTypes.find(type => type.key === key)?.label
+      ?? key;
+    if (key || label) entries.push({ key, label });
+  }
+  return entries;
+}
+
+function splitCombinedDamageTypeValue(value) {
+  return String(value ?? "")
+    .split(/\s*(?:\/|\+|,)\s*|\s+\u0438\s+/iu)
+    .map(part => part.trim())
+    .filter(Boolean);
+}
+
+function combineDamageTypeEntries(entries = [], damageTypes = []) {
+  const combined = [];
+  const seen = new Set();
+  for (const entry of entries) {
+    const key = String(entry.key ?? "").trim();
+    const label = String(entry.label ?? "").trim() || damageTypes.find(type => type.key === key)?.label || key;
+    const uniqueKey = key || label.toLocaleLowerCase();
+    if (!uniqueKey || seen.has(uniqueKey)) continue;
+    seen.add(uniqueKey);
+    combined.push({ key, label });
+  }
+
+  return {
+    key: combined.map(entry => entry.key).filter(Boolean).join("/"),
+    label: combined.map(entry => entry.label).filter(Boolean).join(" / ")
+  };
+}
+
 function selectTraumaProfile(stage, snapshot = {}, latestDamageTypeKey = "", latestDamage = 0) {
   const weighted = Object.entries(snapshot ?? {})
     .map(([key, value]) => [key, Math.max(0, Number(value) || 0) + (key === latestDamageTypeKey ? Math.max(0, Number(latestDamage) || 0) : 0)])
@@ -368,8 +499,4 @@ function selectTraumaProfile(stage, snapshot = {}, latestDamageTypeKey = "", lat
 function isConfiguredProfile(profile) {
   if (!profile) return false;
   return Boolean(String(profile.name ?? "").trim() || String(profile.img ?? "").trim() || profile.effects?.length);
-}
-
-function hasExistingTrauma(actor, limbKey, stageId) {
-  return getActorTraumas(actor).some(item => item.system?.limbKey === limbKey && item.system?.stageId === stageId);
 }

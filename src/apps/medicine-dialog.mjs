@@ -529,6 +529,7 @@ function snapshotTrauma(item) {
     img: normalizeImagePath(item.img, "icons/svg/blood.svg"),
     limbLabel: system.limbLabel ?? "",
     damageTypeLabel: system.damageTypeLabel ?? "",
+    sources: prepareTraumaSourceEntries(item),
     healingDifficulty: toInteger(system.healingDifficulty),
     healingToolClass: String(system.healingToolClass ?? "D"),
     healingProgress: toInteger(system.healingProgress),
@@ -536,6 +537,28 @@ function snapshotTrauma(item) {
     healingSkillKey: String(system.healingSkillKey ?? ""),
     healingSkillLabel: getHealingSkillLabel(system.healingSkillKey)
   };
+}
+
+function prepareTraumaSourceEntries(item) {
+  const sources = Array.isArray(item.system?.sources) && item.system.sources.length
+    ? item.system.sources
+    : [{
+      limbLabel: item.system?.limbLabel ?? item.system?.limbKey ?? "",
+      damageTypeLabel: item.system?.damageTypeLabel ?? item.system?.damageTypeKey ?? "",
+      thresholdPercent: item.system?.thresholdPercent
+    }];
+
+  return sources.map(source => {
+    const limbLabel = String(source.limbLabel ?? source.limbKey ?? "").trim();
+    const damageTypeLabel = String(source.damageTypeLabel ?? source.damageTypeKey ?? "").trim();
+    const thresholdPercent = toInteger(source.thresholdPercent);
+    return {
+      limbLabel,
+      damageTypeLabel,
+      thresholdPercent,
+      summary: `${limbLabel} - ${damageTypeLabel}: ${thresholdPercent}%`
+    };
+  });
 }
 
 async function requestMedicineSocket(action, payload = {}, gm = getResponsibleGM()) {

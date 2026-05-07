@@ -62,7 +62,9 @@
             <img src="{{img}}" alt="{{name}}">
             <div class="fallout-maw-trauma-summary">
               <strong>{{name}}</strong>
-              <span>{{limbLabel}} &middot; {{damageTypeLabel}}</span>
+              {{#each sources}}
+              <span>{{summary}}</span>
+              {{/each}}
             </div>
           </div>
           <div class="fallout-maw-trauma-treatment">
@@ -123,7 +125,9 @@
           <img src="{{img}}" alt="{{name}}">
           <div class="fallout-maw-trauma-summary">
             <strong>{{name}}</strong>
-            <span>{{limbLabel}} &middot; {{damageTypeLabel}}</span>
+            {{#each sources}}
+            <span>{{summary}}</span>
+            {{/each}}
           </div>
         </div>
         <div class="fallout-maw-trauma-treatment">

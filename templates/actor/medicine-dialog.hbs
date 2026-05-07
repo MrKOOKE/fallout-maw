@@ -13,7 +13,9 @@
             <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../fallbackIcon}}'">
             <div class="fallout-maw-medicine-trauma-title">
               <h3>{{name}}</h3>
-              <span>{{limbLabel}} - {{damageTypeLabel}}</span>
+              {{#each sources}}
+              <span>{{summary}}</span>
+              {{/each}}
             </div>
           </div>
 

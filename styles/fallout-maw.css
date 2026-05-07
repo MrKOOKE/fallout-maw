@@ -215,6 +215,41 @@
   margin-bottom: 0.5rem;
 }
 
+.fallout-maw-collapsible-panel.collapsed > :not(.fallout-maw-collapsible-header) {
+  display: none;
+}
+
+.fallout-maw-collapsible-panel.collapsed .fallout-maw-collapsible-header {
+  margin-bottom: 0;
+}
+
+.fallout-maw-collapsible-header > button[data-creature-section-toggle] {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  display: inline-flex;
+  flex: 1 1 auto;
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 700;
+  gap: 0.45rem;
+  justify-content: flex-start;
+  min-height: 1.75rem;
+  padding: 0;
+  text-align: left;
+}
+
+.fallout-maw-collapsible-header > button[data-creature-section-toggle]:hover,
+.fallout-maw-collapsible-header > button[data-creature-section-toggle]:focus-visible {
+  text-shadow: 0 0 6px rgba(230, 210, 150, 0.55);
+}
+
+.fallout-maw-collapsible-header > button[data-creature-section-toggle] i {
+  flex: 0 0 auto;
+  width: 1rem;
+}
+
 .fallout-maw-button-row {
   display: flex;
   flex-wrap: wrap;
@@ -600,6 +635,10 @@
   font-size: 1rem;
   line-height: 1.22;
   opacity: 1;
+}
+
+.fallout-maw-trauma-summary span + span {
+  margin-top: 0.08rem;
 }
 
 .fallout-maw-trauma-treatment {
@@ -3511,6 +3550,10 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-medicine-trauma-title span,
 .fallout-maw-medicine-trauma-stats span {
   color: var(--fallout-maw-actor-text);
+}
+
+.fallout-maw-medicine-trauma-title span {
+  display: block;
 }
 
 .fallout-maw-medicine-trauma-stats {

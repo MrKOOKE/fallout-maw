@@ -2054,6 +2054,7 @@ function prepareTraumaEntries(actor, settings = {}) {
     img: item.img,
     limbLabel: item.system?.limbLabel ?? item.system?.limbKey ?? "",
     damageTypeLabel: item.system?.damageTypeLabel ?? item.system?.damageTypeKey ?? "",
+    sources: prepareTraumaSourceEntries(item),
     thresholdPercent: toInteger(item.system?.thresholdPercent),
     healingDifficulty: toInteger(item.system?.healingDifficulty ?? 60),
     healingToolClass: String(item.system?.healingToolClass ?? "D").trim().toUpperCase() || "D",
@@ -2062,6 +2063,28 @@ function prepareTraumaEntries(actor, settings = {}) {
     healingSkillLabel: skillLabels.get(item.system?.healingSkillKey) ?? item.system?.healingSkillKey ?? "doctor",
     effects: prepareTraumaEffectEntries(item.system?.effects, pathLabels)
   }));
+}
+
+function prepareTraumaSourceEntries(item) {
+  const sources = Array.isArray(item.system?.sources) && item.system.sources.length
+    ? item.system.sources
+    : [{
+      limbLabel: item.system?.limbLabel ?? item.system?.limbKey ?? "",
+      damageTypeLabel: item.system?.damageTypeLabel ?? item.system?.damageTypeKey ?? "",
+      thresholdPercent: item.system?.thresholdPercent
+    }];
+
+  return sources.map(source => {
+    const limbLabel = String(source.limbLabel ?? source.limbKey ?? "").trim();
+    const damageTypeLabel = String(source.damageTypeLabel ?? source.damageTypeKey ?? "").trim();
+    const thresholdPercent = toInteger(source.thresholdPercent);
+    return {
+      limbLabel,
+      damageTypeLabel,
+      thresholdPercent,
+      summary: `${limbLabel} - ${damageTypeLabel}: ${thresholdPercent}%`
+    };
+  });
 }
 
 function prepareTraumaEffectEntries(effects = [], pathLabels = new Map()) {
