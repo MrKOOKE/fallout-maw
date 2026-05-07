@@ -43,6 +43,12 @@ const DEFAULT_DAMAGE_TYPE_SETTINGS = Object.freeze({
     tickCount: 0,
     intervalSeconds: 6
   }),
+  needIncrease: Object.freeze({
+    enabled: false,
+    needKey: "",
+    percent: 100,
+    preventHealthDamage: false
+  }),
   resourceLimit: Object.freeze({
     enabled: false,
     effectName: "",
@@ -84,6 +90,14 @@ const DEFAULT_DAMAGE_TYPE_SETTINGS_BY_KEY = Object.freeze({
       color: "#3f8cff",
       durationSeconds: 12,
       resources: DEFAULT_RESOURCE_LIMIT_RESOURCES
+    })
+  }),
+  radiation: Object.freeze({
+    needIncrease: Object.freeze({
+      enabled: true,
+      needKey: "radcont",
+      percent: 100,
+      preventHealthDamage: true
     })
   })
 });
@@ -377,6 +391,12 @@ function normalizeDamageTypeBehavior(settings = {}, key = "") {
       delayedPercent: clampPercent(toDecimal(source.periodic?.delayedPercent, defaults.periodic.delayedPercent)),
       tickCount: Math.max(0, toInteger(source.periodic?.tickCount ?? defaults.periodic.tickCount)),
       intervalSeconds: Math.max(1, toInteger(source.periodic?.intervalSeconds ?? defaults.periodic.intervalSeconds))
+    },
+    needIncrease: {
+      enabled: Boolean(source.needIncrease?.enabled ?? defaults.needIncrease.enabled),
+      needKey: String(source.needIncrease?.needKey ?? defaults.needIncrease.needKey ?? "").trim(),
+      percent: Math.max(0, toDecimal(source.needIncrease?.percent, defaults.needIncrease.percent)),
+      preventHealthDamage: Boolean(source.needIncrease?.preventHealthDamage ?? defaults.needIncrease.preventHealthDamage)
     },
     resourceLimit: {
       enabled: Boolean(resourceLimitSource.enabled ?? resourceLimitDefaults.enabled),

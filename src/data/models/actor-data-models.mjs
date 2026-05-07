@@ -159,7 +159,9 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       this.characteristics,
       skillValues
     );
-    replaceObjectContents(this.needs, normalizeResourceMap(this.needs, needSettings, needMaximums));
+    replaceObjectContents(this.needs, normalizeResourceMap(this.needs, needSettings, needMaximums, {
+      defaultToMin: true
+    }));
 
     const baseDamageResistances = buildLimbDamageResistanceMap(
       this.limbs,
@@ -300,7 +302,7 @@ function developmentField() {
   });
 }
 
-function normalizeResourceMap(currentResources = {}, settings = [], maximums = {}, { trackSpent = false } = {}) {
+function normalizeResourceMap(currentResources = {}, settings = [], maximums = {}, { trackSpent = false, defaultToMin = false } = {}) {
   return Object.fromEntries(
     settings.map(setting => {
       const current = currentResources?.[setting.key];
@@ -314,7 +316,7 @@ function normalizeResourceMap(currentResources = {}, settings = [], maximums = {
         ? max - spent
         : current && typeof current === "object"
           ? current.value
-          : max;
+          : defaultToMin ? min : max;
       const value = Math.min(Math.max(toInteger(fallbackValue), min), max);
       return [setting.key, { min, spent, bonus, value, max }];
     })

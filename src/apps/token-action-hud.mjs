@@ -1,5 +1,5 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
-import { TEMPLATES } from "../constants.mjs";
+import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import {
   getCreatureOptions,
   getNeedSettings,
@@ -27,7 +27,9 @@ import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { FalloutMaWFormApplicationV2, getFlatFormData } from "./base-form-application-v2.mjs";
 
-const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const FormDataExtended = foundry.applications.ux.FormDataExtended;
+const DAMAGE_EFFECT_FLAG_KEY = "damageEffect";
 const ACTIVE_WEAPON_SET_FLAG = "activeWeaponSet";
 const TOKEN_ACTION_HUD_SCALE_DEFAULT = 50;
 const TOKEN_ACTION_HUD_SCALE_MIN = 25;
@@ -198,11 +200,19 @@ function applyTokenActionHudScale(percent) {
 
 function getSelectedTokenForHud() {
   const controlled = canvas?.tokens?.controlled ?? [];
-  if (controlled.length !== 1) return null;
-  const token = controlled[0];
-  const actor = token?.actor;
-  if (!actor?.testUserPermission?.(game.user, "LIMITED")) return null;
-  return token;
+  return controlled.find(token => token?.actor?.testUserPermission?.(game.user, "LIMITED")) ?? null;
+}
+
+function getSelectedHudActors() {
+  const actors = [];
+  const seen = new Set();
+  for (const token of canvas?.tokens?.controlled ?? []) {
+    const actor = token?.actor;
+    if (!actor?.testUserPermission?.(game.user, "OWNER") || seen.has(actor.uuid)) continue;
+    seen.add(actor.uuid);
+    actors.push(actor);
+  }
+  return actors;
 }
 
 class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -229,6 +239,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       toggleTray: TokenActionHud.#onToggleTray,
       toggleMeterSection: TokenActionHud.#onToggleMeterSection,
       cycleWeaponSet: TokenActionHud.#onCycleWeaponSet,
+      gmHealSelected: TokenActionHud.#onGmHealSelected,
+      gmAwardExperience: TokenActionHud.#onGmAwardExperience,
       openSettings: TokenActionHud.#onOpenSettings,
       rollSkill: TokenActionHud.#onRollSkill,
       openItem: TokenActionHud.#onOpenItem,
@@ -278,6 +290,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       token: this.#token,
       limbs: limbSilhouette?.visible ? [] : prepareLimbEntries(displayLimbs),
       limbSilhouette,
+      gmControls: game.user?.isGM ? {
+        selectedCount: getSelectedHudActors().length
+      } : null,
       resources: prepareResourceEntries(actor),
       needs: prepareNeedEntries(actor),
       activeTray: this.#activeTray,
@@ -364,6 +379,70 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     tokenActionHudSettings ??= new TokenActionHudSettings();
     return tokenActionHudSettings.render({ force: true });
+  }
+
+  static async #onGmHealSelected(event) {
+    event.preventDefault();
+    if (!game.user?.isGM) return undefined;
+
+    const actors = getSelectedHudActors();
+    if (!actors.length) return undefined;
+    const confirmed = await DialogV2.confirm({
+      window: {
+        title: "Полное восстановление"
+      },
+      content: `<p>Полностью вылечить выбранных актеров: ${actors.length}?</p>`,
+      yes: {
+        label: "Вылечить",
+        icon: "fa-solid fa-kit-medical"
+      },
+      no: {
+        label: "Отмена"
+      },
+      rejectClose: false
+    });
+    if (!confirmed) return undefined;
+
+    for (const actor of actors) await fullyRestoreActor(actor);
+    return this.render({ force: true });
+  }
+
+  static async #onGmAwardExperience(event) {
+    event.preventDefault();
+    if (!game.user?.isGM) return undefined;
+
+    const actors = getSelectedHudActors();
+    if (!actors.length) return undefined;
+    const formData = await DialogV2.input({
+      window: {
+        title: "Выдать опыт"
+      },
+      content: `
+        <p>Выдать опыт выбранным актерам: ${actors.length}.</p>
+        <label class="fallout-maw-stacked-field">
+          <span>Опыт</span>
+          <input type="number" name="experience" value="0" min="0" step="1" autofocus>
+        </label>
+      `,
+      ok: {
+        label: "Выдать",
+        icon: "fa-solid fa-star",
+        callback: (_event, button) => new FormDataExtended(button.form).object
+      },
+      position: {
+        width: 420
+      },
+      rejectClose: false
+    });
+    if (!formData) return undefined;
+
+    const amount = Math.max(0, toInteger(formData.experience));
+    if (!amount) return undefined;
+    for (const actor of actors) {
+      const current = Math.max(0, toInteger(actor.system?.development?.experience));
+      await actor.update({ "system.development.experience": current + amount });
+    }
+    return this.render({ force: true });
   }
 
   static async #onCycleWeaponSet(event) {
@@ -775,8 +854,10 @@ function applyMeterPreview(meter, spent) {
   const min = toInteger(meter.dataset.resourceMin);
   const value = toInteger(meter.dataset.resourceValue);
   const max = Math.max(min, toInteger(meter.dataset.resourceMax));
+  const limited = Math.min(Math.max(0, toInteger(meter.dataset.resourceLimited)), Math.max(0, value - min));
   const range = Math.max(0, max - min);
-  const cappedSpend = Math.min(Math.max(0, spent), Math.max(0, value - min));
+  const availableValue = Math.max(min, value - limited);
+  const cappedSpend = Math.min(Math.max(0, spent), Math.max(0, availableValue - min));
   if (!range || !cappedSpend) {
     meter.classList.remove("preview-spend");
     meter.style.removeProperty("--meter-preview-left");
@@ -784,7 +865,7 @@ function applyMeterPreview(meter, spent) {
     return;
   }
 
-  const left = ((value - cappedSpend - min) / range) * 100;
+  const left = ((availableValue - cappedSpend - min) / range) * 100;
   const width = (cappedSpend / range) * 100;
   meter.style.setProperty("--meter-preview-left", `${Math.max(0, left).toFixed(2)}%`);
   meter.style.setProperty("--meter-preview-width", `${Math.min(100, width).toFixed(2)}%`);
@@ -808,6 +889,44 @@ function addLimitedResourceDisplay(entry, limit = null) {
       `--meter-blocked-color: ${color}`
     ].join("; ")
   };
+}
+
+async function fullyRestoreActor(actor) {
+  if (!actor?.isOwner) return;
+
+  const traumaIds = actor.items
+    .filter(item => item.type === "trauma")
+    .map(item => item.id);
+  if (traumaIds.length) await actor.deleteEmbeddedDocuments("Item", traumaIds);
+
+  const damageEffectIds = actor.effects
+    .filter(effect => isDamageSystemEffect(effect))
+    .map(effect => effect.id);
+  if (damageEffectIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", damageEffectIds);
+
+  const updates = {};
+  for (const [key, limb] of Object.entries(actor.system?.limbs ?? {})) {
+    const max = Math.max(0, toInteger(limb?.max));
+    updates[`system.limbs.${key}.value`] = max;
+    updates[`system.limbs.${key}.damageAccumulation`] = {};
+  }
+  for (const [key, resource] of Object.entries(actor.system?.resources ?? {})) {
+    const max = Math.max(Math.max(0, toInteger(resource?.min)), toInteger(resource?.max));
+    updates[`system.resources.${key}.value`] = max;
+    updates[`system.resources.${key}.spent`] = 0;
+  }
+  for (const [key, need] of Object.entries(actor.system?.needs ?? {})) {
+    const min = Math.max(0, toInteger(need?.min));
+    updates[`system.needs.${key}.value`] = min;
+    updates[`system.needs.${key}.spent`] = 0;
+  }
+  if (Object.keys(updates).length) await actor.update(updates);
+}
+
+function isDamageSystemEffect(effect) {
+  if (!effect) return false;
+  const flags = effect.flags?.[SYSTEM_ID] ?? effect.flags?.[FALLOUT_MAW.id] ?? {};
+  return Boolean(flags[DAMAGE_EFFECT_FLAG_KEY] || flags.traumaItem);
 }
 
 function getActiveWeaponSet(actor, weaponSets = []) {

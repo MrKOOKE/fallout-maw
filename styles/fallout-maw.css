@@ -3312,6 +3312,39 @@ label.fallout-maw-mitigation-cell {
   margin-top: 8px;
 }
 
+.fallout-maw-token-hud-limbs-title {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+}
+
+.fallout-maw-token-hud-gm-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.fallout-maw-token-hud-gm-actions button {
+  align-items: center;
+  aspect-ratio: 1;
+  background: rgba(242, 213, 129, 0.08);
+  border: 1px solid rgba(242, 213, 129, 0.42);
+  color: #f2d581;
+  display: inline-flex;
+  font-size: 0.72rem;
+  height: 20px;
+  justify-content: center;
+  line-height: 1;
+  margin: 0;
+  padding: 0;
+  width: 20px;
+}
+
+.fallout-maw-token-hud-gm-actions button:hover,
+.fallout-maw-token-hud-gm-actions button:focus-visible {
+  background: rgba(242, 213, 129, 0.18);
+}
+
 .fallout-maw-token-hud-collapse-toggle {
   align-items: center;
   background: transparent;

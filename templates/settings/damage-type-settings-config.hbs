@@ -16,6 +16,35 @@
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
       <label class="fallout-maw-section-toggle">
+        <input type="hidden" name="settings.needIncrease.enabled" value="false">
+        <input type="checkbox" name="settings.needIncrease.enabled" value="true" {{checked settings.needIncrease.enabled}}>
+        <span>Увеличение потребности</span>
+      </label>
+    </header>
+    <div class="fallout-maw-list-grid two-columns">
+      <label>
+        <span>Потребность</span>
+        <select name="settings.needIncrease.needKey">
+          {{#each needOptions}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
+        <span>% конвертации</span>
+        <input type="number" name="settings.needIncrease.percent" value="{{settings.needIncrease.percent}}" min="0" step="1">
+      </label>
+      <label class="fallout-maw-inline-checkbox">
+        <span>Не наносить урон по ОЗ</span>
+        <input type="hidden" name="settings.needIncrease.preventHealthDamage" value="false">
+        <input type="checkbox" name="settings.needIncrease.preventHealthDamage" value="true" {{checked settings.needIncrease.preventHealthDamage}}>
+      </label>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <label class="fallout-maw-section-toggle">
         <input type="hidden" name="settings.periodic.enabled" value="false">
         <input type="checkbox" name="settings.periodic.enabled" value="true" {{checked settings.periodic.enabled}}>
         <span>Периодический урон</span>

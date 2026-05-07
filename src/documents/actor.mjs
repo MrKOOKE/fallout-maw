@@ -240,7 +240,7 @@ function applyNewActorResourceDefaults(actor) {
     system: {
       currencies: initializeCurrencyMap(getCurrencySettings()),
       resources: maximizeResourceMap(actor.system?.resources),
-      needs: maximizeResourceMap(actor.system?.needs),
+      needs: minimizeResourceMap(actor.system?.needs),
       researches: normalizeResearchCollection(actor.system?.researches),
       proficiencies: initializeProficiencyMap(actor.system?.proficiencies),
       limbs: maximizeResourceMap(actor.system?.limbs)
@@ -307,6 +307,17 @@ function maximizeResourceMap(resources = {}) {
       const bonus = toInteger(resource?.bonus);
       const max = Number(resource?.max) || min;
       return [key, { ...resource, min, bonus, value: max, max }];
+    })
+  );
+}
+
+function minimizeResourceMap(resources = {}) {
+  return Object.fromEntries(
+    Object.entries(resources ?? {}).map(([key, resource]) => {
+      const min = Number(resource?.min) || 0;
+      const bonus = toInteger(resource?.bonus);
+      const max = Math.max(min, Number(resource?.max) || min);
+      return [key, { ...resource, min, bonus, value: min, max }];
     })
   );
 }

@@ -2,6 +2,7 @@ import { TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN } from "../formulas/index.mjs";
 import {
   getDamageTypeSettings,
+  getNeedSettings,
   getResourceSettings,
   resetDamageTypeSettings,
   setDamageTypeSettings
@@ -193,6 +194,7 @@ class DamageTypeSettingsConfig extends FalloutMaWFormApplicationV2 {
       ...(await super._prepareContext(options)),
       damageType: this.damageType,
       settings: this.damageType.settings ?? {},
+      needOptions: prepareNeedOptions(this.damageType.settings?.needIncrease?.needKey ?? ""),
       resourceLimitRows: prepareResourceLimitRows(this.damageType.settings?.resourceLimit?.resources ?? [])
     };
   }
@@ -249,6 +251,12 @@ function normalizeSettingsFromForm(settings = {}) {
       tickCount: toInteger(settings.periodic?.tickCount),
       intervalSeconds: toInteger(settings.periodic?.intervalSeconds || 6)
     },
+    needIncrease: {
+      enabled: toBoolean(settings.needIncrease?.enabled, false),
+      needKey: String(settings.needIncrease?.needKey ?? "").trim(),
+      percent: Math.max(0, toDecimal(settings.needIncrease?.percent, 100)),
+      preventHealthDamage: toBoolean(settings.needIncrease?.preventHealthDamage, false)
+    },
     resourceLimit: {
       enabled: toBoolean(resourceLimit.enabled, false),
       effectName: String(resourceLimit.effectName ?? "").trim(),
@@ -287,6 +295,13 @@ function prepareResourceLimitRows(resources = []) {
       ...resource,
       selected: resource.key === entry.resourceKey
     }))
+  }));
+}
+
+function prepareNeedOptions(selectedKey = "") {
+  return getNeedSettings().map(need => ({
+    ...need,
+    selected: need.key === selectedKey
   }));
 }
 

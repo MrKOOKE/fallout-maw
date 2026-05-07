@@ -22,7 +22,15 @@
     </section>
 
     <section class="fallout-maw-token-hud-block fallout-maw-token-hud-limbs">
-      <div class="fallout-maw-token-hud-block-title">Части тела</div>
+      <div class="fallout-maw-token-hud-block-title fallout-maw-token-hud-limbs-title">
+        <span>Части тела</span>
+        {{#if gmControls}}
+        <span class="fallout-maw-token-hud-gm-actions">
+          <button type="button" data-action="gmHealSelected" title="Полностью вылечить выбранных актеров"><i class="fa-solid fa-kit-medical"></i></button>
+          <button type="button" data-action="gmAwardExperience" title="Выдать опыт выбранным актерам"><i class="fa-solid fa-star"></i></button>
+        </span>
+        {{/if}}
+      </div>
       {{#if limbSilhouette.visible}}
       <svg class="fallout-maw-token-hud-limb-silhouette" viewBox="{{limbSilhouette.viewBox}}" role="img" aria-label="Limbs" data-limb-popover-root>
         {{#each limbSilhouette.parts}}
@@ -64,7 +72,7 @@
               <span>{{label}}</span>
               <strong>{{value}} / {{max}}</strong>
             </div>
-            <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}" data-token-hud-resource-meter data-resource-key="{{key}}" data-resource-min="{{min}}" data-resource-value="{{value}}" data-resource-max="{{max}}">
+            <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}" data-token-hud-resource-meter data-resource-key="{{key}}" data-resource-min="{{min}}" data-resource-value="{{value}}" data-resource-max="{{max}}" data-resource-limited="{{blockedAmount}}">
               <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
               {{#if blockedAmount}}<span class="fallout-maw-resource-meter-blocked" style="{{blockedStyle}}" aria-hidden="true"></span>{{/if}}
               <span class="fallout-maw-resource-meter-preview" aria-hidden="true"></span>

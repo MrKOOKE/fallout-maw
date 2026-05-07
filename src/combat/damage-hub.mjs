@@ -84,6 +84,17 @@ export async function applyDamageApplication(request = {}) {
     : mitigatedAmount;
   if (effectiveAmount <= 0) return { actor, amount: 0, healthDelta: 0, limbDelta: 0, mode, scope };
 
+  const needIncrease = damageType?.settings?.needIncrease;
+  if (mode === MODE_DAMAGE && data.processDamageTypeSettings && needIncrease?.enabled) {
+    await applyNeedIncrease(actor, {
+      amount: effectiveAmount,
+      settings: needIncrease
+    });
+    if (needIncrease.preventHealthDamage) {
+      return { actor, amount: 0, potentialAmount: effectiveAmount, healthDelta: 0, limbDelta: 0, mode, scope };
+    }
+  }
+
   const periodic = damageType?.settings?.periodic;
   if (mode === MODE_DAMAGE && data.processDamageTypeSettings && periodic?.enabled) {
     const immediateAmount = roundDamageAmount(effectiveAmount * (Number(periodic.immediatePercent) || 0) / 100);
@@ -324,6 +335,24 @@ async function createResourceLimitEffect(actor, { damageType = {}, healthDelta =
     },
     system: { changes: [] }
   }]);
+}
+
+async function applyNeedIncrease(actor, { amount = 0, settings = {} } = {}) {
+  const needKey = String(settings.needKey ?? "").trim();
+  const need = actor.system?.needs?.[needKey];
+  if (!need) return null;
+
+  const delta = roundDamageAmount(Math.max(0, Number(amount) || 0) * (Math.max(0, Number(settings.percent) || 0) / 100));
+  if (!delta) return null;
+
+  const min = Math.max(0, toInteger(need.min));
+  const max = Math.max(min, toInteger(need.max));
+  const current = Math.min(Math.max(toInteger(need.value), min), max);
+  const next = Math.min(max, current + delta);
+  if (next === current) return null;
+
+  await actor.update({ [`system.needs.${needKey}.value`]: next });
+  return { needKey, delta: next - current, value: next };
 }
 
 async function handleDamageSocketMessage(payload = {}) {

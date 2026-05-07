@@ -49,12 +49,16 @@ export function getCombatMovementResourceState(actor) {
     movement: {
       key: MOVEMENT_RESOURCE_KEY,
       label: MOVEMENT_RESOURCE_LABEL,
+      current: movementValue,
+      limited: limitedMovement,
       value: Math.max(0, movementValue - limitedMovement),
       max: Math.max(0, toInteger(movement.max))
     },
     action: {
       key: ACTION_RESOURCE_KEY,
       label: ACTION_RESOURCE_LABEL,
+      current: actionValue,
+      limited: limitedAction,
       value: Math.max(0, actionValue - limitedAction),
       max: Math.max(0, toInteger(action.max))
     },
@@ -160,8 +164,8 @@ async function spendCombatMovementResources(tokenDocument, movement, _operation,
   if (!movementSpend && !actionSpend) return;
 
   const updates = {};
-  if (movementSpend) updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = state.movement.value - movementSpend;
-  if (actionSpend) updates[`system.resources.${ACTION_RESOURCE_KEY}.value`] = state.action.value - actionSpend;
+  if (movementSpend) updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = Math.max(0, state.movement.current - movementSpend);
+  if (actionSpend) updates[`system.resources.${ACTION_RESOURCE_KEY}.value`] = Math.max(0, state.action.current - actionSpend);
   updates[`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`] = [
     ...getMovementResourceSpendingStack(actor),
     createMovementResourceSpendingEntry(tokenDocument, movement, {
