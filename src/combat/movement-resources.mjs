@@ -95,6 +95,12 @@ export function getCombatMovementCost(movement) {
   return Math.ceil(rawCost);
 }
 
+export function getCombatMovementAffordabilityCost(movement) {
+  const cost = getMovementSectionCost(movement?.passed) + getMovementSectionCost(movement?.pending);
+  if (cost > 0) return Math.ceil(cost);
+  return getCombatMovementCost(movement);
+}
+
 export function isCombatMovementTracked(tokenDocument) {
   const combat = game.combat;
   if (!combat?.started || !tokenDocument?.actor) return false;
@@ -117,7 +123,7 @@ function preventUnaffordableCombatMovement(tokenDocument, movement) {
   if (movement?.method === "undo") return true;
   if (isGMDebugMovementBypassActive()) return true;
 
-  const cost = getCombatMovementCost(movement);
+  const cost = getCombatMovementAffordabilityCost(movement);
   if (cost <= 0) return true;
 
   const state = getCombatMovementResourceState(tokenDocument.actor);
@@ -255,6 +261,12 @@ async function waitForMovementAnimation(movement) {
   } catch (_error) {
     // Movement resource spending is best-effort after whatever animation state Foundry exposes.
   }
+}
+
+function getMovementSectionCost(section) {
+  const cost = Number(section?.cost ?? 0);
+  if (!Number.isFinite(cost) || cost <= 0) return 0;
+  return cost;
 }
 
 function toInteger(value) {
