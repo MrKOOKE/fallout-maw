@@ -1,4 +1,6 @@
 import { FALLOUT_MAW, syncSystemConfig } from "./config/system-config.mjs";
+import { FalloutMaWTokenRuler } from "./canvas/token-ruler.mjs";
+import { registerCombatMovementHooks } from "./combat/movement-resources.mjs";
 import { registerDataModels, registerTrackableAttributes } from "./data/index.mjs";
 import { FalloutMaWActor, FalloutMaWItem } from "./documents/index.mjs";
 import { getCreatureOptions } from "./settings/accessors.mjs";
@@ -35,6 +37,7 @@ Hooks.once("init", () => {
   CONFIG.FalloutMaW = syncSystemConfig();
   CONFIG.Actor.documentClass = FalloutMaWActor;
   CONFIG.Item.documentClass = FalloutMaWItem;
+  CONFIG.Token.rulerClass = FalloutMaWTokenRuler;
   CONFIG.time.roundTime = 6;
   CONFIG.time.turnTime = 0;
   CONFIG.ActiveEffect.expiryAction = "delete";
@@ -44,6 +47,7 @@ Hooks.once("init", () => {
   registerSystemSheets();
   registerDataModels();
   registerTrackableAttributes();
+  registerCombatMovementHooks();
   registerSkillCheckControlHooks();
   registerTokenActionHudHooks();
 });

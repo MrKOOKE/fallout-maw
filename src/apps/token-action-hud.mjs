@@ -13,6 +13,7 @@ import {
 } from "../settings/constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getLimbHealingCap } from "../combat/damage-hub.mjs";
+import { MOVEMENT_RESOURCE_PREVIEW_HOOK } from "../combat/movement-resources.mjs";
 import { openLimbDamageDialog } from "./limb-damage-dialog.mjs";
 import {
   FALLBACK_ICON,
@@ -49,6 +50,7 @@ let hooksRegistered = false;
 let tokenActionHudRefresh = null;
 let tokenActionHudLayoutRefresh = null;
 let tokenActionHudPreviewPercent = null;
+let tokenActionHudMovementPreview = null;
 
 export function registerTokenActionHudHooks() {
   if (hooksRegistered) return;
@@ -62,6 +64,7 @@ export function registerTokenActionHudHooks() {
   Hooks.on("deleteItem", scheduleTokenActionHudRefreshForItem);
   Hooks.on("updateToken", scheduleTokenActionHudRefresh);
   Hooks.on("updateSetting", scheduleTokenActionHudRefreshForSetting);
+  Hooks.on(MOVEMENT_RESOURCE_PREVIEW_HOOK, applyTokenActionHudMovementPreview);
   window.addEventListener("resize", scheduleTokenActionHudRefresh);
   tokenActionHudRefresh = foundry.utils.debounce(syncTokenActionHud, 60);
   tokenActionHudLayoutRefresh = foundry.utils.debounce(layoutCurrentTokenActionHud, 60);
@@ -129,6 +132,11 @@ function layoutCurrentTokenActionHud() {
   if (!tokenActionHud?.element?.isConnected) return;
   tokenActionHud.element.classList.remove("layout-ready");
   layoutTokenActionHud(tokenActionHud.element);
+}
+
+function applyTokenActionHudMovementPreview(preview) {
+  tokenActionHudMovementPreview = preview;
+  tokenActionHud?.applyMovementResourcePreview(preview);
 }
 
 function addTokenActionHudControlButton(controls) {
@@ -285,8 +293,26 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       silhouette.addEventListener("pointerleave", () => this.#onLimbPopoverLeaveRoot());
       this.#limbPopover.boundRoot = silhouette;
     }
+    this.applyMovementResourcePreview(tokenActionHudMovementPreview);
     this.element?.classList.remove("layout-ready");
     this.#scheduleLayout();
+  }
+
+  applyMovementResourcePreview(preview) {
+    const resources = this.#getMovementResourcePreviewResources(preview);
+    for (const meter of this.element?.querySelectorAll("[data-token-hud-resource-meter]") ?? []) {
+      const key = String(meter.dataset.resourceKey ?? "");
+      const spent = Math.max(0, toInteger(resources?.[key]));
+      applyMeterPreview(meter, spent);
+    }
+  }
+
+  #getMovementResourcePreviewResources(preview) {
+    if (!preview || preview.actorUuid !== this.actor?.uuid) return null;
+    if (preview.tokenId && preview.tokenId !== this.#token?.document?.id) return null;
+    const sceneId = this.#token?.document?.parent?.id ?? this.#token?.document?.scene?.id ?? "";
+    if (preview.sceneId && sceneId && preview.sceneId !== sceneId) return null;
+    return preview.resources ?? null;
   }
 
   async _onClose(options) {
@@ -709,6 +735,28 @@ function prepareActions(activeTray, activeWeaponSet, items, abilities) {
       count
     };
   });
+}
+
+function applyMeterPreview(meter, spent) {
+  if (!meter) return;
+
+  const min = toInteger(meter.dataset.resourceMin);
+  const value = toInteger(meter.dataset.resourceValue);
+  const max = Math.max(min, toInteger(meter.dataset.resourceMax));
+  const range = Math.max(0, max - min);
+  const cappedSpend = Math.min(Math.max(0, spent), Math.max(0, value - min));
+  if (!range || !cappedSpend) {
+    meter.classList.remove("preview-spend");
+    meter.style.removeProperty("--meter-preview-left");
+    meter.style.removeProperty("--meter-preview-width");
+    return;
+  }
+
+  const left = ((value - cappedSpend - min) / range) * 100;
+  const width = (cappedSpend / range) * 100;
+  meter.style.setProperty("--meter-preview-left", `${Math.max(0, left).toFixed(2)}%`);
+  meter.style.setProperty("--meter-preview-width", `${Math.min(100, width).toFixed(2)}%`);
+  meter.classList.add("preview-spend");
 }
 
 function getActiveWeaponSet(actor, weaponSets = []) {
