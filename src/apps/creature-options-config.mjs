@@ -263,7 +263,8 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     race.limbs.push({
       key: id,
       label: "Новая конечность",
-      stateMax: 100
+      stateMax: 100,
+      damageMultiplier: 1
     });
     return this.forceRender();
   }
@@ -433,7 +434,8 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     return rows.map(row => ({
       key: row.querySelector("[data-field='key']")?.value?.trim() ?? "",
       label: row.querySelector("[data-field='label']")?.value?.trim() || localize("FALLOUTMAW.Common.Untitled"),
-      stateMax: Math.max(0, toInteger(row.querySelector("[data-field='stateMax']")?.value))
+      stateMax: Math.max(0, toInteger(row.querySelector("[data-field='stateMax']")?.value)),
+      damageMultiplier: toDecimal(row.querySelector("[data-field='damageMultiplier']")?.value, 1)
     })).filter(limb => limb.key);
   }
 
@@ -534,4 +536,9 @@ function getUniqueId(baseId, existingIds) {
   let index = 2;
   while (used.has(`${baseId}${index}`)) index += 1;
   return `${baseId}${index}`;
+}
+
+function toDecimal(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }

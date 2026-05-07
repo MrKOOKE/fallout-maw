@@ -996,6 +996,19 @@
   z-index: 2;
 }
 
+.fallout-maw-resource-meter-blocked {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--meter-blocked-color, #3f8cff) 72%, #ffffff), color-mix(in srgb, var(--meter-blocked-color, #3f8cff) 72%, #000000));
+  bottom: 1px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24), 0 0 12px color-mix(in srgb, var(--meter-blocked-color, #3f8cff) 48%, transparent);
+  display: block;
+  left: var(--meter-blocked-left, 0%);
+  pointer-events: none;
+  position: absolute;
+  top: 1px;
+  width: var(--meter-blocked-width, 0%);
+  z-index: 2;
+}
+
 .fallout-maw-resource-meter.preview-spend .fallout-maw-resource-meter-preview {
   opacity: 1;
 }
@@ -4155,7 +4168,18 @@ label.fallout-maw-mitigation-cell {
 }
 
 .damage-type-settings .fallout-maw-settings-row {
-  grid-template-columns: 2rem minmax(130px, 1fr) minmax(160px, 1.4fr) 2.5rem;
+  grid-template-columns: 2rem minmax(130px, 1fr) minmax(160px, 1.4fr) 2.5rem 2.5rem;
+}
+
+.damage-type-settings .fallout-maw-icon-button {
+  align-items: center;
+  aspect-ratio: 1;
+  display: inline-flex;
+  height: 2.25rem;
+  justify-content: center;
+  justify-self: center;
+  padding: 0;
+  width: 2.25rem;
 }
 
 .currency-settings .fallout-maw-settings-row {
@@ -4185,7 +4209,7 @@ label.fallout-maw-mitigation-cell {
 }
 
 .limb-settings .fallout-maw-settings-row {
-  grid-template-columns: minmax(110px, 0.45fr) minmax(160px, 1fr) 130px 2.5rem;
+  grid-template-columns: minmax(110px, 0.45fr) minmax(160px, 1fr) 130px 90px 2.5rem;
 }
 
 .fallout-maw-settings-actions {

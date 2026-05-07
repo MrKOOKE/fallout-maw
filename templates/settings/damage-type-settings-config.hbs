@@ -1,0 +1,86 @@
+<div class="fallout-maw-config-body">
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>{{damageType.label}}</h2>
+      <p class="hint">{{damageType.key}}</p>
+    </header>
+
+    <div class="fallout-maw-list-grid two-columns">
+      <label class="fallout-maw-inline-checkbox">
+        <span>Множитель части тела к ОЗ</span>
+        <input type="hidden" name="settings.limbHealthMultiplier.enabled" value="false">
+        <input type="checkbox" name="settings.limbHealthMultiplier.enabled" value="true" {{checked settings.limbHealthMultiplier.enabled}}>
+      </label>
+      <label>
+        <span>Множитель состояния конечности</span>
+        <input type="number" name="settings.limbStateDamage.multiplier" value="{{settings.limbStateDamage.multiplier}}" min="0" step="0.1">
+      </label>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <h2>Периодический урон</h2>
+    <div class="fallout-maw-list-grid two-columns">
+      <label class="fallout-maw-inline-checkbox">
+        <span>Включить</span>
+        <input type="hidden" name="settings.periodic.enabled" value="false">
+        <input type="checkbox" name="settings.periodic.enabled" value="true" {{checked settings.periodic.enabled}}>
+      </label>
+      <label>
+        <span>Название эффекта</span>
+        <input type="text" name="settings.periodic.effectName" value="{{settings.periodic.effectName}}">
+      </label>
+      <label>
+        <span>Изображение эффекта</span>
+        <file-picker type="image" name="settings.periodic.img" value="{{settings.periodic.img}}"></file-picker>
+      </label>
+      <label>
+        <span>% сразу</span>
+        <input type="number" name="settings.periodic.immediatePercent" value="{{settings.periodic.immediatePercent}}" min="0" max="100" step="1">
+      </label>
+      <label>
+        <span>% отложенно</span>
+        <input type="number" name="settings.periodic.delayedPercent" value="{{settings.periodic.delayedPercent}}" min="0" max="100" step="1">
+      </label>
+      <label>
+        <span>Тиков</span>
+        <input type="number" name="settings.periodic.tickCount" value="{{settings.periodic.tickCount}}" min="0" step="1">
+      </label>
+      <label>
+        <span>Интервал, секунд</span>
+        <input type="number" name="settings.periodic.intervalSeconds" value="{{settings.periodic.intervalSeconds}}" min="1" step="1">
+      </label>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <h2>Блок ОД/ОП</h2>
+    <div class="fallout-maw-list-grid two-columns">
+      <label class="fallout-maw-inline-checkbox">
+        <span>Включить</span>
+        <input type="hidden" name="settings.resourceBlock.enabled" value="false">
+        <input type="checkbox" name="settings.resourceBlock.enabled" value="true" {{checked settings.resourceBlock.enabled}}>
+      </label>
+      <label>
+        <span>Название блока</span>
+        <input type="text" name="settings.resourceBlock.effectName" value="{{settings.resourceBlock.effectName}}">
+      </label>
+      <label>
+        <span>Изображение блока</span>
+        <file-picker type="image" name="settings.resourceBlock.img" value="{{settings.resourceBlock.img}}"></file-picker>
+      </label>
+      <label>
+        <span>Цвет блока</span>
+        <input type="color" name="settings.resourceBlock.color" value="{{settings.resourceBlock.color}}">
+      </label>
+      <label>
+        <span>Длительность блока, секунд</span>
+        <input type="number" name="settings.resourceBlock.durationSeconds" value="{{settings.resourceBlock.durationSeconds}}" min="1" step="1">
+      </label>
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  </footer>
+</div>

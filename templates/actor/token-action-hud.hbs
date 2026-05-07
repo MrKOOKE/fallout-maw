@@ -66,6 +66,7 @@
             </div>
             <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}" data-token-hud-resource-meter data-resource-key="{{key}}" data-resource-min="{{min}}" data-resource-value="{{value}}" data-resource-max="{{max}}">
               <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
+              {{#if blockedAmount}}<span class="fallout-maw-resource-meter-blocked" style="{{blockedStyle}}" aria-hidden="true"></span>{{/if}}
               <span class="fallout-maw-resource-meter-preview" aria-hidden="true"></span>
             </div>
           </div>

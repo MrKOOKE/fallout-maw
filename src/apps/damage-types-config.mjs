@@ -2,7 +2,7 @@ import { TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN } from "../formulas/index.mjs";
 import { getDamageTypeSettings, resetDamageTypeSettings, setDamageTypeSettings } from "../settings/accessors.mjs";
 import { format, localize } from "../utils/i18n.mjs";
-import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
+import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateSettingsReorder } from "./settings-reorder.mjs";
 
 export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
@@ -24,7 +24,8 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
     actions: {
       createDamageType: this.#onCreateDamageType,
       deleteDamageType: this.#onDeleteDamageType,
-      resetDefaults: this.#onResetDefaults
+      resetDefaults: this.#onResetDefaults,
+      openDamageTypeSettings: this.#onOpenDamageTypeSettings
     }
   };
 
@@ -84,12 +85,38 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
+  static #onOpenDamageTypeSettings(event, target) {
+    event.preventDefault();
+    this.damageTypes = this.#readDamageTypesFromForm();
+    const rows = Array.from(this.form?.querySelectorAll("[data-damage-type-row]") ?? []);
+    const index = rows.indexOf(target.closest("[data-damage-type-row]"));
+    const damageType = this.damageTypes[index];
+    if (!damageType) return undefined;
+
+    return new DamageTypeSettingsConfig({
+      damageType,
+      onSave: settings => {
+        this.damageTypes = this.#readDamageTypesFromForm();
+        if (!this.damageTypes[index]) return;
+        this.damageTypes[index].settings = settings;
+        this.forceRender();
+      }
+    }).render({ force: true });
+  }
+
   #readDamageTypesFromForm() {
     const rows = Array.from(this.form?.querySelectorAll("[data-damage-type-row]") ?? []);
-    return rows.map(row => ({
-      key: row.querySelector("[data-field='key']")?.value?.trim() ?? "",
-      label: row.querySelector("[data-field='label']")?.value?.trim() ?? ""
-    }));
+    return rows.map((row, index) => {
+      const key = row.querySelector("[data-field='key']")?.value?.trim() ?? "";
+      const existing = this.damageTypes.find(damageType => damageType.key === key)?.settings
+        ?? this.damageTypes[index]?.settings
+        ?? {};
+      return {
+        key,
+        label: row.querySelector("[data-field='label']")?.value?.trim() ?? "",
+        settings: foundry.utils.deepClone(existing)
+      };
+    });
   }
 
   #validateDamageTypes(damageTypes) {
@@ -113,6 +140,98 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
     while (keys.has(`${baseKey}${index}`)) index += 1;
     return `${baseKey}${index}`;
   }
+}
+
+class DamageTypeSettingsConfig extends FalloutMaWFormApplicationV2 {
+  constructor({ damageType = {}, onSave = null } = {}) {
+    super();
+    this.damageType = foundry.utils.deepClone(damageType);
+    this.damageType.settings = normalizeSettingsFromForm(this.damageType.settings ?? {});
+    this.onSave = onSave;
+  }
+
+  static DEFAULT_OPTIONS = {
+    id: "fallout-maw-damage-type-settings",
+    classes: ["fallout-maw", "fallout-maw-config-form", "damage-type-settings-config"],
+    position: {
+      width: 620,
+      height: "auto"
+    },
+    window: {
+      resizable: true
+    },
+    form: {
+      handler: FalloutMaWFormApplicationV2.handleFormSubmit,
+      submitOnChange: false,
+      closeOnSubmit: true
+    }
+  };
+
+  static PARTS = {
+    form: {
+      template: TEMPLATES.settings.damageTypeSettings
+    }
+  };
+
+  get title() {
+    return `Доп. настройки урона: ${this.damageType.label || this.damageType.key}`;
+  }
+
+  async _prepareContext(options) {
+    return {
+      ...(await super._prepareContext(options)),
+      damageType: this.damageType,
+      settings: this.damageType.settings ?? {}
+    };
+  }
+
+  async _processFormData(_event, _form, formData) {
+    const data = getExpandedFormData(formData);
+    this.onSave?.(normalizeSettingsFromForm(data.settings ?? {}));
+  }
+}
+
+function toInteger(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.trunc(number) : 0;
+}
+
+function toDecimal(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function normalizeSettingsFromForm(settings = {}) {
+  return {
+    limbHealthMultiplier: {
+      enabled: toBoolean(settings.limbHealthMultiplier?.enabled, true)
+    },
+    limbStateDamage: {
+      multiplier: toDecimal(settings.limbStateDamage?.multiplier, 1)
+    },
+    periodic: {
+      enabled: toBoolean(settings.periodic?.enabled, false),
+      effectName: String(settings.periodic?.effectName ?? "").trim(),
+      img: String(settings.periodic?.img ?? "").trim(),
+      immediatePercent: toDecimal(settings.periodic?.immediatePercent, 100),
+      delayedPercent: toDecimal(settings.periodic?.delayedPercent, 0),
+      tickCount: toInteger(settings.periodic?.tickCount),
+      intervalSeconds: toInteger(settings.periodic?.intervalSeconds || 6)
+    },
+    resourceBlock: {
+      enabled: toBoolean(settings.resourceBlock?.enabled, false),
+      effectName: String(settings.resourceBlock?.effectName ?? "").trim(),
+      img: String(settings.resourceBlock?.img ?? "").trim(),
+      color: String(settings.resourceBlock?.color ?? "#3f8cff").trim() || "#3f8cff",
+      durationSeconds: toInteger(settings.resourceBlock?.durationSeconds || 12)
+    }
+  };
+}
+
+function toBoolean(value, fallback = false) {
+  if (value === true || value === "true" || value === "on" || value === "1") return true;
+  if (value === false || value === "false" || value === "0" || value === "") return false;
+  return fallback;
 }
 
 function throwValidationError(message) {

@@ -88,14 +88,14 @@ export const DEFAULT_PROFICIENCIES = Object.freeze([
 ]);
 
 export const DEFAULT_LIMBS = Object.freeze([
-  { key: "head", label: "Голова", stateMax: 100 },
-  { key: "eyes", label: "Глаза", stateMax: 100 },
-  { key: "torso", label: "Туловище", stateMax: 100 },
-  { key: "groin", label: "Пах", stateMax: 100 },
-  { key: "leftArm", label: "Левая рука", stateMax: 100 },
-  { key: "rightArm", label: "Правая рука", stateMax: 100 },
-  { key: "leftLeg", label: "Левая нога", stateMax: 100 },
-  { key: "rightLeg", label: "Правая нога", stateMax: 100 }
+  { key: "head", label: "Голова", stateMax: 100, damageMultiplier: 1.3 },
+  { key: "eyes", label: "Глаза", stateMax: 100, damageMultiplier: 1.4 },
+  { key: "torso", label: "Туловище", stateMax: 100, damageMultiplier: 1 },
+  { key: "groin", label: "Пах", stateMax: 100, damageMultiplier: 1.2 },
+  { key: "leftArm", label: "Левая рука", stateMax: 100, damageMultiplier: 0.8 },
+  { key: "rightArm", label: "Правая рука", stateMax: 100, damageMultiplier: 0.8 },
+  { key: "leftLeg", label: "Левая нога", stateMax: 100, damageMultiplier: 0.8 },
+  { key: "rightLeg", label: "Правая нога", stateMax: 100, damageMultiplier: 0.8 }
 ]);
 
 export const DEFAULT_EQUIPMENT_SLOTS = Object.freeze([

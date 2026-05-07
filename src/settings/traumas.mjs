@@ -59,7 +59,7 @@ export function getLimbSetId(limbs = []) {
   const normalized = normalizeLimbSetLimbs(limbs);
   if (!normalized.length) return "";
   return normalized
-    .map(limb => `${limb.key}:${limb.label}:${limb.stateMax}`)
+    .map(limb => `${limb.key}:${limb.label}:${limb.stateMax}:${limb.damageMultiplier}`)
     .join("|");
 }
 
@@ -181,8 +181,14 @@ function normalizeLimbSetLimbs(limbs = []) {
     .map(limb => ({
       key: String(limb?.key ?? "").trim(),
       label: String(limb?.label ?? limb?.name ?? limb?.key ?? "").trim(),
-      stateMax: Math.max(0, toInteger(limb?.stateMax))
+      stateMax: Math.max(0, toInteger(limb?.stateMax)),
+      damageMultiplier: toDecimal(limb?.damageMultiplier, 1)
     }))
     .filter(limb => limb.key)
     .sort((left, right) => left.key.localeCompare(right.key));
+}
+
+function toDecimal(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }

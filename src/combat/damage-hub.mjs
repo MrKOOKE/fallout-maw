@@ -6,14 +6,23 @@ import { toInteger } from "../utils/numbers.mjs";
 const DAMAGE_SOCKET = `system.${SYSTEM_ID}`;
 const TRAUMA_FLAG_SCOPE = "fallout-maw";
 const TRAUMA_FLAG_KEY = "trauma";
+const DAMAGE_EFFECT_FLAG_KEY = "damageEffect";
+const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const MODE_DAMAGE = "damage";
 const MODE_HEALING = "healing";
 const SCOPE_LIMB = "limb";
 const SCOPE_HEALTH = "health";
 const SCOPE_HEALTH_AND_LIMB = "healthAndLimb";
+const ROUND_SECONDS = 6;
+const ACTION_RESOURCE_KEY = "actionPoints";
+const MOVEMENT_RESOURCE_KEY = "movementPoints";
+let damageTimeHooksRegistered = false;
+const combatRoundWorldTimes = new Map();
+const processingPeriodicEffectUuids = new Set();
 
 export function registerDamageSocket() {
   game.socket.on(DAMAGE_SOCKET, handleDamageSocketMessage);
+  registerDamageTimeHooks();
 }
 
 export async function requestDamageApplication({
@@ -25,6 +34,7 @@ export async function requestDamageApplication({
   mode = MODE_DAMAGE,
   scope = SCOPE_HEALTH_AND_LIMB,
   applyMitigation = true,
+  processDamageTypeSettings = true,
   source = {}
 } = {}) {
   const resolvedActor = actor ?? await fromUuid(actorUuid);
@@ -38,6 +48,7 @@ export async function requestDamageApplication({
     mode,
     scope,
     applyMitigation,
+    processDamageTypeSettings,
     source,
     requesterUserId: game.user?.id ?? ""
   });
@@ -67,15 +78,76 @@ export async function applyDamageApplication(request = {}) {
   const mode = data.mode === MODE_HEALING ? MODE_HEALING : MODE_DAMAGE;
   const scope = normalizeScope(data.scope, data.limbKey);
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
-  const effectiveAmount = mode === MODE_DAMAGE && data.applyMitigation
+  const mitigatedAmount = mode === MODE_DAMAGE && data.applyMitigation
     ? calculateEffectiveDamage(actor, data.amount, damageType?.key ?? "", data.limbKey)
     : data.amount;
-  if (effectiveAmount <= 0) return { actor, amount: 0, mode, scope };
+  const effectiveAmount = mode === MODE_DAMAGE && data.processDamageTypeSettings
+    ? applyLimbHealthMultiplier(actor, mitigatedAmount, damageType, data.limbKey)
+    : mitigatedAmount;
+  if (effectiveAmount <= 0) return { actor, amount: 0, healthDelta: 0, limbDelta: 0, mode, scope };
+
+  const periodic = damageType?.settings?.periodic;
+  if (mode === MODE_DAMAGE && data.processDamageTypeSettings && periodic?.enabled) {
+    const immediateAmount = roundDamageAmount(effectiveAmount * (Number(periodic.immediatePercent) || 0) / 100);
+    const delayedAmount = roundDamageAmount(effectiveAmount * (Number(periodic.delayedPercent) || 0) / 100);
+    const immediateResult = immediateAmount > 0
+      ? await applyDirectDamageApplication(actor, {
+        ...data,
+        amount: immediateAmount,
+        damageTypeKey: damageType?.key ?? data.damageTypeKey,
+        mode,
+        scope
+      }, damageType)
+      : { actor, amount: 0, healthDelta: 0, limbDelta: 0, createdTraumas: [] };
+    if (delayedAmount > 0) await createPeriodicDamageEffect(actor, {
+      damageType,
+      limbKey: data.limbKey,
+      scope,
+      amount: delayedAmount,
+      settings: periodic,
+      source: data.source
+    });
+    if (immediateResult.healthDelta > 0) {
+      await createResourceBlockEffect(actor, {
+        damageType,
+        healthDelta: immediateResult.healthDelta,
+        source: data.source
+      });
+    }
+    return {
+      ...immediateResult,
+      amount: immediateAmount,
+      delayedAmount
+    };
+  }
+
+  const result = await applyDirectDamageApplication(actor, {
+    ...data,
+    amount: effectiveAmount,
+    damageTypeKey: damageType?.key ?? data.damageTypeKey,
+    mode,
+    scope
+  }, damageType);
+  if (mode === MODE_DAMAGE && data.processDamageTypeSettings && result.healthDelta > 0) {
+    await createResourceBlockEffect(actor, {
+      damageType,
+      healthDelta: result.healthDelta,
+      source: data.source
+    });
+  }
+  return result;
+}
+
+async function applyDirectDamageApplication(actor, data = {}, damageType = null) {
+  const mode = data.mode === MODE_HEALING ? MODE_HEALING : MODE_DAMAGE;
+  const scope = normalizeScope(data.scope, data.limbKey);
+  const effectiveAmount = Math.max(0, roundDamageAmount(data.amount));
 
   const updateData = {};
   const limb = data.limbKey ? actor.system?.limbs?.[data.limbKey] : null;
   const shouldUpdateHealth = scope === SCOPE_HEALTH || scope === SCOPE_HEALTH_AND_LIMB;
   const shouldUpdateLimb = Boolean(limb) && (scope === SCOPE_LIMB || scope === SCOPE_HEALTH_AND_LIMB);
+  let actualHealthDelta = 0;
   let actualLimbDelta = 0;
   let previousLimbValue = limb ? toInteger(limb.value) : 0;
   let nextLimbValue = previousLimbValue;
@@ -88,6 +160,7 @@ export async function applyDamageApplication(request = {}) {
     const next = mode === MODE_DAMAGE
       ? Math.max(min, current - effectiveAmount)
       : Math.min(max, current + effectiveAmount);
+    actualHealthDelta = Math.abs(next - current);
     updateData["system.resources.health.value"] = next;
   }
 
@@ -95,7 +168,13 @@ export async function applyDamageApplication(request = {}) {
     const min = toInteger(limb.min);
     const max = toInteger(limb.max);
     if (mode === MODE_DAMAGE) {
-      nextLimbValue = Math.max(min, previousLimbValue - effectiveAmount);
+      const limbDamage = calculateLimbStateDamage(actor, limb, {
+        healthDelta: actualHealthDelta,
+        amount: effectiveAmount,
+        scope,
+        damageType
+      });
+      nextLimbValue = Math.max(min, previousLimbValue - limbDamage);
       actualLimbDelta = Math.max(0, previousLimbValue - nextLimbValue);
     } else {
       const cap = getLimbHealingCap(actor, data.limbKey);
@@ -121,6 +200,8 @@ export async function applyDamageApplication(request = {}) {
   return {
     actor,
     amount: effectiveAmount,
+    healthDelta: actualHealthDelta,
+    limbDelta: actualLimbDelta,
     mode,
     scope,
     limbKey: data.limbKey,
@@ -142,10 +223,397 @@ export function getLimbHealingCap(actor, limbKey = "") {
     .reduce((cap, item) => Math.min(cap, toInteger(item.system?.thresholdValue)), max);
 }
 
+export function getResourceBlockState(actor) {
+  const resources = {};
+  for (const effect of actor?.effects ?? []) {
+    if (effect.disabled) continue;
+    const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
+    if (data?.kind !== "resourceBlock") continue;
+    const color = String(data.color ?? "#3f8cff");
+    for (const [key, amount] of Object.entries(data.resources ?? {})) {
+      const value = Math.max(0, toInteger(amount));
+      if (!value) continue;
+      resources[key] ??= { amount: 0, color };
+      resources[key].amount += value;
+      resources[key].color = color;
+    }
+  }
+  return { resources };
+}
+
+async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = "", scope = SCOPE_HEALTH, amount = 0, settings = {}, source = {} } = {}) {
+  const tickCount = Math.max(0, toInteger(settings.tickCount));
+  const tickAmount = tickCount > 0 ? roundDamageAmount(amount / tickCount) : 0;
+  if (!tickCount || !tickAmount) return [];
+
+  const intervalSeconds = Math.max(1, toInteger(settings.intervalSeconds || ROUND_SECONDS));
+  const startTime = Number(game.time?.worldTime) || 0;
+  const endTime = startTime + (intervalSeconds * tickCount);
+  const effectName = String(settings.effectName || damageType.label || damageType.key || "Урон").trim();
+  const effectData = {
+    type: "base",
+    name: effectName,
+    img: String(settings.img || "icons/svg/hazard.svg"),
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    flags: {
+      [TRAUMA_FLAG_SCOPE]: {
+        kind: "active",
+        [DAMAGE_EFFECT_FLAG_KEY]: {
+          kind: "periodicDamage",
+          damageTypeKey: damageType.key ?? "",
+          limbKey,
+          scope,
+          amountPerTick: tickAmount,
+          totalTicks: tickCount,
+          remainingTicks: tickCount,
+          intervalSeconds,
+          startTime,
+          endTime,
+          nextTickTime: startTime + intervalSeconds,
+          source
+        }
+      }
+    },
+    system: { changes: [] }
+  };
+  return actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+}
+
+async function createResourceBlockEffect(actor, { damageType = {}, healthDelta = 0, source = {} } = {}) {
+  const settings = damageType?.settings?.resourceBlock;
+  if (!settings?.enabled) return [];
+  const healthMax = Math.max(0, toInteger(actor.health?.max));
+  if (!healthMax) return [];
+  const percent = Math.max(0, Number(healthDelta) || 0) / healthMax;
+  const action = actor.system?.resources?.[ACTION_RESOURCE_KEY];
+  const movement = actor.system?.resources?.[MOVEMENT_RESOURCE_KEY];
+  const resources = {};
+  const actionBlock = roundDamageAmount(percent * Math.max(0, toInteger(action?.max)));
+  const movementBlock = roundDamageAmount(percent * Math.max(0, toInteger(movement?.max)));
+  if (actionBlock) resources[ACTION_RESOURCE_KEY] = actionBlock;
+  if (movementBlock) resources[MOVEMENT_RESOURCE_KEY] = movementBlock;
+  if (!Object.keys(resources).length) return [];
+
+  const durationSeconds = Math.max(1, toInteger(settings.durationSeconds || 12));
+  const startTime = Number(game.time?.worldTime) || 0;
+  return actor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: String(settings.effectName || damageType.label || "Крио-блок"),
+    img: String(settings.img || "icons/svg/frozen.svg"),
+    disabled: false,
+    tint: settings.color,
+    duration: {
+      seconds: durationSeconds,
+      startTime
+    },
+    flags: {
+      [TRAUMA_FLAG_SCOPE]: {
+        kind: "temporary",
+        [DAMAGE_EFFECT_FLAG_KEY]: {
+          kind: "resourceBlock",
+          damageTypeKey: damageType.key ?? "",
+          resources,
+          color: settings.color,
+          source
+        }
+      }
+    },
+    system: { changes: [] }
+  }]);
+}
+
 async function handleDamageSocketMessage(payload = {}) {
   if (!payload || payload.action !== "applyDamage") return;
   if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
   await applyDamageApplication(payload.request);
+}
+
+function registerDamageTimeHooks() {
+  if (damageTimeHooksRegistered) return;
+  Hooks.on("combatStart", combat => {
+    if (!game.user?.isActiveGM) return;
+    combatRoundWorldTimes.set(combat.id, Number(game.time?.worldTime) || 0);
+  });
+  Hooks.on("deleteCombat", combat => combatRoundWorldTimes.delete(combat.id));
+  Hooks.on("combatTurnChange", advanceWorldTimeForCombatRound);
+  Hooks.on("updateWorldTime", processTimedDamageEffects);
+  damageTimeHooksRegistered = true;
+}
+
+async function advanceWorldTimeForCombatRound(combat, previous, current) {
+  if (!game.user?.isActiveGM || !combat?.started) return;
+  const previousRound = toInteger(previous?.round);
+  const currentRound = toInteger(current?.round);
+  if (currentRound <= 1 || currentRound <= previousRound) return;
+
+  const roundSeconds = getRoundSeconds();
+  const previousWorldTime = combatRoundWorldTimes.get(combat.id) ?? (Number(game.time?.worldTime) || 0);
+  const currentWorldTime = Number(game.time?.worldTime) || 0;
+  const elapsed = Math.max(0, currentWorldTime - previousWorldTime);
+  if (elapsed < roundSeconds) await game.time.advance(roundSeconds - elapsed);
+  combatRoundWorldTimes.set(combat.id, Number(game.time?.worldTime) || currentWorldTime + roundSeconds);
+}
+
+function getRoundSeconds() {
+  if (CONFIG.time) CONFIG.time.roundTime = ROUND_SECONDS;
+  return ROUND_SECONDS;
+}
+
+async function processTimedDamageEffects(worldTime, deltaTime) {
+  if (!game.user?.isActiveGM || Number(deltaTime) <= 0) return;
+  const now = Number(worldTime) || Number(game.time?.worldTime) || 0;
+  for (const actor of getLoadedActors()) {
+    if (!actor?.isOwner) continue;
+    const entries = [];
+    const effectUpdates = [];
+    const effectDeleteIds = new Set();
+    const lockedEffectUuids = new Set();
+
+    for (const effect of Array.from(actor.effects ?? [])) {
+      const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
+      if (effect.disabled || data?.kind !== "periodicDamage") continue;
+      if (!effect.uuid || processingPeriodicEffectUuids.has(effect.uuid)) continue;
+      const tickResult = collectPeriodicDamageEffectTicks(effect, data, now);
+      if (!tickResult.entries.length && !tickResult.update && !tickResult.deleteEffectId) continue;
+      processingPeriodicEffectUuids.add(effect.uuid);
+      lockedEffectUuids.add(effect.uuid);
+      entries.push(...tickResult.entries);
+      if (tickResult.update) effectUpdates.push(tickResult.update);
+      if (tickResult.deleteEffectId) effectDeleteIds.add(tickResult.deleteEffectId);
+    }
+
+    try {
+      if (entries.length) await applyPeriodicDamageBatch(actor, entries);
+      for (const update of effectUpdates) {
+        if (effectDeleteIds.has(update.effectId)) continue;
+        const effect = actor.effects?.get(update.effectId);
+        if (!effect) continue;
+        await updatePeriodicEffect(effect, update.data);
+      }
+      await deletePeriodicEffects(actor, Array.from(effectDeleteIds));
+    } finally {
+      for (const uuid of lockedEffectUuids) processingPeriodicEffectUuids.delete(uuid);
+    }
+  }
+}
+
+function collectPeriodicDamageEffectTicks(effect, data, now) {
+  const intervalSeconds = Math.max(1, toInteger(data.intervalSeconds || ROUND_SECONDS));
+  let remainingTicks = Math.max(0, toInteger(data.remainingTicks));
+  let nextTickTime = Number(data.nextTickTime) || ((Number(data.startTime) || 0) + intervalSeconds);
+  let dueTicks = 0;
+
+  while (remainingTicks > 0 && now >= nextTickTime) {
+    dueTicks += 1;
+    remainingTicks -= 1;
+    nextTickTime += intervalSeconds;
+  }
+
+  const entries = dueTicks > 0
+    ? [{
+      limbKey: data.limbKey,
+      amount: roundDamageAmount((Number(data.amountPerTick) || 0) * dueTicks),
+      damageTypeKey: data.damageTypeKey,
+      scope: data.scope,
+      source: {
+        ...(data.source ?? {}),
+        periodicDamageEffectUuid: effect.uuid,
+        dueTicks
+      }
+    }]
+    : [];
+  const shouldDelete = remainingTicks <= 0 || (Number(data.endTime) && now >= Number(data.endTime) && dueTicks === 0);
+  return {
+    entries: entries.filter(entry => entry.amount > 0),
+    update: !shouldDelete && dueTicks > 0
+      ? {
+        effectId: effect.id,
+        data: {
+          [`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.remainingTicks`]: remainingTicks,
+          [`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.nextTickTime`]: nextTickTime
+        }
+      }
+      : null,
+    deleteEffectId: shouldDelete ? effect.id : ""
+  };
+}
+
+async function updatePeriodicEffect(effect, updateData = {}) {
+  try {
+    if (!effect?.parent?.effects?.has(effect.id)) return;
+    await effect.update(updateData);
+  } catch (error) {
+    if (!isMissingDocumentError(error)) throw error;
+  }
+}
+
+async function deletePeriodicEffects(actor, effectIds = []) {
+  const ids = Array.from(new Set(effectIds)).filter(id => actor.effects?.has(id));
+  if (!ids.length) return;
+  try {
+    await actor.deleteEmbeddedDocuments("ActiveEffect", ids.filter(id => actor.effects?.has(id)));
+  } catch (error) {
+    if (!isMissingDocumentError(error)) throw error;
+  }
+}
+
+function isMissingDocumentError(error) {
+  return /does not exist/i.test(String(error?.message ?? error ?? ""));
+}
+
+async function applyPeriodicDamageBatch(actor, entries = []) {
+  const damageTypes = getDamageTypeSettings();
+  const normalizedEntries = combinePeriodicDamageEntries(entries)
+    .map(entry => ({
+      ...entry,
+      amount: roundDamageAmount(entry.amount),
+      scope: normalizeScope(entry.scope, entry.limbKey),
+      damageType: damageTypes.find(damageType => damageType.key === entry.damageTypeKey) ?? null
+    }))
+    .filter(entry => entry.amount > 0);
+  if (!normalizedEntries.length) return { actor, amount: 0, healthDelta: 0, limbDelta: 0, createdTraumas: [] };
+
+  const updateData = {};
+  const health = actor.health;
+  const healthEntries = normalizedEntries.filter(entry => entry.scope === SCOPE_HEALTH || entry.scope === SCOPE_HEALTH_AND_LIMB);
+  const requestedHealthDamage = healthEntries.reduce((sum, entry) => sum + entry.amount, 0);
+  let actualHealthDelta = 0;
+  if (health && requestedHealthDamage > 0) {
+    const current = toInteger(health.value);
+    const min = toInteger(health.min);
+    const next = Math.max(min, current - requestedHealthDamage);
+    actualHealthDelta = Math.max(0, current - next);
+    updateData["system.resources.health.value"] = next;
+  }
+
+  const healthRatio = requestedHealthDamage > 0 ? actualHealthDelta / requestedHealthDamage : 0;
+  const limbStates = new Map();
+  const damageAccumulation = new Map();
+
+  for (const entry of normalizedEntries) {
+    const limb = entry.limbKey ? actor.system?.limbs?.[entry.limbKey] : null;
+    if (!limb || (entry.scope !== SCOPE_LIMB && entry.scope !== SCOPE_HEALTH_AND_LIMB)) continue;
+
+    const state = getBatchLimbState(limbStates, entry.limbKey, limb);
+    const entryHealthDelta = entry.scope === SCOPE_HEALTH_AND_LIMB ? entry.amount * healthRatio : 0;
+    const limbDamage = calculateLimbStateDamage(actor, limb, {
+      healthDelta: entryHealthDelta,
+      amount: entry.amount,
+      scope: entry.scope,
+      damageType: entry.damageType
+    });
+    if (!limbDamage) continue;
+
+    const previousRunningValue = state.nextValue;
+    state.nextValue = Math.max(state.min, state.nextValue - limbDamage);
+    const actualLimbDelta = Math.max(0, previousRunningValue - state.nextValue);
+    if (!actualLimbDelta) continue;
+
+    state.totalDelta += actualLimbDelta;
+    state.damageByType[entry.damageTypeKey || "untyped"] = (state.damageByType[entry.damageTypeKey || "untyped"] ?? 0) + actualLimbDelta;
+    addBatchDamageAccumulation(damageAccumulation, actor, entry.limbKey, entry.damageTypeKey, actualLimbDelta);
+  }
+
+  for (const [limbKey, state] of limbStates) {
+    if (!state.totalDelta) continue;
+    updateData[`system.limbs.${limbKey}.value`] = state.nextValue;
+  }
+  for (const [limbKey, accumulation] of damageAccumulation) {
+    updateData[`system.limbs.${limbKey}.damageAccumulation`] = normalizeDamageAccumulation(accumulation);
+  }
+
+  if (Object.keys(updateData).length) await actor.update(updateData);
+
+  const createdTraumas = [];
+  for (const [limbKey, state] of limbStates) {
+    if (!state.totalDelta) continue;
+    const [damageTypeKey, latestDamage] = Object.entries(state.damageByType)
+      .sort((left, right) => right[1] - left[1])
+      .at(0) ?? ["untyped", state.totalDelta];
+    createdTraumas.push(...await createTriggeredTraumas(actor, {
+      limbKey,
+      damageTypeKey,
+      previousValue: state.previousValue,
+      nextValue: state.nextValue,
+      latestDamage
+    }));
+  }
+
+  return {
+    actor,
+    amount: normalizedEntries.reduce((sum, entry) => sum + entry.amount, 0),
+    healthDelta: actualHealthDelta,
+    limbDelta: Array.from(limbStates.values()).reduce((sum, state) => sum + state.totalDelta, 0),
+    mode: MODE_DAMAGE,
+    scope: SCOPE_HEALTH_AND_LIMB,
+    createdTraumas
+  };
+}
+
+function combinePeriodicDamageEntries(entries = []) {
+  const combined = new Map();
+  for (const entry of entries) {
+    const key = [
+      String(entry.limbKey ?? ""),
+      String(entry.damageTypeKey ?? ""),
+      String(entry.scope ?? SCOPE_HEALTH)
+    ].join("\u0000");
+    const current = combined.get(key);
+    if (current) current.amount += Math.max(0, Number(entry.amount) || 0);
+    else combined.set(key, {
+      limbKey: String(entry.limbKey ?? ""),
+      damageTypeKey: String(entry.damageTypeKey ?? ""),
+      scope: String(entry.scope ?? SCOPE_HEALTH),
+      amount: Math.max(0, Number(entry.amount) || 0)
+    });
+  }
+  return Array.from(combined.values());
+}
+
+function getBatchLimbState(limbStates, limbKey, limb) {
+  let state = limbStates.get(limbKey);
+  if (state) return state;
+  const previousValue = toInteger(limb.value);
+  state = {
+    previousValue,
+    nextValue: previousValue,
+    min: toInteger(limb.min),
+    totalDelta: 0,
+    damageByType: {}
+  };
+  limbStates.set(limbKey, state);
+  return state;
+}
+
+function addBatchDamageAccumulation(accumulations, actor, limbKey, damageTypeKey, amount) {
+  if (!amount) return;
+  let accumulation = accumulations.get(limbKey);
+  if (!accumulation) {
+    accumulation = { ...(actor.system?.limbs?.[limbKey]?.damageAccumulation ?? {}) };
+    accumulations.set(limbKey, accumulation);
+  }
+  const key = damageTypeKey || "untyped";
+  accumulation[key] = Math.max(0, Number(accumulation[key]) || 0) + amount;
+}
+
+function normalizeDamageAccumulation(value = {}) {
+  return Object.fromEntries(
+    Object.entries(value ?? {})
+      .map(([key, amount]) => [key, Math.max(0, Number(amount) || 0)])
+      .filter(([_key, amount]) => amount > 0)
+  );
+}
+
+function getLoadedActors() {
+  const actors = new Map();
+  for (const actor of game.actors?.contents ?? []) {
+    if (actor?.uuid) actors.set(actor.uuid, actor);
+  }
+  for (const token of globalThis.canvas?.tokens?.placeables ?? []) {
+    if (token.actor?.uuid && !actors.has(token.actor.uuid)) actors.set(token.actor.uuid, token.actor);
+  }
+  return actors.values();
 }
 
 function normalizeDamageRequest(request = {}) {
@@ -159,6 +627,7 @@ function normalizeDamageRequest(request = {}) {
     mode: request.mode === MODE_HEALING || request.mode === "heal" ? MODE_HEALING : MODE_DAMAGE,
     scope: normalizeScope(request.scope, limbKey),
     applyMitigation: request.applyMitigation !== false,
+    processDamageTypeSettings: request.processDamageTypeSettings !== false,
     source: request.source && typeof request.source === "object" ? request.source : {},
     requesterUserId: String(request.requesterUserId ?? "")
   };
@@ -191,6 +660,31 @@ function calculateEffectiveDamage(actor, amount, damageTypeKey = "", limbKey = "
   const reduction = actor.getDamageReduction?.(damageTypeKey, limbKey) ?? 0;
   const defendedDamage = Math.floor(incomingDamage * (1 - (defense / 100)));
   return Math.max(0, defendedDamage - resistance - reduction);
+}
+
+function applyLimbHealthMultiplier(actor, amount, damageType = null, limbKey = "") {
+  const incomingDamage = Math.max(0, Number(amount) || 0);
+  if (!incomingDamage || !limbKey || damageType?.settings?.limbHealthMultiplier?.enabled === false) {
+    return roundDamageAmount(incomingDamage);
+  }
+  const multiplier = Math.max(0, Number(actor.system?.limbs?.[limbKey]?.damageMultiplier) || 1);
+  return roundDamageAmount(incomingDamage * multiplier);
+}
+
+function calculateLimbStateDamage(actor, limb, { healthDelta = 0, amount = 0, scope = SCOPE_LIMB, damageType = null } = {}) {
+  const multiplier = Math.max(0, Number(damageType?.settings?.limbStateDamage?.multiplier) || 1);
+  const health = actor.health;
+  const healthMax = Math.max(0, toInteger(health?.max));
+  const limbMax = Math.max(0, toInteger(limb?.max));
+  const baseDamage = scope === SCOPE_HEALTH_AND_LIMB && healthMax > 0
+    ? (Math.max(0, Number(healthDelta) || 0) / healthMax) * limbMax
+    : Math.max(0, Number(amount) || 0);
+  return roundDamageAmount(baseDamage * multiplier);
+}
+
+function roundDamageAmount(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.round(number)) : 0;
 }
 
 function buildAccumulationUpdate(actor, limbKey, damageTypeKey, amount, mode) {

@@ -229,6 +229,7 @@ function researchField() {
 function limbField() {
   return new SchemaField({
     label: new StringField({ required: true, blank: true, initial: "" }),
+    damageMultiplier: new NumberField({ required: true, initial: 1, persisted: false }),
     min: new NumberField({ required: true, integer: true, initial: -100 }),
     value: new NumberField({ required: true, integer: true, initial: 0 }),
     max: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
@@ -330,6 +331,7 @@ function normalizeLimbMap(currentLimbs = {}, settings = []) {
       const value = Math.min(Math.max(toInteger(fallbackValue), min), max);
       return [setting.key, {
         label: String(setting?.label ?? setting?.name ?? setting?.key ?? ""),
+        damageMultiplier: toDecimal(setting?.damageMultiplier, 1),
         min,
         value,
         max,
@@ -337,6 +339,11 @@ function normalizeLimbMap(currentLimbs = {}, settings = []) {
       }];
     })
   );
+}
+
+function toDecimal(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }
 
 function normalizeDamageAccumulation(value = {}) {

@@ -28,6 +28,60 @@ const DEFAULT_NEED_COLORS = Object.freeze({
   thirst: "#58a6d6",
   sleepiness: "#8f63c9"
 });
+const DEFAULT_DAMAGE_TYPE_SETTINGS = Object.freeze({
+  limbHealthMultiplier: Object.freeze({ enabled: true }),
+  limbStateDamage: Object.freeze({ multiplier: 1 }),
+  periodic: Object.freeze({
+    enabled: false,
+    effectName: "",
+    img: "",
+    immediatePercent: 100,
+    delayedPercent: 0,
+    tickCount: 0,
+    intervalSeconds: 6
+  }),
+  resourceBlock: Object.freeze({
+    enabled: false,
+    effectName: "",
+    img: "",
+    color: "#3f8cff",
+    durationSeconds: 12
+  })
+});
+const DEFAULT_DAMAGE_TYPE_SETTINGS_BY_KEY = Object.freeze({
+  bludgeoning: Object.freeze({ limbStateDamage: Object.freeze({ multiplier: 2 }) }),
+  fire: Object.freeze({
+    periodic: Object.freeze({
+      enabled: true,
+      effectName: "Горение",
+      img: "icons/magic/fire/flame-burning-creature-skeleton.webp",
+      immediatePercent: 50,
+      delayedPercent: 50,
+      tickCount: 1,
+      intervalSeconds: 6
+    })
+  }),
+  poison: Object.freeze({
+    periodic: Object.freeze({
+      enabled: true,
+      effectName: "Яд",
+      img: "icons/magic/death/skull-poison-green.webp",
+      immediatePercent: 0,
+      delayedPercent: 100,
+      tickCount: 3,
+      intervalSeconds: 6
+    })
+  }),
+  cryo: Object.freeze({
+    resourceBlock: Object.freeze({
+      enabled: true,
+      effectName: "Крио-блок",
+      img: "icons/magic/water/barrier-ice-crystal-wall-jagged-blue.webp",
+      color: "#3f8cff",
+      durationSeconds: 12
+    })
+  })
+});
 
 export function createDefaultCharacteristicSettings() {
   return DEFAULT_CHARACTERISTICS.map(entry => ({ ...entry }));
@@ -78,7 +132,7 @@ export function createDefaultNeedSettings() {
 }
 
 export function createDefaultDamageTypeSettings() {
-  return DEFAULT_DAMAGE_TYPES.map(entry => ({ ...entry }));
+  return DEFAULT_DAMAGE_TYPES.map(entry => ({ ...entry, settings: getDefaultDamageTypeSettings(entry.key) }));
 }
 
 export function normalizeCharacteristicSettings(settings) {
@@ -179,10 +233,7 @@ export function normalizeDamageTypeSettings(settings) {
   const source = normalizeCollectionInput(settings, createDefaultDamageTypeSettings());
   return normalizeKeyedEntries(
     source,
-    entry => ({
-      key: String(entry?.key ?? "").trim(),
-      label: String(entry?.label ?? entry?.name ?? "").trim()
-    }),
+    entry => normalizeDamageTypeEntry(entry),
     "Тип урона"
   );
 }
@@ -288,6 +339,56 @@ function normalizeHexColorString(value) {
   if (/^[0-9a-f]{6}$/.test(trimmed)) return `#${trimmed}`;
   if (/^[0-9a-f]{3}$/.test(trimmed)) return `#${trimmed.split("").map(char => `${char}${char}`).join("")}`;
   return null;
+}
+
+function normalizeDamageTypeEntry(entry = {}) {
+  const key = String(entry?.key ?? "").trim();
+  return {
+    key,
+    label: String(entry?.label ?? entry?.name ?? "").trim(),
+    settings: normalizeDamageTypeBehavior(entry?.settings, key)
+  };
+}
+
+function normalizeDamageTypeBehavior(settings = {}, key = "") {
+  const defaults = getDefaultDamageTypeSettings(key);
+  const source = settings && typeof settings === "object" ? settings : {};
+  return {
+    limbHealthMultiplier: {
+      enabled: source.limbHealthMultiplier?.enabled !== false
+    },
+    limbStateDamage: {
+      multiplier: Math.max(0, toDecimal(source.limbStateDamage?.multiplier, defaults.limbStateDamage.multiplier))
+    },
+    periodic: {
+      enabled: Boolean(source.periodic?.enabled ?? defaults.periodic.enabled),
+      effectName: String(source.periodic?.effectName ?? defaults.periodic.effectName ?? "").trim(),
+      img: String(source.periodic?.img ?? defaults.periodic.img ?? "").trim(),
+      immediatePercent: clampPercent(toDecimal(source.periodic?.immediatePercent, defaults.periodic.immediatePercent)),
+      delayedPercent: clampPercent(toDecimal(source.periodic?.delayedPercent, defaults.periodic.delayedPercent)),
+      tickCount: Math.max(0, toInteger(source.periodic?.tickCount ?? defaults.periodic.tickCount)),
+      intervalSeconds: Math.max(1, toInteger(source.periodic?.intervalSeconds ?? defaults.periodic.intervalSeconds))
+    },
+    resourceBlock: {
+      enabled: Boolean(source.resourceBlock?.enabled ?? defaults.resourceBlock.enabled),
+      effectName: String(source.resourceBlock?.effectName ?? defaults.resourceBlock.effectName ?? "").trim(),
+      img: String(source.resourceBlock?.img ?? defaults.resourceBlock.img ?? "").trim(),
+      color: normalizeHexColor(source.resourceBlock?.color, defaults.resourceBlock.color),
+      durationSeconds: Math.max(1, toInteger(source.resourceBlock?.durationSeconds ?? defaults.resourceBlock.durationSeconds))
+    }
+  };
+}
+
+function getDefaultDamageTypeSettings(key = "") {
+  return foundry.utils.mergeObject(
+    foundry.utils.deepClone(DEFAULT_DAMAGE_TYPE_SETTINGS),
+    foundry.utils.deepClone(DEFAULT_DAMAGE_TYPE_SETTINGS_BY_KEY[key] ?? {}),
+    { inplace: false }
+  );
+}
+
+function clampPercent(value) {
+  return Math.max(0, Math.min(100, Number(value) || 0));
 }
 
 function normalizeImagePath(value) {

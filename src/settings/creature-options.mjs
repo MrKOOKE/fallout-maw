@@ -129,7 +129,8 @@ function normalizeLimbs(limbs) {
       return {
         key,
         label: String(limb?.label ?? limb?.name ?? "").trim() || defaultLimb?.label || localize("FALLOUTMAW.Common.Untitled"),
-        stateMax: Math.max(0, toInteger(limb?.stateMax ?? defaultLimb?.stateMax ?? 100))
+        stateMax: Math.max(0, toInteger(limb?.stateMax ?? defaultLimb?.stateMax ?? 100)),
+        damageMultiplier: toDecimal(limb?.damageMultiplier ?? defaultLimb?.damageMultiplier ?? 1, 1)
       };
     })
     .filter(Boolean);
@@ -189,4 +190,9 @@ function normalizeInventorySize(size = {}) {
 
 function normalizeConfigKey(value, fallback) {
   return String(value ?? fallback).trim().replace(/\s+/g, "");
+}
+
+function toDecimal(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }
