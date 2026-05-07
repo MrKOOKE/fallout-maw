@@ -3362,6 +3362,11 @@ label.fallout-maw-mitigation-cell {
   min-height: 0;
 }
 
+.fallout-maw-limb-silhouette-config .header-control[data-action="exportSilhouette"].disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
 .fallout-maw-silhouette-editor {
   display: grid;
   gap: 0.75rem;

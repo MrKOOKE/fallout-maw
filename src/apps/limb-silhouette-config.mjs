@@ -28,6 +28,7 @@ const BRUSH_RADIUS_MIN = 2;
 const BRUSH_RADIUS_MAX = 80;
 const ELLIPSE_SEGMENTS = 48;
 const TOOL_KEYS = Object.freeze(["polygon", "brush", "eraser", "rectangle", "ellipse", "triangle"]);
+const SILHOUETTE_EXPORT_VERSION = 1;
 const EDITOR_COLORS = Object.freeze([
   "#6abf69",
   "#d8c85c",
@@ -80,6 +81,8 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       setTool: LimbSilhouetteConfig.#onSetTool,
       selectLimb: LimbSilhouetteConfig.#onSelectLimb,
       addPoint: LimbSilhouetteConfig.#onAddPoint,
+      exportSilhouette: LimbSilhouetteConfig.#onExportSilhouette,
+      importSilhouette: LimbSilhouetteConfig.#onImportSilhouette,
       undo: LimbSilhouetteConfig.#onUndo,
       clearSilhouette: LimbSilhouetteConfig.#onClearSilhouette,
       save: LimbSilhouetteConfig.#onSave,
@@ -95,6 +98,25 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
 
   get title() {
     return `Силуэт: ${this.#race?.name ?? ""}`;
+  }
+
+  _getHeaderControls() {
+    const controls = super._getHeaderControls();
+    controls.unshift(
+      {
+        action: "exportSilhouette",
+        icon: "fa-solid fa-file-export",
+        label: "Экспорт",
+        visible: true
+      },
+      {
+        action: "importSilhouette",
+        icon: "fa-solid fa-file-import",
+        label: "Импорт",
+        visible: true
+      }
+    );
+    return controls;
   }
 
   async _prepareContext(options) {
@@ -145,6 +167,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#updateHeaderControls();
     const svg = this.element?.querySelector("[data-silhouette-svg]");
     if (!svg) return;
     svg.addEventListener("wheel", event => this.#onWheel(event), { passive: false });
@@ -153,6 +176,11 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     svg.addEventListener("pointerup", event => this.#onPointerUp(event));
     svg.addEventListener("pointercancel", event => this.#onPointerUp(event));
     svg.addEventListener("pointerleave", () => this.#hideBrushCursor(svg));
+  }
+
+  #updateHeaderControls() {
+    const exportControl = this.window?.controls?.querySelector?.("[data-action='exportSilhouette']");
+    exportControl?.classList.toggle("disabled", !this.#canExportSilhouette());
   }
 
   #preparePartPaths(limbs, brushMaskId = "") {
@@ -476,6 +504,44 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     return Math.hypot(point.x - first.x, point.y - first.y) <= threshold;
   }
 
+  #canExportSilhouette() {
+    if (!this.#silhouette) return false;
+    const totalArea = getPathsArea(this.#silhouette.outline);
+    const remainingArea = getPathsArea(this.#remaining);
+    return totalArea > 0 && (remainingArea / totalArea) <= SILHOUETTE_AREA_TOLERANCE;
+  }
+
+  #toExportData() {
+    if (!this.#silhouette) return null;
+    return {
+      type: "fallout-maw.limbSilhouette",
+      version: SILHOUETTE_EXPORT_VERSION,
+      race: {
+        id: this.#race?.id ?? "",
+        name: this.#race?.name ?? ""
+      },
+      silhouette: {
+        width: this.#silhouette.width,
+        height: this.#silhouette.height,
+        image: this.#silhouette.image ?? this.#sourceImage ?? "",
+        outline: normalizePaths(this.#silhouette.outline),
+        parts: (this.#silhouette.parts ?? [])
+          .map(part => ({ limbKey: part.limbKey, paths: normalizePaths(part.paths) }))
+          .filter(part => part.paths.length)
+      }
+    };
+  }
+
+  #importSilhouetteData(data) {
+    const silhouette = normalizeLimbSilhouette(data?.silhouette ?? data, this.#race?.limbs ?? []);
+    if (!silhouette) {
+      ui.notifications.error("Файл не содержит корректный силуэт.");
+      return false;
+    }
+    this.#setSilhouette(silhouette);
+    return true;
+  }
+
   async #applyDrawnPath(points, { render = false, pushHistory = true, notify = true } = {}) {
     return this.#applyDrawnPaths([points], { render, pushHistory, notify });
   }
@@ -563,6 +629,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
   }
 
   #pushHistory() {
+    if (!this.#silhouette) return;
     this.#history.push(foundry.utils.deepClone({
       silhouette: this.#silhouette,
       remaining: this.#remaining,
@@ -610,7 +677,6 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
       return;
     }
 
-    this.#pushHistory();
     this.#silhouette = {
       width: canvas.width,
       height: canvas.height,
@@ -653,6 +719,44 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
     return this.render({ force: true });
   }
 
+  static #onExportSilhouette(event) {
+    event.preventDefault();
+    if (!this.#canExportSilhouette()) {
+      ui.notifications.warn("Экспорт доступен после завершения силуэта.");
+      return undefined;
+    }
+    const data = this.#toExportData();
+    const raceName = String(this.#race?.name || this.#race?.id || "silhouette").slugify({ strict: true });
+    foundry.utils.saveDataToFile(
+      JSON.stringify(data, null, 2),
+      "application/json",
+      `fallout-maw-silhouette-${raceName}.json`
+    );
+    return undefined;
+  }
+
+  static #onImportSilhouette(event) {
+    event.preventDefault();
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      let data;
+      try {
+        data = JSON.parse(await foundry.utils.readTextFromFile(file));
+      } catch (_error) {
+        ui.notifications.error("Не удалось прочитать JSON силуэта.");
+        return;
+      }
+      if (!this.#importSilhouetteData(data)) return;
+      await this.render({ force: true });
+    }, { once: true });
+    input.click();
+    return undefined;
+  }
+
   static #onAddPoint(event, target) {
     event.preventDefault();
     if (this.#suppressNextClick) {
@@ -693,7 +797,6 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
   }
 
   #deleteSilhouette() {
-    this.#pushHistory();
     this.#silhouette = null;
     this.#remaining = [];
     this.#sourceImage = "";
