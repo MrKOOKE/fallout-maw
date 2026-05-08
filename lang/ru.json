@@ -152,6 +152,7 @@
       "WeaponActionAimedShot": "Прицельный выстрел",
       "WeaponActionSnapshot": "Выстрел на вскидку",
       "WeaponActionBurst": "Очередь",
+      "WeaponBurstCount": "Выстрелов в очереди",
       "Weight": "Вес"
     },
     "Effects": {

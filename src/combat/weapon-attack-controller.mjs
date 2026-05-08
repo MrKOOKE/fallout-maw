@@ -4,6 +4,7 @@ import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 let activeAttack = null;
+const BURST_ATTACK_INTERVAL_MS = 200;
 
 export function cancelWeaponAttack() {
   activeAttack?.destroy();
@@ -13,7 +14,7 @@ export function cancelWeaponAttack() {
 export function startWeaponAttack({ token = null, weapon = null, actionKey = "" } = {}) {
   if (!token?.actor || !weapon || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) return undefined;
   if (!hasWeaponAction(weapon, actionKey)) return undefined;
-  if (!hasRequiredWeaponResources(weapon)) return undefined;
+  if (!hasRequiredWeaponResources(weapon, getActionAttackCount(weapon, actionKey))) return undefined;
 
   cancelWeaponAttack();
   activeAttack = new WeaponAttackController(token, weapon, actionKey);
@@ -31,6 +32,7 @@ class WeaponAttackController {
     this.targetMarkers = new PIXI.Graphics();
     this.container.addChild(this.shape, this.targetMarkers);
     this.targets = [];
+    this.geometry = null;
     this.pointer = null;
     this.processing = false;
     this.events = {
@@ -74,10 +76,32 @@ class WeaponAttackController {
     event.preventDefault();
     if (!this.pointer) return;
     if (!this.targets.length) return;
-    if (!hasRequiredWeaponResources(this.weapon)) return;
+    const attackCount = getActionAttackCount(this.weapon, this.actionKey);
+    if (!hasRequiredWeaponResources(this.weapon, attackCount)) return;
 
     this.processing = true;
-    const target = this.targets[Math.floor(Math.random() * this.targets.length)];
+    const damageRequests = [];
+    let attempted = false;
+    for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
+      const selectedTargets = selectTargetsForAttack(this.targets, this.geometry, this.weapon);
+      for (const target of selectedTargets) {
+        const request = await this.resolveAttackAgainstTarget(target);
+        if (request) damageRequests.push(request);
+        attempted = true;
+      }
+      if (attackIndex < attackCount - 1) await wait(BURST_ATTACK_INTERVAL_MS);
+    }
+
+    if (attempted) await spendWeaponResources(this.weapon, attackCount);
+    if (damageRequests.length) {
+      await applyQueuedDamageRequests(damageRequests);
+    }
+    this.processing = false;
+    this.refresh();
+  }
+
+  async resolveAttackAgainstTarget(target) {
+    if (isDeadTarget(target)) return null;
     const limbKey = selectRandomLimbKey(target.actor);
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
@@ -91,29 +115,20 @@ class WeaponAttackController {
       prompt: false,
       requester: "weaponAttack"
     });
-    if (!outcome) {
-      this.processing = false;
-      this.refresh();
-      return;
-    }
-    await spendWeaponResources(this.weapon);
-    if (isSuccessfulAttack(outcome)) {
-      await requestDamageApplication({
-        actor: target.actor,
-        limbKey,
-        amount: toInteger(this.weapon.system?.functions?.weapon?.damage),
-        damageTypeKey: String(this.weapon.system?.functions?.weapon?.damageTypeKey ?? ""),
-        scope: "healthAndLimb",
-        source: {
-          weaponUuid: this.weapon.uuid,
-          actionKey: this.actionKey,
-          attackerUuid: this.token.actor.uuid,
-          tokenId: this.token.id
-        }
-      });
-    }
-    this.processing = false;
-    this.refresh();
+    if (!isSuccessfulAttack(outcome)) return null;
+    return {
+      actor: target.actor,
+      limbKey,
+      amount: toInteger(this.weapon.system?.functions?.weapon?.damage),
+      damageTypeKey: String(this.weapon.system?.functions?.weapon?.damageTypeKey ?? ""),
+      scope: "healthAndLimb",
+      source: {
+        weaponUuid: this.weapon.uuid,
+        actionKey: this.actionKey,
+        attackerUuid: this.token.actor.uuid,
+        tokenId: this.token.id
+      }
+    };
   }
 
   refresh() {
@@ -122,22 +137,26 @@ class WeaponAttackController {
     if (!this.pointer) return;
 
     const origin = getTokenCenter(this.token);
-    const geometry = getAttackGeometry(this.weapon, origin, this.pointer);
-    drawAttackShape(this.shape, geometry, this.processing);
-    this.targets = getPotentialTargets(this.token, geometry);
+    this.geometry = getAttackGeometry(this.weapon, origin, this.pointer);
+    drawAttackShape(this.shape, this.geometry, this.processing);
+    this.targets = getPotentialTargets(this.token, this.geometry);
     drawTargetMarkers(this.targetMarkers, this.targets);
   }
 }
 
 function hasWeaponAction(weapon, actionKey) {
-  if (actionKey === "burst") return false;
   return Boolean(weapon.system?.functions?.weapon?.availableActions?.[actionKey]);
 }
 
-function hasRequiredWeaponResources(weapon) {
+function getActionAttackCount(weapon, actionKey) {
+  if (actionKey !== "burst") return 1;
+  return Math.max(1, toInteger(weapon.system?.functions?.weapon?.burst?.count));
+}
+
+function hasRequiredWeaponResources(weapon, multiplier = 1) {
   const costs = weapon.system?.functions?.weapon?.resourceCosts ?? [];
   for (const cost of costs) {
-    const amount = Math.max(0, toInteger(cost.amount));
+    const amount = Math.max(0, toInteger(cost.amount) * Math.max(1, toInteger(multiplier)));
     if (!amount) continue;
     if (cost.type === "magazine" && toInteger(weapon.system?.functions?.weapon?.magazine?.value) < amount) return false;
     if (cost.type === "condition" && toInteger(weapon.system?.functions?.condition?.value) < amount) return false;
@@ -145,10 +164,10 @@ function hasRequiredWeaponResources(weapon) {
   return true;
 }
 
-async function spendWeaponResources(weapon) {
+async function spendWeaponResources(weapon, multiplier = 1) {
   const updateData = {};
   for (const cost of weapon.system?.functions?.weapon?.resourceCosts ?? []) {
-    const amount = Math.max(0, toInteger(cost.amount));
+    const amount = Math.max(0, toInteger(cost.amount) * Math.max(1, toInteger(multiplier)));
     if (!amount) continue;
     if (cost.type === "magazine") {
       const current = toInteger(weapon.system?.functions?.weapon?.magazine?.value);
@@ -210,9 +229,10 @@ function getPotentialTargets(attackerToken, geometry) {
   return (canvas.tokens?.placeables ?? []).filter(target => {
     if (target === attackerToken || !target.actor || !target.visible) return false;
     const center = getTokenCenter(target);
+    if (isDeadTarget(target)) return false;
     if (!pointInAttackCone(center, geometry)) return false;
     return hasLineOfSight(attackerToken, center, geometry.origin);
-  });
+  }).sort((left, right) => getTargetDistance(left, geometry) - getTargetDistance(right, geometry));
 }
 
 function hasLineOfSight(attackerToken, destination, origin) {
@@ -242,6 +262,34 @@ function drawTargetMarkers(graphics, targets) {
   graphics.endFill();
 }
 
+function selectTargetsForAttack(targets, geometry, weapon) {
+  const livingTargets = (targets ?? []).filter(target => !isDeadTarget(target));
+  if (!livingTargets.length) return [];
+  const primary = livingTargets[Math.floor(Math.random() * livingTargets.length)];
+  const primaryDistance = getTargetDistance(primary, geometry);
+  const targetCount = getWeaponPenetrationTargetCount(weapon);
+  return livingTargets
+    .filter(target => getTargetDistance(target, geometry) >= primaryDistance)
+    .sort((left, right) => getTargetDistance(left, geometry) - getTargetDistance(right, geometry))
+    .slice(0, targetCount);
+}
+
+function getWeaponPenetrationTargetCount(weapon) {
+  return Math.max(1, toInteger(weapon.system?.functions?.weapon?.penetration));
+}
+
+function getTargetDistance(target, geometry) {
+  const center = getTokenCenter(target);
+  return Math.hypot(center.x - geometry.origin.x, center.y - geometry.origin.y);
+}
+
+async function applyQueuedDamageRequests(requests = []) {
+  for (const request of requests) {
+    if (isDeadActor(request.actor)) continue;
+    await requestDamageApplication(request);
+  }
+}
+
 function getTokenCenter(token) {
   return token.center ?? {
     x: token.x + (token.w / 2),
@@ -260,10 +308,30 @@ function getDodgeDifficulty(actor) {
   return toInteger(actor.system?.resources?.dodge?.value);
 }
 
+function isDeadTarget(token) {
+  if (!token?.actor) return true;
+  const defeatedStatus = CONFIG.specialStatusEffects.DEFEATED;
+  return isDeadActor(token.actor)
+    || (defeatedStatus && token.document?.hasStatusEffect?.(defeatedStatus))
+    || token.document?.hasStatusEffect?.("dead");
+}
+
+function isDeadActor(actor) {
+  if (!actor) return true;
+  const health = actor.system?.resources?.health;
+  if (health && toInteger(health.value) <= toInteger(health.min)) return true;
+  const defeatedStatus = CONFIG.specialStatusEffects.DEFEATED;
+  return Boolean((defeatedStatus && actor.statuses?.has(defeatedStatus)) || actor.statuses?.has("dead"));
+}
+
 function isSuccessfulAttack(outcome) {
   return ["success", "criticalSuccess"].includes(String(outcome?.result?.key ?? ""));
 }
 
 function normalizeAngle(angle) {
   return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+function wait(ms) {
+  return new Promise(resolve => window.setTimeout(resolve, ms));
 }

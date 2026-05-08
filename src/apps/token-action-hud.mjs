@@ -495,7 +495,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const actionKey = String(target.dataset.weaponActionKey ?? "");
     const itemId = String(target.dataset.itemId ?? "");
     const item = this.actor?.items.get(itemId);
-    if (!item || !actionKey || actionKey === "burst") return undefined;
+    if (!item || !actionKey) return undefined;
     return startWeaponAttack({ token: this.token, weapon: item, actionKey });
   }
 
@@ -913,8 +913,8 @@ function prepareWeaponActionButtons(selectedWeapon) {
   return [
     { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot"), disabled: !actions.aimedShot },
     { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot"), disabled: !actions.snapshot },
-    { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst"), disabled: true, visible: Boolean(actions.burst) }
-  ].filter(action => action.visible !== false && (action.key === "burst" || !action.disabled)).map(action => ({
+    { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst"), disabled: !actions.burst, visible: Boolean(actions.burst) }
+  ].filter(action => action.visible !== false && !action.disabled).map(action => ({
     ...action,
     itemId: selectedWeapon.id,
     img: normalizeImagePath(selectedWeapon.img, "icons/svg/combat.svg")

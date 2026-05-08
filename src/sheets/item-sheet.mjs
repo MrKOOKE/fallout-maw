@@ -280,7 +280,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
           aimedShot: false,
           snapshot: false,
           burst: false
-        }
+        },
+        "system.functions.weapon.burst.count": 3
       });
     }
 

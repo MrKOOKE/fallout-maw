@@ -109,6 +109,9 @@ function weaponFunctionField() {
       aimedShot: new BooleanField({ required: true, initial: false }),
       snapshot: new BooleanField({ required: true, initial: false }),
       burst: new BooleanField({ required: true, initial: false })
+    }),
+    burst: new SchemaField({
+      count: new NumberField({ required: true, integer: true, min: 1, initial: 3 })
     })
   });
 }

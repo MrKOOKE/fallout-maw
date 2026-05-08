@@ -153,6 +153,7 @@
       "WeaponActionAimedShot": "Aimed Shot",
       "WeaponActionSnapshot": "Snapshot",
       "WeaponActionBurst": "Burst",
+      "WeaponBurstCount": "Burst Shots",
       "Weight": "Weight"
     },
     "Effects": {

@@ -471,6 +471,14 @@
       </button>
       {{/each}}
     </div>
+    {{#if system.functions.weapon.availableActions.burst}}
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponBurstCount"}}</span>
+        <input type="number" name="system.functions.weapon.burst.count" value="{{system.functions.weapon.burst.count}}" min="1" step="1">
+      </label>
+    </div>
+    {{/if}}
   </section>
   {{/if}}
 
