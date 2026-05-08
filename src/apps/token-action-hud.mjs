@@ -2,7 +2,7 @@ import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import {
   getCreatureOptions,
-  getNeedSettings,
+  getActorNeedSettings,
   getResourceSettings,
   getSkillSettings,
   getSystemActionSettings
@@ -727,7 +727,7 @@ function prepareResourceEntries(actor) {
 }
 
 function prepareNeedEntries(actor) {
-  return getNeedSettings().map(need => prepareIndicatorEntry({
+  return getActorNeedSettings(actor).map(need => prepareIndicatorEntry({
     ...need,
     data: actor.system.needs?.[need.key]
   }));

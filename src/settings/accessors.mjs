@@ -2,7 +2,6 @@ import { FALLOUT_MAW, syncSystemConfig } from "../config/system-config.mjs";
 import {
   createDefaultCharacteristicSettings,
   createDefaultDamageTypeSettings,
-  createDefaultNeedSettings,
   createDefaultProficiencySettings,
   createDefaultResourceSettings,
   createDefaultSkillAdvancementSettings,
@@ -23,13 +22,13 @@ import {
   DAMAGE_TYPES_SETTING,
   DISEASE_SETTINGS_SETTING,
   LEVELS_SETTING,
-  NEED_SETTINGS_SETTING,
   PROFICIENCY_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
   SKILL_CHECK_CONTROL_SETTING,
   SKILL_SETTINGS_SETTING,
   SYSTEM_ACTION_SETTINGS_SETTING,
   TIME_MECHANICS_IGNORED_SETTING,
+  TIME_NEEDS_PLAYERS_ONLY_SETTING,
   TOOL_SETTINGS_SETTING,
   TRAUMA_SETTINGS_SETTING
 } from "./constants.mjs";
@@ -220,33 +219,48 @@ export async function resetResourceSettings() {
 }
 
 export function getNeedSettings() {
-  try {
-    return normalizeNeedSettings(game.settings.get(FALLOUT_MAW.id, NEED_SETTINGS_SETTING));
-  } catch (_error) {
-    return createDefaultNeedSettings();
+  return getAllRaceNeedSettings();
+}
+
+export function getActorNeedSettings(actor) {
+  const raceId = actor?.system?.creature?.raceId ?? actor?.creature?.raceId ?? "";
+  if (!raceId) return [];
+  const race = getCreatureOptions().races.find(entry => entry.id === raceId);
+  return normalizeNeedSettings(race?.needSettings ?? []);
+}
+
+export function getRaceNeedSettings(race) {
+  return normalizeNeedSettings(race?.needSettings ?? []);
+}
+
+export function getAllRaceNeedSettings() {
+  const entries = [];
+  const used = new Set();
+  for (const race of getCreatureOptions().races) {
+    for (const need of normalizeNeedSettings(race.needSettings ?? [])) {
+      if (used.has(need.key)) continue;
+      used.add(need.key);
+      entries.push(need);
+    }
   }
-}
-
-export async function setNeedSettings(settings) {
-  const normalized = normalizeNeedSettings(settings);
-  await game.settings.set(FALLOUT_MAW.id, NEED_SETTINGS_SETTING, normalized);
-  return normalized;
-}
-
-export async function resetNeedSettings() {
-  return setNeedSettings(createDefaultNeedSettings());
+  return entries;
 }
 
 export function getTimeMechanicsIgnored() {
-  try {
-    return Boolean(game.settings.get(FALLOUT_MAW.id, TIME_MECHANICS_IGNORED_SETTING));
-  } catch (_error) {
-    return false;
-  }
+  return Boolean(game.settings.get(FALLOUT_MAW.id, TIME_MECHANICS_IGNORED_SETTING));
 }
 
 export async function setTimeMechanicsIgnored(value) {
   await game.settings.set(FALLOUT_MAW.id, TIME_MECHANICS_IGNORED_SETTING, Boolean(value));
+  return Boolean(value);
+}
+
+export function getTimeNeedsPlayersOnly() {
+  return Boolean(game.settings.get(FALLOUT_MAW.id, TIME_NEEDS_PLAYERS_ONLY_SETTING));
+}
+
+export async function setTimeNeedsPlayersOnly(value) {
+  await game.settings.set(FALLOUT_MAW.id, TIME_NEEDS_PLAYERS_ONLY_SETTING, Boolean(value));
   return Boolean(value);
 }
 

@@ -1,5 +1,10 @@
 import { TEMPLATES } from "../constants.mjs";
-import { getTimeMechanicsIgnored, setTimeMechanicsIgnored } from "../settings/accessors.mjs";
+import {
+  getTimeMechanicsIgnored,
+  getTimeNeedsPlayersOnly,
+  setTimeMechanicsIgnored,
+  setTimeNeedsPlayersOnly
+} from "../settings/accessors.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 
 const CONTROL_ID = "fallout-maw-world-time-control";
@@ -64,7 +69,7 @@ export class WorldTimeControl extends FalloutMaWFormApplicationV2 {
     position: {
       left: 92,
       top: 258,
-      width: 260,
+      width: 520,
       height: "auto"
     },
     window: {
@@ -98,6 +103,7 @@ export class WorldTimeControl extends FalloutMaWFormApplicationV2 {
       running: isClockRunning(),
       combatActive: isCombatActive(),
       ignoreTimeMechanics: getTimeMechanicsIgnored(),
+      needsPlayersOnly: getTimeNeedsPlayersOnly(),
       unitOptions: getUnitOptions(selectedUnit)
     };
   }
@@ -111,6 +117,7 @@ export class WorldTimeControl extends FalloutMaWFormApplicationV2 {
     const unit = String(formData.object?.unit ?? selectedUnit);
     selectedUnit = Object.hasOwn(UNIT_SECONDS, unit) ? unit : "hours";
     await setTimeMechanicsIgnored(Boolean(formData.object?.ignoreTimeMechanics));
+    await setTimeNeedsPlayersOnly(Boolean(formData.object?.needsPlayersOnly));
     return undefined;
   }
 

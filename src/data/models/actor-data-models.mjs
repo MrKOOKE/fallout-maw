@@ -16,8 +16,8 @@ import {
   getCreatureOptions,
   getCurrencySettings,
   getDamageTypeSettings,
-  getNeedSettings,
   getProficiencySettings,
+  getRaceNeedSettings,
   getResourceSettings,
   getSkillAdvancementSettings,
   getSkillSettings
@@ -97,7 +97,6 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     const damageTypeSettings = getDamageTypeSettings();
     const currencySettings = getCurrencySettings();
     const resourceSettings = getResourceSettings();
-    const needSettings = getNeedSettings();
     const proficiencySettings = getProficiencySettings();
     const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
 
@@ -121,6 +120,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     replaceObjectContents(this.currencies, normalizeNumberMap(this.currencies, currencySettings));
 
     const race = getCreatureOptions(characteristicSettings, damageTypeSettings).races.find(entry => entry.id === this.creature?.raceId);
+    const needSettings = getRaceNeedSettings(race);
     if (race?.progression) {
       this.progression.skillPointsPerLevel = toInteger(race.progression.skillPointsPerLevel);
       this.progression.researchPointsPerLevel = toInteger(race.progression.researchPointsPerLevel);

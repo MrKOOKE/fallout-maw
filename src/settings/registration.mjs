@@ -2,7 +2,6 @@ import { FALLOUT_MAW } from "../config/system-config.mjs";
 import {
   createDefaultCharacteristicSettings,
   createDefaultDamageTypeSettings,
-  createDefaultNeedSettings,
   createDefaultProficiencySettings,
   createDefaultResourceSettings,
   createDefaultSkillAdvancementSettings,
@@ -16,7 +15,6 @@ import { CurrencySettingsConfig } from "../apps/currency-settings-config.mjs";
 import { DamageTypesConfig } from "../apps/damage-types-config.mjs";
 import { DiseaseSettingsConfig } from "../apps/disease-settings-config.mjs";
 import { LevelSettingsConfig } from "../apps/level-settings-config.mjs";
-import { NeedSettingsConfig } from "../apps/need-settings-config.mjs";
 import { ProficiencySettingsConfig } from "../apps/proficiency-settings-config.mjs";
 import { ResourceSettingsConfig } from "../apps/resource-settings-config.mjs";
 import { SkillFormulasConfig } from "../apps/skill-formulas-config.mjs";
@@ -31,13 +29,13 @@ import {
   DAMAGE_TYPES_SETTING,
   DISEASE_SETTINGS_SETTING,
   LEVELS_SETTING,
-  NEED_SETTINGS_SETTING,
   PROFICIENCY_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
   SKILL_CHECK_CONTROL_SETTING,
   SKILL_SETTINGS_SETTING,
   SYSTEM_ACTION_SETTINGS_SETTING,
   TIME_MECHANICS_IGNORED_SETTING,
+  TIME_NEEDS_PLAYERS_ONLY_SETTING,
   TOOL_SETTINGS_SETTING,
   TRAUMA_SETTINGS_SETTING,
   TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING,
@@ -118,15 +116,6 @@ export function registerSystemSettings() {
     onChange: refreshPreparedActors
   });
 
-  game.settings.register(FALLOUT_MAW.id, NEED_SETTINGS_SETTING, {
-    name: localize("FALLOUTMAW.Settings.Needs.Title"),
-    scope: "world",
-    config: false,
-    type: Object,
-    default: createDefaultNeedSettings(),
-    onChange: refreshPreparedActors
-  });
-
   game.settings.register(FALLOUT_MAW.id, PROFICIENCY_SETTINGS_SETTING, {
     name: localize("FALLOUTMAW.Settings.Proficiencies.Title"),
     scope: "world",
@@ -186,6 +175,14 @@ export function registerSystemSettings() {
     config: false,
     type: Boolean,
     default: false
+  });
+
+  game.settings.register(FALLOUT_MAW.id, TIME_NEEDS_PLAYERS_ONLY_SETTING, {
+    name: "Рост потребностей только у игроков",
+    scope: "world",
+    config: false,
+    type: Boolean,
+    default: true
   });
 
   game.settings.register(FALLOUT_MAW.id, TOKEN_ACTION_HUD_ENABLED_SETTING, {
@@ -308,13 +305,6 @@ export function registerSystemSettings() {
     restricted: true
   });
 
-  game.settings.registerMenu(FALLOUT_MAW.id, "needSettingsMenu", {
-    name: localize("FALLOUTMAW.Settings.Needs.Title"),
-    label: localize("FALLOUTMAW.Settings.Open"),
-    icon: "fa-solid fa-battery-half",
-    type: NeedSettingsConfig,
-    restricted: true
-  });
 }
 
 export async function finalizeSystemSettings() {

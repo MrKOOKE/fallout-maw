@@ -145,7 +145,8 @@ export const DEFAULT_RESOURCES = Object.freeze([
 export const DEFAULT_NEEDS = Object.freeze([
   { key: "hunger", abbr: "hun", label: "Голод", formula: "1000" },
   { key: "thirst", abbr: "thi", label: "Жажда", formula: "1000" },
-  { key: "sleepiness", abbr: "sle", label: "Сонливость", formula: "1000" }
+  { key: "sleepiness", abbr: "sle", label: "Сонливость", formula: "1000" },
+  { key: "radcont", abbr: "rad", label: "Рад. Заражение", formula: "1000" }
 ]);
 
 export const DEFAULT_DAMAGE_TYPES = Object.freeze([

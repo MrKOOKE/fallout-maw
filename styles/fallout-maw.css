@@ -3177,7 +3177,25 @@ label.fallout-maw-mitigation-cell {
 
 .fallout-maw-world-time-panel {
   display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.9fr);
+}
+
+.fallout-maw-world-time-main,
+.fallout-maw-world-time-options {
+  display: grid;
   gap: 0.55rem;
+}
+
+.fallout-maw-world-time-options {
+  border-left: 1px solid rgba(218, 207, 147, 0.22);
+  padding-left: 0.65rem;
+}
+
+.fallout-maw-world-time-options h3 {
+  color: var(--fallout-maw-actor-heading);
+  font-size: 0.95rem;
+  margin: 0;
 }
 
 .fallout-maw-world-time-current {
@@ -3202,7 +3220,7 @@ label.fallout-maw-mitigation-cell {
   height: 2rem;
 }
 
-.fallout-maw-world-time-ignore {
+.fallout-maw-world-time-option {
   align-items: start;
   display: grid;
   gap: 0.45rem;
@@ -3210,7 +3228,7 @@ label.fallout-maw-mitigation-cell {
   line-height: 1.2;
 }
 
-.fallout-maw-world-time-ignore input {
+.fallout-maw-world-time-option input {
   margin-top: 0.15rem;
 }
 
@@ -4484,6 +4502,10 @@ label.fallout-maw-mitigation-cell {
 
 .need-settings .fallout-maw-settings-row {
   grid-template-columns: 2rem 80px minmax(120px, 1fr) minmax(150px, 1.1fr) 74px minmax(220px, 1.4fr) 2.5rem 2.5rem;
+}
+
+.race-need-settings .fallout-maw-settings-row {
+  grid-template-columns: 80px minmax(120px, 1fr) minmax(150px, 1.1fr) 74px minmax(220px, 1.4fr) 2.5rem 2.5rem;
 }
 
 .proficiency-settings .fallout-maw-settings-row {

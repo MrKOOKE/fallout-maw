@@ -1,13 +1,11 @@
 import { TEMPLATES } from "../constants.mjs";
-import { IDENTIFIER_PATTERN, validateFormula } from "../formulas/index.mjs";
+import { createDefaultNeedSettings, IDENTIFIER_PATTERN, validateFormula } from "../formulas/index.mjs";
 import {
   getCharacteristicSettings,
   getNeedSettings,
   getProficiencySettings,
   getResourceSettings,
-  getSkillSettings,
-  resetNeedSettings,
-  setNeedSettings
+  getSkillSettings
 } from "../settings/accessors.mjs";
 import { format, localize } from "../utils/i18n.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
@@ -20,7 +18,8 @@ const { FormDataExtended } = foundry.applications.ux;
 export class NeedSettingsConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
     super(options);
-    this.needs = getNeedSettings();
+    this.needs = foundry.utils.deepClone(options.needs ?? getNeedSettings());
+    this.onSave = options.onSave ?? null;
   }
 
   static DEFAULT_OPTIONS = {
@@ -71,8 +70,8 @@ export class NeedSettingsConfig extends FalloutMaWFormApplicationV2 {
     const needs = this.#readNeedsFromForm();
     this.#validateNeeds(needs);
 
-    await setNeedSettings(needs);
-    this.needs = getNeedSettings();
+    this.onSave?.(needs);
+    this.needs = foundry.utils.deepClone(needs);
     ui.notifications.info(localize("FALLOUTMAW.Messages.NeedsSaved"));
     return this.forceRender();
   }
@@ -104,8 +103,7 @@ export class NeedSettingsConfig extends FalloutMaWFormApplicationV2 {
 
   static async #onResetDefaults(event) {
     event.preventDefault();
-    await resetNeedSettings();
-    this.needs = getNeedSettings();
+    this.needs = createDefaultNeedSettings();
     return this.forceRender();
   }
 
@@ -201,7 +199,7 @@ function throwValidationError(message) {
   throw new Error(message);
 }
 
-class NeedAdvancedSettingsConfig extends FalloutMaWFormApplicationV2 {
+export class NeedAdvancedSettingsConfig extends FalloutMaWFormApplicationV2 {
   constructor({ need = {}, onSave = null } = {}) {
     super();
     this.need = foundry.utils.deepClone(need);

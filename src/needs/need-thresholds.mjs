@@ -1,5 +1,10 @@
 import { DISEASE_CREATE_OPTION, SYSTEM_ID } from "../constants.mjs";
-import { getDiseaseSettings, getNeedSettings, getTimeMechanicsIgnored } from "../settings/accessors.mjs";
+import {
+  getActorNeedSettings,
+  getDiseaseSettings,
+  getTimeMechanicsIgnored,
+  getTimeNeedsPlayersOnly
+} from "../settings/accessors.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const NEED_EFFECT_FLAG_KEY = "needEffect";
@@ -26,9 +31,12 @@ export async function processActorNeedThresholds(actor) {
   if (processingActors.has(actor.uuid)) return;
   processingActors.add(actor.uuid);
   try {
-    for (const need of getNeedSettings()) {
+    const needSettings = getActorNeedSettings(actor);
+    const activeNeedKeys = new Set(needSettings.map(need => need.key));
+    for (const need of needSettings) {
       await processSingleNeed(actor, need);
     }
+    await deleteStaleNeedThresholdEffects(actor, activeNeedKeys);
     await syncActorDiseaseWorseningMultipliers(actor);
   } finally {
     processingActors.delete(actor.uuid);
@@ -59,7 +67,9 @@ async function processDiseaseWorldTime(worldTime, deltaTime) {
   const elapsedSeconds = Number(deltaTime) || 0;
   for (const actor of getLoadedActors()) {
     if (!actor?.isOwner) continue;
-    await processActorNeedAccumulation(actor, elapsedSeconds);
+    if (!getTimeNeedsPlayersOnly() || hasPlayerOwner(actor)) {
+      await processActorNeedAccumulation(actor, elapsedSeconds);
+    }
     await processActorDiseaseWorsening(actor, now);
     await processActorNeedThresholds(actor);
   }
@@ -69,7 +79,7 @@ async function processActorNeedAccumulation(actor, elapsedSeconds) {
   const updateData = {};
   const remainders = foundry.utils.deepClone(actor.getFlag(SYSTEM_ID, NEED_ACCUMULATION_REMAINDER_FLAG_KEY) ?? {});
   const initialRemainders = JSON.stringify(remainders);
-  for (const need of getNeedSettings()) {
+  for (const need of getActorNeedSettings(actor)) {
     const perHour = Math.max(0, Number(need.settings?.accumulation?.perHour) || 0);
     if (!perHour) continue;
     const resource = actor.system?.needs?.[need.key];
@@ -172,6 +182,16 @@ async function syncNeedPenaltyEffect(actor, need, threshold) {
 async function deleteNeedThresholdEffects(actor, needKey) {
   const ids = actor.effects
     .filter(effect => effect.getFlag(SYSTEM_ID, NEED_EFFECT_FLAG_KEY)?.needKey === needKey)
+    .map(effect => effect.id);
+  if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids);
+}
+
+async function deleteStaleNeedThresholdEffects(actor, activeNeedKeys) {
+  const ids = actor.effects
+    .filter(effect => {
+      const needKey = effect.getFlag(SYSTEM_ID, NEED_EFFECT_FLAG_KEY)?.needKey;
+      return needKey && !activeNeedKeys.has(needKey);
+    })
     .map(effect => effect.id);
   if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids);
 }
@@ -387,6 +407,10 @@ function calculateDiseaseWorseningMultiplier(actor, needKey) {
   if (!need) return 1;
   const percent = getNeedPercent(need);
   return Math.max(1, Math.floor(percent / 10) * 2);
+}
+
+function hasPlayerOwner(actor) {
+  return Array.from(game.users ?? []).some(user => !user.isGM && actor.testUserPermission(user, "OWNER"));
 }
 
 async function syncActorDiseaseWorseningMultipliers(actor) {

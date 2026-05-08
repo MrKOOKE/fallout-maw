@@ -8,8 +8,8 @@ import {
   getDamageTypeSettings,
   getDiseaseSettings,
   getLevelSettings,
-  getNeedSettings,
   getProficiencySettings,
+  getRaceNeedSettings,
   getResourceSettings,
   getSkillAdvancementSettings,
   getSkillSettings
@@ -186,7 +186,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const damageTypeSettings = getDamageTypeSettings();
     const diseaseSettings = getDiseaseSettings();
     const resourceSettings = getResourceSettings();
-    const needSettings = getNeedSettings();
     const proficiencySettings = getProficiencySettings();
     const skillSettings = getSkillSettings();
     const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
@@ -194,6 +193,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const typeId = actor.system?.creature?.typeId;
     const raceId = actor.system?.creature?.raceId;
     const race = creatureOptions.races.find(entry => entry.id === raceId);
+    const needSettings = getRaceNeedSettings(race);
     const sourceSystem = actor.system?._source ?? actor.system;
     const limbEntries = Object.entries(actor.system?.limbs ?? {});
     const activeLimbKey = limbEntries.some(([key]) => key === this.#activeLimbKey)

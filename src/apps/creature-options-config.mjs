@@ -1,5 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
-import { validateFormula } from "../formulas/index.mjs";
+import { IDENTIFIER_PATTERN, validateFormula } from "../formulas/index.mjs";
 import {
   getCharacteristicSettings,
   getCreatureOptions,
@@ -17,10 +17,11 @@ import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 import { LimbSilhouetteConfig } from "./limb-silhouette-config.mjs";
+import { NeedAdvancedSettingsConfig } from "./need-settings-config.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
-const CREATURE_SECTION_KEYS = Object.freeze(["type", "race", "base", "development", "limbs", "equipment", "inventory", "resistances"]);
+const CREATURE_SECTION_KEYS = Object.freeze(["type", "race", "base", "development", "limbs", "equipment", "inventory", "resistances", "needs"]);
 
 export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
   #editorMode = "type";
@@ -58,6 +59,9 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       deleteWeaponSet: this.#onDeleteWeaponSet,
       createWeaponSlot: this.#onCreateWeaponSlot,
       deleteWeaponSlot: this.#onDeleteWeaponSlot,
+      createRaceNeed: this.#onCreateRaceNeed,
+      deleteRaceNeed: this.#onDeleteRaceNeed,
+      openRaceNeedSettings: this.#onOpenRaceNeedSettings,
       deleteType: this.#onDeleteType,
       deleteRace: this.#onDeleteRace
     }
@@ -123,7 +127,8 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       damageTypes: damageTypes.map(damageType => ({
         ...damageType,
         formula: String(selectedRace?.damageResistances?.[damageType.key] ?? "0")
-      }))
+      })),
+      needSettings: selectedRace?.needSettings ?? []
     };
   }
 
@@ -369,6 +374,59 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
+  static #onCreateRaceNeed(event) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    if (!race) return undefined;
+    const key = getUniqueId("newNeed", (race.needSettings ?? []).map(need => need.key));
+    const abbr = getUniqueId("new", (race.needSettings ?? []).map(need => need.abbr));
+    race.needSettings ??= [];
+    race.needSettings.push({
+      key,
+      abbr,
+      label: "Новая потребность",
+      formula: "0",
+      color: "#8f8456",
+      settings: { accumulation: { perHour: 10 }, thresholds: [], diseases: [] }
+    });
+    return this.forceRender();
+  }
+
+  static #onDeleteRaceNeed(event, target) {
+    event.preventDefault();
+    const row = target.closest("[data-race-need-row]");
+    const rows = Array.from(this.form?.querySelectorAll("[data-race-need-row]") ?? []);
+    const index = rows.indexOf(row);
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    if (!race || index < 0) return undefined;
+    race.needSettings.splice(index, 1);
+    return this.forceRender();
+  }
+
+  static #onOpenRaceNeedSettings(event, target) {
+    event.preventDefault();
+    const row = target.closest("[data-race-need-row]");
+    const rows = Array.from(this.form?.querySelectorAll("[data-race-need-row]") ?? []);
+    const index = rows.indexOf(row);
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    const need = race?.needSettings?.[index];
+    if (!need) return undefined;
+
+    return new NeedAdvancedSettingsConfig({
+      need,
+      onSave: settings => {
+        this.#updateFromCurrentForm();
+        const activeRace = this.#activeRace;
+        if (!activeRace?.needSettings?.[index]) return;
+        activeRace.needSettings[index].settings = settings;
+        this.forceRender();
+      }
+    }).render({ force: true });
+  }
+
   get #activeRace() {
     return this.creatureOptions.races.find(entry => entry.id === this.activeRaceId);
   }
@@ -423,6 +481,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         String(formData.race?.damageResistances?.[damageType.key] ?? "0").trim() || "0"
       ])
     );
+    race.needSettings = this.#readRaceNeedsFromForm();
     race.progression = {
       skillPointsPerLevel: toInteger(formData.race?.progression?.skillPointsPerLevel),
       researchPointsPerLevel: toInteger(formData.race?.progression?.researchPointsPerLevel)
@@ -464,6 +523,25 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     }).filter(set => set.key);
   }
 
+  #readRaceNeedsFromForm() {
+    const rows = Array.from(this.form?.querySelectorAll("[data-race-need-row]") ?? []);
+    const race = this.#activeRace;
+    return rows.map((row, index) => {
+      const key = row.querySelector("[data-field='key']")?.value?.trim() ?? "";
+      const existing = race?.needSettings?.find(need => need.key === key)?.settings
+        ?? race?.needSettings?.[index]?.settings
+        ?? {};
+      return {
+        abbr: row.querySelector("[data-field='abbr']")?.value?.trim() ?? "",
+        key,
+        label: row.querySelector("[data-field='label']")?.value?.trim() ?? "",
+        color: row.querySelector("[data-field='color']")?.value?.trim() ?? "#8f8456",
+        formula: row.querySelector("[data-field='formula']")?.value?.trim() || "0",
+        settings: foundry.utils.deepClone(existing)
+      };
+    }).filter(need => need.key);
+  }
+
   #validateRaceFormulas() {
     const characteristics = getCharacteristicSettings();
     const skills = getSkillSettings();
@@ -487,6 +565,31 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       } catch (error) {
         ui.notifications.error(`${race.name || race.id} / ${localize("FALLOUTMAW.Common.Load")}: ${error.message}`);
         throw error;
+      }
+
+      const usedNeedKeys = new Set();
+      const usedNeedAbbrs = new Set();
+      for (const [index, need] of (race.needSettings ?? []).entries()) {
+        const key = String(need.key ?? "").trim();
+        const abbr = String(need.abbr ?? "").trim();
+        if (!IDENTIFIER_PATTERN.test(key) || usedNeedKeys.has(key)) {
+          const message = `${race.name || race.id} / потребность ${index + 1}: ключ некорректный или повторяется`;
+          ui.notifications.error(message);
+          throw new Error(message);
+        }
+        if (!IDENTIFIER_PATTERN.test(abbr) || usedNeedAbbrs.has(abbr)) {
+          const message = `${race.name || race.id} / потребность ${index + 1}: код некорректный или повторяется`;
+          ui.notifications.error(message);
+          throw new Error(message);
+        }
+        usedNeedKeys.add(key);
+        usedNeedAbbrs.add(abbr);
+        try {
+          validateFormula(need.formula ?? "0", { allowSkills: true, characteristics, skills });
+        } catch (error) {
+          ui.notifications.error(`${race.name || race.id} / ${need.label || key}: ${error.message}`);
+          throw error;
+        }
       }
     }
   }

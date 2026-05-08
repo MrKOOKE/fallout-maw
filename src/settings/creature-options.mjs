@@ -8,7 +8,7 @@ import {
 } from "../config/defaults.mjs";
 import { localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-import { normalizeFormulaMap } from "../formulas/index.mjs";
+import { createDefaultNeedSettings, normalizeFormulaMap, normalizeNeedSettings } from "../formulas/index.mjs";
 import { normalizeLimbSilhouette } from "../utils/limb-silhouette.mjs";
 
 export function createEmptyCreatureOptions() {
@@ -25,6 +25,7 @@ export function createRaceDefaults(characteristics = [], damageTypes = []) {
     weaponSets: createDefaultWeaponSets(),
     inventorySize: createDefaultInventorySize(),
     damageResistances: Object.fromEntries(damageTypes.map(entry => [entry.key, "0"])),
+    needSettings: createDefaultNeedSettings(),
     progression: {
       skillPointsPerLevel: 0,
       researchPointsPerLevel: 0
@@ -88,6 +89,7 @@ export function normalizeCreatureOptions(options = {}, characteristics = [], dam
         weaponSets: normalizeWeaponSets(race.weaponSets, limbs),
         inventorySize: normalizeInventorySize(race.inventorySize),
         damageResistances: normalizeFormulaMap(race.damageResistances, damageTypes),
+        needSettings: normalizeRaceNeedSettings(race.needSettings),
         progression: {
           skillPointsPerLevel: toInteger(race.progression?.skillPointsPerLevel),
           researchPointsPerLevel: toInteger(race.progression?.researchPointsPerLevel)
@@ -100,6 +102,15 @@ export function normalizeCreatureOptions(options = {}, characteristics = [], dam
 
 function normalizeRaceCharacteristics(values = {}, characteristics = []) {
   return Object.fromEntries(characteristics.map(definition => [definition.key, toInteger(values?.[definition.key] ?? 1)]));
+}
+
+function normalizeRaceNeedSettings(settings) {
+  const normalized = normalizeNeedSettings(settings);
+  const byKey = new Map(normalized.map(need => [need.key, need]));
+  for (const need of createDefaultNeedSettings()) {
+    if (!byKey.has(need.key)) byKey.set(need.key, need);
+  }
+  return Array.from(byKey.values());
 }
 
 function normalizeRaceBaseParameters(values = {}) {

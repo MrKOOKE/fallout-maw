@@ -251,6 +251,40 @@
           {{/each}}
         </div>
       </section>
+
+      <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.needs.cssClass}}" data-creature-section="needs">
+        <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
+          <button type="button" data-creature-section-toggle aria-expanded="{{sections.needs.ariaExpanded}}"><i class="fa-solid {{sections.needs.iconClass}}"></i><span>Потребности</span></button>
+          <button type="button" data-action="createRaceNeed"><i class="fa-solid fa-plus"></i> Создать потребность</button>
+        </header>
+
+        <p class="hint">{{localize "FALLOUTMAW.Settings.Needs.FormulaHint"}}</p>
+
+        <div class="fallout-maw-settings-table need-settings race-need-settings">
+          <div class="fallout-maw-settings-row fallout-maw-grid-header">
+            <span>{{localize "FALLOUTMAW.Common.Code"}}</span>
+            <span>{{localize "FALLOUTMAW.Common.Key"}}</span>
+            <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
+            <span>{{localize "FALLOUTMAW.Common.Color"}}</span>
+            <span>{{localize "FALLOUTMAW.Common.Formula"}}</span>
+            <span></span>
+            <span></span>
+          </div>
+          {{#each needSettings}}
+          <div class="fallout-maw-settings-row" data-race-need-row>
+            <input type="text" data-field="abbr" value="{{abbr}}">
+            <input type="text" data-field="key" value="{{key}}">
+            <input type="text" data-field="label" value="{{label}}">
+            <input type="color" data-field="color" value="{{color}}">
+            <input type="text" data-field="formula" value="{{formula}}" data-formula-autocomplete="all">
+            <button type="button" data-action="openRaceNeedSettings" title="Доп. настройки"><i class="fa-solid fa-gear"></i></button>
+            <button type="button" data-action="deleteRaceNeed" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          {{else}}
+          <p class="fallout-maw-empty-list">Потребности не настроены.</p>
+          {{/each}}
+        </div>
+      </section>
       {{else}}
       <section class="fallout-maw-panel fallout-maw-empty-editor">
         <h2>{{localize "FALLOUTMAW.Settings.CreatureOptions.EmptyEditor"}}</h2>
