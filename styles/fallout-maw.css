@@ -3202,6 +3202,18 @@ label.fallout-maw-mitigation-cell {
   height: 2rem;
 }
 
+.fallout-maw-world-time-ignore {
+  align-items: start;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: max-content minmax(0, 1fr);
+  line-height: 1.2;
+}
+
+.fallout-maw-world-time-ignore input {
+  margin-top: 0.15rem;
+}
+
 .fallout-maw-world-time-actions {
   display: grid;
   gap: 0.35rem;

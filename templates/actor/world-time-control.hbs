@@ -10,6 +10,11 @@
     </select>
   </label>
 
+  <label class="fallout-maw-world-time-ignore">
+    <input type="checkbox" name="ignoreTimeMechanics" {{#if ignoreTimeMechanics}}checked{{/if}}>
+    <span>Игнорировать механики завязанные на времени</span>
+  </label>
+
   <div class="fallout-maw-world-time-actions">
     <button type="button" data-action="advanceTime" data-direction="-1" data-multiplier="5" title="-5 шагов">&lt;&lt;</button>
     <button type="button" data-action="advanceTime" data-direction="-1" data-multiplier="1" title="-1 шаг">&lt;</button>

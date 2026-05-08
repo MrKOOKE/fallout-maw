@@ -37,6 +37,7 @@ import {
   SKILL_CHECK_CONTROL_SETTING,
   SKILL_SETTINGS_SETTING,
   SYSTEM_ACTION_SETTINGS_SETTING,
+  TIME_MECHANICS_IGNORED_SETTING,
   TOOL_SETTINGS_SETTING,
   TRAUMA_SETTINGS_SETTING,
   TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING,
@@ -177,6 +178,14 @@ export function registerSystemSettings() {
     type: Object,
     default: createDefaultSystemActionSettings(),
     onChange: refreshPreparedActors
+  });
+
+  game.settings.register(FALLOUT_MAW.id, TIME_MECHANICS_IGNORED_SETTING, {
+    name: "Игнорировать механики времени",
+    scope: "world",
+    config: false,
+    type: Boolean,
+    default: false
   });
 
   game.settings.register(FALLOUT_MAW.id, TOKEN_ACTION_HUD_ENABLED_SETTING, {

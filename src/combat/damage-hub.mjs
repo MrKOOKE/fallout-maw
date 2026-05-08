@@ -1,5 +1,5 @@
 import { SYSTEM_ID, TRAUMA_CREATE_OPTION } from "../constants.mjs";
-import { getCreatureOptions, getDamageTypeSettings, getTraumaSettings } from "../settings/accessors.mjs";
+import { getCreatureOptions, getDamageTypeSettings, getTimeMechanicsIgnored, getTraumaSettings } from "../settings/accessors.mjs";
 import { getTraumaGroupForActor } from "../settings/traumas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
@@ -370,6 +370,7 @@ function registerDamageTimeHooks() {
   Hooks.on("deleteCombat", combat => combatRoundWorldTimes.delete(combat.id));
   Hooks.on("combatTurnChange", advanceWorldTimeForCombatRound);
   Hooks.on("updateWorldTime", processTimedDamageEffects);
+  Hooks.on("preDeleteActiveEffect", preventIgnoredTimedDamageEffectDeletion);
   damageTimeHooksRegistered = true;
 }
 
@@ -394,6 +395,10 @@ function getRoundSeconds() {
 
 async function processTimedDamageEffects(worldTime, deltaTime) {
   if (!game.user?.isActiveGM || Number(deltaTime) <= 0) return;
+  if (getTimeMechanicsIgnored()) {
+    await preserveTimedDamageEffects(Number(deltaTime) || 0);
+    return;
+  }
   const now = Number(worldTime) || Number(game.time?.worldTime) || 0;
   for (const actor of getLoadedActors()) {
     if (!actor?.isOwner) continue;
@@ -428,6 +433,52 @@ async function processTimedDamageEffects(worldTime, deltaTime) {
       for (const uuid of lockedEffectUuids) processingPeriodicEffectUuids.delete(uuid);
     }
   }
+}
+
+async function preserveTimedDamageEffects(deltaTime) {
+  const elapsed = Math.max(0, Number(deltaTime) || 0);
+  if (!elapsed) return;
+
+  for (const actor of getLoadedActors()) {
+    if (!actor?.isOwner) continue;
+    for (const effect of Array.from(actor.effects ?? [])) {
+      const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
+      if (!data || effect.disabled) continue;
+      const updateData = buildIgnoredTimedDamageEffectUpdate(effect, data, elapsed);
+      if (!Object.keys(updateData).length) continue;
+      await updatePeriodicEffect(effect, updateData);
+    }
+  }
+}
+
+function buildIgnoredTimedDamageEffectUpdate(effect, data, elapsed) {
+  if (data.kind === "periodicDamage") {
+    const updateData = {};
+    const startTime = Number(data.startTime);
+    const endTime = Number(data.endTime);
+    const nextTickTime = Number(data.nextTickTime);
+    if (Number.isFinite(startTime)) updateData[`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.startTime`] = startTime + elapsed;
+    if (Number.isFinite(endTime)) updateData[`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.endTime`] = endTime + elapsed;
+    if (Number.isFinite(nextTickTime)) updateData[`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.nextTickTime`] = nextTickTime + elapsed;
+    return updateData;
+  }
+
+  if (data.kind === "resourceLimit" || data.kind === "resourceBlock") {
+    const startTime = Number(effect.duration?.startTime);
+    if (Number.isFinite(startTime)) return { "duration.startTime": startTime + elapsed };
+  }
+
+  return {};
+}
+
+function preventIgnoredTimedDamageEffectDeletion(effect, _options, _userId) {
+  if (!getTimeMechanicsIgnored()) return undefined;
+  const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
+  if (data?.kind !== "resourceLimit" && data?.kind !== "resourceBlock") return undefined;
+  if (!Number(effect.duration?.seconds)) return undefined;
+  const remaining = Number(effect.duration?.remaining);
+  if (Number.isFinite(remaining) && remaining <= 0) return false;
+  return undefined;
 }
 
 function collectPeriodicDamageEffectTicks(effect, data, now) {

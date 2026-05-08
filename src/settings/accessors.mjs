@@ -29,6 +29,7 @@ import {
   SKILL_CHECK_CONTROL_SETTING,
   SKILL_SETTINGS_SETTING,
   SYSTEM_ACTION_SETTINGS_SETTING,
+  TIME_MECHANICS_IGNORED_SETTING,
   TOOL_SETTINGS_SETTING,
   TRAUMA_SETTINGS_SETTING
 } from "./constants.mjs";
@@ -234,6 +235,19 @@ export async function setNeedSettings(settings) {
 
 export async function resetNeedSettings() {
   return setNeedSettings(createDefaultNeedSettings());
+}
+
+export function getTimeMechanicsIgnored() {
+  try {
+    return Boolean(game.settings.get(FALLOUT_MAW.id, TIME_MECHANICS_IGNORED_SETTING));
+  } catch (_error) {
+    return false;
+  }
+}
+
+export async function setTimeMechanicsIgnored(value) {
+  await game.settings.set(FALLOUT_MAW.id, TIME_MECHANICS_IGNORED_SETTING, Boolean(value));
+  return Boolean(value);
 }
 
 export function getDiseaseSettings() {

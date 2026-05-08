@@ -1,5 +1,5 @@
 import { DISEASE_CREATE_OPTION, SYSTEM_ID } from "../constants.mjs";
-import { getDiseaseSettings, getNeedSettings } from "../settings/accessors.mjs";
+import { getDiseaseSettings, getNeedSettings, getTimeMechanicsIgnored } from "../settings/accessors.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const NEED_EFFECT_FLAG_KEY = "needEffect";
@@ -18,6 +18,7 @@ export function registerNeedThresholdHooks() {
     void processActorNeedThresholds(actor);
   });
   Hooks.on("updateWorldTime", processDiseaseWorldTime);
+  Hooks.on("preDeleteActiveEffect", preventIgnoredDiseaseImmunityDeletion);
 }
 
 export async function processActorNeedThresholds(actor) {
@@ -50,6 +51,10 @@ async function processSingleNeed(actor, need) {
 
 async function processDiseaseWorldTime(worldTime, deltaTime) {
   if (!game.user?.isActiveGM || Number(deltaTime) <= 0) return;
+  if (getTimeMechanicsIgnored()) {
+    await preserveDiseaseTimedEffects(Number(deltaTime) || 0);
+    return;
+  }
   const now = Number(worldTime) || Number(game.time?.worldTime) || 0;
   const elapsedSeconds = Number(deltaTime) || 0;
   for (const actor of getLoadedActors()) {
@@ -91,6 +96,35 @@ async function processActorNeedAccumulation(actor, elapsedSeconds) {
     updateData[`flags.${SYSTEM_ID}.${NEED_ACCUMULATION_REMAINDER_FLAG_KEY}`] = remainders;
   }
   if (Object.keys(updateData).length) await actor.update(updateData);
+}
+
+async function preserveDiseaseTimedEffects(deltaTime) {
+  const elapsed = Math.max(0, Number(deltaTime) || 0);
+  if (!elapsed) return;
+
+  for (const actor of getLoadedActors()) {
+    if (!actor?.isOwner) continue;
+    for (const effect of Array.from(actor.effects ?? [])) {
+      const data = effect.getFlag(SYSTEM_ID, DISEASE_IMMUNITY_FLAG_KEY);
+      if (!data || effect.disabled) continue;
+      const startTime = Number(effect.duration?.startTime);
+      const untilTime = Number(data.untilTime);
+      const updateData = {};
+      if (Number.isFinite(startTime)) updateData["duration.startTime"] = startTime + elapsed;
+      if (Number.isFinite(untilTime)) updateData[`flags.${SYSTEM_ID}.${DISEASE_IMMUNITY_FLAG_KEY}.untilTime`] = untilTime + elapsed;
+      if (Object.keys(updateData).length) await effect.update(updateData);
+    }
+  }
+}
+
+function preventIgnoredDiseaseImmunityDeletion(effect, _options, _userId) {
+  if (!getTimeMechanicsIgnored()) return undefined;
+  const data = effect.getFlag?.(SYSTEM_ID, DISEASE_IMMUNITY_FLAG_KEY);
+  if (!data) return undefined;
+  if (!Number(effect.duration?.seconds)) return undefined;
+  const remaining = Number(effect.duration?.remaining);
+  if (Number.isFinite(remaining) && remaining <= 0) return false;
+  return undefined;
 }
 
 function getNeedPercent(resource) {
