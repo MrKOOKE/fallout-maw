@@ -64,6 +64,7 @@
       "Path": "Path",
       "Total": "Total",
       "Traumas": "Traumas",
+      "Type": "Type",
       "Untitled": "Untitled",
       "Value": "Value",
       "Weapon": "Weapon"
@@ -107,6 +108,8 @@
       "Function": "Item Function",
       "FunctionContainer": "Container",
       "FunctionDamageMitigation": "Defense/Resistance",
+      "FunctionCondition": "Condition",
+      "FunctionWeapon": "Weapon",
       "FunctionChoose": "Choose Function",
       "DeleteFunction": "Delete Function",
       "DeleteFunctionConfirm": "Delete function \"{function}\"?",
@@ -131,6 +134,24 @@
       "Target": "Target",
       "TotalWeight": "Total Weight",
       "Unequip": "Unequip",
+      "ConditionValue": "Condition",
+      "WeaponDamage": "Damage",
+      "WeaponSkill": "Used Skill",
+      "WeaponAccuracyBonus": "Accuracy Bonus",
+      "WeaponAttackCone": "Attack Cone, degrees",
+      "WeaponMaxRange": "Maximum Range, meters",
+      "WeaponEffectiveRange": "Effective Range",
+      "WeaponPenetration": "Penetration",
+      "WeaponMagazine": "Magazine",
+      "WeaponResourceCosts": "Attack Resource Costs",
+      "WeaponAddResourceCost": "Add Cost",
+      "WeaponNoResourceCosts": "No attack costs.",
+      "WeaponCostMagazine": "Magazine",
+      "WeaponCostCondition": "Condition Cost",
+      "WeaponAvailableActions": "Available Actions",
+      "WeaponActionAimedShot": "Aimed Shot",
+      "WeaponActionSnapshot": "Snapshot",
+      "WeaponActionBurst": "Burst",
       "Weight": "Weight"
     },
     "Effects": {
@@ -179,6 +200,9 @@
       "HealingProgress": "Healing progress",
       "HealingSkill": "Healing skill",
       "HealingToolClass": "Treatment tool class"
+    },
+    "Disease": {
+      "ImmunityName": "Disease Immunity: up to level {level}"
     },
     "Research": {
       "ApplyTime": "Apply Time",

@@ -1,6 +1,8 @@
 export const ITEM_FUNCTIONS = {
   container: "container",
   damageMitigation: "damageMitigation",
+  condition: "condition",
+  weapon: "weapon",
   toolPrefix: "tool:"
 };
 
@@ -25,6 +27,14 @@ export function hasItemFunction(itemOrSystem = null, functionKey = "") {
 
 export function getDamageMitigationFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.damageMitigation] ?? {};
+}
+
+export function getConditionFunction(itemOrSystem = null) {
+  return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.condition] ?? {};
+}
+
+export function getWeaponFunction(itemOrSystem = null) {
+  return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.weapon] ?? {};
 }
 
 export function createToolFunctionKey(toolKey = "") {

@@ -349,6 +349,123 @@
   </section>
   {{/if}}
 
+  {{#if hasConditionFunction}}
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Item.FunctionCondition"}}</h2>
+      <button type="button" data-remove-item-function="condition" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label class="fallout-maw-split-number-field">
+        <span>{{localize "FALLOUTMAW.Item.ConditionValue"}}</span>
+        <div>
+          <input type="number" name="system.functions.condition.value" value="{{system.functions.condition.value}}" min="0" step="1">
+          <strong>/</strong>
+          <input type="number" name="system.functions.condition.max" value="{{system.functions.condition.max}}" min="0" step="1">
+        </div>
+      </label>
+    </div>
+  </section>
+  {{/if}}
+
+  {{#if hasWeaponFunction}}
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Item.FunctionWeapon"}}</h2>
+      <button type="button" data-remove-item-function="weapon" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponDamage"}}</span>
+        <input type="number" name="system.functions.weapon.damage" value="{{system.functions.weapon.damage}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponSkill"}}</span>
+        <select name="system.functions.weapon.skillKey">
+          {{#each weaponSkillChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponAccuracyBonus"}}</span>
+        <input type="number" name="system.functions.weapon.accuracyBonus" value="{{system.functions.weapon.accuracyBonus}}" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponAttackCone"}}</span>
+        <input type="number" name="system.functions.weapon.attackConeDegrees" value="{{system.functions.weapon.attackConeDegrees}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponMaxRange"}}</span>
+        <input type="number" name="system.functions.weapon.maxRangeMeters" value="{{system.functions.weapon.maxRangeMeters}}" min="0" step="1">
+      </label>
+      <label class="fallout-maw-split-number-field">
+        <span>{{localize "FALLOUTMAW.Item.WeaponEffectiveRange"}}</span>
+        <div>
+          <input type="number" name="system.functions.weapon.effectiveRange.value" value="{{system.functions.weapon.effectiveRange.value}}" min="0" step="1">
+          <strong>/</strong>
+          <input type="number" name="system.functions.weapon.effectiveRange.max" value="{{system.functions.weapon.effectiveRange.max}}" min="0" step="1">
+        </div>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponPenetration"}}</span>
+        <input type="number" name="system.functions.weapon.penetration" value="{{system.functions.weapon.penetration}}" min="0" step="1">
+      </label>
+      {{#if hasWeaponMagazineCost}}
+        <label class="fallout-maw-split-number-field">
+          <span>{{localize "FALLOUTMAW.Item.WeaponMagazine"}}</span>
+          <div>
+            <input type="number" name="system.functions.weapon.magazine.value" value="{{system.functions.weapon.magazine.value}}" min="0" step="1">
+            <strong>/</strong>
+            <input type="number" name="system.functions.weapon.magazine.max" value="{{system.functions.weapon.magazine.max}}" min="0" step="1">
+          </div>
+        </label>
+      {{/if}}
+    </div>
+
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.WeaponResourceCosts"}}</h3>
+      <button type="button" data-add-weapon-resource-cost><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddResourceCost"}}</button>
+    </div>
+    <div class="fallout-maw-settings-table fallout-maw-weapon-resource-costs">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Type"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span></span>
+      </div>
+      {{#each weaponResourceCosts}}
+      <div class="fallout-maw-settings-row">
+        <select name="system.functions.weapon.resourceCosts.{{index}}.type">
+          {{#each typeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="number" name="system.functions.weapon.resourceCosts.{{index}}.amount" value="{{amount}}" min="0" step="1">
+        <button type="button" data-delete-weapon-resource-cost="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoResourceCosts"}}</p>
+      {{/each}}
+    </div>
+
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.WeaponAvailableActions"}}</h3>
+    </div>
+    <div class="fallout-maw-hidden-controls">
+      {{#each weaponActionChoices}}
+      <input type="checkbox" name="system.functions.weapon.availableActions.{{key}}" data-weapon-action-input="{{key}}" {{checked selected}}>
+      {{/each}}
+    </div>
+    <div class="fallout-maw-button-toggle-grid">
+      {{#each weaponActionChoices}}
+      <button type="button" class="fallout-maw-toggle-button {{#if selected}}active{{/if}}" data-weapon-action-choice="{{key}}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}">
+        {{label}}
+      </button>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+
   {{#each toolFunctions}}
   {{#if enabled}}
   <section class="fallout-maw-panel">

@@ -38,6 +38,8 @@ export class GearDataModel extends BaseItemDataModel {
       itemFunction: new StringField({ required: true, blank: true, initial: "" }),
       functions: new SchemaField({
         container: containerFunctionField(),
+        condition: conditionFunctionField(),
+        weapon: weaponFunctionField(),
         damageMitigation: new SchemaField({
           enabled: new BooleanField({ required: true, initial: false }),
           mode: new StringField({ required: true, blank: false, initial: "defense" }),
@@ -73,6 +75,47 @@ function containerFunctionField() {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     loadReduction: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 0 })
+  });
+}
+
+function conditionFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    value: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    max: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+  });
+}
+
+function weaponFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    damage: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    skillKey: new StringField({ required: true, blank: false, initial: "rangedCombat" }),
+    accuracyBonus: new NumberField({ required: true, integer: true, initial: 0 }),
+    attackConeDegrees: new NumberField({ required: true, min: 0, initial: 0 }),
+    maxRangeMeters: new NumberField({ required: true, min: 0, initial: 0 }),
+    effectiveRange: new SchemaField({
+      value: new NumberField({ required: true, min: 0, initial: 0 }),
+      max: new NumberField({ required: true, min: 0, initial: 0 })
+    }),
+    penetration: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    magazine: new SchemaField({
+      value: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      max: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+    }),
+    resourceCosts: new ArrayField(weaponResourceCostField(), { required: true, initial: [] }),
+    availableActions: new SchemaField({
+      aimedShot: new BooleanField({ required: true, initial: false }),
+      snapshot: new BooleanField({ required: true, initial: false }),
+      burst: new BooleanField({ required: true, initial: false })
+    })
+  });
+}
+
+function weaponResourceCostField() {
+  return new SchemaField({
+    type: new StringField({ required: true, blank: false, initial: "magazine" }),
+    amount: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
   });
 }
 

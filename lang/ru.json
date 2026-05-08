@@ -63,6 +63,7 @@
       "Path": "Путь",
       "Total": "Итого",
       "Traumas": "Травмы",
+      "Type": "Тип",
       "Untitled": "Без названия",
       "Value": "Значение",
       "Weapon": "Оружие"
@@ -106,6 +107,8 @@
       "Function": "Функция предмета",
       "FunctionContainer": "Контейнер",
       "FunctionDamageMitigation": "Защита/Сопротивление",
+      "FunctionCondition": "Состояние",
+      "FunctionWeapon": "Оружие",
       "FunctionChoose": "Выберите функцию",
       "DeleteFunction": "Удаление функции",
       "DeleteFunctionConfirm": "Удалить функцию \"{function}\"?",
@@ -130,6 +133,24 @@
       "Target": "Цель",
       "TotalWeight": "Общий вес",
       "Unequip": "Снять",
+      "ConditionValue": "Состояние",
+      "WeaponDamage": "Урон",
+      "WeaponSkill": "Задействованный навык",
+      "WeaponAccuracyBonus": "Бонус к точности",
+      "WeaponAttackCone": "Конус атаки, градусы",
+      "WeaponMaxRange": "Максимальная дистанция, метры",
+      "WeaponEffectiveRange": "Эффективная дистанция",
+      "WeaponPenetration": "Пробивная сила",
+      "WeaponMagazine": "Магазин",
+      "WeaponResourceCosts": "Расход ресурсов на атаку",
+      "WeaponAddResourceCost": "Добавить расход",
+      "WeaponNoResourceCosts": "Расходы атаки не заданы.",
+      "WeaponCostMagazine": "Магазин",
+      "WeaponCostCondition": "Расход состояния",
+      "WeaponAvailableActions": "Доступные действия",
+      "WeaponActionAimedShot": "Прицельный выстрел",
+      "WeaponActionSnapshot": "Выстрел на вскидку",
+      "WeaponActionBurst": "Очередь",
       "Weight": "Вес"
     },
     "Effects": {
@@ -178,6 +199,9 @@
       "HealingProgress": "Прогресс лечения",
       "HealingSkill": "Навык лечения",
       "HealingToolClass": "Класс инструмента для лечения"
+    },
+    "Disease": {
+      "ImmunityName": "Иммунитет от болезней: до {level} уровня"
     },
     "Research": {
       "ApplyTime": "Применить время",

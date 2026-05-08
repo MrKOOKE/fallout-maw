@@ -64,6 +64,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const equipmentSlotSelections = new Map();
     const hasContainerFunction = hasItemFunction(item, ITEM_FUNCTIONS.container);
     const hasDamageMitigationFunction = hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation);
+    const hasConditionFunction = hasItemFunction(item, ITEM_FUNCTIONS.condition);
+    const hasWeaponFunction = hasItemFunction(item, ITEM_FUNCTIONS.weapon);
     const containerLoadReduction = Math.max(0, Math.min(100, Number(item.system?.functions?.container?.loadReduction) || 0));
     const descriptionHTML = await TextEditor.enrichHTML(item.system?.description ?? "", {
       secrets: item.isOwner,
@@ -87,6 +89,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         value: ITEM_FUNCTIONS.damageMitigation,
         label: game.i18n.localize("FALLOUTMAW.Item.FunctionDamageMitigation"),
         disabled: hasDamageMitigationFunction
+      },
+      {
+        value: ITEM_FUNCTIONS.condition,
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionCondition"),
+        disabled: hasConditionFunction
+      },
+      {
+        value: ITEM_FUNCTIONS.weapon,
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon"),
+        disabled: hasWeaponFunction
       },
       ...toolFunctions.map(tool => ({
         value: createToolFunctionKey(tool.key),
@@ -122,7 +134,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       healingSkillLabel: getHealingSkillLabel(item),
       isContainerFunction: hasContainerFunction,
       hasDamageMitigationFunction,
+      hasConditionFunction,
+      hasWeaponFunction,
+      hasWeaponMagazineCost: hasWeaponResourceCost(item, "magazine"),
       toolFunctions,
+      weaponSkillChoices: buildWeaponSkillChoices(item, skillSettings),
+      weaponResourceCosts: buildWeaponResourceCostRows(item, hasConditionFunction),
+      weaponActionChoices: buildWeaponActionChoices(item),
       containerLoadReduction,
       canAddItemFunction: availableFunctionChoices.some(choice => choice.value && !choice.disabled),
       showFunctionPicker: this.#functionPickerActive,
@@ -151,6 +169,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-equipment-slot-choice]").forEach(button => {
       button.addEventListener("click", event => this.#onEquipmentSlotChoice(event));
     });
+    this.element?.querySelectorAll("[data-weapon-action-choice]").forEach(button => {
+      button.addEventListener("click", event => this.#onWeaponActionChoice(event));
+    });
     this.element?.querySelector("[data-add-item-function]")?.addEventListener("click", event => this.#onAddItemFunction(event));
     this.element?.querySelector("[data-choose-item-function]")?.addEventListener("change", event => this.#onChooseItemFunction(event));
     this.element?.querySelectorAll("[data-container-load-reduction]").forEach(input => {
@@ -159,6 +180,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-remove-item-function]").forEach(button => {
       button.addEventListener("click", event => this.#onRemoveItemFunction(event));
+    });
+    this.element?.querySelector("[data-add-weapon-resource-cost]")?.addEventListener("click", event => this.#onAddWeaponResourceCost(event));
+    this.element?.querySelectorAll("[data-delete-weapon-resource-cost]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteWeaponResourceCost(event));
     });
     this.element?.querySelectorAll("[data-mitigation-fill-handle]").forEach(handle => {
       handle.addEventListener("pointerdown", event => this.#onMitigationFillStart(event));
@@ -179,6 +204,20 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.setAttribute("aria-pressed", String(input.checked));
     });
     return this.item.update({ [`system.occupiedSlots.${key}`]: input.checked });
+  }
+
+  #onWeaponActionChoice(event) {
+    event.preventDefault();
+    const key = event.currentTarget.dataset.weaponActionChoice;
+    if (!key) return;
+
+    const input = this.element.querySelector(`[data-weapon-action-input="${key}"]`);
+    if (!input) return;
+
+    input.checked = !input.checked;
+    event.currentTarget.classList.toggle("active", input.checked);
+    event.currentTarget.setAttribute("aria-pressed", String(input.checked));
+    return this.item.update({ [`system.functions.weapon.availableActions.${key}`]: input.checked });
   }
 
   #onAddItemFunction(event) {
@@ -208,6 +247,38 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return this.item.update({
         "system.functions.damageMitigation.enabled": true,
         "system.functions.damageMitigation.mode": "defense"
+      });
+    }
+
+    if (functionKey === ITEM_FUNCTIONS.condition) {
+      this.#functionPickerActive = false;
+      return this.item.update({
+        "system.functions.condition.enabled": true,
+        "system.functions.condition.value": 0,
+        "system.functions.condition.max": 0
+      });
+    }
+
+    if (functionKey === ITEM_FUNCTIONS.weapon) {
+      this.#functionPickerActive = false;
+      return this.item.update({
+        "system.functions.weapon.enabled": true,
+        "system.functions.weapon.damage": 0,
+        "system.functions.weapon.skillKey": "rangedCombat",
+        "system.functions.weapon.accuracyBonus": 0,
+        "system.functions.weapon.attackConeDegrees": 0,
+        "system.functions.weapon.maxRangeMeters": 0,
+        "system.functions.weapon.effectiveRange.value": 0,
+        "system.functions.weapon.effectiveRange.max": 0,
+        "system.functions.weapon.penetration": 0,
+        "system.functions.weapon.magazine.value": 0,
+        "system.functions.weapon.magazine.max": 0,
+        "system.functions.weapon.resourceCosts": [],
+        "system.functions.weapon.availableActions": {
+          aimedShot: false,
+          snapshot: false,
+          burst: false
+        }
       });
     }
 
@@ -258,11 +329,42 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (functionKey === ITEM_FUNCTIONS.damageMitigation) {
       return this.item.update({ "system.functions.damageMitigation.enabled": false });
     }
+    if (functionKey === ITEM_FUNCTIONS.condition) {
+      return this.item.update({
+        "system.functions.condition.enabled": false,
+        "system.functions.condition.value": 0,
+        "system.functions.condition.max": 0,
+        "system.functions.weapon.resourceCosts": (this.item.system?.functions?.weapon?.resourceCosts ?? [])
+          .filter(cost => cost.type !== "condition")
+      });
+    }
+    if (functionKey === ITEM_FUNCTIONS.weapon) {
+      return this.item.update({
+        "system.functions.weapon.enabled": false,
+        "system.functions.weapon.resourceCosts": []
+      });
+    }
     const toolKey = getToolKeyFromFunctionKey(functionKey);
     if (toolKey) {
       return this.item.update({ [`system.functions.tools.${toolKey}.enabled`]: false });
     }
     return undefined;
+  }
+
+  #onAddWeaponResourceCost(event) {
+    event.preventDefault();
+    const costs = [...(this.item.system?.functions?.weapon?.resourceCosts ?? [])];
+    costs.push({ type: "magazine", amount: 0 });
+    return this.item.update({ "system.functions.weapon.resourceCosts": costs });
+  }
+
+  #onDeleteWeaponResourceCost(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteWeaponResourceCost);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const costs = [...(this.item.system?.functions?.weapon?.resourceCosts ?? [])];
+    costs.splice(index, 1);
+    return this.item.update({ "system.functions.weapon.resourceCosts": costs });
   }
 
   #onMitigationFillStart(event) {
@@ -422,9 +524,57 @@ function getHealingSkillLabel(item) {
 function getItemFunctionLabel(functionKey = "") {
   if (functionKey === ITEM_FUNCTIONS.container) return game.i18n.localize("FALLOUTMAW.Item.FunctionContainer");
   if (functionKey === ITEM_FUNCTIONS.damageMitigation) return game.i18n.localize("FALLOUTMAW.Item.FunctionDamageMitigation");
+  if (functionKey === ITEM_FUNCTIONS.condition) return game.i18n.localize("FALLOUTMAW.Item.FunctionCondition");
+  if (functionKey === ITEM_FUNCTIONS.weapon) return game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon");
   const toolKey = getToolKeyFromFunctionKey(functionKey);
   if (toolKey) return getToolSettings().find(tool => tool.key === toolKey)?.label ?? toolKey;
   return game.i18n.localize("FALLOUTMAW.Item.Function");
+}
+
+function buildWeaponResourceCostRows(item, hasConditionFunction) {
+  return (item.system?.functions?.weapon?.resourceCosts ?? []).map((cost, index) => ({
+    index,
+    amount: Number(cost.amount) || 0,
+    typeChoices: buildWeaponResourceTypeChoices(cost.type, hasConditionFunction)
+  }));
+}
+
+function buildWeaponSkillChoices(item, skillSettings) {
+  const selected = String(item.system?.functions?.weapon?.skillKey ?? "rangedCombat");
+  return skillSettings.map(skill => ({
+    value: skill.key,
+    label: skill.label,
+    selected: skill.key === selected
+  }));
+}
+
+function hasWeaponResourceCost(item, type) {
+  return (item.system?.functions?.weapon?.resourceCosts ?? []).some(cost => cost.type === type);
+}
+
+function buildWeaponResourceTypeChoices(selected, hasConditionFunction) {
+  const choices = [
+    { value: "magazine", label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostMagazine") }
+  ];
+  if (hasConditionFunction) {
+    choices.push({ value: "condition", label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostCondition") });
+  }
+  return choices.map(choice => ({
+    ...choice,
+    selected: choice.value === selected
+  }));
+}
+
+function buildWeaponActionChoices(item) {
+  const actions = item.system?.functions?.weapon?.availableActions ?? {};
+  return [
+    { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot") },
+    { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot") },
+    { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst") }
+  ].map(action => ({
+    ...action,
+    selected: Boolean(actions[action.key])
+  }));
 }
 
 function buildToolFunctionEntries(item, toolSettings, skillSettings) {

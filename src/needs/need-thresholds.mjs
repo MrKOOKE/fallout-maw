@@ -200,7 +200,7 @@ async function ensureDiseaseForNeedLevel(actor, need, threshold) {
   const configuredLevel = Math.max(0, toInteger(threshold.diseaseLevel));
   const level = need.key === "radcont" ? Math.min(configuredLevel, 1) : configuredLevel;
   if (!level) return;
-  if (hasDiseaseImmunity(actor, need.key)) return;
+  if (hasDiseaseImmunity(actor, level)) return;
 
   const diseaseSettings = getDiseaseSettings();
   const existingDiseases = actor.items.filter(item => item.type === "disease" && item.system?.needKey === need.key);
@@ -430,21 +430,24 @@ function normalizeProgress(value) {
 
 export async function createDiseaseImmunityEffect(actor, disease) {
   if (!actor) return [];
-  const needKey = String(disease?.system?.needKey ?? "");
-  if (!needKey) return [];
-  const diseaseId = String(disease?.system?.diseaseId ?? "");
+  const activeLevel = Math.max(1, toInteger(disease?.system?.level));
+  const existingLevels = [];
   const existingIds = actor.effects
     .filter(effect => {
       const data = effect.getFlag(SYSTEM_ID, DISEASE_IMMUNITY_FLAG_KEY);
-      return data?.needKey === needKey && (!diseaseId || data?.diseaseId === diseaseId);
+      const maxLevel = toInteger(data?.maxLevel);
+      if (maxLevel <= 0) return false;
+      existingLevels.push(maxLevel);
+      return true;
     })
     .map(effect => effect.id);
   if (existingIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existingIds);
 
+  const maxLevel = Math.max(activeLevel, ...existingLevels);
   const startTime = Number(game.time?.worldTime) || 0;
   return actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
-    name: `Иммунитет: ${disease.name}`,
+    name: game.i18n.format("FALLOUTMAW.Disease.ImmunityName", { level: maxLevel }),
     img: "icons/magic/life/crosses-trio-red.webp",
     transfer: false,
     disabled: false,
@@ -457,8 +460,7 @@ export async function createDiseaseImmunityEffect(actor, disease) {
       [SYSTEM_ID]: {
         kind: "temporary",
         [DISEASE_IMMUNITY_FLAG_KEY]: {
-          needKey,
-          diseaseId,
+          maxLevel,
           untilTime: startTime + DISEASE_IMMUNITY_SECONDS
         }
       }
@@ -466,12 +468,13 @@ export async function createDiseaseImmunityEffect(actor, disease) {
   }]);
 }
 
-function hasDiseaseImmunity(actor, needKey) {
+function hasDiseaseImmunity(actor, diseaseLevel) {
+  const level = Math.max(1, toInteger(diseaseLevel));
   const now = Number(game.time?.worldTime) || 0;
   return Array.from(actor.effects ?? []).some(effect => {
     if (effect.disabled) return false;
     const data = effect.getFlag(SYSTEM_ID, DISEASE_IMMUNITY_FLAG_KEY);
-    if (data?.needKey !== needKey) return false;
+    if (toInteger(data?.maxLevel) < level) return false;
     const untilTime = Number(data.untilTime) || 0;
     return !untilTime || untilTime > now;
   });
