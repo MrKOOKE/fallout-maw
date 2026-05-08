@@ -1,12 +1,14 @@
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
-import { requestDamageApplications } from "./damage-hub.mjs";
+import { estimateDamageApplication, requestDamageApplications } from "./damage-hub.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
 const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
-const PREVIEW_BROADCAST_INTERVAL_MS = 33;
+const PREVIEW_BROADCAST_INTERVAL_MS = 16;
+const PREVIEW_POSITION_EPSILON = 0.5;
+const PREVIEW_ANGLE_EPSILON = 0.002;
 const remoteAttackPreviews = new Map();
 let activeAttack = null;
 
@@ -46,6 +48,7 @@ class WeaponAttackController {
     this.processing = false;
     this.attackId = foundry.utils.randomID();
     this.lastPreviewBroadcastAt = 0;
+    this.lastBroadcastPreviewState = null;
     this.events = {
       move: event => this.onMove(event),
       confirm: event => this.onConfirm(event),
@@ -90,7 +93,6 @@ class WeaponAttackController {
     event.stopPropagation();
     event.preventDefault();
     if (!this.pointer) return;
-    if (!this.targets.length) return;
     const attackCount = getActionAttackCount(this.weapon, this.actionKey);
     if (!hasRequiredWeaponResources(this.weapon, attackCount)) return;
 
@@ -99,12 +101,9 @@ class WeaponAttackController {
     const damageRequests = [];
     let attempted = false;
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
-      const selectedTargets = selectTargetsForAttack(this.targets, this.geometry, this.weapon);
-      for (const target of selectedTargets) {
-        const request = await this.resolveAttackAgainstTarget(target);
-        if (request) damageRequests.push(request);
-        attempted = true;
-      }
+      const result = await this.resolveAttackTrajectory();
+      damageRequests.push(...result.damageRequests);
+      attempted ||= result.attempted;
     }
 
     if (attempted) await spendWeaponResources(this.weapon, attackCount);
@@ -115,14 +114,47 @@ class WeaponAttackController {
     this.refresh(true);
   }
 
-  async resolveAttackAgainstTarget(target) {
+  async resolveAttackTrajectory() {
+    const damageRequests = [];
+    if (!this.targets.length) return { attempted: true, damageRequests };
+
+    const trajectory = buildAttackTrajectory(this.token, this.geometry, this.targets);
+    const targets = getTrajectoryTargets(this.token, trajectory);
+    const baseDamage = getWeaponDamage(this.weapon);
+    const penetrationPower = getWeaponPenetrationPower(this.weapon);
+    const penetrationThreshold = Math.ceil(baseDamage * 0.5);
+    let penetrationsUsed = 0;
+    let attempted = true;
+
+    for (const target of targets) {
+      const damageAmount = getPenetratedDamageAmount(baseDamage, penetrationsUsed);
+      if (damageAmount <= 0) break;
+      const request = await this.resolveAttackAgainstTarget(target, {
+        damageAmount,
+        difficultyBonus: penetrationsUsed * 20,
+        penetrationStep: penetrationsUsed
+      });
+      if (!request) break;
+
+      damageRequests.push(request);
+      if (penetrationsUsed >= penetrationPower) break;
+
+      const estimate = estimateDamageApplication(request);
+      if (estimate.healthDamage < penetrationThreshold) break;
+      penetrationsUsed += 1;
+    }
+
+    return { attempted, damageRequests };
+  }
+
+  async resolveAttackAgainstTarget(target, { damageAmount = 0, difficultyBonus = 0, penetrationStep = 0 } = {}) {
     if (isDeadTarget(target)) return null;
     const limbKey = selectRandomLimbKey(target.actor);
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
       skillKey: String(this.weapon.system?.functions?.weapon?.skillKey ?? ""),
       data: {
-        difficulty: getDodgeDifficulty(target.actor),
+        difficulty: getDodgeDifficulty(target.actor) + difficultyBonus,
         situationalModifier: toInteger(this.weapon.system?.functions?.weapon?.accuracyBonus)
       },
       animate: false,
@@ -134,14 +166,15 @@ class WeaponAttackController {
     return {
       actor: target.actor,
       limbKey,
-      amount: toInteger(this.weapon.system?.functions?.weapon?.damage),
+      amount: damageAmount,
       damageTypeKey: String(this.weapon.system?.functions?.weapon?.damageTypeKey ?? ""),
       scope: "healthAndLimb",
       source: {
         weaponUuid: this.weapon.uuid,
         actionKey: this.actionKey,
         attackerUuid: this.token.actor.uuid,
-        tokenId: this.token.id
+        tokenId: this.token.id,
+        penetrationStep
       }
     };
   }
@@ -162,14 +195,19 @@ class WeaponAttackController {
   broadcastPreview(force = false) {
     const now = performance.now();
     if (!force && now - this.lastPreviewBroadcastAt < PREVIEW_BROADCAST_INTERVAL_MS) return;
+    const previewState = {
+      geometry: serializeGeometry(this.geometry),
+      targetMarkers: this.targets.map(getTargetMarkerPosition),
+      processing: this.processing
+    };
+    if (!force && isSamePreviewState(previewState, this.lastBroadcastPreviewState)) return;
     this.lastPreviewBroadcastAt = now;
+    this.lastBroadcastPreviewState = previewState;
     broadcastAttackPreview({
       action: "updatePreview",
       attackId: this.attackId,
       sceneId: canvas.scene?.id ?? "",
-      geometry: serializeGeometry(this.geometry),
-      targetMarkers: this.targets.map(getTargetMarkerPosition),
-      processing: this.processing
+      ...previewState
     });
   }
 }
@@ -271,6 +309,33 @@ function deserializePoint(point) {
   };
 }
 
+function isSamePreviewState(current, previous) {
+  if (!current || !previous) return false;
+  if (Boolean(current.processing) !== Boolean(previous.processing)) return false;
+  if (!isSameGeometry(current.geometry, previous.geometry)) return false;
+  return isSameMarkerList(current.targetMarkers, previous.targetMarkers);
+}
+
+function isSameGeometry(current, previous) {
+  if (!current || !previous) return false;
+  return isSamePoint(current.origin, previous.origin)
+    && isSamePoint(current.end, previous.end)
+    && Math.abs((Number(current.angle) || 0) - (Number(previous.angle) || 0)) <= PREVIEW_ANGLE_EPSILON
+    && Math.abs((Number(current.distance) || 0) - (Number(previous.distance) || 0)) <= PREVIEW_POSITION_EPSILON
+    && Math.abs((Number(current.halfAngle) || 0) - (Number(previous.halfAngle) || 0)) <= PREVIEW_ANGLE_EPSILON;
+}
+
+function isSameMarkerList(current = [], previous = []) {
+  if (current.length !== previous.length) return false;
+  return current.every((marker, index) => isSamePoint(marker, previous[index]));
+}
+
+function isSamePoint(current, previous) {
+  if (!current || !previous) return false;
+  return Math.abs((Number(current.x) || 0) - (Number(previous.x) || 0)) <= PREVIEW_POSITION_EPSILON
+    && Math.abs((Number(current.y) || 0) - (Number(previous.y) || 0)) <= PREVIEW_POSITION_EPSILON;
+}
+
 function getActionAttackCount(weapon, actionKey) {
   if (actionKey !== "burst") return 1;
   return Math.max(1, toInteger(weapon.system?.functions?.weapon?.burst?.count));
@@ -357,7 +422,11 @@ function getPotentialTargets(attackerToken, geometry) {
 }
 
 function getVisibleTokenAttackPoint(attackerToken, target, geometry) {
-  return getTokenAttackSamplePoints(target).find(point => (
+  return getVisibleTokenAttackPoints(attackerToken, target, geometry).at(0) ?? null;
+}
+
+function getVisibleTokenAttackPoints(attackerToken, target, geometry) {
+  return getTokenAttackSamplePoints(target).filter(point => (
     pointInAttackCone(point, geometry)
     && hasLineOfSight(attackerToken, point, geometry.origin)
   ));
@@ -407,20 +476,68 @@ function getTargetMarkerPosition(target) {
   };
 }
 
-function selectTargetsForAttack(targets, geometry, weapon) {
-  const livingTargets = (targets ?? []).filter(target => !isDeadTarget(target));
-  if (!livingTargets.length) return [];
-  const primary = livingTargets[Math.floor(Math.random() * livingTargets.length)];
-  const primaryDistance = getTargetDistance(primary, geometry);
-  const targetCount = getWeaponPenetrationTargetCount(weapon);
-  return livingTargets
-    .filter(target => getTargetDistance(target, geometry) >= primaryDistance)
-    .sort((left, right) => getTargetDistance(left, geometry) - getTargetDistance(right, geometry))
-    .slice(0, targetCount);
+function buildAttackTrajectory(attackerToken, coneGeometry, targets = []) {
+  const aimPoint = selectTrajectoryAimPoint(attackerToken, coneGeometry, targets);
+  if (aimPoint) return buildTrajectoryThroughPoint(coneGeometry, aimPoint);
+  return buildRandomTrajectory(coneGeometry);
 }
 
-function getWeaponPenetrationTargetCount(weapon) {
-  return Math.max(1, toInteger(weapon.system?.functions?.weapon?.penetration));
+function selectTrajectoryAimPoint(attackerToken, geometry, targets = []) {
+  const candidates = (targets ?? [])
+    .map(target => ({
+      target,
+      points: getVisibleTokenAttackPoints(attackerToken, target, geometry)
+    }))
+    .filter(candidate => candidate.points.length > 0);
+  if (!candidates.length) return null;
+  const candidate = candidates[Math.floor(Math.random() * candidates.length)];
+  return candidate.points[Math.floor(Math.random() * candidate.points.length)];
+}
+
+function buildTrajectoryThroughPoint(geometry, point) {
+  const angle = Math.atan2(point.y - geometry.origin.y, point.x - geometry.origin.x);
+  return buildTrajectoryByAngle(geometry, angle);
+}
+
+function buildRandomTrajectory(geometry) {
+  const spread = geometry.halfAngle > 0
+    ? -geometry.halfAngle + (Math.random() * geometry.halfAngle * 2)
+    : 0;
+  return buildTrajectoryByAngle(geometry, geometry.angle + spread);
+}
+
+function buildTrajectoryByAngle(geometry, angle) {
+  return {
+    origin: geometry.origin,
+    angle,
+    distance: geometry.distance,
+    halfAngle: 0,
+    end: {
+      x: geometry.origin.x + (Math.cos(angle) * geometry.distance),
+      y: geometry.origin.y + (Math.sin(angle) * geometry.distance)
+    }
+  };
+}
+
+function getTrajectoryTargets(attackerToken, trajectory) {
+  return (canvas.tokens?.placeables ?? [])
+    .filter(target => target !== attackerToken && target.actor && target.visible && !isDeadTarget(target))
+    .map(target => ({ target, hit: getTokenTrajectoryHit(target, trajectory) }))
+    .filter(entry => entry.hit && hasLineOfSight(attackerToken, entry.hit.point, trajectory.origin))
+    .sort((left, right) => left.hit.distance - right.hit.distance)
+    .map(entry => entry.target);
+}
+
+function getWeaponDamage(weapon) {
+  return Math.max(0, toInteger(weapon.system?.functions?.weapon?.damage));
+}
+
+function getWeaponPenetrationPower(weapon) {
+  return Math.max(0, toInteger(weapon.system?.functions?.weapon?.penetration));
+}
+
+function getPenetratedDamageAmount(baseDamage, penetrationsUsed) {
+  return Math.max(0, Math.round(Math.max(0, Number(baseDamage) || 0) * Math.max(0, 1 - (penetrationsUsed * 0.1))));
 }
 
 function getTargetDistance(target, geometry) {
@@ -430,6 +547,65 @@ function getTargetDistance(target, geometry) {
   if (distances.length) return Math.min(...distances);
   const center = getTokenCenter(target);
   return Math.hypot(center.x - geometry.origin.x, center.y - geometry.origin.y);
+}
+
+function getTokenTrajectoryHit(token, trajectory) {
+  const bounds = getTokenBounds(token);
+  const direction = {
+    x: Math.cos(trajectory.angle),
+    y: Math.sin(trajectory.angle)
+  };
+  const range = rayRectangleIntersection(trajectory.origin, direction, bounds, trajectory.distance);
+  if (!range) return null;
+  return {
+    distance: range.entry,
+    point: {
+      x: trajectory.origin.x + (direction.x * range.entry),
+      y: trajectory.origin.y + (direction.y * range.entry)
+    }
+  };
+}
+
+function getTokenBounds(token) {
+  return {
+    left: token.x,
+    right: token.x + token.w,
+    top: token.y,
+    bottom: token.y + token.h
+  };
+}
+
+function rayRectangleIntersection(origin, direction, bounds, maxDistance) {
+  let entry = 0;
+  let exit = maxDistance;
+
+  const xRange = getAxisIntersectionRange(origin.x, direction.x, bounds.left, bounds.right);
+  if (!xRange) return null;
+  entry = Math.max(entry, xRange.entry);
+  exit = Math.min(exit, xRange.exit);
+  if (entry > exit) return null;
+
+  const yRange = getAxisIntersectionRange(origin.y, direction.y, bounds.top, bounds.bottom);
+  if (!yRange) return null;
+  entry = Math.max(entry, yRange.entry);
+  exit = Math.min(exit, yRange.exit);
+  if (entry > exit) return null;
+
+  return { entry, exit };
+}
+
+function getAxisIntersectionRange(origin, direction, min, max) {
+  if (Math.abs(direction) < 0.000001) {
+    return origin >= min && origin <= max
+      ? { entry: Number.NEGATIVE_INFINITY, exit: Number.POSITIVE_INFINITY }
+      : null;
+  }
+  const first = (min - origin) / direction;
+  const second = (max - origin) / direction;
+  return {
+    entry: Math.min(first, second),
+    exit: Math.max(first, second)
+  };
 }
 
 async function applyQueuedDamageRequests(requests = []) {

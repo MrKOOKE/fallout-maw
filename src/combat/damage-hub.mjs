@@ -202,6 +202,33 @@ export async function applyDamageApplication(request = {}) {
   return result;
 }
 
+export function estimateDamageApplication(request = {}) {
+  const data = normalizeDamageRequest(request);
+  const actor = request.actor ?? (data.actorUuid ? fromUuidSync(data.actorUuid) : null);
+  if (!actor || data.mode !== MODE_DAMAGE) {
+    return { amount: 0, healthDamage: 0, damageTypeKey: data.damageTypeKey };
+  }
+
+  const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
+  const mitigatedAmount = data.applyMitigation
+    ? calculateEffectiveDamage(actor, data.amount, damageType?.key ?? "", data.limbKey)
+    : data.amount;
+  let effectiveAmount = data.processDamageTypeSettings
+    ? applyLimbHealthMultiplier(actor, mitigatedAmount, damageType, data.limbKey)
+    : mitigatedAmount;
+
+  const needIncrease = damageType?.settings?.needIncrease;
+  if (data.processDamageTypeSettings && needIncrease?.enabled && needIncrease.preventHealthDamage) effectiveAmount = 0;
+
+  const scope = normalizeScope(data.scope, data.limbKey);
+  const affectsHealth = scope === SCOPE_HEALTH || scope === SCOPE_HEALTH_AND_LIMB;
+  return {
+    amount: Math.max(0, roundDamageAmount(data.amount)),
+    healthDamage: affectsHealth ? Math.max(0, roundDamageAmount(effectiveAmount)) : 0,
+    damageTypeKey: damageType?.key ?? data.damageTypeKey
+  };
+}
+
 export async function applyDamageApplications({ actorUuid = "", requests = [] } = {}) {
   const actor = await fromUuid(actorUuid);
   if (!actor) return undefined;
