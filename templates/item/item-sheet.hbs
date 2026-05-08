@@ -380,6 +380,14 @@
         <input type="number" name="system.functions.weapon.damage" value="{{system.functions.weapon.damage}}" min="0" step="1">
       </label>
       <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponDamageType"}}</span>
+        <select name="system.functions.weapon.damageTypeKey">
+          {{#each weaponDamageTypeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponSkill"}}</span>
         <select name="system.functions.weapon.skillKey">
           {{#each weaponSkillChoices}}

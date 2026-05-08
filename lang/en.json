@@ -136,6 +136,7 @@
       "Unequip": "Unequip",
       "ConditionValue": "Condition",
       "WeaponDamage": "Damage",
+      "WeaponDamageType": "Damage Type",
       "WeaponSkill": "Used Skill",
       "WeaponAccuracyBonus": "Accuracy Bonus",
       "WeaponAttackCone": "Attack Cone, degrees",

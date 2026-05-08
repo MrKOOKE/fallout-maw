@@ -15,6 +15,7 @@ import {
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getLimbHealingCap, getResourceLimitState } from "../combat/damage-hub.mjs";
 import { MOVEMENT_RESOURCE_PREVIEW_HOOK } from "../combat/movement-resources.mjs";
+import { cancelWeaponAttack, startWeaponAttack } from "../combat/weapon-attack-controller.mjs";
 import { openLimbDamageDialog } from "./limb-damage-dialog.mjs";
 import { requestMedicineTarget } from "./medicine-dialog.mjs";
 import {
@@ -30,7 +31,7 @@ import { FalloutMaWFormApplicationV2, getFlatFormData } from "./base-form-applic
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
 const DAMAGE_EFFECT_FLAG_KEY = "damageEffect";
-const ACTIVE_WEAPON_SET_FLAG = "activeWeaponSet";
+const SELECTED_HUD_WEAPON_FLAG = "selectedHudWeaponItemId";
 const TOKEN_ACTION_HUD_SCALE_DEFAULT = 50;
 const TOKEN_ACTION_HUD_SCALE_MIN = 25;
 const TOKEN_ACTION_HUD_SCALE_MAX = 100;
@@ -40,6 +41,10 @@ const HUD_ACTION_TILE_HORIZONTAL_CHROME = 30;
 const HUD_ACTION_TILE_LABEL_FONT_WEIGHT = 700;
 const HUD_ACTION_TILE_LABEL_FONT_SIZE_REM = 0.8;
 const HUD_METER_SECTION_KEYS = Object.freeze(["resources", "needs"]);
+const HUD_SILENT_ITEM_UPDATE_PATHS = new Set([
+  "system.functions.weapon.magazine.value",
+  "system.functions.condition.value"
+]);
 const HUD_ACTIONS = Object.freeze([
   { key: "weapon", label: "Оружие", icon: "icons/svg/combat.svg" },
   { key: "items", label: "Предметы", icon: "icons/svg/item-bag.svg" },
@@ -62,9 +67,12 @@ export function registerTokenActionHudHooks() {
   Hooks.on("getSceneControlButtons", addTokenActionHudControlButton);
   Hooks.on("controlToken", scheduleTokenActionHudRefresh);
   Hooks.on("canvasReady", scheduleTokenActionHudRefresh);
-  Hooks.on("canvasTearDown", closeTokenActionHud);
+  Hooks.on("canvasTearDown", () => {
+    cancelWeaponAttack();
+    closeTokenActionHud();
+  });
   Hooks.on("updateActor", scheduleTokenActionHudRefreshForActor);
-  Hooks.on("updateItem", scheduleTokenActionHudRefreshForItem);
+  Hooks.on("updateItem", scheduleTokenActionHudRefreshForUpdatedItem);
   Hooks.on("createItem", scheduleTokenActionHudRefreshForItem);
   Hooks.on("deleteItem", scheduleTokenActionHudRefreshForItem);
   Hooks.on("updateToken", scheduleTokenActionHudRefresh);
@@ -111,6 +119,16 @@ function scheduleTokenActionHudRefreshForActor(actor) {
 function scheduleTokenActionHudRefreshForItem(item) {
   if (!isActiveHudActor(item?.parent)) return;
   scheduleTokenActionHudRefresh();
+}
+
+function scheduleTokenActionHudRefreshForUpdatedItem(item, changes) {
+  if (isHudSilentItemUpdate(changes)) return;
+  scheduleTokenActionHudRefreshForItem(item);
+}
+
+function isHudSilentItemUpdate(changes = {}) {
+  const paths = Object.keys(foundry.utils.flattenObject(changes));
+  return Boolean(paths.length) && paths.every(path => HUD_SILENT_ITEM_UPDATE_PATHS.has(path));
 }
 
 function scheduleTokenActionHudRefreshForSetting(setting) {
@@ -238,7 +256,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     actions: {
       toggleTray: TokenActionHud.#onToggleTray,
       toggleMeterSection: TokenActionHud.#onToggleMeterSection,
-      cycleWeaponSet: TokenActionHud.#onCycleWeaponSet,
+      selectHudWeapon: TokenActionHud.#onSelectHudWeapon,
+      toggleWeaponActions: TokenActionHud.#onToggleWeaponActions,
+      useWeaponAction: TokenActionHud.#onUseWeaponAction,
       gmHealSelected: TokenActionHud.#onGmHealSelected,
       gmAwardExperience: TokenActionHud.#onGmAwardExperience,
       openSettings: TokenActionHud.#onOpenSettings,
@@ -264,7 +284,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   setToken(token) {
-    if (this.#token?.id !== token?.id) this.#activeTray = "";
+    if (this.#token?.id !== token?.id) {
+      cancelWeaponAttack();
+      this.#activeTray = "";
+    }
     this.#token = token;
   }
 
@@ -273,13 +296,15 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const actor = this.actor;
     const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
     const inventory = prepareInventoryContext(actor, race);
-    const activeWeaponSet = getActiveWeaponSet(actor, inventory.weaponSets);
+    const selectedWeapon = getSelectedHudWeapon(actor, inventory.weaponSets);
+    const weaponSets = prepareHudWeaponSets(inventory.weaponSets, selectedWeapon?.id ?? "");
+    const weaponActionButtons = prepareWeaponActionButtons(selectedWeapon);
     const skills = prepareSkillButtons(actor);
     const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg");
     const abilities = prepareOwnedItemButtons(actor, "ability", "icons/svg/aura.svg");
     const systemActions = prepareSystemActionButtons();
-    const actions = prepareActions(this.#activeTray, activeWeaponSet, items, abilities, systemActions);
-    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, systemActions);
+    const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, systemActions);
+    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, systemActions, weaponActionButtons);
     const meterSections = prepareMeterSectionStates();
     const displayLimbs = prepareDisplayLimbs(actor);
     const limbSilhouette = createLimbSilhouetteHud(race?.limbSilhouette, displayLimbs);
@@ -296,7 +321,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       resources: prepareResourceEntries(actor),
       needs: prepareNeedEntries(actor),
       activeTray: this.#activeTray,
-      activeWeaponSet,
+      weaponSets,
+      selectedWeapon,
       actions,
       meterSections,
       tray,
@@ -337,6 +363,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _onClose(options) {
     await super._onClose(options);
+    cancelWeaponAttack();
     if (this.#layoutFrame) cancelAnimationFrame(this.#layoutFrame);
     this.#layoutFrame = null;
     this.#destroyLimbPopover();
@@ -445,19 +472,31 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     return this.render({ force: true });
   }
 
-  static async #onCycleWeaponSet(event) {
+  static async #onSelectHudWeapon(event, target) {
     event.preventDefault();
     const actor = this.actor;
     if (!actor?.isOwner) return undefined;
-    const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
-    const weaponSets = prepareInventoryContext(actor, race).weaponSets;
-    if (weaponSets.length <= 1) return undefined;
-
-    const active = getActiveWeaponSet(actor, weaponSets);
-    const activeIndex = Math.max(0, weaponSets.findIndex(set => set.key === active?.key));
-    const next = weaponSets[(activeIndex + 1) % weaponSets.length];
-    await actor.setFlag(FALLOUT_MAW.id, ACTIVE_WEAPON_SET_FLAG, next.key);
+    const itemId = String(target.dataset.itemId ?? "");
+    if (!itemId || !actor.items.get(itemId)) return undefined;
+    await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, itemId);
+    this.#activeTray = "";
     return this.render({ force: true });
+  }
+
+  static #onToggleWeaponActions(event) {
+    event.preventDefault();
+    this.#activeTray = this.#activeTray === "weaponActions" ? "" : "weaponActions";
+    this.element?.classList.remove("layout-ready");
+    return this.render({ force: true });
+  }
+
+  static #onUseWeaponAction(event, target) {
+    event.preventDefault();
+    const actionKey = String(target.dataset.weaponActionKey ?? "");
+    const itemId = String(target.dataset.itemId ?? "");
+    const item = this.actor?.items.get(itemId);
+    if (!item || !actionKey || actionKey === "burst") return undefined;
+    return startWeaponAttack({ token: this.token, weapon: item, actionKey });
   }
 
   static #onRollSkill(event, target) {
@@ -763,7 +802,7 @@ function prepareSystemActionButtons() {
   }));
 }
 
-function prepareTrayContext(activeTray, skills, items, abilities, systemActions) {
+function prepareTrayContext(activeTray, skills, items, abilities, systemActions, weaponActions) {
   const trayItems = activeTray === "skills"
     ? skills
     : activeTray === "items"
@@ -772,12 +811,15 @@ function prepareTrayContext(activeTray, skills, items, abilities, systemActions)
         ? abilities
         : activeTray === "actions"
           ? systemActions
-          : [];
+          : activeTray === "weaponActions"
+            ? weaponActions
+            : [];
   return {
     skills,
     items,
     abilities,
     systemActions,
+    weaponActions,
     metrics: prepareTrayMetrics(trayItems),
     visible: Boolean(activeTray)
   };
@@ -817,17 +859,17 @@ function measureTrayMaxLabelWidth(items) {
   }, 0);
 }
 
-function prepareActions(activeTray, activeWeaponSet, items, abilities, systemActions) {
+function prepareActions(activeTray, selectedWeapon, items, abilities, systemActions) {
   return HUD_ACTIONS.map(action => {
     if (action.key === "weapon") {
-      const firstItem = activeWeaponSet?.slots?.find(slot => slot.item)?.item;
       return {
         ...action,
-        active: false,
-        disabled: false,
-        icon: normalizeImagePath(firstItem?.img, action.icon),
-        caption: activeWeaponSet?.label ?? action.label,
-        count: activeWeaponSet?.slots?.filter(slot => slot.item).length ?? 0
+        active: activeTray === "weaponActions",
+        disabled: !selectedWeapon,
+        icon: normalizeImagePath(selectedWeapon?.img, action.icon),
+        caption: selectedWeapon?.name ?? action.label,
+        itemId: selectedWeapon?.id ?? "",
+        count: selectedWeapon ? 1 : 0
       };
     }
 
@@ -846,6 +888,37 @@ function prepareActions(activeTray, activeWeaponSet, items, abilities, systemAct
       count
     };
   });
+}
+
+function prepareHudWeaponSets(weaponSets = [], selectedWeaponId = "") {
+  return weaponSets.map(set => ({
+    ...set,
+    slots: (set.slots ?? []).map(slot => ({
+      ...slot,
+      selected: Boolean(slot.item?.id && slot.item.id === selectedWeaponId)
+    }))
+  }));
+}
+
+function getSelectedHudWeapon(actor, weaponSets = []) {
+  const selectedId = String(actor.getFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG) ?? "");
+  const weaponIds = weaponSets.flatMap(set => (set.slots ?? []).map(slot => slot.item?.id).filter(Boolean));
+  const resolvedId = weaponIds.includes(selectedId) ? selectedId : weaponIds[0];
+  return resolvedId ? actor.items.get(resolvedId) ?? null : null;
+}
+
+function prepareWeaponActionButtons(selectedWeapon) {
+  if (!selectedWeapon) return [];
+  const actions = selectedWeapon.system?.functions?.weapon?.availableActions ?? {};
+  return [
+    { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot"), disabled: !actions.aimedShot },
+    { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot"), disabled: !actions.snapshot },
+    { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst"), disabled: true, visible: Boolean(actions.burst) }
+  ].filter(action => action.visible !== false && (action.key === "burst" || !action.disabled)).map(action => ({
+    ...action,
+    itemId: selectedWeapon.id,
+    img: normalizeImagePath(selectedWeapon.img, "icons/svg/combat.svg")
+  }));
 }
 
 function applyMeterPreview(meter, spent) {
@@ -927,12 +1000,6 @@ function isDamageSystemEffect(effect) {
   if (!effect) return false;
   const flags = effect.flags?.[SYSTEM_ID] ?? effect.flags?.[FALLOUT_MAW.id] ?? {};
   return Boolean(flags[DAMAGE_EFFECT_FLAG_KEY] || flags.traumaItem || flags.diseaseItem || flags.needEffect);
-}
-
-function getActiveWeaponSet(actor, weaponSets = []) {
-  if (!weaponSets.length) return null;
-  const activeKey = String(actor.getFlag(FALLOUT_MAW.id, ACTIVE_WEAPON_SET_FLAG) ?? "");
-  return weaponSets.find(set => set.key === activeKey) ?? weaponSets[0];
 }
 
 function layoutTokenActionHud(element) {

@@ -1,13 +1,13 @@
 <div class="fallout-maw-token-hud-layout">
   <div class="fallout-maw-token-hud-left-stack">
     <section class="fallout-maw-token-hud-block fallout-maw-token-hud-weapons">
-      <div class="fallout-maw-token-hud-block-title">{{#if activeWeaponSet}}{{activeWeaponSet.label}}{{else}}Оружие{{/if}}</div>
-      <div class="fallout-maw-token-hud-slot-row">
-        {{#if activeWeaponSet}}
-        {{#each activeWeaponSet.slots}}
-        <button type="button" class="fallout-maw-token-hud-tile {{#unless item}}empty{{/unless}}" data-action="openItem" data-item-id="{{item.id}}" {{#unless item}}disabled{{/unless}} title="{{label}}">
+      {{#each weaponSets}}
+      <div class="fallout-maw-token-hud-block-title">{{label}}</div>
+      <div class="fallout-maw-token-hud-slot-row fallout-maw-token-hud-weapon-set">
+        {{#each slots}}
+        <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-weapon-slot {{#if selected}}active{{/if}} {{#unless item}}empty{{/unless}}" data-action="selectHudWeapon" data-item-id="{{item.id}}" {{#unless item}}disabled{{/unless}} title="{{label}}">
           {{#if item}}
-          <img src="{{item.img}}" alt="{{item.name}}" onerror="this.src='{{../fallbackIcon}}'">
+          <img src="{{item.img}}" alt="{{item.name}}" onerror="this.src='{{../../fallbackIcon}}'">
           <span>{{item.name}}</span>
           {{else}}
           <img src="icons/svg/combat.svg" alt="">
@@ -15,10 +15,10 @@
           {{/if}}
         </button>
         {{/each}}
-        {{else}}
-        <div class="fallout-maw-token-hud-empty">Нет слотов</div>
-        {{/if}}
       </div>
+      {{else}}
+      <div class="fallout-maw-token-hud-empty">Нет слотов</div>
+      {{/each}}
     </section>
 
     <section class="fallout-maw-token-hud-block fallout-maw-token-hud-limbs">
@@ -152,13 +152,24 @@
       <div class="fallout-maw-token-hud-empty">Действий нет</div>
       {{/each}}
       {{/if}}
+
+      {{#if (eq activeTray "weaponActions")}}
+      {{#each tray.weaponActions}}
+      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="useWeaponAction" data-item-id="{{itemId}}" data-weapon-action-key="{{key}}" title="{{label}}" {{#if disabled}}disabled{{/if}}>
+        <img src="{{img}}" alt="{{label}}" onerror="this.src='{{../fallbackIcon}}'">
+        <span>{{label}}</span>
+      </button>
+      {{else}}
+      <div class="fallout-maw-token-hud-empty">Действий нет</div>
+      {{/each}}
+      {{/if}}
     </div>
     {{/if}}
 
     <div class="fallout-maw-token-hud-actions" data-token-action-hud-actions>
       {{#each actions}}
       {{#if (eq key "weapon")}}
-      <button type="button" class="fallout-maw-token-hud-main-action" data-action="cycleWeaponSet" title="{{caption}}">
+      <button type="button" class="fallout-maw-token-hud-main-action {{#if active}}active{{/if}}" data-action="toggleWeaponActions" title="{{caption}}" {{#if disabled}}disabled{{/if}}>
         <img src="{{icon}}" alt="{{caption}}" onerror="this.src='{{../fallbackIcon}}'">
         <span>{{caption}}</span>
       </button>

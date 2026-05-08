@@ -138,6 +138,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       hasWeaponFunction,
       hasWeaponMagazineCost: hasWeaponResourceCost(item, "magazine"),
       toolFunctions,
+      weaponDamageTypeChoices: buildWeaponDamageTypeChoices(item, damageTypeSettings),
       weaponSkillChoices: buildWeaponSkillChoices(item, skillSettings),
       weaponResourceCosts: buildWeaponResourceCostRows(item, hasConditionFunction),
       weaponActionChoices: buildWeaponActionChoices(item),
@@ -264,6 +265,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return this.item.update({
         "system.functions.weapon.enabled": true,
         "system.functions.weapon.damage": 0,
+        "system.functions.weapon.damageTypeKey": "firearm",
         "system.functions.weapon.skillKey": "rangedCombat",
         "system.functions.weapon.accuracyBonus": 0,
         "system.functions.weapon.attackConeDegrees": 0,
@@ -539,8 +541,17 @@ function buildWeaponResourceCostRows(item, hasConditionFunction) {
   }));
 }
 
+function buildWeaponDamageTypeChoices(item, damageTypeSettings) {
+  const selected = String(item.system?.functions?.weapon?.damageTypeKey ?? "");
+  return damageTypeSettings.map(damageType => ({
+    value: damageType.key,
+    label: damageType.label,
+    selected: damageType.key === selected
+  }));
+}
+
 function buildWeaponSkillChoices(item, skillSettings) {
-  const selected = String(item.system?.functions?.weapon?.skillKey ?? "rangedCombat");
+  const selected = String(item.system?.functions?.weapon?.skillKey ?? "");
   return skillSettings.map(skill => ({
     value: skill.key,
     label: skill.label,

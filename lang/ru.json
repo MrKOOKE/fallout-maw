@@ -135,6 +135,7 @@
       "Unequip": "Снять",
       "ConditionValue": "Состояние",
       "WeaponDamage": "Урон",
+      "WeaponDamageType": "Тип урона",
       "WeaponSkill": "Задействованный навык",
       "WeaponAccuracyBonus": "Бонус к точности",
       "WeaponAttackCone": "Конус атаки, градусы",

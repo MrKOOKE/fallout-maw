@@ -3353,6 +3353,9 @@ label.fallout-maw-mitigation-cell {
 
 .fallout-maw-token-hud-weapons {
   align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
   width: max-content;
 }
 
@@ -3874,6 +3877,7 @@ label.fallout-maw-mitigation-cell {
 }
 
 .fallout-maw-token-hud-main-action.active,
+.fallout-maw-token-hud-weapon-slot.active,
 .fallout-maw-token-hud-tile:hover,
 .fallout-maw-token-hud-main-action:hover,
 .fallout-maw-token-hud-tile:focus-visible,
