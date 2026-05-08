@@ -59,6 +59,147 @@ export async function requestSkillCheck({
   };
 }
 
+export async function requestSkillCheckBatch({
+  actor,
+  skillKey = "",
+  entries = [],
+  animate = false,
+  createMessage = true,
+  requester = "",
+  title = ""
+} = {}) {
+  const preparedEntries = prepareSkillCheckBatchEntries({ actor, skillKey, entries });
+  if (!preparedEntries) return undefined;
+
+  const outcomes = [];
+  for (const entry of preparedEntries) {
+    const outcome = await performSkillCheck(entry.actor, entry.skill, normalizeRequestData(entry.data));
+    if (animate) await playSkillCheckAnimation(outcome);
+    outcomes.push(outcome);
+  }
+
+  if (!createMessage) return { outcomes, message: undefined };
+  const message = await publishSkillCheckBatchMessage(outcomes, { requester, title });
+  return { outcomes, message };
+}
+
+export function createSkillCheckBatchCollector({ requester = "", title = "" } = {}) {
+  const outcomes = [];
+  return {
+    get size() {
+      return outcomes.length;
+    },
+    add(outcome) {
+      if (outcome) outcomes.push(outcome);
+      return outcome;
+    },
+    async publish() {
+      return publishSkillCheckBatchMessage(outcomes, { requester, title });
+    }
+  };
+}
+
+async function publishSkillCheckBatchMessage(outcomes = [], { requester = "", title = "" } = {}) {
+  const normalizedOutcomes = outcomes.filter(Boolean);
+  if (!normalizedOutcomes.length) return undefined;
+
+  const context = buildSkillCheckBatchViewContext(normalizedOutcomes, { title });
+  const content = await renderTemplate(TEMPLATES.skillCheckBatchChatCard, context);
+  return ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor: context.actor }),
+    content,
+    sound: null,
+    rolls: normalizedOutcomes.flatMap(outcome => outcome.rolls.map(roll => roll.toJSON())),
+    flags: {
+      "fallout-maw": {
+        skillCheckBatch: {
+          requester,
+          count: normalizedOutcomes.length,
+          results: Object.fromEntries(context.resultRows.map(row => [row.key, row.count]))
+        }
+      }
+    }
+  });
+}
+
+function buildSkillCheckBatchViewContext(outcomes = [], { title = "" } = {}) {
+  const first = outcomes[0];
+  const counts = countSkillCheckResults(outcomes);
+  const total = outcomes.length;
+  return {
+    actor: first.actor,
+    skill: first.skill,
+    title: String(title || first.skill?.label || game.i18n.localize("FALLOUTMAW.SkillCheck.TerminalTitle")),
+    total,
+    resultRows: [
+      buildBatchResultRow("criticalSuccess", "critical-success", "FALLOUTMAW.SkillCheck.CriticalSuccess", counts, total),
+      buildBatchResultRow("success", "success", "FALLOUTMAW.SkillCheck.Success", counts, total),
+      buildBatchResultRow("failure", "failure", "FALLOUTMAW.SkillCheck.Failure", counts, total),
+      buildBatchResultRow("criticalFailure", "critical-failure", "FALLOUTMAW.SkillCheck.CriticalFailure", counts, total),
+      buildBatchResultRow("automaticFailure", "automatic-failure", "FALLOUTMAW.SkillCheck.AutomaticFailure", counts, total)
+    ].filter(row => row.count > 0),
+    difficultyRange: formatBatchDifficultyRange(outcomes),
+    skillValueRange: formatBatchSkillValueRange(outcomes)
+  };
+}
+
+function countSkillCheckResults(outcomes = []) {
+  return outcomes.reduce((counts, outcome) => {
+    const key = outcome.result?.autoFailure ? "automaticFailure" : String(outcome.result?.key ?? "");
+    counts[key] = (counts[key] ?? 0) + 1;
+    return counts;
+  }, {});
+}
+
+function buildBatchResultRow(key, cssClass, labelKey, counts, total) {
+  const count = counts[key] ?? 0;
+  return {
+    key,
+    cssClass,
+    label: game.i18n.localize(labelKey),
+    count,
+    percent: total > 0 ? Math.round((count / total) * 100) : 0
+  };
+}
+
+function formatBatchDifficultyRange(outcomes = []) {
+  const values = outcomes.map(outcome => toInteger(outcome.check?.difficulty));
+  return formatNumberRange(values);
+}
+
+function formatBatchSkillValueRange(outcomes = []) {
+  const values = outcomes.map(outcome => toInteger(outcome.finalSkillValue));
+  return formatNumberRange(values);
+}
+
+function formatNumberRange(values = []) {
+  const filtered = values.filter(value => Number.isFinite(value));
+  if (!filtered.length) return "0";
+  const min = Math.min(...filtered);
+  const max = Math.max(...filtered);
+  return min === max ? String(min) : `${min}-${max}`;
+}
+
+function prepareSkillCheckBatchEntries({ actor, skillKey = "", entries = [] } = {}) {
+  if (!Array.isArray(entries) || !entries.length) return null;
+  const preparedEntries = [];
+
+  for (const entry of entries) {
+    const entryActor = entry?.actor ?? actor;
+    const entrySkillKey = String(entry?.skillKey ?? skillKey);
+    if (!entryActor) return null;
+    const skill = resolveSkill(entryActor, entrySkillKey);
+    if (!skill) return null;
+    preparedEntries.push({
+      actor: entryActor,
+      skill,
+      data: entry?.data ?? {}
+    });
+  }
+
+  return preparedEntries;
+}
+
 async function promptSkillCheckData(actor, skill) {
   const content = await renderTemplate(TEMPLATES.skillCheckDialog, {
     actor,

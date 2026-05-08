@@ -270,7 +270,9 @@
       "Title": "Проверка: {skill}",
       "Total": "Итог",
       "AnimationClickHint": "Нажмите по проверке для фиксации результата",
-      "AnimationWaitHint": "Ожидание фиксации результата"
+      "AnimationWaitHint": "Ожидание фиксации результата",
+      "BatchTitle": "Серийная проверка",
+      "Count": "Количество"
     },
     "SkillCheckControl": {
       "DifficultyModifier": "Изменение сложности",

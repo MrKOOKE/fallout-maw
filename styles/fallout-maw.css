@@ -2448,6 +2448,88 @@ label.fallout-maw-mitigation-cell {
   color: var(--fallout-maw-skill-check-result-color);
 }
 
+.fallout-maw-skill-check-batch-total {
+  color: var(--fallout-maw-terminal-accent);
+  font-family: var(--font-monospace, monospace);
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.fallout-maw-skill-check-batch-results {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fallout-maw-skill-check-batch-result {
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(216, 192, 94, 0.24);
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.4rem 0.45rem;
+}
+
+.fallout-maw-skill-check-batch-result {
+  align-items: baseline;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.fallout-maw-skill-check-batch-result span {
+  color: var(--fallout-maw-terminal-muted);
+  font-size: 0.88rem;
+  line-height: 1.1;
+}
+
+.fallout-maw-skill-check-batch-result strong {
+  color: var(--fallout-maw-terminal-text);
+  font-family: var(--font-monospace, monospace);
+  font-size: 1.12rem;
+  line-height: 1.1;
+}
+
+.fallout-maw-skill-check-batch-result em {
+  font-family: var(--font-monospace, monospace);
+  font-size: 0.86rem;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.fallout-maw-skill-check-batch-result.critical-success {
+  border-color: rgba(121, 198, 93, 0.58);
+}
+
+.fallout-maw-skill-check-batch-result.critical-success em {
+  color: var(--fallout-maw-terminal-green);
+}
+
+.fallout-maw-skill-check-batch-result.success {
+  border-color: rgba(53, 201, 232, 0.52);
+}
+
+.fallout-maw-skill-check-batch-result.success em {
+  color: var(--fallout-maw-terminal-cyan);
+}
+
+.fallout-maw-skill-check-batch-result.failure {
+  border-color: rgba(224, 142, 61, 0.56);
+}
+
+.fallout-maw-skill-check-batch-result.failure em {
+  color: var(--fallout-maw-terminal-orange);
+}
+
+.fallout-maw-skill-check-batch-result.critical-failure,
+.fallout-maw-skill-check-batch-result.automatic-failure {
+  border-color: rgba(230, 83, 69, 0.58);
+}
+
+.fallout-maw-skill-check-batch-result.critical-failure em,
+.fallout-maw-skill-check-batch-result.automatic-failure em {
+  color: var(--fallout-maw-terminal-red);
+}
+
 .fallout-maw-skill-check-animation-host {
   pointer-events: none;
   position: fixed;

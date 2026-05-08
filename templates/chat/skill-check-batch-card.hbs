@@ -1,0 +1,46 @@
+<article class="fallout-maw-chat-card fallout-maw-skill-check-card fallout-maw-skill-check-batch-card">
+  <header class="fallout-maw-skill-check-terminal-header">
+    <div>
+      <span class="fallout-maw-skill-check-kicker">{{localize "FALLOUTMAW.SkillCheck.BatchTitle"}}</span>
+      <h2>{{title}}</h2>
+    </div>
+    <strong class="fallout-maw-skill-check-batch-total">{{total}}</strong>
+  </header>
+
+  <section class="fallout-maw-skill-check-operator">
+    <img src="{{actor.img}}" alt="{{actor.name}}">
+    <div>
+      <span>{{localize "FALLOUTMAW.SkillCheck.Operator"}}</span>
+      <strong>{{actor.name}}</strong>
+    </div>
+  </section>
+
+  <section class="fallout-maw-skill-check-summary">
+    <div>
+      <span>{{localize "FALLOUTMAW.Common.Skill"}}:</span>
+      <strong>{{skill.label}}</strong>
+    </div>
+    <div>
+      <span>{{localize "FALLOUTMAW.SkillCheck.Count"}}:</span>
+      <strong>{{total}}</strong>
+    </div>
+    <div>
+      <span>{{localize "FALLOUTMAW.SkillCheck.Total"}}:</span>
+      <strong>{{skillValueRange}}</strong>
+    </div>
+    <div>
+      <span>{{localize "FALLOUTMAW.SkillCheck.Difficulty"}}:</span>
+      <strong>{{difficultyRange}}</strong>
+    </div>
+  </section>
+
+  <section class="fallout-maw-skill-check-batch-results">
+    {{#each resultRows}}
+    <div class="fallout-maw-skill-check-batch-result {{cssClass}}">
+      <span>{{label}}</span>
+      <strong>{{count}}</strong>
+      <em>{{percent}}%</em>
+    </div>
+    {{/each}}
+  </section>
+</article>

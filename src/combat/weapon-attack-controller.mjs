@@ -1,4 +1,4 @@
-import { requestSkillCheck } from "../rolls/skill-check.mjs";
+import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { estimateDamageApplication, requestDamageApplications } from "./damage-hub.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
@@ -99,14 +99,22 @@ class WeaponAttackController {
     this.processing = true;
     this.refresh(true);
     const damageRequests = [];
+    const useBatchCheckMessage = attackCount > 1;
+    const checkBatch = useBatchCheckMessage
+      ? createSkillCheckBatchCollector({
+        requester: "weaponAttack",
+        title: this.weapon.name
+      })
+      : null;
     let attempted = false;
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
-      const result = await this.resolveAttackTrajectory();
+      const result = await this.resolveAttackTrajectory({ checkBatch });
       damageRequests.push(...result.damageRequests);
       attempted ||= result.attempted;
     }
 
     if (attempted) await spendWeaponResources(this.weapon, attackCount);
+    await checkBatch?.publish();
     if (damageRequests.length) {
       await applyQueuedDamageRequests(damageRequests);
     }
@@ -114,7 +122,7 @@ class WeaponAttackController {
     this.refresh(true);
   }
 
-  async resolveAttackTrajectory() {
+  async resolveAttackTrajectory({ checkBatch = null } = {}) {
     const damageRequests = [];
     if (!this.targets.length) return { attempted: true, damageRequests };
 
@@ -132,7 +140,8 @@ class WeaponAttackController {
       const request = await this.resolveAttackAgainstTarget(target, {
         damageAmount,
         difficultyBonus: penetrationsUsed * 20,
-        penetrationStep: penetrationsUsed
+        penetrationStep: penetrationsUsed,
+        checkBatch
       });
       if (!request) break;
 
@@ -147,7 +156,7 @@ class WeaponAttackController {
     return { attempted, damageRequests };
   }
 
-  async resolveAttackAgainstTarget(target, { damageAmount = 0, difficultyBonus = 0, penetrationStep = 0 } = {}) {
+  async resolveAttackAgainstTarget(target, { damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
     if (isDeadTarget(target)) return null;
     const limbKey = selectRandomLimbKey(target.actor);
     const outcome = await requestSkillCheck({
@@ -158,10 +167,11 @@ class WeaponAttackController {
         situationalModifier: toInteger(this.weapon.system?.functions?.weapon?.accuracyBonus)
       },
       animate: false,
-      createMessage: true,
+      createMessage: !checkBatch,
       prompt: false,
       requester: "weaponAttack"
     });
+    checkBatch?.add(outcome);
     if (!isSuccessfulAttack(outcome)) return null;
     return {
       actor: target.actor,
