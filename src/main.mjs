@@ -16,9 +16,11 @@ import {
   registerTokenActionHudHooks,
   syncTokenActionHud
 } from "./apps/token-action-hud.mjs";
+import { registerAnimationLibraryBrowserHooks } from "./apps/animation-library-browser.mjs";
 import { registerWorldTimeControlHooks } from "./apps/world-time-control.mjs";
 import { registerSkillCheckSocket } from "./rolls/skill-check.mjs";
 import { registerDamageSocket } from "./combat/damage-hub.mjs";
+import { registerAttackAnimationSocket } from "./combat/attack-animations.mjs";
 import { registerWeaponAttackSocket } from "./combat/weapon-attack-controller.mjs";
 import { registerMedicineSocket } from "./apps/medicine-dialog.mjs";
 import { registerNeedThresholdHooks } from "./needs/need-thresholds.mjs";
@@ -56,6 +58,7 @@ Hooks.once("init", () => {
   registerSkillCheckControlHooks();
   registerTokenActionHudHooks();
   registerWorldTimeControlHooks();
+  registerAnimationLibraryBrowserHooks();
 });
 
 Hooks.once("ready", async () => {
@@ -64,6 +67,7 @@ Hooks.once("ready", async () => {
   refreshSkillCheckControlButton();
   registerSkillCheckSocket();
   registerDamageSocket();
+  registerAttackAnimationSocket();
   registerWeaponAttackSocket();
   registerMedicineSocket();
   refreshTokenActionHudControlButton();

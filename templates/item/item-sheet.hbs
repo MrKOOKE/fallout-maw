@@ -388,6 +388,14 @@
         </select>
       </label>
       <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponAttackAnimation"}}</span>
+        <input type="text" name="system.functions.weapon.attackAnimationKey" value="{{system.functions.weapon.attackAnimationKey}}">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponAttackDelay"}}</span>
+        <input type="number" name="system.functions.weapon.attackAnimationDelayMs" value="{{system.functions.weapon.attackAnimationDelayMs}}" min="0" step="1">
+      </label>
+      <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponSkill"}}</span>
         <select name="system.functions.weapon.skillKey">
           {{#each weaponSkillChoices}}

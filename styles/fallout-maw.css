@@ -5996,6 +5996,194 @@ label.fallout-maw-mitigation-cell {
   color: var(--fallout-maw-actor-plastic-text);
 }
 
+.fallout-maw-animation-library {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.fallout-maw-animation-library-header {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  min-height: 28px;
+}
+
+.fallout-maw-animation-library-header > select,
+.fallout-maw-animation-library-header > input[type="text"] {
+  height: 28px;
+  margin: 0;
+}
+
+.fallout-maw-animation-library-header > select {
+  flex: 0 1 auto;
+  border-radius: 5px 0 0 5px;
+  border-right: 1px solid rgba(0, 0, 0, 0.45);
+}
+
+.fallout-maw-animation-library-header > select + select {
+  border-left: 0;
+  border-radius: 0;
+}
+
+.fallout-maw-animation-library-header > input[type="text"] {
+  border-left: 0;
+  border-radius: 0 5px 5px 0;
+  flex: 1 1 auto;
+  padding-left: 0.5rem;
+}
+
+.fallout-maw-animation-library-header > label {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 0.2rem;
+  margin-left: 0.45rem;
+  white-space: nowrap;
+}
+
+.fallout-maw-animation-library-header > button {
+  flex: 0 0 28px;
+  height: 28px;
+  margin-left: 0.45rem;
+  padding: 0;
+}
+
+.fallout-maw-animation-library-content {
+  display: flex;
+  gap: 0.5rem;
+  max-height: 365px;
+  min-height: 365px;
+  padding-top: 0.5rem;
+}
+
+.fallout-maw-animation-library-entries {
+  flex: 1 1 auto;
+  height: 365px;
+  margin-right: 0.5rem;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.fallout-maw-animation-library-entry {
+  border-radius: 4px;
+  min-height: 17px;
+  padding: 2px;
+}
+
+.fallout-maw-animation-library-entry:nth-child(odd) {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.fallout-maw-animation-library-entry.active,
+.fallout-maw-animation-library-entry:hover {
+  background-color: rgba(212, 181, 93, 0.12);
+}
+
+.fallout-maw-animation-library-entry-main {
+  align-items: center;
+  display: flex;
+  margin-left: calc(var(--fallout-maw-animation-depth, 0) * 15px);
+  min-width: 0;
+}
+
+.fallout-maw-animation-library-entry-main button,
+.fallout-maw-animation-tree-spacer {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 15px;
+  height: 17px;
+  justify-content: center;
+  margin: 0;
+  min-height: 17px;
+  min-width: 15px;
+  padding: 0;
+}
+
+.fallout-maw-animation-library-entry-main button {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: inherit;
+  font-size: 0.72rem;
+}
+
+.fallout-maw-animation-library-entry-text {
+  line-height: 1.15rem;
+  margin-left: 5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-animation-library-entry-text strong,
+.fallout-maw-animation-library-entry-text small {
+  display: inline;
+  font-family: var(--font-primary);
+}
+
+.fallout-maw-animation-library-entry-text small {
+  margin-left: 0.45rem;
+  opacity: 0.72;
+}
+
+.fallout-maw-animation-library-separator {
+  margin-bottom: 0.3rem;
+}
+
+.fallout-maw-animation-library-player-container {
+  align-items: center;
+  display: flex;
+  flex: 0 0 335px;
+  flex-direction: column;
+  height: 365px;
+}
+
+.fallout-maw-animation-library-player-content {
+  align-items: center;
+  background-color: rgba(153, 153, 153, 0.18);
+  border-radius: 5px;
+  display: flex;
+  height: 320px;
+  justify-content: center;
+  max-height: 320px;
+  max-width: 320px;
+  min-height: 320px;
+  overflow: hidden;
+  padding: 10px;
+  width: 320px;
+}
+
+.fallout-maw-animation-library-player-content video,
+.fallout-maw-animation-library-player-content img {
+  height: 320px;
+  max-height: 320px;
+  max-width: 320px;
+  object-fit: contain;
+  width: 320px;
+}
+
+.fallout-maw-animation-library-player-content audio {
+  margin: auto;
+  max-width: 300px;
+}
+
+.fallout-maw-animation-library-no-file,
+.fallout-maw-animation-library-metadata {
+  text-align: center;
+}
+
+.fallout-maw-animation-library-metadata {
+  flex: 0 0 auto;
+  margin-top: 5px;
+}
+
+.fallout-maw-animation-library-preview-data {
+  display: none;
+}
+
 @media (max-width: 760px) {
   .fallout-maw-two-pane {
     grid-template-columns: 1fr;
@@ -6020,6 +6208,8 @@ label.fallout-maw-mitigation-cell {
   }
 
   .fallout-maw-resource-grid,
+  .fallout-maw-animation-library-header,
+  .fallout-maw-animation-library-content,
   .fallout-maw-limb-trauma-layout,
   .fallout-maw-trauma-list,
   .fallout-maw-inventory-summary,

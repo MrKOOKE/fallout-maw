@@ -91,6 +91,8 @@ function weaponFunctionField() {
     enabled: new BooleanField({ required: true, initial: false }),
     damage: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     damageTypeKey: new StringField({ required: true, blank: false, initial: "firearm" }),
+    attackAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
+    attackAnimationDelayMs: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     skillKey: new StringField({ required: true, blank: false, initial: "rangedCombat" }),
     accuracyBonus: new NumberField({ required: true, integer: true, initial: 0 }),
     attackConeDegrees: new NumberField({ required: true, min: 0, initial: 0 }),

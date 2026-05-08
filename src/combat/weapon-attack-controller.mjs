@@ -1,5 +1,6 @@
 import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
+import { playWeaponAttackAnimations } from "./attack-animations.mjs";
 import { estimateDamageApplication, requestDamageApplications } from "./damage-hub.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -98,6 +99,7 @@ class WeaponAttackController {
 
     this.processing = true;
     this.refresh(true);
+    const trajectories = [];
     const damageRequests = [];
     const useBatchCheckMessage = attackCount > 1;
     const checkBatch = useBatchCheckMessage
@@ -109,12 +111,20 @@ class WeaponAttackController {
     let attempted = false;
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
       const result = await this.resolveAttackTrajectory({ checkBatch });
+      if (result.trajectory) trajectories.push(result.trajectory);
       damageRequests.push(...result.damageRequests);
       attempted ||= result.attempted;
     }
 
     if (attempted) await spendWeaponResources(this.weapon, attackCount);
     await checkBatch?.publish();
+    if (attempted) {
+      await playWeaponAttackAnimations({
+        weapon: this.weapon,
+        trajectories,
+        delayMs: getWeaponAttackAnimationDelay(this.weapon)
+      });
+    }
     if (damageRequests.length) {
       await applyQueuedDamageRequests(damageRequests);
     }
@@ -124,9 +134,9 @@ class WeaponAttackController {
 
   async resolveAttackTrajectory({ checkBatch = null } = {}) {
     const damageRequests = [];
-    if (!this.targets.length) return { attempted: true, damageRequests };
-
     const trajectory = buildAttackTrajectory(this.token, this.geometry, this.targets);
+    if (!this.targets.length) return { attempted: true, damageRequests, trajectory };
+
     const targets = getTrajectoryTargets(this.token, trajectory);
     const baseDamage = getWeaponDamage(this.weapon);
     const penetrationPower = getWeaponPenetrationPower(this.weapon);
@@ -153,7 +163,7 @@ class WeaponAttackController {
       penetrationsUsed += 1;
     }
 
-    return { attempted, damageRequests };
+    return { attempted, damageRequests, trajectory };
   }
 
   async resolveAttackAgainstTarget(target, { damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
@@ -544,6 +554,10 @@ function getWeaponDamage(weapon) {
 
 function getWeaponPenetrationPower(weapon) {
   return Math.max(0, toInteger(weapon.system?.functions?.weapon?.penetration));
+}
+
+function getWeaponAttackAnimationDelay(weapon) {
+  return Math.max(0, toInteger(weapon.system?.functions?.weapon?.attackAnimationDelayMs));
 }
 
 function getPenetratedDamageAmount(baseDamage, penetrationsUsed) {

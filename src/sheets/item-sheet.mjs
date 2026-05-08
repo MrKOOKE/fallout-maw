@@ -266,6 +266,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.weapon.enabled": true,
         "system.functions.weapon.damage": 0,
         "system.functions.weapon.damageTypeKey": "firearm",
+        "system.functions.weapon.attackAnimationKey": "",
+        "system.functions.weapon.attackAnimationDelayMs": 0,
         "system.functions.weapon.skillKey": "rangedCombat",
         "system.functions.weapon.accuracyBonus": 0,
         "system.functions.weapon.attackConeDegrees": 0,

@@ -1,0 +1,103 @@
+<section class="fallout-maw-animation-library">
+  <div class="fallout-maw-animation-library-header">
+    <select disabled>
+      <option>fallout-maw</option>
+    </select>
+    <select data-animation-library-file-type>
+      {{#each fileTypeOptions}}
+      <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+      {{/each}}
+    </select>
+    <input type="text" value="{{search}}" placeholder="{{localize 'FALLOUTMAW.AnimationLibrary.Search'}}" data-animation-library-search>
+    <label>
+      <input type="checkbox" data-animation-library-toggle-option="allRanges" {{#if showAllRanges}}checked{{/if}}>
+      <span>{{localize "FALLOUTMAW.AnimationLibrary.ShowAllRanges"}}</span>
+    </label>
+    <label>
+      <input type="checkbox" data-animation-library-toggle-option="subLists" {{#if showSubLists}}checked{{/if}}>
+      <span>{{localize "FALLOUTMAW.AnimationLibrary.ShowSubLists"}}</span>
+    </label>
+    <label>
+      <input type="checkbox" data-animation-library-toggle-option="listView" {{#if listView}}checked{{/if}}>
+      <span>{{localize "FALLOUTMAW.AnimationLibrary.ListView"}}</span>
+    </label>
+    <button type="button" data-action="refresh" title="{{localize 'FALLOUTMAW.AnimationLibrary.Refresh'}}"><i class="fa-solid fa-rotate"></i></button>
+  </div>
+
+  <div class="fallout-maw-animation-library-content">
+    <div class="fallout-maw-animation-library-entries {{#unless listView}}tree{{/unless}}" data-animation-library-entries>
+      {{#each rows}}
+      {{#if separator}}
+      <div class="fallout-maw-animation-library-separator"></div>
+      {{else}}
+      <div class="fallout-maw-animation-library-entry {{#if selected}}active{{/if}}" style="--fallout-maw-animation-depth: {{depth}};" data-animation-library-select-row="{{key}}" data-animation-library-entry="{{encodedEntry}}">
+        <div class="fallout-maw-animation-library-entry-main">
+          {{#if hasChildren}}
+          <button type="button" class="fallout-maw-animation-tree-toggle" data-animation-library-tree-toggle="{{fullPath}}">
+            <i class="fa-solid {{#if open}}fa-angle-down{{else}}fa-angle-right{{/if}}"></i>
+          </button>
+          {{else}}
+          <span class="fallout-maw-animation-tree-spacer"></span>
+          {{/if}}
+
+          {{#if hasEntry}}
+          <button type="button" data-animation-library-action="copyPath" data-path="{{path}}" title="{{localize 'FALLOUTMAW.AnimationLibrary.CopyPath'}}"><i class="fa-solid fa-file"></i></button>
+          <button type="button" data-animation-library-action="copyKey" data-key="{{key}}" title="{{localize 'FALLOUTMAW.AnimationLibrary.CopyKey'}}"><i class="fa-solid fa-database"></i></button>
+          <button type="button" data-animation-library-action="playEntry" title="{{localize 'FALLOUTMAW.AnimationLibrary.PlayPreview'}}"><i class="fa-solid fa-play"></i></button>
+          {{else}}
+          <span class="fallout-maw-animation-tree-spacer"></span>
+          <span class="fallout-maw-animation-tree-spacer"></span>
+          <span class="fallout-maw-animation-tree-spacer"></span>
+          {{/if}}
+
+          <div class="fallout-maw-animation-library-entry-text" title="{{key}}">
+            <strong>{{label}}</strong>
+            {{#if ../listView}}<small>{{key}}</small>{{/if}}
+          </div>
+        </div>
+      </div>
+      {{/if}}
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.AnimationLibrary.Empty"}}</p>
+      {{/each}}
+      {{#if rowLimitReached}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.AnimationLibrary.RowLimit"}}</p>
+      {{/if}}
+    </div>
+
+    <aside class="fallout-maw-animation-library-player-container">
+      <div class="fallout-maw-animation-library-player-content" data-animation-library-player>
+        {{#if hasSelection}}
+          {{#if selectedEntry.isVideo}}
+          <video src="{{selectedEntry.path}}" autoplay loop muted controls></video>
+          {{else if selectedEntry.isImage}}
+          <img src="{{selectedEntry.path}}">
+          {{else if selectedEntry.isAudio}}
+          <audio src="{{selectedEntry.path}}" controls autoplay loop></audio>
+          {{/if}}
+        {{else}}
+        <div class="fallout-maw-animation-library-no-file">{{localize "FALLOUTMAW.AnimationLibrary.NoFileLoaded"}}</div>
+        {{/if}}
+      </div>
+      <div class="fallout-maw-animation-library-metadata" data-animation-library-metadata>
+        {{#if hasSelection}}
+        <span>{{localize "FALLOUTMAW.AnimationLibrary.Type"}}: {{selectedEntry.mediaType}}</span>
+        {{else}}
+        <span>{{localize "FALLOUTMAW.AnimationLibrary.NoFileLoaded"}}</span>
+        {{/if}}
+      </div>
+      {{#if hasSelection}}
+      <div class="fallout-maw-animation-library-preview-data" data-animation-library-preview-data>
+        <label>
+          <span>{{localize "FALLOUTMAW.AnimationLibrary.Key"}}</span>
+          <input type="text" value="{{selectedEntry.key}}" readonly>
+        </label>
+        <label>
+          <span>{{localize "FALLOUTMAW.AnimationLibrary.Path"}}</span>
+          <input type="text" value="{{selectedEntry.path}}" readonly>
+        </label>
+      </div>
+      {{/if}}
+    </aside>
+  </div>
+</section>
