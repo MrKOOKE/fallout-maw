@@ -14,6 +14,7 @@ const SCOPE_LIMB = "limb";
 const SCOPE_HEALTH = "health";
 const SCOPE_HEALTH_AND_LIMB = "healthAndLimb";
 const ROUND_SECONDS = 6;
+const DAMAGE_NUMBER_ANIMATION_MS = 900;
 let damageTimeHooksRegistered = false;
 const combatRoundWorldTimes = new Map();
 const processingPeriodicEffectUuids = new Set();
@@ -65,6 +66,50 @@ export async function requestDamageApplication({
     request
   });
   return undefined;
+}
+
+export async function requestDamageApplications(requests = []) {
+  const normalizedRequests = [];
+  for (const request of requests) {
+    const resolvedActor = request.actor ?? await fromUuid(request.actorUuid ?? "");
+    if (!resolvedActor) continue;
+    normalizedRequests.push(normalizeDamageRequest({
+      ...request,
+      actorUuid: resolvedActor.uuid,
+      requesterUserId: game.user?.id ?? ""
+    }));
+  }
+  if (!normalizedRequests.length) return [];
+
+  const grouped = new Map();
+  for (const request of normalizedRequests) {
+    const list = grouped.get(request.actorUuid) ?? [];
+    list.push(request);
+    grouped.set(request.actorUuid, list);
+  }
+
+  const results = [];
+  for (const [actorUuid, actorRequests] of grouped) {
+    const actor = await fromUuid(actorUuid);
+    if (!actor) continue;
+    if (canApplyDamageLocally(actor)) {
+      results.push(await applyDamageApplications({ actorUuid, requests: actorRequests }));
+      continue;
+    }
+
+    const gm = getResponsibleGM();
+    if (!gm) {
+      ui.notifications.warn("РќРµС‚ Р°РєС‚РёРІРЅРѕРіРѕ GM РґР»СЏ РїСЂРёРјРµРЅРµРЅРёСЏ СѓСЂРѕРЅР°.");
+      continue;
+    }
+    game.socket.emit(DAMAGE_SOCKET, {
+      action: "applyDamageBatch",
+      gmUserId: gm.id,
+      actorUuid,
+      requests: actorRequests
+    });
+  }
+  return results;
 }
 
 export async function applyDamageApplication(request = {}) {
@@ -122,6 +167,10 @@ export async function applyDamageApplication(request = {}) {
         healthDelta: immediateResult.healthDelta,
         source: data.source
       });
+      broadcastDamageNumbers(actor, [{
+        amount: immediateResult.healthDelta,
+        damageTypeKey: damageType?.key ?? data.damageTypeKey
+      }]);
     }
     return {
       ...immediateResult,
@@ -144,7 +193,98 @@ export async function applyDamageApplication(request = {}) {
       source: data.source
     });
   }
+  if (mode === MODE_DAMAGE && result.healthDelta > 0) {
+    broadcastDamageNumbers(actor, [{
+      amount: result.healthDelta,
+      damageTypeKey: damageType?.key ?? data.damageTypeKey
+    }]);
+  }
   return result;
+}
+
+export async function applyDamageApplications({ actorUuid = "", requests = [] } = {}) {
+  const actor = await fromUuid(actorUuid);
+  if (!actor) return undefined;
+  if (!game.user?.isGM && !actor.isOwner) return undefined;
+
+  const batchRequests = [];
+  const singleResults = [];
+  for (const request of requests) {
+    const data = normalizeDamageRequest({ ...request, actorUuid });
+    if (data.mode !== MODE_DAMAGE) {
+      singleResults.push(await applyDamageApplication(data));
+      continue;
+    }
+
+    const entry = await prepareDamageBatchEntry(actor, data);
+    if (entry) batchRequests.push(entry);
+  }
+
+  const batchResult = batchRequests.length
+    ? await applyDamageEntriesBatch(actor, batchRequests)
+    : undefined;
+  if (batchResult?.resourceLimitEntries?.length) {
+    for (const entry of batchResult.resourceLimitEntries) {
+      const damageType = getDamageTypeSettings().find(type => type.key === entry.damageTypeKey);
+      await createResourceLimitEffect(actor, {
+        damageType,
+        healthDelta: entry.amount,
+        source: entry.source
+      });
+    }
+  }
+  return [batchResult, ...singleResults].filter(Boolean);
+}
+
+async function prepareDamageBatchEntry(actor, data = {}) {
+  const scope = normalizeScope(data.scope, data.limbKey);
+  const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
+  const mitigatedAmount = data.applyMitigation
+    ? calculateEffectiveDamage(actor, data.amount, damageType?.key ?? "", data.limbKey)
+    : data.amount;
+  const effectiveAmount = data.processDamageTypeSettings
+    ? applyLimbHealthMultiplier(actor, mitigatedAmount, damageType, data.limbKey)
+    : mitigatedAmount;
+  if (effectiveAmount <= 0) return null;
+
+  const needIncrease = damageType?.settings?.needIncrease;
+  if (data.processDamageTypeSettings && needIncrease?.enabled) {
+    await applyNeedIncrease(actor, {
+      amount: effectiveAmount,
+      settings: needIncrease
+    });
+    if (needIncrease.preventHealthDamage) return null;
+  }
+
+  const periodic = damageType?.settings?.periodic;
+  if (data.processDamageTypeSettings && periodic?.enabled) {
+    const immediateAmount = roundDamageAmount(effectiveAmount * (Number(periodic.immediatePercent) || 0) / 100);
+    const delayedAmount = roundDamageAmount(effectiveAmount * (Number(periodic.delayedPercent) || 0) / 100);
+    if (delayedAmount > 0) await createPeriodicDamageEffect(actor, {
+      damageType,
+      limbKey: data.limbKey,
+      scope,
+      amount: delayedAmount,
+      settings: periodic,
+      source: data.source
+    });
+    if (!immediateAmount) return null;
+    return {
+      ...data,
+      amount: immediateAmount,
+      damageTypeKey: damageType?.key ?? data.damageTypeKey,
+      damageType,
+      scope
+    };
+  }
+
+  return {
+    ...data,
+    amount: effectiveAmount,
+    damageTypeKey: damageType?.key ?? data.damageTypeKey,
+    damageType,
+    scope
+  };
 }
 
 async function applyDirectDamageApplication(actor, data = {}, damageType = null) {
@@ -356,7 +496,21 @@ async function applyNeedIncrease(actor, { amount = 0, settings = {} } = {}) {
 }
 
 async function handleDamageSocketMessage(payload = {}) {
-  if (!payload || payload.action !== "applyDamage") return;
+  if (!payload) return;
+  if (payload.action === "showDamageNumbers") {
+    if (payload.senderUserId === game.user?.id) return;
+    displayDamageNumbersForActor(payload.actorUuid, payload.entries);
+    return;
+  }
+  if (payload.action === "applyDamageBatch") {
+    if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
+    await applyDamageApplications({
+      actorUuid: payload.actorUuid,
+      requests: payload.requests
+    });
+    return;
+  }
+  if (payload.action !== "applyDamage") return;
   if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
   await applyDamageApplication(payload.request);
 }
@@ -555,7 +709,18 @@ async function applyPeriodicDamageBatch(actor, entries = []) {
       damageType: damageTypes.find(damageType => damageType.key === entry.damageTypeKey) ?? null
     }))
     .filter(entry => entry.amount > 0);
-  if (!normalizedEntries.length) return { actor, amount: 0, healthDelta: 0, limbDelta: 0, createdTraumas: [] };
+  return applyDamageEntriesBatch(actor, normalizedEntries);
+}
+
+async function applyDamageEntriesBatch(actor, entries = []) {
+  const normalizedEntries = entries
+    .map(entry => ({
+      ...entry,
+      amount: roundDamageAmount(entry.amount),
+      scope: normalizeScope(entry.scope, entry.limbKey)
+    }))
+    .filter(entry => entry.amount > 0);
+  if (!normalizedEntries.length) return { actor, amount: 0, healthDelta: 0, limbDelta: 0, createdTraumas: [], healthDeltasByType: [], resourceLimitEntries: [] };
 
   const updateData = {};
   const health = actor.health;
@@ -607,6 +772,15 @@ async function applyPeriodicDamageBatch(actor, entries = []) {
   }
 
   if (Object.keys(updateData).length) await actor.update(updateData);
+  const healthDeltasByType = buildBatchDamageNumberEntries(normalizedEntries, actualHealthDelta, requestedHealthDamage);
+  const resourceLimitEntries = buildBatchDamageNumberEntries(
+    normalizedEntries.filter(entry => entry.processDamageTypeSettings !== false),
+    actualHealthDelta,
+    requestedHealthDamage
+  );
+  if (actualHealthDelta > 0) {
+    broadcastDamageNumbers(actor, healthDeltasByType);
+  }
 
   const createdTraumas = [];
   for (const [limbKey, state] of limbStates) {
@@ -630,6 +804,8 @@ async function applyPeriodicDamageBatch(actor, entries = []) {
     limbDelta: Array.from(limbStates.values()).reduce((sum, state) => sum + state.totalDelta, 0),
     mode: MODE_DAMAGE,
     scope: SCOPE_HEALTH_AND_LIMB,
+    healthDeltasByType,
+    resourceLimitEntries,
     createdTraumas
   };
 }
@@ -648,10 +824,44 @@ function combinePeriodicDamageEntries(entries = []) {
       limbKey: String(entry.limbKey ?? ""),
       damageTypeKey: String(entry.damageTypeKey ?? ""),
       scope: String(entry.scope ?? SCOPE_HEALTH),
-      amount: Math.max(0, Number(entry.amount) || 0)
+      amount: Math.max(0, Number(entry.amount) || 0),
+      source: entry.source && typeof entry.source === "object" ? entry.source : {}
     });
   }
   return Array.from(combined.values());
+}
+
+function buildBatchDamageNumberEntries(entries = [], actualHealthDelta = 0, requestedHealthDamage = 0) {
+  if (!actualHealthDelta || !requestedHealthDamage) return [];
+  const healthRatio = actualHealthDelta / requestedHealthDamage;
+  const grouped = new Map();
+  for (const entry of entries) {
+    if (entry.scope !== SCOPE_HEALTH && entry.scope !== SCOPE_HEALTH_AND_LIMB) continue;
+    const key = entry.damageTypeKey || "untyped";
+    const current = grouped.get(key) ?? {
+      damageTypeKey: key,
+      exact: 0,
+      source: entry.source && typeof entry.source === "object" ? entry.source : {}
+    };
+    current.exact += entry.amount * healthRatio;
+    grouped.set(key, current);
+  }
+  const rows = Array.from(grouped.values())
+    .map(row => ({
+      ...row,
+      amount: Math.floor(row.exact),
+      fraction: row.exact - Math.floor(row.exact)
+    }))
+    .filter(row => row.exact > 0);
+  let remaining = actualHealthDelta - rows.reduce((sum, row) => sum + row.amount, 0);
+  for (const row of rows.sort((left, right) => right.fraction - left.fraction)) {
+    if (remaining <= 0) break;
+    row.amount += 1;
+    remaining -= 1;
+  }
+  return rows
+    .filter(row => row.amount > 0)
+    .map(({ damageTypeKey, amount, source }) => ({ damageTypeKey, amount, source }));
 }
 
 function getBatchLimbState(limbStates, limbKey, limb) {
@@ -697,6 +907,102 @@ function getLoadedActors() {
     if (token.actor?.uuid && !actors.has(token.actor.uuid)) actors.set(token.actor.uuid, token.actor);
   }
   return actors.values();
+}
+
+function broadcastDamageNumbers(actor, entries = []) {
+  const payloadEntries = prepareDamageNumberEntries(entries);
+  if (!actor?.uuid || !payloadEntries.length) return;
+  displayDamageNumbersForActor(actor.uuid, payloadEntries);
+  game.socket.emit(DAMAGE_SOCKET, {
+    action: "showDamageNumbers",
+    senderUserId: game.user?.id ?? "",
+    actorUuid: actor.uuid,
+    entries: payloadEntries
+  });
+}
+
+function prepareDamageNumberEntries(entries = []) {
+  const damageTypes = getDamageTypeSettings();
+  return entries
+    .map(entry => {
+      const amount = roundDamageAmount(entry.amount);
+      const damageTypeKey = String(entry.damageTypeKey ?? "").trim();
+      const damageType = damageTypes.find(type => type.key === damageTypeKey);
+      return {
+        amount,
+        damageTypeKey,
+        color: damageType?.color ?? "#f0d48a"
+      };
+    })
+    .filter(entry => entry.amount > 0);
+}
+
+function displayDamageNumbersForActor(actorUuid = "", entries = []) {
+  if (!canvas?.ready || !actorUuid || !entries?.length) return;
+  const tokens = (canvas.tokens?.placeables ?? []).filter(token => token.actor?.uuid === actorUuid);
+  for (const token of tokens) {
+    entries.forEach((entry, index) => animateDamageNumber(token, entry, index, entries.length));
+  }
+}
+
+function animateDamageNumber(token, entry, index = 0, total = 1) {
+  const layer = canvas.controls?._rulerPaths;
+  if (!layer) return;
+
+  const text = new PIXI.Text(String(entry.amount), {
+    fill: entry.color,
+    fontFamily: "serif",
+    fontSize: 32,
+    fontWeight: "700",
+    stroke: "#090604",
+    strokeThickness: 4,
+    dropShadow: true,
+    dropShadowColor: "#000000",
+    dropShadowAlpha: 0.75,
+    dropShadowBlur: 4,
+    dropShadowDistance: 2
+  });
+  text.anchor.set(0.5);
+  text.zIndex = 10000;
+
+  const center = getTokenAnimationOrigin(token);
+  const spreadOffset = (index - ((total - 1) / 2)) * 24;
+  const angle = ((-160 + (Math.random() * 120)) * Math.PI) / 180;
+  const distance = 72 + (Math.random() * 42);
+  const driftX = Math.cos(angle) * distance + spreadOffset;
+  const driftY = Math.sin(angle) * distance - 30;
+  const arc = 72 + (Math.random() * 24);
+  const startedAt = performance.now();
+
+  text.position.set(center.x + spreadOffset, center.y - (token.h * 0.35));
+  layer.addChild(text);
+
+  const tick = () => {
+    if (text.destroyed) {
+      canvas.app.ticker.remove(tick);
+      return;
+    }
+    const elapsed = performance.now() - startedAt;
+    const t = Math.min(1, elapsed / DAMAGE_NUMBER_ANIMATION_MS);
+    const eased = 1 - ((1 - t) ** 3);
+    text.position.set(
+      center.x + spreadOffset + (driftX * eased),
+      center.y - (token.h * 0.35) + (driftY * eased) + (arc * t * t)
+    );
+    text.alpha = Math.max(0, 1 - (t * 0.9));
+    text.scale.set(1 + (Math.sin(Math.PI * t) * 0.18));
+    if (t < 1) return;
+    canvas.app.ticker.remove(tick);
+    text.destroy();
+  };
+  canvas.app.ticker.add(tick);
+}
+
+function getTokenAnimationOrigin(token) {
+  return token.center ?? {
+    x: token.x + (token.w / 2),
+    y: token.y + (token.h / 2)
+  };
 }
 
 function normalizeDamageRequest(request = {}) {

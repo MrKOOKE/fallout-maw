@@ -19,6 +19,7 @@ import {
 import { registerWorldTimeControlHooks } from "./apps/world-time-control.mjs";
 import { registerSkillCheckSocket } from "./rolls/skill-check.mjs";
 import { registerDamageSocket } from "./combat/damage-hub.mjs";
+import { registerWeaponAttackSocket } from "./combat/weapon-attack-controller.mjs";
 import { registerMedicineSocket } from "./apps/medicine-dialog.mjs";
 import { registerNeedThresholdHooks } from "./needs/need-thresholds.mjs";
 import { registerSystemSheets } from "./sheets/index.mjs";
@@ -63,6 +64,7 @@ Hooks.once("ready", async () => {
   refreshSkillCheckControlButton();
   registerSkillCheckSocket();
   registerDamageSocket();
+  registerWeaponAttackSocket();
   registerMedicineSocket();
   refreshTokenActionHudControlButton();
   syncTokenActionHud();

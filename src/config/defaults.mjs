@@ -150,15 +150,15 @@ export const DEFAULT_NEEDS = Object.freeze([
 ]);
 
 export const DEFAULT_DAMAGE_TYPES = Object.freeze([
-  { key: "piercing", label: "Колющий" },
-  { key: "slashing", label: "Режущий" },
-  { key: "bludgeoning", label: "Дробящий" },
-  { key: "firearm", label: "Огнестрельный" },
-  { key: "energy", label: "Энергетический" },
-  { key: "fire", label: "Огненный" },
-  { key: "cryo", label: "Криогенный" },
-  { key: "electric", label: "Электрический" },
-  { key: "acid", label: "Кислотный" },
-  { key: "poison", label: "Ядовитый" },
-  { key: "radiation", label: "Радиационный" }
+  { key: "piercing", label: "Колющий", color: "#d9d0bd" },
+  { key: "slashing", label: "Режущий", color: "#d95c5c" },
+  { key: "bludgeoning", label: "Дробящий", color: "#c49a6c" },
+  { key: "firearm", label: "Огнестрельный", color: "#f0d48a" },
+  { key: "energy", label: "Энергетический", color: "#78f0ff" },
+  { key: "fire", label: "Огненный", color: "#ff6a2a" },
+  { key: "cryo", label: "Криогенный", color: "#6da8ff" },
+  { key: "electric", label: "Электрический", color: "#f6f05a" },
+  { key: "acid", label: "Кислотный", color: "#7be36d" },
+  { key: "poison", label: "Ядовитый", color: "#b56dff" },
+  { key: "radiation", label: "Радиационный", color: "#c6ff4d" }
 ]);

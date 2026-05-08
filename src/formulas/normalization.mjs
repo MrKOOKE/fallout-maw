@@ -419,8 +419,13 @@ function normalizeDamageTypeEntry(entry = {}) {
   return {
     key,
     label: String(entry?.label ?? entry?.name ?? "").trim(),
+    color: normalizeHexColor(entry?.color, getDefaultDamageTypeColor(key)),
     settings: normalizeDamageTypeBehavior(entry?.settings, key)
   };
+}
+
+function getDefaultDamageTypeColor(key = "") {
+  return DEFAULT_DAMAGE_TYPES.find(entry => entry.key === key)?.color ?? DEFAULT_TRACK_COLOR;
 }
 
 function normalizeDamageTypeBehavior(settings = {}, key = "") {

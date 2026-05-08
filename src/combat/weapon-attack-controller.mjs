@@ -1,10 +1,19 @@
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { requestDamageApplication } from "./damage-hub.mjs";
+import { SYSTEM_ID } from "../constants.mjs";
+import { requestDamageApplications } from "./damage-hub.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
+const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
+const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
+const PREVIEW_BROADCAST_INTERVAL_MS = 33;
+const remoteAttackPreviews = new Map();
 let activeAttack = null;
-const BURST_ATTACK_INTERVAL_MS = 200;
+
+export function registerWeaponAttackSocket() {
+  game.socket.on(WEAPON_ATTACK_SOCKET, handleWeaponAttackSocketMessage);
+  Hooks.on("canvasReady", clearRemoteAttackPreviews);
+}
 
 export function cancelWeaponAttack() {
   activeAttack?.destroy();
@@ -35,6 +44,8 @@ class WeaponAttackController {
     this.geometry = null;
     this.pointer = null;
     this.processing = false;
+    this.attackId = foundry.utils.randomID();
+    this.lastPreviewBroadcastAt = 0;
     this.events = {
       move: event => this.onMove(event),
       confirm: event => this.onConfirm(event),
@@ -44,7 +55,7 @@ class WeaponAttackController {
 
   activate() {
     this.container.eventMode = "none";
-    canvas.controls._rulerPaths.addChild(this.container);
+    getAttackPreviewLayer().addChild(this.container);
     canvas.stage.on("mousemove", this.events.move);
     canvas.stage.on("mousedown", this.events.confirm);
     canvas.app.view.oncontextmenu = this.events.cancel;
@@ -54,13 +65,17 @@ class WeaponAttackController {
     canvas.stage.off("mousemove", this.events.move);
     canvas.stage.off("mousedown", this.events.confirm);
     if (canvas.app?.view?.oncontextmenu === this.events.cancel) canvas.app.view.oncontextmenu = null;
+    broadcastAttackPreview({
+      action: "clearPreview",
+      attackId: this.attackId
+    });
     this.container.destroy({ children: true });
   }
 
   onMove(event) {
     if (this.processing) return;
     event.stopPropagation();
-    this.pointer = event.data.getLocalPosition(canvas.controls._rulerPaths);
+    this.pointer = event.data.getLocalPosition(getAttackPreviewLayer());
     this.refresh();
   }
 
@@ -80,6 +95,7 @@ class WeaponAttackController {
     if (!hasRequiredWeaponResources(this.weapon, attackCount)) return;
 
     this.processing = true;
+    this.refresh(true);
     const damageRequests = [];
     let attempted = false;
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
@@ -89,7 +105,6 @@ class WeaponAttackController {
         if (request) damageRequests.push(request);
         attempted = true;
       }
-      if (attackIndex < attackCount - 1) await wait(BURST_ATTACK_INTERVAL_MS);
     }
 
     if (attempted) await spendWeaponResources(this.weapon, attackCount);
@@ -97,7 +112,7 @@ class WeaponAttackController {
       await applyQueuedDamageRequests(damageRequests);
     }
     this.processing = false;
-    this.refresh();
+    this.refresh(true);
   }
 
   async resolveAttackAgainstTarget(target) {
@@ -131,7 +146,7 @@ class WeaponAttackController {
     };
   }
 
-  refresh() {
+  refresh(forceBroadcast = false) {
     this.shape.clear();
     this.targetMarkers.clear();
     if (!this.pointer) return;
@@ -141,11 +156,119 @@ class WeaponAttackController {
     drawAttackShape(this.shape, this.geometry, this.processing);
     this.targets = getPotentialTargets(this.token, this.geometry);
     drawTargetMarkers(this.targetMarkers, this.targets);
+    this.broadcastPreview(forceBroadcast);
+  }
+
+  broadcastPreview(force = false) {
+    const now = performance.now();
+    if (!force && now - this.lastPreviewBroadcastAt < PREVIEW_BROADCAST_INTERVAL_MS) return;
+    this.lastPreviewBroadcastAt = now;
+    broadcastAttackPreview({
+      action: "updatePreview",
+      attackId: this.attackId,
+      sceneId: canvas.scene?.id ?? "",
+      geometry: serializeGeometry(this.geometry),
+      targetMarkers: this.targets.map(getTargetMarkerPosition),
+      processing: this.processing
+    });
   }
 }
 
 function hasWeaponAction(weapon, actionKey) {
   return Boolean(weapon.system?.functions?.weapon?.availableActions?.[actionKey]);
+}
+
+function broadcastAttackPreview(payload = {}) {
+  game.socket.emit(WEAPON_ATTACK_SOCKET, {
+    scope: WEAPON_ATTACK_SOCKET_SCOPE,
+    ...payload,
+    senderUserId: game.user?.id ?? ""
+  });
+}
+
+function handleWeaponAttackSocketMessage(payload = {}) {
+  if (!payload || payload.scope !== WEAPON_ATTACK_SOCKET_SCOPE || payload.senderUserId === game.user?.id) return;
+  if (payload.action === "clearPreview") {
+    removeRemoteAttackPreview(payload.attackId);
+    return;
+  }
+  if (payload.action !== "updatePreview") return;
+  if (payload.sceneId !== canvas.scene?.id) {
+    removeRemoteAttackPreview(payload.attackId);
+    return;
+  }
+  updateRemoteAttackPreview(payload);
+}
+
+function updateRemoteAttackPreview(payload = {}) {
+  const attackId = String(payload.attackId ?? "");
+  const geometry = deserializeGeometry(payload.geometry);
+  if (!attackId || !geometry) return;
+
+  let preview = remoteAttackPreviews.get(attackId);
+  if (!preview) {
+    preview = {
+      container: new PIXI.Container(),
+      shape: new PIXI.Graphics(),
+      targetMarkers: new PIXI.Graphics()
+    };
+    preview.container.eventMode = "none";
+    preview.container.addChild(preview.shape, preview.targetMarkers);
+    getAttackPreviewLayer().addChild(preview.container);
+    remoteAttackPreviews.set(attackId, preview);
+  }
+
+  preview.shape.clear();
+  preview.targetMarkers.clear();
+  drawAttackShape(preview.shape, geometry, Boolean(payload.processing));
+  drawTargetMarkerPositions(preview.targetMarkers, payload.targetMarkers ?? []);
+}
+
+function removeRemoteAttackPreview(attackId = "") {
+  const preview = remoteAttackPreviews.get(String(attackId));
+  if (!preview) return;
+  preview.container.destroy({ children: true });
+  remoteAttackPreviews.delete(String(attackId));
+}
+
+function clearRemoteAttackPreviews() {
+  for (const attackId of Array.from(remoteAttackPreviews.keys())) removeRemoteAttackPreview(attackId);
+}
+
+function serializeGeometry(geometry) {
+  if (!geometry) return null;
+  return {
+    origin: serializePoint(geometry.origin),
+    end: serializePoint(geometry.end),
+    angle: Number(geometry.angle) || 0,
+    distance: Number(geometry.distance) || 0,
+    halfAngle: Number(geometry.halfAngle) || 0
+  };
+}
+
+function deserializeGeometry(geometry) {
+  if (!geometry?.origin || !geometry?.end) return null;
+  return {
+    origin: deserializePoint(geometry.origin),
+    end: deserializePoint(geometry.end),
+    angle: Number(geometry.angle) || 0,
+    distance: Number(geometry.distance) || 0,
+    halfAngle: Number(geometry.halfAngle) || 0
+  };
+}
+
+function serializePoint(point) {
+  return {
+    x: Number(point?.x) || 0,
+    y: Number(point?.y) || 0
+  };
+}
+
+function deserializePoint(point) {
+  return {
+    x: Number(point?.x) || 0,
+    y: Number(point?.y) || 0
+  };
 }
 
 function getActionAttackCount(weapon, actionKey) {
@@ -228,11 +351,16 @@ function buildConePoints({ origin, angle, distance, halfAngle }) {
 function getPotentialTargets(attackerToken, geometry) {
   return (canvas.tokens?.placeables ?? []).filter(target => {
     if (target === attackerToken || !target.actor || !target.visible) return false;
-    const center = getTokenCenter(target);
     if (isDeadTarget(target)) return false;
-    if (!pointInAttackCone(center, geometry)) return false;
-    return hasLineOfSight(attackerToken, center, geometry.origin);
+    return Boolean(getVisibleTokenAttackPoint(attackerToken, target, geometry));
   }).sort((left, right) => getTargetDistance(left, geometry) - getTargetDistance(right, geometry));
+}
+
+function getVisibleTokenAttackPoint(attackerToken, target, geometry) {
+  return getTokenAttackSamplePoints(target).find(point => (
+    pointInAttackCone(point, geometry)
+    && hasLineOfSight(attackerToken, point, geometry.origin)
+  ));
 }
 
 function hasLineOfSight(attackerToken, destination, origin) {
@@ -256,10 +384,27 @@ function drawTargetMarkers(graphics, targets) {
   graphics.beginFill(0xff1f1f, 0.95);
   graphics.lineStyle(1, 0x350000, 0.9);
   for (const target of targets) {
-    const center = getTokenCenter(target);
-    graphics.drawCircle(center.x, target.y + target.h + 8, 7);
+    const marker = getTargetMarkerPosition(target);
+    graphics.drawCircle(marker.x, marker.y, 7);
   }
   graphics.endFill();
+}
+
+function drawTargetMarkerPositions(graphics, markers = []) {
+  graphics.beginFill(0xff1f1f, 0.95);
+  graphics.lineStyle(1, 0x350000, 0.9);
+  for (const marker of markers) {
+    graphics.drawCircle(Number(marker.x) || 0, Number(marker.y) || 0, 7);
+  }
+  graphics.endFill();
+}
+
+function getTargetMarkerPosition(target) {
+  const center = getTokenCenter(target);
+  return {
+    x: center.x,
+    y: target.y + target.h + 8
+  };
 }
 
 function selectTargetsForAttack(targets, geometry, weapon) {
@@ -279,15 +424,16 @@ function getWeaponPenetrationTargetCount(weapon) {
 }
 
 function getTargetDistance(target, geometry) {
+  const distances = getTokenAttackSamplePoints(target)
+    .filter(point => pointInAttackCone(point, geometry))
+    .map(point => Math.hypot(point.x - geometry.origin.x, point.y - geometry.origin.y));
+  if (distances.length) return Math.min(...distances);
   const center = getTokenCenter(target);
   return Math.hypot(center.x - geometry.origin.x, center.y - geometry.origin.y);
 }
 
 async function applyQueuedDamageRequests(requests = []) {
-  for (const request of requests) {
-    if (isDeadActor(request.actor)) continue;
-    await requestDamageApplication(request);
-  }
+  return requestDamageApplications(requests.filter(request => !isDeadActor(request.actor)));
 }
 
 function getTokenCenter(token) {
@@ -295,6 +441,24 @@ function getTokenCenter(token) {
     x: token.x + (token.w / 2),
     y: token.y + (token.h / 2)
   };
+}
+
+function getTokenAttackSamplePoints(token) {
+  const left = token.x;
+  const right = token.x + token.w;
+  const top = token.y;
+  const bottom = token.y + token.h;
+  const points = [];
+  const steps = 4;
+  for (let xIndex = 0; xIndex <= steps; xIndex += 1) {
+    for (let yIndex = 0; yIndex <= steps; yIndex += 1) {
+      points.push({
+        x: left + ((right - left) * xIndex / steps),
+        y: top + ((bottom - top) * yIndex / steps)
+      });
+    }
+  }
+  return points;
 }
 
 function selectRandomLimbKey(actor) {
@@ -332,6 +496,6 @@ function normalizeAngle(angle) {
   return Math.atan2(Math.sin(angle), Math.cos(angle));
 }
 
-function wait(ms) {
-  return new Promise(resolve => window.setTimeout(resolve, ms));
+function getAttackPreviewLayer() {
+  return canvas.controls._rulerPaths;
 }

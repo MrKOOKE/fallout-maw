@@ -4339,7 +4339,7 @@ label.fallout-maw-mitigation-cell {
 }
 
 .damage-type-settings .fallout-maw-settings-row {
-  grid-template-columns: 2rem minmax(130px, 1fr) minmax(160px, 1.4fr) 2.5rem 2.5rem;
+  grid-template-columns: 2rem minmax(120px, 1fr) minmax(150px, 1.4fr) 72px 2.5rem 2.5rem;
 }
 
 .damage-type-settings .fallout-maw-icon-button {

@@ -71,7 +71,7 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
   static #onCreateDamageType(event) {
     event.preventDefault();
     this.damageTypes = this.#readDamageTypesFromForm();
-    this.damageTypes.push({ key: this.#getUniqueKey("newDamageType"), label: "Новый тип урона" });
+    this.damageTypes.push({ key: this.#getUniqueKey("newDamageType"), label: "Новый тип урона", color: "#f0d48a" });
     return this.forceRender();
   }
 
@@ -122,6 +122,7 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
       return {
         key,
         label: row.querySelector("[data-field='label']")?.value?.trim() ?? "",
+        color: row.querySelector("[data-field='color']")?.value?.trim() ?? "#f0d48a",
         settings: foundry.utils.deepClone(existing)
       };
     });
