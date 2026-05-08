@@ -1,0 +1,22 @@
+<section class="fallout-maw-world-time-panel">
+  <div class="fallout-maw-world-time-current">{{currentTime}}</div>
+
+  <label class="fallout-maw-world-time-unit">
+    <span>Шаг</span>
+    <select name="unit">
+      {{#each unitOptions}}
+      <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+      {{/each}}
+    </select>
+  </label>
+
+  <div class="fallout-maw-world-time-actions">
+    <button type="button" data-action="advanceTime" data-direction="-1" data-multiplier="5" title="-5 шагов">&lt;&lt;</button>
+    <button type="button" data-action="advanceTime" data-direction="-1" data-multiplier="1" title="-1 шаг">&lt;</button>
+    <button type="button" data-action="toggleClock" {{#if combatActive}}disabled{{/if}} title="{{#if combatActive}}Ход времени недоступен во время боя{{else}}{{#if running}}Остановить ход времени{{else}}Запустить ход времени{{/if}}{{/if}}">
+      <i class="fa-solid {{#if running}}fa-pause{{else}}fa-play{{/if}}"></i>
+    </button>
+    <button type="button" data-action="advanceTime" data-direction="1" data-multiplier="1" title="+1 шаг">&gt;</button>
+    <button type="button" data-action="advanceTime" data-direction="1" data-multiplier="5" title="+5 шагов">&gt;&gt;</button>
+  </div>
+</section>

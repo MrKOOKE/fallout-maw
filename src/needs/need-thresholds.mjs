@@ -3,6 +3,7 @@ import { getDiseaseSettings, getNeedSettings } from "../settings/accessors.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const NEED_EFFECT_FLAG_KEY = "needEffect";
+const NEED_ACCUMULATION_REMAINDER_FLAG_KEY = "needAccumulationRemainder";
 const DISEASE_FLAG_KEY = "disease";
 export const DISEASE_IMMUNITY_FLAG_KEY = "diseaseImmunity";
 const DISEASE_WORSENING_PROGRESS_MAX = 100;
@@ -50,11 +51,46 @@ async function processSingleNeed(actor, need) {
 async function processDiseaseWorldTime(worldTime, deltaTime) {
   if (!game.user?.isActiveGM || Number(deltaTime) <= 0) return;
   const now = Number(worldTime) || Number(game.time?.worldTime) || 0;
+  const elapsedSeconds = Number(deltaTime) || 0;
   for (const actor of getLoadedActors()) {
     if (!actor?.isOwner) continue;
+    await processActorNeedAccumulation(actor, elapsedSeconds);
     await processActorDiseaseWorsening(actor, now);
     await processActorNeedThresholds(actor);
   }
+}
+
+async function processActorNeedAccumulation(actor, elapsedSeconds) {
+  const updateData = {};
+  const remainders = foundry.utils.deepClone(actor.getFlag(SYSTEM_ID, NEED_ACCUMULATION_REMAINDER_FLAG_KEY) ?? {});
+  const initialRemainders = JSON.stringify(remainders);
+  for (const need of getNeedSettings()) {
+    const perHour = Math.max(0, Number(need.settings?.accumulation?.perHour) || 0);
+    if (!perHour) continue;
+    const resource = actor.system?.needs?.[need.key];
+    if (!resource) continue;
+
+    const min = toInteger(resource.min);
+    const max = Math.max(min, toInteger(resource.max));
+    const current = Math.min(max, Math.max(min, toInteger(resource.value)));
+    if (current >= max) {
+      remainders[need.key] = 0;
+      continue;
+    }
+
+    const accumulated = Math.max(0, Number(remainders[need.key]) || 0) + ((perHour * elapsedSeconds) / 3600);
+    const whole = Math.floor(accumulated);
+    remainders[need.key] = accumulated - whole;
+    if (!whole) continue;
+
+    const next = Math.min(max, current + whole);
+    if (next >= max) remainders[need.key] = 0;
+    if (next !== current) updateData[`system.needs.${need.key}.value`] = next;
+  }
+  if (JSON.stringify(remainders) !== initialRemainders) {
+    updateData[`flags.${SYSTEM_ID}.${NEED_ACCUMULATION_REMAINDER_FLAG_KEY}`] = remainders;
+  }
+  if (Object.keys(updateData).length) await actor.update(updateData);
 }
 
 function getNeedPercent(resource) {

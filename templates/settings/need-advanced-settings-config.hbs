@@ -8,6 +8,18 @@
 
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
+      <h2>Накопление потребности</h2>
+    </header>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>Скорость накопления в час</span>
+        <input type="number" name="settings.accumulation.perHour" value="{{settings.accumulation.perHour}}" min="0" step="0.1">
+      </label>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
       <h2>Пороги потребности</h2>
       <button type="button" data-action="addThreshold"><i class="fa-solid fa-plus"></i> Добавить порог</button>
     </header>

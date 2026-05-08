@@ -3169,6 +3169,61 @@ label.fallout-maw-mitigation-cell {
   transform: translateY(2px);
 }
 
+.fallout-maw-world-time-control .window-content {
+  background: rgba(10, 10, 14, 0.94);
+  color: var(--fallout-maw-actor-text-strong);
+  padding: 0.65rem;
+}
+
+.fallout-maw-world-time-panel {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.fallout-maw-world-time-current {
+  border: 1px solid rgba(218, 207, 147, 0.34);
+  color: var(--fallout-maw-actor-text-strong);
+  font: 700 1.25rem var(--fallout-maw-actor-mono-font);
+  padding: 0.5rem 0.6rem;
+  text-align: center;
+}
+
+.fallout-maw-world-time-unit {
+  align-items: center;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
+.fallout-maw-world-time-unit select {
+  background: rgba(18, 19, 14, 0.94);
+  border: 1px solid rgba(164, 146, 85, 0.62);
+  color: var(--fallout-maw-actor-text-strong);
+  height: 2rem;
+}
+
+.fallout-maw-world-time-actions {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.fallout-maw-world-time-actions button {
+  background: rgba(22, 22, 22, 0.92);
+  border: 1px solid rgba(218, 207, 147, 0.48);
+  border-radius: 3px;
+  color: var(--fallout-maw-actor-text-strong);
+  font-weight: 800;
+  height: 2rem;
+  min-width: 0;
+  padding: 0;
+}
+
+.fallout-maw-world-time-actions button:hover {
+  border-color: rgba(244, 219, 129, 0.86);
+  box-shadow: 0 0 0 1px rgba(244, 219, 129, 0.16);
+}
+
 .fallout-maw-token-action-hud {
   --fallout-maw-token-hud-gap: 7px;
   --fallout-maw-token-hud-tile: 100px;

@@ -16,6 +16,7 @@ import {
   registerTokenActionHudHooks,
   syncTokenActionHud
 } from "./apps/token-action-hud.mjs";
+import { registerWorldTimeControlHooks } from "./apps/world-time-control.mjs";
 import { registerSkillCheckSocket } from "./rolls/skill-check.mjs";
 import { registerDamageSocket } from "./combat/damage-hub.mjs";
 import { registerMedicineSocket } from "./apps/medicine-dialog.mjs";
@@ -53,6 +54,7 @@ Hooks.once("init", () => {
   registerNeedThresholdHooks();
   registerSkillCheckControlHooks();
   registerTokenActionHudHooks();
+  registerWorldTimeControlHooks();
 });
 
 Hooks.once("ready", async () => {

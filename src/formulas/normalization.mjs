@@ -35,11 +35,13 @@ const DEFAULT_NEED_COLORS = Object.freeze({
 });
 const ALL_CHARACTERISTIC_KEYS = Object.freeze(DEFAULT_CHARACTERISTICS.map(entry => entry.key));
 const DEFAULT_NEED_BEHAVIOR = Object.freeze({
+  accumulation: Object.freeze({ perHour: 10 }),
   thresholds: Object.freeze([]),
   diseases: Object.freeze([])
 });
 const DEFAULT_NEED_SETTINGS_BY_KEY = Object.freeze({
   hunger: Object.freeze({
+    accumulation: Object.freeze({ perHour: 10 }),
     thresholds: Object.freeze([
       createNeedEffectThreshold(50, { strength: -2, dexterity: -2 }),
       createNeedEffectThreshold(75, { strength: -2, dexterity: -2, endurance: -2 }),
@@ -47,6 +49,7 @@ const DEFAULT_NEED_SETTINGS_BY_KEY = Object.freeze({
     ])
   }),
   thirst: Object.freeze({
+    accumulation: Object.freeze({ perHour: 10 }),
     thresholds: Object.freeze([
       createNeedEffectThreshold(50, { perception: -2, intelligence: -2 }),
       createNeedEffectThreshold(75, { perception: -2, intelligence: -2, charisma: -2 }),
@@ -54,6 +57,7 @@ const DEFAULT_NEED_SETTINGS_BY_KEY = Object.freeze({
     ])
   }),
   sleepiness: Object.freeze({
+    accumulation: Object.freeze({ perHour: 10 }),
     thresholds: Object.freeze([
       createNeedEffectThreshold(50, Object.fromEntries(ALL_CHARACTERISTIC_KEYS.map(key => [key, -1]))),
       createNeedEffectThreshold(75, Object.fromEntries(ALL_CHARACTERISTIC_KEYS.map(key => [key, -2]))),
@@ -61,6 +65,7 @@ const DEFAULT_NEED_SETTINGS_BY_KEY = Object.freeze({
     ])
   }),
   radcont: Object.freeze({
+    accumulation: Object.freeze({ perHour: 0 }),
     thresholds: Object.freeze([
       createNeedDiseaseThreshold(25, 1)
     ])
@@ -472,8 +477,16 @@ function normalizeNeedBehavior(settings = {}, key = "") {
   const defaults = getDefaultNeedBehavior(key);
   const source = settings && typeof settings === "object" ? settings : {};
   return {
+    accumulation: normalizeNeedAccumulation(source.accumulation, defaults.accumulation),
     thresholds: normalizeNeedThresholds(source.thresholds, defaults.thresholds),
     diseases: normalizeNeedDiseases(source.diseases, defaults.diseases)
+  };
+}
+
+function normalizeNeedAccumulation(accumulation = {}, defaults = DEFAULT_NEED_BEHAVIOR.accumulation) {
+  const source = accumulation && typeof accumulation === "object" ? accumulation : {};
+  return {
+    perHour: Math.max(0, toDecimal(source.perHour, defaults?.perHour ?? 10))
   };
 }
 
