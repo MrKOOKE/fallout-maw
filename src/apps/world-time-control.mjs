@@ -23,7 +23,7 @@ let selectedUnit = "hours";
 
 export function registerWorldTimeControlHooks() {
   if (hooksRegistered) return;
-  Hooks.on("getSceneControlButtons", addWorldTimeControlButton);
+  Hooks.on("renderSceneControls", injectWorldTimeControlButton);
   Hooks.on("updateWorldTime", rerenderWorldTimeControl);
   Hooks.on("combatStart", pauseWorldClockForCombat);
   Hooks.on("deleteCombat", scheduleResumeWorldClockAfterCombat);
@@ -33,22 +33,34 @@ export function registerWorldTimeControlHooks() {
   hooksRegistered = true;
 }
 
-function addWorldTimeControlButton(controls) {
+function injectWorldTimeControlButton(_app, element) {
   if (!game.user?.isGM) return;
-  const notesControls = getSceneControlGroup(controls, "notes");
-  if (!notesControls?.tools || hasSceneControlTool(notesControls.tools, "falloutMawWorldTimeControl")) return;
+  const root = element instanceof HTMLElement ? element : element?.[0];
+  const menu = root?.matches?.("#scene-controls-layers")
+    ? root
+    : root?.querySelector("#scene-controls-layers");
+  if (!menu || menu.querySelector("[data-fallout-maw-world-time-control]")) return;
 
-  const tool = {
-    name: "falloutMawWorldTimeControl",
-    title: "Управление временем",
-    icon: "fa-solid fa-clock",
-    order: getSceneControlToolCount(notesControls.tools),
-    button: true,
-    visible: true,
-    onClick: () => toggleWorldTimeControl(),
-    onChange: () => toggleWorldTimeControl()
-  };
-  addSceneControlTool(notesControls.tools, tool);
+  const item = document.createElement("li");
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "control ui-control layer icon fa-solid fa-clock fallout-maw-world-time-main-control";
+  button.dataset.falloutMawWorldTimeControl = "true";
+  button.dataset.tooltip = "";
+  button.setAttribute("aria-label", "Управление временем");
+  button.setAttribute("aria-pressed", "false");
+  button.addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleWorldTimeControl();
+    updateWorldTimeControlButtonState();
+  });
+  item.append(button);
+
+  const notesItem = menu.querySelector("[data-control='notes']")?.closest("li");
+  if (notesItem?.nextSibling) notesItem.parentElement.insertBefore(item, notesItem.nextSibling);
+  else menu.append(item);
+  updateWorldTimeControlButtonState();
 }
 
 function toggleWorldTimeControl() {
@@ -60,6 +72,7 @@ function toggleWorldTimeControl() {
 function rerenderWorldTimeControl() {
   const app = foundry.applications.instances.get(CONTROL_ID);
   if (app?.rendered) void app.render({ force: true });
+  updateWorldTimeControlButtonState();
 }
 
 export class WorldTimeControl extends FalloutMaWFormApplicationV2 {
@@ -111,6 +124,12 @@ export class WorldTimeControl extends FalloutMaWFormApplicationV2 {
   async _onRender(context, options) {
     await super._onRender(context, options);
     this.#positionNearControl();
+    updateWorldTimeControlButtonState();
+  }
+
+  _onClose(options) {
+    super._onClose(options);
+    updateWorldTimeControlButtonState();
   }
 
   async _processFormData(_event, _form, formData) {
@@ -137,8 +156,7 @@ export class WorldTimeControl extends FalloutMaWFormApplicationV2 {
   }
 
   #positionNearControl() {
-    const button = document.querySelector("[data-tool='falloutMawWorldTimeControl']")
-      ?? document.querySelector("[data-action='falloutMawWorldTimeControl']");
+    const button = document.querySelector("[data-fallout-maw-world-time-control]");
     const element = this.element;
     if (!button || !element) return;
 
@@ -169,6 +187,14 @@ function stopWorldClock() {
   clockTickInFlight = false;
   resumeClockAfterCombat = false;
   rerenderWorldTimeControl();
+}
+
+function updateWorldTimeControlButtonState() {
+  const button = document.querySelector("[data-fallout-maw-world-time-control]");
+  if (!button) return;
+  const active = Boolean(foundry.applications.instances.get(CONTROL_ID)?.rendered);
+  button.classList.toggle("active", active);
+  button.setAttribute("aria-pressed", String(active));
 }
 
 function isClockRunning() {
@@ -262,23 +288,4 @@ function formatWorldTime(seconds) {
 
 function pad(value) {
   return String(value).padStart(2, "0");
-}
-
-function getSceneControlGroup(controls, name) {
-  if (Array.isArray(controls)) return controls.find(control => control.name === name);
-  return controls?.[name];
-}
-
-function hasSceneControlTool(tools, name) {
-  if (Array.isArray(tools)) return tools.some(tool => tool.name === name);
-  return Boolean(tools?.[name]);
-}
-
-function addSceneControlTool(tools, tool) {
-  if (Array.isArray(tools)) tools.push(tool);
-  else tools[tool.name] = tool;
-}
-
-function getSceneControlToolCount(tools) {
-  return Array.isArray(tools) ? tools.length : Object.keys(tools ?? {}).length;
 }
