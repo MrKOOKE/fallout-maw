@@ -6,6 +6,7 @@ import {
   getCreatureOptions,
   getCurrencySettings,
   getDamageTypeSettings,
+  getDiseaseSettings,
   getLevelSettings,
   getNeedSettings,
   getProficiencySettings,
@@ -101,6 +102,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         selectLimb: this.#onSelectLimb,
         openLimbControl: this.#onOpenLimbControl,
         deleteTrauma: this.#onDeleteTrauma,
+        deleteDisease: this.#onDeleteDisease,
         createResearch: this.#onCreateResearch,
         deleteResearch: this.#onDeleteResearch,
         manageResearch: this.#onManageResearch,
@@ -182,6 +184,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const characteristicSettings = getCharacteristicSettings();
     const currencySettings = getCurrencySettings();
     const damageTypeSettings = getDamageTypeSettings();
+    const diseaseSettings = getDiseaseSettings();
     const resourceSettings = getResourceSettings();
     const needSettings = getNeedSettings();
     const proficiencySettings = getProficiencySettings();
@@ -318,6 +321,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         damageTypeSettings,
         limbs
       }),
+      diseases: prepareDiseaseEntries(actor, diseaseSettings, {
+        characteristicSettings,
+        resourceSettings,
+        needSettings,
+        proficiencySettings,
+        skillSettings,
+        damageTypeSettings,
+        limbs
+      }),
       inventory,
       effectCategories: prepareEffectCategories(getActorEffectsForDisplay(actor))
     }, { inplace: false });
@@ -421,6 +433,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     event.preventDefault();
     if (!this.#freeEdit) return undefined;
     const itemId = target.closest("[data-trauma-id]")?.dataset.traumaId ?? "";
+    return this.actor.items.get(itemId)?.delete();
+  }
+
+  static #onDeleteDisease(event, target) {
+    event.preventDefault();
+    if (!this.#freeEdit) return undefined;
+    const itemId = target.closest("[data-disease-id]")?.dataset.diseaseId ?? "";
     return this.actor.items.get(itemId)?.delete();
   }
 
@@ -1939,7 +1958,7 @@ function buildInventoryCellStyle(x, y, placement = null) {
 function prepareInventoryContext(actor, race) {
   const currencies = getCurrencySettings();
   const { columns, rows } = getInventoryGridDimensions(race);
-  const allItems = actor.items.contents.filter(item => item.type !== "trauma");
+  const allItems = actor.items.contents.filter(item => item.type !== "trauma" && item.type !== "disease");
   const allItemData = allItems.map(item => createInventoryItemData(item, allItems, currencies));
   const assignedItemIds = new Set();
   const topLevelItems = allItemData.filter(item => !item.parentId);
@@ -2063,6 +2082,33 @@ function prepareTraumaEntries(actor, settings = {}) {
     healingSkillLabel: skillLabels.get(item.system?.healingSkillKey) ?? item.system?.healingSkillKey ?? "doctor",
     effects: prepareTraumaEffectEntries(item.system?.effects, pathLabels)
   }));
+}
+
+function prepareDiseaseEntries(actor, diseaseSettings = {}, settings = {}) {
+  const pathLabels = buildEffectPathLabelMap(settings);
+  const skillLabels = new Map((settings.skillSettings ?? []).map(skill => [skill.key, skill.label]));
+  const diseases = Array.isArray(diseaseSettings?.diseases) ? diseaseSettings.diseases : [];
+  return actor.items.filter(item => item.type === "disease").map(item => {
+    const diseaseProfile = diseases.find(entry => entry.id === item.system?.diseaseId);
+    const stageProfile = diseaseProfile?.stages?.find(stage => stage.id === item.system?.stageId);
+    const level = toInteger(item.system?.level);
+    const stageName = stageProfile?.name || item.name || (level ? `Стадия ${level}` : "");
+    return {
+      id: item.id,
+      uuid: item.uuid,
+      name: diseaseProfile?.name || item.name,
+      img: diseaseProfile?.img || item.img,
+      stageLabel: level ? `${stageName} (${level})` : stageName,
+      needLabel: item.system?.needLabel ?? item.system?.needKey ?? "",
+      thresholdPercent: toInteger(item.system?.thresholdPercent),
+      healingDifficulty: toInteger(item.system?.healingDifficulty ?? 60),
+      healingToolClass: String(item.system?.healingToolClass ?? "D").trim().toUpperCase() || "D",
+      healingProgress: toInteger(item.system?.healingProgress),
+      healingProgressMax: toInteger(item.system?.healingProgressMax ?? item.system?.healingProgress ?? 100),
+      healingSkillLabel: skillLabels.get(item.system?.healingSkillKey) ?? item.system?.healingSkillKey ?? "doctor",
+      effects: prepareTraumaEffectEntries(item.system?.effects, pathLabels)
+    };
+  });
 }
 
 function prepareTraumaSourceEntries(item) {

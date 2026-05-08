@@ -9,7 +9,8 @@
     "Item": {
       "gear": "Item",
       "ability": "Ability",
-      "trauma": "Trauma"
+      "trauma": "Trauma",
+      "disease": "Disease"
     }
   },
   "FALLOUTMAW": {
@@ -34,6 +35,7 @@
       "DamageReductions": "Damage Reductions",
       "Delete": "Delete",
       "Description": "Description",
+      "Diseases": "Diseases",
       "Edit": "Edit",
       "Equipment": "Equipment",
       "Energy": "Energy",
@@ -79,6 +81,7 @@
       "LockCoreFields": "Lock Core Fields",
       "NoCreatureType": "Not selected",
       "NoRace": "Not selected",
+      "NoDiseases": "No diseases.",
       "NoTraumas": "No traumas.",
       "Progression": "Level Up",
       "Race": "Race",

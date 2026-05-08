@@ -8,7 +8,8 @@
     },
     "Item": {
       "gear": "Предмет",
-      "ability": "Способность"
+      "ability": "Способность",
+      "disease": "Болезнь"
     }
   },
   "FALLOUTMAW": {
@@ -33,6 +34,7 @@
       "DamageReductions": "Снижение урона",
       "Delete": "Удалить",
       "Description": "Описание",
+      "Diseases": "Болезни",
       "Edit": "Изменить",
       "Equipment": "Снаряжение",
       "Energy": "Энергия",
@@ -78,6 +80,7 @@
       "LockCoreFields": "Заблокировать основу",
       "NoCreatureType": "Не выбран",
       "NoRace": "Не выбрана",
+      "NoDiseases": "Болезней нет.",
       "NoTraumas": "Травм нет.",
       "Progression": "Повышение уровня",
       "Race": "Раса",
