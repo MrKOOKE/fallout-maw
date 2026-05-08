@@ -21,6 +21,7 @@ function normalizeDiseaseStages(stages) {
     level: Math.max(0, toInteger(entry?.level)),
     name: String(entry?.name ?? "").trim(),
     img: String(entry?.img ?? "").trim(),
+    worseningHours: Math.max(1, toInteger(entry?.worseningHours ?? 24)),
     healingDifficulty: Math.max(0, toInteger(entry?.healingDifficulty ?? 60)),
     healingToolClass: normalizeToolClass(entry?.healingToolClass),
     healingProgress: Math.max(1, toInteger(entry?.healingProgress ?? entry?.healingProgressMax ?? 100)),

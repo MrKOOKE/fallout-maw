@@ -52,6 +52,10 @@
             <file-picker type="image" name="settings.diseases.{{@../index}}.stages.{{@index}}.img" value="{{img}}"></file-picker>
           </label>
           <label>
+            <span>Прогресс усугубления, ч</span>
+            <input type="number" name="settings.diseases.{{@../index}}.stages.{{@index}}.worseningHours" value="{{worseningHours}}" min="1" step="1">
+          </label>
+          <label>
             <span>Сложность лечения</span>
             <input type="number" name="settings.diseases.{{@../index}}.stages.{{@index}}.healingDifficulty" value="{{healingDifficulty}}" min="0" step="1">
           </label>

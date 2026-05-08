@@ -62,10 +62,7 @@ const DEFAULT_NEED_SETTINGS_BY_KEY = Object.freeze({
   }),
   radcont: Object.freeze({
     thresholds: Object.freeze([
-      createNeedDiseaseThreshold(25, 1),
-      createNeedDiseaseThreshold(50, 2),
-      createNeedDiseaseThreshold(75, 3),
-      createNeedDiseaseThreshold(100, 4)
+      createNeedDiseaseThreshold(25, 1)
     ])
   })
 });
@@ -507,6 +504,7 @@ function normalizeNeedDiseaseStages(stages) {
     level: Math.max(0, toInteger(entry?.level)),
     name: String(entry?.name ?? "").trim(),
     img: String(entry?.img ?? "").trim(),
+    worseningHours: Math.max(1, toInteger(entry?.worseningHours ?? 24)),
     healingDifficulty: Math.max(0, toInteger(entry?.healingDifficulty ?? 60)),
     healingToolClass: normalizeToolClass(entry?.healingToolClass),
     healingProgress: Math.max(1, toInteger(entry?.healingProgress ?? entry?.healingProgressMax ?? 100)),

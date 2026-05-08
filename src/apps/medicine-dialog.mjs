@@ -1,4 +1,5 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { createDiseaseImmunityEffect } from "../needs/need-thresholds.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getSkillSettings, getSystemActionSettings, getToolSettings } from "../settings/accessors.mjs";
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
@@ -537,26 +538,13 @@ async function applyTreatmentToActor(actor, { treatmentType = "trauma", treatmen
   const maxProgress = Math.max(1, toInteger(trauma.system?.healingProgressMax));
   const nextProgress = Math.min(maxProgress, Math.max(0, toInteger(finalProgress)));
   if (completed || nextProgress >= maxProgress) {
-    if (trauma.type === "disease") await reduceNeedForTreatedDisease(actor, trauma);
+    if (trauma.type === "disease") await createDiseaseImmunityEffect(actor, trauma);
     await trauma.delete();
   } else {
     await trauma.update({ "system.healingProgress": nextProgress });
   }
 
   return buildTargetContext(actor);
-}
-
-async function reduceNeedForTreatedDisease(actor, disease) {
-  const needKey = String(disease.system?.needKey ?? "");
-  const need = actor.system?.needs?.[needKey];
-  if (!need) return;
-
-  const min = toInteger(need.min);
-  const max = Math.max(min, toInteger(need.max));
-  const current = Math.min(max, Math.max(min, toInteger(need.value)));
-  const reduction = Math.ceil(Math.max(0, max - min) * (Math.max(0, toInteger(disease.system?.thresholdPercent)) / 100));
-  const next = Math.max(min, current - reduction);
-  if (next !== current) await actor.update({ [`system.needs.${needKey}.value`]: next });
 }
 
 function buildTargetContext(actor, token = null) {

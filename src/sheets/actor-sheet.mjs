@@ -1795,6 +1795,36 @@ function formatNumber(value) {
   return numeric.toFixed(2).replace(/\.?0+$/, "");
 }
 
+function formatProgress(value) {
+  return formatNumber(Math.max(0, Number(value) || 0));
+}
+
+function formatMultiplier(value) {
+  return formatNumber(Math.max(1, Number(value) || 1));
+}
+
+function formatHours(value) {
+  const numeric = Math.max(0, Number(value) || 0);
+  return numeric.toFixed(1).replace(/\.0$/, "");
+}
+
+function calculateDiseaseWorseningMultiplier(actor, needKey) {
+  const need = actor?.system?.needs?.[String(needKey ?? "")];
+  if (!need) return 1;
+  const min = toInteger(need.min);
+  const max = Math.max(min, toInteger(need.max));
+  const value = Math.min(max, Math.max(min, toInteger(need.value)));
+  const percent = ((value - min) / Math.max(1, max - min)) * 100;
+  return Math.max(1, Math.floor(percent / 10) * 2);
+}
+
+function calculateDiseaseHoursUntilWorsening(item, multiplier) {
+  const progress = Math.max(0, Math.min(100, Number(item?.system?.worseningProgress) || 0));
+  const baseSeconds = Math.max(1, toInteger(item?.system?.worseningBaseSeconds) || (24 * 60 * 60));
+  const safeMultiplier = Math.max(1, Number(multiplier) || 1);
+  return ((100 - progress) / 100) * (baseSeconds / 3600) / safeMultiplier;
+}
+
 function escapeHTML(value) {
   const element = document.createElement("span");
   element.textContent = String(value ?? "");
@@ -2092,6 +2122,7 @@ function prepareDiseaseEntries(actor, diseaseSettings = {}, settings = {}) {
     const diseaseProfile = diseases.find(entry => entry.id === item.system?.diseaseId);
     const stageProfile = diseaseProfile?.stages?.find(stage => stage.id === item.system?.stageId);
     const level = toInteger(item.system?.level);
+    const worseningMultiplier = calculateDiseaseWorseningMultiplier(actor, item.system?.needKey);
     const stageName = stageProfile?.name || item.name || (level ? `Стадия ${level}` : "");
     return {
       id: item.id,
@@ -2099,8 +2130,10 @@ function prepareDiseaseEntries(actor, diseaseSettings = {}, settings = {}) {
       name: diseaseProfile?.name || item.name,
       img: diseaseProfile?.img || item.img,
       stageLabel: level ? `${stageName} (${level})` : stageName,
-      needLabel: item.system?.needLabel ?? item.system?.needKey ?? "",
-      thresholdPercent: toInteger(item.system?.thresholdPercent),
+      worseningProgressLabel: formatProgress(item.system?.worseningProgress),
+      worseningProgressMax: Math.max(1, toInteger(item.system?.worseningProgressMax) || 100),
+      worseningMultiplierLabel: formatMultiplier(worseningMultiplier),
+      worseningHoursLeftLabel: formatHours(calculateDiseaseHoursUntilWorsening(item, worseningMultiplier)),
       healingDifficulty: toInteger(item.system?.healingDifficulty ?? 60),
       healingToolClass: String(item.system?.healingToolClass ?? "D").trim().toUpperCase() || "D",
       healingProgress: toInteger(item.system?.healingProgress),
