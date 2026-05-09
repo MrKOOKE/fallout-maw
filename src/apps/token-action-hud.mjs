@@ -153,7 +153,6 @@ function closeTokenActionHud() {
 
 function layoutCurrentTokenActionHud() {
   if (!tokenActionHud?.element?.isConnected) return;
-  tokenActionHud.element.classList.remove("layout-ready");
   layoutTokenActionHud(tokenActionHud.element);
 }
 
@@ -340,7 +339,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#limbPopover.boundRoot = silhouette;
     }
     this.applyMovementResourcePreview(tokenActionHudMovementPreview);
-    this.element?.classList.remove("layout-ready");
     this.#scheduleLayout();
   }
 
@@ -381,7 +379,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     const tray = target.dataset.tray ?? "";
     this.#activeTray = this.#activeTray === tray ? "" : tray;
-    this.element?.classList.remove("layout-ready");
     return this.render({ force: true });
   }
 
@@ -486,7 +483,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   static #onToggleWeaponActions(event) {
     event.preventDefault();
     this.#activeTray = this.#activeTray === "weaponActions" ? "" : "weaponActions";
-    this.element?.classList.remove("layout-ready");
     return this.render({ force: true });
   }
 

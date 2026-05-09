@@ -137,25 +137,30 @@ class WeaponAttackController {
     const trajectory = buildAttackTrajectory(this.token, this.geometry, this.targets);
     if (!this.targets.length) return { attempted: true, damageRequests, trajectory };
 
-    const targets = getTrajectoryTargets(this.token, trajectory);
+    const targets = getTrajectoryTargetEntries(this.token, trajectory);
     const baseDamage = getWeaponDamage(this.weapon);
     const penetrationPower = getWeaponPenetrationPower(this.weapon);
     const penetrationThreshold = Math.ceil(baseDamage * 0.5);
     let penetrationsUsed = 0;
     let attempted = true;
+    let finalAnimationPoint = null;
 
-    for (const target of targets) {
+    for (const entry of targets) {
       const damageAmount = getPenetratedDamageAmount(baseDamage, penetrationsUsed);
       if (damageAmount <= 0) break;
-      const request = await this.resolveAttackAgainstTarget(target, {
+      const request = await this.resolveAttackAgainstTarget(entry.target, {
         damageAmount,
         difficultyBonus: penetrationsUsed * 20,
         penetrationStep: penetrationsUsed,
         checkBatch
       });
-      if (!request) break;
+      if (!request) {
+        finalAnimationPoint = selectMissPointNearTarget(this.token, entry.target, trajectory);
+        break;
+      }
 
       damageRequests.push(request);
+      finalAnimationPoint = getTokenCenter(entry.target);
       if (penetrationsUsed >= penetrationPower) break;
 
       const estimate = estimateDamageApplication(request);
@@ -163,6 +168,7 @@ class WeaponAttackController {
       penetrationsUsed += 1;
     }
 
+    if (finalAnimationPoint) updateTrajectoryEnd(trajectory, finalAnimationPoint);
     return { attempted, damageRequests, trajectory };
   }
 
@@ -205,7 +211,7 @@ class WeaponAttackController {
     if (!this.pointer) return;
 
     const origin = getTokenCenter(this.token);
-    this.geometry = getAttackGeometry(this.weapon, origin, this.pointer);
+    this.geometry = getAttackGeometry(this.weapon, this.token, origin, this.pointer);
     drawAttackShape(this.shape, this.geometry, this.processing);
     this.targets = getPotentialTargets(this.token, this.geometry);
     drawTargetMarkers(this.targetMarkers, this.targets);
@@ -300,7 +306,8 @@ function serializeGeometry(geometry) {
     end: serializePoint(geometry.end),
     angle: Number(geometry.angle) || 0,
     distance: Number(geometry.distance) || 0,
-    halfAngle: Number(geometry.halfAngle) || 0
+    halfAngle: Number(geometry.halfAngle) || 0,
+    shapePoints: Array.isArray(geometry.shapePoints) ? geometry.shapePoints.map(serializePoint) : []
   };
 }
 
@@ -311,7 +318,8 @@ function deserializeGeometry(geometry) {
     end: deserializePoint(geometry.end),
     angle: Number(geometry.angle) || 0,
     distance: Number(geometry.distance) || 0,
-    halfAngle: Number(geometry.halfAngle) || 0
+    halfAngle: Number(geometry.halfAngle) || 0,
+    shapePoints: Array.isArray(geometry.shapePoints) ? geometry.shapePoints.map(deserializePoint) : []
   };
 }
 
@@ -342,12 +350,18 @@ function isSameGeometry(current, previous) {
     && isSamePoint(current.end, previous.end)
     && Math.abs((Number(current.angle) || 0) - (Number(previous.angle) || 0)) <= PREVIEW_ANGLE_EPSILON
     && Math.abs((Number(current.distance) || 0) - (Number(previous.distance) || 0)) <= PREVIEW_POSITION_EPSILON
-    && Math.abs((Number(current.halfAngle) || 0) - (Number(previous.halfAngle) || 0)) <= PREVIEW_ANGLE_EPSILON;
+    && Math.abs((Number(current.halfAngle) || 0) - (Number(previous.halfAngle) || 0)) <= PREVIEW_ANGLE_EPSILON
+    && isSamePointList(current.shapePoints, previous.shapePoints);
 }
 
 function isSameMarkerList(current = [], previous = []) {
   if (current.length !== previous.length) return false;
   return current.every((marker, index) => isSamePoint(marker, previous[index]));
+}
+
+function isSamePointList(current = [], previous = []) {
+  if (current.length !== previous.length) return false;
+  return current.every((point, index) => isSamePoint(point, previous[index]));
 }
 
 function isSamePoint(current, previous) {
@@ -388,18 +402,16 @@ async function spendWeaponResources(weapon, multiplier = 1) {
   if (Object.keys(updateData).length) await weapon.update(updateData);
 }
 
-function getAttackGeometry(weapon, origin, pointer) {
+function getAttackGeometry(weapon, attackerToken, origin, pointer) {
   const maxDistancePixels = metersToPixels(Number(weapon.system?.functions?.weapon?.maxRangeMeters) || 0);
   const dx = pointer.x - origin.x;
   const dy = pointer.y - origin.y;
   const angle = Math.atan2(dy, dx);
   const distance = Math.max(1, maxDistancePixels);
   const halfAngle = Math.max(0, (Number(weapon.system?.functions?.weapon?.attackConeDegrees) || 0) * (Math.PI / 180) / 2);
-  const end = {
-    x: origin.x + (Math.cos(angle) * distance),
-    y: origin.y + (Math.sin(angle) * distance)
-  };
-  return { origin, angle, distance, halfAngle, end };
+  const end = getWallClippedEndpoint(attackerToken, origin, angle, distance).point;
+  const shapePoints = buildClippedConePoints(attackerToken, { origin, angle, distance, halfAngle });
+  return { origin, angle, distance, halfAngle, end, shapePoints };
 }
 
 function metersToPixels(meters) {
@@ -411,7 +423,9 @@ function metersToPixels(meters) {
 function drawAttackShape(graphics, geometry, locked) {
   const color = locked ? 0xffd166 : 0xff3b3b;
   const alpha = locked ? 0.24 : 0.18;
-  const points = buildConePoints(geometry);
+  const points = Array.isArray(geometry.shapePoints) && geometry.shapePoints.length
+    ? geometry.shapePoints.flatMap(point => [point.x, point.y])
+    : buildConePoints(geometry);
   graphics.lineStyle(2, color, 0.9);
   graphics.beginFill(color, alpha);
   if (points.length >= 6) graphics.drawPolygon(points);
@@ -429,6 +443,17 @@ function buildConePoints({ origin, angle, distance, halfAngle }) {
       origin.x + (Math.cos(angle + step) * distance),
       origin.y + (Math.sin(angle + step) * distance)
     );
+  }
+  return points;
+}
+
+function buildClippedConePoints(attackerToken, { origin, angle, distance, halfAngle }) {
+  if (halfAngle <= 0) return [];
+  const points = [origin];
+  const segments = 24;
+  for (let index = 0; index <= segments; index += 1) {
+    const step = -halfAngle + ((halfAngle * 2 * index) / segments);
+    points.push(getWallClippedEndpoint(attackerToken, origin, angle + step, distance).point);
   }
   return points;
 }
@@ -458,6 +483,26 @@ function hasLineOfSight(attackerToken, destination, origin) {
     type: "sight",
     mode: "any"
   });
+}
+
+function getWallClippedEndpoint(attackerToken, origin, angle, distance) {
+  const maxDistance = Math.max(1, Number(distance) || 1);
+  const destination = {
+    x: origin.x + (Math.cos(angle) * maxDistance),
+    y: origin.y + (Math.sin(angle) * maxDistance)
+  };
+  const collision = attackerToken?.checkCollision?.(destination, {
+    origin,
+    type: "sight",
+    mode: "closest"
+  });
+  const point = collision
+    ? { x: Number(collision.x) || destination.x, y: Number(collision.y) || destination.y }
+    : destination;
+  return {
+    point,
+    distance: Math.max(1, Math.hypot(point.x - origin.x, point.y - origin.y))
+  };
 }
 
 function pointInAttackCone(point, { origin, angle, distance, halfAngle }) {
@@ -498,8 +543,8 @@ function getTargetMarkerPosition(target) {
 
 function buildAttackTrajectory(attackerToken, coneGeometry, targets = []) {
   const aimPoint = selectTrajectoryAimPoint(attackerToken, coneGeometry, targets);
-  if (aimPoint) return buildTrajectoryThroughPoint(coneGeometry, aimPoint);
-  return buildRandomTrajectory(coneGeometry);
+  if (aimPoint) return buildTrajectoryThroughPoint(attackerToken, coneGeometry, aimPoint);
+  return buildRandomTrajectory(attackerToken, coneGeometry);
 }
 
 function selectTrajectoryAimPoint(attackerToken, geometry, targets = []) {
@@ -514,38 +559,61 @@ function selectTrajectoryAimPoint(attackerToken, geometry, targets = []) {
   return candidate.points[Math.floor(Math.random() * candidate.points.length)];
 }
 
-function buildTrajectoryThroughPoint(geometry, point) {
+function buildTrajectoryThroughPoint(attackerToken, geometry, point) {
   const angle = Math.atan2(point.y - geometry.origin.y, point.x - geometry.origin.x);
-  return buildTrajectoryByAngle(geometry, angle);
+  return buildTrajectoryByAngle(attackerToken, geometry, angle);
 }
 
-function buildRandomTrajectory(geometry) {
+function buildRandomTrajectory(attackerToken, geometry) {
   const spread = geometry.halfAngle > 0
     ? -geometry.halfAngle + (Math.random() * geometry.halfAngle * 2)
     : 0;
-  return buildTrajectoryByAngle(geometry, geometry.angle + spread);
+  return buildTrajectoryByAngle(attackerToken, geometry, geometry.angle + spread);
 }
 
-function buildTrajectoryByAngle(geometry, angle) {
+function buildTrajectoryByAngle(attackerToken, geometry, angle) {
+  const clipped = getWallClippedEndpoint(attackerToken, geometry.origin, angle, geometry.distance);
   return {
     origin: geometry.origin,
     angle,
-    distance: geometry.distance,
+    distance: clipped.distance,
     halfAngle: 0,
-    end: {
-      x: geometry.origin.x + (Math.cos(angle) * geometry.distance),
-      y: geometry.origin.y + (Math.sin(angle) * geometry.distance)
-    }
+    end: clipped.point
   };
 }
 
-function getTrajectoryTargets(attackerToken, trajectory) {
+function getTrajectoryTargetEntries(attackerToken, trajectory) {
   return (canvas.tokens?.placeables ?? [])
     .filter(target => target !== attackerToken && target.actor && target.visible && !isDeadTarget(target))
     .map(target => ({ target, hit: getTokenTrajectoryHit(target, trajectory) }))
     .filter(entry => entry.hit && hasLineOfSight(attackerToken, entry.hit.point, trajectory.origin))
-    .sort((left, right) => left.hit.distance - right.hit.distance)
-    .map(entry => entry.target);
+    .sort((left, right) => left.hit.distance - right.hit.distance);
+}
+
+function updateTrajectoryEnd(trajectory, point) {
+  const dx = point.x - trajectory.origin.x;
+  const dy = point.y - trajectory.origin.y;
+  trajectory.end = { x: point.x, y: point.y };
+  trajectory.angle = Math.atan2(dy, dx);
+  trajectory.distance = Math.max(1, Math.hypot(dx, dy));
+}
+
+function selectMissPointNearTarget(attackerToken, target, trajectory) {
+  const gridSize = Math.max(1, Number(canvas.grid?.size) || 100);
+  const offsets = [
+    [-1, -1], [0, -1], [1, -1],
+    [-1, 0], [1, 0],
+    [-1, 1], [0, 1], [1, 1]
+  ];
+  const offset = offsets[Math.floor(Math.random() * offsets.length)];
+  const center = getTokenCenter(target);
+  const missPoint = {
+    x: center.x + (offset[0] * gridSize) + ((Math.random() - 0.5) * gridSize * 0.8),
+    y: center.y + (offset[1] * gridSize) + ((Math.random() - 0.5) * gridSize * 0.8)
+  };
+  const angle = Math.atan2(missPoint.y - trajectory.origin.y, missPoint.x - trajectory.origin.x);
+  const maxDistance = Math.min(trajectory.distance, Math.hypot(missPoint.x - trajectory.origin.x, missPoint.y - trajectory.origin.y));
+  return getWallClippedEndpoint(attackerToken, trajectory.origin, angle, maxDistance).point;
 }
 
 function getWeaponDamage(weapon) {

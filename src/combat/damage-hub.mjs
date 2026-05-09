@@ -336,7 +336,9 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
     const next = mode === MODE_DAMAGE
       ? Math.max(min, current - effectiveAmount)
       : Math.min(max, current + effectiveAmount);
-    actualHealthDelta = Math.abs(next - current);
+    actualHealthDelta = mode === MODE_DAMAGE
+      ? effectiveAmount
+      : Math.abs(next - current);
     updateData["system.resources.health.value"] = next;
   }
 
@@ -758,7 +760,7 @@ async function applyDamageEntriesBatch(actor, entries = []) {
     const current = toInteger(health.value);
     const min = toInteger(health.min);
     const next = Math.max(min, current - requestedHealthDamage);
-    actualHealthDelta = Math.max(0, current - next);
+    actualHealthDelta = requestedHealthDamage;
     updateData["system.resources.health.value"] = next;
   }
 

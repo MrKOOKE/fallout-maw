@@ -5,6 +5,7 @@
   "description": "Fallout-MaW game system for Foundry Virtual Tabletop.",
   "type": "module",
   "scripts": {
+    "build:animations": "node scripts/build-animation-database.mjs",
     "check": "node scripts/validate-manifest.mjs && node scripts/check-syntax.mjs",
     "check:manifest": "node scripts/validate-manifest.mjs",
     "check:syntax": "node scripts/check-syntax.mjs"

@@ -2,6 +2,7 @@ import { SYSTEM_ID } from "../constants.mjs";
 
 export const ANIMATION_LIBRARY_ROOT = `systems/${SYSTEM_ID}/Library-animation`;
 
+const ANIMATION_DATABASE_MODULE = "../generated/animation-database.mjs";
 const MEDIA_EXTENSIONS = new Set(["webm", "mp4", "m4v", "webp", "png", "jpg", "jpeg", "gif", "ogg", "mp3", "wav"]);
 const VIDEO_EXTENSIONS = new Set(["webm", "mp4", "m4v"]);
 const IMAGE_EXTENSIONS = new Set(["webp", "png", "jpg", "jpeg", "gif"]);
@@ -15,39 +16,11 @@ let cachedIndex = null;
 
 export async function getAnimationLibraryIndex({ refresh = false } = {}) {
   if (cachedIndex && !refresh) return cachedIndex;
-
-  const files = await collectLibraryFiles(ANIMATION_LIBRARY_ROOT);
-  const entries = files
-    .map(buildAnimationEntry)
-    .filter(Boolean)
-    .sort((left, right) => left.path.localeCompare(right.path, undefined, { numeric: true }));
-  const groupMap = new Map();
-
-  for (const entry of entries) {
-    if (!groupMap.has(entry.key)) {
-      groupMap.set(entry.key, {
-        key: entry.key,
-        label: entry.label,
-        folder: entry.folder,
-        entries: [],
-        distances: [],
-        mediaTypes: new Set()
-      });
-    }
-    const group = groupMap.get(entry.key);
-    group.entries.push(entry);
-    group.mediaTypes.add(entry.mediaType);
-    if (entry.distanceLabel && !group.distances.includes(entry.distanceLabel)) group.distances.push(entry.distanceLabel);
-  }
-
-  const groups = Array.from(groupMap.values()).map(group => ({
-    ...group,
-    mediaTypes: Array.from(group.mediaTypes).sort(),
-    distances: group.distances.sort(compareDistanceLabels),
-    representativePath: selectRepresentativeEntry(group.entries)?.path ?? ""
-  }));
-
-  cachedIndex = { root: ANIMATION_LIBRARY_ROOT, entries, groups };
+  const modulePath = refresh
+    ? `${ANIMATION_DATABASE_MODULE}?refresh=${Date.now()}`
+    : ANIMATION_DATABASE_MODULE;
+  const module = await import(modulePath);
+  cachedIndex = normalizeAnimationLibraryIndex(module.ANIMATION_DATABASE);
   return cachedIndex;
 }
 
@@ -79,12 +52,55 @@ export function normalizeAnimationKey(key) {
   return String(key ?? "").trim();
 }
 
-function buildAnimationEntry(path) {
+function normalizeAnimationLibraryIndex(index) {
+  if (!index || typeof index !== "object") return createEmptyAnimationLibraryIndex();
+  const entries = (Array.isArray(index.files) ? index.files : [])
+    .map(relativePath => buildAnimationEntry(String(relativePath ?? ""), String(index.root || ANIMATION_LIBRARY_ROOT)))
+    .filter(Boolean)
+    .sort((left, right) => left.path.localeCompare(right.path, undefined, { numeric: true }));
+  const groups = buildAnimationGroups(entries);
+  return {
+    root: String(index.root || ANIMATION_LIBRARY_ROOT),
+    entries,
+    groups,
+    updatedAt: Number(index.updatedAt) || 0
+  };
+}
+
+function buildAnimationGroups(entries = []) {
+  const groupMap = new Map();
+  for (const entry of entries) {
+    if (!groupMap.has(entry.key)) {
+      groupMap.set(entry.key, {
+        key: entry.key,
+        label: entry.label,
+        folder: entry.folder,
+        entries: [],
+        distances: [],
+        mediaTypes: new Set()
+      });
+    }
+    const group = groupMap.get(entry.key);
+    group.entries.push(entry);
+    group.mediaTypes.add(entry.mediaType);
+    if (entry.distanceLabel && !group.distances.includes(entry.distanceLabel)) group.distances.push(entry.distanceLabel);
+  }
+
+  return Array.from(groupMap.values()).map(group => ({
+    ...group,
+    mediaTypes: Array.from(group.mediaTypes).sort(),
+    distances: group.distances.sort(compareDistanceLabels),
+    representativePath: selectRepresentativeEntry(group.entries)?.path ?? ""
+  }));
+}
+
+function buildAnimationEntry(relativePath, root = ANIMATION_LIBRARY_ROOT) {
+  const normalizedRelativePath = String(relativePath ?? "").replace(/\\/g, "/").replace(/^[/\\]+/, "");
+  const path = `${root}/${normalizedRelativePath}`;
   const extension = getExtension(path);
   if (!MEDIA_EXTENSIONS.has(extension)) return null;
 
-  const relativePath = path.slice(ANIMATION_LIBRARY_ROOT.length).replace(/^[/\\]+/, "").replace(/\\/g, "/");
-  const segments = relativePath.split("/");
+  const segments = normalizedRelativePath.split("/");
   const filename = segments.pop() ?? "";
   const stem = filename.replace(/\.[^.]+$/, "");
   const mediaType = getMediaType(extension);
@@ -106,7 +122,7 @@ function buildAnimationEntry(path) {
     key,
     fileKey,
     path,
-    relativePath,
+    relativePath: normalizedRelativePath,
     folder: segments.join("/"),
     label: cleanedStem || stem,
     filename,
@@ -128,25 +144,13 @@ function cleanAnimationStem(stem) {
     .replace(/^[_\-\s]+/g, "");
 }
 
-async function collectLibraryFiles(path) {
-  let result;
-  try {
-    result = await FilePicker.browse("data", path);
-  } catch (_error) {
-    return [];
-  }
-
-  const files = [...(result.files ?? [])];
-  for (const directory of result.dirs ?? []) {
-    files.push(...await collectLibraryFiles(directory));
-  }
-  return files;
-}
-
-function selectRepresentativeEntry(entries = []) {
-  const visibleEntries = entries.filter(entry => !entry.isThumb);
-  const videos = visibleEntries.filter(entry => entry.mediaType === "video");
-  return selectEntryByDistance(videos.length ? videos : visibleEntries, getGridSize() * 5);
+function createEmptyAnimationLibraryIndex() {
+  return {
+    root: ANIMATION_LIBRARY_ROOT,
+    entries: [],
+    groups: [],
+    updatedAt: 0
+  };
 }
 
 function selectEntryByDistance(entries = [], distance = 0) {
@@ -175,12 +179,10 @@ function selectEntryByDistance(entries = [], distance = 0) {
   return sameDistance[Math.floor(Math.random() * sameDistance.length)];
 }
 
-function compareDistanceLabels(left, right) {
-  return parseDistanceLabel(left) - parseDistanceLabel(right) || String(left).localeCompare(String(right));
-}
-
-function parseDistanceLabel(label) {
-  return Number(String(label ?? "").match(/\d+/)?.[0]) || 0;
+function selectRepresentativeEntry(entries = []) {
+  const visibleEntries = entries.filter(entry => !entry.isThumb);
+  const videos = visibleEntries.filter(entry => entry.mediaType === "video");
+  return selectEntryByDistance(videos.length ? videos : visibleEntries, getGridSize() * 5);
 }
 
 function getSequencerDistanceThreshold(entry) {
@@ -203,6 +205,14 @@ function getGridSize() {
   return Math.max(1, Number(canvas.grid?.size) || 100);
 }
 
+function compareDistanceLabels(left, right) {
+  return parseDistanceLabel(left) - parseDistanceLabel(right) || String(left).localeCompare(String(right));
+}
+
+function parseDistanceLabel(label) {
+  return Number(String(label ?? "").match(/\d+/)?.[0]) || 0;
+}
+
 function getMediaType(extension) {
   if (VIDEO_EXTENSIONS.has(extension)) return "video";
   if (IMAGE_EXTENSIONS.has(extension)) return "image";
@@ -222,7 +232,7 @@ function normalizeKeySegment(segment) {
   return String(segment ?? "")
     .trim()
     .replace(/([a-z])([A-Z])/g, "$1_$2")
-    .replace(/[^a-zA-Z0-9а-яА-ЯёЁ]+/g, "_")
+    .replace(/[^\p{L}\p{N}]+/gu, "_")
     .replace(/^_+|_+$/g, "")
     .toLowerCase();
 }
