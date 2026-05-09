@@ -2,6 +2,7 @@ import { SYSTEM_ID } from "../constants.mjs";
 import {
   resolveAnimationLibraryFile
 } from "../utils/animation-library.mjs";
+import { ITEM_FUNCTIONS, getWeaponFunctionById } from "../utils/item-functions.mjs";
 
 const ATTACK_ANIMATION_SOCKET = `system.${SYSTEM_ID}`;
 const ATTACK_ANIMATION_SOCKET_SCOPE = "weaponAttackAnimation";
@@ -19,12 +20,14 @@ export function registerAttackAnimationSocket() {
   game.socket.on(ATTACK_ANIMATION_SOCKET, handleAttackAnimationSocketMessage);
 }
 
-export async function playWeaponAttackAnimations({ weapon = null, trajectories = [], delayMs = 0 } = {}) {
-  const animationKey = String(weapon?.system?.functions?.weapon?.attackAnimationKey ?? "").trim();
-  const soundPath = String(weapon?.system?.functions?.weapon?.attackSoundPath ?? "").trim();
+export async function playWeaponAttackAnimations({ weapon = null, weaponFunctionId = "", trajectories = [], delayMs = 0 } = {}) {
+  const weaponData = getWeaponFunctionById(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) ?? {};
+  const animationKey = String(weaponData?.attackAnimationKey ?? "").trim();
+  const soundPath = String(weaponData?.attackSoundPath ?? "").trim();
   if (!animationKey && !soundPath) return;
 
   const entries = [];
+  const soundGroups = getOrderedDelayGroups(trajectories);
   if (animationKey && trajectories.length) {
     for (const trajectory of trajectories) {
       const file = await resolveAnimationLibraryFile(animationKey, {
@@ -51,6 +54,7 @@ export async function playWeaponAttackAnimations({ weapon = null, trajectories =
     sceneId: canvas.scene?.id ?? "",
     entries,
     soundPath,
+    soundGroups,
     delayMs: Math.max(0, Math.trunc(Number(delayMs) || 0)),
     senderUserId: game.user?.id ?? ""
   };
@@ -67,18 +71,26 @@ async function handleAttackAnimationSocketMessage(payload = {}) {
 
 async function playAttackAnimationGroup(payload = {}) {
   const entries = Array.isArray(payload.entries) ? payload.entries : [];
+  const soundGroups = Array.isArray(payload.soundGroups) && payload.soundGroups.length
+    ? payload.soundGroups.map(group => Number(group) || 0)
+    : [0];
   const delayMs = Math.max(0, Math.trunc(Number(payload.delayMs) || 0));
   const promises = [];
-  let previousGroup = null;
 
-  await playAttackSound(payload.soundPath);
-
-  for (let index = 0; index < entries.length; index += 1) {
-    const entry = entries[index];
+  const entriesByGroup = new Map();
+  for (const [index, entry] of entries.entries()) {
     const delayGroup = Number(entry.delayGroup ?? index) || 0;
-    if (index > 0 && delayMs > 0 && delayGroup !== previousGroup) await sleep(delayMs);
-    previousGroup = delayGroup;
-    promises.push(playSingleAttackAnimation(entry));
+    const groupEntries = entriesByGroup.get(delayGroup) ?? [];
+    groupEntries.push(entry);
+    entriesByGroup.set(delayGroup, groupEntries);
+  }
+
+  for (let index = 0; index < soundGroups.length; index += 1) {
+    if (index > 0 && delayMs > 0) await sleep(delayMs);
+    promises.push(playAttackSound(payload.soundPath));
+    for (const entry of entriesByGroup.get(soundGroups[index]) ?? []) {
+      promises.push(playSingleAttackAnimation(entry));
+    }
   }
 
   await Promise.all(promises);
@@ -92,6 +104,18 @@ async function playAttackSound(path) {
   } catch (error) {
     console.warn(`${SYSTEM_ID} | Attack sound failed to play: ${src}`, error);
   }
+}
+
+function getOrderedDelayGroups(trajectories = []) {
+  const groups = [];
+  const seen = new Set();
+  for (const [index, trajectory] of trajectories.entries()) {
+    const group = Number(trajectory?.delayGroup ?? index) || 0;
+    if (seen.has(group)) continue;
+    seen.add(group);
+    groups.push(group);
+  }
+  return groups.length ? groups : [0];
 }
 
 async function playSingleAttackAnimation(entry = {}) {

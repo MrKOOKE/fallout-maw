@@ -24,6 +24,7 @@ import {
   prepareIndicatorEntry,
   prepareInventoryContext
 } from "../utils/actor-display-data.mjs";
+import { ITEM_FUNCTIONS, getEnabledWeaponFunctions } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { FalloutMaWFormApplicationV2, getFlatFormData } from "./base-form-application-v2.mjs";
@@ -297,13 +298,13 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const inventory = prepareInventoryContext(actor, race);
     const selectedWeapon = getSelectedHudWeapon(actor, inventory.weaponSets);
     const weaponSets = prepareHudWeaponSets(inventory.weaponSets, selectedWeapon?.id ?? "");
-    const weaponActionButtons = prepareWeaponActionButtons(selectedWeapon);
+    const weaponActionRows = prepareWeaponActionRows(selectedWeapon);
     const skills = prepareSkillButtons(actor);
     const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg");
     const abilities = prepareOwnedItemButtons(actor, "ability", "icons/svg/aura.svg");
     const systemActions = prepareSystemActionButtons();
     const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, systemActions);
-    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, systemActions, weaponActionButtons);
+    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, systemActions, weaponActionRows);
     const meterSections = prepareMeterSectionStates();
     const displayLimbs = prepareDisplayLimbs(actor);
     const limbSilhouette = createLimbSilhouetteHud(race?.limbSilhouette, displayLimbs);
@@ -502,12 +503,13 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   static #onUseWeaponAction(event, target) {
     event.preventDefault();
     const actionKey = String(target.dataset.weaponActionKey ?? "");
+    const weaponFunctionId = String(target.dataset.weaponFunctionId ?? "");
     const itemId = String(target.dataset.itemId ?? "");
     const item = this.actor?.items.get(itemId);
     if (!item || !actionKey) return undefined;
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
-    return startWeaponAttack({ token: this.token, weapon: item, actionKey });
+    return startWeaponAttack({ token: this.token, weapon: item, actionKey, weaponFunctionId });
   }
 
   static #onRollSkill(event, target) {
@@ -827,7 +829,7 @@ function prepareSystemActionButtons() {
   }));
 }
 
-function prepareTrayContext(activeTray, skills, items, abilities, systemActions, weaponActions) {
+function prepareTrayContext(activeTray, skills, items, abilities, systemActions, weaponActionRows) {
   const trayItems = activeTray === "skills"
     ? skills
     : activeTray === "items"
@@ -837,14 +839,14 @@ function prepareTrayContext(activeTray, skills, items, abilities, systemActions,
         : activeTray === "actions"
           ? systemActions
           : activeTray === "weaponActions"
-            ? weaponActions
+            ? weaponActionRows.flatMap(row => row.actions)
             : [];
   return {
     skills,
     items,
     abilities,
     systemActions,
-    weaponActions,
+    weaponActionRows,
     metrics: prepareTrayMetrics(trayItems),
     visible: Boolean(activeTray)
   };
@@ -936,9 +938,25 @@ function isMiddleMouseClick(event) {
   return event?.button === 1;
 }
 
-function prepareWeaponActionButtons(selectedWeapon) {
+function prepareWeaponActionRows(selectedWeapon) {
   if (!selectedWeapon) return [];
-  const actions = selectedWeapon.system?.functions?.weapon?.availableActions ?? {};
+  return getEnabledWeaponFunctions(selectedWeapon)
+    .sort((left, right) => {
+      if (left.isPrimary === right.isPrimary) return (left.index ?? 0) - (right.index ?? 0);
+      return left.isPrimary ? 1 : -1;
+    })
+    .map((weaponFunction, index) => ({
+      id: weaponFunction.id,
+      label: weaponFunction.isPrimary
+        ? selectedWeapon.name
+        : weaponFunction.name || `${game.i18n.localize("FALLOUTMAW.Item.AdditionalWeaponFunction")} ${index + 1}`,
+      actions: prepareWeaponActionButtonsForFunction(selectedWeapon, weaponFunction)
+    }))
+    .filter(row => row.actions.length);
+}
+
+function prepareWeaponActionButtonsForFunction(selectedWeapon, weaponFunction) {
+  const actions = weaponFunction?.data?.availableActions ?? {};
   return [
     { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot"), disabled: !actions.aimedShot },
     { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot"), disabled: !actions.snapshot },
@@ -946,6 +964,7 @@ function prepareWeaponActionButtons(selectedWeapon) {
   ].filter(action => action.visible !== false && !action.disabled).map(action => ({
     ...action,
     itemId: selectedWeapon.id,
+    weaponFunctionId: weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id,
     img: normalizeImagePath(selectedWeapon.img, "icons/svg/combat.svg")
   }));
 }

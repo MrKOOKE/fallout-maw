@@ -108,7 +108,7 @@
 
   <section class="fallout-maw-token-hud-actions-wrap">
     {{#if tray.visible}}
-    <div class="fallout-maw-token-hud-popup" data-token-action-hud-popup style="{{tray.metrics.style}}">
+    <div class="fallout-maw-token-hud-popup {{#if (eq activeTray "weaponActions")}}weapon-actions{{/if}}" data-token-action-hud-popup style="{{tray.metrics.style}}">
       {{#if (eq activeTray "skills")}}
       {{#each tray.skills}}
       <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="rollSkill" data-skill-key="{{key}}" title="{{label}}">
@@ -154,11 +154,18 @@
       {{/if}}
 
       {{#if (eq activeTray "weaponActions")}}
-      {{#each tray.weaponActions}}
-      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="useWeaponAction" data-item-id="{{itemId}}" data-weapon-action-key="{{key}}" title="{{label}}" {{#if disabled}}disabled{{/if}}>
-        <img src="{{img}}" alt="{{label}}" onerror="this.src='{{../fallbackIcon}}'">
-        <span>{{label}}</span>
-      </button>
+      {{#each tray.weaponActionRows}}
+      <div class="fallout-maw-token-hud-action-row">
+        <div class="fallout-maw-token-hud-action-row-title">{{label}}</div>
+        <div class="fallout-maw-token-hud-action-row-buttons">
+          {{#each actions}}
+          <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="useWeaponAction" data-item-id="{{itemId}}" data-weapon-function-id="{{weaponFunctionId}}" data-weapon-action-key="{{key}}" title="{{label}}" {{#if disabled}}disabled{{/if}}>
+            <img src="{{img}}" alt="{{label}}" onerror="this.src='{{../../fallbackIcon}}'">
+            <span>{{label}}</span>
+          </button>
+          {{/each}}
+        </div>
+      </div>
       {{else}}
       <div class="fallout-maw-token-hud-empty">Действий нет</div>
       {{/each}}

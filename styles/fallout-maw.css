@@ -3682,6 +3682,45 @@ label.fallout-maw-mitigation-cell {
   width: var(--fallout-maw-token-hud-actions-width);
 }
 
+.fallout-maw-token-hud-popup.weapon-actions {
+  align-content: stretch;
+  align-items: stretch;
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+
+.fallout-maw-token-hud-action-row {
+  align-items: flex-start;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 7px;
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.fallout-maw-token-hud-action-row-title {
+  color: var(--fallout-maw-actor-text-strong);
+  flex: 0 0 auto;
+  font-size: 1.08rem;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow: hidden;
+  padding-left: 1px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.fallout-maw-token-hud-action-row-buttons {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  gap: 5px;
+  min-width: 0;
+}
+
 .fallout-maw-token-action-hud:not(.layout-ready) .fallout-maw-token-hud-popup {
   visibility: hidden;
 }

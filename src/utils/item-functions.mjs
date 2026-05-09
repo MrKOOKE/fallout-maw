@@ -37,6 +37,45 @@ export function getWeaponFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.weapon] ?? {};
 }
 
+export function getAdditionalWeaponFunctions(itemOrSystem = null) {
+  const functions = getItemSystem(itemOrSystem).functions?.additionalWeapons;
+  if (Array.isArray(functions)) return functions;
+  if (!functions || typeof functions !== "object") return [];
+  return Object.entries(functions).map(([id, data]) => ({
+    ...data,
+    id: String(id)
+  }));
+}
+
+export function getWeaponFunctionById(itemOrSystem = null, functionId = "") {
+  const id = String(functionId ?? "");
+  if (!id || id === ITEM_FUNCTIONS.weapon) return getWeaponFunction(itemOrSystem);
+  return getAdditionalWeaponFunctions(itemOrSystem).find(entry => String(entry?.id ?? "") === id) ?? null;
+}
+
+export function getEnabledWeaponFunctions(itemOrSystem = null) {
+  const primary = getWeaponFunction(itemOrSystem);
+  if (!primary?.enabled) return [];
+  return [
+    {
+      id: ITEM_FUNCTIONS.weapon,
+      isPrimary: true,
+      name: "",
+      data: primary
+    },
+    ...getAdditionalWeaponFunctions(itemOrSystem)
+      .filter(entry => entry?.enabled)
+      .map((entry, index) => ({
+        id: String(entry.id ?? ""),
+        isPrimary: false,
+        index,
+        name: String(entry.name ?? ""),
+        data: entry
+      }))
+      .filter(entry => entry.id)
+  ];
+}
+
 export function createToolFunctionKey(toolKey = "") {
   return `${ITEM_FUNCTIONS.toolPrefix}${toolKey}`;
 }

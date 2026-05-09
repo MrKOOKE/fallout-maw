@@ -40,6 +40,7 @@ export class GearDataModel extends BaseItemDataModel {
         container: containerFunctionField(),
         condition: conditionFunctionField(),
         weapon: weaponFunctionField(),
+        additionalWeapons: new TypedObjectField(weaponFunctionField({ named: true }), { required: true, initial: {} }),
         damageMitigation: new SchemaField({
           enabled: new BooleanField({ required: true, initial: false }),
           mode: new StringField({ required: true, blank: false, initial: "defense" }),
@@ -86,8 +87,8 @@ function conditionFunctionField() {
   });
 }
 
-function weaponFunctionField() {
-  return new SchemaField({
+function weaponFunctionField({ named = false } = {}) {
+  const schema = {
     enabled: new BooleanField({ required: true, initial: false }),
     damage: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     pellets: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
@@ -122,7 +123,12 @@ function weaponFunctionField() {
       attackConeDegrees: new NumberField({ required: true, min: 0, initial: 0 }),
       count: new NumberField({ required: true, integer: true, min: 1, initial: 3 })
     })
-  });
+  };
+  if (named) {
+    schema.id = new StringField({ required: true, blank: true, initial: "" });
+    schema.name = new StringField({ required: true, blank: true, initial: "" });
+  }
+  return new SchemaField(schema);
 }
 
 function weaponActionSettingsField() {

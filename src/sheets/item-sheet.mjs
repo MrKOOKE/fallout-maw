@@ -138,6 +138,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       hasWeaponFunction,
       hasWeaponMagazineCost: hasWeaponResourceCost(item, "magazine"),
       toolFunctions,
+      weaponFunctionSections: buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, hasConditionFunction),
       weaponDamageTypeChoices: buildWeaponDamageTypeChoices(item, damageTypeSettings),
       weaponDamageTypeRows: buildWeaponDamageTypeRows(item, damageTypeSettings),
       weaponSkillChoices: buildWeaponSkillChoices(item, skillSettings),
@@ -174,7 +175,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-weapon-action-choice]").forEach(button => {
       button.addEventListener("click", event => this.#onWeaponActionChoice(event));
     });
-    this.element?.querySelector("[data-add-weapon-damage-type]")?.addEventListener("click", event => this.#onAddWeaponDamageType(event));
+    this.element?.querySelectorAll("[data-add-weapon-damage-type]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddWeaponDamageType(event));
+    });
     this.element?.querySelectorAll("[data-delete-weapon-damage-type]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteWeaponDamageType(event));
     });
@@ -182,8 +185,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       input.addEventListener("input", event => this.#onWeaponDamagePercentInput(event));
       input.addEventListener("change", event => this.#onWeaponDamagePercentChange(event));
     });
-    this.element?.querySelector("[data-browse-weapon-attack-sound]")?.addEventListener("click", event => this.#onBrowseWeaponAttackSound(event));
+    this.element?.querySelectorAll("[data-browse-weapon-attack-sound]").forEach(button => {
+      button.addEventListener("click", event => this.#onBrowseWeaponAttackSound(event));
+    });
     this.element?.querySelector("[data-add-item-function]")?.addEventListener("click", event => this.#onAddItemFunction(event));
+    this.element?.querySelector("[data-add-additional-weapon-function]")?.addEventListener("click", event => this.#onAddAdditionalWeaponFunction(event));
+    this.element?.querySelectorAll("[data-delete-additional-weapon-function]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAdditionalWeaponFunction(event));
+    });
     this.element?.querySelector("[data-choose-item-function]")?.addEventListener("change", event => this.#onChooseItemFunction(event));
     this.element?.querySelectorAll("[data-container-load-reduction]").forEach(input => {
       input.addEventListener("input", event => this.#onContainerLoadReductionInput(event));
@@ -192,7 +201,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-remove-item-function]").forEach(button => {
       button.addEventListener("click", event => this.#onRemoveItemFunction(event));
     });
-    this.element?.querySelector("[data-add-weapon-resource-cost]")?.addEventListener("click", event => this.#onAddWeaponResourceCost(event));
+    this.element?.querySelectorAll("[data-add-weapon-resource-cost]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddWeaponResourceCost(event));
+    });
     this.element?.querySelectorAll("[data-delete-weapon-resource-cost]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteWeaponResourceCost(event));
     });
@@ -222,13 +233,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const key = event.currentTarget.dataset.weaponActionChoice;
     if (!key) return;
 
-    const input = this.element.querySelector(`[data-weapon-action-input="${key}"]`);
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const path = getWeaponFunctionPath(section);
+    const input = section?.querySelector(`[data-weapon-action-input="${key}"]`);
     if (!input) return;
 
     input.checked = !input.checked;
     event.currentTarget.classList.toggle("active", input.checked);
     event.currentTarget.setAttribute("aria-pressed", String(input.checked));
-    return this.item.update({ [`system.functions.weapon.availableActions.${key}`]: input.checked });
+    return this.item.update({ [`${path}.availableActions.${key}`]: input.checked });
   }
 
   #onAddItemFunction(event) {
@@ -273,34 +286,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (functionKey === ITEM_FUNCTIONS.weapon) {
       this.#functionPickerActive = false;
       return this.item.update({
-        "system.functions.weapon.enabled": true,
-        "system.functions.weapon.damage": 0,
-        "system.functions.weapon.pellets": 1,
-        "system.functions.weapon.damageTypeKey": "firearm",
-        "system.functions.weapon.damageTypes": [{ key: "firearm", percent: 100 }],
-        "system.functions.weapon.attackAnimationKey": "",
-        "system.functions.weapon.attackSoundPath": "",
-        "system.functions.weapon.attackAnimationDelayMs": 0,
-        "system.functions.weapon.skillKey": "rangedCombat",
-        "system.functions.weapon.accuracyBonus": 0,
-        "system.functions.weapon.criticalChanceModifier": 0,
-        "system.functions.weapon.attackConeDegrees": 0,
-        "system.functions.weapon.maxRangeMeters": 0,
-        "system.functions.weapon.effectiveRange.value": 0,
-        "system.functions.weapon.effectiveRange.max": 0,
-        "system.functions.weapon.penetration": 0,
-        "system.functions.weapon.magazine.value": 0,
-        "system.functions.weapon.magazine.max": 0,
-        "system.functions.weapon.resourceCosts": [],
-        "system.functions.weapon.availableActions": {
-          aimedShot: false,
-          snapshot: false,
-          burst: false
-        },
-        "system.functions.weapon.aimedShot.attackConeDegrees": 0,
-        "system.functions.weapon.snapshot.attackConeDegrees": 0,
-        "system.functions.weapon.burst.attackConeDegrees": 0,
-        "system.functions.weapon.burst.count": 3
+        "system.functions.weapon": createDefaultWeaponFunctionData({ enabled: true })
       });
     }
 
@@ -352,18 +338,28 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return this.item.update({ "system.functions.damageMitigation.enabled": false });
     }
     if (functionKey === ITEM_FUNCTIONS.condition) {
+      const additionalWeapons = Object.fromEntries(getAdditionalWeaponFunctionEntries(this.item)
+        .map(({ id, data }) => [
+          id,
+          {
+            ...foundry.utils.deepClone(data),
+            resourceCosts: (data?.resourceCosts ?? []).filter(cost => cost.type !== "condition")
+          }
+        ]));
       return this.item.update({
         "system.functions.condition.enabled": false,
         "system.functions.condition.value": 0,
         "system.functions.condition.max": 0,
         "system.functions.weapon.resourceCosts": (this.item.system?.functions?.weapon?.resourceCosts ?? [])
-          .filter(cost => cost.type !== "condition")
+          .filter(cost => cost.type !== "condition"),
+        "system.functions.additionalWeapons": additionalWeapons
       });
     }
     if (functionKey === ITEM_FUNCTIONS.weapon) {
       return this.item.update({
         "system.functions.weapon.enabled": false,
-        "system.functions.weapon.resourceCosts": []
+        "system.functions.weapon.resourceCosts": [],
+        "system.functions.additionalWeapons": {}
       });
     }
     const toolKey = getToolKeyFromFunctionKey(functionKey);
@@ -373,25 +369,54 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return undefined;
   }
 
+  #onAddAdditionalWeaponFunction(event) {
+    event.preventDefault();
+    const additionalWeapons = Object.fromEntries(getAdditionalWeaponFunctionEntries(this.item)
+      .map(({ id, data }) => [id, foundry.utils.deepClone(data)]));
+    const baseWeapon = this.item.system?.functions?.weapon ?? {};
+    const id = foundry.utils.randomID();
+    additionalWeapons[id] = createDefaultWeaponFunctionData({
+      ...foundry.utils.deepClone(baseWeapon),
+      id,
+      name: getNextAdditionalWeaponFunctionName(Object.values(additionalWeapons)),
+      enabled: true
+    });
+    return this.item.update({ "system.functions.additionalWeapons": additionalWeapons });
+  }
+
+  #onDeleteAdditionalWeaponFunction(event) {
+    event.preventDefault();
+    const id = String(event.currentTarget?.dataset?.deleteAdditionalWeaponFunction ?? "");
+    if (!id) return undefined;
+    const additionalWeapons = Object.fromEntries(getAdditionalWeaponFunctionEntries(this.item)
+      .filter(entry => entry.id !== id)
+      .map(({ id: entryId, data }) => [entryId, foundry.utils.deepClone(data)]));
+    return this.item.update({ "system.functions.additionalWeapons": additionalWeapons });
+  }
+
   #onAddWeaponResourceCost(event) {
     event.preventDefault();
-    const costs = [...(this.item.system?.functions?.weapon?.resourceCosts ?? [])];
+    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const costs = [...(foundry.utils.getProperty(this.item, path)?.resourceCosts ?? [])];
     costs.push({ type: "magazine", amount: 0 });
-    return this.item.update({ "system.functions.weapon.resourceCosts": costs });
+    return this.item.update({ [`${path}.resourceCosts`]: costs });
   }
 
   #onDeleteWeaponResourceCost(event) {
     event.preventDefault();
     const index = Number(event.currentTarget?.dataset?.deleteWeaponResourceCost);
     if (!Number.isInteger(index) || index < 0) return undefined;
-    const costs = [...(this.item.system?.functions?.weapon?.resourceCosts ?? [])];
+    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const costs = [...(foundry.utils.getProperty(this.item, path)?.resourceCosts ?? [])];
     costs.splice(index, 1);
-    return this.item.update({ "system.functions.weapon.resourceCosts": costs });
+    return this.item.update({ [`${path}.resourceCosts`]: costs });
   }
 
   #onAddWeaponDamageType(event) {
     event.preventDefault();
-    const entries = readWeaponDamageTypeRows(this.element);
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const path = getWeaponFunctionPath(section);
+    const entries = readWeaponDamageTypeRows(section);
     const damageTypes = getDamageTypeSettings();
     const existingKeys = new Set(entries.map(entry => entry.key));
     const key = damageTypes.find(type => !existingKeys.has(type.key))?.key
@@ -399,21 +424,24 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       ?? "firearm";
     const used = entries.reduce((total, entry) => total + clampPercent(entry.percent), 0);
     entries.push({ key, percent: Math.max(0, 100 - used) });
-    return this.item.update({ "system.functions.weapon.damageTypes": entries });
+    return this.item.update({ [`${path}.damageTypes`]: entries });
   }
 
   #onDeleteWeaponDamageType(event) {
     event.preventDefault();
     const index = Number(event.currentTarget?.dataset?.deleteWeaponDamageType);
     if (!Number.isInteger(index) || index < 0) return undefined;
-    const entries = readWeaponDamageTypeRows(this.element);
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const path = getWeaponFunctionPath(section);
+    const entries = readWeaponDamageTypeRows(section);
     entries.splice(index, 1);
     if (!entries.length) entries.push({ key: "firearm", percent: 100 });
-    return this.item.update({ "system.functions.weapon.damageTypes": entries });
+    return this.item.update({ [`${path}.damageTypes`]: entries });
   }
 
   #onWeaponDamagePercentInput(event) {
     const input = event.currentTarget;
+    const section = getWeaponFunctionSection(input);
     const row = input.closest("[data-weapon-damage-type-row]");
     if (!row) return;
     const index = Number(row.dataset.weaponDamageTypeRow);
@@ -421,22 +449,25 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     row.querySelectorAll("[data-weapon-damage-percent]").forEach(percentInput => {
       if (percentInput !== input) percentInput.value = input.value;
     });
-    const entries = normalizeWeaponDamageTypeOverflow(readWeaponDamageTypeRows(this.element), index);
-    writeWeaponDamageTypePercents(this.element, entries);
+    const entries = normalizeWeaponDamageTypeOverflow(readWeaponDamageTypeRows(section), index);
+    writeWeaponDamageTypePercents(section, entries);
   }
 
   #onWeaponDamagePercentChange(event) {
     event.preventDefault();
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const path = getWeaponFunctionPath(section);
     const row = event.currentTarget.closest("[data-weapon-damage-type-row]");
     const index = Number(row?.dataset?.weaponDamageTypeRow);
-    const entries = normalizeWeaponDamageTypeOverflow(readWeaponDamageTypeRows(this.element), Number.isInteger(index) ? index : -1);
-    writeWeaponDamageTypePercents(this.element, entries);
-    return this.item.update({ "system.functions.weapon.damageTypes": entries });
+    const entries = normalizeWeaponDamageTypeOverflow(readWeaponDamageTypeRows(section), Number.isInteger(index) ? index : -1);
+    writeWeaponDamageTypePercents(section, entries);
+    return this.item.update({ [`${path}.damageTypes`]: entries });
   }
 
   async #onBrowseWeaponAttackSound(event) {
     event.preventDefault();
-    const input = this.element?.querySelector("[data-weapon-attack-sound-input]");
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const input = section?.querySelector("[data-weapon-attack-sound-input]");
     if (!input) return undefined;
     const picker = new foundry.applications.apps.FilePicker.implementation({
       type: "audio",
@@ -614,8 +645,76 @@ function getItemFunctionLabel(functionKey = "") {
   return game.i18n.localize("FALLOUTMAW.Item.Function");
 }
 
+function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, hasConditionFunction) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.weapon)) return [];
+  const primaryWeapon = item.system?.functions?.weapon ?? {};
+  const sourcePrimaryWeapon = item.system?._source?.functions?.weapon ?? {};
+  const additionalWeapons = getAdditionalWeaponFunctionEntries(item);
+  const sourceAdditionalWeapons = getAdditionalWeaponFunctionEntries({ system: item.system?._source ?? {} });
+  return [
+    buildWeaponFunctionSection({
+      title: game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon"),
+      path: "system.functions.weapon",
+      weaponData: primaryWeapon,
+      sourceWeaponData: sourcePrimaryWeapon,
+      damageTypeSettings,
+      skillSettings,
+      hasConditionFunction,
+      isPrimary: true,
+      canAddAdditional: true
+    }),
+    ...additionalWeapons.map(({ id, data: weaponData }, index) => buildWeaponFunctionSection({
+      title: String(weaponData?.name ?? "").trim() || getDefaultAdditionalWeaponFunctionName(index),
+      path: `system.functions.additionalWeapons.${id}`,
+      weaponData,
+      sourceWeaponData: sourceAdditionalWeapons.find(entry => entry.id === id)?.data ?? {},
+      damageTypeSettings,
+      skillSettings,
+      hasConditionFunction,
+      isAdditional: true,
+      id,
+      index
+    }))
+  ];
+}
+
+function buildWeaponFunctionSection({
+  title = "",
+  path = "system.functions.weapon",
+  weaponData = {},
+  sourceWeaponData = {},
+  damageTypeSettings = [],
+  skillSettings = [],
+  hasConditionFunction = false,
+  isPrimary = false,
+  canAddAdditional = false,
+  isAdditional = false,
+  id = "",
+  index = -1
+} = {}) {
+  return {
+    title,
+    path,
+    weaponData,
+    isPrimary,
+    isAdditional,
+    canAddAdditional,
+    id,
+    index,
+    hasMagazineCost: hasWeaponResourceCostData(weaponData, "magazine"),
+    damageTypeRows: buildWeaponDamageTypeRowsForData(weaponData, damageTypeSettings, sourceWeaponData),
+    skillChoices: buildWeaponSkillChoicesForData(weaponData, skillSettings),
+    resourceCosts: buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction),
+    actionChoices: buildWeaponActionChoicesForData(weaponData, sourceWeaponData)
+  };
+}
+
 function buildWeaponResourceCostRows(item, hasConditionFunction) {
-  return (item.system?.functions?.weapon?.resourceCosts ?? []).map((cost, index) => ({
+  return buildWeaponResourceCostRowsForData(item.system?.functions?.weapon ?? {}, hasConditionFunction);
+}
+
+function buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction) {
+  return (weaponData?.resourceCosts ?? []).map((cost, index) => ({
     index,
     amount: Number(cost.amount) || 0,
     typeChoices: buildWeaponResourceTypeChoices(cost.type, hasConditionFunction)
@@ -632,10 +731,18 @@ function buildWeaponDamageTypeChoices(item, damageTypeSettings) {
 }
 
 function buildWeaponDamageTypeRows(item, damageTypeSettings) {
-  const rows = normalizeWeaponDamageTypeRows(
+  return buildWeaponDamageTypeRowsForData(
     item.system?.functions?.weapon,
     damageTypeSettings,
     item.system?._source?.functions?.weapon
+  );
+}
+
+function buildWeaponDamageTypeRowsForData(weaponData, damageTypeSettings, sourceWeaponData) {
+  const rows = normalizeWeaponDamageTypeRows(
+    weaponData,
+    damageTypeSettings,
+    sourceWeaponData
   );
   return rows.map((entry, index) => ({
     index,
@@ -650,7 +757,11 @@ function buildWeaponDamageTypeRows(item, damageTypeSettings) {
 }
 
 function buildWeaponSkillChoices(item, skillSettings) {
-  const selected = String(item.system?.functions?.weapon?.skillKey ?? "");
+  return buildWeaponSkillChoicesForData(item.system?.functions?.weapon ?? {}, skillSettings);
+}
+
+function buildWeaponSkillChoicesForData(weaponData, skillSettings) {
+  const selected = String(weaponData?.skillKey ?? "");
   return skillSettings.map(skill => ({
     value: skill.key,
     label: skill.label,
@@ -659,7 +770,11 @@ function buildWeaponSkillChoices(item, skillSettings) {
 }
 
 function hasWeaponResourceCost(item, type) {
-  return (item.system?.functions?.weapon?.resourceCosts ?? []).some(cost => cost.type === type);
+  return hasWeaponResourceCostData(item.system?.functions?.weapon ?? {}, type);
+}
+
+function hasWeaponResourceCostData(weaponData, type) {
+  return (weaponData?.resourceCosts ?? []).some(cost => cost.type === type);
 }
 
 function buildWeaponResourceTypeChoices(selected, hasConditionFunction) {
@@ -676,9 +791,14 @@ function buildWeaponResourceTypeChoices(selected, hasConditionFunction) {
 }
 
 function buildWeaponActionChoices(item) {
-  const actions = item.system?.functions?.weapon?.availableActions ?? {};
-  const weaponData = item.system?.functions?.weapon ?? {};
-  const sourceWeaponData = item.system?._source?.functions?.weapon ?? {};
+  return buildWeaponActionChoicesForData(
+    item.system?.functions?.weapon ?? {},
+    item.system?._source?.functions?.weapon ?? {}
+  );
+}
+
+function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {}) {
+  const actions = weaponData?.availableActions ?? {};
   const fallbackCone = Number(weaponData.attackConeDegrees) || 0;
   return [
     { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot") },
@@ -696,6 +816,95 @@ function buildWeaponActionChoices(item) {
       burstCount: Math.max(1, Number(weaponData?.burst?.count) || 3)
     };
   });
+}
+
+function createDefaultWeaponFunctionData(source = {}) {
+  return foundry.utils.mergeObject({
+    enabled: false,
+    damage: 0,
+    pellets: 1,
+    damageTypeKey: "firearm",
+    damageTypes: [{ key: "firearm", percent: 100 }],
+    attackAnimationKey: "",
+    attackSoundPath: "",
+    attackAnimationDelayMs: 0,
+    skillKey: "rangedCombat",
+    accuracyBonus: 0,
+    criticalChanceModifier: 0,
+    attackConeDegrees: 0,
+    maxRangeMeters: 0,
+    effectiveRange: {
+      value: 0,
+      max: 0
+    },
+    penetration: 0,
+    magazine: {
+      value: 0,
+      max: 0
+    },
+    resourceCosts: [],
+    availableActions: {
+      aimedShot: false,
+      snapshot: false,
+      burst: false
+    },
+    aimedShot: {
+      attackConeDegrees: 0
+    },
+    snapshot: {
+      attackConeDegrees: 0
+    },
+    burst: {
+      attackConeDegrees: 0,
+      count: 3
+    }
+  }, foundry.utils.deepClone(source), { inplace: false });
+}
+
+function getNextAdditionalWeaponFunctionName(additionalWeapons = []) {
+  const usedNames = new Set(additionalWeapons.map(entry => String(entry?.name ?? "").trim()).filter(Boolean));
+  for (let index = 0; index < 1000; index += 1) {
+    const name = getDefaultAdditionalWeaponFunctionName(index);
+    if (!usedNames.has(name)) return name;
+  }
+  return getDefaultAdditionalWeaponFunctionName(additionalWeapons.length);
+}
+
+function getDefaultAdditionalWeaponFunctionName(index) {
+  return `${game.i18n.localize("FALLOUTMAW.Item.AdditionalWeaponFunction")} ${index + 1}`;
+}
+
+function getWeaponFunctionSection(element) {
+  return element?.closest?.("[data-weapon-function-section]") ?? null;
+}
+
+function getWeaponFunctionPath(section) {
+  return String(section?.dataset?.weaponFunctionPath ?? "") || "system.functions.weapon";
+}
+
+function getAdditionalWeaponFunctionEntries(item) {
+  const additionalWeapons = item?.system?.functions?.additionalWeapons;
+  if (Array.isArray(additionalWeapons)) {
+    return additionalWeapons
+      .map((data, index) => ({
+        id: String(data?.id || `legacy${index}`),
+        data: {
+          ...data,
+          id: String(data?.id || `legacy${index}`)
+        }
+      }))
+      .filter(entry => entry.id);
+  }
+  if (!additionalWeapons || typeof additionalWeapons !== "object") return [];
+  return Object.entries(additionalWeapons)
+    .map(([id, data]) => ({
+      id: String(id),
+      data: {
+        ...data,
+        id: String(data?.id || id)
+      }
+    }))
+    .filter(entry => entry.id);
 }
 
 function buildToolFunctionEntries(item, toolSettings, skillSettings) {
