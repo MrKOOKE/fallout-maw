@@ -176,8 +176,9 @@ class WeaponAttackController {
     this.refresh(true);
     const trajectories = [];
     const damageRequests = [];
-    const useBatchCheckMessage = attackCount > 1;
-    const checkBatch = useBatchCheckMessage
+    const forceBatchCheckMessage = attackCount > 1;
+    const collectCheckMessages = forceBatchCheckMessage || getWeaponPenetrationPower(this.weapon) > 0;
+    const checkBatch = collectCheckMessages
       ? createSkillCheckBatchCollector({
         requester: "weaponAttack",
         title: this.weapon.name
@@ -192,7 +193,7 @@ class WeaponAttackController {
     }
 
     if (attempted) await spendWeaponResources(this.weapon, attackCount);
-    await checkBatch?.publish();
+    await checkBatch?.publish({ forceBatch: forceBatchCheckMessage });
     if (attempted) {
       await playWeaponAttackAnimations({
         weapon: this.weapon,
@@ -233,27 +234,101 @@ class WeaponAttackController {
     const geometry = deserializeGeometry(this.lockedGeometry) ?? this.geometry;
     const trajectory = buildTrajectoryThroughPoint(this.token, geometry, getTokenCenter(target));
     const blockerCount = getAimedTargetBlockers(this.token, target, trajectory).length;
-    const difficultyBonus = getAimedTargetBlockerBonus(blockerCount);
-    const result = await this.resolveAimedAttackAgainstTarget(target, {
-      limbKey,
-      damageAmount: getWeaponDamage(this.weapon),
-      difficultyBonus,
-      penetrationStep: blockerCount
+    const result = await this.resolveAimedAttackTrajectory(target, trajectory, limbKey, {
+      blockerBonus: getAimedTargetBlockerBonus(blockerCount)
     });
 
-    const trajectories = [trajectory];
-    updateTrajectoryEnd(trajectory, result.request ? getTokenCenter(target) : selectMissPointNearTarget(this.token, target, trajectory));
     await spendWeaponResources(this.weapon, attackCount);
+    await result.checkBatch?.publish({ forceBatch: false });
     await playWeaponAttackAnimations({
       weapon: this.weapon,
-      trajectories,
+      trajectories: [result.trajectory],
       delayMs: getWeaponAttackAnimationDelay(this.weapon)
     });
-    if (result.request) await applyQueuedDamageRequests([result.request]);
+    if (result.damageRequests.length) await applyQueuedDamageRequests(result.damageRequests);
 
     this.processing = false;
     if (isDeadTarget(target)) this.unlockAimedTarget();
     this.refresh(true);
+  }
+
+  async resolveAimedAttackTrajectory(selectedTarget, trajectory, limbKey, { blockerBonus = 0 } = {}) {
+    const damageRequests = [];
+    const baseDamage = getWeaponDamage(this.weapon);
+    const penetrationPower = getWeaponPenetrationPower(this.weapon);
+    const penetrationThreshold = Math.ceil(baseDamage * 0.5);
+    const checkBatch = penetrationPower > 0
+      ? createSkillCheckBatchCollector({
+        requester: "weaponAttack",
+        title: this.weapon.name
+      })
+      : null;
+    const targets = getTrajectoryTargetEntries(this.token, trajectory);
+    const selectedEntry = targets.find(entry => entry.target === selectedTarget)
+      ?? { target: selectedTarget, hit: getTokenTrajectoryHit(selectedTarget, trajectory) };
+    const subsequentTargets = targets.filter(entry => (
+      entry.target !== selectedTarget
+      && (!selectedEntry.hit || entry.hit.distance > selectedEntry.hit.distance + 0.5)
+    ));
+
+    let penetrationsUsed = 0;
+    let finalAnimationPoint = null;
+    let hasSuccessfulHit = false;
+
+    const firstRequest = await this.resolveAimedAttackAgainstTarget(selectedTarget, {
+      limbKey,
+      damageAmount: baseDamage,
+      difficultyBonus: blockerBonus,
+      penetrationStep: 0,
+      checkBatch
+    });
+    if (!firstRequest) {
+      updateTrajectoryEnd(trajectory, selectMissPointNearTarget(this.token, selectedTarget, trajectory));
+      return { damageRequests, trajectory, checkBatch };
+    }
+
+    damageRequests.push(firstRequest);
+    hasSuccessfulHit = true;
+    finalAnimationPoint = selectPointOnTrajectoryPastTarget(selectedTarget, trajectory);
+
+    if (penetrationsUsed < penetrationPower) {
+      const estimate = estimateDamageApplication(firstRequest);
+      if (estimate.healthDamage >= penetrationThreshold) penetrationsUsed += 1;
+    }
+
+    for (const entry of subsequentTargets) {
+      if (penetrationsUsed <= 0 || penetrationsUsed > penetrationPower) break;
+      const damageAmount = getPenetratedDamageAmount(baseDamage, penetrationsUsed);
+      if (damageAmount <= 0) break;
+
+      const request = await this.resolveAttackAgainstTarget(entry.target, {
+        damageAmount,
+        difficultyBonus: penetrationsUsed * 20,
+        penetrationStep: penetrationsUsed,
+        checkBatch
+      });
+      if (!request) {
+        finalAnimationPoint = hasSuccessfulHit
+          ? selectPointOnTrajectoryPastTarget(entry.target, trajectory)
+          : selectMissPointNearTarget(this.token, entry.target, trajectory);
+        break;
+      }
+
+      damageRequests.push(request);
+      hasSuccessfulHit = true;
+      finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, trajectory);
+      if (penetrationsUsed >= penetrationPower) break;
+
+      const estimate = estimateDamageApplication(request);
+      if (estimate.healthDamage < penetrationThreshold) break;
+      penetrationsUsed += 1;
+    }
+
+    if (finalAnimationPoint) {
+      if (hasSuccessfulHit) updateTrajectoryDistanceEnd(trajectory, finalAnimationPoint);
+      else updateTrajectoryEnd(trajectory, finalAnimationPoint);
+    }
+    return { damageRequests, trajectory, checkBatch };
   }
 
   async resolveAttackTrajectory({ checkBatch = null } = {}) {
@@ -336,8 +411,8 @@ class WeaponAttackController {
     };
   }
 
-  async resolveAimedAttackAgainstTarget(target, { limbKey = "", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0 } = {}) {
-    if (isDeadTarget(target)) return { request: null };
+  async resolveAimedAttackAgainstTarget(target, { limbKey = "", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
+    if (isDeadTarget(target)) return null;
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
       skillKey: String(this.weapon.system?.functions?.weapon?.skillKey ?? ""),
@@ -346,26 +421,24 @@ class WeaponAttackController {
         situationalModifier: toInteger(this.weapon.system?.functions?.weapon?.accuracyBonus)
       },
       animate: false,
-      createMessage: true,
+      createMessage: !checkBatch,
       prompt: false,
       requester: "weaponAttack"
     });
-    if (!isSuccessfulAttack(outcome)) return { outcome, request: null };
+    checkBatch?.add(outcome);
+    if (!isSuccessfulAttack(outcome)) return null;
     return {
-      outcome,
-      request: {
-        actor: target.actor,
-        limbKey,
-        amount: damageAmount,
-        damageTypeKey: String(this.weapon.system?.functions?.weapon?.damageTypeKey ?? ""),
-        scope: "healthAndLimb",
-        source: {
-          weaponUuid: this.weapon.uuid,
-          actionKey: this.actionKey,
-          attackerUuid: this.token.actor.uuid,
-          tokenId: this.token.id,
-          penetrationStep
-        }
+      actor: target.actor,
+      limbKey,
+      amount: damageAmount,
+      damageTypeKey: String(this.weapon.system?.functions?.weapon?.damageTypeKey ?? ""),
+      scope: "healthAndLimb",
+      source: {
+        weaponUuid: this.weapon.uuid,
+        actionKey: this.actionKey,
+        attackerUuid: this.token.actor.uuid,
+        tokenId: this.token.id,
+        penetrationStep
       }
     };
   }

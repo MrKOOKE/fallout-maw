@@ -93,8 +93,12 @@ export function createSkillCheckBatchCollector({ requester = "", title = "" } = 
       if (outcome) outcomes.push(outcome);
       return outcome;
     },
-    async publish() {
-      return publishSkillCheckBatchMessage(outcomes, { requester, title });
+    async publish({ forceBatch = true } = {}) {
+      const normalizedOutcomes = outcomes.filter(Boolean);
+      if (normalizedOutcomes.length === 1 && !forceBatch) {
+        return publishSkillCheckMessage(normalizedOutcomes[0], { requester });
+      }
+      return publishSkillCheckBatchMessage(normalizedOutcomes, { requester, title });
     }
   };
 }
