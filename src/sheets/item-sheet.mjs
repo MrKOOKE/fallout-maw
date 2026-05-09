@@ -12,7 +12,7 @@ const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
-const DEFAULT_ITEM_SHEET_HEIGHT = 720;
+const DEFAULT_ITEM_SHEET_HEIGHT = 4000;
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #functionPickerActive = false;
@@ -21,7 +21,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   static DEFAULT_OPTIONS = {
     classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-item-sheet", "sheet", "item"],
     position: {
-      width: 620,
+      width: 930,
       height: "auto"
     },
     form: {
