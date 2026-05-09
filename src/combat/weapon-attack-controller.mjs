@@ -73,6 +73,7 @@ class WeaponAttackController {
     this.limbMenu = null;
     this.suppressNextContextMenu = false;
     this.attackId = foundry.utils.randomID();
+    this.pendingCriticalFailureResourceCosts = [];
     this.lastPreviewBroadcastAt = 0;
     this.lastBroadcastPreviewState = null;
     this.events = {
@@ -203,6 +204,7 @@ class WeaponAttackController {
     if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
 
     this.processing = true;
+    this.pendingCriticalFailureResourceCosts = [];
     this.refresh(true);
     const trajectories = [];
     const damageRequests = [];
@@ -224,7 +226,7 @@ class WeaponAttackController {
       attempted ||= result.attempted;
     }
 
-    if (attempted) await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId);
+    if (attempted) await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
     await checkBatch?.publish({ forceBatch: forceBatchCheckMessage });
     if (attempted) {
       await playWeaponAttackAnimations({
@@ -261,6 +263,7 @@ class WeaponAttackController {
     if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
 
     this.processing = true;
+    this.pendingCriticalFailureResourceCosts = [];
     this.removeLimbMenu();
     this.refresh(true);
 
@@ -295,7 +298,7 @@ class WeaponAttackController {
       damageRequests.push(...result.damageRequests);
     }
 
-    await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId);
+    await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
     await (checkBatch ?? aimedResult.checkBatch)?.publish({ forceBatch: false });
     await playWeaponAttackAnimations({
       weapon: this.weapon,
@@ -319,6 +322,7 @@ class WeaponAttackController {
     if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
 
     this.processing = true;
+    this.pendingCriticalFailureResourceCosts = [];
     this.removeLimbMenu();
     this.refresh(true);
 
@@ -353,7 +357,7 @@ class WeaponAttackController {
       attempted = result.attempted;
     }
 
-    if (attempted) await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId);
+    if (attempted) await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
     await checkBatch.publish({ forceBatch: false });
     if (attempted) {
       await playWeaponAttackAnimations({
@@ -471,11 +475,12 @@ class WeaponAttackController {
   async resolveDirectedAttackAgainstTarget(target, { limbKey = "", mode = "thrust", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
     if (isDeadTarget(target)) return null;
     const resolvedLimbKey = limbKey || selectRandomLimbKey(target.actor);
+    const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
-        difficulty: getDirectedAttackDifficulty(target.actor, resolvedLimbKey, Boolean(limbKey), difficultyBonus),
+        difficulty: getDirectedAttackDifficulty(target.actor, resolvedLimbKey, Boolean(limbKey), difficultyBonus + rangeDifficultyBonus),
         situationalModifier: getAttackModeAccuracyModifier(this.weapon, this.actionKey, mode, this.weaponFunctionId),
         ...getAttackModeCriticalCheckModifiers(this.weapon, this.actionKey, mode, this.weaponFunctionId)
       },
@@ -485,7 +490,9 @@ class WeaponAttackController {
       requester: "weaponAttack"
     });
     checkBatch?.add(outcome);
+    this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) return null;
+    damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     return buildWeaponDamageRequests(this.weapon, {
       actor: target.actor,
       limbKey: resolvedLimbKey,
@@ -644,11 +651,12 @@ class WeaponAttackController {
   async resolveAttackAgainstTarget(target, { damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
     if (isDeadTarget(target)) return null;
     const limbKey = selectRandomLimbKey(target.actor);
+    const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
-        difficulty: getDodgeDifficulty(target.actor) + difficultyBonus,
+        difficulty: getDodgeDifficulty(target.actor) + difficultyBonus + rangeDifficultyBonus,
         situationalModifier: toInteger(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.accuracyBonus),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId)
       },
@@ -658,7 +666,9 @@ class WeaponAttackController {
       requester: "weaponAttack"
     });
     checkBatch?.add(outcome);
+    this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) return null;
+    damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     return buildWeaponDamageRequests(this.weapon, {
       actor: target.actor,
       limbKey,
@@ -675,11 +685,12 @@ class WeaponAttackController {
 
   async resolveAimedAttackAgainstTarget(target, { limbKey = "", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
     if (isDeadTarget(target)) return null;
+    const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
-        difficulty: getAimedAttackDifficulty(target.actor, limbKey, difficultyBonus),
+        difficulty: getAimedAttackDifficulty(target.actor, limbKey, difficultyBonus + rangeDifficultyBonus),
         situationalModifier: toInteger(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.accuracyBonus),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId)
       },
@@ -689,7 +700,9 @@ class WeaponAttackController {
       requester: "weaponAttack"
     });
     checkBatch?.add(outcome);
+    this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) return null;
+    damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     return buildWeaponDamageRequests(this.weapon, {
       actor: target.actor,
       limbKey,
@@ -823,7 +836,8 @@ class WeaponAttackController {
     if (!this.requiresLimbSelection) return [];
     const trajectory = this.geometry ? buildTrajectoryThroughPoint(this.token, this.geometry, getTokenCenter(target)) : null;
     const blockerCount = trajectory ? getAimedTargetBlockers(this.token, target, trajectory).length : 0;
-    const blockerBonus = getAimedTargetBlockerBonus(blockerCount);
+    const blockerBonus = getAimedTargetBlockerBonus(blockerCount)
+      + getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
     return Object.entries(target.actor?.system?.limbs ?? {})
       .filter(([_key, limb]) => limb && typeof limb === "object")
       .map(([key, limb]) => ({
@@ -843,9 +857,15 @@ class WeaponAttackController {
         actionKey: this.actionKey,
         mode: direction.mode,
         limbKey,
+        difficultyBonus: getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId),
         weaponFunctionId: this.weaponFunctionId
       })
     }));
+  }
+
+  recordCriticalFailureConsequences(outcome) {
+    if (!isCriticalFailureAttack(outcome)) return;
+    this.pendingCriticalFailureResourceCosts.push(...getCriticalFailureResourceCosts(this.weapon, this.actionKey, this.weaponFunctionId));
   }
 
   broadcastPreview(force = false) {
@@ -1051,18 +1071,32 @@ function hasRequiredWeaponResources(weapon, multiplier = 1, weaponFunctionId = "
   return true;
 }
 
-async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "") {
+async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "", extraCosts = []) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const weaponPath = getWeaponAttackPath(weapon, weaponFunctionId);
   const updateData = {};
-  for (const cost of weaponData?.resourceCosts ?? []) {
-    const amount = Math.max(0, toInteger(cost.amount) * Math.max(1, toInteger(multiplier)));
+  const costs = [
+    ...(weaponData?.resourceCosts ?? []).map(cost => ({
+      type: cost.type,
+      amount: Math.max(0, toInteger(cost.amount) * Math.max(1, toInteger(multiplier)))
+    })),
+    ...(extraCosts ?? []).map(cost => ({
+      type: cost.type,
+      amount: Math.max(0, toInteger(cost.amount))
+    }))
+  ];
+  for (const cost of costs) {
+    const amount = Math.max(0, toInteger(cost.amount));
     if (!amount) continue;
     if (cost.type === "magazine") {
-      const current = toInteger(weaponData?.magazine?.value);
+      const current = Object.hasOwn(updateData, `${weaponPath}.magazine.value`)
+        ? toInteger(updateData[`${weaponPath}.magazine.value`])
+        : toInteger(weaponData?.magazine?.value);
       updateData[`${weaponPath}.magazine.value`] = Math.max(0, current - amount);
     } else if (cost.type === "condition") {
-      const current = toInteger(weapon.system?.functions?.condition?.value);
+      const current = Object.hasOwn(updateData, "system.functions.condition.value")
+        ? toInteger(updateData["system.functions.condition.value"])
+        : toInteger(weapon.system?.functions?.condition?.value);
       updateData["system.functions.condition.value"] = Math.max(0, current - amount);
     }
   }
@@ -1098,6 +1132,12 @@ function metersToPixels(meters) {
   const gridDistance = Math.max(0.0001, Number(canvas.scene?.grid?.distance ?? canvas.grid?.distance) || 1);
   const gridSize = Math.max(1, Number(canvas.grid?.size) || 100);
   return Math.max(0, meters) * (gridSize / gridDistance);
+}
+
+function pixelsToMeters(pixels) {
+  const gridDistance = Math.max(0.0001, Number(canvas.scene?.grid?.distance ?? canvas.grid?.distance) || 1);
+  const gridSize = Math.max(1, Number(canvas.grid?.size) || 100);
+  return Math.max(0, Number(pixels) || 0) * (gridDistance / gridSize);
 }
 
 function drawAttackShape(graphics, geometry, locked) {
@@ -1484,6 +1524,39 @@ function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "") {
     criticalSuccessBonus: Math.max(0, modifier),
     criticalFailureBonus: Math.max(0, -modifier)
   };
+}
+
+function getCriticalDamageAmount(weapon, amount, outcome, weaponFunctionId = "") {
+  const baseAmount = Math.max(0, Number(amount) || 0);
+  if (!isCriticalSuccessAttack(outcome)) return baseAmount;
+  const rawPercent = Number(getWeaponAttackData(weapon, weaponFunctionId)?.criticalDamagePercent);
+  const percent = Number.isFinite(rawPercent) ? Math.max(0, rawPercent) : 150;
+  return Math.round(baseAmount * percent / 100);
+}
+
+function getCriticalFailureResourceCosts(weapon, actionKey, weaponFunctionId = "") {
+  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  const availableTypes = new Set((weaponData?.resourceCosts ?? []).map(cost => String(cost?.type ?? "")).filter(Boolean));
+  return (weaponData?.[actionKey]?.criticalFailureConsequences ?? [])
+    .filter(consequence => String(consequence?.type ?? "") === "extraResourceCost")
+    .map(consequence => ({
+      type: String(consequence?.resourceType ?? ""),
+      amount: Math.max(0, toInteger(consequence?.amount))
+    }))
+    .filter(consequence => consequence.amount > 0 && availableTypes.has(consequence.type));
+}
+
+function getEffectiveRangeDifficultyBonus(weapon, attackerToken, target, weaponFunctionId = "") {
+  const effective = Number(getWeaponAttackData(weapon, weaponFunctionId)?.effectiveRange?.value) || 0;
+  if (effective <= 0) return 0;
+  const distanceMeters = getTokenDistanceMeters(attackerToken, target);
+  return Math.max(0, Math.round(Math.abs(distanceMeters - effective))) * 10;
+}
+
+function getTokenDistanceMeters(leftToken, rightToken) {
+  const left = getTokenCenter(leftToken);
+  const right = getTokenCenter(rightToken);
+  return pixelsToMeters(Math.hypot(right.x - left.x, right.y - left.y));
 }
 
 function getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId = "") {
@@ -1989,6 +2062,14 @@ function isDeadActor(actor) {
 
 function isSuccessfulAttack(outcome) {
   return ["success", "criticalSuccess"].includes(String(outcome?.result?.key ?? ""));
+}
+
+function isCriticalSuccessAttack(outcome) {
+  return String(outcome?.result?.key ?? "") === "criticalSuccess";
+}
+
+function isCriticalFailureAttack(outcome) {
+  return String(outcome?.result?.key ?? "") === "criticalFailure";
 }
 
 function normalizeAngle(angle) {

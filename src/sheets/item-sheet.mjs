@@ -12,6 +12,7 @@ const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
+const DEFAULT_ITEM_SHEET_HEIGHT = 720;
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #functionPickerActive = false;
@@ -33,7 +34,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   static PARTS = {
     body: {
-      template: TEMPLATES.itemSheet
+      template: TEMPLATES.itemSheet,
+      scrollable: [".tab.active"]
     }
   };
 
@@ -49,6 +51,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   get item() {
     return this.document;
+  }
+
+  _initializeApplicationOptions(options) {
+    options = super._initializeApplicationOptions(options);
+    if (!["disease", "trauma"].includes(String(options.document?.type ?? "")) && options.position?.height === "auto") {
+      options.position.height = DEFAULT_ITEM_SHEET_HEIGHT;
+    }
+    return options;
   }
 
   async _prepareContext(options) {
@@ -210,6 +220,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-weapon-resource-cost]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteWeaponResourceCost(event));
+    });
+    this.element?.querySelectorAll("[data-add-weapon-critical-failure-consequence]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddWeaponCriticalFailureConsequence(event));
+    });
+    this.element?.querySelectorAll("[data-delete-weapon-critical-failure-consequence]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteWeaponCriticalFailureConsequence(event));
     });
     this.element?.querySelectorAll("[data-mitigation-fill-handle]").forEach(handle => {
       handle.addEventListener("pointerdown", event => this.#onMitigationFillStart(event));
@@ -436,6 +452,36 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const costs = [...(foundry.utils.getProperty(this.item, path)?.resourceCosts ?? [])];
     costs.splice(index, 1);
     return this.item.update({ [`${path}.resourceCosts`]: costs });
+  }
+
+  #onAddWeaponCriticalFailureConsequence(event) {
+    event.preventDefault();
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const path = getWeaponFunctionPath(section);
+    const actionKey = String(event.currentTarget?.dataset?.addWeaponCriticalFailureConsequence ?? "");
+    if (!actionKey) return undefined;
+    const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
+    const actionData = weaponData?.[actionKey] ?? {};
+    const consequences = [...(actionData.criticalFailureConsequences ?? [])];
+    consequences.push({
+      type: "extraResourceCost",
+      resourceType: getAvailableWeaponResourceTypes(weaponData).at(0) ?? "",
+      amount: 0
+    });
+    return this.item.update({ [`${path}.${actionKey}.criticalFailureConsequences`]: consequences });
+  }
+
+  #onDeleteWeaponCriticalFailureConsequence(event) {
+    event.preventDefault();
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const path = getWeaponFunctionPath(section);
+    const actionKey = String(event.currentTarget?.dataset?.weaponActionKey ?? "");
+    const index = Number(event.currentTarget?.dataset?.deleteWeaponCriticalFailureConsequence);
+    if (!actionKey || !Number.isInteger(index) || index < 0) return undefined;
+    const actionData = foundry.utils.getProperty(this.item, `${path}.${actionKey}`) ?? {};
+    const consequences = [...(actionData.criticalFailureConsequences ?? [])];
+    consequences.splice(index, 1);
+    return this.item.update({ [`${path}.${actionKey}.criticalFailureConsequences`]: consequences });
   }
 
   #onAddWeaponDamageType(event) {
@@ -747,6 +793,37 @@ function buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction) {
   }));
 }
 
+function getAvailableWeaponResourceTypes(weaponData = {}) {
+  return Array.from(new Set((weaponData?.resourceCosts ?? [])
+    .map(cost => String(cost?.type ?? "").trim())
+    .filter(Boolean)));
+}
+
+function getWeaponResourceTypeLabel(type = "") {
+  if (type === "magazine") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostMagazine");
+  if (type === "condition") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostCondition");
+  return String(type || "-");
+}
+
+function buildWeaponCriticalFailureConsequenceRows(actionData = {}, weaponData = {}) {
+  const resourceTypes = getAvailableWeaponResourceTypes(weaponData);
+  return (actionData?.criticalFailureConsequences ?? []).map((consequence, index) => ({
+    index,
+    type: String(consequence?.type ?? "extraResourceCost"),
+    amount: Number(consequence?.amount) || 0,
+    typeChoices: [{
+      value: "extraResourceCost",
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalFailureExtraResourceCost"),
+      selected: true
+    }],
+    resourceChoices: resourceTypes.map(type => ({
+      value: type,
+      label: getWeaponResourceTypeLabel(type),
+      selected: type === String(consequence?.resourceType ?? "")
+    }))
+  }));
+}
+
 function buildWeaponDamageTypeChoices(item, damageTypeSettings) {
   const selected = String(item.system?.functions?.weapon?.damageTypeKey ?? "");
   return damageTypeSettings.map(damageType => ({
@@ -849,6 +926,7 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {})
       isMelee: Boolean(action.isMelee),
       attackConeDegrees: Number(hasActionCone ? actionData.attackConeDegrees : fallbackCone) || DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
       burstCount: Math.max(1, Number(weaponData?.burst?.count) || 3),
+      criticalFailureConsequences: buildWeaponCriticalFailureConsequenceRows(actionData, weaponData),
       thrust,
       swing
     };
@@ -877,6 +955,7 @@ function createDefaultWeaponFunctionData(source = {}) {
     skillKey: "rangedCombat",
     accuracyBonus: 0,
     criticalChanceModifier: 0,
+    criticalDamagePercent: 150,
     attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
     maxRangeMeters: 0,
     effectiveRange: {
@@ -897,14 +976,17 @@ function createDefaultWeaponFunctionData(source = {}) {
       aimedMeleeAttack: false
     },
     aimedShot: {
-      attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES
+      attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
+      criticalFailureConsequences: []
     },
     snapshot: {
-      attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES
+      attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
+      criticalFailureConsequences: []
     },
     burst: {
       attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
-      count: 3
+      count: 3,
+      criticalFailureConsequences: []
     },
     meleeAttack: createDefaultWeaponMeleeActionData(),
     aimedMeleeAttack: createDefaultWeaponMeleeActionData()
@@ -914,6 +996,7 @@ function createDefaultWeaponFunctionData(source = {}) {
 function createDefaultWeaponMeleeActionData() {
   return {
     attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
+    criticalFailureConsequences: [],
     thrust: {
       enabled: true,
       accuracyModifier: 0,

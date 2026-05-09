@@ -349,6 +349,31 @@
   color: #fff3d8;
 }
 
+.application.fallout-maw-item-sheet .window-content {
+  overflow: hidden;
+}
+
+.application.fallout-maw-item-sheet .fallout-maw-sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.application.fallout-maw-item-sheet .fallout-maw-sheet-body > .tab {
+  display: none;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+  scrollbar-gutter: stable;
+}
+
+.application.fallout-maw-item-sheet .fallout-maw-sheet-body > .tab.active {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
 .fallout-maw-effects-tab {
   min-height: 420px;
   padding-bottom: 4.25rem;
@@ -1415,7 +1440,23 @@
 }
 
 .fallout-maw-weapon-damage-types .fallout-maw-settings-row {
-  grid-template-columns: minmax(140px, 1fr) minmax(130px, 1fr) minmax(70px, 90px) 2.5rem;
+  grid-template-columns: minmax(140px, 1fr) minmax(80px, 110px) 2.5rem;
+}
+
+.fallout-maw-weapon-critical-failure-consequences .fallout-maw-settings-row {
+  grid-template-columns: minmax(150px, 1fr) minmax(120px, 0.8fr) minmax(70px, 90px) 2.5rem;
+}
+
+.fallout-maw-weapon-action-subheader {
+  border-top: 1px solid rgba(218, 207, 147, 0.2);
+  margin: 0.25rem 0 0;
+  padding-top: 0.65rem;
+}
+
+.fallout-maw-weapon-action-subheader h4 {
+  font-size: 1rem;
+  line-height: 1.15;
+  margin: 0;
 }
 
 .fallout-maw-panel[data-weapon-function-section] {

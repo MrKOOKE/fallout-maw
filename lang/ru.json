@@ -66,6 +66,7 @@
       "Type": "Тип",
       "Untitled": "Без названия",
       "Value": "Значение",
+      "ValuePercent": "Значение %",
       "Weapon": "Оружие"
     },
     "AnimationLibrary": {
@@ -171,6 +172,7 @@
       "WeaponSkill": "Задействованный навык",
       "WeaponAccuracyBonus": "Изменение точности",
       "WeaponCriticalChanceModifier": "Изменение шанса на крит",
+      "WeaponCriticalDamagePercent": "Крит урон (%)",
       "WeaponAttackCone": "Конус атаки, градусы",
       "WeaponMaxRange": "Максимальная дистанция, метры",
       "WeaponEffectiveRange": "Эффективная дистанция",
@@ -193,6 +195,11 @@
       "WeaponModeAccuracyModifier": "Изменение точности",
       "WeaponModeCriticalChanceModifier": "Изменение шанса на крит",
       "WeaponModeDamagePercentModifier": "Изменение урона (%)",
+      "WeaponCriticalFailureConsequences": "Последствие крит провала",
+      "WeaponAddCriticalFailureConsequence": "Добавить последствие",
+      "WeaponNoCriticalFailureConsequences": "Последствия крит провала не заданы.",
+      "WeaponCriticalFailureExtraResourceCost": "Повышенный расход ресурсов",
+      "WeaponCriticalFailureResource": "Ресурс",
       "Weight": "Вес"
     },
     "Effects": {

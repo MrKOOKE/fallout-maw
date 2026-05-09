@@ -67,6 +67,7 @@
       "Type": "Type",
       "Untitled": "Untitled",
       "Value": "Value",
+      "ValuePercent": "Value %",
       "Weapon": "Weapon"
     },
     "AnimationLibrary": {
@@ -172,6 +173,7 @@
       "WeaponSkill": "Used Skill",
       "WeaponAccuracyBonus": "Accuracy Change",
       "WeaponCriticalChanceModifier": "Critical Chance Change",
+      "WeaponCriticalDamagePercent": "Critical Damage (%)",
       "WeaponAttackCone": "Attack Cone, degrees",
       "WeaponMaxRange": "Maximum Range, meters",
       "WeaponEffectiveRange": "Effective Range",
@@ -194,6 +196,11 @@
       "WeaponModeAccuracyModifier": "Accuracy Modifier",
       "WeaponModeCriticalChanceModifier": "Critical Chance Modifier",
       "WeaponModeDamagePercentModifier": "Damage Modifier (%)",
+      "WeaponCriticalFailureConsequences": "Critical Failure Consequences",
+      "WeaponAddCriticalFailureConsequence": "Add Consequence",
+      "WeaponNoCriticalFailureConsequences": "No critical failure consequences.",
+      "WeaponCriticalFailureExtraResourceCost": "Increased Resource Cost",
+      "WeaponCriticalFailureResource": "Resource",
       "Weight": "Weight"
     },
     "Effects": {

@@ -101,6 +101,7 @@ function weaponFunctionField({ named = false } = {}) {
     skillKey: new StringField({ required: true, blank: false, initial: "rangedCombat" }),
     accuracyBonus: new NumberField({ required: true, integer: true, initial: 0 }),
     criticalChanceModifier: new NumberField({ required: true, integer: true, initial: 0 }),
+    criticalDamagePercent: new NumberField({ required: true, integer: true, min: 0, initial: 150 }),
     attackConeDegrees: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES }),
     maxRangeMeters: new NumberField({ required: true, min: 0, initial: 0 }),
     effectiveRange: new SchemaField({
@@ -124,7 +125,8 @@ function weaponFunctionField({ named = false } = {}) {
     snapshot: weaponActionSettingsField(),
     burst: new SchemaField({
       attackConeDegrees: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES }),
-      count: new NumberField({ required: true, integer: true, min: 1, initial: 3 })
+      count: new NumberField({ required: true, integer: true, min: 1, initial: 3 }),
+      criticalFailureConsequences: new ArrayField(weaponCriticalFailureConsequenceField(), { required: true, initial: [] })
     }),
     meleeAttack: weaponMeleeActionSettingsField(),
     aimedMeleeAttack: weaponMeleeActionSettingsField()
@@ -138,15 +140,25 @@ function weaponFunctionField({ named = false } = {}) {
 
 function weaponActionSettingsField() {
   return new SchemaField({
-    attackConeDegrees: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES })
+    attackConeDegrees: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES }),
+    criticalFailureConsequences: new ArrayField(weaponCriticalFailureConsequenceField(), { required: true, initial: [] })
   });
 }
 
 function weaponMeleeActionSettingsField() {
   return new SchemaField({
     attackConeDegrees: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES }),
+    criticalFailureConsequences: new ArrayField(weaponCriticalFailureConsequenceField(), { required: true, initial: [] }),
     thrust: weaponAttackModeSettingsField(),
     swing: weaponAttackModeSettingsField()
+  });
+}
+
+function weaponCriticalFailureConsequenceField() {
+  return new SchemaField({
+    type: new StringField({ required: true, blank: false, initial: "extraResourceCost" }),
+    resourceType: new StringField({ required: true, blank: true, initial: "" }),
+    amount: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
   });
 }
 
