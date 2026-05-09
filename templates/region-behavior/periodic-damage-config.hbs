@@ -1,69 +1,73 @@
-<fieldset>
-  <legend>{{localize "BEHAVIOR.SECTIONS.identity"}}</legend>
-  <label>
-    <span>{{localize "DOCUMENT.FIELDS.name.label"}}</span>
-    <input type="text" name="name" value="{{source.name}}">
-  </label>
-</fieldset>
+<div class="fallout-maw-periodic-damage-region-form">
+  <fieldset>
+    <legend>{{localize "BEHAVIOR.SECTIONS.identity"}}</legend>
+    <label>
+      <span>{{localize "DOCUMENT.FIELDS.name.label"}}</span>
+      <input type="text" name="name" value="{{source.name}}">
+    </label>
+  </fieldset>
 
-<fieldset>
-  <legend>{{localize "BEHAVIOR.SECTIONS.status"}}</legend>
-  <label>
-    <span>{{localize "DOCUMENT.FIELDS.disabled.label"}}</span>
-    <input type="checkbox" name="disabled" {{checked source.disabled}}>
-  </label>
-</fieldset>
+  <fieldset>
+    <legend>{{localize "BEHAVIOR.SECTIONS.status"}}</legend>
+    <label>
+      <span>{{localize "DOCUMENT.FIELDS.disabled.label"}}</span>
+      <input type="checkbox" name="disabled" {{checked source.disabled}}>
+    </label>
+  </fieldset>
 
-<fieldset>
-  <legend>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.DamageEntries"}}</legend>
-  <div class="fallout-maw-panel-header">
-    <h3>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.DamageEntries"}}</h3>
-    <button type="button" data-action="addDamageEntry"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.AddDamageEntry"}}</button>
-  </div>
-  <div class="fallout-maw-settings-table">
-    <div class="fallout-maw-settings-row fallout-maw-grid-header">
-      <span>{{localize "FALLOUTMAW.Item.WeaponDamageType"}}</span>
-      <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
-      <span></span>
+  <fieldset>
+    <legend>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.DamageEntries"}}</legend>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.DamageEntries"}}</h3>
+      <button type="button" data-action="addDamageEntry"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.AddDamageEntry"}}</button>
     </div>
-    {{#each damageEntries}}
-    <div class="fallout-maw-settings-row" data-damage-entry-index="{{index}}">
-      <select name="system.damageEntries.{{index}}.damageTypeKey">
-        {{#each damageTypeChoices}}
-        <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+    <div class="fallout-maw-settings-table">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Item.WeaponDamageType"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span></span>
+      </div>
+      <div class="fallout-maw-damage-entry-list">
+        {{#each damageEntries}}
+        <div class="fallout-maw-settings-row" data-damage-entry-index="{{index}}">
+          <select name="system.damageEntries.{{index}}.damageTypeKey">
+            {{#each damageTypeChoices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+          <input type="number" name="system.damageEntries.{{index}}.amount" value="{{amount}}" min="0" step="1">
+          <button type="button" data-action="deleteDamageEntry" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        </div>
+        {{else}}
+        <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.NoDamageEntries"}}</p>
         {{/each}}
-      </select>
-      <input type="number" name="system.damageEntries.{{index}}.amount" value="{{amount}}" min="0" step="1">
-      <button type="button" data-action="deleteDamageEntry" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
     </div>
-    {{else}}
-    <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.NoDamageEntries"}}</p>
-    {{/each}}
-  </div>
-</fieldset>
+  </fieldset>
 
-<fieldset>
-  <legend>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.Timing"}}</legend>
-  <div class="fallout-maw-list-grid two-columns">
-    <label>
-      <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.IntervalSeconds"}}</span>
-      <input type="number" name="system.intervalSeconds" value="{{system.intervalSeconds}}" min="1" step="1">
-    </label>
-    <label>
-      <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.DelaySeconds"}}</span>
-      <input type="number" name="system.delaySeconds" value="{{system.delaySeconds}}" min="0" step="1">
-    </label>
-    <label>
-      <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.DurationSeconds"}}</span>
-      <input type="number" name="system.durationSeconds" value="{{system.durationSeconds}}" min="0" step="1">
-    </label>
-    <label>
-      <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.RadiusDeltaMeters"}}</span>
-      <input type="number" name="system.radiusDeltaMeters" value="{{system.radiusDeltaMeters}}" step="1">
-    </label>
-    <label>
-      <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.DeleteRegionWhenExpired"}}</span>
-      <input type="checkbox" name="system.deleteRegionWhenExpired" {{checked system.deleteRegionWhenExpired}}>
-    </label>
-  </div>
-</fieldset>
+  <fieldset>
+    <legend>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.Timing"}}</legend>
+    <div class="fallout-maw-list-grid two-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.IntervalSeconds"}}</span>
+        <input type="number" name="system.intervalSeconds" value="{{system.intervalSeconds}}" min="1" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.DelaySeconds"}}</span>
+        <input type="number" name="system.delaySeconds" value="{{system.delaySeconds}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.DurationSeconds"}}</span>
+        <input type="number" name="system.durationSeconds" value="{{system.durationSeconds}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.RadiusDeltaMeters"}}</span>
+        <input type="number" name="system.radiusDeltaMeters" value="{{system.radiusDeltaMeters}}" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.RegionBehavior.PeriodicDamage.DeleteRegionWhenExpired"}}</span>
+        <input type="checkbox" name="system.deleteRegionWhenExpired" {{checked system.deleteRegionWhenExpired}}>
+      </label>
+    </div>
+  </fieldset>
+</div>

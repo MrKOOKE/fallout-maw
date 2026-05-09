@@ -26,6 +26,7 @@ export function registerSystemSheets() {
 
   sheetConfig.registerSheet(RegionBehavior, FALLOUT_MAW.id, PeriodicDamageRegionBehaviorConfig, {
     label: "Fallout-MaW V2",
-    types: ["fallout-maw.periodicDamage"]
+    types: ["fallout-maw.periodicDamage"],
+    makeDefault: true
   });
 }

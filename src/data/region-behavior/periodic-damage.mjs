@@ -6,8 +6,6 @@ export default class PeriodicDamageRegionBehaviorType extends foundry.data.regio
 
   static defineSchema() {
     return {
-      damage: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-      damageTypeKey: new StringField({ required: true, blank: true, initial: "firearm" }),
       damageEntries: new ArrayField(new SchemaField({
         damageTypeKey: new StringField({ required: true, blank: true, initial: "firearm" }),
         amount: new NumberField({ required: true, integer: true, min: 0, initial: 0 })

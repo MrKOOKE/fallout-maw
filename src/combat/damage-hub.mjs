@@ -600,13 +600,14 @@ function getRoundSeconds() {
 
 async function processTimedDamageEffects(worldTime, deltaTime) {
   if (!game.user?.isActiveGM || Number(deltaTime) <= 0) return;
+  const elapsed = Number(deltaTime) || 0;
   if (getTimeMechanicsIgnored()) {
-    await preserveTimedDamageEffects(Number(deltaTime) || 0);
-    await preserveRegionPeriodicDamage(Number(deltaTime) || 0);
+    await preserveTimedDamageEffects(elapsed);
+    await preserveRegionPeriodicDamage(elapsed);
     return;
   }
   const now = Number(worldTime) || Number(game.time?.worldTime) || 0;
-  await processRegionPeriodicDamage(now);
+  await processRegionPeriodicDamage(now, elapsed);
   for (const actor of getLoadedActors()) {
     if (!actor?.isOwner) continue;
     const entries = [];
@@ -642,14 +643,15 @@ async function processTimedDamageEffects(worldTime, deltaTime) {
   }
 }
 
-async function processRegionPeriodicDamage(now = 0) {
+async function processRegionPeriodicDamage(now = 0, deltaTime = 0) {
   const batches = [];
+  const previousTime = Math.max(0, (Number(now) || 0) - Math.max(0, Number(deltaTime) || 0));
   for (const scene of game.scenes?.contents ?? []) {
     for (const region of scene.regions?.contents ?? []) {
       if (region.hidden) continue;
       for (const behavior of region.behaviors?.contents ?? []) {
         if (behavior.disabled || behavior.type !== REGION_DAMAGE_BEHAVIOR_TYPE) continue;
-        const batch = await collectRegionPeriodicDamageBehavior(region, behavior, Number(now) || 0);
+        const batch = await collectRegionPeriodicDamageBehavior(region, behavior, Number(now) || 0, previousTime);
         if (batch) batches.push(batch);
       }
     }
@@ -674,7 +676,7 @@ async function processRegionPeriodicDamage(now = 0) {
   }
 }
 
-async function collectRegionPeriodicDamageBehavior(region, behavior, now = 0) {
+async function collectRegionPeriodicDamageBehavior(region, behavior, now = 0, previousTime = now) {
   const system = behavior.system ?? {};
   const entries = getRegionPeriodicDamageEntries(system);
   if (!entries.length) return null;
@@ -684,6 +686,7 @@ async function collectRegionPeriodicDamageBehavior(region, behavior, now = 0) {
   const durationSeconds = Math.max(0, toInteger(system.durationSeconds));
   const state = await getRegionPeriodicDamageState(behavior, {
     now,
+    previousTime,
     intervalSeconds,
     delaySeconds,
     durationSeconds
@@ -718,11 +721,11 @@ async function collectRegionPeriodicDamageBehavior(region, behavior, now = 0) {
   };
 }
 
-async function getRegionPeriodicDamageState(behavior, { now = 0, intervalSeconds = ROUND_SECONDS, delaySeconds = 0, durationSeconds = 0 } = {}) {
+async function getRegionPeriodicDamageState(behavior, { now = 0, previousTime = now, intervalSeconds = ROUND_SECONDS, delaySeconds = 0, durationSeconds = 0 } = {}) {
   const current = behavior.getFlag(SYSTEM_ID, REGION_DAMAGE_FLAG_KEY) ?? {};
   if (Number.isFinite(Number(current.startedAt))) return current;
 
-  const startedAt = Number(now) || 0;
+  const startedAt = Number.isFinite(Number(previousTime)) ? Math.max(0, Number(previousTime)) : (Number(now) || 0);
   const activateAt = startedAt + Math.max(0, toInteger(delaySeconds));
   const hasDelay = Math.max(0, toInteger(delaySeconds)) > 0;
   const state = {
@@ -769,7 +772,7 @@ function buildRegionPeriodicDamageRequests(region, behavior, entries = [], dueTi
 }
 
 function getRegionPeriodicDamageEntries(system = {}) {
-  const entries = Array.isArray(system.damageEntries)
+  return Array.isArray(system.damageEntries)
     ? system.damageEntries
       .map(entry => ({
         damageTypeKey: String(entry?.damageTypeKey ?? "").trim(),
@@ -777,11 +780,6 @@ function getRegionPeriodicDamageEntries(system = {}) {
       }))
       .filter(entry => entry.damageTypeKey && entry.amount > 0)
     : [];
-  if (entries.length) return entries;
-
-  const damageTypeKey = String(system.damageTypeKey ?? "").trim();
-  const amount = Math.max(0, toInteger(system.damage));
-  return damageTypeKey && amount > 0 ? [{ damageTypeKey, amount }] : [];
 }
 
 function getTokensInsideRegion(region) {
