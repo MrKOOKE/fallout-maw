@@ -141,7 +141,8 @@ function normalizeLimbs(limbs) {
         key,
         label: String(limb?.label ?? limb?.name ?? "").trim() || defaultLimb?.label || localize("FALLOUTMAW.Common.Untitled"),
         stateMax: Math.max(0, toInteger(limb?.stateMax ?? defaultLimb?.stateMax ?? 100)),
-        damageMultiplier: toDecimal(limb?.damageMultiplier ?? defaultLimb?.damageMultiplier ?? 1, 1)
+        damageMultiplier: toDecimal(limb?.damageMultiplier ?? defaultLimb?.damageMultiplier ?? 1, 1),
+        aimedDifficultyPercent: toInteger(limb?.aimedDifficultyPercent ?? defaultLimb?.aimedDifficultyPercent ?? 0)
       };
     })
     .filter(Boolean);

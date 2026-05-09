@@ -52,6 +52,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       createRace: this.#onCreateRace,
       createLimb: this.#onCreateLimb,
       deleteLimb: this.#onDeleteLimb,
+      openLimbSettings: this.#onOpenLimbSettings,
       configureLimbSilhouette: this.#onConfigureLimbSilhouette,
       createEquipmentSlot: this.#onCreateEquipmentSlot,
       deleteEquipmentSlot: this.#onDeleteEquipmentSlot,
@@ -269,7 +270,8 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       key: id,
       label: "Новая конечность",
       stateMax: 100,
-      damageMultiplier: 1
+      damageMultiplier: 1,
+      aimedDifficultyPercent: 0
     });
     return this.forceRender();
   }
@@ -287,6 +289,27 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       race.limbSilhouette.parts = (race.limbSilhouette.parts ?? []).filter(part => part.limbKey !== key);
     }
     return this.forceRender();
+  }
+
+  static #onOpenLimbSettings(event, target) {
+    event.preventDefault();
+    const rows = Array.from(this.form?.querySelectorAll("[data-limb-row]") ?? []);
+    const index = rows.indexOf(target.closest("[data-limb-row]"));
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    const limb = race?.limbs?.[index];
+    if (!limb) return undefined;
+
+    return new LimbSettingsConfig({
+      limb,
+      onSave: settings => {
+        this.#updateFromCurrentForm();
+        const activeRace = this.#activeRace;
+        if (!activeRace?.limbs?.[index]) return;
+        Object.assign(activeRace.limbs[index], settings);
+        this.forceRender();
+      }
+    }).render({ force: true });
   }
 
   static #onConfigureLimbSilhouette(event) {
@@ -490,12 +513,18 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
 
   #readLimbsFromForm() {
     const rows = Array.from(this.form?.querySelectorAll("[data-limb-row]") ?? []);
-    return rows.map(row => ({
-      key: row.querySelector("[data-field='key']")?.value?.trim() ?? "",
-      label: row.querySelector("[data-field='label']")?.value?.trim() || localize("FALLOUTMAW.Common.Untitled"),
-      stateMax: Math.max(0, toInteger(row.querySelector("[data-field='stateMax']")?.value)),
-      damageMultiplier: toDecimal(row.querySelector("[data-field='damageMultiplier']")?.value, 1)
-    })).filter(limb => limb.key);
+    const currentLimbs = this.#activeRace?.limbs ?? [];
+    return rows.map((row, index) => {
+      const key = row.querySelector("[data-field='key']")?.value?.trim() ?? "";
+      const existing = currentLimbs.find(limb => limb.key === key) ?? currentLimbs[index] ?? {};
+      return {
+        key,
+        label: row.querySelector("[data-field='label']")?.value?.trim() || localize("FALLOUTMAW.Common.Untitled"),
+        stateMax: Math.max(0, toInteger(existing.stateMax ?? 100)),
+        damageMultiplier: toDecimal(existing.damageMultiplier, 1),
+        aimedDifficultyPercent: toInteger(existing.aimedDifficultyPercent)
+      };
+    }).filter(limb => limb.key);
   }
 
   #readEquipmentSlotsFromForm() {
@@ -630,6 +659,66 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       iconClass: expanded ? "fa-chevron-down" : "fa-chevron-right"
     };
   }
+}
+
+class LimbSettingsConfig extends FalloutMaWFormApplicationV2 {
+  constructor({ limb = {}, onSave = null } = {}) {
+    super();
+    this.limb = normalizeLimbSettings(limb);
+    this.onSave = onSave;
+  }
+
+  static DEFAULT_OPTIONS = {
+    id: "fallout-maw-limb-settings",
+    classes: ["fallout-maw", "fallout-maw-config-form", "limb-settings-config"],
+    position: {
+      width: 520,
+      height: "auto"
+    },
+    window: {
+      resizable: true
+    },
+    form: {
+      handler: FalloutMaWFormApplicationV2.handleFormSubmit,
+      submitOnChange: false,
+      closeOnSubmit: true
+    }
+  };
+
+  static PARTS = {
+    form: {
+      template: TEMPLATES.settings.limbSettings
+    }
+  };
+
+  get title() {
+    return `Доп. настройки конечности: ${this.limb.label || this.limb.key}`;
+  }
+
+  async _prepareContext(options) {
+    return {
+      ...(await super._prepareContext(options)),
+      limb: this.limb
+    };
+  }
+
+  async _processFormData(_event, _form, formData) {
+    const data = getExpandedFormData(formData);
+    this.onSave?.(normalizeLimbSettings({
+      ...this.limb,
+      ...(data.limb ?? {})
+    }));
+  }
+}
+
+function normalizeLimbSettings(limb = {}) {
+  return {
+    key: String(limb?.key ?? "").trim(),
+    label: String(limb?.label ?? limb?.name ?? limb?.key ?? "").trim(),
+    stateMax: Math.max(0, toInteger(limb?.stateMax ?? 100)),
+    damageMultiplier: toDecimal(limb?.damageMultiplier, 1),
+    aimedDifficultyPercent: toInteger(limb?.aimedDifficultyPercent)
+  };
 }
 
 function getUniqueId(baseId, existingIds) {

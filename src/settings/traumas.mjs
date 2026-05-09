@@ -59,7 +59,7 @@ export function getLimbSetId(limbs = []) {
   const normalized = normalizeLimbSetLimbs(limbs);
   if (!normalized.length) return "";
   return normalized
-    .map(limb => `${limb.key}:${limb.label}:${limb.stateMax}:${limb.damageMultiplier}`)
+    .map(limb => `${limb.key}:${limb.label}:${limb.stateMax}:${limb.damageMultiplier}:${limb.aimedDifficultyPercent}`)
     .join("|");
 }
 
@@ -182,7 +182,8 @@ function normalizeLimbSetLimbs(limbs = []) {
       key: String(limb?.key ?? "").trim(),
       label: String(limb?.label ?? limb?.name ?? limb?.key ?? "").trim(),
       stateMax: Math.max(0, toInteger(limb?.stateMax)),
-      damageMultiplier: toDecimal(limb?.damageMultiplier, 1)
+      damageMultiplier: toDecimal(limb?.damageMultiplier, 1),
+      aimedDifficultyPercent: toInteger(limb?.aimedDifficultyPercent)
     }))
     .filter(limb => limb.key)
     .sort((left, right) => left.key.localeCompare(right.key));

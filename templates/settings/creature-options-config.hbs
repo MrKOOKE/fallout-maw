@@ -141,8 +141,7 @@
           <div class="fallout-maw-settings-row" data-limb-row>
             <input type="text" data-field="key" value="{{key}}" placeholder="Код" title="Код конечности">
             <input type="text" data-field="label" value="{{label}}">
-            <input type="number" data-field="stateMax" value="{{stateMax}}" min="0" placeholder="{{localize 'FALLOUTMAW.Settings.CreatureOptions.LimbStateMax'}}" title="{{localize 'FALLOUTMAW.Settings.CreatureOptions.LimbStateMax'}}">
-            <input type="number" data-field="damageMultiplier" value="{{damageMultiplier}}" min="0" step="0.1" placeholder="x урона" title="Множитель урона по частям тела">
+            <button type="button" class="fallout-maw-icon-button" data-action="openLimbSettings" title="Доп. настройки конечности"><i class="fa-solid fa-gear"></i></button>
             <button type="button" data-action="deleteLimb" data-key="{{key}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
           </div>
           {{else}}

@@ -232,6 +232,7 @@ function limbField() {
   return new SchemaField({
     label: new StringField({ required: true, blank: true, initial: "" }),
     damageMultiplier: new NumberField({ required: true, initial: 1, persisted: false }),
+    aimedDifficultyPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
     min: new NumberField({ required: true, integer: true, initial: -100 }),
     value: new NumberField({ required: true, integer: true, initial: 0 }),
     max: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
@@ -334,6 +335,7 @@ function normalizeLimbMap(currentLimbs = {}, settings = []) {
       return [setting.key, {
         label: String(setting?.label ?? setting?.name ?? setting?.key ?? ""),
         damageMultiplier: toDecimal(setting?.damageMultiplier, 1),
+        aimedDifficultyPercent: toInteger(setting?.aimedDifficultyPercent),
         min,
         value,
         max,

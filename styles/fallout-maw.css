@@ -4545,7 +4545,75 @@ label.fallout-maw-mitigation-cell {
 }
 
 .limb-settings .fallout-maw-settings-row {
-  grid-template-columns: minmax(110px, 0.45fr) minmax(160px, 1fr) 130px 90px 2.5rem;
+  grid-template-columns: minmax(110px, 0.45fr) minmax(160px, 1fr) 2.5rem 2.5rem;
+}
+
+.limb-settings .fallout-maw-icon-button {
+  align-items: center;
+  aspect-ratio: 1;
+  display: inline-flex;
+  height: 2.25rem;
+  justify-content: center;
+  justify-self: center;
+  padding: 0;
+  width: 2.25rem;
+}
+
+.fallout-maw-aimed-limb-menu {
+  background: rgba(18, 14, 20, 0.94);
+  border: 1px solid rgba(94, 255, 148, 0.45);
+  border-radius: 6px;
+  box-shadow: 0 0 18px rgba(0, 0, 0, 0.45);
+  display: grid;
+  gap: 0.2rem;
+  min-width: 170px;
+  padding: 0.35rem;
+  pointer-events: auto;
+  position: fixed;
+  z-index: 10000;
+}
+
+.fallout-maw-aimed-limb-menu button {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: inherit;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  justify-items: stretch;
+  min-height: 1.85rem;
+  padding: 0.25rem 0.45rem;
+  text-align: left;
+}
+
+.fallout-maw-aimed-limb-menu button:hover,
+.fallout-maw-aimed-limb-menu button.hover {
+  background: rgba(94, 255, 148, 0.18);
+  border-color: rgba(94, 255, 148, 0.7);
+}
+
+.fallout-maw-aimed-limb-menu span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-aimed-limb-menu strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.fallout-maw-aimed-limb-menu strong.chance-high {
+  color: #73ff9c;
+}
+
+.fallout-maw-aimed-limb-menu strong.chance-medium {
+  color: #ffd966;
+}
+
+.fallout-maw-aimed-limb-menu strong.chance-low {
+  color: #ff6f6f;
 }
 
 .fallout-maw-settings-actions {

@@ -88,14 +88,14 @@ export const DEFAULT_PROFICIENCIES = Object.freeze([
 ]);
 
 export const DEFAULT_LIMBS = Object.freeze([
-  { key: "head", label: "Голова", stateMax: 100, damageMultiplier: 1.3 },
-  { key: "eyes", label: "Глаза", stateMax: 100, damageMultiplier: 1.4 },
-  { key: "torso", label: "Туловище", stateMax: 100, damageMultiplier: 1 },
-  { key: "groin", label: "Пах", stateMax: 100, damageMultiplier: 1.2 },
-  { key: "leftArm", label: "Левая рука", stateMax: 100, damageMultiplier: 0.8 },
-  { key: "rightArm", label: "Правая рука", stateMax: 100, damageMultiplier: 0.8 },
-  { key: "leftLeg", label: "Левая нога", stateMax: 100, damageMultiplier: 0.8 },
-  { key: "rightLeg", label: "Правая нога", stateMax: 100, damageMultiplier: 0.8 }
+  { key: "head", label: "Голова", stateMax: 100, damageMultiplier: 1.3, aimedDifficultyPercent: 30 },
+  { key: "eyes", label: "Глаза", stateMax: 100, damageMultiplier: 1.4, aimedDifficultyPercent: 50 },
+  { key: "torso", label: "Туловище", stateMax: 100, damageMultiplier: 1, aimedDifficultyPercent: 0 },
+  { key: "groin", label: "Пах", stateMax: 100, damageMultiplier: 1.2, aimedDifficultyPercent: 20 },
+  { key: "leftArm", label: "Левая рука", stateMax: 100, damageMultiplier: 0.8, aimedDifficultyPercent: 20 },
+  { key: "rightArm", label: "Правая рука", stateMax: 100, damageMultiplier: 0.8, aimedDifficultyPercent: 20 },
+  { key: "leftLeg", label: "Левая нога", stateMax: 100, damageMultiplier: 0.8, aimedDifficultyPercent: 20 },
+  { key: "rightLeg", label: "Правая нога", stateMax: 100, damageMultiplier: 0.8, aimedDifficultyPercent: 20 }
 ]);
 
 export const DEFAULT_EQUIPMENT_SLOTS = Object.freeze([
