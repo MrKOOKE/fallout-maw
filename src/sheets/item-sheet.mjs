@@ -1,5 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
-import { getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
+import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { groupRaceEquipmentSlotsBySet } from "../utils/equipment-slots.mjs";
 import {
   ITEM_FUNCTIONS,
@@ -68,6 +68,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const priceCurrency = item.system?.priceCurrency ?? "";
     const occupiedSlots = item.system?.occupiedSlots ?? {};
     const creatureOptions = getCreatureOptions();
+    const characteristicSettings = getCharacteristicSettings();
     const damageTypeSettings = getDamageTypeSettings();
     const toolSettings = getToolSettings();
     const skillSettings = getSkillSettings();
@@ -149,7 +150,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       hasWeaponFunction,
       hasWeaponMagazineCost: hasWeaponResourceCost(item, "magazine"),
       toolFunctions,
-      weaponFunctionSections: buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, hasConditionFunction),
+      weaponFunctionSections: buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, characteristicSettings, hasConditionFunction),
       weaponDamageTypeChoices: buildWeaponDamageTypeChoices(item, damageTypeSettings),
       weaponDamageTypeRows: buildWeaponDamageTypeRows(item, damageTypeSettings),
       weaponSkillChoices: buildWeaponSkillChoices(item, skillSettings),
@@ -223,6 +224,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-weapon-resource-cost]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteWeaponResourceCost(event));
+    });
+    this.element?.querySelectorAll("[data-add-weapon-requirement]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddWeaponRequirement(event));
+    });
+    this.element?.querySelectorAll("[data-delete-weapon-requirement]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteWeaponRequirement(event));
+    });
+    this.element?.querySelectorAll("[data-weapon-requirement-type]").forEach(select => {
+      select.addEventListener("change", event => this.#onWeaponRequirementTypeChange(event));
     });
     this.element?.querySelectorAll("[data-add-weapon-critical-failure-consequence]").forEach(button => {
       button.addEventListener("click", event => this.#onAddWeaponCriticalFailureConsequence(event));
@@ -455,6 +465,45 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const costs = [...(foundry.utils.getProperty(this.item, path)?.resourceCosts ?? [])];
     costs.splice(index, 1);
     return this.item.update({ [`${path}.resourceCosts`]: costs });
+  }
+
+  #onAddWeaponRequirement(event) {
+    event.preventDefault();
+    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const requirements = [...(foundry.utils.getProperty(this.item, path)?.requirements ?? [])];
+    requirements.push({
+      type: "characteristic",
+      key: getCharacteristicSettings().at(0)?.key ?? "",
+      value: 0
+    });
+    return this.item.update({ [`${path}.requirements`]: requirements });
+  }
+
+  #onDeleteWeaponRequirement(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteWeaponRequirement);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const requirements = [...(foundry.utils.getProperty(this.item, path)?.requirements ?? [])];
+    requirements.splice(index, 1);
+    return this.item.update({ [`${path}.requirements`]: requirements });
+  }
+
+  #onWeaponRequirementTypeChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    const index = Number(event.currentTarget?.dataset?.weaponRequirementType);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const type = String(event.currentTarget?.value ?? "") === "skill" ? "skill" : "characteristic";
+    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const key = type === "skill"
+      ? getSkillSettings().at(0)?.key ?? ""
+      : getCharacteristicSettings().at(0)?.key ?? "";
+    return this.item.update({
+      [`${path}.requirements.${index}.type`]: type,
+      [`${path}.requirements.${index}.key`]: key
+    });
   }
 
   #onAddWeaponCriticalFailureConsequence(event) {
@@ -737,7 +786,7 @@ function getItemFunctionLabel(functionKey = "") {
   return game.i18n.localize("FALLOUTMAW.Item.Function");
 }
 
-function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, hasConditionFunction) {
+function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, characteristicSettings, hasConditionFunction) {
   if (!hasItemFunction(item, ITEM_FUNCTIONS.weapon)) return [];
   const primaryWeapon = item.system?.functions?.weapon ?? {};
   const sourcePrimaryWeapon = item.system?._source?.functions?.weapon ?? {};
@@ -751,6 +800,7 @@ function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, ha
       sourceWeaponData: sourcePrimaryWeapon,
       damageTypeSettings,
       skillSettings,
+      characteristicSettings,
       hasConditionFunction,
       isPrimary: true,
       canAddAdditional: true
@@ -762,6 +812,7 @@ function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, ha
       sourceWeaponData: sourceAdditionalWeapons.find(entry => entry.id === id)?.data ?? {},
       damageTypeSettings,
       skillSettings,
+      characteristicSettings,
       hasConditionFunction,
       isAdditional: true,
       id,
@@ -777,6 +828,7 @@ function buildWeaponFunctionSection({
   sourceWeaponData = {},
   damageTypeSettings = [],
   skillSettings = [],
+  characteristicSettings = [],
   hasConditionFunction = false,
   isPrimary = false,
   canAddAdditional = false,
@@ -798,6 +850,7 @@ function buildWeaponFunctionSection({
     damageTypeRows: buildWeaponDamageTypeRowsForData(weaponData, damageTypeSettings, sourceWeaponData),
     skillChoices: buildWeaponSkillChoicesForData(weaponData, skillSettings),
     resourceCosts: buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction),
+    requirements: buildWeaponRequirementRowsForData(weaponData, characteristicSettings, skillSettings),
     actionChoices: buildWeaponActionChoicesForData(weaponData, sourceWeaponData)
   };
 }
@@ -814,6 +867,39 @@ function buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction) {
   }));
 }
 
+function buildWeaponRequirementRowsForData(weaponData, characteristicSettings = [], skillSettings = []) {
+  return (weaponData?.requirements ?? []).map((requirement, index) => {
+    const type = String(requirement?.type ?? "characteristic") === "skill" ? "skill" : "characteristic";
+    return {
+      index,
+      type,
+      key: String(requirement?.key ?? ""),
+      value: Math.max(0, Number(requirement?.value) || 0),
+      typeChoices: buildWeaponRequirementTypeChoices(type),
+      keyChoices: buildWeaponRequirementKeyChoices(type, requirement?.key, characteristicSettings, skillSettings)
+    };
+  });
+}
+
+function buildWeaponRequirementTypeChoices(selected) {
+  return [
+    { value: "characteristic", label: game.i18n.localize("FALLOUTMAW.Item.WeaponRequirementCharacteristic") },
+    { value: "skill", label: game.i18n.localize("FALLOUTMAW.Item.WeaponRequirementSkill") }
+  ].map(choice => ({
+    ...choice,
+    selected: choice.value === selected
+  }));
+}
+
+function buildWeaponRequirementKeyChoices(type, selected, characteristicSettings = [], skillSettings = []) {
+  const entries = type === "skill" ? skillSettings : characteristicSettings;
+  return entries.map(entry => ({
+    value: entry.key,
+    label: entry.label,
+    selected: entry.key === String(selected ?? "")
+  }));
+}
+
 function getAvailableWeaponResourceTypes(weaponData = {}) {
   return Array.from(new Set((weaponData?.resourceCosts ?? [])
     .map(cost => String(cost?.type ?? "").trim())
@@ -823,6 +909,7 @@ function getAvailableWeaponResourceTypes(weaponData = {}) {
 function getWeaponResourceTypeLabel(type = "") {
   if (type === "magazine") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostMagazine");
   if (type === "condition") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostCondition");
+  if (type === "quantity") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostQuantity");
   return String(type || "-");
 }
 
@@ -903,7 +990,8 @@ function hasWeaponResourceCostData(weaponData, type) {
 
 function buildWeaponResourceTypeChoices(selected, hasConditionFunction) {
   const choices = [
-    { value: "magazine", label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostMagazine") }
+    { value: "magazine", label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostMagazine") },
+    { value: "quantity", label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostQuantity") }
   ];
   if (hasConditionFunction) {
     choices.push({ value: "condition", label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostCondition") });
@@ -949,12 +1037,18 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {})
       isMelee: Boolean(action.isMelee),
       attackConeDegrees: Number(hasActionCone ? actionData.attackConeDegrees : fallbackCone) || DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
       burstCount: Math.max(1, Number(weaponData?.burst?.count) || 3),
+      burstDifficultyPerShot: getWeaponBurstDifficultyPerShotForData(weaponData),
       volleyDamageRadius: Math.max(0, Number(weaponData?.volley?.damageRadius) || 0),
       criticalFailureConsequences: buildWeaponCriticalFailureConsequenceRows(actionData, weaponData),
       thrust,
       swing
     };
   });
+}
+
+function getWeaponBurstDifficultyPerShotForData(weaponData = {}) {
+  const value = Number(weaponData?.burst?.difficultyPerShot);
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 10;
 }
 
 function prepareWeaponAttackModeSettings(modeData = {}) {
@@ -992,6 +1086,7 @@ function createDefaultWeaponFunctionData(source = {}) {
       max: 0
     },
     resourceCosts: [],
+    requirements: [],
     availableActions: {
       aimedShot: false,
       snapshot: false,
@@ -1011,6 +1106,7 @@ function createDefaultWeaponFunctionData(source = {}) {
     burst: {
       attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
       count: 3,
+      difficultyPerShot: 10,
       criticalFailureConsequences: []
     },
     volley: {

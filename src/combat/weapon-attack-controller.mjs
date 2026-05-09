@@ -73,6 +73,7 @@ class WeaponAttackController {
     this.selectedLimbKey = "";
     this.lockedGeometry = null;
     this.limbMenu = null;
+    this.chanceMenu = null;
     this.suppressNextContextMenu = false;
     this.attackId = foundry.utils.randomID();
     this.pendingCriticalFailureResourceCosts = [];
@@ -103,6 +104,7 @@ class WeaponAttackController {
     canvas.app?.ticker?.remove?.(this.events.tick);
     if (canvas.app?.view?.oncontextmenu === this.events.cancel) canvas.app.view.oncontextmenu = null;
     this.removeLimbMenu();
+    this.removeChanceMenu();
     broadcastAttackPreview({
       action: "clearPreview",
       attackId: this.attackId
@@ -222,7 +224,10 @@ class WeaponAttackController {
       : null;
     let attempted = false;
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
-      const result = await this.resolveAttackPellets({ checkBatch });
+      const result = await this.resolveAttackPellets({
+        checkBatch,
+        difficultyBonus: getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId)
+      });
       for (const trajectory of result.trajectories) {
         trajectories.push({ ...trajectory, delayGroup: attackIndex });
       }
@@ -480,11 +485,12 @@ class WeaponAttackController {
     if (isDeadTarget(target)) return null;
     const resolvedLimbKey = limbKey || selectRandomLimbKey(target.actor);
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
+    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
-        difficulty: getDirectedAttackDifficulty(target.actor, resolvedLimbKey, Boolean(limbKey), difficultyBonus + rangeDifficultyBonus),
+        difficulty: getDirectedAttackDifficulty(target.actor, resolvedLimbKey, Boolean(limbKey), difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus),
         situationalModifier: getAttackModeAccuracyModifier(this.weapon, this.actionKey, mode, this.weaponFunctionId),
         ...getAttackModeCriticalCheckModifiers(this.weapon, this.actionKey, mode, this.weaponFunctionId)
       },
@@ -590,14 +596,19 @@ class WeaponAttackController {
     return { damageRequests, trajectory, checkBatch };
   }
 
-  async resolveAttackPellets({ checkBatch = null } = {}) {
+  async resolveAttackPellets({ checkBatch = null, difficultyBonus = 0 } = {}) {
     const damageRequests = [];
     const trajectories = buildAttackTrajectories(this.token, this.geometry, this.targets, getWeaponPelletCount(this.weapon, this.weaponFunctionId));
     const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), trajectories.map(() => 1));
     let attempted = false;
 
     for (const [index, trajectory] of trajectories.entries()) {
-      const result = await this.resolveAttackTrajectory({ checkBatch, trajectory, baseDamage: pelletDamages[index] ?? 0 });
+      const result = await this.resolveAttackTrajectory({
+        checkBatch,
+        trajectory,
+        baseDamage: pelletDamages[index] ?? 0,
+        difficultyBonus
+      });
       damageRequests.push(...result.damageRequests);
       attempted ||= result.attempted;
     }
@@ -605,7 +616,7 @@ class WeaponAttackController {
     return { attempted, damageRequests, trajectories };
   }
 
-  async resolveAttackTrajectory({ checkBatch = null, trajectory = null, baseDamage = null } = {}) {
+  async resolveAttackTrajectory({ checkBatch = null, trajectory = null, baseDamage = null, difficultyBonus = 0 } = {}) {
     const damageRequests = [];
     trajectory ??= buildAttackTrajectory(this.token, this.geometry, this.targets);
     if (!this.targets.length) return { attempted: true, damageRequests, trajectory };
@@ -624,7 +635,7 @@ class WeaponAttackController {
       if (damageAmount <= 0) break;
       const request = await this.resolveAttackAgainstTarget(entry.target, {
         damageAmount,
-        difficultyBonus: penetrationsUsed * 20,
+        difficultyBonus: Math.max(0, toInteger(difficultyBonus)) + (penetrationsUsed * 20),
         penetrationStep: penetrationsUsed,
         checkBatch
       });
@@ -656,11 +667,12 @@ class WeaponAttackController {
     if (isDeadTarget(target)) return null;
     const limbKey = selectRandomLimbKey(target.actor);
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
+    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
-        difficulty: getDodgeDifficulty(target.actor) + difficultyBonus + rangeDifficultyBonus,
+        difficulty: getDodgeDifficulty(target.actor) + difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus,
         situationalModifier: toInteger(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.accuracyBonus),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId)
       },
@@ -707,7 +719,10 @@ class WeaponAttackController {
       : null;
 
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
-      const blastOutcome = await this.resolveVolleyBlastPoint(intendedGeometry, { checkBatch });
+      const blastOutcome = await this.resolveVolleyBlastPoint(intendedGeometry, {
+        checkBatch,
+        difficultyBonus: getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId)
+      });
       const finalGeometry = {
         ...intendedGeometry,
         end: blastOutcome.center,
@@ -716,7 +731,7 @@ class WeaponAttackController {
       };
       finalGeometries.push(finalGeometry);
       const blastTargets = getPotentialTargets(this.token, finalGeometry, {
-        includeAttacker: isCriticalFailureAttack(blastOutcome.outcome),
+        includeAttacker: true,
         includeDead: true
       });
 
@@ -727,7 +742,7 @@ class WeaponAttackController {
     }
 
     this.geometry = finalGeometries[finalGeometries.length - 1] ?? intendedGeometry;
-    this.targets = getPotentialTargets(this.token, this.geometry, { includeDead: true });
+    this.targets = getPotentialTargets(this.token, this.geometry, { includeAttacker: true, includeDead: true });
 
     await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
     await checkBatch?.publish({ forceBatch: true });
@@ -738,16 +753,17 @@ class WeaponAttackController {
     this.refresh(true);
   }
 
-  async resolveVolleyBlastPoint(geometry, { checkBatch = null } = {}) {
+  async resolveVolleyBlastPoint(geometry, { checkBatch = null, difficultyBonus = 0 } = {}) {
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonusForDistance(
       getWeaponAttackData(this.weapon, this.weaponFunctionId),
       pixelsToMeters(geometry.distance)
     );
+    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
-        difficulty: BASE_VOLLEY_DIFFICULTY + rangeDifficultyBonus,
+        difficulty: BASE_VOLLEY_DIFFICULTY + rangeDifficultyBonus + requirementDifficultyBonus + Math.max(0, toInteger(difficultyBonus)),
         situationalModifier: toInteger(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.accuracyBonus),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId)
       },
@@ -814,11 +830,12 @@ class WeaponAttackController {
   async resolveAimedAttackAgainstTarget(target, { limbKey = "", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
     if (isDeadTarget(target)) return null;
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
+    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
-        difficulty: getAimedAttackDifficulty(target.actor, limbKey, difficultyBonus + rangeDifficultyBonus),
+        difficulty: getAimedAttackDifficulty(target.actor, limbKey, difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus),
         situationalModifier: toInteger(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.accuracyBonus),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId)
       },
@@ -855,13 +872,25 @@ class WeaponAttackController {
       ? deserializeGeometry(this.lockedGeometry)
       : getAttackGeometry(this.weapon, this.actionKey, this.token, origin, this.pointer, this.weaponFunctionId);
     if (!this.geometry) return;
-    drawAttackShape(this.shape, this.geometry, this.processing || (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)));
-    this.targets = getPotentialTargets(this.token, this.geometry, { includeDead: this.volleyAction });
+    this.targets = getPotentialTargets(this.token, this.geometry, {
+      includeAttacker: this.volleyAction,
+      includeDead: this.volleyAction
+    });
     this.hoveredTarget = this.targetedAction && this.aimedMode === "aim"
       ? getAimedTargetUnderPointer(this.pointer, this.targets)
       : this.selectedTarget;
+    drawAttackShape(this.shape, this.geometry, {
+      locked: this.processing || (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)),
+      hasTargets: this.targets.length > 0
+    });
     drawTargetMarkers(this.targetMarkers, this.targets, this.getFocusedTarget(), performance.now());
-    if (this.targetedAction) this.refreshAimedLimbMenu();
+    if (this.targetedAction) {
+      this.removeChanceMenu();
+      this.refreshAimedLimbMenu();
+    } else {
+      this.removeLimbMenu();
+      this.refreshUntargetedChanceMenu();
+    }
     this.broadcastPreview(forceBroadcast);
   }
 
@@ -898,9 +927,12 @@ class WeaponAttackController {
       : this.prepareAimedLimbRows(target);
     if (!rows.length) {
       this.removeLimbMenu();
+      if (this.meleeAction && this.aimedMode === "aim") this.refreshTargetedGeneralChanceMenu(target);
+      else this.removeChanceMenu();
       return;
     }
 
+    this.removeChanceMenu();
     if (!this.limbMenu) this.createLimbMenu();
     this.limbMenu.dataset.mode = this.aimedMode;
     this.limbMenu.innerHTML = rows.map(row => `
@@ -911,6 +943,94 @@ class WeaponAttackController {
     `).join("");
     this.positionLimbMenu(target);
     this.updateLimbMenuHover();
+  }
+
+  refreshTargetedGeneralChanceMenu(target) {
+    if (!target) {
+      this.removeChanceMenu();
+      return;
+    }
+    if (!this.chanceMenu) this.createChanceMenu();
+    const chance = getGeneralAttackHitChance(this.token.actor, this.weapon, target.actor, {
+      difficultyBonus: getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId),
+      weaponFunctionId: this.weaponFunctionId
+    });
+    this.chanceMenu.innerHTML = `
+      <button type="button">
+        <span>${escapeHtml(game.i18n.localize("FALLOUTMAW.Item.AttackChanceHit"))}</span>
+        <strong class="${getAimedChanceClass(chance)}">${chance}%</strong>
+      </button>
+    `;
+    this.positionChanceMenu();
+  }
+
+  refreshUntargetedChanceMenu() {
+    if (this.targetedAction || this.processing) {
+      this.removeChanceMenu();
+      return;
+    }
+    const rows = this.prepareUntargetedChanceRows();
+    if (!rows.length) {
+      this.removeChanceMenu();
+      return;
+    }
+
+    if (!this.chanceMenu) this.createChanceMenu();
+    this.chanceMenu.innerHTML = rows.map(row => `
+      <button type="button">
+        <span>${escapeHtml(row.label)}</span>
+        <strong class="${getAimedChanceClass(row.chance)}">${row.chance}%</strong>
+      </button>
+    `).join("");
+    this.positionChanceMenu();
+  }
+
+  prepareUntargetedChanceRows() {
+    if (!this.geometry) return [];
+    if (this.volleyAction) {
+      return [{
+        label: game.i18n.localize("FALLOUTMAW.Item.AttackChanceArea"),
+        chance: getVolleyAreaHitChance(this.token.actor, this.weapon, this.geometry, {
+          weaponFunctionId: this.weaponFunctionId,
+          difficultyBonus: getBurstShotDifficultyBonus(this.weapon, this.actionKey, 0, this.weaponFunctionId)
+        })
+      }];
+    }
+    const target = getNearestAttackChanceTarget(this.token, this.geometry, this.targets);
+    if (!target) return [];
+    return [{
+      label: String(target.name ?? target.actor?.name ?? game.i18n.localize("FALLOUTMAW.Item.AttackChanceHit")),
+      chance: getGeneralAttackHitChance(this.token.actor, this.weapon, target.actor, {
+        difficultyBonus: getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId),
+        weaponFunctionId: this.weaponFunctionId
+      })
+    }];
+  }
+
+  createChanceMenu() {
+    this.chanceMenu = document.createElement("div");
+    this.chanceMenu.className = "fallout-maw-aimed-limb-menu fallout-maw-attack-chance-menu";
+    this.chanceMenu.addEventListener("contextmenu", event => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    document.body.append(this.chanceMenu);
+  }
+
+  removeChanceMenu() {
+    this.chanceMenu?.remove();
+    this.chanceMenu = null;
+  }
+
+  positionChanceMenu() {
+    if (!this.chanceMenu || !this.pointer) return;
+    const position = canvas.clientCoordinatesFromCanvas(this.pointer);
+    const rect = this.chanceMenu.getBoundingClientRect();
+    const margin = 8;
+    const left = Math.max(margin, Math.min(window.innerWidth - rect.width - margin, position.x + 12));
+    const top = Math.max(margin, Math.min(window.innerHeight - rect.height - margin, position.y + 12));
+    this.chanceMenu.style.left = `${Math.round(left)}px`;
+    this.chanceMenu.style.top = `${Math.round(top)}px`;
   }
 
   createLimbMenu() {
@@ -1091,7 +1211,10 @@ function updateRemoteAttackPreview(payload = {}) {
 
   preview.shape.clear();
   preview.targetMarkers.clear();
-  drawAttackShape(preview.shape, geometry, Boolean(payload.processing));
+  drawAttackShape(preview.shape, geometry, {
+    locked: Boolean(payload.processing),
+    hasTargets: Array.isArray(payload.targetMarkers) && payload.targetMarkers.length > 0
+  });
   drawTargetMarkerPositions(preview.targetMarkers, payload.targetMarkers ?? [], payload.focusedTargetMarker ?? null);
 }
 
@@ -1195,6 +1318,16 @@ function getActionAttackCount(weapon, actionKey, weaponFunctionId = "") {
   return Math.max(1, toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.burst?.count));
 }
 
+function getWeaponBurstDifficultyPerShot(weapon, weaponFunctionId = "") {
+  const value = Number(getWeaponAttackData(weapon, weaponFunctionId)?.burst?.difficultyPerShot);
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 10;
+}
+
+function getBurstShotDifficultyBonus(weapon, actionKey, attackIndex = 0, weaponFunctionId = "") {
+  if (actionKey !== "burst") return 0;
+  return Math.max(0, toInteger(attackIndex)) * getWeaponBurstDifficultyPerShot(weapon, weaponFunctionId);
+}
+
 function getWeaponPelletCount(weapon, weaponFunctionId = "") {
   return Math.max(1, toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.pellets) || 1);
 }
@@ -1207,6 +1340,7 @@ function hasRequiredWeaponResources(weapon, multiplier = 1, weaponFunctionId = "
     if (!amount) continue;
     if (cost.type === "magazine" && toInteger(weaponData?.magazine?.value) < amount) return false;
     if (cost.type === "condition" && toInteger(weapon.system?.functions?.condition?.value) < amount) return false;
+    if (cost.type === "quantity" && toInteger(weapon.system?.quantity) < amount) return false;
   }
   return true;
 }
@@ -1215,6 +1349,7 @@ async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const weaponPath = getWeaponAttackPath(weapon, weaponFunctionId);
   const updateData = {};
+  let deleteWeapon = false;
   const costs = [
     ...(weaponData?.resourceCosts ?? []).map(cost => ({
       type: cost.type,
@@ -1238,9 +1373,17 @@ async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "
         ? toInteger(updateData["system.functions.condition.value"])
         : toInteger(weapon.system?.functions?.condition?.value);
       updateData["system.functions.condition.value"] = Math.max(0, current - amount);
+    } else if (cost.type === "quantity") {
+      const current = Object.hasOwn(updateData, "system.quantity")
+        ? toInteger(updateData["system.quantity"])
+        : toInteger(weapon.system?.quantity);
+      const next = Math.max(0, current - amount);
+      if (next <= 0) deleteWeapon = true;
+      else updateData["system.quantity"] = next;
     }
   }
   if (Object.keys(updateData).length) await weapon.update(updateData);
+  if (deleteWeapon && weapon.id) await weapon.delete();
 }
 
 function getAttackGeometry(weapon, actionKey, attackerToken, origin, pointer, weaponFunctionId = "") {
@@ -1307,8 +1450,8 @@ function sleep(ms) {
   return new Promise(resolve => window.setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 }
 
-function drawAttackShape(graphics, geometry, locked) {
-  const color = locked ? 0xffd166 : 0xff3b3b;
+function drawAttackShape(graphics, geometry, { locked = false, hasTargets = false } = {}) {
+  const color = hasTargets ? 0xff3b3b : 0xffd166;
   const alpha = locked ? 0.24 : 0.18;
   if (geometry.type === VOLLEY_ACTION_KEY) {
     graphics.lineStyle(2, color, 0.7);
@@ -1915,6 +2058,12 @@ function getTargetDistance(target, geometry) {
   return Math.hypot(center.x - geometry.origin.x, center.y - geometry.origin.y);
 }
 
+function getNearestAttackChanceTarget(attackerToken, geometry, targets = []) {
+  if (!geometry || !targets.length) return null;
+  const trajectory = buildAttackTrajectory(attackerToken, geometry, targets);
+  return getTrajectoryTargetEntries(attackerToken, trajectory).at(0)?.target ?? targets.at(0) ?? null;
+}
+
 function getSwingTargetSequence(selectedTarget, directionKey, targets = [], geometry = null) {
   if (!geometry) return [selectedTarget];
   const selectedSpan = getTokenSwingArcSpan(selectedTarget, geometry);
@@ -2303,27 +2452,40 @@ function getDirectedAttackDifficulty(targetActor, limbKey = "", aimed = false, d
   return base + Math.max(0, toInteger(difficultyBonus));
 }
 
+function getGeneralAttackHitChance(attackerActor, weapon, targetActor, { difficultyBonus = 0, weaponFunctionId = "" } = {}) {
+  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  const skillKey = String(weaponData?.skillKey ?? "");
+  const finalSkillValue = toInteger(attackerActor.system?.skills?.[skillKey]?.value)
+    + toInteger(weaponData?.accuracyBonus);
+  const difficulty = getDodgeDifficulty(targetActor)
+    + Math.max(0, toInteger(difficultyBonus))
+    + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId);
+  return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty);
+}
+
+function getVolleyAreaHitChance(attackerActor, weapon, geometry, { difficultyBonus = 0, weaponFunctionId = "" } = {}) {
+  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  const skillKey = String(weaponData?.skillKey ?? "");
+  const finalSkillValue = toInteger(attackerActor.system?.skills?.[skillKey]?.value)
+    + toInteger(weaponData?.accuracyBonus);
+  const rangeDifficultyBonus = getEffectiveRangeDifficultyBonusForDistance(
+    weaponData,
+    pixelsToMeters(geometry.distance)
+  );
+  const difficulty = BASE_VOLLEY_DIFFICULTY
+    + rangeDifficultyBonus
+    + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId)
+    + Math.max(0, toInteger(difficultyBonus));
+  return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty);
+}
+
 function getAimedAttackHitChance(attackerActor, weapon, targetActor, limbKey = "", blockerBonus = 0, weaponFunctionId = "") {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
   const finalSkillValue = toInteger(attackerActor.system?.skills?.[skillKey]?.value)
     + toInteger(weaponData?.accuracyBonus);
-  const difficulty = getAimedAttackDifficulty(targetActor, limbKey, blockerBonus);
-  if ((difficulty - finalSkillValue) >= 100) return 0;
-
-  const gambling = toInteger(attackerActor.system?.skills?.gambling?.value);
-  const criticalFailureMaximum = clamp(5, 0, 100);
-  const criticalSuccessMinimum = Math.ceil(101 - clamp(4 + (gambling / 20), 0, 100));
-  let successes = 0;
-  for (let roll = 1; roll <= 100; roll += 1) {
-    if (criticalFailureMaximum > 0 && roll <= criticalFailureMaximum) continue;
-    if (criticalSuccessMinimum <= 100 && roll >= criticalSuccessMinimum) {
-      successes += 1;
-      continue;
-    }
-    if (finalSkillValue + roll >= difficulty) successes += 1;
-  }
-  return clamp(successes, 0, 100);
+  const difficulty = getAimedAttackDifficulty(targetActor, limbKey, blockerBonus + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId));
+  return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty);
 }
 
 function getDirectedAttackHitChance(attackerActor, weapon, targetActor, { actionKey = "", mode = "thrust", limbKey = "", difficultyBonus = 0, weaponFunctionId = "" } = {}) {
@@ -2331,9 +2493,17 @@ function getDirectedAttackHitChance(attackerActor, weapon, targetActor, { action
   const skillKey = String(weaponData?.skillKey ?? "");
   const finalSkillValue = toInteger(attackerActor.system?.skills?.[skillKey]?.value)
     + getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId);
-  const difficulty = getDirectedAttackDifficulty(targetActor, limbKey, Boolean(limbKey), difficultyBonus);
-  if ((difficulty - finalSkillValue) >= 100) return 0;
+  const difficulty = getDirectedAttackDifficulty(
+    targetActor,
+    limbKey,
+    Boolean(limbKey),
+    difficultyBonus + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId)
+  );
+  return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty);
+}
 
+function getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty) {
+  if ((difficulty - finalSkillValue) >= 100) return 0;
   const gambling = toInteger(attackerActor.system?.skills?.gambling?.value);
   const criticalFailureMaximum = clamp(5, 0, 100);
   const criticalSuccessMinimum = Math.ceil(101 - clamp(4 + (gambling / 20), 0, 100));
@@ -2354,6 +2524,25 @@ function getAimedChanceClass(chance) {
   if (value >= 80) return "chance-high";
   if (value >= 30) return "chance-medium";
   return "chance-low";
+}
+
+function getWeaponRequirementDifficultyPenalty(actor, weapon, weaponFunctionId = "") {
+  const requirements = getWeaponAttackData(weapon, weaponFunctionId)?.requirements ?? [];
+  return requirements.reduce((total, requirement) => {
+    const required = Math.max(0, toInteger(requirement?.value));
+    if (!required) return total;
+    const current = getActorRequirementValue(actor, requirement);
+    const deficit = Math.max(0, required - current);
+    if (!deficit) return total;
+    return total + (String(requirement?.type ?? "") === "skill" ? deficit : deficit * 10);
+  }, 0);
+}
+
+function getActorRequirementValue(actor, requirement = {}) {
+  const key = String(requirement?.key ?? "");
+  if (!key) return 0;
+  if (String(requirement?.type ?? "") === "skill") return toInteger(actor?.system?.skills?.[key]?.value);
+  return toInteger(actor?.system?.characteristics?.[key]);
 }
 
 function getAimedTargetBlockers(attackerToken, selectedTarget, trajectory) {

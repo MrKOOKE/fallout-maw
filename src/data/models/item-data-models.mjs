@@ -114,6 +114,7 @@ function weaponFunctionField({ named = false } = {}) {
       max: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
     }),
     resourceCosts: new ArrayField(weaponResourceCostField(), { required: true, initial: [] }),
+    requirements: new ArrayField(weaponRequirementField(), { required: true, initial: [] }),
     availableActions: new SchemaField({
       aimedShot: new BooleanField({ required: true, initial: false }),
       snapshot: new BooleanField({ required: true, initial: false }),
@@ -127,6 +128,7 @@ function weaponFunctionField({ named = false } = {}) {
     burst: new SchemaField({
       attackConeDegrees: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES }),
       count: new NumberField({ required: true, integer: true, min: 1, initial: 3 }),
+      difficultyPerShot: new NumberField({ required: true, integer: true, min: 0, initial: 10 }),
       criticalFailureConsequences: new ArrayField(weaponCriticalFailureConsequenceField(), { required: true, initial: [] })
     }),
     volley: new SchemaField({
@@ -189,6 +191,14 @@ function weaponResourceCostField() {
   return new SchemaField({
     type: new StringField({ required: true, blank: false, initial: "magazine" }),
     amount: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+  });
+}
+
+function weaponRequirementField() {
+  return new SchemaField({
+    type: new StringField({ required: true, blank: false, choices: ["characteristic", "skill"], initial: "characteristic" }),
+    key: new StringField({ required: true, blank: true, initial: "" }),
+    value: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
   });
 }
 

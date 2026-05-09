@@ -500,6 +500,37 @@
     </div>
 
     <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.WeaponUseRequirements"}}</h3>
+      <button type="button" data-add-weapon-requirement><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddRequirement"}}</button>
+    </div>
+    <div class="fallout-maw-settings-table fallout-maw-weapon-requirements">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Type"}}</span>
+        <span>{{localize "FALLOUTMAW.Item.WeaponRequirementTarget"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span></span>
+      </div>
+      {{#each requirements}}
+      <div class="fallout-maw-settings-row">
+        <select name="{{../path}}.requirements.{{index}}.type" data-weapon-requirement-type="{{index}}">
+          {{#each typeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <select name="{{../path}}.requirements.{{index}}.key">
+          {{#each keyChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="number" name="{{../path}}.requirements.{{index}}.value" value="{{value}}" min="0" step="1">
+        <button type="button" data-delete-weapon-requirement="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoRequirements"}}</p>
+      {{/each}}
+    </div>
+
+    <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.WeaponAvailableActions"}}</h3>
     </div>
     <div class="fallout-maw-hidden-controls">
@@ -536,6 +567,10 @@
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponBurstCount"}}</span>
             <input type="number" name="{{../path}}.burst.count" value="{{burstCount}}" min="1" step="1">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponBurstDifficultyPerShot"}}</span>
+            <input type="number" name="{{../path}}.burst.difficultyPerShot" value="{{burstDifficultyPerShot}}" min="0" step="1">
           </label>
           {{/if}}
         </div>

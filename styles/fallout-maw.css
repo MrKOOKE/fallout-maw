@@ -1439,6 +1439,10 @@
   grid-template-columns: minmax(140px, 1fr) minmax(90px, 120px) 2.5rem;
 }
 
+.fallout-maw-weapon-requirements .fallout-maw-settings-row {
+  grid-template-columns: minmax(130px, 0.8fr) minmax(160px, 1.2fr) minmax(80px, 110px) 2.5rem;
+}
+
 .fallout-maw-weapon-damage-types .fallout-maw-settings-row {
   grid-template-columns: minmax(140px, 1fr) minmax(80px, 110px) 2.5rem;
 }
