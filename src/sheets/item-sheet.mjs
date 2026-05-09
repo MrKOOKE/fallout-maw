@@ -265,6 +265,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return this.item.update({
         "system.functions.weapon.enabled": true,
         "system.functions.weapon.damage": 0,
+        "system.functions.weapon.pellets": 1,
         "system.functions.weapon.damageTypeKey": "firearm",
         "system.functions.weapon.attackAnimationKey": "",
         "system.functions.weapon.attackAnimationDelayMs": 0,
@@ -283,6 +284,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
           snapshot: false,
           burst: false
         },
+        "system.functions.weapon.aimedShot.attackConeDegrees": 0,
+        "system.functions.weapon.snapshot.attackConeDegrees": 0,
+        "system.functions.weapon.burst.attackConeDegrees": 0,
         "system.functions.weapon.burst.count": 3
       });
     }
@@ -581,14 +585,25 @@ function buildWeaponResourceTypeChoices(selected, hasConditionFunction) {
 
 function buildWeaponActionChoices(item) {
   const actions = item.system?.functions?.weapon?.availableActions ?? {};
+  const weaponData = item.system?.functions?.weapon ?? {};
+  const sourceWeaponData = item.system?._source?.functions?.weapon ?? {};
+  const fallbackCone = Number(weaponData.attackConeDegrees) || 0;
   return [
     { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot") },
     { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot") },
     { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst") }
-  ].map(action => ({
-    ...action,
-    selected: Boolean(actions[action.key])
-  }));
+  ].map(action => {
+    const actionData = weaponData?.[action.key] ?? {};
+    const sourceActionData = sourceWeaponData?.[action.key] ?? {};
+    const hasActionCone = Object.hasOwn(sourceActionData, "attackConeDegrees");
+    return {
+      ...action,
+      selected: Boolean(actions[action.key]),
+      isBurst: action.key === "burst",
+      attackConeDegrees: Number(hasActionCone ? actionData.attackConeDegrees : fallbackCone) || 0,
+      burstCount: Math.max(1, Number(weaponData?.burst?.count) || 3)
+    };
+  });
 }
 
 function buildToolFunctionEntries(item, toolSettings, skillSettings) {

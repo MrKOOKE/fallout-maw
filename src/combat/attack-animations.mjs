@@ -36,7 +36,8 @@ export async function playWeaponAttackAnimations({ weapon = null, trajectories =
       origin: serializePoint(trajectory.origin),
       end: serializePoint(trajectory.end),
       angle: Number(trajectory.angle) || 0,
-      distance: Number(trajectory.distance) || 0
+      distance: Number(trajectory.distance) || 0,
+      delayGroup: Number(trajectory.delayGroup ?? entries.length) || 0
     });
   }
   if (!entries.length) return;
@@ -64,10 +65,14 @@ async function playAttackAnimationGroup(payload = {}) {
   const entries = Array.isArray(payload.entries) ? payload.entries : [];
   const delayMs = Math.max(0, Math.trunc(Number(payload.delayMs) || 0));
   const promises = [];
+  let previousGroup = null;
 
   for (let index = 0; index < entries.length; index += 1) {
-    if (index > 0 && delayMs > 0) await sleep(delayMs);
-    promises.push(playSingleAttackAnimation(entries[index]));
+    const entry = entries[index];
+    const delayGroup = Number(entry.delayGroup ?? index) || 0;
+    if (index > 0 && delayMs > 0 && delayGroup !== previousGroup) await sleep(delayMs);
+    previousGroup = delayGroup;
+    promises.push(playSingleAttackAnimation(entry));
   }
 
   await Promise.all(promises);

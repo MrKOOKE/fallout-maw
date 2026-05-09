@@ -158,6 +158,7 @@
       "Unequip": "Unequip",
       "ConditionValue": "Condition",
       "WeaponDamage": "Damage",
+      "WeaponPellets": "Pellets",
       "WeaponDamageType": "Damage Type",
       "WeaponAttackAnimation": "Attack Animation",
       "WeaponAttackDelay": "Delay Between Attacks, ms",

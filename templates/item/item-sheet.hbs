@@ -380,6 +380,10 @@
         <input type="number" name="system.functions.weapon.damage" value="{{system.functions.weapon.damage}}" min="0" step="1">
       </label>
       <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponPellets"}}</span>
+        <input type="number" name="system.functions.weapon.pellets" value="{{system.functions.weapon.pellets}}" min="1" step="1">
+      </label>
+      <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponDamageType"}}</span>
         <select name="system.functions.weapon.damageTypeKey">
           {{#each weaponDamageTypeChoices}}
@@ -406,10 +410,6 @@
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponAccuracyBonus"}}</span>
         <input type="number" name="system.functions.weapon.accuracyBonus" value="{{system.functions.weapon.accuracyBonus}}" step="1">
-      </label>
-      <label>
-        <span>{{localize "FALLOUTMAW.Item.WeaponAttackCone"}}</span>
-        <input type="number" name="system.functions.weapon.attackConeDegrees" value="{{system.functions.weapon.attackConeDegrees}}" min="0" step="1">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponMaxRange"}}</span>
@@ -479,14 +479,29 @@
       </button>
       {{/each}}
     </div>
-    {{#if system.functions.weapon.availableActions.burst}}
-    <div class="fallout-maw-list-grid three-columns">
-      <label>
-        <span>{{localize "FALLOUTMAW.Item.WeaponBurstCount"}}</span>
-        <input type="number" name="system.functions.weapon.burst.count" value="{{system.functions.weapon.burst.count}}" min="1" step="1">
-      </label>
+    <div class="fallout-maw-weapon-action-settings-list">
+      {{#each weaponActionChoices}}
+      {{#if selected}}
+      <section class="fallout-maw-weapon-action-settings">
+        <h3>{{label}}</h3>
+        <div class="fallout-maw-list-grid three-columns">
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponAttackCone"}}</span>
+            <input type="number" name="system.functions.weapon.{{key}}.attackConeDegrees" value="{{attackConeDegrees}}" min="0" step="1">
+          </label>
+          {{#if isBurst}}
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponBurstCount"}}</span>
+            <input type="number" name="system.functions.weapon.burst.count" value="{{burstCount}}" min="1" step="1">
+          </label>
+          {{/if}}
+        </div>
+      </section>
+      {{/if}}
+      {{/each}}
     </div>
-    {{/if}}
+    {{!-- Legacy fallback field is intentionally hidden while older items migrate by normal form saves. --}}
+    <input type="hidden" name="system.functions.weapon.attackConeDegrees" value="{{system.functions.weapon.attackConeDegrees}}">
   </section>
   {{/if}}
 

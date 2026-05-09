@@ -170,6 +170,7 @@ class WeaponAttackController {
     if (this.aimedShot) return this.onAimedConfirm();
     if (!this.pointer) return;
     const attackCount = getActionAttackCount(this.weapon, this.actionKey);
+    const pelletCount = getWeaponPelletCount(this.weapon);
     if (!hasRequiredWeaponResources(this.weapon, attackCount)) return;
 
     this.processing = true;
@@ -177,7 +178,7 @@ class WeaponAttackController {
     const trajectories = [];
     const damageRequests = [];
     const forceBatchCheckMessage = attackCount > 1;
-    const collectCheckMessages = forceBatchCheckMessage || getWeaponPenetrationPower(this.weapon) > 0;
+    const collectCheckMessages = forceBatchCheckMessage || pelletCount > 1 || getWeaponPenetrationPower(this.weapon) > 0;
     const checkBatch = collectCheckMessages
       ? createSkillCheckBatchCollector({
         requester: "weaponAttack",
@@ -186,8 +187,10 @@ class WeaponAttackController {
       : null;
     let attempted = false;
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
-      const result = await this.resolveAttackTrajectory({ checkBatch });
-      if (result.trajectory) trajectories.push(result.trajectory);
+      const result = await this.resolveAttackPellets({ checkBatch });
+      for (const trajectory of result.trajectories) {
+        trajectories.push({ ...trajectory, delayGroup: attackIndex });
+      }
       damageRequests.push(...result.damageRequests);
       attempted ||= result.attempted;
     }
@@ -232,32 +235,55 @@ class WeaponAttackController {
 
     const target = this.selectedTarget;
     const geometry = deserializeGeometry(this.lockedGeometry) ?? this.geometry;
-    const trajectory = buildTrajectoryThroughPoint(this.token, geometry, getTokenCenter(target));
-    const blockerCount = getAimedTargetBlockers(this.token, target, trajectory).length;
-    const result = await this.resolveAimedAttackTrajectory(target, trajectory, limbKey, {
-      blockerBonus: getAimedTargetBlockerBonus(blockerCount)
+    const centerTrajectory = buildTrajectoryThroughPoint(this.token, geometry, getTokenCenter(target));
+    const blockerCount = getAimedTargetBlockers(this.token, target, centerTrajectory).length;
+    const pelletCount = getWeaponPelletCount(this.weapon);
+    const pelletDamage = getWeaponPelletDamage(this.weapon);
+    const trajectories = buildAimedAttackTrajectories(this.token, geometry, centerTrajectory, pelletCount);
+    const checkBatch = (pelletCount > 1 || getWeaponPenetrationPower(this.weapon) > 0)
+      ? createSkillCheckBatchCollector({
+        requester: "weaponAttack",
+        title: this.weapon.name
+      })
+      : null;
+    const damageRequests = [];
+
+    const aimedResult = await this.resolveAimedAttackTrajectory(target, trajectories[0], limbKey, {
+      blockerBonus: getAimedTargetBlockerBonus(blockerCount),
+      baseDamage: pelletDamage,
+      checkBatch
     });
+    damageRequests.push(...aimedResult.damageRequests);
+
+    for (const trajectory of trajectories.slice(1)) {
+      const result = await this.resolveAttackTrajectory({
+        checkBatch,
+        trajectory,
+        baseDamage: pelletDamage
+      });
+      damageRequests.push(...result.damageRequests);
+    }
 
     await spendWeaponResources(this.weapon, attackCount);
-    await result.checkBatch?.publish({ forceBatch: false });
+    await (checkBatch ?? aimedResult.checkBatch)?.publish({ forceBatch: false });
     await playWeaponAttackAnimations({
       weapon: this.weapon,
-      trajectories: [result.trajectory],
+      trajectories: trajectories.map(trajectory => ({ ...trajectory, delayGroup: 0 })),
       delayMs: getWeaponAttackAnimationDelay(this.weapon)
     });
-    if (result.damageRequests.length) await applyQueuedDamageRequests(result.damageRequests);
+    if (damageRequests.length) await applyQueuedDamageRequests(damageRequests);
 
     this.processing = false;
     if (isDeadTarget(target)) this.unlockAimedTarget();
     this.refresh(true);
   }
 
-  async resolveAimedAttackTrajectory(selectedTarget, trajectory, limbKey, { blockerBonus = 0 } = {}) {
+  async resolveAimedAttackTrajectory(selectedTarget, trajectory, limbKey, { blockerBonus = 0, baseDamage = null, checkBatch = null } = {}) {
     const damageRequests = [];
-    const baseDamage = getWeaponDamage(this.weapon);
+    baseDamage = Math.max(0, Number(baseDamage ?? getWeaponDamage(this.weapon)) || 0);
     const penetrationPower = getWeaponPenetrationPower(this.weapon);
     const penetrationThreshold = Math.ceil(baseDamage * 0.5);
-    const checkBatch = penetrationPower > 0
+    checkBatch ??= penetrationPower > 0
       ? createSkillCheckBatchCollector({
         requester: "weaponAttack",
         title: this.weapon.name
@@ -277,7 +303,7 @@ class WeaponAttackController {
 
     const firstRequest = await this.resolveAimedAttackAgainstTarget(selectedTarget, {
       limbKey,
-      damageAmount: baseDamage,
+      damageAmount: getPenetratedDamageAmount(baseDamage, 0),
       difficultyBonus: blockerBonus,
       penetrationStep: 0,
       checkBatch
@@ -331,13 +357,28 @@ class WeaponAttackController {
     return { damageRequests, trajectory, checkBatch };
   }
 
-  async resolveAttackTrajectory({ checkBatch = null } = {}) {
+  async resolveAttackPellets({ checkBatch = null } = {}) {
     const damageRequests = [];
-    const trajectory = buildAttackTrajectory(this.token, this.geometry, this.targets);
+    const trajectories = buildAttackTrajectories(this.token, this.geometry, this.targets, getWeaponPelletCount(this.weapon));
+    const damageAmount = getWeaponPelletDamage(this.weapon);
+    let attempted = false;
+
+    for (const trajectory of trajectories) {
+      const result = await this.resolveAttackTrajectory({ checkBatch, trajectory, baseDamage: damageAmount });
+      damageRequests.push(...result.damageRequests);
+      attempted ||= result.attempted;
+    }
+
+    return { attempted, damageRequests, trajectories };
+  }
+
+  async resolveAttackTrajectory({ checkBatch = null, trajectory = null, baseDamage = null } = {}) {
+    const damageRequests = [];
+    trajectory ??= buildAttackTrajectory(this.token, this.geometry, this.targets);
     if (!this.targets.length) return { attempted: true, damageRequests, trajectory };
 
     const targets = getTrajectoryTargetEntries(this.token, trajectory);
-    const baseDamage = getWeaponDamage(this.weapon);
+    baseDamage = Math.max(0, Number(baseDamage ?? getWeaponDamage(this.weapon)) || 0);
     const penetrationPower = getWeaponPenetrationPower(this.weapon);
     const penetrationThreshold = Math.ceil(baseDamage * 0.5);
     let penetrationsUsed = 0;
@@ -451,7 +492,7 @@ class WeaponAttackController {
     const origin = getTokenCenter(this.token);
     this.geometry = this.aimedShot && this.aimedMode === "limb"
       ? deserializeGeometry(this.lockedGeometry)
-      : getAttackGeometry(this.weapon, this.token, origin, this.pointer);
+      : getAttackGeometry(this.weapon, this.actionKey, this.token, origin, this.pointer);
     if (!this.geometry) return;
     drawAttackShape(this.shape, this.geometry, this.processing || (this.aimedShot && this.aimedMode === "limb"));
     this.targets = getPotentialTargets(this.token, this.geometry);
@@ -730,6 +771,14 @@ function getActionAttackCount(weapon, actionKey) {
   return Math.max(1, toInteger(weapon.system?.functions?.weapon?.burst?.count));
 }
 
+function getWeaponPelletCount(weapon) {
+  return Math.max(1, toInteger(weapon.system?.functions?.weapon?.pellets) || 1);
+}
+
+function getWeaponPelletDamage(weapon) {
+  return Math.max(0, (Number(getWeaponDamage(weapon)) || 0) / getWeaponPelletCount(weapon));
+}
+
 function hasRequiredWeaponResources(weapon, multiplier = 1) {
   const costs = weapon.system?.functions?.weapon?.resourceCosts ?? [];
   for (const cost of costs) {
@@ -757,16 +806,27 @@ async function spendWeaponResources(weapon, multiplier = 1) {
   if (Object.keys(updateData).length) await weapon.update(updateData);
 }
 
-function getAttackGeometry(weapon, attackerToken, origin, pointer) {
+function getAttackGeometry(weapon, actionKey, attackerToken, origin, pointer) {
   const maxDistancePixels = metersToPixels(Number(weapon.system?.functions?.weapon?.maxRangeMeters) || 0);
   const dx = pointer.x - origin.x;
   const dy = pointer.y - origin.y;
   const angle = Math.atan2(dy, dx);
   const distance = Math.max(1, maxDistancePixels);
-  const halfAngle = Math.max(0, (Number(weapon.system?.functions?.weapon?.attackConeDegrees) || 0) * (Math.PI / 180) / 2);
+  const halfAngle = getActionAttackConeRadians(weapon, actionKey) / 2;
   const end = getWallClippedEndpoint(attackerToken, origin, angle, distance).point;
   const shapePoints = buildClippedConePoints(attackerToken, { origin, angle, distance, halfAngle });
   return { origin, angle, distance, halfAngle, end, shapePoints };
+}
+
+function getActionAttackConeRadians(weapon, actionKey) {
+  const weaponData = weapon.system?.functions?.weapon ?? {};
+  const sourceWeaponData = weapon.system?._source?.functions?.weapon ?? {};
+  const sourceActionData = sourceWeaponData?.[actionKey] ?? {};
+  const hasActionCone = Object.hasOwn(sourceActionData, "attackConeDegrees");
+  const actionCone = Number(weaponData?.[actionKey]?.attackConeDegrees);
+  const fallbackCone = Number(weaponData.attackConeDegrees);
+  const degrees = hasActionCone && Number.isFinite(actionCone) ? actionCone : fallbackCone;
+  return Math.max(0, (Number(degrees) || 0) * (Math.PI / 180));
 }
 
 function metersToPixels(meters) {
@@ -918,6 +978,68 @@ function buildAttackTrajectory(attackerToken, coneGeometry, targets = []) {
   const aimPoint = selectTrajectoryAimPoint(attackerToken, coneGeometry, targets);
   if (aimPoint) return buildTrajectoryThroughPoint(attackerToken, coneGeometry, aimPoint);
   return buildRandomTrajectory(attackerToken, coneGeometry);
+}
+
+function buildAttackTrajectories(attackerToken, coneGeometry, targets = [], count = 1) {
+  const amount = Math.max(1, toInteger(count) || 1);
+  if (amount <= 1) return [buildAttackTrajectory(attackerToken, coneGeometry, targets)];
+
+  const trajectories = [];
+  const reserved = new Set();
+  const spacing = getPelletPointSpacing();
+
+  for (let index = 0; index < amount; index += 1) {
+    const trajectory = buildReservedPelletTrajectory(attackerToken, coneGeometry, reserved, spacing);
+    trajectories.push(trajectory);
+  }
+
+  return trajectories;
+}
+
+function buildAimedAttackTrajectories(attackerToken, coneGeometry, centerTrajectory, count = 1) {
+  const amount = Math.max(1, toInteger(count) || 1);
+  if (amount <= 1) return [centerTrajectory];
+
+  const trajectories = [centerTrajectory];
+  const reserved = new Set();
+  const spacing = getPelletPointSpacing();
+  reservePelletPoint(centerTrajectory.end, reserved, spacing, true);
+
+  for (let index = 1; index < amount; index += 1) {
+    trajectories.push(buildReservedPelletTrajectory(attackerToken, coneGeometry, reserved, spacing));
+  }
+
+  return trajectories;
+}
+
+function buildReservedPelletTrajectory(attackerToken, geometry, reserved, spacing) {
+  const attempts = 220;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const trajectory = buildRandomTrajectory(attackerToken, geometry);
+    if (reservePelletPoint(trajectory.end, reserved, spacing)) return trajectory;
+  }
+
+  const trajectory = buildRandomTrajectory(attackerToken, geometry);
+  reservePelletPoint(trajectory.end, reserved, spacing, true);
+  return trajectory;
+}
+
+function getPelletPointSpacing() {
+  const gridSize = Math.max(1, Number(canvas.grid?.size) || 100);
+  return Math.max(1, gridSize / 10);
+}
+
+function reservePelletPoint(point, reserved, spacing, force = false) {
+  const qx = Math.round((Number(point?.x) || 0) / spacing);
+  const qy = Math.round((Number(point?.y) || 0) / spacing);
+  const key = `${qx}:${qy}`;
+  if (!force && reserved.has(key)) return false;
+  for (let dx = -1; dx <= 1; dx += 1) {
+    for (let dy = -1; dy <= 1; dy += 1) {
+      reserved.add(`${qx + dx}:${qy + dy}`);
+    }
+  }
+  return true;
 }
 
 function selectTrajectoryAimPoint(attackerToken, geometry, targets = []) {

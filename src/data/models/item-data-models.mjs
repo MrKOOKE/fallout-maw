@@ -90,6 +90,7 @@ function weaponFunctionField() {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     damage: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    pellets: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     damageTypeKey: new StringField({ required: true, blank: false, initial: "firearm" }),
     attackAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
     attackAnimationDelayMs: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
@@ -112,9 +113,18 @@ function weaponFunctionField() {
       snapshot: new BooleanField({ required: true, initial: false }),
       burst: new BooleanField({ required: true, initial: false })
     }),
+    aimedShot: weaponActionSettingsField(),
+    snapshot: weaponActionSettingsField(),
     burst: new SchemaField({
+      attackConeDegrees: new NumberField({ required: true, min: 0, initial: 0 }),
       count: new NumberField({ required: true, integer: true, min: 1, initial: 3 })
     })
+  });
+}
+
+function weaponActionSettingsField() {
+  return new SchemaField({
+    attackConeDegrees: new NumberField({ required: true, min: 0, initial: 0 })
   });
 }
 

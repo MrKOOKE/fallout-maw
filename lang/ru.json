@@ -157,6 +157,7 @@
       "Unequip": "Снять",
       "ConditionValue": "Состояние",
       "WeaponDamage": "Урон",
+      "WeaponPellets": "Дробь",
       "WeaponDamageType": "Тип урона",
       "WeaponAttackAnimation": "Анимация атаки",
       "WeaponAttackDelay": "Задержка между атаками, мс",
