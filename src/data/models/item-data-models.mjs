@@ -92,10 +92,13 @@ function weaponFunctionField() {
     damage: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     pellets: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     damageTypeKey: new StringField({ required: true, blank: false, initial: "firearm" }),
+    damageTypes: new ArrayField(weaponDamageTypeField(), { required: true, initial: [{ key: "firearm", percent: 100 }] }),
     attackAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
+    attackSoundPath: new StringField({ required: true, blank: true, initial: "" }),
     attackAnimationDelayMs: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     skillKey: new StringField({ required: true, blank: false, initial: "rangedCombat" }),
     accuracyBonus: new NumberField({ required: true, integer: true, initial: 0 }),
+    criticalChanceModifier: new NumberField({ required: true, integer: true, initial: 0 }),
     attackConeDegrees: new NumberField({ required: true, min: 0, initial: 0 }),
     maxRangeMeters: new NumberField({ required: true, min: 0, initial: 0 }),
     effectiveRange: new SchemaField({
@@ -125,6 +128,13 @@ function weaponFunctionField() {
 function weaponActionSettingsField() {
   return new SchemaField({
     attackConeDegrees: new NumberField({ required: true, min: 0, initial: 0 })
+  });
+}
+
+function weaponDamageTypeField() {
+  return new SchemaField({
+    key: new StringField({ required: true, blank: false, initial: "firearm" }),
+    percent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 100 })
   });
 }
 

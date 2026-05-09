@@ -169,7 +169,7 @@
     <div class="fallout-maw-token-hud-actions" data-token-action-hud-actions>
       {{#each actions}}
       {{#if (eq key "weapon")}}
-      <button type="button" class="fallout-maw-token-hud-main-action {{#if active}}active{{/if}}" data-action="toggleWeaponActions" title="{{caption}}" {{#if disabled}}disabled{{/if}}>
+      <button type="button" class="fallout-maw-token-hud-main-action {{#if active}}active{{/if}}" data-action="toggleWeaponActions" data-item-id="{{itemId}}" title="{{caption}}" {{#if disabled}}disabled{{/if}}>
         <img src="{{icon}}" alt="{{caption}}" onerror="this.src='{{../fallbackIcon}}'">
         <span>{{caption}}</span>
       </button>

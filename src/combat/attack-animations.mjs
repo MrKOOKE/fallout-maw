@@ -21,32 +21,36 @@ export function registerAttackAnimationSocket() {
 
 export async function playWeaponAttackAnimations({ weapon = null, trajectories = [], delayMs = 0 } = {}) {
   const animationKey = String(weapon?.system?.functions?.weapon?.attackAnimationKey ?? "").trim();
-  if (!animationKey || !trajectories.length) return;
+  const soundPath = String(weapon?.system?.functions?.weapon?.attackSoundPath ?? "").trim();
+  if (!animationKey && !soundPath) return;
 
   const entries = [];
-  for (const trajectory of trajectories) {
-    const file = await resolveAnimationLibraryFile(animationKey, {
-      distance: Number(trajectory.distance) || 0,
-      mediaType: "video"
-    });
-    if (!file) continue;
-    entries.push({
-      id: foundry.utils.randomID(),
-      file,
-      origin: serializePoint(trajectory.origin),
-      end: serializePoint(trajectory.end),
-      angle: Number(trajectory.angle) || 0,
-      distance: Number(trajectory.distance) || 0,
-      delayGroup: Number(trajectory.delayGroup ?? entries.length) || 0
-    });
+  if (animationKey && trajectories.length) {
+    for (const trajectory of trajectories) {
+      const file = await resolveAnimationLibraryFile(animationKey, {
+        distance: Number(trajectory.distance) || 0,
+        mediaType: "video"
+      });
+      if (!file) continue;
+      entries.push({
+        id: foundry.utils.randomID(),
+        file,
+        origin: serializePoint(trajectory.origin),
+        end: serializePoint(trajectory.end),
+        angle: Number(trajectory.angle) || 0,
+        distance: Number(trajectory.distance) || 0,
+        delayGroup: Number(trajectory.delayGroup ?? entries.length) || 0
+      });
+    }
   }
-  if (!entries.length) return;
+  if (!entries.length && !soundPath) return;
 
   const payload = {
     scope: ATTACK_ANIMATION_SOCKET_SCOPE,
     action: "play",
     sceneId: canvas.scene?.id ?? "",
     entries,
+    soundPath,
     delayMs: Math.max(0, Math.trunc(Number(delayMs) || 0)),
     senderUserId: game.user?.id ?? ""
   };
@@ -67,6 +71,8 @@ async function playAttackAnimationGroup(payload = {}) {
   const promises = [];
   let previousGroup = null;
 
+  await playAttackSound(payload.soundPath);
+
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index];
     const delayGroup = Number(entry.delayGroup ?? index) || 0;
@@ -76,6 +82,16 @@ async function playAttackAnimationGroup(payload = {}) {
   }
 
   await Promise.all(promises);
+}
+
+async function playAttackSound(path) {
+  const src = String(path ?? "").trim();
+  if (!src) return;
+  try {
+    await game.audio.play(src, { context: game.audio.interface });
+  } catch (error) {
+    console.warn(`${SYSTEM_ID} | Attack sound failed to play: ${src}`, error);
+  }
 }
 
 async function playSingleAttackAnimation(entry = {}) {

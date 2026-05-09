@@ -255,14 +255,14 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     actions: {
       toggleTray: TokenActionHud.#onToggleTray,
       toggleMeterSection: TokenActionHud.#onToggleMeterSection,
-      selectHudWeapon: TokenActionHud.#onSelectHudWeapon,
-      toggleWeaponActions: TokenActionHud.#onToggleWeaponActions,
-      useWeaponAction: TokenActionHud.#onUseWeaponAction,
+      selectHudWeapon: { handler: TokenActionHud.#onSelectHudWeapon, buttons: [0, 1] },
+      toggleWeaponActions: { handler: TokenActionHud.#onToggleWeaponActions, buttons: [0, 1] },
+      useWeaponAction: { handler: TokenActionHud.#onUseWeaponAction, buttons: [0, 1] },
       gmHealSelected: TokenActionHud.#onGmHealSelected,
       gmAwardExperience: TokenActionHud.#onGmAwardExperience,
       openSettings: TokenActionHud.#onOpenSettings,
       rollSkill: TokenActionHud.#onRollSkill,
-      openItem: TokenActionHud.#onOpenItem,
+      openItem: { handler: TokenActionHud.#onOpenItem, buttons: [1] },
       useSystemAction: TokenActionHud.#onUseSystemAction
     }
   };
@@ -340,6 +340,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     this.applyMovementResourcePreview(tokenActionHudMovementPreview);
     this.#scheduleLayout();
+  }
+
+  _attachFrameListeners() {
+    super._attachFrameListeners();
+    this.element.addEventListener("pointerdown", event => this.#onHudItemMiddlePointerDown(event));
   }
 
   applyMovementResourcePreview(preview) {
@@ -474,14 +479,22 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const actor = this.actor;
     if (!actor?.isOwner) return undefined;
     const itemId = String(target.dataset.itemId ?? "");
-    if (!itemId || !actor.items.get(itemId)) return undefined;
+    const item = actor.items.get(itemId);
+    if (!itemId || !item) return undefined;
+    if (isMiddleMouseClick(event)) return item.sheet?.render(true);
+    if (event.button !== 0) return undefined;
     await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, itemId);
     this.#activeTray = "";
     return this.render({ force: true });
   }
 
-  static #onToggleWeaponActions(event) {
+  static #onToggleWeaponActions(event, target) {
     event.preventDefault();
+    if (isMiddleMouseClick(event)) {
+      const item = this.actor?.items.get(String(target.dataset.itemId ?? ""));
+      return item?.sheet?.render(true);
+    }
+    if (event.button !== 0) return undefined;
     this.#activeTray = this.#activeTray === "weaponActions" ? "" : "weaponActions";
     return this.render({ force: true });
   }
@@ -492,6 +505,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const itemId = String(target.dataset.itemId ?? "");
     const item = this.actor?.items.get(itemId);
     if (!item || !actionKey) return undefined;
+    if (isMiddleMouseClick(event)) return item.sheet?.render(true);
+    if (event.button !== 0) return undefined;
     return startWeaponAttack({ token: this.token, weapon: item, actionKey });
   }
 
@@ -510,6 +525,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static #onOpenItem(event, target) {
     event.preventDefault();
+    if (!isMiddleMouseClick(event)) return undefined;
     const item = this.actor?.items.get(target.dataset.itemId ?? "");
     return item?.sheet?.render(true);
   }
@@ -530,6 +546,19 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     root.dataset.limbControlClicksBound = "true";
     root.addEventListener("click", event => this.#onLimbControlClick(event), { capture: true });
     root.addEventListener("keydown", event => this.#onLimbControlKeyDown(event), { capture: true });
+  }
+
+  #onHudItemMiddlePointerDown(event) {
+    if (event.button !== 1 || !this.#getHudItemActionElement(event.target)) return;
+    event.preventDefault();
+  }
+
+  #getHudItemActionElement(target) {
+    if (!(target instanceof Element)) return null;
+    const button = target.closest("[data-action][data-item-id]");
+    if (!button || !this.element?.contains(button)) return null;
+    const action = String(button.dataset.action ?? "");
+    return ["openItem", "selectHudWeapon", "useWeaponAction", "toggleWeaponActions"].includes(action) ? button : null;
   }
 
   #onLimbControlKeyDown(event) {
@@ -901,6 +930,10 @@ function getSelectedHudWeapon(actor, weaponSets = []) {
   const weaponIds = weaponSets.flatMap(set => (set.slots ?? []).map(slot => slot.item?.id).filter(Boolean));
   const resolvedId = weaponIds.includes(selectedId) ? selectedId : weaponIds[0];
   return resolvedId ? actor.items.get(resolvedId) ?? null : null;
+}
+
+function isMiddleMouseClick(event) {
+  return event?.button === 1;
 }
 
 function prepareWeaponActionButtons(selectedWeapon) {

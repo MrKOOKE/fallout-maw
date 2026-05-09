@@ -139,6 +139,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       hasWeaponMagazineCost: hasWeaponResourceCost(item, "magazine"),
       toolFunctions,
       weaponDamageTypeChoices: buildWeaponDamageTypeChoices(item, damageTypeSettings),
+      weaponDamageTypeRows: buildWeaponDamageTypeRows(item, damageTypeSettings),
       weaponSkillChoices: buildWeaponSkillChoices(item, skillSettings),
       weaponResourceCosts: buildWeaponResourceCostRows(item, hasConditionFunction),
       weaponActionChoices: buildWeaponActionChoices(item),
@@ -173,6 +174,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-weapon-action-choice]").forEach(button => {
       button.addEventListener("click", event => this.#onWeaponActionChoice(event));
     });
+    this.element?.querySelector("[data-add-weapon-damage-type]")?.addEventListener("click", event => this.#onAddWeaponDamageType(event));
+    this.element?.querySelectorAll("[data-delete-weapon-damage-type]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteWeaponDamageType(event));
+    });
+    this.element?.querySelectorAll("[data-weapon-damage-percent]").forEach(input => {
+      input.addEventListener("input", event => this.#onWeaponDamagePercentInput(event));
+      input.addEventListener("change", event => this.#onWeaponDamagePercentChange(event));
+    });
+    this.element?.querySelector("[data-browse-weapon-attack-sound]")?.addEventListener("click", event => this.#onBrowseWeaponAttackSound(event));
     this.element?.querySelector("[data-add-item-function]")?.addEventListener("click", event => this.#onAddItemFunction(event));
     this.element?.querySelector("[data-choose-item-function]")?.addEventListener("change", event => this.#onChooseItemFunction(event));
     this.element?.querySelectorAll("[data-container-load-reduction]").forEach(input => {
@@ -267,10 +277,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.weapon.damage": 0,
         "system.functions.weapon.pellets": 1,
         "system.functions.weapon.damageTypeKey": "firearm",
+        "system.functions.weapon.damageTypes": [{ key: "firearm", percent: 100 }],
         "system.functions.weapon.attackAnimationKey": "",
+        "system.functions.weapon.attackSoundPath": "",
         "system.functions.weapon.attackAnimationDelayMs": 0,
         "system.functions.weapon.skillKey": "rangedCombat",
         "system.functions.weapon.accuracyBonus": 0,
+        "system.functions.weapon.criticalChanceModifier": 0,
         "system.functions.weapon.attackConeDegrees": 0,
         "system.functions.weapon.maxRangeMeters": 0,
         "system.functions.weapon.effectiveRange.value": 0,
@@ -374,6 +387,67 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const costs = [...(this.item.system?.functions?.weapon?.resourceCosts ?? [])];
     costs.splice(index, 1);
     return this.item.update({ "system.functions.weapon.resourceCosts": costs });
+  }
+
+  #onAddWeaponDamageType(event) {
+    event.preventDefault();
+    const entries = readWeaponDamageTypeRows(this.element);
+    const damageTypes = getDamageTypeSettings();
+    const existingKeys = new Set(entries.map(entry => entry.key));
+    const key = damageTypes.find(type => !existingKeys.has(type.key))?.key
+      ?? damageTypes.at(0)?.key
+      ?? "firearm";
+    const used = entries.reduce((total, entry) => total + clampPercent(entry.percent), 0);
+    entries.push({ key, percent: Math.max(0, 100 - used) });
+    return this.item.update({ "system.functions.weapon.damageTypes": entries });
+  }
+
+  #onDeleteWeaponDamageType(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteWeaponDamageType);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const entries = readWeaponDamageTypeRows(this.element);
+    entries.splice(index, 1);
+    if (!entries.length) entries.push({ key: "firearm", percent: 100 });
+    return this.item.update({ "system.functions.weapon.damageTypes": entries });
+  }
+
+  #onWeaponDamagePercentInput(event) {
+    const input = event.currentTarget;
+    const row = input.closest("[data-weapon-damage-type-row]");
+    if (!row) return;
+    const index = Number(row.dataset.weaponDamageTypeRow);
+    if (!Number.isInteger(index)) return;
+    row.querySelectorAll("[data-weapon-damage-percent]").forEach(percentInput => {
+      if (percentInput !== input) percentInput.value = input.value;
+    });
+    const entries = normalizeWeaponDamageTypeOverflow(readWeaponDamageTypeRows(this.element), index);
+    writeWeaponDamageTypePercents(this.element, entries);
+  }
+
+  #onWeaponDamagePercentChange(event) {
+    event.preventDefault();
+    const row = event.currentTarget.closest("[data-weapon-damage-type-row]");
+    const index = Number(row?.dataset?.weaponDamageTypeRow);
+    const entries = normalizeWeaponDamageTypeOverflow(readWeaponDamageTypeRows(this.element), Number.isInteger(index) ? index : -1);
+    writeWeaponDamageTypePercents(this.element, entries);
+    return this.item.update({ "system.functions.weapon.damageTypes": entries });
+  }
+
+  async #onBrowseWeaponAttackSound(event) {
+    event.preventDefault();
+    const input = this.element?.querySelector("[data-weapon-attack-sound-input]");
+    if (!input) return undefined;
+    const picker = new foundry.applications.apps.FilePicker.implementation({
+      type: "audio",
+      current: input.value ?? "",
+      callback: path => {
+        input.value = path;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    await picker.browse(undefined, { render: false });
+    return picker.render({ force: true });
   }
 
   #onMitigationFillStart(event) {
@@ -557,6 +631,24 @@ function buildWeaponDamageTypeChoices(item, damageTypeSettings) {
   }));
 }
 
+function buildWeaponDamageTypeRows(item, damageTypeSettings) {
+  const rows = normalizeWeaponDamageTypeRows(
+    item.system?.functions?.weapon,
+    damageTypeSettings,
+    item.system?._source?.functions?.weapon
+  );
+  return rows.map((entry, index) => ({
+    index,
+    key: entry.key,
+    percent: clampPercent(entry.percent),
+    choices: damageTypeSettings.map(damageType => ({
+      value: damageType.key,
+      label: damageType.label,
+      selected: damageType.key === entry.key
+    }))
+  }));
+}
+
 function buildWeaponSkillChoices(item, skillSettings) {
   const selected = String(item.system?.functions?.weapon?.skillKey ?? "");
   return skillSettings.map(skill => ({
@@ -642,6 +734,75 @@ function buildToolFunctionEntries(item, toolSettings, skillSettings) {
 
 function normalizePercentInput(value) {
   return Math.max(0, Math.min(100, Math.trunc(Number(value) || 0)));
+}
+
+function clampPercent(value) {
+  return Math.max(0, Math.min(100, Math.trunc(Number(value) || 0)));
+}
+
+function normalizeWeaponDamageTypeRows(weaponData = {}, damageTypeSettings = [], sourceWeaponData = null) {
+  const validKeys = new Set(damageTypeSettings.map(type => type.key));
+  const fallbackKey = String(weaponData?.damageTypeKey ?? "").trim()
+    || damageTypeSettings.at(0)?.key
+    || "firearm";
+  const hasConfiguredDamageTypes = sourceWeaponData ? Object.hasOwn(sourceWeaponData, "damageTypes") : Array.isArray(weaponData?.damageTypes);
+  const rows = hasConfiguredDamageTypes && Array.isArray(weaponData?.damageTypes)
+    ? weaponData.damageTypes
+      .map(entry => ({
+        key: String(entry?.key ?? "").trim(),
+        percent: clampPercent(entry?.percent)
+      }))
+      .filter(entry => entry.key && (!validKeys.size || validKeys.has(entry.key)))
+    : [];
+  if (!rows.length) return [{ key: fallbackKey, percent: 100 }];
+  if (!rows.some(entry => entry.percent > 0)) rows[0].percent = 100;
+  return rows;
+}
+
+function readWeaponDamageTypeRows(root) {
+  const rows = Array.from(root?.querySelectorAll("[data-weapon-damage-type-row]") ?? []);
+  return rows.map(row => ({
+    key: String(row.querySelector("[data-weapon-damage-type-key]")?.value ?? "").trim(),
+    percent: clampPercent(row.querySelector("[data-weapon-damage-percent]")?.value)
+  })).filter(entry => entry.key);
+}
+
+function normalizeWeaponDamageTypeOverflow(entries = [], changedIndex = -1) {
+  const normalized = entries.map(entry => ({
+    key: String(entry?.key ?? "").trim(),
+    percent: clampPercent(entry?.percent)
+  })).filter(entry => entry.key);
+  const total = normalized.reduce((sum, entry) => sum + entry.percent, 0);
+  if (total <= 100) return normalized;
+
+  let excess = total - 100;
+  let candidates = normalized
+    .map((entry, index) => ({ entry, index }))
+    .filter(candidate => candidate.index !== changedIndex && candidate.entry.percent > 0);
+
+  while (excess > 0 && candidates.length) {
+    const share = Math.max(1, Math.ceil(excess / candidates.length));
+    for (const candidate of candidates) {
+      if (excess <= 0) break;
+      const reduction = Math.min(candidate.entry.percent, share, excess);
+      candidate.entry.percent -= reduction;
+      excess -= reduction;
+    }
+    candidates = candidates.filter(candidate => candidate.entry.percent > 0);
+  }
+
+  if (excess > 0 && normalized[changedIndex]) normalized[changedIndex].percent = Math.max(0, normalized[changedIndex].percent - excess);
+  return normalized;
+}
+
+function writeWeaponDamageTypePercents(root, entries = []) {
+  const rows = Array.from(root?.querySelectorAll("[data-weapon-damage-type-row]") ?? []);
+  rows.forEach((row, index) => {
+    const value = String(clampPercent(entries[index]?.percent));
+    row.querySelectorAll("[data-weapon-damage-percent]").forEach(input => {
+      input.value = value;
+    });
+  });
 }
 
 function buildDamageMitigationModeChoices(item) {
