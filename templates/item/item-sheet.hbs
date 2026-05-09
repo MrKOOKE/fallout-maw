@@ -556,6 +556,18 @@
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyDamageRadius"}}</span>
             <input type="number" name="{{../path}}.volley.damageRadius" value="{{volleyDamageRadius}}" min="0" step="1">
           </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDuration"}}</span>
+            <input type="number" name="{{../path}}.volley.regionDurationSeconds" value="{{volleyRegionDurationSeconds}}" min="0" step="1">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDelay"}}</span>
+            <input type="number" name="{{../path}}.volley.regionDelaySeconds" value="{{volleyRegionDelaySeconds}}" min="0" step="1">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadiusDelta"}}</span>
+            <input type="number" name="{{../path}}.volley.regionRadiusDeltaMeters" value="{{volleyRegionRadiusDeltaMeters}}" step="1">
+          </label>
         </div>
         {{else}}
         <div class="fallout-maw-list-grid three-columns">

@@ -10,6 +10,14 @@
       "gear": "Предмет",
       "ability": "Способность",
       "disease": "Болезнь"
+    },
+    "RegionBehavior": {
+      "fallout-maw.periodicDamage": "Периодический урон"
+    }
+  },
+  "TYPES.HINTS": {
+    "RegionBehavior": {
+      "fallout-maw.periodicDamage": "Наносит настроенный урон токенам внутри региона по подписанным событиям."
     }
   },
   "FALLOUTMAW": {
@@ -90,6 +98,35 @@
       "RowLimit": "Показана только часть строк. Уточните поиск.",
       "Empty": "Анимации не найдены.",
       "Select": "Выберите анимацию."
+    },
+    "RegionBehavior": {
+      "PeriodicDamage": {
+        "Name": "Периодический урон",
+        "RegionName": "Область урона",
+        "DamageEntries": "Записи урона",
+        "AddDamageEntry": "Добавить урон",
+        "NoDamageEntries": "Записи урона не заданы.",
+        "Timing": "Время",
+        "IntervalSeconds": "Интервал, сек",
+        "DelaySeconds": "Задержка, сек",
+        "DurationSeconds": "Длительность, сек",
+        "RadiusDeltaMeters": "Изменение радиуса, м",
+        "DeleteRegionWhenExpired": "Удалить регион по истечении"
+      }
+    },
+    "REGIONBEHAVIORS": {
+      "PERIODICDAMAGE": {
+        "FIELDS": {
+          "damage": { "label": "Урон" },
+          "damageTypeKey": { "label": "Тип урона" },
+          "damageEntries": { "label": "Записи урона" },
+          "intervalSeconds": { "label": "Интервал, сек" },
+          "delaySeconds": { "label": "Задержка, сек" },
+          "durationSeconds": { "label": "Длительность, сек" },
+          "radiusDeltaMeters": { "label": "Изменение радиуса, м" },
+          "deleteRegionWhenExpired": { "label": "Удалить регион по истечении" }
+        }
+      }
     },
     "Actor": {
       "Base": "База",
@@ -202,6 +239,9 @@
       "WeaponBurstCount": "Выстрелов в очереди",
       "WeaponBurstDifficultyPerShot": "Сложность за каждую пулю",
       "WeaponVolleyDamageRadius": "Радиус поражения",
+      "WeaponVolleyRegionDuration": "Длительность области, сек",
+      "WeaponVolleyRegionDelay": "Задержка области, сек",
+      "WeaponVolleyRegionRadiusDelta": "Изменение радиуса области, м",
       "WeaponAttackModeThrust": "Укол",
       "WeaponAttackModeSwing": "Размах",
       "WeaponModeAccuracyModifier": "Изменение точности",

@@ -1,5 +1,6 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { getNeedSettings, getProficiencySettings, getResourceSettings, getSkillSettings } from "../settings/accessors.mjs";
+import * as regionBehaviorData from "./region-behavior/_module.mjs";
 import {
   AbilityDataModel,
   CharacterDataModel,
@@ -27,6 +28,9 @@ export function registerDataModels() {
     trauma: TraumaDataModel,
     disease: DiseaseDataModel
   });
+
+  Object.assign(CONFIG.RegionBehavior.dataModels, regionBehaviorData.config);
+  Object.assign(CONFIG.RegionBehavior.typeIcons, regionBehaviorData.icons);
 }
 
 export function registerTrackableAttributes() {

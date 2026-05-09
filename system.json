@@ -75,6 +75,9 @@
           "description"
         ]
       }
+    },
+    "RegionBehavior": {
+      "fallout-maw.periodicDamage": {}
     }
   },
   "socket": true,

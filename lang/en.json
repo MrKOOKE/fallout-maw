@@ -11,6 +11,14 @@
       "ability": "Ability",
       "trauma": "Trauma",
       "disease": "Disease"
+    },
+    "RegionBehavior": {
+      "fallout-maw.periodicDamage": "Periodic Damage"
+    }
+  },
+  "TYPES.HINTS": {
+    "RegionBehavior": {
+      "fallout-maw.periodicDamage": "Apply configured damage to tokens inside the region on subscribed region events."
     }
   },
   "FALLOUTMAW": {
@@ -91,6 +99,35 @@
       "RowLimit": "Only part of the rows is shown. Refine search.",
       "Empty": "No animations found.",
       "Select": "Select an animation."
+    },
+    "RegionBehavior": {
+      "PeriodicDamage": {
+        "Name": "Periodic Damage",
+        "RegionName": "Damage Region",
+        "DamageEntries": "Damage Entries",
+        "AddDamageEntry": "Add Damage",
+        "NoDamageEntries": "No damage entries configured.",
+        "Timing": "Timing",
+        "IntervalSeconds": "Interval, sec",
+        "DelaySeconds": "Delay, sec",
+        "DurationSeconds": "Duration, sec",
+        "RadiusDeltaMeters": "Radius Change, m",
+        "DeleteRegionWhenExpired": "Delete Region When Expired"
+      }
+    },
+    "REGIONBEHAVIORS": {
+      "PERIODICDAMAGE": {
+        "FIELDS": {
+          "damage": { "label": "Damage" },
+          "damageTypeKey": { "label": "Damage Type" },
+          "damageEntries": { "label": "Damage Entries" },
+          "intervalSeconds": { "label": "Interval, sec" },
+          "delaySeconds": { "label": "Delay, sec" },
+          "durationSeconds": { "label": "Duration, sec" },
+          "radiusDeltaMeters": { "label": "Radius Change, m" },
+          "deleteRegionWhenExpired": { "label": "Delete Region When Expired" }
+        }
+      }
     },
     "Actor": {
       "Base": "Base",
@@ -203,6 +240,9 @@
       "WeaponBurstCount": "Burst Shots",
       "WeaponBurstDifficultyPerShot": "Difficulty Per Bullet",
       "WeaponVolleyDamageRadius": "Damage Radius",
+      "WeaponVolleyRegionDuration": "Region Duration, sec",
+      "WeaponVolleyRegionDelay": "Region Delay, sec",
+      "WeaponVolleyRegionRadiusDelta": "Region Radius Change, m",
       "WeaponAttackModeThrust": "Thrust",
       "WeaponAttackModeSwing": "Swing",
       "WeaponModeAccuracyModifier": "Accuracy Modifier",

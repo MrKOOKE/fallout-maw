@@ -1039,6 +1039,9 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {})
       burstCount: Math.max(1, Number(weaponData?.burst?.count) || 3),
       burstDifficultyPerShot: getWeaponBurstDifficultyPerShotForData(weaponData),
       volleyDamageRadius: Math.max(0, Number(weaponData?.volley?.damageRadius) || 0),
+      volleyRegionDurationSeconds: Math.max(0, Math.trunc(Number(weaponData?.volley?.regionDurationSeconds) || 0)),
+      volleyRegionDelaySeconds: Math.max(0, Math.trunc(Number(weaponData?.volley?.regionDelaySeconds) || 0)),
+      volleyRegionRadiusDeltaMeters: Number(weaponData?.volley?.regionRadiusDeltaMeters) || 0,
       criticalFailureConsequences: buildWeaponCriticalFailureConsequenceRows(actionData, weaponData),
       thrust,
       swing
@@ -1111,6 +1114,9 @@ function createDefaultWeaponFunctionData(source = {}) {
     },
     volley: {
       damageRadius: 0,
+      regionDurationSeconds: 0,
+      regionDelaySeconds: 0,
+      regionRadiusDeltaMeters: 0,
       explosionAnimationKey: "",
       explosionSoundPath: "",
       criticalFailureConsequences: []

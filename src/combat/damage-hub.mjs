@@ -7,6 +7,8 @@ const DAMAGE_SOCKET = `system.${SYSTEM_ID}`;
 const TRAUMA_FLAG_SCOPE = "fallout-maw";
 const TRAUMA_FLAG_KEY = "trauma";
 const DAMAGE_EFFECT_FLAG_KEY = "damageEffect";
+const REGION_DAMAGE_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
+const REGION_DAMAGE_FLAG_KEY = "periodicDamage";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const MODE_DAMAGE = "damage";
 const MODE_HEALING = "healing";
@@ -110,6 +112,26 @@ export async function requestDamageApplications(requests = []) {
     });
   }
   return results;
+}
+
+export async function requestRegionPeriodicDamage({ token = null, actor = null, entries = [], source = {} } = {}) {
+  const resolvedActor = actor ?? token?.actor ?? null;
+  if (!resolvedActor) return [];
+
+  const limbKey = selectRandomDamageLimbKey(resolvedActor);
+  const requests = (Array.isArray(entries) ? entries : [])
+    .map(entry => ({
+      actor: resolvedActor,
+      limbKey,
+      amount: Math.max(0, toInteger(entry?.amount)),
+      damageTypeKey: String(entry?.damageTypeKey ?? "").trim(),
+      scope: SCOPE_HEALTH_AND_LIMB,
+      source
+    }))
+    .filter(request => request.amount > 0 && request.damageTypeKey);
+  if (!requests.length) return [];
+
+  return requestDamageApplications(requests);
 }
 
 export async function applyDamageApplication(request = {}) {
@@ -580,9 +602,11 @@ async function processTimedDamageEffects(worldTime, deltaTime) {
   if (!game.user?.isActiveGM || Number(deltaTime) <= 0) return;
   if (getTimeMechanicsIgnored()) {
     await preserveTimedDamageEffects(Number(deltaTime) || 0);
+    await preserveRegionPeriodicDamage(Number(deltaTime) || 0);
     return;
   }
   const now = Number(worldTime) || Number(game.time?.worldTime) || 0;
+  await processRegionPeriodicDamage(now);
   for (const actor of getLoadedActors()) {
     if (!actor?.isOwner) continue;
     const entries = [];
@@ -614,6 +638,213 @@ async function processTimedDamageEffects(worldTime, deltaTime) {
       await deletePeriodicEffects(actor, Array.from(effectDeleteIds));
     } finally {
       for (const uuid of lockedEffectUuids) processingPeriodicEffectUuids.delete(uuid);
+    }
+  }
+}
+
+async function processRegionPeriodicDamage(now = 0) {
+  const batches = [];
+  for (const scene of game.scenes?.contents ?? []) {
+    for (const region of scene.regions?.contents ?? []) {
+      if (region.hidden) continue;
+      for (const behavior of region.behaviors?.contents ?? []) {
+        if (behavior.disabled || behavior.type !== REGION_DAMAGE_BEHAVIOR_TYPE) continue;
+        const batch = await collectRegionPeriodicDamageBehavior(region, behavior, Number(now) || 0);
+        if (batch) batches.push(batch);
+      }
+    }
+  }
+  if (!batches.length) return;
+
+  const requests = batches.flatMap(batch => batch.requests);
+  if (requests.length) await requestDamageApplications(requests);
+
+  for (const batch of batches) {
+    if (batch.dueTicks > 0) await updateRegionPeriodicDamageRadius(batch.region, batch.system, batch.dueTicks);
+    if (batch.shouldExpire) {
+      await expireRegionPeriodicDamage(batch.region, batch.behavior, batch.system);
+      continue;
+    }
+    if (batch.dueTicks > 0) {
+      await batch.behavior.setFlag(SYSTEM_ID, REGION_DAMAGE_FLAG_KEY, {
+        ...batch.state,
+        nextTickTime: batch.nextTickTime
+      });
+    }
+  }
+}
+
+async function collectRegionPeriodicDamageBehavior(region, behavior, now = 0) {
+  const system = behavior.system ?? {};
+  const entries = getRegionPeriodicDamageEntries(system);
+  if (!entries.length) return null;
+
+  const intervalSeconds = Math.max(1, toInteger(system.intervalSeconds) || ROUND_SECONDS);
+  const delaySeconds = Math.max(0, toInteger(system.delaySeconds));
+  const durationSeconds = Math.max(0, toInteger(system.durationSeconds));
+  const state = await getRegionPeriodicDamageState(behavior, {
+    now,
+    intervalSeconds,
+    delaySeconds,
+    durationSeconds
+  });
+  if (!state) return null;
+
+  const expiresAt = Number(state.expiresAt);
+  const oneShotDelayed = delaySeconds > 0 && durationSeconds <= 0;
+  let nextTickTime = Number(state.nextTickTime);
+  if (!Number.isFinite(nextTickTime)) nextTickTime = now + intervalSeconds;
+
+  let dueTicks = 0;
+  while (now >= nextTickTime && (!Number.isFinite(expiresAt) || nextTickTime <= expiresAt)) {
+    dueTicks += 1;
+    nextTickTime += intervalSeconds;
+    if (oneShotDelayed) break;
+  }
+
+  const shouldExpire = oneShotDelayed && dueTicks > 0
+    || (Number.isFinite(expiresAt) && now >= expiresAt);
+  if (!dueTicks && !shouldExpire) return null;
+
+  return {
+    region,
+    behavior,
+    system,
+    state,
+    nextTickTime,
+    dueTicks,
+    shouldExpire,
+    requests: dueTicks > 0 ? buildRegionPeriodicDamageRequests(region, behavior, entries, dueTicks) : []
+  };
+}
+
+async function getRegionPeriodicDamageState(behavior, { now = 0, intervalSeconds = ROUND_SECONDS, delaySeconds = 0, durationSeconds = 0 } = {}) {
+  const current = behavior.getFlag(SYSTEM_ID, REGION_DAMAGE_FLAG_KEY) ?? {};
+  if (Number.isFinite(Number(current.startedAt))) return current;
+
+  const startedAt = Number(now) || 0;
+  const activateAt = startedAt + Math.max(0, toInteger(delaySeconds));
+  const hasDelay = Math.max(0, toInteger(delaySeconds)) > 0;
+  const state = {
+    startedAt,
+    activateAt,
+    expiresAt: durationSeconds > 0 ? activateAt + durationSeconds : null,
+    nextTickTime: hasDelay ? activateAt : activateAt + Math.max(1, toInteger(intervalSeconds) || ROUND_SECONDS)
+  };
+  await behavior.setFlag(SYSTEM_ID, REGION_DAMAGE_FLAG_KEY, state);
+  return state;
+}
+
+function buildRegionPeriodicDamageRequests(region, behavior, entries = [], dueTicks = 1) {
+  const damageEntries = entries.map(entry => ({
+    ...entry,
+    amount: Math.max(0, toInteger(entry.amount)) * Math.max(1, toInteger(dueTicks))
+  }));
+  const requests = [];
+  for (const token of getTokensInsideRegion(region)) {
+    if (!token.actor) continue;
+    const limbKey = selectRandomDamageLimbKey(token.actor);
+    const source = {
+      regionUuid: region.uuid,
+      behaviorUuid: behavior.uuid,
+      tokenId: token.id,
+      kind: "regionPeriodicDamage",
+      dueTicks
+    };
+    for (const entry of damageEntries) {
+      const damageTypeKey = String(entry?.damageTypeKey ?? "").trim();
+      const amount = Math.max(0, toInteger(entry?.amount));
+      if (!damageTypeKey || amount <= 0) continue;
+      requests.push({
+        actor: token.actor,
+        limbKey,
+        amount,
+        damageTypeKey,
+        scope: SCOPE_HEALTH_AND_LIMB,
+        source
+      });
+    }
+  }
+  return requests;
+}
+
+function getRegionPeriodicDamageEntries(system = {}) {
+  const entries = Array.isArray(system.damageEntries)
+    ? system.damageEntries
+      .map(entry => ({
+        damageTypeKey: String(entry?.damageTypeKey ?? "").trim(),
+        amount: Math.max(0, toInteger(entry?.amount))
+      }))
+      .filter(entry => entry.damageTypeKey && entry.amount > 0)
+    : [];
+  if (entries.length) return entries;
+
+  const damageTypeKey = String(system.damageTypeKey ?? "").trim();
+  const amount = Math.max(0, toInteger(system.damage));
+  return damageTypeKey && amount > 0 ? [{ damageTypeKey, amount }] : [];
+}
+
+function getTokensInsideRegion(region) {
+  const scene = region?.parent;
+  if (!scene) return [];
+  return (scene.tokens?.contents ?? [])
+    .filter(token => {
+      if (!token?.actor) return false;
+      try {
+        return token.testInsideRegion(region);
+      } catch (_error) {
+        return false;
+      }
+    });
+}
+
+async function updateRegionPeriodicDamageRadius(region, system = {}, dueTicks = 1) {
+  const deltaMeters = Number(system.radiusDeltaMeters) || 0;
+  if (!deltaMeters || !region?.parent?.regions?.has(region.id)) return;
+  const deltaPixels = metersToPixelsForScene(deltaMeters * Math.max(1, toInteger(dueTicks)), region.parent);
+  const shapes = region.shapes.map(shape => {
+    const data = shape.toObject ? shape.toObject() : foundry.utils.deepClone(shape);
+    if (data.type !== "circle") return data;
+    return {
+      ...data,
+      radius: Math.max(0, (Number(data.radius) || 0) + deltaPixels)
+    };
+  });
+  await region.update({ shapes });
+}
+
+async function expireRegionPeriodicDamage(region, behavior, system = {}) {
+  if (system.deleteRegionWhenExpired !== false && region?.parent?.regions?.has(region.id)) {
+    await region.delete();
+    return;
+  }
+  if (behavior?.parent?.behaviors?.has(behavior.id)) await behavior.update({ disabled: true });
+}
+
+function metersToPixelsForScene(meters, scene = null) {
+  const gridDistance = Math.max(0.0001, Number(scene?.grid?.distance ?? canvas?.scene?.grid?.distance ?? canvas?.grid?.distance) || 1);
+  const gridSize = Math.max(1, Number(scene?.grid?.size ?? canvas?.grid?.size) || 100);
+  return Number(meters || 0) * (gridSize / gridDistance);
+}
+
+async function preserveRegionPeriodicDamage(deltaTime) {
+  const elapsed = Math.max(0, Number(deltaTime) || 0);
+  if (!elapsed) return;
+
+  for (const scene of game.scenes?.contents ?? []) {
+    for (const region of scene.regions?.contents ?? []) {
+      for (const behavior of region.behaviors?.contents ?? []) {
+        if (behavior.type !== REGION_DAMAGE_BEHAVIOR_TYPE) continue;
+        const state = behavior.getFlag(SYSTEM_ID, REGION_DAMAGE_FLAG_KEY);
+        if (!state) continue;
+
+        const updateData = {};
+        for (const key of ["startedAt", "activateAt", "expiresAt", "nextTickTime"]) {
+          const value = Number(state[key]);
+          if (Number.isFinite(value)) updateData[`flags.${SYSTEM_ID}.${REGION_DAMAGE_FLAG_KEY}.${key}`] = value + elapsed;
+        }
+        if (Object.keys(updateData).length) await behavior.update(updateData);
+      }
     }
   }
 }
@@ -1066,6 +1297,13 @@ function getResponsibleGM() {
     .filter(user => user.active && user.isGM)
     .sort((left, right) => left.id.localeCompare(right.id))
     .at(0) ?? null;
+}
+
+function selectRandomDamageLimbKey(actor) {
+  const keys = Object.entries(actor?.system?.limbs ?? {})
+    .filter(([_key, limb]) => limb && typeof limb === "object")
+    .map(([key]) => key);
+  return keys[Math.floor(Math.random() * keys.length)] ?? "";
 }
 
 function calculateEffectiveDamage(actor, amount, damageTypeKey = "", limbKey = "") {

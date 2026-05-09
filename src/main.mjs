@@ -50,8 +50,8 @@ Hooks.once("init", () => {
   CONFIG.ux.DragDrop = FalloutMaWDragDrop;
 
   registerSystemSettings();
-  registerSystemSheets();
   registerDataModels();
+  registerSystemSheets();
   registerTrackableAttributes();
   registerCombatMovementHooks();
   registerNeedThresholdHooks();

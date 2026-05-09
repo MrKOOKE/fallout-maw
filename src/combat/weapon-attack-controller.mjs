@@ -3,6 +3,7 @@ import { SYSTEM_ID } from "../constants.mjs";
 import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./attack-animations.mjs";
 import { estimateDamageApplication, requestDamageApplications } from "./damage-hub.mjs";
 import { ITEM_FUNCTIONS, getWeaponFunctionById, hasItemFunction } from "../utils/item-functions.mjs";
+import { getDamageTypeSettings } from "../settings/accessors.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
@@ -14,6 +15,8 @@ const AIMED_TARGET_BLOCKER_BONUS_STEP = 20;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const BASE_VOLLEY_DIFFICULTY = 60;
 const VOLLEY_ACTION_KEY = "volley";
+const PERIODIC_DAMAGE_REGION_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
+const DEFAULT_REGION_DAMAGE_INTERVAL_SECONDS = 6;
 const MELEE_ACTION_KEYS = new Set(["meleeAttack", "aimedMeleeAttack"]);
 const MELEE_DIRECTIONS = Object.freeze([
   { key: "thrust", label: "Укол", mode: "thrust" },
@@ -711,6 +714,7 @@ class WeaponAttackController {
     const intendedGeometry = this.geometry;
     const damageRequests = [];
     const finalGeometries = [];
+    const regionRequests = [];
     const checkBatch = attackCount > 1
       ? createSkillCheckBatchCollector({
         requester: "weaponAttack",
@@ -735,9 +739,14 @@ class WeaponAttackController {
         includeDead: true
       });
 
-      for (const target of blastTargets) {
-        const result = this.resolveVolleyDamageAgainstTarget(target, finalGeometry, blastOutcome);
-        damageRequests.push(...(result ?? []));
+      const regionRequest = this.buildVolleyDamageRegionRequest(finalGeometry, blastOutcome);
+      if (regionRequest) regionRequests.push(regionRequest);
+
+      if (!regionRequest?.delayed) {
+        for (const target of blastTargets) {
+          const result = this.resolveVolleyDamageAgainstTarget(target, finalGeometry, blastOutcome);
+          damageRequests.push(...(result ?? []));
+        }
       }
     }
 
@@ -747,6 +756,7 @@ class WeaponAttackController {
     await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
     await checkBatch?.publish({ forceBatch: true });
     await this.playVolleyAttackEffects(finalGeometries);
+    if (regionRequests.length) await Promise.all(regionRequests.map(requestCreateVolleyDamageRegion));
     if (damageRequests.length) await applyQueuedDamageRequests(damageRequests);
 
     this.processing = false;
@@ -784,6 +794,49 @@ class WeaponAttackController {
       outcome,
       center,
       critical: isCriticalSuccessAttack(outcome)
+    };
+  }
+
+  buildVolleyDamageRegionRequest(geometry, blastOutcome) {
+    const settings = getVolleyRegionSettings(this.weapon, this.weaponFunctionId);
+    if (!settings.enabled) return null;
+
+    const damageAmount = getCriticalDamageAmount(
+      this.weapon,
+      getWeaponDamage(this.weapon, this.weaponFunctionId),
+      blastOutcome.outcome,
+      this.weaponFunctionId
+    );
+    const damageEntries = buildWeaponDamageRequests(this.weapon, {
+      amount: damageAmount,
+      source: {
+        weaponUuid: this.weapon.uuid,
+        actionKey: this.actionKey,
+        attackerUuid: this.token.actor.uuid,
+        tokenId: this.token.id,
+        blastCenter: serializePoint(geometry.end),
+        blastRadius: getVolleyDamageRadius(this.weapon, this.weaponFunctionId),
+        regionDamage: true
+      }
+    }, this.weaponFunctionId)
+      .map(request => ({
+        damageTypeKey: request.damageTypeKey,
+        amount: request.amount
+      }));
+
+    return {
+      delayed: settings.delaySeconds > 0,
+      sceneId: canvas.scene?.id ?? "",
+      name: this.weapon.name
+        ? `${this.weapon.name}: ${game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.RegionName")}`
+        : game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.RegionName"),
+      center: serializePoint(geometry.end),
+      radiusPixels: geometry.radiusPixels,
+      color: getVolleyRegionColor(damageEntries),
+      damageEntries,
+      delaySeconds: settings.delaySeconds,
+      durationSeconds: settings.durationSeconds,
+      radiusDeltaMeters: settings.radiusDeltaMeters
     };
   }
 
@@ -1179,6 +1232,11 @@ function broadcastAttackPreview(payload = {}) {
 
 function handleWeaponAttackSocketMessage(payload = {}) {
   if (!payload || payload.scope !== WEAPON_ATTACK_SOCKET_SCOPE || payload.senderUserId === game.user?.id) return;
+  if (payload.action === "createVolleyDamageRegion") {
+    if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
+    void createVolleyDamageRegion(payload.region);
+    return;
+  }
   if (payload.action === "clearPreview") {
     removeRemoteAttackPreview(payload.attackId);
     return;
@@ -1227,6 +1285,88 @@ function removeRemoteAttackPreview(attackId = "") {
 
 function clearRemoteAttackPreviews() {
   for (const attackId of Array.from(remoteAttackPreviews.keys())) removeRemoteAttackPreview(attackId);
+}
+
+async function requestCreateVolleyDamageRegion(regionData = {}) {
+  if (!regionData?.sceneId) return null;
+  if (game.user?.isGM) return createVolleyDamageRegion(regionData);
+
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для создания области урона.");
+    return null;
+  }
+
+  game.socket.emit(WEAPON_ATTACK_SOCKET, {
+    scope: WEAPON_ATTACK_SOCKET_SCOPE,
+    action: "createVolleyDamageRegion",
+    gmUserId: gm.id,
+    senderUserId: game.user?.id ?? "",
+    region: regionData
+  });
+  return null;
+}
+
+async function createVolleyDamageRegion(regionData = {}) {
+  const scene = game.scenes?.get(String(regionData.sceneId ?? "")) ?? canvas.scene;
+  if (!scene || !game.user?.isGM) return null;
+
+  const center = serializePoint(regionData.center);
+  const radiusPixels = Math.max(0, Number(regionData.radiusPixels) || 0);
+  const damageEntries = (Array.isArray(regionData.damageEntries) ? regionData.damageEntries : [])
+    .map(entry => ({
+      damageTypeKey: String(entry?.damageTypeKey ?? "").trim(),
+      amount: Math.max(0, toInteger(entry?.amount))
+    }))
+    .filter(entry => entry.damageTypeKey && entry.amount > 0);
+  if (!radiusPixels || !damageEntries.length) return null;
+
+  const durationSeconds = Math.max(0, toInteger(regionData.durationSeconds));
+  const delaySeconds = Math.max(0, toInteger(regionData.delaySeconds));
+  const levelId = getRegionRestrictionLevelId(scene);
+
+  const created = await scene.createEmbeddedDocuments("Region", [{
+    name: String(regionData.name ?? "").trim() || game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.RegionName"),
+    color: String(regionData.color ?? "#dd8431"),
+    shapes: [{
+      type: "circle",
+      x: center.x,
+      y: center.y,
+      radius: radiusPixels,
+      gridBased: false
+    }],
+    elevation: { bottom: null, top: null },
+    levels: levelId ? [levelId] : [],
+    restriction: { enabled: Boolean(levelId), type: "move", priority: 0 },
+    visibility: CONST.REGION_VISIBILITY.ALWAYS,
+    highlightMode: "shapes",
+    displayMeasurements: false,
+    behaviors: [{
+      name: game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.Name"),
+      type: PERIODIC_DAMAGE_REGION_BEHAVIOR_TYPE,
+      system: {
+        damageEntries,
+        intervalSeconds: DEFAULT_REGION_DAMAGE_INTERVAL_SECONDS,
+        delaySeconds,
+        durationSeconds,
+        radiusDeltaMeters: Number(regionData.radiusDeltaMeters) || 0,
+        deleteRegionWhenExpired: true
+      }
+    }]
+  }]);
+  return created?.[0] ?? null;
+}
+
+function getRegionRestrictionLevelId(scene) {
+  if (canvas.scene?.id === scene?.id && canvas.level?.id) return canvas.level.id;
+  return scene?._view ?? scene?.initialLevel?.id ?? scene?.firstLevel?.id ?? "";
+}
+
+function getResponsibleGM() {
+  return (game.users?.contents ?? [])
+    .filter(user => user.active && user.isGM)
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .at(0) ?? null;
 }
 
 function serializeGeometry(geometry) {
@@ -1773,6 +1913,27 @@ function getWeaponDamage(weapon, weaponFunctionId = "") {
 
 function getVolleyDamageRadius(weapon, weaponFunctionId = "") {
   return Math.max(0, Number(getWeaponAttackData(weapon, weaponFunctionId)?.volley?.damageRadius) || 0);
+}
+
+function getVolleyRegionSettings(weapon, weaponFunctionId = "") {
+  const volley = getWeaponAttackData(weapon, weaponFunctionId)?.volley ?? {};
+  const durationSeconds = Math.max(0, toInteger(volley.regionDurationSeconds));
+  const delaySeconds = Math.max(0, toInteger(volley.regionDelaySeconds));
+  const radiusDeltaMeters = Number(volley.regionRadiusDeltaMeters) || 0;
+  return {
+    enabled: durationSeconds > 0 || delaySeconds > 0,
+    durationSeconds,
+    delaySeconds,
+    radiusDeltaMeters
+  };
+}
+
+function getVolleyRegionColor(damageEntries = []) {
+  const damageTypes = getDamageTypeSettings();
+  const dominant = [...damageEntries]
+    .sort((left, right) => (Number(right.amount) || 0) - (Number(left.amount) || 0))
+    .at(0);
+  return damageTypes.find(type => type.key === dominant?.damageTypeKey)?.color ?? "#dd8431";
 }
 
 function computeVolleyBlastCenter({ attackerToken = null, intendedCenter = null, radiusPixels = 0, outcome = null } = {}) {

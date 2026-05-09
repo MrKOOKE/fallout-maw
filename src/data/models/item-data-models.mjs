@@ -133,6 +133,9 @@ function weaponFunctionField({ named = false } = {}) {
     }),
     volley: new SchemaField({
       damageRadius: new NumberField({ required: true, min: 0, initial: 0 }),
+      regionDurationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      regionDelaySeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      regionRadiusDeltaMeters: new NumberField({ required: true, initial: 0 }),
       explosionAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
       explosionSoundPath: new StringField({ required: true, blank: true, initial: "" }),
       criticalFailureConsequences: new ArrayField(weaponCriticalFailureConsequenceField(), { required: true, initial: [] })
