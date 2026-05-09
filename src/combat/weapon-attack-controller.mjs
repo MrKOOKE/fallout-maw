@@ -715,7 +715,10 @@ class WeaponAttackController {
         distance: Math.max(1, Math.hypot(blastOutcome.center.x - intendedGeometry.origin.x, blastOutcome.center.y - intendedGeometry.origin.y))
       };
       finalGeometries.push(finalGeometry);
-      const blastTargets = getPotentialTargets(this.token, finalGeometry, { includeAttacker: isCriticalFailureAttack(blastOutcome.outcome) });
+      const blastTargets = getPotentialTargets(this.token, finalGeometry, {
+        includeAttacker: isCriticalFailureAttack(blastOutcome.outcome),
+        includeDead: true
+      });
 
       for (const target of blastTargets) {
         const result = this.resolveVolleyDamageAgainstTarget(target, finalGeometry, blastOutcome);
@@ -724,7 +727,7 @@ class WeaponAttackController {
     }
 
     this.geometry = finalGeometries[finalGeometries.length - 1] ?? intendedGeometry;
-    this.targets = getPotentialTargets(this.token, this.geometry);
+    this.targets = getPotentialTargets(this.token, this.geometry, { includeDead: true });
 
     await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
     await checkBatch?.publish({ forceBatch: true });
@@ -789,7 +792,6 @@ class WeaponAttackController {
   }
 
   resolveVolleyDamageAgainstTarget(target, geometry, blastOutcome) {
-    if (isDeadTarget(target)) return null;
     const limbKey = selectRandomLimbKey(target.actor);
     const falloff = getVolleyDamageFalloff(target, geometry);
     const baseDamage = Math.round(getWeaponDamage(this.weapon, this.weaponFunctionId) * falloff);
@@ -854,7 +856,7 @@ class WeaponAttackController {
       : getAttackGeometry(this.weapon, this.actionKey, this.token, origin, this.pointer, this.weaponFunctionId);
     if (!this.geometry) return;
     drawAttackShape(this.shape, this.geometry, this.processing || (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)));
-    this.targets = getPotentialTargets(this.token, this.geometry);
+    this.targets = getPotentialTargets(this.token, this.geometry, { includeDead: this.volleyAction });
     this.hoveredTarget = this.targetedAction && this.aimedMode === "aim"
       ? getAimedTargetUnderPointer(this.pointer, this.targets)
       : this.selectedTarget;
@@ -1353,10 +1355,10 @@ function buildClippedConePoints(attackerToken, { origin, angle, distance, halfAn
   return points;
 }
 
-function getPotentialTargets(attackerToken, geometry, { includeAttacker = false } = {}) {
+function getPotentialTargets(attackerToken, geometry, { includeAttacker = false, includeDead = false } = {}) {
   return (canvas.tokens?.placeables ?? []).filter(target => {
     if ((!includeAttacker && target === attackerToken) || !target.actor || !target.visible) return false;
-    if (isDeadTarget(target)) return false;
+    if (!includeDead && isDeadTarget(target)) return false;
     return Boolean(getVisibleTokenAttackPoint(attackerToken, target, geometry));
   }).sort((left, right) => getTargetDistance(left, geometry) - getTargetDistance(right, geometry));
 }
@@ -2238,7 +2240,7 @@ function getAxisIntersectionRange(origin, direction, min, max) {
 }
 
 async function applyQueuedDamageRequests(requests = []) {
-  return requestDamageApplications(requests.filter(request => !isDeadActor(request.actor)));
+  return requestDamageApplications(requests);
 }
 
 function getTokenCenter(token) {
