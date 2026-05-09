@@ -960,7 +960,9 @@ function prepareWeaponActionButtonsForFunction(selectedWeapon, weaponFunction) {
   return [
     { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot"), disabled: !actions.aimedShot },
     { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot"), disabled: !actions.snapshot },
-    { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst"), disabled: !actions.burst, visible: Boolean(actions.burst) }
+    { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst"), disabled: !actions.burst, visible: Boolean(actions.burst) },
+    { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack"), disabled: !actions.meleeAttack },
+    { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), disabled: !actions.aimedMeleeAttack }
   ].filter(action => action.visible !== false && !action.disabled).map(action => ({
     ...action,
     itemId: selectedWeapon.id,

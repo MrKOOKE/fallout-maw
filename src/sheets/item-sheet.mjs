@@ -11,6 +11,7 @@ import {
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
+const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #functionPickerActive = false;
@@ -799,11 +800,13 @@ function buildWeaponActionChoices(item) {
 
 function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {}) {
   const actions = weaponData?.availableActions ?? {};
-  const fallbackCone = Number(weaponData.attackConeDegrees) || 0;
+  const fallbackCone = Number(weaponData.attackConeDegrees) || DEFAULT_WEAPON_ATTACK_CONE_DEGREES;
   return [
     { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot") },
     { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot") },
-    { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst") }
+    { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst") },
+    { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack"), isMelee: true },
+    { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), isMelee: true }
   ].map(action => {
     const actionData = weaponData?.[action.key] ?? {};
     const sourceActionData = sourceWeaponData?.[action.key] ?? {};
@@ -812,10 +815,21 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {})
       ...action,
       selected: Boolean(actions[action.key]),
       isBurst: action.key === "burst",
-      attackConeDegrees: Number(hasActionCone ? actionData.attackConeDegrees : fallbackCone) || 0,
-      burstCount: Math.max(1, Number(weaponData?.burst?.count) || 3)
+      isMelee: Boolean(action.isMelee),
+      attackConeDegrees: Number(hasActionCone ? actionData.attackConeDegrees : fallbackCone) || DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
+      burstCount: Math.max(1, Number(weaponData?.burst?.count) || 3),
+      thrust: prepareWeaponAttackModeSettings(actionData?.thrust),
+      swing: prepareWeaponAttackModeSettings(actionData?.swing)
     };
   });
+}
+
+function prepareWeaponAttackModeSettings(modeData = {}) {
+  return {
+    accuracyModifier: Number(modeData?.accuracyModifier) || 0,
+    criticalChanceModifier: Number(modeData?.criticalChanceModifier) || 0,
+    damagePercentModifier: Number(modeData?.damagePercentModifier) || 0
+  };
 }
 
 function createDefaultWeaponFunctionData(source = {}) {
@@ -831,7 +845,7 @@ function createDefaultWeaponFunctionData(source = {}) {
     skillKey: "rangedCombat",
     accuracyBonus: 0,
     criticalChanceModifier: 0,
-    attackConeDegrees: 0,
+    attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
     maxRangeMeters: 0,
     effectiveRange: {
       value: 0,
@@ -846,19 +860,39 @@ function createDefaultWeaponFunctionData(source = {}) {
     availableActions: {
       aimedShot: false,
       snapshot: false,
-      burst: false
+      burst: false,
+      meleeAttack: false,
+      aimedMeleeAttack: false
     },
     aimedShot: {
-      attackConeDegrees: 0
+      attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES
     },
     snapshot: {
-      attackConeDegrees: 0
+      attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES
     },
     burst: {
-      attackConeDegrees: 0,
+      attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
       count: 3
-    }
+    },
+    meleeAttack: createDefaultWeaponMeleeActionData(),
+    aimedMeleeAttack: createDefaultWeaponMeleeActionData()
   }, foundry.utils.deepClone(source), { inplace: false });
+}
+
+function createDefaultWeaponMeleeActionData() {
+  return {
+    attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
+    thrust: {
+      accuracyModifier: 0,
+      criticalChanceModifier: 0,
+      damagePercentModifier: 0
+    },
+    swing: {
+      accuracyModifier: 0,
+      criticalChanceModifier: 0,
+      damagePercentModifier: 0
+    }
+  };
 }
 
 function getNextAdditionalWeaponFunctionName(additionalWeapons = []) {

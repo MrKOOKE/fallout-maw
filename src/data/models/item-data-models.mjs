@@ -1,4 +1,5 @@
 const { ArrayField, BooleanField, HTMLField, NumberField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
+const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 
 export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
   static defineSchema() {
@@ -100,7 +101,7 @@ function weaponFunctionField({ named = false } = {}) {
     skillKey: new StringField({ required: true, blank: false, initial: "rangedCombat" }),
     accuracyBonus: new NumberField({ required: true, integer: true, initial: 0 }),
     criticalChanceModifier: new NumberField({ required: true, integer: true, initial: 0 }),
-    attackConeDegrees: new NumberField({ required: true, min: 0, initial: 0 }),
+    attackConeDegrees: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES }),
     maxRangeMeters: new NumberField({ required: true, min: 0, initial: 0 }),
     effectiveRange: new SchemaField({
       value: new NumberField({ required: true, min: 0, initial: 0 }),
@@ -115,14 +116,18 @@ function weaponFunctionField({ named = false } = {}) {
     availableActions: new SchemaField({
       aimedShot: new BooleanField({ required: true, initial: false }),
       snapshot: new BooleanField({ required: true, initial: false }),
-      burst: new BooleanField({ required: true, initial: false })
+      burst: new BooleanField({ required: true, initial: false }),
+      meleeAttack: new BooleanField({ required: true, initial: false }),
+      aimedMeleeAttack: new BooleanField({ required: true, initial: false })
     }),
     aimedShot: weaponActionSettingsField(),
     snapshot: weaponActionSettingsField(),
     burst: new SchemaField({
-      attackConeDegrees: new NumberField({ required: true, min: 0, initial: 0 }),
+      attackConeDegrees: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES }),
       count: new NumberField({ required: true, integer: true, min: 1, initial: 3 })
-    })
+    }),
+    meleeAttack: weaponMeleeActionSettingsField(),
+    aimedMeleeAttack: weaponMeleeActionSettingsField()
   };
   if (named) {
     schema.id = new StringField({ required: true, blank: true, initial: "" });
@@ -133,7 +138,23 @@ function weaponFunctionField({ named = false } = {}) {
 
 function weaponActionSettingsField() {
   return new SchemaField({
-    attackConeDegrees: new NumberField({ required: true, min: 0, initial: 0 })
+    attackConeDegrees: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES })
+  });
+}
+
+function weaponMeleeActionSettingsField() {
+  return new SchemaField({
+    attackConeDegrees: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES }),
+    thrust: weaponAttackModeSettingsField(),
+    swing: weaponAttackModeSettingsField()
+  });
+}
+
+function weaponAttackModeSettingsField() {
+  return new SchemaField({
+    accuracyModifier: new NumberField({ required: true, integer: true, initial: 0 }),
+    criticalChanceModifier: new NumberField({ required: true, integer: true, initial: 0 }),
+    damagePercentModifier: new NumberField({ required: true, integer: true, initial: 0 })
   });
 }
 

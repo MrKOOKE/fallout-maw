@@ -185,7 +185,14 @@
       "WeaponActionAimedShot": "Прицельный выстрел",
       "WeaponActionSnapshot": "Выстрел на вскидку",
       "WeaponActionBurst": "Очередь",
+      "WeaponActionMeleeAttack": "Неприцельная атака",
+      "WeaponActionAimedMeleeAttack": "Прицельная атака",
       "WeaponBurstCount": "Выстрелов в очереди",
+      "WeaponAttackModeThrust": "Укол",
+      "WeaponAttackModeSwing": "Размах",
+      "WeaponModeAccuracyModifier": "Изменение точности",
+      "WeaponModeCriticalChanceModifier": "Изменение шанса на крит",
+      "WeaponModeDamagePercentModifier": "Изменение урона (%)",
       "Weight": "Вес"
     },
     "Effects": {

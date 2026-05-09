@@ -186,7 +186,14 @@
       "WeaponActionAimedShot": "Aimed Shot",
       "WeaponActionSnapshot": "Snapshot",
       "WeaponActionBurst": "Burst",
+      "WeaponActionMeleeAttack": "Unaimed Attack",
+      "WeaponActionAimedMeleeAttack": "Aimed Attack",
       "WeaponBurstCount": "Burst Shots",
+      "WeaponAttackModeThrust": "Thrust",
+      "WeaponAttackModeSwing": "Swing",
+      "WeaponModeAccuracyModifier": "Accuracy Modifier",
+      "WeaponModeCriticalChanceModifier": "Critical Chance Modifier",
+      "WeaponModeDamagePercentModifier": "Damage Modifier (%)",
       "Weight": "Weight"
     },
     "Effects": {

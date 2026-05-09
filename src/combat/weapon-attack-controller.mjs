@@ -11,6 +11,15 @@ const PREVIEW_BROADCAST_INTERVAL_MS = 16;
 const PREVIEW_POSITION_EPSILON = 0.5;
 const PREVIEW_ANGLE_EPSILON = 0.002;
 const AIMED_TARGET_BLOCKER_BONUS_STEP = 20;
+const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
+const MELEE_ACTION_KEYS = new Set(["meleeAttack", "aimedMeleeAttack"]);
+const MELEE_DIRECTIONS = Object.freeze([
+  { key: "thrust", label: "Укол", mode: "thrust" },
+  { key: "rightToLeft", label: "Справа налево", mode: "swing" },
+  { key: "leftToRight", label: "Слева направо", mode: "swing" }
+]);
+const SWING_ARC_EPSILON = 0.0001;
+const GEOMETRY_EPSILON = 0.0001;
 const remoteAttackPreviews = new Map();
 let activeAttack = null;
 
@@ -50,11 +59,16 @@ class WeaponAttackController {
     this.geometry = null;
     this.pointer = null;
     this.processing = false;
+    this.meleeAction = MELEE_ACTION_KEYS.has(actionKey);
     this.aimedShot = isAimedShotAction(weapon, actionKey, this.weaponFunctionId);
+    this.targetedAction = this.aimedShot || this.meleeAction;
+    this.requiresLimbSelection = this.aimedShot || actionKey === "aimedMeleeAttack";
+    this.requiresDirectionSelection = this.meleeAction;
     this.aimedMode = "aim";
     this.hoveredTarget = null;
     this.selectedTarget = null;
     this.hoveredLimbKey = "";
+    this.selectedLimbKey = "";
     this.lockedGeometry = null;
     this.limbMenu = null;
     this.suppressNextContextMenu = false;
@@ -75,7 +89,7 @@ class WeaponAttackController {
     getAttackPreviewLayer().addChild(this.container);
     canvas.stage.on("mousemove", this.events.move);
     document.addEventListener("pointerdown", this.events.pointerDown, { capture: true });
-    if (this.aimedShot) canvas.app.ticker.add(this.events.tick);
+    if (this.targetedAction) canvas.app.ticker.add(this.events.tick);
     canvas.app.view.oncontextmenu = this.events.cancel;
   }
 
@@ -95,7 +109,7 @@ class WeaponAttackController {
   onMove(event) {
     if (this.processing) return;
     event.stopPropagation();
-    if (this.aimedShot && this.aimedMode === "limb") {
+    if (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)) {
       this.refreshAimedLimbMenu();
       return;
     }
@@ -115,7 +129,7 @@ class WeaponAttackController {
     this.updatePointerFromClientEvent(event);
     if (event.button === 2) {
       this.suppressNextContextMenu = true;
-      if (this.aimedShot && this.aimedMode === "limb") {
+      if (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)) {
         this.unlockAimedTarget();
         return false;
       }
@@ -137,9 +151,22 @@ class WeaponAttackController {
       return true;
     }
 
+    const directionButton = event.target?.closest?.("[data-attack-direction]");
+    if (directionButton && this.aimedMode === "direction") {
+      void this.performDirectedAttack(directionButton.dataset.attackDirection ?? "");
+      return true;
+    }
+
     const button = event.target?.closest?.("[data-limb-key]");
     if (!button || this.aimedMode !== "limb") return true;
-    void this.performAimedAttack(button.dataset.limbKey ?? "");
+    const limbKey = button.dataset.limbKey ?? "";
+    if (this.requiresDirectionSelection) {
+      this.selectedLimbKey = limbKey;
+      this.aimedMode = "direction";
+      this.refreshAimedLimbMenu();
+      return true;
+    }
+    void this.performAimedAttack(limbKey);
     return true;
   }
 
@@ -149,7 +176,7 @@ class WeaponAttackController {
       this.suppressNextContextMenu = false;
       return false;
     }
-    if (this.aimedShot && this.aimedMode === "limb") {
+    if (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)) {
       this.unlockAimedTarget();
       return false;
     }
@@ -158,7 +185,7 @@ class WeaponAttackController {
   }
 
   onTick() {
-    if (!this.aimedShot || this.processing) return;
+    if (!this.targetedAction || this.processing) return;
     if (!this.hoveredTarget && !this.selectedTarget) return;
     this.targetMarkers.clear();
     drawTargetMarkers(this.targetMarkers, this.targets, this.getFocusedTarget(), performance.now());
@@ -169,7 +196,7 @@ class WeaponAttackController {
     event.stopPropagation?.();
     event.preventDefault?.();
     this.updatePointerFromClientEvent(event);
-    if (this.aimedShot) return this.onAimedConfirm();
+    if (this.targetedAction) return this.onAimedConfirm();
     if (!this.pointer) return;
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     const pelletCount = getWeaponPelletCount(this.weapon, this.weaponFunctionId);
@@ -221,7 +248,8 @@ class WeaponAttackController {
 
     this.selectedTarget = this.hoveredTarget;
     this.lockedGeometry = serializeGeometry(this.geometry);
-    this.aimedMode = "limb";
+    this.selectedLimbKey = "";
+    this.aimedMode = this.requiresLimbSelection ? "limb" : "direction";
     this.refresh(true);
     this.refreshAimedLimbMenu();
     return undefined;
@@ -280,6 +308,195 @@ class WeaponAttackController {
     this.processing = false;
     if (isDeadTarget(target)) this.unlockAimedTarget();
     this.refresh(true);
+  }
+
+  async performDirectedAttack(directionKey) {
+    if (this.processing || this.aimedMode !== "direction" || !this.selectedTarget) return;
+    const direction = MELEE_DIRECTIONS.find(entry => entry.key === directionKey);
+    if (!direction) return;
+    const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
+    if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
+
+    this.processing = true;
+    this.removeLimbMenu();
+    this.refresh(true);
+
+    const target = this.selectedTarget;
+    const geometry = deserializeGeometry(this.lockedGeometry) ?? this.geometry;
+    const damageRequests = [];
+    let trajectories = [];
+    let attempted = false;
+
+    const checkBatch = createSkillCheckBatchCollector({
+      requester: "weaponAttack",
+      title: this.weapon.name
+    });
+
+    if (direction.mode === "thrust") {
+      const trajectory = buildTrajectoryThroughPoint(this.token, geometry, getTokenCenter(target));
+      const result = await this.resolveDirectedThrustTrajectory(target, trajectory, {
+        limbKey: this.selectedLimbKey,
+        checkBatch
+      });
+      damageRequests.push(...result.damageRequests);
+      trajectories = [result.trajectory];
+      attempted = true;
+    } else {
+      const result = await this.resolveDirectedSwing(target, direction.key, {
+        limbKey: this.selectedLimbKey,
+        checkBatch,
+        geometry
+      });
+      damageRequests.push(...result.damageRequests);
+      trajectories = [result.trajectory];
+      attempted = result.attempted;
+    }
+
+    if (attempted) await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId);
+    await checkBatch.publish({ forceBatch: false });
+    if (attempted) {
+      await playWeaponAttackAnimations({
+        weapon: this.weapon,
+        weaponFunctionId: this.weaponFunctionId,
+        trajectories: trajectories.map(trajectory => ({ ...trajectory, delayGroup: 0 })),
+        delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
+      });
+    }
+    if (damageRequests.length) await applyQueuedDamageRequests(damageRequests);
+
+    this.processing = false;
+    if (isDeadTarget(target)) this.unlockAimedTarget();
+    this.refresh(true);
+  }
+
+  async resolveDirectedThrustTrajectory(selectedTarget, trajectory, { limbKey = "", checkBatch = null } = {}) {
+    const damageRequests = [];
+    const baseDamage = getAttackModeDamage(this.weapon, this.actionKey, "thrust", getWeaponDamage(this.weapon, this.weaponFunctionId), this.weaponFunctionId);
+    const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId);
+    const penetrationThreshold = Math.ceil(baseDamage * 0.5);
+    const targets = getTrajectoryTargetEntries(this.token, trajectory);
+    const selectedEntry = targets.find(entry => entry.target === selectedTarget)
+      ?? { target: selectedTarget, hit: getTokenTrajectoryHit(selectedTarget, trajectory) };
+    const subsequentTargets = targets.filter(entry => (
+      entry.target !== selectedTarget
+      && (!selectedEntry.hit || entry.hit.distance > selectedEntry.hit.distance + 0.5)
+    ));
+
+    let penetrationsUsed = 0;
+    let finalAnimationPoint = null;
+    let hasSuccessfulHit = false;
+
+    const firstRequest = await this.resolveDirectedAttackAgainstTarget(selectedTarget, {
+      limbKey,
+      mode: "thrust",
+      damageAmount: getPenetratedDamageAmount(baseDamage, 0),
+      penetrationStep: 0,
+      checkBatch
+    });
+    if (!firstRequest) {
+      updateTrajectoryEnd(trajectory, selectMissPointNearTarget(this.token, selectedTarget, trajectory));
+      return { damageRequests, trajectory, checkBatch };
+    }
+
+    damageRequests.push(...firstRequest);
+    hasSuccessfulHit = true;
+    finalAnimationPoint = selectPointOnTrajectoryPastTarget(selectedTarget, trajectory);
+
+    if (penetrationsUsed < penetrationPower) {
+      const estimate = estimateDamageRequestGroup(firstRequest);
+      if (estimate.healthDamage >= penetrationThreshold) penetrationsUsed += 1;
+    }
+
+    for (const entry of subsequentTargets) {
+      if (penetrationsUsed <= 0 || penetrationsUsed > penetrationPower) break;
+      const damageAmount = getPenetratedDamageAmount(baseDamage, penetrationsUsed);
+      if (damageAmount <= 0) break;
+
+      const request = await this.resolveDirectedAttackAgainstTarget(entry.target, {
+        mode: "thrust",
+        damageAmount,
+        difficultyBonus: penetrationsUsed * 20,
+        penetrationStep: penetrationsUsed,
+        checkBatch
+      });
+      if (!request) break;
+
+      damageRequests.push(...request);
+      hasSuccessfulHit = true;
+      finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, trajectory);
+      if (penetrationsUsed >= penetrationPower) break;
+
+      const estimate = estimateDamageRequestGroup(request);
+      if (estimate.healthDamage < penetrationThreshold) break;
+      penetrationsUsed += 1;
+    }
+
+    if (finalAnimationPoint) {
+      if (hasSuccessfulHit) updateTrajectoryDistanceEnd(trajectory, finalAnimationPoint);
+      else updateTrajectoryEnd(trajectory, finalAnimationPoint);
+    }
+    return { damageRequests, trajectory, checkBatch };
+  }
+
+  async resolveDirectedSwing(selectedTarget, directionKey, { limbKey = "", checkBatch = null, geometry = null } = {}) {
+    const damageRequests = [];
+    const targets = getSwingTargetSequence(selectedTarget, directionKey, this.targets, geometry ?? this.geometry);
+    const hitTargets = [];
+    const baseDamage = getAttackModeDamage(this.weapon, this.actionKey, "swing", getWeaponDamage(this.weapon, this.weaponFunctionId), this.weaponFunctionId);
+
+    for (const [index, target] of targets.entries()) {
+      const damageAmount = Math.max(0, Math.round(baseDamage * Math.max(0, 1 - (index * 0.2))));
+      if (damageAmount <= 0) break;
+      const request = await this.resolveDirectedAttackAgainstTarget(target, {
+        limbKey: index === 0 ? limbKey : "",
+        mode: "swing",
+        damageAmount,
+        difficultyBonus: index * 30,
+        penetrationStep: index,
+        checkBatch
+      });
+      if (!request) break;
+      damageRequests.push(...request);
+      hitTargets.push(target);
+    }
+
+    return {
+      attempted: true,
+      damageRequests,
+      trajectory: buildSwingAnimationTrajectory(this.token, hitTargets.length ? hitTargets : [selectedTarget], directionKey, geometry ?? this.geometry)
+    };
+  }
+
+  async resolveDirectedAttackAgainstTarget(target, { limbKey = "", mode = "thrust", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
+    if (isDeadTarget(target)) return null;
+    const resolvedLimbKey = limbKey || selectRandomLimbKey(target.actor);
+    const outcome = await requestSkillCheck({
+      actor: this.token.actor,
+      skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
+      data: {
+        difficulty: getDirectedAttackDifficulty(target.actor, resolvedLimbKey, Boolean(limbKey), difficultyBonus),
+        situationalModifier: getAttackModeAccuracyModifier(this.weapon, this.actionKey, mode, this.weaponFunctionId),
+        ...getAttackModeCriticalCheckModifiers(this.weapon, this.actionKey, mode, this.weaponFunctionId)
+      },
+      animate: false,
+      createMessage: !checkBatch,
+      prompt: false,
+      requester: "weaponAttack"
+    });
+    checkBatch?.add(outcome);
+    if (!isSuccessfulAttack(outcome)) return null;
+    return buildWeaponDamageRequests(this.weapon, {
+      actor: target.actor,
+      limbKey: resolvedLimbKey,
+      amount: damageAmount,
+      source: {
+        weaponUuid: this.weapon.uuid,
+        actionKey: this.actionKey,
+        attackerUuid: this.token.actor.uuid,
+        tokenId: this.token.id,
+        penetrationStep
+      }
+    }, this.weaponFunctionId);
   }
 
   async resolveAimedAttackTrajectory(selectedTarget, trajectory, limbKey, { blockerBonus = 0, baseDamage = null, checkBatch = null } = {}) {
@@ -492,17 +709,17 @@ class WeaponAttackController {
     if (!this.pointer && !this.lockedGeometry) return;
 
     const origin = getTokenCenter(this.token);
-    this.geometry = this.aimedShot && this.aimedMode === "limb"
+    this.geometry = this.targetedAction && ["limb", "direction"].includes(this.aimedMode)
       ? deserializeGeometry(this.lockedGeometry)
       : getAttackGeometry(this.weapon, this.actionKey, this.token, origin, this.pointer, this.weaponFunctionId);
     if (!this.geometry) return;
-    drawAttackShape(this.shape, this.geometry, this.processing || (this.aimedShot && this.aimedMode === "limb"));
+    drawAttackShape(this.shape, this.geometry, this.processing || (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)));
     this.targets = getPotentialTargets(this.token, this.geometry);
-    this.hoveredTarget = this.aimedShot && this.aimedMode === "aim"
+    this.hoveredTarget = this.targetedAction && this.aimedMode === "aim"
       ? getAimedTargetUnderPointer(this.pointer, this.targets)
       : this.selectedTarget;
     drawTargetMarkers(this.targetMarkers, this.targets, this.getFocusedTarget(), performance.now());
-    if (this.aimedShot) this.refreshAimedLimbMenu();
+    if (this.targetedAction) this.refreshAimedLimbMenu();
     this.broadcastPreview(forceBroadcast);
   }
 
@@ -513,27 +730,30 @@ class WeaponAttackController {
   updatePointerFromClientEvent(event) {
     if (!Number.isFinite(Number(event?.clientX)) || !Number.isFinite(Number(event?.clientY))) return;
     this.pointer = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
-    if (!this.processing && !(this.aimedShot && this.aimedMode === "limb")) this.refresh();
+    if (!this.processing && !(this.targetedAction && ["limb", "direction"].includes(this.aimedMode))) this.refresh();
   }
 
   unlockAimedTarget() {
     this.aimedMode = "aim";
     this.selectedTarget = null;
     this.hoveredLimbKey = "";
+    this.selectedLimbKey = "";
     this.lockedGeometry = null;
     this.removeLimbMenu();
     this.refresh(true);
   }
 
   refreshAimedLimbMenu() {
-    if (!this.aimedShot || this.processing) return;
+    if (!this.targetedAction || this.processing) return;
     const target = this.getFocusedTarget();
     if (!target) {
       this.removeLimbMenu();
       return;
     }
 
-    const rows = this.prepareAimedLimbRows(target);
+    const rows = this.aimedMode === "direction"
+      ? this.prepareAttackDirectionRows(target)
+      : this.prepareAimedLimbRows(target);
     if (!rows.length) {
       this.removeLimbMenu();
       return;
@@ -542,7 +762,7 @@ class WeaponAttackController {
     if (!this.limbMenu) this.createLimbMenu();
     this.limbMenu.dataset.mode = this.aimedMode;
     this.limbMenu.innerHTML = rows.map(row => `
-      <button type="button" data-limb-key="${escapeHtml(row.key)}" class="${row.key === this.hoveredLimbKey ? "hover" : ""}">
+      <button type="button" ${row.direction ? `data-attack-direction="${escapeHtml(row.key)}"` : `data-limb-key="${escapeHtml(row.key)}"`} class="${row.key === this.hoveredLimbKey ? "hover" : ""}">
         <span>${escapeHtml(row.label)}</span>
         <strong class="${getAimedChanceClass(row.chance)}">${row.chance}%</strong>
       </button>
@@ -560,8 +780,10 @@ class WeaponAttackController {
     });
     this.limbMenu.addEventListener("pointerover", event => {
       const button = event.target?.closest?.("[data-limb-key]");
-      if (!button) return;
-      this.hoveredLimbKey = button.dataset.limbKey ?? "";
+      const directionButton = event.target?.closest?.("[data-attack-direction]");
+      const activeButton = button ?? directionButton;
+      if (!activeButton) return;
+      this.hoveredLimbKey = activeButton.dataset.limbKey ?? activeButton.dataset.attackDirection ?? "";
       this.updateLimbMenuHover();
     });
     this.limbMenu.addEventListener("pointerout", event => {
@@ -573,8 +795,9 @@ class WeaponAttackController {
   }
 
   updateLimbMenuHover() {
-    for (const button of this.limbMenu?.querySelectorAll("[data-limb-key]") ?? []) {
-      button.classList.toggle("hover", button.dataset.limbKey === this.hoveredLimbKey);
+    for (const button of this.limbMenu?.querySelectorAll("[data-limb-key], [data-attack-direction]") ?? []) {
+      const key = button.dataset.limbKey ?? button.dataset.attackDirection ?? "";
+      button.classList.toggle("hover", key === this.hoveredLimbKey);
     }
   }
 
@@ -596,6 +819,7 @@ class WeaponAttackController {
   }
 
   prepareAimedLimbRows(target) {
+    if (!this.requiresLimbSelection) return [];
     const trajectory = this.geometry ? buildTrajectoryThroughPoint(this.token, this.geometry, getTokenCenter(target)) : null;
     const blockerCount = trajectory ? getAimedTargetBlockers(this.token, target, trajectory).length : 0;
     const blockerBonus = getAimedTargetBlockerBonus(blockerCount);
@@ -606,6 +830,21 @@ class WeaponAttackController {
         label: String(limb.label ?? key),
         chance: getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, key, blockerBonus, this.weaponFunctionId)
       }));
+  }
+
+  prepareAttackDirectionRows(target) {
+    const limbKey = this.selectedLimbKey;
+    return MELEE_DIRECTIONS.map(direction => ({
+      key: direction.key,
+      label: direction.label,
+      direction: true,
+      chance: getDirectedAttackHitChance(this.token.actor, this.weapon, target.actor, {
+        actionKey: this.actionKey,
+        mode: direction.mode,
+        limbKey,
+        weaponFunctionId: this.weaponFunctionId
+      })
+    }));
   }
 
   broadcastPreview(force = false) {
@@ -848,7 +1087,9 @@ function getActionAttackConeRadians(weapon, actionKey, weaponFunctionId = "") {
   const hasActionCone = Object.hasOwn(sourceActionData, "attackConeDegrees");
   const actionCone = Number(weaponData?.[actionKey]?.attackConeDegrees);
   const fallbackCone = Number(weaponData.attackConeDegrees);
-  const degrees = hasActionCone && Number.isFinite(actionCone) ? actionCone : fallbackCone;
+  const degrees = hasActionCone && Number.isFinite(actionCone)
+    ? actionCone
+    : (Number.isFinite(fallbackCone) && fallbackCone > 0 ? fallbackCone : DEFAULT_WEAPON_ATTACK_CONE_DEGREES);
   return Math.max(0, (Number(degrees) || 0) * (Math.PI / 180));
 }
 
@@ -909,10 +1150,8 @@ function getVisibleTokenAttackPoint(attackerToken, target, geometry) {
 }
 
 function getVisibleTokenAttackPoints(attackerToken, target, geometry) {
-  return getTokenAttackSamplePoints(target).filter(point => (
-    pointInAttackCone(point, geometry)
-    && hasLineOfSight(attackerToken, point, geometry.origin)
-  ));
+  return getTokenAttackContactPoints(target, geometry)
+    .filter(point => hasLineOfSight(attackerToken, point, geometry.origin));
 }
 
 function hasLineOfSight(attackerToken, destination, origin) {
@@ -1246,6 +1485,30 @@ function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "") {
   };
 }
 
+function getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId = "") {
+  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  return weaponData?.[actionKey]?.[mode] ?? {};
+}
+
+function getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId = "") {
+  return toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.accuracyBonus)
+    + toInteger(getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.accuracyModifier);
+}
+
+function getAttackModeCriticalCheckModifiers(weapon, actionKey, mode, weaponFunctionId = "") {
+  const modifier = toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier)
+    + toInteger(getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.criticalChanceModifier);
+  return {
+    criticalSuccessBonus: Math.max(0, modifier),
+    criticalFailureBonus: Math.max(0, -modifier)
+  };
+}
+
+function getAttackModeDamage(weapon, actionKey, mode, baseDamage, weaponFunctionId = "") {
+  const modifier = toInteger(getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.damagePercentModifier);
+  return Math.max(0, Math.round(Math.max(0, Number(baseDamage) || 0) * Math.max(0, 100 + modifier) / 100));
+}
+
 function getWeaponPenetrationPower(weapon, weaponFunctionId = "") {
   return Math.max(0, toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.penetration));
 }
@@ -1259,12 +1522,86 @@ function getPenetratedDamageAmount(baseDamage, penetrationsUsed) {
 }
 
 function getTargetDistance(target, geometry) {
-  const distances = getTokenAttackSamplePoints(target)
-    .filter(point => pointInAttackCone(point, geometry))
+  const distances = getTokenAttackContactPoints(target, geometry)
     .map(point => Math.hypot(point.x - geometry.origin.x, point.y - geometry.origin.y));
   if (distances.length) return Math.min(...distances);
   const center = getTokenCenter(target);
   return Math.hypot(center.x - geometry.origin.x, center.y - geometry.origin.y);
+}
+
+function getSwingTargetSequence(selectedTarget, directionKey, targets = [], geometry = null) {
+  if (!geometry) return [selectedTarget];
+  const selectedSpan = getTokenSwingArcSpan(selectedTarget, geometry);
+  if (!selectedSpan) return [selectedTarget];
+  const movingLeft = directionKey === "rightToLeft";
+  const anchor = selectedSpan.lateralCenter;
+  const nextTargets = Array.from(new Set(targets ?? []))
+    .filter(target => target !== selectedTarget && target?.actor && target.visible && !isDeadTarget(target))
+    .map(target => ({ target, span: getTokenSwingArcSpan(target, geometry) }))
+    .filter(entry => entry.span)
+    .filter(entry => movingLeft
+      ? entry.span.lateralCenter <= anchor + SWING_ARC_EPSILON
+      : entry.span.lateralCenter >= anchor - SWING_ARC_EPSILON)
+    .sort((left, right) => {
+      const arcOrder = movingLeft
+        ? right.span.lateralCenter - left.span.lateralCenter
+        : left.span.lateralCenter - right.span.lateralCenter;
+      return arcOrder || left.span.distance - right.span.distance;
+    })
+    .map(entry => entry.target);
+  return [selectedTarget, ...nextTargets];
+}
+
+function getTokenSwingArcSpan(target, geometry) {
+  const points = getTokenAttackContactPoints(target, geometry)
+    .map(point => ({
+      offset: normalizeAngle(Math.atan2(point.y - geometry.origin.y, point.x - geometry.origin.x) - geometry.angle),
+      lateral: getSwingLateralOffset(point, geometry),
+      distance: Math.hypot(point.x - geometry.origin.x, point.y - geometry.origin.y)
+    }));
+  if (!points.length) return null;
+  points.sort((left, right) => left.offset - right.offset);
+  const min = points[0].offset;
+  const max = points.at(-1).offset;
+  const lateralValues = points.map(point => point.lateral).sort((left, right) => left - right);
+  const lateralMin = lateralValues[0];
+  const lateralMax = lateralValues.at(-1);
+  return {
+    min,
+    max,
+    center: (min + max) / 2,
+    lateralMin,
+    lateralMax,
+    lateralCenter: (lateralMin + lateralMax) / 2,
+    distance: Math.min(...points.map(point => point.distance))
+  };
+}
+
+function getSwingLateralOffset(point, geometry) {
+  const dx = point.x - geometry.origin.x;
+  const dy = point.y - geometry.origin.y;
+  return (Math.cos(geometry.angle) * dy) - (Math.sin(geometry.angle) * dx);
+}
+
+function buildSwingAnimationTrajectory(attackerToken, targets = [], directionKey = "rightToLeft", geometry = null) {
+  const centers = targets.map(getTokenCenter);
+  const first = geometry?.origin ?? (attackerToken ? getTokenCenter(attackerToken) : null) ?? centers.at(0) ?? { x: 0, y: 0 };
+  const last = centers.at(-1) ?? null;
+  const fallbackOffset = Math.max(24, (Number(canvas.grid?.size) || 100) * 0.7);
+  const end = last
+    ? last
+    : {
+      x: first.x + (directionKey === "rightToLeft" ? -fallbackOffset : fallbackOffset),
+      y: first.y
+    };
+  const angle = Math.atan2(end.y - first.y, end.x - first.x);
+  return {
+    origin: first,
+    angle,
+    distance: Math.max(1, Math.hypot(end.x - first.x, end.y - first.y)),
+    halfAngle: 0,
+    end
+  };
 }
 
 function getTokenTrajectoryHit(token, trajectory) {
@@ -1284,13 +1621,174 @@ function getTokenTrajectoryHit(token, trajectory) {
   };
 }
 
+function getTokenAttackContactPoints(token, geometry) {
+  const bounds = getTokenBoundsRectangle(token);
+  if (!bounds) return [];
+  const points = [];
+
+  if (geometry.halfAngle <= 0) {
+    const end = geometry.end ?? getPointOnTrajectory(geometry, geometry.distance);
+    addRectangleSegmentContactPoints(points, bounds, geometry.origin, end);
+    return sortContactPoints(points, geometry.origin);
+  }
+
+  const attackPolygon = getAttackPolygon(geometry);
+  if (attackPolygon) {
+    const intersection = bounds.intersectPolygon?.(attackPolygon, { canMutate: false });
+    const intersectionPoints = getPolygonPointObjects(intersection);
+    if (intersectionPoints.length) addUniquePoint(points, getPointCentroid(intersectionPoints));
+    for (const point of intersectionPoints) addInsetContactPoint(points, point, bounds);
+  }
+
+  for (const segment of getAttackBoundarySegments(geometry)) {
+    addRectangleSegmentContactPoints(points, bounds, segment.a, segment.b);
+  }
+
+  for (const point of getTokenAttackSamplePoints(token)) {
+    if (pointInAttackCone(point, geometry)) addUniquePoint(points, point);
+  }
+
+  return sortContactPoints(points, geometry.origin);
+}
+
 function getTokenBounds(token) {
+  const bounds = getTokenBoundsRectangle(token);
+  if (bounds) {
+    return {
+      left: bounds.left,
+      right: bounds.right,
+      top: bounds.top,
+      bottom: bounds.bottom
+    };
+  }
   return {
     left: token.x,
     right: token.x + token.w,
     top: token.y,
     bottom: token.y + token.h
   };
+}
+
+function getTokenBoundsRectangle(token) {
+  const bounds = token?.bounds;
+  if (bounds) {
+    const left = Number(bounds.left ?? bounds.x);
+    const top = Number(bounds.top ?? bounds.y);
+    const width = Number(bounds.width);
+    const height = Number(bounds.height);
+    const right = Number(bounds.right ?? (left + width));
+    const bottom = Number(bounds.bottom ?? (top + height));
+    if ([left, right, top, bottom].every(Number.isFinite)) {
+      return new PIXI.Rectangle(left, top, right - left, bottom - top).normalize();
+    }
+  }
+  const left = Number(token?.x);
+  const top = Number(token?.y);
+  const width = Number(token?.w);
+  const height = Number(token?.h);
+  if ([left, top, width, height].every(Number.isFinite)) return new PIXI.Rectangle(left, top, width, height).normalize();
+  return null;
+}
+
+function getAttackBoundarySegments(geometry) {
+  const points = getAttackPolygonPoints(geometry);
+  if (points.length < 2) return [];
+  const segments = [];
+  for (let index = 0; index < points.length; index += 1) {
+    segments.push({
+      a: points[index],
+      b: points[(index + 1) % points.length]
+    });
+  }
+  return segments;
+}
+
+function getAttackPolygon(geometry) {
+  const points = getAttackPolygonPoints(geometry);
+  if (points.length < 3) return null;
+  return new PIXI.Polygon(points.flatMap(point => [point.x, point.y]));
+}
+
+function getAttackPolygonPoints(geometry) {
+  if (Array.isArray(geometry.shapePoints) && geometry.shapePoints.length >= 3) return geometry.shapePoints;
+  if (geometry.halfAngle <= 0) return [];
+  const points = [geometry.origin];
+  const segments = 24;
+  for (let index = 0; index <= segments; index += 1) {
+    const step = -geometry.halfAngle + ((geometry.halfAngle * 2 * index) / segments);
+    points.push({
+      x: geometry.origin.x + (Math.cos(geometry.angle + step) * geometry.distance),
+      y: geometry.origin.y + (Math.sin(geometry.angle + step) * geometry.distance)
+    });
+  }
+  return points;
+}
+
+function getPolygonPointObjects(polygon) {
+  const values = Array.isArray(polygon?.points) ? polygon.points : [];
+  const points = [];
+  for (let index = 0; index < values.length - 1; index += 2) {
+    const x = Number(values[index]);
+    const y = Number(values[index + 1]);
+    if (Number.isFinite(x) && Number.isFinite(y)) points.push({ x, y });
+  }
+  return points;
+}
+
+function getPointCentroid(points = []) {
+  const count = Math.max(1, points.length);
+  return {
+    x: points.reduce((sum, point) => sum + point.x, 0) / count,
+    y: points.reduce((sum, point) => sum + point.y, 0) / count
+  };
+}
+
+function addRectangleSegmentContactPoints(points, bounds, a, b) {
+  const intersections = bounds.segmentIntersections?.(a, b) ?? [];
+  if (bounds.contains?.(a.x, a.y)) addUniquePoint(points, a);
+  if (bounds.contains?.(b.x, b.y)) addUniquePoint(points, b);
+  for (const point of intersections) addInsetContactPoint(points, point, bounds);
+  if (intersections.length >= 2) {
+    addUniquePoint(points, {
+      x: (intersections[0].x + intersections.at(-1).x) / 2,
+      y: (intersections[0].y + intersections.at(-1).y) / 2
+    });
+  }
+}
+
+function addInsetContactPoint(points, point, bounds) {
+  const center = bounds.center ?? {
+    x: bounds.x + (bounds.width / 2),
+    y: bounds.y + (bounds.height / 2)
+  };
+  const dx = center.x - point.x;
+  const dy = center.y - point.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance <= GEOMETRY_EPSILON) {
+    addUniquePoint(points, point);
+    return;
+  }
+  const inset = Math.min(3, Math.max(0.5, Math.min(bounds.width, bounds.height) * 0.02), distance);
+  addUniquePoint(points, {
+    x: point.x + ((dx / distance) * inset),
+    y: point.y + ((dy / distance) * inset)
+  });
+}
+
+function sortContactPoints(points, origin) {
+  return points.sort((left, right) => (
+    Math.hypot(left.x - origin.x, left.y - origin.y)
+    - Math.hypot(right.x - origin.x, right.y - origin.y)
+  ));
+}
+
+function addUniquePoint(points, point) {
+  if (!Number.isFinite(Number(point?.x)) || !Number.isFinite(Number(point?.y))) return;
+  if (points.some(existing => (
+    Math.abs(existing.x - point.x) <= GEOMETRY_EPSILON
+    && Math.abs(existing.y - point.y) <= GEOMETRY_EPSILON
+  ))) return;
+  points.push({ x: Number(point.x), y: Number(point.y) });
 }
 
 function rayRectangleIntersection(origin, direction, bounds, maxDistance) {
@@ -1383,12 +1881,42 @@ function getAimedAttackDifficulty(targetActor, limbKey = "", blockerBonus = 0) {
   return dodge + Math.round(dodge * (limbPercent / 100)) + Math.max(0, toInteger(blockerBonus));
 }
 
+function getDirectedAttackDifficulty(targetActor, limbKey = "", aimed = false, difficultyBonus = 0) {
+  const base = aimed
+    ? getAimedAttackDifficulty(targetActor, limbKey, 0)
+    : getDodgeDifficulty(targetActor);
+  return base + Math.max(0, toInteger(difficultyBonus));
+}
+
 function getAimedAttackHitChance(attackerActor, weapon, targetActor, limbKey = "", blockerBonus = 0, weaponFunctionId = "") {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
   const finalSkillValue = toInteger(attackerActor.system?.skills?.[skillKey]?.value)
     + toInteger(weaponData?.accuracyBonus);
   const difficulty = getAimedAttackDifficulty(targetActor, limbKey, blockerBonus);
+  if ((difficulty - finalSkillValue) >= 100) return 0;
+
+  const gambling = toInteger(attackerActor.system?.skills?.gambling?.value);
+  const criticalFailureMaximum = clamp(5, 0, 100);
+  const criticalSuccessMinimum = Math.ceil(101 - clamp(4 + (gambling / 20), 0, 100));
+  let successes = 0;
+  for (let roll = 1; roll <= 100; roll += 1) {
+    if (criticalFailureMaximum > 0 && roll <= criticalFailureMaximum) continue;
+    if (criticalSuccessMinimum <= 100 && roll >= criticalSuccessMinimum) {
+      successes += 1;
+      continue;
+    }
+    if (finalSkillValue + roll >= difficulty) successes += 1;
+  }
+  return clamp(successes, 0, 100);
+}
+
+function getDirectedAttackHitChance(attackerActor, weapon, targetActor, { actionKey = "", mode = "thrust", limbKey = "", difficultyBonus = 0, weaponFunctionId = "" } = {}) {
+  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  const skillKey = String(weaponData?.skillKey ?? "");
+  const finalSkillValue = toInteger(attackerActor.system?.skills?.[skillKey]?.value)
+    + getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId);
+  const difficulty = getDirectedAttackDifficulty(targetActor, limbKey, Boolean(limbKey), difficultyBonus);
   if ((difficulty - finalSkillValue) >= 100) return 0;
 
   const gambling = toInteger(attackerActor.system?.skills?.gambling?.value);

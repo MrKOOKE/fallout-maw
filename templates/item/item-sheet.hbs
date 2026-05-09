@@ -529,6 +529,44 @@
           </label>
           {{/if}}
         </div>
+        {{#if isMelee}}
+        <div class="fallout-maw-weapon-action-mode-grid">
+          <section class="fallout-maw-weapon-action-mode">
+            <h4>{{localize "FALLOUTMAW.Item.WeaponAttackModeThrust"}}</h4>
+            <div class="fallout-maw-list-grid three-columns">
+              <label>
+                <span>{{localize "FALLOUTMAW.Item.WeaponModeAccuracyModifier"}}</span>
+                <input type="number" name="{{../path}}.{{key}}.thrust.accuracyModifier" value="{{thrust.accuracyModifier}}" step="1">
+              </label>
+              <label>
+                <span>{{localize "FALLOUTMAW.Item.WeaponModeCriticalChanceModifier"}}</span>
+                <input type="number" name="{{../path}}.{{key}}.thrust.criticalChanceModifier" value="{{thrust.criticalChanceModifier}}" step="1">
+              </label>
+              <label>
+                <span>{{localize "FALLOUTMAW.Item.WeaponModeDamagePercentModifier"}}</span>
+                <input type="number" name="{{../path}}.{{key}}.thrust.damagePercentModifier" value="{{thrust.damagePercentModifier}}" step="1">
+              </label>
+            </div>
+          </section>
+          <section class="fallout-maw-weapon-action-mode">
+            <h4>{{localize "FALLOUTMAW.Item.WeaponAttackModeSwing"}}</h4>
+            <div class="fallout-maw-list-grid three-columns">
+              <label>
+                <span>{{localize "FALLOUTMAW.Item.WeaponModeAccuracyModifier"}}</span>
+                <input type="number" name="{{../path}}.{{key}}.swing.accuracyModifier" value="{{swing.accuracyModifier}}" step="1">
+              </label>
+              <label>
+                <span>{{localize "FALLOUTMAW.Item.WeaponModeCriticalChanceModifier"}}</span>
+                <input type="number" name="{{../path}}.{{key}}.swing.criticalChanceModifier" value="{{swing.criticalChanceModifier}}" step="1">
+              </label>
+              <label>
+                <span>{{localize "FALLOUTMAW.Item.WeaponModeDamagePercentModifier"}}</span>
+                <input type="number" name="{{../path}}.{{key}}.swing.damagePercentModifier" value="{{swing.damagePercentModifier}}" step="1">
+              </label>
+            </div>
+          </section>
+        </div>
+        {{/if}}
       </section>
       {{/if}}
       {{/each}}
