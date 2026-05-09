@@ -1,6 +1,6 @@
 import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
-import { playWeaponAttackAnimations } from "./attack-animations.mjs";
+import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./attack-animations.mjs";
 import { estimateDamageApplication, requestDamageApplications } from "./damage-hub.mjs";
 import { ITEM_FUNCTIONS, getWeaponFunctionById, hasItemFunction } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -12,6 +12,8 @@ const PREVIEW_POSITION_EPSILON = 0.5;
 const PREVIEW_ANGLE_EPSILON = 0.002;
 const AIMED_TARGET_BLOCKER_BONUS_STEP = 20;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
+const BASE_VOLLEY_DIFFICULTY = 60;
+const VOLLEY_ACTION_KEY = "volley";
 const MELEE_ACTION_KEYS = new Set(["meleeAttack", "aimedMeleeAttack"]);
 const MELEE_DIRECTIONS = Object.freeze([
   { key: "thrust", label: "Укол", mode: "thrust" },
@@ -76,6 +78,7 @@ class WeaponAttackController {
     this.pendingCriticalFailureResourceCosts = [];
     this.lastPreviewBroadcastAt = 0;
     this.lastBroadcastPreviewState = null;
+    this.volleyAction = isVolleyAttackAction(this.weapon, this.actionKey, this.weaponFunctionId);
     this.events = {
       move: event => this.onMove(event),
       confirm: event => this.onConfirm(event),
@@ -199,6 +202,7 @@ class WeaponAttackController {
     this.updatePointerFromClientEvent(event);
     if (this.targetedAction) return this.onAimedConfirm();
     if (!this.pointer) return;
+    if (this.volleyAction) return this.performVolleyAttack();
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     const pelletCount = getWeaponPelletCount(this.weapon, this.weaponFunctionId);
     if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
@@ -683,6 +687,128 @@ class WeaponAttackController {
     }, this.weaponFunctionId);
   }
 
+  async performVolleyAttack() {
+    if (this.processing || !this.geometry) return;
+    const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
+    if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
+
+    this.processing = true;
+    this.pendingCriticalFailureResourceCosts = [];
+    this.refresh(true);
+
+    const intendedGeometry = this.geometry;
+    const damageRequests = [];
+    const finalGeometries = [];
+    const checkBatch = attackCount > 1
+      ? createSkillCheckBatchCollector({
+        requester: "weaponAttack",
+        title: this.weapon.name
+      })
+      : null;
+
+    for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
+      const blastOutcome = await this.resolveVolleyBlastPoint(intendedGeometry, { checkBatch });
+      const finalGeometry = {
+        ...intendedGeometry,
+        end: blastOutcome.center,
+        angle: Math.atan2(blastOutcome.center.y - intendedGeometry.origin.y, blastOutcome.center.x - intendedGeometry.origin.x),
+        distance: Math.max(1, Math.hypot(blastOutcome.center.x - intendedGeometry.origin.x, blastOutcome.center.y - intendedGeometry.origin.y))
+      };
+      finalGeometries.push(finalGeometry);
+      const blastTargets = getPotentialTargets(this.token, finalGeometry, { includeAttacker: isCriticalFailureAttack(blastOutcome.outcome) });
+
+      for (const target of blastTargets) {
+        const result = this.resolveVolleyDamageAgainstTarget(target, finalGeometry, blastOutcome);
+        damageRequests.push(...(result ?? []));
+      }
+    }
+
+    this.geometry = finalGeometries[finalGeometries.length - 1] ?? intendedGeometry;
+    this.targets = getPotentialTargets(this.token, this.geometry);
+
+    await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
+    await checkBatch?.publish({ forceBatch: true });
+    await this.playVolleyAttackEffects(finalGeometries);
+    if (damageRequests.length) await applyQueuedDamageRequests(damageRequests);
+
+    this.processing = false;
+    this.refresh(true);
+  }
+
+  async resolveVolleyBlastPoint(geometry, { checkBatch = null } = {}) {
+    const rangeDifficultyBonus = getEffectiveRangeDifficultyBonusForDistance(
+      getWeaponAttackData(this.weapon, this.weaponFunctionId),
+      pixelsToMeters(geometry.distance)
+    );
+    const outcome = await requestSkillCheck({
+      actor: this.token.actor,
+      skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
+      data: {
+        difficulty: BASE_VOLLEY_DIFFICULTY + rangeDifficultyBonus,
+        situationalModifier: toInteger(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.accuracyBonus),
+        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId)
+      },
+      animate: false,
+      createMessage: !checkBatch,
+      prompt: false,
+      requester: "weaponAttack"
+    });
+    checkBatch?.add(outcome);
+    this.recordCriticalFailureConsequences(outcome);
+    const center = computeVolleyBlastCenter({
+      attackerToken: this.token,
+      intendedCenter: geometry.end,
+      radiusPixels: geometry.radiusPixels,
+      outcome
+    });
+    return {
+      outcome,
+      center,
+      critical: isCriticalSuccessAttack(outcome)
+    };
+  }
+
+  async playVolleyAttackEffects(finalGeometries = []) {
+    const delayMs = getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId);
+    const animationTasks = finalGeometries.map(async (geometry, index) => {
+      if (index > 0 && delayMs > 0) await sleep(index * delayMs);
+      await playWeaponAttackAnimations({
+        weapon: this.weapon,
+        weaponFunctionId: this.weaponFunctionId,
+        trajectories: [buildVolleyAnimationTrajectory(geometry)],
+        delayMs: 0
+      });
+      await playWeaponExplosionAnimation({
+        weapon: this.weapon,
+        weaponFunctionId: this.weaponFunctionId,
+        center: geometry.end,
+        radiusPixels: geometry.radiusPixels
+      });
+    });
+    await Promise.all(animationTasks);
+  }
+
+  resolveVolleyDamageAgainstTarget(target, geometry, blastOutcome) {
+    if (isDeadTarget(target)) return null;
+    const limbKey = selectRandomLimbKey(target.actor);
+    const falloff = getVolleyDamageFalloff(target, geometry);
+    const baseDamage = Math.round(getWeaponDamage(this.weapon, this.weaponFunctionId) * falloff);
+    const damageAmount = getCriticalDamageAmount(this.weapon, baseDamage, blastOutcome.outcome, this.weaponFunctionId);
+    return buildWeaponDamageRequests(this.weapon, {
+      actor: target.actor,
+      limbKey,
+      amount: damageAmount,
+      source: {
+        weaponUuid: this.weapon.uuid,
+        actionKey: this.actionKey,
+        attackerUuid: this.token.actor.uuid,
+        tokenId: this.token.id,
+        blastCenter: serializePoint(geometry.end),
+        blastRadius: getVolleyDamageRadius(this.weapon, this.weaponFunctionId)
+      }
+    }, this.weaponFunctionId);
+  }
+
   async resolveAimedAttackAgainstTarget(target, { limbKey = "", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
     if (isDeadTarget(target)) return null;
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
@@ -915,6 +1041,12 @@ function hasWeaponAction(weapon, actionKey, weaponFunctionId = "") {
   return Boolean(getWeaponAttackData(weapon, weaponFunctionId)?.availableActions?.[actionKey]);
 }
 
+function isVolleyAttackAction(weapon, actionKey, weaponFunctionId = "") {
+  const actions = getWeaponAttackData(weapon, weaponFunctionId)?.availableActions ?? {};
+  if (actionKey === VOLLEY_ACTION_KEY) return Boolean(actions.volley);
+  return actionKey === "burst" && Boolean(actions.burst) && Boolean(actions.volley);
+}
+
 function broadcastAttackPreview(payload = {}) {
   game.socket.emit(WEAPON_ATTACK_SOCKET, {
     scope: WEAPON_ATTACK_SOCKET_SCOPE,
@@ -975,11 +1107,13 @@ function clearRemoteAttackPreviews() {
 function serializeGeometry(geometry) {
   if (!geometry) return null;
   return {
+    type: String(geometry.type ?? ""),
     origin: serializePoint(geometry.origin),
     end: serializePoint(geometry.end),
     angle: Number(geometry.angle) || 0,
     distance: Number(geometry.distance) || 0,
     halfAngle: Number(geometry.halfAngle) || 0,
+    radiusPixels: Number(geometry.radiusPixels) || 0,
     shapePoints: Array.isArray(geometry.shapePoints) ? geometry.shapePoints.map(serializePoint) : []
   };
 }
@@ -987,11 +1121,13 @@ function serializeGeometry(geometry) {
 function deserializeGeometry(geometry) {
   if (!geometry?.origin || !geometry?.end) return null;
   return {
+    type: String(geometry.type ?? ""),
     origin: deserializePoint(geometry.origin),
     end: deserializePoint(geometry.end),
     angle: Number(geometry.angle) || 0,
     distance: Number(geometry.distance) || 0,
     halfAngle: Number(geometry.halfAngle) || 0,
+    radiusPixels: Number(geometry.radiusPixels) || 0,
     shapePoints: Array.isArray(geometry.shapePoints) ? geometry.shapePoints.map(deserializePoint) : []
   };
 }
@@ -1020,11 +1156,13 @@ function isSamePreviewState(current, previous) {
 
 function isSameGeometry(current, previous) {
   if (!current || !previous) return false;
-  return isSamePoint(current.origin, previous.origin)
+  return String(current.type ?? "") === String(previous.type ?? "")
+    && isSamePoint(current.origin, previous.origin)
     && isSamePoint(current.end, previous.end)
     && Math.abs((Number(current.angle) || 0) - (Number(previous.angle) || 0)) <= PREVIEW_ANGLE_EPSILON
     && Math.abs((Number(current.distance) || 0) - (Number(previous.distance) || 0)) <= PREVIEW_POSITION_EPSILON
     && Math.abs((Number(current.halfAngle) || 0) - (Number(previous.halfAngle) || 0)) <= PREVIEW_ANGLE_EPSILON
+    && Math.abs((Number(current.radiusPixels) || 0) - (Number(previous.radiusPixels) || 0)) <= PREVIEW_POSITION_EPSILON
     && isSamePointList(current.shapePoints, previous.shapePoints);
 }
 
@@ -1104,6 +1242,8 @@ async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "
 }
 
 function getAttackGeometry(weapon, actionKey, attackerToken, origin, pointer, weaponFunctionId = "") {
+  if (isVolleyAttackAction(weapon, actionKey, weaponFunctionId)) return getVolleyAttackGeometry(weapon, attackerToken, origin, pointer, weaponFunctionId);
+
   const maxDistancePixels = metersToPixels(Number(getWeaponAttackData(weapon, weaponFunctionId)?.maxRangeMeters) || 0);
   const dx = pointer.x - origin.x;
   const dy = pointer.y - origin.y;
@@ -1113,6 +1253,27 @@ function getAttackGeometry(weapon, actionKey, attackerToken, origin, pointer, we
   const end = getWallClippedEndpoint(attackerToken, origin, angle, distance).point;
   const shapePoints = buildClippedConePoints(attackerToken, { origin, angle, distance, halfAngle });
   return { origin, angle, distance, halfAngle, end, shapePoints };
+}
+
+function getVolleyAttackGeometry(weapon, attackerToken, origin, pointer, weaponFunctionId = "") {
+  const maxDistancePixels = metersToPixels(Number(getWeaponAttackData(weapon, weaponFunctionId)?.maxRangeMeters) || 0);
+  const radiusPixels = metersToPixels(getVolleyDamageRadius(weapon, weaponFunctionId));
+  const dx = pointer.x - origin.x;
+  const dy = pointer.y - origin.y;
+  const angle = Math.atan2(dy, dx);
+  const requestedDistance = Math.max(1, Math.hypot(dx, dy));
+  const maxDistance = maxDistancePixels > 0 ? Math.min(requestedDistance, maxDistancePixels) : requestedDistance;
+  const clipped = getWallClippedEndpoint(attackerToken, origin, angle, maxDistance);
+  return {
+    type: VOLLEY_ACTION_KEY,
+    origin,
+    angle,
+    distance: clipped.distance,
+    halfAngle: 0,
+    end: clipped.point,
+    radiusPixels,
+    shapePoints: []
+  };
 }
 
 function getActionAttackConeRadians(weapon, actionKey, weaponFunctionId = "") {
@@ -1140,9 +1301,23 @@ function pixelsToMeters(pixels) {
   return Math.max(0, Number(pixels) || 0) * (gridDistance / gridSize);
 }
 
+function sleep(ms) {
+  return new Promise(resolve => window.setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
 function drawAttackShape(graphics, geometry, locked) {
   const color = locked ? 0xffd166 : 0xff3b3b;
   const alpha = locked ? 0.24 : 0.18;
+  if (geometry.type === VOLLEY_ACTION_KEY) {
+    graphics.lineStyle(2, color, 0.7);
+    graphics.moveTo(geometry.origin.x, geometry.origin.y);
+    graphics.lineTo(geometry.end.x, geometry.end.y);
+    graphics.lineStyle(2, color, 0.9);
+    graphics.beginFill(color, alpha);
+    graphics.drawCircle(geometry.end.x, geometry.end.y, Math.max(1, Number(geometry.radiusPixels) || 0));
+    graphics.endFill();
+    return;
+  }
   const points = Array.isArray(geometry.shapePoints) && geometry.shapePoints.length
     ? geometry.shapePoints.flatMap(point => [point.x, point.y])
     : buildConePoints(geometry);
@@ -1178,9 +1353,9 @@ function buildClippedConePoints(attackerToken, { origin, angle, distance, halfAn
   return points;
 }
 
-function getPotentialTargets(attackerToken, geometry) {
+function getPotentialTargets(attackerToken, geometry, { includeAttacker = false } = {}) {
   return (canvas.tokens?.placeables ?? []).filter(target => {
-    if (target === attackerToken || !target.actor || !target.visible) return false;
+    if ((!includeAttacker && target === attackerToken) || !target.actor || !target.visible) return false;
     if (isDeadTarget(target)) return false;
     return Boolean(getVisibleTokenAttackPoint(attackerToken, target, geometry));
   }).sort((left, right) => getTargetDistance(left, geometry) - getTargetDistance(right, geometry));
@@ -1191,6 +1366,10 @@ function getVisibleTokenAttackPoint(attackerToken, target, geometry) {
 }
 
 function getVisibleTokenAttackPoints(attackerToken, target, geometry) {
+  if (geometry.type === VOLLEY_ACTION_KEY) {
+    return getTokenAttackContactPoints(target, geometry)
+      .filter(point => hasLineOfSight(attackerToken, point, geometry.end));
+  }
   return getTokenAttackContactPoints(target, geometry)
     .filter(point => hasLineOfSight(attackerToken, point, geometry.origin));
 }
@@ -1447,6 +1626,114 @@ function getWeaponDamage(weapon, weaponFunctionId = "") {
   return Math.max(0, toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.damage));
 }
 
+function getVolleyDamageRadius(weapon, weaponFunctionId = "") {
+  return Math.max(0, Number(getWeaponAttackData(weapon, weaponFunctionId)?.volley?.damageRadius) || 0);
+}
+
+function computeVolleyBlastCenter({ attackerToken = null, intendedCenter = null, radiusPixels = 0, outcome = null } = {}) {
+  const origin = getTokenCenter(attackerToken);
+  const target = serializePoint(intendedCenter);
+  const radius = Math.max(1, Number(radiusPixels) || 1);
+  const resultKey = String(outcome?.result?.key ?? "");
+  const roll = Math.max(1, Math.min(100, toInteger(outcome?.selectedRoll?.total) || 50));
+  const difficulty = Math.max(1, toInteger(outcome?.check?.difficulty) || BASE_VOLLEY_DIFFICULTY);
+  const total = Math.max(0, toInteger(outcome?.total));
+  const baseAngle = Math.atan2(target.y - origin.y, target.x - origin.x);
+  const margin = total - difficulty;
+  const successQuality = Math.max(0, Math.min(1, (Math.max(0, margin) + roll) / 160));
+  const missSeverity = Math.max(0, Math.min(1, ((Math.max(0, -margin) / Math.max(25, difficulty)) * 0.7) + ((100 - roll) / 100 * 0.3)));
+  const criticalFailure = resultKey === "criticalFailure";
+  let candidate = target;
+
+  if (resultKey === "success") {
+    const maxOffset = radius * (0.08 + (0.62 * (1 - successQuality)));
+    candidate = addPolar(target, Math.random() * Math.PI * 2, maxOffset * Math.sqrt(Math.random()));
+  } else if (resultKey === "failure" || resultKey === "criticalFailure") {
+    candidate = computeVolleyMissCenter({
+      origin,
+      target,
+      baseAngle,
+      radius,
+      severity: criticalFailure ? Math.min(1, missSeverity + 0.2) : missSeverity,
+      minSourceDistance: criticalFailure ? radius * 0.5 : radius + metersToPixels(5)
+    });
+  }
+
+  const finalAngle = Math.atan2(candidate.y - origin.y, candidate.x - origin.x);
+  const finalDistance = Math.max(1, Math.hypot(candidate.x - origin.x, candidate.y - origin.y));
+  return getWallClippedEndpoint(attackerToken, origin, finalAngle, finalDistance).point;
+}
+
+function computeVolleyMissCenter({ origin, target, baseAngle, radius, severity = 0.5, minSourceDistance = 0 } = {}) {
+  const minTargetDistance = (radius * 2) + 1;
+  const maxTargetDistance = radius * (2.4 + (1.6 * Math.max(0, Math.min(1, severity))));
+  const isValid = point => (
+    Math.hypot(point.x - target.x, point.y - target.y) > minTargetDistance
+    && Math.hypot(point.x - origin.x, point.y - origin.y) >= minSourceDistance
+  );
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const roll = Math.random();
+    const mode = roll < 0.42 ? "undershoot" : roll < 0.58 ? "overshoot" : "lateral";
+    const point = buildVolleyMissCandidate(target, baseAngle, radius, maxTargetDistance, mode);
+    if (isValid(point)) return point;
+  }
+
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const point = addPolar(
+      target,
+      Math.random() * Math.PI * 2,
+      randomRange(minTargetDistance, maxTargetDistance + radius)
+    );
+    if (isValid(point)) return point;
+  }
+
+  return addPolar(target, baseAngle, minTargetDistance + radius);
+}
+
+function buildVolleyMissCandidate(target, baseAngle, radius, maxDistance, mode) {
+  const distance = randomRange((radius * 2) + 1, maxDistance);
+  if (mode === "undershoot") {
+    return addPolar(target, baseAngle + Math.PI + randomRange(-0.75, 0.75), distance);
+  }
+  if (mode === "overshoot") {
+    return addPolar(target, baseAngle + randomRange(-0.65, 0.65), distance);
+  }
+  const side = Math.random() < 0.5 ? -1 : 1;
+  return addPolar(target, baseAngle + (side * (Math.PI / 2 + randomRange(-0.9, 0.9))), distance);
+}
+
+function addPolar(point, angle, distance) {
+  return {
+    x: point.x + (Math.cos(angle) * distance),
+    y: point.y + (Math.sin(angle) * distance)
+  };
+}
+
+function randomRange(min, max) {
+  const low = Math.min(Number(min) || 0, Number(max) || 0);
+  const high = Math.max(Number(min) || 0, Number(max) || 0);
+  return low + (Math.random() * (high - low));
+}
+
+function getVolleyDamageFalloff(target, geometry) {
+  const radius = Math.max(1, Number(geometry?.radiusPixels) || 1);
+  const distance = getTokenVolleyDistanceToHitboxEdge(target, geometry);
+  const ratio = Math.max(0, Math.min(1, distance / radius));
+  return Math.max(0.2, 1 - (0.8 * ratio));
+}
+
+function getTokenVolleyDistanceToHitboxEdge(token, geometry) {
+  const bounds = getTokenBoundsRectangle(token);
+  if (!bounds) return 0;
+  const center = geometry.end;
+  const closest = {
+    x: Math.max(bounds.left, Math.min(center.x, bounds.right)),
+    y: Math.max(bounds.top, Math.min(center.y, bounds.bottom))
+  };
+  return Math.max(0, Math.hypot(closest.x - center.x, closest.y - center.y));
+}
+
 function getWeaponDamageTypeEntries(weapon, weaponFunctionId = "") {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const sourceWeaponData = getWeaponAttackSourceData(weapon, weaponFunctionId);
@@ -1547,9 +1834,15 @@ function getCriticalFailureResourceCosts(weapon, actionKey, weaponFunctionId = "
 }
 
 function getEffectiveRangeDifficultyBonus(weapon, attackerToken, target, weaponFunctionId = "") {
-  const effective = Number(getWeaponAttackData(weapon, weaponFunctionId)?.effectiveRange?.value) || 0;
+  return getEffectiveRangeDifficultyBonusForDistance(
+    getWeaponAttackData(weapon, weaponFunctionId),
+    getTokenDistanceMeters(attackerToken, target)
+  );
+}
+
+function getEffectiveRangeDifficultyBonusForDistance(weaponData = {}, distanceMeters = 0) {
+  const effective = Number(weaponData?.effectiveRange?.value) || 0;
   if (effective <= 0) return 0;
-  const distanceMeters = getTokenDistanceMeters(attackerToken, target);
   return Math.max(0, Math.round(Math.abs(distanceMeters - effective))) * 10;
 }
 
@@ -1609,6 +1902,10 @@ function getPenetratedDamageAmount(baseDamage, penetrationsUsed) {
 }
 
 function getTargetDistance(target, geometry) {
+  if (geometry.type === VOLLEY_ACTION_KEY) {
+    const center = getTokenCenter(target);
+    return Math.hypot(center.x - geometry.end.x, center.y - geometry.end.y);
+  }
   const distances = getTokenAttackContactPoints(target, geometry)
     .map(point => Math.hypot(point.x - geometry.origin.x, point.y - geometry.origin.y));
   if (distances.length) return Math.min(...distances);
@@ -1691,6 +1988,17 @@ function buildSwingAnimationTrajectory(attackerToken, targets = [], directionKey
   };
 }
 
+function buildVolleyAnimationTrajectory(geometry) {
+  return {
+    origin: geometry.origin,
+    angle: geometry.angle,
+    distance: geometry.distance,
+    halfAngle: 0,
+    end: geometry.end,
+    delayGroup: 0
+  };
+}
+
 function getTokenTrajectoryHit(token, trajectory) {
   const bounds = getTokenBounds(token);
   const direction = {
@@ -1711,6 +2019,7 @@ function getTokenTrajectoryHit(token, trajectory) {
 function getTokenAttackContactPoints(token, geometry) {
   const bounds = getTokenBoundsRectangle(token);
   if (!bounds) return [];
+  if (geometry.type === VOLLEY_ACTION_KEY) return getTokenVolleyContactPoints(bounds, geometry);
   const points = [];
 
   if (geometry.halfAngle <= 0) {
@@ -1736,6 +2045,23 @@ function getTokenAttackContactPoints(token, geometry) {
   }
 
   return sortContactPoints(points, geometry.origin);
+}
+
+function getTokenVolleyContactPoints(bounds, geometry) {
+  const radius = Math.max(0, Number(geometry.radiusPixels) || 0);
+  const center = geometry.end;
+  const closest = {
+    x: Math.max(bounds.left, Math.min(center.x, bounds.right)),
+    y: Math.max(bounds.top, Math.min(center.y, bounds.bottom))
+  };
+  const points = [];
+  if (Math.hypot(closest.x - center.x, closest.y - center.y) <= radius) addUniquePoint(points, closest);
+  const boundsCenter = bounds.center ?? {
+    x: bounds.x + (bounds.width / 2),
+    y: bounds.y + (bounds.height / 2)
+  };
+  if (Math.hypot(boundsCenter.x - center.x, boundsCenter.y - center.y) <= radius) addUniquePoint(points, boundsCenter);
+  return sortContactPoints(points, center);
 }
 
 function getTokenBounds(token) {

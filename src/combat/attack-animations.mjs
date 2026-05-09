@@ -63,10 +63,40 @@ export async function playWeaponAttackAnimations({ weapon = null, weaponFunction
   await playAttackAnimationGroup(payload);
 }
 
+export async function playWeaponExplosionAnimation({ weapon = null, weaponFunctionId = "", center = null, radiusPixels = 0 } = {}) {
+  const weaponData = getWeaponFunctionById(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) ?? {};
+  const animationKey = String(weaponData?.volley?.explosionAnimationKey ?? "").trim();
+  const soundPath = String(weaponData?.volley?.explosionSoundPath ?? "").trim();
+  if (!animationKey && !soundPath) return;
+
+  let file = "";
+  if (animationKey) {
+    file = await resolveAnimationLibraryFile(animationKey, {
+      mediaType: "video"
+    });
+  }
+  if (!file && !soundPath) return;
+
+  const payload = {
+    scope: ATTACK_ANIMATION_SOCKET_SCOPE,
+    action: "playExplosion",
+    sceneId: canvas.scene?.id ?? "",
+    file,
+    center: serializePoint(center),
+    radiusPixels: Math.max(0, Number(radiusPixels) || 0),
+    soundPath,
+    senderUserId: game.user?.id ?? ""
+  };
+
+  game.socket.emit(ATTACK_ANIMATION_SOCKET, payload);
+  await playExplosionAnimation(payload);
+}
+
 async function handleAttackAnimationSocketMessage(payload = {}) {
   if (!payload || payload.scope !== ATTACK_ANIMATION_SOCKET_SCOPE || payload.senderUserId === game.user?.id) return;
-  if (payload.action !== "play" || payload.sceneId !== canvas.scene?.id) return;
-  await playAttackAnimationGroup(payload);
+  if (payload.sceneId !== canvas.scene?.id) return;
+  if (payload.action === "play") await playAttackAnimationGroup(payload);
+  if (payload.action === "playExplosion") await playExplosionAnimation(payload);
 }
 
 async function playAttackAnimationGroup(payload = {}) {
@@ -104,6 +134,59 @@ async function playAttackSound(path) {
   } catch (error) {
     console.warn(`${SYSTEM_ID} | Attack sound failed to play: ${src}`, error);
   }
+}
+
+async function playExplosionAnimation(payload = {}) {
+  const promises = [playAttackSound(payload.soundPath)];
+  if (payload.file) promises.push(playSingleExplosionAnimation(payload));
+  await Promise.all(promises);
+}
+
+async function playSingleExplosionAnimation(payload = {}) {
+  const layer = getAttackAnimationLayer();
+  if (!layer || !payload.file) return;
+
+  let texture;
+  try {
+    texture = await foundry.canvas.loadTexture(payload.file);
+  } catch (error) {
+    console.warn(`${SYSTEM_ID} | Explosion animation failed to load: ${payload.file}`, error);
+    return;
+  }
+  if (!texture?.valid) return;
+
+  let video = game.video.getVideoSource(texture);
+  if (video) {
+    texture = await game.video.cloneTexture(video);
+    video = game.video.getVideoSource(texture);
+  }
+
+  const sprite = new PIXI.Sprite(texture);
+  sprite.eventMode = "none";
+  sprite.anchor.set(0.5, 0.5);
+  sprite.position.set(Number(payload.center?.x) || 0, Number(payload.center?.y) || 0);
+
+  const radiusPixels = Math.max(0, Number(payload.radiusPixels) || 0);
+  if (radiusPixels > 0) {
+    const diameter = radiusPixels * 2;
+    const textureSize = Math.max(1, Number(texture.width) || 0, Number(texture.height) || 0);
+    const scale = Math.max(0.001, diameter / textureSize);
+    sprite.scale.set(scale, scale);
+  }
+
+  layer.addChild(sprite);
+
+  if (video) {
+    video.loop = false;
+    const durationMs = getVideoDurationMs(video);
+    const done = waitForVideoEnd(video, durationMs);
+    await game.video.play(video, { loop: false, offset: 0, volume: 0 });
+    await done;
+  } else {
+    await sleep(STATIC_ANIMATION_DURATION_MS);
+  }
+
+  sprite.destroy({ children: true, texture: false, baseTexture: false });
 }
 
 function getOrderedDelayGroups(trajectories = []) {

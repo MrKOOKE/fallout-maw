@@ -118,6 +118,7 @@ function weaponFunctionField({ named = false } = {}) {
       aimedShot: new BooleanField({ required: true, initial: false }),
       snapshot: new BooleanField({ required: true, initial: false }),
       burst: new BooleanField({ required: true, initial: false }),
+      volley: new BooleanField({ required: true, initial: false }),
       meleeAttack: new BooleanField({ required: true, initial: false }),
       aimedMeleeAttack: new BooleanField({ required: true, initial: false })
     }),
@@ -126,6 +127,12 @@ function weaponFunctionField({ named = false } = {}) {
     burst: new SchemaField({
       attackConeDegrees: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES }),
       count: new NumberField({ required: true, integer: true, min: 1, initial: 3 }),
+      criticalFailureConsequences: new ArrayField(weaponCriticalFailureConsequenceField(), { required: true, initial: [] })
+    }),
+    volley: new SchemaField({
+      damageRadius: new NumberField({ required: true, min: 0, initial: 0 }),
+      explosionAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
+      explosionSoundPath: new StringField({ required: true, blank: true, initial: "" }),
       criticalFailureConsequences: new ArrayField(weaponCriticalFailureConsequenceField(), { required: true, initial: [] })
     }),
     meleeAttack: weaponMeleeActionSettingsField(),

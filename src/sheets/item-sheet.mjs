@@ -202,6 +202,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-browse-weapon-attack-sound]").forEach(button => {
       button.addEventListener("click", event => this.#onBrowseWeaponAttackSound(event));
     });
+    this.element?.querySelectorAll("[data-browse-weapon-explosion-sound]").forEach(button => {
+      button.addEventListener("click", event => this.#onBrowseWeaponExplosionSound(event));
+    });
     this.element?.querySelector("[data-add-item-function]")?.addEventListener("click", event => this.#onAddItemFunction(event));
     this.element?.querySelector("[data-add-additional-weapon-function]")?.addEventListener("click", event => this.#onAddAdditionalWeaponFunction(event));
     this.element?.querySelectorAll("[data-delete-additional-weapon-function]").forEach(button => {
@@ -553,6 +556,23 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return picker.render({ force: true });
   }
 
+  async #onBrowseWeaponExplosionSound(event) {
+    event.preventDefault();
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const input = section?.querySelector("[data-weapon-explosion-sound-input]");
+    if (!input) return undefined;
+    const picker = new foundry.applications.apps.FilePicker.implementation({
+      type: "audio",
+      current: input.value ?? "",
+      callback: path => {
+        input.value = path;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    await picker.browse(undefined, { render: false });
+    return picker.render({ force: true });
+  }
+
   #onMitigationFillStart(event) {
     if (event.button !== 0) return;
 
@@ -774,6 +794,7 @@ function buildWeaponFunctionSection({
     id,
     index,
     hasMagazineCost: hasWeaponResourceCostData(weaponData, "magazine"),
+    hasVolleyAction: Boolean(weaponData?.availableActions?.volley),
     damageTypeRows: buildWeaponDamageTypeRowsForData(weaponData, damageTypeSettings, sourceWeaponData),
     skillChoices: buildWeaponSkillChoicesForData(weaponData, skillSettings),
     resourceCosts: buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction),
@@ -907,6 +928,7 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {})
     { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot") },
     { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot") },
     { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst") },
+    { key: "volley", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley"), isVolley: true },
     { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack"), isMelee: true },
     { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), isMelee: true }
   ].map(action => {
@@ -923,9 +945,11 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {})
       ...action,
       selected: Boolean(actions[action.key]),
       isBurst: action.key === "burst",
+      isVolley: action.key === "volley",
       isMelee: Boolean(action.isMelee),
       attackConeDegrees: Number(hasActionCone ? actionData.attackConeDegrees : fallbackCone) || DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
       burstCount: Math.max(1, Number(weaponData?.burst?.count) || 3),
+      volleyDamageRadius: Math.max(0, Number(weaponData?.volley?.damageRadius) || 0),
       criticalFailureConsequences: buildWeaponCriticalFailureConsequenceRows(actionData, weaponData),
       thrust,
       swing
@@ -972,6 +996,7 @@ function createDefaultWeaponFunctionData(source = {}) {
       aimedShot: false,
       snapshot: false,
       burst: false,
+      volley: false,
       meleeAttack: false,
       aimedMeleeAttack: false
     },
@@ -986,6 +1011,12 @@ function createDefaultWeaponFunctionData(source = {}) {
     burst: {
       attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
       count: 3,
+      criticalFailureConsequences: []
+    },
+    volley: {
+      damageRadius: 0,
+      explosionAnimationKey: "",
+      explosionSoundPath: "",
       criticalFailureConsequences: []
     },
     meleeAttack: createDefaultWeaponMeleeActionData(),

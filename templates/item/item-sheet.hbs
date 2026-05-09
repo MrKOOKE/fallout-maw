@@ -519,6 +519,14 @@
       {{#if selected}}
       <section class="fallout-maw-weapon-action-settings" data-weapon-action-settings="{{key}}">
         <h3>{{label}}</h3>
+        {{#if isVolley}}
+        <div class="fallout-maw-list-grid three-columns">
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyDamageRadius"}}</span>
+            <input type="number" name="{{../path}}.volley.damageRadius" value="{{volleyDamageRadius}}" min="0" step="1">
+          </label>
+        </div>
+        {{else}}
         <div class="fallout-maw-list-grid three-columns">
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponAttackCone"}}</span>
@@ -581,6 +589,7 @@
           </section>
         </div>
         {{/if}}
+        {{/if}}
         <div class="fallout-maw-panel-header fallout-maw-weapon-action-subheader">
           <h4>{{localize "FALLOUTMAW.Item.WeaponCriticalFailureConsequences"}}</h4>
           <button type="button" data-add-weapon-critical-failure-consequence="{{key}}"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddCriticalFailureConsequence"}}</button>
@@ -621,7 +630,7 @@
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.WeaponAttackPresentation"}}</h3>
     </div>
-    <div class="fallout-maw-list-grid two-columns">
+    <div class="fallout-maw-list-grid {{#if hasVolleyAction}}three-columns{{else}}two-columns{{/if}}">
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponAttackAnimation"}}</span>
         <input type="text" name="{{path}}.attackAnimationKey" value="{{weaponData.attackAnimationKey}}">
@@ -633,6 +642,19 @@
           <button type="button" data-browse-weapon-attack-sound title="{{localize 'FILES.Browse'}}"><i class="fa-solid fa-music"></i></button>
         </div>
       </label>
+      {{#if hasVolleyAction}}
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponExplosionAnimation"}}</span>
+        <input type="text" name="{{path}}.volley.explosionAnimationKey" value="{{weaponData.volley.explosionAnimationKey}}">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponExplosionSound"}}</span>
+        <div class="fallout-maw-image-picker-field">
+          <input type="text" name="{{path}}.volley.explosionSoundPath" value="{{weaponData.volley.explosionSoundPath}}" data-weapon-explosion-sound-input>
+          <button type="button" data-browse-weapon-explosion-sound title="{{localize 'FILES.Browse'}}"><i class="fa-solid fa-music"></i></button>
+        </div>
+      </label>
+      {{/if}}
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponAttackDelay"}}</span>
         <input type="number" name="{{path}}.attackAnimationDelayMs" value="{{weaponData.attackAnimationDelayMs}}" min="0" step="1">
