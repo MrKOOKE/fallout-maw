@@ -186,6 +186,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       input.addEventListener("input", event => this.#onWeaponDamagePercentInput(event));
       input.addEventListener("change", event => this.#onWeaponDamagePercentChange(event));
     });
+    this.element?.querySelectorAll("[data-weapon-attack-mode-enabled]").forEach(input => {
+      input.addEventListener("change", event => this.#onWeaponAttackModeEnabledChange(event));
+    });
     this.element?.querySelectorAll("[data-browse-weapon-attack-sound]").forEach(button => {
       button.addEventListener("click", event => this.#onBrowseWeaponAttackSound(event));
     });
@@ -243,6 +246,28 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.currentTarget.classList.toggle("active", input.checked);
     event.currentTarget.setAttribute("aria-pressed", String(input.checked));
     return this.item.update({ [`${path}.availableActions.${key}`]: input.checked });
+  }
+
+  #onWeaponAttackModeEnabledChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    const input = event.currentTarget;
+    const section = input.closest("[data-weapon-function-section]");
+    const action = input.closest("[data-weapon-action-settings]");
+    const path = getWeaponFunctionPath(section);
+    const actionKey = String(action?.dataset.weaponActionSettings ?? "");
+    const mode = String(input.dataset.weaponAttackModeEnabled ?? "");
+    if (!path || !actionKey || !mode) return undefined;
+
+    const modeInputs = Array.from(action.querySelectorAll("[data-weapon-attack-mode-enabled]"));
+    const enabledInputs = modeInputs.filter(entry => entry.checked);
+    if (!enabledInputs.length) {
+      input.checked = true;
+      return undefined;
+    }
+
+    return this.item.update({ [`${path}.${actionKey}.${mode}.enabled`]: input.checked });
   }
 
   #onAddItemFunction(event) {
@@ -811,6 +836,12 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {})
     const actionData = weaponData?.[action.key] ?? {};
     const sourceActionData = sourceWeaponData?.[action.key] ?? {};
     const hasActionCone = Object.hasOwn(sourceActionData, "attackConeDegrees");
+    const thrust = prepareWeaponAttackModeSettings(actionData?.thrust);
+    const swing = prepareWeaponAttackModeSettings(actionData?.swing);
+    if (!thrust.enabled && !swing.enabled) {
+      thrust.enabled = true;
+      swing.enabled = true;
+    }
     return {
       ...action,
       selected: Boolean(actions[action.key]),
@@ -818,14 +849,15 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {})
       isMelee: Boolean(action.isMelee),
       attackConeDegrees: Number(hasActionCone ? actionData.attackConeDegrees : fallbackCone) || DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
       burstCount: Math.max(1, Number(weaponData?.burst?.count) || 3),
-      thrust: prepareWeaponAttackModeSettings(actionData?.thrust),
-      swing: prepareWeaponAttackModeSettings(actionData?.swing)
+      thrust,
+      swing
     };
   });
 }
 
 function prepareWeaponAttackModeSettings(modeData = {}) {
   return {
+    enabled: modeData?.enabled !== false,
     accuracyModifier: Number(modeData?.accuracyModifier) || 0,
     criticalChanceModifier: Number(modeData?.criticalChanceModifier) || 0,
     damagePercentModifier: Number(modeData?.damagePercentModifier) || 0
@@ -883,11 +915,13 @@ function createDefaultWeaponMeleeActionData() {
   return {
     attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
     thrust: {
+      enabled: true,
       accuracyModifier: 0,
       criticalChanceModifier: 0,
       damagePercentModifier: 0
     },
     swing: {
+      enabled: true,
       accuracyModifier: 0,
       criticalChanceModifier: 0,
       damagePercentModifier: 0

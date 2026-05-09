@@ -152,6 +152,7 @@ function weaponMeleeActionSettingsField() {
 
 function weaponAttackModeSettingsField() {
   return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: true }),
     accuracyModifier: new NumberField({ required: true, integer: true, initial: 0 }),
     criticalChanceModifier: new NumberField({ required: true, integer: true, initial: 0 }),
     damagePercentModifier: new NumberField({ required: true, integer: true, initial: 0 })

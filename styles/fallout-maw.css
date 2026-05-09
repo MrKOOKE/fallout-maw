@@ -1418,6 +1418,40 @@
   grid-template-columns: minmax(140px, 1fr) minmax(130px, 1fr) minmax(70px, 90px) 2.5rem;
 }
 
+.fallout-maw-panel[data-weapon-function-section] {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.fallout-maw-panel[data-weapon-function-section] > .fallout-maw-panel-header {
+  margin: 0;
+  padding: 0;
+}
+
+.fallout-maw-panel[data-weapon-function-section] > .fallout-maw-panel-header:not(:first-child) {
+  border-top: 1px solid rgba(218, 207, 147, 0.22);
+  margin-top: 0.35rem;
+  padding-top: 0.85rem;
+}
+
+.fallout-maw-panel[data-weapon-function-section] > .fallout-maw-panel-header h3 {
+  color: var(--fallout-maw-text);
+  font-size: 1.08rem;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.fallout-maw-panel[data-weapon-function-section] > .fallout-maw-list-grid,
+.fallout-maw-panel[data-weapon-function-section] > .fallout-maw-settings-table,
+.fallout-maw-panel[data-weapon-function-section] > .fallout-maw-button-toggle-grid,
+.fallout-maw-panel[data-weapon-function-section] > .fallout-maw-weapon-action-settings-list {
+  margin-top: -0.15rem;
+}
+
+.fallout-maw-panel[data-weapon-function-section] > .fallout-maw-hidden-controls + .fallout-maw-button-toggle-grid {
+  margin-top: -0.2rem;
+}
+
 .fallout-maw-button-toggle-grid {
   display: flex;
   flex-wrap: wrap;
@@ -1469,10 +1503,28 @@
   padding-top: 0.5rem;
 }
 
-.fallout-maw-weapon-action-mode h4 {
+.fallout-maw-weapon-action-mode-header {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.fallout-maw-weapon-action-mode-header h4 {
   color: var(--fallout-maw-text-soft);
   font-size: 0.98rem;
   line-height: 1.15;
+  margin: 0;
+}
+
+.fallout-maw-weapon-action-mode-header label {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 0.35rem;
+}
+
+.fallout-maw-weapon-action-mode-header input {
   margin: 0;
 }
 

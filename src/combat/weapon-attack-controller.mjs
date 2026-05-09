@@ -312,7 +312,8 @@ class WeaponAttackController {
 
   async performDirectedAttack(directionKey) {
     if (this.processing || this.aimedMode !== "direction" || !this.selectedTarget) return;
-    const direction = MELEE_DIRECTIONS.find(entry => entry.key === directionKey);
+    const direction = getEnabledMeleeDirections(this.weapon, this.actionKey, this.weaponFunctionId)
+      .find(entry => entry.key === directionKey);
     if (!direction) return;
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
@@ -834,7 +835,7 @@ class WeaponAttackController {
 
   prepareAttackDirectionRows(target) {
     const limbKey = this.selectedLimbKey;
-    return MELEE_DIRECTIONS.map(direction => ({
+    return getEnabledMeleeDirections(this.weapon, this.actionKey, this.weaponFunctionId).map(direction => ({
       key: direction.key,
       label: direction.label,
       direction: true,
@@ -1488,6 +1489,19 @@ function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "") {
 function getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId = "") {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   return weaponData?.[actionKey]?.[mode] ?? {};
+}
+
+function getEnabledMeleeDirections(weapon, actionKey, weaponFunctionId = "") {
+  const directions = MELEE_DIRECTIONS.filter(direction => isWeaponAttackModeEnabled(weapon, actionKey, direction.mode, weaponFunctionId));
+  return directions.length ? directions : MELEE_DIRECTIONS;
+}
+
+function isWeaponAttackModeEnabled(weapon, actionKey, mode, weaponFunctionId = "") {
+  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  const thrustEnabled = weaponData?.[actionKey]?.thrust?.enabled !== false;
+  const swingEnabled = weaponData?.[actionKey]?.swing?.enabled !== false;
+  if (!thrustEnabled && !swingEnabled) return true;
+  return getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.enabled !== false;
 }
 
 function getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId = "") {

@@ -515,7 +515,7 @@
     <div class="fallout-maw-weapon-action-settings-list">
       {{#each actionChoices}}
       {{#if selected}}
-      <section class="fallout-maw-weapon-action-settings">
+      <section class="fallout-maw-weapon-action-settings" data-weapon-action-settings="{{key}}">
         <h3>{{label}}</h3>
         <div class="fallout-maw-list-grid three-columns">
           <label>
@@ -532,7 +532,13 @@
         {{#if isMelee}}
         <div class="fallout-maw-weapon-action-mode-grid">
           <section class="fallout-maw-weapon-action-mode">
-            <h4>{{localize "FALLOUTMAW.Item.WeaponAttackModeThrust"}}</h4>
+            <div class="fallout-maw-weapon-action-mode-header">
+              <h4>{{localize "FALLOUTMAW.Item.WeaponAttackModeThrust"}}</h4>
+              <label>
+                <input type="checkbox" name="{{../path}}.{{key}}.thrust.enabled" data-weapon-attack-mode-enabled="thrust" {{checked thrust.enabled}}>
+                <span>{{localize "FALLOUTMAW.Effects.Enable"}}</span>
+              </label>
+            </div>
             <div class="fallout-maw-list-grid three-columns">
               <label>
                 <span>{{localize "FALLOUTMAW.Item.WeaponModeAccuracyModifier"}}</span>
@@ -549,7 +555,13 @@
             </div>
           </section>
           <section class="fallout-maw-weapon-action-mode">
-            <h4>{{localize "FALLOUTMAW.Item.WeaponAttackModeSwing"}}</h4>
+            <div class="fallout-maw-weapon-action-mode-header">
+              <h4>{{localize "FALLOUTMAW.Item.WeaponAttackModeSwing"}}</h4>
+              <label>
+                <input type="checkbox" name="{{../path}}.{{key}}.swing.enabled" data-weapon-attack-mode-enabled="swing" {{checked swing.enabled}}>
+                <span>{{localize "FALLOUTMAW.Effects.Enable"}}</span>
+              </label>
+            </div>
             <div class="fallout-maw-list-grid three-columns">
               <label>
                 <span>{{localize "FALLOUTMAW.Item.WeaponModeAccuracyModifier"}}</span>
