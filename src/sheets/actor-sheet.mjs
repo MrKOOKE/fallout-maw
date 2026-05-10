@@ -49,6 +49,7 @@ import {
   getConditionFunction,
   getConditionWeakeningData,
   getDamageMitigationFunction,
+  getDamageSourceFunction,
   getEnabledWeaponFunctions,
   getToolFunction,
   hasItemFunction
@@ -2108,6 +2109,7 @@ function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex 
     buildContainerTooltipSection(item, actor),
     buildConditionTooltipSection(item),
     buildDamageMitigationTooltipSection(item),
+    buildDamageSourceTooltipSection(item),
     ...buildWeaponTooltipSections(item, activeWeaponIndex),
     ...buildToolTooltipSections(item)
   ].filter(Boolean);
@@ -2157,6 +2159,18 @@ function buildDamageMitigationTooltipSection(item) {
   const coverage = summarizeMitigationCoverage(mitigation.entries);
   if (coverage) rows.push(["Покрытие", coverage]);
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionDamageMitigation"), rows);
+}
+
+function buildDamageSourceTooltipSection(item) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.damageSource)) return "";
+  const source = getDamageSourceFunction(item);
+  const sourceName = String(source?.name ?? "").trim();
+  const rows = [
+    [game.i18n.localize("FALLOUTMAW.Item.DamageSourceName"), sourceName || item.name],
+    [game.i18n.localize("FALLOUTMAW.Item.DamageSourceDamage"), toInteger(source?.damage)],
+    ["Распределение урона", getWeaponDamageTypeLabels(source).join(", ")]
+  ];
+  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource"), rows);
 }
 
 function summarizeMitigationCoverage(entries = {}) {
@@ -2210,9 +2224,12 @@ function buildWeaponTooltipRows(item, entry = {}) {
   const data = entry.data ?? {};
   const weakening = getConditionWeakeningData(item, { minimumRatio: 0.1 });
   const rows = [
-    [game.i18n.localize("FALLOUTMAW.Item.WeaponDamage"), formatWeaponDamageValue(data, weakening)],
-    ["Распределение урона", getWeaponDamageDistributionLabel(data)]
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponDamage"), formatWeaponDamageValue(item, data, weakening)],
+    ["Распределение урона", getWeaponDamageDistributionLabel(item, data)]
   ];
+  if (isSourceDamageMode(data)) {
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource"), getWeaponDamageSourceLabel(data)]);
+  }
   const magazineMax = hasWeaponResourceCostData(data, "magazine") ? toInteger(data.magazine?.max) : 0;
   if (magazineMax) {
     rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), renderTooltipMeterValue(toInteger(data.magazine?.value), magazineMax)]);
@@ -2240,15 +2257,15 @@ function getWeaponTooltipSectionTitle(item, entry = {}, index = 0) {
   return `${game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon")} ${index + 1}`;
 }
 
-function formatWeaponDamageValue(data = {}, weakening = null) {
-  const damage = toInteger(data.damage);
+function formatWeaponDamageValue(item, data = {}, weakening = null) {
+  const damage = toInteger(getEffectiveWeaponDamageData(item, data).damage);
   const effectiveDamage = weakening?.active ? Math.floor(damage * weakening.ratio) : damage;
   const pellets = Math.max(1, toInteger(data.pellets));
   return pellets > 1 ? `${effectiveDamage} x ${pellets}` : String(effectiveDamage);
 }
 
-function getWeaponDamageDistributionLabel(data = {}) {
-  return getWeaponDamageTypeLabels(data).join(", ");
+function getWeaponDamageDistributionLabel(item, data = {}) {
+  return getWeaponDamageTypeLabels(getEffectiveWeaponDamageData(item, data)).join(", ");
 }
 
 function getWeaponVolleyRows(data = {}) {
@@ -2298,6 +2315,41 @@ function getWeaponDamageTypeLabels(data = {}) {
       const percent = toInteger(row.percent);
       return percent && percent !== 100 ? `${label} ${percent}%` : label;
     });
+}
+
+function isSourceDamageMode(data = {}) {
+  return String(data?.damageMode ?? "manual") === "source";
+}
+
+function getEffectiveWeaponDamageData(_item, data = {}) {
+  if (!isSourceDamageMode(data)) return data;
+  const sourceItem = getWeaponDamageSourceItem(data);
+  if (!sourceItem || !hasItemFunction(sourceItem, ITEM_FUNCTIONS.damageSource)) {
+    return {
+      damage: 0,
+      damageTypeKey: "firearm",
+      damageTypes: [{ key: "firearm", percent: 100 }]
+    };
+  }
+  const source = getDamageSourceFunction(sourceItem);
+  return {
+    damage: source.damage,
+    damageTypeKey: source.damageTypeKey,
+    damageTypes: source.damageTypes
+  };
+}
+
+function getWeaponDamageSourceLabel(data = {}) {
+  const sourceItem = getWeaponDamageSourceItem(data);
+  if (!sourceItem) return "—";
+  const source = getDamageSourceFunction(sourceItem);
+  return String(source?.name ?? "").trim() || sourceItem.name;
+}
+
+function getWeaponDamageSourceItem(data = {}) {
+  const uuid = String(data?.magazine?.sourceItemUuid ?? "").trim();
+  if (!uuid) return null;
+  return globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
 }
 
 function getSkillLabel(skillKey = "") {

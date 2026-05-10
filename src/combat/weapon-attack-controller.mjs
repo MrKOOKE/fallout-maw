@@ -3,7 +3,7 @@ import { SYSTEM_ID } from "../constants.mjs";
 import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./attack-animations.mjs";
 import { estimateDamageApplication, getLimbHealingCap, requestDamageApplications } from "./damage-hub.mjs";
 import { createThrownItemTile } from "../canvas/thrown-items.mjs";
-import { ITEM_FUNCTIONS, getConditionWeakeningData, getWeaponFunctionById, hasItemFunction } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageSourceFunction, getWeaponFunctionById, hasItemFunction } from "../utils/item-functions.mjs";
 import { getCreatureOptions, getDamageTypeSettings } from "../settings/accessors.mjs";
 import { ACTION_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -2316,7 +2316,7 @@ function getPointElevationAtDistance(originElevation, targetElevation, distance,
 }
 
 function getWeaponDamage(weapon, weaponFunctionId = "") {
-  const baseDamage = Math.max(0, toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.damage));
+  const baseDamage = Math.max(0, toInteger(getEffectiveWeaponDamageData(weapon, weaponFunctionId)?.damage));
   return Math.max(0, Math.floor(baseDamage * getWeaponConditionWeakeningRatio(weapon)));
 }
 
@@ -2461,6 +2461,20 @@ function getTokenVolleyDistanceToHitboxEdge(token, geometry) {
 }
 
 function getWeaponDamageTypeEntries(weapon, weaponFunctionId = "") {
+  const effectiveDamageData = getEffectiveWeaponDamageData(weapon, weaponFunctionId);
+  if (effectiveDamageData?.source === "damageSource") {
+    const entries = Array.isArray(effectiveDamageData.damageTypes)
+      ? effectiveDamageData.damageTypes
+        .map(entry => ({
+          key: String(entry?.key ?? "").trim(),
+          weight: Math.max(0, toInteger(entry?.percent))
+        }))
+        .filter(entry => entry.key && entry.weight > 0)
+      : [];
+    if (entries.length) return entries;
+    return [{ key: String(effectiveDamageData.damageTypeKey ?? "").trim() || "firearm", weight: 100 }];
+  }
+
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const sourceWeaponData = getWeaponAttackSourceData(weapon, weaponFunctionId);
   const hasConfiguredDamageTypes = Object.hasOwn(sourceWeaponData, "damageTypes");
@@ -2475,6 +2489,33 @@ function getWeaponDamageTypeEntries(weapon, weaponFunctionId = "") {
   if (entries.length) return entries;
   const fallback = String(weaponData.damageTypeKey ?? "").trim() || "firearm";
   return [{ key: fallback, weight: 100 }];
+}
+
+function getEffectiveWeaponDamageData(weapon, weaponFunctionId = "") {
+  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  if (String(weaponData?.damageMode ?? "manual") !== "source") return weaponData;
+  const sourceItem = getWeaponMagazineSourceItem(weaponData);
+  if (!sourceItem || !hasItemFunction(sourceItem, ITEM_FUNCTIONS.damageSource)) {
+    return {
+      source: "damageSource",
+      damage: 0,
+      damageTypeKey: "firearm",
+      damageTypes: [{ key: "firearm", percent: 100 }]
+    };
+  }
+  const source = getDamageSourceFunction(sourceItem);
+  return {
+    source: "damageSource",
+    damage: source.damage,
+    damageTypeKey: source.damageTypeKey,
+    damageTypes: source.damageTypes
+  };
+}
+
+function getWeaponMagazineSourceItem(weaponData = {}) {
+  const uuid = String(weaponData?.magazine?.sourceItemUuid ?? "").trim();
+  if (!uuid) return null;
+  return globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
 }
 
 function buildWeaponDamageRequests(weapon, { actor = null, limbKey = "", amount = 0, source = {} } = {}, weaponFunctionId = "") {

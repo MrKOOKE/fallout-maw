@@ -1467,6 +1467,47 @@
   grid-template-columns: minmax(140px, 1fr) minmax(80px, 110px) 2.5rem;
 }
 
+.fallout-maw-magazine-source-field {
+  min-width: 0;
+}
+
+.fallout-maw-magazine-source-drop {
+  align-items: center;
+  background: rgba(9, 10, 7, 0.72);
+  border: 1px solid rgba(218, 207, 147, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55);
+  display: grid;
+  gap: 0.1rem;
+  grid-template-columns: minmax(0, 1fr) 2rem;
+  min-height: 3.4rem;
+  padding: 0.35rem 0.4rem;
+}
+
+.fallout-maw-magazine-source-drop strong,
+.fallout-maw-magazine-source-drop small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-magazine-source-drop strong {
+  color: var(--fallout-maw-text);
+}
+
+.fallout-maw-magazine-source-drop small {
+  color: rgba(218, 207, 147, 0.68);
+  font-size: 0.78rem;
+}
+
+.fallout-maw-magazine-source-drop button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  height: 2rem;
+  padding: 0;
+  width: 2rem;
+}
+
 .fallout-maw-weapon-critical-failure-consequences .fallout-maw-settings-row {
   grid-template-columns: minmax(150px, 1fr) minmax(120px, 0.8fr) minmax(70px, 90px) 2.5rem;
 }
@@ -4405,7 +4446,7 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-token-hud-actions {
   align-self: flex-start;
   max-width: var(--fallout-maw-token-hud-actions-width);
-  pointer-events: all;
+  pointer-events: none;
   width: max-content;
 }
 
@@ -4416,7 +4457,7 @@ label.fallout-maw-mitigation-cell {
   max-height: var(--fallout-maw-token-hud-popup-max-height);
   max-width: var(--fallout-maw-token-hud-actions-width);
   overflow: hidden auto;
-  pointer-events: all;
+  pointer-events: none;
   width: var(--fallout-maw-token-hud-actions-width);
 }
 
@@ -4457,6 +4498,12 @@ label.fallout-maw-mitigation-cell {
   flex-wrap: nowrap;
   gap: 5px;
   min-width: 0;
+  pointer-events: none;
+}
+
+.fallout-maw-token-hud-actions > button,
+.fallout-maw-token-hud-popup button {
+  pointer-events: auto;
 }
 
 .fallout-maw-token-action-hud:not(.layout-ready) .fallout-maw-token-hud-popup {

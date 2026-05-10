@@ -447,6 +447,48 @@
   </section>
   {{/if}}
 
+  {{#if hasDamageSourceFunction}}
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Item.FunctionDamageSource"}}</h2>
+      <button type="button" data-remove-item-function="damageSource" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.DamageSourceName"}}</span>
+        <input type="text" name="system.functions.damageSource.name" value="{{system.functions.damageSource.name}}">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.DamageSourceDamage"}}</span>
+        <input type="number" name="system.functions.damageSource.damage" value="{{system.functions.damageSource.damage}}" min="0" step="1">
+      </label>
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.DamageSourceDamageTypes"}}</h3>
+      <button type="button" data-add-damage-source-damage-type><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddDamageType"}}</button>
+    </div>
+    <div class="fallout-maw-settings-table fallout-maw-weapon-damage-types">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Type"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.ValuePercent"}}</span>
+        <span></span>
+      </div>
+      {{#each damageSourceDamageTypeRows}}
+      <div class="fallout-maw-settings-row" data-damage-source-type-row="{{index}}">
+        <select name="system.functions.damageSource.damageTypes.{{index}}.key" data-damage-source-type-key>
+          {{#each choices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="number" name="system.functions.damageSource.damageTypes.{{index}}.percent" value="{{percent}}" min="0" max="100" step="1" data-damage-source-percent>
+        <button type="button" data-delete-damage-source-damage-type="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{/each}}
+    </div>
+    <input type="hidden" name="system.functions.damageSource.damageTypeKey" value="{{system.functions.damageSource.damageTypeKey}}">
+  </section>
+  {{/if}}
+
   {{#each weaponFunctionSections}}
   <section class="fallout-maw-panel" data-weapon-function-section data-weapon-function-path="{{path}}">
     <div class="fallout-maw-panel-header">
@@ -474,8 +516,16 @@
     {{/if}}
     <div class="fallout-maw-list-grid three-columns">
       <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponDamageMode"}}</span>
+        <select name="{{path}}.damageMode" data-weapon-damage-mode>
+          {{#each damageModeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponDamage"}}</span>
-        <input type="number" name="{{path}}.damage" value="{{weaponData.damage}}" min="0" step="1">
+        <input type="number" name="{{path}}.damage" value="{{weaponData.damage}}" min="0" step="1" {{#if usesDamageSource}}disabled{{/if}}>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponPellets"}}</span>
@@ -526,12 +576,21 @@
             <input type="number" name="{{path}}.magazine.max" value="{{weaponData.magazine.max}}" min="0" step="1">
           </div>
         </label>
+        <label class="fallout-maw-magazine-source-field">
+          <span>{{localize "FALLOUTMAW.Item.WeaponMagazineSource"}}</span>
+          <div class="fallout-maw-magazine-source-drop" data-weapon-magazine-source-drop>
+            <strong>{{magazineSourceItem.name}}</strong>
+            <small>{{localize "FALLOUTMAW.Item.WeaponMagazineSourceDrop"}}</small>
+            <button type="button" data-clear-weapon-magazine-source title="{{localize 'FALLOUTMAW.Item.WeaponMagazineSourceClear'}}"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <input type="hidden" name="{{path}}.magazine.sourceItemUuid" value="{{weaponData.magazine.sourceItemUuid}}">
+        </label>
       {{/if}}
     </div>
 
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.WeaponDamageTypes"}}</h3>
-      <button type="button" data-add-weapon-damage-type><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddDamageType"}}</button>
+      <button type="button" data-add-weapon-damage-type {{#if usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddDamageType"}}</button>
     </div>
     <div class="fallout-maw-settings-table fallout-maw-weapon-damage-types">
       <div class="fallout-maw-settings-row fallout-maw-grid-header">
@@ -541,13 +600,13 @@
       </div>
       {{#each damageTypeRows}}
       <div class="fallout-maw-settings-row" data-weapon-damage-type-row="{{index}}">
-        <select name="{{../path}}.damageTypes.{{index}}.key" data-weapon-damage-type-key>
+        <select name="{{../path}}.damageTypes.{{index}}.key" data-weapon-damage-type-key {{#if ../usesDamageSource}}disabled{{/if}}>
           {{#each choices}}
           <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
           {{/each}}
         </select>
-        <input type="number" name="{{../path}}.damageTypes.{{index}}.percent" value="{{percent}}" min="0" max="100" step="1" data-weapon-damage-percent>
-        <button type="button" data-delete-weapon-damage-type="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        <input type="number" name="{{../path}}.damageTypes.{{index}}.percent" value="{{percent}}" min="0" max="100" step="1" data-weapon-damage-percent {{#if ../usesDamageSource}}disabled{{/if}}>
+        <button type="button" data-delete-weapon-damage-type="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}" {{#if ../usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-trash"></i></button>
       </div>
       {{/each}}
     </div>
@@ -565,13 +624,14 @@
       </div>
       {{#each resourceCosts}}
       <div class="fallout-maw-settings-row">
-        <select name="{{../path}}.resourceCosts.{{index}}.type">
+        <select name="{{../path}}.resourceCosts.{{index}}.type" {{#if locked}}disabled{{/if}}>
           {{#each typeChoices}}
           <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
           {{/each}}
         </select>
+        {{#if locked}}<input type="hidden" name="{{../path}}.resourceCosts.{{index}}.type" value="{{type}}">{{/if}}
         <input type="number" name="{{../path}}.resourceCosts.{{index}}.amount" value="{{amount}}" min="0" step="1">
-        <button type="button" data-delete-weapon-resource-cost="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        <button type="button" data-delete-weapon-resource-cost="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}" {{#if locked}}disabled{{/if}}><i class="fa-solid fa-trash"></i></button>
       </div>
       {{else}}
       <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoResourceCosts"}}</p>

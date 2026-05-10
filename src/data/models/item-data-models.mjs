@@ -53,6 +53,7 @@ export class GearDataModel extends BaseItemDataModel {
       functions: new SchemaField({
         container: containerFunctionField(),
         condition: conditionFunctionField(),
+        damageSource: damageSourceFunctionField(),
         weapon: weaponFunctionField(),
         additionalWeapons: new TypedObjectField(weaponFunctionField({ named: true }), { required: true, initial: {} }),
         damageMitigation: new SchemaField({
@@ -113,9 +114,20 @@ function conditionRecoveryMethodField() {
   });
 }
 
+function damageSourceFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    name: new StringField({ required: true, blank: true, initial: "" }),
+    damage: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    damageTypeKey: new StringField({ required: true, blank: false, initial: "firearm" }),
+    damageTypes: new ArrayField(weaponDamageTypeField(), { required: true, initial: [{ key: "firearm", percent: 100 }] })
+  });
+}
+
 function weaponFunctionField({ named = false } = {}) {
   const schema = {
     enabled: new BooleanField({ required: true, initial: false }),
+    damageMode: new StringField({ required: true, blank: false, choices: ["manual", "source"], initial: "manual" }),
     damage: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     pellets: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     damageTypeKey: new StringField({ required: true, blank: false, initial: "firearm" }),
@@ -136,7 +148,8 @@ function weaponFunctionField({ named = false } = {}) {
     penetration: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     magazine: new SchemaField({
       value: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-      max: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+      max: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      sourceItemUuid: new StringField({ required: true, blank: true, initial: "" })
     }),
     resourceCosts: new ArrayField(weaponResourceCostField(), { required: true, initial: [] }),
     specialProperties: new ArrayField(new StringField({

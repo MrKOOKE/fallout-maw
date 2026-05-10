@@ -15,6 +15,7 @@ import {
 import {
   refreshTokenActionHudControlButton,
   registerTokenActionHudHooks,
+  registerTokenActionHudSocket,
   syncTokenActionHud
 } from "./apps/token-action-hud.mjs";
 import { registerAnimationLibraryBrowserHooks } from "./apps/animation-library-browser.mjs";
@@ -72,6 +73,7 @@ Hooks.once("ready", async () => {
   registerWeaponAttackSocket();
   registerThrownItemHooks();
   registerMedicineSocket();
+  registerTokenActionHudSocket();
   refreshTokenActionHudControlButton();
   syncTokenActionHud();
 });

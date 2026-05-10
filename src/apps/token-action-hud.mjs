@@ -27,13 +27,24 @@ import {
   prepareIndicatorEntry,
   prepareInventoryContext
 } from "../utils/actor-display-data.mjs";
-import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageMitigationFunction, getEnabledWeaponFunctions, hasItemFunction } from "../utils/item-functions.mjs";
+import { createDefaultInventorySize } from "../settings/creature-options.mjs";
+import {
+  ROOT_CONTAINER_ID,
+  createStoredPlacement,
+  findFirstAvailableInventoryPlacement,
+  getContextInventoryItems,
+  getItemQuantity
+} from "../utils/inventory-containers.mjs";
+import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageMitigationFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getWeaponFunctionById, hasItemFunction } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { FalloutMaWFormApplicationV2, getFlatFormData } from "./base-form-application-v2.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
+const TOKEN_ACTION_HUD_SOCKET = `system.${SYSTEM_ID}`;
+const TOKEN_ACTION_HUD_SOCKET_SCOPE = "fallout-maw.tokenActionHud";
+const TOKEN_ACTION_HUD_SOCKET_TIMEOUT = 10000;
 const DAMAGE_EFFECT_FLAG_KEY = "damageEffect";
 const SELECTED_HUD_WEAPON_FLAG = "selectedHudWeaponItemId";
 const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
@@ -73,6 +84,7 @@ let tokenActionHudRefresh = null;
 let tokenActionHudLayoutRefresh = null;
 let tokenActionHudPreviewPercent = null;
 let tokenActionHudMovementPreview = null;
+const pendingTokenActionHudSocketRequests = new Map();
 
 export function registerTokenActionHudHooks() {
   if (hooksRegistered) return;
@@ -95,6 +107,10 @@ export function registerTokenActionHudHooks() {
   tokenActionHudLayoutRefresh = foundry.utils.debounce(layoutCurrentTokenActionHud, 60);
   applyTokenActionHudScale(getTokenActionHudScalePercent());
   hooksRegistered = true;
+}
+
+export function registerTokenActionHudSocket() {
+  game.socket.on(TOKEN_ACTION_HUD_SOCKET, handleTokenActionHudSocketMessage);
 }
 
 export function refreshTokenActionHudControlButton() {
@@ -557,6 +573,14 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
     if (isHudWeaponDisabled(this.actor, item)) return undefined;
+    if (actionKey === "reload") {
+      return openWeaponReloadDialog({
+        actor: this.actor,
+        weapon: item,
+        weaponFunctionId,
+        application: this
+      });
+    }
     return startWeaponAttack({ token: this.token, weapon: item, actionKey, weaponFunctionId });
   }
 
@@ -1211,13 +1235,15 @@ function prepareWeaponActionRows(selectedWeapon, forceDisabled = false) {
 
 function prepareWeaponActionButtonsForFunction(selectedWeapon, weaponFunction, forceDisabled = false) {
   const actions = weaponFunction?.data?.availableActions ?? {};
+  const hasMagazineCost = hasWeaponResourceCostData(weaponFunction?.data, "magazine");
   const buttons = [
     { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot"), configured: Boolean(actions.aimedShot) },
     { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot"), configured: Boolean(actions.snapshot) },
     { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst"), configured: Boolean(actions.burst), visible: Boolean(actions.burst) },
     { key: "volley", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley"), configured: Boolean(actions.volley), visible: Boolean(actions.volley) },
     { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack"), configured: Boolean(actions.meleeAttack) },
-    { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), configured: Boolean(actions.aimedMeleeAttack) }
+    { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), configured: Boolean(actions.aimedMeleeAttack) },
+    { key: "reload", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload"), configured: hasMagazineCost, visible: hasMagazineCost }
   ];
   return buttons.filter(action => action.visible !== false && action.configured).map(action => ({
     ...action,
@@ -1233,7 +1259,346 @@ function prepareWeaponActionButtonsForFunction(selectedWeapon, weaponFunction, f
 
 function getWeaponActionPointCostForHud(weaponData = {}, actionKey = "") {
   const value = Number(weaponData?.[actionKey]?.actionPointCost);
-  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 5;
+  const fallback = actionKey === "reload" ? 2 : 5;
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
+}
+
+function hasWeaponResourceCostData(weaponData = {}, type = "") {
+  return (weaponData?.resourceCosts ?? []).some(cost => String(cost?.type ?? "") === type);
+}
+
+async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunctionId = "", application = null } = {}) {
+  if (!actor?.isOwner || !weapon) return undefined;
+  const weaponData = getWeaponFunctionById(weapon, weaponFunctionId) ?? {};
+  if (!hasWeaponResourceCostData(weaponData, "magazine")) return undefined;
+
+  const sourceItem = getWeaponMagazineSourceItem(weaponData);
+  if (!sourceItem || sourceItem.actor || !hasItemFunction(sourceItem, ITEM_FUNCTIONS.damageSource)) {
+    ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadNoSource"));
+    return undefined;
+  }
+
+  const source = getDamageSourceFunction(sourceItem);
+  const sourceLabel = String(source?.name ?? "").trim() || sourceItem.name;
+  const current = Math.max(0, toInteger(weaponData.magazine?.value));
+  const max = Math.max(0, toInteger(weaponData.magazine?.max));
+  const available = getActorMagazineSourceQuantity(actor, sourceItem);
+  const result = await DialogV2.wait({
+    window: {
+      title: game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload")
+    },
+    content: `
+      <div class="fallout-maw-reload-dialog">
+        <p><strong>${escapeHTML(sourceLabel)}</strong></p>
+        <p>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"))}: ${current} / ${max}</p>
+        <p>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.Quantity"))}: ${available}</p>
+      </div>
+    `,
+    buttons: [
+      {
+        action: "insert",
+        label: game.i18n.localize("FALLOUTMAW.Item.WeaponReloadInsert"),
+        icon: "fa-solid fa-arrow-down",
+        default: true
+      },
+      {
+        action: "extract",
+        label: game.i18n.localize("FALLOUTMAW.Item.WeaponReloadExtract"),
+        icon: "fa-solid fa-arrow-up"
+      },
+      {
+        action: "cancel",
+        label: game.i18n.localize("Cancel"),
+        icon: "fa-solid fa-xmark",
+        type: "button"
+      }
+    ],
+    position: {
+      width: 360
+    },
+    rejectClose: false
+  });
+
+  if (!result || result === "cancel") return undefined;
+  try {
+    await requestWeaponReloadOperation({
+      actor,
+      weapon,
+      weaponFunctionId,
+      action: result
+    });
+  } catch (error) {
+    ui.notifications.warn(error.message);
+  }
+  return application?.render({ force: true });
+}
+
+async function requestWeaponReloadOperation({ actor = null, weapon = null, weaponFunctionId = "", action = "" } = {}) {
+  if (!actor?.isOwner || !weapon) return undefined;
+  const payload = {
+    actorUuid: actor.uuid,
+    weaponId: weapon.id,
+    weaponFunctionId: String(weaponFunctionId ?? ""),
+    action: String(action ?? "")
+  };
+  if (game.user?.isGM) return performWeaponReloadOperation(payload, game.user?.id ?? "");
+  const gm = getResponsibleGM();
+  if (!gm) throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadNoGM"));
+  return requestTokenActionHudSocket("weaponReload", payload, gm);
+}
+
+async function performWeaponReloadOperation({ actorUuid = "", weaponId = "", weaponFunctionId = "", action = "" } = {}, requesterUserId = "") {
+  const actor = await fromUuid(actorUuid);
+  if (!actor) throw new Error("Actor not found.");
+  const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
+  if (requester && !actor.testUserPermission(requester, "OWNER")) throw new Error("No actor owner permission.");
+  const weapon = actor.items?.get(weaponId);
+  if (!weapon || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) throw new Error("Weapon not found.");
+  const weaponData = getWeaponFunctionById(weapon, weaponFunctionId) ?? {};
+  if (!hasWeaponResourceCostData(weaponData, "magazine")) return undefined;
+  const sourceItem = getWeaponMagazineSourceItem(weaponData);
+  if (!sourceItem || sourceItem.actor || !hasItemFunction(sourceItem, ITEM_FUNCTIONS.damageSource)) {
+    throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadNoSource"));
+  }
+  if (String(action) === "insert") return insertWeaponMagazineSource(actor, weapon, weaponFunctionId, weaponData, sourceItem);
+  if (String(action) === "extract") return extractWeaponMagazineSource(actor, weapon, weaponFunctionId, weaponData, sourceItem);
+  return undefined;
+}
+
+async function insertWeaponMagazineSource(actor, weapon, weaponFunctionId, weaponData, sourceItem) {
+  const current = Math.max(0, toInteger(weaponData.magazine?.value));
+  const max = Math.max(0, toInteger(weaponData.magazine?.max));
+  if (max && current >= max) {
+    throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadMagazineFull"));
+  }
+  const sourceStacks = getActorMagazineSourceStacks(actor, sourceItem);
+  const available = sourceStacks.reduce((total, item) => total + getItemQuantity(item), 0);
+  if (!available) {
+    throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadSourceEmpty"));
+  }
+  const capacity = max > 0 ? Math.max(0, max - current) : available;
+  const amount = Math.min(capacity, available);
+  if (!amount) return;
+  const updates = [{
+    _id: weapon.id,
+    [`${getWeaponFunctionPath(weaponFunctionId)}.magazine.value`]: current + amount
+  }];
+  const deletes = [];
+  let remaining = amount;
+  for (const stack of sourceStacks) {
+    if (remaining <= 0) break;
+    const quantity = getItemQuantity(stack);
+    const spent = Math.min(quantity, remaining);
+    const next = quantity - spent;
+    if (next > 0) updates.push({ _id: stack.id, "system.quantity": next });
+    else deletes.push(stack.id);
+    remaining -= spent;
+  }
+  if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
+  if (deletes.length) return actor.deleteEmbeddedDocuments("Item", deletes);
+  return undefined;
+}
+
+async function extractWeaponMagazineSource(actor, weapon, weaponFunctionId, weaponData, sourceItem) {
+  const current = Math.max(0, toInteger(weaponData.magazine?.value));
+  if (!current) {
+    throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadMagazineEmpty"));
+  }
+  const sourceStacks = getActorMagazineSourceStacks(actor, sourceItem);
+  const updates = [{
+    _id: weapon.id,
+    [`${getWeaponFunctionPath(weaponFunctionId)}.magazine.value`]: 0
+  }];
+  const targetStack = sourceStacks.at(0);
+  if (targetStack) {
+    updates.push({
+      _id: targetStack.id,
+      "system.quantity": getItemQuantity(targetStack) + current
+    });
+    return actor.updateEmbeddedDocuments("Item", updates);
+  }
+  await actor.updateEmbeddedDocuments("Item", updates);
+  return createActorMagazineSourceStack(actor, sourceItem, current);
+}
+
+function getWeaponFunctionPath(weaponFunctionId = "") {
+  const id = String(weaponFunctionId ?? "");
+  return !id || id === ITEM_FUNCTIONS.weapon
+    ? "system.functions.weapon"
+    : `system.functions.additionalWeapons.${id}`;
+}
+
+function getWeaponMagazineSourceItem(weaponData = {}) {
+  const uuid = String(weaponData?.magazine?.sourceItemUuid ?? "").trim();
+  if (!uuid) return null;
+  return globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
+}
+
+function getActorMagazineSourceQuantity(actor, sourceItem) {
+  return getActorMagazineSourceStacks(actor, sourceItem)
+    .reduce((total, item) => total + getItemQuantity(item), 0);
+}
+
+function getActorMagazineSourceStacks(actor, sourceItem) {
+  if (!actor || !sourceItem) return [];
+  return (actor.items?.contents ?? []).filter(item => isMatchingMagazineSourceItem(item, sourceItem));
+}
+
+function isMatchingMagazineSourceItem(item, sourceItem) {
+  if (!item || !sourceItem || !hasItemFunction(item, ITEM_FUNCTIONS.damageSource)) return false;
+  if (item.getFlag?.(SYSTEM_ID, "damageSourcePrototypeUuid") === sourceItem.uuid) return true;
+  if (item.name !== sourceItem.name) return false;
+  return areDamageSourcesEqual(getDamageSourceFunction(item), getDamageSourceFunction(sourceItem));
+}
+
+function areDamageSourcesEqual(left = {}, right = {}) {
+  if (String(left?.name ?? "") !== String(right?.name ?? "")) return false;
+  if (toInteger(left?.damage) !== toInteger(right?.damage)) return false;
+  if (String(left?.damageTypeKey ?? "") !== String(right?.damageTypeKey ?? "")) return false;
+  const leftTypes = normalizeDamageSourceTypeSignature(left?.damageTypes);
+  const rightTypes = normalizeDamageSourceTypeSignature(right?.damageTypes);
+  return leftTypes === rightTypes;
+}
+
+function normalizeDamageSourceTypeSignature(entries = []) {
+  return (entries ?? [])
+    .map(entry => `${String(entry?.key ?? "")}:${toInteger(entry?.percent)}`)
+    .sort()
+    .join("|");
+}
+
+async function createActorMagazineSourceStack(actor, sourceItem, quantity) {
+  const createData = sourceItem.toObject();
+  delete createData._id;
+  foundry.utils.setProperty(createData, "system.quantity", Math.max(0, toInteger(quantity)));
+  foundry.utils.setProperty(createData, `flags.${SYSTEM_ID}.damageSourcePrototypeUuid`, sourceItem.uuid);
+
+  const placement = getFirstAvailableRootInventoryPlacement(actor, createData);
+  if (!placement) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+  const storedPlacement = createStoredPlacement(placement, createData);
+  foundry.utils.mergeObject(createData, {
+    system: {
+      equipped: false,
+      container: {
+        parentId: ROOT_CONTAINER_ID
+      },
+      placement: {
+        mode: storedPlacement.mode,
+        equipmentSlot: storedPlacement.equipmentSlot,
+        weaponSet: storedPlacement.weaponSet,
+        weaponSlot: storedPlacement.weaponSlot,
+        x: storedPlacement.x,
+        y: storedPlacement.y,
+        width: storedPlacement.width,
+        height: storedPlacement.height
+      }
+    }
+  });
+  return actor.createEmbeddedDocuments("Item", [createData]);
+}
+
+function getFirstAvailableRootInventoryPlacement(actor, itemData) {
+  const allItems = actor?.items?.contents ?? [];
+  const rootItems = getContextInventoryItems(ROOT_CONTAINER_ID, allItems);
+  const { columns, rows } = getActorRootInventoryDimensions(actor);
+  return findFirstAvailableInventoryPlacement(rootItems, columns, rows, itemData, allItems);
+}
+
+function getActorRootInventoryDimensions(actor) {
+  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId);
+  const fallback = createDefaultInventorySize();
+  const inventorySize = race?.inventorySize ?? fallback;
+  return {
+    columns: Math.max(1, toInteger(inventorySize.columns) || fallback.columns),
+    rows: Math.max(1, toInteger(inventorySize.rows) || fallback.rows)
+  };
+}
+
+async function requestTokenActionHudSocket(action, payload = {}, gm = getResponsibleGM()) {
+  if (!gm) throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadNoGM"));
+  const requestId = foundry.utils.randomID();
+  const requesterUserId = game.user?.id ?? "";
+
+  const promise = new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      pendingTokenActionHudSocketRequests.delete(requestId);
+      reject(new Error("GM did not answer token HUD request."));
+    }, TOKEN_ACTION_HUD_SOCKET_TIMEOUT);
+    pendingTokenActionHudSocketRequests.set(requestId, { resolve, reject, timeout });
+  });
+
+  game.socket.emit(TOKEN_ACTION_HUD_SOCKET, {
+    scope: TOKEN_ACTION_HUD_SOCKET_SCOPE,
+    type: "request",
+    action,
+    requestId,
+    requesterUserId,
+    gmUserId: gm.id,
+    payload
+  });
+  return promise;
+}
+
+async function handleTokenActionHudSocketMessage(message = {}) {
+  if (message?.scope !== TOKEN_ACTION_HUD_SOCKET_SCOPE) return;
+
+  if (message.type === "response") {
+    if (message.recipientUserId && message.recipientUserId !== game.user?.id) return;
+    const pending = pendingTokenActionHudSocketRequests.get(message.requestId);
+    if (!pending) return;
+    window.clearTimeout(pending.timeout);
+    pendingTokenActionHudSocketRequests.delete(message.requestId);
+    if (message.ok) pending.resolve(message.result);
+    else pending.reject(new Error(message.error || "Token HUD socket request failed."));
+    return;
+  }
+
+  if (message.type !== "request") return;
+  if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+
+  try {
+    const result = await handleTokenActionHudSocketRequest(message.action, message.payload ?? {}, message.requesterUserId ?? "");
+    game.socket.emit(TOKEN_ACTION_HUD_SOCKET, {
+      scope: TOKEN_ACTION_HUD_SOCKET_SCOPE,
+      type: "response",
+      requestId: message.requestId,
+      recipientUserId: message.requesterUserId,
+      ok: true,
+      result
+    });
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Token Action HUD socket request failed`, error);
+    game.socket.emit(TOKEN_ACTION_HUD_SOCKET, {
+      scope: TOKEN_ACTION_HUD_SOCKET_SCOPE,
+      type: "response",
+      requestId: message.requestId,
+      recipientUserId: message.requesterUserId,
+      ok: false,
+      error: error.message
+    });
+  }
+}
+
+async function handleTokenActionHudSocketRequest(action, payload = {}, requesterUserId = "") {
+  if (action === "weaponReload") return performWeaponReloadOperation(payload, requesterUserId);
+  return undefined;
+}
+
+function getResponsibleGM() {
+  return (game.users?.contents ?? [])
+    .filter(user => user.active && user.isGM)
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .at(0) ?? null;
+}
+
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, character => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#039;"
+  })[character]);
 }
 
 function applyMeterPreview(meter, spent) {

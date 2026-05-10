@@ -1,6 +1,7 @@
 export const ITEM_FUNCTIONS = {
   container: "container",
   damageMitigation: "damageMitigation",
+  damageSource: "damageSource",
   condition: "condition",
   weapon: "weapon",
   toolPrefix: "tool:"
@@ -31,6 +32,10 @@ export function getDamageMitigationFunction(itemOrSystem = null) {
 
 export function getConditionFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.condition] ?? {};
+}
+
+export function getDamageSourceFunction(itemOrSystem = null) {
+  return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.damageSource] ?? {};
 }
 
 export function getConditionWeakeningData(itemOrSystem = null, { minimumRatio = 0 } = {}) {
