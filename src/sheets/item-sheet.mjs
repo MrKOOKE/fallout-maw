@@ -324,6 +324,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.itemFunction": ITEM_FUNCTIONS.container,
         "system.functions.container.enabled": true,
         "system.functions.container.loadReduction": Number(this.item.system?.functions?.container?.loadReduction) || 0,
+        "system.functions.container.extraWeaponSlots": Math.max(0, toInteger(this.item.system?.functions?.container?.extraWeaponSlots)),
         "system.quantity": 1,
         "system.maxStack": 1
       });
@@ -394,7 +395,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return this.item.update({
         "system.itemFunction": "",
         "system.functions.container.enabled": false,
-        "system.functions.container.loadReduction": 0
+        "system.functions.container.loadReduction": 0,
+        "system.functions.container.extraWeaponSlots": 0
       });
     }
     if (functionKey === ITEM_FUNCTIONS.damageMitigation) {

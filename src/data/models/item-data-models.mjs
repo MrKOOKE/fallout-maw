@@ -77,7 +77,8 @@ export class AbilityDataModel extends BaseItemDataModel {
 function containerFunctionField() {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
-    loadReduction: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 0 })
+    loadReduction: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 0 }),
+    extraWeaponSlots: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
   });
 }
 

@@ -153,6 +153,8 @@
     "Item": {
       "ContainerColumns": "Container Volume Horizontal",
       "ContainerCurrentLoad": "Container Load",
+      "ContainerExtraWeaponSlots": "Extra Weapon Slots",
+      "ContainerExtraWeaponSlotLabel": "Extra Slot {number}",
       "ContainerLoadReduction": "Load Reduction",
       "ContainerMaxLoad": "Maximum Load",
       "ContainerRows": "Container Volume Vertical",

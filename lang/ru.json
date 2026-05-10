@@ -152,6 +152,8 @@
     "Item": {
       "ContainerColumns": "Объем контейнера по горизонтали",
       "ContainerCurrentLoad": "Текущая нагрузка контейнера",
+      "ContainerExtraWeaponSlots": "Доп. оружейные слоты",
+      "ContainerExtraWeaponSlotLabel": "Доп. слот {number}",
       "ContainerLoadReduction": "Снижение нагрузки",
       "ContainerMaxLoad": "Максимальная нагрузка",
       "ContainerRows": "Объем контейнера по вертикали",

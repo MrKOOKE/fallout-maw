@@ -1,26 +1,30 @@
 <div class="fallout-maw-token-hud-layout">
-  <div class="fallout-maw-token-hud-left-stack">
-    <section class="fallout-maw-token-hud-block fallout-maw-token-hud-weapons">
-      {{#each weaponSets}}
-      <div class="fallout-maw-token-hud-block-title">{{label}}</div>
-      <div class="fallout-maw-token-hud-slot-row fallout-maw-token-hud-weapon-set">
-        {{#each slots}}
-        <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-weapon-slot {{#if selected}}active{{/if}} {{#unless item}}empty{{/unless}}" data-action="selectHudWeapon" data-item-id="{{item.id}}" {{#unless item}}disabled{{/unless}} title="{{label}}">
-          {{#if item}}
-          <img src="{{item.img}}" alt="{{item.name}}" onerror="this.src='{{../../fallbackIcon}}'">
-          <span>{{item.name}}</span>
-          {{else}}
-          <img src="icons/svg/combat.svg" alt="">
-          <span>{{label}}</span>
-          {{/if}}
-        </button>
-        {{/each}}
-      </div>
-      {{else}}
-      <div class="fallout-maw-token-hud-empty">Нет слотов</div>
+  <section class="fallout-maw-token-hud-block fallout-maw-token-hud-weapons">
+    {{#if weaponSet}}
+    <button type="button" class="fallout-maw-token-hud-block-title fallout-maw-token-hud-weapon-set-title" data-action="cycleHudWeaponSet" title="{{weaponSet.label}}">
+      <span>{{weaponSet.label}}</span>
+      <i class="fa-solid fa-repeat" inert></i>
+    </button>
+    <div class="fallout-maw-token-hud-slot-row fallout-maw-token-hud-weapon-set">
+      {{#each weaponSet.slots}}
+      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-weapon-slot {{#if selected}}active{{/if}} {{#unless item}}empty{{/unless}}" data-action="selectHudWeapon" data-item-id="{{item.id}}" data-weapon-set="{{../key}}" {{#unless item}}disabled{{/unless}} title="{{label}}">
+        {{#if item}}
+        <img src="{{item.img}}" alt="{{item.name}}" onerror="this.src='{{../../fallbackIcon}}'">
+        <span>{{item.name}}</span>
+        {{else}}
+        <img src="icons/svg/combat.svg" alt="">
+        <span>{{label}}</span>
+        {{/if}}
+      </button>
       {{/each}}
-    </section>
+    </div>
+    {{else}}
+    <div class="fallout-maw-token-hud-empty">Нет слотов</div>
+    {{/if}}
+  </section>
 
+  <div class="fallout-maw-token-hud-main-grid">
+  <div class="fallout-maw-token-hud-left-stack">
     <section class="fallout-maw-token-hud-block fallout-maw-token-hud-limbs">
       <div class="fallout-maw-token-hud-block-title fallout-maw-token-hud-limbs-title">
         <span>Части тела</span>
@@ -195,4 +199,5 @@
       {{/each}}
     </div>
   </section>
+  </div>
 </div>

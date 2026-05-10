@@ -17,6 +17,7 @@ import {
   normalizeInventoryPlacement,
   prepareInventoryGridContext
 } from "./inventory-containers.mjs";
+import { hasItemFunction, ITEM_FUNCTIONS } from "./item-functions.mjs";
 import { toInteger } from "./numbers.mjs";
 
 export const FALLBACK_ICON = "icons/svg/d20-grey.svg";
@@ -114,23 +115,10 @@ export function prepareInventoryContext(actor, race) {
     return { ...slot, item };
   });
 
-  const weaponSets = (race?.weaponSets ?? []).map(set => ({
-    ...set,
-    slots: (set.slots ?? []).map(slot => {
-      const limb = (race?.limbs ?? []).find(entry => entry.key === slot.limbKey);
-      const item = topLevelItems.find(candidate => (
-        candidate.placement?.mode === "weapon"
-        && candidate.placement?.weaponSet === set.key
-        && candidate.placement?.weaponSlot === slot.key
-      ));
-      if (item) assignedItemIds.add(item.id);
-      return {
-        ...slot,
-        label: limb?.label || slot.limbKey || slot.key,
-        item
-      };
-    })
-  }));
+  const weaponSets = [
+    ...(race?.weaponSets ?? []).map(set => prepareWeaponSetContext(set, race, topLevelItems, assignedItemIds)),
+    ...prepareContainerWeaponSets(actor, topLevelItems, assignedItemIds)
+  ];
 
   const inventoryItems = allItems.filter(item => (
     !assignedItemIds.has(item.id)
@@ -171,6 +159,78 @@ export function prepareInventoryContext(actor, race) {
     containers,
     grid
   };
+}
+
+function prepareWeaponSetContext(set, race, topLevelItems, assignedItemIds) {
+  return {
+    ...set,
+    slots: (set.slots ?? []).map(slot => prepareWeaponSlotContext({
+      setKey: set.key,
+      slot,
+      label: (race?.limbs ?? []).find(entry => entry.key === slot.limbKey)?.label || slot.limbKey || slot.key,
+      topLevelItems,
+      assignedItemIds
+    }))
+  };
+}
+
+function prepareContainerWeaponSets(actor, topLevelItems, assignedItemIds) {
+  return topLevelItems
+    .map(item => ({
+      item,
+      extraWeaponSlots: getContainerExtraWeaponSlots(actor.items.get(item.id))
+    }))
+    .filter(entry => entry.item.equipped && entry.extraWeaponSlots > 0)
+    .map(entry => {
+      const setKey = getContainerWeaponSetKey(entry.item.id);
+      return {
+        key: setKey,
+        label: entry.item.name,
+        containerId: entry.item.id,
+        slots: Array.from({ length: entry.extraWeaponSlots }, (_value, index) => {
+          const slotKey = getContainerWeaponSlotKey(index);
+          const label = game.i18n.format("FALLOUTMAW.Item.ContainerExtraWeaponSlotLabel", { number: index + 1 });
+          return prepareWeaponSlotContext({
+            setKey,
+            slot: {
+              key: slotKey,
+              label,
+              containerId: entry.item.id
+            },
+            label,
+            topLevelItems,
+            assignedItemIds
+          });
+        })
+      };
+    });
+}
+
+function prepareWeaponSlotContext({ setKey = "", slot = {}, label = "", topLevelItems = [], assignedItemIds = null } = {}) {
+  const item = topLevelItems.find(candidate => (
+    candidate.placement?.mode === "weapon"
+    && candidate.placement?.weaponSet === setKey
+    && candidate.placement?.weaponSlot === slot.key
+  ));
+  if (item) assignedItemIds?.add(item.id);
+  return {
+    ...slot,
+    label: label || slot.label || slot.key,
+    item
+  };
+}
+
+function getContainerExtraWeaponSlots(container) {
+  if (!container || !hasItemFunction(container, ITEM_FUNCTIONS.container)) return 0;
+  return Math.max(0, toInteger(container.system?.functions?.container?.extraWeaponSlots));
+}
+
+function getContainerWeaponSetKey(containerId = "") {
+  return `container:${containerId}`;
+}
+
+function getContainerWeaponSlotKey(index = 0) {
+  return `extraWeaponSlot${Math.max(1, toInteger(index) + 1)}`;
 }
 
 export function createInventoryItemData(item, allItems, currencies = [], placement = null) {

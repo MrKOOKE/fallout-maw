@@ -33,6 +33,7 @@ const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applicat
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
 const DAMAGE_EFFECT_FLAG_KEY = "damageEffect";
 const SELECTED_HUD_WEAPON_FLAG = "selectedHudWeaponItemId";
+const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
 const TOKEN_ACTION_HUD_SCALE_DEFAULT = 50;
 const TOKEN_ACTION_HUD_SCALE_MIN = 25;
 const TOKEN_ACTION_HUD_SCALE_MAX = 100;
@@ -257,6 +258,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       toggleTray: TokenActionHud.#onToggleTray,
       toggleMeterSection: TokenActionHud.#onToggleMeterSection,
       selectHudWeapon: { handler: TokenActionHud.#onSelectHudWeapon, buttons: [0, 1] },
+      cycleHudWeaponSet: TokenActionHud.#onCycleHudWeaponSet,
       toggleWeaponActions: { handler: TokenActionHud.#onToggleWeaponActions, buttons: [0, 1] },
       useWeaponAction: { handler: TokenActionHud.#onUseWeaponAction, buttons: [0, 1] },
       gmHealSelected: TokenActionHud.#onGmHealSelected,
@@ -296,8 +298,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const actor = this.actor;
     const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
     const inventory = prepareInventoryContext(actor, race);
-    const selectedWeapon = getSelectedHudWeapon(actor, inventory.weaponSets);
-    const weaponSets = prepareHudWeaponSets(inventory.weaponSets, selectedWeapon?.id ?? "");
+    const activeWeaponSetKey = getActiveHudWeaponSetKey(actor, inventory.weaponSets);
+    const selectedWeapon = getSelectedHudWeapon(actor, inventory.weaponSets, activeWeaponSetKey);
+    const weaponSet = prepareHudWeaponSet(inventory.weaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "");
     const weaponActionRows = prepareWeaponActionRows(selectedWeapon);
     const skills = prepareSkillButtons(actor);
     const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg");
@@ -321,7 +324,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       resources: prepareResourceEntries(actor),
       needs: prepareNeedEntries(actor),
       activeTray: this.#activeTray,
-      weaponSets,
+      weaponSet,
+      weaponSetCount: inventory.weaponSets.length,
       selectedWeapon,
       actions,
       meterSections,
@@ -485,6 +489,30 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
     await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, itemId);
+    const weaponSetKey = String(target.dataset.weaponSet ?? "");
+    if (weaponSetKey) await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
+    this.#activeTray = "";
+    return this.render({ force: true });
+  }
+
+  static async #onCycleHudWeaponSet(event) {
+    event.preventDefault();
+    const actor = this.actor;
+    if (!actor?.isOwner) return undefined;
+
+    const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
+    const weaponSets = prepareInventoryContext(actor, race).weaponSets;
+    if (weaponSets.length <= 1) return undefined;
+
+    const currentKey = getActiveHudWeaponSetKey(actor, weaponSets);
+    const currentIndex = Math.max(0, weaponSets.findIndex(set => set.key === currentKey));
+    const nextSet = weaponSets[(currentIndex + 1) % weaponSets.length];
+    await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, nextSet.key);
+
+    const nextWeaponId = getFirstWeaponIdInSet(nextSet);
+    if (nextWeaponId) await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, nextWeaponId);
+    else await actor.unsetFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG);
+
     this.#activeTray = "";
     return this.render({ force: true });
   }
@@ -917,21 +945,41 @@ function prepareActions(activeTray, selectedWeapon, items, abilities, systemActi
   });
 }
 
-function prepareHudWeaponSets(weaponSets = [], selectedWeaponId = "") {
-  return weaponSets.map(set => ({
+function prepareHudWeaponSet(weaponSets = [], activeSetKey = "", selectedWeaponId = "") {
+  const set = weaponSets.find(entry => entry.key === activeSetKey) ?? weaponSets[0] ?? null;
+  if (!set) return null;
+  return {
     ...set,
     slots: (set.slots ?? []).map(slot => ({
       ...slot,
       selected: Boolean(slot.item?.id && slot.item.id === selectedWeaponId)
     }))
-  }));
+  };
 }
 
-function getSelectedHudWeapon(actor, weaponSets = []) {
+function getActiveHudWeaponSetKey(actor, weaponSets = []) {
+  if (!weaponSets.length) return "";
+  const selectedSetKey = String(actor.getFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG) ?? "");
+  if (weaponSets.some(set => set.key === selectedSetKey)) return selectedSetKey;
+
   const selectedId = String(actor.getFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG) ?? "");
-  const weaponIds = weaponSets.flatMap(set => (set.slots ?? []).map(slot => slot.item?.id).filter(Boolean));
+  const selectedSet = selectedId
+    ? weaponSets.find(set => (set.slots ?? []).some(slot => slot.item?.id === selectedId))
+    : null;
+  return selectedSet?.key ?? weaponSets[0].key;
+}
+
+function getSelectedHudWeapon(actor, weaponSets = [], activeSetKey = "") {
+  const set = weaponSets.find(entry => entry.key === activeSetKey) ?? weaponSets[0] ?? null;
+  if (!set) return null;
+  const selectedId = String(actor.getFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG) ?? "");
+  const weaponIds = (set.slots ?? []).map(slot => slot.item?.id).filter(Boolean);
   const resolvedId = weaponIds.includes(selectedId) ? selectedId : weaponIds[0];
   return resolvedId ? actor.items.get(resolvedId) ?? null : null;
+}
+
+function getFirstWeaponIdInSet(weaponSet = null) {
+  return (weaponSet?.slots ?? []).map(slot => slot.item?.id).find(Boolean) ?? "";
 }
 
 function isMiddleMouseClick(event) {
@@ -1071,15 +1119,16 @@ function layoutTokenActionHud(element) {
   const popup = element.querySelector("[data-token-action-hud-popup]");
   const actionsRect = actions?.getBoundingClientRect();
   const rootRect = element.getBoundingClientRect();
+  const scale = getActiveTokenActionHudScaleFactor();
 
   const availableWidth = actionsRect
-    ? Math.max(96, (safeRight - actionsRect.left) / getActiveTokenActionHudScaleFactor())
-    : Math.max(96, (safeRight - rootRect.left) / getActiveTokenActionHudScaleFactor());
+    ? Math.max(96, (safeRight - actionsRect.left) / scale)
+    : Math.max(96, (safeRight - rootRect.left) / scale);
   element.style.setProperty("--fallout-maw-token-hud-actions-width", `${Math.floor(availableWidth)}px`);
 
   if (popup) {
     const popupBottom = actionsRect?.top ?? rootRect.top;
-    const maxHeight = Math.max(72, (popupBottom - margin) / getActiveTokenActionHudScaleFactor());
+    const maxHeight = Math.max(72, (popupBottom - margin) / scale);
     element.style.setProperty("--fallout-maw-token-hud-popup-max-height", `${Math.floor(maxHeight)}px`);
   }
 
