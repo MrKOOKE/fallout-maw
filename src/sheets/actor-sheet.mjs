@@ -101,6 +101,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #tooltipItemId = "";
   #tooltipWeaponTabIndex = 0;
   #tooltipDocumentPointerDownHandler = null;
+  #inventoryContextMenuOpen = false;
   #uiScale = 1;
   #viewportResizeHandler = null;
   #tabScrollPositions = new Map();
@@ -726,6 +727,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #onInventoryItemMouseOver(event) {
+    if (this.#inventoryContextMenuOpen) return;
     if (this.#tooltipPinned) return;
     const itemElement = event.target?.closest?.("[data-tooltip-item]");
     if (!itemElement) return;
@@ -740,6 +742,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #onInventoryItemMouseMove(event) {
+    if (this.#inventoryContextMenuOpen) return;
     if (this.#tooltipPinned) return;
     if (!event.target?.closest?.("[data-tooltip-item]")) return;
     this.#tooltipPointer = { x: event.clientX, y: event.clientY };
@@ -760,6 +763,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #onInventoryAuxClick(event) {
+    if (this.#inventoryContextMenuOpen) return;
     if (event.button !== 1) return;
     const itemElement = event.target?.closest?.("[data-tooltip-item]");
     if (!itemElement) return;
@@ -1623,7 +1627,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #showInventoryContextMenu(item, event) {
+    this.#clearInventoryTooltip({ force: true });
     this.#closeInventoryContextMenu();
+    this.#inventoryContextMenuOpen = true;
     const placementMode = String(item.system?.placement?.mode ?? "");
     const isSlottedEquipment = placementMode === "equipment";
     const isSlottedWeapon = placementMode === "weapon";
@@ -1673,6 +1679,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #closeInventoryContextMenu() {
     document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
+    this.#inventoryContextMenuOpen = false;
   }
 
   #openContainerSheet(item) {
@@ -1788,9 +1795,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const totalPrice = unitPrice * quantity;
     const weightLabel = formatUnitAndTotal(unitWeight, totalWeight, quantity, game.i18n.localize("FALLOUTMAW.Common.Kg"));
     const priceHTML = renderTooltipPriceValue(unitPrice, totalPrice, quantity, currency);
-    const containerLine = isContainerItem(item)
-      ? `<div class="metric wide">${game.i18n.localize("FALLOUTMAW.Item.ContainerCurrentLoad")}: ${formatWeight(getContainerContentsWeight(item, this.actor.items))} / ${formatWeight(getContainerMaxLoad(item))} ${game.i18n.localize("FALLOUTMAW.Common.Kg")}</div>`
-      : "";
     const descriptionSource = String(item.system?.description ?? "").trim();
     const descriptionHTML = descriptionSource
       ? await TextEditor.enrichHTML(descriptionSource, {
@@ -1821,7 +1825,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           <div class="bottom">
             <div class="metric">${game.i18n.localize("FALLOUTMAW.Item.Weight")}: ${weightLabel}</div>
             <div class="metric price-metric">${priceHTML}</div>
-            ${containerLine}
           </div>
         </section>
         ${functionSections}
@@ -2083,6 +2086,23 @@ function renderTooltipPriceValue(unitValue, totalValue, quantity = 1, currency =
   `;
 }
 
+function renderTooltipMeterValue(value, max = 0) {
+  const safeValue = Math.max(0, toInteger(value));
+  const safeMax = Math.max(0, toInteger(max));
+  const text = safeMax ? `${safeValue} / ${safeMax}` : String(safeValue);
+  if (!safeMax) return text;
+  const percent = Math.max(0, Math.min(100, (safeValue / safeMax) * 100));
+  const stateClass = percent >= 80 ? "high" : percent >= 30 ? "medium" : "low";
+  return {
+    html: `
+      <span class="function-meter-value">${escapeHTML(text)}</span>
+      <span class="function-meter-track ${stateClass}" aria-hidden="true">
+        <span class="function-meter-fill" style="width: ${formatNumber(percent)}%;"></span>
+      </span>
+    `
+  };
+}
+
 function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex = 0 } = {}) {
   const sections = [
     buildContainerTooltipSection(item, actor),
@@ -2100,8 +2120,7 @@ function buildContainerTooltipSection(item, actor) {
   const system = item.system ?? {};
   const rows = [
     ["Размер", `${toInteger(system.container?.columns)} x ${toInteger(system.container?.rows)}`],
-    [game.i18n.localize("FALLOUTMAW.Item.ContainerMaxLoad"), `${formatWeight(getContainerMaxLoad(item))} ${game.i18n.localize("FALLOUTMAW.Common.Kg")}`],
-    [game.i18n.localize("FALLOUTMAW.Item.ContainerCurrentLoad"), `${formatWeight(getContainerContentsWeight(item, actor?.items))} ${game.i18n.localize("FALLOUTMAW.Common.Kg")}`]
+    ["Нагруженность", `${formatWeight(getContainerContentsWeight(item, actor?.items))} / ${formatWeight(getContainerMaxLoad(item))} ${game.i18n.localize("FALLOUTMAW.Common.Kg")}`]
   ];
   const extraWeaponSlots = toInteger(system.functions?.container?.extraWeaponSlots);
   const loadReduction = Math.max(0, Math.min(100, Number(system.functions?.container?.loadReduction) || 0));
@@ -2116,7 +2135,7 @@ function buildConditionTooltipSection(item) {
   const max = Math.max(0, toInteger(condition.max));
   const value = Math.max(0, toInteger(condition.value));
   const rows = [
-    [game.i18n.localize("FALLOUTMAW.Item.ConditionValue"), max ? `${value} / ${max}` : value],
+    [game.i18n.localize("FALLOUTMAW.Item.ConditionValue"), renderTooltipMeterValue(value, max)],
     [game.i18n.localize("FALLOUTMAW.Item.ConditionWeakeningThreshold"), Math.max(1, toInteger(condition.weakeningThreshold) || 20)]
   ];
   rows.push(...getConditionRecoveryMethodRows(condition));
@@ -2194,6 +2213,10 @@ function buildWeaponTooltipRows(item, entry = {}) {
     [game.i18n.localize("FALLOUTMAW.Item.WeaponDamage"), formatWeaponDamageValue(data, weakening)],
     ["Распределение урона", getWeaponDamageDistributionLabel(data)]
   ];
+  const magazineMax = hasWeaponResourceCostData(data, "magazine") ? toInteger(data.magazine?.max) : 0;
+  if (magazineMax) {
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), renderTooltipMeterValue(toInteger(data.magazine?.value), magazineMax)]);
+  }
   rows.push(...getWeaponVolleyRows(data));
   rows.push(
     [game.i18n.localize("FALLOUTMAW.Item.WeaponSkill"), getSkillLabel(data.skillKey)],
@@ -2202,8 +2225,6 @@ function buildWeaponTooltipRows(item, entry = {}) {
   );
   const penetration = toInteger(data.penetration);
   if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), penetration]);
-  const magazineMax = toInteger(data.magazine?.max);
-  if (magazineMax) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), `${toInteger(data.magazine?.value)} / ${magazineMax}`]);
   rows.push(...getWeaponResourceCostRows(data));
   const actions = getWeaponActionLabels(data);
   if (actions.length) rows.push(["Действия", {
