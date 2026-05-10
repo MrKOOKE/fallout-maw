@@ -1,6 +1,7 @@
 import { SYSTEM_ID, TRAUMA_CREATE_OPTION } from "../constants.mjs";
 import { getCreatureOptions, getDamageTypeSettings, getTimeMechanicsIgnored, getTraumaSettings } from "../settings/accessors.mjs";
 import { getTraumaGroupForActor } from "../settings/traumas.mjs";
+import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const DAMAGE_SOCKET = `system.${SYSTEM_ID}`;
@@ -181,13 +182,15 @@ export async function applyDamageApplication(request = {}) {
       scope,
       amount: delayedAmount,
       settings: periodic,
-      source: data.source
+      source: data.source,
+      worldTime: getDamageApplicationWorldTime(data.source)
     });
     if (immediateResult.healthDelta > 0) {
       await createResourceLimitEffect(actor, {
         damageType,
         healthDelta: immediateResult.healthDelta,
-        source: data.source
+        source: data.source,
+        worldTime: getDamageApplicationWorldTime(data.source)
       });
       broadcastDamageNumbers(actor, [{
         amount: immediateResult.healthDelta,
@@ -212,7 +215,8 @@ export async function applyDamageApplication(request = {}) {
     await createResourceLimitEffect(actor, {
       damageType,
       healthDelta: result.healthDelta,
-      source: data.source
+      source: data.source,
+      worldTime: getDamageApplicationWorldTime(data.source)
     });
   }
   if (mode === MODE_DAMAGE && result.healthDelta > 0) {
@@ -278,7 +282,8 @@ export async function applyDamageApplications({ actorUuid = "", requests = [] } 
       await createResourceLimitEffect(actor, {
         damageType,
         healthDelta: entry.amount,
-        source: entry.source
+        source: entry.source,
+        worldTime: getDamageApplicationWorldTime(entry.source)
       });
     }
   }
@@ -315,7 +320,8 @@ async function prepareDamageBatchEntry(actor, data = {}) {
       scope,
       amount: delayedAmount,
       settings: periodic,
-      source: data.source
+      source: data.source,
+      worldTime: getDamageApplicationWorldTime(data.source)
     });
     if (!immediateAmount) return null;
     return {
@@ -443,13 +449,13 @@ export function getResourceLimitState(actor) {
 
 export const getResourceBlockState = getResourceLimitState;
 
-async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = "", scope = SCOPE_HEALTH, amount = 0, settings = {}, source = {} } = {}) {
+async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = "", scope = SCOPE_HEALTH, amount = 0, settings = {}, source = {}, worldTime = null } = {}) {
   const tickCount = Math.max(0, toInteger(settings.tickCount));
   const tickAmount = tickCount > 0 ? roundDamageAmount(amount / tickCount) : 0;
   if (!tickCount || !tickAmount) return [];
 
   const intervalSeconds = Math.max(1, toInteger(settings.intervalSeconds || ROUND_SECONDS));
-  const startTime = Number(game.time?.worldTime) || 0;
+  const startTime = Number.isFinite(Number(worldTime)) ? Number(worldTime) : (Number(game.time?.worldTime) || 0);
   const endTime = startTime + (intervalSeconds * tickCount);
   const effectName = String(settings.effectName || damageType.label || damageType.key || "Урон").trim();
   const effectData = {
@@ -482,7 +488,7 @@ async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = ""
   return actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
 }
 
-async function createResourceLimitEffect(actor, { damageType = {}, healthDelta = 0, source = {} } = {}) {
+async function createResourceLimitEffect(actor, { damageType = {}, healthDelta = 0, source = {}, worldTime = null } = {}) {
   const settings = damageType?.settings?.resourceLimit ?? damageType?.settings?.resourceBlock;
   if (!settings?.enabled) return [];
   const healthMax = Math.max(0, toInteger(actor.health?.max));
@@ -501,7 +507,7 @@ async function createResourceLimitEffect(actor, { damageType = {}, healthDelta =
   if (!Object.keys(resources).length) return [];
 
   const durationSeconds = Math.max(1, toInteger(settings.durationSeconds || 12));
-  const startTime = Number(game.time?.worldTime) || 0;
+  const startTime = Number.isFinite(Number(worldTime)) ? Number(worldTime) : (Number(game.time?.worldTime) || 0);
   return actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
     name: String(settings.effectName || damageType.label || "Ограничение ресурсов"),
@@ -574,7 +580,7 @@ function registerDamageTimeHooks() {
   });
   Hooks.on("deleteCombat", combat => combatRoundWorldTimes.delete(combat.id));
   Hooks.on("combatTurnChange", advanceWorldTimeForCombatRound);
-  Hooks.on("updateWorldTime", processTimedDamageEffects);
+  registerQueuedWorldTimeProcessor(processTimedDamageEffects);
   Hooks.on("preDeleteActiveEffect", preventIgnoredTimedDamageEffectDeletion);
   damageTimeHooksRegistered = true;
 }
@@ -629,7 +635,6 @@ async function processTimedDamageEffects(worldTime, deltaTime) {
     }
 
     try {
-      if (entries.length) await applyPeriodicDamageBatch(actor, entries);
       for (const update of effectUpdates) {
         if (effectDeleteIds.has(update.effectId)) continue;
         const effect = actor.effects?.get(update.effectId);
@@ -637,6 +642,7 @@ async function processTimedDamageEffects(worldTime, deltaTime) {
         await updatePeriodicEffect(effect, update.data);
       }
       await deletePeriodicEffects(actor, Array.from(effectDeleteIds));
+      if (entries.length) await applyPeriodicDamageBatch(actor, entries);
     } finally {
       for (const uuid of lockedEffectUuids) processingPeriodicEffectUuids.delete(uuid);
     }
@@ -658,9 +664,6 @@ async function processRegionPeriodicDamage(now = 0, deltaTime = 0) {
   }
   if (!batches.length) return;
 
-  const requests = batches.flatMap(batch => batch.requests);
-  if (requests.length) await requestDamageApplications(requests);
-
   for (const batch of batches) {
     if (batch.dueTicks > 0) await updateRegionPeriodicDamageRadius(batch.region, batch.system, batch.dueTicks);
     if (batch.shouldExpire) {
@@ -674,6 +677,9 @@ async function processRegionPeriodicDamage(now = 0, deltaTime = 0) {
       });
     }
   }
+
+  const requests = batches.flatMap(batch => batch.requests);
+  if (requests.length) await requestDamageApplications(requests);
 }
 
 async function collectRegionPeriodicDamageBehavior(region, behavior, now = 0, previousTime = now) {
@@ -698,12 +704,13 @@ async function collectRegionPeriodicDamageBehavior(region, behavior, now = 0, pr
   let nextTickTime = Number(state.nextTickTime);
   if (!Number.isFinite(nextTickTime)) nextTickTime = now + intervalSeconds;
 
-  let dueTicks = 0;
+  const tickTimes = [];
   while (now >= nextTickTime && (!Number.isFinite(expiresAt) || nextTickTime <= expiresAt)) {
-    dueTicks += 1;
+    tickTimes.push(nextTickTime);
     nextTickTime += intervalSeconds;
     if (oneShotDelayed) break;
   }
+  const dueTicks = tickTimes.length;
 
   const shouldExpire = oneShotDelayed && dueTicks > 0
     || (Number.isFinite(expiresAt) && now >= expiresAt);
@@ -717,7 +724,7 @@ async function collectRegionPeriodicDamageBehavior(region, behavior, now = 0, pr
     nextTickTime,
     dueTicks,
     shouldExpire,
-    requests: dueTicks > 0 ? buildRegionPeriodicDamageRequests(region, behavior, entries, dueTicks) : []
+    requests: dueTicks > 0 ? buildRegionPeriodicDamageRequests(region, behavior, entries, tickTimes) : []
   };
 }
 
@@ -738,34 +745,41 @@ async function getRegionPeriodicDamageState(behavior, { now = 0, previousTime = 
   return state;
 }
 
-function buildRegionPeriodicDamageRequests(region, behavior, entries = [], dueTicks = 1) {
+function buildRegionPeriodicDamageRequests(region, behavior, entries = [], tickTimes = []) {
   const damageEntries = entries.map(entry => ({
     ...entry,
-    amount: Math.max(0, toInteger(entry.amount)) * Math.max(1, toInteger(dueTicks))
+    amount: Math.max(0, toInteger(entry.amount))
   }));
+  const times = (Array.isArray(tickTimes) ? tickTimes : [])
+    .map(time => Number(time))
+    .filter(Number.isFinite);
+  if (!times.length) times.push(Number(game.time?.worldTime) || 0);
   const requests = [];
   for (const token of getTokensInsideRegion(region)) {
     if (!token.actor) continue;
     const limbKey = selectRandomDamageLimbKey(token.actor);
-    const source = {
-      regionUuid: region.uuid,
-      behaviorUuid: behavior.uuid,
-      tokenId: token.id,
-      kind: "regionPeriodicDamage",
-      dueTicks
-    };
-    for (const entry of damageEntries) {
-      const damageTypeKey = String(entry?.damageTypeKey ?? "").trim();
-      const amount = Math.max(0, toInteger(entry?.amount));
-      if (!damageTypeKey || amount <= 0) continue;
-      requests.push({
-        actor: token.actor,
-        limbKey,
-        amount,
-        damageTypeKey,
-        scope: SCOPE_HEALTH_AND_LIMB,
-        source
-      });
+    for (const worldTime of times) {
+      const source = {
+        regionUuid: region.uuid,
+        behaviorUuid: behavior.uuid,
+        tokenId: token.id,
+        kind: "regionPeriodicDamage",
+        dueTicks: 1,
+        worldTime
+      };
+      for (const entry of damageEntries) {
+        const damageTypeKey = String(entry?.damageTypeKey ?? "").trim();
+        const amount = Math.max(0, toInteger(entry?.amount));
+        if (!damageTypeKey || amount <= 0) continue;
+        requests.push({
+          actor: token.actor,
+          limbKey,
+          amount,
+          damageTypeKey,
+          scope: SCOPE_HEALTH_AND_LIMB,
+          source
+        });
+      }
     }
   }
   return requests;
@@ -914,7 +928,8 @@ function collectPeriodicDamageEffectTicks(effect, data, now) {
       source: {
         ...(data.source ?? {}),
         periodicDamageEffectUuid: effect.uuid,
-        dueTicks
+        dueTicks,
+        worldTime: Number.isFinite(Number(now)) ? Number(now) : (Number(game.time?.worldTime) || 0)
       }
     }]
     : [];
@@ -1278,6 +1293,11 @@ function normalizeDamageRequest(request = {}) {
     source: request.source && typeof request.source === "object" ? request.source : {},
     requesterUserId: String(request.requesterUserId ?? "")
   };
+}
+
+function getDamageApplicationWorldTime(source = {}) {
+  const value = Number(source?.worldTime);
+  return Number.isFinite(value) ? value : (Number(game.time?.worldTime) || 0);
 }
 
 function normalizeScope(scope, limbKey = "") {

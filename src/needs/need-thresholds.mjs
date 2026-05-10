@@ -5,6 +5,7 @@ import {
   getTimeMechanicsIgnored,
   getTimeNeedsPlayersOnly
 } from "../settings/accessors.mjs";
+import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const NEED_EFFECT_FLAG_KEY = "needEffect";
@@ -22,7 +23,7 @@ export function registerNeedThresholdHooks() {
     if (!foundry.utils.hasProperty(changes ?? {}, "system.needs")) return;
     void processActorNeedThresholds(actor);
   });
-  Hooks.on("updateWorldTime", processDiseaseWorldTime);
+  registerQueuedWorldTimeProcessor(processDiseaseWorldTime);
   Hooks.on("preDeleteActiveEffect", preventIgnoredDiseaseImmunityDeletion);
 }
 

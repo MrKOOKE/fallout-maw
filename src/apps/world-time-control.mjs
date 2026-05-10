@@ -20,6 +20,7 @@ let lastClockTick = 0;
 let clockTickInFlight = false;
 let resumeClockAfterCombat = false;
 let selectedUnit = "hours";
+let worldTimeAdvanceQueue = Promise.resolve();
 
 export function registerWorldTimeControlHooks() {
   if (hooksRegistered) return;
@@ -255,7 +256,11 @@ function isCombatActive() {
 async function advanceWorldTime(seconds) {
   const amount = Math.trunc(Number(seconds) || 0);
   if (!amount || !game.user?.isGM) return;
-  await game.time.advance(amount);
+  const advance = worldTimeAdvanceQueue.then(() => game.time.advance(amount));
+  worldTimeAdvanceQueue = advance.catch(error => {
+    console.error("Fallout MaW | Queued world time advance failed", error);
+  });
+  await advance;
 }
 
 function getSelectedUnitSeconds() {
