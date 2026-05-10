@@ -216,7 +216,7 @@
       "WeaponCriticalChanceModifier": "Изменение шанса на крит",
       "WeaponCriticalDamagePercent": "Крит урон (%)",
       "WeaponAttackCone": "Конус атаки, градусы",
-      "WeaponMaxRange": "Максимальная дистанция, метры",
+      "WeaponMaxRange": "Максимальная дистанция",
       "WeaponEffectiveRange": "Эффективная дистанция",
       "WeaponPenetration": "Пробивная сила",
       "WeaponMagazine": "Магазин",

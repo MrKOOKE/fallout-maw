@@ -217,7 +217,7 @@
       "WeaponCriticalChanceModifier": "Critical Chance Change",
       "WeaponCriticalDamagePercent": "Critical Damage (%)",
       "WeaponAttackCone": "Attack Cone, degrees",
-      "WeaponMaxRange": "Maximum Range, meters",
+      "WeaponMaxRange": "Maximum Range",
       "WeaponEffectiveRange": "Effective Range",
       "WeaponPenetration": "Penetration",
       "WeaponMagazine": "Magazine",

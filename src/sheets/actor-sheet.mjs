@@ -12,7 +12,8 @@ import {
   getRaceNeedSettings,
   getResourceSettings,
   getSkillAdvancementSettings,
-  getSkillSettings
+  getSkillSettings,
+  getToolSettings
 } from "../settings/accessors.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
 import { createDefaultInventorySize } from "../settings/creature-options.mjs";
@@ -42,6 +43,15 @@ import {
   prepareInventoryContext as prepareDisplayInventoryContext
 } from "../utils/actor-display-data.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
+import {
+  DAMAGE_MITIGATION_MODES,
+  ITEM_FUNCTIONS,
+  getConditionFunction,
+  getDamageMitigationFunction,
+  getEnabledWeaponFunctions,
+  getToolFunction,
+  hasItemFunction
+} from "../utils/item-functions.mjs";
 import {
   ROOT_CONTAINER_ID,
   buildInventoryCellStyle as buildInventoryCellStyleHelper,
@@ -1751,6 +1761,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         relativeTo: item
       })
       : "";
+    const functionSections = buildInventoryTooltipFunctionSections(item, this.actor);
     if (!this.#tooltipTimer) return;
 
     const tooltip = document.createElement("aside");
@@ -1768,6 +1779,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
             ${containerLine}
           </div>
         </section>
+        ${functionSections}
         ${descriptionHTML ? `<section class="description">${descriptionHTML}</section>` : ""}
       </section>
     `;
@@ -1941,6 +1953,213 @@ function formatUnitAndTotal(unitValue, totalValue, quantity = 1, suffix = "") {
     ? `${formatNumber(unitValue)} / ${formatNumber(totalValue)}`
     : formatNumber(unitValue);
   return suffixText ? `${values} ${suffixText}` : values;
+}
+
+function buildInventoryTooltipFunctionSections(item, actor) {
+  const sections = [
+    buildContainerTooltipSection(item, actor),
+    buildConditionTooltipSection(item),
+    buildDamageMitigationTooltipSection(item),
+    ...buildWeaponTooltipSections(item),
+    ...buildToolTooltipSections(item)
+  ].filter(Boolean);
+  if (!sections.length) return "";
+  return `<section class="functions">${sections.join("")}</section>`;
+}
+
+function buildContainerTooltipSection(item, actor) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.container)) return "";
+  const system = item.system ?? {};
+  const rows = [
+    ["Размер", `${toInteger(system.container?.columns)} x ${toInteger(system.container?.rows)}`],
+    [game.i18n.localize("FALLOUTMAW.Item.ContainerMaxLoad"), `${formatWeight(getContainerMaxLoad(item))} ${game.i18n.localize("FALLOUTMAW.Common.Kg")}`],
+    [game.i18n.localize("FALLOUTMAW.Item.ContainerCurrentLoad"), `${formatWeight(getContainerContentsWeight(item, actor?.items))} ${game.i18n.localize("FALLOUTMAW.Common.Kg")}`]
+  ];
+  const extraWeaponSlots = toInteger(system.functions?.container?.extraWeaponSlots);
+  const loadReduction = Math.max(0, Math.min(100, Number(system.functions?.container?.loadReduction) || 0));
+  if (extraWeaponSlots) rows.push([game.i18n.localize("FALLOUTMAW.Item.ContainerExtraWeaponSlots"), extraWeaponSlots]);
+  if (loadReduction) rows.push([game.i18n.localize("FALLOUTMAW.Item.ContainerLoadReduction"), `${loadReduction}%`]);
+  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionContainer"), rows);
+}
+
+function buildConditionTooltipSection(item) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.condition)) return "";
+  const condition = getConditionFunction(item);
+  const max = Math.max(0, toInteger(condition.max));
+  const value = Math.max(0, toInteger(condition.value));
+  return renderTooltipSingleValueSection(
+    game.i18n.localize("FALLOUTMAW.Item.FunctionCondition"),
+    max ? `${value} / ${max}` : value
+  );
+}
+
+function buildDamageMitigationTooltipSection(item) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation)) return "";
+  const mitigation = getDamageMitigationFunction(item);
+  const mode = String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense);
+  const modeLabel = mode === DAMAGE_MITIGATION_MODES.resistance
+    ? game.i18n.localize("FALLOUTMAW.Item.MitigationModeResistance")
+    : game.i18n.localize("FALLOUTMAW.Item.MitigationModeDefense");
+  const rows = [
+    [game.i18n.localize("FALLOUTMAW.Item.MitigationMode"), modeLabel]
+  ];
+  const finalReduction = Math.max(0, toInteger(mitigation.finalReduction));
+  if (finalReduction) rows.push([game.i18n.localize("FALLOUTMAW.Item.FinalDamageReduction"), finalReduction]);
+  const coverage = summarizeMitigationCoverage(mitigation.entries);
+  if (coverage) rows.push(["Покрытие", coverage]);
+  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionDamageMitigation"), rows);
+}
+
+function summarizeMitigationCoverage(entries = {}) {
+  const limbCount = Object.values(entries ?? {}).filter(damageEntries => (
+    Object.values(damageEntries ?? {}).some(entry => toInteger(entry?.value) !== 0)
+  )).length;
+  const damageTypeCount = new Set(Object.values(entries ?? {}).flatMap(damageEntries => (
+    Object.entries(damageEntries ?? {})
+      .filter(([_key, entry]) => toInteger(entry?.value) !== 0)
+      .map(([key]) => key)
+  ))).size;
+  if (!limbCount && !damageTypeCount) return "";
+  return `${limbCount} частей / ${damageTypeCount} типов`;
+}
+
+function buildWeaponTooltipSections(item) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.weapon)) return [];
+  return getEnabledWeaponFunctions(item).map((entry, index) => {
+    const data = entry.data ?? {};
+    const title = getWeaponTooltipSectionTitle(item, entry, index);
+    const rows = [
+      [game.i18n.localize("FALLOUTMAW.Item.WeaponDamage"), formatWeaponDamageValue(data)],
+      ["Распределение урона", getWeaponDamageDistributionLabel(data)],
+      [game.i18n.localize("FALLOUTMAW.Item.WeaponSkill"), getSkillLabel(data.skillKey)],
+      [game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), `${formatNumber(data.maxRangeMeters)} м`],
+      [game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), `${formatNumber(data.effectiveRange?.value)} / ${formatNumber(data.effectiveRange?.max)} м`]
+    ];
+    const penetration = toInteger(data.penetration);
+    if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), penetration]);
+    const magazineMax = toInteger(data.magazine?.max);
+    if (magazineMax) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), `${toInteger(data.magazine?.value)} / ${magazineMax}`]);
+    const actions = getWeaponActionLabels(data);
+    if (actions.length) rows.push(["Действия", {
+      html: actions.map(action => `<span class="function-value-token">${escapeHTML(action)}</span>`).join("")
+    }]);
+    return renderTooltipFunctionSection(title, rows);
+  });
+}
+
+function getWeaponTooltipSectionTitle(item, entry = {}, index = 0) {
+  const configuredName = String(entry.data?.name ?? entry.name ?? "").trim();
+  if (configuredName) return configuredName;
+  if (entry.isPrimary) return game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon");
+  return `${game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon")} ${index + 1}`;
+}
+
+function formatWeaponDamageValue(data = {}) {
+  const damage = toInteger(data.damage);
+  const pellets = Math.max(1, toInteger(data.pellets));
+  return pellets > 1 ? `${damage} x ${pellets}` : String(damage);
+}
+
+function getWeaponDamageDistributionLabel(data = {}) {
+  return getWeaponDamageTypeLabels(data).join(", ");
+}
+
+function getWeaponDamageTypeLabels(data = {}) {
+  const damageTypes = getDamageTypeSettings();
+  const labels = new Map(damageTypes.map(type => [type.key, type.label ?? type.key]));
+  const rows = Array.isArray(data.damageTypes) && data.damageTypes.length
+    ? data.damageTypes
+    : [{ key: data.damageTypeKey, percent: 100 }];
+  return rows
+    .filter(row => String(row?.key ?? "").trim())
+    .map(row => {
+      const key = String(row.key ?? "");
+      const label = labels.get(key) ?? key;
+      const percent = toInteger(row.percent);
+      return percent && percent !== 100 ? `${label} ${percent}%` : label;
+    });
+}
+
+function getSkillLabel(skillKey = "") {
+  const key = String(skillKey ?? "");
+  if (!key) return "—";
+  return getSkillSettings().find(skill => skill.key === key)?.label ?? key;
+}
+
+function getWeaponActionLabels(data = {}) {
+  const definitions = [
+    ["aimedShot", game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot")],
+    ["snapshot", game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot")],
+    ["burst", game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst")],
+    ["volley", game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley")],
+    ["meleeAttack", game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack")],
+    ["aimedMeleeAttack", game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack")]
+  ];
+  return definitions
+    .filter(([key]) => data.availableActions?.[key])
+    .map(([key, label]) => {
+      const name = String(data[key]?.name ?? "").trim() || label;
+      return `${name} (${getWeaponActionPointCost(data, key)} ОД)`;
+    });
+}
+
+function getWeaponActionPointCost(weaponData = {}, actionKey = "") {
+  const value = Number(weaponData?.[actionKey]?.actionPointCost);
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 5;
+}
+
+function buildToolTooltipSections(item) {
+  const tools = item.system?.functions?.tools ?? {};
+  return getToolSettings()
+    .filter(tool => tools?.[tool.key]?.enabled)
+    .map(tool => {
+      const data = getToolFunction(item, tool.key);
+      const rows = [
+        ["Класс", String(data.toolClass ?? "D")],
+        ["Запас", `${toInteger(data.supply?.value)} / ${toInteger(data.supply?.max)}`],
+        ["Навык", `${getSkillLabel(data.skillKey)} ${toInteger(data.skillValue)}`]
+      ];
+      return renderTooltipFunctionSection(tool.label ?? tool.key, rows);
+    });
+}
+
+function renderTooltipFunctionSection(title, rows = []) {
+  const content = rows
+    .filter(row => hasTooltipRowValue(row?.[1]))
+    .map(([label, value]) => `
+      <div class="function-row">
+        <span>${escapeHTML(label)}</span>
+        <strong>${renderTooltipRowValue(value)}</strong>
+      </div>
+    `).join("");
+  if (!content) return "";
+  return `
+    <section class="function-section">
+      <h4>${escapeHTML(title)}</h4>
+      <div class="function-grid">${content}</div>
+    </section>
+  `;
+}
+
+function renderTooltipSingleValueSection(title, value) {
+  if (!hasTooltipRowValue(value)) return "";
+  return `
+    <section class="function-section single-value">
+      <h4>${escapeHTML(title)}</h4>
+      <strong>${renderTooltipRowValue(value)}</strong>
+    </section>
+  `;
+}
+
+function hasTooltipRowValue(value) {
+  if (value === undefined || value === null) return false;
+  if (typeof value === "object" && Object.hasOwn(value, "html")) return String(value.html ?? "").trim() !== "";
+  return String(value).trim() !== "";
+}
+
+function renderTooltipRowValue(value) {
+  if (typeof value === "object" && Object.hasOwn(value, "html")) return String(value.html ?? "");
+  return escapeHTML(value);
 }
 
 function formatProgress(value) {
