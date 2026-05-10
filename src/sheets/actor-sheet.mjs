@@ -84,6 +84,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #dragDrop = null;
   #tooltipTimer = null;
   #tooltipElement = null;
+  #tooltipAnchorElement = null;
   #tooltipPointer = { x: 0, y: 0 };
   #uiScale = 1;
   #viewportResizeHandler = null;
@@ -716,13 +717,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!item) return;
     this.#tooltipPointer = { x: event.clientX, y: event.clientY };
     this.#clearInventoryTooltip();
+    this.#tooltipAnchorElement = itemElement;
     this.#tooltipTimer = setTimeout(() => this.#showInventoryTooltip(item), 500);
   }
 
   #onInventoryItemMouseMove(event) {
     if (!event.target?.closest?.("[data-tooltip-item]")) return;
     this.#tooltipPointer = { x: event.clientX, y: event.clientY };
-    if (this.#tooltipElement) this.#positionInventoryTooltip();
   }
 
   #onInventoryItemMouseOut(event) {
@@ -1728,7 +1729,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
   }
 
-  #showInventoryTooltip(item) {
+  async #showInventoryTooltip(item) {
     const currencySettings = getCurrencySettings();
     const currency = currencySettings.find(entry => entry.key === item.system?.priceCurrency);
     const quantity = Math.max(1, toInteger(item.system?.quantity));
@@ -1736,28 +1737,88 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const unitPrice = Number(item.system?.price) || 0;
     const totalWeight = Number(getItemTotalWeight(item, this.actor.items).toFixed(1));
     const totalPrice = unitPrice * quantity;
-    const currencyLabel = currency?.label ? ` ${currency.label}` : "";
+    const currencyLabel = currency?.label ?? "";
+    const weightLabel = formatUnitAndTotal(unitWeight, totalWeight, quantity, game.i18n.localize("FALLOUTMAW.Common.Kg"));
+    const priceLabel = formatUnitAndTotal(unitPrice, totalPrice, quantity, currencyLabel);
     const containerLine = isContainerItem(item)
-      ? `<span>${game.i18n.localize("FALLOUTMAW.Item.ContainerCurrentLoad")}: ${formatWeight(getContainerContentsWeight(item, this.actor.items))} / ${formatWeight(getContainerMaxLoad(item))} ${game.i18n.localize("FALLOUTMAW.Common.Kg")}</span>`
+      ? `<div class="metric wide">${game.i18n.localize("FALLOUTMAW.Item.ContainerCurrentLoad")}: ${formatWeight(getContainerContentsWeight(item, this.actor.items))} / ${formatWeight(getContainerMaxLoad(item))} ${game.i18n.localize("FALLOUTMAW.Common.Kg")}</div>`
       : "";
+    const descriptionSource = String(item.system?.description ?? "").trim();
+    const descriptionHTML = descriptionSource
+      ? await TextEditor.enrichHTML(descriptionSource, {
+        async: true,
+        secrets: item.isOwner,
+        relativeTo: item
+      })
+      : "";
+    if (!this.#tooltipTimer) return;
 
     const tooltip = document.createElement("aside");
     tooltip.className = "fallout-maw-inventory-tooltip";
     this.#applyOverlayUiScale(tooltip);
     tooltip.innerHTML = `
-      <strong>${escapeHTML(item.name)}</strong>
-      <span>${game.i18n.localize("FALLOUTMAW.Item.Weight")}: ${formatNumber(unitWeight)} / ${formatNumber(totalWeight)} ${game.i18n.localize("FALLOUTMAW.Common.Kg")}</span>
-      <span>${game.i18n.localize("FALLOUTMAW.Item.Price")}: ${formatNumber(unitPrice)}${currencyLabel} / ${formatNumber(totalPrice)}${currencyLabel}</span>
-      ${containerLine}
+      <section class="content">
+        <section class="header">
+          <div class="top">
+            <div class="name">${escapeHTML(item.name)}</div>
+          </div>
+          <div class="bottom">
+            <div class="metric">${game.i18n.localize("FALLOUTMAW.Item.Weight")}: ${weightLabel}</div>
+            <div class="metric">${game.i18n.localize("FALLOUTMAW.Item.Price")}: ${priceLabel}</div>
+            ${containerLine}
+          </div>
+        </section>
+        ${descriptionHTML ? `<section class="description">${descriptionHTML}</section>` : ""}
+      </section>
     `;
     document.body.append(tooltip);
     this.#tooltipElement = tooltip;
     this.#positionInventoryTooltip();
+    requestAnimationFrame(() => {
+      const description = tooltip.querySelector(".description");
+      description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+      this.#positionInventoryTooltip();
+    });
   }
 
   #positionInventoryTooltip() {
     if (!this.#tooltipElement) return;
-    this.#positionOverlayAtPointer(this.#tooltipElement, this.#tooltipPointer, 14);
+    this.#positionInventoryTooltipAtAnchor(this.#tooltipElement, this.#tooltipAnchorElement);
+  }
+
+  #positionInventoryTooltipAtAnchor(element, anchor) {
+    if (!element) return;
+    if (!anchor?.isConnected) {
+      this.#positionOverlayAtPointer(element, this.#tooltipPointer, 14);
+      return;
+    }
+
+    const { viewportWidth, viewportHeight } = this.#getViewportMetrics();
+    const anchorRect = anchor.getBoundingClientRect();
+    const tooltipRect = element.getBoundingClientRect();
+    const margin = Math.max(8, 12 * this.#uiScale);
+    const gap = Math.max(10, 12 * this.#uiScale);
+
+    let left = anchorRect.left - tooltipRect.width - gap;
+    let direction = "left";
+    if (left < margin) {
+      left = anchorRect.right + gap;
+      direction = "right";
+    }
+    if ((left + tooltipRect.width) > (viewportWidth - margin)) {
+      left = Math.max(margin, viewportWidth - tooltipRect.width - margin);
+      direction = "clamped";
+    }
+
+    let top = anchorRect.top + ((anchorRect.height - tooltipRect.height) / 2);
+    if (top < margin) top = margin;
+    if ((top + tooltipRect.height) > (viewportHeight - margin)) {
+      top = Math.max(margin, viewportHeight - tooltipRect.height - margin);
+    }
+
+    element.dataset.tooltipDirection = direction;
+    element.style.left = `${Math.round(left)}px`;
+    element.style.top = `${Math.round(top)}px`;
   }
 
   #clearInventoryTooltip() {
@@ -1767,6 +1828,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }
     this.#tooltipElement?.remove();
     this.#tooltipElement = null;
+    this.#tooltipAnchorElement = null;
   }
 
   #getFullscreenSheetPosition(position = {}) {
@@ -1871,6 +1933,14 @@ function formatNumber(value) {
   const numeric = Number(value) || 0;
   if (Number.isInteger(numeric)) return String(numeric);
   return numeric.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function formatUnitAndTotal(unitValue, totalValue, quantity = 1, suffix = "") {
+  const suffixText = String(suffix ?? "").trim();
+  const values = quantity > 1
+    ? `${formatNumber(unitValue)} / ${formatNumber(totalValue)}`
+    : formatNumber(unitValue);
+  return suffixText ? `${values} ${suffixText}` : values;
 }
 
 function formatProgress(value) {
