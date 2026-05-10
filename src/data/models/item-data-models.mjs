@@ -119,8 +119,18 @@ function damageSourceFunctionField() {
     enabled: new BooleanField({ required: true, initial: false }),
     name: new StringField({ required: true, blank: true, initial: "" }),
     damage: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    pellets: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     damageTypeKey: new StringField({ required: true, blank: false, initial: "firearm" }),
-    damageTypes: new ArrayField(weaponDamageTypeField(), { required: true, initial: [{ key: "firearm", percent: 100 }] })
+    damageTypes: new ArrayField(weaponDamageTypeField(), { required: true, initial: [{ key: "firearm", percent: 100 }] }),
+    accuracyBonus: new NumberField({ required: true, integer: true, initial: 0 }),
+    criticalChanceModifier: new NumberField({ required: true, integer: true, initial: 0 }),
+    criticalDamagePercent: new NumberField({ required: true, integer: true, initial: 0 }),
+    maxRangeMeters: new NumberField({ required: true, min: 0, initial: 0 }),
+    effectiveRange: new SchemaField({
+      value: new NumberField({ required: true, min: 0, initial: 0 }),
+      max: new NumberField({ required: true, min: 0, initial: 0 })
+    }),
+    penetration: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
   });
 }
 

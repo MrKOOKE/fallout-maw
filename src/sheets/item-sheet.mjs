@@ -432,11 +432,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (functionKey === ITEM_FUNCTIONS.damageSource) {
       this.#functionPickerActive = false;
       return this.item.update({
-        "system.functions.damageSource.enabled": true,
-        "system.functions.damageSource.name": "",
-        "system.functions.damageSource.damage": 0,
-        "system.functions.damageSource.damageTypeKey": "firearm",
-        "system.functions.damageSource.damageTypes": [{ key: "firearm", percent: 100 }]
+        "system.functions.damageSource": createDefaultDamageSourceFunctionData({ enabled: true })
       });
     }
 
@@ -508,11 +504,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     }
     if (functionKey === ITEM_FUNCTIONS.damageSource) {
       return this.item.update({
-        "system.functions.damageSource.enabled": false,
-        "system.functions.damageSource.name": "",
-        "system.functions.damageSource.damage": 0,
-        "system.functions.damageSource.damageTypeKey": "firearm",
-        "system.functions.damageSource.damageTypes": [{ key: "firearm", percent: 100 }]
+        "system.functions.damageSource": createDefaultDamageSourceFunctionData({ enabled: false })
       });
     }
     if (functionKey === ITEM_FUNCTIONS.condition) {
@@ -574,8 +566,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   #onAddWeaponResourceCost(event) {
     event.preventDefault();
     const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
-    const costs = [...(foundry.utils.getProperty(this.item, path)?.resourceCosts ?? [])];
-    costs.push({ type: "magazine", amount: 0 });
+    const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
+    const costs = [...(weaponData?.resourceCosts ?? [])];
+    const type = getDefaultNewWeaponResourceCostType(weaponData, hasItemFunction(this.item, ITEM_FUNCTIONS.condition));
+    costs.push({ type, amount: 0 });
     return this.item.update({ [`${path}.resourceCosts`]: costs });
   }
 
@@ -586,7 +580,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
     const costs = [...(foundry.utils.getProperty(this.item, path)?.resourceCosts ?? [])];
     const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
-    if (isSourceDamageMode(weaponData) && costs[index]?.type === "magazine") return undefined;
+    if (isLockedWeaponMagazineResourceCost(weaponData, costs, index)) return undefined;
     costs.splice(index, 1);
     return this.item.update({ [`${path}.resourceCosts`]: costs });
   }
@@ -1180,17 +1174,49 @@ function buildWeaponResourceCostRows(item, hasConditionFunction) {
 }
 
 function buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction) {
-  const costs = [...(weaponData?.resourceCosts ?? [])];
-  if (isSourceDamageMode(weaponData) && !costs.some(cost => String(cost?.type ?? "") === "magazine")) {
-    costs.push({ type: "magazine", amount: 1 });
+  const costs = Array.isArray(weaponData?.resourceCosts)
+    ? weaponData.resourceCosts
+    : Object.values(weaponData?.resourceCosts ?? {});
+  let lockedMagazineUsed = false;
+  const rows = costs.map((cost, index) => {
+    const type = String(cost?.type ?? "magazine");
+    const locked = isSourceDamageMode(weaponData) && type === "magazine" && !lockedMagazineUsed;
+    if (type === "magazine") lockedMagazineUsed = true;
+    return {
+      index,
+      amount: Number(cost.amount) || 0,
+      locked,
+      synthetic: false,
+      type,
+      typeChoices: buildWeaponResourceTypeChoices(type, hasConditionFunction)
+    };
+  });
+  if (isSourceDamageMode(weaponData) && !lockedMagazineUsed) {
+    rows.push({
+      index: "source-magazine",
+      amount: 1,
+      locked: true,
+      synthetic: true,
+      type: "magazine",
+      typeChoices: buildWeaponResourceTypeChoices("magazine", hasConditionFunction)
+    });
   }
-  return costs.map((cost, index) => ({
-    index,
-    amount: Number(cost.amount) || 0,
-    locked: isSourceDamageMode(weaponData) && String(cost?.type ?? "") === "magazine",
-    type: String(cost?.type ?? "magazine"),
-    typeChoices: buildWeaponResourceTypeChoices(cost.type, hasConditionFunction)
-  }));
+  return rows;
+}
+
+function isLockedWeaponMagazineResourceCost(weaponData = {}, costs = [], index = -1) {
+  if (!isSourceDamageMode(weaponData) || !Number.isInteger(index) || index < 0) return false;
+  if (String(costs[index]?.type ?? "") !== "magazine") return false;
+  return !costs.slice(0, index).some(cost => String(cost?.type ?? "") === "magazine");
+}
+
+function getDefaultNewWeaponResourceCostType(weaponData = {}, hasConditionFunction = false) {
+  const used = new Set((weaponData?.resourceCosts ?? []).map(cost => String(cost?.type ?? "")));
+  if (isSourceDamageMode(weaponData)) used.add("magazine");
+  if (hasConditionFunction && !used.has("condition")) return "condition";
+  if (!used.has("quantity")) return "quantity";
+  if (!used.has("magazine")) return "magazine";
+  return hasConditionFunction ? "condition" : "quantity";
 }
 
 function buildWeaponSpecialPropertyRowsForData(weaponData) {
@@ -1334,6 +1360,7 @@ function getWeaponDisplayData(weaponData = {}) {
   return {
     ...weaponData,
     damage: source.damage,
+    pellets: Math.max(1, toInteger(source.pellets) || 1),
     damageTypeKey: source.damageTypeKey,
     damageTypes: source.damageTypes
   };
@@ -1465,6 +1492,7 @@ function hasWeaponResourceCost(item, type) {
 }
 
 function hasWeaponResourceCostData(weaponData, type) {
+  if (type === "magazine" && isSourceDamageMode(weaponData)) return true;
   return (weaponData?.resourceCosts ?? []).some(cost => cost.type === type);
 }
 
@@ -1556,6 +1584,26 @@ function prepareWeaponAttackModeSettings(modeData = {}) {
     criticalChanceModifier: Number(modeData?.criticalChanceModifier) || 0,
     damagePercentModifier: Number(modeData?.damagePercentModifier) || 0
   };
+}
+
+function createDefaultDamageSourceFunctionData(source = {}) {
+  return foundry.utils.mergeObject({
+    enabled: false,
+    name: "",
+    damage: 0,
+    pellets: 1,
+    damageTypeKey: "firearm",
+    damageTypes: [{ key: "firearm", percent: 100 }],
+    accuracyBonus: 0,
+    criticalChanceModifier: 0,
+    criticalDamagePercent: 0,
+    maxRangeMeters: 0,
+    effectiveRange: {
+      value: 0,
+      max: 0
+    },
+    penetration: 0
+  }, foundry.utils.deepClone(source), { inplace: false });
 }
 
 function createDefaultWeaponFunctionData(source = {}) {
@@ -1883,12 +1931,7 @@ function writeDamageSourceTypePercents(root, entries = []) {
 }
 
 function buildWeaponMagazineSourceModeUpdates(path, weaponData = {}) {
-  const costs = Array.isArray(weaponData?.resourceCosts) ? foundry.utils.deepClone(weaponData.resourceCosts) : [];
-  if (!costs.some(cost => String(cost?.type ?? "") === "magazine")) {
-    costs.push({ type: "magazine", amount: 1 });
-  }
   const updateData = {
-    [`${path}.resourceCosts`]: costs,
     [`${path}.availableActions.reload`]: true
   };
   if (!weaponData?.magazine) {

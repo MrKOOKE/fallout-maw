@@ -1280,6 +1280,7 @@ function getWeaponActionPointCostForHud(weaponData = {}, actionKey = "") {
 }
 
 function hasWeaponResourceCostData(weaponData = {}, type = "") {
+  if (type === "magazine" && String(weaponData?.damageMode ?? "manual") === "source") return true;
   return (weaponData?.resourceCosts ?? []).some(cost => String(cost?.type ?? "") === type);
 }
 

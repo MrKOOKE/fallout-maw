@@ -1380,7 +1380,30 @@ class WeaponAttackController {
 }
 
 function getWeaponAttackData(weapon, weaponFunctionId = "") {
-  return getWeaponFunctionById(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) ?? {};
+  return applyDamageSourceWeaponModifiers(getWeaponFunctionById(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) ?? {});
+}
+
+function applyDamageSourceWeaponModifiers(weaponData = {}) {
+  if (String(weaponData?.damageMode ?? "manual") !== "source") return weaponData;
+  const sourceItem = getWeaponMagazineSourceItem(weaponData);
+  if (!sourceItem || !hasItemFunction(sourceItem, ITEM_FUNCTIONS.damageSource)) return weaponData;
+  const source = getDamageSourceFunction(sourceItem);
+  return {
+    ...weaponData,
+    damage: source.damage,
+    pellets: Math.max(1, toInteger(source.pellets) || 1),
+    damageTypeKey: source.damageTypeKey,
+    damageTypes: source.damageTypes,
+    accuracyBonus: toInteger(weaponData.accuracyBonus) + toInteger(source.accuracyBonus),
+    criticalChanceModifier: toInteger(weaponData.criticalChanceModifier) + toInteger(source.criticalChanceModifier),
+    criticalDamagePercent: Math.max(0, toInteger(weaponData.criticalDamagePercent) + toInteger(source.criticalDamagePercent)),
+    maxRangeMeters: Math.max(0, Number(weaponData.maxRangeMeters) + Number(source.maxRangeMeters || 0)),
+    effectiveRange: {
+      value: Math.max(0, Number(weaponData.effectiveRange?.value) + Number(source.effectiveRange?.value || 0)),
+      max: Math.max(0, Number(weaponData.effectiveRange?.max) + Number(source.effectiveRange?.max || 0))
+    },
+    penetration: Math.max(0, toInteger(weaponData.penetration) + toInteger(source.penetration))
+  };
 }
 
 function getWeaponAttackSourceData(weapon, weaponFunctionId = "") {
@@ -1685,7 +1708,7 @@ function getWeaponPelletCount(weapon, weaponFunctionId = "") {
 
 function hasRequiredWeaponResources(weapon, multiplier = 1, weaponFunctionId = "") {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
-  const costs = weaponData?.resourceCosts ?? [];
+  const costs = getWeaponResourceCosts(weaponData);
   for (const cost of costs) {
     const amount = Math.max(0, toInteger(cost.amount) * Math.max(1, toInteger(multiplier)));
     if (!amount) continue;
@@ -1737,7 +1760,7 @@ async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "
   const updateData = {};
   let deleteWeapon = false;
   const costs = [
-    ...(weaponData?.resourceCosts ?? []).map(cost => ({
+    ...getWeaponResourceCosts(weaponData).map(cost => ({
       type: cost.type,
       amount: Math.max(0, toInteger(cost.amount) * Math.max(1, toInteger(multiplier)))
     })),
@@ -1784,7 +1807,7 @@ function getSpentQuantityItemData(weapon, multiplier = 1, weaponFunctionId = "")
 function getWeaponQuantityResourceCost(weapon, multiplier = 1, weaponFunctionId = "") {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const countMultiplier = Math.max(1, toInteger(multiplier));
-  return (weaponData?.resourceCosts ?? []).reduce((total, cost) => {
+  return getWeaponResourceCosts(weaponData).reduce((total, cost) => {
     if (cost?.type !== "quantity") return total;
     return total + (Math.max(0, toInteger(cost.amount)) * countMultiplier);
   }, 0);
@@ -2320,6 +2343,17 @@ function getWeaponDamage(weapon, weaponFunctionId = "") {
   return Math.max(0, Math.floor(baseDamage * getWeaponConditionWeakeningRatio(weapon)));
 }
 
+function getWeaponResourceCosts(weaponData = {}) {
+  const costs = Array.isArray(weaponData?.resourceCosts)
+    ? foundry.utils.deepClone(weaponData.resourceCosts)
+    : [];
+  if (String(weaponData?.damageMode ?? "manual") === "source"
+    && !costs.some(cost => String(cost?.type ?? "") === "magazine")) {
+    costs.push({ type: "magazine", amount: 1 });
+  }
+  return costs;
+}
+
 function getVolleyDamageRadius(weapon, weaponFunctionId = "") {
   return Math.max(0, Number(getWeaponAttackData(weapon, weaponFunctionId)?.volley?.damageRadius) || 0);
 }
@@ -2596,7 +2630,7 @@ function getCriticalDamageAmount(weapon, amount, outcome, weaponFunctionId = "")
 
 function getCriticalFailureResourceCosts(weapon, actionKey, weaponFunctionId = "") {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
-  const availableTypes = new Set((weaponData?.resourceCosts ?? []).map(cost => String(cost?.type ?? "")).filter(Boolean));
+  const availableTypes = new Set(getWeaponResourceCosts(weaponData).map(cost => String(cost?.type ?? "")).filter(Boolean));
   return (weaponData?.[actionKey]?.criticalFailureConsequences ?? [])
     .filter(consequence => String(consequence?.type ?? "") === "extraResourceCost")
     .map(consequence => ({

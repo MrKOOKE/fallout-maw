@@ -462,6 +462,38 @@
         <span>{{localize "FALLOUTMAW.Item.DamageSourceDamage"}}</span>
         <input type="number" name="system.functions.damageSource.damage" value="{{system.functions.damageSource.damage}}" min="0" step="1">
       </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponPellets"}}</span>
+        <input type="number" name="system.functions.damageSource.pellets" value="{{system.functions.damageSource.pellets}}" min="1" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponAccuracyBonus"}}</span>
+        <input type="number" name="system.functions.damageSource.accuracyBonus" value="{{system.functions.damageSource.accuracyBonus}}" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponCriticalChanceModifier"}}</span>
+        <input type="number" name="system.functions.damageSource.criticalChanceModifier" value="{{system.functions.damageSource.criticalChanceModifier}}" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponCriticalDamagePercent"}}</span>
+        <input type="number" name="system.functions.damageSource.criticalDamagePercent" value="{{system.functions.damageSource.criticalDamagePercent}}" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponMaxRange"}}</span>
+        <input type="number" name="system.functions.damageSource.maxRangeMeters" value="{{system.functions.damageSource.maxRangeMeters}}" min="0" step="1">
+      </label>
+      <label class="fallout-maw-split-number-field">
+        <span>{{localize "FALLOUTMAW.Item.WeaponEffectiveRange"}}</span>
+        <div>
+          <input type="number" name="system.functions.damageSource.effectiveRange.value" value="{{system.functions.damageSource.effectiveRange.value}}" min="0" step="1">
+          <strong>/</strong>
+          <input type="number" name="system.functions.damageSource.effectiveRange.max" value="{{system.functions.damageSource.effectiveRange.max}}" min="0" step="1">
+        </div>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponPenetration"}}</span>
+        <input type="number" name="system.functions.damageSource.penetration" value="{{system.functions.damageSource.penetration}}" min="0" step="1">
+      </label>
     </div>
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.DamageSourceDamageTypes"}}</h3>
@@ -529,7 +561,7 @@
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponPellets"}}</span>
-        <input type="number" name="{{path}}.pellets" value="{{weaponData.pellets}}" min="1" step="1">
+        <input type="number" name="{{path}}.pellets" value="{{weaponData.pellets}}" min="1" step="1" {{#if usesDamageSource}}disabled{{/if}}>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponSkill"}}</span>
@@ -642,14 +674,32 @@
       </div>
       {{#each resourceCosts}}
       <div class="fallout-maw-settings-row">
-        <select name="{{../path}}.resourceCosts.{{index}}.type" {{#if locked}}disabled{{/if}}>
+        {{#if synthetic}}
+        <select disabled>
           {{#each typeChoices}}
           <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
           {{/each}}
         </select>
-        {{#if locked}}<input type="hidden" name="{{../path}}.resourceCosts.{{index}}.type" value="{{type}}">{{/if}}
+        <input type="number" value="{{amount}}" min="0" step="1" disabled>
+        <button type="button" title="{{localize 'FALLOUTMAW.Common.Delete'}}" disabled><i class="fa-solid fa-trash"></i></button>
+        {{else}}
+        {{#if locked}}
+        <select disabled>
+          {{#each typeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="hidden" name="{{../path}}.resourceCosts.{{index}}.type" value="{{type}}">
+        {{else}}
+        <select name="{{../path}}.resourceCosts.{{index}}.type">
+          {{#each typeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        {{/if}}
         <input type="number" name="{{../path}}.resourceCosts.{{index}}.amount" value="{{amount}}" min="0" step="1">
         <button type="button" data-delete-weapon-resource-cost="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}" {{#if locked}}disabled{{/if}}><i class="fa-solid fa-trash"></i></button>
+        {{/if}}
       </div>
       {{else}}
       <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoResourceCosts"}}</p>

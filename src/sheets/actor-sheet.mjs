@@ -2067,6 +2067,11 @@ function formatNumber(value) {
   return numeric.toFixed(2).replace(/\.?0+$/, "");
 }
 
+function formatSignedNumber(value) {
+  const numeric = Number(value) || 0;
+  return numeric > 0 ? `+${formatNumber(numeric)}` : formatNumber(numeric);
+}
+
 function formatUnitAndTotal(unitValue, totalValue, quantity = 1, suffix = "") {
   const suffixText = String(suffix ?? "").trim();
   const values = quantity > 1
@@ -2170,6 +2175,21 @@ function buildDamageSourceTooltipSection(item) {
     [game.i18n.localize("FALLOUTMAW.Item.DamageSourceDamage"), toInteger(source?.damage)],
     ["Распределение урона", getWeaponDamageTypeLabels(source).join(", ")]
   ];
+  const pellets = Math.max(1, toInteger(source?.pellets) || 1);
+  if (pellets > 1) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPellets"), pellets]);
+  const accuracyBonus = toInteger(source?.accuracyBonus);
+  if (accuracyBonus) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), formatSignedNumber(accuracyBonus)]);
+  const criticalChanceModifier = toInteger(source?.criticalChanceModifier);
+  if (criticalChanceModifier) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), formatSignedNumber(criticalChanceModifier)]);
+  const criticalDamagePercent = toInteger(source?.criticalDamagePercent);
+  if (criticalDamagePercent) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), `${formatSignedNumber(criticalDamagePercent)}%`]);
+  const maxRangeMeters = Number(source?.maxRangeMeters) || 0;
+  if (maxRangeMeters) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), `${formatNumber(maxRangeMeters)} м`]);
+  const effectiveValue = Number(source?.effectiveRange?.value) || 0;
+  const effectiveMax = Number(source?.effectiveRange?.max) || 0;
+  if (effectiveValue || effectiveMax) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), `${formatNumber(effectiveValue)} / ${formatNumber(effectiveMax)} м`]);
+  const penetration = toInteger(source?.penetration);
+  if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), penetration]);
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource"), rows);
 }
 
@@ -2221,7 +2241,7 @@ function buildWeaponTooltipSections(item, activeWeaponIndex = 0) {
 }
 
 function buildWeaponTooltipRows(item, entry = {}) {
-  const data = entry.data ?? {};
+  const data = getEffectiveWeaponTooltipData(entry.data ?? {});
   const weakening = getConditionWeakeningData(item, { minimumRatio: 0.1 });
   const rows = [
     [game.i18n.localize("FALLOUTMAW.Item.WeaponDamage"), formatWeaponDamageValue(item, data, weakening)],
@@ -2234,12 +2254,18 @@ function buildWeaponTooltipRows(item, entry = {}) {
   if (magazineMax) {
     rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), renderTooltipMeterValue(toInteger(data.magazine?.value), magazineMax)]);
   }
-  rows.push(...getWeaponVolleyRows(data));
   rows.push(
-    [game.i18n.localize("FALLOUTMAW.Item.WeaponSkill"), getSkillLabel(data.skillKey)],
     [game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), `${formatNumber(data.maxRangeMeters)} м`],
     [game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), `${formatNumber(data.effectiveRange?.value)} / ${formatNumber(data.effectiveRange?.max)} м`]
   );
+  rows.push(...getWeaponVolleyRows(data));
+  rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponSkill"), getSkillLabel(data.skillKey)]);
+  const accuracyBonus = toInteger(data.accuracyBonus);
+  if (accuracyBonus) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), formatSignedNumber(accuracyBonus)]);
+  const criticalChanceModifier = toInteger(data.criticalChanceModifier);
+  if (criticalChanceModifier) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), formatSignedNumber(criticalChanceModifier)]);
+  const criticalDamagePercent = toInteger(data.criticalDamagePercent);
+  if (criticalDamagePercent) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), `${criticalDamagePercent}%`]);
   const penetration = toInteger(data.penetration);
   if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), penetration]);
   rows.push(...getWeaponResourceCostRows(data));
@@ -2295,7 +2321,7 @@ function getWeaponDamageEntryLabels(entries = []) {
       const key = String(entry?.damageTypeKey ?? "").trim();
       const amount = toInteger(entry?.amount);
       if (!key || !amount) return "";
-      return `${labels.get(key) ?? key} ${amount}`;
+      return `${labels.get(key) ?? key}: ${amount}`;
     })
     .filter(Boolean)
     .join(", ");
@@ -2313,7 +2339,7 @@ function getWeaponDamageTypeLabels(data = {}) {
       const key = String(row.key ?? "");
       const label = labels.get(key) ?? key;
       const percent = toInteger(row.percent);
-      return percent && percent !== 100 ? `${label} ${percent}%` : label;
+      return `${label}: ${percent || 100}%`;
     });
 }
 
@@ -2336,6 +2362,32 @@ function getEffectiveWeaponDamageData(_item, data = {}) {
     damage: source.damage,
     damageTypeKey: source.damageTypeKey,
     damageTypes: source.damageTypes
+  };
+}
+
+function getEffectiveWeaponTooltipData(data = {}) {
+  if (!isSourceDamageMode(data)) return data;
+  const sourceItem = getWeaponDamageSourceItem(data);
+  if (!sourceItem || !hasItemFunction(sourceItem, ITEM_FUNCTIONS.damageSource)) return data;
+  return mergeWeaponDataWithDamageSource(data, getDamageSourceFunction(sourceItem));
+}
+
+function mergeWeaponDataWithDamageSource(data = {}, source = {}) {
+  return {
+    ...data,
+    damage: source.damage,
+    pellets: Math.max(1, toInteger(source.pellets) || 1),
+    damageTypeKey: source.damageTypeKey,
+    damageTypes: source.damageTypes,
+    accuracyBonus: toInteger(data.accuracyBonus) + toInteger(source.accuracyBonus),
+    criticalChanceModifier: toInteger(data.criticalChanceModifier) + toInteger(source.criticalChanceModifier),
+    criticalDamagePercent: Math.max(0, toInteger(data.criticalDamagePercent) + toInteger(source.criticalDamagePercent)),
+    maxRangeMeters: Math.max(0, Number(data.maxRangeMeters) + Number(source.maxRangeMeters || 0)),
+    effectiveRange: {
+      value: Math.max(0, Number(data.effectiveRange?.value) + Number(source.effectiveRange?.value || 0)),
+      max: Math.max(0, Number(data.effectiveRange?.max) + Number(source.effectiveRange?.max || 0))
+    },
+    penetration: Math.max(0, toInteger(data.penetration) + toInteger(source.penetration))
   };
 }
 
@@ -2380,6 +2432,7 @@ function getConditionRecoveryMethodRows(condition = {}) {
 
 function getWeaponResourceCostRows(data = {}) {
   return (data.resourceCosts ?? [])
+    .filter(cost => !(String(cost?.type ?? "") === "magazine" && Math.max(0, toInteger(cost?.amount)) <= 1))
     .map(cost => {
       const amount = Math.max(0, toInteger(cost?.amount));
       const type = getWeaponResourceTypeLabel(cost?.type);
@@ -2420,6 +2473,7 @@ function getWeaponActionPointCost(weaponData = {}, actionKey = "") {
 }
 
 function hasWeaponResourceCostData(weaponData = {}, type = "") {
+  if (type === "magazine" && String(weaponData?.damageMode ?? "manual") === "source") return true;
   return (weaponData?.resourceCosts ?? []).some(cost => String(cost?.type ?? "") === type);
 }
 
@@ -2463,7 +2517,7 @@ function renderTooltipFunctionGrid(rows = []) {
     .filter(row => hasTooltipRowValue(row?.[1]))
     .map(([label, value]) => `
       <div class="function-row">
-        <span>${escapeHTML(label)}</span>
+        <span>${escapeHTML(formatTooltipLabel(label))}</span>
         <strong>${renderTooltipRowValue(value)}</strong>
       </div>
     `).join("");
@@ -2490,6 +2544,12 @@ function hasTooltipRowValue(value) {
 function renderTooltipRowValue(value) {
   if (typeof value === "object" && Object.hasOwn(value, "html")) return String(value.html ?? "");
   return escapeHTML(value);
+}
+
+function formatTooltipLabel(label = "") {
+  const text = String(label ?? "").trim();
+  if (!text) return "";
+  return /[:：]$/.test(text) ? text : `${text}:`;
 }
 
 function formatProgress(value) {

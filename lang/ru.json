@@ -243,7 +243,7 @@
       "WeaponSkill": "Задействованный навык",
       "WeaponAccuracyBonus": "Изменение точности",
       "WeaponCriticalChanceModifier": "Изменение шанса на крит",
-      "WeaponCriticalDamagePercent": "Крит урон (%)",
+      "WeaponCriticalDamagePercent": "Крит урон",
       "WeaponAttackCone": "Конус атаки, градусы",
       "WeaponMaxRange": "Максимальная дистанция",
       "WeaponEffectiveRange": "Эффективная дистанция",
