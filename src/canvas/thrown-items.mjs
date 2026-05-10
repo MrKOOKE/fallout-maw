@@ -21,6 +21,7 @@ const DEFAULT_TILE_IMAGE = "icons/svg/item-bag.svg";
 
 let tilePatchRegistered = false;
 let canvasPickupListenerRegistered = false;
+const combatPickupPromptKeys = new Set();
 
 export function registerThrownItemHooks() {
   game.socket.on(THROWN_ITEM_SOCKET, handleThrownItemSocketMessage);
@@ -30,16 +31,21 @@ export function registerThrownItemHooks() {
     patchTileInteractions();
     registerCanvasPickupListener();
   });
+  Hooks.on("deleteCombat", combat => {
+    void promptThrownItemPickupForCombat(combat);
+  });
 }
 
-export async function createThrownItemTile({ sceneId = "", itemData = null, point = null, sourceActorUuid = "", sourceItemUuid = "" } = {}) {
+export async function createThrownItemTile({ sceneId = "", itemData = null, point = null, sourceActorUuid = "", sourceItemUuid = "", sourceUserId = "", combatId = "" } = {}) {
   if (!sceneId || !itemData || !point) return null;
   const request = {
     sceneId,
     itemData: normalizeDroppedItemData(itemData),
     point: serializePoint(point),
     sourceActorUuid: String(sourceActorUuid ?? ""),
-    sourceItemUuid: String(sourceItemUuid ?? "")
+    sourceItemUuid: String(sourceItemUuid ?? ""),
+    sourceUserId: String(sourceUserId || game.user?.id || ""),
+    combatId: String(combatId || game.combat?.id || "")
   };
 
   if (game.user?.isGM) return createThrownItemTileDocument(request);
@@ -77,7 +83,7 @@ async function handleThrownItemSocketMessage(payload = {}) {
   }
 }
 
-async function createThrownItemTileDocument({ sceneId = "", itemData = null, point = null, sourceActorUuid = "", sourceItemUuid = "" } = {}) {
+async function createThrownItemTileDocument({ sceneId = "", itemData = null, point = null, sourceActorUuid = "", sourceItemUuid = "", sourceUserId = "", combatId = "" } = {}) {
   const scene = game.scenes?.get(sceneId);
   if (!scene || !itemData || !point) return null;
 
@@ -105,6 +111,8 @@ async function createThrownItemTileDocument({ sceneId = "", itemData = null, poi
           itemData: normalizeDroppedItemData(itemData),
           sourceActorUuid: String(sourceActorUuid ?? ""),
           sourceItemUuid: String(sourceItemUuid ?? ""),
+          sourceUserId: String(sourceUserId ?? ""),
+          combatId: String(combatId ?? ""),
           createdAt: Number(game.time?.worldTime) || 0
         }
       }
@@ -279,6 +287,117 @@ async function pickupThrownItemTile({ sceneId = "", tileId = "", actorUuid = "",
 
   await actor.createEmbeddedDocuments("Item", [itemData]);
   await scene.deleteEmbeddedDocuments("Tile", [tile.id]);
+}
+
+async function promptThrownItemPickupForCombat(combat) {
+  const combatId = String(combat?.id ?? "");
+  const userId = String(game.user?.id ?? "");
+  if (!combatId || !userId) return;
+
+  const promptKey = `${combatId}:${userId}`;
+  if (combatPickupPromptKeys.has(promptKey)) return;
+
+  const entries = await getThrownItemPickupEntriesForCombat(combat, userId);
+  if (!entries.length) return;
+  combatPickupPromptKeys.add(promptKey);
+
+  const pickedIndexes = new Set();
+  const itemList = entries.map((entry, index) => `
+    <li data-thrown-item-row="${index}" style="display:flex; align-items:center; gap:0.5rem; margin:0.35rem 0;">
+      <span style="flex:1;"><strong>${escapeHTML(entry.thrownItem.itemData?.name ?? entry.tile.name)}</strong> -> ${escapeHTML(entry.actor.name)}</span>
+      <button type="button" data-thrown-item-pickup="${index}">
+        <i class="fa-solid fa-hand"></i>
+        <span>Забрать</span>
+      </button>
+    </li>
+  `).join("");
+
+  await DialogV2.wait({
+    window: { title: "Возврат метнутых предметов" },
+    content: `<p>Забрать метнутые в этом бою предметы?</p><ul style="list-style:none; padding-left:0;">${itemList}</ul>`,
+    buttons: [{
+      action: "takeAll",
+      label: "Забрать все",
+      icon: "fa-solid fa-check",
+      callback: async (_event, _button, dialog) => {
+        for (const [index, entry] of entries.entries()) {
+          if (pickedIndexes.has(index)) continue;
+          if (!entry.tile.parent?.tiles?.get(entry.tile.id)) {
+            markThrownItemPickupRow(dialog, index, pickedIndexes);
+            continue;
+          }
+          await requestPickupThrownItemTile(entry.tile, entry.actor);
+          markThrownItemPickupRow(dialog, index, pickedIndexes);
+        }
+        closeThrownItemPickupDialogIfEmpty(dialog, entries, pickedIndexes);
+        return "takeAll";
+      }
+    }],
+    render: (_event, dialog) => {
+      for (const button of dialog.element.querySelectorAll("[data-thrown-item-pickup]")) {
+        button.addEventListener("click", async event => {
+          event.preventDefault();
+          event.stopPropagation();
+          const index = toInteger(button.dataset.thrownItemPickup);
+          if (pickedIndexes.has(index)) return;
+          const entry = entries[index];
+          if (!entry) return;
+          button.disabled = true;
+          if (entry.tile.parent?.tiles?.get(entry.tile.id)) await requestPickupThrownItemTile(entry.tile, entry.actor);
+          markThrownItemPickupRow(dialog, index, pickedIndexes);
+          closeThrownItemPickupDialogIfEmpty(dialog, entries, pickedIndexes);
+        });
+      }
+    },
+    rejectClose: false,
+    modal: true
+  });
+}
+
+function markThrownItemPickupRow(dialog, index, pickedIndexes) {
+  pickedIndexes.add(index);
+  const row = dialog.element.querySelector(`[data-thrown-item-row="${index}"]`);
+  if (!row) return;
+  row.style.opacity = "0.45";
+  row.style.textDecoration = "line-through";
+  const button = row.querySelector("[data-thrown-item-pickup]");
+  if (button) button.disabled = true;
+}
+
+function closeThrownItemPickupDialogIfEmpty(dialog, entries, pickedIndexes) {
+  if (pickedIndexes.size < entries.length) return;
+  void dialog.close({ submitted: true });
+}
+
+async function getThrownItemPickupEntriesForCombat(combat, userId) {
+  const entries = [];
+  const combatId = String(combat?.id ?? "");
+  for (const scene of getCombatThrownItemScenes(combat)) {
+    for (const tile of scene.tiles?.contents ?? []) {
+      const thrownItem = tile.getFlag?.(SYSTEM_ID, THROWN_ITEM_FLAG);
+      if (!thrownItem?.itemData) continue;
+      if (String(thrownItem.combatId ?? "") !== combatId) continue;
+      if (String(thrownItem.sourceUserId ?? "") !== userId) continue;
+
+      const actor = await fromUuid(String(thrownItem.sourceActorUuid ?? ""));
+      if (!actor?.isOwner) continue;
+      entries.push({ scene, tile, thrownItem, actor });
+    }
+  }
+  return entries;
+}
+
+function getCombatThrownItemScenes(combat) {
+  const scenes = new Map();
+  const addScene = sceneOrId => {
+    const scene = typeof sceneOrId === "string" ? game.scenes?.get(sceneOrId) : sceneOrId;
+    if (scene?.id) scenes.set(scene.id, scene);
+  };
+
+  addScene(combat?.scene);
+  for (const combatant of combat?.combatants ?? []) addScene(combatant.sceneId);
+  if (!scenes.size && game.combat?.id === combat?.id) addScene(canvas.scene);
+  return scenes.values();
 }
 
 function getPickupActor() {

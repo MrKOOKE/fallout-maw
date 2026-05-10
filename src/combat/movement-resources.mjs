@@ -198,6 +198,14 @@ async function restoreLastMovementResourceSpending(tokenDocument) {
 
 async function restoreCombatMovementResources(combat) {
   if (!game.user.isActiveGM) return;
+  const actors = getCombatMovementRestoreActors(combat);
+
+  for (const actor of actors.values()) {
+    await restoreActorMovementResources(actor);
+  }
+}
+
+function getCombatMovementRestoreActors(combat) {
   const actors = new Map();
   for (const combatant of combat?.combatants ?? []) {
     const actor = combatant.actor;
@@ -205,9 +213,28 @@ async function restoreCombatMovementResources(combat) {
     actors.set(actor.uuid, actor);
   }
 
-  for (const actor of actors.values()) {
-    await restoreActorMovementResources(actor);
+  for (const scene of getCombatMovementRestoreScenes(combat)) {
+    for (const tokenDocument of scene.tokens?.contents ?? []) {
+      const actor = tokenDocument.actor;
+      if (!actor) continue;
+      actors.set(actor.uuid, actor);
+    }
   }
+
+  return actors;
+}
+
+function getCombatMovementRestoreScenes(combat) {
+  const scenes = new Map();
+  const addScene = sceneOrId => {
+    const scene = typeof sceneOrId === "string" ? game.scenes?.get(sceneOrId) : sceneOrId;
+    if (scene?.id) scenes.set(scene.id, scene);
+  };
+
+  addScene(combat?.scene);
+  for (const combatant of combat?.combatants ?? []) addScene(combatant.sceneId);
+  if (!scenes.size && game.combat?.id === combat?.id) addScene(canvas.scene);
+  return scenes.values();
 }
 
 async function restoreActorMovementResources(actor) {
