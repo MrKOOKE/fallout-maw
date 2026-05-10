@@ -403,6 +403,46 @@
           <input type="number" name="system.functions.condition.max" value="{{system.functions.condition.max}}" min="0" step="1">
         </div>
       </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.ConditionWeakeningThreshold"}}</span>
+        <input type="number" name="system.functions.condition.weakeningThreshold" value="{{system.functions.condition.weakeningThreshold}}" min="1" step="1">
+      </label>
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.ConditionRecoveryMethods"}}</h3>
+      <button type="button" data-add-condition-recovery-method><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.ConditionAddRecoveryMethod"}}</button>
+    </div>
+    <div class="fallout-maw-settings-table fallout-maw-condition-recovery-methods">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Item.ConditionRecoveryMethod"}}</span>
+        <span>{{localize "FALLOUTMAW.Item.ConditionRecoveryTool"}}</span>
+        <span>{{localize "FALLOUTMAW.Item.ConditionRecoveryClass"}}</span>
+        <span>{{localize "FALLOUTMAW.Item.ConditionRecoveryDifficulty"}}</span>
+        <span></span>
+      </div>
+      {{#each conditionRecoveryMethodRows}}
+      <div class="fallout-maw-settings-row">
+        <select name="system.functions.condition.recoveryMethods.{{index}}.type">
+          {{#each typeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <select name="system.functions.condition.recoveryMethods.{{index}}.toolKey">
+          {{#each toolChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <select name="system.functions.condition.recoveryMethods.{{index}}.toolClass">
+          {{#each classChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="number" name="system.functions.condition.recoveryMethods.{{index}}.difficulty" value="{{difficulty}}" min="0" step="1">
+        <button type="button" data-delete-condition-recovery-method="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.ConditionNoRecoveryMethods"}}</p>
+      {{/each}}
     </div>
   </section>
   {{/if}}
@@ -622,7 +662,8 @@
             <input type="number" name="{{../path}}.{{key}}.actionPointCost" value="{{actionPointCost}}" min="0" step="1">
           </label>
         </div>
-        {{#if isVolley}}
+        {{#if isReload}}
+        {{else if isVolley}}
         <div class="fallout-maw-list-grid three-columns">
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyDamageRadius"}}</span>
@@ -739,6 +780,7 @@
         </div>
         {{/if}}
         {{/if}}
+        {{#unless isReload}}
         <div class="fallout-maw-panel-header fallout-maw-weapon-action-subheader">
           <h4>{{localize "FALLOUTMAW.Item.WeaponCriticalFailureConsequences"}}</h4>
           <button type="button" data-add-weapon-critical-failure-consequence="{{key}}"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddCriticalFailureConsequence"}}</button>
@@ -769,6 +811,7 @@
           <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoCriticalFailureConsequences"}}</p>
           {{/each}}
         </div>
+        {{/unless}}
       </section>
       {{/if}}
       {{/each}}

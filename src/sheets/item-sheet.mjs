@@ -14,6 +14,8 @@ const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
+const DEFAULT_RELOAD_ACTION_POINT_COST = 2;
+const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 20;
 const DEFAULT_ITEM_SHEET_HEIGHT = 4000;
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
@@ -165,6 +167,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       isContainerFunction: hasContainerFunction,
       hasDamageMitigationFunction,
       hasConditionFunction,
+      conditionRecoveryMethodRows: buildConditionRecoveryMethodRows(item, toolSettings),
       hasWeaponFunction,
       hasWeaponMagazineCost: hasWeaponResourceCost(item, "magazine"),
       toolFunctions,
@@ -260,6 +263,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-weapon-resource-cost]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteWeaponResourceCost(event));
+    });
+    this.element?.querySelector("[data-add-condition-recovery-method]")?.addEventListener("click", event => this.#onAddConditionRecoveryMethod(event));
+    this.element?.querySelectorAll("[data-delete-condition-recovery-method]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteConditionRecoveryMethod(event));
     });
     this.element?.querySelectorAll("[data-add-weapon-special-property]").forEach(button => {
       button.addEventListener("click", event => this.#onAddWeaponSpecialProperty(event));
@@ -393,7 +400,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return this.item.update({
         "system.functions.condition.enabled": true,
         "system.functions.condition.value": 0,
-        "system.functions.condition.max": 0
+        "system.functions.condition.max": 0,
+        "system.functions.condition.weakeningThreshold": DEFAULT_CONDITION_WEAKENING_THRESHOLD,
+        "system.functions.condition.recoveryMethods": []
       });
     }
 
@@ -526,6 +535,28 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const costs = [...(foundry.utils.getProperty(this.item, path)?.resourceCosts ?? [])];
     costs.splice(index, 1);
     return this.item.update({ [`${path}.resourceCosts`]: costs });
+  }
+
+  #onAddConditionRecoveryMethod(event) {
+    event.preventDefault();
+    const methods = [...(this.item.system?.functions?.condition?.recoveryMethods ?? [])];
+    const firstTool = getToolSettings().at(0)?.key ?? "";
+    methods.push({
+      type: "tools",
+      toolKey: firstTool,
+      toolClass: "D",
+      difficulty: 0
+    });
+    return this.item.update({ "system.functions.condition.recoveryMethods": methods });
+  }
+
+  #onDeleteConditionRecoveryMethod(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteConditionRecoveryMethod);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const methods = [...(this.item.system?.functions?.condition?.recoveryMethods ?? [])];
+    methods.splice(index, 1);
+    return this.item.update({ "system.functions.condition.recoveryMethods": methods });
   }
 
   #onAddWeaponSpecialProperty(event) {
@@ -1158,6 +1189,7 @@ function buildWeaponActionChoices(item, damageTypeSettings = []) {
 
 function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {}, damageTypeSettings = []) {
   const actions = weaponData?.availableActions ?? {};
+  const hasMagazineCost = hasWeaponResourceCostData(weaponData, "magazine");
   const fallbackCone = Number(weaponData.attackConeDegrees) || DEFAULT_WEAPON_ATTACK_CONE_DEGREES;
   return [
     { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot") },
@@ -1165,7 +1197,8 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {},
     { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst") },
     { key: "volley", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley"), isVolley: true },
     { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack"), isMelee: true },
-    { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), isMelee: true }
+    { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), isMelee: true },
+    { key: "reload", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload"), isReload: true, autoSelected: hasMagazineCost }
   ].map(action => {
     const actionData = weaponData?.[action.key] ?? {};
     const sourceActionData = sourceWeaponData?.[action.key] ?? {};
@@ -1181,7 +1214,7 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {},
       ...action,
       name: actionName,
       displayLabel: actionName || action.label,
-      selected: Boolean(actions[action.key]),
+      selected: Boolean(actions[action.key]) || Boolean(action.autoSelected),
       isBurst: action.key === "burst",
       isVolley: action.key === "volley",
       isMelee: Boolean(action.isMelee),
@@ -1195,7 +1228,7 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {},
       volleyRegionDurationSeconds: Math.max(0, Math.trunc(Number(weaponData?.volley?.regionDurationSeconds) || 0)),
       volleyRegionDelaySeconds: Math.max(0, Math.trunc(Number(weaponData?.volley?.regionDelaySeconds) || 0)),
       volleyRegionRadiusDeltaMeters: Number(weaponData?.volley?.regionRadiusDeltaMeters) || 0,
-      criticalFailureConsequences: buildWeaponCriticalFailureConsequenceRows(actionData, weaponData),
+      criticalFailureConsequences: action.isReload ? [] : buildWeaponCriticalFailureConsequenceRows(actionData, weaponData),
       thrust,
       swing
     };
@@ -1209,7 +1242,8 @@ function getWeaponBurstDifficultyPerShotForData(weaponData = {}) {
 
 function getWeaponActionPointCostForData(weaponData = {}, actionKey = "") {
   const value = Number(weaponData?.[actionKey]?.actionPointCost);
-  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : DEFAULT_WEAPON_ACTION_POINT_COST;
+  const fallback = actionKey === "reload" ? DEFAULT_RELOAD_ACTION_POINT_COST : DEFAULT_WEAPON_ACTION_POINT_COST;
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
 }
 
 function prepareWeaponAttackModeSettings(modeData = {}) {
@@ -1255,7 +1289,8 @@ function createDefaultWeaponFunctionData(source = {}) {
       burst: false,
       volley: false,
       meleeAttack: false,
-      aimedMeleeAttack: false
+      aimedMeleeAttack: false,
+      reload: false
     },
     aimedShot: {
       name: "",
@@ -1291,7 +1326,11 @@ function createDefaultWeaponFunctionData(source = {}) {
       criticalFailureConsequences: []
     },
     meleeAttack: createDefaultWeaponMeleeActionData(),
-    aimedMeleeAttack: createDefaultWeaponMeleeActionData()
+    aimedMeleeAttack: createDefaultWeaponMeleeActionData(),
+    reload: {
+      name: "",
+      actionPointCost: DEFAULT_RELOAD_ACTION_POINT_COST
+    }
   }, foundry.utils.deepClone(source), { inplace: false });
 }
 
@@ -1392,6 +1431,38 @@ function buildToolFunctionEntries(item, toolSettings, skillSettings) {
       supplyMax: Number(data.supply?.max) || 0,
       skillValue: Number(data.skillValue) || 0,
       skillKey
+    };
+  });
+}
+
+function buildConditionRecoveryMethodRows(item, toolSettings = []) {
+  const classChoices = ["D", "C", "B", "A", "S"];
+  return (item.system?.functions?.condition?.recoveryMethods ?? []).map((method, index) => {
+    const type = String(method?.type ?? "tools") === "tools" ? "tools" : "tools";
+    const toolKey = String(method?.toolKey ?? "");
+    const toolChoices = toolSettings.map(tool => ({
+      value: tool.key,
+      label: tool.label,
+      selected: tool.key === toolKey
+    }));
+    if (!toolChoices.some(choice => choice.selected) && toolChoices[0]) toolChoices[0].selected = true;
+    return {
+      index,
+      type,
+      toolKey,
+      toolClass: String(method?.toolClass ?? "D"),
+      difficulty: Math.max(0, toInteger(method?.difficulty)),
+      typeChoices: [{
+        value: "tools",
+        label: game.i18n.localize("FALLOUTMAW.Item.ConditionRecoveryMethodTools"),
+        selected: true
+      }],
+      toolChoices,
+      classChoices: classChoices.map(value => ({
+        value,
+        label: value,
+        selected: value === String(method?.toolClass ?? "D")
+      }))
     };
   });
 }

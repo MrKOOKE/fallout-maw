@@ -27,6 +27,7 @@ import { resourceField } from "./resources.mjs";
 import {
   DAMAGE_MITIGATION_MODES,
   ITEM_FUNCTIONS,
+  getConditionWeakeningData,
   getDamageMitigationFunction,
   hasItemFunction
 } from "../../utils/item-functions.mjs";
@@ -398,19 +399,22 @@ function buildEquippedItemDamageMitigation(items, limbs = {}, damageTypeSettings
     const mitigation = getDamageMitigationFunction(item);
     const mode = String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense);
     const finalReduction = Math.max(0, toInteger(mitigation.finalReduction));
+    const weakening = getConditionWeakeningData(item);
+    const weakeningRatio = weakening.active ? weakening.ratio : 1;
 
     for (const [limbKey, damageEntries] of Object.entries(mitigation.entries ?? {})) {
       if (!limbKeys.has(limbKey)) continue;
       for (const [damageTypeKey, entry] of Object.entries(damageEntries ?? {})) {
         if (!damageTypeKeys.has(damageTypeKey)) continue;
-        const value = toInteger(entry?.value);
+        const baseValue = toInteger(entry?.value);
+        const value = baseValue > 0 ? Math.floor(baseValue * weakeningRatio) : baseValue;
         if (!value) continue;
 
         if (mode === DAMAGE_MITIGATION_MODES.defense) defenses[limbKey][damageTypeKey] += value;
         else if (mode === DAMAGE_MITIGATION_MODES.resistance) resistances[limbKey][damageTypeKey] += value;
         else continue;
 
-        reductions[limbKey][damageTypeKey] += finalReduction;
+        reductions[limbKey][damageTypeKey] += Math.floor(finalReduction * weakeningRatio);
       }
     }
   }

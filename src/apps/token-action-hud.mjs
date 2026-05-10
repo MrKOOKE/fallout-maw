@@ -27,7 +27,7 @@ import {
   prepareIndicatorEntry,
   prepareInventoryContext
 } from "../utils/actor-display-data.mjs";
-import { ITEM_FUNCTIONS, getDamageMitigationFunction, getEnabledWeaponFunctions, hasItemFunction } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageMitigationFunction, getEnabledWeaponFunctions, hasItemFunction } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { FalloutMaWFormApplicationV2, getFlatFormData } from "./base-form-application-v2.mjs";
@@ -959,7 +959,8 @@ function getFlatLimbFinalReductions(actor) {
   for (const item of actor.items?.contents ?? []) {
     if (item.type !== "gear" || !item.system?.equipped || !hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation)) continue;
     const mitigation = getDamageMitigationFunction(item);
-    const finalReduction = Math.max(0, toInteger(mitigation.finalReduction));
+    const weakening = getConditionWeakeningData(item);
+    const finalReduction = Math.floor(Math.max(0, toInteger(mitigation.finalReduction)) * (weakening.active ? weakening.ratio : 1));
     if (!finalReduction) continue;
     for (const [limbKey, damageEntries] of Object.entries(mitigation.entries ?? {})) {
       if (!Object.hasOwn(result, limbKey) || !hasAnyMitigationEntry(damageEntries)) continue;

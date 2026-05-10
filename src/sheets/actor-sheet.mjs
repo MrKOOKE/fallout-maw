@@ -47,6 +47,7 @@ import {
   DAMAGE_MITIGATION_MODES,
   ITEM_FUNCTIONS,
   getConditionFunction,
+  getConditionWeakeningData,
   getDamageMitigationFunction,
   getEnabledWeaponFunctions,
   getToolFunction,
@@ -96,6 +97,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #tooltipElement = null;
   #tooltipAnchorElement = null;
   #tooltipPointer = { x: 0, y: 0 };
+  #tooltipPinned = false;
+  #tooltipItemId = "";
+  #tooltipWeaponTabIndex = 0;
+  #tooltipDocumentPointerDownHandler = null;
   #uiScale = 1;
   #viewportResizeHandler = null;
   #tabScrollPositions = new Map();
@@ -368,7 +373,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     super._onClose(options);
     this.#unbindViewportResize();
     this.#closeInventoryContextMenu();
-    this.#clearInventoryTooltip();
+    this.#clearInventoryTooltip({ force: true });
   }
 
   async _onDrop(event) {
@@ -403,7 +408,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   async _onDragStart(event) {
     await super._onDragStart(event);
-    this.#clearInventoryTooltip();
+    this.#clearInventoryTooltip({ force: true });
     this.#clearInventoryDropPreview();
     const item = this.actor.items.get(event.currentTarget?.dataset?.itemId ?? "");
     this.#draggedItemId = item?.id ?? "";
@@ -654,6 +659,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     root.addEventListener("mouseover", event => this.#onInventoryItemMouseOver(event));
     root.addEventListener("mousemove", event => this.#onInventoryItemMouseMove(event));
     root.addEventListener("mouseout", event => this.#onInventoryItemMouseOut(event));
+    root.addEventListener("mousedown", event => this.#onInventoryMiddleMouseDown(event));
+    root.addEventListener("auxclick", event => this.#onInventoryAuxClick(event));
     root.addEventListener("click", () => this.#closeInventoryContextMenu());
   }
 
@@ -719,6 +726,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #onInventoryItemMouseOver(event) {
+    if (this.#tooltipPinned) return;
     const itemElement = event.target?.closest?.("[data-tooltip-item]");
     if (!itemElement) return;
     if (itemElement.contains(event.relatedTarget)) return;
@@ -732,14 +740,45 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #onInventoryItemMouseMove(event) {
+    if (this.#tooltipPinned) return;
     if (!event.target?.closest?.("[data-tooltip-item]")) return;
     this.#tooltipPointer = { x: event.clientX, y: event.clientY };
   }
 
   #onInventoryItemMouseOut(event) {
+    if (this.#tooltipPinned) return;
     const itemElement = event.target?.closest?.("[data-tooltip-item]");
     if (!itemElement || itemElement.contains(event.relatedTarget)) return;
+    if (this.#tooltipElement?.contains(event.relatedTarget)) return;
     this.#clearInventoryTooltip();
+  }
+
+  #onInventoryMiddleMouseDown(event) {
+    if (event.button !== 1) return;
+    if (!event.target?.closest?.("[data-tooltip-item], .fallout-maw-inventory-tooltip")) return;
+    event.preventDefault();
+  }
+
+  #onInventoryAuxClick(event) {
+    if (event.button !== 1) return;
+    const itemElement = event.target?.closest?.("[data-tooltip-item]");
+    if (!itemElement) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const item = this.actor.items.get(itemElement.dataset.tooltipItem);
+    if (!item) return;
+
+    const sameTooltip = this.#tooltipElement && this.#tooltipItemId === item.id;
+    const shouldPin = !(sameTooltip && this.#tooltipPinned);
+    this.#clearInventoryTooltip({ force: true });
+    if (!shouldPin) return;
+
+    this.#tooltipPinned = true;
+    this.#tooltipPointer = { x: event.clientX, y: event.clientY };
+    this.#tooltipAnchorElement = itemElement;
+    this.#tooltipWeaponTabIndex = 0;
+    void this.#showInventoryTooltip(item, { pinned: true });
   }
 
   #getDropZone(eventOrTarget) {
@@ -1739,7 +1778,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
   }
 
-  async #showInventoryTooltip(item) {
+  async #showInventoryTooltip(item, { pinned = false } = {}) {
     const currencySettings = getCurrencySettings();
     const currency = currencySettings.find(entry => entry.key === item.system?.priceCurrency);
     const quantity = Math.max(1, toInteger(item.system?.quantity));
@@ -1747,9 +1786,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const unitPrice = Number(item.system?.price) || 0;
     const totalWeight = Number(getItemTotalWeight(item, this.actor.items).toFixed(1));
     const totalPrice = unitPrice * quantity;
-    const currencyLabel = currency?.label ?? "";
     const weightLabel = formatUnitAndTotal(unitWeight, totalWeight, quantity, game.i18n.localize("FALLOUTMAW.Common.Kg"));
-    const priceLabel = formatUnitAndTotal(unitPrice, totalPrice, quantity, currencyLabel);
+    const priceHTML = renderTooltipPriceValue(unitPrice, totalPrice, quantity, currency);
     const containerLine = isContainerItem(item)
       ? `<div class="metric wide">${game.i18n.localize("FALLOUTMAW.Item.ContainerCurrentLoad")}: ${formatWeight(getContainerContentsWeight(item, this.actor.items))} / ${formatWeight(getContainerMaxLoad(item))} ${game.i18n.localize("FALLOUTMAW.Common.Kg")}</div>`
       : "";
@@ -1761,11 +1799,18 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         relativeTo: item
       })
       : "";
-    const functionSections = buildInventoryTooltipFunctionSections(item, this.actor);
-    if (!this.#tooltipTimer) return;
+    const functionSections = buildInventoryTooltipFunctionSections(item, this.actor, {
+      activeWeaponIndex: this.#tooltipWeaponTabIndex
+    });
+    if (!this.#tooltipTimer && !pinned) return;
+    if (this.#tooltipTimer) {
+      clearTimeout(this.#tooltipTimer);
+      this.#tooltipTimer = null;
+    }
 
     const tooltip = document.createElement("aside");
     tooltip.className = "fallout-maw-inventory-tooltip";
+    tooltip.classList.toggle("pinned", Boolean(pinned));
     this.#applyOverlayUiScale(tooltip);
     tooltip.innerHTML = `
       <section class="content">
@@ -1775,7 +1820,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           </div>
           <div class="bottom">
             <div class="metric">${game.i18n.localize("FALLOUTMAW.Item.Weight")}: ${weightLabel}</div>
-            <div class="metric">${game.i18n.localize("FALLOUTMAW.Item.Price")}: ${priceLabel}</div>
+            <div class="metric price-metric">${priceHTML}</div>
             ${containerLine}
           </div>
         </section>
@@ -1783,8 +1828,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         ${descriptionHTML ? `<section class="description">${descriptionHTML}</section>` : ""}
       </section>
     `;
+    tooltip.addEventListener("click", event => this.#onInventoryTooltipClick(event));
+    tooltip.addEventListener("auxclick", event => this.#onInventoryTooltipAuxClick(event));
+    tooltip.addEventListener("mouseleave", () => {
+      this.#clearInventoryTooltip({ force: this.#tooltipPinned });
+    });
     document.body.append(tooltip);
     this.#tooltipElement = tooltip;
+    this.#tooltipPinned = Boolean(pinned);
+    this.#tooltipItemId = item.id;
+    if (pinned) this.#bindInventoryTooltipDocumentClose();
     this.#positionInventoryTooltip();
     requestAnimationFrame(() => {
       const description = tooltip.querySelector(".description");
@@ -1796,6 +1849,43 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #positionInventoryTooltip() {
     if (!this.#tooltipElement) return;
     this.#positionInventoryTooltipAtAnchor(this.#tooltipElement, this.#tooltipAnchorElement);
+  }
+
+  #onInventoryTooltipClick(event) {
+    const button = event.target?.closest?.("[data-tooltip-weapon-tab]");
+    if (!button || !this.#tooltipElement?.contains(button)) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const index = Math.max(0, toInteger(button.dataset.tooltipWeaponTab));
+    if (index === this.#tooltipWeaponTabIndex) return;
+    this.#tooltipWeaponTabIndex = index;
+    this.#activateInventoryTooltipWeaponTab(index);
+  }
+
+  #onInventoryTooltipAuxClick(event) {
+    if (event.button !== 1) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (this.#tooltipPinned) {
+      this.#clearInventoryTooltip({ force: true });
+      return;
+    }
+    this.#tooltipPinned = true;
+    this.#tooltipElement?.classList.add("pinned");
+    this.#bindInventoryTooltipDocumentClose();
+  }
+
+  #activateInventoryTooltipWeaponTab(index) {
+    if (!this.#tooltipElement) return;
+    this.#tooltipElement.querySelectorAll("[data-tooltip-weapon-tab]").forEach(button => {
+      const active = toInteger(button.dataset.tooltipWeaponTab) === index;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    this.#tooltipElement.querySelectorAll("[data-tooltip-weapon-panel]").forEach(panel => {
+      panel.classList.toggle("active", toInteger(panel.dataset.tooltipWeaponPanel) === index);
+    });
   }
 
   #positionInventoryTooltipAtAnchor(element, anchor) {
@@ -1833,14 +1923,40 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     element.style.top = `${Math.round(top)}px`;
   }
 
-  #clearInventoryTooltip() {
+  #bindInventoryTooltipDocumentClose() {
+    if (this.#tooltipDocumentPointerDownHandler) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#tooltipDocumentPointerDownHandler = event => {
+      if (event.button === 1 && this.#tooltipElement?.contains(event.target)) {
+        event.preventDefault();
+      }
+      if (!this.#tooltipPinned || !this.#tooltipElement) return;
+      if (this.#tooltipElement.contains(event.target)) return;
+      this.#clearInventoryTooltip({ force: true });
+    };
+    view.document.addEventListener("pointerdown", this.#tooltipDocumentPointerDownHandler, { capture: true });
+  }
+
+  #unbindInventoryTooltipDocumentClose() {
+    if (!this.#tooltipDocumentPointerDownHandler) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    view.document.removeEventListener("pointerdown", this.#tooltipDocumentPointerDownHandler, { capture: true });
+    this.#tooltipDocumentPointerDownHandler = null;
+  }
+
+  #clearInventoryTooltip({ force = false } = {}) {
     if (this.#tooltipTimer) {
       clearTimeout(this.#tooltipTimer);
       this.#tooltipTimer = null;
     }
+    if (this.#tooltipPinned && !force) return;
+    this.#unbindInventoryTooltipDocumentClose();
     this.#tooltipElement?.remove();
     this.#tooltipElement = null;
     this.#tooltipAnchorElement = null;
+    this.#tooltipPinned = false;
+    this.#tooltipItemId = "";
+    this.#tooltipWeaponTabIndex = 0;
   }
 
   #getFullscreenSheetPosition(position = {}) {
@@ -1955,12 +2071,24 @@ function formatUnitAndTotal(unitValue, totalValue, quantity = 1, suffix = "") {
   return suffixText ? `${values} ${suffixText}` : values;
 }
 
-function buildInventoryTooltipFunctionSections(item, actor) {
+function renderTooltipPriceValue(unitValue, totalValue, quantity = 1, currency = null) {
+  const value = quantity > 1
+    ? `${formatNumber(unitValue)} / ${formatNumber(totalValue)}`
+    : formatNumber(unitValue);
+  const icon = String(currency?.img || "icons/svg/coins.svg").trim();
+  const label = String(currency?.label ?? "").trim();
+  return `
+    <span class="metric-value">${escapeHTML(value)}</span>
+    <span class="currency-inline-icon">${icon ? `<img src="${escapeAttribute(icon)}" alt="${escapeAttribute(label)}">` : ""}</span>
+  `;
+}
+
+function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex = 0 } = {}) {
   const sections = [
     buildContainerTooltipSection(item, actor),
     buildConditionTooltipSection(item),
     buildDamageMitigationTooltipSection(item),
-    ...buildWeaponTooltipSections(item),
+    ...buildWeaponTooltipSections(item, activeWeaponIndex),
     ...buildToolTooltipSections(item)
   ].filter(Boolean);
   if (!sections.length) return "";
@@ -1987,10 +2115,12 @@ function buildConditionTooltipSection(item) {
   const condition = getConditionFunction(item);
   const max = Math.max(0, toInteger(condition.max));
   const value = Math.max(0, toInteger(condition.value));
-  return renderTooltipSingleValueSection(
-    game.i18n.localize("FALLOUTMAW.Item.FunctionCondition"),
-    max ? `${value} / ${max}` : value
-  );
+  const rows = [
+    [game.i18n.localize("FALLOUTMAW.Item.ConditionValue"), max ? `${value} / ${max}` : value],
+    [game.i18n.localize("FALLOUTMAW.Item.ConditionWeakeningThreshold"), Math.max(1, toInteger(condition.weakeningThreshold) || 20)]
+  ];
+  rows.push(...getConditionRecoveryMethodRows(condition));
+  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionCondition"), rows);
 }
 
 function buildDamageMitigationTooltipSection(item) {
@@ -2023,28 +2153,63 @@ function summarizeMitigationCoverage(entries = {}) {
   return `${limbCount} частей / ${damageTypeCount} типов`;
 }
 
-function buildWeaponTooltipSections(item) {
+function buildWeaponTooltipSections(item, activeWeaponIndex = 0) {
   if (!hasItemFunction(item, ITEM_FUNCTIONS.weapon)) return [];
-  return getEnabledWeaponFunctions(item).map((entry, index) => {
-    const data = entry.data ?? {};
-    const title = getWeaponTooltipSectionTitle(item, entry, index);
-    const rows = [
-      [game.i18n.localize("FALLOUTMAW.Item.WeaponDamage"), formatWeaponDamageValue(data)],
-      ["Распределение урона", getWeaponDamageDistributionLabel(data)],
-      [game.i18n.localize("FALLOUTMAW.Item.WeaponSkill"), getSkillLabel(data.skillKey)],
-      [game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), `${formatNumber(data.maxRangeMeters)} м`],
-      [game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), `${formatNumber(data.effectiveRange?.value)} / ${formatNumber(data.effectiveRange?.max)} м`]
-    ];
-    const penetration = toInteger(data.penetration);
-    if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), penetration]);
-    const magazineMax = toInteger(data.magazine?.max);
-    if (magazineMax) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), `${toInteger(data.magazine?.value)} / ${magazineMax}`]);
-    const actions = getWeaponActionLabels(data);
-    if (actions.length) rows.push(["Действия", {
-      html: actions.map(action => `<span class="function-value-token">${escapeHTML(action)}</span>`).join("")
-    }]);
-    return renderTooltipFunctionSection(title, rows);
-  });
+  const entries = getEnabledWeaponFunctions(item);
+  if (!entries.length) return [];
+  if (entries.length === 1) {
+    return entries.map((entry, index) => renderTooltipFunctionSection(
+      getWeaponTooltipSectionTitle(item, entry, index),
+      buildWeaponTooltipRows(item, entry)
+    ));
+  }
+
+  const activeIndex = Math.max(0, Math.min(entries.length - 1, toInteger(activeWeaponIndex)));
+  const tabs = entries.map((entry, index) => {
+    const active = index === activeIndex;
+    return `
+      <button type="button" class="${active ? "active" : ""}" data-tooltip-weapon-tab="${index}" aria-selected="${active ? "true" : "false"}">
+        ${escapeHTML(getWeaponTooltipSectionTitle(item, entry, index))}
+      </button>
+    `;
+  }).join("");
+  const panels = entries.map((entry, index) => `
+    <div class="weapon-tab-panel ${index === activeIndex ? "active" : ""}" data-tooltip-weapon-panel="${index}">
+      ${renderTooltipFunctionGrid(buildWeaponTooltipRows(item, entry))}
+    </div>
+  `).join("");
+
+  return [`
+    <section class="function-section weapon-tab-section">
+      <div class="weapon-tab-list" role="tablist">${tabs}</div>
+      ${panels}
+    </section>
+  `];
+}
+
+function buildWeaponTooltipRows(item, entry = {}) {
+  const data = entry.data ?? {};
+  const weakening = getConditionWeakeningData(item, { minimumRatio: 0.1 });
+  const rows = [
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponDamage"), formatWeaponDamageValue(data, weakening)],
+    ["Распределение урона", getWeaponDamageDistributionLabel(data)]
+  ];
+  rows.push(...getWeaponVolleyRows(data));
+  rows.push(
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponSkill"), getSkillLabel(data.skillKey)],
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), `${formatNumber(data.maxRangeMeters)} м`],
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), `${formatNumber(data.effectiveRange?.value)} / ${formatNumber(data.effectiveRange?.max)} м`]
+  );
+  const penetration = toInteger(data.penetration);
+  if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), penetration]);
+  const magazineMax = toInteger(data.magazine?.max);
+  if (magazineMax) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), `${toInteger(data.magazine?.value)} / ${magazineMax}`]);
+  rows.push(...getWeaponResourceCostRows(data));
+  const actions = getWeaponActionLabels(data);
+  if (actions.length) rows.push(["Действия", {
+    html: renderTooltipValueTokens(actions)
+  }]);
+  return rows;
 }
 
 function getWeaponTooltipSectionTitle(item, entry = {}, index = 0) {
@@ -2054,14 +2219,48 @@ function getWeaponTooltipSectionTitle(item, entry = {}, index = 0) {
   return `${game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon")} ${index + 1}`;
 }
 
-function formatWeaponDamageValue(data = {}) {
+function formatWeaponDamageValue(data = {}, weakening = null) {
   const damage = toInteger(data.damage);
+  const effectiveDamage = weakening?.active ? Math.floor(damage * weakening.ratio) : damage;
   const pellets = Math.max(1, toInteger(data.pellets));
-  return pellets > 1 ? `${damage} x ${pellets}` : String(damage);
+  return pellets > 1 ? `${effectiveDamage} x ${pellets}` : String(effectiveDamage);
 }
 
 function getWeaponDamageDistributionLabel(data = {}) {
   return getWeaponDamageTypeLabels(data).join(", ");
+}
+
+function getWeaponVolleyRows(data = {}) {
+  const volley = data.volley ?? {};
+  const rows = [];
+  const damageRadius = Number(volley.damageRadius) || 0;
+  if (damageRadius > 0) rows.push(["Радиус взрыва", `${formatNumber(damageRadius)} м`]);
+
+  const regionDamage = getWeaponDamageEntryLabels(volley.regionDamageEntries);
+  const regionRadius = Number(volley.regionRadius) || 0;
+  const regionDuration = Number(volley.regionDurationSeconds) || 0;
+  const regionDelay = Number(volley.regionDelaySeconds) || 0;
+  const regionDelta = Number(volley.regionRadiusDeltaMeters) || 0;
+  if (regionRadius > 0) rows.push(["Радиус области", `${formatNumber(regionRadius)} м`]);
+  if (regionDamage) rows.push(["Урон области", regionDamage]);
+  if (regionDuration > 0) rows.push(["Длительность области", `${formatNumber(regionDuration)} с`]);
+  if (regionDelay > 0) rows.push(["Задержка области", `${formatNumber(regionDelay)} с`]);
+  if (regionDelta !== 0) rows.push(["Изменение радиуса", `${regionDelta > 0 ? "+" : ""}${formatNumber(regionDelta)} м`]);
+  return rows;
+}
+
+function getWeaponDamageEntryLabels(entries = []) {
+  const damageTypes = getDamageTypeSettings();
+  const labels = new Map(damageTypes.map(type => [type.key, type.label ?? type.key]));
+  return (entries ?? [])
+    .map(entry => {
+      const key = String(entry?.damageTypeKey ?? "").trim();
+      const amount = toInteger(entry?.amount);
+      if (!key || !amount) return "";
+      return `${labels.get(key) ?? key} ${amount}`;
+    })
+    .filter(Boolean)
+    .join(", ");
 }
 
 function getWeaponDamageTypeLabels(data = {}) {
@@ -2086,6 +2285,43 @@ function getSkillLabel(skillKey = "") {
   return getSkillSettings().find(skill => skill.key === key)?.label ?? key;
 }
 
+function getToolLabel(toolKey = "") {
+  const key = String(toolKey ?? "");
+  if (!key) return "—";
+  return getToolSettings().find(tool => tool.key === key)?.label ?? key;
+}
+
+function getConditionRecoveryMethodRows(condition = {}) {
+  return (condition.recoveryMethods ?? [])
+    .filter(method => String(method?.type ?? "tools") === "tools")
+    .map(method => {
+      const toolKey = String(method.toolKey ?? "").trim();
+      const tool = toolKey
+        ? getToolLabel(toolKey)
+        : game.i18n.localize("FALLOUTMAW.Item.ConditionRecoveryMethodTools");
+      const toolClass = String(method.toolClass ?? "D");
+      const difficulty = Math.max(0, toInteger(method.difficulty));
+      return [tool, `${game.i18n.localize("FALLOUTMAW.Item.ConditionRecoveryClass")}: ${toolClass}, СЛ: ${difficulty}`];
+    });
+}
+
+function getWeaponResourceCostRows(data = {}) {
+  return (data.resourceCosts ?? [])
+    .map(cost => {
+      const amount = Math.max(0, toInteger(cost?.amount));
+      const type = getWeaponResourceTypeLabel(cost?.type);
+      return [type, amount];
+    })
+    .filter(([type]) => Boolean(type));
+}
+
+function getWeaponResourceTypeLabel(type = "") {
+  if (type === "magazine") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostMagazine");
+  if (type === "condition") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostCondition");
+  if (type === "quantity") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostQuantity");
+  return String(type || "—");
+}
+
 function getWeaponActionLabels(data = {}) {
   const definitions = [
     ["aimedShot", game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot")],
@@ -2093,10 +2329,11 @@ function getWeaponActionLabels(data = {}) {
     ["burst", game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst")],
     ["volley", game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley")],
     ["meleeAttack", game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack")],
-    ["aimedMeleeAttack", game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack")]
+    ["aimedMeleeAttack", game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack")],
+    ["reload", game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload")]
   ];
   return definitions
-    .filter(([key]) => data.availableActions?.[key])
+    .filter(([key]) => data.availableActions?.[key] || (key === "reload" && hasWeaponResourceCostData(data, "magazine")))
     .map(([key, label]) => {
       const name = String(data[key]?.name ?? "").trim() || label;
       return `${name} (${getWeaponActionPointCost(data, key)} ОД)`;
@@ -2105,7 +2342,21 @@ function getWeaponActionLabels(data = {}) {
 
 function getWeaponActionPointCost(weaponData = {}, actionKey = "") {
   const value = Number(weaponData?.[actionKey]?.actionPointCost);
-  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 5;
+  const fallback = actionKey === "reload" ? 2 : 5;
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
+}
+
+function hasWeaponResourceCostData(weaponData = {}, type = "") {
+  return (weaponData?.resourceCosts ?? []).some(cost => String(cost?.type ?? "") === type);
+}
+
+function renderTooltipValueTokens(values = [], { comma = false } = {}) {
+  return values
+    .map((value, index) => {
+      const suffix = comma && index < values.length - 1 ? "," : "";
+      return `<span class="function-value-token">${escapeHTML(`${value}${suffix}`)}</span>`;
+    })
+    .join(" ");
 }
 
 function buildToolTooltipSections(item) {
@@ -2124,6 +2375,17 @@ function buildToolTooltipSections(item) {
 }
 
 function renderTooltipFunctionSection(title, rows = []) {
+  const content = renderTooltipFunctionGrid(rows);
+  if (!content) return "";
+  return `
+    <section class="function-section">
+      <h4>${escapeHTML(title)}</h4>
+      ${content}
+    </section>
+  `;
+}
+
+function renderTooltipFunctionGrid(rows = []) {
   const content = rows
     .filter(row => hasTooltipRowValue(row?.[1]))
     .map(([label, value]) => `
@@ -2133,12 +2395,7 @@ function renderTooltipFunctionSection(title, rows = []) {
       </div>
     `).join("");
   if (!content) return "";
-  return `
-    <section class="function-section">
-      <h4>${escapeHTML(title)}</h4>
-      <div class="function-grid">${content}</div>
-    </section>
-  `;
+  return `<div class="function-grid">${content}</div>`;
 }
 
 function renderTooltipSingleValueSection(title, value) {
@@ -2196,6 +2453,10 @@ function escapeHTML(value) {
   const element = document.createElement("span");
   element.textContent = String(value ?? "");
   return element.innerHTML;
+}
+
+function escapeAttribute(value) {
+  return escapeHTML(value).replace(/"/g, "&quot;");
 }
 
 function prepareIndicatorEntry({

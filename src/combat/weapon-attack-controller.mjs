@@ -3,7 +3,7 @@ import { SYSTEM_ID } from "../constants.mjs";
 import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./attack-animations.mjs";
 import { estimateDamageApplication, getLimbHealingCap, requestDamageApplications } from "./damage-hub.mjs";
 import { createThrownItemTile } from "../canvas/thrown-items.mjs";
-import { ITEM_FUNCTIONS, getWeaponFunctionById, hasItemFunction } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, getConditionWeakeningData, getWeaponFunctionById, hasItemFunction } from "../utils/item-functions.mjs";
 import { getCreatureOptions, getDamageTypeSettings } from "../settings/accessors.mjs";
 import { ACTION_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -863,7 +863,7 @@ class WeaponAttackController {
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getDodgeDifficulty(target.actor) + difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus,
-        situationalModifier: toInteger(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.accuracyBonus),
+        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId)
       },
       animate: false,
@@ -961,7 +961,7 @@ class WeaponAttackController {
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: BASE_VOLLEY_DIFFICULTY + rangeDifficultyBonus + requirementDifficultyBonus + Math.max(0, toInteger(difficultyBonus)),
-        situationalModifier: toInteger(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.accuracyBonus),
+        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId)
       },
       animate: false,
@@ -1052,7 +1052,7 @@ class WeaponAttackController {
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getAimedAttackDifficulty(target.actor, limbKey, difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus),
-        situationalModifier: toInteger(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.accuracyBonus),
+        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId)
       },
       animate: false,
@@ -2316,7 +2316,8 @@ function getPointElevationAtDistance(originElevation, targetElevation, distance,
 }
 
 function getWeaponDamage(weapon, weaponFunctionId = "") {
-  return Math.max(0, toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.damage));
+  const baseDamage = Math.max(0, toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.damage));
+  return Math.max(0, Math.floor(baseDamage * getWeaponConditionWeakeningRatio(weapon)));
 }
 
 function getVolleyDamageRadius(weapon, weaponFunctionId = "") {
@@ -2536,7 +2537,8 @@ function estimateDamageRequestGroup(requests = []) {
 }
 
 function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "") {
-  const modifier = toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier);
+  const modifier = toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier)
+    - getWeaponConditionCritChancePenalty(weapon);
   return {
     criticalSuccessBonus: Math.max(0, modifier),
     criticalFailureBonus: Math.max(0, -modifier)
@@ -2601,13 +2603,19 @@ function isWeaponAttackModeEnabled(weapon, actionKey, mode, weaponFunctionId = "
 }
 
 function getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId = "") {
+  return getWeaponAccuracyModifier(weapon, weaponFunctionId)
+    + toInteger(getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.accuracyModifier)
+}
+
+function getWeaponAccuracyModifier(weapon, weaponFunctionId = "") {
   return toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.accuracyBonus)
-    + toInteger(getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.accuracyModifier);
+    - getWeaponConditionAccuracyPenalty(weapon);
 }
 
 function getAttackModeCriticalCheckModifiers(weapon, actionKey, mode, weaponFunctionId = "") {
   const modifier = toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier)
-    + toInteger(getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.criticalChanceModifier);
+    + toInteger(getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.criticalChanceModifier)
+    - getWeaponConditionCritChancePenalty(weapon);
   return {
     criticalSuccessBonus: Math.max(0, modifier),
     criticalFailureBonus: Math.max(0, -modifier)
@@ -2617,6 +2625,25 @@ function getAttackModeCriticalCheckModifiers(weapon, actionKey, mode, weaponFunc
 function getAttackModeDamage(weapon, actionKey, mode, baseDamage, weaponFunctionId = "") {
   const modifier = toInteger(getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.damagePercentModifier);
   return Math.max(0, Math.round(Math.max(0, Number(baseDamage) || 0) * Math.max(0, 100 + modifier) / 100));
+}
+
+function getWeaponConditionWeakening(weapon) {
+  return getConditionWeakeningData(weapon, { minimumRatio: 0.1 });
+}
+
+function getWeaponConditionWeakeningRatio(weapon) {
+  const weakening = getWeaponConditionWeakening(weapon);
+  return weakening.active ? weakening.ratio : 1;
+}
+
+function getWeaponConditionAccuracyPenalty(weapon) {
+  const weakening = getWeaponConditionWeakening(weapon);
+  return weakening.active ? weakening.steps * 10 : 0;
+}
+
+function getWeaponConditionCritChancePenalty(weapon) {
+  const weakening = getWeaponConditionWeakening(weapon);
+  return weakening.active ? weakening.steps * 3 : 0;
 }
 
 function getWeaponPenetrationPower(weapon, weaponFunctionId = "") {
@@ -3346,7 +3373,7 @@ function getGeneralAttackHitChance(attackerActor, weapon, targetActor, { difficu
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
   const finalSkillValue = toInteger(attackerActor.system?.skills?.[skillKey]?.value)
-    + toInteger(weaponData?.accuracyBonus);
+    + getWeaponAccuracyModifier(weapon, weaponFunctionId);
   const difficulty = getDodgeDifficulty(targetActor)
     + Math.max(0, toInteger(difficultyBonus))
     + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId);
@@ -3357,7 +3384,7 @@ function getVolleyAreaHitChance(attackerActor, weapon, geometry, { difficultyBon
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
   const finalSkillValue = toInteger(attackerActor.system?.skills?.[skillKey]?.value)
-    + toInteger(weaponData?.accuracyBonus);
+    + getWeaponAccuracyModifier(weapon, weaponFunctionId);
   const rangeDifficultyBonus = getEffectiveRangeDifficultyBonusForDistance(
     weaponData,
     pixelsToMeters(geometry.distance)
@@ -3373,7 +3400,7 @@ function getAimedAttackHitChance(attackerActor, weapon, targetActor, limbKey = "
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
   const finalSkillValue = toInteger(attackerActor.system?.skills?.[skillKey]?.value)
-    + toInteger(weaponData?.accuracyBonus);
+    + getWeaponAccuracyModifier(weapon, weaponFunctionId);
   const difficulty = getAimedAttackDifficulty(targetActor, limbKey, blockerBonus + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId));
   return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty);
 }
