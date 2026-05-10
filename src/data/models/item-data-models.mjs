@@ -149,7 +149,8 @@ function weaponFunctionField({ named = false } = {}) {
     magazine: new SchemaField({
       value: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
       max: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-      sourceItemUuid: new StringField({ required: true, blank: true, initial: "" })
+      sourceItemUuid: new StringField({ required: true, blank: true, initial: "" }),
+      sourceItemUuids: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), { required: true, initial: [] })
     }),
     resourceCosts: new ArrayField(weaponResourceCostField(), { required: true, initial: [] }),
     specialProperties: new ArrayField(new StringField({

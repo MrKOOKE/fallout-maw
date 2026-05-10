@@ -1,11 +1,12 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { FalloutMaWActiveEffectSheet } from "./active-effect-sheet.mjs";
 import { FalloutMaWActorSheet } from "./actor-sheet.mjs";
-import { FalloutMaWItemSheet } from "./item-sheet.mjs";
+import { FalloutMaWItemSheet, registerItemSheetSourceSyncHooks } from "./item-sheet.mjs";
 import { PeriodicDamageRegionBehaviorConfig } from "./periodic-damage-region-behavior-config.mjs";
 
 export function registerSystemSheets() {
   const sheetConfig = foundry.applications.apps.DocumentSheetConfig;
+  registerItemSheetSourceSyncHooks();
 
   sheetConfig.registerSheet(Actor, FALLOUT_MAW.id, FalloutMaWActorSheet, {
     label: "Fallout-MaW V2",

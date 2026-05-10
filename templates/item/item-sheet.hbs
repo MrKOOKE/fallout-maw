@@ -576,17 +576,35 @@
             <input type="number" name="{{path}}.magazine.max" value="{{weaponData.magazine.max}}" min="0" step="1">
           </div>
         </label>
-        <label class="fallout-maw-magazine-source-field">
-          <span>{{localize "FALLOUTMAW.Item.WeaponMagazineSource"}}</span>
-          <div class="fallout-maw-magazine-source-drop" data-weapon-magazine-source-drop>
-            <strong>{{magazineSourceItem.name}}</strong>
-            <small>{{localize "FALLOUTMAW.Item.WeaponMagazineSourceDrop"}}</small>
-            <button type="button" data-clear-weapon-magazine-source title="{{localize 'FALLOUTMAW.Item.WeaponMagazineSourceClear'}}"><i class="fa-solid fa-xmark"></i></button>
-          </div>
-          <input type="hidden" name="{{path}}.magazine.sourceItemUuid" value="{{weaponData.magazine.sourceItemUuid}}">
-        </label>
       {{/if}}
     </div>
+
+    {{#if hasMagazineCost}}
+    <section class="fallout-maw-magazine-source-section">
+      <div class="fallout-maw-panel-header">
+        <h3>{{localize "FALLOUTMAW.Item.WeaponMagazineSource"}}</h3>
+      </div>
+      <div class="fallout-maw-magazine-source-list">
+        {{#each magazineSourceItems}}
+        <div class="fallout-maw-magazine-source-drop {{#if active}}active{{/if}} {{#if empty}}empty{{/if}}"
+          data-weapon-magazine-source-drop
+          data-weapon-magazine-source-index="{{index}}"
+          {{#unless empty}}data-select-weapon-magazine-source="{{uuid}}" role="button" tabindex="0"{{/unless}}>
+          {{#if empty}}
+          <i class="fa-solid fa-arrow-down" aria-hidden="true"></i>
+          <span>{{localize "FALLOUTMAW.Item.WeaponMagazineSourceDrop"}}</span>
+          {{else}}
+          <img src="{{img}}" alt="">
+          <strong>{{name}}</strong>
+          <button type="button" data-delete-weapon-magazine-source="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          <input type="hidden" name="{{../path}}.magazine.sourceItemUuids.{{index}}" value="{{uuid}}">
+          {{/if}}
+        </div>
+        {{/each}}
+      </div>
+      <input type="hidden" name="{{path}}.magazine.sourceItemUuid" value="{{weaponData.magazine.sourceItemUuid}}">
+    </section>
+    {{/if}}
 
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.WeaponDamageTypes"}}</h3>

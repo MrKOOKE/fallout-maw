@@ -218,7 +218,7 @@
       "WeaponDamageModeManual": "Урон",
       "WeaponDamageModeSource": "Урон от источника",
       "WeaponMagazineSource": "Источник магазина",
-      "WeaponMagazineSourceDrop": "Перетащите сюда мировой предмет с функцией Источник урона",
+      "WeaponMagazineSourceDrop": "Перетащите сюда источник урона",
       "WeaponMagazineSourceEmpty": "Источник не назначен",
       "WeaponMagazineSourceClear": "Убрать источник",
       "WeaponReloadInsert": "Вставить",

@@ -8,6 +8,7 @@ import {
   getToolKeyFromFunctionKey,
   hasItemFunction
 } from "../utils/item-functions.mjs";
+import { FALLBACK_ICON, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
@@ -18,6 +19,7 @@ const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
 const DEFAULT_RELOAD_ACTION_POINT_COST = 2;
 const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 20;
 const DEFAULT_ITEM_SHEET_HEIGHT = 4000;
+let itemSheetSourceSyncHooksRegistered = false;
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #functionPickerActive = false;
@@ -256,8 +258,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       zone.addEventListener("dragover", event => this.#onWeaponMagazineSourceDragOver(event));
       zone.addEventListener("drop", event => this.#onWeaponMagazineSourceDrop(event));
     });
-    this.element?.querySelectorAll("[data-clear-weapon-magazine-source]").forEach(button => {
-      button.addEventListener("click", event => this.#onClearWeaponMagazineSource(event));
+    this.element?.querySelectorAll("[data-select-weapon-magazine-source]").forEach(source => {
+      source.addEventListener("click", event => this.#onSelectWeaponMagazineSource(event));
+    });
+    this.element?.querySelectorAll("[data-delete-weapon-magazine-source]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteWeaponMagazineSource(event));
     });
     this.element?.querySelectorAll("[data-add-volley-region-damage]").forEach(button => {
       button.addEventListener("click", event => this.#onAddVolleyRegionDamage(event));
@@ -814,7 +819,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   async #onWeaponMagazineSourceDrop(event) {
     event.preventDefault();
-    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    event.stopPropagation();
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const path = getWeaponFunctionPath(section);
     if (!path) return undefined;
     const item = await getDroppedItem(event);
     if (!item) return undefined;
@@ -822,14 +829,43 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadSourceWorldOnly"));
       return undefined;
     }
-    return this.item.update({ [`${path}.magazine.sourceItemUuid`]: item.uuid });
+    const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
+    const sources = getWeaponMagazineSourceUuids(weaponData);
+    const index = Number(event.currentTarget?.dataset?.weaponMagazineSourceIndex);
+    if (Number.isInteger(index) && index >= 0 && index < sources.length) sources[index] = item.uuid;
+    else sources.push(item.uuid);
+    const uniqueSources = uniqueStrings(sources);
+    return this.item.update({
+      [`${path}.magazine.sourceItemUuid`]: item.uuid,
+      [`${path}.magazine.sourceItemUuids`]: uniqueSources
+    });
   }
 
-  #onClearWeaponMagazineSource(event) {
+  #onSelectWeaponMagazineSource(event) {
     event.preventDefault();
+    event.stopPropagation();
     const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
     if (!path) return undefined;
-    return this.item.update({ [`${path}.magazine.sourceItemUuid`]: "" });
+    const uuid = String(event.currentTarget?.dataset?.selectWeaponMagazineSource ?? "").trim();
+    if (!uuid) return undefined;
+    return this.item.update({ [`${path}.magazine.sourceItemUuid`]: uuid });
+  }
+
+  #onDeleteWeaponMagazineSource(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    if (!path) return undefined;
+    const index = Number(event.currentTarget?.dataset?.deleteWeaponMagazineSource);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
+    const sources = getWeaponMagazineSourceUuids(weaponData);
+    const removed = sources.splice(index, 1).at(0) ?? "";
+    const active = String(weaponData?.magazine?.sourceItemUuid ?? "");
+    return this.item.update({
+      [`${path}.magazine.sourceItemUuid`]: active === removed ? (sources.at(0) ?? "") : active,
+      [`${path}.magazine.sourceItemUuids`]: sources
+    });
   }
 
   #onAddVolleyRegionDamage(event) {
@@ -1039,6 +1075,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   }
 }
 
+export function registerItemSheetSourceSyncHooks() {
+  if (itemSheetSourceSyncHooksRegistered) return;
+  itemSheetSourceSyncHooksRegistered = true;
+  Hooks.on("updateItem", item => {
+    if (!item || item.actor || !hasItemFunction(item, ITEM_FUNCTIONS.damageSource)) return;
+    refreshWeaponSheetsForDamageSource(item.uuid);
+  });
+}
+
 function getHealingSkillLabel(item) {
   if (!["trauma", "disease"].includes(item?.type)) return "";
   const key = item.system?.healingSkillKey ?? "";
@@ -1119,7 +1164,7 @@ function buildWeaponFunctionSection({
     damageModeChoices: buildWeaponDamageModeChoices(weaponData?.damageMode),
     usesDamageSource: isSourceDamageMode(weaponData),
     hasMagazineCost: hasWeaponResourceCostData(weaponData, "magazine") || isSourceDamageMode(weaponData),
-    magazineSourceItem: getWeaponMagazineSourceItemContext(weaponData),
+    magazineSourceItems: buildWeaponMagazineSourceItems(weaponData),
     hasVolleyAction: Boolean(weaponData?.availableActions?.volley),
     damageTypeRows: buildWeaponDamageTypeRowsForData(effectiveWeaponData, damageTypeSettings, sourceWeaponData),
     skillChoices: buildWeaponSkillChoicesForData(effectiveWeaponData, skillSettings),
@@ -1294,26 +1339,81 @@ function getWeaponDisplayData(weaponData = {}) {
   };
 }
 
-function getWeaponMagazineSourceItemContext(weaponData = {}) {
-  const item = getWeaponMagazineSourceItem(weaponData);
-  if (!item) {
+function buildWeaponMagazineSourceItems(weaponData = {}) {
+  const activeUuid = String(weaponData?.magazine?.sourceItemUuid ?? "").trim();
+  const rows = getWeaponMagazineSourceUuids(weaponData).map((uuid, index) => {
+    const item = getWeaponMagazineSourceItem({ magazine: { sourceItemUuid: uuid } });
+    const source = item ? getDamageSourceFunction(item) : null;
     return {
-      uuid: "",
-      name: game.i18n.localize("FALLOUTMAW.Item.WeaponMagazineSourceEmpty")
+      index,
+      uuid,
+      name: String(source?.name ?? "").trim() || item?.name || uuid,
+      img: normalizeImagePath(item?.img, FALLBACK_ICON),
+      active: uuid === activeUuid,
+      empty: false
     };
-  }
-  const source = getDamageSourceFunction(item);
-  const configuredName = String(source?.name ?? "").trim();
-  return {
-    uuid: item.uuid,
-    name: configuredName || item.name
-  };
+  });
+  rows.push({
+    index: rows.length,
+    uuid: "",
+    name: "",
+    active: false,
+    empty: true
+  });
+  return rows;
 }
 
 function getWeaponMagazineSourceItem(weaponData = {}) {
   const uuid = String(weaponData?.magazine?.sourceItemUuid ?? "").trim();
   if (!uuid) return null;
   return globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
+}
+
+function getWeaponMagazineSourceUuids(weaponData = {}) {
+  return uniqueStrings([
+    ...(Array.isArray(weaponData?.magazine?.sourceItemUuids) ? weaponData.magazine.sourceItemUuids : []),
+    String(weaponData?.magazine?.sourceItemUuid ?? "")
+  ]);
+}
+
+function uniqueStrings(values = []) {
+  return Array.from(new Set((values ?? []).map(value => String(value ?? "").trim()).filter(Boolean)));
+}
+
+function refreshWeaponSheetsForDamageSource(sourceUuid = "") {
+  const uuid = String(sourceUuid ?? "").trim();
+  if (!uuid) return;
+  for (const item of getAllWorldAndActorItems()) {
+    if (!itemReferencesDamageSource(item, uuid)) continue;
+    for (const app of Object.values(item.apps ?? {})) {
+      app.render?.({ force: true });
+    }
+  }
+}
+
+function getAllWorldAndActorItems() {
+  return [
+    ...(game.items?.contents ?? []),
+    ...(game.actors?.contents ?? []).flatMap(actor => actor.items?.contents ?? [])
+  ];
+}
+
+function itemReferencesDamageSource(item, sourceUuid = "") {
+  if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.weapon)) return false;
+  return getWeaponFunctionDataList(item).some(weaponData => (
+    getWeaponMagazineSourceUuids(weaponData).includes(sourceUuid)
+  ));
+}
+
+function getWeaponFunctionDataList(item) {
+  const functions = item.system?.functions ?? {};
+  const entries = [];
+  if (functions.weapon?.enabled) entries.push(functions.weapon);
+  const additional = functions.additionalWeapons;
+  if (additional && typeof additional === "object") {
+    entries.push(...Object.values(additional).filter(data => data?.enabled));
+  }
+  return entries;
 }
 
 function buildWeaponDamageTypeRowsForData(weaponData, damageTypeSettings, sourceWeaponData) {
@@ -1483,7 +1583,8 @@ function createDefaultWeaponFunctionData(source = {}) {
     magazine: {
       value: 0,
       max: 0,
-      sourceItemUuid: ""
+      sourceItemUuid: "",
+      sourceItemUuids: []
     },
     resourceCosts: [],
     specialProperties: [],
@@ -1794,6 +1895,7 @@ function buildWeaponMagazineSourceModeUpdates(path, weaponData = {}) {
     updateData[`${path}.magazine.value`] = 0;
     updateData[`${path}.magazine.max`] = 0;
     updateData[`${path}.magazine.sourceItemUuid`] = "";
+    updateData[`${path}.magazine.sourceItemUuids`] = [];
   }
   return updateData;
 }
