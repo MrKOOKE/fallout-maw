@@ -556,6 +556,36 @@
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyDamageRadius"}}</span>
             <input type="number" name="{{../path}}.volley.damageRadius" value="{{volleyDamageRadius}}" min="0" step="1">
           </label>
+        </div>
+        <div class="fallout-maw-panel-header">
+          <h4>{{localize "FALLOUTMAW.Item.WeaponVolleyRegion"}}</h4>
+          <button type="button" data-add-volley-region-damage><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponVolleyAddRegionDamage"}}</button>
+        </div>
+        <div class="fallout-maw-settings-table fallout-maw-damage-entry-table fallout-maw-volley-region-damage">
+          <div class="fallout-maw-settings-row fallout-maw-grid-header">
+            <span>{{localize "FALLOUTMAW.Item.WeaponDamageType"}}</span>
+            <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+            <span></span>
+          </div>
+          {{#each volleyRegionDamageRows}}
+          <div class="fallout-maw-settings-row" data-volley-region-damage-row="{{index}}">
+            <select name="{{../../path}}.volley.regionDamageEntries.{{index}}.damageTypeKey" data-volley-region-damage-type>
+              {{#each choices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+            <input type="number" name="{{../../path}}.volley.regionDamageEntries.{{index}}.amount" value="{{amount}}" min="0" step="1" data-volley-region-damage-amount>
+            <button type="button" class="fallout-maw-icon-delete-button" data-delete-volley-region-damage="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          {{else}}
+          <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponVolleyNoRegionDamage"}}</p>
+          {{/each}}
+        </div>
+        <div class="fallout-maw-list-grid three-columns">
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadius"}}</span>
+            <input type="number" name="{{../path}}.volley.regionRadius" value="{{volleyRegionRadius}}" min="0" step="1">
+          </label>
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDuration"}}</span>
             <input type="number" name="{{../path}}.volley.regionDurationSeconds" value="{{volleyRegionDurationSeconds}}" min="0" step="1">

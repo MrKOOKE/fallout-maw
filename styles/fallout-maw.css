@@ -1451,6 +1451,19 @@
   grid-template-columns: minmax(150px, 1fr) minmax(120px, 0.8fr) minmax(70px, 90px) 2.5rem;
 }
 
+.fallout-maw-damage-entry-table .fallout-maw-settings-row {
+  grid-template-columns: minmax(150px, 1fr) minmax(90px, 130px) 2.5rem;
+}
+
+.fallout-maw-icon-delete-button {
+  align-items: center;
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  padding: 0;
+  width: 2.5rem;
+}
+
 .fallout-maw-weapon-action-subheader {
   border-top: 1px solid rgba(218, 207, 147, 0.2);
   margin: 0.25rem 0 0;

@@ -133,6 +133,8 @@ function weaponFunctionField({ named = false } = {}) {
     }),
     volley: new SchemaField({
       damageRadius: new NumberField({ required: true, min: 0, initial: 0 }),
+      regionRadius: new NumberField({ required: true, min: 0, initial: 0 }),
+      regionDamageEntries: new ArrayField(weaponDamageEntryField(), { required: true, initial: [] }),
       regionDurationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
       regionDelaySeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
       regionRadiusDeltaMeters: new NumberField({ required: true, initial: 0 }),
@@ -148,6 +150,13 @@ function weaponFunctionField({ named = false } = {}) {
     schema.name = new StringField({ required: true, blank: true, initial: "" });
   }
   return new SchemaField(schema);
+}
+
+function weaponDamageEntryField() {
+  return new SchemaField({
+    damageTypeKey: new StringField({ required: true, blank: true, initial: "firearm" }),
+    amount: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+  });
 }
 
 function weaponActionSettingsField() {

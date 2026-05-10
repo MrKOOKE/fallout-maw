@@ -121,7 +121,7 @@ function renderDamageEntryRow(entry, index, damageTypes = []) {
     <div class="fallout-maw-settings-row" data-damage-entry-index="${index}">
       <select name="system.damageEntries.${index}.damageTypeKey">${options}</select>
       <input type="number" name="system.damageEntries.${index}.amount" value="${Math.max(0, toInteger(entry?.amount))}" min="0" step="1">
-      <button type="button" data-action="deleteDamageEntry" title="${escapeHtml(game.i18n.localize("FALLOUTMAW.Common.Delete"))}"><i class="fa-solid fa-trash"></i></button>
+      <button type="button" class="fallout-maw-icon-delete-button" data-action="deleteDamageEntry" title="${escapeHtml(game.i18n.localize("FALLOUTMAW.Common.Delete"))}"><i class="fa-solid fa-trash"></i></button>
     </div>
   `;
 }

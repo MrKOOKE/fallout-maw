@@ -72,6 +72,7 @@ class WeaponAttackController {
     this.aimedMode = "aim";
     this.hoveredTarget = null;
     this.selectedTarget = null;
+    this.trajectoryAimTarget = null;
     this.hoveredLimbKey = "";
     this.selectedLimbKey = "";
     this.lockedGeometry = null;
@@ -281,7 +282,7 @@ class WeaponAttackController {
 
     const target = this.selectedTarget;
     const geometry = deserializeGeometry(this.lockedGeometry) ?? this.geometry;
-    const centerTrajectory = buildTrajectoryThroughPoint(this.token, geometry, getTokenCenter(target));
+    const centerTrajectory = buildTrajectoryThroughPoint(this.token, geometry, getTokenAimPoint(target));
     const blockerCount = getAimedTargetBlockers(this.token, target, centerTrajectory).length;
     const pelletCount = getWeaponPelletCount(this.weapon, this.weaponFunctionId);
     const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), Array(pelletCount).fill(1));
@@ -350,7 +351,7 @@ class WeaponAttackController {
     });
 
     if (direction.mode === "thrust") {
-      const trajectory = buildTrajectoryThroughPoint(this.token, geometry, getTokenCenter(target));
+      const trajectory = buildTrajectoryThroughPoint(this.token, geometry, getTokenAimPoint(target));
       const result = await this.resolveDirectedThrustTrajectory(target, trajectory, {
         limbKey: this.selectedLimbKey,
         checkBatch
@@ -742,11 +743,9 @@ class WeaponAttackController {
       const regionRequest = this.buildVolleyDamageRegionRequest(finalGeometry, blastOutcome);
       if (regionRequest) regionRequests.push(regionRequest);
 
-      if (!regionRequest?.delayed) {
-        for (const target of blastTargets) {
-          const result = this.resolveVolleyDamageAgainstTarget(target, finalGeometry, blastOutcome);
-          damageRequests.push(...(result ?? []));
-        }
+      for (const target of blastTargets) {
+        const result = this.resolveVolleyDamageAgainstTarget(target, finalGeometry, blastOutcome);
+        damageRequests.push(...(result ?? []));
       }
     }
 
@@ -801,39 +800,15 @@ class WeaponAttackController {
     const settings = getVolleyRegionSettings(this.weapon, this.weaponFunctionId);
     if (!settings.enabled) return null;
 
-    const damageAmount = getCriticalDamageAmount(
-      this.weapon,
-      getWeaponDamage(this.weapon, this.weaponFunctionId),
-      blastOutcome.outcome,
-      this.weaponFunctionId
-    );
-    const damageEntries = buildWeaponDamageRequests(this.weapon, {
-      amount: damageAmount,
-      source: {
-        weaponUuid: this.weapon.uuid,
-        actionKey: this.actionKey,
-        attackerUuid: this.token.actor.uuid,
-        tokenId: this.token.id,
-        blastCenter: serializePoint(geometry.end),
-        blastRadius: getVolleyDamageRadius(this.weapon, this.weaponFunctionId),
-        regionDamage: true
-      }
-    }, this.weaponFunctionId)
-      .map(request => ({
-        damageTypeKey: request.damageTypeKey,
-        amount: request.amount
-      }));
-
     return {
-      delayed: settings.delaySeconds > 0,
       sceneId: canvas.scene?.id ?? "",
       name: this.weapon.name
         ? `${this.weapon.name}: ${game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.RegionName")}`
         : game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.RegionName"),
       center: serializePoint(geometry.end),
-      radiusPixels: geometry.radiusPixels,
-      color: getVolleyRegionColor(damageEntries),
-      damageEntries,
+      radiusPixels: metersToPixels(settings.radiusMeters),
+      color: getVolleyRegionColor(settings.damageEntries),
+      damageEntries: settings.damageEntries,
       delaySeconds: settings.delaySeconds,
       durationSeconds: settings.durationSeconds,
       radiusDeltaMeters: settings.radiusDeltaMeters
@@ -920,15 +895,25 @@ class WeaponAttackController {
     this.targetMarkers.clear();
     if (!this.pointer && !this.lockedGeometry) return;
 
-    const origin = getTokenCenter(this.token);
+    const origin = getTokenAimPoint(this.token);
     this.geometry = this.targetedAction && ["limb", "direction"].includes(this.aimedMode)
       ? deserializeGeometry(this.lockedGeometry)
       : getAttackGeometry(this.weapon, this.actionKey, this.token, origin, this.pointer, this.weaponFunctionId);
     if (!this.geometry) return;
-    this.targets = getPotentialTargets(this.token, this.geometry, {
+    const potentialTargets = getPotentialTargets(this.token, this.geometry, {
       includeAttacker: this.volleyAction,
       includeDead: this.volleyAction
     });
+    this.targets = potentialTargets;
+    this.geometry.aimPoint = null;
+    this.trajectoryAimTarget = this.getUntargetedTrajectoryAimTarget(potentialTargets);
+    this.geometry.aimPoint = this.trajectoryAimTarget ? getTokenAimPoint(this.trajectoryAimTarget) : null;
+    if (this.geometry.aimPoint) {
+      const trajectory = buildTrajectoryThroughPoint(this.token, this.geometry, this.geometry.aimPoint);
+      const trajectoryEntries = getTrajectoryTargetEntries(this.token, trajectory);
+      const trajectoryTargets = new Set(trajectoryEntries.map(entry => entry.target));
+      this.targets = potentialTargets.filter(target => trajectoryTargets.has(target));
+    }
     this.hoveredTarget = this.targetedAction && this.aimedMode === "aim"
       ? getAimedTargetUnderPointer(this.pointer, this.targets)
       : this.selectedTarget;
@@ -947,8 +932,15 @@ class WeaponAttackController {
     this.broadcastPreview(forceBroadcast);
   }
 
+  getUntargetedTrajectoryAimTarget(potentialTargets = []) {
+    if (this.targetedAction || this.volleyAction) return null;
+    const hoveredTarget = getAimedTargetUnderPointer(this.pointer, potentialTargets);
+    if (hoveredTarget) return hoveredTarget;
+    return potentialTargets.at(0) ?? null;
+  }
+
   getFocusedTarget() {
-    return this.selectedTarget ?? this.hoveredTarget;
+    return this.selectedTarget ?? this.hoveredTarget ?? this.trajectoryAimTarget;
   }
 
   updatePointerFromClientEvent(event) {
@@ -1135,7 +1127,7 @@ class WeaponAttackController {
 
   prepareAimedLimbRows(target) {
     if (!this.requiresLimbSelection) return [];
-    const trajectory = this.geometry ? buildTrajectoryThroughPoint(this.token, this.geometry, getTokenCenter(target)) : null;
+    const trajectory = this.geometry ? buildTrajectoryThroughPoint(this.token, this.geometry, getTokenAimPoint(target)) : null;
     const blockerCount = trajectory ? getAimedTargetBlockers(this.token, target, trajectory).length : 0;
     const blockerBonus = getAimedTargetBlockerBonus(blockerCount)
       + getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
@@ -1379,6 +1371,7 @@ function serializeGeometry(geometry) {
     distance: Number(geometry.distance) || 0,
     halfAngle: Number(geometry.halfAngle) || 0,
     radiusPixels: Number(geometry.radiusPixels) || 0,
+    aimPoint: geometry.aimPoint ? serializePoint(geometry.aimPoint) : null,
     shapePoints: Array.isArray(geometry.shapePoints) ? geometry.shapePoints.map(serializePoint) : []
   };
 }
@@ -1393,22 +1386,27 @@ function deserializeGeometry(geometry) {
     distance: Number(geometry.distance) || 0,
     halfAngle: Number(geometry.halfAngle) || 0,
     radiusPixels: Number(geometry.radiusPixels) || 0,
+    aimPoint: geometry.aimPoint ? deserializePoint(geometry.aimPoint) : null,
     shapePoints: Array.isArray(geometry.shapePoints) ? geometry.shapePoints.map(deserializePoint) : []
   };
 }
 
 function serializePoint(point) {
-  return {
+  const data = {
     x: Number(point?.x) || 0,
     y: Number(point?.y) || 0
   };
+  if (Number.isFinite(Number(point?.elevation))) data.elevation = Number(point.elevation);
+  return data;
 }
 
 function deserializePoint(point) {
-  return {
+  const data = {
     x: Number(point?.x) || 0,
     y: Number(point?.y) || 0
   };
+  if (Number.isFinite(Number(point?.elevation))) data.elevation = Number(point.elevation);
+  return data;
 }
 
 function isSamePreviewState(current, previous) {
@@ -1428,6 +1426,7 @@ function isSameGeometry(current, previous) {
     && Math.abs((Number(current.distance) || 0) - (Number(previous.distance) || 0)) <= PREVIEW_POSITION_EPSILON
     && Math.abs((Number(current.halfAngle) || 0) - (Number(previous.halfAngle) || 0)) <= PREVIEW_ANGLE_EPSILON
     && Math.abs((Number(current.radiusPixels) || 0) - (Number(previous.radiusPixels) || 0)) <= PREVIEW_POSITION_EPSILON
+    && isSameNullablePoint(current.aimPoint, previous.aimPoint)
     && isSamePointList(current.shapePoints, previous.shapePoints);
 }
 
@@ -1444,7 +1443,8 @@ function isSamePointList(current = [], previous = []) {
 function isSamePoint(current, previous) {
   if (!current || !previous) return false;
   return Math.abs((Number(current.x) || 0) - (Number(previous.x) || 0)) <= PREVIEW_POSITION_EPSILON
-    && Math.abs((Number(current.y) || 0) - (Number(previous.y) || 0)) <= PREVIEW_POSITION_EPSILON;
+    && Math.abs((Number(current.y) || 0) - (Number(previous.y) || 0)) <= PREVIEW_POSITION_EPSILON
+    && Math.abs((Number(current.elevation) || 0) - (Number(previous.elevation) || 0)) <= PREVIEW_POSITION_EPSILON;
 }
 
 function isSameNullablePoint(current, previous) {
@@ -1653,9 +1653,11 @@ function getVisibleTokenAttackPoint(attackerToken, target, geometry) {
 function getVisibleTokenAttackPoints(attackerToken, target, geometry) {
   if (geometry.type === VOLLEY_ACTION_KEY) {
     return getTokenAttackContactPoints(target, geometry)
+      .map(point => withTokenAimElevation(target, point))
       .filter(point => hasLineOfSight(attackerToken, point, geometry.end));
   }
   return getTokenAttackContactPoints(target, geometry)
+    .map(point => withTokenAimElevation(target, point))
     .filter(point => hasLineOfSight(attackerToken, point, geometry.origin));
 }
 
@@ -1667,11 +1669,14 @@ function hasLineOfSight(attackerToken, destination, origin) {
   });
 }
 
-function getWallClippedEndpoint(attackerToken, origin, angle, distance) {
+function getWallClippedEndpoint(attackerToken, origin, angle, distance, targetElevation = null) {
   const maxDistance = Math.max(1, Number(distance) || 1);
+  const originElevation = Number(origin.elevation) || 0;
+  const destinationElevation = Number.isFinite(Number(targetElevation)) ? Number(targetElevation) : originElevation;
   const destination = {
     x: origin.x + (Math.cos(angle) * maxDistance),
-    y: origin.y + (Math.sin(angle) * maxDistance)
+    y: origin.y + (Math.sin(angle) * maxDistance),
+    elevation: destinationElevation
   };
   const collision = attackerToken?.checkCollision?.(destination, {
     origin,
@@ -1679,7 +1684,13 @@ function getWallClippedEndpoint(attackerToken, origin, angle, distance) {
     mode: "closest"
   });
   const point = collision
-    ? { x: Number(collision.x) || destination.x, y: Number(collision.y) || destination.y }
+    ? {
+      x: Number(collision.x) || destination.x,
+      y: Number(collision.y) || destination.y,
+      elevation: Number.isFinite(Number(collision.elevation))
+        ? Number(collision.elevation)
+        : getPointElevationAtDistance(originElevation, destinationElevation, Math.hypot((Number(collision.x) || destination.x) - origin.x, (Number(collision.y) || destination.y) - origin.y), maxDistance)
+    }
     : destination;
   return {
     point,
@@ -1810,6 +1821,7 @@ function reservePelletPoint(point, reserved, spacing, force = false) {
 }
 
 function selectTrajectoryAimPoint(attackerToken, geometry, targets = []) {
+  if (geometry?.aimPoint) return geometry.aimPoint;
   const candidates = (targets ?? [])
     .map(target => ({
       target,
@@ -1823,24 +1835,35 @@ function selectTrajectoryAimPoint(attackerToken, geometry, targets = []) {
 
 function buildTrajectoryThroughPoint(attackerToken, geometry, point) {
   const angle = Math.atan2(point.y - geometry.origin.y, point.x - geometry.origin.x);
-  return buildTrajectoryByAngle(attackerToken, geometry, angle);
+  const pointDistance = Math.max(1, Math.hypot(point.x - geometry.origin.x, point.y - geometry.origin.y));
+  const originElevation = Number(geometry.origin?.elevation) || 0;
+  const elevationSlope = (Number(point.elevation ?? originElevation) - originElevation) / pointDistance;
+  return buildTrajectoryByAngle(attackerToken, geometry, angle, elevationSlope);
 }
 
 function buildRandomTrajectory(attackerToken, geometry) {
   const spread = geometry.halfAngle > 0
     ? -geometry.halfAngle + (Math.random() * geometry.halfAngle * 2)
     : 0;
-  return buildTrajectoryByAngle(attackerToken, geometry, geometry.angle + spread);
+  return buildTrajectoryByAngle(attackerToken, geometry, geometry.angle + spread, Number(geometry.elevationSlope) || 0);
 }
 
-function buildTrajectoryByAngle(attackerToken, geometry, angle) {
-  const clipped = getWallClippedEndpoint(attackerToken, geometry.origin, angle, geometry.distance);
+function buildTrajectoryByAngle(attackerToken, geometry, angle, elevationSlope = 0) {
+  const originElevation = Number(geometry.origin?.elevation) || 0;
+  const targetElevation = originElevation + ((Number(elevationSlope) || 0) * Math.max(1, Number(geometry.distance) || 1));
+  const clipped = getWallClippedEndpoint(attackerToken, geometry.origin, angle, geometry.distance, targetElevation);
+  const distance = clipped.distance;
+  const endElevation = getPointElevationAtDistance(originElevation, targetElevation, distance, Math.max(1, Number(geometry.distance) || 1));
   return {
     origin: geometry.origin,
     angle,
-    distance: clipped.distance,
+    distance,
     halfAngle: 0,
-    end: clipped.point
+    elevationSlope: Number(elevationSlope) || 0,
+    end: {
+      ...clipped.point,
+      elevation: Number.isFinite(Number(clipped.point?.elevation)) ? Number(clipped.point.elevation) : endElevation
+    }
   };
 }
 
@@ -1855,9 +1878,14 @@ function getTrajectoryTargetEntries(attackerToken, trajectory) {
 function updateTrajectoryEnd(trajectory, point) {
   const dx = point.x - trajectory.origin.x;
   const dy = point.y - trajectory.origin.y;
-  trajectory.end = { x: point.x, y: point.y };
+  trajectory.end = {
+    x: point.x,
+    y: point.y,
+    elevation: Number.isFinite(Number(point.elevation)) ? Number(point.elevation) : getTrajectoryElevationAtDistance(trajectory, Math.hypot(dx, dy))
+  };
   trajectory.angle = Math.atan2(dy, dx);
   trajectory.distance = Math.max(1, Math.hypot(dx, dy));
+  trajectory.elevationSlope = (Number(trajectory.end.elevation) - (Number(trajectory.origin?.elevation) || 0)) / trajectory.distance;
 }
 
 function updateTrajectoryDistanceEnd(trajectory, point) {
@@ -1874,14 +1902,15 @@ function selectMissPointNearTarget(attackerToken, target, trajectory) {
     [-1, 1], [0, 1], [1, 1]
   ];
   const offset = offsets[Math.floor(Math.random() * offsets.length)];
-  const center = getTokenCenter(target);
+  const center = getTokenAimPoint(target);
   const missPoint = {
     x: center.x + (offset[0] * gridSize) + ((Math.random() - 0.5) * gridSize * 0.8),
-    y: center.y + (offset[1] * gridSize) + ((Math.random() - 0.5) * gridSize * 0.8)
+    y: center.y + (offset[1] * gridSize) + ((Math.random() - 0.5) * gridSize * 0.8),
+    elevation: Number(center.elevation) || 0
   };
   const angle = Math.atan2(missPoint.y - trajectory.origin.y, missPoint.x - trajectory.origin.x);
   const maxDistance = Math.min(trajectory.distance, Math.hypot(missPoint.x - trajectory.origin.x, missPoint.y - trajectory.origin.y));
-  return getWallClippedEndpoint(attackerToken, trajectory.origin, angle, maxDistance).point;
+  return getWallClippedEndpoint(attackerToken, trajectory.origin, angle, maxDistance, missPoint.elevation).point;
 }
 
 function selectPointOnTrajectoryPastTarget(target, trajectory) {
@@ -1890,7 +1919,7 @@ function selectPointOnTrajectoryPastTarget(target, trajectory) {
   const targetDepth = Math.max(target.w ?? 0, target.h ?? 0, gridSize * 0.35);
   const distance = hit
     ? Math.min(trajectory.distance, hit.distance + targetDepth)
-    : Math.min(trajectory.distance, getProjectedDistanceOnTrajectory(getTokenCenter(target), trajectory));
+    : Math.min(trajectory.distance, getProjectedDistanceOnTrajectory(getTokenAimPoint(target), trajectory));
   return getPointOnTrajectory(trajectory, distance);
 }
 
@@ -1901,10 +1930,22 @@ function getProjectedDistanceOnTrajectory(point, trajectory) {
 }
 
 function getPointOnTrajectory(trajectory, distance) {
+  const range = Math.max(0, Number(distance) || 0);
   return {
-    x: trajectory.origin.x + (Math.cos(trajectory.angle) * distance),
-    y: trajectory.origin.y + (Math.sin(trajectory.angle) * distance)
+    x: trajectory.origin.x + (Math.cos(trajectory.angle) * range),
+    y: trajectory.origin.y + (Math.sin(trajectory.angle) * range),
+    elevation: getTrajectoryElevationAtDistance(trajectory, range)
   };
+}
+
+function getTrajectoryElevationAtDistance(trajectory, distance) {
+  return (Number(trajectory?.origin?.elevation) || 0) + ((Number(trajectory?.elevationSlope) || 0) * Math.max(0, Number(distance) || 0));
+}
+
+function getPointElevationAtDistance(originElevation, targetElevation, distance, maxDistance) {
+  const total = Math.max(1, Number(maxDistance) || 1);
+  const t = Math.max(0, Math.min(1, (Number(distance) || 0) / total));
+  return (Number(originElevation) || 0) + (((Number(targetElevation) || 0) - (Number(originElevation) || 0)) * t);
 }
 
 function getWeaponDamage(weapon, weaponFunctionId = "") {
@@ -1917,15 +1958,29 @@ function getVolleyDamageRadius(weapon, weaponFunctionId = "") {
 
 function getVolleyRegionSettings(weapon, weaponFunctionId = "") {
   const volley = getWeaponAttackData(weapon, weaponFunctionId)?.volley ?? {};
+  const radiusMeters = Math.max(0, Number(volley.regionRadius) || 0);
+  const damageEntries = getVolleyRegionDamageEntries(volley);
   const durationSeconds = Math.max(0, toInteger(volley.regionDurationSeconds));
   const delaySeconds = Math.max(0, toInteger(volley.regionDelaySeconds));
   const radiusDeltaMeters = Number(volley.regionRadiusDeltaMeters) || 0;
   return {
-    enabled: durationSeconds > 0 || delaySeconds > 0,
+    enabled: radiusMeters > 0 && damageEntries.length > 0 && (durationSeconds > 0 || delaySeconds > 0),
+    radiusMeters,
+    damageEntries,
     durationSeconds,
     delaySeconds,
     radiusDeltaMeters
   };
+}
+
+function getVolleyRegionDamageEntries(volley = {}) {
+  const entries = Array.isArray(volley.regionDamageEntries) ? volley.regionDamageEntries : [];
+  return entries
+    .map(entry => ({
+      damageTypeKey: String(entry?.damageTypeKey ?? "").trim(),
+      amount: Math.max(0, toInteger(entry?.amount))
+    }))
+    .filter(entry => entry.damageTypeKey && entry.amount > 0);
 }
 
 function getVolleyRegionColor(damageEntries = []) {
@@ -2319,11 +2374,15 @@ function getTokenTrajectoryHit(token, trajectory) {
   };
   const range = rayRectangleIntersection(trajectory.origin, direction, bounds, trajectory.distance);
   if (!range) return null;
+  const elevationRange = getTokenElevationRange(token);
+  const hitDistance = getTrajectoryTokenElevationHitDistance(trajectory, range, elevationRange);
+  if (!Number.isFinite(hitDistance)) return null;
   return {
-    distance: range.entry,
+    distance: hitDistance,
     point: {
-      x: trajectory.origin.x + (direction.x * range.entry),
-      y: trajectory.origin.y + (direction.y * range.entry)
+      x: trajectory.origin.x + (direction.x * hitDistance),
+      y: trajectory.origin.y + (direction.y * hitDistance),
+      elevation: getTrajectoryElevationAtDistance(trajectory, hitDistance)
     }
   };
 }
@@ -2359,6 +2418,13 @@ function getTokenAttackContactPoints(token, geometry) {
   return sortContactPoints(points, geometry.origin);
 }
 
+function withTokenAimElevation(token, point) {
+  return {
+    ...point,
+    elevation: Number.isFinite(Number(point?.elevation)) ? Number(point.elevation) : getTokenAimElevation(token)
+  };
+}
+
 function getTokenVolleyContactPoints(bounds, geometry) {
   const radius = Math.max(0, Number(geometry.radiusPixels) || 0);
   const center = geometry.end;
@@ -2392,6 +2458,59 @@ function getTokenBounds(token) {
     top: token.y,
     bottom: token.y + token.h
   };
+}
+
+function getTokenElevationRange(token) {
+  const document = token?.document;
+  const gridDistance = Math.max(0.0001, Number(token?.scene?.grid?.distance ?? canvas.scene?.grid?.distance ?? canvas.dimensions?.distance) || 1);
+  const bottom = Number(document?.elevation ?? token?.elevation ?? 0) || 0;
+  const depth = Math.max(0, Number(document?.depth ?? 1) || 0) * gridDistance;
+  const top = bottom + (depth > 0 ? depth : gridDistance);
+  return { bottom: Math.min(bottom, top), top: Math.max(bottom, top) };
+}
+
+function getTokenAimElevation(token) {
+  const range = getTokenElevationRange(token);
+  return (range.bottom + range.top) / 2;
+}
+
+function getTokenAimPoint(token) {
+  const origin = token?.document?.getMovementOrigin?.();
+  if (origin) {
+    return {
+      x: Number(origin.x) || 0,
+      y: Number(origin.y) || 0,
+      elevation: Number(origin.elevation) || 0
+    };
+  }
+  const center = getTokenCenter(token);
+  return {
+    x: center.x,
+    y: center.y,
+    elevation: getTokenAimElevation(token)
+  };
+}
+
+function getTrajectoryTokenElevationHitDistance(trajectory, range, elevationRange) {
+  const entry = Math.max(0, Number(range.entry) || 0);
+  const exit = Math.min(Number(trajectory.distance) || 0, Number(range.exit) || 0);
+  if (entry > exit) return Number.NaN;
+
+  const slope = Number(trajectory.elevationSlope) || 0;
+  const originElevation = Number(trajectory.origin?.elevation) || 0;
+  if (Math.abs(slope) <= 0.000001) {
+    return originElevation >= elevationRange.bottom - GEOMETRY_EPSILON
+      && originElevation <= elevationRange.top + GEOMETRY_EPSILON
+      ? entry
+      : Number.NaN;
+  }
+
+  const first = (elevationRange.bottom - originElevation) / slope;
+  const second = (elevationRange.top - originElevation) / slope;
+  const verticalEntry = Math.min(first, second);
+  const verticalExit = Math.max(first, second);
+  const hit = Math.max(entry, verticalEntry);
+  return hit <= Math.min(exit, verticalExit) + GEOMETRY_EPSILON ? hit : Number.NaN;
 }
 
 function getTokenBoundsRectangle(token) {
@@ -2513,7 +2632,9 @@ function addUniquePoint(points, point) {
     Math.abs(existing.x - point.x) <= GEOMETRY_EPSILON
     && Math.abs(existing.y - point.y) <= GEOMETRY_EPSILON
   ))) return;
-  points.push({ x: Number(point.x), y: Number(point.y) });
+  const entry = { x: Number(point.x), y: Number(point.y) };
+  if (Number.isFinite(Number(point.elevation))) entry.elevation = Number(point.elevation);
+  points.push(entry);
 }
 
 function rayRectangleIntersection(origin, direction, bounds, maxDistance) {
@@ -2554,9 +2675,14 @@ async function applyQueuedDamageRequests(requests = []) {
 }
 
 function getTokenCenter(token) {
-  return token.center ?? {
+  const center = token?.document?.getCenterPoint?.(token.document._source) ?? token.center ?? {
     x: token.x + (token.w / 2),
     y: token.y + (token.h / 2)
+  };
+  return {
+    x: Number(center.x) || 0,
+    y: Number(center.y) || 0,
+    elevation: Number.isFinite(Number(center.elevation)) ? Number(center.elevation) : getTokenAimElevation(token)
   };
 }
 

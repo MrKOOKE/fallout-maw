@@ -7,6 +7,7 @@ import {
   getToolKeyFromFunctionKey,
   hasItemFunction
 } from "../utils/item-functions.mjs";
+import { toInteger } from "../utils/numbers.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -155,7 +156,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       weaponDamageTypeRows: buildWeaponDamageTypeRows(item, damageTypeSettings),
       weaponSkillChoices: buildWeaponSkillChoices(item, skillSettings),
       weaponResourceCosts: buildWeaponResourceCostRows(item, hasConditionFunction),
-      weaponActionChoices: buildWeaponActionChoices(item),
+      weaponActionChoices: buildWeaponActionChoices(item, damageTypeSettings),
       containerLoadReduction,
       canAddItemFunction: availableFunctionChoices.some(choice => choice.value && !choice.disabled),
       showFunctionPicker: this.#functionPickerActive,
@@ -196,6 +197,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-weapon-damage-percent]").forEach(input => {
       input.addEventListener("input", event => this.#onWeaponDamagePercentInput(event));
       input.addEventListener("change", event => this.#onWeaponDamagePercentChange(event));
+    });
+    this.element?.querySelectorAll("[data-add-volley-region-damage]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddVolleyRegionDamage(event));
+    });
+    this.element?.querySelectorAll("[data-delete-volley-region-damage]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteVolleyRegionDamage(event));
     });
     this.element?.querySelectorAll("[data-weapon-attack-mode-enabled]").forEach(input => {
       input.addEventListener("change", event => this.#onWeaponAttackModeEnabledChange(event));
@@ -588,6 +595,31 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.item.update({ [`${path}.damageTypes`]: entries });
   }
 
+  #onAddVolleyRegionDamage(event) {
+    event.preventDefault();
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const path = getWeaponFunctionPath(section);
+    const entries = readVolleyRegionDamageRows(section);
+    const damageTypes = getDamageTypeSettings();
+    const existingKeys = new Set(entries.map(entry => entry.damageTypeKey));
+    const damageTypeKey = damageTypes.find(type => !existingKeys.has(type.key))?.key
+      ?? damageTypes.at(0)?.key
+      ?? "firearm";
+    entries.push({ damageTypeKey, amount: 0 });
+    return this.item.update({ [`${path}.volley.regionDamageEntries`]: entries });
+  }
+
+  #onDeleteVolleyRegionDamage(event) {
+    event.preventDefault();
+    const section = getWeaponFunctionSection(event.currentTarget);
+    const path = getWeaponFunctionPath(section);
+    const index = Number(event.currentTarget?.dataset?.deleteVolleyRegionDamage);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const entries = readVolleyRegionDamageRows(section);
+    entries.splice(index, 1);
+    return this.item.update({ [`${path}.volley.regionDamageEntries`]: entries });
+  }
+
   async #onBrowseWeaponAttackSound(event) {
     event.preventDefault();
     const section = getWeaponFunctionSection(event.currentTarget);
@@ -851,7 +883,7 @@ function buildWeaponFunctionSection({
     skillChoices: buildWeaponSkillChoicesForData(weaponData, skillSettings),
     resourceCosts: buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction),
     requirements: buildWeaponRequirementRowsForData(weaponData, characteristicSettings, skillSettings),
-    actionChoices: buildWeaponActionChoicesForData(weaponData, sourceWeaponData)
+    actionChoices: buildWeaponActionChoicesForData(weaponData, sourceWeaponData, damageTypeSettings)
   };
 }
 
@@ -967,6 +999,19 @@ function buildWeaponDamageTypeRowsForData(weaponData, damageTypeSettings, source
   }));
 }
 
+function buildVolleyRegionDamageRowsForData(entries = [], damageTypeSettings = []) {
+  return normalizeVolleyRegionDamageEntries(entries).map((entry, index) => ({
+    index,
+    damageTypeKey: entry.damageTypeKey,
+    amount: Math.max(0, toInteger(entry.amount)),
+    choices: damageTypeSettings.map(damageType => ({
+      value: damageType.key,
+      label: damageType.label,
+      selected: damageType.key === entry.damageTypeKey
+    }))
+  }));
+}
+
 function buildWeaponSkillChoices(item, skillSettings) {
   return buildWeaponSkillChoicesForData(item.system?.functions?.weapon ?? {}, skillSettings);
 }
@@ -1002,14 +1047,15 @@ function buildWeaponResourceTypeChoices(selected, hasConditionFunction) {
   }));
 }
 
-function buildWeaponActionChoices(item) {
+function buildWeaponActionChoices(item, damageTypeSettings = []) {
   return buildWeaponActionChoicesForData(
     item.system?.functions?.weapon ?? {},
-    item.system?._source?.functions?.weapon ?? {}
+    item.system?._source?.functions?.weapon ?? {},
+    damageTypeSettings
   );
 }
 
-function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {}) {
+function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {}, damageTypeSettings = []) {
   const actions = weaponData?.availableActions ?? {};
   const fallbackCone = Number(weaponData.attackConeDegrees) || DEFAULT_WEAPON_ATTACK_CONE_DEGREES;
   return [
@@ -1039,6 +1085,8 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {})
       burstCount: Math.max(1, Number(weaponData?.burst?.count) || 3),
       burstDifficultyPerShot: getWeaponBurstDifficultyPerShotForData(weaponData),
       volleyDamageRadius: Math.max(0, Number(weaponData?.volley?.damageRadius) || 0),
+      volleyRegionRadius: Math.max(0, Number(weaponData?.volley?.regionRadius) || 0),
+      volleyRegionDamageRows: buildVolleyRegionDamageRowsForData(weaponData?.volley?.regionDamageEntries, damageTypeSettings),
       volleyRegionDurationSeconds: Math.max(0, Math.trunc(Number(weaponData?.volley?.regionDurationSeconds) || 0)),
       volleyRegionDelaySeconds: Math.max(0, Math.trunc(Number(weaponData?.volley?.regionDelaySeconds) || 0)),
       volleyRegionRadiusDeltaMeters: Number(weaponData?.volley?.regionRadiusDeltaMeters) || 0,
@@ -1114,6 +1162,8 @@ function createDefaultWeaponFunctionData(source = {}) {
     },
     volley: {
       damageRadius: 0,
+      regionRadius: 0,
+      regionDamageEntries: [],
       regionDurationSeconds: 0,
       regionDelaySeconds: 0,
       regionRadiusDeltaMeters: 0,
@@ -1258,6 +1308,24 @@ function readWeaponDamageTypeRows(root) {
     key: String(row.querySelector("[data-weapon-damage-type-key]")?.value ?? "").trim(),
     percent: clampPercent(row.querySelector("[data-weapon-damage-percent]")?.value)
   })).filter(entry => entry.key);
+}
+
+function readVolleyRegionDamageRows(root) {
+  const rows = Array.from(root?.querySelectorAll("[data-volley-region-damage-row]") ?? []);
+  return normalizeVolleyRegionDamageEntries(rows.map(row => ({
+    damageTypeKey: String(row.querySelector("[data-volley-region-damage-type]")?.value ?? "").trim(),
+    amount: Math.max(0, toInteger(row.querySelector("[data-volley-region-damage-amount]")?.value))
+  })));
+}
+
+function normalizeVolleyRegionDamageEntries(entries = []) {
+  const values = Array.isArray(entries) ? entries : Object.values(entries ?? {});
+  return values
+    .map(entry => ({
+      damageTypeKey: String(entry?.damageTypeKey ?? "").trim(),
+      amount: Math.max(0, toInteger(entry?.amount))
+    }))
+    .filter(entry => entry.damageTypeKey || entry.amount > 0);
 }
 
 function normalizeWeaponDamageTypeOverflow(entries = [], changedIndex = -1) {
