@@ -104,9 +104,12 @@ export function createLimbSilhouetteHud(silhouette, limbs = {}) {
   const parts = normalized.parts.flatMap(part => {
     const limb = limbs?.[part.limbKey];
     if (!limb) return [];
-    const color = getLimbStateColor(limb);
+    const color = String(limb?.fill ?? "") || getLimbStateColor(limb);
     const label = String(limb.label ?? part.limbKey);
-    const title = `${label}: ${toInteger(limb.value)} / ${toInteger(limb.max)}`;
+    const displayValue = limb?.displayValue ?? toInteger(limb.value);
+    const displayMax = limb?.displayMax ?? toInteger(limb.max);
+    const popoverRows = Array.isArray(limb?.popoverRows) ? limb.popoverRows : [];
+    const title = `${label}: ${displayValue} / ${displayMax}`;
     const path = pathsToCompoundSvgData(part.paths);
     if (!path) return [];
     return [{
@@ -114,9 +117,10 @@ export function createLimbSilhouetteHud(silhouette, limbs = {}) {
       limbKey: part.limbKey,
       label,
       title,
-      value: toInteger(limb.value),
-      max: toInteger(limb.max),
-      fill: color
+      value: displayValue,
+      max: displayMax,
+      fill: color,
+      popoverRowsJson: JSON.stringify(popoverRows)
     }];
   });
 

@@ -27,7 +27,17 @@
   <div class="fallout-maw-token-hud-left-stack">
     <section class="fallout-maw-token-hud-block fallout-maw-token-hud-limbs">
       <div class="fallout-maw-token-hud-block-title fallout-maw-token-hud-limbs-title">
-        <span>Части тела</span>
+        <details class="fallout-maw-token-hud-limb-layer-menu" data-limb-layer-menu>
+          <summary aria-label="Слой состояния частей тела">
+            <span>{{limbLayer.label}}</span>
+            <i class="fa-solid fa-caret-down" inert></i>
+          </summary>
+          <div class="fallout-maw-token-hud-limb-layer-options" role="listbox">
+            {{#each limbLayer.choices}}
+            <button type="button" class="{{#if selected}}active{{/if}}" data-limb-layer-option="{{key}}" role="option" aria-selected="{{selected}}">{{label}}</button>
+            {{/each}}
+          </div>
+        </details>
         {{#if gmControls}}
         <span class="fallout-maw-token-hud-gm-actions">
           <button type="button" data-action="gmHealSelected" title="Полностью вылечить выбранных актеров"><i class="fa-solid fa-kit-medical"></i></button>
@@ -38,7 +48,7 @@
       {{#if limbSilhouette.visible}}
       <svg class="fallout-maw-token-hud-limb-silhouette" viewBox="{{limbSilhouette.viewBox}}" role="img" aria-label="Limbs" data-limb-popover-root>
         {{#each limbSilhouette.parts}}
-        <path class="fallout-maw-token-hud-limb-silhouette-part" d="{{d}}" fill="{{fill}}" data-limb-key="{{limbKey}}" data-limb-popover data-label="{{label}}" data-value="{{value}}" data-max="{{max}}"></path>
+        <path class="fallout-maw-token-hud-limb-silhouette-part" d="{{d}}" fill="{{fill}}" data-limb-key="{{limbKey}}" data-limb-popover data-label="{{label}}" data-value="{{value}}" data-max="{{max}}" data-popover-rows="{{popoverRowsJson}}"></path>
         {{/each}}
         {{#each limbSilhouette.outline}}
         <path class="fallout-maw-token-hud-limb-silhouette-outline" d="{{d}}"></path>

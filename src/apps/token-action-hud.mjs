@@ -3,6 +3,7 @@ import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import {
   getCreatureOptions,
   getActorNeedSettings,
+  getDamageTypeSettings,
   getResourceSettings,
   getSkillSettings,
   getSystemActionSettings,
@@ -26,7 +27,7 @@ import {
   prepareIndicatorEntry,
   prepareInventoryContext
 } from "../utils/actor-display-data.mjs";
-import { ITEM_FUNCTIONS, getEnabledWeaponFunctions } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, getDamageMitigationFunction, getEnabledWeaponFunctions, hasItemFunction } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { FalloutMaWFormApplicationV2, getFlatFormData } from "./base-form-application-v2.mjs";
@@ -45,6 +46,13 @@ const HUD_ACTION_TILE_HORIZONTAL_CHROME = 30;
 const HUD_ACTION_TILE_LABEL_FONT_WEIGHT = 700;
 const HUD_ACTION_TILE_LABEL_FONT_SIZE_REM = 0.8;
 const HUD_METER_SECTION_KEYS = Object.freeze(["resources", "needs"]);
+const HUD_LIMB_LAYER_KEYS = Object.freeze(["state", "defense", "resistance", "reduction"]);
+const HUD_LIMB_LAYERS = Object.freeze([
+  { key: "state", label: "Состояние" },
+  { key: "defense", label: "Защита" },
+  { key: "resistance", label: "Сопротивление" },
+  { key: "reduction", label: "Итоговое снижение" }
+]);
 const HUD_SILENT_ITEM_UPDATE_PATHS = new Set([
   "system.functions.weapon.magazine.value",
   "system.functions.condition.value"
@@ -239,6 +247,7 @@ function getSelectedHudActors() {
 class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #token = null;
   #activeTray = "";
+  #limbDisplayLayer = "state";
   #layoutFrame = null;
   #limbPopover = {
     element: null,
@@ -317,7 +326,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, systemActions);
     const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, systemActions, weaponActionRows);
     const meterSections = prepareMeterSectionStates();
-    const displayLimbs = prepareDisplayLimbs(actor);
+    const displayLimbs = prepareDisplayLimbs(actor, this.#limbDisplayLayer);
     const limbSilhouette = createLimbSilhouetteHud(race?.limbSilhouette, displayLimbs);
 
     return {
@@ -326,6 +335,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       token: this.#token,
       limbs: limbSilhouette?.visible ? [] : prepareLimbEntries(displayLimbs),
       limbSilhouette,
+      limbLayer: prepareLimbLayerContext(this.#limbDisplayLayer),
       gmControls: game.user?.isGM ? {
         selectedCount: getSelectedHudActors().length
       } : null,
@@ -358,6 +368,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   _attachFrameListeners() {
     super._attachFrameListeners();
     this.element.addEventListener("pointerdown", event => this.#onHudItemMiddlePointerDown(event));
+    this.element.addEventListener("click", event => this.#onLimbLayerOptionClick(event));
   }
 
   applyMovementResourcePreview(preview) {
@@ -592,6 +603,23 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
   }
 
+  #onLimbLayerOptionClick(event) {
+    if (!(event.target instanceof Element)) return;
+    const option = event.target.closest("[data-limb-layer-option]");
+    if (!option || !this.element?.contains(option)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    option.closest("[data-limb-layer-menu]")?.removeAttribute("open");
+    this.#setLimbDisplayLayer(String(option.dataset.limbLayerOption ?? ""));
+  }
+
+  #setLimbDisplayLayer(layer) {
+    if (!HUD_LIMB_LAYER_KEYS.includes(layer) || layer === this.#limbDisplayLayer) return;
+    this.#limbDisplayLayer = layer;
+    this.#destroyLimbPopover();
+    void this.render({ force: true });
+  }
+
   #getHudItemActionElement(target) {
     if (!(target instanceof Element)) return null;
     const button = target.closest("[data-action][data-item-id]");
@@ -655,6 +683,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const label = String(target.dataset.label ?? "");
     const value = String(target.dataset.value ?? "0");
     const max = String(target.dataset.max ?? "0");
+    const rows = parseLimbPopoverRows(target);
 
     const element = this.#limbPopover.element ?? document.createElement("div");
     element.className = "fallout-maw fallout-maw-token-hud-limb-popover";
@@ -662,10 +691,24 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const title = document.createElement("div");
     title.className = "fallout-maw-token-hud-limb-popover-title";
     title.textContent = label;
-    const valueRow = document.createElement("div");
-    valueRow.className = "fallout-maw-token-hud-limb-popover-value";
-    valueRow.textContent = `${value} / ${max}`;
-    element.append(title, valueRow);
+    element.append(title);
+    if (rows.length) {
+      for (const row of rows) {
+        const valueRow = document.createElement("div");
+        valueRow.className = "fallout-maw-token-hud-limb-popover-row";
+        const rowLabel = document.createElement("span");
+        rowLabel.textContent = String(row.label ?? "");
+        const rowValue = document.createElement("strong");
+        rowValue.textContent = String(row.value ?? "");
+        valueRow.append(rowLabel, rowValue);
+        element.append(valueRow);
+      }
+    } else {
+      const valueRow = document.createElement("div");
+      valueRow.className = "fallout-maw-token-hud-limb-popover-value";
+      valueRow.textContent = `${value} / ${max}`;
+      element.append(valueRow);
+    }
     document.body.append(element);
     this.#limbPopover.element = element;
     positionLimbPopover(element, target);
@@ -822,11 +865,123 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
   }
 }
 
-function prepareDisplayLimbs(actor) {
-  return Object.fromEntries(Object.entries(actor.system?.limbs ?? {}).map(([key, limb]) => [
+function prepareLimbLayerContext(activeLayer = "state") {
+  const active = HUD_LIMB_LAYER_KEYS.includes(activeLayer) ? activeLayer : "state";
+  return {
+    key: active,
+    label: HUD_LIMB_LAYERS.find(layer => layer.key === active)?.label ?? "Состояние",
+    choices: HUD_LIMB_LAYERS.map(layer => ({
+      ...layer,
+      selected: layer.key === active
+    }))
+  };
+}
+
+function prepareDisplayLimbs(actor, layer = "state") {
+  const baseLimbs = Object.fromEntries(Object.entries(actor.system?.limbs ?? {}).map(([key, limb]) => [
     key,
     prepareLimbDisplayData(actor, key, limb)
   ]));
+  if (layer === "defense" || layer === "resistance") return prepareMitigationLayerLimbs(actor, baseLimbs, layer);
+  if (layer === "reduction") return prepareReductionLayerLimbs(actor, baseLimbs);
+  return baseLimbs;
+}
+
+function prepareMitigationLayerLimbs(actor, limbs = {}, layer = "defense") {
+  const damageTypes = getDamageTypeSettings();
+  const source = layer === "defense" ? actor.system?.damageDefenses : actor.system?.damageResistances;
+  return Object.fromEntries(Object.entries(limbs ?? {}).map(([key, limb]) => {
+    const rows = damageTypes.map(damageType => {
+      const value = toInteger(source?.[key]?.[damageType.key]);
+      return {
+        label: String(damageType.label ?? damageType.key),
+        value,
+        display: `${value}%`
+      };
+    });
+    const score = averageMitigationPercent(rows.map(row => row.value));
+    return [key, {
+      ...limb,
+      fill: getMitigationLayerColor(score),
+      displayValue: `${formatSignedNumber(score)}%`,
+      displayMax: "100%",
+      popoverRows: rows.map(row => ({
+        label: row.label,
+        value: row.display
+      }))
+    }];
+  }));
+}
+
+function prepareReductionLayerLimbs(actor, limbs = {}) {
+  const reductions = getFlatLimbFinalReductions(actor);
+  return Object.fromEntries(Object.entries(limbs ?? {}).map(([key, limb]) => {
+    const value = toInteger(reductions[key]);
+    return [key, {
+      ...limb,
+      fill: getMitigationLayerColor(value),
+      displayValue: formatSignedNumber(value),
+      displayMax: "100",
+      popoverRows: [{
+        label: "Итоговое снижение",
+        value: formatSignedNumber(value)
+      }]
+    }];
+  }));
+}
+
+function averageMitigationPercent(values = []) {
+  if (!values.length) return 0;
+  const total = values.reduce((sum, value) => sum + Math.max(-100, Math.min(100, toInteger(value))), 0);
+  return Math.round(total / values.length);
+}
+
+function getMitigationLayerColor(value) {
+  const number = Math.max(-100, Math.min(100, Number(value) || 0));
+  if (number > 0) return mixColor([0, 0, 0], [218, 181, 64], number / 100);
+  if (number < 0) return mixColor([0, 0, 0], [185, 48, 43], Math.abs(number) / 100);
+  return "rgb(0, 0, 0)";
+}
+
+function mixColor(from, to, ratio) {
+  const t = Math.max(0, Math.min(1, Number(ratio) || 0));
+  const channels = from.map((value, index) => Math.round(value + ((to[index] - value) * t)));
+  return `rgb(${channels[0]}, ${channels[1]}, ${channels[2]})`;
+}
+
+function formatSignedNumber(value) {
+  const number = toInteger(value);
+  return number > 0 ? `+${number}` : String(number);
+}
+
+function getFlatLimbFinalReductions(actor) {
+  const result = Object.fromEntries(Object.keys(actor.system?.limbs ?? {}).map(key => [key, 0]));
+  for (const item of actor.items?.contents ?? []) {
+    if (item.type !== "gear" || !item.system?.equipped || !hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation)) continue;
+    const mitigation = getDamageMitigationFunction(item);
+    const finalReduction = Math.max(0, toInteger(mitigation.finalReduction));
+    if (!finalReduction) continue;
+    for (const [limbKey, damageEntries] of Object.entries(mitigation.entries ?? {})) {
+      if (!Object.hasOwn(result, limbKey) || !hasAnyMitigationEntry(damageEntries)) continue;
+      result[limbKey] += finalReduction;
+    }
+  }
+  return result;
+}
+
+function hasAnyMitigationEntry(damageEntries = {}) {
+  return Object.values(damageEntries ?? {}).some(entry => toInteger(entry?.value) !== 0);
+}
+
+function parseLimbPopoverRows(target) {
+  const text = String(target?.dataset?.popoverRows ?? "").trim();
+  if (!text) return [];
+  try {
+    const rows = JSON.parse(text);
+    return Array.isArray(rows) ? rows : [];
+  } catch (_error) {
+    return [];
+  }
 }
 
 function prepareLimbDisplayData(actor, limbKey, limb = {}) {

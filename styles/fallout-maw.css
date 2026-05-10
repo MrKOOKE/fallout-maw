@@ -3695,17 +3695,42 @@ label.fallout-maw-mitigation-cell {
 
 .fallout-maw-token-hud-limb-popover-title {
   color: #f2d581;
-  font-size: 0.9rem;
+  font-size: 1.05rem;
   font-weight: 700;
   line-height: 1.1;
-  margin-bottom: 5px;
+  margin-bottom: 7px;
   text-transform: uppercase;
 }
 
 .fallout-maw-token-hud-limb-popover-value {
-  font-size: 0.86rem;
+  font-size: 1rem;
   font-weight: 700;
   line-height: 1;
+}
+
+.fallout-maw-token-hud-limb-popover-row {
+  align-items: baseline;
+  display: flex;
+  font-size: 0.96rem;
+  gap: 16px;
+  justify-content: space-between;
+  line-height: 1.2;
+  min-width: 210px;
+}
+
+.fallout-maw-token-hud-limb-popover-row + .fallout-maw-token-hud-limb-popover-row {
+  margin-top: 4px;
+}
+
+.fallout-maw-token-hud-limb-popover-row span {
+  color: #d7c99b;
+  min-width: 0;
+}
+
+.fallout-maw-token-hud-limb-popover-row strong {
+  color: #f2d581;
+  flex: 0 0 auto;
+  font-size: 0.98rem;
 }
 
 .fallout-maw-token-hud-resources {
@@ -3756,6 +3781,84 @@ label.fallout-maw-mitigation-cell {
   display: flex;
   gap: 6px;
   justify-content: space-between;
+}
+
+.fallout-maw-token-hud-limb-layer-menu {
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+}
+
+.fallout-maw-token-hud-limb-layer-menu summary {
+  align-items: center;
+  color: #f2d581;
+  cursor: pointer;
+  display: flex;
+  font-size: 1rem;
+  font-weight: 700;
+  gap: 8px;
+  justify-content: space-between;
+  line-height: 1;
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.fallout-maw-token-hud-limb-layer-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.fallout-maw-token-hud-limb-layer-menu summary:hover,
+.fallout-maw-token-hud-limb-layer-menu summary:focus-visible {
+  color: #fff0b3;
+  outline: 0;
+}
+
+.fallout-maw-token-hud-limb-layer-menu summary i {
+  color: #c9b06a;
+  flex: 0 0 auto;
+  font-size: 0.82em;
+  transition: transform 160ms ease;
+}
+
+.fallout-maw-token-hud-limb-layer-menu[open] summary i {
+  transform: rotate(180deg);
+}
+
+.fallout-maw-token-hud-limb-layer-options {
+  background:
+    linear-gradient(180deg, rgba(38, 40, 32, 0.98), rgba(9, 10, 8, 0.98));
+  border: 1px solid rgba(242, 213, 129, 0.58);
+  box-shadow: inset 0 0 0 1px rgba(255, 238, 170, 0.06), 0 8px 22px rgba(0, 0, 0, 0.5);
+  left: -6px;
+  min-width: 252px;
+  padding: 4px;
+  position: absolute;
+  top: calc(100% + 7px);
+  z-index: calc(var(--z-index-tooltip, 9999) + 1);
+}
+
+.fallout-maw-token-hud-limb-layer-options button {
+  background: transparent;
+  border: 0;
+  color: #ded2ab;
+  cursor: pointer;
+  display: block;
+  font-size: 0.94rem;
+  font-weight: 700;
+  line-height: 1;
+  margin: 0;
+  padding: 9px 10px;
+  text-align: left;
+  text-transform: uppercase;
+  width: 100%;
+}
+
+.fallout-maw-token-hud-limb-layer-options button:hover,
+.fallout-maw-token-hud-limb-layer-options button:focus-visible,
+.fallout-maw-token-hud-limb-layer-options button.active {
+  background: rgba(242, 213, 129, 0.14);
+  color: #f2d581;
+  outline: 0;
 }
 
 .fallout-maw-token-hud-gm-actions {
