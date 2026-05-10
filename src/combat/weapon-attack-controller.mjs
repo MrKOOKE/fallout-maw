@@ -2,8 +2,10 @@ import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skil
 import { SYSTEM_ID } from "../constants.mjs";
 import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./attack-animations.mjs";
 import { estimateDamageApplication, requestDamageApplications } from "./damage-hub.mjs";
+import { createThrownItemTile } from "../canvas/thrown-items.mjs";
 import { ITEM_FUNCTIONS, getWeaponFunctionById, hasItemFunction } from "../utils/item-functions.mjs";
 import { getDamageTypeSettings } from "../settings/accessors.mjs";
+import { ACTION_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
@@ -13,8 +15,11 @@ const PREVIEW_POSITION_EPSILON = 0.5;
 const PREVIEW_ANGLE_EPSILON = 0.002;
 const AIMED_TARGET_BLOCKER_BONUS_STEP = 20;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
+const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
 const BASE_VOLLEY_DIFFICULTY = 60;
 const VOLLEY_ACTION_KEY = "volley";
+const THROW_ACTION_KEY = "throwItem";
+const AIMED_THROW_ACTION_KEY = "aimedThrowItem";
 const PERIODIC_DAMAGE_REGION_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
 const DEFAULT_REGION_DAMAGE_INTERVAL_SECONDS = 6;
 const MELEE_ACTION_KEYS = new Set(["meleeAttack", "aimedMeleeAttack"]);
@@ -43,6 +48,7 @@ export function startWeaponAttack({ token = null, weapon = null, actionKey = "",
   if (!getWeaponAttackData(weapon, weaponFunctionId)?.enabled) return undefined;
   if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) return undefined;
   if (!hasRequiredWeaponResources(weapon, getActionAttackCount(weapon, actionKey, weaponFunctionId), weaponFunctionId)) return undefined;
+  if (!hasRequiredWeaponActionPoints(token.actor, weapon, actionKey, weaponFunctionId)) return undefined;
 
   cancelWeaponAttack();
   activeAttack = new WeaponAttackController(token, weapon, actionKey, weaponFunctionId);
@@ -84,6 +90,7 @@ class WeaponAttackController {
     this.lastPreviewBroadcastAt = 0;
     this.lastBroadcastPreviewState = null;
     this.volleyAction = isVolleyAttackAction(this.weapon, this.actionKey, this.weaponFunctionId);
+    this.throwAction = isThrowAttackAction(this.weapon, this.actionKey, this.weaponFunctionId);
     this.events = {
       move: event => this.onMove(event),
       confirm: event => this.onConfirm(event),
@@ -209,9 +216,11 @@ class WeaponAttackController {
     if (this.targetedAction) return this.onAimedConfirm();
     if (!this.pointer) return;
     if (this.volleyAction) return this.performVolleyAttack();
+    if (this.throwAction) return this.performThrowAttack();
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     const pelletCount = getWeaponPelletCount(this.weapon, this.weaponFunctionId);
     if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
+    if (!hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
 
     this.processing = true;
     this.pendingCriticalFailureResourceCosts = [];
@@ -239,7 +248,10 @@ class WeaponAttackController {
       attempted ||= result.attempted;
     }
 
-    if (attempted) await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
+    if (attempted) {
+      await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
+      await spendWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId);
+    }
     await checkBatch?.publish({ forceBatch: forceBatchCheckMessage });
     if (attempted) {
       await playWeaponAttackAnimations({
@@ -256,10 +268,56 @@ class WeaponAttackController {
     this.refresh(true);
   }
 
+  async performThrowAttack() {
+    if (this.processing || !this.pointer) return;
+    const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
+    if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
+    if (!hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
+
+    this.processing = true;
+    this.pendingCriticalFailureResourceCosts = [];
+    this.refresh(true);
+
+    const thrownItemData = this.weapon.toObject();
+    const sourceItemUuid = this.weapon.uuid;
+    const checkBatch = createSkillCheckBatchCollector({
+      requester: "weaponAttack",
+      title: this.weapon.name
+    });
+    const result = await this.resolveAttackTrajectory({ checkBatch });
+    const trajectories = [{ ...result.trajectory, delayGroup: 0 }];
+
+    if (result.attempted) {
+      await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
+      await spendWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId);
+    }
+    await checkBatch.publish({ forceBatch: false });
+    if (result.attempted) {
+      await playWeaponAttackAnimations({
+        weapon: this.weapon,
+        weaponFunctionId: this.weaponFunctionId,
+        trajectories,
+        delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
+      });
+      await createThrownItemTile({
+        sceneId: canvas.scene?.id ?? "",
+        itemData: thrownItemData,
+        point: result.trajectory.end,
+        sourceActorUuid: this.token.actor.uuid,
+        sourceItemUuid
+      });
+    }
+    if (result.damageRequests.length) await applyQueuedDamageRequests(result.damageRequests);
+
+    this.processing = false;
+    this.refresh(true);
+  }
+
   onAimedConfirm() {
     if (this.aimedMode !== "aim" || !this.hoveredTarget || !this.geometry) return undefined;
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return undefined;
+    if (!hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return undefined;
 
     this.selectedTarget = this.hoveredTarget;
     this.lockedGeometry = serializeGeometry(this.geometry);
@@ -274,12 +332,15 @@ class WeaponAttackController {
     if (this.processing || this.aimedMode !== "limb" || !this.selectedTarget) return;
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
+    if (!hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
 
     this.processing = true;
     this.pendingCriticalFailureResourceCosts = [];
     this.removeLimbMenu();
     this.refresh(true);
 
+    const thrownItemData = this.throwAction ? this.weapon.toObject() : null;
+    const sourceItemUuid = this.throwAction ? this.weapon.uuid : "";
     const target = this.selectedTarget;
     const geometry = deserializeGeometry(this.lockedGeometry) ?? this.geometry;
     const centerTrajectory = buildTrajectoryThroughPoint(this.token, geometry, getTokenAimPoint(target));
@@ -312,6 +373,7 @@ class WeaponAttackController {
     }
 
     await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
+    await spendWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId);
     await (checkBatch ?? aimedResult.checkBatch)?.publish({ forceBatch: false });
     await playWeaponAttackAnimations({
       weapon: this.weapon,
@@ -319,6 +381,15 @@ class WeaponAttackController {
       trajectories: trajectories.map(trajectory => ({ ...trajectory, delayGroup: 0 })),
       delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
     });
+    if (this.throwAction) {
+      await createThrownItemTile({
+        sceneId: canvas.scene?.id ?? "",
+        itemData: thrownItemData,
+        point: trajectories[0]?.end ?? getTokenAimPoint(target),
+        sourceActorUuid: this.token.actor.uuid,
+        sourceItemUuid
+      });
+    }
     if (damageRequests.length) await applyQueuedDamageRequests(damageRequests);
 
     this.processing = false;
@@ -333,6 +404,7 @@ class WeaponAttackController {
     if (!direction) return;
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
+    if (!hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
 
     this.processing = true;
     this.pendingCriticalFailureResourceCosts = [];
@@ -370,7 +442,10 @@ class WeaponAttackController {
       attempted = result.attempted;
     }
 
-    if (attempted) await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
+    if (attempted) {
+      await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
+      await spendWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId);
+    }
     await checkBatch.publish({ forceBatch: false });
     if (attempted) {
       await playWeaponAttackAnimations({
@@ -707,6 +782,7 @@ class WeaponAttackController {
     if (this.processing || !this.geometry) return;
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
+    if (!hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
 
     this.processing = true;
     this.pendingCriticalFailureResourceCosts = [];
@@ -753,6 +829,7 @@ class WeaponAttackController {
     this.targets = getPotentialTargets(this.token, this.geometry, { includeAttacker: true, includeDead: true });
 
     await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
+    await spendWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId);
     await checkBatch?.publish({ forceBatch: true });
     await this.playVolleyAttackEffects(finalGeometries);
     if (regionRequests.length) await Promise.all(regionRequests.map(requestCreateVolleyDamageRegion));
@@ -1214,6 +1291,12 @@ function isVolleyAttackAction(weapon, actionKey, weaponFunctionId = "") {
   return actionKey === "burst" && Boolean(actions.burst) && Boolean(actions.volley);
 }
 
+function isThrowAttackAction(weapon, actionKey, weaponFunctionId = "") {
+  const actions = getWeaponAttackData(weapon, weaponFunctionId)?.availableActions ?? {};
+  if (actionKey === THROW_ACTION_KEY) return Boolean(actions.throwItem);
+  return actionKey === AIMED_THROW_ACTION_KEY && Boolean(actions.aimedThrowItem);
+}
+
 function broadcastAttackPreview(payload = {}) {
   game.socket.emit(WEAPON_ATTACK_SOCKET, {
     scope: WEAPON_ATTACK_SOCKET_SCOPE,
@@ -1483,6 +1566,41 @@ function hasRequiredWeaponResources(weapon, multiplier = 1, weaponFunctionId = "
     if (cost.type === "quantity" && toInteger(weapon.system?.quantity) < amount) return false;
   }
   return true;
+}
+
+function isCombatActionPointSpendingActive() {
+  return Boolean(game.combat);
+}
+
+function getWeaponActionPointCost(weapon, actionKey, weaponFunctionId = "") {
+  const value = Number(getWeaponAttackData(weapon, weaponFunctionId)?.[actionKey]?.actionPointCost);
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : DEFAULT_WEAPON_ACTION_POINT_COST;
+}
+
+function hasRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "") {
+  if (!isCombatActionPointSpendingActive()) return true;
+  const cost = getWeaponActionPointCost(weapon, actionKey, weaponFunctionId);
+  if (cost <= 0) return true;
+
+  const state = getCombatMovementResourceState(actor);
+  if (!state) return true;
+  if (cost <= state.action.value) return true;
+
+  ui.notifications.warn(`${actor?.name ?? ""}: не хватает ${state.action.label} для действия (${cost} > ${state.action.value}).`);
+  return false;
+}
+
+async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "") {
+  if (!isCombatActionPointSpendingActive()) return;
+  const cost = getWeaponActionPointCost(weapon, actionKey, weaponFunctionId);
+  if (cost <= 0) return;
+
+  const state = getCombatMovementResourceState(actor);
+  if (!state || cost > state.action.value) return;
+
+  await actor.update({
+    [`system.resources.${ACTION_RESOURCE_KEY}.value`]: Math.max(0, state.action.current - cost)
+  });
 }
 
 async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "", extraCosts = []) {
@@ -2022,7 +2140,7 @@ function computeVolleyBlastCenter({ attackerToken = null, intendedCenter = null,
 
   const finalAngle = Math.atan2(candidate.y - origin.y, candidate.x - origin.x);
   const finalDistance = Math.max(1, Math.hypot(candidate.x - origin.x, candidate.y - origin.y));
-  return getWallClippedEndpoint(attackerToken, origin, finalAngle, finalDistance).point;
+  return getWallClippedEndpoint(attackerToken, origin, finalAngle, finalDistance, candidate.elevation).point;
 }
 
 function computeVolleyMissCenter({ origin, target, baseAngle, radius, severity = 0.5, minSourceDistance = 0 } = {}) {
@@ -2065,10 +2183,12 @@ function buildVolleyMissCandidate(target, baseAngle, radius, maxDistance, mode) 
 }
 
 function addPolar(point, angle, distance) {
-  return {
+  const result = {
     x: point.x + (Math.cos(angle) * distance),
     y: point.y + (Math.sin(angle) * distance)
   };
+  if (Number.isFinite(Number(point?.elevation))) result.elevation = Number(point.elevation);
+  return result;
 }
 
 function randomRange(min, max) {
@@ -2085,14 +2205,9 @@ function getVolleyDamageFalloff(target, geometry) {
 }
 
 function getTokenVolleyDistanceToHitboxEdge(token, geometry) {
-  const bounds = getTokenBoundsRectangle(token);
-  if (!bounds) return 0;
-  const center = geometry.end;
-  const closest = {
-    x: Math.max(bounds.left, Math.min(center.x, bounds.right)),
-    y: Math.max(bounds.top, Math.min(center.y, bounds.bottom))
-  };
-  return Math.max(0, Math.hypot(closest.x - center.x, closest.y - center.y));
+  const closest = getClosestPointOnTokenVolume(token, geometry?.end);
+  if (!closest) return 0;
+  return getSphericalDistancePixels(geometry.end, closest);
 }
 
 function getWeaponDamageTypeEntries(weapon, weaponFunctionId = "") {
@@ -2390,7 +2505,7 @@ function getTokenTrajectoryHit(token, trajectory) {
 function getTokenAttackContactPoints(token, geometry) {
   const bounds = getTokenBoundsRectangle(token);
   if (!bounds) return [];
-  if (geometry.type === VOLLEY_ACTION_KEY) return getTokenVolleyContactPoints(bounds, geometry);
+  if (geometry.type === VOLLEY_ACTION_KEY) return getTokenVolleyContactPoints(token, geometry);
   const points = [];
 
   if (geometry.halfAngle <= 0) {
@@ -2425,21 +2540,12 @@ function withTokenAimElevation(token, point) {
   };
 }
 
-function getTokenVolleyContactPoints(bounds, geometry) {
+function getTokenVolleyContactPoints(token, geometry) {
   const radius = Math.max(0, Number(geometry.radiusPixels) || 0);
-  const center = geometry.end;
-  const closest = {
-    x: Math.max(bounds.left, Math.min(center.x, bounds.right)),
-    y: Math.max(bounds.top, Math.min(center.y, bounds.bottom))
-  };
+  const closest = getClosestPointOnTokenVolume(token, geometry.end);
   const points = [];
-  if (Math.hypot(closest.x - center.x, closest.y - center.y) <= radius) addUniquePoint(points, closest);
-  const boundsCenter = bounds.center ?? {
-    x: bounds.x + (bounds.width / 2),
-    y: bounds.y + (bounds.height / 2)
-  };
-  if (Math.hypot(boundsCenter.x - center.x, boundsCenter.y - center.y) <= radius) addUniquePoint(points, boundsCenter);
-  return sortContactPoints(points, center);
+  if (closest && getSphericalDistancePixels(geometry.end, closest) <= radius) addUniquePoint(points, closest);
+  return sortContactPoints(points, geometry.end);
 }
 
 function getTokenBounds(token) {
@@ -2467,6 +2573,27 @@ function getTokenElevationRange(token) {
   const depth = Math.max(0, Number(document?.depth ?? 1) || 0) * gridDistance;
   const top = bottom + (depth > 0 ? depth : gridDistance);
   return { bottom: Math.min(bottom, top), top: Math.max(bottom, top) };
+}
+
+function getClosestPointOnTokenVolume(token, point) {
+  const bounds = getTokenBoundsRectangle(token);
+  if (!bounds || !point) return null;
+  const elevationRange = getTokenElevationRange(token);
+  const pointElevation = Number.isFinite(Number(point.elevation)) ? Number(point.elevation) : getTokenAimElevation(token);
+  return {
+    x: Math.max(bounds.left, Math.min(Number(point.x) || 0, bounds.right)),
+    y: Math.max(bounds.top, Math.min(Number(point.y) || 0, bounds.bottom)),
+    elevation: Math.max(elevationRange.bottom, Math.min(pointElevation, elevationRange.top))
+  };
+}
+
+function getSphericalDistancePixels(left, right) {
+  const dx = (Number(left?.x) || 0) - (Number(right?.x) || 0);
+  const dy = (Number(left?.y) || 0) - (Number(right?.y) || 0);
+  const leftElevation = Number.isFinite(Number(left?.elevation)) ? Number(left.elevation) : 0;
+  const rightElevation = Number.isFinite(Number(right?.elevation)) ? Number(right.elevation) : 0;
+  const dz = metersToPixels(Math.abs(leftElevation - rightElevation));
+  return Math.hypot(dx, dy, dz);
 }
 
 function getTokenAimElevation(token) {
@@ -2712,7 +2839,9 @@ function selectRandomLimbKey(actor) {
 }
 
 function isAimedShotAction(weapon, actionKey, weaponFunctionId = "") {
-  return actionKey === "aimedShot" && Boolean(getWeaponAttackData(weapon, weaponFunctionId)?.availableActions?.aimedShot);
+  const actions = getWeaponAttackData(weapon, weaponFunctionId)?.availableActions ?? {};
+  if (actionKey === "aimedShot") return Boolean(actions.aimedShot);
+  return actionKey === AIMED_THROW_ACTION_KEY && Boolean(actions.aimedThrowItem);
 }
 
 function getAimedTargetUnderPointer(pointer, targets = []) {

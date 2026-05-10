@@ -13,6 +13,7 @@ const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
+const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
 const DEFAULT_ITEM_SHEET_HEIGHT = 4000;
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
@@ -1063,6 +1064,8 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {},
     { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot") },
     { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst") },
     { key: "volley", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley"), isVolley: true },
+    { key: "throwItem", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionThrowItem") },
+    { key: "aimedThrowItem", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedThrowItem") },
     { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack"), isMelee: true },
     { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), isMelee: true }
   ].map(action => {
@@ -1081,6 +1084,7 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {},
       isBurst: action.key === "burst",
       isVolley: action.key === "volley",
       isMelee: Boolean(action.isMelee),
+      actionPointCost: getWeaponActionPointCostForData(weaponData, action.key),
       attackConeDegrees: Number(hasActionCone ? actionData.attackConeDegrees : fallbackCone) || DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
       burstCount: Math.max(1, Number(weaponData?.burst?.count) || 3),
       burstDifficultyPerShot: getWeaponBurstDifficultyPerShotForData(weaponData),
@@ -1100,6 +1104,11 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {},
 function getWeaponBurstDifficultyPerShotForData(weaponData = {}) {
   const value = Number(weaponData?.burst?.difficultyPerShot);
   return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 10;
+}
+
+function getWeaponActionPointCostForData(weaponData = {}, actionKey = "") {
+  const value = Number(weaponData?.[actionKey]?.actionPointCost);
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : DEFAULT_WEAPON_ACTION_POINT_COST;
 }
 
 function prepareWeaponAttackModeSettings(modeData = {}) {
@@ -1143,24 +1152,30 @@ function createDefaultWeaponFunctionData(source = {}) {
       snapshot: false,
       burst: false,
       volley: false,
+      throwItem: false,
+      aimedThrowItem: false,
       meleeAttack: false,
       aimedMeleeAttack: false
     },
     aimedShot: {
+      actionPointCost: DEFAULT_WEAPON_ACTION_POINT_COST,
       attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
       criticalFailureConsequences: []
     },
     snapshot: {
+      actionPointCost: DEFAULT_WEAPON_ACTION_POINT_COST,
       attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
       criticalFailureConsequences: []
     },
     burst: {
+      actionPointCost: DEFAULT_WEAPON_ACTION_POINT_COST,
       attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
       count: 3,
       difficultyPerShot: 10,
       criticalFailureConsequences: []
     },
     volley: {
+      actionPointCost: DEFAULT_WEAPON_ACTION_POINT_COST,
       damageRadius: 0,
       regionRadius: 0,
       regionDamageEntries: [],
@@ -1171,6 +1186,16 @@ function createDefaultWeaponFunctionData(source = {}) {
       explosionSoundPath: "",
       criticalFailureConsequences: []
     },
+    throwItem: {
+      actionPointCost: DEFAULT_WEAPON_ACTION_POINT_COST,
+      attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
+      criticalFailureConsequences: []
+    },
+    aimedThrowItem: {
+      actionPointCost: DEFAULT_WEAPON_ACTION_POINT_COST,
+      attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
+      criticalFailureConsequences: []
+    },
     meleeAttack: createDefaultWeaponMeleeActionData(),
     aimedMeleeAttack: createDefaultWeaponMeleeActionData()
   }, foundry.utils.deepClone(source), { inplace: false });
@@ -1178,6 +1203,7 @@ function createDefaultWeaponFunctionData(source = {}) {
 
 function createDefaultWeaponMeleeActionData() {
   return {
+    actionPointCost: DEFAULT_WEAPON_ACTION_POINT_COST,
     attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
     criticalFailureConsequences: [],
     thrust: {

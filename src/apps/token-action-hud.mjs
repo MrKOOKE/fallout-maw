@@ -957,19 +957,29 @@ function prepareWeaponActionRows(selectedWeapon) {
 
 function prepareWeaponActionButtonsForFunction(selectedWeapon, weaponFunction) {
   const actions = weaponFunction?.data?.availableActions ?? {};
-  return [
+  const buttons = [
     { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot"), disabled: !actions.aimedShot },
     { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot"), disabled: !actions.snapshot },
     { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst"), disabled: !actions.burst, visible: Boolean(actions.burst) },
     { key: "volley", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley"), disabled: !actions.volley, visible: Boolean(actions.volley) },
+    { key: "throwItem", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionThrowItem"), disabled: !actions.throwItem, visible: Boolean(actions.throwItem) },
+    { key: "aimedThrowItem", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedThrowItem"), disabled: !actions.aimedThrowItem, visible: Boolean(actions.aimedThrowItem) },
     { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack"), disabled: !actions.meleeAttack },
     { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), disabled: !actions.aimedMeleeAttack }
-  ].filter(action => action.visible !== false && !action.disabled).map(action => ({
+  ];
+  return buttons.filter(action => action.visible !== false && !action.disabled).map(action => ({
     ...action,
     itemId: selectedWeapon.id,
     weaponFunctionId: weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id,
-    img: normalizeImagePath(selectedWeapon.img, "icons/svg/combat.svg")
+    img: normalizeImagePath(selectedWeapon.img, "icons/svg/combat.svg"),
+    actionPointCost: getWeaponActionPointCostForHud(weaponFunction.data, action.key),
+    actionPointCostLabel: `${getWeaponActionPointCostForHud(weaponFunction.data, action.key)} ОД`
   }));
+}
+
+function getWeaponActionPointCostForHud(weaponData = {}, actionKey = "") {
+  const value = Number(weaponData?.[actionKey]?.actionPointCost);
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 5;
 }
 
 function applyMeterPreview(meter, spent) {

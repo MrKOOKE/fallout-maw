@@ -162,6 +162,7 @@
           <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="useWeaponAction" data-item-id="{{itemId}}" data-weapon-function-id="{{weaponFunctionId}}" data-weapon-action-key="{{key}}" title="{{label}}" {{#if disabled}}disabled{{/if}}>
             <img src="{{img}}" alt="{{label}}" onerror="this.src='{{../../fallbackIcon}}'">
             <span>{{label}}</span>
+            {{#if actionPointCostLabel}}<strong>{{actionPointCostLabel}}</strong>{{/if}}
           </button>
           {{/each}}
         </div>

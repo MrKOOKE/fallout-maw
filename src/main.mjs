@@ -1,5 +1,6 @@
 import { FALLOUT_MAW, syncSystemConfig } from "./config/system-config.mjs";
 import { FalloutMaWTokenRuler } from "./canvas/token-ruler.mjs";
+import { registerThrownItemHooks } from "./canvas/thrown-items.mjs";
 import { registerCombatMovementHooks } from "./combat/movement-resources.mjs";
 import { registerDataModels, registerTrackableAttributes } from "./data/index.mjs";
 import { FalloutMaWActor, FalloutMaWItem } from "./documents/index.mjs";
@@ -69,6 +70,7 @@ Hooks.once("ready", async () => {
   registerDamageSocket();
   registerAttackAnimationSocket();
   registerWeaponAttackSocket();
+  registerThrownItemHooks();
   registerMedicineSocket();
   refreshTokenActionHudControlButton();
   syncTokenActionHud();

@@ -111,15 +111,7 @@ export function getCombatMovementAffordabilityCost(movement) {
 
 export function isCombatMovementTracked(tokenDocument) {
   const combat = game.combat;
-  if (!combat?.started || !tokenDocument?.actor) return false;
-
-  const tokenId = tokenDocument.id;
-  const sceneId = tokenDocument.parent?.id ?? tokenDocument.scene?.id ?? null;
-  return combat.combatants.some(combatant => {
-    if (combatant.tokenId !== tokenId) return false;
-    if (sceneId && combatant.sceneId && combatant.sceneId !== sceneId) return false;
-    return combatant.actor?.uuid === tokenDocument.actor?.uuid;
-  });
+  return Boolean(combat && tokenDocument?.actor);
 }
 
 export function isGMDebugMovementBypassActive() {

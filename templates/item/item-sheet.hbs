@@ -550,6 +550,12 @@
       {{#if selected}}
       <section class="fallout-maw-weapon-action-settings" data-weapon-action-settings="{{key}}">
         <h3>{{label}}</h3>
+        <div class="fallout-maw-list-grid three-columns">
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponActionPointCost"}}</span>
+            <input type="number" name="{{../path}}.{{key}}.actionPointCost" value="{{actionPointCost}}" min="0" step="1">
+          </label>
+        </div>
         {{#if isVolley}}
         <div class="fallout-maw-list-grid three-columns">
           <label>
