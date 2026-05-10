@@ -1,5 +1,11 @@
 import { SYSTEM_ID, TRAUMA_CREATE_OPTION } from "../constants.mjs";
-import { getCreatureOptions, getDamageTypeSettings, getTimeMechanicsIgnored, getTraumaSettings } from "../settings/accessors.mjs";
+import {
+  getCreatureOptions,
+  getDamageTypeSettings,
+  getTimeMechanicsIgnored,
+  getTokenActionHudDamageIcons,
+  getTraumaSettings
+} from "../settings/accessors.mjs";
 import { getTraumaGroupForActor } from "../settings/traumas.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -18,9 +24,11 @@ const SCOPE_HEALTH = "health";
 const SCOPE_HEALTH_AND_LIMB = "healthAndLimb";
 const ROUND_SECONDS = 6;
 const DAMAGE_NUMBER_ANIMATION_MS = 900;
+const DAMAGE_MITIGATION_ICON_ANIMATION_MS = 1000;
 let damageTimeHooksRegistered = false;
 const combatRoundWorldTimes = new Map();
 const processingPeriodicEffectUuids = new Set();
+const damageMitigationTextureCache = new Map();
 
 export function registerDamageSocket() {
   game.socket.on(DAMAGE_SOCKET, handleDamageSocketMessage);
@@ -144,12 +152,17 @@ export async function applyDamageApplication(request = {}) {
   const mode = data.mode === MODE_HEALING ? MODE_HEALING : MODE_DAMAGE;
   const scope = normalizeScope(data.scope, data.limbKey);
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
-  const mitigatedAmount = mode === MODE_DAMAGE && data.applyMitigation
-    ? calculateEffectiveDamage(actor, data.amount, damageType?.key ?? "", data.limbKey)
-    : data.amount;
+  const mitigationResult = mode === MODE_DAMAGE && data.applyMitigation
+    ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source)
+    : { amount: data.amount, display: null };
+  const mitigatedAmount = mitigationResult.amount;
   const effectiveAmount = mode === MODE_DAMAGE && data.processDamageTypeSettings
     ? applyLimbHealthMultiplier(actor, mitigatedAmount, damageType, data.limbKey)
     : mitigatedAmount;
+  const mitigationDisplay = mode === MODE_DAMAGE && data.applyMitigation
+    ? buildDamageMitigationDisplay(data.amount, mitigatedAmount)
+    : null;
+  if (mitigationDisplay) broadcastDamageMitigationIcon(actor, mitigationDisplay);
   if (effectiveAmount <= 0) return { actor, amount: 0, healthDelta: 0, limbDelta: 0, mode, scope };
 
   const needIncrease = damageType?.settings?.needIncrease;
@@ -237,7 +250,7 @@ export function estimateDamageApplication(request = {}) {
 
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
   const mitigatedAmount = data.applyMitigation
-    ? calculateEffectiveDamage(actor, data.amount, damageType?.key ?? "", data.limbKey)
+    ? calculateEffectiveDamage(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source)
     : data.amount;
   let effectiveAmount = data.processDamageTypeSettings
     ? applyLimbHealthMultiplier(actor, mitigatedAmount, damageType, data.limbKey)
@@ -262,6 +275,7 @@ export async function applyDamageApplications({ actorUuid = "", requests = [] } 
 
   const batchRequests = [];
   const singleResults = [];
+  const mitigationDisplays = [];
   for (const request of requests) {
     const data = normalizeDamageRequest({ ...request, actorUuid });
     if (data.mode !== MODE_DAMAGE) {
@@ -270,8 +284,12 @@ export async function applyDamageApplications({ actorUuid = "", requests = [] } 
     }
 
     const entry = await prepareDamageBatchEntry(actor, data);
-    if (entry) batchRequests.push(entry);
+    if (entry?.damageMitigationDisplay) mitigationDisplays.push(entry.damageMitigationDisplay);
+    if (entry?.amount > 0) batchRequests.push(entry);
   }
+
+  const mitigationDisplay = combineDamageMitigationDisplays(mitigationDisplays);
+  if (mitigationDisplay) broadcastDamageMitigationIcon(actor, mitigationDisplay);
 
   const batchResult = batchRequests.length
     ? await applyDamageEntriesBatch(actor, batchRequests)
@@ -293,13 +311,28 @@ export async function applyDamageApplications({ actorUuid = "", requests = [] } 
 async function prepareDamageBatchEntry(actor, data = {}) {
   const scope = normalizeScope(data.scope, data.limbKey);
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
-  const mitigatedAmount = data.applyMitigation
-    ? calculateEffectiveDamage(actor, data.amount, damageType?.key ?? "", data.limbKey)
-    : data.amount;
+  const mitigationResult = data.applyMitigation
+    ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source)
+    : { amount: data.amount, display: null };
+  const mitigatedAmount = mitigationResult.amount;
   const effectiveAmount = data.processDamageTypeSettings
     ? applyLimbHealthMultiplier(actor, mitigatedAmount, damageType, data.limbKey)
     : mitigatedAmount;
-  if (effectiveAmount <= 0) return null;
+  const damageMitigationDisplay = data.applyMitigation
+    ? buildDamageMitigationDisplay(data.amount, mitigatedAmount)
+    : null;
+  if (effectiveAmount <= 0) {
+    return damageMitigationDisplay
+      ? {
+        ...data,
+        amount: 0,
+        damageTypeKey: damageType?.key ?? data.damageTypeKey,
+        damageType,
+        scope,
+        damageMitigationDisplay
+      }
+      : null;
+  }
 
   const needIncrease = damageType?.settings?.needIncrease;
   if (data.processDamageTypeSettings && needIncrease?.enabled) {
@@ -323,13 +356,25 @@ async function prepareDamageBatchEntry(actor, data = {}) {
       source: data.source,
       worldTime: getDamageApplicationWorldTime(data.source)
     });
-    if (!immediateAmount) return null;
+    if (!immediateAmount) {
+      return damageMitigationDisplay
+        ? {
+          ...data,
+          amount: 0,
+          damageTypeKey: damageType?.key ?? data.damageTypeKey,
+          damageType,
+          scope,
+          damageMitigationDisplay
+        }
+        : null;
+    }
     return {
       ...data,
       amount: immediateAmount,
       damageTypeKey: damageType?.key ?? data.damageTypeKey,
       damageType,
-      scope
+      scope,
+      damageMitigationDisplay
     };
   }
 
@@ -338,7 +383,8 @@ async function prepareDamageBatchEntry(actor, data = {}) {
     amount: effectiveAmount,
     damageTypeKey: damageType?.key ?? data.damageTypeKey,
     damageType,
-    scope
+    scope,
+    damageMitigationDisplay
   };
 }
 
@@ -557,6 +603,11 @@ async function handleDamageSocketMessage(payload = {}) {
   if (payload.action === "showDamageNumbers") {
     if (payload.senderUserId === game.user?.id) return;
     displayDamageNumbersForActor(payload.actorUuid, payload.entries);
+    return;
+  }
+  if (payload.action === "showDamageMitigationIcon") {
+    if (payload.senderUserId === game.user?.id) return;
+    displayDamageMitigationIconForActor(payload.actorUuid, payload.display);
     return;
   }
   if (payload.action === "applyDamageBatch") {
@@ -1194,6 +1245,18 @@ function broadcastDamageNumbers(actor, entries = []) {
   });
 }
 
+function broadcastDamageMitigationIcon(actor, display = null) {
+  const payloadDisplay = normalizeDamageMitigationDisplay(display);
+  if (!actor?.uuid || !payloadDisplay) return;
+  displayDamageMitigationIconForActor(actor.uuid, payloadDisplay);
+  game.socket.emit(DAMAGE_SOCKET, {
+    action: "showDamageMitigationIcon",
+    senderUserId: game.user?.id ?? "",
+    actorUuid: actor.uuid,
+    display: payloadDisplay
+  });
+}
+
 function prepareDamageNumberEntries(entries = []) {
   const damageTypes = getDamageTypeSettings();
   return entries
@@ -1271,6 +1334,122 @@ function animateDamageNumber(token, entry, index = 0, total = 1) {
   canvas.app.ticker.add(tick);
 }
 
+function displayDamageMitigationIconForActor(actorUuid = "", display = null) {
+  const payloadDisplay = normalizeDamageMitigationDisplay(display);
+  if (!canvas?.ready || !actorUuid || !payloadDisplay) return;
+  const tokens = (canvas.tokens?.placeables ?? []).filter(token => token.actor?.uuid === actorUuid);
+  for (const token of tokens) void animateDamageMitigationIcon(token, payloadDisplay);
+}
+
+async function animateDamageMitigationIcon(token, display = null) {
+  const payloadDisplay = normalizeDamageMitigationDisplay(display);
+  if (!payloadDisplay || !isTokenVisibleToCurrentUser(token)) return;
+
+  const icons = getTokenActionHudDamageIcons();
+  const path = payloadDisplay.tier === 2 ? icons.damageBlockedIcon : icons.damageReductionIcon;
+  const texture = await getDamageMitigationTexture(path);
+  if (!texture?.valid) return;
+
+  const layer = canvas.controls?._rulerPaths ?? canvas.interface ?? canvas.stage;
+  if (!layer) return;
+
+  const container = new PIXI.Container();
+  container.eventMode = "none";
+  container.interactive = false;
+  container.interactiveChildren = false;
+  container.zIndex = 10000;
+
+  const sprite = new PIXI.Sprite(texture);
+  sprite.anchor.set(0.5);
+
+  const gridSize = canvas?.grid?.size || canvas?.scene?.grid?.size || 100;
+  const baseSize = Math.max(24, Math.floor(gridSize * 0.95));
+  const textureSize = Math.max(1, Number(texture.width) || 0, Number(texture.height) || 0);
+  const baseScale = baseSize / textureSize;
+  sprite.scale.set(baseScale * 0.86);
+  container.addChild(sprite);
+
+  const label = payloadDisplay.tier === 1
+    ? createDamageMitigationPercentLabel(payloadDisplay.percent, baseSize)
+    : null;
+  if (label) container.addChild(label);
+
+  const center = getTokenAnimationOrigin(token);
+  const tokenTop = Number(token.top ?? token.y ?? (center.y - (token.h / 2))) || center.y;
+  const startY = tokenTop - Math.max(4, gridSize * 0.06);
+  const floatUp = Math.max(22, gridSize * 0.32);
+  const startedAt = performance.now();
+
+  container.position.set(center.x, startY);
+  layer.sortableChildren = true;
+  layer.addChild(container);
+
+  const tick = () => {
+    if (container.destroyed) {
+      canvas.app.ticker.remove(tick);
+      return;
+    }
+
+    const elapsed = performance.now() - startedAt;
+    const t = Math.min(1, elapsed / DAMAGE_MITIGATION_ICON_ANIMATION_MS);
+    const eased = 1 - ((1 - t) ** 3);
+    const fadeIn = Math.min(1, t / 0.18);
+    const fadeOut = t > 0.78 ? Math.max(0, 1 - ((t - 0.78) / 0.22)) : 1;
+    const alpha = fadeIn * fadeOut;
+
+    container.y = startY - (floatUp * eased);
+    container.alpha = alpha;
+    const pulse = 0.86 + (Math.sin(Math.PI * t) * 0.18);
+    sprite.scale.set(baseScale * pulse);
+    if (t < 1) return;
+
+    canvas.app.ticker.remove(tick);
+    container.destroy({ children: true, texture: false, baseTexture: false });
+  };
+  canvas.app.ticker.add(tick);
+}
+
+function createDamageMitigationPercentLabel(percent, baseSize) {
+  const label = new PIXI.Text(`${Math.max(1, Math.min(100, toInteger(percent)))}%`, {
+    fill: "#ffffff",
+    fontFamily: "Arial",
+    fontSize: Math.max(11, Math.floor(baseSize * 0.24)),
+    fontWeight: "900",
+    stroke: "#17110b",
+    strokeThickness: 5,
+    dropShadow: true,
+    dropShadowColor: "#000000",
+    dropShadowAlpha: 0.7,
+    dropShadowBlur: 2,
+    dropShadowDistance: 1
+  });
+  label.anchor.set(0.5);
+  label.y = -baseSize * 0.08;
+  return label;
+}
+
+async function getDamageMitigationTexture(path) {
+  const src = String(path ?? "").trim();
+  if (!src) return null;
+  if (damageMitigationTextureCache.has(src)) return damageMitigationTextureCache.get(src);
+  try {
+    const texture = await foundry.canvas.loadTexture(src);
+    damageMitigationTextureCache.set(src, texture);
+    return texture;
+  } catch (error) {
+    console.warn(`${SYSTEM_ID} | Damage mitigation icon failed to load: ${src}`, error);
+    damageMitigationTextureCache.set(src, null);
+    return null;
+  }
+}
+
+function isTokenVisibleToCurrentUser(token) {
+  if (!token) return false;
+  if (token.document?.hidden && !game.user?.isGM) return false;
+  if (token.visible === false) return false;
+  return true;
+}
+
 function getTokenAnimationOrigin(token) {
   return token.center ?? {
     x: token.x + (token.w / 2),
@@ -1324,16 +1503,77 @@ function selectRandomDamageLimbKey(actor) {
   return keys[Math.floor(Math.random() * keys.length)] ?? "";
 }
 
-function calculateEffectiveDamage(actor, amount, damageTypeKey = "", limbKey = "") {
-  const incomingDamage = Math.max(0, Math.floor(Number(amount) || 0));
-  if (!incomingDamage) return 0;
-  if (!damageTypeKey) return incomingDamage;
+function calculateEffectiveDamage(actor, amount, damageTypeKey = "", limbKey = "", source = {}) {
+  return calculateDamageMitigation(actor, amount, damageTypeKey, limbKey, source).amount;
+}
 
-  const resistance = actor.getDamageResistance?.(damageTypeKey, limbKey) ?? 0;
-  const defense = Math.min(100, actor.getDamageDefense?.(damageTypeKey, limbKey) ?? 0);
+function calculateDamageMitigation(actor, amount, damageTypeKey = "", limbKey = "", source = {}) {
+  const incomingDamage = Math.max(0, Math.floor(Number(amount) || 0));
+  if (!incomingDamage) return { amount: 0, display: null };
+  if (!damageTypeKey) return { amount: incomingDamage, display: null };
+
+  const mitigationPenetration = getDamageMitigationPenetration(source);
+  const rawDefense = Math.min(100, actor.getDamageDefense?.(damageTypeKey, limbKey) ?? 0);
+  const defenseReduction = Math.min(rawDefense, mitigationPenetration);
+  const defense = Math.max(0, rawDefense - defenseReduction);
+  const rawResistance = Math.min(100, actor.getDamageResistance?.(damageTypeKey, limbKey) ?? 0);
+  const resistance = Math.max(0, rawResistance - Math.max(0, mitigationPenetration - defenseReduction));
   const reduction = actor.getDamageReduction?.(damageTypeKey, limbKey) ?? 0;
-  const defendedDamage = Math.floor(incomingDamage * (1 - (defense / 100)));
-  return Math.max(0, defendedDamage - resistance - reduction);
+  let remaining = incomingDamage;
+  const defenseBlocked = Math.floor((remaining * Math.max(0, defense)) / 100);
+  remaining = Math.max(0, remaining - defenseBlocked);
+  const resistanceBlocked = Math.floor((remaining * Math.max(0, resistance)) / 100);
+  remaining = Math.max(0, remaining - resistanceBlocked);
+  const finalAmount = Math.max(0, remaining - reduction);
+  return {
+    amount: finalAmount,
+    display: null
+  };
+}
+
+function buildDamageMitigationDisplay(incomingDamage, finalAmount) {
+  const incoming = Math.max(0, Math.floor(Number(incomingDamage) || 0));
+  if (!incoming) return null;
+  const final = Math.max(0, Math.floor(Number(finalAmount) || 0));
+  const blocked = Math.max(0, incoming - final);
+  if (!blocked) return null;
+  const ratio = blocked / incoming;
+  return {
+    incoming,
+    blocked,
+    percent: ratio >= 1 ? 100 : Math.min(99, Math.max(1, Math.floor(ratio * 100))),
+    tier: ratio >= 1 ? 2 : 1
+  };
+}
+
+function normalizeDamageMitigationDisplay(display = null) {
+  const incoming = Math.max(0, Math.floor(Number(display?.incoming) || 0));
+  const blocked = Math.max(0, Math.floor(Number(display?.blocked) || 0));
+  if (!incoming || !blocked) return null;
+  const ratio = blocked / incoming;
+  return {
+    incoming,
+    blocked,
+    percent: ratio >= 1 ? 100 : Math.min(99, Math.max(1, Math.floor(ratio * 100))),
+    tier: ratio >= 1 || display?.tier === 2 ? 2 : 1
+  };
+}
+
+function combineDamageMitigationDisplays(displays = []) {
+  const totals = displays.reduce((result, display) => {
+    const normalized = normalizeDamageMitigationDisplay(display);
+    if (!normalized) return result;
+    result.incoming += normalized.incoming;
+    result.blocked += normalized.blocked;
+    return result;
+  }, { incoming: 0, blocked: 0 });
+  return normalizeDamageMitigationDisplay(totals);
+}
+
+function getDamageMitigationPenetration(source = {}) {
+  const penetrationPower = Math.max(0, toInteger(source?.penetrationPower));
+  const penetrationStep = Math.max(0, toInteger(source?.penetrationStep));
+  return Math.max(0, penetrationPower - penetrationStep) * 10;
 }
 
 function applyLimbHealthMultiplier(actor, amount, damageType = null, limbKey = "") {

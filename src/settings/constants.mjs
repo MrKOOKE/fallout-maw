@@ -14,5 +14,7 @@ export const SKILL_CHECK_CONTROL_SETTING = "skillCheckControl";
 export const TOKEN_ACTION_HUD_ENABLED_SETTING = "tokenActionHudEnabled";
 export const TOKEN_ACTION_HUD_SCALE_SETTING = "tokenActionHudScale";
 export const TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING = "tokenActionHudCollapsedSections";
+export const TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING = "tokenActionHudDamageIcons";
 export const TIME_MECHANICS_IGNORED_SETTING = "timeMechanicsIgnored";
 export const TIME_NEEDS_PLAYERS_ONLY_SETTING = "timeNeedsPlayersOnly";
+export const MIGRATION_STATE_SETTING = "migrationState";

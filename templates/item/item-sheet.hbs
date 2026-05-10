@@ -247,6 +247,41 @@
     </div>
   </section>
 
+  <section class="fallout-maw-panel">
+    <h2>{{localize "FALLOUTMAW.Item.OccupiedWeaponSlots"}}</h2>
+    <div class="fallout-maw-list-grid two-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponSlotMode"}}</span>
+        <select name="system.weaponSlotRequirement.mode">
+          {{#each weaponSlotRequirementModeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+    </div>
+    <div class="fallout-maw-hidden-controls">
+      {{#each weaponSlotSelections}}
+      <input type="checkbox" name="system.weaponSlotRequirement.slots.{{selectionKey}}" data-weapon-slot-input="{{selectionKey}}" {{checked selected}}>
+      {{/each}}
+    </div>
+    <div class="fallout-maw-occupied-slot-groups">
+      {{#each weaponSlotGroups}}
+      <section class="fallout-maw-occupied-slot-group">
+        <strong>{{raceNames}}</strong>
+        <div class="fallout-maw-occupied-slot-list">
+          {{#each slots}}
+          <button type="button" class="fallout-maw-occupied-slot-choice {{#if selected}}active{{/if}}" data-weapon-slot-choice="{{selectionKey}}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}">
+            {{label}}
+          </button>
+          {{/each}}
+        </div>
+      </section>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoWeaponSlots"}}</p>
+      {{/each}}
+    </div>
+  </section>
+
   <section class="fallout-maw-panel fallout-maw-description-panel">
     <h2>{{localize "FALLOUTMAW.Common.Description"}}</h2>
     {{#if editable}}
@@ -504,6 +539,29 @@
     </div>
 
     <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.WeaponSpecialProperties"}}</h3>
+      <button type="button" data-add-weapon-special-property><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddSpecialProperty"}}</button>
+    </div>
+    <div class="fallout-maw-settings-table fallout-maw-weapon-special-properties">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Type"}}</span>
+        <span></span>
+      </div>
+      {{#each specialProperties}}
+      <div class="fallout-maw-settings-row">
+        <select name="{{../path}}.specialProperties.{{index}}">
+          {{#each choices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <button type="button" data-delete-weapon-special-property="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoSpecialProperties"}}</p>
+      {{/each}}
+    </div>
+
+    <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.WeaponUseRequirements"}}</h3>
       <button type="button" data-add-weapon-requirement><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddRequirement"}}</button>
     </div>
@@ -553,8 +611,12 @@
       {{#each actionChoices}}
       {{#if selected}}
       <section class="fallout-maw-weapon-action-settings" data-weapon-action-settings="{{key}}">
-        <h3>{{label}}</h3>
+        <h3>{{displayLabel}}</h3>
         <div class="fallout-maw-list-grid three-columns">
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponActionName"}}</span>
+            <input type="text" name="{{../path}}.{{key}}.name" value="{{name}}" placeholder="{{label}}">
+          </label>
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponActionPointCost"}}</span>
             <input type="number" name="{{../path}}.{{key}}.actionPointCost" value="{{actionPointCost}}" min="0" step="1">

@@ -5,6 +5,7 @@ import {
   isContainerItem
 } from "../utils/inventory-containers.mjs";
 import { DISEASE_CREATE_OPTION, TRAUMA_CREATE_OPTION } from "../constants.mjs";
+import { migrateItemData } from "../migrations/documents.mjs";
 
 const MANUALLY_CREATABLE_ITEM_TYPES = Object.freeze(["gear", "ability"]);
 
@@ -25,8 +26,7 @@ export class FalloutMaWItem extends Item {
 
   static migrateData(source) {
     source = super.migrateData(source);
-    if (["weapon", "armor"].includes(source?.type)) source.type = "gear";
-    return source;
+    return migrateItemData(source);
   }
 
   _initializeSource(data, options = {}) {

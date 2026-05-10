@@ -17,8 +17,14 @@ import {
 import { getLevelThreshold } from "../settings/levels.mjs";
 import { getItemActorLoadWeight, getItemContainerParentId } from "../utils/inventory-containers.mjs";
 import { requestDamageApplication } from "../combat/damage-hub.mjs";
+import { migrateActorData } from "../migrations/documents.mjs";
 
 export class FalloutMaWActor extends Actor {
+  static migrateData(source) {
+    source = super.migrateData(source);
+    return migrateActorData(source);
+  }
+
   static async createDialog(data = {}, createOptions = {}, dialogOptions = {}, renderOptions = {}) {
     const creatureOptions = getCreatureOptions();
     const selectedCreatureType = foundry.utils.getProperty(data, "system.creature.typeId") || "";

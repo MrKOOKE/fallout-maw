@@ -17,9 +17,14 @@ import {
 import { getLevelThreshold } from "../settings/levels.mjs";
 import { createDefaultInventorySize } from "../settings/creature-options.mjs";
 import {
+  canUseWeaponSlotForItem,
   getEquipmentSlotSelectionKey,
   getRaceEquipmentSlotsForItem,
-  getSelectedEquipmentSlotKeys
+  getRequiredWeaponSlotsForItem,
+  getSelectedEquipmentSlotKeys,
+  getWeaponSlotRequirement,
+  getWeaponSlotRequirementSize,
+  isContainerWeaponSetKey
 } from "../utils/equipment-slots.mjs";
   import {
     completeResearch,
@@ -806,12 +811,27 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #highlightEquipmentSlotsForItem(itemData) {
     const race = this.#getCurrentRace();
     const selectedSlots = getRaceEquipmentSlotsForItem(race, itemData);
-    if (!selectedSlots.length) return false;
+    let highlighted = false;
 
     for (const slot of selectedSlots) {
       this.element?.querySelector(`[data-equipment-slot="${CSS.escape(slot.key)}"]`)?.classList.add("drop-match-preview");
+      highlighted = true;
     }
-    return true;
+
+    for (const set of race?.weaponSets ?? []) {
+      for (const slot of set.slots ?? []) {
+        if (!canUseWeaponSlotForItem(race, itemData, set.key, slot.key)) continue;
+        this.element?.querySelector(
+          `[data-weapon-set="${CSS.escape(set.key)}"][data-weapon-slot="${CSS.escape(slot.key)}"]`
+        )?.classList.add("drop-match-preview");
+        highlighted = true;
+      }
+    }
+    this.element?.querySelectorAll("[data-weapon-set^='container:'][data-weapon-slot]").forEach(element => {
+      element.classList.add("drop-match-preview");
+      highlighted = true;
+    });
+    return highlighted;
   }
 
   #setInventoryHoverPreview(zone = null, event = null) {
@@ -1425,6 +1445,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (placement.mode === "equipment") {
       return this.#resolveEquipmentPlacement(itemData, placement, excludeItemIds);
     }
+    if (placement.mode === "weapon") {
+      return this.#resolveWeaponPlacement(itemData, placement, excludeItemIds);
+    }
 
     const footprint = getItemFootprint(itemData);
     return {
@@ -1432,6 +1455,48 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       width: footprint.width,
       height: footprint.height
     };
+  }
+
+  #resolveWeaponPlacement(itemData, placement, excludeItemIds = []) {
+    if (placement.mode !== "weapon") return placement;
+
+    const requiredSlotKeys = this.#getWeaponPlacementSlotKeys(itemData, placement);
+    if (!requiredSlotKeys.length) return null;
+
+    const blocked = requiredSlotKeys.some(slotKey => Boolean(this.#getWeaponItemForSlot(
+      placement.weaponSet,
+      slotKey,
+      excludeItemIds
+    )));
+    if (blocked) return null;
+
+    const footprint = getItemFootprint(itemData);
+    return {
+      ...placement,
+      width: footprint.width,
+      height: footprint.height
+    };
+  }
+
+  #getWeaponPlacementSlotKeys(itemData, placement = {}) {
+    const race = this.#getCurrentRace();
+    const setKey = String(placement.weaponSet ?? "");
+    const primarySlotKey = String(placement.weaponSlot ?? "");
+    if (!setKey || !primarySlotKey) return [];
+
+    if (isContainerWeaponSetKey(setKey)) {
+      const inventory = prepareDisplayInventoryContext(this.actor, race);
+      const set = (inventory.weaponSets ?? []).find(entry => entry.key === setKey);
+      const slots = set?.slots ?? [];
+      const primaryIndex = slots.findIndex(slot => slot.key === primarySlotKey);
+      if (primaryIndex < 0) return [];
+      const size = getWeaponSlotRequirementSize(itemData);
+      const requiredSlots = slots.slice(primaryIndex, primaryIndex + size);
+      return requiredSlots.length === size ? requiredSlots.map(slot => slot.key) : [];
+    }
+
+    if (!canUseWeaponSlotForItem(race, itemData, setKey, primarySlotKey)) return [];
+    return getRequiredWeaponSlotsForItem(race, itemData, setKey, primarySlotKey).map(slot => slot.key);
   }
 
   #resolveInventoryPlacement(itemData, placement, excludeItemIds = [], reservedPlacements = [], parentId = ROOT_CONTAINER_ID) {
@@ -1473,6 +1538,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }) ?? null;
   }
 
+  #getWeaponItemForSlot(setKey = "", slotKey = "", excludeItemIds = []) {
+    const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+    const inventory = prepareDisplayInventoryContext(this.actor, this.#getCurrentRace());
+    const set = (inventory.weaponSets ?? []).find(entry => entry.key === setKey);
+    const slot = (set?.slots ?? []).find(entry => entry.key === slotKey);
+    const itemId = String(slot?.item?.id ?? "");
+    return itemId && !excluded.has(itemId) ? this.actor.items.get(itemId) ?? null : null;
+  }
+
   #getCurrentRace() {
     return getCreatureOptions().races.find(entry => entry.id === this.actor.system?.creature?.raceId) ?? null;
   }
@@ -1493,13 +1567,17 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       && getItemFootprint(sourceSystem).width === getItemFootprint(targetSystem).width
       && getItemFootprint(sourceSystem).height === getItemFootprint(targetSystem).height
       && serializeSet(getSelectedEquipmentSlotKeys(sourceSystem)) === serializeSet(getSelectedEquipmentSlotKeys(targetSystem))
+      && serializeWeaponSlotRequirement(sourceSystem) === serializeWeaponSlotRequirement(targetSystem)
       && serializeItemFunctions(sourceSystem.functions) === serializeItemFunctions(targetSystem.functions)
     );
   }
 
   #showInventoryContextMenu(item, event) {
     this.#closeInventoryContextMenu();
-    const isSlottedEquipment = item.system?.placement?.mode === "equipment";
+    const placementMode = String(item.system?.placement?.mode ?? "");
+    const isSlottedEquipment = placementMode === "equipment";
+    const isSlottedWeapon = placementMode === "weapon";
+    const isSlottedItem = isSlottedEquipment || isSlottedWeapon;
     const isEquipped = Boolean(item.system?.equipped);
     const isContainer = isContainerItem(item);
     const menu = document.createElement("nav");
@@ -1513,12 +1591,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
     }
-    if (isSlottedEquipment || isEquipped) {
+    if (isSlottedItem || isEquipped) {
       menuOptions.push(["unequip", "fa-hand", game.i18n.localize("FALLOUTMAW.Item.Unequip")]);
     } else {
       menuOptions.push(["equip", "fa-shirt", game.i18n.localize("FALLOUTMAW.Item.Equip")]);
     }
-    if (!isSlottedEquipment) {
+    if (!isSlottedItem) {
       menuOptions.push(["copy", "fa-copy", game.i18n.localize("FALLOUTMAW.Common.Copy")]);
     }
     menuOptions.push(["delete", "fa-trash", game.i18n.localize("FALLOUTMAW.Common.Delete")]);
@@ -1935,6 +2013,11 @@ function hexToRgb(hexColor) {
 
 function serializeSet(set) {
   return Array.from(set).sort().join("|");
+}
+
+function serializeWeaponSlotRequirement(system = {}) {
+  const requirement = getWeaponSlotRequirement(system);
+  return `${requirement.mode}:${serializeSet(requirement.selectedKeys)}`;
 }
 
 function serializeItemFunctions(functions = {}) {

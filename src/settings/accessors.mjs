@@ -30,7 +30,8 @@ import {
   TIME_MECHANICS_IGNORED_SETTING,
   TIME_NEEDS_PLAYERS_ONLY_SETTING,
   TOOL_SETTINGS_SETTING,
-  TRAUMA_SETTINGS_SETTING
+  TRAUMA_SETTINGS_SETTING,
+  TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING
 } from "./constants.mjs";
 import { createEmptyCreatureOptions, normalizeCreatureOptions } from "./creature-options.mjs";
 import { createDefaultDiseaseSettings, normalizeDiseaseSettings } from "./diseases.mjs";
@@ -55,6 +56,11 @@ export const DEFAULT_SKILL_CHECK_CONTROL = Object.freeze({
   resetEdgeModeAfterUse: false
 });
 
+export const DEFAULT_TOKEN_ACTION_HUD_DAMAGE_ICONS = Object.freeze({
+  damageReductionIcon: `systems/${FALLOUT_MAW.id}/assets/HUD/ac-badge__-no-bg-preview_carve.photos.png`,
+  damageBlockedIcon: `systems/${FALLOUT_MAW.id}/assets/HUD/ac-gold-shield-badge-Picsart-BackgroundRemover.png`
+});
+
 const SKILL_CHECK_RESULT_MODES = new Set(["standard", "criticalSuccess", "success", "failure", "criticalFailure"]);
 const SKILL_CHECK_EDGE_MODES = new Set(["none", "advantage", "disadvantage"]);
 
@@ -75,6 +81,19 @@ export function normalizeSkillCheckControl(value = {}) {
     resetModifiersAfterUse: Boolean(source.resetModifiersAfterUse),
     resetEdgeModeAfterUse: Boolean(source.resetEdgeModeAfterUse)
   };
+}
+
+export function normalizeTokenActionHudDamageIcons(value = {}) {
+  const source = value && typeof value === "object" ? value : {};
+  return {
+    damageReductionIcon: normalizeImageSettingPath(source.damageReductionIcon, DEFAULT_TOKEN_ACTION_HUD_DAMAGE_ICONS.damageReductionIcon),
+    damageBlockedIcon: normalizeImageSettingPath(source.damageBlockedIcon, DEFAULT_TOKEN_ACTION_HUD_DAMAGE_ICONS.damageBlockedIcon)
+  };
+}
+
+function normalizeImageSettingPath(value, fallback) {
+  const path = String(value ?? "").trim();
+  return path || fallback;
 }
 
 function toInteger(value) {
@@ -365,6 +384,20 @@ export function getSkillCheckControl() {
 export async function setSkillCheckControl(value) {
   const normalized = normalizeSkillCheckControl(value);
   await game.settings.set(FALLOUT_MAW.id, SKILL_CHECK_CONTROL_SETTING, normalized);
+  return normalized;
+}
+
+export function getTokenActionHudDamageIcons() {
+  try {
+    return normalizeTokenActionHudDamageIcons(game.settings.get(FALLOUT_MAW.id, TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING));
+  } catch (_error) {
+    return normalizeTokenActionHudDamageIcons();
+  }
+}
+
+export async function setTokenActionHudDamageIcons(value) {
+  const normalized = normalizeTokenActionHudDamageIcons(value);
+  await game.settings.set(FALLOUT_MAW.id, TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING, normalized);
   return normalized;
 }
 

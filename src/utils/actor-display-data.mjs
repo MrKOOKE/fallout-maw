@@ -2,8 +2,13 @@ import { createDefaultInventorySize } from "../settings/creature-options.mjs";
 import { getCurrencySettings } from "../settings/accessors.mjs";
 import {
   getEquipmentSlotSelectionKey,
-  getSelectedEquipmentSlotKeys
+  getRequiredWeaponSlotsForItem,
+  getSelectedEquipmentSlotKeys,
+  getWeaponSlotRequirement,
+  getWeaponSlotRequirementSize,
+  isContainerWeaponSetKey
 } from "./equipment-slots.mjs";
+import { getLimbHealingCap } from "../combat/damage-hub.mjs";
 import {
   getContainerContentsWeight,
   getContainerDimensions,
@@ -116,7 +121,7 @@ export function prepareInventoryContext(actor, race) {
   });
 
   const weaponSets = [
-    ...(race?.weaponSets ?? []).map(set => prepareWeaponSetContext(set, race, topLevelItems, assignedItemIds)),
+    ...(race?.weaponSets ?? []).map(set => prepareWeaponSetContext(set, race, topLevelItems, assignedItemIds, actor)),
     ...prepareContainerWeaponSets(actor, topLevelItems, assignedItemIds)
   ];
 
@@ -161,15 +166,19 @@ export function prepareInventoryContext(actor, race) {
   };
 }
 
-function prepareWeaponSetContext(set, race, topLevelItems, assignedItemIds) {
+function prepareWeaponSetContext(set, race, topLevelItems, assignedItemIds, actor = null) {
   return {
     ...set,
-    slots: (set.slots ?? []).map(slot => prepareWeaponSlotContext({
+    slots: (set.slots ?? []).map((slot, index, slots) => prepareWeaponSlotContext({
       setKey: set.key,
       slot,
+      slotIndex: index,
+      setSlots: slots,
       label: (race?.limbs ?? []).find(entry => entry.key === slot.limbKey)?.label || slot.limbKey || slot.key,
       topLevelItems,
-      assignedItemIds
+      assignedItemIds,
+      race,
+      actor
     }))
   };
 }
@@ -197,27 +206,99 @@ function prepareContainerWeaponSets(actor, topLevelItems, assignedItemIds) {
               label,
               containerId: entry.item.id
             },
+            slotIndex: index,
+            setSlots: Array.from({ length: entry.extraWeaponSlots }, (_slotValue, slotIndex) => ({
+              key: getContainerWeaponSlotKey(slotIndex),
+              label: game.i18n.format("FALLOUTMAW.Item.ContainerExtraWeaponSlotLabel", { number: slotIndex + 1 }),
+              containerId: entry.item.id
+            })),
             label,
             topLevelItems,
-            assignedItemIds
+            assignedItemIds,
+            actor
           });
         })
       };
     });
 }
 
-function prepareWeaponSlotContext({ setKey = "", slot = {}, label = "", topLevelItems = [], assignedItemIds = null } = {}) {
-  const item = topLevelItems.find(candidate => (
-    candidate.placement?.mode === "weapon"
-    && candidate.placement?.weaponSet === setKey
-    && candidate.placement?.weaponSlot === slot.key
-  ));
+function prepareWeaponSlotContext({
+  setKey = "",
+  slot = {},
+  slotIndex = 0,
+  setSlots = [],
+  label = "",
+  topLevelItems = [],
+  assignedItemIds = null,
+  race = null,
+  actor = null
+} = {}) {
+  const occupant = findWeaponSlotOccupant({
+    setKey,
+    slot,
+    slotIndex,
+    setSlots,
+    topLevelItems,
+    race,
+    actor
+  });
+  const item = occupant?.item ?? null;
   if (item) assignedItemIds?.add(item.id);
   return {
     ...slot,
     label: label || slot.label || slot.key,
-    item
+    item: item ? {
+      ...item,
+      phantom: Boolean(occupant?.phantom),
+      disabled: Boolean(occupant?.disabled)
+    } : null,
+    phantom: Boolean(occupant?.phantom),
+    disabled: Boolean(occupant?.disabled)
   };
+}
+
+function findWeaponSlotOccupant({ setKey = "", slot = {}, slotIndex = 0, setSlots = [], topLevelItems = [], race = null, actor = null } = {}) {
+  for (const candidate of topLevelItems) {
+    const placement = candidate.placement ?? {};
+    if (placement.mode !== "weapon" || placement.weaponSet !== setKey) continue;
+    if (placement.weaponSlot === slot.key) {
+      return {
+        item: candidate,
+        phantom: false,
+        disabled: isWeaponSlotOccupantDisabled(actor, race, candidate)
+      };
+    }
+
+    if (!isPhantomWeaponSlotForItem({ setKey, slot, slotIndex, setSlots, item: candidate, race })) continue;
+    return {
+      item: candidate,
+      phantom: true,
+      disabled: isWeaponSlotOccupantDisabled(actor, race, candidate)
+    };
+  }
+  return null;
+}
+
+function isPhantomWeaponSlotForItem({ setKey = "", slot = {}, slotIndex = 0, setSlots = [], item = null, race = null } = {}) {
+  const placement = item?.placement ?? {};
+  if (placement.weaponSlot === slot.key) return false;
+
+  if (isContainerWeaponSetKey(setKey)) {
+    const primaryIndex = setSlots.findIndex(entry => entry.key === placement.weaponSlot);
+    if (primaryIndex < 0) return false;
+    const size = getWeaponSlotRequirementSize(item);
+    return slotIndex > primaryIndex && slotIndex < (primaryIndex + size);
+  }
+
+  const requiredSlots = getRequiredWeaponSlotsForItem(race, item, setKey, placement.weaponSlot);
+  return requiredSlots.some(requiredSlot => requiredSlot.key === slot.key);
+}
+
+function isWeaponSlotOccupantDisabled(actor, race, item = null) {
+  if (!actor || !item || isContainerWeaponSetKey(item.placement?.weaponSet)) return false;
+  const requiredSlots = getRequiredWeaponSlotsForItem(race, item, item.placement?.weaponSet, item.placement?.weaponSlot);
+  if (getWeaponSlotRequirement(item).selectedKeys.size && !requiredSlots.length) return true;
+  return requiredSlots.some(slot => slot.limbKey && getLimbHealingCap(actor, slot.limbKey) <= 0);
 }
 
 function getContainerExtraWeaponSlots(container) {
@@ -252,6 +333,7 @@ export function createInventoryItemData(item, allItems, currencies = [], placeme
     priceCurrencyLabel: currencies.find(currency => currency.key === item.system?.priceCurrency)?.label ?? "",
     equipped: Boolean(item.system?.equipped),
     occupiedSlots: item.system?.occupiedSlots ?? {},
+    weaponSlotRequirement: item.system?.weaponSlotRequirement ?? { mode: "oneOf", slots: {} },
     itemFunction: item.system?.itemFunction ?? "",
     isContainer: isContainerItem(item),
     parentId: getItemContainerParentId(item),

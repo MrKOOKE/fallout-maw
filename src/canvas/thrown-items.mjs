@@ -481,9 +481,10 @@ function getActorRootInventoryDimensions(actor) {
 function normalizeDroppedItemData(itemData) {
   const data = foundry.utils.deepClone(itemData);
   delete data._id;
+  const quantity = Math.max(1, toInteger(data.system?.quantity) || 1);
   foundry.utils.mergeObject(data, {
     system: {
-      quantity: 1,
+      quantity,
       equipped: false,
       container: { parentId: "" },
       placement: {

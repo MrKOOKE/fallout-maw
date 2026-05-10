@@ -5,7 +5,9 @@ import {
   getActorNeedSettings,
   getResourceSettings,
   getSkillSettings,
-  getSystemActionSettings
+  getSystemActionSettings,
+  getTokenActionHudDamageIcons,
+  setTokenActionHudDamageIcons
 } from "../settings/accessors.mjs";
 import {
   TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING,
@@ -285,6 +287,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     return this.#token?.actor ?? null;
   }
 
+  close(options = {}) {
+    return super.close({ ...options, animate: false });
+  }
+
   setToken(token) {
     if (this.#token?.id !== token?.id) {
       cancelWeaponAttack();
@@ -301,7 +307,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const activeWeaponSetKey = getActiveHudWeaponSetKey(actor, inventory.weaponSets);
     const selectedWeapon = getSelectedHudWeapon(actor, inventory.weaponSets, activeWeaponSetKey);
     const weaponSet = prepareHudWeaponSet(inventory.weaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "");
-    const weaponActionRows = prepareWeaponActionRows(selectedWeapon);
+    const selectedWeaponSlot = getSelectedHudWeaponSlot(weaponSet, selectedWeapon?.id ?? "");
+    const selectedWeaponDisabled = Boolean(selectedWeaponSlot?.disabled);
+    const weaponActionRows = prepareWeaponActionRows(selectedWeapon, selectedWeaponDisabled);
     const skills = prepareSkillButtons(actor);
     const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg");
     const abilities = prepareOwnedItemButtons(actor, "ability", "icons/svg/aura.svg");
@@ -537,6 +545,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!item || !actionKey) return undefined;
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
+    if (isHudWeaponDisabled(this.actor, item)) return undefined;
     return startWeaponAttack({ token: this.token, weapon: item, actionKey, weaponFunctionId });
   }
 
@@ -717,7 +726,7 @@ function applyMeterSectionCollapsedState(element, section, collapsed) {
   button?.setAttribute("aria-expanded", String(!collapsed));
 }
 
-class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
+export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
   #lastPreviewPercent = null;
 
   static DEFAULT_OPTIONS = {
@@ -734,6 +743,9 @@ class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
       handler: TokenActionHudSettings.handleFormSubmit,
       submitOnChange: false,
       closeOnSubmit: true
+    },
+    actions: {
+      browseHudDamageIcon: this.#onBrowseHudDamageIcon
     }
   };
 
@@ -744,7 +756,7 @@ class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return "Настройки HUD";
+    return game.i18n.localize("FALLOUTMAW.Settings.HUD.Title");
   }
 
   async _prepareContext(options) {
@@ -753,7 +765,8 @@ class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
       ...(await super._prepareContext(options)),
       scale,
       min: TOKEN_ACTION_HUD_SCALE_MIN,
-      max: TOKEN_ACTION_HUD_SCALE_MAX
+      max: TOKEN_ACTION_HUD_SCALE_MAX,
+      damageIcons: getTokenActionHudDamageIcons()
     };
   }
 
@@ -774,7 +787,30 @@ class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
     const data = getFlatFormData(formData);
     const scale = normalizeTokenActionHudScalePercent(data.scale);
     await game.settings.set(FALLOUT_MAW.id, TOKEN_ACTION_HUD_SCALE_SETTING, scale);
+    await setTokenActionHudDamageIcons({
+      damageReductionIcon: data.damageReductionIcon,
+      damageBlockedIcon: data.damageBlockedIcon
+    });
     applyTokenActionHudScale(scale);
+  }
+
+  static async #onBrowseHudDamageIcon(event, target) {
+    event.preventDefault();
+    const field = target.closest("[data-hud-damage-icon-field]");
+    const input = field?.querySelector("input");
+    if (!input) return undefined;
+
+    const picker = new foundry.applications.apps.FilePicker.implementation({
+      type: "image",
+      current: input.value ?? "",
+      callback: path => {
+        input.value = path;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    await picker.browse(undefined, { render: false });
+    return picker.render({ force: true });
   }
 
   #previewScale(range, output) {
@@ -952,9 +988,23 @@ function prepareHudWeaponSet(weaponSets = [], activeSetKey = "", selectedWeaponI
     ...set,
     slots: (set.slots ?? []).map(slot => ({
       ...slot,
-      selected: Boolean(slot.item?.id && slot.item.id === selectedWeaponId)
+      selected: Boolean(slot.item?.id && !slot.phantom && slot.item.id === selectedWeaponId)
     }))
   };
+}
+
+function getSelectedHudWeaponSlot(weaponSet = null, selectedWeaponId = "") {
+  if (!weaponSet || !selectedWeaponId) return null;
+  return (weaponSet.slots ?? []).find(slot => slot.item?.id === selectedWeaponId && !slot.phantom) ?? null;
+}
+
+function isHudWeaponDisabled(actor, weapon) {
+  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId);
+  const inventory = actor ? prepareInventoryContext(actor, race) : { weaponSets: [] };
+  const placement = weapon?.system?.placement ?? {};
+  const set = (inventory.weaponSets ?? []).find(entry => entry.key === placement.weaponSet);
+  const slot = (set?.slots ?? []).find(entry => entry.item?.id === weapon?.id && !entry.phantom);
+  return Boolean(slot?.disabled);
 }
 
 function getActiveHudWeaponSetKey(actor, weaponSets = []) {
@@ -964,7 +1014,7 @@ function getActiveHudWeaponSetKey(actor, weaponSets = []) {
 
   const selectedId = String(actor.getFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG) ?? "");
   const selectedSet = selectedId
-    ? weaponSets.find(set => (set.slots ?? []).some(slot => slot.item?.id === selectedId))
+    ? weaponSets.find(set => (set.slots ?? []).some(slot => slot.item?.id === selectedId && !slot.phantom))
     : null;
   return selectedSet?.key ?? weaponSets[0].key;
 }
@@ -973,20 +1023,20 @@ function getSelectedHudWeapon(actor, weaponSets = [], activeSetKey = "") {
   const set = weaponSets.find(entry => entry.key === activeSetKey) ?? weaponSets[0] ?? null;
   if (!set) return null;
   const selectedId = String(actor.getFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG) ?? "");
-  const weaponIds = (set.slots ?? []).map(slot => slot.item?.id).filter(Boolean);
+  const weaponIds = (set.slots ?? []).filter(slot => !slot.phantom).map(slot => slot.item?.id).filter(Boolean);
   const resolvedId = weaponIds.includes(selectedId) ? selectedId : weaponIds[0];
   return resolvedId ? actor.items.get(resolvedId) ?? null : null;
 }
 
 function getFirstWeaponIdInSet(weaponSet = null) {
-  return (weaponSet?.slots ?? []).map(slot => slot.item?.id).find(Boolean) ?? "";
+  return (weaponSet?.slots ?? []).filter(slot => !slot.phantom).map(slot => slot.item?.id).find(Boolean) ?? "";
 }
 
 function isMiddleMouseClick(event) {
   return event?.button === 1;
 }
 
-function prepareWeaponActionRows(selectedWeapon) {
+function prepareWeaponActionRows(selectedWeapon, forceDisabled = false) {
   if (!selectedWeapon) return [];
   return getEnabledWeaponFunctions(selectedWeapon)
     .sort((left, right) => {
@@ -998,25 +1048,25 @@ function prepareWeaponActionRows(selectedWeapon) {
       label: weaponFunction.isPrimary
         ? selectedWeapon.name
         : weaponFunction.name || `${game.i18n.localize("FALLOUTMAW.Item.AdditionalWeaponFunction")} ${index + 1}`,
-      actions: prepareWeaponActionButtonsForFunction(selectedWeapon, weaponFunction)
+      actions: prepareWeaponActionButtonsForFunction(selectedWeapon, weaponFunction, forceDisabled)
     }))
     .filter(row => row.actions.length);
 }
 
-function prepareWeaponActionButtonsForFunction(selectedWeapon, weaponFunction) {
+function prepareWeaponActionButtonsForFunction(selectedWeapon, weaponFunction, forceDisabled = false) {
   const actions = weaponFunction?.data?.availableActions ?? {};
   const buttons = [
-    { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot"), disabled: !actions.aimedShot },
-    { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot"), disabled: !actions.snapshot },
-    { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst"), disabled: !actions.burst, visible: Boolean(actions.burst) },
-    { key: "volley", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley"), disabled: !actions.volley, visible: Boolean(actions.volley) },
-    { key: "throwItem", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionThrowItem"), disabled: !actions.throwItem, visible: Boolean(actions.throwItem) },
-    { key: "aimedThrowItem", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedThrowItem"), disabled: !actions.aimedThrowItem, visible: Boolean(actions.aimedThrowItem) },
-    { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack"), disabled: !actions.meleeAttack },
-    { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), disabled: !actions.aimedMeleeAttack }
+    { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot"), configured: Boolean(actions.aimedShot) },
+    { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot"), configured: Boolean(actions.snapshot) },
+    { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst"), configured: Boolean(actions.burst), visible: Boolean(actions.burst) },
+    { key: "volley", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley"), configured: Boolean(actions.volley), visible: Boolean(actions.volley) },
+    { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack"), configured: Boolean(actions.meleeAttack) },
+    { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), configured: Boolean(actions.aimedMeleeAttack) }
   ];
-  return buttons.filter(action => action.visible !== false && !action.disabled).map(action => ({
+  return buttons.filter(action => action.visible !== false && action.configured).map(action => ({
     ...action,
+    label: String(weaponFunction.data?.[action.key]?.name ?? "").trim() || action.label,
+    disabled: forceDisabled,
     itemId: selectedWeapon.id,
     weaponFunctionId: weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id,
     img: normalizeImagePath(selectedWeapon.img, "icons/svg/combat.svg"),

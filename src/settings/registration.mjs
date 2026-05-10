@@ -20,6 +20,7 @@ import { ResourceSettingsConfig } from "../apps/resource-settings-config.mjs";
 import { SkillFormulasConfig } from "../apps/skill-formulas-config.mjs";
 import { SystemActionSettingsConfig } from "../apps/system-action-settings-config.mjs";
 import { ToolSettingsConfig } from "../apps/tool-settings-config.mjs";
+import { TokenActionHudSettings } from "../apps/token-action-hud.mjs";
 import { TraumaSettingsConfig } from "../apps/trauma-settings-config.mjs";
 import { refreshPreparedActors, syncSettingsIntoSystemConfig } from "./accessors.mjs";
 import {
@@ -29,6 +30,7 @@ import {
   DAMAGE_TYPES_SETTING,
   DISEASE_SETTINGS_SETTING,
   LEVELS_SETTING,
+  MIGRATION_STATE_SETTING,
   PROFICIENCY_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
   SKILL_CHECK_CONTROL_SETTING,
@@ -39,6 +41,7 @@ import {
   TOOL_SETTINGS_SETTING,
   TRAUMA_SETTINGS_SETTING,
   TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING,
+  TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING,
   TOKEN_ACTION_HUD_ENABLED_SETTING,
   TOKEN_ACTION_HUD_SCALE_SETTING
 } from "./constants.mjs";
@@ -47,9 +50,25 @@ import { createDefaultDiseaseSettings } from "./diseases.mjs";
 import { createDefaultLevelSettings } from "./levels.mjs";
 import { createDefaultSystemActionSettings, createDefaultToolSettings } from "./tools.mjs";
 import { createDefaultTraumaSettings } from "./traumas.mjs";
-import { DEFAULT_SKILL_CHECK_CONTROL, normalizeSkillCheckControl } from "./accessors.mjs";
+import {
+  DEFAULT_SKILL_CHECK_CONTROL,
+  DEFAULT_TOKEN_ACTION_HUD_DAMAGE_ICONS,
+  normalizeSkillCheckControl,
+  normalizeTokenActionHudDamageIcons
+} from "./accessors.mjs";
+import { migrateSystemSettings } from "../migrations/settings.mjs";
 
 export function registerSystemSettings() {
+  game.settings.register(FALLOUT_MAW.id, MIGRATION_STATE_SETTING, {
+    name: "Migration State",
+    scope: "world",
+    config: false,
+    type: Object,
+    default: {
+      completed: []
+    }
+  });
+
   game.settings.register(FALLOUT_MAW.id, CREATURE_OPTIONS_SETTING, {
     name: localize("FALLOUTMAW.Settings.CreatureOptions.Title"),
     scope: "world",
@@ -209,6 +228,14 @@ export function registerSystemSettings() {
     default: {}
   });
 
+  game.settings.register(FALLOUT_MAW.id, TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING, {
+    name: "Token Action HUD Damage Icons",
+    scope: "world",
+    config: false,
+    type: Object,
+    default: normalizeTokenActionHudDamageIcons(DEFAULT_TOKEN_ACTION_HUD_DAMAGE_ICONS)
+  });
+
   game.settings.registerMenu(FALLOUT_MAW.id, "creatureOptionsMenu", {
     name: localize("FALLOUTMAW.Settings.CreatureOptions.Title"),
     label: localize("FALLOUTMAW.Settings.Open"),
@@ -305,9 +332,18 @@ export function registerSystemSettings() {
     restricted: true
   });
 
+  game.settings.registerMenu(FALLOUT_MAW.id, "tokenActionHudSettingsMenu", {
+    name: localize("FALLOUTMAW.Settings.HUD.Title"),
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-table-cells-large",
+    type: TokenActionHudSettings,
+    restricted: true
+  });
+
 }
 
 export async function finalizeSystemSettings() {
+  await migrateSystemSettings();
   syncSettingsIntoSystemConfig();
   refreshPreparedActors();
 }

@@ -1,6 +1,6 @@
 import { TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
-import { groupRaceEquipmentSlotsBySet } from "../utils/equipment-slots.mjs";
+import { groupRaceEquipmentSlotsBySet, groupRaceWeaponSlotsBySet } from "../utils/equipment-slots.mjs";
 import {
   ITEM_FUNCTIONS,
   createToolFunctionKey,
@@ -69,13 +69,17 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const type = item.type;
     const priceCurrency = item.system?.priceCurrency ?? "";
     const occupiedSlots = item.system?.occupiedSlots ?? {};
+    const weaponSlotRequirement = item.system?.weaponSlotRequirement ?? {};
+    const occupiedWeaponSlots = weaponSlotRequirement.slots ?? {};
     const creatureOptions = getCreatureOptions();
     const characteristicSettings = getCharacteristicSettings();
     const damageTypeSettings = getDamageTypeSettings();
     const toolSettings = getToolSettings();
     const skillSettings = getSkillSettings();
     const equipmentSlotGroups = groupRaceEquipmentSlotsBySet(creatureOptions);
+    const weaponSlotGroups = groupRaceWeaponSlotsBySet(creatureOptions);
     const equipmentSlotSelections = new Map();
+    const weaponSlotSelections = new Map();
     const hasContainerFunction = hasItemFunction(item, ITEM_FUNCTIONS.container);
     const hasDamageMitigationFunction = hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation);
     const hasConditionFunction = hasItemFunction(item, ITEM_FUNCTIONS.condition);
@@ -133,6 +137,18 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       }
     }
 
+    for (const group of weaponSlotGroups) {
+      for (const slot of group.slots) {
+        if (!weaponSlotSelections.has(slot.selectionKey)) {
+          weaponSlotSelections.set(slot.selectionKey, {
+            selectionKey: slot.selectionKey,
+            label: slot.label,
+            selected: Boolean(occupiedWeaponSlots[slot.selectionKey])
+          });
+        }
+      }
+    }
+
     return foundry.utils.mergeObject(context, {
       item,
       system: item.system,
@@ -175,6 +191,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
           selected: Boolean(occupiedSlots[slot.selectionKey])
         }))
       })),
+      weaponSlotRequirementModeChoices: buildWeaponSlotRequirementModeChoices(weaponSlotRequirement.mode),
+      weaponSlotSelections: Array.from(weaponSlotSelections.values()),
+      weaponSlotGroups: weaponSlotGroups.map(group => ({
+        raceNames: group.races.join(", "),
+        slots: group.slots.map(slot => ({
+          ...slot,
+          selected: Boolean(occupiedWeaponSlots[slot.selectionKey])
+        }))
+      })),
       damageMitigationModeChoices: buildDamageMitigationModeChoices(item),
       damageMitigationTable: buildDamageMitigationTable(item, creatureOptions, damageTypeSettings),
       totalWeight: item.totalWeight
@@ -185,6 +210,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     await super._onRender(context, options);
     this.element?.querySelectorAll("[data-equipment-slot-choice]").forEach(button => {
       button.addEventListener("click", event => this.#onEquipmentSlotChoice(event));
+    });
+    this.element?.querySelectorAll("[data-weapon-slot-choice]").forEach(button => {
+      button.addEventListener("click", event => this.#onWeaponSlotChoice(event));
     });
     this.element?.querySelectorAll("[data-weapon-action-choice]").forEach(button => {
       button.addEventListener("click", event => this.#onWeaponActionChoice(event));
@@ -233,6 +261,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-delete-weapon-resource-cost]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteWeaponResourceCost(event));
     });
+    this.element?.querySelectorAll("[data-add-weapon-special-property]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddWeaponSpecialProperty(event));
+    });
+    this.element?.querySelectorAll("[data-delete-weapon-special-property]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteWeaponSpecialProperty(event));
+    });
     this.element?.querySelectorAll("[data-add-weapon-requirement]").forEach(button => {
       button.addEventListener("click", event => this.#onAddWeaponRequirement(event));
     });
@@ -267,6 +301,22 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.setAttribute("aria-pressed", String(input.checked));
     });
     return this.item.update({ [`system.occupiedSlots.${key}`]: input.checked });
+  }
+
+  #onWeaponSlotChoice(event) {
+    event.preventDefault();
+    const key = event.currentTarget.dataset.weaponSlotChoice;
+    if (!key) return;
+
+    const input = this.element.querySelector(`[data-weapon-slot-input="${key}"]`);
+    if (!input) return;
+
+    input.checked = !input.checked;
+    this.element.querySelectorAll(`[data-weapon-slot-choice="${key}"]`).forEach(button => {
+      button.classList.toggle("active", input.checked);
+      button.setAttribute("aria-pressed", String(input.checked));
+    });
+    return this.item.update({ [`system.weaponSlotRequirement.slots.${key}`]: input.checked });
   }
 
   #onWeaponActionChoice(event) {
@@ -424,6 +474,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return this.item.update({
         "system.functions.weapon.enabled": false,
         "system.functions.weapon.resourceCosts": [],
+        "system.functions.weapon.specialProperties": [],
         "system.functions.additionalWeapons": {}
       });
     }
@@ -475,6 +526,24 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const costs = [...(foundry.utils.getProperty(this.item, path)?.resourceCosts ?? [])];
     costs.splice(index, 1);
     return this.item.update({ [`${path}.resourceCosts`]: costs });
+  }
+
+  #onAddWeaponSpecialProperty(event) {
+    event.preventDefault();
+    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const properties = [...(foundry.utils.getProperty(this.item, path)?.specialProperties ?? [])];
+    properties.push("hitAllConeTargets");
+    return this.item.update({ [`${path}.specialProperties`]: properties });
+  }
+
+  #onDeleteWeaponSpecialProperty(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteWeaponSpecialProperty);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const properties = [...(foundry.utils.getProperty(this.item, path)?.specialProperties ?? [])];
+    properties.splice(index, 1);
+    return this.item.update({ [`${path}.specialProperties`]: properties });
   }
 
   #onAddWeaponRequirement(event) {
@@ -885,6 +954,7 @@ function buildWeaponFunctionSection({
     damageTypeRows: buildWeaponDamageTypeRowsForData(weaponData, damageTypeSettings, sourceWeaponData),
     skillChoices: buildWeaponSkillChoicesForData(weaponData, skillSettings),
     resourceCosts: buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction),
+    specialProperties: buildWeaponSpecialPropertyRowsForData(weaponData),
     requirements: buildWeaponRequirementRowsForData(weaponData, characteristicSettings, skillSettings),
     actionChoices: buildWeaponActionChoicesForData(weaponData, sourceWeaponData, damageTypeSettings)
   };
@@ -899,6 +969,23 @@ function buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction) {
     index,
     amount: Number(cost.amount) || 0,
     typeChoices: buildWeaponResourceTypeChoices(cost.type, hasConditionFunction)
+  }));
+}
+
+function buildWeaponSpecialPropertyRowsForData(weaponData) {
+  return (weaponData?.specialProperties ?? []).map((property, index) => ({
+    index,
+    choices: buildWeaponSpecialPropertyChoices(property)
+  }));
+}
+
+function buildWeaponSpecialPropertyChoices(selected) {
+  return [{
+    value: "hitAllConeTargets",
+    label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialHitAllConeTargets")
+  }].map(choice => ({
+    ...choice,
+    selected: choice.value === String(selected ?? "")
   }));
 }
 
@@ -932,6 +1019,17 @@ function buildWeaponRequirementKeyChoices(type, selected, characteristicSettings
     value: entry.key,
     label: entry.label,
     selected: entry.key === String(selected ?? "")
+  }));
+}
+
+function buildWeaponSlotRequirementModeChoices(selected) {
+  const value = selected === "all" ? "all" : "oneOf";
+  return [
+    { value: "oneOf", label: game.i18n.localize("FALLOUTMAW.Item.WeaponSlotModeOneOf") },
+    { value: "all", label: game.i18n.localize("FALLOUTMAW.Item.WeaponSlotModeAll") }
+  ].map(choice => ({
+    ...choice,
+    selected: choice.value === value
   }));
 }
 
@@ -1066,13 +1164,12 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {},
     { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot") },
     { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst") },
     { key: "volley", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley"), isVolley: true },
-    { key: "throwItem", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionThrowItem") },
-    { key: "aimedThrowItem", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedThrowItem") },
     { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack"), isMelee: true },
     { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), isMelee: true }
   ].map(action => {
     const actionData = weaponData?.[action.key] ?? {};
     const sourceActionData = sourceWeaponData?.[action.key] ?? {};
+    const actionName = String(actionData?.name ?? "").trim();
     const hasActionCone = Object.hasOwn(sourceActionData, "attackConeDegrees");
     const thrust = prepareWeaponAttackModeSettings(actionData?.thrust);
     const swing = prepareWeaponAttackModeSettings(actionData?.swing);
@@ -1082,6 +1179,8 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {},
     }
     return {
       ...action,
+      name: actionName,
+      displayLabel: actionName || action.label,
       selected: Boolean(actions[action.key]),
       isBurst: action.key === "burst",
       isVolley: action.key === "volley",
@@ -1148,28 +1247,30 @@ function createDefaultWeaponFunctionData(source = {}) {
       max: 0
     },
     resourceCosts: [],
+    specialProperties: [],
     requirements: [],
     availableActions: {
       aimedShot: false,
       snapshot: false,
       burst: false,
       volley: false,
-      throwItem: false,
-      aimedThrowItem: false,
       meleeAttack: false,
       aimedMeleeAttack: false
     },
     aimedShot: {
+      name: "",
       actionPointCost: DEFAULT_WEAPON_ACTION_POINT_COST,
       attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
       criticalFailureConsequences: []
     },
     snapshot: {
+      name: "",
       actionPointCost: DEFAULT_WEAPON_ACTION_POINT_COST,
       attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
       criticalFailureConsequences: []
     },
     burst: {
+      name: "",
       actionPointCost: DEFAULT_WEAPON_ACTION_POINT_COST,
       attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
       count: 3,
@@ -1177,6 +1278,7 @@ function createDefaultWeaponFunctionData(source = {}) {
       criticalFailureConsequences: []
     },
     volley: {
+      name: "",
       actionPointCost: DEFAULT_WEAPON_ACTION_POINT_COST,
       damageRadius: 0,
       regionRadius: 0,
@@ -1188,16 +1290,6 @@ function createDefaultWeaponFunctionData(source = {}) {
       explosionSoundPath: "",
       criticalFailureConsequences: []
     },
-    throwItem: {
-      actionPointCost: DEFAULT_WEAPON_ACTION_POINT_COST,
-      attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
-      criticalFailureConsequences: []
-    },
-    aimedThrowItem: {
-      actionPointCost: DEFAULT_WEAPON_ACTION_POINT_COST,
-      attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
-      criticalFailureConsequences: []
-    },
     meleeAttack: createDefaultWeaponMeleeActionData(),
     aimedMeleeAttack: createDefaultWeaponMeleeActionData()
   }, foundry.utils.deepClone(source), { inplace: false });
@@ -1205,6 +1297,7 @@ function createDefaultWeaponFunctionData(source = {}) {
 
 function createDefaultWeaponMeleeActionData() {
   return {
+    name: "",
     actionPointCost: DEFAULT_WEAPON_ACTION_POINT_COST,
     attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
     criticalFailureConsequences: [],

@@ -54,10 +54,17 @@
                 <div class="fallout-maw-slot-card-label">{{label}}</div>
                 <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large" data-weapon-set="{{../key}}" data-weapon-slot="{{key}}" data-drop-zone title="{{label}}">
                   {{#if item}}
-                  <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+                  {{#if phantom}}
+                  <article class="fallout-maw-inventory-item fallout-maw-draggable-item phantom {{#if disabled}}unusable{{/if}}" data-tooltip-item="{{item.id}}">
                     <img src="{{item.img}}" alt="{{item.name}}">
                     {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
                   </article>
+                  {{else}}
+                  <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}} {{#if phantom}}phantom{{/if}} {{#if disabled}}unusable{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+                    <img src="{{item.img}}" alt="{{item.name}}">
+                    {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
+                  </article>
+                  {{/if}}
                   {{/if}}
                 </div>
               </div>

@@ -1,6 +1,9 @@
 const { ArrayField, BooleanField, HTMLField, NumberField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
+const WEAPON_SPECIAL_PROPERTIES = Object.freeze({
+  hitAllConeTargets: "hitAllConeTargets"
+});
 
 export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
   static defineSchema() {
@@ -18,6 +21,13 @@ export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
       occupiedSlots: new TypedObjectField(new BooleanField({ required: true, initial: false }), {
         required: true,
         initial: {}
+      }),
+      weaponSlotRequirement: new SchemaField({
+        mode: new StringField({ required: true, blank: false, choices: ["oneOf", "all"], initial: "oneOf" }),
+        slots: new TypedObjectField(new BooleanField({ required: true, initial: false }), {
+          required: true,
+          initial: {}
+        })
       }),
       placement: new SchemaField({
         mode: new StringField({ required: true, blank: true, initial: "inventory" }),
@@ -116,20 +126,25 @@ function weaponFunctionField({ named = false } = {}) {
       max: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
     }),
     resourceCosts: new ArrayField(weaponResourceCostField(), { required: true, initial: [] }),
+    specialProperties: new ArrayField(new StringField({
+      required: true,
+      blank: false,
+      choices: Object.values(WEAPON_SPECIAL_PROPERTIES),
+      initial: WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets
+    }), { required: true, initial: [] }),
     requirements: new ArrayField(weaponRequirementField(), { required: true, initial: [] }),
     availableActions: new SchemaField({
       aimedShot: new BooleanField({ required: true, initial: false }),
       snapshot: new BooleanField({ required: true, initial: false }),
       burst: new BooleanField({ required: true, initial: false }),
       volley: new BooleanField({ required: true, initial: false }),
-      throwItem: new BooleanField({ required: true, initial: false }),
-      aimedThrowItem: new BooleanField({ required: true, initial: false }),
       meleeAttack: new BooleanField({ required: true, initial: false }),
       aimedMeleeAttack: new BooleanField({ required: true, initial: false })
     }),
     aimedShot: weaponActionSettingsField(),
     snapshot: weaponActionSettingsField(),
     burst: new SchemaField({
+      name: new StringField({ required: true, blank: true, initial: "" }),
       actionPointCost: new NumberField({ required: true, integer: true, min: 0, initial: DEFAULT_WEAPON_ACTION_POINT_COST }),
       attackConeDegrees: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES }),
       count: new NumberField({ required: true, integer: true, min: 1, initial: 3 }),
@@ -137,6 +152,7 @@ function weaponFunctionField({ named = false } = {}) {
       criticalFailureConsequences: new ArrayField(weaponCriticalFailureConsequenceField(), { required: true, initial: [] })
     }),
     volley: new SchemaField({
+      name: new StringField({ required: true, blank: true, initial: "" }),
       actionPointCost: new NumberField({ required: true, integer: true, min: 0, initial: DEFAULT_WEAPON_ACTION_POINT_COST }),
       damageRadius: new NumberField({ required: true, min: 0, initial: 0 }),
       regionRadius: new NumberField({ required: true, min: 0, initial: 0 }),
@@ -148,8 +164,6 @@ function weaponFunctionField({ named = false } = {}) {
       explosionSoundPath: new StringField({ required: true, blank: true, initial: "" }),
       criticalFailureConsequences: new ArrayField(weaponCriticalFailureConsequenceField(), { required: true, initial: [] })
     }),
-    throwItem: weaponActionSettingsField(),
-    aimedThrowItem: weaponActionSettingsField(),
     meleeAttack: weaponMeleeActionSettingsField(),
     aimedMeleeAttack: weaponMeleeActionSettingsField()
   };
@@ -169,6 +183,7 @@ function weaponDamageEntryField() {
 
 function weaponActionSettingsField() {
   return new SchemaField({
+    name: new StringField({ required: true, blank: true, initial: "" }),
     actionPointCost: new NumberField({ required: true, integer: true, min: 0, initial: DEFAULT_WEAPON_ACTION_POINT_COST }),
     attackConeDegrees: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES }),
     criticalFailureConsequences: new ArrayField(weaponCriticalFailureConsequenceField(), { required: true, initial: [] })
@@ -177,6 +192,7 @@ function weaponActionSettingsField() {
 
 function weaponMeleeActionSettingsField() {
   return new SchemaField({
+    name: new StringField({ required: true, blank: true, initial: "" }),
     actionPointCost: new NumberField({ required: true, integer: true, min: 0, initial: DEFAULT_WEAPON_ACTION_POINT_COST }),
     attackConeDegrees: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES }),
     criticalFailureConsequences: new ArrayField(weaponCriticalFailureConsequenceField(), { required: true, initial: [] }),

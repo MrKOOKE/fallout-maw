@@ -1,17 +1,35 @@
 <div class="fallout-maw-config-body fallout-maw-token-action-hud-config">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Настройки HUD</h2>
+      <h2>{{localize "FALLOUTMAW.Settings.HUD.Title"}}</h2>
     </header>
 
     <label class="fallout-maw-token-action-hud-scale-field">
-      <span>Масштаб</span>
+      <span>{{localize "FALLOUTMAW.Settings.HUD.Scale"}}</span>
       <strong data-token-action-hud-scale-output>{{scale}}%</strong>
       <input type="range" name="scale" value="{{scale}}" min="{{min}}" max="{{max}}" step="1" data-token-action-hud-scale>
     </label>
+
+    <div class="fallout-maw-token-action-hud-icon-grid">
+      <label class="fallout-maw-stacked-field" data-hud-damage-icon-field>
+        <span>{{localize "FALLOUTMAW.Settings.HUD.DamageReductionIcon"}}</span>
+        <div class="fallout-maw-image-picker-field">
+          <input type="text" name="damageReductionIcon" value="{{damageIcons.damageReductionIcon}}">
+          <button type="button" data-action="browseHudDamageIcon" title="{{localize 'FALLOUTMAW.Common.Image'}}"><i class="fa-solid fa-folder-open"></i></button>
+        </div>
+      </label>
+
+      <label class="fallout-maw-stacked-field" data-hud-damage-icon-field>
+        <span>{{localize "FALLOUTMAW.Settings.HUD.DamageBlockedIcon"}}</span>
+        <div class="fallout-maw-image-picker-field">
+          <input type="text" name="damageBlockedIcon" value="{{damageIcons.damageBlockedIcon}}">
+          <button type="button" data-action="browseHudDamageIcon" title="{{localize 'FALLOUTMAW.Common.Image'}}"><i class="fa-solid fa-folder-open"></i></button>
+        </div>
+      </label>
+    </div>
   </section>
 
   <footer class="sheet-footer flexrow">
-    <button type="submit"><i class="fa-solid fa-save"></i> Сохранить</button>
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
   </footer>
 </div>
