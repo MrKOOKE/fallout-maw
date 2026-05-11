@@ -215,6 +215,7 @@
       "DamageSourceName": "Название",
       "DamageSourceDamage": "Урон",
       "DamageSourceDamageTypes": "Типы урона",
+      "DamageSourceExplosion": "Взрыв",
       "WeaponDamage": "Урон",
       "WeaponDamageMode": "Режим урона",
       "WeaponDamageModeManual": "Урон",

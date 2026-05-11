@@ -24,6 +24,7 @@ const TextEditor = foundry.applications.ux.TextEditor.implementation;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
 const DEFAULT_RELOAD_ACTION_POINT_COST = 2;
+const DEFAULT_ATTACK_ANIMATION_DELAY_MS = 200;
 const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 20;
 const DEFAULT_ITEM_SHEET_HEIGHT = 4000;
 let itemSheetSourceSyncHooksRegistered = false;
@@ -193,6 +194,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       hasModuleFunction,
       weaponModuleTargetChoices: buildWeaponModuleTargetChoices(item.system?.functions?.module?.targetFunction),
       damageSourceDamageTypeRows: buildDamageSourceDamageTypeRows(item, damageTypeSettings),
+      damageSourceVolleyRegionDamageRows: buildDamageSourceVolleyRegionDamageRows(item, damageTypeSettings),
       hasConditionFunction,
       conditionRecoveryMethodRows: buildConditionRecoveryMethodRows(item, toolSettings),
       hasWeaponFunction,
@@ -267,6 +269,18 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-damage-source-percent]").forEach(input => {
       input.addEventListener("input", event => this.#onDamageSourcePercentInput(event));
       input.addEventListener("change", event => this.#onDamageSourcePercentChange(event));
+    });
+    this.element?.querySelectorAll("[data-add-damage-source-volley-region-damage]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddDamageSourceVolleyRegionDamage(event));
+    });
+    this.element?.querySelectorAll("[data-delete-damage-source-volley-region-damage]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteDamageSourceVolleyRegionDamage(event));
+    });
+    this.element?.querySelectorAll("[data-browse-damage-source-attack-sound]").forEach(button => {
+      button.addEventListener("click", event => this.#onBrowseDamageSourceAttackSound(event));
+    });
+    this.element?.querySelectorAll("[data-browse-damage-source-explosion-sound]").forEach(button => {
+      button.addEventListener("click", event => this.#onBrowseDamageSourceExplosionSound(event));
     });
     this.element?.querySelectorAll("[data-weapon-damage-mode]").forEach(select => {
       select.addEventListener("change", event => this.#onWeaponDamageModeChange(event));
@@ -969,6 +983,27 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.item.update({ "system.functions.damageSource.damageTypes": entries });
   }
 
+  #onAddDamageSourceVolleyRegionDamage(event) {
+    event.preventDefault();
+    const entries = readDamageSourceVolleyRegionDamageRows(this.element);
+    const damageTypes = getDamageTypeSettings();
+    const existingKeys = new Set(entries.map(entry => entry.damageTypeKey));
+    const damageTypeKey = damageTypes.find(type => !existingKeys.has(type.key))?.key
+      ?? damageTypes.at(0)?.key
+      ?? "firearm";
+    entries.push({ damageTypeKey, amount: 0 });
+    return this.item.update({ "system.functions.damageSource.volley.regionDamageEntries": entries });
+  }
+
+  #onDeleteDamageSourceVolleyRegionDamage(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteDamageSourceVolleyRegionDamage);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const entries = readDamageSourceVolleyRegionDamageRows(this.element);
+    entries.splice(index, 1);
+    return this.item.update({ "system.functions.damageSource.volley.regionDamageEntries": entries });
+  }
+
   #onWeaponDamageModeChange(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -1086,6 +1121,38 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.preventDefault();
     const section = getWeaponFunctionSection(event.currentTarget);
     const input = section?.querySelector("[data-weapon-explosion-sound-input]");
+    if (!input) return undefined;
+    const picker = new foundry.applications.apps.FilePicker.implementation({
+      type: "audio",
+      current: input.value ?? "",
+      callback: path => {
+        input.value = path;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    await picker.browse(undefined, { render: false });
+    return picker.render({ force: true });
+  }
+
+  async #onBrowseDamageSourceAttackSound(event) {
+    event.preventDefault();
+    const input = this.element?.querySelector("[data-damage-source-attack-sound-input]");
+    if (!input) return undefined;
+    const picker = new foundry.applications.apps.FilePicker.implementation({
+      type: "audio",
+      current: input.value ?? "",
+      callback: path => {
+        input.value = path;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    await picker.browse(undefined, { render: false });
+    return picker.render({ force: true });
+  }
+
+  async #onBrowseDamageSourceExplosionSound(event) {
+    event.preventDefault();
+    const input = this.element?.querySelector("[data-damage-source-explosion-sound-input]");
     if (!input) return undefined;
     const picker = new foundry.applications.apps.FilePicker.implementation({
       type: "audio",
@@ -1377,7 +1444,7 @@ function buildWeaponFunctionSection({
     resourceCosts: buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction),
     specialProperties: buildWeaponSpecialPropertyRowsForData(weaponData),
     requirements: buildWeaponRequirementRowsForData(weaponData, characteristicSettings, skillSettings),
-    actionChoices: buildWeaponActionChoicesForData(weaponData, sourceWeaponData, damageTypeSettings)
+    actionChoices: buildWeaponActionChoicesForData(effectiveWeaponData, sourceWeaponData, damageTypeSettings)
   };
 }
 
@@ -1613,6 +1680,13 @@ function buildDamageSourceDamageTypeRows(item, damageTypeSettings) {
   );
 }
 
+function buildDamageSourceVolleyRegionDamageRows(item, damageTypeSettings) {
+  return buildVolleyRegionDamageRowsForData(
+    item.system?.functions?.damageSource?.volley?.regionDamageEntries,
+    damageTypeSettings
+  );
+}
+
 function buildWeaponDamageModeChoices(selected = "manual") {
   const value = String(selected ?? "") === "source" ? "source" : "manual";
   return [
@@ -1638,7 +1712,27 @@ function getWeaponDisplayData(weaponData = {}) {
     damage: source.damage,
     pellets: Math.max(1, toInteger(source.pellets) || 1),
     damageTypeKey: source.damageTypeKey,
-    damageTypes: source.damageTypes
+    damageTypes: source.damageTypes,
+    attackAnimationKey: String(source.attackAnimationKey ?? ""),
+    attackSoundPath: String(source.attackSoundPath ?? ""),
+    attackAnimationDelayMs: Math.max(0, toInteger(source.attackAnimationDelayMs)),
+    volley: mergeDamageSourceVolleyData(weaponData.volley, source.volley)
+  };
+}
+
+function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
+  return {
+    ...(weaponVolley ?? {}),
+    damageRadius: Math.max(0, Number(sourceVolley?.damageRadius) || 0),
+    regionRadius: Math.max(0, Number(sourceVolley?.regionRadius) || 0),
+    regionDamageEntries: Array.isArray(sourceVolley?.regionDamageEntries)
+      ? foundry.utils.deepClone(sourceVolley.regionDamageEntries)
+      : [],
+    regionDurationSeconds: Math.max(0, toInteger(sourceVolley?.regionDurationSeconds)),
+    regionDelaySeconds: Math.max(0, toInteger(sourceVolley?.regionDelaySeconds)),
+    regionRadiusDeltaMeters: Number(sourceVolley?.regionRadiusDeltaMeters) || 0,
+    explosionAnimationKey: String(sourceVolley?.explosionAnimationKey ?? ""),
+    explosionSoundPath: String(sourceVolley?.explosionSoundPath ?? "")
   };
 }
 
@@ -1893,6 +1987,9 @@ function createDefaultDamageSourceFunctionData(source = {}) {
     pellets: 1,
     damageTypeKey: "firearm",
     damageTypes: [{ key: "firearm", percent: 100 }],
+    attackAnimationKey: "",
+    attackSoundPath: "",
+    attackAnimationDelayMs: DEFAULT_ATTACK_ANIMATION_DELAY_MS,
     accuracyBonus: 0,
     criticalChanceModifier: 0,
     criticalDamagePercent: 0,
@@ -1901,8 +1998,22 @@ function createDefaultDamageSourceFunctionData(source = {}) {
       value: 0,
       max: 0
     },
-    penetration: 0
+    penetration: 0,
+    volley: createDefaultDamageSourceVolleyData()
   }, foundry.utils.deepClone(source), { inplace: false });
+}
+
+function createDefaultDamageSourceVolleyData() {
+  return {
+    damageRadius: 0,
+    regionRadius: 0,
+    regionDamageEntries: [],
+    regionDurationSeconds: 0,
+    regionDelaySeconds: 0,
+    regionRadiusDeltaMeters: 0,
+    explosionAnimationKey: "",
+    explosionSoundPath: ""
+  };
 }
 
 function createDefaultWeaponFunctionData(source = {}) {
@@ -1915,7 +2026,7 @@ function createDefaultWeaponFunctionData(source = {}) {
     damageTypes: [{ key: "firearm", percent: 100 }],
     attackAnimationKey: "",
     attackSoundPath: "",
-    attackAnimationDelayMs: 0,
+    attackAnimationDelayMs: DEFAULT_ATTACK_ANIMATION_DELAY_MS,
     proficiencyKey: "pistol",
     skillKey: "rangedCombat",
     accuracyBonus: 0,
@@ -2171,6 +2282,14 @@ function readVolleyRegionDamageRows(root) {
   return normalizeVolleyRegionDamageEntries(rows.map(row => ({
     damageTypeKey: String(row.querySelector("[data-volley-region-damage-type]")?.value ?? "").trim(),
     amount: Math.max(0, toInteger(row.querySelector("[data-volley-region-damage-amount]")?.value))
+  })));
+}
+
+function readDamageSourceVolleyRegionDamageRows(root) {
+  const rows = Array.from(root?.querySelectorAll("[data-damage-source-volley-region-damage-row]") ?? []);
+  return normalizeVolleyRegionDamageEntries(rows.map(row => ({
+    damageTypeKey: String(row.querySelector("[data-damage-source-volley-region-damage-type]")?.value ?? "").trim(),
+    amount: Math.max(0, toInteger(row.querySelector("[data-damage-source-volley-region-damage-amount]")?.value))
   })));
 }
 

@@ -496,6 +496,68 @@
       </label>
     </div>
     <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.DamageSourceExplosion"}}</h3>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponVolleyDamageRadius"}}</span>
+        <input type="number" name="system.functions.damageSource.volley.damageRadius" value="{{system.functions.damageSource.volley.damageRadius}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponExplosionAnimation"}}</span>
+        <input type="text" name="system.functions.damageSource.volley.explosionAnimationKey" value="{{system.functions.damageSource.volley.explosionAnimationKey}}">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponExplosionSound"}}</span>
+        <div class="fallout-maw-image-picker-field">
+          <input type="text" name="system.functions.damageSource.volley.explosionSoundPath" value="{{system.functions.damageSource.volley.explosionSoundPath}}" data-damage-source-explosion-sound-input>
+          <button type="button" data-browse-damage-source-explosion-sound title="{{localize 'FILES.Browse'}}"><i class="fa-solid fa-music"></i></button>
+        </div>
+      </label>
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.WeaponVolleyRegion"}}</h3>
+      <button type="button" data-add-damage-source-volley-region-damage><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponVolleyAddRegionDamage"}}</button>
+    </div>
+    <div class="fallout-maw-settings-table fallout-maw-damage-entry-table fallout-maw-volley-region-damage">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Item.WeaponDamageType"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span></span>
+      </div>
+      {{#each damageSourceVolleyRegionDamageRows}}
+      <div class="fallout-maw-settings-row" data-damage-source-volley-region-damage-row="{{index}}">
+        <select name="system.functions.damageSource.volley.regionDamageEntries.{{index}}.damageTypeKey" data-damage-source-volley-region-damage-type>
+          {{#each choices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="number" name="system.functions.damageSource.volley.regionDamageEntries.{{index}}.amount" value="{{amount}}" min="0" step="1" data-damage-source-volley-region-damage-amount>
+        <button type="button" class="fallout-maw-icon-delete-button" data-delete-damage-source-volley-region-damage="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponVolleyNoRegionDamage"}}</p>
+      {{/each}}
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadius"}}</span>
+        <input type="number" name="system.functions.damageSource.volley.regionRadius" value="{{system.functions.damageSource.volley.regionRadius}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDuration"}}</span>
+        <input type="number" name="system.functions.damageSource.volley.regionDurationSeconds" value="{{system.functions.damageSource.volley.regionDurationSeconds}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDelay"}}</span>
+        <input type="number" name="system.functions.damageSource.volley.regionDelaySeconds" value="{{system.functions.damageSource.volley.regionDelaySeconds}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadiusDelta"}}</span>
+        <input type="number" name="system.functions.damageSource.volley.regionRadiusDeltaMeters" value="{{system.functions.damageSource.volley.regionRadiusDeltaMeters}}" step="1">
+      </label>
+    </div>
+    <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.DamageSourceDamageTypes"}}</h3>
       <button type="button" data-add-damage-source-damage-type><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddDamageType"}}</button>
     </div>
@@ -516,6 +578,26 @@
         <button type="button" data-delete-damage-source-damage-type="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
       </div>
       {{/each}}
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.WeaponAttackPresentation"}}</h3>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponAttackAnimation"}}</span>
+        <input type="text" name="system.functions.damageSource.attackAnimationKey" value="{{system.functions.damageSource.attackAnimationKey}}">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponAttackSound"}}</span>
+        <div class="fallout-maw-image-picker-field">
+          <input type="text" name="system.functions.damageSource.attackSoundPath" value="{{system.functions.damageSource.attackSoundPath}}" data-damage-source-attack-sound-input>
+          <button type="button" data-browse-damage-source-attack-sound title="{{localize 'FILES.Browse'}}"><i class="fa-solid fa-music"></i></button>
+        </div>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponAttackDelay"}}</span>
+        <input type="number" name="system.functions.damageSource.attackAnimationDelayMs" value="{{system.functions.damageSource.attackAnimationDelayMs}}" min="0" step="1">
+      </label>
     </div>
     <input type="hidden" name="system.functions.damageSource.damageTypeKey" value="{{system.functions.damageSource.damageTypeKey}}">
   </section>
@@ -904,12 +986,12 @@
         <div class="fallout-maw-list-grid three-columns">
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyDamageRadius"}}</span>
-            <input type="number" name="{{../path}}.volley.damageRadius" value="{{volleyDamageRadius}}" min="0" step="1">
+            <input type="number" name="{{../path}}.volley.damageRadius" value="{{volleyDamageRadius}}" min="0" step="1" {{#if ../usesDamageSource}}disabled{{/if}}>
           </label>
         </div>
         <div class="fallout-maw-panel-header">
           <h4>{{localize "FALLOUTMAW.Item.WeaponVolleyRegion"}}</h4>
-          <button type="button" data-add-volley-region-damage><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponVolleyAddRegionDamage"}}</button>
+          <button type="button" data-add-volley-region-damage {{#if ../usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponVolleyAddRegionDamage"}}</button>
         </div>
         <div class="fallout-maw-settings-table fallout-maw-damage-entry-table fallout-maw-volley-region-damage">
           <div class="fallout-maw-settings-row fallout-maw-grid-header">
@@ -919,13 +1001,13 @@
           </div>
           {{#each volleyRegionDamageRows}}
           <div class="fallout-maw-settings-row" data-volley-region-damage-row="{{index}}">
-            <select name="{{../../path}}.volley.regionDamageEntries.{{index}}.damageTypeKey" data-volley-region-damage-type>
+            <select name="{{../../path}}.volley.regionDamageEntries.{{index}}.damageTypeKey" data-volley-region-damage-type {{#if ../../usesDamageSource}}disabled{{/if}}>
               {{#each choices}}
               <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
               {{/each}}
             </select>
-            <input type="number" name="{{../../path}}.volley.regionDamageEntries.{{index}}.amount" value="{{amount}}" min="0" step="1" data-volley-region-damage-amount>
-            <button type="button" class="fallout-maw-icon-delete-button" data-delete-volley-region-damage="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+            <input type="number" name="{{../../path}}.volley.regionDamageEntries.{{index}}.amount" value="{{amount}}" min="0" step="1" data-volley-region-damage-amount {{#if ../../usesDamageSource}}disabled{{/if}}>
+            <button type="button" class="fallout-maw-icon-delete-button" data-delete-volley-region-damage="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}" {{#if ../../usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-trash"></i></button>
           </div>
           {{else}}
           <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponVolleyNoRegionDamage"}}</p>
@@ -934,19 +1016,19 @@
         <div class="fallout-maw-list-grid three-columns">
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadius"}}</span>
-            <input type="number" name="{{../path}}.volley.regionRadius" value="{{volleyRegionRadius}}" min="0" step="1">
+            <input type="number" name="{{../path}}.volley.regionRadius" value="{{volleyRegionRadius}}" min="0" step="1" {{#if ../usesDamageSource}}disabled{{/if}}>
           </label>
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDuration"}}</span>
-            <input type="number" name="{{../path}}.volley.regionDurationSeconds" value="{{volleyRegionDurationSeconds}}" min="0" step="1">
+            <input type="number" name="{{../path}}.volley.regionDurationSeconds" value="{{volleyRegionDurationSeconds}}" min="0" step="1" {{#if ../usesDamageSource}}disabled{{/if}}>
           </label>
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDelay"}}</span>
-            <input type="number" name="{{../path}}.volley.regionDelaySeconds" value="{{volleyRegionDelaySeconds}}" min="0" step="1">
+            <input type="number" name="{{../path}}.volley.regionDelaySeconds" value="{{volleyRegionDelaySeconds}}" min="0" step="1" {{#if ../usesDamageSource}}disabled{{/if}}>
           </label>
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadiusDelta"}}</span>
-            <input type="number" name="{{../path}}.volley.regionRadiusDeltaMeters" value="{{volleyRegionRadiusDeltaMeters}}" step="1">
+            <input type="number" name="{{../path}}.volley.regionRadiusDeltaMeters" value="{{volleyRegionRadiusDeltaMeters}}" step="1" {{#if ../usesDamageSource}}disabled{{/if}}>
           </label>
         </div>
         {{else}}
@@ -1062,31 +1144,31 @@
     <div class="fallout-maw-list-grid {{#if hasVolleyAction}}three-columns{{else}}two-columns{{/if}}">
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponAttackAnimation"}}</span>
-        <input type="text" name="{{path}}.attackAnimationKey" value="{{weaponData.attackAnimationKey}}">
+        <input type="text" name="{{path}}.attackAnimationKey" value="{{weaponData.attackAnimationKey}}" {{#if usesDamageSource}}disabled{{/if}}>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponAttackSound"}}</span>
         <div class="fallout-maw-image-picker-field">
-          <input type="text" name="{{path}}.attackSoundPath" value="{{weaponData.attackSoundPath}}" data-weapon-attack-sound-input>
-          <button type="button" data-browse-weapon-attack-sound title="{{localize 'FILES.Browse'}}"><i class="fa-solid fa-music"></i></button>
+          <input type="text" name="{{path}}.attackSoundPath" value="{{weaponData.attackSoundPath}}" data-weapon-attack-sound-input {{#if usesDamageSource}}disabled{{/if}}>
+          <button type="button" data-browse-weapon-attack-sound title="{{localize 'FILES.Browse'}}" {{#if usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-music"></i></button>
         </div>
       </label>
       {{#if hasVolleyAction}}
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponExplosionAnimation"}}</span>
-        <input type="text" name="{{path}}.volley.explosionAnimationKey" value="{{weaponData.volley.explosionAnimationKey}}">
+        <input type="text" name="{{path}}.volley.explosionAnimationKey" value="{{weaponData.volley.explosionAnimationKey}}" {{#if usesDamageSource}}disabled{{/if}}>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponExplosionSound"}}</span>
         <div class="fallout-maw-image-picker-field">
-          <input type="text" name="{{path}}.volley.explosionSoundPath" value="{{weaponData.volley.explosionSoundPath}}" data-weapon-explosion-sound-input>
-          <button type="button" data-browse-weapon-explosion-sound title="{{localize 'FILES.Browse'}}"><i class="fa-solid fa-music"></i></button>
+          <input type="text" name="{{path}}.volley.explosionSoundPath" value="{{weaponData.volley.explosionSoundPath}}" data-weapon-explosion-sound-input {{#if usesDamageSource}}disabled{{/if}}>
+          <button type="button" data-browse-weapon-explosion-sound title="{{localize 'FILES.Browse'}}" {{#if usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-music"></i></button>
         </div>
       </label>
       {{/if}}
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponAttackDelay"}}</span>
-        <input type="number" name="{{path}}.attackAnimationDelayMs" value="{{weaponData.attackAnimationDelayMs}}" min="0" step="1">
+        <input type="number" name="{{path}}.attackAnimationDelayMs" value="{{weaponData.attackAnimationDelayMs}}" min="0" step="1" {{#if usesDamageSource}}disabled{{/if}}>
       </label>
     </div>
   </section>

@@ -2610,6 +2610,7 @@ function buildDamageSourceTooltipSection(item) {
   if (effectiveValue || effectiveMax) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), `${formatNumber(effectiveValue)} / ${formatNumber(effectiveMax)} м`]);
   const penetration = toInteger(source?.penetration);
   if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), penetration]);
+  rows.push(...getWeaponVolleyRows(source));
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource"), rows);
 }
 
@@ -3151,6 +3152,9 @@ function mergeWeaponDataWithDamageSource(data = {}, source = {}) {
     pellets: Math.max(1, toInteger(source.pellets) || 1),
     damageTypeKey: source.damageTypeKey,
     damageTypes: source.damageTypes,
+    attackAnimationKey: String(source.attackAnimationKey ?? ""),
+    attackSoundPath: String(source.attackSoundPath ?? ""),
+    attackAnimationDelayMs: Math.max(0, toInteger(source.attackAnimationDelayMs)),
     accuracyBonus: toInteger(data.accuracyBonus) + toInteger(source.accuracyBonus),
     criticalChanceModifier: toInteger(data.criticalChanceModifier) + toInteger(source.criticalChanceModifier),
     criticalDamagePercent: Math.max(0, toInteger(data.criticalDamagePercent) + toInteger(source.criticalDamagePercent)),
@@ -3159,7 +3163,24 @@ function mergeWeaponDataWithDamageSource(data = {}, source = {}) {
       value: Math.max(0, Number(data.effectiveRange?.value) + Number(source.effectiveRange?.value || 0)),
       max: Math.max(0, Number(data.effectiveRange?.max) + Number(source.effectiveRange?.max || 0))
     },
-    penetration: Math.max(0, toInteger(data.penetration) + toInteger(source.penetration))
+    penetration: Math.max(0, toInteger(data.penetration) + toInteger(source.penetration)),
+    volley: mergeDamageSourceVolleyData(data.volley, source.volley)
+  };
+}
+
+function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
+  return {
+    ...(weaponVolley ?? {}),
+    damageRadius: Math.max(0, Number(sourceVolley?.damageRadius) || 0),
+    regionRadius: Math.max(0, Number(sourceVolley?.regionRadius) || 0),
+    regionDamageEntries: Array.isArray(sourceVolley?.regionDamageEntries)
+      ? foundry.utils.deepClone(sourceVolley.regionDamageEntries)
+      : [],
+    regionDurationSeconds: Math.max(0, toInteger(sourceVolley?.regionDurationSeconds)),
+    regionDelaySeconds: Math.max(0, toInteger(sourceVolley?.regionDelaySeconds)),
+    regionRadiusDeltaMeters: Number(sourceVolley?.regionRadiusDeltaMeters) || 0,
+    explosionAnimationKey: String(sourceVolley?.explosionAnimationKey ?? ""),
+    explosionSoundPath: String(sourceVolley?.explosionSoundPath ?? "")
   };
 }
 

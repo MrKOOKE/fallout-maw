@@ -2067,10 +2067,22 @@ function isMatchingMagazineSourceItem(item, sourceItem) {
 function areDamageSourcesEqual(left = {}, right = {}) {
   if (String(left?.name ?? "") !== String(right?.name ?? "")) return false;
   if (toInteger(left?.damage) !== toInteger(right?.damage)) return false;
+  if (toInteger(left?.pellets) !== toInteger(right?.pellets)) return false;
   if (String(left?.damageTypeKey ?? "") !== String(right?.damageTypeKey ?? "")) return false;
+  if (String(left?.attackAnimationKey ?? "") !== String(right?.attackAnimationKey ?? "")) return false;
+  if (String(left?.attackSoundPath ?? "") !== String(right?.attackSoundPath ?? "")) return false;
+  if (toInteger(left?.attackAnimationDelayMs) !== toInteger(right?.attackAnimationDelayMs)) return false;
+  if (toInteger(left?.accuracyBonus) !== toInteger(right?.accuracyBonus)) return false;
+  if (toInteger(left?.criticalChanceModifier) !== toInteger(right?.criticalChanceModifier)) return false;
+  if (toInteger(left?.criticalDamagePercent) !== toInteger(right?.criticalDamagePercent)) return false;
+  if (Number(left?.maxRangeMeters || 0) !== Number(right?.maxRangeMeters || 0)) return false;
+  if (Number(left?.effectiveRange?.value || 0) !== Number(right?.effectiveRange?.value || 0)) return false;
+  if (Number(left?.effectiveRange?.max || 0) !== Number(right?.effectiveRange?.max || 0)) return false;
+  if (toInteger(left?.penetration) !== toInteger(right?.penetration)) return false;
   const leftTypes = normalizeDamageSourceTypeSignature(left?.damageTypes);
   const rightTypes = normalizeDamageSourceTypeSignature(right?.damageTypes);
-  return leftTypes === rightTypes;
+  if (leftTypes !== rightTypes) return false;
+  return normalizeDamageSourceVolleySignature(left?.volley) === normalizeDamageSourceVolleySignature(right?.volley);
 }
 
 function normalizeDamageSourceTypeSignature(entries = []) {
@@ -2078,6 +2090,23 @@ function normalizeDamageSourceTypeSignature(entries = []) {
     .map(entry => `${String(entry?.key ?? "")}:${toInteger(entry?.percent)}`)
     .sort()
     .join("|");
+}
+
+function normalizeDamageSourceVolleySignature(volley = {}) {
+  const regionDamage = (Array.isArray(volley?.regionDamageEntries) ? volley.regionDamageEntries : [])
+    .map(entry => `${String(entry?.damageTypeKey ?? "")}:${toInteger(entry?.amount)}`)
+    .sort()
+    .join("|");
+  return [
+    Number(volley?.damageRadius || 0),
+    Number(volley?.regionRadius || 0),
+    regionDamage,
+    toInteger(volley?.regionDurationSeconds),
+    toInteger(volley?.regionDelaySeconds),
+    Number(volley?.regionRadiusDeltaMeters || 0),
+    String(volley?.explosionAnimationKey ?? ""),
+    String(volley?.explosionSoundPath ?? "")
+  ].join(";");
 }
 
 async function createActorMagazineSourceStack(actor, sourceItem, quantity) {

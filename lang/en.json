@@ -216,6 +216,7 @@
       "DamageSourceName": "Name",
       "DamageSourceDamage": "Damage",
       "DamageSourceDamageTypes": "Damage Types",
+      "DamageSourceExplosion": "Explosion",
       "WeaponDamage": "Damage",
       "WeaponDamageMode": "Damage Mode",
       "WeaponDamageModeManual": "Damage",

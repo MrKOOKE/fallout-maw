@@ -20,8 +20,8 @@ export function registerAttackAnimationSocket() {
   game.socket.on(ATTACK_ANIMATION_SOCKET, handleAttackAnimationSocketMessage);
 }
 
-export async function playWeaponAttackAnimations({ weapon = null, weaponFunctionId = "", trajectories = [], delayMs = 0 } = {}) {
-  const weaponData = getWeaponFunctionById(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) ?? {};
+export async function playWeaponAttackAnimations({ weapon = null, weaponFunctionId = "", weaponData = null, trajectories = [], delayMs = 0 } = {}) {
+  weaponData ??= getWeaponFunctionById(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) ?? {};
   const animationKey = String(weaponData?.attackAnimationKey ?? "").trim();
   const soundPath = String(weaponData?.attackSoundPath ?? "").trim();
   if (!animationKey && !soundPath) return;
@@ -63,8 +63,8 @@ export async function playWeaponAttackAnimations({ weapon = null, weaponFunction
   await playAttackAnimationGroup(payload);
 }
 
-export async function playWeaponExplosionAnimation({ weapon = null, weaponFunctionId = "", center = null, radiusPixels = 0 } = {}) {
-  const weaponData = getWeaponFunctionById(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) ?? {};
+export async function playWeaponExplosionAnimation({ weapon = null, weaponFunctionId = "", weaponData = null, center = null, radiusPixels = 0 } = {}) {
+  weaponData ??= getWeaponFunctionById(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) ?? {};
   const animationKey = String(weaponData?.volley?.explosionAnimationKey ?? "").trim();
   const soundPath = String(weaponData?.volley?.explosionSoundPath ?? "").trim();
   if (!animationKey && !soundPath) return;

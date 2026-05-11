@@ -123,6 +123,9 @@ function damageSourceFunctionField() {
     pellets: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     damageTypeKey: new StringField({ required: true, blank: false, initial: "firearm" }),
     damageTypes: new ArrayField(weaponDamageTypeField(), { required: true, initial: [{ key: "firearm", percent: 100 }] }),
+    attackAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
+    attackSoundPath: new StringField({ required: true, blank: true, initial: "" }),
+    attackAnimationDelayMs: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     accuracyBonus: new NumberField({ required: true, integer: true, initial: 0 }),
     criticalChanceModifier: new NumberField({ required: true, integer: true, initial: 0 }),
     criticalDamagePercent: new NumberField({ required: true, integer: true, initial: 0 }),
@@ -131,7 +134,21 @@ function damageSourceFunctionField() {
       value: new NumberField({ required: true, min: 0, initial: 0 }),
       max: new NumberField({ required: true, min: 0, initial: 0 })
     }),
-    penetration: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+    penetration: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    volley: damageSourceVolleyField()
+  });
+}
+
+function damageSourceVolleyField() {
+  return new SchemaField({
+    damageRadius: new NumberField({ required: true, min: 0, initial: 0 }),
+    regionRadius: new NumberField({ required: true, min: 0, initial: 0 }),
+    regionDamageEntries: new ArrayField(weaponDamageEntryField(), { required: true, initial: [] }),
+    regionDurationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    regionDelaySeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    regionRadiusDeltaMeters: new NumberField({ required: true, initial: 0 }),
+    explosionAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
+    explosionSoundPath: new StringField({ required: true, blank: true, initial: "" })
   });
 }
 

@@ -279,6 +279,7 @@ class WeaponAttackController {
       await playWeaponAttackAnimations({
         weapon: this.weapon,
         weaponFunctionId: this.weaponFunctionId,
+        weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
         trajectories,
         delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
       });
@@ -343,6 +344,7 @@ class WeaponAttackController {
       await playWeaponAttackAnimations({
         weapon: this.weapon,
         weaponFunctionId: this.weaponFunctionId,
+        weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
         trajectories,
         delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
       });
@@ -411,6 +413,7 @@ class WeaponAttackController {
       await playWeaponAttackAnimations({
         weapon: this.weapon,
         weaponFunctionId: this.weaponFunctionId,
+        weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
         trajectories,
         delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
       });
@@ -486,6 +489,7 @@ class WeaponAttackController {
     await playWeaponAttackAnimations({
       weapon: this.weapon,
       weaponFunctionId: this.weaponFunctionId,
+      weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
       trajectories: trajectories.map(trajectory => ({ ...trajectory, delayGroup: 0 })),
       delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
     });
@@ -563,6 +567,7 @@ class WeaponAttackController {
       await playWeaponAttackAnimations({
         weapon: this.weapon,
         weaponFunctionId: this.weaponFunctionId,
+        weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
         trajectories: trajectories.map(trajectory => ({ ...trajectory, delayGroup: 0 })),
         delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
       });
@@ -1011,12 +1016,14 @@ class WeaponAttackController {
       await playWeaponAttackAnimations({
         weapon: this.weapon,
         weaponFunctionId: this.weaponFunctionId,
+        weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
         trajectories: [buildVolleyAnimationTrajectory(geometry)],
         delayMs: 0
       });
       await playWeaponExplosionAnimation({
         weapon: this.weapon,
         weaponFunctionId: this.weaponFunctionId,
+        weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
         center: geometry.end,
         radiusPixels: geometry.radiusPixels
       });
@@ -1398,6 +1405,9 @@ function applyDamageSourceWeaponModifiers(weaponData = {}) {
     pellets: Math.max(1, toInteger(source.pellets) || 1),
     damageTypeKey: source.damageTypeKey,
     damageTypes: source.damageTypes,
+    attackAnimationKey: String(source.attackAnimationKey ?? ""),
+    attackSoundPath: String(source.attackSoundPath ?? ""),
+    attackAnimationDelayMs: Math.max(0, toInteger(source.attackAnimationDelayMs)),
     accuracyBonus: toInteger(weaponData.accuracyBonus) + toInteger(source.accuracyBonus),
     criticalChanceModifier: toInteger(weaponData.criticalChanceModifier) + toInteger(source.criticalChanceModifier),
     criticalDamagePercent: Math.max(0, toInteger(weaponData.criticalDamagePercent) + toInteger(source.criticalDamagePercent)),
@@ -1406,7 +1416,24 @@ function applyDamageSourceWeaponModifiers(weaponData = {}) {
       value: Math.max(0, Number(weaponData.effectiveRange?.value) + Number(source.effectiveRange?.value || 0)),
       max: Math.max(0, Number(weaponData.effectiveRange?.max) + Number(source.effectiveRange?.max || 0))
     },
-    penetration: Math.max(0, toInteger(weaponData.penetration) + toInteger(source.penetration))
+    penetration: Math.max(0, toInteger(weaponData.penetration) + toInteger(source.penetration)),
+    volley: mergeDamageSourceVolleyData(weaponData.volley, source.volley)
+  };
+}
+
+function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
+  return {
+    ...(weaponVolley ?? {}),
+    damageRadius: Math.max(0, Number(sourceVolley?.damageRadius) || 0),
+    regionRadius: Math.max(0, Number(sourceVolley?.regionRadius) || 0),
+    regionDamageEntries: Array.isArray(sourceVolley?.regionDamageEntries)
+      ? foundry.utils.deepClone(sourceVolley.regionDamageEntries)
+      : [],
+    regionDurationSeconds: Math.max(0, toInteger(sourceVolley?.regionDurationSeconds)),
+    regionDelaySeconds: Math.max(0, toInteger(sourceVolley?.regionDelaySeconds)),
+    regionRadiusDeltaMeters: Number(sourceVolley?.regionRadiusDeltaMeters) || 0,
+    explosionAnimationKey: String(sourceVolley?.explosionAnimationKey ?? ""),
+    explosionSoundPath: String(sourceVolley?.explosionSoundPath ?? "")
   };
 }
 
