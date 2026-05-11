@@ -1,6 +1,46 @@
 <div class="fallout-maw-config-body">
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Settings.Proficiencies.InfluenceTitle"}}</h2>
+    </header>
+    <div class="fallout-maw-proficiency-influence-grid">
+      <label class="fallout-maw-split-number-field">
+        <span>{{localize "FALLOUTMAW.Settings.Proficiencies.InfluenceAccuracy"}}</span>
+        <div>
+          <input type="number" data-influence-field="accuracy" data-influence-bound="min" value="{{influence.accuracy.min}}" step="1">
+          <strong>/</strong>
+          <input type="number" data-influence-field="accuracy" data-influence-bound="max" value="{{influence.accuracy.max}}" step="1">
+        </div>
+      </label>
+      <label class="fallout-maw-split-number-field">
+        <span>{{localize "FALLOUTMAW.Settings.Proficiencies.InfluenceDamage"}}</span>
+        <div>
+          <input type="number" data-influence-field="damage" data-influence-bound="min" value="{{influence.damage.min}}" step="1">
+          <strong>/</strong>
+          <input type="number" data-influence-field="damage" data-influence-bound="max" value="{{influence.damage.max}}" step="1">
+        </div>
+      </label>
+      <label class="fallout-maw-split-number-field">
+        <span>{{localize "FALLOUTMAW.Settings.Proficiencies.InfluenceCriticalChance"}}</span>
+        <div>
+          <input type="number" data-influence-field="criticalChance" data-influence-bound="min" value="{{influence.criticalChance.min}}" step="1">
+          <strong>/</strong>
+          <input type="number" data-influence-field="criticalChance" data-influence-bound="max" value="{{influence.criticalChance.max}}" step="1">
+        </div>
+      </label>
+      <label class="fallout-maw-split-number-field">
+        <span>{{localize "FALLOUTMAW.Settings.Proficiencies.InfluenceCriticalDamage"}}</span>
+        <div>
+          <input type="number" data-influence-field="criticalDamage" data-influence-bound="min" value="{{influence.criticalDamage.min}}" step="1">
+          <strong>/</strong>
+          <input type="number" data-influence-field="criticalDamage" data-influence-bound="max" value="{{influence.criticalDamage.max}}" step="1">
+        </div>
+      </label>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
       <h2>{{localize "FALLOUTMAW.Settings.Proficiencies.Title"}}</h2>
       <div class="fallout-maw-button-row">
         <button type="button" data-action="createProficiency"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Settings.Proficiencies.Create"}}</button>

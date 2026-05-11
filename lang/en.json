@@ -36,6 +36,7 @@
       "Code": "Code",
       "Color": "Color",
       "Copy": "Copy",
+      "Cancel": "Cancel",
       "Create": "Create",
       "Currencies": "Currencies",
       "DamageDefenses": "Damage Defenses",
@@ -241,6 +242,8 @@
       "WeaponExplosionSound": "Explosion Sound",
       "WeaponAttackPresentation": "Attack Presentation",
       "WeaponAttackDelay": "Delay Between Attacks, ms",
+      "WeaponType": "Weapon Type",
+      "WeaponCombatStats": "Combat Stats",
       "WeaponSkill": "Used Skill",
       "WeaponAccuracyBonus": "Accuracy Change",
       "WeaponCriticalChanceModifier": "Critical Chance Change",
@@ -530,6 +533,11 @@
       "Proficiencies": {
         "Create": "Create Proficiency",
         "Empty": "No proficiencies created.",
+        "InfluenceAccuracy": "Accuracy",
+        "InfluenceCriticalChance": "Critical Chance",
+        "InfluenceCriticalDamage": "Critical Damage",
+        "InfluenceDamage": "Damage",
+        "InfluenceTitle": "Proficiency Influence",
         "Title": "Proficiency Settings"
       },
       "Resources": {

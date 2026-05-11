@@ -6,9 +6,7 @@ import {
   getDamageTypeSettings,
   getResourceSettings,
   getSkillSettings,
-  getSystemActionSettings,
-  getTokenActionHudDamageIcons,
-  setTokenActionHudDamageIcons
+  getSystemActionSettings
 } from "../settings/accessors.mjs";
 import {
   TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING,
@@ -18,7 +16,12 @@ import {
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getLimbHealingCap, getResourceLimitState } from "../combat/damage-hub.mjs";
 import { MOVEMENT_RESOURCE_PREVIEW_HOOK } from "../combat/movement-resources.mjs";
-import { cancelWeaponAttack, startWeaponAttack } from "../combat/weapon-attack-controller.mjs";
+import {
+  cancelWeaponAttack,
+  hasRequiredWeaponReloadActionPoints,
+  spendWeaponReloadActionPoints,
+  startWeaponAttack
+} from "../combat/weapon-attack-controller.mjs";
 import { openLimbDamageDialog } from "./limb-damage-dialog.mjs";
 import { requestMedicineTarget } from "./medicine-dialog.mjs";
 import {
@@ -816,7 +819,7 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
     id: "fallout-maw-token-action-hud-settings",
     classes: ["fallout-maw", "fallout-maw-config-form", "fallout-maw-token-action-hud-settings"],
     position: {
-      width: 420,
+      width: 380,
       height: "auto"
     },
     window: {
@@ -826,9 +829,6 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
       handler: TokenActionHudSettings.handleFormSubmit,
       submitOnChange: false,
       closeOnSubmit: true
-    },
-    actions: {
-      browseHudDamageIcon: this.#onBrowseHudDamageIcon
     }
   };
 
@@ -848,8 +848,7 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
       ...(await super._prepareContext(options)),
       scale,
       min: TOKEN_ACTION_HUD_SCALE_MIN,
-      max: TOKEN_ACTION_HUD_SCALE_MAX,
-      damageIcons: getTokenActionHudDamageIcons()
+      max: TOKEN_ACTION_HUD_SCALE_MAX
     };
   }
 
@@ -870,30 +869,7 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
     const data = getFlatFormData(formData);
     const scale = normalizeTokenActionHudScalePercent(data.scale);
     await game.settings.set(FALLOUT_MAW.id, TOKEN_ACTION_HUD_SCALE_SETTING, scale);
-    await setTokenActionHudDamageIcons({
-      damageReductionIcon: data.damageReductionIcon,
-      damageBlockedIcon: data.damageBlockedIcon
-    });
     applyTokenActionHudScale(scale);
-  }
-
-  static async #onBrowseHudDamageIcon(event, target) {
-    event.preventDefault();
-    const field = target.closest("[data-hud-damage-icon-field]");
-    const input = field?.querySelector("input");
-    if (!input) return undefined;
-
-    const picker = new foundry.applications.apps.FilePicker.implementation({
-      type: "image",
-      current: input.value ?? "",
-      callback: path => {
-        input.value = path;
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-    });
-
-    await picker.browse(undefined, { render: false });
-    return picker.render({ force: true });
   }
 
   #previewScale(range, output) {
@@ -1284,8 +1260,19 @@ function hasWeaponResourceCostData(weaponData = {}, type = "") {
   return (weaponData?.resourceCosts ?? []).some(cost => String(cost?.type ?? "") === type);
 }
 
+function updateReloadDialogMagazineReadout(dialog, actor, weaponId, weaponFunctionId) {
+  const weapon = actor.items.get(weaponId);
+  const el = dialog.element?.querySelector?.("[data-reload-magazine-readout]");
+  if (!el || !weapon) return;
+  const wd = getWeaponFunctionById(weapon, weaponFunctionId) ?? {};
+  const cur = Math.max(0, toInteger(wd?.magazine?.value));
+  const max = Math.max(0, toInteger(wd?.magazine?.max));
+  el.textContent = `${game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine")}: ${cur} / ${max}`;
+}
+
 async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunctionId = "", application = null } = {}) {
   if (!actor?.isOwner || !weapon) return undefined;
+  const weaponId = weapon.id;
   const weaponData = getWeaponFunctionById(weapon, weaponFunctionId) ?? {};
   if (!hasWeaponResourceCostData(weaponData, "magazine")) return undefined;
 
@@ -1308,7 +1295,29 @@ async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunct
       selected: item.uuid === sourceItem.uuid
     }))
     .filter(entry => entry.quantity > 0);
-  const result = await DialogV2.wait({
+
+  const runReloadStep = async (dialog, action, sourceUuid) => {
+    const freshWeapon = actor.items.get(weaponId);
+    if (!freshWeapon) return;
+    if (!hasRequiredWeaponReloadActionPoints(actor, freshWeapon, weaponFunctionId)) return;
+    try {
+      await requestWeaponReloadOperation({
+        actor,
+        weapon: freshWeapon,
+        weaponFunctionId,
+        action,
+        sourceUuid
+      });
+      await spendWeaponReloadActionPoints(actor, freshWeapon, weaponFunctionId);
+    } catch (error) {
+      ui.notifications.warn(error.message);
+      return;
+    }
+    updateReloadDialogMagazineReadout(dialog, actor, weaponId, weaponFunctionId);
+    await application?.render({ force: true });
+  };
+
+  const dialog = new DialogV2({
     window: {
       title: game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload")
     },
@@ -1316,10 +1325,10 @@ async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunct
       <form class="fallout-maw-reload-dialog-form">
       <div class="fallout-maw-reload-dialog">
         <p><strong>${escapeHTML(sourceLabel)}</strong></p>
-        <p>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"))}: ${current} / ${max}</p>
+        <p data-reload-magazine-readout>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"))}: ${current} / ${max}</p>
         <label>
           <span>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.WeaponMagazineSource"))}</span>
-          <select name="sourceUuid" ${availableSources.length ? "" : "disabled"}>
+          <select name="sourceUuid" data-reload-source-select ${availableSources.length ? "" : "disabled"}>
             ${availableSources.map(entry => `
               <option value="${escapeAttribute(entry.uuid)}" ${entry.selected ? "selected" : ""}>
                 ${escapeHTML(entry.name)} (${entry.quantity})
@@ -1330,52 +1339,64 @@ async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunct
       </div>
       </form>
     `,
+    form: {
+      closeOnSubmit: false
+    },
     buttons: [
       {
         action: "insert",
         label: game.i18n.localize("FALLOUTMAW.Item.WeaponReloadInsert"),
         icon: "fa-solid fa-arrow-down",
         default: true,
-        callback: (_event, button) => ({
-          action: "insert",
-          sourceUuid: readReloadDialogSourceUuid(button)
-        })
+        callback: async (event, button, dlg) => {
+          await runReloadStep(dlg, "insert", readReloadDialogSourceUuid(button));
+        }
       },
       {
         action: "extract",
         label: game.i18n.localize("FALLOUTMAW.Item.WeaponReloadExtract"),
         icon: "fa-solid fa-arrow-up",
-        callback: (_event, button) => ({
-          action: "extract",
-          sourceUuid: readReloadDialogSourceUuid(button) || sourceItem.uuid
-        })
+        callback: async (event, button, dlg) => {
+          await runReloadStep(dlg, "extract", readReloadDialogSourceUuid(button));
+        }
       },
       {
         action: "cancel",
-        label: game.i18n.localize("Cancel"),
+        label: game.i18n.localize("FALLOUTMAW.Common.Cancel"),
         icon: "fa-solid fa-xmark",
-        type: "button"
+        type: "button",
+        callback: (event, button, dlg) => {
+          dlg.close();
+        }
       }
     ],
     position: {
       width: 360
-    },
-    rejectClose: false
+    }
   });
 
-  if (!result || result === "cancel") return undefined;
-  try {
-    await requestWeaponReloadOperation({
-      actor,
-      weapon,
-      weaponFunctionId,
-      action: result.action ?? result,
-      sourceUuid: result.sourceUuid ?? ""
+  dialog.addEventListener("render", () => {
+    const select = dialog.element?.querySelector?.("[data-reload-source-select]");
+    if (!select || select.dataset.reloadAmmoWatcher) return;
+    select.dataset.reloadAmmoWatcher = "1";
+    select.addEventListener("change", async () => {
+      const freshWeapon = actor.items.get(weaponId);
+      if (!freshWeapon) return;
+      const wd = getWeaponFunctionById(freshWeapon, weaponFunctionId) ?? {};
+      const newUuid = String(select.value ?? "").trim();
+      const loadedUuid = String(wd?.magazine?.sourceItemUuid ?? "").trim();
+      const rounds = Math.max(0, toInteger(wd?.magazine?.value));
+      if (!rounds) return;
+      if (newUuid === loadedUuid) return;
+      const configuredSources = getWeaponMagazineSourceItems(wd);
+      const loadedSource = configuredSources.find(item => item.uuid === loadedUuid);
+      if (!loadedSource) return;
+      await runReloadStep(dialog, "extract", loadedSource.uuid);
     });
-  } catch (error) {
-    ui.notifications.warn(error.message);
-  }
-  return application?.render({ force: true });
+  }, { once: true });
+
+  await dialog.render({ force: true });
+  return undefined;
 }
 
 async function requestWeaponReloadOperation({ actor = null, weapon = null, weaponFunctionId = "", action = "", sourceUuid = "" } = {}) {
@@ -1403,13 +1424,24 @@ async function performWeaponReloadOperation({ actorUuid = "", weaponId = "", wea
   const weaponData = getWeaponFunctionById(weapon, weaponFunctionId) ?? {};
   if (!hasWeaponResourceCostData(weaponData, "magazine")) return undefined;
   const configuredSources = getWeaponMagazineSourceItems(weaponData);
-  const sourceItem = configuredSources.find(item => item.uuid === sourceUuid)
+  const loadedUuid = String(weaponData?.magazine?.sourceItemUuid ?? "").trim();
+
+  if (String(action) === "extract") {
+    const extractSource = (loadedUuid ? configuredSources.find(item => item.uuid === loadedUuid) : null)
+      ?? configuredSources.find(item => item.uuid === sourceUuid)
+      ?? getActiveWeaponMagazineSourceItem(weaponData, configuredSources);
+    if (!extractSource || extractSource.actor || !hasItemFunction(extractSource, ITEM_FUNCTIONS.damageSource)) {
+      throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadNoSource"));
+    }
+    return extractWeaponMagazineSource(actor, weapon, weaponFunctionId, weaponData, extractSource);
+  }
+
+  const insertSource = configuredSources.find(item => item.uuid === sourceUuid)
     ?? getActiveWeaponMagazineSourceItem(weaponData, configuredSources);
-  if (!sourceItem || sourceItem.actor || !hasItemFunction(sourceItem, ITEM_FUNCTIONS.damageSource)) {
+  if (!insertSource || insertSource.actor || !hasItemFunction(insertSource, ITEM_FUNCTIONS.damageSource)) {
     throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadNoSource"));
   }
-  if (String(action) === "insert") return insertWeaponMagazineSource(actor, weapon, weaponFunctionId, weaponData, sourceItem);
-  if (String(action) === "extract") return extractWeaponMagazineSource(actor, weapon, weaponFunctionId, weaponData, sourceItem);
+  if (String(action) === "insert") return insertWeaponMagazineSource(actor, weapon, weaponFunctionId, weaponData, insertSource);
   return undefined;
 }
 

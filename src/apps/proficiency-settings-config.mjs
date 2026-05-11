@@ -1,6 +1,7 @@
 import { TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN } from "../formulas/index.mjs";
 import {
+  getProficiencyInfluenceSettings,
   getProficiencySettings,
   resetProficiencySettings,
   setProficiencySettings
@@ -14,6 +15,7 @@ export class ProficiencySettingsConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
     super(options);
     this.proficiencies = getProficiencySettings();
+    this.influence = getProficiencyInfluenceSettings();
   }
 
   static DEFAULT_OPTIONS = {
@@ -46,7 +48,8 @@ export class ProficiencySettingsConfig extends FalloutMaWFormApplicationV2 {
   async _prepareContext(options) {
     return {
       ...(await super._prepareContext(options)),
-      proficiencies: this.proficiencies
+      proficiencies: this.proficiencies,
+      influence: this.influence
     };
   }
 
@@ -57,10 +60,12 @@ export class ProficiencySettingsConfig extends FalloutMaWFormApplicationV2 {
 
   async _processFormData(_event, _form, _formData) {
     const proficiencies = this.#readProficienciesFromForm();
+    const influence = this.#readInfluenceFromForm();
     this.#validateProficiencies(proficiencies);
 
-    await setProficiencySettings(proficiencies);
+    await setProficiencySettings({ entries: proficiencies, influence });
     this.proficiencies = getProficiencySettings();
+    this.influence = getProficiencyInfluenceSettings();
     ui.notifications.info(localize("FALLOUTMAW.Messages.ProficienciesSaved"));
     return this.forceRender();
   }
@@ -68,6 +73,7 @@ export class ProficiencySettingsConfig extends FalloutMaWFormApplicationV2 {
   static #onCreateProficiency(event) {
     event.preventDefault();
     this.proficiencies = this.#readProficienciesFromForm();
+    this.influence = this.#readInfluenceFromForm();
     this.proficiencies.push({
       key: this.#getUniqueKey("newProficiency"),
       abbr: this.#getUniqueAbbr("new"),
@@ -84,6 +90,7 @@ export class ProficiencySettingsConfig extends FalloutMaWFormApplicationV2 {
     if (index < 0) return undefined;
 
     this.proficiencies = this.#readProficienciesFromForm();
+    this.influence = this.#readInfluenceFromForm();
     this.proficiencies.splice(index, 1);
     return this.forceRender();
   }
@@ -92,6 +99,7 @@ export class ProficiencySettingsConfig extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     await resetProficiencySettings();
     this.proficiencies = getProficiencySettings();
+    this.influence = getProficiencyInfluenceSettings();
     return this.forceRender();
   }
 
@@ -103,6 +111,22 @@ export class ProficiencySettingsConfig extends FalloutMaWFormApplicationV2 {
       label: row.querySelector("[data-field='label']")?.value?.trim() ?? "",
       max: Math.max(0, toInteger(row.querySelector("[data-field='max']")?.value))
     }));
+  }
+
+  #readInfluenceFromForm() {
+    return {
+      accuracy: this.#readInfluenceRange("accuracy"),
+      damage: this.#readInfluenceRange("damage"),
+      criticalChance: this.#readInfluenceRange("criticalChance"),
+      criticalDamage: this.#readInfluenceRange("criticalDamage")
+    };
+  }
+
+  #readInfluenceRange(key) {
+    return {
+      min: toInteger(this.form?.querySelector(`[data-influence-field='${key}'][data-influence-bound='min']`)?.value),
+      max: toInteger(this.form?.querySelector(`[data-influence-field='${key}'][data-influence-bound='max']`)?.value)
+    };
   }
 
   #validateProficiencies(proficiencies) {

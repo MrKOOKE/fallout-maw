@@ -2,6 +2,7 @@ import { FALLOUT_MAW, syncSystemConfig } from "../config/system-config.mjs";
 import {
   createDefaultCharacteristicSettings,
   createDefaultDamageTypeSettings,
+  createDefaultProficiencyInfluenceSettings,
   createDefaultProficiencySettings,
   createDefaultResourceSettings,
   createDefaultSkillAdvancementSettings,
@@ -9,6 +10,7 @@ import {
   normalizeCharacteristicSettings,
   normalizeDamageTypeSettings,
   normalizeNeedSettings,
+  normalizeProficiencyInfluenceSettings,
   normalizeProficiencySettings,
   normalizeResourceSettings,
   normalizeSkillAdvancementSettings,
@@ -159,14 +161,30 @@ export function getProficiencySettings() {
   }
 }
 
+export function getProficiencyInfluenceSettings() {
+  try {
+    return normalizeProficiencyInfluenceSettings(game.settings.get(FALLOUT_MAW.id, PROFICIENCY_SETTINGS_SETTING));
+  } catch (_error) {
+    return createDefaultProficiencyInfluenceSettings();
+  }
+}
+
 export async function setProficiencySettings(settings) {
-  const normalized = normalizeProficiencySettings(settings);
+  const normalized = {
+    entries: normalizeProficiencySettings(settings),
+    influence: normalizeProficiencyInfluenceSettings(settings?.influence ? settings : {
+      influence: getProficiencyInfluenceSettings()
+    })
+  };
   await game.settings.set(FALLOUT_MAW.id, PROFICIENCY_SETTINGS_SETTING, normalized);
   return normalized;
 }
 
 export async function resetProficiencySettings() {
-  return setProficiencySettings(createDefaultProficiencySettings());
+  return setProficiencySettings({
+    entries: createDefaultProficiencySettings(),
+    influence: createDefaultProficiencyInfluenceSettings()
+  });
 }
 
 export function getDamageTypeSettings() {

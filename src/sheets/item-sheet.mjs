@@ -1,5 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
-import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
+import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { groupRaceEquipmentSlotsBySet, groupRaceWeaponSlotsBySet } from "../utils/equipment-slots.mjs";
 import {
   ITEM_FUNCTIONS,
@@ -81,6 +81,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const damageTypeSettings = getDamageTypeSettings();
     const toolSettings = getToolSettings();
     const skillSettings = getSkillSettings();
+    const proficiencySettings = getProficiencySettings();
     const equipmentSlotGroups = groupRaceEquipmentSlotsBySet(creatureOptions);
     const weaponSlotGroups = groupRaceWeaponSlotsBySet(creatureOptions);
     const equipmentSlotSelections = new Map();
@@ -182,7 +183,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       hasWeaponFunction,
       hasWeaponMagazineCost: hasWeaponResourceCost(item, "magazine"),
       toolFunctions,
-      weaponFunctionSections: buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, characteristicSettings, hasConditionFunction),
+      weaponFunctionSections: buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, proficiencySettings, characteristicSettings, hasConditionFunction),
       weaponDamageTypeChoices: buildWeaponDamageTypeChoices(item, damageTypeSettings),
       weaponDamageTypeRows: buildWeaponDamageTypeRows(item, damageTypeSettings),
       weaponSkillChoices: buildWeaponSkillChoices(item, skillSettings),
@@ -1095,7 +1096,7 @@ function getItemFunctionLabel(functionKey = "") {
   return game.i18n.localize("FALLOUTMAW.Item.Function");
 }
 
-function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, characteristicSettings, hasConditionFunction) {
+function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, proficiencySettings, characteristicSettings, hasConditionFunction) {
   if (!hasItemFunction(item, ITEM_FUNCTIONS.weapon)) return [];
   const primaryWeapon = item.system?.functions?.weapon ?? {};
   const sourcePrimaryWeapon = item.system?._source?.functions?.weapon ?? {};
@@ -1109,6 +1110,7 @@ function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, ch
       sourceWeaponData: sourcePrimaryWeapon,
       damageTypeSettings,
       skillSettings,
+      proficiencySettings,
       characteristicSettings,
       hasConditionFunction,
       isPrimary: true,
@@ -1121,6 +1123,7 @@ function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, ch
       sourceWeaponData: sourceAdditionalWeapons.find(entry => entry.id === id)?.data ?? {},
       damageTypeSettings,
       skillSettings,
+      proficiencySettings,
       characteristicSettings,
       hasConditionFunction,
       isAdditional: true,
@@ -1137,6 +1140,7 @@ function buildWeaponFunctionSection({
   sourceWeaponData = {},
   damageTypeSettings = [],
   skillSettings = [],
+  proficiencySettings = [],
   characteristicSettings = [],
   hasConditionFunction = false,
   isPrimary = false,
@@ -1162,6 +1166,7 @@ function buildWeaponFunctionSection({
     hasVolleyAction: Boolean(weaponData?.availableActions?.volley),
     damageTypeRows: buildWeaponDamageTypeRowsForData(effectiveWeaponData, damageTypeSettings, sourceWeaponData),
     skillChoices: buildWeaponSkillChoicesForData(effectiveWeaponData, skillSettings),
+    proficiencyChoices: buildWeaponProficiencyChoicesForData(effectiveWeaponData, proficiencySettings),
     resourceCosts: buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction),
     specialProperties: buildWeaponSpecialPropertyRowsForData(weaponData),
     requirements: buildWeaponRequirementRowsForData(weaponData, characteristicSettings, skillSettings),
@@ -1487,6 +1492,20 @@ function buildWeaponSkillChoicesForData(weaponData, skillSettings) {
   }));
 }
 
+function buildWeaponProficiencyChoicesForData(weaponData, proficiencySettings) {
+  const selected = String(weaponData?.proficiencyKey ?? "");
+  const fallback = proficiencySettings[0]?.key ?? "";
+  const selectedKey = proficiencySettings.some(proficiency => proficiency.key === selected) ? selected : fallback;
+  if (!proficiencySettings.length) {
+    return [{ value: "", label: game.i18n.localize("FALLOUTMAW.Settings.Proficiencies.Empty"), selected: true }];
+  }
+  return proficiencySettings.map(proficiency => ({
+    value: proficiency.key,
+    label: proficiency.label,
+    selected: proficiency.key === selectedKey
+  }));
+}
+
 function hasWeaponResourceCost(item, type) {
   return hasWeaponResourceCostData(item.system?.functions?.weapon ?? {}, type);
 }
@@ -1617,6 +1636,7 @@ function createDefaultWeaponFunctionData(source = {}) {
     attackAnimationKey: "",
     attackSoundPath: "",
     attackAnimationDelayMs: 0,
+    proficiencyKey: "pistol",
     skillKey: "rangedCombat",
     accuracyBonus: 0,
     criticalChanceModifier: 0,

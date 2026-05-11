@@ -4,7 +4,7 @@ import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./atta
 import { estimateDamageApplication, getLimbHealingCap, requestDamageApplications } from "./damage-hub.mjs";
 import { createThrownItemTile } from "../canvas/thrown-items.mjs";
 import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageSourceFunction, getWeaponFunctionById, hasItemFunction } from "../utils/item-functions.mjs";
-import { getCreatureOptions, getDamageTypeSettings } from "../settings/accessors.mjs";
+import { getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings } from "../settings/accessors.mjs";
 import { ACTION_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { getRequiredWeaponSlotsForItem, getWeaponSlotRequirement, isContainerWeaponSetKey } from "../utils/equipment-slots.mjs";
@@ -2340,7 +2340,9 @@ function getPointElevationAtDistance(originElevation, targetElevation, distance,
 
 function getWeaponDamage(weapon, weaponFunctionId = "") {
   const baseDamage = Math.max(0, toInteger(getEffectiveWeaponDamageData(weapon, weaponFunctionId)?.damage));
-  return Math.max(0, Math.floor(baseDamage * getWeaponConditionWeakeningRatio(weapon)));
+  const proficiencyModifier = getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "damage");
+  const modifiedDamage = Math.round(baseDamage * Math.max(0, 100 + proficiencyModifier) / 100);
+  return Math.max(0, Math.floor(modifiedDamage * getWeaponConditionWeakeningRatio(weapon)));
 }
 
 function getWeaponResourceCosts(weaponData = {}) {
@@ -2613,6 +2615,7 @@ function estimateDamageRequestGroup(requests = []) {
 
 function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "") {
   const modifier = toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier)
+    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance")
     - getWeaponConditionCritChancePenalty(weapon);
   return {
     criticalSuccessBonus: Math.max(0, modifier),
@@ -2624,7 +2627,8 @@ function getCriticalDamageAmount(weapon, amount, outcome, weaponFunctionId = "")
   const baseAmount = Math.max(0, Number(amount) || 0);
   if (!isCriticalSuccessAttack(outcome)) return baseAmount;
   const rawPercent = Number(getWeaponAttackData(weapon, weaponFunctionId)?.criticalDamagePercent);
-  const percent = Number.isFinite(rawPercent) ? Math.max(0, rawPercent) : 150;
+  const percent = Math.max(0, (Number.isFinite(rawPercent) ? Math.max(0, rawPercent) : 150)
+    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalDamage"));
   return Math.round(baseAmount * percent / 100);
 }
 
@@ -2684,11 +2688,41 @@ function getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId
 
 function getWeaponAccuracyModifier(weapon, weaponFunctionId = "") {
   return toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.accuracyBonus)
+    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "accuracy")
     - getWeaponConditionAccuracyPenalty(weapon);
+}
+
+function getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId = "", influenceKey = "") {
+  const actor = getWeaponOwnerActor(weapon);
+  if (!actor) return 0;
+  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  const proficiency = getWeaponProficiencySetting(weaponData);
+  if (!proficiency) return 0;
+
+  const range = getProficiencyInfluenceSettings()?.[influenceKey] ?? { min: 0, max: 0 };
+  const minimum = toInteger(range.min);
+  const maximum = toInteger(range.max);
+  const actorValue = toInteger(actor.system?.proficiencies?.[proficiency.key]?.value);
+  const settingMax = Math.max(0, toInteger(proficiency.max));
+  const ratio = settingMax > 0 ? clamp(actorValue / settingMax, 0, 1) : 0;
+  return Math.round(minimum + ((maximum - minimum) * ratio));
+}
+
+function getWeaponProficiencySetting(weaponData = {}) {
+  const proficiencies = getProficiencySettings();
+  if (!proficiencies.length) return null;
+  const key = String(weaponData?.proficiencyKey ?? "");
+  return proficiencies.find(proficiency => proficiency.key === key) ?? proficiencies[0] ?? null;
+}
+
+function getWeaponOwnerActor(weapon) {
+  const parent = weapon?.parent;
+  return parent?.documentName === "Actor" ? parent : null;
 }
 
 function getAttackModeCriticalCheckModifiers(weapon, actionKey, mode, weaponFunctionId = "") {
   const modifier = toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier)
+    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance")
     + toInteger(getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.criticalChanceModifier)
     - getWeaponConditionCritChancePenalty(weapon);
   return {
@@ -3608,4 +3642,12 @@ function isCanvasViewEvent(event) {
 
 function getAttackPreviewLayer() {
   return canvas.controls._rulerPaths;
+}
+
+export async function spendWeaponReloadActionPoints(actor, weapon, weaponFunctionId = "") {
+  await spendWeaponActionPoints(actor, weapon, "reload", weaponFunctionId);
+}
+
+export function hasRequiredWeaponReloadActionPoints(actor, weapon, weaponFunctionId = "") {
+  return hasRequiredWeaponActionPoints(actor, weapon, "reload", weaponFunctionId);
 }

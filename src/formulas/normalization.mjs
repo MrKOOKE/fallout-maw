@@ -3,6 +3,7 @@ import {
   DEFAULT_DAMAGE_TYPES,
   DEFAULT_NEEDS,
   DEFAULT_PROFICIENCIES,
+  DEFAULT_PROFICIENCY_INFLUENCE,
   DEFAULT_RESOURCES,
   DEFAULT_SKILL_DEVELOPMENT_LIMIT,
   DEFAULT_SIGNATURE_SKILL_FLAT_BONUS,
@@ -181,6 +182,15 @@ export function createDefaultProficiencySettings() {
   return DEFAULT_PROFICIENCIES.map(entry => ({ ...entry }));
 }
 
+export function createDefaultProficiencyInfluenceSettings() {
+  return {
+    accuracy: { ...DEFAULT_PROFICIENCY_INFLUENCE.accuracy },
+    damage: { ...DEFAULT_PROFICIENCY_INFLUENCE.damage },
+    criticalChance: { ...DEFAULT_PROFICIENCY_INFLUENCE.criticalChance },
+    criticalDamage: { ...DEFAULT_PROFICIENCY_INFLUENCE.criticalDamage }
+  };
+}
+
 export function createDefaultResourceSettings() {
   return DEFAULT_RESOURCES.map(entry => ({ ...entry }));
 }
@@ -277,6 +287,24 @@ export function normalizeProficiencySettings(settings) {
     },
     "Владение"
   );
+}
+
+export function normalizeProficiencyInfluenceSettings(settings = {}) {
+  const defaults = createDefaultProficiencyInfluenceSettings();
+  const source = settings?.influence ?? settings ?? {};
+  return {
+    accuracy: normalizeProficiencyInfluenceRange(source.accuracy, defaults.accuracy),
+    damage: normalizeProficiencyInfluenceRange(source.damage, defaults.damage),
+    criticalChance: normalizeProficiencyInfluenceRange(source.criticalChance, defaults.criticalChance),
+    criticalDamage: normalizeProficiencyInfluenceRange(source.criticalDamage, defaults.criticalDamage)
+  };
+}
+
+function normalizeProficiencyInfluenceRange(range = {}, defaults = { min: 0, max: 0 }) {
+  return {
+    min: toInteger(range?.min ?? defaults.min),
+    max: toInteger(range?.max ?? defaults.max)
+  };
 }
 
 export function normalizeResourceSettings(settings) {

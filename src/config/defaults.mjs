@@ -87,6 +87,13 @@ export const DEFAULT_PROFICIENCIES = Object.freeze([
   { key: "twoHandedBludgeoning", abbr: "thb", label: "Двуручное дробящее", max: 1000 }
 ]);
 
+export const DEFAULT_PROFICIENCY_INFLUENCE = Object.freeze({
+  accuracy: Object.freeze({ min: 0, max: 50 }),
+  damage: Object.freeze({ min: 0, max: 25 }),
+  criticalChance: Object.freeze({ min: 0, max: 0 }),
+  criticalDamage: Object.freeze({ min: 0, max: 0 })
+});
+
 export const DEFAULT_LIMBS = Object.freeze([
   { key: "head", label: "Голова", stateMax: 100, damageMultiplier: 1.3, aimedDifficultyPercent: 30 },
   { key: "eyes", label: "Глаза", stateMax: 100, damageMultiplier: 1.4, aimedDifficultyPercent: 50 },

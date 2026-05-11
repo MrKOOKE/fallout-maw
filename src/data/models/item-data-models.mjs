@@ -145,6 +145,7 @@ function weaponFunctionField({ named = false } = {}) {
     attackAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
     attackSoundPath: new StringField({ required: true, blank: true, initial: "" }),
     attackAnimationDelayMs: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    proficiencyKey: new StringField({ required: true, blank: true, initial: "pistol" }),
     skillKey: new StringField({ required: true, blank: false, initial: "rangedCombat" }),
     accuracyBonus: new NumberField({ required: true, integer: true, initial: 0 }),
     criticalChanceModifier: new NumberField({ required: true, integer: true, initial: 0 }),

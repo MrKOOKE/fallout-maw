@@ -9,24 +9,6 @@
       <strong data-token-action-hud-scale-output>{{scale}}%</strong>
       <input type="range" name="scale" value="{{scale}}" min="{{min}}" max="{{max}}" step="1" data-token-action-hud-scale>
     </label>
-
-    <div class="fallout-maw-token-action-hud-icon-grid">
-      <label class="fallout-maw-stacked-field" data-hud-damage-icon-field>
-        <span>{{localize "FALLOUTMAW.Settings.HUD.DamageReductionIcon"}}</span>
-        <div class="fallout-maw-image-picker-field">
-          <input type="text" name="damageReductionIcon" value="{{damageIcons.damageReductionIcon}}">
-          <button type="button" data-action="browseHudDamageIcon" title="{{localize 'FALLOUTMAW.Common.Image'}}"><i class="fa-solid fa-folder-open"></i></button>
-        </div>
-      </label>
-
-      <label class="fallout-maw-stacked-field" data-hud-damage-icon-field>
-        <span>{{localize "FALLOUTMAW.Settings.HUD.DamageBlockedIcon"}}</span>
-        <div class="fallout-maw-image-picker-field">
-          <input type="text" name="damageBlockedIcon" value="{{damageIcons.damageBlockedIcon}}">
-          <button type="button" data-action="browseHudDamageIcon" title="{{localize 'FALLOUTMAW.Common.Image'}}"><i class="fa-solid fa-folder-open"></i></button>
-        </div>
-      </label>
-    </div>
   </section>
 
   <footer class="sheet-footer flexrow">

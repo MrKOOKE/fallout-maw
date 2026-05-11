@@ -2,6 +2,7 @@ import { FALLOUT_MAW } from "../config/system-config.mjs";
 import {
   createDefaultCharacteristicSettings,
   createDefaultDamageTypeSettings,
+  createDefaultProficiencyInfluenceSettings,
   createDefaultProficiencySettings,
   createDefaultResourceSettings,
   createDefaultSkillAdvancementSettings,
@@ -140,7 +141,10 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: createDefaultProficiencySettings(),
+    default: {
+      entries: createDefaultProficiencySettings(),
+      influence: createDefaultProficiencyInfluenceSettings()
+    },
     onChange: refreshPreparedActors
   });
 

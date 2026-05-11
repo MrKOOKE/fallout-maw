@@ -215,6 +215,45 @@
   margin-bottom: 0.5rem;
 }
 
+.application.fallout-maw-item-sheet .fallout-maw-panel h2,
+.application.fallout-maw-item-sheet .fallout-maw-panel-header h2,
+.application.fallout-maw-item-sheet .fallout-maw-panel-header h3,
+.application.fallout-maw-item-sheet .fallout-maw-panel-header h4,
+.application.fallout-maw-item-sheet .fallout-maw-weapon-action-settings > h3 {
+  flex: 0 1 auto;
+}
+
+.application.fallout-maw-item-sheet .fallout-maw-panel-header {
+  border-top: 1px solid rgba(218, 207, 147, 0.22);
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.application.fallout-maw-item-sheet .fallout-maw-panel > .fallout-maw-panel-header:first-child {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.application.fallout-maw-item-sheet .fallout-maw-panel-header h3,
+.application.fallout-maw-item-sheet .fallout-maw-panel-header h4,
+.application.fallout-maw-item-sheet .fallout-maw-weapon-action-settings > h3 {
+  border: 0;
+  color: var(--fallout-maw-text);
+  font-size: 1.05rem;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.application.fallout-maw-item-sheet .fallout-maw-panel-header h4 {
+  font-size: 1rem;
+}
+
+.application.fallout-maw-item-sheet .fallout-maw-weapon-type-header select {
+  flex: 0 1 18rem;
+  min-width: 12rem;
+}
+
 .fallout-maw-collapsible-panel.collapsed > :not(.fallout-maw-collapsible-header) {
   display: none;
 }
@@ -5574,6 +5613,16 @@ label.fallout-maw-mitigation-cell {
 
 .proficiency-settings .fallout-maw-settings-row {
   grid-template-columns: 2rem 80px minmax(120px, 1fr) minmax(170px, 1.5fr) 110px 2.5rem;
+}
+
+.fallout-maw-proficiency-influence-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.fallout-maw-proficiency-influence-grid .fallout-maw-split-number-field > div {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
 }
 
 .fallout-maw-grid-header {

@@ -35,6 +35,7 @@
       "Characteristics": "Характеристики",
       "Code": "Код",
       "Copy": "Скопировать",
+      "Cancel": "Отмена",
       "Create": "Создать",
       "Currencies": "Валюты",
       "DamageDefenses": "Защита от урона",
@@ -240,6 +241,8 @@
       "WeaponExplosionSound": "Звук взрыва",
       "WeaponAttackPresentation": "Оформление атаки",
       "WeaponAttackDelay": "Задержка между атаками, мс",
+      "WeaponType": "Тип оружия",
+      "WeaponCombatStats": "Боевые параметры",
       "WeaponSkill": "Задействованный навык",
       "WeaponAccuracyBonus": "Изменение точности",
       "WeaponCriticalChanceModifier": "Изменение шанса на крит",
@@ -428,9 +431,9 @@
       "Kicker": "GM-терминал",
       "Modifiers": "Модификаторы проверки",
       "Reset": "Сбросить",
-      "ResetEdgeModeAfterUse": "Сбросить режим после применения",
-      "ResetModifiersAfterUse": "Сбросить модификаторы после применения",
-      "ResetResultAfterUse": "Сбросить результат после применения",
+      "ResetEdgeModeAfterUse": "Сбросить после первого применения",
+      "ResetModifiersAfterUse": "Сбросить после первого применения",
+      "ResetResultAfterUse": "Сбросить после первого применения",
       "ResultModes": {
         "Standard": "Стандарт"
       },
@@ -529,6 +532,11 @@
       "Proficiencies": {
         "Create": "Создать владение",
         "Empty": "Владения не созданы.",
+        "InfluenceAccuracy": "Точность",
+        "InfluenceCriticalChance": "Шанс на крит",
+        "InfluenceCriticalDamage": "Крит урон",
+        "InfluenceDamage": "Урон",
+        "InfluenceTitle": "Влияние владений",
         "Title": "Настройка владений"
       },
       "Resources": {
