@@ -2447,7 +2447,74 @@ function getModuleTooltipRows(item) {
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), weapon.penetration);
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), weapon.magazineMax);
   rows.push(...getModuleActionPointRows(weapon.actionPointCosts));
+  rows.push(...getModuleAddedWeaponFunctionRows(item, moduleData.additionalWeapons));
   return rows;
+}
+
+function getModuleAddedWeaponFunctionRows(item, additionalWeapons = {}) {
+  return normalizeTooltipWeaponFunctionEntries(additionalWeapons)
+    .filter(({ data }) => data?.enabled)
+    .map(({ id, data }, index) => {
+      const title = String(data?.name ?? "").trim() || getDefaultTooltipWeaponFunctionName(index);
+      const entry = {
+        id,
+        isPrimary: false,
+        canHaveModuleSlots: false,
+        name: title,
+        data
+      };
+      const tooltipHTML = renderAddedWeaponFunctionTooltipHTML(title, buildWeaponTooltipRows(item, entry, { actor: null, baseMode: true }));
+      return ["Добавляет функцию", {
+        html: `
+          <span class="weapon-tab-list tooltip-added-weapon-function-list">
+            <span class="tooltip-added-weapon-function-chip"
+              data-tooltip-html="${escapeAttribute(tooltipHTML)}"
+              data-tooltip-class="fallout-maw-inventory-tooltip fallout-maw-module-item-tooltip"
+              data-tooltip-direction="RIGHT">
+              ${escapeHTML(title)}
+            </span>
+          </span>
+        `
+      }];
+    });
+}
+
+function renderAddedWeaponFunctionTooltipHTML(title, rows = []) {
+  return `
+    <section class="content">
+      <section class="functions">
+        ${renderTooltipFunctionSection(title, rows)}
+      </section>
+    </section>
+  `;
+}
+
+function normalizeTooltipWeaponFunctionEntries(functions = {}) {
+  if (Array.isArray(functions)) {
+    return functions
+      .map((data, index) => ({
+        id: String(data?.id || `legacy${index}`),
+        data: {
+          ...data,
+          id: String(data?.id || `legacy${index}`)
+        }
+      }))
+      .filter(entry => entry.id);
+  }
+  if (!functions || typeof functions !== "object") return [];
+  return Object.entries(functions)
+    .map(([id, data]) => ({
+      id: String(id),
+      data: {
+        ...data,
+        id: String(data?.id || id)
+      }
+    }))
+    .filter(entry => entry.id);
+}
+
+function getDefaultTooltipWeaponFunctionName(index = 0) {
+  return `${game.i18n.localize("FALLOUTMAW.Item.AdditionalWeaponFunction")} ${index + 1}`;
 }
 
 function summarizeMitigationCoverage(entries = {}) {

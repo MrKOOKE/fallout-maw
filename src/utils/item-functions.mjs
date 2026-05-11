@@ -138,10 +138,7 @@ export function getWeaponFunctionModuleSlots(itemOrSystem = null, functionId = "
   const primary = getWeaponFunction(itemOrSystem);
   const id = String(functionId || ITEM_FUNCTIONS.weapon);
   if (!primary?.enabled) return [];
-  if (id === ITEM_FUNCTIONS.weapon || getWeaponFunctionById(itemOrSystem, id)) {
-    return Array.isArray(primary.moduleSlots) ? primary.moduleSlots : [];
-  }
-  return [];
+  return id === ITEM_FUNCTIONS.weapon && Array.isArray(primary.moduleSlots) ? primary.moduleSlots : [];
 }
 
 export function getWeaponFunctionUpdatePath(itemOrSystem = null, functionId = "") {

@@ -2110,7 +2110,8 @@ label.fallout-maw-mitigation-cell {
   padding: 0.36rem;
 }
 
-.fallout-maw-inventory-tooltip .weapon-tab-list button {
+.fallout-maw-inventory-tooltip .weapon-tab-list button,
+.fallout-maw-inventory-tooltip .weapon-tab-list .tooltip-added-weapon-function-chip {
   background:
     radial-gradient(circle at 18% 22%, rgba(255, 247, 214, 0.16), transparent 1.6rem),
     radial-gradient(circle at 78% 68%, rgba(74, 59, 34, 0.22), transparent 2.7rem),
@@ -2126,6 +2127,9 @@ label.fallout-maw-mitigation-cell {
   box-sizing: border-box;
   color: #332d1f;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-family: inherit;
   font-size: 1.22rem;
   font-weight: 700;
@@ -2139,7 +2143,12 @@ label.fallout-maw-mitigation-cell {
   text-shadow: 0 1px 0 rgba(255, 248, 220, 0.18);
 }
 
-.fallout-maw-inventory-tooltip .weapon-tab-list button::after {
+.fallout-maw-inventory-tooltip .weapon-tab-list .tooltip-added-weapon-function-chip {
+  cursor: help;
+}
+
+.fallout-maw-inventory-tooltip .weapon-tab-list button::after,
+.fallout-maw-inventory-tooltip .weapon-tab-list .tooltip-added-weapon-function-chip::after {
   background: transparent;
   bottom: 0.24rem;
   content: "";
@@ -2150,6 +2159,7 @@ label.fallout-maw-mitigation-cell {
 }
 
 .fallout-maw-inventory-tooltip .weapon-tab-list button:hover,
+.fallout-maw-inventory-tooltip .weapon-tab-list .tooltip-added-weapon-function-chip:hover,
 .fallout-maw-inventory-tooltip .weapon-tab-list button.active {
   background:
     radial-gradient(circle at 18% 22%, rgba(255, 247, 214, 0.2), transparent 1.7rem),
@@ -2245,6 +2255,18 @@ label.fallout-maw-mitigation-cell {
   display: block;
   overflow-wrap: normal;
   white-space: nowrap;
+}
+
+.fallout-maw-inventory-tooltip .tooltip-added-weapon-function-list {
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 0.2rem;
+  width: min(11rem, 100%);
+}
+
+.fallout-maw-inventory-tooltip .tooltip-added-weapon-function-list .tooltip-added-weapon-function-chip {
+  min-height: 2rem;
 }
 
 .fallout-maw-inventory-tooltip .tooltip-module-grid {
