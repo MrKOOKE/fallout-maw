@@ -52,6 +52,7 @@ import {
   getDamageMitigationFunction,
   getDamageSourceFunction,
   getEnabledWeaponFunctions,
+  getWeaponFunctionModuleSlots,
   getModuleFunction,
   getToolFunction,
   hasItemFunction
@@ -1821,7 +1822,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     tooltip.addEventListener("auxclick", event => this.#onInventoryTooltipAuxClick(event));
     tooltip.addEventListener("contextmenu", event => this.#onInventoryTooltipContextMenu(event));
     tooltip.addEventListener("mouseleave", () => {
-      this.#clearInventoryTooltip({ force: this.#tooltipPinned });
+      if (!this.#tooltipPinned) this.#clearInventoryTooltip();
     });
     document.body.append(tooltip);
     this.#tooltipElement = tooltip;
@@ -1914,13 +1915,24 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!this.#tooltipElement || !this.#tooltipItemId) return;
     const item = this.actor.items.get(this.#tooltipItemId);
     if (!item) return;
-    const pinned = this.#tooltipPinned;
-    this.#tooltipElement.remove();
-    this.#tooltipElement = null;
-    await this.#showInventoryTooltip(item, { pinned, refresh: true });
+    this.#tooltipElement.innerHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
+      activeWeaponIndex: this.#tooltipWeaponTabIndex,
+      baseMode: this.#tooltipBaseMode
+    });
+    this.#tooltipElement.classList.toggle("pinned", this.#tooltipPinned);
+    this.#clampInventoryTooltipToViewport(this.#tooltipElement);
+    requestAnimationFrame(() => {
+      if (!this.#tooltipElement) return;
+      const description = this.#tooltipElement.querySelector(".description");
+      description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+      this.#clampInventoryTooltipToViewport(this.#tooltipElement);
+    });
   }
 
   #toggleWeaponModulePicker(slotElement) {
+    this.#tooltipPinned = true;
+    this.#tooltipElement?.classList.add("pinned");
+    this.#bindInventoryTooltipDocumentClose();
     const weaponIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipWeaponIndex));
     const slotIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipModuleSlotIndex));
     const panelKey = `${weaponIndex}:${slotIndex}`;
@@ -1930,12 +1942,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#tooltipElement.querySelectorAll("[data-tooltip-module-picker-panel]").forEach(entry => entry.classList.remove("active"));
     this.#tooltipElement.querySelectorAll("[data-tooltip-module-slot]").forEach(entry => entry.classList.remove("selecting"));
     if (wasActive) {
-      this.#positionInventoryTooltip();
+      this.#clampInventoryTooltipToViewport(this.#tooltipElement);
       return;
     }
     panel.classList.add("active");
     slotElement.classList.add("selecting");
-    requestAnimationFrame(() => this.#positionInventoryTooltip());
+    requestAnimationFrame(() => this.#clampInventoryTooltipToViewport(this.#tooltipElement));
   }
 
   async #installWeaponModuleFromTooltipChoice(choiceElement) {
@@ -1959,7 +1971,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const weaponIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipWeaponIndex));
     const slotIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipModuleSlotIndex));
     const entry = entries[weaponIndex] ?? null;
-    const slot = getWeaponModuleSlots(entry?.data ?? {})[slotIndex] ?? null;
+    const slot = entry?.canHaveModuleSlots ? getWeaponModuleSlots(entry?.data ?? {})[slotIndex] ?? null : null;
     return { item, entries, entry, weaponIndex, slotIndex, slot };
   }
 
@@ -1981,6 +1993,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const quantity = getItemQuantityHelper(moduleItem);
     if (quantity > 1) await moduleItem.update({ "system.quantity": quantity - 1 });
     else await moduleItem.delete();
+    this.#restoreTooltipModuleSlotsTab(weapon.id);
     await this.#refreshInventoryTooltip();
   }
 
@@ -1993,7 +2006,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     slots[slotIndex] = { ...slot, itemUuid: "", itemData: {} };
     await weapon.update({ [`${path}.moduleSlots`]: slots });
     await this.#insertItemIntoInventory(itemData, createInventoryPlacementHelper(1, 1, itemData, this.actor.items));
+    this.#restoreTooltipModuleSlotsTab(weapon.id);
     await this.#refreshInventoryTooltip();
+  }
+
+  #restoreTooltipModuleSlotsTab(weaponId = "") {
+    const weapon = this.actor.items.get(String(weaponId ?? ""));
+    if (!weapon) return;
+    this.#tooltipWeaponTabIndex = getEnabledWeaponFunctions(weapon).length;
   }
 
   #positionInventoryTooltipAtAnchor(element, anchor) {
@@ -2037,6 +2057,22 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if ((tooltipRect.top + tooltipRect.height) > (viewportHeight - margin)) {
       element.style.top = `${Math.round(Math.max(margin, viewportHeight - tooltipRect.height - margin))}px`;
     }
+  }
+
+  #clampInventoryTooltipToViewport(element) {
+    if (!element) return;
+    const { viewportWidth, viewportHeight } = this.#getViewportMetrics();
+    const margin = Math.max(8, 12 * this.#uiScale);
+    this.#syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, this.#uiScale);
+    const rect = element.getBoundingClientRect();
+    let left = Number.parseFloat(element.style.left);
+    let top = Number.parseFloat(element.style.top);
+    if (!Number.isFinite(left)) left = rect.left;
+    if (!Number.isFinite(top)) top = rect.top;
+    left = Math.max(margin, Math.min(viewportWidth - rect.width - margin, left));
+    top = Math.max(margin, Math.min(viewportHeight - rect.height - margin, top));
+    element.style.left = `${Math.round(left)}px`;
+    element.style.top = `${Math.round(top)}px`;
   }
 
   #syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, scale = 1) {
@@ -2183,7 +2219,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #syncOverlayScale() {
     if (this.#tooltipElement) {
       this.#applyOverlayUiScale(this.#tooltipElement);
-      this.#positionInventoryTooltip();
+      if (this.#tooltipPinned) this.#clampInventoryTooltipToViewport(this.#tooltipElement);
+      else this.#positionInventoryTooltip();
     }
 
     for (const menu of document.querySelectorAll(".fallout-maw-inventory-context-menu")) {
@@ -2473,7 +2510,7 @@ function buildWeaponTooltipSections(item, activeWeaponIndex = 0, { actor = null,
 }
 
 function renderWeaponTooltipModuleSlots(item, entries = [], actor = null) {
-  const slots = entries.flatMap((entry, weaponIndex) => getWeaponModuleSlots(entry.data ?? {}).map((slot, slotIndex) => ({
+  const slots = entries.flatMap((entry, weaponIndex) => !entry?.canHaveModuleSlots ? [] : getWeaponModuleSlots(entry.data ?? {}).map((slot, slotIndex) => ({
     entry,
     weaponIndex,
     slotIndex,
@@ -2568,7 +2605,10 @@ function renderModuleChangePreview(item) {
 }
 
 function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = false } = {}) {
-  const data = getEffectiveWeaponTooltipData(entry.data ?? {}, { applyModules: !baseMode });
+  const data = getEffectiveWeaponTooltipData(entry.data ?? {}, {
+    applyModules: !baseMode,
+    moduleSlots: getWeaponFunctionModuleSlots(item, entry.id)
+  });
   const baseData = getEffectiveWeaponTooltipData(entry.data ?? {}, { applyModules: false });
   const stats = getWeaponTooltipCalculatedStats(item, data, { actor, baseMode });
   const baseStats = baseMode ? stats : getWeaponTooltipCalculatedStats(item, baseData, { actor, baseMode: true });
@@ -2841,14 +2881,15 @@ function getEffectiveWeaponDamageData(_item, data = {}) {
   };
 }
 
-function getEffectiveWeaponTooltipData(data = {}, { applyModules = true } = {}) {
-  if (!isSourceDamageMode(data)) return applyModules ? applyWeaponModuleModifiers(data) : data;
+function getEffectiveWeaponTooltipData(data = {}, { applyModules = true, moduleSlots = null } = {}) {
+  const moduleOptions = Array.isArray(moduleSlots) ? { moduleSlots } : {};
+  if (!isSourceDamageMode(data)) return applyModules ? applyWeaponModuleModifiers(data, moduleOptions) : data;
   const sourceItem = getWeaponDamageSourceItem(data);
   if (!sourceItem || !hasItemFunction(sourceItem, ITEM_FUNCTIONS.damageSource)) {
-    return applyModules ? applyWeaponModuleModifiers(data) : data;
+    return applyModules ? applyWeaponModuleModifiers(data, moduleOptions) : data;
   }
   const merged = mergeWeaponDataWithDamageSource(data, getDamageSourceFunction(sourceItem));
-  return applyModules ? applyWeaponModuleModifiers(merged) : merged;
+  return applyModules ? applyWeaponModuleModifiers(merged, moduleOptions) : merged;
 }
 
 function mergeWeaponDataWithDamageSource(data = {}, source = {}) {

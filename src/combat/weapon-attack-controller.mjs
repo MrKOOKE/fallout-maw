@@ -3,7 +3,7 @@ import { SYSTEM_ID } from "../constants.mjs";
 import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./attack-animations.mjs";
 import { estimateDamageApplication, getLimbHealingCap, requestDamageApplications } from "./damage-hub.mjs";
 import { createThrownItemTile } from "../canvas/thrown-items.mjs";
-import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageSourceFunction, getWeaponFunctionById, hasItemFunction } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageSourceFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction } from "../utils/item-functions.mjs";
 import { getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings } from "../settings/accessors.mjs";
 import { ACTION_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -1381,7 +1381,10 @@ class WeaponAttackController {
 }
 
 function getWeaponAttackData(weapon, weaponFunctionId = "") {
-  return applyWeaponModuleModifiers(applyDamageSourceWeaponModifiers(getWeaponFunctionById(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) ?? {}));
+  return applyWeaponModuleModifiers(
+    applyDamageSourceWeaponModifiers(getWeaponFunctionById(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) ?? {}),
+    { moduleSlots: getWeaponFunctionModuleSlots(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) }
+  );
 }
 
 function applyDamageSourceWeaponModifiers(weaponData = {}) {
@@ -1418,11 +1421,7 @@ function getWeaponAttackSourceData(weapon, weaponFunctionId = "") {
 }
 
 function getWeaponAttackPath(weapon, weaponFunctionId = "") {
-  const id = String(weaponFunctionId || ITEM_FUNCTIONS.weapon);
-  if (!id || id === ITEM_FUNCTIONS.weapon) return "system.functions.weapon";
-  return weapon.system?.functions?.additionalWeapons?.[id]
-    ? `system.functions.additionalWeapons.${id}`
-    : "system.functions.weapon";
+  return getWeaponFunctionUpdatePath(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) || "system.functions.weapon";
 }
 
 function hasWeaponAction(weapon, actionKey, weaponFunctionId = "") {

@@ -563,6 +563,7 @@
     </div>
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.ModuleActionPointCosts"}}</h3>
+      <button type="button" data-add-module-weapon-function><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.AddAdditionalWeaponFunction"}}</button>
     </div>
     <div class="fallout-maw-list-grid three-columns">
       <label><span>{{localize "FALLOUTMAW.Item.WeaponActionAimedShot"}}</span><input type="number" name="system.functions.module.weapon.actionPointCosts.aimedShot" value="{{system.functions.module.weapon.actionPointCosts.aimedShot}}" step="1"></label>
@@ -584,14 +585,16 @@
         {{#if canAddAdditional}}
         <button type="button" data-add-additional-weapon-function><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.AddAdditionalWeaponFunction"}}</button>
         {{/if}}
-        {{#if isAdditional}}
+        {{#if isModuleWeapon}}
+        <button type="button" data-delete-module-weapon-function="{{id}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        {{else if isAdditional}}
         <button type="button" data-delete-additional-weapon-function="{{id}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
         {{else}}
         <button type="button" data-remove-item-function="weapon" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
         {{/if}}
       </div>
     </div>
-    {{#if isAdditional}}
+    {{#if isNamed}}
     <div class="fallout-maw-list-grid three-columns">
       <label>
         <span>{{localize "FALLOUTMAW.Item.AdditionalWeaponFunctionName"}}</span>
@@ -773,6 +776,7 @@
       {{/each}}
     </div>
 
+    {{#if canHaveModuleSlots}}
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.WeaponModuleSlots"}}</h3>
       <button type="button" data-add-weapon-module-slot><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddModuleSlot"}}</button>
@@ -809,6 +813,7 @@
       <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponModuleNoSlots"}}</p>
       {{/each}}
     </div>
+    {{/if}}
 
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.WeaponSpecialProperties"}}</h3>

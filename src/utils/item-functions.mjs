@@ -7,6 +7,7 @@ export const ITEM_FUNCTIONS = {
   module: "module",
   toolPrefix: "tool:"
 };
+export const MODULE_WEAPON_FUNCTION_ID_PREFIX = "module:";
 
 export const DAMAGE_MITIGATION_MODES = {
   defense: "defense",
@@ -66,41 +67,93 @@ export function getWeaponFunction(itemOrSystem = null) {
 
 export function getAdditionalWeaponFunctions(itemOrSystem = null) {
   const functions = getItemSystem(itemOrSystem).functions?.additionalWeapons;
-  if (Array.isArray(functions)) return functions;
-  if (!functions || typeof functions !== "object") return [];
-  return Object.entries(functions).map(([id, data]) => ({
-    ...data,
-    id: String(id)
-  }));
+  return normalizeWeaponFunctionEntries(functions).map(({ id, data }) => ({ ...data, id }));
 }
 
 export function getWeaponFunctionById(itemOrSystem = null, functionId = "") {
   const id = String(functionId ?? "");
   if (!id || id === ITEM_FUNCTIONS.weapon) return getWeaponFunction(itemOrSystem);
-  return getAdditionalWeaponFunctions(itemOrSystem).find(entry => String(entry?.id ?? "") === id) ?? null;
+  const additional = getAdditionalWeaponFunctions(itemOrSystem).find(entry => String(entry?.id ?? "") === id);
+  if (additional) return additional;
+  return getInstalledModuleWeaponFunctions(itemOrSystem).find(entry => String(entry?.id ?? "") === id)?.data ?? null;
 }
 
 export function getEnabledWeaponFunctions(itemOrSystem = null) {
   const primary = getWeaponFunction(itemOrSystem);
   if (!primary?.enabled) return [];
+  const additional = getAdditionalWeaponFunctions(itemOrSystem)
+    .filter(entry => entry?.enabled)
+    .map((entry, index) => ({
+      id: String(entry.id ?? ""),
+      isPrimary: false,
+      canHaveModuleSlots: false,
+      index,
+      name: String(entry.name ?? ""),
+      data: entry
+    }))
+    .filter(entry => entry.id);
+  const moduleWeapons = getInstalledModuleWeaponFunctions(itemOrSystem)
+    .filter(entry => entry?.data?.enabled)
+    .map((entry, index) => ({
+      ...entry,
+      isPrimary: false,
+      isModuleWeapon: true,
+      canHaveModuleSlots: false,
+      index: additional.length + index
+    }))
+    .filter(entry => entry.id);
   return [
     {
       id: ITEM_FUNCTIONS.weapon,
       isPrimary: true,
+      canHaveModuleSlots: true,
       name: "",
       data: primary
     },
-    ...getAdditionalWeaponFunctions(itemOrSystem)
-      .filter(entry => entry?.enabled)
-      .map((entry, index) => ({
-        id: String(entry.id ?? ""),
-        isPrimary: false,
-        index,
-        name: String(entry.name ?? ""),
-        data: entry
-      }))
-      .filter(entry => entry.id)
+    ...additional,
+    ...moduleWeapons
   ];
+}
+
+export function createModuleWeaponFunctionId(slotId = "", actionId = "") {
+  const slotKey = String(slotId ?? "").trim();
+  const actionKey = String(actionId ?? "").trim();
+  if (!slotKey || !actionKey) return "";
+  return `${MODULE_WEAPON_FUNCTION_ID_PREFIX}${slotKey}:${actionKey}`;
+}
+
+export function parseModuleWeaponFunctionId(functionId = "") {
+  const id = String(functionId ?? "");
+  if (!id.startsWith(MODULE_WEAPON_FUNCTION_ID_PREFIX)) return null;
+  const rest = id.slice(MODULE_WEAPON_FUNCTION_ID_PREFIX.length);
+  const separator = rest.indexOf(":");
+  if (separator <= 0 || separator >= rest.length - 1) return null;
+  return {
+    slotId: rest.slice(0, separator),
+    actionId: rest.slice(separator + 1)
+  };
+}
+
+export function getWeaponFunctionModuleSlots(itemOrSystem = null, functionId = "") {
+  const primary = getWeaponFunction(itemOrSystem);
+  const id = String(functionId || ITEM_FUNCTIONS.weapon);
+  if (!primary?.enabled) return [];
+  if (id === ITEM_FUNCTIONS.weapon || getWeaponFunctionById(itemOrSystem, id)) {
+    return Array.isArray(primary.moduleSlots) ? primary.moduleSlots : [];
+  }
+  return [];
+}
+
+export function getWeaponFunctionUpdatePath(itemOrSystem = null, functionId = "") {
+  const id = String(functionId || ITEM_FUNCTIONS.weapon);
+  if (!id || id === ITEM_FUNCTIONS.weapon) return "system.functions.weapon";
+  const moduleId = parseModuleWeaponFunctionId(id);
+  if (moduleId) {
+    const slotIndex = findWeaponModuleSlotIndex(itemOrSystem, moduleId.slotId);
+    if (slotIndex < 0) return "";
+    return `system.functions.weapon.moduleSlots.${slotIndex}.itemData.system.functions.module.additionalWeapons.${moduleId.actionId}`;
+  }
+  return `system.functions.additionalWeapons.${id}`;
 }
 
 export function createToolFunctionKey(toolKey = "") {
@@ -120,4 +173,71 @@ export function hasToolFunction(itemOrSystem = null, toolKey = "") {
 
 export function getToolFunction(itemOrSystem = null, toolKey = "") {
   return getItemSystem(itemOrSystem).functions?.tools?.[toolKey] ?? {};
+}
+
+function getInstalledModuleWeaponFunctions(itemOrSystem = null) {
+  const primary = getWeaponFunction(itemOrSystem);
+  const slots = Array.isArray(primary?.moduleSlots) ? primary.moduleSlots : [];
+  return slots.flatMap((slot, slotIndex) => {
+    const itemData = getWeaponModuleSlotItemData(slot);
+    const module = getModuleFunction(itemData);
+    if (!module?.enabled || String(module.targetFunction ?? "weapon") !== "weapon") return [];
+    const slotId = String(slot?.id ?? "") || `slot-${slotIndex + 1}`;
+    return normalizeWeaponFunctionEntries(module.additionalWeapons)
+      .filter(({ id }) => id)
+      .map(({ id, data }, index) => ({
+        id: createModuleWeaponFunctionId(slotId, id),
+        sourceId: id,
+        moduleSlotId: slotId,
+        moduleSlotIndex: slotIndex,
+        moduleItemName: String(itemData?.name ?? "").trim(),
+        index,
+        name: String(data?.name ?? "").trim(),
+        data: {
+          ...data,
+          id: createModuleWeaponFunctionId(slotId, id)
+        }
+      }));
+  });
+}
+
+function normalizeWeaponFunctionEntries(functions = null) {
+  if (Array.isArray(functions)) {
+    return functions
+      .map((data, index) => ({
+        id: String(data?.id || `legacy${index}`),
+        data: {
+          ...data,
+          id: String(data?.id || `legacy${index}`)
+        }
+      }))
+      .filter(entry => entry.id);
+  }
+  if (!functions || typeof functions !== "object") return [];
+  return Object.entries(functions)
+    .map(([id, data]) => ({
+      id: String(id),
+      data: {
+        ...data,
+        id: String(data?.id || id)
+      }
+    }))
+    .filter(entry => entry.id);
+}
+
+function findWeaponModuleSlotIndex(itemOrSystem = null, slotId = "") {
+  const id = String(slotId ?? "");
+  if (!id) return -1;
+  const slots = Array.isArray(getWeaponFunction(itemOrSystem)?.moduleSlots)
+    ? getWeaponFunction(itemOrSystem).moduleSlots
+    : [];
+  return slots.findIndex((slot, index) => (String(slot?.id ?? "") || `slot-${index + 1}`) === id);
+}
+
+function getWeaponModuleSlotItemData(slot = {}) {
+  if (slot?.itemData?.system) return slot.itemData;
+  const uuid = String(slot?.itemUuid ?? "").trim();
+  if (!uuid) return null;
+  const item = globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
+  return item?.toObject?.() ?? null;
 }

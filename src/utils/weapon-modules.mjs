@@ -50,14 +50,15 @@ export function isModuleItemCompatibleWithSlot(itemOrData = null, slot = {}) {
   return getWeaponModuleTechnicalName(itemOrData) === slotKey;
 }
 
-export function getInstalledWeaponModuleItems(weaponData = {}) {
-  return getWeaponModuleSlots(weaponData)
+export function getInstalledWeaponModuleItems(weaponData = {}, { moduleSlots = null } = {}) {
+  const slots = Array.isArray(moduleSlots) ? moduleSlots : getWeaponModuleSlots(weaponData);
+  return slots
     .map(slot => getWeaponModuleSlotItemData(slot))
     .filter(itemData => itemData?.system && isWeaponModuleItem(itemData));
 }
 
-export function applyWeaponModuleModifiers(weaponData = {}) {
-  const modules = getInstalledWeaponModuleItems(weaponData);
+export function applyWeaponModuleModifiers(weaponData = {}, options = {}) {
+  const modules = getInstalledWeaponModuleItems(weaponData, options);
   if (!modules.length) return weaponData;
 
   const result = foundry.utils.deepClone(weaponData);

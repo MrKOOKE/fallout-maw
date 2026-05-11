@@ -39,7 +39,7 @@ import {
   getContextInventoryItems,
   getItemQuantity
 } from "../utils/inventory-containers.mjs";
-import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageMitigationFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getWeaponFunctionById, hasItemFunction } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageMitigationFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
@@ -787,13 +787,18 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   async #refreshHudItemTooltip() {
     if (!this.#itemTooltipElement || !this.#itemTooltipItemId) return;
     const item = this.actor?.items.get(this.#itemTooltipItemId);
-    const anchor = this.#itemTooltipAnchorElement;
-    if (!item || !anchor?.isConnected) return this.#clearHudItemTooltip();
+    if (!item) return this.#clearHudItemTooltip();
     this.#itemTooltipElement.innerHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
       activeWeaponIndex: this.#itemTooltipWeaponTabIndex,
       baseMode: this.#itemTooltipBaseMode
     });
-    this.#positionHudItemTooltip();
+    this.#clampHudItemTooltipToViewport(this.#itemTooltipElement);
+    requestAnimationFrame(() => {
+      if (!this.#itemTooltipElement) return;
+      const description = this.#itemTooltipElement.querySelector(".description");
+      description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+      this.#clampHudItemTooltipToViewport(this.#itemTooltipElement);
+    });
   }
 
   async #onHudItemTooltipClick(event) {
@@ -825,8 +830,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!button || !this.#itemTooltipElement?.contains(button)) return;
     event.preventDefault();
     event.stopPropagation();
-    this.#itemTooltipWeaponTabIndex = Math.max(0, toInteger(button.dataset.tooltipWeaponTab));
-    void this.#refreshHudItemTooltip();
+    const index = Math.max(0, toInteger(button.dataset.tooltipWeaponTab));
+    if (index === this.#itemTooltipWeaponTabIndex) return;
+    this.#itemTooltipWeaponTabIndex = index;
+    this.#activateHudItemTooltipWeaponTab(index);
   }
 
   async #onHudItemTooltipContextMenu(event) {
@@ -849,12 +856,25 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#itemTooltipElement.querySelectorAll("[data-tooltip-module-picker-panel]").forEach(entry => entry.classList.remove("active"));
     this.#itemTooltipElement.querySelectorAll("[data-tooltip-module-slot]").forEach(entry => entry.classList.remove("selecting"));
     if (wasActive) {
-      this.#positionHudItemTooltip();
+      this.#clampHudItemTooltipToViewport(this.#itemTooltipElement);
       return;
     }
     panel.classList.add("active");
     slotElement.classList.add("selecting");
-    requestAnimationFrame(() => this.#positionHudItemTooltip());
+    requestAnimationFrame(() => this.#clampHudItemTooltipToViewport(this.#itemTooltipElement));
+  }
+
+  #activateHudItemTooltipWeaponTab(index) {
+    if (!this.#itemTooltipElement) return;
+    this.#itemTooltipElement.querySelectorAll("[data-tooltip-weapon-tab]").forEach(button => {
+      const active = toInteger(button.dataset.tooltipWeaponTab) === index;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    this.#itemTooltipElement.querySelectorAll("[data-tooltip-weapon-panel]").forEach(panel => {
+      panel.classList.toggle("active", toInteger(panel.dataset.tooltipWeaponPanel) === index);
+    });
+    this.#clampHudItemTooltipToViewport(this.#itemTooltipElement);
   }
 
   async #installHudWeaponModuleFromTooltipChoice(choiceElement) {
@@ -877,12 +897,12 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const weaponIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipWeaponIndex));
     const slotIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipModuleSlotIndex));
     const entry = entries[weaponIndex] ?? null;
-    const slot = getWeaponModuleSlots(entry?.data ?? {})[slotIndex] ?? null;
+    const slot = entry?.canHaveModuleSlots ? getWeaponModuleSlots(entry?.data ?? {})[slotIndex] ?? null : null;
     return { weapon, entries, entry, weaponIndex, slotIndex, slot };
   }
 
   async #installHudWeaponModule(weapon, entry, slotIndex, moduleItem) {
-    const path = getWeaponFunctionPath(entry?.isPrimary ? ITEM_FUNCTIONS.weapon : entry?.id);
+    const path = getWeaponFunctionPath(weapon, entry?.isPrimary ? ITEM_FUNCTIONS.weapon : entry?.id);
     const slots = getWeaponModuleSlots(entry?.data ?? {});
     const slot = slots[slotIndex];
     if (!slot || !isModuleItemCompatibleWithSlot(moduleItem, slot)) return undefined;
@@ -897,18 +917,26 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const quantity = getItemQuantity(moduleItem);
     if (quantity > 1) await moduleItem.update({ "system.quantity": quantity - 1 });
     else await moduleItem.delete();
+    this.#restoreHudModuleSlotsTab(weapon.id);
     return this.#refreshHudItemTooltip();
   }
 
   async #uninstallHudWeaponModule(weapon, entry, slotIndex, itemData) {
-    const path = getWeaponFunctionPath(entry?.isPrimary ? ITEM_FUNCTIONS.weapon : entry?.id);
+    const path = getWeaponFunctionPath(weapon, entry?.isPrimary ? ITEM_FUNCTIONS.weapon : entry?.id);
     const slots = getWeaponModuleSlots(entry?.data ?? {});
     const slot = slots[slotIndex];
     if (!slot) return undefined;
     slots[slotIndex] = { ...slot, itemUuid: "", itemData: {} };
     await weapon.update({ [`${path}.moduleSlots`]: slots });
     await returnModuleItemToActorInventory(this.actor, itemData);
+    this.#restoreHudModuleSlotsTab(weapon.id);
     return this.#refreshHudItemTooltip();
+  }
+
+  #restoreHudModuleSlotsTab(weaponId = "") {
+    const weapon = this.actor?.items.get(String(weaponId ?? ""));
+    if (!weapon) return;
+    this.#itemTooltipWeaponTabIndex = getEnabledWeaponFunctions(weapon).length;
   }
 
   #positionHudItemTooltip() {
@@ -933,6 +961,22 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if ((tooltipRect.top + tooltipRect.height) > (view.innerHeight - margin)) {
       tooltip.style.top = `${Math.round(Math.max(margin, view.innerHeight - tooltipRect.height - margin))}px`;
     }
+  }
+
+  #clampHudItemTooltipToViewport(tooltip) {
+    if (!tooltip) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    const margin = 10;
+    this.#syncHudItemTooltipAvailableHeight(tooltip, view.innerHeight, margin);
+    const rect = tooltip.getBoundingClientRect();
+    let left = Number.parseFloat(tooltip.style.left);
+    let top = Number.parseFloat(tooltip.style.top);
+    if (!Number.isFinite(left)) left = rect.left;
+    if (!Number.isFinite(top)) top = rect.top;
+    left = Math.max(margin, Math.min(view.innerWidth - rect.width - margin, left));
+    top = Math.max(margin, Math.min(view.innerHeight - rect.height - margin, top));
+    tooltip.style.left = `${Math.round(left)}px`;
+    tooltip.style.top = `${Math.round(top)}px`;
   }
 
   #syncHudItemTooltipAvailableHeight(tooltip, viewportHeight, margin) {
@@ -1535,7 +1579,9 @@ function prepareWeaponActionRows(selectedWeapon, forceDisabled = false) {
 }
 
 function prepareWeaponActionButtonsForFunction(selectedWeapon, weaponFunction, forceDisabled = false) {
-  const weaponData = applyWeaponModuleModifiers(weaponFunction?.data ?? {});
+  const weaponData = applyWeaponModuleModifiers(weaponFunction?.data ?? {}, {
+    moduleSlots: getWeaponFunctionModuleSlots(selectedWeapon, weaponFunction?.id)
+  });
   const actions = weaponData?.availableActions ?? {};
   const hasMagazineCost = hasWeaponResourceCostData(weaponData, "magazine");
   const buttons = [
@@ -1771,8 +1817,8 @@ async function insertWeaponMagazineSource(actor, weapon, weaponFunctionId, weapo
   if (!amount) return;
   const updates = [{
     _id: weapon.id,
-    [`${getWeaponFunctionPath(weaponFunctionId)}.magazine.sourceItemUuid`]: sourceItem.uuid,
-    [`${getWeaponFunctionPath(weaponFunctionId)}.magazine.value`]: current + amount
+    [`${getWeaponFunctionPath(weapon, weaponFunctionId)}.magazine.sourceItemUuid`]: sourceItem.uuid,
+    [`${getWeaponFunctionPath(weapon, weaponFunctionId)}.magazine.value`]: current + amount
   }];
   const deletes = [];
   let remaining = amount;
@@ -1798,8 +1844,8 @@ async function extractWeaponMagazineSource(actor, weapon, weaponFunctionId, weap
   const sourceStacks = getActorMagazineSourceStacks(actor, sourceItem);
   const updates = [{
     _id: weapon.id,
-    [`${getWeaponFunctionPath(weaponFunctionId)}.magazine.sourceItemUuid`]: sourceItem.uuid,
-    [`${getWeaponFunctionPath(weaponFunctionId)}.magazine.value`]: 0
+    [`${getWeaponFunctionPath(weapon, weaponFunctionId)}.magazine.sourceItemUuid`]: sourceItem.uuid,
+    [`${getWeaponFunctionPath(weapon, weaponFunctionId)}.magazine.value`]: 0
   }];
   const targetStack = sourceStacks.at(0);
   if (targetStack) {
@@ -1813,11 +1859,8 @@ async function extractWeaponMagazineSource(actor, weapon, weaponFunctionId, weap
   return createActorMagazineSourceStack(actor, sourceItem, current);
 }
 
-function getWeaponFunctionPath(weaponFunctionId = "") {
-  const id = String(weaponFunctionId ?? "");
-  return !id || id === ITEM_FUNCTIONS.weapon
-    ? "system.functions.weapon"
-    : `system.functions.additionalWeapons.${id}`;
+function getWeaponFunctionPath(weapon, weaponFunctionId = "") {
+  return getWeaponFunctionUpdatePath(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) || "system.functions.weapon";
 }
 
 function getWeaponMagazineSourceItem(weaponData = {}) {

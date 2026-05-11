@@ -298,8 +298,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelector("[data-add-item-function]")?.addEventListener("click", event => this.#onAddItemFunction(event));
     this.element?.querySelector("[data-add-additional-weapon-function]")?.addEventListener("click", event => this.#onAddAdditionalWeaponFunction(event));
+    this.element?.querySelector("[data-add-module-weapon-function]")?.addEventListener("click", event => this.#onAddModuleWeaponFunction(event));
     this.element?.querySelectorAll("[data-delete-additional-weapon-function]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAdditionalWeaponFunction(event));
+    });
+    this.element?.querySelectorAll("[data-delete-module-weapon-function]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteModuleWeaponFunction(event));
     });
     this.element?.querySelector("[data-choose-item-function]")?.addEventListener("change", event => this.#onChooseItemFunction(event));
     this.element?.querySelectorAll("[data-container-load-reduction]").forEach(input => {
@@ -489,7 +493,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return this.item.update({
         "system.functions.module.enabled": true,
         "system.functions.module.name": "",
-        "system.functions.module.targetFunction": "weapon"
+        "system.functions.module.targetFunction": "weapon",
+        "system.functions.module.additionalWeapons": {}
       });
     }
 
@@ -576,7 +581,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return this.item.update({
         "system.functions.module.enabled": false,
         "system.functions.module.name": "",
-        "system.functions.module.targetFunction": "weapon"
+        "system.functions.module.targetFunction": "weapon",
+        "system.functions.module.additionalWeapons": {}
       });
     }
     const toolKey = getToolKeyFromFunctionKey(functionKey);
@@ -596,7 +602,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       ...foundry.utils.deepClone(baseWeapon),
       id,
       name: getNextAdditionalWeaponFunctionName(Object.values(additionalWeapons)),
-      enabled: true
+      enabled: true,
+      moduleSlots: []
     });
     return this.item.update({ "system.functions.additionalWeapons": additionalWeapons });
   }
@@ -607,6 +614,28 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const id = String(event.currentTarget?.dataset?.deleteAdditionalWeaponFunction ?? "");
     if (!id) return undefined;
     return this.item.update({ [`system.functions.additionalWeapons.${id}`]: globalThis._del });
+  }
+
+  #onAddModuleWeaponFunction(event) {
+    event.preventDefault();
+    const moduleWeapons = Object.fromEntries(getModuleWeaponFunctionEntries(this.item)
+      .map(({ id, data }) => [id, foundry.utils.deepClone(data)]));
+    const id = foundry.utils.randomID();
+    moduleWeapons[id] = createDefaultWeaponFunctionData({
+      id,
+      name: getNextAdditionalWeaponFunctionName(Object.values(moduleWeapons)),
+      enabled: true,
+      moduleSlots: []
+    });
+    return this.item.update({ "system.functions.module.additionalWeapons": moduleWeapons });
+  }
+
+  #onDeleteModuleWeaponFunction(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const id = String(event.currentTarget?.dataset?.deleteModuleWeaponFunction ?? "");
+    if (!id) return undefined;
+    return this.item.update({ [`system.functions.module.additionalWeapons.${id}`]: globalThis._del });
   }
 
   #onAddWeaponResourceCost(event) {
@@ -1246,13 +1275,13 @@ function getItemFunctionLabel(functionKey = "") {
 }
 
 function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, proficiencySettings, characteristicSettings, hasConditionFunction) {
-  if (!hasItemFunction(item, ITEM_FUNCTIONS.weapon)) return [];
-  const primaryWeapon = item.system?.functions?.weapon ?? {};
-  const sourcePrimaryWeapon = item.system?._source?.functions?.weapon ?? {};
-  const additionalWeapons = getAdditionalWeaponFunctionEntries(item);
-  const sourceAdditionalWeapons = getAdditionalWeaponFunctionEntries({ system: item.system?._source ?? {} });
-  return [
-    buildWeaponFunctionSection({
+  const sections = [];
+  if (hasItemFunction(item, ITEM_FUNCTIONS.weapon)) {
+    const primaryWeapon = item.system?.functions?.weapon ?? {};
+    const sourcePrimaryWeapon = item.system?._source?.functions?.weapon ?? {};
+    const additionalWeapons = getAdditionalWeaponFunctionEntries(item);
+    const sourceAdditionalWeapons = getAdditionalWeaponFunctionEntries({ system: item.system?._source ?? {} });
+    sections.push(buildWeaponFunctionSection({
       title: game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon"),
       path: "system.functions.weapon",
       weaponData: primaryWeapon,
@@ -1263,9 +1292,10 @@ function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, pr
       characteristicSettings,
       hasConditionFunction,
       isPrimary: true,
-      canAddAdditional: true
-    }),
-    ...additionalWeapons.map(({ id, data: weaponData }, index) => buildWeaponFunctionSection({
+      canAddAdditional: true,
+      canHaveModuleSlots: true
+    }));
+    sections.push(...additionalWeapons.map(({ id, data: weaponData }, index) => buildWeaponFunctionSection({
       title: String(weaponData?.name ?? "").trim() || getDefaultAdditionalWeaponFunctionName(index),
       path: `system.functions.additionalWeapons.${id}`,
       weaponData,
@@ -1276,10 +1306,31 @@ function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, pr
       characteristicSettings,
       hasConditionFunction,
       isAdditional: true,
+      isNamed: true,
       id,
       index
-    }))
-  ];
+    })));
+  }
+  if (hasItemFunction(item, ITEM_FUNCTIONS.module)) {
+    const moduleWeapons = getModuleWeaponFunctionEntries(item);
+    const sourceModuleWeapons = getModuleWeaponFunctionEntries({ system: item.system?._source ?? {} });
+    sections.push(...moduleWeapons.map(({ id, data: weaponData }, index) => buildWeaponFunctionSection({
+      title: String(weaponData?.name ?? "").trim() || getDefaultAdditionalWeaponFunctionName(index),
+      path: `system.functions.module.additionalWeapons.${id}`,
+      weaponData,
+      sourceWeaponData: sourceModuleWeapons.find(entry => entry.id === id)?.data ?? {},
+      damageTypeSettings,
+      skillSettings,
+      proficiencySettings,
+      characteristicSettings,
+      hasConditionFunction,
+      isModuleWeapon: true,
+      isNamed: true,
+      id,
+      index
+    })));
+  }
+  return sections;
 }
 
 function buildWeaponFunctionSection({
@@ -1294,7 +1345,10 @@ function buildWeaponFunctionSection({
   hasConditionFunction = false,
   isPrimary = false,
   canAddAdditional = false,
+  canHaveModuleSlots = false,
   isAdditional = false,
+  isModuleWeapon = false,
+  isNamed = false,
   id = "",
   index = -1
 } = {}) {
@@ -1305,14 +1359,17 @@ function buildWeaponFunctionSection({
     weaponData: effectiveWeaponData,
     isPrimary,
     isAdditional,
+    isModuleWeapon,
+    isNamed,
     canAddAdditional,
+    canHaveModuleSlots,
     id,
     index,
     damageModeChoices: buildWeaponDamageModeChoices(weaponData?.damageMode),
     usesDamageSource: isSourceDamageMode(weaponData),
     hasMagazineCost: hasWeaponResourceCostData(weaponData, "magazine") || isSourceDamageMode(weaponData),
     magazineSourceItems: buildWeaponMagazineSourceItems(weaponData),
-    moduleSlots: buildWeaponModuleSlotRows(weaponData),
+    moduleSlots: canHaveModuleSlots ? buildWeaponModuleSlotRows(weaponData) : [],
     hasVolleyAction: Boolean(weaponData?.availableActions?.volley),
     damageTypeRows: buildWeaponDamageTypeRowsForData(effectiveWeaponData, damageTypeSettings, sourceWeaponData),
     skillChoices: buildWeaponSkillChoicesForData(effectiveWeaponData, skillSettings),
@@ -1976,6 +2033,15 @@ function getWeaponFunctionPath(section) {
 
 function getAdditionalWeaponFunctionEntries(item) {
   const additionalWeapons = item?.system?.functions?.additionalWeapons;
+  return getWeaponFunctionEntries(additionalWeapons);
+}
+
+function getModuleWeaponFunctionEntries(item) {
+  const moduleWeapons = item?.system?.functions?.module?.additionalWeapons;
+  return getWeaponFunctionEntries(moduleWeapons);
+}
+
+function getWeaponFunctionEntries(additionalWeapons) {
   if (Array.isArray(additionalWeapons)) {
     return additionalWeapons
       .map((data, index) => ({

@@ -221,7 +221,8 @@ function moduleFunctionField() {
     enabled: new BooleanField({ required: true, initial: false }),
     name: new StringField({ required: true, blank: true, initial: "" }),
     targetFunction: new StringField({ required: true, blank: false, choices: ["weapon"], initial: "weapon" }),
-    weapon: weaponModuleModifiersField()
+    weapon: weaponModuleModifiersField(),
+    additionalWeapons: new TypedObjectField(weaponFunctionField({ named: true }), { required: true, initial: {} })
   });
 }
 
