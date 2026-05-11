@@ -377,20 +377,22 @@ class WeaponAttackController {
         title: this.weapon.name
       })
       : null;
-    const primaryShots = buildBurstPrimaryShots(this.token, this.geometry, attackCount);
-    const assignments = buildBurstBulletAssignments(this.token, this.geometry, this.targets, attackCount, { primaryShots });
+    const projectileCount = getBurstProjectileCount(attackCount, pelletCount);
+    const primaryShots = buildBurstPrimaryShots(this.token, this.geometry, projectileCount);
+    const assignments = buildBurstBulletAssignments(this.token, this.geometry, this.targets, projectileCount, { primaryShots });
     let attempted = false;
 
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
-      const target = assignments[attackIndex] ?? null;
-      const primaryTrajectory = primaryShots[attackIndex]?.trajectory ?? buildRandomTrajectory(this.token, getRandomBurstMissGeometry(this.token, this.geometry));
       const difficultyBonus = getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId);
-      const shotTrajectories = target
-        ? buildAimedAttackTrajectories(this.token, this.geometry, buildTrajectoryThroughPoint(this.token, this.geometry, getTokenAimPoint(target)), pelletCount)
-        : buildAimedAttackTrajectories(this.token, getRandomBurstMissGeometry(this.token, this.geometry), primaryTrajectory, pelletCount);
-      const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), shotTrajectories.map(() => 1));
+      const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), Array(Math.max(1, toInteger(pelletCount))).fill(1));
 
-      for (const [pelletIndex, trajectory] of shotTrajectories.entries()) {
+      for (let pelletIndex = 0; pelletIndex < pelletDamages.length; pelletIndex += 1) {
+        const projectileIndex = (attackIndex * pelletDamages.length) + pelletIndex;
+        const target = assignments[projectileIndex] ?? null;
+        const primaryTrajectory = primaryShots[projectileIndex]?.trajectory ?? buildRandomTrajectory(this.token, getRandomBurstMissGeometry(this.token, this.geometry));
+        const trajectory = target
+          ? buildTrajectoryThroughPoint(this.token, this.geometry, getTokenAimPoint(target))
+          : primaryTrajectory;
         attempted = true;
         if (!target) {
           trajectories.push({ ...trajectory, delayGroup: attackIndex });
@@ -1278,8 +1280,9 @@ class WeaponAttackController {
       || hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_HIT_ALL_CONE_TARGETS, this.weaponFunctionId)
     ) return new Map();
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
-    return buildBurstTargetRanges(this.token, this.geometry, targets, attackCount, {
-      primaryShots: buildBurstPrimaryShots(this.token, this.geometry, attackCount)
+    const projectileCount = getBurstProjectileCount(attackCount, getWeaponPelletCount(this.weapon, this.weaponFunctionId));
+    return buildBurstTargetRanges(this.token, this.geometry, targets, projectileCount, {
+      primaryShots: buildBurstPrimaryShots(this.token, this.geometry, projectileCount)
     });
   }
 
@@ -1929,6 +1932,10 @@ function getBurstShotDifficultyBonus(weapon, actionKey, attackIndex = 0, weaponF
 
 function getWeaponPelletCount(weapon, weaponFunctionId = "") {
   return Math.max(1, toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.pellets) || 1);
+}
+
+function getBurstProjectileCount(attackCount = 1, pelletCount = 1) {
+  return Math.max(1, toInteger(attackCount) || 1) * Math.max(1, toInteger(pelletCount) || 1);
 }
 
 function hasRequiredWeaponResources(weapon, multiplier = 1, weaponFunctionId = "") {
@@ -3086,6 +3093,9 @@ function buildBurstTargetEntries(attackerToken, geometry, targets = [], attackCo
 
 function getBurstPrimaryTargets(attackerToken, geometry, targets = [], attackCount = 1, { primaryShots = null } = {}) {
   const allowedTargets = new Set(targets);
+  const shotTargets = getBurstPrimaryShotTargets(primaryShots, allowedTargets);
+  if (shotTargets) return shotTargets;
+
   const coveredIntervals = [];
   const primaryTargets = new Set();
   const candidates = Array.from(new Set(targets))
@@ -3104,6 +3114,16 @@ function getBurstPrimaryTargets(attackerToken, geometry, targets = [], attackCou
   }
 
   return primaryTargets;
+}
+
+function getBurstPrimaryShotTargets(primaryShots = null, allowedTargets = new Set()) {
+  if (!Array.isArray(primaryShots)) return null;
+  const targets = new Set();
+  for (const shot of primaryShots) {
+    const target = shot?.target ?? null;
+    if (target && allowedTargets.has(target)) targets.add(target);
+  }
+  return targets;
 }
 
 function getBurstTargetAngularInterval(target, geometry) {
