@@ -35,6 +35,7 @@ import {
   ROOT_CONTAINER_ID,
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
+  getItemMaxStack,
   getContextInventoryItems,
   getItemQuantity
 } from "../utils/inventory-containers.mjs";
@@ -42,6 +43,13 @@ import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageMitigationFunction,
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
+import {
+  applyWeaponModuleModifiers,
+  getWeaponModuleSlots,
+  getWeaponModuleSlotItemData,
+  getWeaponModuleTechnicalName,
+  isModuleItemCompatibleWithSlot
+} from "../utils/weapon-modules.mjs";
 import { FalloutMaWFormApplicationV2, getFlatFormData } from "./base-form-application-v2.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -762,7 +770,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       baseMode: this.#itemTooltipBaseMode
     });
     tooltip.addEventListener("click", event => this.#onHudItemTooltipClick(event));
-    tooltip.addEventListener("contextmenu", event => event.preventDefault());
+    tooltip.addEventListener("contextmenu", event => this.#onHudItemTooltipContextMenu(event));
     document.body.append(tooltip);
     this.#itemTooltipElement = tooltip;
     this.#itemTooltipAnchorElement = anchor;
@@ -789,12 +797,119 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #onHudItemTooltipClick(event) {
+    const moduleSlot = event.target?.closest?.("[data-tooltip-module-slot]");
+    if (moduleSlot && this.#itemTooltipElement?.contains(moduleSlot)) {
+      event.preventDefault();
+      event.stopPropagation();
+      void this.#openHudWeaponModuleSelection(moduleSlot);
+      return;
+    }
+
     const button = event.target?.closest?.("[data-tooltip-weapon-tab]");
     if (!button || !this.#itemTooltipElement?.contains(button)) return;
     event.preventDefault();
     event.stopPropagation();
     this.#itemTooltipWeaponTabIndex = Math.max(0, toInteger(button.dataset.tooltipWeaponTab));
     void this.#refreshHudItemTooltip();
+  }
+
+  async #onHudItemTooltipContextMenu(event) {
+    const moduleSlot = event.target?.closest?.("[data-tooltip-module-slot]");
+    if (!moduleSlot || !this.#itemTooltipElement?.contains(moduleSlot)) {
+      event.preventDefault();
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    await this.#removeHudWeaponModule(moduleSlot);
+  }
+
+  async #openHudWeaponModuleSelection(slotElement) {
+    const { weapon, entries, weaponIndex, slotIndex, slot } = this.#getHudWeaponModuleSlotContext(slotElement);
+    if (!weapon || !slot) return;
+    const modules = this.actor.items.contents
+      .filter(candidate => candidate.id !== weapon.id && isModuleItemCompatibleWithSlot(candidate, slot) && getItemQuantity(candidate) > 0)
+      .map(candidate => ({ id: candidate.id, name: getWeaponModuleTechnicalName(candidate) }));
+    if (!modules.length) return ui.notifications.warn("Подходящих модулей нет.");
+    const result = await DialogV2.input({
+      classes: ["dialog", "fallout-maw-module-selection-dialog"],
+      position: { width: 400 },
+      window: { title: game.i18n.localize("FALLOUTMAW.Item.WeaponModuleSlots") },
+      content: `
+        <div class="fallout-maw-terminal-dialog">
+          <label class="fallout-maw-stacked-field">
+            <span>${escapeHTML(slot.moduleKey || game.i18n.localize("FALLOUTMAW.Item.WeaponModuleSlots"))}</span>
+            <select name="moduleId">
+              ${modules.map(module => `<option value="${escapeAttribute(module.id)}">${escapeHTML(module.name)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+      `,
+      ok: {
+        label: "Выбрать",
+        icon: "fa-solid fa-check",
+        callback: (_event, button) => new FormDataExtended(button.form).object
+      },
+      rejectClose: false
+    });
+    const moduleItem = this.actor.items.get(String(result?.moduleId ?? ""));
+    if (!moduleItem) return undefined;
+    return this.#installHudWeaponModule(weapon, entries[weaponIndex], slotIndex, moduleItem);
+  }
+
+  async #removeHudWeaponModule(slotElement) {
+    const { weapon, entry, slotIndex, slot } = this.#getHudWeaponModuleSlotContext(slotElement);
+    const itemData = getWeaponModuleSlotItemData(slot);
+    if (!weapon || !entry || !itemData?.system) return undefined;
+    const confirmed = await DialogV2.confirm({
+      window: { title: game.i18n.localize("FALLOUTMAW.Item.WeaponModuleSlots") },
+      content: `<p>Снять модуль "${escapeHTML(getWeaponModuleTechnicalName(itemData))}"?</p>`,
+      yes: { icon: "fa-solid fa-arrow-up", label: "Да" },
+      no: { label: game.i18n.localize("Cancel") },
+      rejectClose: false,
+      modal: true
+    });
+    if (!confirmed) return undefined;
+    return this.#uninstallHudWeaponModule(weapon, entry, slotIndex, itemData);
+  }
+
+  #getHudWeaponModuleSlotContext(slotElement) {
+    const weapon = this.#itemTooltipItemId ? this.actor?.items.get(this.#itemTooltipItemId) : null;
+    const entries = weapon ? getEnabledWeaponFunctions(weapon) : [];
+    const weaponIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipWeaponIndex));
+    const slotIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipModuleSlotIndex));
+    const entry = entries[weaponIndex] ?? null;
+    const slot = getWeaponModuleSlots(entry?.data ?? {})[slotIndex] ?? null;
+    return { weapon, entries, entry, weaponIndex, slotIndex, slot };
+  }
+
+  async #installHudWeaponModule(weapon, entry, slotIndex, moduleItem) {
+    const path = getWeaponFunctionPath(entry?.isPrimary ? ITEM_FUNCTIONS.weapon : entry?.id);
+    const slots = getWeaponModuleSlots(entry?.data ?? {});
+    const slot = slots[slotIndex];
+    if (!slot || !isModuleItemCompatibleWithSlot(moduleItem, slot)) return undefined;
+    if (getWeaponModuleSlotItemData(slot)?.system) return ui.notifications.warn("Сначала снимите установленный модуль.");
+
+    const itemData = moduleItem.toObject();
+    delete itemData._id;
+    foundry.utils.setProperty(itemData, "system.quantity", 1);
+    slots[slotIndex] = { ...slot, itemUuid: moduleItem.uuid, itemData };
+    await weapon.update({ [`${path}.moduleSlots`]: slots });
+    const quantity = getItemQuantity(moduleItem);
+    if (quantity > 1) await moduleItem.update({ "system.quantity": quantity - 1 });
+    else await moduleItem.delete();
+    return this.#refreshHudItemTooltip();
+  }
+
+  async #uninstallHudWeaponModule(weapon, entry, slotIndex, itemData) {
+    const path = getWeaponFunctionPath(entry?.isPrimary ? ITEM_FUNCTIONS.weapon : entry?.id);
+    const slots = getWeaponModuleSlots(entry?.data ?? {});
+    const slot = slots[slotIndex];
+    if (!slot) return undefined;
+    slots[slotIndex] = { ...slot, itemUuid: "", itemData: {} };
+    await weapon.update({ [`${path}.moduleSlots`]: slots });
+    await returnModuleItemToActorInventory(this.actor, itemData);
+    return this.#refreshHudItemTooltip();
   }
 
   #positionHudItemTooltip() {
@@ -1395,8 +1510,9 @@ function prepareWeaponActionRows(selectedWeapon, forceDisabled = false) {
 }
 
 function prepareWeaponActionButtonsForFunction(selectedWeapon, weaponFunction, forceDisabled = false) {
-  const actions = weaponFunction?.data?.availableActions ?? {};
-  const hasMagazineCost = hasWeaponResourceCostData(weaponFunction?.data, "magazine");
+  const weaponData = applyWeaponModuleModifiers(weaponFunction?.data ?? {});
+  const actions = weaponData?.availableActions ?? {};
+  const hasMagazineCost = hasWeaponResourceCostData(weaponData, "magazine");
   const buttons = [
     { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot"), configured: Boolean(actions.aimedShot) },
     { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot"), configured: Boolean(actions.snapshot) },
@@ -1408,13 +1524,13 @@ function prepareWeaponActionButtonsForFunction(selectedWeapon, weaponFunction, f
   ];
   return buttons.filter(action => action.visible !== false && action.configured).map(action => ({
     ...action,
-    label: String(weaponFunction.data?.[action.key]?.name ?? "").trim() || action.label,
+    label: String(weaponData?.[action.key]?.name ?? "").trim() || action.label,
     disabled: forceDisabled,
     itemId: selectedWeapon.id,
     weaponFunctionId: weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id,
     img: normalizeImagePath(selectedWeapon.img, "icons/svg/combat.svg"),
-    actionPointCost: getWeaponActionPointCostForHud(weaponFunction.data, action.key),
-    actionPointCostLabel: `${getWeaponActionPointCostForHud(weaponFunction.data, action.key)} ОД`
+    actionPointCost: getWeaponActionPointCostForHud(weaponData, action.key),
+    actionPointCostLabel: `${getWeaponActionPointCostForHud(weaponData, action.key)} ОД`
   }));
 }
 
@@ -1757,6 +1873,46 @@ async function createActorMagazineSourceStack(actor, sourceItem, quantity) {
       container: {
         parentId: ROOT_CONTAINER_ID
       },
+      placement: {
+        mode: storedPlacement.mode,
+        equipmentSlot: storedPlacement.equipmentSlot,
+        weaponSet: storedPlacement.weaponSet,
+        weaponSlot: storedPlacement.weaponSlot,
+        x: storedPlacement.x,
+        y: storedPlacement.y,
+        width: storedPlacement.width,
+        height: storedPlacement.height
+      }
+    }
+  });
+  return actor.createEmbeddedDocuments("Item", [createData]);
+}
+
+async function returnModuleItemToActorInventory(actor, itemData) {
+  if (!actor || !itemData?.system) return null;
+  const moduleName = getWeaponModuleTechnicalName(itemData);
+  const stackTarget = actor.items.contents.find(item => (
+    getWeaponModuleTechnicalName(item) === moduleName
+    && getItemQuantity(item) < getItemMaxStack(item)
+    && String(item.system?.placement?.mode ?? "inventory") === "inventory"
+  ));
+  if (stackTarget) {
+    return stackTarget.update({ "system.quantity": getItemQuantity(stackTarget) + 1 });
+  }
+
+  const placement = getFirstAvailableRootInventoryPlacement(actor, itemData);
+  if (!placement) {
+    ui.notifications.warn("Нет места в инвентаре для снятого модуля.");
+    return null;
+  }
+  const createData = foundry.utils.deepClone(itemData);
+  delete createData._id;
+  const storedPlacement = createStoredPlacement(placement, itemData);
+  foundry.utils.mergeObject(createData, {
+    system: {
+      quantity: 1,
+      equipped: false,
+      container: { parentId: ROOT_CONTAINER_ID },
       placement: {
         mode: storedPlacement.mode,
         equipmentSlot: storedPlacement.equipmentSlot,

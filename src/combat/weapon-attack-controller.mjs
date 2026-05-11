@@ -8,6 +8,7 @@ import { getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSetti
 import { ACTION_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { getRequiredWeaponSlotsForItem, getWeaponSlotRequirement, isContainerWeaponSetKey } from "../utils/equipment-slots.mjs";
+import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
 
 const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
 const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
@@ -1380,7 +1381,7 @@ class WeaponAttackController {
 }
 
 function getWeaponAttackData(weapon, weaponFunctionId = "") {
-  return applyDamageSourceWeaponModifiers(getWeaponFunctionById(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) ?? {});
+  return applyWeaponModuleModifiers(applyDamageSourceWeaponModifiers(getWeaponFunctionById(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) ?? {}));
 }
 
 function applyDamageSourceWeaponModifiers(weaponData = {}) {
@@ -2528,24 +2529,7 @@ function getWeaponDamageTypeEntries(weapon, weaponFunctionId = "") {
 }
 
 function getEffectiveWeaponDamageData(weapon, weaponFunctionId = "") {
-  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
-  if (String(weaponData?.damageMode ?? "manual") !== "source") return weaponData;
-  const sourceItem = getWeaponMagazineSourceItem(weaponData);
-  if (!sourceItem || !hasItemFunction(sourceItem, ITEM_FUNCTIONS.damageSource)) {
-    return {
-      source: "damageSource",
-      damage: 0,
-      damageTypeKey: "firearm",
-      damageTypes: [{ key: "firearm", percent: 100 }]
-    };
-  }
-  const source = getDamageSourceFunction(sourceItem);
-  return {
-    source: "damageSource",
-    damage: source.damage,
-    damageTypeKey: source.damageTypeKey,
-    damageTypes: source.damageTypes
-  };
+  return getWeaponAttackData(weapon, weaponFunctionId);
 }
 
 function getWeaponMagazineSourceItem(weaponData = {}) {

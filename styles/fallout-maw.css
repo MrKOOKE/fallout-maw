@@ -172,6 +172,27 @@
   min-height: 1.2em;
 }
 
+.fallout-maw-terminal-dialog {
+  background: rgba(8, 6, 13, 0.94);
+  color: var(--color-text-primary);
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.5rem;
+}
+
+.fallout-maw-terminal-dialog .fallout-maw-stacked-field > span {
+  min-height: 0;
+}
+
+.fallout-maw-module-selection-dialog .window-content {
+  background: rgba(9, 7, 14, 0.96);
+}
+
+.fallout-maw-module-selection-dialog .dialog-content,
+.fallout-maw-module-selection-dialog .form-footer {
+  background: transparent;
+}
+
 .fallout-maw-list-grid {
   grid-template-columns: 1fr;
 }
@@ -1577,6 +1598,89 @@
   width: 2rem;
 }
 
+.fallout-maw-weapon-module-pending-list {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.fallout-maw-weapon-module-pending-list:empty {
+  display: none;
+}
+
+.fallout-maw-weapon-module-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+
+.fallout-maw-weapon-module-slot-pending {
+  max-width: 36rem;
+  width: 100%;
+}
+
+.fallout-maw-weapon-module-slot-card {
+  align-items: center;
+  display: grid;
+  gap: 0.35rem;
+  justify-items: center;
+  position: relative;
+  width: 4.5rem;
+}
+
+.fallout-maw-weapon-module-drop {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--color-border-light-primary);
+  border-radius: 3px;
+  color: var(--color-text-primary);
+  display: flex;
+  font-size: 1.35rem;
+  height: 4.5rem;
+  justify-content: center;
+  padding: 0.25rem;
+  width: 4.5rem;
+}
+
+.fallout-maw-weapon-module-drop.empty {
+  background: rgba(191, 164, 80, 0.08);
+  border-style: dashed;
+  color: var(--color-text-light-5);
+}
+
+.fallout-maw-weapon-module-drop img {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.fallout-maw-weapon-module-slot-label {
+  color: var(--color-text-primary);
+  font-size: 0.82rem;
+  line-height: 1.15;
+  max-width: 100%;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.fallout-maw-weapon-module-slot-delete {
+  height: 1.65rem;
+  opacity: 0;
+  padding: 0;
+  position: absolute;
+  right: -0.35rem;
+  top: -0.35rem;
+  transition: opacity 120ms ease;
+  width: 1.65rem;
+}
+
+.fallout-maw-weapon-module-slot-card:hover .fallout-maw-weapon-module-slot-delete,
+.fallout-maw-weapon-module-slot-delete:focus {
+  opacity: 1;
+}
+
 .fallout-maw-weapon-critical-failure-consequences .fallout-maw-settings-row {
   grid-template-columns: minmax(150px, 1fr) minmax(120px, 0.8fr) minmax(70px, 90px) 2.5rem;
 }
@@ -2157,6 +2261,52 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-inventory-tooltip .function-value-token {
   display: block;
   overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.fallout-maw-inventory-tooltip .tooltip-module-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.fallout-maw-inventory-tooltip .tooltip-module-card {
+  align-items: center;
+  display: grid;
+  gap: 0.25rem;
+  justify-items: center;
+  width: 4.35rem;
+}
+
+.fallout-maw-inventory-tooltip .tooltip-module-slot {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(218, 207, 147, 0.36);
+  border-radius: 3px;
+  color: var(--color-text-primary);
+  display: flex;
+  height: 4.25rem;
+  justify-content: center;
+  padding: 0.25rem;
+  width: 4.25rem;
+}
+
+.fallout-maw-inventory-tooltip .tooltip-module-slot.empty {
+  border-style: dashed;
+  color: rgba(238, 229, 183, 0.72);
+}
+
+.fallout-maw-inventory-tooltip .tooltip-module-slot img {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.fallout-maw-inventory-tooltip .tooltip-module-card > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

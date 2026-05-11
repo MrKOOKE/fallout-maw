@@ -4,6 +4,7 @@ export const ITEM_FUNCTIONS = {
   damageSource: "damageSource",
   condition: "condition",
   weapon: "weapon",
+  module: "module",
   toolPrefix: "tool:"
 };
 
@@ -36,6 +37,10 @@ export function getConditionFunction(itemOrSystem = null) {
 
 export function getDamageSourceFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.damageSource] ?? {};
+}
+
+export function getModuleFunction(itemOrSystem = null) {
+  return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.module] ?? {};
 }
 
 export function getConditionWeakeningData(itemOrSystem = null, { minimumRatio = 0 } = {}) {

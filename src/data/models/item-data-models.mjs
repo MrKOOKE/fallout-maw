@@ -1,4 +1,4 @@
-const { ArrayField, BooleanField, HTMLField, NumberField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
+const { ArrayField, BooleanField, HTMLField, NumberField, ObjectField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
 const DEFAULT_RELOAD_ACTION_POINT_COST = 2;
@@ -54,6 +54,7 @@ export class GearDataModel extends BaseItemDataModel {
         container: containerFunctionField(),
         condition: conditionFunctionField(),
         damageSource: damageSourceFunctionField(),
+        module: moduleFunctionField(),
         weapon: weaponFunctionField(),
         additionalWeapons: new TypedObjectField(weaponFunctionField({ named: true }), { required: true, initial: {} }),
         damageMitigation: new SchemaField({
@@ -164,6 +165,7 @@ function weaponFunctionField({ named = false } = {}) {
       sourceItemUuids: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), { required: true, initial: [] })
     }),
     resourceCosts: new ArrayField(weaponResourceCostField(), { required: true, initial: [] }),
+    moduleSlots: new ArrayField(weaponModuleSlotField(), { required: true, initial: [] }),
     specialProperties: new ArrayField(new StringField({
       required: true,
       blank: false,
@@ -212,6 +214,50 @@ function weaponFunctionField({ named = false } = {}) {
     schema.name = new StringField({ required: true, blank: true, initial: "" });
   }
   return new SchemaField(schema);
+}
+
+function moduleFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    name: new StringField({ required: true, blank: true, initial: "" }),
+    targetFunction: new StringField({ required: true, blank: false, choices: ["weapon"], initial: "weapon" }),
+    weapon: weaponModuleModifiersField()
+  });
+}
+
+function weaponModuleModifiersField() {
+  return new SchemaField({
+    damage: new NumberField({ required: true, integer: true, initial: 0 }),
+    accuracyBonus: new NumberField({ required: true, integer: true, initial: 0 }),
+    criticalChanceModifier: new NumberField({ required: true, integer: true, initial: 0 }),
+    criticalDamagePercent: new NumberField({ required: true, integer: true, initial: 0 }),
+    attackConeDegrees: new NumberField({ required: true, initial: 0 }),
+    maxRangeMeters: new NumberField({ required: true, initial: 0 }),
+    effectiveRange: new SchemaField({
+      value: new NumberField({ required: true, initial: 0 }),
+      max: new NumberField({ required: true, initial: 0 })
+    }),
+    penetration: new NumberField({ required: true, integer: true, initial: 0 }),
+    magazineMax: new NumberField({ required: true, integer: true, initial: 0 }),
+    actionPointCosts: new SchemaField({
+      aimedShot: new NumberField({ required: true, integer: true, initial: 0 }),
+      snapshot: new NumberField({ required: true, integer: true, initial: 0 }),
+      burst: new NumberField({ required: true, integer: true, initial: 0 }),
+      volley: new NumberField({ required: true, integer: true, initial: 0 }),
+      meleeAttack: new NumberField({ required: true, integer: true, initial: 0 }),
+      aimedMeleeAttack: new NumberField({ required: true, integer: true, initial: 0 }),
+      reload: new NumberField({ required: true, integer: true, initial: 0 })
+    })
+  });
+}
+
+function weaponModuleSlotField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: true, initial: "" }),
+    moduleKey: new StringField({ required: true, blank: true, initial: "" }),
+    itemUuid: new StringField({ required: true, blank: true, initial: "" }),
+    itemData: new ObjectField({ required: true, initial: {} })
+  });
 }
 
 function weaponDamageEntryField() {

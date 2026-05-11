@@ -10,6 +10,13 @@ import {
 } from "../utils/item-functions.mjs";
 import { FALLBACK_ICON, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import {
+  getWeaponModuleSlots,
+  getWeaponModuleSlotItemData,
+  getWeaponModuleTechnicalName,
+  isModuleItemCompatibleWithSlot,
+  isWeaponModuleItem
+} from "../utils/weapon-modules.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -89,6 +96,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const hasContainerFunction = hasItemFunction(item, ITEM_FUNCTIONS.container);
     const hasDamageMitigationFunction = hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation);
     const hasDamageSourceFunction = hasItemFunction(item, ITEM_FUNCTIONS.damageSource);
+    const hasModuleFunction = hasItemFunction(item, ITEM_FUNCTIONS.module);
     const hasConditionFunction = hasItemFunction(item, ITEM_FUNCTIONS.condition);
     const hasWeaponFunction = hasItemFunction(item, ITEM_FUNCTIONS.weapon);
     const containerLoadReduction = Math.max(0, Math.min(100, Number(item.system?.functions?.container?.loadReduction) || 0));
@@ -129,6 +137,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         value: ITEM_FUNCTIONS.weapon,
         label: game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon"),
         disabled: hasWeaponFunction
+      },
+      {
+        value: ITEM_FUNCTIONS.module,
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionModule"),
+        disabled: hasModuleFunction
       },
       ...toolFunctions.map(tool => ({
         value: createToolFunctionKey(tool.key),
@@ -177,12 +190,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       isContainerFunction: hasContainerFunction,
       hasDamageMitigationFunction,
       hasDamageSourceFunction,
+      hasModuleFunction,
+      weaponModuleTargetChoices: buildWeaponModuleTargetChoices(item.system?.functions?.module?.targetFunction),
       damageSourceDamageTypeRows: buildDamageSourceDamageTypeRows(item, damageTypeSettings),
       hasConditionFunction,
       conditionRecoveryMethodRows: buildConditionRecoveryMethodRows(item, toolSettings),
       hasWeaponFunction,
       hasWeaponMagazineCost: hasWeaponResourceCost(item, "magazine"),
       toolFunctions,
+      weaponModuleChoices: buildWeaponModuleChoices(item),
       weaponFunctionSections: buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, proficiencySettings, characteristicSettings, hasConditionFunction),
       weaponDamageTypeChoices: buildWeaponDamageTypeChoices(item, damageTypeSettings),
       weaponDamageTypeRows: buildWeaponDamageTypeRows(item, damageTypeSettings),
@@ -298,6 +314,19 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-weapon-resource-cost]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteWeaponResourceCost(event));
+    });
+    this.element?.querySelectorAll("[data-add-weapon-module-slot]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddWeaponModuleSlot(event));
+    });
+    this.element?.querySelectorAll("[data-weapon-module-slot-key-select]").forEach(select => {
+      select.addEventListener("change", event => this.#onWeaponModuleSlotKeyChange(event));
+    });
+    this.element?.querySelectorAll("[data-delete-weapon-module-slot]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteWeaponModuleSlot(event));
+    });
+    this.element?.querySelectorAll("[data-weapon-module-slot-drop]").forEach(zone => {
+      zone.addEventListener("dragover", event => this.#onWeaponModuleSlotDragOver(event));
+      zone.addEventListener("drop", event => this.#onWeaponModuleSlotDrop(event));
     });
     this.element?.querySelector("[data-add-condition-recovery-method]")?.addEventListener("click", event => this.#onAddConditionRecoveryMethod(event));
     this.element?.querySelectorAll("[data-delete-condition-recovery-method]").forEach(button => {
@@ -455,6 +484,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       });
     }
 
+    if (functionKey === ITEM_FUNCTIONS.module) {
+      this.#functionPickerActive = false;
+      return this.item.update({
+        "system.functions.module.enabled": true,
+        "system.functions.module.name": "",
+        "system.functions.module.targetFunction": "weapon"
+      });
+    }
+
     const toolKey = getToolKeyFromFunctionKey(functionKey);
     if (toolKey) {
       this.#functionPickerActive = false;
@@ -534,6 +572,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.additionalWeapons": {}
       });
     }
+    if (functionKey === ITEM_FUNCTIONS.module) {
+      return this.item.update({
+        "system.functions.module.enabled": false,
+        "system.functions.module.name": "",
+        "system.functions.module.targetFunction": "weapon"
+      });
+    }
     const toolKey = getToolKeyFromFunctionKey(functionKey);
     if (toolKey) {
       return this.item.update({ [`system.functions.tools.${toolKey}.enabled`]: false });
@@ -584,6 +629,109 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (isLockedWeaponMagazineResourceCost(weaponData, costs, index)) return undefined;
     costs.splice(index, 1);
     return this.item.update({ [`${path}.resourceCosts`]: costs });
+  }
+
+  #onAddWeaponModuleSlot(event) {
+    event.preventDefault();
+    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
+    const slots = [...getWeaponModuleSlots(weaponData)];
+    slots.push({
+      id: foundry.utils.randomID(),
+      moduleKey: "",
+      itemUuid: "",
+      itemData: {}
+    });
+    return this.item.update({ [`${path}.moduleSlots`]: slots });
+  }
+
+  #onWeaponModuleSlotKeyChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    const index = Number(event.currentTarget?.dataset?.weaponModuleSlotKeySelect);
+    const moduleKey = String(event.currentTarget?.value ?? "").trim();
+    if (!Number.isInteger(index) || index < 0 || !moduleKey) return undefined;
+    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const slots = [...getWeaponModuleSlots(foundry.utils.getProperty(this.item, path) ?? {})];
+    const slot = slots[index];
+    if (!slot) return undefined;
+    slots[index] = {
+      ...slot,
+      moduleKey,
+      itemUuid: "",
+      itemData: {}
+    };
+    return this.item.update({ [`${path}.moduleSlots`]: slots });
+  }
+
+  #onDeleteWeaponModuleSlot(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteWeaponModuleSlot);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const slots = [...getWeaponModuleSlots(foundry.utils.getProperty(this.item, path) ?? {})];
+    slots.splice(index, 1);
+    return this.item.update({ [`${path}.moduleSlots`]: slots });
+  }
+
+  #onWeaponModuleSlotDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  async #onWeaponModuleSlotDrop(event) {
+    event.preventDefault();
+    const zone = event.currentTarget;
+    const index = Number(zone?.dataset?.weaponModuleSlotDrop);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const data = this.#getDragEventData(event);
+    if (data?.type !== "Item") return undefined;
+    const droppedItem = data.uuid
+      ? await foundry.utils.getDocumentClass("Item").fromDropData(data)
+      : null;
+    if (!droppedItem || !isWeaponModuleItem(droppedItem)) return ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Item.WeaponModuleDropInvalid"));
+
+    const path = getWeaponFunctionPath(getWeaponFunctionSection(zone));
+    const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
+    const slots = [...getWeaponModuleSlots(weaponData)];
+    const slot = slots[index];
+    if (!slot || !isModuleItemCompatibleWithSlot(droppedItem, slot)) {
+      return ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Item.WeaponModuleDropInvalid"));
+    }
+    const itemData = droppedItem.toObject();
+    foundry.utils.setProperty(itemData, "system.quantity", 1);
+    slots[index] = {
+      ...slot,
+      itemUuid: droppedItem.uuid,
+      itemData
+    };
+    return this.item.update({ [`${path}.moduleSlots`]: slots });
+  }
+
+  #getDragEventData(event) {
+    const cachedPayload = CONFIG.ux.DragDrop?.getPayload?.();
+    if (cachedPayload && (typeof cachedPayload === "object")) return cachedPayload;
+
+    try {
+      const textEditor = foundry.applications.ux.TextEditor?.implementation ?? globalThis.TextEditor?.implementation ?? globalThis.TextEditor;
+      const data = textEditor.getDragEventData(event);
+      if (data && (typeof data === "object")) return data;
+    } catch (_error) {
+      // Fall through to explicit transfer payloads.
+    }
+
+    for (const type of ["application/json", "text/plain"]) {
+      const raw = event.dataTransfer?.getData(type);
+      if (!raw) continue;
+      try {
+        return JSON.parse(raw);
+      } catch (_error) {
+        continue;
+      }
+    }
+
+    return null;
   }
 
   #onAddConditionRecoveryMethod(event) {
@@ -1091,6 +1239,7 @@ function getItemFunctionLabel(functionKey = "") {
   if (functionKey === ITEM_FUNCTIONS.damageSource) return game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource");
   if (functionKey === ITEM_FUNCTIONS.condition) return game.i18n.localize("FALLOUTMAW.Item.FunctionCondition");
   if (functionKey === ITEM_FUNCTIONS.weapon) return game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon");
+  if (functionKey === ITEM_FUNCTIONS.module) return game.i18n.localize("FALLOUTMAW.Item.FunctionModule");
   const toolKey = getToolKeyFromFunctionKey(functionKey);
   if (toolKey) return getToolSettings().find(tool => tool.key === toolKey)?.label ?? toolKey;
   return game.i18n.localize("FALLOUTMAW.Item.Function");
@@ -1163,6 +1312,7 @@ function buildWeaponFunctionSection({
     usesDamageSource: isSourceDamageMode(weaponData),
     hasMagazineCost: hasWeaponResourceCostData(weaponData, "magazine") || isSourceDamageMode(weaponData),
     magazineSourceItems: buildWeaponMagazineSourceItems(weaponData),
+    moduleSlots: buildWeaponModuleSlotRows(weaponData),
     hasVolleyAction: Boolean(weaponData?.availableActions?.volley),
     damageTypeRows: buildWeaponDamageTypeRowsForData(effectiveWeaponData, damageTypeSettings, sourceWeaponData),
     skillChoices: buildWeaponSkillChoicesForData(effectiveWeaponData, skillSettings),
@@ -1172,6 +1322,70 @@ function buildWeaponFunctionSection({
     requirements: buildWeaponRequirementRowsForData(weaponData, characteristicSettings, skillSettings),
     actionChoices: buildWeaponActionChoicesForData(weaponData, sourceWeaponData, damageTypeSettings)
   };
+}
+
+function buildWeaponModuleChoices(excludeItem = null) {
+  const excludeUuid = String(excludeItem?.uuid ?? "");
+  const choices = getAllWorldAndActorItems()
+    .filter(item => item?.uuid !== excludeUuid && isWeaponModuleItem(item))
+    .map(item => ({
+      value: getWeaponModuleTechnicalName(item),
+      label: getWeaponModuleTechnicalName(item),
+      uuid: item.uuid
+    }))
+    .filter(choice => choice.value);
+  const unique = [];
+  const used = new Set();
+  for (const choice of choices) {
+    if (used.has(choice.value)) continue;
+    used.add(choice.value);
+    unique.push(choice);
+  }
+  return unique.length ? unique : [{
+    value: "",
+    label: game.i18n.localize("FALLOUTMAW.Item.WeaponModuleNoAvailable")
+  }];
+}
+
+function buildWeaponModuleSlotRows(weaponData = {}) {
+  const slots = getWeaponModuleSlots(weaponData);
+  const usedModuleKeys = new Set(slots.map(slot => String(slot.moduleKey ?? "").trim()).filter(Boolean));
+  return slots.map((slot, index) => {
+    const itemData = getWeaponModuleSlotItemData(slot);
+    return {
+      index,
+      id: slot.id,
+      moduleKey: slot.moduleKey,
+      choices: buildWeaponModuleSlotChoices(slot.moduleKey, usedModuleKeys),
+      item: itemData ? {
+        name: getWeaponModuleTechnicalName(itemData),
+        img: normalizeImagePath(itemData.img, FALLBACK_ICON)
+      } : null
+    };
+  });
+}
+
+function buildWeaponModuleSlotChoices(selected = "", excludedKeys = new Set()) {
+  const selectedKey = String(selected ?? "");
+  const availableChoices = buildWeaponModuleChoices()
+    .filter(choice => !excludedKeys.has(choice.value) || choice.value === selectedKey || !choice.value);
+  const moduleChoices = availableChoices.some(choice => choice.value) ? availableChoices : [{
+    value: "",
+    label: game.i18n.localize("FALLOUTMAW.Item.WeaponModuleNoAvailable")
+  }];
+  return [
+    {
+      value: "",
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponModuleChooseSlot"),
+      selected: !selectedKey,
+      disabled: true
+    },
+    ...moduleChoices.map(choice => ({
+      ...choice,
+      selected: choice.value === selectedKey,
+      disabled: !choice.value
+    }))
+  ];
 }
 
 function buildWeaponResourceCostRows(item, hasConditionFunction) {
@@ -1492,6 +1706,15 @@ function buildWeaponSkillChoicesForData(weaponData, skillSettings) {
   }));
 }
 
+function buildWeaponModuleTargetChoices(selected = "weapon") {
+  const value = String(selected ?? "") === "weapon" ? "weapon" : "weapon";
+  return [{
+    value: "weapon",
+    label: game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon"),
+    selected: value === "weapon"
+  }];
+}
+
 function buildWeaponProficiencyChoicesForData(weaponData, proficiencySettings) {
   const selected = String(weaponData?.proficiencyKey ?? "");
   const fallback = proficiencySettings[0]?.key ?? "";
@@ -1655,6 +1878,7 @@ function createDefaultWeaponFunctionData(source = {}) {
       sourceItemUuids: []
     },
     resourceCosts: [],
+    moduleSlots: [],
     specialProperties: [],
     requirements: [],
     availableActions: {
