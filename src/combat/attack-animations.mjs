@@ -30,18 +30,19 @@ export async function playWeaponAttackAnimations({ weapon = null, weaponFunction
   const soundGroups = getOrderedDelayGroups(trajectories);
   if (animationKey && trajectories.length) {
     for (const trajectory of trajectories) {
+      const animationTrajectory = normalizeAnimationTrajectory(trajectory);
       const file = await resolveAnimationLibraryFile(animationKey, {
-        distance: Number(trajectory.distance) || 0,
+        distance: animationTrajectory.distance,
         mediaType: "video"
       });
       if (!file) continue;
       entries.push({
         id: foundry.utils.randomID(),
         file,
-        origin: serializePoint(trajectory.origin),
-        end: serializePoint(trajectory.end),
-        angle: Number(trajectory.angle) || 0,
-        distance: Number(trajectory.distance) || 0,
+        origin: animationTrajectory.origin,
+        end: animationTrajectory.end,
+        angle: animationTrajectory.angle,
+        distance: animationTrajectory.distance,
         delayGroup: Number(trajectory.delayGroup ?? entries.length) || 0
       });
     }
@@ -293,6 +294,37 @@ function serializePoint(point) {
   return {
     x: Number(point?.x) || 0,
     y: Number(point?.y) || 0
+  };
+}
+
+function normalizeAnimationTrajectory(trajectory = {}) {
+  const origin = serializePoint(trajectory.origin);
+  const hasEnd = Number.isFinite(Number(trajectory?.end?.x)) && Number.isFinite(Number(trajectory?.end?.y));
+  if (hasEnd) {
+    const end = serializePoint(trajectory.end);
+    const dx = end.x - origin.x;
+    const dy = end.y - origin.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance > 0.0001) {
+      return {
+        origin,
+        end,
+        angle: Math.atan2(dy, dx),
+        distance
+      };
+    }
+  }
+
+  const angle = Number.isFinite(Number(trajectory.angle)) ? Number(trajectory.angle) : 0;
+  const distance = Math.max(0, Number(trajectory.distance) || 0);
+  return {
+    origin,
+    end: {
+      x: origin.x + (Math.cos(angle) * distance),
+      y: origin.y + (Math.sin(angle) * distance)
+    },
+    angle,
+    distance
   };
 }
 

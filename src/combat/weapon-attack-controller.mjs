@@ -384,15 +384,18 @@ class WeaponAttackController {
       const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), shotTrajectories.map(() => 1));
 
       for (const [pelletIndex, trajectory] of shotTrajectories.entries()) {
-        trajectories.push({ ...trajectory, delayGroup: attackIndex });
         attempted = true;
-        if (!target) continue;
+        if (!target) {
+          trajectories.push({ ...trajectory, delayGroup: attackIndex });
+          continue;
+        }
         const result = await this.resolveAttackTrajectory({
           checkBatch,
           trajectory,
           baseDamage: pelletDamages[pelletIndex] ?? 0,
           difficultyBonus
         });
+        trajectories.push({ ...(result.trajectory ?? trajectory), delayGroup: attackIndex });
         damageRequests.push(...result.damageRequests);
       }
     }
