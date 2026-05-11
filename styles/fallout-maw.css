@@ -2342,10 +2342,10 @@ label.fallout-maw-mitigation-cell {
 #tooltip.fallout-maw-module-item-tooltip,
 .fallout-maw-nested-tooltip.fallout-maw-module-item-tooltip {
   box-sizing: border-box;
-  max-width: min(520px, calc(100vw - 1rem));
-  min-width: min(420px, calc(100vw - 1rem));
+  max-width: min(760px, calc(100vw - 1rem));
+  min-width: min(560px, calc(100vw - 1rem));
   text-align: left;
-  width: 460px;
+  width: min(660px, calc(100vw - 1rem));
 }
 
 #tooltip.fallout-maw-module-item-tooltip {
@@ -2399,7 +2399,9 @@ label.fallout-maw-mitigation-cell {
   border: 1px solid rgba(218, 207, 147, 0.32);
   box-sizing: border-box;
   color: var(--fallout-maw-tooltip-text);
+  cursor: pointer;
   display: grid;
+  font-family: inherit;
   gap: 0.6rem;
   grid-template-columns: 3.8rem minmax(0, 1fr);
   height: auto;
@@ -2415,6 +2417,12 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-inventory-tooltip .tooltip-module-choice:hover {
   background: rgba(218, 207, 147, 0.1);
   border-color: rgba(247, 232, 166, 0.62);
+}
+
+.fallout-maw-inventory-tooltip .tooltip-module-choice:focus-visible {
+  border-color: rgba(247, 232, 166, 0.78);
+  outline: 1px solid rgba(247, 232, 166, 0.56);
+  outline-offset: 2px;
 }
 
 .fallout-maw-inventory-tooltip .tooltip-module-choice img {

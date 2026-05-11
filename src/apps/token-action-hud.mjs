@@ -819,7 +819,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async #onHudItemTooltipClick(event) {
-    if (!event.target?.closest?.("[data-fallout-maw-nested-tooltip-html]")) {
+    const nestedAnchor = event.target?.closest?.("[data-fallout-maw-nested-tooltip-html]");
+    if (!nestedAnchor) {
       this.#clearNestedHudItemTooltip({ force: true });
     }
 
@@ -833,6 +834,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const moduleChoice = event.target?.closest?.("[data-tooltip-module-choice]");
     if (moduleChoice && this.#itemTooltipElement?.contains(moduleChoice)) {
+      if (nestedAnchor && moduleChoice.contains(nestedAnchor)) return;
       event.preventDefault();
       event.stopPropagation();
       await this.#installHudWeaponModuleFromTooltipChoice(moduleChoice);

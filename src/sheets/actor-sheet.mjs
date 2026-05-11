@@ -84,6 +84,7 @@ import { toInteger } from "../utils/numbers.mjs";
 import {
   applyWeaponModuleModifiers,
   WEAPON_MODULE_ACTION_KEYS,
+  getWeaponModuleDisplayName,
   getWeaponModuleSlots,
   getWeaponModuleSlotItemData,
   getWeaponModuleTechnicalName,
@@ -1858,7 +1859,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   async #onInventoryTooltipClick(event) {
-    if (!event.target?.closest?.("[data-fallout-maw-nested-tooltip-html]")) {
+    const nestedAnchor = event.target?.closest?.("[data-fallout-maw-nested-tooltip-html]");
+    if (!nestedAnchor) {
       this.#clearNestedInventoryTooltip({ force: true });
     }
 
@@ -1872,6 +1874,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     const moduleChoice = event.target?.closest?.("[data-tooltip-module-choice]");
     if (moduleChoice && this.#tooltipElement?.contains(moduleChoice)) {
+      if (nestedAnchor && moduleChoice.contains(nestedAnchor)) return;
       event.preventDefault();
       event.stopPropagation();
       await this.#installWeaponModuleFromTooltipChoice(moduleChoice);
@@ -2824,21 +2827,21 @@ function getTooltipWeaponModuleCandidates(actor, item, slot) {
   if (!actor?.items) return [];
   return actor.items.contents
     .filter(candidate => candidate.id !== item.id && isModuleItemCompatibleWithSlot(candidate, slot) && getItemQuantityHelper(candidate) > 0)
-    .sort((left, right) => getWeaponModuleTechnicalName(left).localeCompare(getWeaponModuleTechnicalName(right), game.i18n.lang));
+    .sort((left, right) => getWeaponModuleDisplayName(left).localeCompare(getWeaponModuleDisplayName(right), game.i18n.lang));
 }
 
 function renderWeaponTooltipModuleChoice(item, weaponIndex, slotIndex) {
   return `
-    <button type="button" class="tooltip-module-choice"
+    <div class="tooltip-module-choice" role="button" tabindex="0"
       data-tooltip-module-choice="${escapeAttribute(item.id)}"
       data-tooltip-weapon-index="${weaponIndex}"
       data-tooltip-module-slot-index="${slotIndex}">
       <img src="${escapeAttribute(item.img || "icons/svg/item-bag.svg")}" alt="">
       <span class="tooltip-module-choice-body">
-        <strong>${escapeHTML(getWeaponModuleTechnicalName(item))}</strong>
+        <strong>${escapeHTML(getWeaponModuleDisplayName(item))}</strong>
         ${renderModuleChangePreview(item)}
       </span>
-    </button>
+    </div>
   `;
 }
 

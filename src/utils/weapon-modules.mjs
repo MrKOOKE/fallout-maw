@@ -21,6 +21,11 @@ export function getWeaponModuleTechnicalName(itemOrData = null) {
   return name || String(itemOrData?.name ?? "").trim();
 }
 
+export function getWeaponModuleDisplayName(itemOrData = null) {
+  const name = String(itemOrData?.name ?? "").trim();
+  return name || getWeaponModuleTechnicalName(itemOrData);
+}
+
 export function getWeaponModuleSlots(weaponData = {}) {
   const slots = Array.isArray(weaponData?.moduleSlots) ? weaponData.moduleSlots : [];
   return slots.map((slot, index) => ({
