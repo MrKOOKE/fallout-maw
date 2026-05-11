@@ -1,4 +1,5 @@
 import { SYSTEM_ID, TRAUMA_CREATE_OPTION } from "../constants.mjs";
+import { evaluateFormulaVariables } from "../formulas/index.mjs";
 import {
   getCreatureOptions,
   getDamageTypeSettings,
@@ -8,6 +9,14 @@ import {
 } from "../settings/accessors.mjs";
 import { getTraumaGroupForActor } from "../settings/traumas.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
+import {
+  DAMAGE_MITIGATION_MODES,
+  ITEM_FUNCTIONS,
+  getConditionFunction,
+  getConditionWeakeningData,
+  getDamageMitigationFunction,
+  hasItemFunction
+} from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const DAMAGE_SOCKET = `system.${SYSTEM_ID}`;
@@ -25,6 +34,20 @@ const SCOPE_HEALTH_AND_LIMB = "healthAndLimb";
 const ROUND_SECONDS = 6;
 const DAMAGE_NUMBER_ANIMATION_MS = 900;
 const DAMAGE_MITIGATION_ICON_ANIMATION_MS = 1000;
+const EQUIPMENT_CONDITION_UNCONDITIONAL_RATIO = 0.2;
+const EQUIPMENT_CONDITION_DAMAGE_VARIABLES = Object.freeze([
+  "incoming",
+  "final",
+  "blocked",
+  "protected",
+  "penetrated",
+  "thresholdBlocked",
+  "unconditional",
+  "condition",
+  "conditionMax",
+  "mitigation",
+  "penetration"
+]);
 let damageTimeHooksRegistered = false;
 const combatRoundWorldTimes = new Map();
 const processingPeriodicEffectUuids = new Set();
@@ -153,9 +176,15 @@ export async function applyDamageApplication(request = {}) {
   const scope = normalizeScope(data.scope, data.limbKey);
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
   const mitigationResult = mode === MODE_DAMAGE && data.applyMitigation
-    ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source)
+    ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source, {
+      damageType,
+      includeEquipmentConditionDamage: data.processDamageTypeSettings
+    })
     : { amount: data.amount, display: null };
   const mitigatedAmount = mitigationResult.amount;
+  if (mode === MODE_DAMAGE && data.applyMitigation && data.processDamageTypeSettings) {
+    await applyEquipmentConditionDamage(actor, mitigationResult.equipmentConditionDamage);
+  }
   const effectiveAmount = mode === MODE_DAMAGE && data.processDamageTypeSettings
     ? applyLimbHealthMultiplier(actor, mitigatedAmount, damageType, data.limbKey)
     : mitigatedAmount;
@@ -250,7 +279,7 @@ export function estimateDamageApplication(request = {}) {
 
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
   const mitigatedAmount = data.applyMitigation
-    ? calculateEffectiveDamage(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source)
+    ? calculateEffectiveDamage(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source, { damageType })
     : data.amount;
   let effectiveAmount = data.processDamageTypeSettings
     ? applyLimbHealthMultiplier(actor, mitigatedAmount, damageType, data.limbKey)
@@ -276,6 +305,7 @@ export async function applyDamageApplications({ actorUuid = "", requests = [] } 
   const batchRequests = [];
   const singleResults = [];
   const mitigationDisplays = [];
+  const equipmentConditionDamageState = createEquipmentConditionDamageState(actor);
   for (const request of requests) {
     const data = normalizeDamageRequest({ ...request, actorUuid });
     if (data.mode !== MODE_DAMAGE) {
@@ -283,7 +313,7 @@ export async function applyDamageApplications({ actorUuid = "", requests = [] } 
       continue;
     }
 
-    const entry = await prepareDamageBatchEntry(actor, data);
+    const entry = await prepareDamageBatchEntry(actor, data, { equipmentConditionDamageState });
     if (entry?.damageMitigationDisplay) mitigationDisplays.push(entry.damageMitigationDisplay);
     if (entry?.amount > 0) batchRequests.push(entry);
   }
@@ -294,6 +324,7 @@ export async function applyDamageApplications({ actorUuid = "", requests = [] } 
   const batchResult = batchRequests.length
     ? await applyDamageEntriesBatch(actor, batchRequests)
     : undefined;
+  await applyEquipmentConditionDamage(actor, getEquipmentConditionDamageStateEntries(equipmentConditionDamageState));
   if (batchResult?.resourceLimitEntries?.length) {
     for (const entry of batchResult.resourceLimitEntries) {
       const damageType = getDamageTypeSettings().find(type => type.key === entry.damageTypeKey);
@@ -308,11 +339,15 @@ export async function applyDamageApplications({ actorUuid = "", requests = [] } 
   return [batchResult, ...singleResults].filter(Boolean);
 }
 
-async function prepareDamageBatchEntry(actor, data = {}) {
+async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDamageState = null } = {}) {
   const scope = normalizeScope(data.scope, data.limbKey);
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
   const mitigationResult = data.applyMitigation
-    ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source)
+    ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source, {
+      damageType,
+      includeEquipmentConditionDamage: data.processDamageTypeSettings,
+      equipmentConditionDamageState: data.processDamageTypeSettings ? equipmentConditionDamageState : null
+    })
     : { amount: data.amount, display: null };
   const mitigatedAmount = mitigationResult.amount;
   const effectiveAmount = data.processDamageTypeSettings
@@ -1503,16 +1538,20 @@ function selectRandomDamageLimbKey(actor) {
   return keys[Math.floor(Math.random() * keys.length)] ?? "";
 }
 
-function calculateEffectiveDamage(actor, amount, damageTypeKey = "", limbKey = "", source = {}) {
-  return calculateDamageMitigation(actor, amount, damageTypeKey, limbKey, source).amount;
+function calculateEffectiveDamage(actor, amount, damageTypeKey = "", limbKey = "", source = {}, options = {}) {
+  return calculateDamageMitigation(actor, amount, damageTypeKey, limbKey, source, options).amount;
 }
 
-function calculateDamageMitigation(actor, amount, damageTypeKey = "", limbKey = "", source = {}) {
+function calculateDamageMitigation(actor, amount, damageTypeKey = "", limbKey = "", source = {}, options = {}) {
   const incomingDamage = Math.max(0, Math.floor(Number(amount) || 0));
-  if (!incomingDamage) return { amount: 0, display: null };
-  if (!damageTypeKey) return { amount: incomingDamage, display: null };
+  if (!incomingDamage) return { amount: 0, display: null, equipmentConditionDamage: [] };
+  if (!damageTypeKey) return { amount: incomingDamage, display: null, equipmentConditionDamage: [] };
 
   const mitigationPenetration = getDamageMitigationPenetration(source);
+  const equipmentSources = options.includeEquipmentConditionDamage
+    ? getEquipmentConditionDamageSources(actor, damageTypeKey, limbKey)
+    : [];
+  const itemWear = new Map();
   const rawDefense = Math.min(100, actor.getDamageDefense?.(damageTypeKey, limbKey) ?? 0);
   const defenseReduction = Math.min(rawDefense, mitigationPenetration);
   const defense = Math.max(0, rawDefense - defenseReduction);
@@ -1521,14 +1560,170 @@ function calculateDamageMitigation(actor, amount, damageTypeKey = "", limbKey = 
   const reduction = actor.getDamageReduction?.(damageTypeKey, limbKey) ?? 0;
   let remaining = incomingDamage;
   const defenseBlocked = Math.floor((remaining * Math.max(0, defense)) / 100);
+  addEquipmentLayerWear(itemWear, equipmentSources.filter(entry => entry.mode === DAMAGE_MITIGATION_MODES.defense), {
+    incoming: remaining,
+    blocked: defenseBlocked
+  });
   remaining = Math.max(0, remaining - defenseBlocked);
   const resistanceBlocked = Math.floor((remaining * Math.max(0, resistance)) / 100);
+  addEquipmentLayerWear(itemWear, equipmentSources.filter(entry => entry.mode === DAMAGE_MITIGATION_MODES.resistance), {
+    incoming: remaining,
+    blocked: resistanceBlocked
+  });
   remaining = Math.max(0, remaining - resistanceBlocked);
+  const thresholdBlocked = Math.min(remaining, Math.max(0, reduction));
+  addEquipmentThresholdWear(itemWear, equipmentSources, thresholdBlocked);
+  addEquipmentUnconditionalWear(itemWear, equipmentSources, incomingDamage);
   const finalAmount = Math.max(0, remaining - reduction);
   return {
     amount: finalAmount,
-    display: null
+    display: null,
+    equipmentConditionDamage: options.includeEquipmentConditionDamage
+      ? calculateEquipmentConditionDamage(actor, itemWear, {
+        damageType: options.damageType,
+        damageTypeKey,
+        incoming: incomingDamage,
+        final: finalAmount,
+        penetration: mitigationPenetration,
+        state: options.equipmentConditionDamageState
+      })
+      : []
   };
+}
+
+function getEquipmentConditionDamageSources(actor, damageTypeKey = "", limbKey = "") {
+  if (!actor || !damageTypeKey || !limbKey) return [];
+
+  const sources = [];
+  for (const item of actor.items?.contents ?? Array.from(actor.items ?? [])) {
+    if (item.type !== "gear" || !item.system?.equipped) continue;
+    if (!hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation) || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
+
+    const mitigation = getDamageMitigationFunction(item);
+    const entry = mitigation.entries?.[limbKey]?.[damageTypeKey];
+    const baseValue = toInteger(entry?.value);
+    if (baseValue <= 0) continue;
+
+    const weakening = getConditionWeakeningData(item);
+    const weakeningRatio = weakening.active ? weakening.ratio : 1;
+    const value = Math.floor(baseValue * weakeningRatio);
+    if (value <= 0) continue;
+
+    sources.push({
+      item,
+      itemId: item.id,
+      mode: String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense),
+      mitigation: value,
+      finalReduction: Math.floor(Math.max(0, toInteger(mitigation.finalReduction)) * weakeningRatio)
+    });
+  }
+
+  return sources;
+}
+
+function addEquipmentLayerWear(itemWear, sources = [], { incoming = 0, blocked = 0 } = {}) {
+  const layerIncoming = Math.max(0, Math.floor(Number(incoming) || 0));
+  if (!layerIncoming || !sources.length) return;
+
+  const totalMitigation = sources.reduce((sum, source) => sum + Math.max(0, toInteger(source.mitigation)), 0);
+  if (totalMitigation <= 0) return;
+
+  const protectedTotal = Math.floor((layerIncoming * Math.min(100, totalMitigation)) / 100);
+  if (!protectedTotal) return;
+
+  const blockedTotal = Math.min(protectedTotal, Math.max(0, Math.floor(Number(blocked) || 0)));
+  const protectedAllocations = allocateIntegerByWeight(protectedTotal, sources, source => source.mitigation);
+  const blockedAllocations = allocateIntegerByWeight(blockedTotal, sources, source => source.mitigation);
+
+  for (const source of sources) {
+    const protectedAmount = protectedAllocations.get(source.itemId) ?? 0;
+    const blockedAmount = blockedAllocations.get(source.itemId) ?? 0;
+    const wear = getOrCreateEquipmentWear(itemWear, source);
+    wear.protected += protectedAmount;
+    wear.blocked += blockedAmount;
+    wear.penetrated += Math.max(0, protectedAmount - blockedAmount);
+    wear.mitigation += Math.max(0, toInteger(source.mitigation));
+  }
+}
+
+function addEquipmentThresholdWear(itemWear, sources = [], thresholdBlocked = 0) {
+  const amount = Math.max(0, Math.floor(Number(thresholdBlocked) || 0));
+  if (!amount) return;
+
+  const reductionSources = sources.filter(source => source.finalReduction > 0);
+  const allocations = allocateIntegerByWeight(amount, reductionSources, source => source.finalReduction);
+  for (const source of reductionSources) {
+    const allocated = allocations.get(source.itemId) ?? 0;
+    if (!allocated) continue;
+    const wear = getOrCreateEquipmentWear(itemWear, source);
+    wear.thresholdBlocked += allocated;
+    wear.blocked += allocated;
+  }
+}
+
+function addEquipmentUnconditionalWear(itemWear, sources = [], incomingDamage = 0) {
+  const amount = Math.floor(Math.max(0, Number(incomingDamage) || 0) * EQUIPMENT_CONDITION_UNCONDITIONAL_RATIO);
+  if (!amount || !sources.length) return;
+
+  const allocations = allocateIntegerByWeight(amount, sources, () => 1);
+  for (const source of sources) {
+    const allocated = allocations.get(source.itemId) ?? 0;
+    if (!allocated) continue;
+    getOrCreateEquipmentWear(itemWear, source).unconditional += allocated;
+  }
+}
+
+function getOrCreateEquipmentWear(itemWear, source) {
+  let entry = itemWear.get(source.itemId);
+  if (!entry) {
+    entry = {
+      item: source.item,
+      itemId: source.itemId,
+      protected: 0,
+      blocked: 0,
+      penetrated: 0,
+      thresholdBlocked: 0,
+      unconditional: 0,
+      mitigation: 0
+    };
+    itemWear.set(source.itemId, entry);
+  }
+  return entry;
+}
+
+function allocateIntegerByWeight(total, sources = [], getWeight) {
+  const amount = Math.max(0, Math.floor(Number(total) || 0));
+  const entries = sources
+    .map(source => ({
+      source,
+      weight: Math.max(0, Number(getWeight(source)) || 0),
+      amount: 0,
+      exact: 0
+    }))
+    .filter(entry => entry.weight > 0);
+  const allocations = new Map();
+  if (!amount || !entries.length) return allocations;
+
+  const totalWeight = entries.reduce((sum, entry) => sum + entry.weight, 0);
+  let allocated = 0;
+  for (const entry of entries) {
+    entry.exact = (amount * entry.weight) / totalWeight;
+    entry.amount = Math.floor(entry.exact);
+    allocated += entry.amount;
+  }
+
+  let remainder = amount - allocated;
+  entries.sort((left, right) => (right.exact - Math.floor(right.exact)) - (left.exact - Math.floor(left.exact)));
+  for (const entry of entries) {
+    if (remainder <= 0) break;
+    entry.amount += 1;
+    remainder -= 1;
+  }
+
+  for (const entry of entries) {
+    if (entry.amount > 0) allocations.set(entry.source.itemId, entry.amount);
+  }
+  return allocations;
 }
 
 function buildDamageMitigationDisplay(incomingDamage, finalAmount) {
@@ -1574,6 +1769,130 @@ function getDamageMitigationPenetration(source = {}) {
   const penetrationPower = Math.max(0, toInteger(source?.penetrationPower));
   const penetrationStep = Math.max(0, toInteger(source?.penetrationStep));
   return Math.max(0, penetrationPower - penetrationStep) * 10;
+}
+
+function calculateEquipmentConditionDamage(actor, itemWear = new Map(), { damageType = null, damageTypeKey = "", incoming = 0, final = 0, penetration = 0, state = null } = {}) {
+  const settings = damageType?.settings?.equipmentConditionDamage;
+  if (!settings?.enabled || !itemWear.size) return [];
+
+  const formula = String(settings.formula ?? "").trim();
+  if (!formula) return [];
+
+  const results = [];
+  for (const wear of itemWear.values()) {
+    const condition = getEquipmentConditionValue(wear.item, state);
+    const conditionMax = getEquipmentConditionMax(wear.item, state);
+    if (condition <= 0) continue;
+
+    let amount = 0;
+    try {
+      const variables = Object.fromEntries(EQUIPMENT_CONDITION_DAMAGE_VARIABLES.map(key => [key, 0]));
+      Object.assign(variables, {
+        incoming,
+        final,
+        blocked: wear.blocked,
+        protected: wear.protected,
+        penetrated: wear.penetrated,
+        thresholdBlocked: wear.thresholdBlocked,
+        unconditional: wear.unconditional,
+        condition,
+        conditionMax,
+        mitigation: wear.mitigation,
+        penetration
+      });
+      amount = Math.max(0, evaluateFormulaVariables(formula, variables));
+    } catch (error) {
+      console.warn(`${SYSTEM_ID} | Equipment condition damage formula error (${damageTypeKey}): ${error.message}`);
+      continue;
+    }
+
+    const applied = reserveEquipmentConditionDamage(wear.item, amount, state);
+    if (applied > 0) results.push({ itemId: wear.itemId, amount: applied });
+  }
+  return results;
+}
+
+function createEquipmentConditionDamageState(actor) {
+  return {
+    actor,
+    entries: new Map(),
+    totals: new Map()
+  };
+}
+
+function getEquipmentConditionDamageStateEntries(state = null) {
+  if (!state?.totals?.size) return [];
+  return Array.from(state.totals.entries())
+    .map(([itemId, amount]) => ({ itemId, amount }))
+    .filter(entry => entry.amount > 0);
+}
+
+function getEquipmentConditionStateEntry(item, state = null) {
+  if (!state || !item?.id) return null;
+  let entry = state.entries.get(item.id);
+  if (!entry) {
+    const condition = getConditionFunction(item);
+    entry = {
+      current: Math.max(0, toInteger(condition.value)),
+      max: Math.max(0, toInteger(condition.max))
+    };
+    state.entries.set(item.id, entry);
+  }
+  return entry;
+}
+
+function getEquipmentConditionValue(item, state = null) {
+  const stateEntry = getEquipmentConditionStateEntry(item, state);
+  if (stateEntry) return stateEntry.current;
+  return Math.max(0, toInteger(getConditionFunction(item).value));
+}
+
+function getEquipmentConditionMax(item, state = null) {
+  const stateEntry = getEquipmentConditionStateEntry(item, state);
+  if (stateEntry) return stateEntry.max;
+  return Math.max(0, toInteger(getConditionFunction(item).max));
+}
+
+function reserveEquipmentConditionDamage(item, amount, state = null) {
+  const requested = Math.max(0, Math.floor(Number(amount) || 0));
+  if (!requested || !item?.id) return 0;
+
+  const stateEntry = getEquipmentConditionStateEntry(item, state);
+  if (stateEntry) {
+    const applied = Math.min(requested, Math.max(0, stateEntry.current));
+    if (!applied) return 0;
+    stateEntry.current = Math.max(0, stateEntry.current - applied);
+    state.totals.set(item.id, (state.totals.get(item.id) ?? 0) + applied);
+    return applied;
+  }
+
+  return Math.min(requested, Math.max(0, toInteger(getConditionFunction(item).value)));
+}
+
+async function applyEquipmentConditionDamage(actor, entries = []) {
+  const totals = new Map();
+  for (const entry of entries ?? []) {
+    const itemId = String(entry?.itemId ?? "");
+    const amount = Math.max(0, Math.floor(Number(entry?.amount) || 0));
+    if (!itemId || !amount) continue;
+    totals.set(itemId, (totals.get(itemId) ?? 0) + amount);
+  }
+  if (!totals.size) return;
+
+  const updates = [];
+  for (const [itemId, amount] of totals) {
+    const item = actor.items?.get?.(itemId);
+    if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
+    const current = Math.max(0, toInteger(getConditionFunction(item).value));
+    const next = Math.max(0, current - amount);
+    if (next === current) continue;
+    updates.push({
+      _id: item.id,
+      "system.functions.condition.value": next
+    });
+  }
+
+  if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
 }
 
 function applyLimbHealthMultiplier(actor, amount, damageType = null, limbKey = "") {

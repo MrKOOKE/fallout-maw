@@ -16,6 +16,21 @@
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
       <label class="fallout-maw-section-toggle">
+        <input type="hidden" name="settings.equipmentConditionDamage.enabled" value="false">
+        <input type="checkbox" name="settings.equipmentConditionDamage.enabled" value="true" {{checked settings.equipmentConditionDamage.enabled}}>
+        <span>Повреждение защитного снаряжения</span>
+      </label>
+    </header>
+    <label>
+      <span>Формула износа</span>
+      <input type="text" name="settings.equipmentConditionDamage.formula" value="{{settings.equipmentConditionDamage.formula}}">
+    </label>
+    <p class="hint">Переменные: incoming, final, blocked, protected, penetrated, thresholdBlocked, unconditional, condition, conditionMax, mitigation, penetration.</p>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <label class="fallout-maw-section-toggle">
         <input type="hidden" name="settings.needIncrease.enabled" value="false">
         <input type="checkbox" name="settings.needIncrease.enabled" value="true" {{checked settings.needIncrease.enabled}}>
         <span>Увеличение потребности</span>

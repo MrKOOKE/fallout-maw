@@ -265,6 +265,11 @@ function normalizeSettingsFromForm(settings = {}) {
       color: String(resourceLimit.color ?? "#3f8cff").trim() || "#3f8cff",
       durationSeconds: toInteger(resourceLimit.durationSeconds || 12),
       resources: normalizeResourceLimitRows(resourceLimit.resources)
+    },
+    equipmentConditionDamage: {
+      enabled: toBoolean(settings.equipmentConditionDamage?.enabled, true),
+      formula: String(settings.equipmentConditionDamage?.formula ?? "protected + thresholdBlocked * 0.5 + unconditional").trim()
+        || "protected + thresholdBlocked * 0.5 + unconditional"
     }
   };
 }

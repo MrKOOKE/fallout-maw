@@ -3117,6 +3117,7 @@ function isSourceDamageMode(data = {}) {
 }
 
 function getEffectiveWeaponDamageData(_item, data = {}) {
+  if (data?.source === "damageSource") return data;
   if (!isSourceDamageMode(data)) return data;
   const sourceItem = getWeaponDamageSourceItem(data);
   if (!sourceItem || !hasItemFunction(sourceItem, ITEM_FUNCTIONS.damageSource)) {
@@ -3128,6 +3129,8 @@ function getEffectiveWeaponDamageData(_item, data = {}) {
   }
   const source = getDamageSourceFunction(sourceItem);
   return {
+    ...data,
+    source: "damageSource",
     damage: source.damage,
     damageTypeKey: source.damageTypeKey,
     damageTypes: source.damageTypes
@@ -3148,6 +3151,7 @@ function getEffectiveWeaponTooltipData(data = {}, { applyModules = true, moduleS
 function mergeWeaponDataWithDamageSource(data = {}, source = {}) {
   return {
     ...data,
+    source: "damageSource",
     damage: source.damage,
     pellets: Math.max(1, toInteger(source.pellets) || 1),
     damageTypeKey: source.damageTypeKey,

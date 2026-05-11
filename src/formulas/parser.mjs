@@ -17,7 +17,8 @@ export function normalizeFormulaOptions(options = {}) {
   return {
     allowSkills: options.allowSkills === true,
     characteristicAliases: getCharacteristicAliases(options.characteristics),
-    skillAliases: getSkillAliases(options.skills)
+    skillAliases: getSkillAliases(options.skills),
+    variableAliases: getVariableAliases(options.variables)
   };
 }
 
@@ -103,7 +104,11 @@ class FormulaParser {
     const identifier = this.source.slice(start, this.index);
     const normalized = identifier.toLowerCase();
 
-    if (!this.options.characteristicAliases[normalized] && !(this.options.allowSkills && this.options.skillAliases[normalized])) {
+    if (
+      !this.options.characteristicAliases[normalized]
+      && !(this.options.allowSkills && this.options.skillAliases[normalized])
+      && !this.options.variableAliases[normalized]
+    ) {
       throw this.error(format("FALLOUTMAW.Formula.UnknownParameter", { identifier }));
     }
 
@@ -128,6 +133,15 @@ class FormulaParser {
   error(message) {
     return new Error(`${message} ${format("FALLOUTMAW.Formula.OnPosition", { position: this.index + 1 })}`);
   }
+}
+
+function getVariableAliases(variables = []) {
+  const aliases = {};
+  for (const variable of variables ?? []) {
+    const key = String(variable ?? "").trim();
+    if (key) aliases[key.toLowerCase()] = key;
+  }
+  return aliases;
 }
 
 function binaryExpression(operator, left, right) {

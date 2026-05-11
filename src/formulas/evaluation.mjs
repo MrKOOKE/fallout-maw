@@ -26,6 +26,19 @@ export function evaluateFormula(formula, data = {}) {
   return Math.trunc(value);
 }
 
+export function evaluateFormulaVariables(formula, variables = {}) {
+  const normalizedVariables = Object.fromEntries(
+    Object.entries(variables ?? {}).map(([key, value]) => [String(key).toLowerCase(), Number(value) || 0])
+  );
+  const expression = parseFormula(String(formula ?? "0"), {
+    variables: Object.keys(variables ?? {})
+  });
+  const value = expression.evaluate(identifier => normalizedVariables[String(identifier).toLowerCase()] ?? 0);
+
+  if (!Number.isFinite(value)) throw new Error(localize("FALLOUTMAW.Formula.InvalidNumberValue"));
+  return Math.trunc(value);
+}
+
 export function evaluateSkillFormulas(skillSettings, characteristicSettings, characteristics = {}) {
   const normalizedSkills = normalizeSkillSettings(skillSettings);
   const normalizedCharacteristics = normalizeCharacteristicSettings(characteristicSettings);
