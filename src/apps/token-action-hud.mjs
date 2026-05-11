@@ -306,6 +306,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #itemTooltipKeyHandler = null;
   #itemTooltipSuppressHudActivation = false;
   #itemTooltipSuppressHudActivationTimer = null;
+  #editableMeterSections = {
+    resources: false,
+    needs: false
+  };
   #limbPopover = {
     element: null,
     showTimer: null,
@@ -325,6 +329,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     actions: {
       toggleTray: TokenActionHud.#onToggleTray,
       toggleMeterSection: TokenActionHud.#onToggleMeterSection,
+      toggleMeterEdit: TokenActionHud.#onToggleMeterEdit,
       selectHudWeapon: { handler: TokenActionHud.#onSelectHudWeapon, buttons: [0, 1] },
       cycleHudWeaponSet: TokenActionHud.#onCycleHudWeaponSet,
       toggleWeaponActions: { handler: TokenActionHud.#onToggleWeaponActions, buttons: [0, 1] },
@@ -361,6 +366,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (this.#token?.id !== token?.id) {
       cancelWeaponAttack();
       this.#activeTray = "";
+      this.#editableMeterSections.resources = false;
+      this.#editableMeterSections.needs = false;
     }
     this.#token = token;
   }
@@ -382,7 +389,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const systemActions = prepareSystemActionButtons();
     const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, systemActions);
     const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, systemActions, weaponActionRows);
-    const meterSections = prepareMeterSectionStates();
+    const meterSections = prepareMeterSectionStates(this.#editableMeterSections);
     const displayLimbs = prepareDisplayLimbs(actor, this.#limbDisplayLayer);
     const limbSilhouette = createLimbSilhouetteHud(race?.limbSilhouette, displayLimbs);
 
@@ -430,6 +437,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.element.addEventListener("contextmenu", event => this.#onHudItemTooltipHudActivation(event), { capture: true });
     this.element.addEventListener("contextmenu", event => this.#onHudContextMenu(event));
     this.element.addEventListener("click", event => this.#onLimbLayerOptionClick(event));
+    this.element.addEventListener("change", event => this.#onMeterValueInputChange(event));
+    this.element.addEventListener("keydown", event => this.#onMeterValueInputKeyDown(event));
   }
 
   applyMovementResourcePreview(preview) {
@@ -489,6 +498,16 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     current[section] = collapsed;
     await game.settings.set(FALLOUT_MAW.id, TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING, current);
     return undefined;
+  }
+
+  static #onToggleMeterEdit(event, target) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!game.user?.isGM) return undefined;
+    const section = String(target.dataset.section ?? "");
+    if (!HUD_METER_SECTION_KEYS.includes(section)) return undefined;
+    this.#editableMeterSections[section] = !this.#editableMeterSections[section];
+    return this.render({ force: true });
   }
 
   static #onOpenSettings(event) {
@@ -752,6 +771,48 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.stopPropagation();
     this.#destroyLimbPopover();
     void openLimbDamageDialog(this.actor, target.dataset.limbKey ?? "");
+  }
+
+  #onMeterValueInputKeyDown(event) {
+    const input = event.target?.closest?.("[data-token-hud-meter-value-input]");
+    if (!input || !this.element?.contains(input)) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      input.value = String(input.dataset.originalValue ?? input.value ?? "0");
+      input.blur();
+      return;
+    }
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    input.blur();
+  }
+
+  async #onMeterValueInputChange(event) {
+    const input = event.target?.closest?.("[data-token-hud-meter-value-input]");
+    if (!input || !this.element?.contains(input)) return;
+    if (!game.user?.isGM) return;
+
+    const section = String(input.dataset.section ?? "");
+    const key = String(input.dataset.key ?? "");
+    if (!HUD_METER_SECTION_KEYS.includes(section) || !this.#editableMeterSections[section] || !key) return;
+
+    const actor = this.actor;
+    const data = actor?.system?.[section]?.[key];
+    if (!actor || !data) return;
+
+    const min = Math.max(0, toInteger(data.min));
+    const max = Math.max(min, toInteger(data.max));
+    const value = Math.min(max, Math.max(min, toInteger(input.value)));
+    input.value = String(value);
+    input.dataset.originalValue = String(value);
+
+    const updates = {
+      [`system.${section}.${key}.value`]: value
+    };
+    if (section === "resources") {
+      updates[`system.resources.${key}.spent`] = Math.max(0, max - value);
+    }
+    await actor.update(updates);
   }
 
   #onLimbPopoverMove(event) {
@@ -1292,18 +1353,19 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
 }
 
-function prepareMeterSectionStates() {
+function prepareMeterSectionStates(editable = {}) {
   const collapsed = getTokenActionHudCollapsedSections();
   return {
-    resources: prepareMeterSectionState(collapsed.resources),
-    needs: prepareMeterSectionState(collapsed.needs)
+    resources: prepareMeterSectionState(collapsed.resources, editable.resources),
+    needs: prepareMeterSectionState(collapsed.needs, editable.needs)
   };
 }
 
-function prepareMeterSectionState(collapsed) {
+function prepareMeterSectionState(collapsed, editable) {
   return {
     collapsed: Boolean(collapsed),
-    expanded: !collapsed
+    expanded: !collapsed,
+    editable: Boolean(editable)
   };
 }
 

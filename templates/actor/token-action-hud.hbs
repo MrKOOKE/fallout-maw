@@ -73,18 +73,32 @@
   </div>
 
   <section class="fallout-maw-token-hud-block fallout-maw-token-hud-resources">
-    <section class="fallout-maw-token-hud-meter-section {{#if meterSections.resources.collapsed}}collapsed{{/if}}" data-token-hud-meter-section="resources">
-      <button type="button" class="fallout-maw-token-hud-block-title fallout-maw-token-hud-collapse-toggle" data-action="toggleMeterSection" data-section="resources" data-token-hud-meter-toggle aria-expanded="{{meterSections.resources.expanded}}">
-        <i class="fa-solid fa-caret-down" inert></i>
-        <span>Ресурсы</span>
-      </button>
+    <section class="fallout-maw-token-hud-meter-section {{#if meterSections.resources.collapsed}}collapsed{{/if}} {{#if meterSections.resources.editable}}editable{{/if}}" data-token-hud-meter-section="resources">
+      <div class="fallout-maw-token-hud-meter-title-row">
+        <button type="button" class="fallout-maw-token-hud-block-title fallout-maw-token-hud-collapse-toggle" data-action="toggleMeterSection" data-section="resources" data-token-hud-meter-toggle aria-expanded="{{meterSections.resources.expanded}}">
+          <i class="fa-solid fa-caret-down" inert></i>
+          <span>Ресурсы</span>
+        </button>
+        {{#if gmControls}}
+        <button type="button" class="fallout-maw-token-hud-meter-edit-lock {{#if meterSections.resources.editable}}unlocked{{/if}}" data-action="toggleMeterEdit" data-section="resources" title="Редактировать текущие значения ресурсов" aria-pressed="{{meterSections.resources.editable}}">
+          <i class="fa-solid {{#if meterSections.resources.editable}}fa-lock-open{{else}}fa-lock{{/if}}" inert></i>
+        </button>
+        {{/if}}
+      </div>
       <div class="fallout-maw-token-hud-collapsible">
         <div class="fallout-maw-token-hud-collapsible-inner fallout-maw-token-hud-meter-list">
           {{#each resources}}
           <div class="fallout-maw-token-hud-meter-card" data-token-hud-resource-card data-resource-key="{{key}}">
             <div class="fallout-maw-token-hud-meter-header">
               <span>{{label}}</span>
+              {{#if ../meterSections.resources.editable}}
+              <label class="fallout-maw-token-hud-meter-value-editor">
+                <input type="number" value="{{value}}" min="{{min}}" max="{{max}}" step="1" data-token-hud-meter-value-input data-section="resources" data-key="{{key}}" data-original-value="{{value}}" aria-label="{{label}}">
+                <b>/ {{max}}</b>
+              </label>
+              {{else}}
               <strong>{{value}} / {{max}}</strong>
+              {{/if}}
             </div>
             <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}" data-token-hud-resource-meter data-resource-key="{{key}}" data-resource-min="{{min}}" data-resource-value="{{value}}" data-resource-max="{{max}}" data-resource-limited="{{blockedAmount}}">
               <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
@@ -97,18 +111,32 @@
       </div>
     </section>
 
-    <section class="fallout-maw-token-hud-meter-section {{#if meterSections.needs.collapsed}}collapsed{{/if}}" data-token-hud-meter-section="needs">
-      <button type="button" class="fallout-maw-token-hud-block-title fallout-maw-token-hud-collapse-toggle secondary" data-action="toggleMeterSection" data-section="needs" data-token-hud-meter-toggle aria-expanded="{{meterSections.needs.expanded}}">
-        <i class="fa-solid fa-caret-down" inert></i>
-        <span>Потребности</span>
-      </button>
+    <section class="fallout-maw-token-hud-meter-section {{#if meterSections.needs.collapsed}}collapsed{{/if}} {{#if meterSections.needs.editable}}editable{{/if}}" data-token-hud-meter-section="needs">
+      <div class="fallout-maw-token-hud-meter-title-row secondary">
+        <button type="button" class="fallout-maw-token-hud-block-title fallout-maw-token-hud-collapse-toggle secondary" data-action="toggleMeterSection" data-section="needs" data-token-hud-meter-toggle aria-expanded="{{meterSections.needs.expanded}}">
+          <i class="fa-solid fa-caret-down" inert></i>
+          <span>Потребности</span>
+        </button>
+        {{#if gmControls}}
+        <button type="button" class="fallout-maw-token-hud-meter-edit-lock {{#if meterSections.needs.editable}}unlocked{{/if}}" data-action="toggleMeterEdit" data-section="needs" title="Редактировать текущие значения потребностей" aria-pressed="{{meterSections.needs.editable}}">
+          <i class="fa-solid {{#if meterSections.needs.editable}}fa-lock-open{{else}}fa-lock{{/if}}" inert></i>
+        </button>
+        {{/if}}
+      </div>
       <div class="fallout-maw-token-hud-collapsible">
         <div class="fallout-maw-token-hud-collapsible-inner fallout-maw-token-hud-meter-list">
           {{#each needs}}
           <div class="fallout-maw-token-hud-meter-card">
             <div class="fallout-maw-token-hud-meter-header">
               <span>{{label}}</span>
+              {{#if ../meterSections.needs.editable}}
+              <label class="fallout-maw-token-hud-meter-value-editor">
+                <input type="number" value="{{value}}" min="{{min}}" max="{{max}}" step="1" data-token-hud-meter-value-input data-section="needs" data-key="{{key}}" data-original-value="{{value}}" aria-label="{{label}}">
+                <b>/ {{max}}</b>
+              </label>
+              {{else}}
               <strong>{{value}} / {{max}}</strong>
+              {{/if}}
             </div>
             <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
               <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>

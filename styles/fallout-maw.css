@@ -4901,6 +4901,22 @@ label.fallout-maw-mitigation-cell {
   margin-top: 8px;
 }
 
+.fallout-maw-token-hud-meter-title-row {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+  margin-bottom: 5px;
+}
+
+.fallout-maw-token-hud-meter-title-row.secondary {
+  margin-top: 8px;
+}
+
+.fallout-maw-token-hud-meter-title-row .fallout-maw-token-hud-block-title,
+.fallout-maw-token-hud-meter-title-row .fallout-maw-token-hud-block-title.secondary {
+  margin: 0;
+}
+
 .fallout-maw-token-hud-weapon-set-title {
   align-items: center;
   background: transparent;
@@ -5058,8 +5074,10 @@ label.fallout-maw-mitigation-cell {
   color: #f2d581;
   cursor: pointer;
   display: flex;
+  flex: 1 1 auto;
   gap: 5px;
   justify-content: flex-start;
+  min-width: 0;
   padding: 0;
   text-align: left;
   width: 100%;
@@ -5084,6 +5102,37 @@ label.fallout-maw-mitigation-cell {
 
 .fallout-maw-token-hud-meter-section.collapsed .fallout-maw-token-hud-collapse-toggle i {
   transform: rotate(-90deg);
+}
+
+.fallout-maw-token-hud-meter-edit-lock {
+  align-items: center;
+  background: rgba(70, 12, 10, 0.72);
+  border: 1px solid rgba(230, 88, 72, 0.72);
+  color: #ff9a8c;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 22px;
+  height: 22px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 22px;
+}
+
+.fallout-maw-token-hud-meter-edit-lock.unlocked {
+  background: rgba(27, 76, 25, 0.78);
+  border-color: rgba(118, 213, 95, 0.78);
+  color: #a8ee8a;
+}
+
+.fallout-maw-token-hud-meter-edit-lock:hover,
+.fallout-maw-token-hud-meter-edit-lock:focus-visible {
+  box-shadow: 0 0 0 1px rgba(255, 239, 173, 0.18), 0 0 8px rgba(242, 213, 129, 0.18);
+  outline: 0;
+}
+
+.fallout-maw-token-hud-meter-edit-lock i {
+  font-size: 0.72rem;
 }
 
 .fallout-maw-token-hud-meter-section + .fallout-maw-token-hud-meter-section {
@@ -5614,6 +5663,40 @@ label.fallout-maw-mitigation-cell {
   color: #f3dda0;
   flex: none;
   font-size: 0.8rem;
+}
+
+.fallout-maw-token-hud-meter-value-editor {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+.fallout-maw-token-hud-meter-value-editor input {
+  background: rgba(0, 0, 0, 0.58);
+  border: 1px solid rgba(118, 213, 95, 0.58);
+  color: #f3dda0;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  height: 20px;
+  line-height: 1;
+  padding: 1px 3px;
+  text-align: right;
+  width: 3.2rem;
+}
+
+.fallout-maw-token-hud-meter-value-editor input:focus {
+  border-color: rgba(168, 238, 138, 0.9);
+  box-shadow: 0 0 0 1px rgba(118, 213, 95, 0.22);
+  outline: 0;
+}
+
+.fallout-maw-token-hud-meter-value-editor b {
+  color: #f3dda0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .fallout-maw-token-hud-stat-grid {
