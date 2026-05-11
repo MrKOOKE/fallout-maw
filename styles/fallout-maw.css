@@ -1836,13 +1836,13 @@ label.fallout-maw-mitigation-cell {
 }
 
 .fallout-maw-inventory-tooltip {
-  max-width: 663px;
-  min-width: 507px;
+  max-width: 760px;
+  min-width: 560px;
   overflow: hidden;
   padding: 0;
   pointer-events: auto;
   position: fixed;
-  width: 585px;
+  width: 660px;
 }
 
 .fallout-maw-inventory-tooltip.pinned {
@@ -2131,7 +2131,7 @@ label.fallout-maw-mitigation-cell {
   padding-top: 0.34rem;
 }
 
-.fallout-maw-inventory-tooltip .function-row span {
+.fallout-maw-inventory-tooltip .function-row > span {
   color: var(--fallout-maw-tooltip-text);
   font-size: 1.2rem;
   min-width: 0;
@@ -2158,6 +2158,16 @@ label.fallout-maw-mitigation-cell {
   display: block;
   overflow-wrap: normal;
   white-space: nowrap;
+}
+
+.fallout-maw-inventory-tooltip .function-value-change.positive {
+  color: #8fd86d;
+  text-shadow: 0 0 6px rgba(143, 216, 109, 0.18);
+}
+
+.fallout-maw-inventory-tooltip .function-value-change.negative {
+  color: #e07464;
+  text-shadow: 0 0 6px rgba(224, 116, 100, 0.16);
 }
 
 .fallout-maw-inventory-tooltip .function-meter-value {

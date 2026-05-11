@@ -8,6 +8,7 @@ import {
   getDamageTypeSettings,
   getDiseaseSettings,
   getLevelSettings,
+  getProficiencyInfluenceSettings,
   getProficiencySettings,
   getRaceNeedSettings,
   getResourceSettings,
@@ -102,6 +103,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #tooltipItemId = "";
   #tooltipWeaponTabIndex = 0;
   #tooltipDocumentPointerDownHandler = null;
+  #tooltipDocumentKeyHandler = null;
+  #tooltipBaseMode = false;
   #inventoryContextMenuOpen = false;
   #uiScale = 1;
   #viewportResizeHandler = null;
@@ -736,6 +739,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     const item = this.actor.items.get(itemElement.dataset.tooltipItem);
     if (!item) return;
+    this.#tooltipBaseMode = Boolean(event.altKey);
     this.#tooltipPointer = { x: event.clientX, y: event.clientY };
     this.#clearInventoryTooltip();
     this.#tooltipAnchorElement = itemElement;
@@ -780,6 +784,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!shouldPin) return;
 
     this.#tooltipPinned = true;
+    this.#tooltipBaseMode = Boolean(event.altKey);
     this.#tooltipPointer = { x: event.clientX, y: event.clientY };
     this.#tooltipAnchorElement = itemElement;
     this.#tooltipWeaponTabIndex = 0;
@@ -1786,7 +1791,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
   }
 
-  async #showInventoryTooltip(item, { pinned = false } = {}) {
+  async #showInventoryTooltip(item, { pinned = false, refresh = false } = {}) {
     const currencySettings = getCurrencySettings();
     const currency = currencySettings.find(entry => entry.key === item.system?.priceCurrency);
     const quantity = Math.max(1, toInteger(item.system?.quantity));
@@ -1805,9 +1810,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       })
       : "";
     const functionSections = buildInventoryTooltipFunctionSections(item, this.actor, {
-      activeWeaponIndex: this.#tooltipWeaponTabIndex
+      activeWeaponIndex: this.#tooltipWeaponTabIndex,
+      baseMode: this.#tooltipBaseMode
     });
-    if (!this.#tooltipTimer && !pinned) return;
+    if (!this.#tooltipTimer && !pinned && !refresh) return;
     if (this.#tooltipTimer) {
       clearTimeout(this.#tooltipTimer);
       this.#tooltipTimer = null;
@@ -1842,6 +1848,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#tooltipPinned = Boolean(pinned);
     this.#tooltipItemId = item.id;
     if (pinned) this.#bindInventoryTooltipDocumentClose();
+    this.#bindInventoryTooltipAltMode();
     this.#positionInventoryTooltip();
     requestAnimationFrame(() => {
       const description = tooltip.querySelector(".description");
@@ -1890,6 +1897,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#tooltipElement.querySelectorAll("[data-tooltip-weapon-panel]").forEach(panel => {
       panel.classList.toggle("active", toInteger(panel.dataset.tooltipWeaponPanel) === index);
     });
+  }
+
+  async #refreshInventoryTooltip() {
+    if (!this.#tooltipElement || !this.#tooltipItemId) return;
+    const item = this.actor.items.get(this.#tooltipItemId);
+    if (!item) return;
+    const pinned = this.#tooltipPinned;
+    this.#tooltipElement.remove();
+    this.#tooltipElement = null;
+    await this.#showInventoryTooltip(item, { pinned, refresh: true });
   }
 
   #positionInventoryTooltipAtAnchor(element, anchor) {
@@ -1948,6 +1965,28 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#tooltipDocumentPointerDownHandler = null;
   }
 
+  #bindInventoryTooltipAltMode() {
+    if (this.#tooltipDocumentKeyHandler) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#tooltipDocumentKeyHandler = event => {
+      if (event.key !== "Alt") return;
+      const baseMode = event.type === "keydown";
+      if (this.#tooltipBaseMode === baseMode) return;
+      this.#tooltipBaseMode = baseMode;
+      void this.#refreshInventoryTooltip();
+    };
+    view.document.addEventListener("keydown", this.#tooltipDocumentKeyHandler, { capture: true });
+    view.document.addEventListener("keyup", this.#tooltipDocumentKeyHandler, { capture: true });
+  }
+
+  #unbindInventoryTooltipAltMode() {
+    if (!this.#tooltipDocumentKeyHandler) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    view.document.removeEventListener("keydown", this.#tooltipDocumentKeyHandler, { capture: true });
+    view.document.removeEventListener("keyup", this.#tooltipDocumentKeyHandler, { capture: true });
+    this.#tooltipDocumentKeyHandler = null;
+  }
+
   #clearInventoryTooltip({ force = false } = {}) {
     if (this.#tooltipTimer) {
       clearTimeout(this.#tooltipTimer);
@@ -1955,12 +1994,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }
     if (this.#tooltipPinned && !force) return;
     this.#unbindInventoryTooltipDocumentClose();
+    this.#unbindInventoryTooltipAltMode();
     this.#tooltipElement?.remove();
     this.#tooltipElement = null;
     this.#tooltipAnchorElement = null;
     this.#tooltipPinned = false;
     this.#tooltipItemId = "";
     this.#tooltipWeaponTabIndex = 0;
+    this.#tooltipBaseMode = false;
   }
 
   #getFullscreenSheetPosition(position = {}) {
@@ -2109,13 +2150,13 @@ function renderTooltipMeterValue(value, max = 0) {
   };
 }
 
-function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex = 0 } = {}) {
+function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex = 0, baseMode = false } = {}) {
   const sections = [
     buildContainerTooltipSection(item, actor),
     buildConditionTooltipSection(item),
     buildDamageMitigationTooltipSection(item),
     buildDamageSourceTooltipSection(item),
-    ...buildWeaponTooltipSections(item, activeWeaponIndex),
+    ...buildWeaponTooltipSections(item, activeWeaponIndex, { actor, baseMode }),
     ...buildToolTooltipSections(item)
   ].filter(Boolean);
   if (!sections.length) return "";
@@ -2206,14 +2247,14 @@ function summarizeMitigationCoverage(entries = {}) {
   return `${limbCount} частей / ${damageTypeCount} типов`;
 }
 
-function buildWeaponTooltipSections(item, activeWeaponIndex = 0) {
+function buildWeaponTooltipSections(item, activeWeaponIndex = 0, { actor = null, baseMode = false } = {}) {
   if (!hasItemFunction(item, ITEM_FUNCTIONS.weapon)) return [];
   const entries = getEnabledWeaponFunctions(item);
   if (!entries.length) return [];
   if (entries.length === 1) {
     return entries.map((entry, index) => renderTooltipFunctionSection(
       getWeaponTooltipSectionTitle(item, entry, index),
-      buildWeaponTooltipRows(item, entry)
+      buildWeaponTooltipRows(item, entry, { actor, baseMode })
     ));
   }
 
@@ -2228,7 +2269,7 @@ function buildWeaponTooltipSections(item, activeWeaponIndex = 0) {
   }).join("");
   const panels = entries.map((entry, index) => `
     <div class="weapon-tab-panel ${index === activeIndex ? "active" : ""}" data-tooltip-weapon-panel="${index}">
-      ${renderTooltipFunctionGrid(buildWeaponTooltipRows(item, entry))}
+      ${renderTooltipFunctionGrid(buildWeaponTooltipRows(item, entry, { actor, baseMode }))}
     </div>
   `).join("");
 
@@ -2240,11 +2281,12 @@ function buildWeaponTooltipSections(item, activeWeaponIndex = 0) {
   `];
 }
 
-function buildWeaponTooltipRows(item, entry = {}) {
+function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = false } = {}) {
   const data = getEffectiveWeaponTooltipData(entry.data ?? {});
-  const weakening = getConditionWeakeningData(item, { minimumRatio: 0.1 });
+  const stats = getWeaponTooltipCalculatedStats(item, data, { actor, baseMode });
+  const baseStats = baseMode ? stats : getWeaponTooltipCalculatedStats(item, data, { actor, baseMode: true });
   const rows = [
-    [game.i18n.localize("FALLOUTMAW.Item.WeaponDamage"), formatWeaponDamageValue(item, data, weakening)],
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponDamage"), renderChangedWeaponDamageValue(data, stats.damage, baseStats.damage, { baseMode })],
     ["Распределение урона", getWeaponDamageDistributionLabel(item, data)]
   ];
   if (isSourceDamageMode(data)) {
@@ -2255,19 +2297,25 @@ function buildWeaponTooltipRows(item, entry = {}) {
     rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), renderTooltipMeterValue(toInteger(data.magazine?.value), magazineMax)]);
   }
   rows.push(
-    [game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), `${formatNumber(data.maxRangeMeters)} м`],
-    [game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), `${formatNumber(data.effectiveRange?.value)} / ${formatNumber(data.effectiveRange?.max)} м`]
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), renderChangedDistanceValue(data.maxRangeMeters, data.maxRangeMeters, { baseMode })],
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), renderChangedEffectiveRangeValue(data.effectiveRange, data.effectiveRange, { baseMode })]
   );
   rows.push(...getWeaponVolleyRows(data));
   rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponSkill"), getSkillLabel(data.skillKey)]);
-  const accuracyBonus = toInteger(data.accuracyBonus);
-  if (accuracyBonus) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), formatSignedNumber(accuracyBonus)]);
-  const criticalChanceModifier = toInteger(data.criticalChanceModifier);
-  if (criticalChanceModifier) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), formatSignedNumber(criticalChanceModifier)]);
-  const criticalDamagePercent = toInteger(data.criticalDamagePercent);
-  if (criticalDamagePercent) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), `${criticalDamagePercent}%`]);
-  const penetration = toInteger(data.penetration);
-  if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), penetration]);
+  const accuracyBonus = stats.accuracyBonus;
+  if (accuracyBonus || (!baseMode && accuracyBonus !== baseStats.accuracyBonus)) {
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), renderChangedSignedNumber(accuracyBonus, baseStats.accuracyBonus, { baseMode })]);
+  }
+  const criticalChanceModifier = stats.criticalChanceModifier;
+  if (criticalChanceModifier || (!baseMode && criticalChanceModifier !== baseStats.criticalChanceModifier)) {
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), renderChangedSignedNumber(criticalChanceModifier, baseStats.criticalChanceModifier, { baseMode })]);
+  }
+  const criticalDamagePercent = stats.criticalDamagePercent;
+  if (criticalDamagePercent || (!baseMode && criticalDamagePercent !== baseStats.criticalDamagePercent)) {
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), renderChangedPercentValue(criticalDamagePercent, baseStats.criticalDamagePercent, { baseMode })]);
+  }
+  const penetration = stats.penetration;
+  if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), renderChangedNumber(penetration, baseStats.penetration, { baseMode })]);
   rows.push(...getWeaponResourceCostRows(data));
   const actions = getWeaponActionLabels(data);
   if (actions.length) rows.push(["Действия", {
@@ -2283,9 +2331,100 @@ function getWeaponTooltipSectionTitle(item, entry = {}, index = 0) {
   return `${game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon")} ${index + 1}`;
 }
 
-function formatWeaponDamageValue(item, data = {}, weakening = null) {
-  const damage = toInteger(getEffectiveWeaponDamageData(item, data).damage);
-  const effectiveDamage = weakening?.active ? Math.floor(damage * weakening.ratio) : damage;
+function renderChangedWeaponDamageValue(data = {}, value = 0, baseValue = 0, { baseMode = false } = {}) {
+  const text = formatWeaponDamageValue(data, value);
+  if (baseMode || toInteger(value) === toInteger(baseValue)) return text;
+  return renderChangedTooltipText(text, value > baseValue);
+}
+
+function renderChangedNumber(value = 0, baseValue = 0, { baseMode = false, higherIsBetter = true } = {}) {
+  const text = formatNumber(value);
+  if (baseMode || Number(value) === Number(baseValue)) return text;
+  return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === higherIsBetter);
+}
+
+function renderChangedSignedNumber(value = 0, baseValue = 0, options = {}) {
+  const text = formatSignedNumber(value);
+  if (options.baseMode || Number(value) === Number(baseValue)) return text;
+  return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === (options.higherIsBetter !== false));
+}
+
+function renderChangedPercentValue(value = 0, baseValue = 0, options = {}) {
+  const text = `${formatNumber(value)}%`;
+  if (options.baseMode || Number(value) === Number(baseValue)) return text;
+  return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === (options.higherIsBetter !== false));
+}
+
+function renderChangedDistanceValue(value = 0, baseValue = 0, options = {}) {
+  const text = `${formatNumber(value)} м`;
+  if (options.baseMode || Number(value) === Number(baseValue)) return text;
+  return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === (options.higherIsBetter !== false));
+}
+
+function renderChangedEffectiveRangeValue(range = {}, baseRange = {}, { baseMode = false } = {}) {
+  const value = Number(range?.value) || 0;
+  const max = Number(range?.max) || 0;
+  const baseValue = Number(baseRange?.value) || 0;
+  const baseMax = Number(baseRange?.max) || 0;
+  if (baseMode || (value === baseValue && max === baseMax)) return `${formatNumber(value)} / ${formatNumber(max)} м`;
+  const valueHtml = value === baseValue ? escapeHTML(formatNumber(value)) : renderChangedTooltipSpan(formatNumber(value), value < baseValue);
+  const maxHtml = max === baseMax ? escapeHTML(formatNumber(max)) : renderChangedTooltipSpan(formatNumber(max), max > baseMax);
+  return { html: `${valueHtml} / ${maxHtml} м` };
+}
+
+function renderChangedTooltipText(text, positive) {
+  return { html: renderChangedTooltipSpan(text, positive) };
+}
+
+function renderChangedTooltipSpan(text, positive) {
+  const className = `function-value-change ${positive ? "positive" : "negative"}`;
+  return `<span class="${className}">${escapeHTML(text)}</span>`;
+}
+
+function getWeaponTooltipCalculatedStats(item, data = {}, { actor = null, baseMode = false } = {}) {
+  const proficiencyDamage = baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "damage");
+  const baseDamage = Math.max(0, toInteger(getEffectiveWeaponDamageData(item, data).damage));
+  const modifiedDamage = Math.round(baseDamage * Math.max(0, 100 + proficiencyDamage) / 100);
+  const weakening = baseMode ? { active: false, ratio: 1, steps: 0 } : getConditionWeakeningData(item, { minimumRatio: 0.1 });
+  const conditionAccuracyPenalty = weakening.active ? weakening.steps * 10 : 0;
+  const conditionCritPenalty = weakening.active ? weakening.steps * 3 : 0;
+
+  return {
+    damage: Math.max(0, Math.floor(modifiedDamage * (weakening.active ? weakening.ratio : 1))),
+    accuracyBonus: toInteger(data.accuracyBonus)
+      + (baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "accuracy"))
+      - conditionAccuracyPenalty,
+    criticalChanceModifier: toInteger(data.criticalChanceModifier)
+      + (baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "criticalChance"))
+      - conditionCritPenalty,
+    criticalDamagePercent: Math.max(0, toInteger(data.criticalDamagePercent)
+      + (baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "criticalDamage"))),
+    penetration: Math.max(0, toInteger(data.penetration))
+  };
+}
+
+function getWeaponProficiencyInfluenceBonus(actor, data = {}, influenceKey = "") {
+  if (!actor) return 0;
+  const proficiency = getWeaponProficiencySetting(data);
+  if (!proficiency) return 0;
+  const range = getProficiencyInfluenceSettings()?.[influenceKey] ?? { min: 0, max: 0 };
+  const minimum = toInteger(range.min);
+  const maximum = toInteger(range.max);
+  const actorValue = toInteger(actor.system?.proficiencies?.[proficiency.key]?.value);
+  const settingMax = Math.max(0, toInteger(proficiency.max));
+  const ratio = settingMax > 0 ? Math.max(0, Math.min(1, actorValue / settingMax)) : 0;
+  return Math.round(minimum + ((maximum - minimum) * ratio));
+}
+
+function getWeaponProficiencySetting(data = {}) {
+  const proficiencies = getProficiencySettings();
+  if (!proficiencies.length) return null;
+  const key = String(data?.proficiencyKey ?? "");
+  return proficiencies.find(proficiency => proficiency.key === key) ?? proficiencies[0] ?? null;
+}
+
+function formatWeaponDamageValue(data = {}, damage = 0) {
+  const effectiveDamage = Math.max(0, toInteger(damage));
   const pellets = Math.max(1, toInteger(data.pellets));
   return pellets > 1 ? `${effectiveDamage} x ${pellets}` : String(effectiveDamage);
 }
