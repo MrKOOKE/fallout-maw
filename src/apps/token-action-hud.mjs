@@ -796,12 +796,28 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#positionHudItemTooltip();
   }
 
-  #onHudItemTooltipClick(event) {
+  async #onHudItemTooltipClick(event) {
+    const moduleRemove = event.target?.closest?.("[data-tooltip-module-remove]");
+    if (moduleRemove && this.#itemTooltipElement?.contains(moduleRemove)) {
+      event.preventDefault();
+      event.stopPropagation();
+      await this.#removeHudWeaponModule(moduleRemove);
+      return;
+    }
+
+    const moduleChoice = event.target?.closest?.("[data-tooltip-module-choice]");
+    if (moduleChoice && this.#itemTooltipElement?.contains(moduleChoice)) {
+      event.preventDefault();
+      event.stopPropagation();
+      await this.#installHudWeaponModuleFromTooltipChoice(moduleChoice);
+      return;
+    }
+
     const moduleSlot = event.target?.closest?.("[data-tooltip-module-slot]");
     if (moduleSlot && this.#itemTooltipElement?.contains(moduleSlot)) {
       event.preventDefault();
       event.stopPropagation();
-      void this.#openHudWeaponModuleSelection(moduleSlot);
+      this.#toggleHudWeaponModulePicker(moduleSlot);
       return;
     }
 
@@ -821,39 +837,30 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     event.preventDefault();
     event.stopPropagation();
-    await this.#removeHudWeaponModule(moduleSlot);
   }
 
-  async #openHudWeaponModuleSelection(slotElement) {
-    const { weapon, entries, weaponIndex, slotIndex, slot } = this.#getHudWeaponModuleSlotContext(slotElement);
-    if (!weapon || !slot) return;
-    const modules = this.actor.items.contents
-      .filter(candidate => candidate.id !== weapon.id && isModuleItemCompatibleWithSlot(candidate, slot) && getItemQuantity(candidate) > 0)
-      .map(candidate => ({ id: candidate.id, name: getWeaponModuleTechnicalName(candidate) }));
-    if (!modules.length) return ui.notifications.warn("Подходящих модулей нет.");
-    const result = await DialogV2.input({
-      classes: ["dialog", "fallout-maw-module-selection-dialog"],
-      position: { width: 400 },
-      window: { title: game.i18n.localize("FALLOUTMAW.Item.WeaponModuleSlots") },
-      content: `
-        <div class="fallout-maw-terminal-dialog">
-          <label class="fallout-maw-stacked-field">
-            <span>${escapeHTML(slot.moduleKey || game.i18n.localize("FALLOUTMAW.Item.WeaponModuleSlots"))}</span>
-            <select name="moduleId">
-              ${modules.map(module => `<option value="${escapeAttribute(module.id)}">${escapeHTML(module.name)}</option>`).join("")}
-            </select>
-          </label>
-        </div>
-      `,
-      ok: {
-        label: "Выбрать",
-        icon: "fa-solid fa-check",
-        callback: (_event, button) => new FormDataExtended(button.form).object
-      },
-      rejectClose: false
-    });
-    const moduleItem = this.actor.items.get(String(result?.moduleId ?? ""));
-    if (!moduleItem) return undefined;
+  #toggleHudWeaponModulePicker(slotElement) {
+    const weaponIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipWeaponIndex));
+    const slotIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipModuleSlotIndex));
+    const panelKey = `${weaponIndex}:${slotIndex}`;
+    const panel = this.#itemTooltipElement?.querySelector(`[data-tooltip-module-picker-panel="${CSS.escape(panelKey)}"]`);
+    if (!panel) return;
+    const wasActive = panel.classList.contains("active");
+    this.#itemTooltipElement.querySelectorAll("[data-tooltip-module-picker-panel]").forEach(entry => entry.classList.remove("active"));
+    this.#itemTooltipElement.querySelectorAll("[data-tooltip-module-slot]").forEach(entry => entry.classList.remove("selecting"));
+    if (wasActive) {
+      this.#positionHudItemTooltip();
+      return;
+    }
+    panel.classList.add("active");
+    slotElement.classList.add("selecting");
+    requestAnimationFrame(() => this.#positionHudItemTooltip());
+  }
+
+  async #installHudWeaponModuleFromTooltipChoice(choiceElement) {
+    const { weapon, entries, weaponIndex, slotIndex } = this.#getHudWeaponModuleSlotContext(choiceElement);
+    const moduleItem = this.actor.items.get(String(choiceElement?.dataset?.tooltipModuleChoice ?? ""));
+    if (!weapon || !moduleItem) return undefined;
     return this.#installHudWeaponModule(weapon, entries[weaponIndex], slotIndex, moduleItem);
   }
 
@@ -861,15 +868,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const { weapon, entry, slotIndex, slot } = this.#getHudWeaponModuleSlotContext(slotElement);
     const itemData = getWeaponModuleSlotItemData(slot);
     if (!weapon || !entry || !itemData?.system) return undefined;
-    const confirmed = await DialogV2.confirm({
-      window: { title: game.i18n.localize("FALLOUTMAW.Item.WeaponModuleSlots") },
-      content: `<p>Снять модуль "${escapeHTML(getWeaponModuleTechnicalName(itemData))}"?</p>`,
-      yes: { icon: "fa-solid fa-arrow-up", label: "Да" },
-      no: { label: game.i18n.localize("Cancel") },
-      rejectClose: false,
-      modal: true
-    });
-    if (!confirmed) return undefined;
     return this.#uninstallHudWeaponModule(weapon, entry, slotIndex, itemData);
   }
 
@@ -888,13 +886,14 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const slots = getWeaponModuleSlots(entry?.data ?? {});
     const slot = slots[slotIndex];
     if (!slot || !isModuleItemCompatibleWithSlot(moduleItem, slot)) return undefined;
-    if (getWeaponModuleSlotItemData(slot)?.system) return ui.notifications.warn("Сначала снимите установленный модуль.");
+    const oldItemData = getWeaponModuleSlotItemData(slot);
 
     const itemData = moduleItem.toObject();
     delete itemData._id;
     foundry.utils.setProperty(itemData, "system.quantity", 1);
     slots[slotIndex] = { ...slot, itemUuid: moduleItem.uuid, itemData };
     await weapon.update({ [`${path}.moduleSlots`]: slots });
+    if (oldItemData?.system) await returnModuleItemToActorInventory(this.actor, oldItemData);
     const quantity = getItemQuantity(moduleItem);
     if (quantity > 1) await moduleItem.update({ "system.quantity": quantity - 1 });
     else await moduleItem.delete();
@@ -918,9 +917,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!tooltip || !anchor?.isConnected) return;
     const view = this.element?.ownerDocument?.defaultView ?? window;
     const anchorRect = anchor.getBoundingClientRect();
-    const tooltipRect = tooltip.getBoundingClientRect();
     const margin = 10;
     const gap = 12;
+    this.#syncHudItemTooltipAvailableHeight(tooltip, view.innerHeight, margin);
+    let tooltipRect = tooltip.getBoundingClientRect();
     let left = anchorRect.left + ((anchorRect.width - tooltipRect.width) / 2);
     left = Math.max(margin, Math.min(view.innerWidth - tooltipRect.width - margin, left));
     let top = anchorRect.top - tooltipRect.height - gap;
@@ -928,6 +928,31 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     tooltip.style.left = `${Math.round(left)}px`;
     tooltip.style.top = `${Math.round(Math.max(margin, top))}px`;
     tooltip.dataset.tooltipDirection = "hud";
+    this.#syncHudItemTooltipAvailableHeight(tooltip, view.innerHeight, margin);
+    tooltipRect = tooltip.getBoundingClientRect();
+    if ((tooltipRect.top + tooltipRect.height) > (view.innerHeight - margin)) {
+      tooltip.style.top = `${Math.round(Math.max(margin, view.innerHeight - tooltipRect.height - margin))}px`;
+    }
+  }
+
+  #syncHudItemTooltipAvailableHeight(tooltip, viewportHeight, margin) {
+    if (!tooltip) return;
+    const style = getComputedStyle(tooltip);
+    const scale = Math.max(0.1, Number.parseFloat(style.getPropertyValue("--fallout-maw-ui-scale")) || 1);
+    const maxTooltipHeight = Math.max(220, Math.floor((viewportHeight - (margin * 2)) / scale));
+    tooltip.style.setProperty("--fallout-maw-tooltip-max-height", `${maxTooltipHeight}px`);
+
+    const picker = tooltip.querySelector(".tooltip-module-picker-panels:has(.tooltip-module-picker-panel.active)");
+    if (!picker) {
+      tooltip.style.removeProperty("--fallout-maw-module-picker-max-height");
+      return;
+    }
+
+    const tooltipRect = tooltip.getBoundingClientRect();
+    const pickerRect = picker.getBoundingClientRect();
+    const nonPickerHeight = Math.max(0, tooltipRect.height - pickerRect.height);
+    const maxPickerHeight = Math.max(160, Math.floor((viewportHeight - (margin * 2) - nonPickerHeight) / scale));
+    tooltip.style.setProperty("--fallout-maw-module-picker-max-height", `${maxPickerHeight}px`);
   }
 
   #bindHudItemTooltipDocumentListeners() {

@@ -92,8 +92,7 @@ import {
 import { FalloutMaWContainerSheet } from "./container-sheet.mjs";
 
 const { ActorSheetV2 } = foundry.applications.sheets;
-const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
-const FormDataExtended = foundry.applications.ux.FormDataExtended;
+const { HandlebarsApplicationMixin } = foundry.applications.api;
 const ACTOR_SHEET_REFERENCE_WIDTH = 2560;
 const ACTOR_SHEET_REFERENCE_HEIGHT = 1440;
 const ACTOR_SHEET_FALLBACK_VIEWPORT_WIDTH = 1280;
@@ -1843,12 +1842,28 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#positionInventoryTooltipAtAnchor(this.#tooltipElement, this.#tooltipAnchorElement);
   }
 
-  #onInventoryTooltipClick(event) {
+  async #onInventoryTooltipClick(event) {
+    const moduleRemove = event.target?.closest?.("[data-tooltip-module-remove]");
+    if (moduleRemove && this.#tooltipElement?.contains(moduleRemove)) {
+      event.preventDefault();
+      event.stopPropagation();
+      await this.#removeWeaponModuleFromTooltipSlot(moduleRemove);
+      return;
+    }
+
+    const moduleChoice = event.target?.closest?.("[data-tooltip-module-choice]");
+    if (moduleChoice && this.#tooltipElement?.contains(moduleChoice)) {
+      event.preventDefault();
+      event.stopPropagation();
+      await this.#installWeaponModuleFromTooltipChoice(moduleChoice);
+      return;
+    }
+
     const moduleSlot = event.target?.closest?.("[data-tooltip-module-slot]");
     if (moduleSlot && this.#tooltipElement?.contains(moduleSlot)) {
       event.preventDefault();
       event.stopPropagation();
-      void this.#openWeaponModuleSelection(moduleSlot);
+      this.#toggleWeaponModulePicker(moduleSlot);
       return;
     }
 
@@ -1868,7 +1883,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!moduleSlot || !this.#tooltipElement?.contains(moduleSlot)) return;
     event.preventDefault();
     event.stopPropagation();
-    await this.#removeWeaponModuleFromTooltipSlot(moduleSlot);
   }
 
   #onInventoryTooltipAuxClick(event) {
@@ -1906,43 +1920,28 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     await this.#showInventoryTooltip(item, { pinned, refresh: true });
   }
 
-  async #openWeaponModuleSelection(slotElement) {
-    const { item, entries, weaponIndex, slotIndex, slot } = this.#getTooltipWeaponModuleSlotContext(slotElement);
-    if (!item || !slot) return;
-    const modules = this.actor.items.contents
-      .filter(candidate => candidate.id !== item.id && isModuleItemCompatibleWithSlot(candidate, slot) && getItemQuantityHelper(candidate) > 0)
-      .map(candidate => ({
-        id: candidate.id,
-        name: getWeaponModuleTechnicalName(candidate),
-        img: candidate.img
-      }));
-    if (!modules.length) {
-      ui.notifications.warn("Подходящих модулей нет.");
+  #toggleWeaponModulePicker(slotElement) {
+    const weaponIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipWeaponIndex));
+    const slotIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipModuleSlotIndex));
+    const panelKey = `${weaponIndex}:${slotIndex}`;
+    const panel = this.#tooltipElement?.querySelector(`[data-tooltip-module-picker-panel="${CSS.escape(panelKey)}"]`);
+    if (!panel) return;
+    const wasActive = panel.classList.contains("active");
+    this.#tooltipElement.querySelectorAll("[data-tooltip-module-picker-panel]").forEach(entry => entry.classList.remove("active"));
+    this.#tooltipElement.querySelectorAll("[data-tooltip-module-slot]").forEach(entry => entry.classList.remove("selecting"));
+    if (wasActive) {
+      this.#positionInventoryTooltip();
       return;
     }
+    panel.classList.add("active");
+    slotElement.classList.add("selecting");
+    requestAnimationFrame(() => this.#positionInventoryTooltip());
+  }
 
-    const result = await DialogV2.input({
-      classes: ["dialog", "fallout-maw-module-selection-dialog"],
-      position: { width: 400 },
-      window: { title: game.i18n.localize("FALLOUTMAW.Item.WeaponModuleSlots") },
-      content: `
-        <div class="fallout-maw-terminal-dialog">
-          <label class="fallout-maw-stacked-field">
-            <span>${escapeHTML(slot.moduleKey || game.i18n.localize("FALLOUTMAW.Item.WeaponModuleSlots"))}</span>
-            <select name="moduleId">
-              ${modules.map(module => `<option value="${escapeAttribute(module.id)}">${escapeHTML(module.name)}</option>`).join("")}
-            </select>
-          </label>
-        </div>
-      `,
-      ok: {
-        label: "Выбрать",
-        icon: "fa-solid fa-check",
-        callback: (_event, button) => new FormDataExtended(button.form).object
-      },
-      rejectClose: false
-    });
-    const moduleItem = this.actor.items.get(String(result?.moduleId ?? ""));
+  async #installWeaponModuleFromTooltipChoice(choiceElement) {
+    const { item, entries, weaponIndex, slotIndex } = this.#getTooltipWeaponModuleSlotContext(choiceElement);
+    if (!item) return;
+    const moduleItem = this.actor.items.get(String(choiceElement?.dataset?.tooltipModuleChoice ?? ""));
     if (!moduleItem) return;
     await this.#installWeaponModule(item, entries[weaponIndex], slotIndex, moduleItem);
   }
@@ -1951,15 +1950,6 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const { item, entry, slotIndex, slot } = this.#getTooltipWeaponModuleSlotContext(slotElement);
     const itemData = getWeaponModuleSlotItemData(slot);
     if (!item || !entry || !itemData?.system) return;
-    const confirmed = await DialogV2.confirm({
-      window: { title: game.i18n.localize("FALLOUTMAW.Item.WeaponModuleSlots") },
-      content: `<p>Снять модуль "${escapeHTML(getWeaponModuleTechnicalName(itemData))}"?</p>`,
-      yes: { icon: "fa-solid fa-arrow-up", label: "Да" },
-      no: { label: game.i18n.localize("Cancel") },
-      rejectClose: false,
-      modal: true
-    });
-    if (!confirmed) return;
     await this.#uninstallWeaponModule(item, entry, slotIndex, itemData);
   }
 
@@ -1979,10 +1969,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const slots = getWeaponModuleSlots(entry.data ?? {});
     const slot = slots[slotIndex];
     if (!slot || !isModuleItemCompatibleWithSlot(moduleItem, slot)) return;
-    if (getWeaponModuleSlotItemData(slot)?.system) {
-      ui.notifications.warn("Сначала снимите установленный модуль.");
-      return;
-    }
+    const oldItemData = getWeaponModuleSlotItemData(slot);
 
     const itemData = moduleItem.toObject();
     delete itemData._id;
@@ -1990,6 +1977,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     slots[slotIndex] = { ...slot, itemUuid: moduleItem.uuid, itemData };
 
     await weapon.update({ [`${path}.moduleSlots`]: slots });
+    if (oldItemData?.system) await this.#insertItemIntoInventory(oldItemData, createInventoryPlacementHelper(1, 1, oldItemData, this.actor.items));
     const quantity = getItemQuantityHelper(moduleItem);
     if (quantity > 1) await moduleItem.update({ "system.quantity": quantity - 1 });
     else await moduleItem.delete();
@@ -2016,10 +2004,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }
 
     const { viewportWidth, viewportHeight } = this.#getViewportMetrics();
-    const anchorRect = anchor.getBoundingClientRect();
-    const tooltipRect = element.getBoundingClientRect();
     const margin = Math.max(8, 12 * this.#uiScale);
     const gap = Math.max(10, 12 * this.#uiScale);
+    this.#syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, this.#uiScale);
+
+    const anchorRect = anchor.getBoundingClientRect();
+    let tooltipRect = element.getBoundingClientRect();
 
     let left = anchorRect.left - tooltipRect.width - gap;
     let direction = "left";
@@ -2041,6 +2031,31 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     element.dataset.tooltipDirection = direction;
     element.style.left = `${Math.round(left)}px`;
     element.style.top = `${Math.round(top)}px`;
+
+    this.#syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, this.#uiScale);
+    tooltipRect = element.getBoundingClientRect();
+    if ((tooltipRect.top + tooltipRect.height) > (viewportHeight - margin)) {
+      element.style.top = `${Math.round(Math.max(margin, viewportHeight - tooltipRect.height - margin))}px`;
+    }
+  }
+
+  #syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, scale = 1) {
+    if (!element) return;
+    const safeScale = Math.max(0.1, Number(scale) || 1);
+    const maxTooltipHeight = Math.max(220, Math.floor((viewportHeight - (margin * 2)) / safeScale));
+    element.style.setProperty("--fallout-maw-tooltip-max-height", `${maxTooltipHeight}px`);
+
+    const picker = element.querySelector(".tooltip-module-picker-panels:has(.tooltip-module-picker-panel.active)");
+    if (!picker) {
+      element.style.removeProperty("--fallout-maw-module-picker-max-height");
+      return;
+    }
+
+    const tooltipRect = element.getBoundingClientRect();
+    const pickerRect = picker.getBoundingClientRect();
+    const nonPickerHeight = Math.max(0, tooltipRect.height - pickerRect.height);
+    const maxPickerHeight = Math.max(160, Math.floor((viewportHeight - (margin * 2) - nonPickerHeight) / safeScale));
+    element.style.setProperty("--fallout-maw-module-picker-max-height", `${maxPickerHeight}px`);
   }
 
   #bindInventoryTooltipDocumentClose() {
@@ -2196,6 +2211,18 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 }
 
 export async function renderInventoryItemTooltipHTML(item, actor, { activeWeaponIndex = 0, baseMode = false } = {}) {
+  const descriptionSource = String(item.system?.description ?? "").trim();
+  const descriptionHTML = descriptionSource
+    ? await TextEditor.enrichHTML(descriptionSource, {
+      async: true,
+      secrets: item.isOwner,
+      relativeTo: item
+    })
+    : "";
+  return renderInventoryItemTooltipContentHTML(item, actor, { activeWeaponIndex, baseMode, descriptionHTML });
+}
+
+function renderInventoryItemTooltipContentHTML(item, actor, { activeWeaponIndex = 0, baseMode = false, descriptionHTML = "" } = {}) {
   const currencySettings = getCurrencySettings();
   const currency = currencySettings.find(entry => entry.key === item.system?.priceCurrency);
   const quantity = Math.max(1, toInteger(item.system?.quantity));
@@ -2205,14 +2232,6 @@ export async function renderInventoryItemTooltipHTML(item, actor, { activeWeapon
   const totalPrice = unitPrice * quantity;
   const weightLabel = formatUnitAndTotal(unitWeight, totalWeight, quantity, game.i18n.localize("FALLOUTMAW.Common.Kg"));
   const priceHTML = renderTooltipPriceValue(unitPrice, totalPrice, quantity, currency);
-  const descriptionSource = String(item.system?.description ?? "").trim();
-  const descriptionHTML = descriptionSource
-    ? await TextEditor.enrichHTML(descriptionSource, {
-      async: true,
-      secrets: item.isOwner,
-      relativeTo: item
-    })
-    : "";
   const functionSections = buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex, baseMode });
   return `
     <section class="content">
@@ -2372,6 +2391,10 @@ function buildDamageSourceTooltipSection(item) {
 
 function buildModuleTooltipSection(item) {
   if (!isWeaponModuleItem(item)) return "";
+  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionModule"), getModuleTooltipRows(item));
+}
+
+function getModuleTooltipRows(item) {
   const moduleData = getModuleFunction(item);
   const weapon = moduleData.weapon ?? {};
   const rows = [
@@ -2382,12 +2405,12 @@ function buildModuleTooltipSection(item) {
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), weapon.accuracyBonus);
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), weapon.criticalChanceModifier, { suffix: "%" });
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), weapon.criticalDamagePercent, { suffix: "%" });
-  pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), weapon.maxRangeMeters, { suffix: " Рј" });
+  pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), weapon.maxRangeMeters, { suffix: " м" });
   pushModuleEffectiveRangeRow(rows, weapon.effectiveRange);
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), weapon.penetration);
   pushModuleChangeRow(rows, game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), weapon.magazineMax);
   rows.push(...getModuleActionPointRows(weapon.actionPointCosts));
-  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionModule"), rows);
+  return rows;
 }
 
 function summarizeMitigationCoverage(entries = {}) {
@@ -2436,7 +2459,7 @@ function buildWeaponTooltipSections(item, activeWeaponIndex = 0, { actor = null,
     `),
     `
       <div class="weapon-tab-panel ${moduleTabIndex === activeIndex ? "active" : ""}" data-tooltip-weapon-panel="${moduleTabIndex}">
-        ${renderWeaponTooltipModuleSlots(entries)}
+        ${renderWeaponTooltipModuleSlots(item, entries, actor)}
       </div>
     `
   ].join("");
@@ -2449,7 +2472,7 @@ function buildWeaponTooltipSections(item, activeWeaponIndex = 0, { actor = null,
   `];
 }
 
-function renderWeaponTooltipModuleSlots(entries = []) {
+function renderWeaponTooltipModuleSlots(item, entries = [], actor = null) {
   const slots = entries.flatMap((entry, weaponIndex) => getWeaponModuleSlots(entry.data ?? {}).map((slot, slotIndex) => ({
     entry,
     weaponIndex,
@@ -2462,17 +2485,85 @@ function renderWeaponTooltipModuleSlots(entries = []) {
     <div class="tooltip-module-grid">
       ${slots.map(({ entry, weaponIndex, slotIndex, slot, itemData }) => `
         <div class="tooltip-module-card">
+          ${itemData ? `
+            <button type="button" class="tooltip-module-remove" data-tooltip-module-remove data-tooltip-weapon-index="${weaponIndex}" data-tooltip-module-slot-index="${slotIndex}">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          ` : ""}
           <button type="button" class="tooltip-module-slot ${itemData ? "filled" : "empty"}"
             data-tooltip-module-slot
             data-tooltip-weapon-index="${weaponIndex}"
             data-tooltip-module-slot-index="${slotIndex}"
-            title="${escapeAttribute(itemData ? getWeaponModuleTechnicalName(itemData) : slot.moduleKey)}">
+            ${itemData ? renderInstalledModuleTooltipAttributes(itemData, actor) : ""}>
             ${itemData ? `<img src="${escapeAttribute(itemData.img || "icons/svg/item-bag.svg")}" alt="">` : `<i class="fa-solid fa-plus"></i>`}
           </button>
           <span>${escapeHTML(slot.moduleKey || getWeaponTooltipSectionTitle(null, entry, weaponIndex))}</span>
         </div>
       `).join("")}
     </div>
+    <div class="tooltip-module-picker-panels">
+      ${slots.map(({ weaponIndex, slotIndex, slot }) => renderWeaponTooltipModulePickerPanel(item, actor, slot, weaponIndex, slotIndex)).join("")}
+    </div>
+  `;
+}
+
+function renderInstalledModuleTooltipAttributes(item, actor = null) {
+  const html = renderInventoryItemTooltipContentHTML(item, actor);
+  return [
+    `data-tooltip-html="${escapeAttribute(html)}"`,
+    `data-tooltip-class="fallout-maw-inventory-tooltip fallout-maw-module-item-tooltip"`,
+    `data-tooltip-direction="RIGHT"`
+  ].join(" ");
+}
+
+function renderWeaponTooltipModulePickerPanel(item, actor, slot, weaponIndex, slotIndex) {
+  const panelKey = `${weaponIndex}:${slotIndex}`;
+  const candidates = getTooltipWeaponModuleCandidates(actor, item, slot);
+  const content = candidates.length
+    ? `<div class="tooltip-module-choice-list">${candidates.map(candidate => renderWeaponTooltipModuleChoice(candidate, weaponIndex, slotIndex)).join("")}</div>`
+    : `<p class="fallout-maw-empty-list">Нет подходящих модулей.</p>`;
+  return `
+    <div class="tooltip-module-picker-panel" data-tooltip-module-picker-panel="${escapeAttribute(panelKey)}">
+      <h5>${escapeHTML(slot.moduleKey || game.i18n.localize("FALLOUTMAW.Item.WeaponModuleSlots"))}</h5>
+      ${content}
+    </div>
+  `;
+}
+
+function getTooltipWeaponModuleCandidates(actor, item, slot) {
+  if (!actor?.items) return [];
+  return actor.items.contents
+    .filter(candidate => candidate.id !== item.id && isModuleItemCompatibleWithSlot(candidate, slot) && getItemQuantityHelper(candidate) > 0)
+    .sort((left, right) => getWeaponModuleTechnicalName(left).localeCompare(getWeaponModuleTechnicalName(right), game.i18n.lang));
+}
+
+function renderWeaponTooltipModuleChoice(item, weaponIndex, slotIndex) {
+  return `
+    <button type="button" class="tooltip-module-choice"
+      data-tooltip-module-choice="${escapeAttribute(item.id)}"
+      data-tooltip-weapon-index="${weaponIndex}"
+      data-tooltip-module-slot-index="${slotIndex}">
+      <img src="${escapeAttribute(item.img || "icons/svg/item-bag.svg")}" alt="">
+      <span class="tooltip-module-choice-body">
+        <strong>${escapeHTML(getWeaponModuleTechnicalName(item))}</strong>
+        ${renderModuleChangePreview(item)}
+      </span>
+    </button>
+  `;
+}
+
+function renderModuleChangePreview(item) {
+  const rows = getModuleTooltipRows(item).slice(2).filter(row => hasTooltipRowValue(row?.[1]));
+  if (!rows.length) return `<span class="tooltip-module-choice-empty">Нет изменений</span>`;
+  return `
+    <span class="tooltip-module-choice-effects">
+      ${rows.map(([label, value]) => `
+        <span>
+          <em>${escapeHTML(formatTooltipLabel(label))}</em>
+          <b>${renderTooltipRowValue(value)}</b>
+        </span>
+      `).join("")}
+    </span>
   `;
 }
 
@@ -2591,8 +2682,8 @@ function pushModuleEffectiveRangeRow(rows, range = {}) {
   const value = Number(range?.value) || 0;
   const max = Number(range?.max) || 0;
   if (!value && !max) return;
-  const valueHtml = value ? renderChangedTooltipSpan(`${formatSignedNumber(value)} Рј`, value < 0) : escapeHTML("0 Рј");
-  const maxHtml = max ? renderChangedTooltipSpan(`${formatSignedNumber(max)} Рј`, max > 0) : escapeHTML("0 Рј");
+  const valueHtml = value ? renderChangedTooltipSpan(`${formatSignedNumber(value)} м`, value < 0) : escapeHTML("0 м");
+  const maxHtml = max ? renderChangedTooltipSpan(`${formatSignedNumber(max)} м`, max > 0) : escapeHTML("0 м");
   rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), { html: `${valueHtml} / ${maxHtml}` }]);
 }
 
@@ -2609,7 +2700,7 @@ function getModuleActionPointRows(actionPointCosts = {}) {
   return WEAPON_MODULE_ACTION_KEYS
     .map(key => [labels.get(key) ?? key, Number(actionPointCosts?.[key]) || 0])
     .filter(([_label, value]) => value)
-    .map(([label, value]) => [label, renderModuleChangeValue(value, { suffix: " РћР”", higherIsBetter: false })]);
+    .map(([label, value]) => [label, renderModuleChangeValue(value, { suffix: " ОД", higherIsBetter: false })]);
 }
 
 function renderModuleChangeValue(value = 0, { suffix = "", higherIsBetter = true } = {}) {
