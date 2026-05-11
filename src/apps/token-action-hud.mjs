@@ -41,6 +41,7 @@ import {
 import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageMitigationFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getWeaponFunctionById, hasItemFunction } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
+import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
 import { FalloutMaWFormApplicationV2, getFlatFormData } from "./base-form-application-v2.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -284,6 +285,15 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #activeTray = "";
   #limbDisplayLayer = "state";
   #layoutFrame = null;
+  #itemTooltipElement = null;
+  #itemTooltipAnchorElement = null;
+  #itemTooltipItemId = "";
+  #itemTooltipWeaponTabIndex = 0;
+  #itemTooltipBaseMode = false;
+  #itemTooltipPointerDownHandler = null;
+  #itemTooltipKeyHandler = null;
+  #itemTooltipSuppressHudActivation = false;
+  #itemTooltipSuppressHudActivationTimer = null;
   #limbPopover = {
     element: null,
     showTimer: null,
@@ -403,6 +413,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   _attachFrameListeners() {
     super._attachFrameListeners();
     this.element.addEventListener("pointerdown", event => this.#onHudItemMiddlePointerDown(event));
+    this.element.addEventListener("click", event => this.#onHudItemTooltipHudActivation(event), { capture: true });
+    this.element.addEventListener("auxclick", event => this.#onHudItemTooltipHudActivation(event), { capture: true });
+    this.element.addEventListener("contextmenu", event => this.#onHudItemTooltipHudActivation(event), { capture: true });
+    this.element.addEventListener("contextmenu", event => this.#onHudContextMenu(event));
     this.element.addEventListener("click", event => this.#onLimbLayerOptionClick(event));
   }
 
@@ -428,6 +442,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     cancelWeaponAttack();
     if (this.#layoutFrame) cancelAnimationFrame(this.#layoutFrame);
     this.#layoutFrame = null;
+    this.#clearHudItemTooltip();
+    this.#clearHudItemTooltipActivationSuppression();
     this.#destroyLimbPopover();
   }
 
@@ -646,6 +662,30 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
   }
 
+  #onHudItemTooltipHudActivation(event) {
+    if (!this.#itemTooltipSuppressHudActivation) return;
+    if (this.#itemTooltipElement?.contains(event.target)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+
+  #onHudContextMenu(event) {
+    if (!(event.target instanceof Element)) return;
+    const button = event.target.closest('[data-action="toggleWeaponActions"][data-item-id]');
+    if (!button || !this.element?.contains(button)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const item = this.actor?.items.get(String(button.dataset.itemId ?? ""));
+    if (!item) return;
+    if (this.#itemTooltipElement && this.#itemTooltipItemId === item.id) {
+      this.#clearHudItemTooltip();
+      return;
+    }
+    this.#itemTooltipBaseMode = Boolean(event.altKey);
+    this.#itemTooltipWeaponTabIndex = 0;
+    void this.#showHudItemTooltip(item, button);
+  }
+
   #onLimbLayerOptionClick(event) {
     if (!(event.target instanceof Element)) return;
     const option = event.target.closest("[data-limb-layer-option]");
@@ -710,6 +750,135 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #onLimbPopoverLeaveRoot() {
     this.#limbPopover.hoveredPart = null;
     this.#scheduleLimbPopoverClose();
+  }
+
+  async #showHudItemTooltip(item, anchor) {
+    this.#clearHudItemTooltip();
+    const tooltip = document.createElement("aside");
+    tooltip.className = "fallout-maw-inventory-tooltip pinned";
+    tooltip.style.setProperty("--fallout-maw-ui-scale", String(tokenActionHudScaleFactor(getTokenActionHudScalePercent())));
+    tooltip.innerHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
+      activeWeaponIndex: this.#itemTooltipWeaponTabIndex,
+      baseMode: this.#itemTooltipBaseMode
+    });
+    tooltip.addEventListener("click", event => this.#onHudItemTooltipClick(event));
+    tooltip.addEventListener("contextmenu", event => event.preventDefault());
+    document.body.append(tooltip);
+    this.#itemTooltipElement = tooltip;
+    this.#itemTooltipAnchorElement = anchor;
+    this.#itemTooltipItemId = item.id;
+    this.#bindHudItemTooltipDocumentListeners();
+    this.#positionHudItemTooltip();
+    requestAnimationFrame(() => {
+      const description = tooltip.querySelector(".description");
+      description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+      this.#positionHudItemTooltip();
+    });
+  }
+
+  async #refreshHudItemTooltip() {
+    if (!this.#itemTooltipElement || !this.#itemTooltipItemId) return;
+    const item = this.actor?.items.get(this.#itemTooltipItemId);
+    const anchor = this.#itemTooltipAnchorElement;
+    if (!item || !anchor?.isConnected) return this.#clearHudItemTooltip();
+    this.#itemTooltipElement.innerHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
+      activeWeaponIndex: this.#itemTooltipWeaponTabIndex,
+      baseMode: this.#itemTooltipBaseMode
+    });
+    this.#positionHudItemTooltip();
+  }
+
+  #onHudItemTooltipClick(event) {
+    const button = event.target?.closest?.("[data-tooltip-weapon-tab]");
+    if (!button || !this.#itemTooltipElement?.contains(button)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.#itemTooltipWeaponTabIndex = Math.max(0, toInteger(button.dataset.tooltipWeaponTab));
+    void this.#refreshHudItemTooltip();
+  }
+
+  #positionHudItemTooltip() {
+    const tooltip = this.#itemTooltipElement;
+    const anchor = this.#itemTooltipAnchorElement;
+    if (!tooltip || !anchor?.isConnected) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    const anchorRect = anchor.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    const margin = 10;
+    const gap = 12;
+    let left = anchorRect.left + ((anchorRect.width - tooltipRect.width) / 2);
+    left = Math.max(margin, Math.min(view.innerWidth - tooltipRect.width - margin, left));
+    let top = anchorRect.top - tooltipRect.height - gap;
+    if (top < margin) top = Math.min(view.innerHeight - tooltipRect.height - margin, anchorRect.bottom + gap);
+    tooltip.style.left = `${Math.round(left)}px`;
+    tooltip.style.top = `${Math.round(Math.max(margin, top))}px`;
+    tooltip.dataset.tooltipDirection = "hud";
+  }
+
+  #bindHudItemTooltipDocumentListeners() {
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    if (!this.#itemTooltipPointerDownHandler) {
+      this.#itemTooltipPointerDownHandler = event => {
+        if (this.#itemTooltipElement?.contains(event.target)) return;
+        if (this.element?.contains?.(event.target)) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          this.#suppressNextHudItemTooltipActivation();
+        }
+        this.#clearHudItemTooltip();
+      };
+      view.document.addEventListener("pointerdown", this.#itemTooltipPointerDownHandler, { capture: true });
+    }
+    if (!this.#itemTooltipKeyHandler) {
+      this.#itemTooltipKeyHandler = event => {
+        if (event.key === "Escape") return this.#clearHudItemTooltip();
+        if (event.key !== "Alt") return undefined;
+        const baseMode = event.type === "keydown";
+        if (this.#itemTooltipBaseMode === baseMode) return undefined;
+        this.#itemTooltipBaseMode = baseMode;
+        void this.#refreshHudItemTooltip();
+        return undefined;
+      };
+      view.document.addEventListener("keydown", this.#itemTooltipKeyHandler, { capture: true });
+      view.document.addEventListener("keyup", this.#itemTooltipKeyHandler, { capture: true });
+    }
+  }
+
+  #clearHudItemTooltip() {
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    if (this.#itemTooltipPointerDownHandler) {
+      view.document.removeEventListener("pointerdown", this.#itemTooltipPointerDownHandler, { capture: true });
+      this.#itemTooltipPointerDownHandler = null;
+    }
+    if (this.#itemTooltipKeyHandler) {
+      view.document.removeEventListener("keydown", this.#itemTooltipKeyHandler, { capture: true });
+      view.document.removeEventListener("keyup", this.#itemTooltipKeyHandler, { capture: true });
+      this.#itemTooltipKeyHandler = null;
+    }
+    this.#itemTooltipElement?.remove();
+    this.#itemTooltipElement = null;
+    this.#itemTooltipAnchorElement = null;
+    this.#itemTooltipItemId = "";
+    this.#itemTooltipWeaponTabIndex = 0;
+    this.#itemTooltipBaseMode = false;
+  }
+
+  #suppressNextHudItemTooltipActivation() {
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#itemTooltipSuppressHudActivation = true;
+    if (this.#itemTooltipSuppressHudActivationTimer) view.clearTimeout(this.#itemTooltipSuppressHudActivationTimer);
+    this.#itemTooltipSuppressHudActivationTimer = view.setTimeout(() => {
+      this.#itemTooltipSuppressHudActivation = false;
+      this.#itemTooltipSuppressHudActivationTimer = null;
+    }, 250);
+  }
+
+  #clearHudItemTooltipActivationSuppression() {
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#itemTooltipSuppressHudActivation = false;
+    if (!this.#itemTooltipSuppressHudActivationTimer) return;
+    view.clearTimeout(this.#itemTooltipSuppressHudActivationTimer);
+    this.#itemTooltipSuppressHudActivationTimer = null;
   }
 
   #scheduleLimbPopoverClose() {

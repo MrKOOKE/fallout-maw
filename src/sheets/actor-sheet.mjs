@@ -1792,24 +1792,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   async #showInventoryTooltip(item, { pinned = false, refresh = false } = {}) {
-    const currencySettings = getCurrencySettings();
-    const currency = currencySettings.find(entry => entry.key === item.system?.priceCurrency);
-    const quantity = Math.max(1, toInteger(item.system?.quantity));
-    const unitWeight = Number(item.system?.weight) || 0;
-    const unitPrice = Number(item.system?.price) || 0;
-    const totalWeight = Number(getItemTotalWeight(item, this.actor.items).toFixed(1));
-    const totalPrice = unitPrice * quantity;
-    const weightLabel = formatUnitAndTotal(unitWeight, totalWeight, quantity, game.i18n.localize("FALLOUTMAW.Common.Kg"));
-    const priceHTML = renderTooltipPriceValue(unitPrice, totalPrice, quantity, currency);
-    const descriptionSource = String(item.system?.description ?? "").trim();
-    const descriptionHTML = descriptionSource
-      ? await TextEditor.enrichHTML(descriptionSource, {
-        async: true,
-        secrets: item.isOwner,
-        relativeTo: item
-      })
-      : "";
-    const functionSections = buildInventoryTooltipFunctionSections(item, this.actor, {
+    const tooltipHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
       activeWeaponIndex: this.#tooltipWeaponTabIndex,
       baseMode: this.#tooltipBaseMode
     });
@@ -1823,21 +1806,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     tooltip.className = "fallout-maw-inventory-tooltip";
     tooltip.classList.toggle("pinned", Boolean(pinned));
     this.#applyOverlayUiScale(tooltip);
-    tooltip.innerHTML = `
-      <section class="content">
-        <section class="header">
-          <div class="top">
-            <div class="name">${escapeHTML(item.name)}</div>
-          </div>
-          <div class="bottom">
-            <div class="metric">${game.i18n.localize("FALLOUTMAW.Item.Weight")}: ${weightLabel}</div>
-            <div class="metric price-metric">${priceHTML}</div>
-          </div>
-        </section>
-        ${functionSections}
-        ${descriptionHTML ? `<section class="description">${descriptionHTML}</section>` : ""}
-      </section>
-    `;
+    tooltip.innerHTML = tooltipHTML;
     tooltip.addEventListener("click", event => this.#onInventoryTooltipClick(event));
     tooltip.addEventListener("auxclick", event => this.#onInventoryTooltipAuxClick(event));
     tooltip.addEventListener("mouseleave", () => {
@@ -2096,6 +2065,42 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 }
 
+export async function renderInventoryItemTooltipHTML(item, actor, { activeWeaponIndex = 0, baseMode = false } = {}) {
+  const currencySettings = getCurrencySettings();
+  const currency = currencySettings.find(entry => entry.key === item.system?.priceCurrency);
+  const quantity = Math.max(1, toInteger(item.system?.quantity));
+  const unitWeight = Number(item.system?.weight) || 0;
+  const unitPrice = Number(item.system?.price) || 0;
+  const totalWeight = Number(getItemTotalWeight(item, actor?.items).toFixed(1));
+  const totalPrice = unitPrice * quantity;
+  const weightLabel = formatUnitAndTotal(unitWeight, totalWeight, quantity, game.i18n.localize("FALLOUTMAW.Common.Kg"));
+  const priceHTML = renderTooltipPriceValue(unitPrice, totalPrice, quantity, currency);
+  const descriptionSource = String(item.system?.description ?? "").trim();
+  const descriptionHTML = descriptionSource
+    ? await TextEditor.enrichHTML(descriptionSource, {
+      async: true,
+      secrets: item.isOwner,
+      relativeTo: item
+    })
+    : "";
+  const functionSections = buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex, baseMode });
+  return `
+    <section class="content">
+      <section class="header">
+        <div class="top">
+          <div class="name">${escapeHTML(item.name)}</div>
+        </div>
+        <div class="bottom">
+          <div class="metric">${game.i18n.localize("FALLOUTMAW.Item.Weight")}: ${weightLabel}</div>
+          <div class="metric price-metric">${priceHTML}</div>
+        </div>
+      </section>
+      ${functionSections}
+      ${descriptionHTML ? `<section class="description">${descriptionHTML}</section>` : ""}
+    </section>
+  `;
+}
+
 function formatWeight(value) {
   const numeric = Number(value) || 0;
   if (Number.isInteger(numeric)) return String(numeric);
@@ -2221,7 +2226,7 @@ function buildDamageSourceTooltipSection(item) {
   const accuracyBonus = toInteger(source?.accuracyBonus);
   if (accuracyBonus) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), formatSignedNumber(accuracyBonus)]);
   const criticalChanceModifier = toInteger(source?.criticalChanceModifier);
-  if (criticalChanceModifier) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), formatSignedNumber(criticalChanceModifier)]);
+  if (criticalChanceModifier) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), `${formatSignedNumber(criticalChanceModifier)}%`]);
   const criticalDamagePercent = toInteger(source?.criticalDamagePercent);
   if (criticalDamagePercent) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), `${formatSignedNumber(criticalDamagePercent)}%`]);
   const maxRangeMeters = Number(source?.maxRangeMeters) || 0;
@@ -2308,7 +2313,7 @@ function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = fal
   }
   const criticalChanceModifier = stats.criticalChanceModifier;
   if (criticalChanceModifier || (!baseMode && criticalChanceModifier !== baseStats.criticalChanceModifier)) {
-    rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), renderChangedSignedNumber(criticalChanceModifier, baseStats.criticalChanceModifier, { baseMode })]);
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), renderChangedSignedPercentValue(criticalChanceModifier, baseStats.criticalChanceModifier, { baseMode })]);
   }
   const criticalDamagePercent = stats.criticalDamagePercent;
   if (criticalDamagePercent || (!baseMode && criticalDamagePercent !== baseStats.criticalDamagePercent)) {
@@ -2345,6 +2350,12 @@ function renderChangedNumber(value = 0, baseValue = 0, { baseMode = false, highe
 
 function renderChangedSignedNumber(value = 0, baseValue = 0, options = {}) {
   const text = formatSignedNumber(value);
+  if (options.baseMode || Number(value) === Number(baseValue)) return text;
+  return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === (options.higherIsBetter !== false));
+}
+
+function renderChangedSignedPercentValue(value = 0, baseValue = 0, options = {}) {
+  const text = `${formatSignedNumber(value)}%`;
   if (options.baseMode || Number(value) === Number(baseValue)) return text;
   return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === (options.higherIsBetter !== false));
 }
