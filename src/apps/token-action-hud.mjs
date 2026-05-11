@@ -39,7 +39,7 @@ import {
   getContextInventoryItems,
   getItemQuantity
 } from "../utils/inventory-containers.mjs";
-import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageMitigationFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, getConditionFunction, getConditionWeakeningData, getDamageMitigationFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
@@ -503,23 +503,32 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const actors = getSelectedHudActors();
     if (!actors.length) return undefined;
-    const confirmed = await DialogV2.confirm({
+    const formData = await DialogV2.input({
       window: {
         title: "Полное восстановление"
       },
-      content: `<p>Полностью вылечить выбранных актеров: ${actors.length}?</p>`,
-      yes: {
+      content: `
+        <p>Полностью вылечить выбранных актеров: ${actors.length}?</p>
+        <label class="fallout-maw-gm-heal-repair-option">
+          <input type="checkbox" name="repairItems" value="true">
+          <span>Починить все предметы?</span>
+        </label>
+      `,
+      ok: {
         label: "Вылечить",
-        icon: "fa-solid fa-kit-medical"
+        icon: "fa-solid fa-kit-medical",
+        callback: (_event, button) => new FormDataExtended(button.form).object
       },
-      no: {
+      buttons: [{
+        action: "cancel",
         label: "Отмена"
-      },
+      }],
       rejectClose: false
     });
-    if (!confirmed) return undefined;
+    if (!formData || formData === "cancel") return undefined;
 
-    for (const actor of actors) await fullyRestoreActor(actor);
+    const repairItems = Boolean(formData.repairItems);
+    for (const actor of actors) await fullyRestoreActor(actor, { repairItems });
     return this.render({ force: true });
   }
 
@@ -2330,7 +2339,7 @@ function addLimitedResourceDisplay(entry, limit = null) {
   };
 }
 
-async function fullyRestoreActor(actor) {
+async function fullyRestoreActor(actor, { repairItems = false } = {}) {
   if (!actor?.isOwner) return;
 
   const traumaIds = actor.items
@@ -2360,6 +2369,24 @@ async function fullyRestoreActor(actor) {
     updates[`system.needs.${key}.spent`] = 0;
   }
   if (Object.keys(updates).length) await actor.update(updates);
+
+  if (repairItems) await fullyRepairActorItems(actor);
+}
+
+async function fullyRepairActorItems(actor) {
+  const itemUpdates = [];
+  for (const item of actor.items ?? []) {
+    if (!hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
+    const condition = getConditionFunction(item);
+    const max = Math.max(0, toInteger(condition.max));
+    const current = Math.max(0, toInteger(condition.value));
+    if (current === max) continue;
+    itemUpdates.push({
+      _id: item.id,
+      "system.functions.condition.value": max
+    });
+  }
+  if (itemUpdates.length) await actor.updateEmbeddedDocuments("Item", itemUpdates);
 }
 
 function isDamageSystemEffect(effect) {

@@ -3563,6 +3563,292 @@ label.fallout-maw-mitigation-cell {
   color: var(--fallout-maw-terminal-red);
 }
 
+.fallout-maw-chat-card.fallout-maw-damage-summary-card {
+  --fallout-maw-damage-card-bg: #10130d;
+  --fallout-maw-damage-card-bg-2: #1b1d16;
+  --fallout-maw-damage-card-border: rgba(199, 178, 95, 0.72);
+  --fallout-maw-damage-card-line: rgba(216, 192, 94, 0.3);
+  --fallout-maw-damage-card-text: #fff1b6;
+  --fallout-maw-damage-card-muted: #d5c98b;
+  --fallout-maw-damage-card-accent: #f0cf55;
+  --fallout-maw-damage-card-red: #e65345;
+  background:
+    repeating-linear-gradient(180deg, rgba(235, 218, 132, 0.035) 0 1px, transparent 1px 4px),
+    linear-gradient(180deg, var(--fallout-maw-damage-card-bg-2), var(--fallout-maw-damage-card-bg));
+  border: 2px solid var(--fallout-maw-damage-card-border);
+  border-radius: 4px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.72),
+    inset 0 0 18px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(0, 0, 0, 0.85);
+  color: var(--fallout-maw-damage-card-text);
+  display: grid;
+  font-family: var(--fallout-maw-actor-ui-font, var(--font-primary, serif));
+  gap: 0.55rem;
+  padding: 0.65rem;
+}
+
+.fallout-maw-damage-summary-header {
+  align-items: flex-start;
+  border-bottom: 2px solid var(--fallout-maw-damage-card-accent);
+  display: flex;
+  gap: 0.65rem;
+  justify-content: space-between;
+  padding-bottom: 0.42rem;
+}
+
+.fallout-maw-damage-summary-kicker {
+  color: var(--fallout-maw-damage-card-accent);
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.fallout-maw-damage-summary-header h2 {
+  color: var(--fallout-maw-damage-card-text);
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.05;
+  margin: 0.16rem 0 0;
+}
+
+.fallout-maw-damage-summary-total {
+  color: var(--fallout-maw-damage-card-red);
+  font-family: var(--font-monospace, monospace);
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.fallout-maw-damage-summary-victims {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.fallout-maw-damage-summary-victim {
+  align-items: start;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(216, 192, 94, 0.24);
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+  padding: 0.42rem;
+}
+
+.fallout-maw-damage-summary-victim img {
+  background: rgba(0, 0, 0, 0.42);
+  border: 1px solid rgba(216, 192, 94, 0.36);
+  border-radius: 2px;
+  height: 2.25rem;
+  object-fit: cover;
+  width: 2.25rem;
+}
+
+.fallout-maw-damage-summary-victim-body {
+  display: grid;
+  gap: 0.32rem;
+  min-width: 0;
+}
+
+.fallout-maw-damage-summary-victim-body header {
+  align-items: baseline;
+  display: flex;
+  gap: 0.55rem;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.fallout-maw-damage-summary-victim-body header strong {
+  color: var(--fallout-maw-damage-card-accent);
+  font-size: 1.02rem;
+  line-height: 1.1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-damage-summary-victim-body header span {
+  color: var(--fallout-maw-damage-card-muted);
+  flex: 0 0 auto;
+  font-size: 0.9rem;
+  line-height: 1.1;
+}
+
+.fallout-maw-damage-summary-victim-body header b,
+.fallout-maw-damage-summary-victim-body li strong {
+  color: var(--fallout-maw-damage-card-red);
+  font-family: var(--font-monospace, monospace);
+  font-weight: 900;
+}
+
+.fallout-maw-damage-summary-victim-body ul {
+  display: grid;
+  gap: 0.16rem 0.45rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.fallout-maw-damage-summary-victim-body li {
+  align-items: baseline;
+  border-bottom: 1px solid var(--fallout-maw-damage-card-line);
+  display: flex;
+  gap: 0.35rem;
+  justify-content: space-between;
+  min-width: 0;
+  padding-bottom: 0.1rem;
+}
+
+.fallout-maw-damage-summary-victim-body li span {
+  color: var(--fallout-maw-damage-card-muted);
+  font-size: 0.88rem;
+  line-height: 1.1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-damage-summary-victim-body p {
+  color: var(--fallout-maw-damage-card-muted);
+  font-size: 0.88rem;
+  line-height: 1.2;
+  margin: 0;
+  opacity: 0.8;
+}
+
+.fallout-maw-damage-summary-victim {
+  grid-template-columns: 1fr;
+}
+
+.fallout-maw-damage-summary-victim-main {
+  align-items: stretch;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  min-width: 0;
+}
+
+.fallout-maw-damage-summary-victim-main img {
+  align-self: center;
+  height: 2.5rem;
+  width: 2.5rem;
+}
+
+.fallout-maw-damage-summary-victim-name {
+  align-items: center;
+  border-bottom: 1px solid var(--fallout-maw-damage-card-line);
+  color: var(--fallout-maw-damage-card-accent);
+  display: flex;
+  font-size: 1.04rem;
+  line-height: 1.1;
+  min-height: 1.35rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-damage-summary-damage-row {
+  align-items: center;
+  color: var(--fallout-maw-damage-card-muted);
+  display: flex;
+  font-size: 0.92rem;
+  gap: 0.35rem;
+  justify-content: space-between;
+  min-height: 1.2rem;
+}
+
+.fallout-maw-damage-summary-damage-row b {
+  color: var(--fallout-maw-damage-card-red);
+  font-family: var(--font-monospace, monospace);
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.fallout-maw-damage-summary-limbs {
+  border-top: 1px solid rgba(216, 192, 94, 0.2);
+  display: grid;
+  padding-top: 0.25rem;
+}
+
+.fallout-maw-damage-summary-limbs summary {
+  align-items: center;
+  color: var(--fallout-maw-damage-card-muted);
+  cursor: pointer;
+  display: flex;
+  font-size: 0.88rem;
+  gap: 0.35rem;
+  justify-content: space-between;
+  line-height: 1.1;
+  list-style: none;
+}
+
+.fallout-maw-damage-summary-limbs summary::-webkit-details-marker {
+  display: none;
+}
+
+.fallout-maw-damage-summary-limbs summary::before {
+  color: var(--fallout-maw-damage-card-accent);
+  content: "▸";
+  flex: 0 0 auto;
+  font-family: var(--font-monospace, monospace);
+}
+
+.fallout-maw-damage-summary-limbs[open] summary::before {
+  content: "▾";
+}
+
+.fallout-maw-damage-summary-limbs summary span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.fallout-maw-damage-summary-limbs summary strong {
+  color: var(--fallout-maw-damage-card-red);
+  font-family: var(--font-monospace, monospace);
+  font-weight: 900;
+}
+
+.fallout-maw-damage-summary-limbs ul {
+  display: grid;
+  gap: 0.12rem;
+  list-style: none;
+  margin: 0.28rem 0 0;
+  padding: 0;
+}
+
+.fallout-maw-damage-summary-limbs li {
+  align-items: baseline;
+  border-bottom: 1px solid var(--fallout-maw-damage-card-line);
+  display: flex;
+  gap: 0.35rem;
+  justify-content: space-between;
+  min-width: 0;
+  padding-bottom: 0.1rem;
+}
+
+.fallout-maw-damage-summary-limbs li span {
+  color: var(--fallout-maw-damage-card-muted);
+  font-size: 0.88rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-damage-summary-limbs li strong {
+  color: var(--fallout-maw-damage-card-red);
+  font-family: var(--font-monospace, monospace);
+  font-weight: 900;
+}
+
+.fallout-maw-damage-summary-no-limbs {
+  border-top: 1px solid rgba(216, 192, 94, 0.2);
+  color: var(--fallout-maw-damage-card-muted);
+  font-size: 0.88rem;
+  line-height: 1.2;
+  margin: 0;
+  opacity: 0.8;
+  padding-top: 0.25rem;
+}
+
 .fallout-maw-skill-check-animation-host {
   pointer-events: none;
   position: fixed;
@@ -4719,6 +5005,7 @@ label.fallout-maw-mitigation-cell {
 }
 
 .fallout-maw-token-hud-gm-actions {
+  align-items: center;
   display: inline-flex;
   gap: 4px;
 }
@@ -4742,6 +5029,18 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-token-hud-gm-actions button:hover,
 .fallout-maw-token-hud-gm-actions button:focus-visible {
   background: rgba(242, 213, 129, 0.18);
+}
+
+.fallout-maw-gm-heal-repair-option {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+}
+
+.fallout-maw-gm-heal-repair-option input {
+  flex: 0 0 auto;
+  margin: 0;
 }
 
 .fallout-maw-token-hud-collapse-toggle {

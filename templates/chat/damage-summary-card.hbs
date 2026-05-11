@@ -1,0 +1,44 @@
+<article class="fallout-maw-chat-card fallout-maw-damage-summary-card">
+  <header class="fallout-maw-damage-summary-header">
+    <div>
+      <span class="fallout-maw-damage-summary-kicker">{{labels.kicker}}</span>
+      <h2>{{labels.title}}</h2>
+    </div>
+  </header>
+
+  <section class="fallout-maw-damage-summary-victims">
+    {{#each victims}}
+    <div class="fallout-maw-damage-summary-victim">
+      <div class="fallout-maw-damage-summary-victim-main">
+        <img src="{{img}}" alt="{{name}}">
+        <div class="fallout-maw-damage-summary-victim-body">
+          <strong class="fallout-maw-damage-summary-victim-name">{{name}}</strong>
+          <div class="fallout-maw-damage-summary-damage-row">
+            <span>{{../labels.totalDamage}}:</span>
+            <b>-{{healthDamage}}</b>
+          </div>
+        </div>
+      </div>
+
+      {{#if limbs.length}}
+      <details class="fallout-maw-damage-summary-limbs">
+        <summary>
+          <span>{{../labels.limbs}}</span>
+          <strong>-{{limbDamage}}</strong>
+        </summary>
+        <ul>
+          {{#each limbs}}
+          <li>
+            <span>{{label}}</span>
+            <strong>-{{amount}}</strong>
+          </li>
+          {{/each}}
+        </ul>
+      </details>
+      {{else}}
+      <p class="fallout-maw-damage-summary-no-limbs">{{../labels.noLimbDamage}}</p>
+      {{/if}}
+    </div>
+    {{/each}}
+  </section>
+</article>

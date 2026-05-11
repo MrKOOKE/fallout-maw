@@ -1,4 +1,4 @@
-import { SYSTEM_ID, TRAUMA_CREATE_OPTION } from "../constants.mjs";
+import { SYSTEM_ID, TEMPLATES, TRAUMA_CREATE_OPTION } from "../constants.mjs";
 import { evaluateFormulaVariables } from "../formulas/index.mjs";
 import {
   getCreatureOptions,
@@ -90,23 +90,25 @@ export async function requestDamageApplication({
 
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Нет активного GM для применения урона.");
+    ui.notifications.warn("No active GM is available to apply damage.");
     return undefined;
   }
 
   game.socket.emit(DAMAGE_SOCKET, {
-    action: "applyDamage",
+    action: "applyDamageCycle",
     gmUserId: gm.id,
-    request
+    requests: [request]
   });
   return undefined;
 }
 
 export async function requestDamageApplications(requests = []) {
   const normalizedRequests = [];
+  const actors = new Map();
   for (const request of requests) {
     const resolvedActor = request.actor ?? await fromUuid(request.actorUuid ?? "");
     if (!resolvedActor) continue;
+    actors.set(resolvedActor.uuid, resolvedActor);
     normalizedRequests.push(normalizeDamageRequest({
       ...request,
       actorUuid: resolvedActor.uuid,
@@ -115,35 +117,23 @@ export async function requestDamageApplications(requests = []) {
   }
   if (!normalizedRequests.length) return [];
 
-  const grouped = new Map();
-  for (const request of normalizedRequests) {
-    const list = grouped.get(request.actorUuid) ?? [];
-    list.push(request);
-    grouped.set(request.actorUuid, list);
+  if (Array.from(actors.values()).every(actor => canApplyDamageLocally(actor))) {
+    return applyDamageCycle(normalizedRequests);
   }
 
-  const results = [];
-  for (const [actorUuid, actorRequests] of grouped) {
-    const actor = await fromUuid(actorUuid);
-    if (!actor) continue;
-    if (canApplyDamageLocally(actor)) {
-      results.push(await applyDamageApplications({ actorUuid, requests: actorRequests }));
-      continue;
-    }
-
-    const gm = getResponsibleGM();
-    if (!gm) {
-      ui.notifications.warn("РќРµС‚ Р°РєС‚РёРІРЅРѕРіРѕ GM РґР»СЏ РїСЂРёРјРµРЅРµРЅРёСЏ СѓСЂРѕРЅР°.");
-      continue;
-    }
+  const gm = getResponsibleGM();
+  if (gm) {
     game.socket.emit(DAMAGE_SOCKET, {
-      action: "applyDamageBatch",
+      action: "applyDamageCycle",
       gmUserId: gm.id,
-      actorUuid,
-      requests: actorRequests
+      requests: normalizedRequests
     });
+    return [];
   }
-  return results;
+
+  ui.notifications.warn("No active GM is available to apply damage.");
+  return applyDamageCycle(normalizedRequests.filter(request => canApplyDamageLocally(actors.get(request.actorUuid))));
+
 }
 
 export async function requestRegionPeriodicDamage({ token = null, actor = null, entries = [], source = {} } = {}) {
@@ -166,7 +156,29 @@ export async function requestRegionPeriodicDamage({ token = null, actor = null, 
   return requestDamageApplications(requests);
 }
 
-export async function applyDamageApplication(request = {}) {
+async function applyDamageCycle(requests = []) {
+  const grouped = new Map();
+  for (const request of requests) {
+    const data = normalizeDamageRequest(request);
+    if (!data.actorUuid) continue;
+    const actorRequests = grouped.get(data.actorUuid) ?? [];
+    actorRequests.push(data);
+    grouped.set(data.actorUuid, actorRequests);
+  }
+  if (!grouped.size) return [];
+
+  const results = [];
+  for (const [actorUuid, actorRequests] of grouped) {
+    const actor = await fromUuid(actorUuid);
+    if (!actor || (!game.user?.isGM && !actor.isOwner)) continue;
+    results.push(...await applyDamageApplications({ actorUuid, requests: actorRequests }, { createSummary: false }));
+  }
+
+  await publishDamageSummaryMessage(results);
+  return results;
+}
+
+export async function applyDamageApplication(request = {}, { createSummary = true } = {}) {
   const data = normalizeDamageRequest(request);
   const actor = await fromUuid(data.actorUuid);
   if (!actor) return undefined;
@@ -239,11 +251,13 @@ export async function applyDamageApplication(request = {}) {
         damageTypeKey: damageType?.key ?? data.damageTypeKey
       }]);
     }
-    return {
+    const result = {
       ...immediateResult,
       amount: immediateAmount,
       delayedAmount
     };
+    if (createSummary) await publishDamageSummaryMessage([result]);
+    return result;
   }
 
   const result = await applyDirectDamageApplication(actor, {
@@ -267,6 +281,7 @@ export async function applyDamageApplication(request = {}) {
       damageTypeKey: damageType?.key ?? data.damageTypeKey
     }]);
   }
+  if (createSummary) await publishDamageSummaryMessage([result]);
   return result;
 }
 
@@ -297,7 +312,7 @@ export function estimateDamageApplication(request = {}) {
   };
 }
 
-export async function applyDamageApplications({ actorUuid = "", requests = [] } = {}) {
+export async function applyDamageApplications({ actorUuid = "", requests = [] } = {}, { createSummary = true } = {}) {
   const actor = await fromUuid(actorUuid);
   if (!actor) return undefined;
   if (!game.user?.isGM && !actor.isOwner) return undefined;
@@ -309,7 +324,7 @@ export async function applyDamageApplications({ actorUuid = "", requests = [] } 
   for (const request of requests) {
     const data = normalizeDamageRequest({ ...request, actorUuid });
     if (data.mode !== MODE_DAMAGE) {
-      singleResults.push(await applyDamageApplication(data));
+      singleResults.push(await applyDamageApplication(data, { createSummary: false }));
       continue;
     }
 
@@ -336,7 +351,9 @@ export async function applyDamageApplications({ actorUuid = "", requests = [] } 
       });
     }
   }
-  return [batchResult, ...singleResults].filter(Boolean);
+  const results = [batchResult, ...singleResults].filter(Boolean);
+  if (createSummary) await publishDamageSummaryMessage(results);
+  return results;
 }
 
 async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDamageState = null } = {}) {
@@ -651,6 +668,11 @@ async function handleDamageSocketMessage(payload = {}) {
       actorUuid: payload.actorUuid,
       requests: payload.requests
     });
+    return;
+  }
+  if (payload.action === "applyDamageCycle") {
+    if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
+    await applyDamageCycle(payload.requests);
     return;
   }
   if (payload.action !== "applyDamage") return;
@@ -1068,7 +1090,9 @@ async function applyPeriodicDamageBatch(actor, entries = []) {
       damageType: damageTypes.find(damageType => damageType.key === entry.damageTypeKey) ?? null
     }))
     .filter(entry => entry.amount > 0);
-  return applyDamageEntriesBatch(actor, normalizedEntries);
+  const result = await applyDamageEntriesBatch(actor, normalizedEntries);
+  await publishDamageSummaryMessage([result]);
+  return result;
 }
 
 async function applyDamageEntriesBatch(actor, entries = []) {
@@ -1161,6 +1185,7 @@ async function applyDamageEntriesBatch(actor, entries = []) {
     amount: normalizedEntries.reduce((sum, entry) => sum + entry.amount, 0),
     healthDelta: actualHealthDelta,
     limbDelta: Array.from(limbStates.values()).reduce((sum, state) => sum + state.totalDelta, 0),
+    limbDeltas: buildBatchLimbDeltaEntries(actor, limbStates),
     mode: MODE_DAMAGE,
     scope: SCOPE_HEALTH_AND_LIMB,
     healthDeltasByType,
@@ -1221,6 +1246,164 @@ function buildBatchDamageNumberEntries(entries = [], actualHealthDelta = 0, requ
   return rows
     .filter(row => row.amount > 0)
     .map(({ damageTypeKey, amount, source }) => ({ damageTypeKey, amount, source }));
+}
+
+function buildBatchLimbDeltaEntries(actor, limbStates = new Map()) {
+  return Array.from(limbStates.entries())
+    .map(([limbKey, state]) => ({
+      limbKey,
+      limbLabel: getLimbLabel(actor, limbKey),
+      amount: roundDamageAmount(state.totalDelta),
+      damageByType: { ...(state.damageByType ?? {}) }
+    }))
+    .filter(entry => entry.amount > 0);
+}
+
+async function publishDamageSummaryMessage(results = []) {
+  const context = buildDamageSummaryViewContext(results);
+  if (!context.victims.length) return undefined;
+
+  const content = await renderTemplate(TEMPLATES.damageSummaryChatCard, context);
+  return ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor: context.primaryActor }),
+    content,
+    sound: null,
+    flags: {
+      [SYSTEM_ID]: {
+        damageSummary: {
+          totalHealthDamage: context.totalHealthDamage,
+          totalLimbDamage: context.totalLimbDamage,
+          victims: context.victims.map(victim => ({
+            actorUuid: victim.actorUuid,
+            name: victim.name,
+            healthDamage: victim.healthDamage,
+            limbDamage: victim.limbDamage,
+            limbs: victim.limbs.map(limb => ({
+              key: limb.key,
+              label: limb.label,
+              amount: limb.amount
+            }))
+          }))
+        }
+      }
+    }
+  });
+}
+
+function buildDamageSummaryViewContext(results = []) {
+  const victims = new Map();
+  for (const result of results.flat(Infinity).filter(Boolean)) {
+    if (result.mode && result.mode !== MODE_DAMAGE) continue;
+    const actor = result.actor;
+    if (!actor?.uuid) continue;
+
+    const healthDelta = roundDamageAmount(result.healthDelta);
+    const limbDelta = roundDamageAmount(result.limbDelta);
+    if (healthDelta <= 0 && limbDelta <= 0) continue;
+
+    const victim = getDamageSummaryVictim(victims, actor);
+    victim.healthDamage += healthDelta;
+    victim.limbDamage += limbDelta;
+
+    for (const entry of result.healthDeltasByType ?? []) {
+      const damageTypeKey = String(entry?.damageTypeKey ?? "untyped");
+      const amount = roundDamageAmount(entry?.amount);
+      if (amount <= 0) continue;
+      victim.damageByType.set(damageTypeKey, (victim.damageByType.get(damageTypeKey) ?? 0) + amount);
+    }
+
+    if (Array.isArray(result.limbDeltas) && result.limbDeltas.length) {
+      for (const entry of result.limbDeltas) {
+        addDamageSummaryLimb(victim, actor, entry.limbKey, entry.amount, entry.damageByType);
+      }
+    } else {
+      addDamageSummaryLimb(victim, actor, result.limbKey, result.limbDelta, {
+        [result.damageTypeKey || "untyped"]: result.limbDelta
+      });
+    }
+  }
+
+  const rows = Array.from(victims.values())
+    .map(victim => ({
+      actorUuid: victim.actor.uuid,
+      name: String(victim.actor.name ?? game.i18n.localize("DOCUMENT.Actor")),
+      img: getActorDamageSummaryImage(victim.actor),
+      healthDamage: roundDamageAmount(victim.healthDamage),
+      limbDamage: roundDamageAmount(victim.limbDamage),
+      limbs: Array.from(victim.limbs.values())
+        .map(limb => ({
+          key: limb.key,
+          label: limb.label,
+          amount: roundDamageAmount(limb.amount)
+        }))
+        .filter(limb => limb.amount > 0)
+        .sort((left, right) => right.amount - left.amount)
+    }))
+    .filter(victim => victim.healthDamage > 0 || victim.limbDamage > 0)
+    .sort((left, right) => (right.healthDamage + right.limbDamage) - (left.healthDamage + left.limbDamage));
+
+  return {
+    primaryActor: victims.values().next().value?.actor ?? null,
+    totalHealthDamage: rows.reduce((sum, victim) => sum + victim.healthDamage, 0),
+    totalLimbDamage: rows.reduce((sum, victim) => sum + victim.limbDamage, 0),
+    victims: rows,
+    labels: {
+      kicker: "Итог цикла",
+      title: "Сводка урона",
+      totalDamage: "Урон",
+      limbs: "Поврежденные конечности",
+      noLimbDamage: "Конечности не повреждены"
+    }
+  };
+}
+
+function getDamageSummaryVictim(victims, actor) {
+  let victim = victims.get(actor.uuid);
+  if (victim) return victim;
+  victim = {
+    actor,
+    healthDamage: 0,
+    limbDamage: 0,
+    limbs: new Map(),
+    damageByType: new Map()
+  };
+  victims.set(actor.uuid, victim);
+  return victim;
+}
+
+function addDamageSummaryLimb(victim, actor, limbKey = "", amount = 0, damageByType = {}) {
+  const key = String(limbKey ?? "").trim();
+  const delta = roundDamageAmount(amount);
+  if (!key || delta <= 0) return;
+
+  let limb = victim.limbs.get(key);
+  if (!limb) {
+    limb = {
+      key,
+      label: getLimbLabel(actor, key),
+      amount: 0,
+      damageByType: new Map()
+    };
+    victim.limbs.set(key, limb);
+  }
+  limb.amount += delta;
+
+  for (const [damageTypeKey, value] of Object.entries(damageByType ?? {})) {
+    const typeDelta = roundDamageAmount(value);
+    if (typeDelta <= 0) continue;
+    const typeKey = String(damageTypeKey || "untyped");
+    limb.damageByType.set(typeKey, (limb.damageByType.get(typeKey) ?? 0) + typeDelta);
+  }
+}
+
+function getActorDamageSummaryImage(actor) {
+  const token = (globalThis.canvas?.tokens?.placeables ?? [])
+    .find(placeable => placeable.actor?.uuid === actor.uuid && isTokenVisibleToCurrentUser(placeable));
+  return String(token?.document?.texture?.src ?? actor.img ?? "icons/svg/mystery-man.svg");
+}
+
+function getLimbLabel(actor, limbKey = "") {
+  return String(actor?.system?.limbs?.[limbKey]?.label ?? limbKey);
 }
 
 function getBatchLimbState(limbStates, limbKey, limb) {
