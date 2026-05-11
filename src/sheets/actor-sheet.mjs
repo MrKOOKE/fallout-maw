@@ -107,7 +107,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #dragPreviewSourceKey = "";
   #dragDrop = null;
   #tooltipTimer = null;
+  #tooltipCloseTimer = null;
   #tooltipElement = null;
+  #nestedTooltipElement = null;
+  #nestedTooltipAnchorElement = null;
+  #nestedTooltipCloseTimer = null;
+  #nestedTooltipPinned = false;
   #tooltipAnchorElement = null;
   #tooltipPointer = { x: 0, y: 0 };
   #tooltipPinned = false;
@@ -1818,10 +1823,19 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     tooltip.classList.toggle("pinned", Boolean(pinned));
     this.#applyOverlayUiScale(tooltip);
     tooltip.innerHTML = tooltipHTML;
+    tooltip.addEventListener("pointerenter", () => this.#cancelInventoryTooltipClose());
     tooltip.addEventListener("click", event => this.#onInventoryTooltipClick(event));
+    tooltip.addEventListener("pointerover", event => this.#onInventoryTooltipPointerOver(event));
+    tooltip.addEventListener("pointerout", event => this.#onInventoryTooltipPointerOut(event));
     tooltip.addEventListener("auxclick", event => this.#onInventoryTooltipAuxClick(event));
     tooltip.addEventListener("contextmenu", event => this.#onInventoryTooltipContextMenu(event));
-    tooltip.addEventListener("mouseleave", () => {
+    tooltip.addEventListener("mouseleave", event => {
+      if (this.#nestedTooltipElement?.contains(event.relatedTarget)) return;
+      if (this.#nestedTooltipElement) {
+        this.#scheduleNestedInventoryTooltipClose();
+        if (!this.#tooltipPinned) this.#scheduleInventoryTooltipClose();
+        return;
+      }
       if (!this.#tooltipPinned) this.#clearInventoryTooltip();
     });
     document.body.append(tooltip);
@@ -1844,6 +1858,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   async #onInventoryTooltipClick(event) {
+    if (!event.target?.closest?.("[data-fallout-maw-nested-tooltip-html]")) {
+      this.#clearNestedInventoryTooltip({ force: true });
+    }
+
     const moduleRemove = event.target?.closest?.("[data-tooltip-module-remove]");
     if (moduleRemove && this.#tooltipElement?.contains(moduleRemove)) {
       event.preventDefault();
@@ -1879,6 +1897,22 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#activateInventoryTooltipWeaponTab(index);
   }
 
+  #onInventoryTooltipPointerOver(event) {
+    const anchor = event.target?.closest?.("[data-fallout-maw-nested-tooltip-html]");
+    if (!anchor || !this.#tooltipElement?.contains(anchor)) return;
+    this.#cancelNestedInventoryTooltipClose();
+    if (this.#nestedTooltipPinned) return;
+    if (this.#nestedTooltipElement && this.#nestedTooltipAnchorElement === anchor) return;
+    this.#showNestedInventoryTooltip(anchor);
+  }
+
+  #onInventoryTooltipPointerOut(event) {
+    const anchor = event.target?.closest?.("[data-fallout-maw-nested-tooltip-html]");
+    if (!anchor || !this.#tooltipElement?.contains(anchor)) return;
+    if (anchor.contains(event.relatedTarget) || this.#nestedTooltipElement?.contains(event.relatedTarget)) return;
+    this.#scheduleNestedInventoryTooltipClose();
+  }
+
   async #onInventoryTooltipContextMenu(event) {
     const moduleSlot = event.target?.closest?.("[data-tooltip-module-slot]");
     if (!moduleSlot || !this.#tooltipElement?.contains(moduleSlot)) return;
@@ -1890,13 +1924,20 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (event.button !== 1) return;
     event.preventDefault();
     event.stopPropagation();
-    if (this.#tooltipPinned) {
-      this.#clearInventoryTooltip({ force: true });
+
+    const nestedAnchor = event.target?.closest?.("[data-fallout-maw-nested-tooltip-html]");
+    if (nestedAnchor && this.#tooltipElement?.contains(nestedAnchor)) {
+      this.#pinInventoryTooltip();
+      if (this.#nestedTooltipElement && this.#nestedTooltipAnchorElement === nestedAnchor) {
+        this.#pinNestedInventoryTooltip();
+      } else {
+        this.#showNestedInventoryTooltip(nestedAnchor, { pinned: true });
+      }
       return;
     }
-    this.#tooltipPinned = true;
-    this.#tooltipElement?.classList.add("pinned");
-    this.#bindInventoryTooltipDocumentClose();
+
+    this.#clearNestedInventoryTooltip({ force: true });
+    this.#pinInventoryTooltip();
   }
 
   #activateInventoryTooltipWeaponTab(index) {
@@ -1915,6 +1956,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!this.#tooltipElement || !this.#tooltipItemId) return;
     const item = this.actor.items.get(this.#tooltipItemId);
     if (!item) return;
+    this.#clearNestedInventoryTooltip({ force: true });
     this.#tooltipElement.innerHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
       activeWeaponIndex: this.#tooltipWeaponTabIndex,
       baseMode: this.#tooltipBaseMode
@@ -2016,6 +2058,137 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#tooltipWeaponTabIndex = getEnabledWeaponFunctions(weapon).length;
   }
 
+  #pinInventoryTooltip() {
+    this.#tooltipPinned = true;
+    this.#tooltipElement?.classList.add("pinned");
+    this.#bindInventoryTooltipDocumentClose();
+  }
+
+  #pinNestedInventoryTooltip() {
+    this.#cancelNestedInventoryTooltipClose();
+    this.#nestedTooltipPinned = true;
+    this.#nestedTooltipElement?.classList.add("pinned");
+  }
+
+  #showNestedInventoryTooltip(anchor, { pinned = false } = {}) {
+    const html = String(anchor?.dataset?.falloutMawNestedTooltipHtml ?? "").trim();
+    if (!html) return;
+    if (this.#nestedTooltipElement && this.#nestedTooltipAnchorElement === anchor) {
+      if (pinned) this.#pinNestedInventoryTooltip();
+      return;
+    }
+    this.#clearNestedInventoryTooltip({ force: true });
+
+    const tooltip = document.createElement("aside");
+    const tooltipClass = String(anchor.dataset.falloutMawNestedTooltipClass || "fallout-maw-inventory-tooltip fallout-maw-module-item-tooltip");
+    tooltip.className = `${tooltipClass} fallout-maw-nested-tooltip`;
+    tooltip.classList.toggle("pinned", Boolean(pinned));
+    this.#applyOverlayUiScale(tooltip);
+    tooltip.innerHTML = html;
+    tooltip.addEventListener("pointerenter", () => {
+      this.#cancelInventoryTooltipClose();
+      this.#cancelNestedInventoryTooltipClose();
+    });
+    tooltip.addEventListener("pointerleave", event => {
+      if (this.#nestedTooltipPinned) return;
+      if (this.#nestedTooltipAnchorElement?.contains(event.relatedTarget)) return;
+      this.#scheduleNestedInventoryTooltipClose();
+      if (!this.#tooltipPinned) this.#scheduleInventoryTooltipClose();
+    });
+    tooltip.addEventListener("auxclick", event => {
+      if (event.button !== 1) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.#pinInventoryTooltip();
+      this.#nestedTooltipPinned = true;
+      tooltip.classList.add("pinned");
+    });
+
+    document.body.append(tooltip);
+    this.#nestedTooltipElement = tooltip;
+    this.#nestedTooltipAnchorElement = anchor;
+    this.#nestedTooltipPinned = Boolean(pinned);
+    this.#positionNestedInventoryTooltip();
+    requestAnimationFrame(() => {
+      if (!this.#nestedTooltipElement) return;
+      const description = this.#nestedTooltipElement.querySelector(".description");
+      description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+      this.#positionNestedInventoryTooltip();
+    });
+  }
+
+  #positionNestedInventoryTooltip() {
+    const tooltip = this.#nestedTooltipElement;
+    const anchor = this.#nestedTooltipAnchorElement;
+    if (!tooltip || !anchor?.isConnected) return;
+
+    const { viewportWidth, viewportHeight } = this.#getViewportMetrics();
+    const margin = Math.max(8, 12 * this.#uiScale);
+    const gap = Math.max(10, 12 * this.#uiScale);
+    this.#syncInventoryTooltipAvailableHeight(tooltip, viewportHeight, margin, this.#uiScale);
+
+    const anchorRect = anchor.getBoundingClientRect();
+    const parentRect = this.#tooltipElement?.getBoundingClientRect();
+    let tooltipRect = tooltip.getBoundingClientRect();
+    let left = (parentRect?.right ?? anchorRect.right) + gap;
+    if ((left + tooltipRect.width) > (viewportWidth - margin)) {
+      left = (parentRect?.left ?? anchorRect.left) - tooltipRect.width - gap;
+    }
+    left = Math.max(margin, Math.min(viewportWidth - tooltipRect.width - margin, left));
+
+    let top = anchorRect.top + ((anchorRect.height - tooltipRect.height) / 2);
+    top = Math.max(margin, Math.min(viewportHeight - tooltipRect.height - margin, top));
+    tooltip.style.left = `${Math.round(left)}px`;
+    tooltip.style.top = `${Math.round(top)}px`;
+
+    this.#syncInventoryTooltipAvailableHeight(tooltip, viewportHeight, margin, this.#uiScale);
+    tooltipRect = tooltip.getBoundingClientRect();
+    if ((tooltipRect.top + tooltipRect.height) > (viewportHeight - margin)) {
+      tooltip.style.top = `${Math.round(Math.max(margin, viewportHeight - tooltipRect.height - margin))}px`;
+    }
+  }
+
+  #scheduleNestedInventoryTooltipClose() {
+    if (this.#nestedTooltipPinned || this.#nestedTooltipCloseTimer) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#nestedTooltipCloseTimer = view.setTimeout(() => {
+      this.#nestedTooltipCloseTimer = null;
+      this.#clearNestedInventoryTooltip();
+    }, 120);
+  }
+
+  #cancelNestedInventoryTooltipClose() {
+    if (!this.#nestedTooltipCloseTimer) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    view.clearTimeout(this.#nestedTooltipCloseTimer);
+    this.#nestedTooltipCloseTimer = null;
+  }
+
+  #clearNestedInventoryTooltip({ force = false } = {}) {
+    this.#cancelNestedInventoryTooltipClose();
+    if (this.#nestedTooltipPinned && !force) return;
+    this.#nestedTooltipElement?.remove();
+    this.#nestedTooltipElement = null;
+    this.#nestedTooltipAnchorElement = null;
+    this.#nestedTooltipPinned = false;
+  }
+
+  #scheduleInventoryTooltipClose() {
+    if (this.#tooltipPinned || this.#tooltipCloseTimer) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#tooltipCloseTimer = view.setTimeout(() => {
+      this.#tooltipCloseTimer = null;
+      this.#clearInventoryTooltip();
+    }, 160);
+  }
+
+  #cancelInventoryTooltipClose() {
+    if (!this.#tooltipCloseTimer) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    view.clearTimeout(this.#tooltipCloseTimer);
+    this.#tooltipCloseTimer = null;
+  }
+
   #positionInventoryTooltipAtAnchor(element, anchor) {
     if (!element) return;
     if (!anchor?.isConnected) {
@@ -2098,11 +2271,18 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (this.#tooltipDocumentPointerDownHandler) return;
     const view = this.element?.ownerDocument?.defaultView ?? window;
     this.#tooltipDocumentPointerDownHandler = event => {
-      if (event.button === 1 && this.#tooltipElement?.contains(event.target)) {
+      const insideParentTooltip = this.#tooltipElement?.contains(event.target);
+      const insideNestedTooltip = this.#nestedTooltipElement?.contains(event.target);
+      if (event.button === 1 && (insideParentTooltip || insideNestedTooltip)) {
         event.preventDefault();
+        return;
       }
       if (!this.#tooltipPinned || !this.#tooltipElement) return;
-      if (this.#tooltipElement.contains(event.target)) return;
+      if (insideNestedTooltip) return;
+      if (insideParentTooltip) {
+        this.#clearNestedInventoryTooltip({ force: true });
+        return;
+      }
       this.#clearInventoryTooltip({ force: true });
     };
     view.document.addEventListener("pointerdown", this.#tooltipDocumentPointerDownHandler, { capture: true });
@@ -2142,9 +2322,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       clearTimeout(this.#tooltipTimer);
       this.#tooltipTimer = null;
     }
+    this.#cancelInventoryTooltipClose();
     if (this.#tooltipPinned && !force) return;
     this.#unbindInventoryTooltipDocumentClose();
     this.#unbindInventoryTooltipAltMode();
+    this.#clearNestedInventoryTooltip({ force: true });
     this.#tooltipElement?.remove();
     this.#tooltipElement = null;
     this.#tooltipAnchorElement = null;
@@ -2221,6 +2403,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       this.#applyOverlayUiScale(this.#tooltipElement);
       if (this.#tooltipPinned) this.#clampInventoryTooltipToViewport(this.#tooltipElement);
       else this.#positionInventoryTooltip();
+    }
+
+    if (this.#nestedTooltipElement) {
+      this.#applyOverlayUiScale(this.#nestedTooltipElement);
+      this.#positionNestedInventoryTooltip();
     }
 
     for (const menu of document.querySelectorAll(".fallout-maw-inventory-context-menu")) {
@@ -2468,9 +2655,8 @@ function getModuleAddedWeaponFunctionRows(item, additionalWeapons = {}) {
         html: `
           <span class="weapon-tab-list tooltip-added-weapon-function-list">
             <span class="tooltip-added-weapon-function-chip"
-              data-tooltip-html="${escapeAttribute(tooltipHTML)}"
-              data-tooltip-class="fallout-maw-inventory-tooltip fallout-maw-module-item-tooltip"
-              data-tooltip-direction="RIGHT">
+              data-fallout-maw-nested-tooltip-html="${escapeAttribute(tooltipHTML)}"
+              data-fallout-maw-nested-tooltip-class="fallout-maw-inventory-tooltip fallout-maw-module-item-tooltip">
               ${escapeHTML(title)}
             </span>
           </span>
@@ -2614,9 +2800,8 @@ function renderWeaponTooltipModuleSlots(item, entries = [], actor = null) {
 function renderInstalledModuleTooltipAttributes(item, actor = null) {
   const html = renderInventoryItemTooltipContentHTML(item, actor);
   return [
-    `data-tooltip-html="${escapeAttribute(html)}"`,
-    `data-tooltip-class="fallout-maw-inventory-tooltip fallout-maw-module-item-tooltip"`,
-    `data-tooltip-direction="RIGHT"`
+    `data-fallout-maw-nested-tooltip-html="${escapeAttribute(html)}"`,
+    `data-fallout-maw-nested-tooltip-class="fallout-maw-inventory-tooltip fallout-maw-module-item-tooltip"`
   ].join(" ");
 }
 

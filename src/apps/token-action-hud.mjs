@@ -294,6 +294,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #limbDisplayLayer = "state";
   #layoutFrame = null;
   #itemTooltipElement = null;
+  #itemTooltipNestedElement = null;
+  #itemTooltipNestedAnchorElement = null;
+  #itemTooltipNestedCloseTimer = null;
+  #itemTooltipNestedPinned = false;
   #itemTooltipAnchorElement = null;
   #itemTooltipItemId = "";
   #itemTooltipWeaponTabIndex = 0;
@@ -770,6 +774,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       baseMode: this.#itemTooltipBaseMode
     });
     tooltip.addEventListener("click", event => this.#onHudItemTooltipClick(event));
+    tooltip.addEventListener("pointerover", event => this.#onHudItemTooltipPointerOver(event));
+    tooltip.addEventListener("pointerout", event => this.#onHudItemTooltipPointerOut(event));
+    tooltip.addEventListener("auxclick", event => this.#onHudItemTooltipAuxClick(event));
     tooltip.addEventListener("contextmenu", event => this.#onHudItemTooltipContextMenu(event));
     document.body.append(tooltip);
     this.#itemTooltipElement = tooltip;
@@ -788,6 +795,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!this.#itemTooltipElement || !this.#itemTooltipItemId) return;
     const item = this.actor?.items.get(this.#itemTooltipItemId);
     if (!item) return this.#clearHudItemTooltip();
+    this.#clearNestedHudItemTooltip({ force: true });
     this.#itemTooltipElement.innerHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
       activeWeaponIndex: this.#itemTooltipWeaponTabIndex,
       baseMode: this.#itemTooltipBaseMode
@@ -802,6 +810,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async #onHudItemTooltipClick(event) {
+    if (!event.target?.closest?.("[data-fallout-maw-nested-tooltip-html]")) {
+      this.#clearNestedHudItemTooltip({ force: true });
+    }
+
     const moduleRemove = event.target?.closest?.("[data-tooltip-module-remove]");
     if (moduleRemove && this.#itemTooltipElement?.contains(moduleRemove)) {
       event.preventDefault();
@@ -834,6 +846,35 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (index === this.#itemTooltipWeaponTabIndex) return;
     this.#itemTooltipWeaponTabIndex = index;
     this.#activateHudItemTooltipWeaponTab(index);
+  }
+
+  #onHudItemTooltipPointerOver(event) {
+    const anchor = event.target?.closest?.("[data-fallout-maw-nested-tooltip-html]");
+    if (!anchor || !this.#itemTooltipElement?.contains(anchor)) return;
+    this.#cancelNestedHudItemTooltipClose();
+    if (this.#itemTooltipNestedPinned) return;
+    if (this.#itemTooltipNestedElement && this.#itemTooltipNestedAnchorElement === anchor) return;
+    this.#showNestedHudItemTooltip(anchor);
+  }
+
+  #onHudItemTooltipPointerOut(event) {
+    const anchor = event.target?.closest?.("[data-fallout-maw-nested-tooltip-html]");
+    if (!anchor || !this.#itemTooltipElement?.contains(anchor)) return;
+    if (anchor.contains(event.relatedTarget) || this.#itemTooltipNestedElement?.contains(event.relatedTarget)) return;
+    this.#scheduleNestedHudItemTooltipClose();
+  }
+
+  #onHudItemTooltipAuxClick(event) {
+    if (event.button !== 1) return;
+    const anchor = event.target?.closest?.("[data-fallout-maw-nested-tooltip-html]");
+    if (!anchor || !this.#itemTooltipElement?.contains(anchor)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (this.#itemTooltipNestedElement && this.#itemTooltipNestedAnchorElement === anchor) {
+      this.#pinNestedHudItemTooltip();
+    } else {
+      this.#showNestedHudItemTooltip(anchor, { pinned: true });
+    }
   }
 
   async #onHudItemTooltipContextMenu(event) {
@@ -939,6 +980,108 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#itemTooltipWeaponTabIndex = getEnabledWeaponFunctions(weapon).length;
   }
 
+  #showNestedHudItemTooltip(anchor, { pinned = false } = {}) {
+    const html = String(anchor?.dataset?.falloutMawNestedTooltipHtml ?? "").trim();
+    if (!html) return;
+    if (this.#itemTooltipNestedElement && this.#itemTooltipNestedAnchorElement === anchor) {
+      if (pinned) this.#pinNestedHudItemTooltip();
+      return;
+    }
+    this.#clearNestedHudItemTooltip({ force: true });
+
+    const tooltip = document.createElement("aside");
+    const tooltipClass = String(anchor.dataset.falloutMawNestedTooltipClass || "fallout-maw-inventory-tooltip fallout-maw-module-item-tooltip");
+    tooltip.className = `${tooltipClass} fallout-maw-nested-tooltip`;
+    tooltip.classList.toggle("pinned", Boolean(pinned));
+    tooltip.style.setProperty("--fallout-maw-ui-scale", String(tokenActionHudScaleFactor(getTokenActionHudScalePercent())));
+    tooltip.innerHTML = html;
+    tooltip.addEventListener("pointerenter", () => this.#cancelNestedHudItemTooltipClose());
+    tooltip.addEventListener("pointerleave", event => {
+      if (this.#itemTooltipNestedPinned) return;
+      if (this.#itemTooltipNestedAnchorElement?.contains(event.relatedTarget)) return;
+      this.#scheduleNestedHudItemTooltipClose();
+    });
+    tooltip.addEventListener("auxclick", event => {
+      if (event.button !== 1) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.#itemTooltipNestedPinned = true;
+      tooltip.classList.add("pinned");
+    });
+
+    document.body.append(tooltip);
+    this.#itemTooltipNestedElement = tooltip;
+    this.#itemTooltipNestedAnchorElement = anchor;
+    this.#itemTooltipNestedPinned = Boolean(pinned);
+    this.#positionNestedHudItemTooltip();
+    requestAnimationFrame(() => {
+      if (!this.#itemTooltipNestedElement) return;
+      const description = this.#itemTooltipNestedElement.querySelector(".description");
+      description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+      this.#positionNestedHudItemTooltip();
+    });
+  }
+
+  #pinNestedHudItemTooltip() {
+    this.#cancelNestedHudItemTooltipClose();
+    this.#itemTooltipNestedPinned = true;
+    this.#itemTooltipNestedElement?.classList.add("pinned");
+  }
+
+  #positionNestedHudItemTooltip() {
+    const tooltip = this.#itemTooltipNestedElement;
+    const anchor = this.#itemTooltipNestedAnchorElement;
+    if (!tooltip || !anchor?.isConnected) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    const margin = 10;
+    const gap = 12;
+    this.#syncHudItemTooltipAvailableHeight(tooltip, view.innerHeight, margin);
+
+    const anchorRect = anchor.getBoundingClientRect();
+    const parentRect = this.#itemTooltipElement?.getBoundingClientRect();
+    let rect = tooltip.getBoundingClientRect();
+    let left = (parentRect?.right ?? anchorRect.right) + gap;
+    if ((left + rect.width) > (view.innerWidth - margin)) {
+      left = (parentRect?.left ?? anchorRect.left) - rect.width - gap;
+    }
+    left = Math.max(margin, Math.min(view.innerWidth - rect.width - margin, left));
+    let top = anchorRect.top + ((anchorRect.height - rect.height) / 2);
+    top = Math.max(margin, Math.min(view.innerHeight - rect.height - margin, top));
+    tooltip.style.left = `${Math.round(left)}px`;
+    tooltip.style.top = `${Math.round(top)}px`;
+
+    this.#syncHudItemTooltipAvailableHeight(tooltip, view.innerHeight, margin);
+    rect = tooltip.getBoundingClientRect();
+    if ((rect.top + rect.height) > (view.innerHeight - margin)) {
+      tooltip.style.top = `${Math.round(Math.max(margin, view.innerHeight - rect.height - margin))}px`;
+    }
+  }
+
+  #scheduleNestedHudItemTooltipClose() {
+    if (this.#itemTooltipNestedPinned || this.#itemTooltipNestedCloseTimer) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#itemTooltipNestedCloseTimer = view.setTimeout(() => {
+      this.#itemTooltipNestedCloseTimer = null;
+      this.#clearNestedHudItemTooltip();
+    }, 120);
+  }
+
+  #cancelNestedHudItemTooltipClose() {
+    if (!this.#itemTooltipNestedCloseTimer) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    view.clearTimeout(this.#itemTooltipNestedCloseTimer);
+    this.#itemTooltipNestedCloseTimer = null;
+  }
+
+  #clearNestedHudItemTooltip({ force = false } = {}) {
+    this.#cancelNestedHudItemTooltipClose();
+    if (this.#itemTooltipNestedPinned && !force) return;
+    this.#itemTooltipNestedElement?.remove();
+    this.#itemTooltipNestedElement = null;
+    this.#itemTooltipNestedAnchorElement = null;
+    this.#itemTooltipNestedPinned = false;
+  }
+
   #positionHudItemTooltip() {
     const tooltip = this.#itemTooltipElement;
     const anchor = this.#itemTooltipAnchorElement;
@@ -1003,7 +1146,17 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const view = this.element?.ownerDocument?.defaultView ?? window;
     if (!this.#itemTooltipPointerDownHandler) {
       this.#itemTooltipPointerDownHandler = event => {
-        if (this.#itemTooltipElement?.contains(event.target)) return;
+        const insideParentTooltip = this.#itemTooltipElement?.contains(event.target);
+        const insideNestedTooltip = this.#itemTooltipNestedElement?.contains(event.target);
+        if (event.button === 1 && (insideParentTooltip || insideNestedTooltip)) {
+          event.preventDefault();
+          return;
+        }
+        if (insideNestedTooltip) return;
+        if (insideParentTooltip) {
+          this.#clearNestedHudItemTooltip({ force: true });
+          return;
+        }
         if (this.element?.contains?.(event.target)) {
           event.preventDefault();
           event.stopImmediatePropagation();
@@ -1039,6 +1192,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       view.document.removeEventListener("keyup", this.#itemTooltipKeyHandler, { capture: true });
       this.#itemTooltipKeyHandler = null;
     }
+    this.#clearNestedHudItemTooltip({ force: true });
     this.#itemTooltipElement?.remove();
     this.#itemTooltipElement = null;
     this.#itemTooltipAnchorElement = null;
