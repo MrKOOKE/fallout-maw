@@ -1708,16 +1708,47 @@ function getWeaponPelletCount(weapon, weaponFunctionId = "") {
 }
 
 function hasRequiredWeaponResources(weapon, multiplier = 1, weaponFunctionId = "") {
+  const missing = getMissingWeaponResourceCost(weapon, multiplier, weaponFunctionId);
+  if (!missing) return true;
+  ui.notifications.warn(`${weapon?.name ?? ""}: не хватает ${missing.label} (${missing.current} / ${missing.required}).`);
+  return false;
+}
+
+function getMissingWeaponResourceCost(weapon, multiplier = 1, weaponFunctionId = "") {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const costs = getWeaponResourceCosts(weaponData);
   for (const cost of costs) {
     const amount = Math.max(0, toInteger(cost.amount) * Math.max(1, toInteger(multiplier)));
     if (!amount) continue;
-    if (cost.type === "magazine" && toInteger(weaponData?.magazine?.value) < amount) return false;
-    if (cost.type === "condition" && toInteger(weapon.system?.functions?.condition?.value) < amount) return false;
-    if (cost.type === "quantity" && toInteger(weapon.system?.quantity) < amount) return false;
+    if (cost.type === "magazine") {
+      const current = toInteger(weaponData?.magazine?.value);
+      if (current < amount) return {
+        type: "magazine",
+        label: game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"),
+        current,
+        required: amount
+      };
+    }
+    if (cost.type === "condition") {
+      const current = toInteger(weapon.system?.functions?.condition?.value);
+      if (current < amount) return {
+        type: "condition",
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionCondition"),
+        current,
+        required: amount
+      };
+    }
+    if (cost.type === "quantity") {
+      const current = toInteger(weapon.system?.quantity);
+      if (current < amount) return {
+        type: "quantity",
+        label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostQuantity"),
+        current,
+        required: amount
+      };
+    }
   }
-  return true;
+  return null;
 }
 
 function isCombatActionPointSpendingActive() {
