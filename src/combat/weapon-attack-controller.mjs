@@ -15,6 +15,9 @@ const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
 const PREVIEW_BROADCAST_INTERVAL_MS = 16;
 const PREVIEW_POSITION_EPSILON = 0.5;
 const PREVIEW_ANGLE_EPSILON = 0.002;
+const BURST_PREVIEW_STABILIZE_MS = 120;
+const BURST_PREVIEW_FORCE_ANGLE_DELTA = 0.012;
+const BURST_PREVIEW_FORCE_DISTANCE_DELTA = 24;
 const AIMED_TARGET_BLOCKER_BONUS_STEP = 20;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
@@ -79,7 +82,8 @@ class WeaponAttackController {
     this.container = new PIXI.Container();
     this.shape = new PIXI.Graphics();
     this.targetMarkers = new PIXI.Graphics();
-    this.container.addChild(this.shape, this.targetMarkers);
+    this.focusedTargetMarker = new PIXI.Graphics();
+    this.container.addChild(this.shape, this.targetMarkers, this.focusedTargetMarker);
     this.targets = [];
     this.geometry = null;
     this.pointer = null;
@@ -103,6 +107,9 @@ class WeaponAttackController {
     this.pendingCriticalFailureResourceCosts = [];
     this.lastPreviewBroadcastAt = 0;
     this.lastBroadcastPreviewState = null;
+    this.lastTargetMarkerRenderState = null;
+    this.burstTargetPreview = createBurstTargetPreviewState();
+    this.burstPreviewStabilizeTimeout = null;
     this.volleyAction = isVolleyAttackAction(this.weapon, this.actionKey, this.weaponFunctionId);
     this.events = {
       move: event => this.onMove(event),
@@ -118,7 +125,7 @@ class WeaponAttackController {
     getAttackPreviewLayer().addChild(this.container);
     canvas.stage.on("mousemove", this.events.move);
     document.addEventListener("pointerdown", this.events.pointerDown, { capture: true });
-    if (this.targetedAction) canvas.app.ticker.add(this.events.tick);
+    canvas.app.ticker.add(this.events.tick);
     canvas.app.view.oncontextmenu = this.events.cancel;
   }
 
@@ -129,6 +136,7 @@ class WeaponAttackController {
     if (canvas.app?.view?.oncontextmenu === this.events.cancel) canvas.app.view.oncontextmenu = null;
     this.removeLimbMenu();
     this.removeChanceMenu();
+    this.clearBurstTargetPreviewTimer();
     broadcastAttackPreview({
       action: "clearPreview",
       attackId: this.attackId
@@ -215,9 +223,8 @@ class WeaponAttackController {
   }
 
   onTick() {
-    if (!this.targetedAction || this.processing) return;
-    if (!this.hoveredTarget && !this.selectedTarget) return;
-    drawTargetMarkers(this.targetMarkers, this.targets, this.getFocusedTarget(), performance.now(), this.getBurstTargetRanges());
+    if (this.processing) return;
+    this.drawFocusedTargetMarkerForPreview(performance.now());
   }
 
   async onConfirm(event) {
@@ -1091,8 +1098,11 @@ class WeaponAttackController {
 
   refresh(forceBroadcast = false) {
     this.shape.clear();
-    clearTargetMarkerLayer(this.targetMarkers);
-    if (!this.pointer && !this.lockedGeometry) return;
+    if (!this.pointer && !this.lockedGeometry) {
+      this.clearTargetMarkers();
+      this.resetBurstTargetPreview();
+      return;
+    }
 
     const origin = getTokenAimPoint(this.token);
     this.geometry = this.targetedAction && ["limb", "direction"].includes(this.aimedMode)
@@ -1115,7 +1125,11 @@ class WeaponAttackController {
       locked: this.processing || (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)),
       hasTargets: this.targets.length > 0
     });
-    drawTargetMarkers(this.targetMarkers, this.targets, this.getFocusedTarget(), performance.now(), this.getBurstTargetRanges());
+    const markerPreview = this.getTargetMarkerPreview(forceBroadcast || this.processing);
+    this.drawTargetMarkersForPreview(markerPreview, {
+      force: forceBroadcast || this.processing,
+      time: performance.now()
+    });
     if (this.targetedAction) {
       this.removeChanceMenu();
       this.refreshAimedLimbMenu();
@@ -1123,7 +1137,7 @@ class WeaponAttackController {
       this.removeLimbMenu();
       this.refreshUntargetedChanceMenu();
     }
-    this.broadcastPreview(forceBroadcast);
+    this.broadcastPreview(forceBroadcast, markerPreview);
   }
 
   getUntargetedTrajectoryAimTarget(potentialTargets = []) {
@@ -1135,6 +1149,125 @@ class WeaponAttackController {
 
   getFocusedTarget() {
     return this.selectedTarget ?? this.hoveredTarget ?? this.trajectoryAimTarget;
+  }
+
+  getTargetMarkerPreview(force = false) {
+    const burstRanges = this.getBurstTargetRanges(this.targets);
+    if (!this.shouldStabilizeBurstTargetPreview()) return {
+      targets: this.targets,
+      burstRanges
+    };
+    return this.getStableBurstTargetPreview({ targets: this.targets, burstRanges }, force);
+  }
+
+  shouldStabilizeBurstTargetPreview() {
+    return (
+      this.actionKey === "burst"
+      && !this.volleyAction
+      && !this.processing
+      && !this.targetedAction
+      && !hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_HIT_ALL_CONE_TARGETS, this.weaponFunctionId)
+    );
+  }
+
+  getStableBurstTargetPreview(rawPreview, force = false) {
+    const now = performance.now();
+    const signature = getBurstTargetPreviewSignature(rawPreview.targets, rawPreview.burstRanges);
+    const state = this.burstTargetPreview;
+    const shouldAcceptImmediately = force
+      || !state.initialized
+      || signature === state.signature
+      || isMajorBurstPreviewGeometryShift(state.geometry, this.geometry);
+
+    if (shouldAcceptImmediately) return this.acceptBurstTargetPreview(rawPreview, signature, now);
+
+    if (signature !== state.pendingSignature) {
+      state.pendingSignature = signature;
+      state.pendingTargets = [...rawPreview.targets];
+      state.pendingBurstRanges = rawPreview.burstRanges;
+      state.pendingGeometry = serializeGeometry(this.geometry);
+      state.pendingSince = now;
+      this.scheduleBurstTargetPreviewRefresh();
+      return this.getAcceptedBurstTargetPreview();
+    }
+
+    state.pendingTargets = [...rawPreview.targets];
+    state.pendingBurstRanges = rawPreview.burstRanges;
+    state.pendingGeometry = serializeGeometry(this.geometry);
+    if (now - state.pendingSince >= BURST_PREVIEW_STABILIZE_MS) {
+      return this.acceptBurstTargetPreview({
+        targets: state.pendingTargets,
+        burstRanges: state.pendingBurstRanges
+      }, state.pendingSignature, now, state.pendingGeometry);
+    }
+
+    this.scheduleBurstTargetPreviewRefresh();
+    return this.getAcceptedBurstTargetPreview();
+  }
+
+  acceptBurstTargetPreview(rawPreview, signature, now = performance.now(), geometry = serializeGeometry(this.geometry)) {
+    const state = this.burstTargetPreview;
+    this.clearBurstTargetPreviewTimer();
+    state.initialized = true;
+    state.signature = signature;
+    state.targets = [...rawPreview.targets];
+    state.burstRanges = rawPreview.burstRanges;
+    state.geometry = geometry;
+    state.pendingSignature = "";
+    state.pendingTargets = [];
+    state.pendingBurstRanges = new Map();
+    state.pendingGeometry = null;
+    state.pendingSince = now;
+    return this.getAcceptedBurstTargetPreview();
+  }
+
+  getAcceptedBurstTargetPreview() {
+    return {
+      targets: this.burstTargetPreview.targets,
+      burstRanges: this.burstTargetPreview.burstRanges
+    };
+  }
+
+  scheduleBurstTargetPreviewRefresh() {
+    if (this.burstPreviewStabilizeTimeout) return;
+    this.burstPreviewStabilizeTimeout = window.setTimeout(() => {
+      this.burstPreviewStabilizeTimeout = null;
+      if (activeAttack !== this || this.processing || !this.pointer) return;
+      this.refresh();
+    }, BURST_PREVIEW_STABILIZE_MS + 16);
+  }
+
+  clearBurstTargetPreviewTimer() {
+    if (!this.burstPreviewStabilizeTimeout) return;
+    window.clearTimeout(this.burstPreviewStabilizeTimeout);
+    this.burstPreviewStabilizeTimeout = null;
+  }
+
+  resetBurstTargetPreview() {
+    this.clearBurstTargetPreviewTimer();
+    this.burstTargetPreview = createBurstTargetPreviewState();
+  }
+
+  clearTargetMarkers() {
+    clearTargetMarkerLayer(this.targetMarkers);
+    clearTargetMarkerLayer(this.focusedTargetMarker);
+    this.lastTargetMarkerRenderState = null;
+  }
+
+  drawTargetMarkersForPreview(markerPreview, { force = false, time = performance.now() } = {}) {
+    const renderState = getTargetMarkerRenderState(markerPreview.targets, null, markerPreview.burstRanges);
+    if (force || !isSameTargetMarkerRenderState(renderState, this.lastTargetMarkerRenderState)) {
+      this.lastTargetMarkerRenderState = renderState;
+      drawTargetMarkers(this.targetMarkers, markerPreview.targets, null, time, markerPreview.burstRanges);
+    }
+    this.drawFocusedTargetMarkerForPreview(time);
+  }
+
+  drawFocusedTargetMarkerForPreview(time = performance.now()) {
+    clearTargetMarkerLayer(this.focusedTargetMarker);
+    const focusedTarget = this.getFocusedTarget();
+    if (!focusedTarget) return;
+    drawFocusedTargetMarker(this.focusedTargetMarker, getTargetCenterMarkerPosition(focusedTarget), time);
   }
 
   getBurstTargetRanges(targets = this.targets) {
@@ -1368,13 +1501,13 @@ class WeaponAttackController {
     this.pendingCriticalFailureResourceCosts.push(...getCriticalFailureResourceCosts(this.weapon, this.actionKey, this.weaponFunctionId));
   }
 
-  broadcastPreview(force = false) {
+  broadcastPreview(force = false, markerPreview = null) {
     const now = performance.now();
     if (!force && now - this.lastPreviewBroadcastAt < PREVIEW_BROADCAST_INTERVAL_MS) return;
-    const burstRanges = this.getBurstTargetRanges();
+    markerPreview ??= this.getTargetMarkerPreview(force);
     const previewState = {
       geometry: serializeGeometry(this.geometry),
-      targetMarkers: this.targets.map(target => getTargetMarkerPreviewData(target, burstRanges)),
+      targetMarkers: markerPreview.targets.map(target => getTargetMarkerPreviewData(target, markerPreview.burstRanges)),
       focusedTargetMarker: this.getFocusedTarget() ? getTargetCenterMarkerPosition(this.getFocusedTarget()) : null,
       processing: this.processing
     };
@@ -1663,6 +1796,68 @@ function deserializePoint(point) {
   };
   if (Number.isFinite(Number(point?.elevation))) data.elevation = Number(point.elevation);
   return data;
+}
+
+function createBurstTargetPreviewState() {
+  return {
+    initialized: false,
+    signature: "",
+    targets: [],
+    burstRanges: new Map(),
+    geometry: null,
+    pendingSignature: "",
+    pendingTargets: [],
+    pendingBurstRanges: new Map(),
+    pendingGeometry: null,
+    pendingSince: 0
+  };
+}
+
+function getBurstTargetPreviewSignature(targets = [], burstRanges = new Map()) {
+  return targets.map(target => {
+    const range = burstRanges.get(target) ?? {};
+    return [
+      getTargetPreviewKey(target),
+      toInteger(range.min),
+      toInteger(range.max),
+      String(range.label ?? "")
+    ].join(":");
+  }).join("|");
+}
+
+function getTargetPreviewKey(target) {
+  return String(target?.document?.uuid ?? target?.document?.id ?? target?.id ?? target?.actor?.uuid ?? "");
+}
+
+function isMajorBurstPreviewGeometryShift(previous, current) {
+  if (!previous || !current) return true;
+  const angleDelta = Math.abs(normalizeAngle((Number(current.angle) || 0) - (Number(previous.angle) || 0)));
+  const gridSize = Math.max(1, Number(canvas.grid?.size) || 100);
+  const distanceDelta = Math.hypot(
+    (Number(current.end?.x) || 0) - (Number(previous.end?.x) || 0),
+    (Number(current.end?.y) || 0) - (Number(previous.end?.y) || 0)
+  );
+  const distanceThreshold = Math.max(
+    BURST_PREVIEW_FORCE_DISTANCE_DELTA,
+    (Number(current.distance) || gridSize) * BURST_PREVIEW_FORCE_ANGLE_DELTA
+  );
+  return angleDelta >= BURST_PREVIEW_FORCE_ANGLE_DELTA
+    || distanceDelta >= distanceThreshold
+    || !isSamePoint(current.origin, previous.origin)
+    || Math.abs((Number(current.distance) || 0) - (Number(previous.distance) || 0)) > BURST_PREVIEW_FORCE_DISTANCE_DELTA;
+}
+
+function getTargetMarkerRenderState(targets = [], focusedTarget = null, burstRanges = new Map()) {
+  return {
+    markers: targets.map(target => getTargetMarkerPreviewData(target, burstRanges)),
+    focusedMarker: focusedTarget ? getTargetCenterMarkerPosition(focusedTarget) : null
+  };
+}
+
+function isSameTargetMarkerRenderState(current, previous) {
+  if (!current || !previous) return false;
+  return isSameMarkerList(current.markers, previous.markers)
+    && isSameNullablePoint(current.focusedMarker, previous.focusedMarker);
 }
 
 function isSamePreviewState(current, previous) {
@@ -2075,15 +2270,6 @@ function getWallClippedEndpoint(attackerToken, origin, angle, distance, targetEl
     point,
     distance: Math.max(1, Math.hypot(point.x - origin.x, point.y - origin.y))
   };
-}
-
-function pointInAttackCone(point, { origin, angle, distance, halfAngle }) {
-  const dx = point.x - origin.x;
-  const dy = point.y - origin.y;
-  const range = Math.hypot(dx, dy);
-  if (range > distance) return false;
-  if (halfAngle <= 0) return Math.abs(normalizeAngle(Math.atan2(dy, dx) - angle)) < 0.025;
-  return Math.abs(normalizeAngle(Math.atan2(dy, dx) - angle)) <= halfAngle;
 }
 
 function clearTargetMarkerLayer(graphics) {
@@ -2957,6 +3143,26 @@ function addCoveredAngularInterval(coveredIntervals, interval) {
   }
 }
 
+function getBurstTargetConeOffset(attackerToken, geometry, target) {
+  if (!geometry || geometry.halfAngle <= 0) return 0;
+  const points = getVisibleTokenAttackPoints(attackerToken, target, geometry);
+  if (!points.length) return 1;
+  const offsets = points.map(point => {
+    const angle = Math.atan2(point.y - geometry.origin.y, point.x - geometry.origin.x);
+    return clamp(Math.abs(normalizeAngle(angle - geometry.angle)) / Math.max(geometry.halfAngle, BURST_TARGET_EPSILON), 0, 1);
+  });
+  return Math.min(...offsets);
+}
+
+function getBurstTargetScore(offset, attackCount = 1) {
+  const amount = Math.max(1, toInteger(attackCount) || 1);
+  const normalizedOffset = clamp(offset, 0, 1);
+  if (normalizedOffset <= BURST_CENTER_WIDTH_RATIO) return 1;
+  const edgeScore = 0.5 / amount;
+  const falloff = clamp((1 - normalizedOffset) / Math.max(BURST_TARGET_EPSILON, 1 - BURST_CENTER_WIDTH_RATIO), 0, 1);
+  return edgeScore + ((1 - edgeScore) * falloff * falloff);
+}
+
 function buildBurstPrimaryShots(attackerToken, geometry, attackCount = 1) {
   const amount = Math.max(1, toInteger(attackCount) || 1);
   const shotGeometry = getRandomBurstMissGeometry(attackerToken, geometry);
@@ -2978,26 +3184,6 @@ function getBurstPrimaryOffsets(count = 1) {
     ? 0
     : -1 + ((2 * index) / (amount - 1)));
   return offsets.sort((left, right) => Math.abs(left) - Math.abs(right) || left - right);
-}
-
-function getBurstTargetConeOffset(attackerToken, geometry, target) {
-  if (!geometry || geometry.halfAngle <= 0) return 0;
-  const points = getVisibleTokenAttackPoints(attackerToken, target, geometry);
-  if (!points.length) return 1;
-  const offsets = points.map(point => {
-    const angle = Math.atan2(point.y - geometry.origin.y, point.x - geometry.origin.x);
-    return clamp(Math.abs(normalizeAngle(angle - geometry.angle)) / Math.max(geometry.halfAngle, BURST_TARGET_EPSILON), 0, 1);
-  });
-  return Math.min(...offsets);
-}
-
-function getBurstTargetScore(offset, attackCount = 1) {
-  const amount = Math.max(1, toInteger(attackCount) || 1);
-  const normalizedOffset = clamp(offset, 0, 1);
-  if (normalizedOffset <= BURST_CENTER_WIDTH_RATIO) return 1;
-  const edgeScore = 0.5 / amount;
-  const falloff = clamp((1 - normalizedOffset) / Math.max(BURST_TARGET_EPSILON, 1 - BURST_CENTER_WIDTH_RATIO), 0, 1);
-  return edgeScore + ((1 - edgeScore) * falloff * falloff);
 }
 
 function getBurstBulletRange(expected, attackCount = 1, hasCompetition = false) {
@@ -3136,53 +3322,139 @@ function buildVolleyAnimationTrajectory(geometry) {
   };
 }
 
-function getTokenTrajectoryHit(token, trajectory) {
-  const bounds = getTokenBounds(token);
-  const direction = {
-    x: Math.cos(trajectory.angle),
-    y: Math.sin(trajectory.angle)
+function getTokenTrajectoryIntersectionRange(token, trajectory) {
+  const polygon = getTokenWorldPolygon(token);
+  if (!polygon || !trajectory?.origin) return null;
+  const origin = trajectory.origin;
+  const end = trajectory.end ?? getPointOnTrajectory(trajectory, trajectory.distance);
+  return getSegmentPolygonIntersectionRange(origin, end, polygon, trajectory.distance);
+}
+
+function getSegmentPolygonIntersectionRange(origin, end, polygon, maxDistance = null) {
+  const points = getPolygonPointObjects(polygon);
+  if (points.length < 3) return null;
+  const segmentLength = Math.hypot((Number(end?.x) || 0) - (Number(origin?.x) || 0), (Number(end?.y) || 0) - (Number(origin?.y) || 0));
+  const distance = Math.max(0, Number(maxDistance) || segmentLength);
+  if (distance <= GEOMETRY_EPSILON || segmentLength <= GEOMETRY_EPSILON) return null;
+
+  const values = [];
+  const addDistance = point => {
+    const value = clamp(getProjectedDistanceOnSegment(origin, end, point), 0, distance);
+    if (values.some(existing => Math.abs(existing - value) <= GEOMETRY_EPSILON)) return;
+    values.push(value);
   };
-  const range = rayRectangleIntersection(trajectory.origin, direction, bounds, trajectory.distance);
+
+  if (polygon.contains?.(origin.x, origin.y)) values.push(0);
+  if (polygon.contains?.(end.x, end.y)) values.push(distance);
+
+  for (let index = 0; index < points.length; index += 1) {
+    const a = points[index];
+    const b = points[(index + 1) % points.length];
+    const intersection = foundry.utils.lineSegmentIntersection?.(origin, end, a, b);
+    if (intersection) addDistance(intersection);
+  }
+
+  if (values.length < 2) return null;
+  values.sort((left, right) => left - right);
+  const entry = values[0];
+  const exit = values.at(-1);
+  return exit - entry > GEOMETRY_EPSILON ? { entry, exit } : null;
+}
+
+function getProjectedDistanceOnSegment(origin, end, point) {
+  const dx = (Number(end?.x) || 0) - (Number(origin?.x) || 0);
+  const dy = (Number(end?.y) || 0) - (Number(origin?.y) || 0);
+  const length = Math.hypot(dx, dy);
+  if (length <= GEOMETRY_EPSILON) return 0;
+  return (((Number(point?.x) || 0) - (Number(origin?.x) || 0)) * dx
+    + ((Number(point?.y) || 0) - (Number(origin?.y) || 0)) * dy) / length;
+}
+
+function getTokenWorldPolygon(token) {
+  const shape = token?.shape ?? token?.getShape?.();
+  const offset = getTokenShapeOffset(token);
+  if (shape instanceof PIXI.Polygon) return translatePolygon(shape, offset);
+  if (shape instanceof PIXI.Rectangle) {
+    return new PIXI.Rectangle(
+      offset.x + shape.x,
+      offset.y + shape.y,
+      shape.width,
+      shape.height
+    ).normalize().toPolygon();
+  }
+  if (shape instanceof PIXI.Circle) {
+    return new PIXI.Circle(offset.x + shape.x, offset.y + shape.y, shape.radius).toPolygon?.({ density: 48 }) ?? null;
+  }
+  if (shape instanceof PIXI.Ellipse) return ellipseToPolygon(shape, offset);
+
+  const bounds = getTokenBoundsRectangle(token);
+  return bounds?.toPolygon?.() ?? null;
+}
+
+function getTokenShapeOffset(token) {
+  return {
+    x: Number(token?.position?.x ?? token?.x ?? token?.document?.x) || 0,
+    y: Number(token?.position?.y ?? token?.y ?? token?.document?.y) || 0
+  };
+}
+
+function translatePolygon(polygon, offset) {
+  const translated = [];
+  const points = Array.isArray(polygon?.points) ? polygon.points : [];
+  for (let index = 0; index < points.length - 1; index += 2) {
+    translated.push((Number(points[index]) || 0) + offset.x, (Number(points[index + 1]) || 0) + offset.y);
+  }
+  return new PIXI.Polygon(translated);
+}
+
+function ellipseToPolygon(ellipse, offset, density = 48) {
+  const radiusX = Number(ellipse.radiusX ?? ellipse.halfWidth ?? ellipse.width) || 0;
+  const radiusY = Number(ellipse.radiusY ?? ellipse.halfHeight ?? ellipse.height) || 0;
+  if (radiusX <= 0 || radiusY <= 0) return null;
+  const center = {
+    x: offset.x + (Number(ellipse.x) || 0),
+    y: offset.y + (Number(ellipse.y) || 0)
+  };
+  const points = [];
+  for (let index = 0; index < density; index += 1) {
+    const angle = (Math.PI * 2 * index) / density;
+    points.push(center.x + (Math.cos(angle) * radiusX), center.y + (Math.sin(angle) * radiusY));
+  }
+  return new PIXI.Polygon(points);
+}
+
+function getTokenTrajectoryHit(token, trajectory) {
+  const range = getTokenTrajectoryIntersectionRange(token, trajectory);
   if (!range) return null;
   const elevationRange = getTokenElevationRange(token);
   const hitDistance = getTrajectoryTokenElevationHitDistance(trajectory, range, elevationRange);
   if (!Number.isFinite(hitDistance)) return null;
   return {
     distance: hitDistance,
-    point: {
-      x: trajectory.origin.x + (direction.x * hitDistance),
-      y: trajectory.origin.y + (direction.y * hitDistance),
-      elevation: getTrajectoryElevationAtDistance(trajectory, hitDistance)
-    }
+    point: getPointOnTrajectory(trajectory, hitDistance)
   };
 }
 
 function getTokenAttackContactPoints(token, geometry) {
-  const bounds = getTokenBoundsRectangle(token);
-  if (!bounds) return [];
+  const tokenPolygon = getTokenWorldPolygon(token);
+  if (!tokenPolygon) return [];
   if (geometry.type === VOLLEY_ACTION_KEY) return getTokenVolleyContactPoints(token, geometry);
   const points = [];
 
   if (geometry.halfAngle <= 0) {
-    const end = geometry.end ?? getPointOnTrajectory(geometry, geometry.distance);
-    addRectangleSegmentContactPoints(points, bounds, geometry.origin, end);
+    const hit = getTokenTrajectoryHit(token, geometry);
+    if (hit?.point) addUniquePoint(points, hit.point);
     return sortContactPoints(points, geometry.origin);
   }
 
   const attackPolygon = getAttackPolygon(geometry);
   if (attackPolygon) {
-    const intersection = bounds.intersectPolygon?.(attackPolygon, { canMutate: false });
+    const intersection = attackPolygon.intersectPolygon?.(tokenPolygon, { scalingFactor: 100 });
     const intersectionPoints = getPolygonPointObjects(intersection);
-    if (intersectionPoints.length) addUniquePoint(points, getPointCentroid(intersectionPoints));
-    for (const point of intersectionPoints) addInsetContactPoint(points, point, bounds);
-  }
-
-  for (const segment of getAttackBoundarySegments(geometry)) {
-    addRectangleSegmentContactPoints(points, bounds, segment.a, segment.b);
-  }
-
-  for (const point of getTokenAttackSamplePoints(token)) {
-    if (pointInAttackCone(point, geometry)) addUniquePoint(points, point);
+    if (getPolygonArea(intersectionPoints) > GEOMETRY_EPSILON) {
+      addUniquePoint(points, getPointCentroid(intersectionPoints));
+      for (const point of intersectionPoints) addUniquePoint(points, point);
+    }
   }
 
   return sortContactPoints(points, geometry.origin);
@@ -3296,37 +3568,25 @@ function getTrajectoryTokenElevationHitDistance(trajectory, range, elevationRang
 }
 
 function getTokenBoundsRectangle(token) {
-  const bounds = token?.bounds;
-  if (bounds) {
-    const left = Number(bounds.left ?? bounds.x);
-    const top = Number(bounds.top ?? bounds.y);
-    const width = Number(bounds.width);
-    const height = Number(bounds.height);
-    const right = Number(bounds.right ?? (left + width));
-    const bottom = Number(bounds.bottom ?? (top + height));
-    if ([left, right, top, bottom].every(Number.isFinite)) {
-      return new PIXI.Rectangle(left, top, right - left, bottom - top).normalize();
-    }
-  }
   const left = Number(token?.x);
   const top = Number(token?.y);
   const width = Number(token?.w);
   const height = Number(token?.h);
   if ([left, top, width, height].every(Number.isFinite)) return new PIXI.Rectangle(left, top, width, height).normalize();
-  return null;
-}
 
-function getAttackBoundarySegments(geometry) {
-  const points = getAttackPolygonPoints(geometry);
-  if (points.length < 2) return [];
-  const segments = [];
-  for (let index = 0; index < points.length; index += 1) {
-    segments.push({
-      a: points[index],
-      b: points[(index + 1) % points.length]
-    });
+  const bounds = token?.bounds;
+  if (bounds) {
+    const boundsLeft = Number(bounds.left ?? bounds.x);
+    const boundsTop = Number(bounds.top ?? bounds.y);
+    const boundsWidth = Number(bounds.width);
+    const boundsHeight = Number(bounds.height);
+    const boundsRight = Number(bounds.right ?? (boundsLeft + boundsWidth));
+    const boundsBottom = Number(bounds.bottom ?? (boundsTop + boundsHeight));
+    if ([boundsLeft, boundsRight, boundsTop, boundsBottom].every(Number.isFinite)) {
+      return new PIXI.Rectangle(boundsLeft, boundsTop, boundsRight - boundsLeft, boundsBottom - boundsTop).normalize();
+    }
   }
-  return segments;
+  return null;
 }
 
 function getAttackPolygon(geometry) {
@@ -3361,44 +3621,24 @@ function getPolygonPointObjects(polygon) {
   return points;
 }
 
+function getPolygonArea(points = []) {
+  if (points.length < 3) return 0;
+  let area = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    area += ((Number(current.x) || 0) * (Number(next.y) || 0))
+      - ((Number(next.x) || 0) * (Number(current.y) || 0));
+  }
+  return Math.abs(area) / 2;
+}
+
 function getPointCentroid(points = []) {
   const count = Math.max(1, points.length);
   return {
     x: points.reduce((sum, point) => sum + point.x, 0) / count,
     y: points.reduce((sum, point) => sum + point.y, 0) / count
   };
-}
-
-function addRectangleSegmentContactPoints(points, bounds, a, b) {
-  const intersections = bounds.segmentIntersections?.(a, b) ?? [];
-  if (bounds.contains?.(a.x, a.y)) addUniquePoint(points, a);
-  if (bounds.contains?.(b.x, b.y)) addUniquePoint(points, b);
-  for (const point of intersections) addInsetContactPoint(points, point, bounds);
-  if (intersections.length >= 2) {
-    addUniquePoint(points, {
-      x: (intersections[0].x + intersections.at(-1).x) / 2,
-      y: (intersections[0].y + intersections.at(-1).y) / 2
-    });
-  }
-}
-
-function addInsetContactPoint(points, point, bounds) {
-  const center = bounds.center ?? {
-    x: bounds.x + (bounds.width / 2),
-    y: bounds.y + (bounds.height / 2)
-  };
-  const dx = center.x - point.x;
-  const dy = center.y - point.y;
-  const distance = Math.hypot(dx, dy);
-  if (distance <= GEOMETRY_EPSILON) {
-    addUniquePoint(points, point);
-    return;
-  }
-  const inset = Math.min(3, Math.max(0.5, Math.min(bounds.width, bounds.height) * 0.02), distance);
-  addUniquePoint(points, {
-    x: point.x + ((dx / distance) * inset),
-    y: point.y + ((dy / distance) * inset)
-  });
 }
 
 function sortContactPoints(points, origin) {
@@ -3419,39 +3659,6 @@ function addUniquePoint(points, point) {
   points.push(entry);
 }
 
-function rayRectangleIntersection(origin, direction, bounds, maxDistance) {
-  let entry = 0;
-  let exit = maxDistance;
-
-  const xRange = getAxisIntersectionRange(origin.x, direction.x, bounds.left, bounds.right);
-  if (!xRange) return null;
-  entry = Math.max(entry, xRange.entry);
-  exit = Math.min(exit, xRange.exit);
-  if (entry > exit) return null;
-
-  const yRange = getAxisIntersectionRange(origin.y, direction.y, bounds.top, bounds.bottom);
-  if (!yRange) return null;
-  entry = Math.max(entry, yRange.entry);
-  exit = Math.min(exit, yRange.exit);
-  if (entry > exit) return null;
-
-  return { entry, exit };
-}
-
-function getAxisIntersectionRange(origin, direction, min, max) {
-  if (Math.abs(direction) < 0.000001) {
-    return origin >= min && origin <= max
-      ? { entry: Number.NEGATIVE_INFINITY, exit: Number.POSITIVE_INFINITY }
-      : null;
-  }
-  const first = (min - origin) / direction;
-  const second = (max - origin) / direction;
-  return {
-    entry: Math.min(first, second),
-    exit: Math.max(first, second)
-  };
-}
-
 async function applyQueuedDamageRequests(requests = []) {
   return requestDamageApplications(requests);
 }
@@ -3468,24 +3675,6 @@ function getTokenCenter(token) {
   };
 }
 
-function getTokenAttackSamplePoints(token) {
-  const left = token.x;
-  const right = token.x + token.w;
-  const top = token.y;
-  const bottom = token.y + token.h;
-  const points = [];
-  const steps = 4;
-  for (let xIndex = 0; xIndex <= steps; xIndex += 1) {
-    for (let yIndex = 0; yIndex <= steps; yIndex += 1) {
-      points.push({
-        x: left + ((right - left) * xIndex / steps),
-        y: top + ((bottom - top) * yIndex / steps)
-      });
-    }
-  }
-  return points;
-}
-
 function selectRandomLimbKey(actor) {
   const keys = Object.entries(actor.system?.limbs ?? {})
     .filter(([_key, limb]) => limb && typeof limb === "object")
@@ -3500,13 +3689,7 @@ function isAimedShotAction(weapon, actionKey, weaponFunctionId = "") {
 
 function getAimedTargetUnderPointer(pointer, targets = []) {
   if (!pointer) return null;
-  return targets.find(target => {
-    const bounds = getTokenBounds(target);
-    return pointer.x >= bounds.left
-      && pointer.x <= bounds.right
-      && pointer.y >= bounds.top
-      && pointer.y <= bounds.bottom;
-  }) ?? null;
+  return targets.find(target => getTokenWorldPolygon(target)?.contains?.(pointer.x, pointer.y)) ?? null;
 }
 
 function getAimedAttackDifficulty(targetActor, limbKey = "", blockerBonus = 0) {
