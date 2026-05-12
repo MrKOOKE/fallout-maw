@@ -1,5 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
-import { requestDamageApplication } from "../combat/damage-hub.mjs";
+import { isLimbDestroyed, requestDamageApplication, restoreDestroyedLimb } from "../combat/damage-hub.mjs";
 import { getDamageTypeSettings } from "../settings/accessors.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
@@ -10,6 +10,8 @@ const { renderTemplate } = foundry.applications.handlebars;
 export async function openLimbDamageDialog(actor, limbKey = "") {
   const limb = actor?.system?.limbs?.[limbKey];
   if (!actor || !limb) return undefined;
+  if (!game.user?.isGM) return undefined;
+  if (isLimbDestroyed(actor, limbKey)) return openLimbRestoreDialog(actor, limbKey, limb);
 
   const damageTypes = getDamageTypeSettings();
   const content = await renderTemplate(TEMPLATES.limbDamageDialog, {
@@ -51,4 +53,24 @@ export async function openLimbDamageDialog(actor, limbKey = "") {
       }
     });
   });
+}
+
+async function openLimbRestoreDialog(actor, limbKey = "", limb = {}) {
+  const label = String(limb?.label ?? limbKey);
+  const confirmed = await DialogV2.confirm({
+    window: {
+      title: `${label}: восстановление`
+    },
+    content: `<p>${label} отсутствует. Восстановить часть тела и вернуть ее функции?</p>`,
+    yes: {
+      label: "Восстановить",
+      icon: "fa-solid fa-kit-medical"
+    },
+    no: {
+      label: "Отмена"
+    },
+    rejectClose: false
+  });
+  if (!confirmed) return undefined;
+  return restoreDestroyedLimb(actor, limbKey);
 }

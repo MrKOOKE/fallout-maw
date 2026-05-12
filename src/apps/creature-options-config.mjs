@@ -4,6 +4,9 @@ import {
   getCharacteristicSettings,
   getCreatureOptions,
   getDamageTypeSettings,
+  getNeedSettings,
+  getProficiencySettings,
+  getResourceSettings,
   getSkillSettings,
   setCreatureOptions
 } from "../settings/accessors.mjs";
@@ -15,6 +18,7 @@ import {
 import { format, localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
+import { activateEffectKeyAutocomplete, createEffectKeyToken } from "./effect-key-autocomplete.mjs";
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 import { LimbSilhouetteConfig } from "./limb-silhouette-config.mjs";
 import { NeedAdvancedSettingsConfig } from "./need-settings-config.mjs";
@@ -271,7 +275,9 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       label: "Новая конечность",
       stateMax: 100,
       damageMultiplier: 1,
-      aimedDifficultyPercent: 0
+      aimedDifficultyPercent: 0,
+      critical: false,
+      lossEffects: []
     });
     return this.forceRender();
   }
@@ -522,7 +528,9 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         label: row.querySelector("[data-field='label']")?.value?.trim() || localize("FALLOUTMAW.Common.Untitled"),
         stateMax: Math.max(0, toInteger(existing.stateMax ?? 100)),
         damageMultiplier: toDecimal(existing.damageMultiplier, 1),
-        aimedDifficultyPercent: toInteger(existing.aimedDifficultyPercent)
+        aimedDifficultyPercent: toInteger(existing.aimedDifficultyPercent),
+        critical: parseBoolean(existing.critical),
+        lossEffects: normalizeLimbLossEffects(existing.lossEffects)
       };
     }).filter(limb => limb.key);
   }
@@ -682,6 +690,10 @@ class LimbSettingsConfig extends FalloutMaWFormApplicationV2 {
       handler: FalloutMaWFormApplicationV2.handleFormSubmit,
       submitOnChange: false,
       closeOnSubmit: true
+    },
+    actions: {
+      addLossEffect: this.#onAddLossEffect,
+      deleteLossEffect: this.#onDeleteLossEffect
     }
   };
 
@@ -698,27 +710,118 @@ class LimbSettingsConfig extends FalloutMaWFormApplicationV2 {
   async _prepareContext(options) {
     return {
       ...(await super._prepareContext(options)),
-      limb: this.limb
+      limb: {
+        ...this.limb,
+        lossEffects: normalizeLimbLossEffects(this.limb.lossEffects).map((effect, index) => prepareLimbLossEffectRow(effect, index))
+      }
     };
+  }
+
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    activateEffectKeyAutocomplete(this.element, buildEffectKeyTokens());
   }
 
   async _processFormData(_event, _form, formData) {
     const data = getExpandedFormData(formData);
     this.onSave?.(normalizeLimbSettings({
       ...this.limb,
-      ...(data.limb ?? {})
+      ...(data.limb ?? {}),
+      lossEffects: this.#readLossEffectsFromForm()
     }));
+  }
+
+  static #onAddLossEffect(event) {
+    event.preventDefault();
+    this.#syncFromForm();
+    if (this.limb.critical) return this.forceRender();
+    this.limb.lossEffects.push({ key: "", type: "add", value: "0", phase: "initial", priority: null });
+    return this.forceRender();
+  }
+
+  static #onDeleteLossEffect(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const index = Number(target.closest("[data-limb-loss-effect]")?.dataset.limbLossEffect) || 0;
+    this.limb.lossEffects.splice(index, 1);
+    return this.forceRender();
+  }
+
+  #syncFromForm() {
+    if (!this.form) return;
+    const formData = new FormDataExtended(this.form);
+    const data = getExpandedFormData(formData);
+    this.limb = normalizeLimbSettings({
+      ...this.limb,
+      ...(data.limb ?? {}),
+      lossEffects: this.#readLossEffectsFromForm()
+    });
+  }
+
+  #readLossEffectsFromForm() {
+    return Array.from(this.form?.querySelectorAll("[data-limb-loss-effect]") ?? [])
+      .map(row => ({
+        key: row.querySelector("[data-limb-loss-effect-key]")?.value?.trim() ?? "",
+        type: row.querySelector("[data-limb-loss-effect-type]")?.value ?? "add",
+        value: row.querySelector("[data-limb-loss-effect-value]")?.value ?? "0",
+        phase: "initial",
+        priority: row.querySelector("[data-limb-loss-effect-priority]")?.value ?? null
+      }))
+      .filter(effect => effect.key);
   }
 }
 
 function normalizeLimbSettings(limb = {}) {
+  const critical = parseBoolean(limb?.critical);
   return {
     key: String(limb?.key ?? "").trim(),
     label: String(limb?.label ?? limb?.name ?? limb?.key ?? "").trim(),
     stateMax: Math.max(0, toInteger(limb?.stateMax ?? 100)),
     damageMultiplier: toDecimal(limb?.damageMultiplier, 1),
-    aimedDifficultyPercent: toInteger(limb?.aimedDifficultyPercent)
+    aimedDifficultyPercent: toInteger(limb?.aimedDifficultyPercent),
+    critical,
+    lossEffects: critical ? [] : normalizeLimbLossEffects(limb?.lossEffects)
   };
+}
+
+function normalizeLimbLossEffects(value = []) {
+  const effects = Array.isArray(value) ? value : Object.values(value ?? {});
+  return effects
+    .map(effect => ({
+      key: String(effect?.key ?? "").trim(),
+      type: ["add", "multiply", "override"].includes(String(effect?.type ?? "")) ? String(effect.type) : "add",
+      value: String(effect?.value ?? "0"),
+      phase: String(effect?.phase || "initial"),
+      priority: effect?.priority === "" || effect?.priority === null || effect?.priority === undefined
+        ? null
+        : toInteger(effect.priority)
+    }))
+    .filter(effect => effect.key);
+}
+
+function prepareLimbLossEffectRow(effect = {}, index = 0) {
+  const type = String(effect?.type ?? "add");
+  return {
+    ...effect,
+    index,
+    addSelected: type === "add",
+    multiplySelected: type === "multiply",
+    overrideSelected: type === "override",
+    priority: effect?.priority ?? ""
+  };
+}
+
+function buildEffectKeyTokens() {
+  return [
+    ...getCharacteristicSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.characteristics.${entry.key}`, group: "Характеристики" })),
+    ...getSkillSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.skills.${entry.key}.bonus`, group: "Навыки" })),
+    ...getResourceSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.resources.${entry.key}.bonus`, group: "Ресурсы" })),
+    ...getNeedSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.needs.${entry.key}.bonus`, group: "Потребности" })),
+    ...getProficiencySettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.proficiencies.${entry.key}.bonus`, group: "Владения" })),
+    createEffectKeyToken({ code: "blind", key: "blind", label: "Слепота", path: "status.blind", group: "Статусы" }),
+    createEffectKeyToken({ code: "moveCost", key: "movement", label: "Стоимость перемещения", path: "system.costs.movement", group: "Стоимость" }),
+    createEffectKeyToken({ code: "actionCost", key: "action", label: "Стоимость действий", path: "system.costs.action", group: "Стоимость" })
+  ].filter(Boolean);
 }
 
 function getUniqueId(baseId, existingIds) {
@@ -733,4 +836,11 @@ function getUniqueId(baseId, existingIds) {
 function toDecimal(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function parseBoolean(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (Array.isArray(value)) return value.some(entry => parseBoolean(entry, false));
+  if (typeof value === "boolean") return value;
+  return ["true", "1", "yes", "on"].includes(String(value).trim().toLowerCase());
 }

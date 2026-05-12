@@ -14,7 +14,7 @@ import {
   TOKEN_ACTION_HUD_SCALE_SETTING
 } from "../settings/constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { getLimbHealingCap, getResourceLimitState } from "../combat/damage-hub.mjs";
+import { applyDamageCostModifier, fullyRestoreActorDamageState, getDamageCostModifierState, getLimbHealingCap, getResourceLimitState, isLimbDestroyed } from "../combat/damage-hub.mjs";
 import { MOVEMENT_RESOURCE_PREVIEW_HOOK } from "../combat/movement-resources.mjs";
 import {
   cancelWeaponAttack,
@@ -24,6 +24,7 @@ import {
 } from "../combat/weapon-attack-controller.mjs";
 import { openLimbDamageDialog } from "./limb-damage-dialog.mjs";
 import { requestMedicineTarget } from "./medicine-dialog.mjs";
+import { requestRepairTarget } from "./repair-dialog.mjs";
 import {
   FALLBACK_ICON,
   normalizeImagePath,
@@ -57,7 +58,6 @@ const FormDataExtended = foundry.applications.ux.FormDataExtended;
 const TOKEN_ACTION_HUD_SOCKET = `system.${SYSTEM_ID}`;
 const TOKEN_ACTION_HUD_SOCKET_SCOPE = "fallout-maw.tokenActionHud";
 const TOKEN_ACTION_HUD_SOCKET_TIMEOUT = 10000;
-const DAMAGE_EFFECT_FLAG_KEY = "damageEffect";
 const SELECTED_HUD_WEAPON_FLAG = "selectedHudWeaponItemId";
 const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
 const TOKEN_ACTION_HUD_SCALE_DEFAULT = 50;
@@ -90,7 +90,7 @@ const HUD_ACTIONS = Object.freeze([
 ]);
 
 let tokenActionHud = null;
-let tokenActionHudSettings = null;
+let tokenActionHudScaleSettings = null;
 let hooksRegistered = false;
 let tokenActionHudRefresh = null;
 let tokenActionHudLayoutRefresh = null;
@@ -382,7 +382,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const weaponSet = prepareHudWeaponSet(inventory.weaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "");
     const selectedWeaponSlot = getSelectedHudWeaponSlot(weaponSet, selectedWeapon?.id ?? "");
     const selectedWeaponDisabled = Boolean(selectedWeaponSlot?.disabled);
-    const weaponActionRows = prepareWeaponActionRows(selectedWeapon, selectedWeaponDisabled);
+    const weaponActionRows = prepareWeaponActionRows(actor, selectedWeapon, selectedWeaponDisabled);
     const skills = prepareSkillButtons(actor);
     const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg");
     const abilities = prepareOwnedItemButtons(actor, "ability", "icons/svg/aura.svg");
@@ -512,8 +512,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static #onOpenSettings(event) {
     event.preventDefault();
-    tokenActionHudSettings ??= new TokenActionHudSettings();
-    return tokenActionHudSettings.render({ force: true });
+    tokenActionHudScaleSettings ??= new TokenActionHudScaleSettings();
+    return tokenActionHudScaleSettings.render({ force: true });
   }
 
   static async #onGmHealSelected(event) {
@@ -682,10 +682,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   static #onUseSystemAction(event, target) {
     event.preventDefault();
     const key = String(target.dataset.systemActionKey ?? "");
-    if (key !== "medicine") return undefined;
+    if (!["medicine", "repair"].includes(key)) return undefined;
 
     this.#activeTray = "";
     void this.render({ force: true });
+    if (key === "repair") return requestRepairTarget(this.token);
     return requestMedicineTarget(this.token);
   }
 
@@ -766,6 +767,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       ? getHoveredLimbPart(silhouette, event)
       : event.target.closest("[data-limb-key]");
     if (!target) return;
+    if (!game.user?.isGM) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -1328,7 +1330,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     } else {
       const valueRow = document.createElement("div");
       valueRow.className = "fallout-maw-token-hud-limb-popover-value";
-      valueRow.textContent = `${value} / ${max}`;
+      valueRow.textContent = max ? `${value} / ${max}` : value;
       element.append(valueRow);
     }
     document.body.append(element);
@@ -1392,12 +1394,12 @@ function applyMeterSectionCollapsedState(element, section, collapsed) {
   button?.setAttribute("aria-expanded", String(!collapsed));
 }
 
-export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
+class TokenActionHudScaleSettings extends FalloutMaWFormApplicationV2 {
   #lastPreviewPercent = null;
 
   static DEFAULT_OPTIONS = {
-    id: "fallout-maw-token-action-hud-settings",
-    classes: ["fallout-maw", "fallout-maw-config-form", "fallout-maw-token-action-hud-settings"],
+    id: "fallout-maw-token-action-hud-scale-settings",
+    classes: ["fallout-maw", "fallout-maw-config-form", "fallout-maw-token-action-hud-scale-settings"],
     position: {
       width: 380,
       height: "auto"
@@ -1406,7 +1408,7 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
       resizable: false
     },
     form: {
-      handler: TokenActionHudSettings.handleFormSubmit,
+      handler: TokenActionHudScaleSettings.handleFormSubmit,
       submitOnChange: false,
       closeOnSubmit: true
     }
@@ -1414,12 +1416,12 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
 
   static PARTS = {
     form: {
-      template: TEMPLATES.settings.tokenActionHud
+      template: TEMPLATES.tokenActionHudScaleSettings
     }
   };
 
   get title() {
-    return game.i18n.localize("FALLOUTMAW.Settings.HUD.Title");
+    return game.i18n.localize("FALLOUTMAW.Settings.HUD.Scale");
   }
 
   async _prepareContext(options) {
@@ -1441,7 +1443,7 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
 
   async _onClose(options) {
     await super._onClose(options);
-    tokenActionHudSettings = null;
+    tokenActionHudScaleSettings = null;
     applyTokenActionHudScale(getTokenActionHudScalePercent());
   }
 
@@ -1582,6 +1584,14 @@ function parseLimbPopoverRows(target) {
 }
 
 function prepareLimbDisplayData(actor, limbKey, limb = {}) {
+  if (isLimbDestroyed(actor, limbKey)) {
+    return {
+      ...limb,
+      displayValue: "Отсутствует",
+      displayMax: "",
+      stateLabel: "Отсутствует"
+    };
+  }
   const max = getLimbHealingCap(actor, limbKey);
   if (max >= toInteger(limb?.max)) return limb;
   return {
@@ -1788,7 +1798,7 @@ function isMiddleMouseClick(event) {
   return event?.button === 1;
 }
 
-function prepareWeaponActionRows(selectedWeapon, forceDisabled = false) {
+function prepareWeaponActionRows(actor, selectedWeapon, forceDisabled = false) {
   if (!selectedWeapon) return [];
   return getEnabledWeaponFunctions(selectedWeapon)
     .sort((left, right) => {
@@ -1800,12 +1810,12 @@ function prepareWeaponActionRows(selectedWeapon, forceDisabled = false) {
       label: weaponFunction.isPrimary
         ? selectedWeapon.name
         : weaponFunction.name || `${game.i18n.localize("FALLOUTMAW.Item.AdditionalWeaponFunction")} ${index + 1}`,
-      actions: prepareWeaponActionButtonsForFunction(selectedWeapon, weaponFunction, forceDisabled)
+      actions: prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunction, forceDisabled)
     }))
     .filter(row => row.actions.length);
 }
 
-function prepareWeaponActionButtonsForFunction(selectedWeapon, weaponFunction, forceDisabled = false) {
+function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunction, forceDisabled = false) {
   const weaponData = applyWeaponModuleModifiers(weaponFunction?.data ?? {}, {
     moduleSlots: getWeaponFunctionModuleSlots(selectedWeapon, weaponFunction?.id)
   });
@@ -1820,22 +1830,26 @@ function prepareWeaponActionButtonsForFunction(selectedWeapon, weaponFunction, f
     { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), configured: Boolean(actions.aimedMeleeAttack) },
     { key: "reload", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload"), configured: hasMagazineCost, visible: hasMagazineCost }
   ];
-  return buttons.filter(action => action.visible !== false && action.configured).map(action => ({
-    ...action,
-    label: String(weaponData?.[action.key]?.name ?? "").trim() || action.label,
-    disabled: forceDisabled,
-    itemId: selectedWeapon.id,
-    weaponFunctionId: weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id,
-    img: normalizeImagePath(selectedWeapon.img, "icons/svg/combat.svg"),
-    actionPointCost: getWeaponActionPointCostForHud(weaponData, action.key),
-    actionPointCostLabel: `${getWeaponActionPointCostForHud(weaponData, action.key)} ОД`
-  }));
+  return buttons.filter(action => action.visible !== false && action.configured).map(action => {
+    const actionPointCost = getWeaponActionPointCostForHud(actor, weaponData, action.key);
+    return {
+      ...action,
+      label: String(weaponData?.[action.key]?.name ?? "").trim() || action.label,
+      disabled: forceDisabled,
+      itemId: selectedWeapon.id,
+      weaponFunctionId: weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id,
+      img: normalizeImagePath(selectedWeapon.img, "icons/svg/combat.svg"),
+      actionPointCost,
+      actionPointCostLabel: `${actionPointCost} ОД`
+    };
+  });
 }
 
-function getWeaponActionPointCostForHud(weaponData = {}, actionKey = "") {
+function getWeaponActionPointCostForHud(actor, weaponData = {}, actionKey = "") {
   const value = Number(weaponData?.[actionKey]?.actionPointCost);
   const fallback = actionKey === "reload" ? 2 : 5;
-  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
+  const baseCost = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
+  return applyDamageCostModifier(baseCost, getDamageCostModifierState(actor).action);
 }
 
 function hasWeaponResourceCostData(weaponData = {}, type = "") {
@@ -2404,36 +2418,7 @@ function addLimitedResourceDisplay(entry, limit = null) {
 }
 
 async function fullyRestoreActor(actor, { repairItems = false } = {}) {
-  if (!actor?.isOwner) return;
-
-  const traumaIds = actor.items
-    .filter(item => item.type === "trauma" || item.type === "disease")
-    .map(item => item.id);
-  if (traumaIds.length) await actor.deleteEmbeddedDocuments("Item", traumaIds);
-
-  const damageEffectIds = actor.effects
-    .filter(effect => isDamageSystemEffect(effect))
-    .map(effect => effect.id);
-  if (damageEffectIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", damageEffectIds);
-
-  const updates = {};
-  for (const [key, limb] of Object.entries(actor.system?.limbs ?? {})) {
-    const max = Math.max(0, toInteger(limb?.max));
-    updates[`system.limbs.${key}.value`] = max;
-    updates[`system.limbs.${key}.damageAccumulation`] = {};
-  }
-  for (const [key, resource] of Object.entries(actor.system?.resources ?? {})) {
-    const max = Math.max(Math.max(0, toInteger(resource?.min)), toInteger(resource?.max));
-    updates[`system.resources.${key}.value`] = max;
-    updates[`system.resources.${key}.spent`] = 0;
-  }
-  for (const [key, need] of Object.entries(actor.system?.needs ?? {})) {
-    const min = Math.max(0, toInteger(need?.min));
-    updates[`system.needs.${key}.value`] = min;
-    updates[`system.needs.${key}.spent`] = 0;
-  }
-  if (Object.keys(updates).length) await actor.update(updates);
-
+  await fullyRestoreActorDamageState(actor);
   if (repairItems) await fullyRepairActorItems(actor);
 }
 
@@ -2451,12 +2436,6 @@ async function fullyRepairActorItems(actor) {
     });
   }
   if (itemUpdates.length) await actor.updateEmbeddedDocuments("Item", itemUpdates);
-}
-
-function isDamageSystemEffect(effect) {
-  if (!effect) return false;
-  const flags = effect.flags?.[SYSTEM_ID] ?? effect.flags?.[FALLOUT_MAW.id] ?? {};
-  return Boolean(flags[DAMAGE_EFFECT_FLAG_KEY] || flags.traumaItem || flags.diseaseItem || flags.needEffect);
 }
 
 function layoutTokenActionHud(element) {

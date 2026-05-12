@@ -37,6 +37,12 @@ export const DEFAULT_SYSTEM_ACTION_SETTINGS = Object.freeze([
     label: "Медицина",
     img: "icons/svg/heal.svg",
     toolKey: "medical"
+  },
+  {
+    key: "repair",
+    label: "Ремонт",
+    img: "icons/tools/smithing/tongs-steel-grey.webp",
+    toolKey: "repair"
   }
 ]);
 

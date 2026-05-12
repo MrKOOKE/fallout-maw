@@ -321,6 +321,7 @@
     "Effects": {
       "AddChange": "Add Effect Change",
       "ChangeAdd": "Modify",
+      "ChangeMultiply": "Percent",
       "ChangeOverride": "Override",
       "Create": "Create Effect",
       "Disable": "Disable",

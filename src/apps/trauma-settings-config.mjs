@@ -341,6 +341,7 @@ function prepareEffectRow(effect, index) {
     ...effect,
     index,
     addSelected: String(effect?.type ?? "add") === "add",
+    multiplySelected: String(effect?.type ?? "") === "multiply",
     overrideSelected: String(effect?.type ?? "") === "override",
     priority: effect?.priority ?? ""
   };
@@ -434,6 +435,9 @@ function buildEffectKeyTokens() {
       label: entry.label,
       path: `system.proficiencies.${entry.key}.bonus`,
       group: "Владения"
-    }))
+    })),
+    createEffectKeyToken({ code: "blind", key: "blind", label: "Слепота", path: "status.blind", group: "Статусы" }),
+    createEffectKeyToken({ code: "moveCost", key: "movement", label: "Стоимость перемещения", path: "system.costs.movement", group: "Стоимость" }),
+    createEffectKeyToken({ code: "actionCost", key: "action", label: "Стоимость действий", path: "system.costs.action", group: "Стоимость" })
   ].filter(Boolean);
 }

@@ -1,5 +1,6 @@
 import {
   MOVEMENT_RULER_COLORS,
+  applyCombatMovementCostModifier,
   clearCombatMovementResourcePreview,
   getCombatMovementResourceState,
   isGMDebugMovementBypassActive,
@@ -36,7 +37,7 @@ function applyCombatMovementStyle(token, waypoint, style) {
   const state = getCombatMovementResourceState(token.actor);
   if (!state) return style;
 
-  const cost = getWaypointCost(waypoint);
+  const cost = getWaypointCost(token.actor, waypoint);
   if (cost <= state.movement.value) return { ...style, color: MOVEMENT_RULER_COLORS.movement };
   if (cost <= state.total) return { ...style, color: MOVEMENT_RULER_COLORS.action };
   return { ...style, color: MOVEMENT_RULER_COLORS.exhausted };
@@ -46,10 +47,10 @@ function isSelfPlannedMovement(token) {
   return Boolean(game.user?.id && token?._plannedMovement && (game.user.id in token._plannedMovement));
 }
 
-function getWaypointCost(waypoint) {
+function getWaypointCost(actor, waypoint) {
   const cost = Number(waypoint?.measurement?.cost ?? 0) - getPassedHistoryCost(waypoint);
   if (!Number.isFinite(cost) || cost <= 0) return 0;
-  return Math.ceil(cost);
+  return applyCombatMovementCostModifier(actor, Math.ceil(cost));
 }
 
 function getPassedHistoryCost(waypoint) {
@@ -94,5 +95,5 @@ function getSelfPlannedMovementCost(token, rulerData) {
     : 0;
   const cost = totalCost - historyCost;
   if (!Number.isFinite(cost) || cost <= 0) return 0;
-  return Math.ceil(cost);
+  return applyCombatMovementCostModifier(token.actor, Math.ceil(cost));
 }

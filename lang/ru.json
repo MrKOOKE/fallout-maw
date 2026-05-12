@@ -320,6 +320,7 @@
     "Effects": {
       "AddChange": "Добавить изменение",
       "ChangeAdd": "Изменение",
+      "ChangeMultiply": "Процент",
       "ChangeOverride": "Перезапись",
       "Create": "Создать эффект",
       "Disable": "Отключить",

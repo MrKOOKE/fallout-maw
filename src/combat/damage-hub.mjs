@@ -23,9 +23,11 @@ const DAMAGE_SOCKET = `system.${SYSTEM_ID}`;
 const TRAUMA_FLAG_SCOPE = "fallout-maw";
 const TRAUMA_FLAG_KEY = "trauma";
 const DAMAGE_EFFECT_FLAG_KEY = "damageEffect";
+const LIMB_LOSS_EFFECT_KIND = "limbLoss";
 const REGION_DAMAGE_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
 const REGION_DAMAGE_FLAG_KEY = "periodicDamage";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
+const HEALING_DAMAGE_TYPE_KEY = "healing";
 const MODE_DAMAGE = "damage";
 const MODE_HEALING = "healing";
 const SCOPE_LIMB = "limb";
@@ -35,6 +37,15 @@ const ROUND_SECONDS = 6;
 const DAMAGE_NUMBER_ANIMATION_MS = 900;
 const DAMAGE_MITIGATION_ICON_ANIMATION_MS = 1000;
 const EQUIPMENT_CONDITION_UNCONDITIONAL_RATIO = 0.2;
+const STATUS_EFFECTS = Object.freeze({
+  dead: "dead",
+  unconscious: "unconscious",
+  blind: "blind"
+});
+const COST_EFFECT_KEYS = Object.freeze({
+  movement: "system.costs.movement",
+  action: "system.costs.action"
+});
 const EQUIPMENT_CONDITION_DAMAGE_VARIABLES = Object.freeze([
   "incoming",
   "final",
@@ -52,6 +63,8 @@ let damageTimeHooksRegistered = false;
 const combatRoundWorldTimes = new Map();
 const processingPeriodicEffectUuids = new Set();
 const damageMitigationTextureCache = new Map();
+const actorDamageStatusSyncQueue = new Map();
+const actorDamageMutationQueue = new Map();
 
 export function registerDamageSocket() {
   game.socket.on(DAMAGE_SOCKET, handleDamageSocketMessage);
@@ -178,7 +191,13 @@ async function applyDamageCycle(requests = []) {
   return results;
 }
 
-export async function applyDamageApplication(request = {}, { createSummary = true } = {}) {
+export async function applyDamageApplication(request = {}, options = {}) {
+  const data = normalizeDamageRequest(request);
+  if (!data.actorUuid) return undefined;
+  return queueActorDamageMutation(data.actorUuid, () => applyDamageApplicationNow(data, options));
+}
+
+async function applyDamageApplicationNow(request = {}, { createSummary = true } = {}) {
   const data = normalizeDamageRequest(request);
   const actor = await fromUuid(data.actorUuid);
   if (!actor) return undefined;
@@ -186,6 +205,11 @@ export async function applyDamageApplication(request = {}, { createSummary = tru
 
   const mode = data.mode === MODE_HEALING ? MODE_HEALING : MODE_DAMAGE;
   const scope = normalizeScope(data.scope, data.limbKey);
+  if (mode === MODE_HEALING && isHealingBlocked(actor)) {
+    await queueActorDamageStatusSync(actor);
+    return { actor, amount: 0, healthDelta: 0, limbDelta: 0, mode, scope, limbKey: data.limbKey };
+  }
+
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
   const mitigationResult = mode === MODE_DAMAGE && data.applyMitigation
     ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source, {
@@ -312,7 +336,13 @@ export function estimateDamageApplication(request = {}) {
   };
 }
 
-export async function applyDamageApplications({ actorUuid = "", requests = [] } = {}, { createSummary = true } = {}) {
+export async function applyDamageApplications({ actorUuid = "", requests = [] } = {}, options = {}) {
+  const targetActorUuid = String(actorUuid ?? "").trim();
+  if (!targetActorUuid) return undefined;
+  return queueActorDamageMutation(targetActorUuid, () => applyDamageApplicationsNow({ actorUuid: targetActorUuid, requests }, options));
+}
+
+async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}, { createSummary = true } = {}) {
   const actor = await fromUuid(actorUuid);
   if (!actor) return undefined;
   if (!game.user?.isGM && !actor.isOwner) return undefined;
@@ -324,7 +354,7 @@ export async function applyDamageApplications({ actorUuid = "", requests = [] } 
   for (const request of requests) {
     const data = normalizeDamageRequest({ ...request, actorUuid });
     if (data.mode !== MODE_DAMAGE) {
-      singleResults.push(await applyDamageApplication(data, { createSummary: false }));
+      singleResults.push(await applyDamageApplicationNow(data, { createSummary: false }));
       continue;
     }
 
@@ -489,9 +519,15 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
     Object.assign(updateData, buildAccumulationUpdate(actor, data.limbKey, data.damageTypeKey, actualLimbDelta, mode));
   }
 
-  if (Object.keys(updateData).length) await actor.update(updateData);
+  if (Object.keys(updateData).length) await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
+
+  const destroyedLimbKeys = shouldUpdateLimb && mode === MODE_DAMAGE && actualLimbDelta > 0
+    ? await applyDestroyedLimbConsequences(actor, [data.limbKey])
+    : new Set();
+  await queueActorDamageStatusSync(actor);
 
   const createdTraumas = shouldUpdateLimb && mode === MODE_DAMAGE && actualLimbDelta > 0
+    && !destroyedLimbKeys.has(data.limbKey)
     ? await createTriggeredTraumas(actor, {
       limbKey: data.limbKey,
       damageTypeKey: damageType?.key ?? data.damageTypeKey,
@@ -521,10 +557,359 @@ export function getActorTraumas(actor) {
 export function getLimbHealingCap(actor, limbKey = "") {
   const limb = actor?.system?.limbs?.[limbKey];
   if (!limb) return 0;
+  if (isLimbDestroyed(actor, limbKey)) return 0;
   const max = toInteger(limb.max);
   return getActorTraumas(actor)
     .filter(item => item.system?.limbKey === limbKey)
     .reduce((cap, item) => Math.min(cap, toInteger(item.system?.thresholdValue)), max);
+}
+
+export function isLimbDestroyed(actor, limbKey = "") {
+  const limb = actor?.system?.limbs?.[limbKey];
+  if (!limb) return false;
+  return toInteger(limb.value) <= toInteger(limb.min);
+}
+
+export async function restoreDestroyedLimb(actor, limbKey = "") {
+  if (!actor || !game.user?.isGM) return undefined;
+  return queueActorDamageMutation(actor.uuid, async freshActor => {
+    const limb = freshActor?.system?.limbs?.[limbKey];
+    if (!freshActor || !limb) return undefined;
+    const max = Math.max(0, toInteger(limb.max));
+
+    await deleteLimbTraumas(freshActor, limbKey);
+    await deleteLimbLossEffects(freshActor, limbKey);
+    await freshActor.update({
+      [`system.limbs.${limbKey}.value`]: max,
+      [`system.limbs.${limbKey}.damageAccumulation`]: {}
+    }, { falloutMawSkipDamageStatusSync: true });
+    await queueActorDamageStatusSync(freshActor);
+    return freshActor;
+  });
+}
+
+export async function fullyRestoreActorDamageState(actor) {
+  if (!actor?.isOwner) return undefined;
+  return queueActorDamageMutation(actor.uuid, async freshActor => {
+    if (!freshActor?.isOwner) return undefined;
+
+    await deleteDamageStateItems(freshActor);
+    await deleteDamageSystemEffects(freshActor);
+
+    const updates = buildFullDamageRestoreUpdate(freshActor);
+    if (Object.keys(updates).length) await freshActor.update(updates, { falloutMawSkipDamageStatusSync: true });
+    await queueActorDamageStatusSync(freshActor);
+    return freshActor;
+  });
+}
+
+export function getDamageCostModifierState(actor) {
+  return {
+    movement: collectCostModifier(actor, COST_EFFECT_KEYS.movement),
+    action: collectCostModifier(actor, COST_EFFECT_KEYS.action)
+  };
+}
+
+export function prepareActorDamageUpdate(actor, changes = {}) {
+  return preventCriticalLimbHealthRecovery(actor, changes);
+}
+
+export function handleActorDamageUpdate(actor, changes = {}, options = {}) {
+  if (options?.falloutMawSkipDamageStatusSync) return undefined;
+  if (!isDamageStatusUpdateRelevant(changes)) return undefined;
+  return queueActorDamageStatusSync(actor);
+}
+
+export function applyDamageCostModifier(baseCost = 0, modifier = {}) {
+  let cost = Math.max(0, Number(baseCost) || 0);
+  const hasOverride = modifier?.override !== null && modifier?.override !== undefined && modifier?.override !== "";
+  const override = hasOverride ? Number(modifier.override) : NaN;
+  if (Number.isFinite(override)) cost = override;
+  const multiplier = Number(modifier?.multiplier);
+  cost *= Number.isFinite(multiplier) ? multiplier : 1;
+  cost += Number(modifier?.add) || 0;
+  return Math.max(0, Math.ceil(cost));
+}
+
+function preventCriticalLimbHealthRecovery(actor, changes = {}) {
+  const healthValuePath = "system.resources.health.value";
+  if (!hasUpdatePath(changes, healthValuePath)) return false;
+  if (!hasDestroyedCriticalLimbAfterUpdate(actor, changes)) return false;
+
+  const current = toInteger(actor?.system?.resources?.health?.value);
+  const requested = toInteger(getUpdatePath(changes, healthValuePath));
+  if (requested <= current) return false;
+
+  setUpdatePath(changes, healthValuePath, current);
+  return true;
+}
+
+function hasDestroyedCriticalLimbAfterUpdate(actor, changes = {}) {
+  for (const [key, limb] of Object.entries(actor?.system?.limbs ?? {})) {
+    const critical = Boolean(getUpdatePath(changes, `system.limbs.${key}.critical`) ?? limb?.critical);
+    if (!critical) continue;
+
+    const min = toInteger(getUpdatePath(changes, `system.limbs.${key}.min`) ?? limb?.min);
+    const value = toInteger(getUpdatePath(changes, `system.limbs.${key}.value`) ?? limb?.value);
+    if (value <= min) return true;
+  }
+  return false;
+}
+
+function isDamageStatusUpdateRelevant(changes = {}) {
+  return hasUpdatePath(changes, "system.resources.health.value")
+    || updateTouchesPath(changes, "system.limbs");
+}
+
+function queueActorDamageStatusSync(actor) {
+  const actorUuid = actor?.uuid;
+  if (!actorUuid) return undefined;
+
+  const previous = actorDamageStatusSyncQueue.get(actorUuid) ?? Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(async () => {
+      const freshActor = fromUuidSync(actorUuid) ?? actor;
+      await synchronizeActorVitalStatuses(freshActor);
+    })
+    .finally(() => {
+      if (actorDamageStatusSyncQueue.get(actorUuid) === next) actorDamageStatusSyncQueue.delete(actorUuid);
+    });
+  actorDamageStatusSyncQueue.set(actorUuid, next);
+  return next;
+}
+
+function queueActorDamageMutation(actorOrUuid, operation) {
+  const actorUuid = typeof actorOrUuid === "string" ? actorOrUuid : actorOrUuid?.uuid;
+  if (!actorUuid) return operation(null);
+
+  const previous = actorDamageMutationQueue.get(actorUuid) ?? Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(() => operation(fromUuidSync(actorUuid)))
+    .finally(() => {
+      if (actorDamageMutationQueue.get(actorUuid) === next) actorDamageMutationQueue.delete(actorUuid);
+    });
+  actorDamageMutationQueue.set(actorUuid, next);
+  return next;
+}
+
+async function applyDestroyedLimbConsequences(actor, limbKeys = []) {
+  return applyDestroyedLimbConsequencesNow(actor, limbKeys);
+}
+
+async function applyDestroyedLimbConsequencesNow(actor, limbKeys = []) {
+  const destroyed = new Set();
+  for (const limbKey of Array.from(new Set(limbKeys.filter(Boolean)))) {
+    if (!isLimbDestroyed(actor, limbKey)) continue;
+    destroyed.add(limbKey);
+    await deleteLimbTraumas(actor, limbKey);
+    await deleteLimbLossEffects(actor, limbKey);
+    if (!isCriticalLimb(actor, limbKey)) await createLimbLossEffect(actor, limbKey);
+  }
+  return destroyed;
+}
+
+async function deleteLimbTraumas(actor, limbKey = "") {
+  const ids = getActorTraumas(actor)
+    .filter(item => item.system?.limbKey === limbKey)
+    .map(item => item.id)
+    .filter(Boolean);
+  await deleteActorItems(actor, ids);
+}
+
+async function deleteLimbLossEffects(actor, limbKey = "") {
+  const ids = Array.from(actor?.effects ?? [])
+    .filter(effect => {
+      const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
+      return data?.kind === LIMB_LOSS_EFFECT_KIND && data?.limbKey === limbKey;
+    })
+    .map(effect => effect.id)
+    .filter(Boolean);
+  await deleteActorActiveEffects(actor, ids);
+}
+
+async function deleteDamageStateItems(actor) {
+  const ids = Array.from(actor?.items ?? [])
+    .filter(item => item.type === "trauma" || item.type === "disease")
+    .map(item => item.id)
+    .filter(Boolean);
+  await deleteActorItems(actor, ids);
+}
+
+async function deleteDamageSystemEffects(actor) {
+  const ids = Array.from(actor?.effects ?? [])
+    .filter(effect => isDamageSystemEffect(effect))
+    .map(effect => effect.id)
+    .filter(Boolean);
+  await deleteActorActiveEffects(actor, ids);
+}
+
+async function deleteActorItems(actor, itemIds = []) {
+  const ids = Array.from(new Set(itemIds)).filter(id => actor?.items?.has(id));
+  if (!ids.length) return [];
+  return actor.deleteEmbeddedDocuments("Item", ids.filter(id => actor.items?.has(id)));
+}
+
+async function deleteActorActiveEffects(actor, effectIds = []) {
+  const ids = Array.from(new Set(effectIds)).filter(id => actor?.effects?.has(id));
+  if (!ids.length) return [];
+  try {
+    return await actor.deleteEmbeddedDocuments("ActiveEffect", ids.filter(id => actor.effects?.has(id)));
+  } catch (error) {
+    if (!isMissingDocumentError(error)) throw error;
+    return [];
+  }
+}
+
+function isDamageSystemEffect(effect) {
+  if (!effect) return false;
+  const flags = effect.flags?.[SYSTEM_ID] ?? effect.flags?.[TRAUMA_FLAG_SCOPE] ?? {};
+  return Boolean(flags[DAMAGE_EFFECT_FLAG_KEY] || flags.traumaItem || flags.diseaseItem);
+}
+
+function buildFullDamageRestoreUpdate(actor) {
+  const updates = {};
+  for (const [key, limb] of Object.entries(actor?.system?.limbs ?? {})) {
+    const max = Math.max(0, toInteger(limb?.max));
+    updates[`system.limbs.${key}.value`] = max;
+    updates[`system.limbs.${key}.damageAccumulation`] = {};
+  }
+  for (const [key, resource] of Object.entries(actor?.system?.resources ?? {})) {
+    const max = Math.max(Math.max(0, toInteger(resource?.min)), toInteger(resource?.max));
+    updates[`system.resources.${key}.value`] = max;
+    updates[`system.resources.${key}.spent`] = 0;
+  }
+  for (const [key, need] of Object.entries(actor?.system?.needs ?? {})) {
+    const min = Math.max(0, toInteger(need?.min));
+    updates[`system.needs.${key}.value`] = min;
+    updates[`system.needs.${key}.spent`] = 0;
+  }
+  return updates;
+}
+
+async function createLimbLossEffect(actor, limbKey = "") {
+  const limb = actor?.system?.limbs?.[limbKey];
+  const effectEntries = getLimbLossEffects(actor, limbKey).map(prepareEffectChange).filter(change => change.key);
+  const { changes, statuses } = splitSpecialEffectChanges(effectEntries);
+  if (!changes.length && !statuses.length) return [];
+
+  const label = String(limb?.label ?? limbKey);
+  return actor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: `${label}: отсутствует`,
+    img: "icons/svg/blood.svg",
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    statuses,
+    flags: {
+      [TRAUMA_FLAG_SCOPE]: {
+        kind: "active",
+        [DAMAGE_EFFECT_FLAG_KEY]: {
+          kind: LIMB_LOSS_EFFECT_KIND,
+          limbKey
+        }
+      }
+    },
+    system: { changes }
+  }]);
+}
+
+function getLimbLossEffects(actor, limbKey = "") {
+  const limbSettings = getActorLimbSettings(actor, limbKey);
+  if (limbSettings?.critical) return [];
+  return Array.isArray(limbSettings?.lossEffects)
+    ? limbSettings.lossEffects.map(effect => ({ ...effect }))
+    : [];
+}
+
+function getActorLimbSettings(actor, limbKey = "") {
+  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId);
+  return race?.limbs?.find(limb => limb.key === limbKey) ?? actor?.system?.limbs?.[limbKey] ?? null;
+}
+
+function isCriticalLimb(actor, limbKey = "") {
+  const actorLimb = actor?.system?.limbs?.[limbKey];
+  if (actorLimb && "critical" in actorLimb) return Boolean(actorLimb.critical);
+  return Boolean(getActorLimbSettings(actor, limbKey)?.critical);
+}
+
+function hasDestroyedCriticalLimb(actor) {
+  return Object.keys(actor?.system?.limbs ?? {})
+    .some(limbKey => isCriticalLimb(actor, limbKey) && isLimbDestroyed(actor, limbKey));
+}
+
+function isHealingBlocked(actor) {
+  return Boolean(actor?.statuses?.has?.(STATUS_EFFECTS.dead) || hasDestroyedCriticalLimb(actor));
+}
+
+async function synchronizeActorVitalStatuses(actor) {
+  if (!actor?.toggleStatusEffect) return;
+  const dead = hasDestroyedCriticalLimb(actor);
+  const health = actor.health;
+  const unconscious = !dead && health && toInteger(health.value) <= toInteger(health.min);
+  await setActorStatus(actor, STATUS_EFFECTS.dead, dead);
+  await setActorStatus(actor, STATUS_EFFECTS.unconscious, Boolean(unconscious));
+}
+
+async function setActorStatus(actor, statusId = "", active = false) {
+  if (!statusId || !actor?.toggleStatusEffect) return;
+  if (actor.statuses?.has?.(statusId) === active) return;
+  try {
+    await actor.toggleStatusEffect(statusId, { active });
+  } catch (error) {
+    if (!isMissingDocumentError(error)) throw error;
+    const freshActor = fromUuidSync(actor.uuid) ?? actor;
+    if (freshActor.statuses?.has?.(statusId) === active) return;
+    if (!active) return;
+    await freshActor.toggleStatusEffect(statusId, { active });
+  }
+}
+
+function splitSpecialEffectChanges(effectChanges = []) {
+  const statuses = [];
+  const changes = [];
+  for (const change of effectChanges) {
+    const statusId = getStatusEffectId(change.key);
+    if (statusId) {
+      if (isTruthyEffectValue(change.value) && !statuses.includes(statusId)) statuses.push(statusId);
+      continue;
+    }
+    changes.push(change);
+  }
+  return { changes, statuses };
+}
+
+function getStatusEffectId(key = "") {
+  const normalized = String(key ?? "").trim();
+  if (!normalized.startsWith("status.")) return "";
+  return normalized.slice("status.".length).trim();
+}
+
+function isTruthyEffectValue(value) {
+  const text = String(value ?? "").trim().toLowerCase();
+  return !["", "0", "false", "no", "off"].includes(text);
+}
+
+function collectCostModifier(actor, key = "") {
+  const modifier = { add: 0, multiplier: 1, override: null };
+  for (const effect of getActorApplicableEffects(actor)) {
+    if (effect.disabled) continue;
+    for (const change of effect.system?.changes ?? effect.changes ?? []) {
+      if (String(change.key ?? "").trim() !== key) continue;
+      const value = Number(change.value);
+      if (!Number.isFinite(value)) continue;
+      if (change.type === "override") modifier.override = value;
+      else if (change.type === "multiply") modifier.multiplier *= value;
+      else modifier.add += value;
+    }
+  }
+  return modifier;
+}
+
+function getActorApplicableEffects(actor) {
+  if (typeof actor?.allApplicableEffects === "function") return Array.from(actor.allApplicableEffects());
+  return Array.from(actor?.effects ?? []);
 }
 
 export function getResourceLimitState(actor) {
@@ -724,36 +1109,39 @@ async function processTimedDamageEffects(worldTime, deltaTime) {
   await processRegionPeriodicDamage(now, elapsed);
   for (const actor of getLoadedActors()) {
     if (!actor?.isOwner) continue;
-    const entries = [];
-    const effectUpdates = [];
-    const effectDeleteIds = new Set();
-    const lockedEffectUuids = new Set();
+    await queueActorDamageMutation(actor.uuid, async freshActor => {
+      if (!freshActor?.isOwner) return;
+      const entries = [];
+      const effectUpdates = [];
+      const effectDeleteIds = new Set();
+      const lockedEffectUuids = new Set();
 
-    for (const effect of Array.from(actor.effects ?? [])) {
-      const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
-      if (effect.disabled || data?.kind !== "periodicDamage") continue;
-      if (!effect.uuid || processingPeriodicEffectUuids.has(effect.uuid)) continue;
-      const tickResult = collectPeriodicDamageEffectTicks(effect, data, now);
-      if (!tickResult.entries.length && !tickResult.update && !tickResult.deleteEffectId) continue;
-      processingPeriodicEffectUuids.add(effect.uuid);
-      lockedEffectUuids.add(effect.uuid);
-      entries.push(...tickResult.entries);
-      if (tickResult.update) effectUpdates.push(tickResult.update);
-      if (tickResult.deleteEffectId) effectDeleteIds.add(tickResult.deleteEffectId);
-    }
-
-    try {
-      for (const update of effectUpdates) {
-        if (effectDeleteIds.has(update.effectId)) continue;
-        const effect = actor.effects?.get(update.effectId);
-        if (!effect) continue;
-        await updatePeriodicEffect(effect, update.data);
+      for (const effect of Array.from(freshActor.effects ?? [])) {
+        const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
+        if (effect.disabled || data?.kind !== "periodicDamage") continue;
+        if (!effect.uuid || processingPeriodicEffectUuids.has(effect.uuid)) continue;
+        const tickResult = collectPeriodicDamageEffectTicks(effect, data, now);
+        if (!tickResult.entries.length && !tickResult.update && !tickResult.deleteEffectId) continue;
+        processingPeriodicEffectUuids.add(effect.uuid);
+        lockedEffectUuids.add(effect.uuid);
+        entries.push(...tickResult.entries);
+        if (tickResult.update) effectUpdates.push(tickResult.update);
+        if (tickResult.deleteEffectId) effectDeleteIds.add(tickResult.deleteEffectId);
       }
-      await deletePeriodicEffects(actor, Array.from(effectDeleteIds));
-      if (entries.length) await applyPeriodicDamageBatch(actor, entries);
-    } finally {
-      for (const uuid of lockedEffectUuids) processingPeriodicEffectUuids.delete(uuid);
-    }
+
+      try {
+        for (const update of effectUpdates) {
+          if (effectDeleteIds.has(update.effectId)) continue;
+          const effect = freshActor.effects?.get(update.effectId);
+          if (!effect) continue;
+          await updatePeriodicEffect(effect, update.data);
+        }
+        await deletePeriodicEffects(freshActor, Array.from(effectDeleteIds));
+        if (entries.length) await applyPeriodicDamageBatch(freshActor, entries);
+      } finally {
+        for (const uuid of lockedEffectUuids) processingPeriodicEffectUuids.delete(uuid);
+      }
+    });
   }
 }
 
@@ -1067,13 +1455,7 @@ async function updatePeriodicEffect(effect, updateData = {}) {
 }
 
 async function deletePeriodicEffects(actor, effectIds = []) {
-  const ids = Array.from(new Set(effectIds)).filter(id => actor.effects?.has(id));
-  if (!ids.length) return;
-  try {
-    await actor.deleteEmbeddedDocuments("ActiveEffect", ids.filter(id => actor.effects?.has(id)));
-  } catch (error) {
-    if (!isMissingDocumentError(error)) throw error;
-  }
+  await deleteActorActiveEffects(actor, effectIds);
 }
 
 function isMissingDocumentError(error) {
@@ -1154,7 +1536,9 @@ async function applyDamageEntriesBatch(actor, entries = []) {
     updateData[`system.limbs.${limbKey}.damageAccumulation`] = normalizeDamageAccumulation(accumulation);
   }
 
-  if (Object.keys(updateData).length) await actor.update(updateData);
+  if (Object.keys(updateData).length) await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
+  const destroyedLimbKeys = await applyDestroyedLimbConsequences(actor, Array.from(limbStates.keys()));
+  await queueActorDamageStatusSync(actor);
   const healthDeltasByType = buildBatchDamageNumberEntries(normalizedEntries, actualHealthDelta, requestedHealthDamage);
   const resourceLimitEntries = buildBatchDamageNumberEntries(
     normalizedEntries.filter(entry => entry.processDamageTypeSettings !== false),
@@ -1168,6 +1552,7 @@ async function applyDamageEntriesBatch(actor, entries = []) {
   const createdTraumas = [];
   for (const [limbKey, state] of limbStates) {
     if (!state.totalDelta) continue;
+    if (destroyedLimbKeys.has(limbKey)) continue;
     const [damageTypeKey, latestDamage] = Object.entries(state.damageByType)
       .sort((left, right) => right[1] - left[1])
       .at(0) ?? ["untyped", state.totalDelta];
@@ -1678,12 +2063,13 @@ function getTokenAnimationOrigin(token) {
 function normalizeDamageRequest(request = {}) {
   const amount = Math.max(0, Math.floor(Number(request.amount) || 0));
   const limbKey = String(request.limbKey ?? "").trim();
+  const mode = request.mode === MODE_HEALING || request.mode === "heal" ? MODE_HEALING : MODE_DAMAGE;
   return {
     actorUuid: String(request.actorUuid ?? request.actor?.uuid ?? "").trim(),
     limbKey,
     amount,
-    damageTypeKey: String(request.damageTypeKey ?? "").trim(),
-    mode: request.mode === MODE_HEALING || request.mode === "heal" ? MODE_HEALING : MODE_DAMAGE,
+    damageTypeKey: mode === MODE_HEALING ? HEALING_DAMAGE_TYPE_KEY : String(request.damageTypeKey ?? "").trim(),
+    mode,
     scope: normalizeScope(request.scope, limbKey),
     applyMitigation: request.applyMitigation !== false,
     processDamageTypeSettings: request.processDamageTypeSettings !== false,
@@ -1712,6 +2098,25 @@ function getResponsibleGM() {
     .filter(user => user.active && user.isGM)
     .sort((left, right) => left.id.localeCompare(right.id))
     .at(0) ?? null;
+}
+
+function hasUpdatePath(object, path) {
+  return foundry.utils.hasProperty(object, path) || Object.hasOwn(object ?? {}, path);
+}
+
+function getUpdatePath(object, path) {
+  if (foundry.utils.hasProperty(object, path)) return foundry.utils.getProperty(object, path);
+  return object?.[path];
+}
+
+function setUpdatePath(object, path, value) {
+  if (Object.hasOwn(object ?? {}, path)) object[path] = value;
+  else foundry.utils.setProperty(object, path, value);
+}
+
+function updateTouchesPath(object, path) {
+  if (foundry.utils.hasProperty(object, path)) return true;
+  return Object.keys(object ?? {}).some(key => key === path || key.startsWith(`${path}.`));
 }
 
 function selectRandomDamageLimbKey(actor) {
@@ -2204,9 +2609,10 @@ function buildTraumaItemData(actor, { limb, limbKey, limbSetId, stage, damageTyp
   const limbLabel = String(limb.label ?? limbKey);
   const name = profileEntry.profile.name || `${limbLabel}: ${damageType?.label ?? profileEntry.damageTypeKey}`;
   const img = profileEntry.profile.img || "icons/svg/blood.svg";
-  const effectChanges = (profileEntry.profile.effects ?? [])
+  const effectEntries = (profileEntry.profile.effects ?? [])
     .map(prepareEffectChange)
     .filter(change => change.key);
+  const { changes: activeEffectChanges, statuses } = splitSpecialEffectChanges(effectEntries);
 
   return {
     type: "trauma",
@@ -2237,7 +2643,7 @@ function buildTraumaItemData(actor, { limb, limbKey, limbSetId, stage, damageTyp
         thresholdPercent
       }],
       generated: true,
-      effects: effectChanges
+      effects: effectEntries
     },
     flags: {
       [TRAUMA_FLAG_SCOPE]: {
@@ -2255,8 +2661,9 @@ function buildTraumaItemData(actor, { limb, limbKey, limbSetId, stage, damageTyp
       img,
       transfer: true,
       disabled: false,
+      statuses,
       system: {
-        changes: effectChanges
+        changes: activeEffectChanges
       },
       flags: {
         [TRAUMA_FLAG_SCOPE]: {
@@ -2309,8 +2716,10 @@ function mergeEscalatedTraumaData({ finalTraumaData, previousTraumas = [], inter
   foundry.utils.setProperty(finalTraumaData, "system.sources", sources);
   if (combinedDamageTypes.key) foundry.utils.setProperty(finalTraumaData, "system.damageTypeKey", combinedDamageTypes.key);
 
+  const { changes: activeEffectChanges, statuses } = splitSpecialEffectChanges(effectChanges);
   for (const effect of finalTraumaData.effects ?? []) {
-    foundry.utils.setProperty(effect, "system.changes", effectChanges);
+    foundry.utils.setProperty(effect, "system.changes", activeEffectChanges);
+    foundry.utils.setProperty(effect, "statuses", statuses);
   }
   return finalTraumaData;
 }

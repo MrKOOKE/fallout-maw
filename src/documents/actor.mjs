@@ -16,7 +16,7 @@ import {
 } from "../settings/accessors.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
 import { getItemActorLoadWeight, getItemContainerParentId } from "../utils/inventory-containers.mjs";
-import { requestDamageApplication } from "../combat/damage-hub.mjs";
+import { handleActorDamageUpdate, prepareActorDamageUpdate, requestDamageApplication } from "../combat/damage-hub.mjs";
 import { migrateActorData } from "../migrations/documents.mjs";
 
 export class FalloutMaWActor extends Actor {
@@ -65,8 +65,15 @@ export class FalloutMaWActor extends Actor {
   async _preUpdate(changes, options, user) {
     if ((await super._preUpdate(changes, options, user)) === false) return false;
     if (!["character", "npc"].includes(this.type)) return undefined;
+    prepareActorDamageUpdate(this, changes);
     syncTrackedResourceValueUpdates(this, changes);
     return undefined;
+  }
+
+  _onUpdate(changes, options, userId) {
+    super._onUpdate(changes, options, userId);
+    if (!["character", "npc"].includes(this.type)) return;
+    handleActorDamageUpdate(this, changes, options);
   }
 
   prepareDerivedData() {

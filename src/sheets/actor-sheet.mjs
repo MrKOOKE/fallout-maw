@@ -37,7 +37,7 @@ import {
   prepareResearchesForDisplay
 } from "../research/index.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { getActorTraumas, getLimbHealingCap } from "../combat/damage-hub.mjs";
+import { getActorTraumas, getLimbHealingCap, isLimbDestroyed } from "../combat/damage-hub.mjs";
 import { openLimbDamageDialog } from "../apps/limb-damage-dialog.mjs";
 import {
   prepareIndicatorEntry as prepareDisplayIndicatorEntry,
@@ -458,6 +458,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   static #onSelectLimb(event, target) {
+    if (!game.user?.isGM) return undefined;
     event.preventDefault();
     const limbKey = target.dataset.limbKey ?? "";
     if (!limbKey || (limbKey === this.#activeLimbKey)) return undefined;
@@ -466,6 +467,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   static #onOpenLimbControl(event, target) {
+    if (!game.user?.isGM) return undefined;
     event.preventDefault();
     const limbKey = target.closest("[data-limb-key]")?.dataset.limbKey ?? target.dataset.limbKey ?? "";
     if (!limbKey) return undefined;
@@ -539,6 +541,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const card = target?.closest("[data-limb-control-card]");
     if (!card || !this.element?.contains(card)) return;
     if (target.closest("input, select, textarea, [data-action='deleteTrauma']")) return;
+    if (!game.user?.isGM) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -3854,12 +3857,14 @@ function humanizeEffectPath(path) {
 }
 
 function getEffectTypeLabel(type) {
+  if (type === "multiply") return game.i18n.localize("FALLOUTMAW.Effects.ChangeMultiply");
   return game.i18n.localize(type === "override" ? "FALLOUTMAW.Effects.ChangeOverride" : "FALLOUTMAW.Effects.ChangeAdd");
 }
 
 function formatEffectChangeValue(type, value) {
   const text = String(value ?? "").trim() || "0";
   if (type === "override") return `= ${text}`;
+  if (type === "multiply") return `x ${text}`;
   if (/^-/.test(text) || /^\+/.test(text)) return text;
   return `+${text}`;
 }
@@ -3941,6 +3946,14 @@ function prepareEffectCategories(effects = []) {
 }
 
 function prepareLimbDisplayData(actor, limbKey, limb = {}) {
+  if (isLimbDestroyed(actor, limbKey)) {
+    return {
+      ...limb,
+      displayValue: "Отсутствует",
+      displayMax: "",
+      stateLabel: "Отсутствует"
+    };
+  }
   const max = getLimbHealingCap(actor, limbKey);
   if (max >= toInteger(limb?.max)) return limb;
   return {

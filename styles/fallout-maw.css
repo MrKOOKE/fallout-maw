@@ -5270,7 +5270,7 @@ label.fallout-maw-mitigation-cell {
   --fallout-maw-actor-plastic-text: #2b2a21;
   --fallout-maw-actor-edge-dark: rgba(0, 0, 0, 0.88);
   --fallout-maw-actor-edge-light: rgba(219, 219, 186, 0.26);
-  min-width: 760px;
+  min-width: 1120px;
   background:
     linear-gradient(180deg, rgba(53, 56, 47, 0.98), rgba(14, 16, 13, 0.98));
   border: 3px solid #171912;
@@ -5334,8 +5334,9 @@ label.fallout-maw-mitigation-cell {
     inset 1px 1px 0 rgba(219, 219, 186, 0.16),
     inset -1px -1px 0 rgba(0, 0, 0, 0.88);
   color: var(--fallout-maw-actor-text);
-  overflow: hidden;
-  padding: 0.9rem;
+  max-height: calc(100vh - 4rem);
+  overflow: auto;
+  padding: 0.85rem 1rem;
 }
 
 .application.fallout-maw-medicine-dialog .window-resize-handle,
@@ -5346,7 +5347,12 @@ label.fallout-maw-mitigation-cell {
 .application.fallout-maw-medicine-dialog .fallout-maw-medicine-body {
   color: var(--fallout-maw-actor-text);
   direction: ltr;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
   font-family: var(--fallout-maw-actor-ui-font);
+  max-height: none;
+  overflow: visible;
   text-align: left;
 }
 
@@ -5361,6 +5367,21 @@ label.fallout-maw-mitigation-cell {
   padding: 0.85rem;
 }
 
+.fallout-maw-dialog-toolbar {
+  align-items: center;
+  border-bottom: 1px solid var(--fallout-maw-actor-border);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(18rem, 1fr) auto;
+  padding: 0 0 0.7rem;
+}
+
+.fallout-maw-repair-toolbar {
+  grid-template-columns: minmax(18rem, 1fr) auto minmax(14rem, 1fr);
+}
+
+.fallout-maw-dialog-toolbar h2,
+.fallout-maw-dialog-toolbar strong,
 .fallout-maw-medicine-panel-header h2,
 .fallout-maw-medicine-panel-header strong {
   color: var(--fallout-maw-actor-text-strong);
@@ -5368,142 +5389,173 @@ label.fallout-maw-mitigation-cell {
   margin: 0;
 }
 
-.fallout-maw-medicine-trauma-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
+.fallout-maw-dialog-toolbar strong {
+  justify-self: end;
 }
 
-.fallout-maw-medicine-trauma-card {
-  background: rgba(6, 8, 6, 0.68);
-  border: 1px solid var(--fallout-maw-actor-border-soft);
-  padding: 0.55rem;
-}
-
-.fallout-maw-medicine-trauma-card.active {
-  border-color: var(--fallout-maw-actor-border);
-}
-
-.fallout-maw-medicine-trauma-summary {
-  align-items: center;
-  display: grid;
-  gap: 0.8rem;
-  grid-template-columns: minmax(16rem, 1.2fr) minmax(18rem, 1.35fr) max-content;
-}
-
-.fallout-maw-medicine-trauma-identity,
-.fallout-maw-medicine-instrument-name {
-  align-items: center;
-  display: grid;
-  gap: 0.65rem;
-  grid-template-columns: 3.25rem minmax(0, 1fr);
-  min-width: 0;
-}
-
-.fallout-maw-medicine-trauma-identity img,
-.fallout-maw-medicine-instrument-name img {
-  height: 3rem;
-  object-fit: contain;
-  width: 3rem;
-}
-
-.fallout-maw-medicine-trauma-title {
-  min-width: 0;
-}
-
-.fallout-maw-medicine-trauma-title h3 {
-  color: var(--fallout-maw-actor-text-strong);
-  font-size: 1.12rem;
-  line-height: 1.15;
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.fallout-maw-medicine-trauma-title span,
-.fallout-maw-medicine-trauma-stats span {
-  color: var(--fallout-maw-actor-text);
-}
-
-.fallout-maw-medicine-trauma-title span {
-  display: block;
-}
-
-.fallout-maw-medicine-trauma-stats {
-  display: grid;
-  gap: 0.25rem 1rem;
-  grid-template-columns: repeat(2, minmax(9rem, 1fr));
-}
-
-.fallout-maw-medicine-trauma-stats strong {
-  color: var(--fallout-maw-actor-text-strong);
-}
-
-.application.fallout-maw-medicine-dialog .fallout-maw-medicine-trauma-summary > button {
-  min-height: 2.25rem;
-  min-width: 6rem;
-  white-space: nowrap;
-}
-
-.fallout-maw-medicine-instrument-table {
-  border-top: 1px solid var(--fallout-maw-actor-border);
-  display: grid;
-  gap: 0.25rem;
-  margin-top: 0.55rem;
-  padding-top: 0.55rem;
-}
-
-.fallout-maw-medicine-instrument-row {
-  align-items: center;
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: minmax(15rem, 1fr) 4.5rem 8rem minmax(9rem, 0.75fr);
-  min-height: 3.4rem;
-  text-align: left;
-}
-
-.fallout-maw-medicine-instrument-header {
-  color: var(--fallout-maw-actor-text-strong);
-  font-weight: 700;
-  padding: 0 0.55rem;
-}
-
-.application.fallout-maw-medicine-dialog button.fallout-maw-medicine-instrument-row {
+.application.fallout-maw-medicine-dialog .fallout-maw-dialog-primary-action {
   background: rgba(8, 9, 8, 0.88);
   border: 1px solid var(--fallout-maw-actor-border);
   border-radius: 0;
-  color: var(--fallout-maw-actor-text);
-  display: grid;
-  justify-items: stretch;
-  padding: 0.45rem 0.55rem;
-  text-align: left;
-  width: 100%;
-}
-
-.application.fallout-maw-medicine-dialog button.fallout-maw-medicine-instrument-row:hover,
-.application.fallout-maw-medicine-dialog button.fallout-maw-medicine-instrument-row:focus-visible {
-  background: rgba(220, 197, 110, 0.12);
   color: var(--fallout-maw-actor-text-strong);
+  justify-self: center;
+  min-height: 2.2rem;
+  min-width: 13rem;
+  padding: 0.35rem 0.85rem;
 }
 
-.fallout-maw-medicine-instrument-name span {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.application.fallout-maw-medicine-dialog .fallout-maw-dialog-primary-action:hover,
+.application.fallout-maw-medicine-dialog .fallout-maw-dialog-primary-action:focus-visible {
+  background: rgba(220, 197, 110, 0.12);
+}
+
+.fallout-maw-action-table,
+.fallout-maw-action-subtable {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+.fallout-maw-action-table {
+  background: rgba(6, 8, 6, 0.68);
+  border: 1px solid var(--fallout-maw-actor-border-soft);
+}
+
+.fallout-maw-action-subtable {
+  border-top: 1px solid var(--fallout-maw-actor-border);
+}
+
+.fallout-maw-action-row {
+  align-items: stretch;
+  display: grid;
+  gap: 0;
+  min-height: 3.45rem;
+  min-width: 0;
+}
+
+.fallout-maw-action-row--target {
+  grid-template-columns:
+    4.25rem
+    minmax(21rem, 1.8fr)
+    minmax(8rem, 0.65fr)
+    minmax(4.5rem, 0.35fr)
+    minmax(6.5rem, 0.45fr)
+    minmax(8rem, 0.7fr)
+    minmax(7rem, 0.5fr);
+}
+
+.fallout-maw-action-row--tool {
+  grid-template-columns:
+    4.25rem
+    minmax(21rem, 1.8fr)
+    minmax(4.5rem, 0.35fr)
+    minmax(7.5rem, 0.6fr)
+    minmax(7rem, 0.55fr)
+    minmax(8rem, 0.7fr)
+    minmax(7rem, 0.5fr);
+}
+
+.fallout-maw-action-row + .fallout-maw-action-row,
+.fallout-maw-action-subtable + .fallout-maw-action-row {
+  border-top: 1px solid var(--fallout-maw-actor-border-soft);
+}
+
+.fallout-maw-action-row--head {
+  background: rgba(220, 197, 110, 0.08);
+  min-height: 2.35rem;
+}
+
+.fallout-maw-action-row.is-active {
+  background: rgba(220, 197, 110, 0.12);
+}
+
+.fallout-maw-action-row.is-disabled {
+  opacity: 0.55;
+}
+
+.fallout-maw-action-cell {
+  align-items: center;
+  border-left: 1px solid var(--fallout-maw-actor-border-soft);
+  box-sizing: border-box;
+  color: var(--fallout-maw-actor-text-strong);
+  display: flex;
+  font-style: normal;
+  font-weight: 700;
+  justify-content: flex-start;
+  line-height: 1.15;
+  min-width: 0;
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  white-space: normal;
+}
+
+.fallout-maw-action-cell:first-child {
+  border-left: 0;
+}
+
+.fallout-maw-action-cell--image {
+  justify-content: center;
+  padding: 0.3rem;
+}
+
+.fallout-maw-action-cell--image img {
+  height: 2.8rem;
+  object-fit: contain;
+  width: 2.8rem;
+}
+
+.fallout-maw-action-cell--name {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.15rem;
+  justify-content: center;
+}
+
+.fallout-maw-action-cell--name strong,
+.fallout-maw-action-cell--name small {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.fallout-maw-action-cell--name strong {
+  color: var(--fallout-maw-actor-text-strong);
+  font-size: 1rem;
+}
+
+.fallout-maw-action-cell--name small {
+  color: var(--fallout-maw-actor-text);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.fallout-maw-action-cell em,
+.fallout-maw-action-cell small {
+  font-style: normal;
+}
+
+.fallout-maw-action-cell--button {
+  justify-content: center;
+  padding: 0.35rem 0.45rem;
+}
+
+.application.fallout-maw-medicine-dialog .fallout-maw-action-cell--button > button {
+  background: rgba(8, 9, 8, 0.88);
+  border: 1px solid var(--fallout-maw-actor-border);
+  border-radius: 0;
+  color: var(--fallout-maw-actor-text-strong);
+  min-height: 2.15rem;
+  min-width: 6.25rem;
+  padding: 0.3rem 0.65rem;
+  text-align: center;
   white-space: nowrap;
 }
 
-.fallout-maw-medicine-instrument-row strong,
-.fallout-maw-medicine-instrument-row em,
-.fallout-maw-medicine-instrument-row small {
-  color: var(--fallout-maw-actor-text-strong);
-  font-style: normal;
-  font-weight: 700;
-  text-align: left;
-}
-
-.fallout-maw-medicine-instrument-row.disabled {
-  opacity: 0.55;
+.application.fallout-maw-medicine-dialog .fallout-maw-action-cell--button > button:hover,
+.application.fallout-maw-medicine-dialog .fallout-maw-action-cell--button > button:focus-visible {
+  background: rgba(220, 197, 110, 0.12);
 }
 
 .fallout-maw-split-number-field > div {
@@ -6102,15 +6154,18 @@ label.fallout-maw-mitigation-cell {
 }
 
 .fallout-maw-medicine-tabs {
+  border-bottom: 1px solid var(--fallout-maw-actor-border-soft);
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 0.75rem;
+  margin: -0.15rem 0 0;
+  padding-bottom: 0.55rem;
 }
 
 .fallout-maw-medicine-tabs button {
   background: transparent;
-  border: 1px solid var(--color-border-light-primary, rgba(255, 255, 255, 0.25));
-  border-radius: 4px;
+  border: 1px solid var(--fallout-maw-actor-border-soft);
+  border-radius: 0;
+  color: var(--fallout-maw-actor-text);
   font-weight: 700;
   padding: 0.35rem 0.75rem;
 }

@@ -4,11 +4,22 @@
       <h2>{{localize "FALLOUTMAW.Settings.HUD.Title"}}</h2>
     </header>
 
-    <label class="fallout-maw-token-action-hud-scale-field">
-      <span>{{localize "FALLOUTMAW.Settings.HUD.Scale"}}</span>
-      <strong data-token-action-hud-scale-output>{{scale}}%</strong>
-      <input type="range" name="scale" value="{{scale}}" min="{{min}}" max="{{max}}" step="1" data-token-action-hud-scale>
-    </label>
+    <div class="fallout-maw-list-grid one-column">
+      <label>
+        <span>Путь изображения снижения урона</span>
+        <div class="fallout-maw-inline-controls">
+          <input type="text" name="damageReductionIcon" value="{{damageReductionIcon}}">
+          <button type="button" data-action="browseDamageReductionImage" title="{{localize 'FALLOUTMAW.Common.Image'}}"><i class="fa-solid fa-image"></i></button>
+        </div>
+      </label>
+      <label>
+        <span>Путь изображения полного блокирования урона</span>
+        <div class="fallout-maw-inline-controls">
+          <input type="text" name="damageBlockedIcon" value="{{damageBlockedIcon}}">
+          <button type="button" data-action="browseDamageBlockedImage" title="{{localize 'FALLOUTMAW.Common.Image'}}"><i class="fa-solid fa-image"></i></button>
+        </div>
+      </label>
+    </div>
   </section>
 
   <footer class="sheet-footer flexrow">

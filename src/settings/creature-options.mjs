@@ -34,7 +34,10 @@ export function createRaceDefaults(characteristics = [], damageTypes = []) {
 }
 
 export function createDefaultLimbs() {
-  return DEFAULT_LIMBS.map(entry => ({ ...entry }));
+  return DEFAULT_LIMBS.map(entry => ({
+    ...entry,
+    lossEffects: cloneLimbLossEffects(entry.lossEffects)
+  }));
 }
 
 export function createDefaultEquipmentSlots() {
@@ -137,15 +140,39 @@ function normalizeLimbs(limbs) {
       if (!key || usedKeys.has(key)) return null;
       usedKeys.add(key);
       const defaultLimb = defaultsByKey.get(key);
+      const critical = parseBoolean(limb?.critical, Boolean(defaultLimb?.critical));
       return {
         key,
         label: String(limb?.label ?? limb?.name ?? "").trim() || defaultLimb?.label || localize("FALLOUTMAW.Common.Untitled"),
         stateMax: Math.max(0, toInteger(limb?.stateMax ?? defaultLimb?.stateMax ?? 100)),
         damageMultiplier: toDecimal(limb?.damageMultiplier ?? defaultLimb?.damageMultiplier ?? 1, 1),
-        aimedDifficultyPercent: toInteger(limb?.aimedDifficultyPercent ?? defaultLimb?.aimedDifficultyPercent ?? 0)
+        aimedDifficultyPercent: toInteger(limb?.aimedDifficultyPercent ?? defaultLimb?.aimedDifficultyPercent ?? 0),
+        critical,
+        lossEffects: critical
+          ? []
+          : normalizeLimbLossEffects(limb?.lossEffects ?? defaultLimb?.lossEffects)
       };
     })
     .filter(Boolean);
+}
+
+function normalizeLimbLossEffects(value = []) {
+  const effects = Array.isArray(value) ? value : Object.values(value ?? {});
+  return effects
+    .map(effect => ({
+      key: String(effect?.key ?? "").trim(),
+      type: ["add", "multiply", "override"].includes(String(effect?.type ?? "")) ? String(effect.type) : "add",
+      value: String(effect?.value ?? "0"),
+      phase: String(effect?.phase || "initial"),
+      priority: effect?.priority === "" || effect?.priority === null || effect?.priority === undefined
+        ? null
+        : toInteger(effect.priority)
+    }))
+    .filter(effect => effect.key);
+}
+
+function cloneLimbLossEffects(value = []) {
+  return normalizeLimbLossEffects(value).map(effect => ({ ...effect }));
 }
 
 function normalizeEquipmentSlots(slots) {
@@ -207,4 +234,11 @@ function normalizeConfigKey(value, fallback) {
 function toDecimal(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function parseBoolean(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (Array.isArray(value)) return value.some(entry => parseBoolean(entry, false));
+  if (typeof value === "boolean") return value;
+  return ["true", "1", "yes", "on"].includes(String(value).trim().toLowerCase());
 }

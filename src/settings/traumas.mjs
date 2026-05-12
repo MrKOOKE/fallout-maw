@@ -166,7 +166,7 @@ function normalizeTraumaEffects(value = []) {
   return effects
     .map(effect => ({
       key: String(effect?.key ?? "").trim(),
-      type: ["add", "override"].includes(String(effect?.type ?? "")) ? String(effect.type) : "add",
+      type: ["add", "multiply", "override"].includes(String(effect?.type ?? "")) ? String(effect.type) : "add",
       value: String(effect?.value ?? "0"),
       phase: String(effect?.phase || "initial"),
       priority: effect?.priority === "" || effect?.priority === null || effect?.priority === undefined

@@ -109,7 +109,9 @@ export function createLimbSilhouetteHud(silhouette, limbs = {}) {
     const displayValue = limb?.displayValue ?? toInteger(limb.value);
     const displayMax = limb?.displayMax ?? toInteger(limb.max);
     const popoverRows = Array.isArray(limb?.popoverRows) ? limb.popoverRows : [];
-    const title = `${label}: ${displayValue} / ${displayMax}`;
+    const title = displayMax === "" || displayMax === null || displayMax === undefined
+      ? `${label}: ${displayValue}`
+      : `${label}: ${displayValue} / ${displayMax}`;
     const path = pathsToCompoundSvgData(part.paths);
     if (!path) return [];
     return [{

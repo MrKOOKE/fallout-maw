@@ -1,7 +1,7 @@
 import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./attack-animations.mjs";
-import { estimateDamageApplication, getLimbHealingCap, requestDamageApplications } from "./damage-hub.mjs";
+import { applyDamageCostModifier, estimateDamageApplication, getDamageCostModifierState, getLimbHealingCap, requestDamageApplications } from "./damage-hub.mjs";
 import { createThrownItemTile } from "../canvas/thrown-items.mjs";
 import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageSourceFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction } from "../utils/item-functions.mjs";
 import { getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings } from "../settings/accessors.mjs";
@@ -466,7 +466,6 @@ class WeaponAttackController {
     const target = this.selectedTarget;
     const geometry = deserializeGeometry(this.lockedGeometry) ?? this.geometry;
     const centerTrajectory = buildTrajectoryThroughPoint(this.token, geometry, getTokenAimPoint(target));
-    const blockerCount = getAimedTargetBlockers(this.token, target, centerTrajectory).length;
     const pelletCount = getWeaponPelletCount(this.weapon, this.weaponFunctionId);
     const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), Array(pelletCount).fill(1));
     const trajectories = buildAimedAttackTrajectories(this.token, geometry, centerTrajectory, pelletCount);
@@ -478,18 +477,11 @@ class WeaponAttackController {
       : null;
     const damageRequests = [];
 
-    const aimedResult = await this.resolveAimedAttackTrajectory(target, trajectories[0], limbKey, {
-      blockerBonus: getAimedTargetBlockerBonus(blockerCount),
-      baseDamage: pelletDamages[0] ?? 0,
-      checkBatch
-    });
-    damageRequests.push(...aimedResult.damageRequests);
-
-    for (const [index, trajectory] of trajectories.slice(1).entries()) {
-      const result = await this.resolveAttackTrajectory({
+    for (const [index, trajectory] of trajectories.entries()) {
+      const result = await this.resolveAimedPelletTrajectory(target, trajectory, limbKey, {
+        forceAimed: index === 0,
         checkBatch,
-        trajectory,
-        baseDamage: pelletDamages[index + 1] ?? 0
+        baseDamage: pelletDamages[index] ?? 0
       });
       damageRequests.push(...result.damageRequests);
     }
@@ -497,7 +489,7 @@ class WeaponAttackController {
     const spentQuantityItemData = getSpentQuantityItemData(this.weapon, attackCount, this.weaponFunctionId);
     await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
     await spendWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId);
-    await (checkBatch ?? aimedResult.checkBatch)?.publish({ forceBatch: false });
+    await checkBatch?.publish({ forceBatch: false });
     await playWeaponAttackAnimations({
       weapon: this.weapon,
       weaponFunctionId: this.weaponFunctionId,
@@ -516,6 +508,23 @@ class WeaponAttackController {
     this.processing = false;
     if (isDeadTarget(target)) this.unlockAimedTarget();
     this.refresh(true);
+  }
+
+  async resolveAimedPelletTrajectory(selectedTarget, trajectory, limbKey, { forceAimed = false, baseDamage = null, checkBatch = null } = {}) {
+    if (forceAimed || doesTrajectoryHitTarget(this.token, selectedTarget, trajectory)) {
+      const blockerCount = getAimedTargetBlockers(this.token, selectedTarget, trajectory).length;
+      return this.resolveAimedAttackTrajectory(selectedTarget, trajectory, limbKey, {
+        blockerBonus: getAimedTargetBlockerBonus(blockerCount),
+        baseDamage,
+        checkBatch
+      });
+    }
+
+    return this.resolveAttackTrajectory({
+      checkBatch,
+      trajectory,
+      baseDamage
+    });
   }
 
   async performDirectedAttack(directionKey) {
@@ -1986,14 +1995,15 @@ function isCombatActionPointSpendingActive() {
   return Boolean(game.combat);
 }
 
-function getWeaponActionPointCost(weapon, actionKey, weaponFunctionId = "") {
+function getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId = "") {
   const value = Number(getWeaponAttackData(weapon, weaponFunctionId)?.[actionKey]?.actionPointCost);
-  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : DEFAULT_WEAPON_ACTION_POINT_COST;
+  const baseCost = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : DEFAULT_WEAPON_ACTION_POINT_COST;
+  return applyDamageCostModifier(baseCost, getDamageCostModifierState(actor).action);
 }
 
 function hasRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "") {
   if (!isCombatActionPointSpendingActive()) return true;
-  const cost = getWeaponActionPointCost(weapon, actionKey, weaponFunctionId);
+  const cost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId);
   if (cost <= 0) return true;
 
   const state = getCombatMovementResourceState(actor);
@@ -2006,7 +2016,7 @@ function hasRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
 
 async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "") {
   if (!isCombatActionPointSpendingActive()) return;
-  const cost = getWeaponActionPointCost(weapon, actionKey, weaponFunctionId);
+  const cost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId);
   if (cost <= 0) return;
 
   const state = getCombatMovementResourceState(actor);
@@ -2517,6 +2527,11 @@ function getTrajectoryTargetEntries(attackerToken, trajectory) {
     .map(target => ({ target, hit: getTokenTrajectoryHit(target, trajectory) }))
     .filter(entry => entry.hit && hasLineOfSight(attackerToken, entry.hit.point, trajectory.origin))
     .sort((left, right) => left.hit.distance - right.hit.distance);
+}
+
+function doesTrajectoryHitTarget(attackerToken, target, trajectory) {
+  if (!target || !trajectory) return false;
+  return getTrajectoryTargetEntries(attackerToken, trajectory).some(entry => entry.target === target);
 }
 
 function updateTrajectoryEnd(trajectory, point) {
@@ -3844,8 +3859,6 @@ function isDeadTarget(token) {
 
 function isDeadActor(actor) {
   if (!actor) return true;
-  const health = actor.system?.resources?.health;
-  if (health && toInteger(health.value) <= toInteger(health.min)) return true;
   const defeatedStatus = CONFIG.specialStatusEffects.DEFEATED;
   return Boolean((defeatedStatus && actor.statuses?.has(defeatedStatus)) || actor.statuses?.has("dead"));
 }

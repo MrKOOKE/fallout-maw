@@ -60,7 +60,7 @@
         <div class="fallout-maw-token-hud-meter-card" data-limb-control-card data-limb-key="{{key}}" role="button" tabindex="0">
           <div class="fallout-maw-token-hud-meter-header">
             <span>{{label}}</span>
-            <strong>{{value}} / {{max}}</strong>
+            <strong>{{valueLabel}}{{#if maxLabel}} / {{maxLabel}}{{/if}}</strong>
           </div>
           <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
             <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>

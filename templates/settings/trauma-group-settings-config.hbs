@@ -86,6 +86,7 @@
                   <input type="text" data-trauma-effect-key data-effect-key-autocomplete value="{{key}}">
                   <select data-trauma-effect-type>
                     <option value="add" {{#if addSelected}}selected{{/if}}>{{localize "FALLOUTMAW.Effects.ChangeAdd"}}</option>
+                    <option value="multiply" {{#if multiplySelected}}selected{{/if}}>Процент</option>
                     <option value="override" {{#if overrideSelected}}selected{{/if}}>{{localize "FALLOUTMAW.Effects.ChangeOverride"}}</option>
                   </select>
                   <input type="text" data-trauma-effect-value value="{{value}}">

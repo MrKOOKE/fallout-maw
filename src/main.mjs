@@ -25,6 +25,7 @@ import { registerDamageSocket } from "./combat/damage-hub.mjs";
 import { registerAttackAnimationSocket } from "./combat/attack-animations.mjs";
 import { registerWeaponAttackSocket } from "./combat/weapon-attack-controller.mjs";
 import { registerMedicineSocket } from "./apps/medicine-dialog.mjs";
+import { registerRepairSocket } from "./apps/repair-dialog.mjs";
 import { registerNeedThresholdHooks } from "./needs/need-thresholds.mjs";
 import { registerSystemSheets } from "./sheets/index.mjs";
 import { FalloutMaWDragDrop } from "./utils/drag-drop.mjs";
@@ -73,6 +74,7 @@ Hooks.once("ready", async () => {
   registerWeaponAttackSocket();
   registerThrownItemHooks();
   registerMedicineSocket();
+  registerRepairSocket();
   registerTokenActionHudSocket();
   refreshTokenActionHudControlButton();
   syncTokenActionHud();

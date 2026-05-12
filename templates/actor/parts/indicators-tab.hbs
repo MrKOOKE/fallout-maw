@@ -7,8 +7,8 @@
         <div class="fallout-maw-resource-card-header">
           <span class="fallout-maw-resource-name">{{label}}</span>
           <span class="fallout-maw-resource-value">
-            {{#if ../freeEdit}}<input type="number" name="{{inputName}}" value="{{value}}" min="{{min}}" max="{{max}}">{{else}}<strong>{{value}}</strong>{{/if}}
-            <span class="fallout-maw-resource-max">/ {{max}}</span>
+            {{#if ../freeEdit}}<input type="number" name="{{inputName}}" value="{{value}}" min="{{min}}" max="{{max}}">{{else}}<strong>{{valueLabel}}</strong>{{/if}}
+            {{#if maxLabel}}<span class="fallout-maw-resource-max">/ {{maxLabel}}</span>{{/if}}
           </span>
         </div>
         <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}">

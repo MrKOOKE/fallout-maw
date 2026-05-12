@@ -21,7 +21,7 @@ import { ResourceSettingsConfig } from "../apps/resource-settings-config.mjs";
 import { SkillFormulasConfig } from "../apps/skill-formulas-config.mjs";
 import { SystemActionSettingsConfig } from "../apps/system-action-settings-config.mjs";
 import { ToolSettingsConfig } from "../apps/tool-settings-config.mjs";
-import { TokenActionHudSettings } from "../apps/token-action-hud.mjs";
+import { TokenActionHudSettings } from "../apps/token-action-hud-settings-config.mjs";
 import { TraumaSettingsConfig } from "../apps/trauma-settings-config.mjs";
 import { refreshPreparedActors, syncSettingsIntoSystemConfig } from "./accessors.mjs";
 import {

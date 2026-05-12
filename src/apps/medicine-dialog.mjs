@@ -65,7 +65,7 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
     id: "fallout-maw-medicine-dialog",
     classes: ["fallout-maw", "fallout-maw-medicine-dialog"],
     position: {
-      width: 860,
+      width: 1290,
       height: "auto"
     },
     window: {
@@ -268,11 +268,17 @@ async function getMedicineTargetContext(targetToken) {
 function prepareTargetTreatments(treatments, instruments, activeTreatmentId) {
   return treatments.map(treatment => {
     const requiredClass = String(treatment.healingToolClass ?? "D");
-    const availableInstruments = instruments.map(instrument => ({
-      ...instrument,
-      classAccepted: isToolClassAccepted(instrument.toolClass, requiredClass),
-      usable: isToolClassAccepted(instrument.toolClass, requiredClass) && instrument.supplyValue > 0 && instrument.requirementMet
-    }));
+    const availableInstruments = instruments.map(instrument => {
+      const classAccepted = isToolClassAccepted(instrument.toolClass, requiredClass);
+      const efficiency = calculateBaseEfficiency(instrument.toolClass, requiredClass);
+      return {
+        ...instrument,
+        efficiency,
+        efficiencyLabel: `${formatNumber(efficiency)}%`,
+        classAccepted,
+        usable: classAccepted && instrument.supplyValue > 0 && instrument.requirementMet
+      };
+    });
     return {
       ...treatment,
       active: treatment.id === activeTreatmentId,
@@ -478,8 +484,7 @@ function validateInstrumentForTreatment(actor, trauma, tool) {
 
 function calculateTreatmentResult({ trauma, tool, availableCharges, progressForCheck, missingProgress, resultKey }) {
   const targetProgress = Math.min(progressForCheck, missingProgress);
-  const classBonus = Math.max(0, toToolClassRank(tool.toolClass) - toToolClassRank(trauma.healingToolClass)) * 50;
-  let efficiency = 100 + classBonus;
+  let efficiency = calculateBaseEfficiency(tool.toolClass, trauma.healingToolClass);
   if (resultKey === "criticalSuccess") efficiency *= 1.5;
   else if (resultKey === "failure") efficiency *= 0.5;
 
@@ -771,6 +776,10 @@ function getTreatmentResultLabel(resultKey) {
 
 function formatNumber(value) {
   return Number(value).toFixed(Number.isInteger(value) ? 0 : 1);
+}
+
+function calculateBaseEfficiency(actualClass, requiredClass) {
+  return 100 + Math.max(0, toToolClassRank(actualClass) - toToolClassRank(requiredClass)) * 50;
 }
 
 function getHealingSkillLabel(skillKey) {

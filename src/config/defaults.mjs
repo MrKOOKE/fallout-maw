@@ -94,15 +94,27 @@ export const DEFAULT_PROFICIENCY_INFLUENCE = Object.freeze({
   criticalDamage: Object.freeze({ min: 0, max: 0 })
 });
 
+const DEFAULT_MISSING_LIMB_PHYSICAL_EFFECTS = Object.freeze([
+  Object.freeze({ key: "system.characteristics.strength", type: "multiply", value: "0.8", phase: "initial", priority: null }),
+  Object.freeze({ key: "system.characteristics.dexterity", type: "multiply", value: "0.8", phase: "initial", priority: null })
+]);
+
+const DEFAULT_MISSING_LEG_EFFECTS = Object.freeze([
+  ...DEFAULT_MISSING_LIMB_PHYSICAL_EFFECTS,
+  Object.freeze({ key: "system.costs.movement", type: "add", value: "1", phase: "initial", priority: null })
+]);
+
 export const DEFAULT_LIMBS = Object.freeze([
-  { key: "head", label: "Голова", stateMax: 100, damageMultiplier: 1.3, aimedDifficultyPercent: 30 },
-  { key: "eyes", label: "Глаза", stateMax: 100, damageMultiplier: 1.4, aimedDifficultyPercent: 50 },
-  { key: "torso", label: "Туловище", stateMax: 100, damageMultiplier: 1, aimedDifficultyPercent: 0 },
-  { key: "groin", label: "Пах", stateMax: 100, damageMultiplier: 1.2, aimedDifficultyPercent: 20 },
-  { key: "leftArm", label: "Левая рука", stateMax: 100, damageMultiplier: 0.8, aimedDifficultyPercent: 20 },
-  { key: "rightArm", label: "Правая рука", stateMax: 100, damageMultiplier: 0.8, aimedDifficultyPercent: 20 },
-  { key: "leftLeg", label: "Левая нога", stateMax: 100, damageMultiplier: 0.8, aimedDifficultyPercent: 20 },
-  { key: "rightLeg", label: "Правая нога", stateMax: 100, damageMultiplier: 0.8, aimedDifficultyPercent: 20 }
+  { key: "head", label: "Голова", stateMax: 100, damageMultiplier: 1.3, aimedDifficultyPercent: 30, critical: true, lossEffects: [] },
+  { key: "eyes", label: "Глаза", stateMax: 100, damageMultiplier: 1.4, aimedDifficultyPercent: 50, critical: false, lossEffects: Object.freeze([
+    Object.freeze({ key: "status.blind", type: "add", value: "1", phase: "initial", priority: null })
+  ]) },
+  { key: "torso", label: "Туловище", stateMax: 100, damageMultiplier: 1, aimedDifficultyPercent: 0, critical: true, lossEffects: [] },
+  { key: "groin", label: "Пах", stateMax: 100, damageMultiplier: 1.2, aimedDifficultyPercent: 20, critical: false, lossEffects: [] },
+  { key: "leftArm", label: "Левая рука", stateMax: 100, damageMultiplier: 0.8, aimedDifficultyPercent: 20, critical: false, lossEffects: DEFAULT_MISSING_LIMB_PHYSICAL_EFFECTS },
+  { key: "rightArm", label: "Правая рука", stateMax: 100, damageMultiplier: 0.8, aimedDifficultyPercent: 20, critical: false, lossEffects: DEFAULT_MISSING_LIMB_PHYSICAL_EFFECTS },
+  { key: "leftLeg", label: "Левая нога", stateMax: 100, damageMultiplier: 0.8, aimedDifficultyPercent: 20, critical: false, lossEffects: DEFAULT_MISSING_LEG_EFFECTS },
+  { key: "rightLeg", label: "Правая нога", stateMax: 100, damageMultiplier: 0.8, aimedDifficultyPercent: 20, critical: false, lossEffects: DEFAULT_MISSING_LEG_EFFECTS }
 ]);
 
 export const DEFAULT_EQUIPMENT_SLOTS = Object.freeze([

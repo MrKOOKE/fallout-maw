@@ -1,5 +1,5 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
-import { getResourceLimitState } from "./damage-hub.mjs";
+import { applyDamageCostModifier, getDamageCostModifierState, getResourceLimitState } from "./damage-hub.mjs";
 
 export const MOVEMENT_RESOURCE_KEY = "movementPoints";
 export const ACTION_RESOURCE_KEY = "actionPoints";
@@ -97,16 +97,20 @@ export function createCombatMovementResourcePreview(tokenDocument, cost = 0) {
   };
 }
 
-export function getCombatMovementCost(movement) {
+export function getCombatMovementCost(movement, actor = null) {
   const rawCost = Number(movement?.passed?.cost ?? movement?.cost ?? 0);
   if (!Number.isFinite(rawCost) || rawCost <= 0) return 0;
-  return Math.ceil(rawCost);
+  return applyCombatMovementCostModifier(actor, Math.ceil(rawCost));
 }
 
-export function getCombatMovementAffordabilityCost(movement) {
+export function getCombatMovementAffordabilityCost(movement, actor = null) {
   const cost = getMovementSectionCost(movement?.passed) + getMovementSectionCost(movement?.pending);
-  if (cost > 0) return Math.ceil(cost);
-  return getCombatMovementCost(movement);
+  if (cost > 0) return applyCombatMovementCostModifier(actor, Math.ceil(cost));
+  return getCombatMovementCost(movement, actor);
+}
+
+export function applyCombatMovementCostModifier(actor, cost = 0) {
+  return applyDamageCostModifier(cost, getDamageCostModifierState(actor).movement);
 }
 
 export function isCombatMovementTracked(tokenDocument) {
@@ -123,7 +127,7 @@ function preventUnaffordableCombatMovement(tokenDocument, movement) {
   if (movement?.method === "undo") return true;
   if (isGMDebugMovementBypassActive()) return true;
 
-  const cost = getCombatMovementAffordabilityCost(movement);
+  const cost = getCombatMovementAffordabilityCost(movement, tokenDocument.actor);
   if (cost <= 0) return true;
 
   const state = getCombatMovementResourceState(tokenDocument.actor);
@@ -142,7 +146,7 @@ async function spendCombatMovementResources(tokenDocument, movement, _operation,
   if (movement?.method === "undo") return restoreLastMovementResourceSpending(tokenDocument);
   if (isGMDebugMovementBypassActive()) return;
 
-  const cost = getCombatMovementCost(movement);
+  const cost = getCombatMovementCost(movement, tokenDocument.actor);
   if (cost <= 0) return;
 
   await waitForMovementAnimation(movement);
