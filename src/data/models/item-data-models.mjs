@@ -61,6 +61,7 @@ export class GearDataModel extends BaseItemDataModel {
           enabled: new BooleanField({ required: true, initial: false }),
           mode: new StringField({ required: true, blank: false, initial: "defense" }),
           finalReduction: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+          limbSetIds: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), { required: true, initial: [] }),
           entries: new TypedObjectField(
             new TypedObjectField(damageMitigationEntryField(), { required: true, initial: {} }),
             { required: true, initial: {} }

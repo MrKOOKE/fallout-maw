@@ -370,19 +370,45 @@
         <input type="number" name="system.functions.damageMitigation.finalReduction" value="{{system.functions.damageMitigation.finalReduction}}" min="0" step="1">
       </label>
     </div>
-    <div class="fallout-maw-mitigation-matrix" style="--fallout-maw-mitigation-columns: {{damageMitigationTable.columns}};">
-      <div class="fallout-maw-mitigation-cell fallout-maw-grid-header">{{localize "FALLOUTMAW.Settings.DamageTypes.Title"}}</div>
-      {{#each damageMitigationTable.limbs}}
-      <div class="fallout-maw-mitigation-cell fallout-maw-grid-header">{{label}}</div>
+    <div class="fallout-maw-hidden-controls">
+      {{#each damageMitigationLimbSetChoices}}
+      {{#if selected}}
+      <input type="hidden" name="system.functions.damageMitigation.limbSetIds.{{selectedIndex}}" value="{{id}}">
+      {{/if}}
       {{/each}}
-      {{#each damageMitigationTable.rows}}
-      <div class="fallout-maw-mitigation-cell fallout-maw-mitigation-damage-type">{{damageTypeLabel}}</div>
-      {{#each cells}}
-      <label class="fallout-maw-mitigation-cell" data-mitigation-cell data-mitigation-row="{{rowIndex}}" data-mitigation-column="{{columnIndex}}">
-        <input type="number" name="system.functions.damageMitigation.entries.{{limbKey}}.{{damageTypeKey}}.value" value="{{value}}" step="1">
-        <button type="button" class="fallout-maw-mitigation-fill-handle" data-mitigation-fill-handle title="{{localize 'FALLOUTMAW.Item.FillMitigationValues'}}" aria-label="{{localize 'FALLOUTMAW.Item.FillMitigationValues'}}"><i class="fa-solid fa-grip"></i></button>
-      </label>
+    </div>
+    <div class="fallout-maw-mitigation-limb-set-list">
+      {{#each damageMitigationLimbSetChoices}}
+      <button type="button" class="fallout-maw-mitigation-limb-set-choice {{#if selected}}active{{/if}}" data-mitigation-limb-set-choice="{{id}}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}">
+        <strong>{{raceNames}}</strong>
+        <span>{{limbsShortLabel}}</span>
+      </button>
       {{/each}}
+    </div>
+    <div class="fallout-maw-mitigation-table-list">
+      {{#each damageMitigationTables}}
+      <section class="fallout-maw-mitigation-table">
+        <h3>{{raceNames}}</h3>
+        <div class="fallout-maw-mitigation-matrix" style="--fallout-maw-mitigation-columns: {{columns}};">
+          <div class="fallout-maw-mitigation-cell fallout-maw-grid-header"></div>
+          {{#each limbs}}
+          <div class="fallout-maw-mitigation-cell fallout-maw-grid-header" title="{{label}}">{{shortLabel}}</div>
+          {{/each}}
+          {{#each rows}}
+          <div class="fallout-maw-mitigation-cell fallout-maw-mitigation-damage-type" title="{{damageTypeLabel}}">
+            <span class="fallout-maw-damage-type-icon" style="--fallout-maw-damage-type-color: {{damageTypeColor}};">
+              <img src="{{damageTypeImg}}" alt="{{damageTypeLabel}}">
+            </span>
+          </div>
+          {{#each cells}}
+          <label class="fallout-maw-mitigation-cell" data-mitigation-cell data-mitigation-group="{{../../id}}" data-mitigation-row="{{rowIndex}}" data-mitigation-column="{{columnIndex}}">
+            <input type="number" name="system.functions.damageMitigation.entries.{{limbKey}}.{{damageTypeKey}}.value" value="{{value}}" step="1">
+            <button type="button" class="fallout-maw-mitigation-fill-handle" data-mitigation-fill-handle title="{{localize 'FALLOUTMAW.Item.FillMitigationValues'}}" aria-label="{{localize 'FALLOUTMAW.Item.FillMitigationValues'}}"><i class="fa-solid fa-grip"></i></button>
+          </label>
+          {{/each}}
+          {{/each}}
+        </div>
+      </section>
       {{/each}}
     </div>
   </section>

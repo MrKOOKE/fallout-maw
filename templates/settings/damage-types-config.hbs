@@ -11,6 +11,7 @@
     <div class="fallout-maw-settings-table damage-type-settings">
       <div class="fallout-maw-settings-row fallout-maw-grid-header">
         <span></span>
+        <span>{{localize "FALLOUTMAW.Common.Image"}}</span>
         <span>{{localize "FALLOUTMAW.Common.Key"}}</span>
         <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
         <span>{{localize "FALLOUTMAW.Common.Color"}}</span>
@@ -20,6 +21,16 @@
       {{#each damageTypes}}
       <div class="fallout-maw-settings-row" data-damage-type-row>
         <button type="button" class="fallout-maw-drag-handle" data-drag-handle title="{{localize 'FALLOUTMAW.Common.Reorder'}}"><i class="fa-solid fa-grip-lines"></i></button>
+        <button type="button" class="fallout-maw-damage-type-preview-button" data-action="browseDamageTypeImage" title="{{label}}">
+          <span class="fallout-maw-damage-type-preview" style="--fallout-maw-damage-type-color: {{color}};">
+            {{#if hasImage}}
+            <img src="{{img}}" alt="{{label}}">
+            {{else}}
+            <span class="fallout-maw-damage-type-preview-placeholder"></span>
+            {{/if}}
+          </span>
+        </button>
+        <input type="hidden" data-field="img" value="{{img}}">
         <input type="text" data-field="key" value="{{key}}">
         <input type="text" data-field="label" value="{{label}}">
         <input type="color" data-field="color" value="{{color}}">

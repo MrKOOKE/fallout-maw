@@ -2,6 +2,11 @@ import { TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { groupRaceEquipmentSlotsBySet, groupRaceWeaponSlotsBySet } from "../utils/equipment-slots.mjs";
 import {
+  buildDamageMitigationLimbSetChoices,
+  buildDamageMitigationTables,
+  getSelectedDamageMitigationLimbSetIds
+} from "../utils/damage-mitigation-display.mjs";
+import {
   ITEM_FUNCTIONS,
   createToolFunctionKey,
   getDamageSourceFunction,
@@ -234,7 +239,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         }))
       })),
       damageMitigationModeChoices: buildDamageMitigationModeChoices(item),
-      damageMitigationTable: buildDamageMitigationTable(item, creatureOptions, damageTypeSettings),
+      damageMitigationLimbSetChoices: buildDamageMitigationLimbSetChoices(item, creatureOptions),
+      damageMitigationTables: buildDamageMitigationTables(item, creatureOptions, damageTypeSettings),
       totalWeight: item.totalWeight
     }, { inplace: false });
   }
@@ -373,6 +379,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-mitigation-fill-handle]").forEach(handle => {
       handle.addEventListener("pointerdown", event => this.#onMitigationFillStart(event));
+    });
+    this.element?.querySelectorAll("[data-mitigation-limb-set-choice]").forEach(button => {
+      button.addEventListener("click", event => this.#onMitigationLimbSetChoice(event));
     });
   }
 
@@ -1166,6 +1175,26 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return picker.render({ force: true });
   }
 
+  #onMitigationLimbSetChoice(event) {
+    event.preventDefault();
+    const groupId = String(event.currentTarget?.dataset?.mitigationLimbSetChoice ?? "");
+    if (!groupId) return undefined;
+
+    const choices = buildDamageMitigationLimbSetChoices(this.item, getCreatureOptions());
+    const validIds = new Set(choices.map(choice => choice.id));
+    if (!validIds.has(groupId)) return undefined;
+
+    const selected = new Set(getSelectedDamageMitigationLimbSetIds(this.item, choices));
+    if (selected.has(groupId)) {
+      if (selected.size <= 1) return undefined;
+      selected.delete(groupId);
+    } else {
+      selected.add(groupId);
+    }
+
+    return this.item.update({ "system.functions.damageMitigation.limbSetIds": Array.from(selected) });
+  }
+
   #onMitigationFillStart(event) {
     if (event.button !== 0) return;
 
@@ -1185,6 +1214,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       pointerId: event.pointerId,
       value: input.value,
       origin: {
+        group: String(originCell.dataset.mitigationGroup ?? ""),
         row: Number(originCell.dataset.mitigationRow) || 0,
         column: Number(originCell.dataset.mitigationColumn) || 0
       },
@@ -1229,6 +1259,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         return {
           cell,
           input,
+          group: String(cell.dataset.mitigationGroup ?? ""),
           row: Number(cell.dataset.mitigationRow) || 0,
           column: Number(cell.dataset.mitigationColumn) || 0,
           originalValue: input.value
@@ -1242,9 +1273,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (!drag) return;
 
     const target = {
+      group: String(targetCell.dataset.mitigationGroup ?? ""),
       row: Number(targetCell.dataset.mitigationRow) || 0,
       column: Number(targetCell.dataset.mitigationColumn) || 0
     };
+    if (target.group !== drag.origin.group) return;
     const minRow = Math.min(drag.origin.row, target.row);
     const maxRow = Math.max(drag.origin.row, target.row);
     const minColumn = Math.min(drag.origin.column, target.column);
@@ -1252,7 +1285,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const nextActiveInputs = new Set();
 
     for (const entry of drag.cells) {
-      const inRectangle = entry.row >= minRow
+      const inRectangle = entry.group === drag.origin.group
+        && entry.row >= minRow
         && entry.row <= maxRow
         && entry.column >= minColumn
         && entry.column <= maxColumn;
@@ -2397,37 +2431,3 @@ function buildDamageMitigationModeChoices(item) {
   ];
 }
 
-function buildDamageMitigationTable(item, creatureOptions, damageTypeSettings) {
-  const limbs = getUniqueLimbs(creatureOptions);
-  const entries = item.system?.functions?.damageMitigation?.entries ?? {};
-
-  return {
-    limbs,
-    columns: Math.max(1, limbs.length),
-    rows: damageTypeSettings.map((damageType, rowIndex) => ({
-      damageTypeKey: damageType.key,
-      damageTypeLabel: damageType.label,
-      cells: limbs.map((limb, columnIndex) => ({
-        limbKey: limb.key,
-        damageTypeKey: damageType.key,
-        rowIndex,
-        columnIndex,
-        value: Number(entries?.[limb.key]?.[damageType.key]?.value) || 0
-      }))
-    }))
-  };
-}
-
-function getUniqueLimbs(creatureOptions) {
-  const limbs = new Map();
-  for (const race of creatureOptions?.races ?? []) {
-    for (const limb of race.limbs ?? []) {
-      if (limbs.has(limb.key)) continue;
-      limbs.set(limb.key, {
-        key: limb.key,
-        label: String(limb.label ?? limb.name ?? limb.key)
-      });
-    }
-  }
-  return Array.from(limbs.values());
-}

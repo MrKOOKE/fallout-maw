@@ -28,6 +28,7 @@ import {
   getWeaponSlotRequirementSize,
   isContainerWeaponSetKey
 } from "../utils/equipment-slots.mjs";
+import { buildDamageMitigationTables } from "../utils/damage-mitigation-display.mjs";
   import {
     completeResearch,
     deleteResearchWithConfirm,
@@ -2538,7 +2539,7 @@ function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex 
   const sections = [
     buildContainerTooltipSection(item, actor),
     buildConditionTooltipSection(item),
-    buildDamageMitigationTooltipSection(item),
+    buildDamageMitigationTooltipSection(item, actor),
     buildDamageSourceTooltipSection(item),
     buildModuleTooltipSection(item),
     ...buildWeaponTooltipSections(item, activeWeaponIndex, { actor, baseMode }),
@@ -2575,7 +2576,7 @@ function buildConditionTooltipSection(item) {
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionCondition"), rows);
 }
 
-function buildDamageMitigationTooltipSection(item) {
+function buildDamageMitigationTooltipSection(item, actor) {
   if (!hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation)) return "";
   const mitigation = getDamageMitigationFunction(item);
   const mode = String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense);
@@ -2587,9 +2588,55 @@ function buildDamageMitigationTooltipSection(item) {
   ];
   const finalReduction = Math.max(0, toInteger(mitigation.finalReduction));
   if (finalReduction) rows.push([game.i18n.localize("FALLOUTMAW.Item.FinalDamageReduction"), finalReduction]);
-  const coverage = summarizeMitigationCoverage(mitigation.entries);
-  if (coverage) rows.push(["Покрытие", coverage]);
-  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionDamageMitigation"), rows);
+  const tableHTML = renderDamageMitigationTooltipTables(buildDamageMitigationTables(item, getCreatureOptions(), getDamageTypeSettings(), {
+    actorRaceId: actor?.system?.creature?.raceId ?? ""
+  }));
+  const content = `${renderTooltipFunctionGrid(rows)}${tableHTML}`;
+  if (!content.trim()) return "";
+  return `
+    <section class="function-section damage-mitigation-tooltip-section">
+      <h4>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.FunctionDamageMitigation"))}</h4>
+      ${content}
+    </section>
+  `;
+}
+
+function renderDamageMitigationTooltipTables(tables = []) {
+  if (!tables.length) return "";
+  return `
+    <div class="tooltip-mitigation-table-list">
+      ${tables.map(table => `
+        <section class="tooltip-mitigation-table">
+          ${tables.length > 1 ? `<h5>${escapeHTML(table.raceNames)}</h5>` : ""}
+          <div class="tooltip-mitigation-matrix" style="--fallout-maw-mitigation-columns: ${Math.max(1, toInteger(table.columns))};">
+            <span class="tooltip-mitigation-cell tooltip-mitigation-header"></span>
+            ${table.limbs.map(limb => `
+              <span class="tooltip-mitigation-cell tooltip-mitigation-header" title="${escapeAttribute(limb.label)}">${escapeHTML(limb.shortLabel)}</span>
+            `).join("")}
+            ${table.rows.map(row => `
+              <span class="tooltip-mitigation-cell tooltip-mitigation-damage-type" title="${escapeAttribute(row.damageTypeLabel)}">
+                ${renderDamageTypeIcon(row)}
+              </span>
+              ${row.cells.map(cell => `
+                <span class="tooltip-mitigation-cell tooltip-mitigation-value">${escapeHTML(formatNumber(cell.value))}</span>
+              `).join("")}
+            `).join("")}
+          </div>
+        </section>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderDamageTypeIcon(damageType = {}) {
+  const img = String(damageType.damageTypeImg ?? "").trim() || "icons/svg/d20-grey.svg";
+  const label = String(damageType.damageTypeLabel ?? "");
+  const color = String(damageType.damageTypeColor ?? "").trim() || "#f0d48a";
+  return `
+    <span class="fallout-maw-damage-type-icon" style="--fallout-maw-damage-type-color: ${escapeAttribute(color)};">
+      <img src="${escapeAttribute(img)}" alt="${escapeAttribute(label)}">
+    </span>
+  `;
 }
 
 function buildDamageSourceTooltipSection(item) {

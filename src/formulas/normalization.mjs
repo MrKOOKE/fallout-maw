@@ -459,12 +459,17 @@ function normalizeDamageTypeEntry(entry = {}) {
     key,
     label: String(entry?.label ?? entry?.name ?? "").trim(),
     color: normalizeHexColor(entry?.color, getDefaultDamageTypeColor(key)),
+    img: normalizeImagePath(entry?.img ?? getDefaultDamageTypeImage(key)),
     settings: normalizeDamageTypeBehavior(entry?.settings, key)
   };
 }
 
 function getDefaultDamageTypeColor(key = "") {
   return DEFAULT_DAMAGE_TYPES.find(entry => entry.key === key)?.color ?? DEFAULT_TRACK_COLOR;
+}
+
+function getDefaultDamageTypeImage(key = "") {
+  return DEFAULT_DAMAGE_TYPES.find(entry => entry.key === key)?.img ?? FALLBACK_ICON;
 }
 
 function normalizeDamageTypeBehavior(settings = {}, key = "") {

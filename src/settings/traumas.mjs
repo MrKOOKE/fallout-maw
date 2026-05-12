@@ -37,7 +37,7 @@ export function getUniqueLimbSets(creatureOptions = {}) {
   const groups = new Map();
 
   for (const race of creatureOptions?.races ?? []) {
-    const limbs = normalizeLimbSetLimbs(race?.limbs ?? []);
+    const limbs = normalizeLimbSetLimbs(race?.limbs ?? [], { sort: false });
     const id = getLimbSetId(limbs);
     if (!id) continue;
 
@@ -56,7 +56,7 @@ export function getUniqueLimbSets(creatureOptions = {}) {
 }
 
 export function getLimbSetId(limbs = []) {
-  const normalized = normalizeLimbSetLimbs(limbs);
+  const normalized = normalizeLimbSetLimbs(limbs, { sort: true });
   if (!normalized.length) return "";
   return normalized
     .map(limb => `${limb.key}:${limb.label}:${limb.stateMax}:${limb.damageMultiplier}:${limb.aimedDifficultyPercent}`)
@@ -176,8 +176,8 @@ function normalizeTraumaEffects(value = []) {
     .filter(effect => effect.key);
 }
 
-function normalizeLimbSetLimbs(limbs = []) {
-  return Array.from(limbs ?? [])
+function normalizeLimbSetLimbs(limbs = [], { sort = true } = {}) {
+  const normalized = Array.from(limbs ?? [])
     .map(limb => ({
       key: String(limb?.key ?? "").trim(),
       label: String(limb?.label ?? limb?.name ?? limb?.key ?? "").trim(),
@@ -185,8 +185,10 @@ function normalizeLimbSetLimbs(limbs = []) {
       damageMultiplier: toDecimal(limb?.damageMultiplier, 1),
       aimedDifficultyPercent: toInteger(limb?.aimedDifficultyPercent)
     }))
-    .filter(limb => limb.key)
-    .sort((left, right) => left.key.localeCompare(right.key));
+    .filter(limb => limb.key);
+  return sort
+    ? normalized.sort((left, right) => left.key.localeCompare(right.key))
+    : normalized;
 }
 
 function toDecimal(value, fallback = 0) {

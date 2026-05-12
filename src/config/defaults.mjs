@@ -169,15 +169,15 @@ export const DEFAULT_NEEDS = Object.freeze([
 ]);
 
 export const DEFAULT_DAMAGE_TYPES = Object.freeze([
-  { key: "piercing", label: "Колющий", color: "#d9d0bd" },
-  { key: "slashing", label: "Режущий", color: "#d95c5c" },
-  { key: "bludgeoning", label: "Дробящий", color: "#c49a6c" },
-  { key: "firearm", label: "Огнестрельный", color: "#f0d48a" },
-  { key: "energy", label: "Энергетический", color: "#78f0ff" },
-  { key: "fire", label: "Огненный", color: "#ff6a2a" },
-  { key: "cryo", label: "Криогенный", color: "#6da8ff" },
-  { key: "electric", label: "Электрический", color: "#f6f05a" },
-  { key: "acid", label: "Кислотный", color: "#7be36d" },
-  { key: "poison", label: "Ядовитый", color: "#b56dff" },
-  { key: "radiation", label: "Радиационный", color: "#c6ff4d" }
+  { key: "piercing", label: "Колющий", color: "#d9d0bd", img: "icons/weapons/daggers/dagger-straight-thin-black.webp" },
+  { key: "slashing", label: "Режущий", color: "#d95c5c", img: "icons/skills/melee/strike-slashes-red.webp" },
+  { key: "bludgeoning", label: "Дробящий", color: "#c49a6c", img: "icons/skills/melee/strike-hammer-destructive-orange.webp" },
+  { key: "firearm", label: "Огнестрельный", color: "#f0d48a", img: "icons/skills/ranged/bullets-triple-ball-orange.webp" },
+  { key: "energy", label: "Энергетический", color: "#78f0ff", img: "icons/skills/ranged/energy-weapon-fire-blue.webp" },
+  { key: "fire", label: "Огненный", color: "#ff6a2a", img: "icons/magic/fire/flame-burning-embers-orange.webp" },
+  { key: "cryo", label: "Криогенный", color: "#6da8ff", img: "icons/magic/water/snowflake-ice-blue.webp" },
+  { key: "electric", label: "Электрический", color: "#f6f05a", img: "icons/magic/lightning/bolt-strike-sparks-yellow.webp" },
+  { key: "acid", label: "Кислотный", color: "#7be36d", img: "icons/svg/acid.svg" },
+  { key: "poison", label: "Ядовитый", color: "#b56dff", img: "icons/svg/poison.svg" },
+  { key: "radiation", label: "Радиационный", color: "#c6ff4d", img: "icons/svg/radiation.svg" }
 ]);

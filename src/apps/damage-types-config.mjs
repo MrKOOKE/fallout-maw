@@ -23,7 +23,7 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
     id: "fallout-maw-damage-types",
     classes: ["fallout-maw", "fallout-maw-config-form", "damage-types-config"],
     position: {
-      width: 720,
+      width: 900,
       height: "auto"
     },
     window: {
@@ -32,6 +32,7 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
     actions: {
       createDamageType: this.#onCreateDamageType,
       deleteDamageType: this.#onDeleteDamageType,
+      browseDamageTypeImage: this.#onBrowseDamageTypeImage,
       resetDefaults: this.#onResetDefaults,
       openDamageTypeSettings: this.#onOpenDamageTypeSettings
     }
@@ -50,7 +51,10 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
   async _prepareContext(options) {
     return {
       ...(await super._prepareContext(options)),
-      damageTypes: this.damageTypes
+      damageTypes: this.damageTypes.map(damageType => ({
+        ...damageType,
+        hasImage: Boolean(damageType.img)
+      }))
     };
   }
 
@@ -71,7 +75,7 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
   static #onCreateDamageType(event) {
     event.preventDefault();
     this.damageTypes = this.#readDamageTypesFromForm();
-    this.damageTypes.push({ key: this.#getUniqueKey("newDamageType"), label: "Новый тип урона", color: "#f0d48a" });
+    this.damageTypes.push({ key: this.#getUniqueKey("newDamageType"), label: "Новый тип урона", color: "#f0d48a", img: "icons/svg/d20-grey.svg" });
     return this.forceRender();
   }
 
@@ -84,6 +88,28 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
     this.damageTypes = this.#readDamageTypesFromForm();
     this.damageTypes.splice(index, 1);
     return this.forceRender();
+  }
+
+  static async #onBrowseDamageTypeImage(event, target) {
+    event.preventDefault();
+    const rows = Array.from(this.form?.querySelectorAll("[data-damage-type-row]") ?? []);
+    const row = target.closest("[data-damage-type-row]");
+    const index = rows.indexOf(row);
+    if (index < 0) return undefined;
+
+    this.damageTypes = this.#readDamageTypesFromForm();
+    const current = this.damageTypes[index]?.img ?? "";
+    const picker = new foundry.applications.apps.FilePicker.implementation({
+      type: "image",
+      current,
+      callback: path => {
+        this.damageTypes[index].img = path;
+        this.forceRender();
+      }
+    });
+
+    await picker.browse(undefined, { render: false });
+    return picker.render({ force: true });
   }
 
   static async #onResetDefaults(event) {
@@ -123,6 +149,7 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
         key,
         label: row.querySelector("[data-field='label']")?.value?.trim() ?? "",
         color: row.querySelector("[data-field='color']")?.value?.trim() ?? "#f0d48a",
+        img: row.querySelector("[data-field='img']")?.value?.trim() ?? "icons/svg/d20-grey.svg",
         settings: foundry.utils.deepClone(existing)
       };
     });
