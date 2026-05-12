@@ -252,10 +252,10 @@ function prepareWeaponSlotContext({
     item: item ? {
       ...item,
       phantom: Boolean(occupant?.phantom),
-      disabled: Boolean(occupant?.disabled)
+      useDisabled: Boolean(occupant?.useDisabled)
     } : null,
     phantom: Boolean(occupant?.phantom),
-    disabled: Boolean(occupant?.disabled)
+    useDisabled: Boolean(occupant?.useDisabled)
   };
 }
 
@@ -267,7 +267,7 @@ function findWeaponSlotOccupant({ setKey = "", slot = {}, slotIndex = 0, setSlot
       return {
         item: candidate,
         phantom: false,
-        disabled: isWeaponSlotOccupantDisabled(actor, race, candidate)
+        useDisabled: isWeaponSlotOccupantDisabled(actor, race, candidate)
       };
     }
 
@@ -275,7 +275,7 @@ function findWeaponSlotOccupant({ setKey = "", slot = {}, slotIndex = 0, setSlot
     return {
       item: candidate,
       phantom: true,
-      disabled: isWeaponSlotOccupantDisabled(actor, race, candidate)
+      useDisabled: isWeaponSlotOccupantDisabled(actor, race, candidate)
     };
   }
   return null;

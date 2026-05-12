@@ -7,7 +7,7 @@
     </button>
     <div class="fallout-maw-token-hud-slot-row fallout-maw-token-hud-weapon-set">
       {{#each weaponSet.slots}}
-      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-weapon-slot {{#if selected}}active{{/if}} {{#if phantom}}phantom{{/if}} {{#if disabled}}unusable{{/if}} {{#unless item}}empty{{/unless}}" data-action="selectHudWeapon" data-item-id="{{item.id}}" data-weapon-set="{{../key}}" {{#unless item}}disabled{{/unless}}>
+      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-weapon-slot {{#if selected}}active{{/if}} {{#if phantom}}phantom{{/if}} {{#if useDisabled}}unusable{{/if}} {{#unless item}}empty{{/unless}}" data-action="selectHudWeapon" data-item-id="{{item.id}}" data-weapon-set="{{../key}}" {{#unless item}}disabled{{/unless}}>
         {{#if item}}
         <img src="{{item.img}}" alt="{{item.name}}" onerror="this.src='{{../../fallbackIcon}}'">
         <span>{{item.name}}</span>

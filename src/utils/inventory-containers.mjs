@@ -288,6 +288,7 @@ export function inventoryPlacementsOverlap(left, right) {
 
 export function getContextInventoryItems(parentId = ROOT_CONTAINER_ID, items = null) {
   return getItemsArray(items).filter(item => {
+    if (!isInventoryManagedItem(item)) return false;
     if (getItemContainerParentId(item) !== String(parentId ?? "")) return false;
     const placement = item.system?.placement ?? {};
     return (String(placement.mode ?? "inventory") === "inventory");
@@ -390,7 +391,7 @@ export function prepareInventoryGridContext(contextItems, columns, rows, allItem
 }
 
 export function validateInventoryTree(items, rootDimensions) {
-  const itemsArray = getItemsArray(items);
+  const itemsArray = getItemsArray(items).filter(isInventoryManagedItem);
   const itemMap = new Map(itemsArray.map(item => [getItemId(item), item]));
 
   for (const item of itemsArray) {
@@ -430,6 +431,11 @@ export function validateInventoryTree(items, rootDimensions) {
   }
 
   return { valid: true };
+}
+
+function isInventoryManagedItem(itemOrSystem = null) {
+  const type = getItemType(itemOrSystem);
+  return type !== "trauma" && type !== "disease";
 }
 
 function validateContextPlacements(contextItems, columns, rows, allItems) {

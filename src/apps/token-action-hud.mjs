@@ -381,7 +381,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const selectedWeapon = getSelectedHudWeapon(actor, inventory.weaponSets, activeWeaponSetKey);
     const weaponSet = prepareHudWeaponSet(inventory.weaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "");
     const selectedWeaponSlot = getSelectedHudWeaponSlot(weaponSet, selectedWeapon?.id ?? "");
-    const selectedWeaponDisabled = Boolean(selectedWeaponSlot?.disabled);
+    const selectedWeaponDisabled = Boolean(selectedWeaponSlot?.useDisabled);
     const weaponActionRows = prepareWeaponActionRows(actor, selectedWeapon, selectedWeaponDisabled);
     const skills = prepareSkillButtons(actor);
     const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg");
@@ -1766,7 +1766,7 @@ function isHudWeaponDisabled(actor, weapon) {
   const placement = weapon?.system?.placement ?? {};
   const set = (inventory.weaponSets ?? []).find(entry => entry.key === placement.weaponSet);
   const slot = (set?.slots ?? []).find(entry => entry.item?.id === weapon?.id && !entry.phantom);
-  return Boolean(slot?.disabled);
+  return Boolean(slot?.useDisabled);
 }
 
 function getActiveHudWeaponSetKey(actor, weaponSets = []) {
