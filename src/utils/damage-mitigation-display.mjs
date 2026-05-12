@@ -69,15 +69,26 @@ function buildDamageMitigationTableForGroup(group, entries = {}, damageTypeSetti
       damageTypeLabel: damageType.label || damageType.key,
       damageTypeImg: String(damageType.img ?? "").trim() || FALLBACK_DAMAGE_TYPE_ICON,
       damageTypeColor: String(damageType.color ?? "").trim() || "#f0d48a",
-      cells: limbs.map((limb, columnIndex) => ({
-        limbKey: limb.key,
-        damageTypeKey: damageType.key,
-        rowIndex,
-        columnIndex,
-        value: Number(entries?.[limb.key]?.[damageType.key]?.value) || 0
-      }))
+      cells: limbs.map((limb, columnIndex) => {
+        const value = Number(entries?.[limb.key]?.[damageType.key]?.value) || 0;
+        return {
+          limbKey: limb.key,
+          damageTypeKey: damageType.key,
+          rowIndex,
+          columnIndex,
+          value,
+          valueClass: getMitigationValueClass(value)
+        };
+      })
     }))
   };
+}
+
+function getMitigationValueClass(value = 0) {
+  const numeric = Number(value) || 0;
+  if (numeric > 0) return "positive";
+  if (numeric < 0) return "negative";
+  return "neutral";
 }
 
 function takeChars(value = "", count = 0) {

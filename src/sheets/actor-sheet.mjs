@@ -2618,7 +2618,7 @@ function renderDamageMitigationTooltipTables(tables = []) {
                 ${renderDamageTypeIcon(row)}
               </span>
               ${row.cells.map(cell => `
-                <span class="tooltip-mitigation-cell tooltip-mitigation-value">${escapeHTML(formatNumber(cell.value))}</span>
+                <span class="tooltip-mitigation-cell tooltip-mitigation-value mitigation-value-${escapeAttribute(cell.valueClass)}">${escapeHTML(formatNumber(cell.value))}</span>
               `).join("")}
             `).join("")}
           </div>
