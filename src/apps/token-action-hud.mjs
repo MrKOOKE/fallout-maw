@@ -336,6 +336,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       toggleTray: TokenActionHud.#onToggleTray,
       toggleMeterSection: TokenActionHud.#onToggleMeterSection,
       toggleMeterEdit: TokenActionHud.#onToggleMeterEdit,
+      selectHudWeaponSet: TokenActionHud.#onSelectHudWeaponSet,
       selectHudWeapon: { handler: TokenActionHud.#onSelectHudWeapon, buttons: [0, 1] },
       toggleWeaponActions: { handler: TokenActionHud.#onToggleWeaponActions, buttons: [0, 1] },
       useWeaponAction: { handler: TokenActionHud.#onUseWeaponAction, buttons: [0, 1] },
@@ -385,8 +386,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const inventory = prepareInventoryContext(actor, race);
     const activeWeaponSetKey = getActiveHudWeaponSetKey(actor, inventory.weaponSets);
     const selectedWeapon = getSelectedHudWeapon(actor, inventory.weaponSets, activeWeaponSetKey);
-    const weaponSet = prepareHudWeaponSet(inventory.weaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "");
     const hudIcons = getTokenActionHudIcons();
+    const weaponSet = prepareHudWeaponSet(inventory.weaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons);
     const weaponSets = prepareHudWeaponSets(inventory.weaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons);
     const selectedWeaponSlot = getSelectedHudWeaponSlot(weaponSet, selectedWeapon?.id ?? "");
     const selectedWeaponDisabled = Boolean(selectedWeaponSlot?.useDisabled);
@@ -396,7 +397,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const abilities = prepareOwnedItemButtons(actor, "ability", "icons/svg/aura.svg");
     const systemActions = prepareSystemActionButtons();
     const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, systemActions, hudIcons);
-    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, systemActions, weaponActionRows);
+    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, systemActions, weaponActionRows, weaponSet, weaponSets);
     const meterSections = prepareMeterSectionStates(this.#editableMeterSections);
     const displayLimbs = prepareDisplayLimbs(actor, this.#limbDisplayLayer);
     const limbSilhouette = createLimbSilhouetteHud(race?.limbSilhouette, displayLimbs);
@@ -487,7 +488,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #activateVariableWidthTiles() {
     const images = this.element?.querySelectorAll(
-      ".fallout-maw-token-hud-main-action.variable-width img, .fallout-maw-token-hud-weapon-slot:not(.empty) > img"
+      ".fallout-maw-token-hud-main-action.variable-width img, .fallout-maw-token-hud-weapon-slot:not(.empty) > img, .fallout-maw-token-hud-set-slot-preview:not(.empty) > img"
     ) ?? [];
     for (const image of images) {
       const applyAspect = () => {
@@ -503,6 +504,23 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     const tray = target.dataset.tray ?? "";
     this.#activeTray = this.#activeTray === tray ? "" : tray;
+    return this.render({ force: true });
+  }
+
+  static async #onSelectHudWeaponSet(event, target) {
+    event.preventDefault();
+    const actor = this.actor;
+    if (!actor?.isOwner) return undefined;
+    const weaponSetKey = String(target.dataset.weaponSet ?? "");
+    if (!weaponSetKey) return undefined;
+    await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
+
+    const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
+    const inventory = prepareInventoryContext(actor, race);
+    const set = inventory.weaponSets.find(entry => entry.key === weaponSetKey);
+    const firstWeaponId = getUniqueHudWeaponSlots(set?.slots ?? []).at(0)?.item?.id ?? "";
+    if (firstWeaponId) await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, firstWeaponId);
+    this.#activeTray = "";
     return this.render({ force: true });
   }
 
@@ -628,14 +646,21 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     return this.render({ force: true });
   }
 
-  static #onToggleWeaponActions(event, target) {
+  static async #onToggleWeaponActions(event, target) {
     event.preventDefault();
+    const itemId = String(target.dataset.itemId ?? "");
+    if (!itemId) return undefined;
     if (isMiddleMouseClick(event)) {
-      const item = this.actor?.items.get(String(target.dataset.itemId ?? ""));
+      const item = this.actor?.items.get(itemId);
       return item?.sheet?.render(true);
     }
     if (event.button !== 0) return undefined;
-    this.#activeTray = this.#activeTray === "weaponActions" ? "" : "weaponActions";
+    const currentItemId = String(this.actor?.getFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG) ?? "");
+    const wasOpenForItem = this.#activeTray === "weaponActions" && currentItemId === itemId;
+    if (itemId) await this.actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, itemId);
+    const weaponSetKey = String(target.dataset.weaponSet ?? "");
+    if (weaponSetKey) await this.actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
+    this.#activeTray = wasOpenForItem ? "" : "weaponActions";
     return this.render({ force: true });
   }
 
@@ -1681,7 +1706,7 @@ function prepareSystemActionButtons() {
   }));
 }
 
-function prepareTrayContext(activeTray, skills, items, abilities, systemActions, weaponActionRows) {
+function prepareTrayContext(activeTray, skills, items, abilities, systemActions, weaponActionRows, weaponSet = null, weaponSets = []) {
   const trayItems = activeTray === "skills"
     ? skills
     : activeTray === "items"
@@ -1692,13 +1717,17 @@ function prepareTrayContext(activeTray, skills, items, abilities, systemActions,
           ? systemActions
           : activeTray === "weaponActions"
             ? weaponActionRows.flatMap(row => row.actions)
-            : [];
+            : activeTray === "weaponSets"
+              ? weaponSets
+              : [];
   return {
     skills,
     items,
     abilities,
     systemActions,
     weaponActionRows,
+    weaponSet,
+    weaponSets,
     metrics: prepareTrayMetrics(trayItems),
     visible: Boolean(activeTray)
   };
@@ -1711,20 +1740,7 @@ function prepareTrayMetrics(_items) {
 }
 
 function prepareActions(activeTray, selectedWeapon, items, abilities, systemActions, hudIcons = {}) {
-  return HUD_ACTIONS.map(action => {
-    if (action.key === "weapon") {
-      return {
-        ...action,
-        active: activeTray === "weaponActions",
-        disabled: !selectedWeapon,
-        icon: normalizeImagePath(selectedWeapon?.img, hudIcons.mainActions?.weapon ?? action.icon),
-        caption: selectedWeapon?.name ?? action.label,
-        itemId: selectedWeapon?.id ?? "",
-        count: selectedWeapon ? 1 : 0,
-        variableWidth: Boolean(selectedWeapon)
-      };
-    }
-
+  return HUD_ACTIONS.filter(action => action.key !== "weapon").map(action => {
     const count = action.key === "items"
       ? items.length
       : action.key === "abilities"
@@ -1743,8 +1759,8 @@ function prepareActions(activeTray, selectedWeapon, items, abilities, systemActi
   });
 }
 
-function prepareHudWeaponSet(weaponSets = [], activeSetKey = "", selectedWeaponId = "") {
-  return prepareHudWeaponSets(weaponSets, activeSetKey, selectedWeaponId)
+function prepareHudWeaponSet(weaponSets = [], activeSetKey = "", selectedWeaponId = "", hudIcons = {}) {
+  return prepareHudWeaponSets(weaponSets, activeSetKey, selectedWeaponId, hudIcons)
     .find(entry => entry.key === activeSetKey) ?? null;
 }
 
@@ -1754,10 +1770,28 @@ function prepareHudWeaponSets(weaponSets = [], activeSetKey = "", selectedWeapon
     active: set.key === activeSetKey,
     slots: (set.slots ?? []).map(slot => ({
       ...slot,
+      weaponSetKey: set.key,
       emptyIcon: normalizeImagePath(hudIcons.emptyWeaponSlotIcon, "icons/svg/combat.svg"),
       selected: Boolean(slot.item?.id && !slot.phantom && slot.item.id === selectedWeaponId)
+    })),
+    weapons: getUniqueHudWeaponSlots(set.slots ?? []).map(slot => ({
+      ...slot,
+      weaponSetKey: set.key,
+      selected: Boolean(slot.item?.id && slot.item.id === selectedWeaponId)
     }))
   }));
+}
+
+function getUniqueHudWeaponSlots(slots = []) {
+  const seen = new Set();
+  const entries = [];
+  for (const slot of slots) {
+    const id = slot.item?.id ?? "";
+    if (!id || slot.phantom || seen.has(id)) continue;
+    seen.add(id);
+    entries.push(slot);
+  }
+  return entries;
 }
 
 function getSelectedHudWeaponSlot(weaponSet = null, selectedWeaponId = "") {
@@ -2455,6 +2489,7 @@ function layoutTokenActionHud(element) {
   element.style.setProperty("--fallout-maw-token-hud-actions-width", `${Math.floor(availableWidth)}px`);
 
   if (popup) {
+    balanceTokenActionHudPopup(popup, availableWidth);
     const popupBottom = actionsRect?.top ?? rootRect.top;
     const maxHeight = Math.max(72, (popupBottom - margin) / scale);
     element.style.setProperty("--fallout-maw-token-hud-popup-max-height", `${Math.floor(maxHeight)}px`);
@@ -2463,11 +2498,30 @@ function layoutTokenActionHud(element) {
   element.classList.add("layout-ready");
 }
 
+function balanceTokenActionHudPopup(popup, availableWidth) {
+  if (!popup || popup.classList.contains("weapon-actions") || popup.classList.contains("weapon-sets")) return;
+  const itemCount = popup.querySelectorAll(":scope > button").length;
+  if (itemCount <= 0) {
+    popup.style.removeProperty("--fallout-maw-token-hud-balanced-columns");
+    return;
+  }
+
+  const style = getComputedStyle(popup);
+  const tileSize = Number.parseFloat(style.getPropertyValue("--fallout-maw-token-hud-action-tile-width"))
+    || Number.parseFloat(style.getPropertyValue("--fallout-maw-token-hud-tile"))
+    || 115;
+  const gap = Number.parseFloat(style.columnGap) || 5;
+  const maxColumns = Math.max(1, Math.floor((availableWidth + gap) / (tileSize + gap)));
+  const rows = Math.max(1, Math.ceil(itemCount / maxColumns));
+  const columns = Math.max(1, Math.ceil(itemCount / rows));
+  popup.style.setProperty("--fallout-maw-token-hud-balanced-columns", String(columns));
+}
+
 function setHudTileImageAspect(image) {
   const width = Number(image?.naturalWidth);
   const height = Number(image?.naturalHeight);
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
-  const tile = image.closest(".fallout-maw-token-hud-main-action, .fallout-maw-token-hud-weapon-slot");
+  const tile = image.closest(".fallout-maw-token-hud-main-action, .fallout-maw-token-hud-weapon-slot, .fallout-maw-token-hud-set-slot-preview");
   if (!tile) return;
   const aspect = Math.max(1, width / height);
   tile.style.setProperty("--fallout-maw-hud-image-aspect", String(aspect));
