@@ -1,7 +1,7 @@
 import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./attack-animations.mjs";
-import { applyDamageCostModifier, estimateDamageApplication, getDamageCostModifierState, getLimbHealingCap, requestDamageApplications } from "./damage-hub.mjs";
+import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplication, getDamageCostModifierState, getLimbHealingCap, requestDamageApplications, runDamageHubOperation } from "./damage-hub.mjs";
 import { createThrownItemTile } from "../canvas/thrown-items.mjs";
 import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageSourceFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction } from "../utils/item-functions.mjs";
 import { getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings } from "../settings/accessors.mjs";
@@ -25,6 +25,7 @@ const BASE_VOLLEY_DIFFICULTY = 60;
 const VOLLEY_ACTION_KEY = "volley";
 const PERIODIC_DAMAGE_REGION_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
 const DEFAULT_REGION_DAMAGE_INTERVAL_SECONDS = 6;
+const REGION_SOCKET_REQUEST_TIMEOUT_MS = 60000;
 const WEAPON_SPECIAL_HIT_ALL_CONE_TARGETS = "hitAllConeTargets";
 const MELEE_ACTION_KEYS = new Set(["meleeAttack", "aimedMeleeAttack"]);
 const BURST_CENTER_WIDTH_RATIO = 0.2;
@@ -37,6 +38,7 @@ const MELEE_DIRECTIONS = Object.freeze([
 const SWING_ARC_EPSILON = 0.0001;
 const GEOMETRY_EPSILON = 0.0001;
 const remoteAttackPreviews = new Map();
+const pendingRegionSocketRequests = new Map();
 let activeAttack = null;
 
 export function registerWeaponAttackSocket() {
@@ -970,8 +972,7 @@ class WeaponAttackController {
     await spendWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId);
     await checkBatch?.publish({ forceBatch: true });
     await this.playVolleyAttackEffects(finalGeometries);
-    if (regionRequests.length) await Promise.all(regionRequests.map(requestCreateVolleyDamageRegion));
-    if (damageRequests.length) await applyQueuedDamageRequests(damageRequests);
+    await applyQueuedDamageAndRegionRequests(damageRequests, regionRequests);
 
     this.processing = false;
     this.refresh(true);
@@ -1625,6 +1626,44 @@ function broadcastAttackPreview(payload = {}) {
 
 function handleWeaponAttackSocketMessage(payload = {}) {
   if (!payload || payload.scope !== WEAPON_ATTACK_SOCKET_SCOPE || payload.senderUserId === game.user?.id) return;
+  if (payload.action === "createVolleyDamageRegionsResult") {
+    if (payload.targetUserId && payload.targetUserId !== game.user?.id) return;
+    const pending = pendingRegionSocketRequests.get(payload.requestId);
+    if (!pending) return;
+    window.clearTimeout(pending.timeout);
+    pendingRegionSocketRequests.delete(payload.requestId);
+    if (payload.ok) pending.resolve(payload.results ?? []);
+    else pending.reject(new Error(payload.error || "Volley region socket request failed."));
+    return;
+  }
+  if (payload.action === "createVolleyDamageRegions") {
+    if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
+    void createVolleyDamageRegions(payload.regions).then(results => {
+      respondVolleyRegionSocketRequest(payload, { ok: true, results: serializeRegionSocketResults(results) });
+    }).catch(error => {
+      console.error("Fallout MaW | Volley region socket request failed", error);
+      respondVolleyRegionSocketRequest(payload, {
+        ok: false,
+        error: String(error?.message ?? error ?? "Volley region socket request failed."),
+        results: []
+      });
+    });
+    return;
+  }
+  if (payload.action === "applyDamageAndCreateVolleyDamageRegions") {
+    if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
+    void applyDamageAndCreateVolleyDamageRegions(payload.damageRequests, payload.regionRequests).then(results => {
+      respondVolleyRegionSocketRequest(payload, { ok: true, results: serializeRegionSocketResults(results.regions) });
+    }).catch(error => {
+      console.error("Fallout MaW | Volley damage and region socket request failed", error);
+      respondVolleyRegionSocketRequest(payload, {
+        ok: false,
+        error: String(error?.message ?? error ?? "Volley damage and region socket request failed."),
+        results: []
+      });
+    });
+    return;
+  }
   if (payload.action === "createVolleyDamageRegion") {
     if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
     void createVolleyDamageRegion(payload.region);
@@ -1680,27 +1719,153 @@ function clearRemoteAttackPreviews() {
   for (const attackId of Array.from(remoteAttackPreviews.keys())) removeRemoteAttackPreview(attackId);
 }
 
+function respondVolleyRegionSocketRequest(payload = {}, { ok = true, error = "", results = [] } = {}) {
+  if (!payload.requestId || !payload.senderUserId) return;
+  game.socket.emit(WEAPON_ATTACK_SOCKET, {
+    scope: WEAPON_ATTACK_SOCKET_SCOPE,
+    action: "createVolleyDamageRegionsResult",
+    senderUserId: game.user?.id ?? "",
+    targetUserId: payload.senderUserId,
+    requestId: payload.requestId,
+    ok,
+    error,
+    results
+  });
+}
+
+function serializeRegionSocketResults(regions = []) {
+  return (Array.isArray(regions) ? regions : [regions])
+    .filter(Boolean)
+    .map(region => ({
+      uuid: String(region.uuid ?? ""),
+      id: String(region.id ?? ""),
+      name: String(region.name ?? "")
+    }));
+}
+
 async function requestCreateVolleyDamageRegion(regionData = {}) {
   if (!regionData?.sceneId) return null;
-  if (game.user?.isGM) return createVolleyDamageRegion(regionData);
+  const results = await requestCreateVolleyDamageRegions([regionData]);
+  return results?.[0] ?? null;
+}
+
+async function requestCreateVolleyDamageRegions(regions = []) {
+  const regionData = (Array.isArray(regions) ? regions : [regions])
+    .filter(region => region?.sceneId);
+  if (!regionData.length) return [];
+  if (game.user?.isGM) return createVolleyDamageRegions(regionData);
 
   const gm = getResponsibleGM();
   if (!gm) {
     ui.notifications.warn("Нет активного GM для создания области урона.");
-    return null;
+    return [];
   }
+
+  const requestId = foundry.utils.randomID();
+  const promise = new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      pendingRegionSocketRequests.delete(requestId);
+      reject(new Error("Volley region socket request timed out."));
+    }, REGION_SOCKET_REQUEST_TIMEOUT_MS);
+    pendingRegionSocketRequests.set(requestId, { resolve, reject, timeout });
+  });
 
   game.socket.emit(WEAPON_ATTACK_SOCKET, {
     scope: WEAPON_ATTACK_SOCKET_SCOPE,
-    action: "createVolleyDamageRegion",
+    action: "createVolleyDamageRegions",
     gmUserId: gm.id,
     senderUserId: game.user?.id ?? "",
-    region: regionData
+    requestId,
+    regions: regionData
   });
-  return null;
+
+  try {
+    return await promise;
+  } catch (error) {
+    console.error("Fallout MaW | Volley region socket request failed", error);
+    ui.notifications.warn("РќРµС‚ РѕС‚РІРµС‚Р° GM РЅР° СЃРѕР·РґР°РЅРёРµ РѕР±Р»Р°СЃС‚РµР№ СѓСЂРѕРЅР°.");
+    return [];
+  }
+}
+
+async function requestApplyDamageAndCreateVolleyDamageRegions(damageRequests = [], regionRequests = []) {
+  const serializableDamageRequests = serializeWeaponDamageRequests(damageRequests);
+  const regions = (Array.isArray(regionRequests) ? regionRequests : [regionRequests])
+    .filter(region => region?.sceneId);
+  if (!serializableDamageRequests.length && !regions.length) return { damage: [], regions: [] };
+  if (game.user?.isGM) return applyDamageAndCreateVolleyDamageRegions(serializableDamageRequests, regions);
+
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("РќРµС‚ Р°РєС‚РёРІРЅРѕРіРѕ GM РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё СѓСЂРѕРЅР° Рё РѕР±Р»Р°СЃС‚РµР№.");
+    return { damage: [], regions: [] };
+  }
+
+  const requestId = foundry.utils.randomID();
+  const promise = new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      pendingRegionSocketRequests.delete(requestId);
+      reject(new Error("Volley damage and region socket request timed out."));
+    }, REGION_SOCKET_REQUEST_TIMEOUT_MS);
+    pendingRegionSocketRequests.set(requestId, { resolve, reject, timeout });
+  });
+
+  game.socket.emit(WEAPON_ATTACK_SOCKET, {
+    scope: WEAPON_ATTACK_SOCKET_SCOPE,
+    action: "applyDamageAndCreateVolleyDamageRegions",
+    gmUserId: gm.id,
+    senderUserId: game.user?.id ?? "",
+    requestId,
+    damageRequests: serializableDamageRequests,
+    regionRequests: regions
+  });
+
+  try {
+    const results = await promise;
+    return { damage: [], regions: results };
+  } catch (error) {
+    console.error("Fallout MaW | Volley damage and region socket request failed", error);
+    ui.notifications.warn("РќРµС‚ РѕС‚РІРµС‚Р° GM РЅР° РѕР±СЂР°Р±РѕС‚РєСѓ СѓСЂРѕРЅР° Рё РѕР±Р»Р°СЃС‚РµР№.");
+    return { damage: [], regions: [] };
+  }
 }
 
 async function createVolleyDamageRegion(regionData = {}) {
+  const results = await createVolleyDamageRegions([regionData]);
+  return results?.[0] ?? null;
+}
+
+async function applyDamageAndCreateVolleyDamageRegions(damageRequests = [], regionRequests = []) {
+  const serializableDamageRequests = serializeWeaponDamageRequests(damageRequests);
+  const regions = (Array.isArray(regionRequests) ? regionRequests : [regionRequests])
+    .filter(region => region?.sceneId);
+  return runDamageHubOperation(async () => {
+    const volleyLogicalWorldTime = Number(game.time?.worldTime) || 0;
+    const damage = serializableDamageRequests.length
+      ? await applyDamageRequestsInCurrentHubOperation(serializableDamageRequests, volleyLogicalWorldTime)
+      : [];
+    const createdRegions = regions.length ? await createVolleyDamageRegionsNow(regions) : [];
+    return { damage, regions: createdRegions };
+  });
+}
+
+async function createVolleyDamageRegionsNow(regions = []) {
+  const created = [];
+  for (const data of regions) {
+    const region = await createVolleyDamageRegionNow(data);
+    if (region) created.push(region);
+  }
+  return created;
+}
+
+async function createVolleyDamageRegions(regions = []) {
+  const regionData = (Array.isArray(regions) ? regions : [regions])
+    .filter(region => region?.sceneId);
+  if (!regionData.length) return [];
+  return runDamageHubOperation(() => createVolleyDamageRegionsNow(regionData));
+}
+
+async function createVolleyDamageRegionNow(regionData = {}) {
   const scene = game.scenes?.get(String(regionData.sceneId ?? "")) ?? canvas.scene;
   if (!scene || !game.user?.isGM) return null;
 
@@ -3696,6 +3861,29 @@ function addUniquePoint(points, point) {
 
 async function applyQueuedDamageRequests(requests = []) {
   return requestDamageApplications(requests);
+}
+
+async function applyQueuedDamageAndRegionRequests(damageRequests = [], regionRequests = []) {
+  if (regionRequests.length) {
+    await requestApplyDamageAndCreateVolleyDamageRegions(damageRequests, regionRequests);
+    return;
+  }
+  if (damageRequests.length) await applyQueuedDamageRequests(damageRequests);
+}
+
+function serializeWeaponDamageRequests(requests = []) {
+  return (Array.isArray(requests) ? requests : [requests])
+    .map(request => ({
+      actorUuid: String(request?.actor?.uuid ?? request?.actorUuid ?? "").trim(),
+      limbKey: String(request?.limbKey ?? "").trim(),
+      amount: Math.max(0, toInteger(request?.amount)),
+      damageTypeKey: String(request?.damageTypeKey ?? "").trim(),
+      scope: String(request?.scope ?? "healthAndLimb"),
+      source: request?.source && typeof request.source === "object"
+        ? foundry.utils.deepClone(request.source)
+        : {}
+    }))
+    .filter(request => request.actorUuid && request.amount > 0 && request.damageTypeKey);
 }
 
 function getTokenCenter(token) {

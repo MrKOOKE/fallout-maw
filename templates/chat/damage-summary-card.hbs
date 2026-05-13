@@ -38,6 +38,26 @@
       {{else}}
       <p class="fallout-maw-damage-summary-no-limbs">{{../labels.noLimbDamage}}</p>
       {{/if}}
+
+      {{#if traumas.length}}
+      <details class="fallout-maw-damage-summary-traumas">
+        <summary>
+          <span>{{../labels.traumas}}</span>
+          <strong>{{traumas.length}}</strong>
+        </summary>
+        <ul>
+          {{#each traumas}}
+          <li>
+            <img src="{{img}}" alt="{{name}}">
+            <span>
+              <strong>{{name}}</strong>
+              {{#if summary}}<small>{{summary}}</small>{{/if}}
+            </span>
+          </li>
+          {{/each}}
+        </ul>
+      </details>
+      {{/if}}
     </div>
     {{/each}}
   </section>

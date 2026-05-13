@@ -4059,6 +4059,96 @@ label.fallout-maw-mitigation-cell {
   padding-top: 0.25rem;
 }
 
+.fallout-maw-damage-summary-traumas {
+  border-top: 1px solid rgba(216, 192, 94, 0.2);
+  display: grid;
+  padding-top: 0.25rem;
+}
+
+.fallout-maw-damage-summary-traumas summary {
+  align-items: center;
+  color: var(--fallout-maw-damage-card-muted);
+  cursor: pointer;
+  display: flex;
+  font-size: 0.88rem;
+  gap: 0.35rem;
+  justify-content: space-between;
+  line-height: 1.1;
+  list-style: none;
+}
+
+.fallout-maw-damage-summary-traumas summary::-webkit-details-marker {
+  display: none;
+}
+
+.fallout-maw-damage-summary-traumas summary::before {
+  color: var(--fallout-maw-damage-card-accent);
+  content: ">";
+  flex: 0 0 auto;
+  font-family: var(--font-monospace, monospace);
+}
+
+.fallout-maw-damage-summary-traumas[open] summary::before {
+  content: "v";
+}
+
+.fallout-maw-damage-summary-traumas summary span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.fallout-maw-damage-summary-traumas summary strong {
+  color: var(--fallout-maw-damage-card-red);
+  font-family: var(--font-monospace, monospace);
+  font-weight: 900;
+}
+
+.fallout-maw-damage-summary-traumas ul {
+  display: grid;
+  gap: 0.16rem;
+  list-style: none;
+  margin: 0.28rem 0 0;
+  padding: 0;
+}
+
+.fallout-maw-damage-summary-traumas li {
+  align-items: center;
+  border-bottom: 1px solid var(--fallout-maw-damage-card-line);
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  min-width: 0;
+  padding-bottom: 0.18rem;
+}
+
+.fallout-maw-damage-summary-traumas li img {
+  border-radius: 2px;
+  height: 1.5rem;
+  object-fit: cover;
+  width: 1.5rem;
+}
+
+.fallout-maw-damage-summary-traumas li span {
+  display: grid;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.fallout-maw-damage-summary-traumas li strong {
+  color: var(--fallout-maw-damage-card-accent);
+  font-size: 0.9rem;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-damage-summary-traumas li small {
+  color: var(--fallout-maw-damage-card-muted);
+  font-size: 0.78rem;
+  line-height: 1.15;
+  opacity: 0.88;
+  overflow-wrap: anywhere;
+}
+
 .fallout-maw-skill-check-animation-host {
   pointer-events: none;
   position: fixed;

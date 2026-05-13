@@ -59,13 +59,21 @@ async function processSingleNeed(actor, need) {
 }
 
 async function processDiseaseWorldTime(worldTime, deltaTime) {
-  if (!game.user?.isActiveGM || Number(deltaTime) <= 0) return;
+  const dtIn = Number(deltaTime) || 0;
+  if (!game.user?.isActiveGM || dtIn <= 0) return;
   if (getTimeMechanicsIgnored()) {
-    await preserveDiseaseTimedEffects(Number(deltaTime) || 0);
+    await preserveDiseaseTimedEffects(dtIn);
     return;
   }
-  const now = Number(worldTime) || Number(game.time?.worldTime) || 0;
-  const elapsedSeconds = Number(deltaTime) || 0;
+  const clock = Number(game.time?.worldTime) || 0;
+  let wt = Number(worldTime) || 0;
+  let dt = dtIn;
+  if (clock > wt) {
+    dt += clock - wt;
+    wt = clock;
+  }
+  const now = wt;
+  const elapsedSeconds = dt;
   for (const actor of getLoadedActors()) {
     if (!actor?.isOwner) continue;
     if (!getTimeNeedsPlayersOnly() || hasPlayerOwner(actor)) {

@@ -20,6 +20,7 @@ import {
 import { toInteger } from "../utils/numbers.mjs";
 
 const DAMAGE_SOCKET = `system.${SYSTEM_ID}`;
+const DAMAGE_SOCKET_REQUEST_TIMEOUT_MS = 60000;
 const TRAUMA_FLAG_SCOPE = "fallout-maw";
 const TRAUMA_FLAG_KEY = "trauma";
 const DAMAGE_EFFECT_FLAG_KEY = "damageEffect";
@@ -67,6 +68,8 @@ const processingPeriodicEffectUuids = new Set();
 const damageMitigationTextureCache = new Map();
 const actorDamageStatusSyncQueue = new Map();
 const actorDamageMutationQueue = new Map();
+const pendingDamageSocketRequests = new Map();
+let damageHubOperationQueue = Promise.resolve();
 
 export function registerDamageSocket() {
   game.socket.on(DAMAGE_SOCKET, handleDamageSocketMessage);
@@ -109,12 +112,8 @@ export async function requestDamageApplication({
     return undefined;
   }
 
-  game.socket.emit(DAMAGE_SOCKET, {
-    action: "applyDamageCycle",
-    gmUserId: gm.id,
-    requests: [request]
-  });
-  return undefined;
+  const results = await requestDamageCycleFromGM(gm, [request]);
+  return results?.[0];
 }
 
 export async function requestDamageApplications(requests = []) {
@@ -137,18 +136,48 @@ export async function requestDamageApplications(requests = []) {
   }
 
   const gm = getResponsibleGM();
-  if (gm) {
-    game.socket.emit(DAMAGE_SOCKET, {
-      action: "applyDamageCycle",
-      gmUserId: gm.id,
-      requests: normalizedRequests
-    });
-    return [];
-  }
+  if (gm) return requestDamageCycleFromGM(gm, normalizedRequests);
 
   ui.notifications.warn("No active GM is available to apply damage.");
   return applyDamageCycle(normalizedRequests.filter(request => canApplyDamageLocally(actors.get(request.actorUuid))));
 
+}
+
+async function requestDamageCycleFromGM(gm, requests = []) {
+  return requestDamageSocketActionFromGM(gm, {
+    action: "applyDamageCycle",
+    requests
+  }, {
+    fallback: [],
+    timeoutWarning: "No GM response was received for damage application."
+  });
+}
+
+async function requestDamageSocketActionFromGM(gm, payload = {}, { fallback = [], timeoutWarning = "No GM response was received for damage hub action." } = {}) {
+  const requestId = foundry.utils.randomID();
+  const requesterUserId = game.user?.id ?? "";
+  const promise = new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      pendingDamageSocketRequests.delete(requestId);
+      reject(new Error("Damage hub socket request timed out."));
+    }, DAMAGE_SOCKET_REQUEST_TIMEOUT_MS);
+    pendingDamageSocketRequests.set(requestId, { resolve, reject, timeout });
+  });
+
+  game.socket.emit(DAMAGE_SOCKET, {
+    ...payload,
+    gmUserId: gm.id,
+    requesterUserId,
+    requestId
+  });
+
+  try {
+    return await promise;
+  } catch (error) {
+    console.error("Fallout MaW | Damage hub socket request failed", error);
+    ui.notifications.warn(timeoutWarning);
+    return fallback;
+  }
 }
 
 export async function requestRegionPeriodicDamage({ token = null, actor = null, entries = [], source = {} } = {}) {
@@ -196,7 +225,9 @@ export async function requestFirstAidEffect({
     source
   });
 
-  if (canApplyDamageLocally(resolvedActor)) return createFirstAidEffect(resolvedActor, request);
+  if (canApplyDamageLocally(resolvedActor)) {
+    return runDamageHubOperation(() => createFirstAidEffect(resolvedActor, request));
+  }
 
   const gm = getResponsibleGM();
   if (!gm) {
@@ -204,12 +235,10 @@ export async function requestFirstAidEffect({
     return [];
   }
 
-  game.socket.emit(DAMAGE_SOCKET, {
+  return requestDamageSocketActionFromGM(gm, {
     action: "createFirstAidEffect",
-    gmUserId: gm.id,
     request
   });
-  return [];
 }
 
 export async function requestFirstAidNeedChanges({
@@ -226,7 +255,9 @@ export async function requestFirstAidNeedChanges({
   });
   if (!request.needs.length) return [];
 
-  if (canApplyDamageLocally(resolvedActor)) return applyFirstAidNeedChanges(resolvedActor, request.needs);
+  if (canApplyDamageLocally(resolvedActor)) {
+    return runDamageHubOperation(() => applyFirstAidNeedChanges(resolvedActor, request.needs));
+  }
 
   const gm = getResponsibleGM();
   if (!gm) {
@@ -234,15 +265,17 @@ export async function requestFirstAidNeedChanges({
     return [];
   }
 
-  game.socket.emit(DAMAGE_SOCKET, {
+  return requestDamageSocketActionFromGM(gm, {
     action: "applyFirstAidNeedChanges",
-    gmUserId: gm.id,
     request
   });
-  return [];
 }
 
 async function applyDamageCycle(requests = []) {
+  return runDamageHubOperation(() => applyDamageCycleNow(requests));
+}
+
+async function applyDamageCycleNow(requests = []) {
   const grouped = new Map();
   for (const request of requests) {
     const data = normalizeDamageRequest(request);
@@ -257,17 +290,76 @@ async function applyDamageCycle(requests = []) {
   for (const [actorUuid, actorRequests] of grouped) {
     const actor = await fromUuid(actorUuid);
     if (!actor || (!game.user?.isGM && !actor.isOwner)) continue;
-    results.push(...await applyDamageApplications({ actorUuid, requests: actorRequests }, { createSummary: false }));
+    const actorResults = await queueActorDamageMutation(actorUuid, () => (
+      applyDamageApplicationsNow({ actorUuid, requests: actorRequests }, { createSummary: false })
+    ));
+    if (Array.isArray(actorResults)) results.push(...actorResults);
   }
 
   await publishDamageSummaryMessage(results);
   return results;
 }
 
+function stampDamageRequestsLogicalWorldTime(requests = [], logicalWorldTime) {
+  const lt = Number(logicalWorldTime);
+  if (!Number.isFinite(lt) || lt <= 0) return requests;
+  return requests.map(request => {
+    const src = request?.source && typeof request.source === "object"
+      ? { ...request.source }
+      : {};
+    if (!Number.isFinite(Number(src.worldTime))) src.worldTime = lt;
+    return { ...request, source: src };
+  });
+}
+
+export async function applyDamageRequestsInCurrentHubOperation(requests = [], logicalWorldTime = null) {
+  const stamped = Number.isFinite(Number(logicalWorldTime))
+    ? stampDamageRequestsLogicalWorldTime(requests, Number(logicalWorldTime))
+    : requests;
+  return applyDamageCycleNow(stamped);
+}
+
+function serializeDamageCycleSocketResults(results = []) {
+  return results.flat(Infinity).filter(Boolean).map(result => ({
+    actorUuid: String(result.actor?.uuid ?? result.actorUuid ?? ""),
+    amount: roundDamageAmount(result.amount),
+    healthDelta: roundDamageAmount(result.healthDelta),
+    limbDelta: roundDamageAmount(result.limbDelta),
+    mode: result.mode ?? MODE_DAMAGE,
+    scope: result.scope ?? "",
+    limbKey: result.limbKey ?? "",
+    damageTypeKey: result.damageTypeKey ?? ""
+  }));
+}
+
+function serializeEmbeddedDocumentSocketResults(documents = []) {
+  return (Array.isArray(documents) ? documents : [documents])
+    .filter(Boolean)
+    .map(document => ({
+      uuid: String(document.uuid ?? ""),
+      id: String(document.id ?? ""),
+      name: String(document.name ?? "")
+    }));
+}
+
+function respondDamageHubSocketAction(payload = {}, { ok = true, error = "", result = [] } = {}) {
+  if (!payload.requestId || !payload.requesterUserId) return;
+  game.socket.emit(DAMAGE_SOCKET, {
+    action: "damageHubActionResult",
+    targetUserId: payload.requesterUserId,
+    requestId: payload.requestId,
+    ok,
+    error,
+    result
+  });
+}
+
 export async function applyDamageApplication(request = {}, options = {}) {
   const data = normalizeDamageRequest(request);
   if (!data.actorUuid) return undefined;
-  return queueActorDamageMutation(data.actorUuid, () => applyDamageApplicationNow(data, options));
+  return runDamageHubOperation(() => (
+    queueActorDamageMutation(data.actorUuid, () => applyDamageApplicationNow(data, options))
+  ));
 }
 
 async function applyDamageApplicationNow(request = {}, { createSummary = true } = {}) {
@@ -418,7 +510,9 @@ export function estimateDamageApplication(request = {}) {
 export async function applyDamageApplications({ actorUuid = "", requests = [] } = {}, options = {}) {
   const targetActorUuid = String(actorUuid ?? "").trim();
   if (!targetActorUuid) return undefined;
-  return queueActorDamageMutation(targetActorUuid, () => applyDamageApplicationsNow({ actorUuid: targetActorUuid, requests }, options));
+  return runDamageHubOperation(() => (
+    queueActorDamageMutation(targetActorUuid, () => applyDamageApplicationsNow({ actorUuid: targetActorUuid, requests }, options))
+  ));
 }
 
 async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}, { createSummary = true } = {}) {
@@ -773,6 +867,22 @@ function queueActorDamageMutation(actorOrUuid, operation) {
   return next;
 }
 
+export async function runDamageHubOperation(operation) {
+  const previous = damageHubOperationQueue.catch(() => undefined);
+  let releaseQueuedOperation;
+  const queuedOperation = new Promise(resolve => {
+    releaseQueuedOperation = resolve;
+  });
+  damageHubOperationQueue = previous.then(() => queuedOperation);
+  await previous;
+
+  try {
+    return await operation();
+  } finally {
+    releaseQueuedOperation();
+  }
+}
+
 async function applyDestroyedLimbConsequences(actor, limbKeys = []) {
   return applyDestroyedLimbConsequencesNow(actor, limbKeys);
 }
@@ -827,14 +937,14 @@ async function deleteDamageSystemEffects(actor) {
 async function deleteActorItems(actor, itemIds = []) {
   const ids = Array.from(new Set(itemIds)).filter(id => actor?.items?.has(id));
   if (!ids.length) return [];
-  return actor.deleteEmbeddedDocuments("Item", ids.filter(id => actor.items?.has(id)));
+  return actor.deleteEmbeddedDocuments("Item", ids.filter(id => actor.items?.has(id)), { animate: false });
 }
 
 async function deleteActorActiveEffects(actor, effectIds = []) {
   const ids = Array.from(new Set(effectIds)).filter(id => actor?.effects?.has(id));
   if (!ids.length) return [];
   try {
-    return await actor.deleteEmbeddedDocuments("ActiveEffect", ids.filter(id => actor.effects?.has(id)));
+    return await actor.deleteEmbeddedDocuments("ActiveEffect", ids.filter(id => actor.effects?.has(id)), { animate: false });
   } catch (error) {
     if (!isMissingDocumentError(error)) throw error;
     return [];
@@ -891,7 +1001,7 @@ async function createLimbLossEffect(actor, limbKey = "") {
       }
     },
     system: { changes }
-  }]);
+  }], { animate: false });
 }
 
 function getLimbLossEffects(actor, limbKey = "") {
@@ -932,17 +1042,54 @@ async function synchronizeActorVitalStatuses(actor) {
 }
 
 async function setActorStatus(actor, statusId = "", active = false) {
-  if (!statusId || !actor?.toggleStatusEffect) return;
+  if (!statusId || !actor) return;
   if (actor.statuses?.has?.(statusId) === active) return;
   try {
-    await actor.toggleStatusEffect(statusId, { active });
+    await setActorStatusNoAnimation(actor, statusId, active);
   } catch (error) {
     if (!isMissingDocumentError(error)) throw error;
     const freshActor = fromUuidSync(actor.uuid) ?? actor;
     if (freshActor.statuses?.has?.(statusId) === active) return;
     if (!active) return;
-    await freshActor.toggleStatusEffect(statusId, { active });
+    await setActorStatusNoAnimation(freshActor, statusId, active);
   }
+}
+
+async function setActorStatusNoAnimation(actor, statusId = "", active = false) {
+  const status = CONFIG.statusEffects?.[statusId];
+  if (!status) return undefined;
+
+  const existing = getActorStatusEffectIds(actor, status);
+  if (existing.length) {
+    if (active) return true;
+    await actor.deleteEmbeddedDocuments("ActiveEffect", existing, { animate: false });
+    return false;
+  }
+
+  if (!active && active !== undefined) return undefined;
+  const ActiveEffect = getDocumentClass("ActiveEffect");
+  const effect = await ActiveEffect.fromStatusEffect(statusId);
+  return ActiveEffect.implementation.create(effect, {
+    parent: actor,
+    keepId: true,
+    animate: false
+  });
+}
+
+function getActorStatusEffectIds(actor, status) {
+  if (!actor || !status) return [];
+  const existing = [];
+  if (status._id) {
+    const effect = actor.effects?.get(status._id);
+    if (effect) existing.push(effect.id);
+    return existing;
+  }
+
+  for (const effect of actor.effects ?? []) {
+    const statuses = effect.statuses;
+    if (statuses?.size === 1 && statuses.has(status.id)) existing.push(effect.id);
+  }
+  return existing;
 }
 
 function splitSpecialEffectChanges(effectChanges = []) {
@@ -1227,6 +1374,16 @@ async function applyNeedIncrease(actor, { amount = 0, settings = {} } = {}) {
 
 async function handleDamageSocketMessage(payload = {}) {
   if (!payload) return;
+  if (payload.action === "applyDamageCycleResult" || payload.action === "damageHubActionResult") {
+    if (payload.targetUserId && payload.targetUserId !== game.user?.id) return;
+    const pending = pendingDamageSocketRequests.get(payload.requestId);
+    if (!pending) return;
+    window.clearTimeout(pending.timeout);
+    pendingDamageSocketRequests.delete(payload.requestId);
+    if (payload.ok) pending.resolve(payload.results ?? payload.result ?? []);
+    else pending.reject(new Error(payload.error || "Damage hub socket request failed."));
+    return;
+  }
   if (payload.action === "showDamageNumbers") {
     if (payload.senderUserId === game.user?.id) return;
     displayDamageNumbersForActor(payload.actorUuid, payload.entries);
@@ -1247,21 +1404,64 @@ async function handleDamageSocketMessage(payload = {}) {
   }
   if (payload.action === "applyDamageCycle") {
     if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
-    await applyDamageCycle(payload.requests);
+    let ok = true;
+    let results = [];
+    let error = "";
+    try {
+      results = await applyDamageCycle(payload.requests);
+    } catch (caught) {
+      ok = false;
+      error = String(caught?.message ?? caught ?? "Damage hub socket request failed.");
+      console.error("Fallout MaW | Damage hub socket request failed", caught);
+    }
+    if (payload.requestId && payload.requesterUserId) {
+      game.socket.emit(DAMAGE_SOCKET, {
+        action: "applyDamageCycleResult",
+        targetUserId: payload.requesterUserId,
+        requestId: payload.requestId,
+        ok,
+        error,
+        results: ok ? serializeDamageCycleSocketResults(results) : []
+      });
+    }
     return;
   }
   if (payload.action === "createFirstAidEffect") {
     if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
-    const request = normalizeFirstAidEffectRequest(payload.request);
-    const actor = await fromUuid(request.actorUuid);
-    if (actor) await createFirstAidEffect(actor, request);
+    let ok = true;
+    let result = [];
+    let error = "";
+    try {
+      const request = normalizeFirstAidEffectRequest(payload.request);
+      const actor = await fromUuid(request.actorUuid);
+      if (actor) result = await runDamageHubOperation(() => createFirstAidEffect(actor, request));
+    } catch (caught) {
+      ok = false;
+      error = String(caught?.message ?? caught ?? "Damage hub socket request failed.");
+      console.error("Fallout MaW | First aid effect socket request failed", caught);
+    }
+    respondDamageHubSocketAction(payload, {
+      ok,
+      error,
+      result: ok ? serializeEmbeddedDocumentSocketResults(result) : []
+    });
     return;
   }
   if (payload.action === "applyFirstAidNeedChanges") {
     if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
-    const request = normalizeFirstAidNeedChangesRequest(payload.request);
-    const actor = await fromUuid(request.actorUuid);
-    if (actor) await applyFirstAidNeedChanges(actor, request.needs);
+    let ok = true;
+    let result = [];
+    let error = "";
+    try {
+      const request = normalizeFirstAidNeedChangesRequest(payload.request);
+      const actor = await fromUuid(request.actorUuid);
+      if (actor) result = await runDamageHubOperation(() => applyFirstAidNeedChanges(actor, request.needs));
+    } catch (caught) {
+      ok = false;
+      error = String(caught?.message ?? caught ?? "Damage hub socket request failed.");
+      console.error("Fallout MaW | First aid need socket request failed", caught);
+    }
+    respondDamageHubSocketAction(payload, { ok, error, result: ok ? result : [] });
     return;
   }
   if (payload.action !== "applyDamage") return;
@@ -1277,7 +1477,7 @@ function registerDamageTimeHooks() {
   });
   Hooks.on("deleteCombat", combat => combatRoundWorldTimes.delete(combat.id));
   Hooks.on("combatTurnChange", advanceWorldTimeForCombatRound);
-  registerQueuedWorldTimeProcessor(processTimedDamageEffects);
+  registerQueuedWorldTimeProcessor(processTimedDamageEffects, { priority: 100 });
   Hooks.on("preDeleteActiveEffect", preventIgnoredTimedDamageEffectDeletion);
   damageTimeHooksRegistered = true;
 }
@@ -1302,7 +1502,21 @@ function getRoundSeconds() {
 }
 
 async function processTimedDamageEffects(worldTime, deltaTime) {
-  if (!game.user?.isActiveGM || Number(deltaTime) <= 0) return;
+  const dt = Number(deltaTime) || 0;
+  if (!game.user?.isActiveGM || dt <= 0) return;
+  return runDamageHubOperation(async () => {
+    const clock = Number(game.time?.worldTime) || 0;
+    let wt = Number(worldTime) || 0;
+    let dtInner = Number(deltaTime) || 0;
+    if (clock > wt) {
+      dtInner += clock - wt;
+      wt = clock;
+    }
+    return processTimedDamageEffectsNow(wt, dtInner);
+  });
+}
+
+async function processTimedDamageEffectsNow(worldTime, deltaTime) {
   const elapsed = Number(deltaTime) || 0;
   if (getTimeMechanicsIgnored()) {
     await preserveTimedDamageEffects(elapsed);
@@ -1311,6 +1525,7 @@ async function processTimedDamageEffects(worldTime, deltaTime) {
   }
   const now = Number(worldTime) || Number(game.time?.worldTime) || 0;
   await processRegionPeriodicDamage(now, elapsed);
+  const damageResults = [];
   for (const actor of getLoadedActors()) {
     if (!actor?.isOwner) continue;
     await queueActorDamageMutation(actor.uuid, async freshActor => {
@@ -1343,7 +1558,7 @@ async function processTimedDamageEffects(worldTime, deltaTime) {
         await deletePeriodicEffects(freshActor, Array.from(effectDeleteIds));
         const damageEntries = entries.filter(entry => entry.mode !== MODE_HEALING);
         const healingEntries = entries.filter(entry => entry.mode === MODE_HEALING);
-        if (damageEntries.length) await applyPeriodicDamageBatch(freshActor, damageEntries);
+        if (damageEntries.length) damageResults.push(await applyPeriodicDamageBatch(freshActor, damageEntries));
         if (healingEntries.length) {
           await applyDamageApplicationsNow({
             actorUuid: freshActor.uuid,
@@ -1357,13 +1572,14 @@ async function processTimedDamageEffects(worldTime, deltaTime) {
               processDamageTypeSettings: false,
               source: entry.source
             }))
-          });
+          }, { createSummary: false });
         }
       } finally {
         for (const uuid of lockedEffectUuids) processingPeriodicEffectUuids.delete(uuid);
       }
     });
   }
+  await publishDamageSummaryMessage(damageResults);
 }
 
 async function processRegionPeriodicDamage(now = 0, deltaTime = 0) {
@@ -1396,7 +1612,7 @@ async function processRegionPeriodicDamage(now = 0, deltaTime = 0) {
   }
 
   const requests = batches.flatMap(batch => batch.requests);
-  if (requests.length) await requestDamageApplications(requests);
+  if (requests.length) await applyDamageCycleNow(requests);
 }
 
 async function collectRegionPeriodicDamageBehavior(region, behavior, now = 0, previousTime = now) {
@@ -1769,7 +1985,6 @@ async function applyPeriodicDamageBatch(actor, entries = []) {
     }))
     .filter(entry => entry.amount > 0);
   const result = await applyDamageEntriesBatch(actor, normalizedEntries);
-  await publishDamageSummaryMessage([result]);
   return result;
 }
 
@@ -1963,6 +2178,11 @@ async function publishDamageSummaryMessage(results = []) {
               key: limb.key,
               label: limb.label,
               amount: limb.amount
+            })),
+            traumas: victim.traumas.map(trauma => ({
+              key: trauma.key,
+              name: trauma.name,
+              summary: trauma.summary
             }))
           }))
         }
@@ -1980,7 +2200,8 @@ function buildDamageSummaryViewContext(results = []) {
 
     const healthDelta = roundDamageAmount(result.healthDelta);
     const limbDelta = roundDamageAmount(result.limbDelta);
-    if (healthDelta <= 0 && limbDelta <= 0) continue;
+    const createdTraumas = Array.isArray(result.createdTraumas) ? result.createdTraumas.filter(Boolean) : [];
+    if (healthDelta <= 0 && limbDelta <= 0 && !createdTraumas.length) continue;
 
     const victim = getDamageSummaryVictim(victims, actor);
     victim.healthDamage += healthDelta;
@@ -2002,6 +2223,8 @@ function buildDamageSummaryViewContext(results = []) {
         [result.damageTypeKey || "untyped"]: result.limbDelta
       });
     }
+
+    for (const trauma of createdTraumas) addDamageSummaryTrauma(victim, trauma);
   }
 
   const rows = Array.from(victims.values())
@@ -2018,9 +2241,16 @@ function buildDamageSummaryViewContext(results = []) {
           amount: roundDamageAmount(limb.amount)
         }))
         .filter(limb => limb.amount > 0)
-        .sort((left, right) => right.amount - left.amount)
+        .sort((left, right) => right.amount - left.amount),
+      traumas: Array.from(victim.traumas.values())
+        .map(trauma => ({
+          key: trauma.key,
+          name: trauma.name,
+          img: trauma.img,
+          summary: trauma.summary
+        }))
     }))
-    .filter(victim => victim.healthDamage > 0 || victim.limbDamage > 0)
+    .filter(victim => victim.healthDamage > 0 || victim.limbDamage > 0 || victim.traumas.length > 0)
     .sort((left, right) => (right.healthDamage + right.limbDamage) - (left.healthDamage + left.limbDamage));
 
   return {
@@ -2033,7 +2263,8 @@ function buildDamageSummaryViewContext(results = []) {
       title: "Сводка урона",
       totalDamage: "Урон",
       limbs: "Поврежденные конечности",
-      noLimbDamage: "Конечности не повреждены"
+      noLimbDamage: "Конечности не повреждены",
+      traumas: "Полученные травмы"
     }
   };
 }
@@ -2046,6 +2277,7 @@ function getDamageSummaryVictim(victims, actor) {
     healthDamage: 0,
     limbDamage: 0,
     limbs: new Map(),
+    traumas: new Map(),
     damageByType: new Map()
   };
   victims.set(actor.uuid, victim);
@@ -2075,6 +2307,50 @@ function addDamageSummaryLimb(victim, actor, limbKey = "", amount = 0, damageByT
     const typeKey = String(damageTypeKey || "untyped");
     limb.damageByType.set(typeKey, (limb.damageByType.get(typeKey) ?? 0) + typeDelta);
   }
+}
+
+function addDamageSummaryTrauma(victim, trauma) {
+  const key = getDamageSummaryTraumaKey(trauma);
+  if (!key || victim.traumas.has(key)) return;
+  victim.traumas.set(key, {
+    key,
+    name: String(trauma?.name ?? game.i18n.localize("DOCUMENT.Item")),
+    img: String(trauma?.img ?? "icons/svg/blood.svg"),
+    summary: buildDamageSummaryTraumaSummary(trauma)
+  });
+}
+
+function getDamageSummaryTraumaKey(trauma) {
+  return String(trauma?.uuid ?? trauma?.id ?? trauma?.name ?? "").trim();
+}
+
+function buildDamageSummaryTraumaSummary(trauma) {
+  const sources = Array.isArray(trauma?.system?.sources) ? trauma.system.sources : [];
+  const sourceText = sources
+    .map(getDamageSummaryTraumaSourceText)
+    .filter(Boolean)
+    .join("; ");
+  if (sourceText) return sourceText;
+
+  const limbLabel = String(trauma?.system?.limbLabel ?? trauma?.system?.limbKey ?? "").trim();
+  const damageTypeLabel = String(trauma?.system?.damageTypeLabel ?? trauma?.system?.damageTypeKey ?? "").trim();
+  const threshold = toInteger(trauma?.system?.thresholdPercent);
+  return [
+    limbLabel,
+    damageTypeLabel,
+    threshold > 0 ? `${threshold}%` : ""
+  ].filter(Boolean).join(" - ");
+}
+
+function getDamageSummaryTraumaSourceText(source = {}) {
+  const limbLabel = String(source?.limbLabel ?? source?.limbKey ?? "").trim();
+  const damageTypeLabel = String(source?.damageTypeLabel ?? source?.damageTypeKey ?? "").trim();
+  const threshold = toInteger(source?.thresholdPercent);
+  return [
+    limbLabel,
+    damageTypeLabel,
+    threshold > 0 ? `${threshold}%` : ""
+  ].filter(Boolean).join(" - ");
 }
 
 function getActorDamageSummaryImage(actor) {
@@ -2889,10 +3165,11 @@ async function createTriggeredTraumas(actor, { limbKey, damageTypeKey, previousV
   });
 
   const created = await actor.createEmbeddedDocuments("Item", [finalTraumaData], {
-    [TRAUMA_CREATE_OPTION]: true
+    [TRAUMA_CREATE_OPTION]: true,
+    animate: false
   });
   if (existingLimbTraumas.length) {
-    await actor.deleteEmbeddedDocuments("Item", existingLimbTraumas.map(item => item.id));
+    await actor.deleteEmbeddedDocuments("Item", existingLimbTraumas.map(item => item.id), { animate: false });
   }
   return created;
 }
