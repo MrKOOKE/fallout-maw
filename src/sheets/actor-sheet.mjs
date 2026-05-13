@@ -386,6 +386,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#relocateEffectsAddButton();
     this.#activateCreatureSelectors();
     this.#activateInventoryInteractions();
+    this.#activateWeaponSlotAspectSizing();
     this.#activateLimbControlClicks();
     this.#activateTabScrollPersistence();
     this.#restoreActiveTabScroll();
@@ -765,6 +766,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#clearInventoryTooltip();
     this.#tooltipAnchorElement = itemElement;
     this.#tooltipTimer = setTimeout(() => this.#showInventoryTooltip(item), 500);
+  }
+
+  #activateWeaponSlotAspectSizing() {
+    const images = this.element?.querySelectorAll(".fallout-maw-weapon-slot .fallout-maw-inventory-item > img") ?? [];
+    for (const image of images) {
+      const applyAspect = () => setWeaponSlotImageAspect(image);
+      if (image.complete && image.naturalWidth && image.naturalHeight) applyAspect();
+      else image.addEventListener("load", applyAspect, { once: true });
+    }
   }
 
   #onInventoryItemMouseMove(event) {
@@ -3609,6 +3619,15 @@ function findFirstAvailableInventoryPlacement(items, columns, rows, itemOrSystem
 
 function buildInventoryCellStyle(x, y, placement = null) {
   return buildInventoryCellStyleHelper(x, y, placement);
+}
+
+function setWeaponSlotImageAspect(image) {
+  const width = Number(image?.naturalWidth);
+  const height = Number(image?.naturalHeight);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
+  const slot = image.closest(".fallout-maw-weapon-slot");
+  if (!slot) return;
+  slot.style.setProperty("--fallout-maw-weapon-slot-image-aspect", String(Math.max(1, width / height)));
 }
 
 function prepareInventoryContext(actor, race) {

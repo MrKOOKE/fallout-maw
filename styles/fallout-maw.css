@@ -8003,6 +8003,12 @@ label.fallout-maw-mitigation-cell {
   width: var(--fallout-maw-actor-large-slot-size);
 }
 
+.application.fallout-maw-actor-sheet .fallout-maw-weapon-slot {
+  aspect-ratio: auto;
+  min-width: var(--fallout-maw-actor-large-slot-size);
+  width: calc(var(--fallout-maw-actor-large-slot-size) * var(--fallout-maw-weapon-slot-image-aspect, 1));
+}
+
 .application.fallout-maw-actor-sheet .fallout-maw-equipment-slot,
 .application.fallout-maw-actor-sheet .fallout-maw-inventory-cell {
   background:
