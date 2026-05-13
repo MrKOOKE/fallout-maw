@@ -1,28 +1,4 @@
 <div class="fallout-maw-token-hud-layout">
-  <section class="fallout-maw-token-hud-block fallout-maw-token-hud-weapons">
-    {{#if weaponSet}}
-    <button type="button" class="fallout-maw-token-hud-block-title fallout-maw-token-hud-weapon-set-title" data-action="cycleHudWeaponSet" title="{{weaponSet.label}}">
-      <span>{{weaponSet.label}}</span>
-      <i class="fa-solid fa-repeat" inert></i>
-    </button>
-    <div class="fallout-maw-token-hud-slot-row fallout-maw-token-hud-weapon-set">
-      {{#each weaponSet.slots}}
-      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-weapon-slot {{#if selected}}active{{/if}} {{#if phantom}}phantom{{/if}} {{#if useDisabled}}unusable{{/if}} {{#unless item}}empty{{/unless}}" data-action="selectHudWeapon" data-item-id="{{item.id}}" data-weapon-set="{{../key}}" {{#unless item}}disabled{{/unless}}>
-        {{#if item}}
-        <img src="{{item.img}}" alt="{{item.name}}" onerror="this.src='{{../../fallbackIcon}}'">
-        <span>{{item.name}}</span>
-        {{else}}
-        <img src="icons/svg/combat.svg" alt="">
-        <span>{{label}}</span>
-        {{/if}}
-      </button>
-      {{/each}}
-    </div>
-    {{else}}
-    <div class="fallout-maw-token-hud-empty">Нет слотов</div>
-    {{/if}}
-  </section>
-
   <div class="fallout-maw-token-hud-main-grid">
   <div class="fallout-maw-token-hud-left-stack">
     <section class="fallout-maw-token-hud-block fallout-maw-token-hud-limbs">
@@ -217,6 +193,34 @@
     {{/if}}
 
     <div class="fallout-maw-token-hud-actions" data-token-action-hud-actions>
+      {{#if weaponSet}}
+      <details class="fallout-maw-token-hud-weapon-set-menu">
+        <summary class="fallout-maw-token-hud-main-action fallout-maw-token-hud-weapon-set-toggle" title="{{weaponSet.label}}">
+          <span>{{weaponSet.label}}</span>
+          <i class="fa-solid fa-caret-up" inert></i>
+        </summary>
+        <div class="fallout-maw-token-hud-weapon-set-list" role="listbox" aria-label="Наборы оружия">
+          {{#each weaponSets}}
+          <div class="fallout-maw-token-hud-weapon-set-row {{#if active}}active{{/if}}">
+            <div class="fallout-maw-token-hud-weapon-set-row-title">{{label}}</div>
+            <div class="fallout-maw-token-hud-weapon-set-row-slots">
+              {{#each slots}}
+              <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-weapon-slot {{#if selected}}active{{/if}} {{#if phantom}}phantom{{/if}} {{#if useDisabled}}unusable{{/if}} {{#unless item}}empty{{/unless}}" data-action="selectHudWeapon" data-item-id="{{item.id}}" data-weapon-set="{{../key}}" {{#unless item}}disabled{{/unless}}>
+                {{#if item}}
+                <img src="{{item.img}}" alt="{{item.name}}" onerror="this.src='{{../../fallbackIcon}}'">
+                <span>{{item.name}}</span>
+                {{else}}
+                <img src="icons/svg/combat.svg" alt="">
+                <span>{{label}}</span>
+                {{/if}}
+              </button>
+              {{/each}}
+            </div>
+          </div>
+          {{/each}}
+        </div>
+      </details>
+      {{/if}}
       {{#each actions}}
       {{#if (eq key "weapon")}}
       <button type="button" class="fallout-maw-token-hud-main-action {{#if active}}active{{/if}}" data-action="toggleWeaponActions" data-item-id="{{itemId}}" title="{{caption}}" {{#if disabled}}disabled{{/if}}>

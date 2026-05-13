@@ -5077,6 +5077,96 @@ label.fallout-maw-mitigation-cell {
   font-size: 0.86em;
 }
 
+.fallout-maw-token-hud-weapon-set-menu {
+  flex: 0 0 var(--fallout-maw-token-hud-tile);
+  height: var(--fallout-maw-token-hud-tile);
+  pointer-events: auto;
+  position: relative;
+  width: var(--fallout-maw-token-hud-tile);
+}
+
+.fallout-maw-token-hud-weapon-set-menu summary {
+  list-style: none;
+}
+
+.fallout-maw-token-hud-weapon-set-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.fallout-maw-token-hud-weapon-set-toggle {
+  height: 100%;
+  width: 100%;
+}
+
+.fallout-maw-token-hud-weapon-set-toggle i {
+  color: #c9b06a;
+  font-size: 0.92rem;
+  transition: transform 160ms ease;
+}
+
+.fallout-maw-token-hud-weapon-set-menu[open] .fallout-maw-token-hud-weapon-set-toggle i {
+  transform: rotate(180deg);
+}
+
+.fallout-maw-token-hud-weapon-set-list {
+  background:
+    linear-gradient(180deg, rgba(38, 40, 32, 0.98), rgba(9, 10, 8, 0.98));
+  border: 1px solid rgba(242, 213, 129, 0.58);
+  box-shadow: inset 0 0 0 1px rgba(255, 238, 170, 0.06), 0 8px 22px rgba(0, 0, 0, 0.5);
+  bottom: calc(100% + var(--fallout-maw-token-hud-gap));
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  left: 0;
+  max-height: var(--fallout-maw-token-hud-popup-max-height);
+  max-width: calc(100vw - 24px);
+  min-width: 260px;
+  overflow: auto;
+  padding: 5px;
+  position: absolute;
+  z-index: calc(var(--z-index-tooltip, 9999) + 1);
+}
+
+.fallout-maw-token-hud-weapon-set-row {
+  align-items: stretch;
+  background: rgba(3, 5, 4, 0.48);
+  border: 1px solid rgba(190, 174, 126, 0.16);
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+  padding: 5px;
+}
+
+.fallout-maw-token-hud-weapon-set-row.active {
+  border-color: rgba(255, 219, 105, 0.58);
+}
+
+.fallout-maw-token-hud-weapon-set-row-title {
+  align-items: center;
+  color: #f2d581;
+  display: flex;
+  flex: 0 0 94px;
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1.1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+}
+
+.fallout-maw-token-hud-weapon-set-row-slots {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.fallout-maw-token-hud-weapon-set-menu button {
+  pointer-events: auto;
+}
+
 .fallout-maw-token-hud-limbs-title {
   align-items: center;
   display: flex;

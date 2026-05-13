@@ -331,7 +331,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       toggleMeterSection: TokenActionHud.#onToggleMeterSection,
       toggleMeterEdit: TokenActionHud.#onToggleMeterEdit,
       selectHudWeapon: { handler: TokenActionHud.#onSelectHudWeapon, buttons: [0, 1] },
-      cycleHudWeaponSet: TokenActionHud.#onCycleHudWeaponSet,
       toggleWeaponActions: { handler: TokenActionHud.#onToggleWeaponActions, buttons: [0, 1] },
       useWeaponAction: { handler: TokenActionHud.#onUseWeaponAction, buttons: [0, 1] },
       gmHealSelected: TokenActionHud.#onGmHealSelected,
@@ -380,6 +379,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const activeWeaponSetKey = getActiveHudWeaponSetKey(actor, inventory.weaponSets);
     const selectedWeapon = getSelectedHudWeapon(actor, inventory.weaponSets, activeWeaponSetKey);
     const weaponSet = prepareHudWeaponSet(inventory.weaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "");
+    const weaponSets = prepareHudWeaponSets(inventory.weaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "");
     const selectedWeaponSlot = getSelectedHudWeaponSlot(weaponSet, selectedWeapon?.id ?? "");
     const selectedWeaponDisabled = Boolean(selectedWeaponSlot?.useDisabled);
     const weaponActionRows = prepareWeaponActionRows(actor, selectedWeapon, selectedWeaponDisabled);
@@ -407,7 +407,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       needs: prepareNeedEntries(actor),
       activeTray: this.#activeTray,
       weaponSet,
-      weaponSetCount: inventory.weaponSets.length,
+      weaponSets,
       selectedWeapon,
       actions,
       meterSections,
@@ -601,28 +601,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, itemId);
     const weaponSetKey = String(target.dataset.weaponSet ?? "");
     if (weaponSetKey) await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
-    this.#activeTray = "";
-    return this.render({ force: true });
-  }
-
-  static async #onCycleHudWeaponSet(event) {
-    event.preventDefault();
-    const actor = this.actor;
-    if (!actor?.isOwner) return undefined;
-
-    const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
-    const weaponSets = prepareInventoryContext(actor, race).weaponSets;
-    if (weaponSets.length <= 1) return undefined;
-
-    const currentKey = getActiveHudWeaponSetKey(actor, weaponSets);
-    const currentIndex = Math.max(0, weaponSets.findIndex(set => set.key === currentKey));
-    const nextSet = weaponSets[(currentIndex + 1) % weaponSets.length];
-    await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, nextSet.key);
-
-    const nextWeaponId = getFirstWeaponIdInSet(nextSet);
-    if (nextWeaponId) await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, nextWeaponId);
-    else await actor.unsetFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG);
-
     this.#activeTray = "";
     return this.render({ force: true });
   }
@@ -1744,15 +1722,19 @@ function prepareActions(activeTray, selectedWeapon, items, abilities, systemActi
 }
 
 function prepareHudWeaponSet(weaponSets = [], activeSetKey = "", selectedWeaponId = "") {
-  const set = weaponSets.find(entry => entry.key === activeSetKey) ?? weaponSets[0] ?? null;
-  if (!set) return null;
-  return {
+  return prepareHudWeaponSets(weaponSets, activeSetKey, selectedWeaponId)
+    .find(entry => entry.key === activeSetKey) ?? null;
+}
+
+function prepareHudWeaponSets(weaponSets = [], activeSetKey = "", selectedWeaponId = "") {
+  return weaponSets.map(set => ({
     ...set,
+    active: set.key === activeSetKey,
     slots: (set.slots ?? []).map(slot => ({
       ...slot,
       selected: Boolean(slot.item?.id && !slot.phantom && slot.item.id === selectedWeaponId)
     }))
-  };
+  }));
 }
 
 function getSelectedHudWeaponSlot(weaponSet = null, selectedWeaponId = "") {
@@ -1788,10 +1770,6 @@ function getSelectedHudWeapon(actor, weaponSets = [], activeSetKey = "") {
   const weaponIds = (set.slots ?? []).filter(slot => !slot.phantom).map(slot => slot.item?.id).filter(Boolean);
   const resolvedId = weaponIds.includes(selectedId) ? selectedId : weaponIds[0];
   return resolvedId ? actor.items.get(resolvedId) ?? null : null;
-}
-
-function getFirstWeaponIdInSet(weaponSet = null) {
-  return (weaponSet?.slots ?? []).filter(slot => !slot.phantom).map(slot => slot.item?.id).find(Boolean) ?? "";
 }
 
 function isMiddleMouseClick(event) {
