@@ -53,9 +53,9 @@ import { createDefaultSystemActionSettings, createDefaultToolSettings } from "./
 import { createDefaultTraumaSettings } from "./traumas.mjs";
 import {
   DEFAULT_SKILL_CHECK_CONTROL,
-  DEFAULT_TOKEN_ACTION_HUD_DAMAGE_ICONS,
+  DEFAULT_TOKEN_ACTION_HUD_ICONS,
   normalizeSkillCheckControl,
-  normalizeTokenActionHudDamageIcons
+  normalizeTokenActionHudIcons
 } from "./accessors.mjs";
 import { migrateSystemSettings } from "../migrations/settings.mjs";
 
@@ -233,11 +233,11 @@ export function registerSystemSettings() {
   });
 
   game.settings.register(FALLOUT_MAW.id, TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING, {
-    name: "Token Action HUD Damage Icons",
+    name: "Token Action HUD Icons",
     scope: "world",
     config: false,
     type: Object,
-    default: normalizeTokenActionHudDamageIcons(DEFAULT_TOKEN_ACTION_HUD_DAMAGE_ICONS)
+    default: normalizeTokenActionHudIcons(DEFAULT_TOKEN_ACTION_HUD_ICONS)
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "creatureOptionsMenu", {

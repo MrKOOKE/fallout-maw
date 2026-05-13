@@ -63,6 +63,31 @@ export const DEFAULT_TOKEN_ACTION_HUD_DAMAGE_ICONS = Object.freeze({
   damageBlockedIcon: `systems/${FALLOUT_MAW.id}/assets/HUD/ac-gold-shield-badge-Picsart-BackgroundRemover.png`
 });
 
+export const DEFAULT_TOKEN_ACTION_HUD_ICONS = Object.freeze({
+  ...DEFAULT_TOKEN_ACTION_HUD_DAMAGE_ICONS,
+  mainActions: Object.freeze({
+    weapon: "icons/svg/combat.svg",
+    items: "icons/svg/item-bag.svg",
+    abilities: "icons/svg/aura.svg",
+    skills: "icons/svg/dice-target.svg",
+    actions: "icons/svg/aura.svg",
+    settings: "icons/svg/lever.svg"
+  }),
+  weaponActions: Object.freeze({
+    aimedShot: "icons/svg/target.svg",
+    snapshot: "icons/svg/thrust.svg",
+    burst: "icons/svg/dice-target.svg",
+    volley: "icons/svg/explosion.svg",
+    meleeAttack: "icons/svg/sword.svg",
+    aimedMeleeAttack: "icons/svg/target.svg",
+    reload: "icons/svg/upgrade.svg"
+  }),
+  skillIcons: Object.freeze(Object.fromEntries(
+    createDefaultSkillSettings().map(skill => [skill.key, normalizeImageSettingPath(skill.img, "icons/svg/d20-grey.svg")])
+  )),
+  emptyWeaponSlotIcon: "icons/svg/combat.svg"
+});
+
 const SKILL_CHECK_RESULT_MODES = new Set(["standard", "criticalSuccess", "success", "failure", "criticalFailure"]);
 const SKILL_CHECK_EDGE_MODES = new Set(["none", "advantage", "disadvantage"]);
 
@@ -86,11 +111,30 @@ export function normalizeSkillCheckControl(value = {}) {
 }
 
 export function normalizeTokenActionHudDamageIcons(value = {}) {
+  return normalizeTokenActionHudIcons(value);
+}
+
+export function normalizeTokenActionHudIcons(value = {}) {
   const source = value && typeof value === "object" ? value : {};
+  const defaults = DEFAULT_TOKEN_ACTION_HUD_ICONS;
   return {
-    damageReductionIcon: normalizeImageSettingPath(source.damageReductionIcon, DEFAULT_TOKEN_ACTION_HUD_DAMAGE_ICONS.damageReductionIcon),
-    damageBlockedIcon: normalizeImageSettingPath(source.damageBlockedIcon, DEFAULT_TOKEN_ACTION_HUD_DAMAGE_ICONS.damageBlockedIcon)
+    damageReductionIcon: normalizeImageSettingPath(source.damageReductionIcon, defaults.damageReductionIcon),
+    damageBlockedIcon: normalizeImageSettingPath(source.damageBlockedIcon, defaults.damageBlockedIcon),
+    mainActions: normalizeImageSettingMap(source.mainActions, defaults.mainActions),
+    weaponActions: normalizeImageSettingMap(source.weaponActions, defaults.weaponActions),
+    skillIcons: normalizeImageSettingMap(source.skillIcons, defaults.skillIcons),
+    emptyWeaponSlotIcon: normalizeImageSettingPath(source.emptyWeaponSlotIcon, defaults.emptyWeaponSlotIcon)
   };
+}
+
+function normalizeImageSettingMap(value, defaults = {}) {
+  const source = value && typeof value === "object" ? value : {};
+  return Object.fromEntries(
+    Object.entries(defaults).map(([key, fallback]) => [
+      key,
+      normalizeImageSettingPath(source[key], fallback)
+    ])
+  );
 }
 
 function normalizeImageSettingPath(value, fallback) {
@@ -406,15 +450,23 @@ export async function setSkillCheckControl(value) {
 }
 
 export function getTokenActionHudDamageIcons() {
+  return getTokenActionHudIcons();
+}
+
+export function getTokenActionHudIcons() {
   try {
-    return normalizeTokenActionHudDamageIcons(game.settings.get(FALLOUT_MAW.id, TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING));
+    return normalizeTokenActionHudIcons(game.settings.get(FALLOUT_MAW.id, TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING));
   } catch (_error) {
-    return normalizeTokenActionHudDamageIcons();
+    return normalizeTokenActionHudIcons();
   }
 }
 
 export async function setTokenActionHudDamageIcons(value) {
-  const normalized = normalizeTokenActionHudDamageIcons(value);
+  return setTokenActionHudIcons(value);
+}
+
+export async function setTokenActionHudIcons(value) {
+  const normalized = normalizeTokenActionHudIcons(value);
   await game.settings.set(FALLOUT_MAW.id, TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING, normalized);
   return normalized;
 }
