@@ -2943,7 +2943,7 @@ function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = fal
     [game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), renderChangedDistanceValue(data.maxRangeMeters, baseData.maxRangeMeters, { baseMode })],
     [game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), renderChangedEffectiveRangeValue(data.effectiveRange, baseData.effectiveRange, { baseMode })]
   );
-  rows.push(...getWeaponVolleyRows(data));
+  rows.push(...getWeaponActionDetailRows(data));
   rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponSkill"), getSkillLabel(data.skillKey)]);
   const accuracyBonus = stats.accuracyBonus;
   if (accuracyBonus || (!baseMode && accuracyBonus !== baseStats.accuracyBonus)) {
@@ -3119,7 +3119,7 @@ function getWeaponProficiencySetting(data = {}) {
 function formatWeaponDamageValue(data = {}, damage = 0) {
   const effectiveDamage = Math.max(0, toInteger(damage));
   const pellets = Math.max(1, toInteger(data.pellets));
-  return pellets > 1 ? `${effectiveDamage} x ${pellets}` : String(effectiveDamage);
+  return pellets > 1 ? `${effectiveDamage} / ${pellets}` : String(effectiveDamage);
 }
 
 function getWeaponDamageDistributionLabel(item, data = {}) {
@@ -3143,6 +3143,17 @@ function getWeaponVolleyRows(data = {}) {
   if (regionDelay > 0) rows.push(["Задержка области", `${formatNumber(regionDelay)} с`]);
   if (regionDelta !== 0) rows.push(["Изменение радиуса", `${regionDelta > 0 ? "+" : ""}${formatNumber(regionDelta)} м`]);
   return rows;
+}
+
+function getWeaponActionDetailRows(data = {}) {
+  const rows = [];
+  if (isWeaponActionEnabled(data, "volley")) rows.push(...getWeaponVolleyRows(data));
+  return rows;
+}
+
+function isWeaponActionEnabled(data = {}, actionKey = "") {
+  if (actionKey === "reload" && hasWeaponResourceCostData(data, "magazine")) return true;
+  return Boolean(data?.availableActions?.[actionKey]);
 }
 
 function getWeaponDamageEntryLabels(entries = []) {
@@ -3320,7 +3331,7 @@ function getWeaponActionLabels(data = {}, baseData = {}, { baseMode = false } = 
     ["reload", game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload")]
   ];
   return definitions
-    .filter(([key]) => data.availableActions?.[key] || (key === "reload" && hasWeaponResourceCostData(data, "magazine")))
+    .filter(([key]) => isWeaponActionEnabled(data, key))
     .map(([key, label]) => {
       const name = String(data[key]?.name ?? "").trim() || label;
       const cost = getWeaponActionPointCost(data, key);
