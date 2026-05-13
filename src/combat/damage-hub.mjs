@@ -24,6 +24,7 @@ const TRAUMA_FLAG_SCOPE = "fallout-maw";
 const TRAUMA_FLAG_KEY = "trauma";
 const DAMAGE_EFFECT_FLAG_KEY = "damageEffect";
 const LIMB_LOSS_EFFECT_KIND = "limbLoss";
+const FIRST_AID_TEMPORARY_EFFECT_KIND = "firstAidTemporary";
 const REGION_DAMAGE_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
 const REGION_DAMAGE_FLAG_KEY = "periodicDamage";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
@@ -36,6 +37,7 @@ const SCOPE_HEALTH_AND_LIMB = "healthAndLimb";
 const ROUND_SECONDS = 6;
 const DAMAGE_NUMBER_ANIMATION_MS = 900;
 const DAMAGE_MITIGATION_ICON_ANIMATION_MS = 1000;
+const HEALING_NUMBER_COLOR = "#62d96b";
 const EQUIPMENT_CONDITION_UNCONDITIONAL_RATIO = 0.2;
 const STATUS_EFFECTS = Object.freeze({
   dead: "dead",
@@ -167,6 +169,77 @@ export async function requestRegionPeriodicDamage({ token = null, actor = null, 
   if (!requests.length) return [];
 
   return requestDamageApplications(requests);
+}
+
+export async function requestFirstAidEffect({
+  actor = null,
+  actorUuid = "",
+  itemName = "",
+  itemImg = "",
+  healingPerTick = 0,
+  durationSeconds = 0,
+  intervalSeconds = ROUND_SECONDS,
+  changes = [],
+  source = {}
+} = {}) {
+  const resolvedActor = actor ?? await fromUuid(actorUuid);
+  if (!resolvedActor) return [];
+
+  const request = normalizeFirstAidEffectRequest({
+    actorUuid: resolvedActor.uuid,
+    itemName,
+    itemImg,
+    healingPerTick,
+    durationSeconds,
+    intervalSeconds,
+    changes,
+    source
+  });
+
+  if (canApplyDamageLocally(resolvedActor)) return createFirstAidEffect(resolvedActor, request);
+
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("No active GM is available to create a first aid effect.");
+    return [];
+  }
+
+  game.socket.emit(DAMAGE_SOCKET, {
+    action: "createFirstAidEffect",
+    gmUserId: gm.id,
+    request
+  });
+  return [];
+}
+
+export async function requestFirstAidNeedChanges({
+  actor = null,
+  actorUuid = "",
+  needs = []
+} = {}) {
+  const resolvedActor = actor ?? await fromUuid(actorUuid);
+  if (!resolvedActor) return [];
+
+  const request = normalizeFirstAidNeedChangesRequest({
+    actorUuid: resolvedActor.uuid,
+    needs
+  });
+  if (!request.needs.length) return [];
+
+  if (canApplyDamageLocally(resolvedActor)) return applyFirstAidNeedChanges(resolvedActor, request.needs);
+
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("No active GM is available to apply first aid need changes.");
+    return [];
+  }
+
+  game.socket.emit(DAMAGE_SOCKET, {
+    action: "applyFirstAidNeedChanges",
+    gmUserId: gm.id,
+    request
+  });
+  return [];
 }
 
 async function applyDamageCycle(requests = []) {
@@ -303,6 +376,12 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
     broadcastDamageNumbers(actor, [{
       amount: result.healthDelta,
       damageTypeKey: damageType?.key ?? data.damageTypeKey
+    }]);
+  }
+  if (mode === MODE_HEALING && result.healthDelta > 0) {
+    broadcastDamageNumbers(actor, [{
+      amount: result.healthDelta,
+      mode: MODE_HEALING
     }]);
   }
   if (createSummary) await publishDamageSummaryMessage([result]);
@@ -1017,6 +1096,117 @@ async function createResourceLimitEffect(actor, { damageType = {}, healthDelta =
   }]);
 }
 
+async function createFirstAidEffect(actor, request = {}) {
+  const data = normalizeFirstAidEffectRequest(request);
+  if (!actor || data.durationSeconds <= 0) return [];
+  if (data.healingPerTick <= 0 && !data.changes.length) return [];
+
+  const startTime = Number.isFinite(Number(data.source?.worldTime))
+    ? Number(data.source.worldTime)
+    : (Number(game.time?.worldTime) || 0);
+  const tickCount = data.healingPerTick > 0
+    ? Math.max(1, Math.ceil(data.durationSeconds / data.intervalSeconds))
+    : 0;
+  const effectName = data.itemName || "Первая помощь";
+  const description = [
+    data.healingPerTick > 0 ? `Заживление: +${data.healingPerTick}` : "",
+    `Длительность: ${data.durationSeconds} сек.`
+  ].filter(Boolean).join("<br>");
+  const damageEffect = data.healingPerTick > 0
+    ? {
+      kind: "periodicHealing",
+      amountPerTick: data.healingPerTick,
+      totalTicks: tickCount,
+      remainingTicks: tickCount,
+      intervalSeconds: data.intervalSeconds,
+      startTime,
+      endTime: startTime + data.durationSeconds,
+      nextTickTime: startTime + data.intervalSeconds,
+      source: data.source
+    }
+    : {
+      kind: FIRST_AID_TEMPORARY_EFFECT_KIND,
+      startTime,
+      endTime: startTime + data.durationSeconds,
+      source: data.source
+    };
+  const flags = {
+    [TRAUMA_FLAG_SCOPE]: {
+      kind: "temporary",
+      [DAMAGE_EFFECT_FLAG_KEY]: damageEffect
+    }
+  };
+
+  const effectData = {
+    type: "base",
+    name: effectName,
+    img: data.itemImg || "icons/svg/heal.svg",
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    description,
+    flags,
+    system: { changes: data.changes }
+  };
+  return actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+}
+
+function normalizeFirstAidEffectRequest(request = {}) {
+  return {
+    actorUuid: String(request.actorUuid ?? "").trim(),
+    itemName: String(request.itemName ?? "").trim(),
+    itemImg: String(request.itemImg ?? "").trim(),
+    healingPerTick: Math.max(0, toInteger(request.healingPerTick)),
+    durationSeconds: Math.max(0, toInteger(request.durationSeconds)),
+    intervalSeconds: Math.max(1, toInteger(request.intervalSeconds || ROUND_SECONDS)),
+    changes: normalizeEffectChanges(request.changes),
+    source: request.source && typeof request.source === "object" ? foundry.utils.deepClone(request.source) : {}
+  };
+}
+
+function normalizeFirstAidNeedChangesRequest(request = {}) {
+  const source = Array.isArray(request.needs) ? request.needs : Object.values(request.needs ?? {});
+  return {
+    actorUuid: String(request.actorUuid ?? "").trim(),
+    needs: source
+      .map(entry => ({
+        key: String(entry?.key ?? entry?.needKey ?? "").trim(),
+        value: toInteger(entry?.value)
+      }))
+      .filter(entry => entry.key && entry.value)
+  };
+}
+
+async function applyFirstAidNeedChanges(actor, needs = []) {
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return [];
+  const updates = {};
+  for (const entry of needs) {
+    const need = actor.system?.needs?.[entry.key];
+    if (!need) continue;
+    const min = Math.max(0, toInteger(need.min));
+    const max = Math.max(min, toInteger(need.max));
+    const next = Math.min(max, Math.max(min, toInteger(need.value) + toInteger(entry.value)));
+    updates[`system.needs.${entry.key}.value`] = next;
+  }
+  if (!Object.keys(updates).length) return [];
+  await actor.update(updates);
+  return Object.entries(updates).map(([path, value]) => ({ path, value }));
+}
+
+function normalizeEffectChanges(changes = []) {
+  const source = Array.isArray(changes) ? changes : Object.values(changes ?? {});
+  return source
+    .map(change => ({
+      key: String(change?.key ?? "").trim(),
+      type: ["add", "multiply", "override"].includes(String(change?.type ?? "")) ? String(change.type) : "add",
+      value: String(change?.value ?? "0"),
+      phase: String(change?.phase ?? "initial") || "initial",
+      priority: change?.priority === null || change?.priority === "" || change?.priority === undefined
+        ? null
+        : toInteger(change.priority)
+    }))
+    .filter(change => change.key);
+}
+
 async function applyNeedIncrease(actor, { amount = 0, settings = {} } = {}) {
   const needKey = String(settings.needKey ?? "").trim();
   const need = actor.system?.needs?.[needKey];
@@ -1058,6 +1248,20 @@ async function handleDamageSocketMessage(payload = {}) {
   if (payload.action === "applyDamageCycle") {
     if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
     await applyDamageCycle(payload.requests);
+    return;
+  }
+  if (payload.action === "createFirstAidEffect") {
+    if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
+    const request = normalizeFirstAidEffectRequest(payload.request);
+    const actor = await fromUuid(request.actorUuid);
+    if (actor) await createFirstAidEffect(actor, request);
+    return;
+  }
+  if (payload.action === "applyFirstAidNeedChanges") {
+    if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
+    const request = normalizeFirstAidNeedChangesRequest(payload.request);
+    const actor = await fromUuid(request.actorUuid);
+    if (actor) await applyFirstAidNeedChanges(actor, request.needs);
     return;
   }
   if (payload.action !== "applyDamage") return;
@@ -1118,9 +1322,9 @@ async function processTimedDamageEffects(worldTime, deltaTime) {
 
       for (const effect of Array.from(freshActor.effects ?? [])) {
         const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
-        if (effect.disabled || data?.kind !== "periodicDamage") continue;
+        if (effect.disabled || !isDamageHubManagedTimedEffect(data)) continue;
         if (!effect.uuid || processingPeriodicEffectUuids.has(effect.uuid)) continue;
-        const tickResult = collectPeriodicDamageEffectTicks(effect, data, now);
+        const tickResult = collectDamageHubManagedTimedEffectTicks(effect, data, now);
         if (!tickResult.entries.length && !tickResult.update && !tickResult.deleteEffectId) continue;
         processingPeriodicEffectUuids.add(effect.uuid);
         lockedEffectUuids.add(effect.uuid);
@@ -1137,7 +1341,24 @@ async function processTimedDamageEffects(worldTime, deltaTime) {
           await updatePeriodicEffect(effect, update.data);
         }
         await deletePeriodicEffects(freshActor, Array.from(effectDeleteIds));
-        if (entries.length) await applyPeriodicDamageBatch(freshActor, entries);
+        const damageEntries = entries.filter(entry => entry.mode !== MODE_HEALING);
+        const healingEntries = entries.filter(entry => entry.mode === MODE_HEALING);
+        if (damageEntries.length) await applyPeriodicDamageBatch(freshActor, damageEntries);
+        if (healingEntries.length) {
+          await applyDamageApplicationsNow({
+            actorUuid: freshActor.uuid,
+            requests: healingEntries.map(entry => ({
+              actorUuid: freshActor.uuid,
+              amount: entry.amount,
+              damageTypeKey: entry.damageTypeKey || HEALING_DAMAGE_TYPE_KEY,
+              mode: MODE_HEALING,
+              scope: SCOPE_HEALTH,
+              applyMitigation: false,
+              processDamageTypeSettings: false,
+              source: entry.source
+            }))
+          });
+        }
       } finally {
         for (const uuid of lockedEffectUuids) processingPeriodicEffectUuids.delete(uuid);
       }
@@ -1385,6 +1606,17 @@ function buildIgnoredTimedDamageEffectUpdate(effect, data, elapsed) {
     return updateData;
   }
 
+  if (data.kind === "periodicHealing" || data.kind === FIRST_AID_TEMPORARY_EFFECT_KIND) {
+    const updateData = {};
+    const startTime = Number(data.startTime);
+    const endTime = Number(data.endTime);
+    const nextTickTime = Number(data.nextTickTime);
+    if (Number.isFinite(startTime)) updateData[`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.startTime`] = startTime + elapsed;
+    if (Number.isFinite(endTime)) updateData[`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.endTime`] = endTime + elapsed;
+    if (Number.isFinite(nextTickTime)) updateData[`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.nextTickTime`] = nextTickTime + elapsed;
+    return updateData;
+  }
+
   if (data.kind === "resourceLimit" || data.kind === "resourceBlock") {
     const startTime = Number(effect.duration?.startTime);
     if (Number.isFinite(startTime)) return { "duration.startTime": startTime + elapsed };
@@ -1401,6 +1633,18 @@ function preventIgnoredTimedDamageEffectDeletion(effect, _options, _userId) {
   const remaining = Number(effect.duration?.remaining);
   if (Number.isFinite(remaining) && remaining <= 0) return false;
   return undefined;
+}
+
+function isDamageHubManagedTimedEffect(data) {
+  return data?.kind === "periodicDamage"
+    || data?.kind === "periodicHealing"
+    || data?.kind === FIRST_AID_TEMPORARY_EFFECT_KIND;
+}
+
+function collectDamageHubManagedTimedEffectTicks(effect, data, now) {
+  if (data.kind === "periodicHealing") return collectPeriodicHealingEffectTicks(effect, data, now);
+  if (data.kind === FIRST_AID_TEMPORARY_EFFECT_KIND) return collectFirstAidTemporaryEffectTicks(effect, data, now);
+  return collectPeriodicDamageEffectTicks(effect, data, now);
 }
 
 function collectPeriodicDamageEffectTicks(effect, data, now) {
@@ -1441,6 +1685,58 @@ function collectPeriodicDamageEffectTicks(effect, data, now) {
         }
       }
       : null,
+    deleteEffectId: shouldDelete ? effect.id : ""
+  };
+}
+
+function collectPeriodicHealingEffectTicks(effect, data, now) {
+  const intervalSeconds = Math.max(1, toInteger(data.intervalSeconds || ROUND_SECONDS));
+  let remainingTicks = Math.max(0, toInteger(data.remainingTicks));
+  let nextTickTime = Number(data.nextTickTime) || ((Number(data.startTime) || 0) + intervalSeconds);
+  let dueTicks = 0;
+
+  while (remainingTicks > 0 && now >= nextTickTime) {
+    dueTicks += 1;
+    remainingTicks -= 1;
+    nextTickTime += intervalSeconds;
+  }
+
+  const entries = dueTicks > 0
+    ? [{
+      mode: MODE_HEALING,
+      amount: roundDamageAmount((Number(data.amountPerTick) || 0) * dueTicks),
+      damageTypeKey: HEALING_DAMAGE_TYPE_KEY,
+      scope: SCOPE_HEALTH,
+      source: {
+        ...(data.source ?? {}),
+        periodicHealingEffectUuid: effect.uuid,
+        dueTicks,
+        worldTime: Number.isFinite(Number(now)) ? Number(now) : (Number(game.time?.worldTime) || 0)
+      }
+    }]
+    : [];
+  const shouldDelete = remainingTicks <= 0 || (Number(data.endTime) && now >= Number(data.endTime) && dueTicks === 0);
+  return {
+    entries: entries.filter(entry => entry.amount > 0),
+    update: !shouldDelete && dueTicks > 0
+      ? {
+        effectId: effect.id,
+        data: {
+          [`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.remainingTicks`]: remainingTicks,
+          [`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.nextTickTime`]: nextTickTime
+        }
+      }
+      : null,
+    deleteEffectId: shouldDelete ? effect.id : ""
+  };
+}
+
+function collectFirstAidTemporaryEffectTicks(effect, data, now) {
+  const endTime = Number(data.endTime);
+  const shouldDelete = Number.isFinite(endTime) && endTime > 0 && now >= endTime;
+  return {
+    entries: [],
+    update: null,
     deleteEffectId: shouldDelete ? effect.id : ""
   };
 }
@@ -1866,11 +2162,13 @@ function prepareDamageNumberEntries(entries = []) {
     .map(entry => {
       const amount = roundDamageAmount(entry.amount);
       const damageTypeKey = String(entry.damageTypeKey ?? "").trim();
+      const mode = entry.mode === MODE_HEALING ? MODE_HEALING : MODE_DAMAGE;
       const damageType = damageTypes.find(type => type.key === damageTypeKey);
       return {
         amount,
         damageTypeKey,
-        color: damageType?.color ?? "#f0d48a"
+        mode,
+        color: mode === MODE_HEALING ? HEALING_NUMBER_COLOR : (damageType?.color ?? "#f0d48a")
       };
     })
     .filter(entry => entry.amount > 0);
@@ -1888,7 +2186,7 @@ function animateDamageNumber(token, entry, index = 0, total = 1) {
   const layer = canvas.controls?._rulerPaths;
   if (!layer) return;
 
-  const text = new PIXI.Text(String(entry.amount), {
+  const text = new PIXI.Text(entry.mode === MODE_HEALING ? `+${entry.amount}` : String(entry.amount), {
     fill: entry.color,
     fontFamily: "serif",
     fontSize: 32,

@@ -1,12 +1,6 @@
-import { activateEffectKeyAutocomplete, createEffectKeyToken } from "../apps/effect-key-autocomplete.mjs";
+import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.mjs";
 import { TEMPLATES } from "../constants.mjs";
-import {
-  getCharacteristicSettings,
-  getNeedSettings,
-  getProficiencySettings,
-  getResourceSettings,
-  getSkillSettings
-} from "../settings/accessors.mjs";
+import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 
 const { ActiveEffectConfig } = foundry.applications.sheets;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -159,7 +153,7 @@ function getEffectKind(effect) {
   return "active";
 }
 
-function buildEffectKeyTokens() {
+function buildLegacyEffectKeyTokens() {
   return [
     ...getCharacteristicSettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,

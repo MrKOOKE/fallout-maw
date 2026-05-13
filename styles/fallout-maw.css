@@ -871,6 +871,74 @@
   min-width: 2.25rem;
 }
 
+.fallout-maw-first-aid-need-row {
+  align-items: center;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: minmax(220px, 1fr) minmax(120px, 180px) 2.5rem;
+}
+
+.fallout-maw-first-aid-need-row > * {
+  min-width: 0;
+}
+
+.fallout-maw-first-aid-limb-choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.fallout-maw-first-aid-limb-choice {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(198, 181, 139, 0.28);
+  border-radius: 4px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 3rem minmax(150px, 1fr) 80px 90px;
+  min-height: 2.35rem;
+  padding: 0.25rem 0.45rem;
+  text-align: left;
+  width: 100%;
+}
+
+.fallout-maw-first-aid-limb-choice:hover,
+.fallout-maw-first-aid-limb-choice:focus-visible,
+.fallout-maw-first-aid-limb-choice.selected {
+  border-color: rgba(238, 211, 154, 0.78);
+}
+
+.fallout-maw-first-aid-limb-choice.disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.fallout-maw-first-aid-limb-count {
+  align-items: center;
+  border: 1px solid rgba(238, 211, 154, 0.45);
+  border-radius: 4px;
+  display: inline-flex;
+  font-weight: 700;
+  height: 1.75rem;
+  justify-content: center;
+  min-width: 2.25rem;
+}
+
+.fallout-maw-first-aid-limb-choice small {
+  color: var(--color-text-dark-secondary);
+  text-align: right;
+}
+
+.fallout-maw-first-aid-limb-choice strong {
+  text-align: right;
+}
+
+.fallout-maw-first-aid-limb-total {
+  margin-top: -0.35rem;
+}
+
 .fallout-maw-config-body,
 .fallout-maw-sheet-body {
   display: flex;

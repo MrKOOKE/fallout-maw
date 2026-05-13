@@ -3,6 +3,7 @@ export const ITEM_FUNCTIONS = {
   damageMitigation: "damageMitigation",
   damageSource: "damageSource",
   condition: "condition",
+  firstAid: "firstAid",
   weapon: "weapon",
   module: "module",
   toolPrefix: "tool:"
@@ -40,8 +41,16 @@ export function getDamageSourceFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.damageSource] ?? {};
 }
 
+export function getFirstAidFunction(itemOrSystem = null) {
+  return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.firstAid] ?? {};
+}
+
 export function getModuleFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.module] ?? {};
+}
+
+export function isActiveItem(itemOrSystem = null) {
+  return hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.firstAid);
 }
 
 export function getConditionWeakeningData(itemOrSystem = null, { minimumRatio = 0 } = {}) {

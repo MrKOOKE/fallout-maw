@@ -473,6 +473,126 @@
   </section>
   {{/if}}
 
+  {{#if hasFirstAidFunction}}
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Item.FunctionFirstAid"}}</h2>
+      <button type="button" data-remove-item-function="firstAid" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.FirstAidHealing"}}</span>
+        <input type="number" name="system.functions.firstAid.healing" value="{{system.functions.firstAid.healing}}" min="0" step="1">
+      </label>
+      <label class="fallout-maw-inline-checkbox">
+        <span>{{localize "FALLOUTMAW.Item.FirstAidHealingPercent"}}</span>
+        <input type="hidden" name="system.functions.firstAid.healingIsPercentage" value="false">
+        <input type="checkbox" name="system.functions.firstAid.healingIsPercentage" value="true" {{checked system.functions.firstAid.healingIsPercentage}}>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.FirstAidActionPointCost"}}</span>
+        <input type="number" name="system.functions.firstAid.actionPointCost" value="{{system.functions.firstAid.actionPointCost}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.FirstAidMaxDistance"}}</span>
+        <input type="number" name="system.functions.firstAid.maxDistance" value="{{system.functions.firstAid.maxDistance}}" min="0" step="0.1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.FirstAidDifficulty"}}</span>
+        <input type="number" name="system.functions.firstAid.difficulty" value="{{system.functions.firstAid.difficulty}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.FirstAidCriticalSuccessBonus"}}</span>
+        <input type="number" name="system.functions.firstAid.criticalSuccessHealingBonus" value="{{system.functions.firstAid.criticalSuccessHealingBonus}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.FirstAidCriticalFailureDamageMin"}}</span>
+        <input type="number" name="system.functions.firstAid.criticalFailureDamageMin" value="{{system.functions.firstAid.criticalFailureDamageMin}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.FirstAidCriticalFailureDamageMax"}}</span>
+        <input type="number" name="system.functions.firstAid.criticalFailureDamageMax" value="{{system.functions.firstAid.criticalFailureDamageMax}}" min="0" step="1">
+      </label>
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.FirstAidNeeds"}}</h3>
+      <button type="button" data-add-first-aid-need><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.ConditionAddRecoveryMethod"}}</button>
+    </div>
+    <div class="fallout-maw-effect-change-list">
+      <div class="fallout-maw-first-aid-need-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span></span>
+      </div>
+      {{#each firstAidNeedRows}}
+      <div class="fallout-maw-first-aid-need-row">
+        <select name="system.functions.firstAid.needs.{{index}}.needKey">
+          {{#each choices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="number" name="system.functions.firstAid.needs.{{index}}.value" value="{{value}}" step="1">
+        <button type="button" class="fallout-maw-icon-delete-button" data-delete-first-aid-need="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.FirstAidNoNeeds"}}</p>
+      {{/each}}
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.FirstAidLimbs"}}</h3>
+    </div>
+    <div class="fallout-maw-list-grid two-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.FirstAidLimbSelectionCount"}}</span>
+        <input type="number" name="system.functions.firstAid.limbSelection.count" value="{{system.functions.firstAid.limbSelection.count}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.FirstAidLimbSelectionValue"}}</span>
+        <input type="number" name="system.functions.firstAid.limbSelection.value" value="{{system.functions.firstAid.limbSelection.value}}" step="1">
+      </label>
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.FirstAidEffectChanges"}}</h3>
+      <button type="button" data-add-first-aid-effect><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Effects.AddChange"}}</button>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.FirstAidDurationSeconds"}}</span>
+        <input type="number" name="system.functions.firstAid.durationSeconds" value="{{system.functions.firstAid.durationSeconds}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.FirstAidIntervalSeconds"}}</span>
+        <input type="number" name="system.functions.firstAid.intervalSeconds" value="{{system.functions.firstAid.intervalSeconds}}" min="1" step="1">
+      </label>
+    </div>
+    <div class="fallout-maw-effect-change-list">
+      <div class="fallout-maw-effect-change-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Path"}}</span>
+        <span>{{localize "FALLOUTMAW.Effects.Mode"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span>{{localize "FALLOUTMAW.Effects.Priority"}}</span>
+        <span></span>
+      </div>
+      {{#each firstAidEffectRows}}
+      <div class="fallout-maw-effect-change-row">
+        <input type="text" name="system.functions.firstAid.changes.{{index}}.key" value="{{key}}" data-effect-key-autocomplete>
+        <select name="system.functions.firstAid.changes.{{index}}.type">
+          {{#each typeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="hidden" name="system.functions.firstAid.changes.{{index}}.phase" value="initial">
+        <input type="text" name="system.functions.firstAid.changes.{{index}}.value" value="{{value}}">
+        <input type="number" name="system.functions.firstAid.changes.{{index}}.priority" value="{{priority}}" step="1">
+        <button type="button" data-delete-first-aid-effect="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Effects.NoChanges"}}</p>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+
   {{#if hasDamageSourceFunction}}
   <section class="fallout-maw-panel">
     <div class="fallout-maw-panel-header">

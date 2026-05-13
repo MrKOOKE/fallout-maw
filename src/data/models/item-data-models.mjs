@@ -67,6 +67,7 @@ export class GearDataModel extends BaseItemDataModel {
             { required: true, initial: {} }
           )
         }),
+        firstAid: firstAidFunctionField(),
         tools: new TypedObjectField(toolFunctionField(), { required: true, initial: {} })
       }),
       container: new SchemaField({
@@ -362,6 +363,31 @@ function toolFunctionField() {
     }),
     skillValue: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     skillKey: new StringField({ required: true, blank: true, initial: "" })
+  });
+}
+
+function firstAidFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    healing: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    healingIsPercentage: new BooleanField({ required: true, initial: false }),
+    durationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    intervalSeconds: new NumberField({ required: true, integer: true, min: 1, initial: 6 }),
+    actionPointCost: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    maxDistance: new NumberField({ required: true, min: 0, initial: 0 }),
+    difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    criticalSuccessHealingBonus: new NumberField({ required: true, integer: true, min: 0, initial: 20 }),
+    criticalFailureDamageMin: new NumberField({ required: true, integer: true, min: 0, initial: 1 }),
+    criticalFailureDamageMax: new NumberField({ required: true, integer: true, min: 0, initial: 10 }),
+    needs: new ArrayField(new SchemaField({
+      needKey: new StringField({ required: true, blank: true, initial: "" }),
+      value: new NumberField({ required: true, integer: true, initial: 0 })
+    }), { required: true, initial: [] }),
+    limbSelection: new SchemaField({
+      count: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      value: new NumberField({ required: true, integer: true, initial: 0 })
+    }),
+    changes: new ArrayField(traumaEffectField(), { required: true, initial: [] })
   });
 }
 

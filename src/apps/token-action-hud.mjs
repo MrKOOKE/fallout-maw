@@ -22,6 +22,7 @@ import {
   spendWeaponReloadActionPoints,
   startWeaponAttack
 } from "../combat/weapon-attack-controller.mjs";
+import { useFirstAidItem } from "../items/first-aid.mjs";
 import { openLimbDamageDialog } from "./limb-damage-dialog.mjs";
 import { requestMedicineTarget } from "./medicine-dialog.mjs";
 import { requestRepairTarget } from "./repair-dialog.mjs";
@@ -40,7 +41,7 @@ import {
   getContextInventoryItems,
   getItemQuantity
 } from "../utils/inventory-containers.mjs";
-import { ITEM_FUNCTIONS, getConditionFunction, getConditionWeakeningData, getDamageMitigationFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, getConditionFunction, getConditionWeakeningData, getDamageMitigationFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction, isActiveItem } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
@@ -288,6 +289,15 @@ function getSelectedHudActors() {
   return actors;
 }
 
+function getFirstHudTarget() {
+  const token = Array.from(game.user?.targets ?? [])
+    .find(target => target?.actor) ?? null;
+  return {
+    token,
+    actor: token?.actor ?? null
+  };
+}
+
 class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #token = null;
   #activeTray = "";
@@ -338,6 +348,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       openSettings: TokenActionHud.#onOpenSettings,
       rollSkill: TokenActionHud.#onRollSkill,
       openItem: { handler: TokenActionHud.#onOpenItem, buttons: [1] },
+      useItem: { handler: TokenActionHud.#onUseItem, buttons: [0, 1] },
       useSystemAction: TokenActionHud.#onUseSystemAction
     }
   };
@@ -384,7 +395,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const selectedWeaponDisabled = Boolean(selectedWeaponSlot?.useDisabled);
     const weaponActionRows = prepareWeaponActionRows(actor, selectedWeapon, selectedWeaponDisabled);
     const skills = prepareSkillButtons(actor);
-    const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg");
+    const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg", { activeOnly: true });
     const abilities = prepareOwnedItemButtons(actor, "ability", "icons/svg/aura.svg");
     const systemActions = prepareSystemActionButtons();
     const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, systemActions);
@@ -657,6 +668,30 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     return item?.sheet?.render(true);
   }
 
+  static async #onUseItem(event, target) {
+    event.preventDefault();
+    const item = this.actor?.items.get(target.dataset.itemId ?? "");
+    if (!item) return undefined;
+    if (isMiddleMouseClick(event)) return item.sheet?.render(true);
+    if (event.button !== 0) return undefined;
+    if (!isActiveItem(item)) return undefined;
+    const targetData = getFirstHudTarget();
+    const targetActor = targetData.actor ?? this.actor;
+    if (!targetActor) return undefined;
+    const used = await useFirstAidItem({
+      sourceActor: this.actor,
+      sourceToken: this.token,
+      targetActor,
+      targetToken: targetData.token ?? this.token,
+      item
+    });
+    if (used) {
+      this.#activeTray = "";
+      return this.render({ force: true });
+    }
+    return undefined;
+  }
+
   static #onUseSystemAction(event, target) {
     event.preventDefault();
     const key = String(target.dataset.systemActionKey ?? "");
@@ -727,7 +762,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const button = target.closest("[data-action][data-item-id]");
     if (!button || !this.element?.contains(button)) return null;
     const action = String(button.dataset.action ?? "");
-    return ["openItem", "selectHudWeapon", "useWeaponAction", "toggleWeaponActions"].includes(action) ? button : null;
+    return ["openItem", "useItem", "selectHudWeapon", "useWeaponAction", "toggleWeaponActions"].includes(action) ? button : null;
   }
 
   #onLimbControlKeyDown(event) {
@@ -1614,9 +1649,10 @@ function prepareSkillButtons(actor) {
   });
 }
 
-function prepareOwnedItemButtons(actor, type, fallbackIcon) {
+function prepareOwnedItemButtons(actor, type, fallbackIcon, { activeOnly = false } = {}) {
   return actor.items
     .filter(item => item.type === type)
+    .filter(item => !activeOnly || isActiveItem(item))
     .map(item => ({
       id: item.id,
       name: item.name,

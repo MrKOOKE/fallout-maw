@@ -1,5 +1,6 @@
+import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.mjs";
 import { TEMPLATES } from "../constants.mjs";
-import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
+import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getNeedSettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { groupRaceEquipmentSlotsBySet, groupRaceWeaponSlotsBySet } from "../utils/equipment-slots.mjs";
 import {
   buildDamageMitigationLimbSetChoices,
@@ -14,6 +15,7 @@ import {
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { FALLBACK_ICON, normalizeImagePath } from "../utils/actor-display-data.mjs";
+import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
   getWeaponModuleSlots,
@@ -104,6 +106,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const hasDamageSourceFunction = hasItemFunction(item, ITEM_FUNCTIONS.damageSource);
     const hasModuleFunction = hasItemFunction(item, ITEM_FUNCTIONS.module);
     const hasConditionFunction = hasItemFunction(item, ITEM_FUNCTIONS.condition);
+    const hasFirstAidFunction = hasItemFunction(item, ITEM_FUNCTIONS.firstAid);
     const hasWeaponFunction = hasItemFunction(item, ITEM_FUNCTIONS.weapon);
     const containerLoadReduction = Math.max(0, Math.min(100, Number(item.system?.functions?.container?.loadReduction) || 0));
     const descriptionHTML = await TextEditor.enrichHTML(item.system?.description ?? "", {
@@ -138,6 +141,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         value: ITEM_FUNCTIONS.condition,
         label: game.i18n.localize("FALLOUTMAW.Item.FunctionCondition"),
         disabled: hasConditionFunction
+      },
+      {
+        value: ITEM_FUNCTIONS.firstAid,
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionFirstAid"),
+        disabled: hasFirstAidFunction
       },
       {
         value: ITEM_FUNCTIONS.weapon,
@@ -201,6 +209,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       damageSourceDamageTypeRows: buildDamageSourceDamageTypeRows(item, damageTypeSettings),
       damageSourceVolleyRegionDamageRows: buildDamageSourceVolleyRegionDamageRows(item, damageTypeSettings),
       hasConditionFunction,
+      hasFirstAidFunction,
+      firstAidEffectRows: buildFirstAidEffectRows(item),
+      firstAidNeedRows: buildFirstAidNeedRows(item),
       conditionRecoveryMethodRows: buildConditionRecoveryMethodRows(item, toolSettings),
       hasWeaponFunction,
       hasWeaponMagazineCost: hasWeaponResourceCost(item, "magazine"),
@@ -356,6 +367,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-delete-condition-recovery-method]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteConditionRecoveryMethod(event));
     });
+    this.element?.querySelector("[data-add-first-aid-effect]")?.addEventListener("click", event => this.#onAddFirstAidEffect(event));
+    this.element?.querySelectorAll("[data-delete-first-aid-effect]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteFirstAidEffect(event));
+    });
+    this.element?.querySelector("[data-add-first-aid-need]")?.addEventListener("click", event => this.#onAddFirstAidNeed(event));
+    this.element?.querySelectorAll("[data-delete-first-aid-need]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteFirstAidNeed(event));
+    });
+    activateEffectKeyAutocomplete(this.element, buildEffectKeyTokens({ includeFirstAidHealing: true }));
     this.element?.querySelectorAll("[data-add-weapon-special-property]").forEach(button => {
       button.addEventListener("click", event => this.#onAddWeaponSpecialProperty(event));
     });
@@ -504,6 +524,27 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       });
     }
 
+    if (functionKey === ITEM_FUNCTIONS.firstAid) {
+      this.#functionPickerActive = false;
+      return this.item.update({
+        "system.functions.firstAid.enabled": true,
+        "system.functions.firstAid.healing": 0,
+        "system.functions.firstAid.healingIsPercentage": false,
+        "system.functions.firstAid.durationSeconds": 0,
+        "system.functions.firstAid.intervalSeconds": 6,
+        "system.functions.firstAid.actionPointCost": 0,
+        "system.functions.firstAid.maxDistance": 0,
+        "system.functions.firstAid.difficulty": 0,
+        "system.functions.firstAid.criticalSuccessHealingBonus": 20,
+        "system.functions.firstAid.criticalFailureDamageMin": 1,
+        "system.functions.firstAid.criticalFailureDamageMax": 10,
+        "system.functions.firstAid.needs": [],
+        "system.functions.firstAid.limbSelection.count": 0,
+        "system.functions.firstAid.limbSelection.value": 0,
+        "system.functions.firstAid.changes": []
+      });
+    }
+
     if (functionKey === ITEM_FUNCTIONS.weapon) {
       this.#functionPickerActive = false;
       return this.item.update({
@@ -590,6 +631,25 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.weapon.resourceCosts": (this.item.system?.functions?.weapon?.resourceCosts ?? [])
           .filter(cost => cost.type !== "condition"),
         "system.functions.additionalWeapons": additionalWeapons
+      });
+    }
+    if (functionKey === ITEM_FUNCTIONS.firstAid) {
+      return this.item.update({
+        "system.functions.firstAid.enabled": false,
+        "system.functions.firstAid.healing": 0,
+        "system.functions.firstAid.healingIsPercentage": false,
+        "system.functions.firstAid.durationSeconds": 0,
+        "system.functions.firstAid.intervalSeconds": 6,
+        "system.functions.firstAid.actionPointCost": 0,
+        "system.functions.firstAid.maxDistance": 0,
+        "system.functions.firstAid.difficulty": 0,
+        "system.functions.firstAid.criticalSuccessHealingBonus": 20,
+        "system.functions.firstAid.criticalFailureDamageMin": 1,
+        "system.functions.firstAid.criticalFailureDamageMax": 10,
+        "system.functions.firstAid.needs": [],
+        "system.functions.firstAid.limbSelection.count": 0,
+        "system.functions.firstAid.limbSelection.value": 0,
+        "system.functions.firstAid.changes": []
       });
     }
     if (functionKey === ITEM_FUNCTIONS.weapon) {
@@ -806,6 +866,44 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const methods = [...(this.item.system?.functions?.condition?.recoveryMethods ?? [])];
     methods.splice(index, 1);
     return this.item.update({ "system.functions.condition.recoveryMethods": methods });
+  }
+
+  #onAddFirstAidEffect(event) {
+    event.preventDefault();
+    const changes = [...(this.item.system?.functions?.firstAid?.changes ?? [])];
+    changes.push({ key: "", type: "add", value: "0", phase: "initial", priority: null });
+    return this.item.update({ "system.functions.firstAid.changes": changes });
+  }
+
+  #onDeleteFirstAidEffect(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteFirstAidEffect);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const changes = [...(this.item.system?.functions?.firstAid?.changes ?? [])];
+    changes.splice(index, 1);
+    return this.item.update({ "system.functions.firstAid.changes": changes });
+  }
+
+  #onAddFirstAidNeed(event) {
+    event.preventDefault();
+    const source = this.item.system?.functions?.firstAid?.needs ?? [];
+    const current = Array.isArray(source)
+      ? [...source]
+      : Object.entries(source).map(([needKey, value]) => ({ needKey, value }));
+    const existing = new Set(current.map(entry => String(entry?.needKey ?? "")));
+    const need = getNeedSettings().find(entry => !existing.has(entry.key)) ?? getNeedSettings()[0];
+    if (!need) return undefined;
+    current.push({ needKey: need.key, value: 0 });
+    return this.item.update({ "system.functions.firstAid.needs": current });
+  }
+
+  #onDeleteFirstAidNeed(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteFirstAidNeed);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const current = [...(this.item.system?.functions?.firstAid?.needs ?? [])];
+    current.splice(index, 1);
+    return this.item.update({ "system.functions.firstAid.needs": current });
   }
 
   #onAddWeaponSpecialProperty(event) {
@@ -1368,6 +1466,7 @@ function getItemFunctionLabel(functionKey = "") {
   if (functionKey === ITEM_FUNCTIONS.damageMitigation) return game.i18n.localize("FALLOUTMAW.Item.FunctionDamageMitigation");
   if (functionKey === ITEM_FUNCTIONS.damageSource) return game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource");
   if (functionKey === ITEM_FUNCTIONS.condition) return game.i18n.localize("FALLOUTMAW.Item.FunctionCondition");
+  if (functionKey === ITEM_FUNCTIONS.firstAid) return game.i18n.localize("FALLOUTMAW.Item.FunctionFirstAid");
   if (functionKey === ITEM_FUNCTIONS.weapon) return game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon");
   if (functionKey === ITEM_FUNCTIONS.module) return game.i18n.localize("FALLOUTMAW.Item.FunctionModule");
   const toolKey = getToolKeyFromFunctionKey(functionKey);
@@ -2274,6 +2373,46 @@ function buildConditionRecoveryMethodRows(item, toolSettings = []) {
       }))
     };
   });
+}
+
+function buildFirstAidEffectRows(item) {
+  return (item.system?.functions?.firstAid?.changes ?? []).map((change, index) => ({
+    index,
+    key: String(change?.key ?? ""),
+    type: String(change?.type ?? "add"),
+    value: String(change?.value ?? "0"),
+    priority: change?.priority ?? "",
+    typeChoices: buildFirstAidEffectTypeChoices(change?.type)
+  }));
+}
+
+function buildFirstAidNeedRows(item) {
+  const settings = getNeedSettings();
+  const source = Array.isArray(item.system?.functions?.firstAid?.needs)
+    ? item.system.functions.firstAid.needs
+    : Object.entries(item.system?.functions?.firstAid?.needs ?? {}).map(([needKey, value]) => ({ needKey, value }));
+  return source.map((entry, index) => ({
+    index,
+    needKey: String(entry?.needKey ?? ""),
+    value: toInteger(entry?.value),
+    choices: settings.map(entry => ({
+      value: entry.key,
+      label: entry.label || entry.key,
+      selected: entry.key === String(source[index]?.needKey ?? "")
+    }))
+  }));
+}
+
+function buildFirstAidEffectTypeChoices(selected = "add") {
+  const value = String(selected ?? "add");
+  return [
+    { value: "add", label: game.i18n.localize("FALLOUTMAW.Effects.ChangeAdd") },
+    { value: "multiply", label: game.i18n.localize("FALLOUTMAW.Effects.ChangeMultiply") },
+    { value: "override", label: game.i18n.localize("FALLOUTMAW.Effects.ChangeOverride") }
+  ].map(choice => ({
+    ...choice,
+    selected: choice.value === value
+  }));
 }
 
 function normalizePercentInput(value) {

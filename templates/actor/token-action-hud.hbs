@@ -139,7 +139,7 @@
 
       {{#if (eq activeTray "items")}}
       {{#each tray.items}}
-      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="openItem" data-item-id="{{id}}" title="{{name}}">
+      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="useItem" data-item-id="{{id}}" title="{{name}}">
         <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../fallbackIcon}}'">
         <span>{{name}}</span>
         {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
