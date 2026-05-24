@@ -273,6 +273,10 @@ function prepareActorLoadData(actor) {
       skills
     }))
     : 0;
+  const limitPercent = Math.max(0, Number(race?.baseParameters?.loadLimitPercent) || 0);
+  const limit = max > 0 && limitPercent > 0
+    ? Number(((max * limitPercent) / 100).toFixed(1))
+    : 0;
   const value = Number(
     actor.items.reduce((total, item) => (
       getItemContainerParentId(item)
@@ -280,7 +284,7 @@ function prepareActorLoadData(actor) {
         : total + (Number(getItemActorLoadWeight(item, actor.items)) || 0)
     ), 0).toFixed(1)
   );
-  actor.system.load = { min: 0, spent: 0, bonus: 0, value, max };
+  actor.system.load = { min: 0, spent: 0, bonus: 0, value, max, limit, limitPercent };
 }
 
 function activateCreatureCreateDialog(dialog) {

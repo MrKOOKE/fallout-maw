@@ -495,7 +495,10 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       proficiencyPoints: toInteger(formData.race?.baseParameters?.proficiencyPoints),
       loadFormula: String(
         formData.race?.baseParameters?.loadFormula ?? createDefaultRaceBaseParameters().loadFormula
-      ).trim() || createDefaultRaceBaseParameters().loadFormula
+      ).trim() || createDefaultRaceBaseParameters().loadFormula,
+      loadLimitPercent: Math.max(0, toInteger(
+        formData.race?.baseParameters?.loadLimitPercent ?? createDefaultRaceBaseParameters().loadLimitPercent
+      ))
     };
     race.limbs = this.#readLimbsFromForm();
     race.equipmentSlots = this.#readEquipmentSlotsFromForm();

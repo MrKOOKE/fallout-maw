@@ -21,6 +21,7 @@ export const TEMPLATES = Object.freeze({
   skillCheckAnimation: `systems/${SYSTEM_ID}/templates/actor/skill-check-animation.hbs`,
   tokenActionHud: `systems/${SYSTEM_ID}/templates/actor/token-action-hud.hbs`,
   tokenActionHudScaleSettings: `systems/${SYSTEM_ID}/templates/actor/token-action-hud-scale-settings.hbs`,
+  searchInventory: `systems/${SYSTEM_ID}/templates/actor/search-inventory.hbs`,
   skillCheckChatCard: `systems/${SYSTEM_ID}/templates/chat/skill-check-card.hbs`,
   skillCheckBatchChatCard: `systems/${SYSTEM_ID}/templates/chat/skill-check-batch-card.hbs`,
   damageSummaryChatCard: `systems/${SYSTEM_ID}/templates/chat/damage-summary-card.hbs`,

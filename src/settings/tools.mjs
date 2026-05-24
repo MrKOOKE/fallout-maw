@@ -43,6 +43,12 @@ export const DEFAULT_SYSTEM_ACTION_SETTINGS = Object.freeze([
     label: "Ремонт",
     img: "icons/tools/smithing/tongs-steel-grey.webp",
     toolKey: "repair"
+  },
+  {
+    key: "search",
+    label: "Обыск",
+    img: "icons/svg/eye.svg",
+    toolKey: ""
   }
 ]);
 

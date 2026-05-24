@@ -518,6 +518,7 @@
         "InventoryColumns": "Horizontal",
         "InventoryRows": "Vertical",
         "InventorySize": "Base Inventory Size",
+        "LoadLimitPercent": "Load limit (% of base)",
         "Limbs": "Limbs",
         "LimbStateMax": "Max state",
         "NewEquipmentSlot": "New Slot",
@@ -601,6 +602,7 @@
     },
     "Messages": {
       "AdvancementSaved": "Level up saved.",
+      "ActorLoadLimitExceeded": "The actor cannot carry that much weight.",
       "CharacteristicsSaved": "Characteristic settings saved.",
       "ContainerMaxLoadExceeded": "This container cannot hold that much weight.",
       "ContainerRecursiveError": "A container cannot be placed inside itself or one of its descendants.",

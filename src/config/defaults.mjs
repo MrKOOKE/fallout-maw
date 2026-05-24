@@ -16,6 +16,7 @@ export const DEFAULT_BASE_PARAMETER_POOLS = Object.freeze({
 });
 
 export const DEFAULT_LOAD_FORMULA = "20 + 10*str";
+export const DEFAULT_LOAD_LIMIT_PERCENT = 150;
 
 export const DEFAULT_CURRENCIES = Object.freeze([
   { key: "caps", label: "Крышки", img: "", value: 1 },

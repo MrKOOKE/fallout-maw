@@ -68,6 +68,7 @@ import {
   getContainerDimensions,
   getContainerMaxLoad,
   getContextInventoryItems,
+  getItemActorLoadWeight,
   getItemContainerParentId,
   getItemFootprint as getItemFootprintHelper,
   getItemMaxStack as getItemMaxStackHelper,
@@ -1482,7 +1483,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #validateProjectedInventoryState({ updates = [], deletes = [], creates = [] } = {}) {
     const projectedItems = this.#projectInventoryState({ updates, deletes, creates });
     const validation = validateInventoryTree(projectedItems, getInventoryGridDimensions(this.#getCurrentRace()));
-    if (validation.valid) return true;
+    if (validation.valid) {
+      const loadValidation = validateActorLoadLimit(this.actor, projectedItems);
+      if (loadValidation.valid) return true;
+      this.#warnInventoryValidation(loadValidation);
+      return false;
+    }
     this.#warnInventoryValidation(validation);
     return false;
   }
@@ -1524,6 +1530,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }
     if (validation?.reason === "max-load") {
       ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.ContainerMaxLoadExceeded"));
+      return;
+    }
+    if (validation?.reason === "actor-load-limit") {
+      ui.notifications.warn(getActorLoadLimitExceededMessage());
       return;
     }
     this.#warnInventoryNoSpace();
@@ -3639,6 +3649,42 @@ function setWeaponSlotImageAspect(image) {
   const slot = image.closest(".fallout-maw-weapon-slot");
   if (!slot) return;
   slot.style.setProperty("--fallout-maw-weapon-slot-image-aspect", String(Math.max(1, width / height)));
+}
+
+function validateActorLoadLimit(actor, projectedItems = []) {
+  const limit = getActorLoadLimit(actor);
+  if (limit <= 0) return { valid: true };
+
+  const currentLoad = Number(actor?.system?.load?.value) || calculateActorLoad(actor?.items?.contents ?? []);
+  const projectedLoad = calculateActorLoad(projectedItems);
+  if (projectedLoad <= (limit + 0.0001)) return { valid: true };
+  if (projectedLoad <= (currentLoad + 0.0001)) return { valid: true };
+  return { valid: false, reason: "actor-load-limit", value: projectedLoad, limit };
+}
+
+function getActorLoadLimit(actor) {
+  const preparedLimit = Number(actor?.system?.load?.limit) || 0;
+  if (preparedLimit > 0) return preparedLimit;
+  const max = Number(actor?.system?.load?.max) || 0;
+  if (max <= 0) return 0;
+  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId) ?? null;
+  const percent = Math.max(0, Number(race?.baseParameters?.loadLimitPercent) || 0);
+  return percent > 0 ? (max * percent) / 100 : 0;
+}
+
+function calculateActorLoad(items = []) {
+  const itemList = Array.isArray(items) ? items : Array.from(items ?? []);
+  return Number(itemList.reduce((total, item) => (
+    getItemContainerParentId(item)
+      ? total
+      : total + (Number(getItemActorLoadWeight(item, itemList)) || 0)
+  ), 0).toFixed(1));
+}
+
+function getActorLoadLimitExceededMessage() {
+  const key = "FALLOUTMAW.Messages.ActorLoadLimitExceeded";
+  const localized = game.i18n.localize(key);
+  return localized === key ? "Актер не может нести такой вес." : localized;
 }
 
 function prepareInventoryContext(actor, race) {

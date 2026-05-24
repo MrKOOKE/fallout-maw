@@ -4,6 +4,7 @@ import {
   DEFAULT_INVENTORY_SIZE,
   DEFAULT_LIMBS,
   DEFAULT_LOAD_FORMULA,
+  DEFAULT_LOAD_LIMIT_PERCENT,
   DEFAULT_WEAPON_SETS
 } from "../config/defaults.mjs";
 import { localize } from "../utils/i18n.mjs";
@@ -56,7 +57,7 @@ export function createDefaultInventorySize() {
 }
 
 export function createDefaultRaceBaseParameters() {
-  return { ...DEFAULT_BASE_PARAMETER_POOLS, loadFormula: DEFAULT_LOAD_FORMULA };
+  return { ...DEFAULT_BASE_PARAMETER_POOLS, loadFormula: DEFAULT_LOAD_FORMULA, loadLimitPercent: DEFAULT_LOAD_LIMIT_PERCENT };
 }
 
 export function normalizeCreatureOptions(options = {}, characteristics = [], damageTypes = []) {
@@ -123,7 +124,8 @@ function normalizeRaceBaseParameters(values = {}) {
     signatureSkillPoints: toInteger(values?.signatureSkillPoints ?? defaults.signatureSkillPoints),
     traitPoints: toInteger(values?.traitPoints ?? defaults.traitPoints),
     proficiencyPoints: toInteger(values?.proficiencyPoints ?? defaults.proficiencyPoints),
-    loadFormula: String(values?.loadFormula ?? defaults.loadFormula).trim() || defaults.loadFormula
+    loadFormula: String(values?.loadFormula ?? defaults.loadFormula).trim() || defaults.loadFormula,
+    loadLimitPercent: Math.max(0, toInteger(values?.loadLimitPercent ?? defaults.loadLimitPercent))
   };
 }
 

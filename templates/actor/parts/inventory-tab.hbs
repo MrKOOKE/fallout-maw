@@ -107,13 +107,8 @@
           {{#each inventory.containers}}
           <section class="fallout-maw-container-section" data-container-drop-surface data-container-id="{{id}}" data-inventory-parent-id="{{id}}">
             <div class="fallout-maw-panel-header fallout-maw-container-header">
-              <div class="fallout-maw-container-title">
-                <strong>{{name}}</strong>
-              </div>
               <div class="fallout-maw-container-overview draggable fallout-maw-draggable-item" data-item-id="{{id}}" data-tooltip-item="{{id}}">
-                <div class="fallout-maw-container-portrait">
-                  <img src="{{img}}" alt="{{name}}">
-                </div>
+                <strong class="fallout-maw-container-overview-name">{{name}}</strong>
                 <div class="fallout-maw-load-meter fallout-maw-load-meter--{{load.trend}} fallout-maw-load-meter--{{load.state}}" aria-label="{{localize 'FALLOUTMAW.Item.ContainerCurrentLoad'}}">
                   <div class="fallout-maw-load-meter-track">
                     <div class="fallout-maw-load-meter-fill" style="width: {{load.percent}}%;"></div>
