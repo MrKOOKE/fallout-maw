@@ -8112,6 +8112,7 @@ label.fallout-maw-mitigation-cell {
   gap: 0.65rem;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   min-height: 0;
+  position: relative;
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-header::after {
@@ -8146,6 +8147,56 @@ label.fallout-maw-mitigation-cell {
   min-height: 0;
   padding: 0;
   text-align: center;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-bulk-controls {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  left: 50%;
+  pointer-events: auto;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-bulk-controls button {
+  align-items: center;
+  background:
+    repeating-linear-gradient(180deg, rgba(171, 224, 132, 0.018) 0 1px, transparent 1px 5px),
+    linear-gradient(180deg, rgba(6, 9, 7, 0.98), rgba(12, 14, 9, 0.96));
+  border: 2px solid rgba(131, 119, 74, 0.52);
+  box-shadow:
+    inset 3px 3px 0 rgba(0, 0, 0, 0.72),
+    inset -1px -1px 0 rgba(219, 219, 186, 0.12),
+    0 3px 0 rgba(0, 0, 0, 0.68);
+  cursor: pointer;
+  display: inline-flex;
+  height: 2.7rem;
+  justify-content: center;
+  padding: 0.35rem;
+  width: 2.7rem;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-bulk-controls button:hover {
+  border-color: rgba(234, 224, 139, 0.86);
+  box-shadow:
+    inset 0 0 0 1px rgba(234, 224, 139, 0.22),
+    0 0 0 1px rgba(234, 224, 139, 0.22),
+    0 3px 0 rgba(0, 0, 0, 0.68);
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-bulk-controls button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-bulk-controls img {
+  border: 0;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-sheet-body {

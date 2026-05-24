@@ -5,6 +5,14 @@
       <div class="fallout-maw-title-display">{{name}}</div>
     </section>
     {{/each}}
+    <div class="fallout-maw-search-bulk-controls">
+      <button type="button" data-search-bulk-transfer="put" title="Положить все" {{#unless canInteract}}disabled{{/unless}}>
+        <img src="icons/svg/chest.svg" alt="Положить все">
+      </button>
+      <button type="button" data-search-bulk-transfer="take" title="Забрать все" {{#unless canInteract}}disabled{{/unless}}>
+        <img src="icons/svg/item-bag.svg" alt="Забрать все">
+      </button>
+    </div>
   </header>
 
   <div class="fallout-maw-sheet-body fallout-maw-search-sheet-body">

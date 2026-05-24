@@ -79,6 +79,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #draggedItemId = "";
   #draggedActorUuid = "";
   #dragDrop = null;
+  #bulkTransferInProgress = false;
   #hoverPreviewInputKey = "";
   #hoverPreviewKey = "";
   #hookIds = [];
@@ -408,21 +409,23 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     return this.#executeSearchTransfer(payload);
   }
 
-  async #executeSearchTransfer(payload) {
+  async #executeSearchTransfer(payload, { notify = true } = {}) {
     const sourceActor = this.#getActorByUuid(String(payload?.sourceActorUuid ?? ""));
     const targetActor = this.#getActorByUuid(String(payload?.targetActorUuid ?? ""));
-    if (!sourceActor || !targetActor) return null;
+    if (!sourceActor || !targetActor) return false;
     try {
       if (canModifySearchTransferDirectly(sourceActor, targetActor)) {
         await performSearchInventoryTransfer(payload, game.user?.id ?? "");
       } else {
         await requestSearchInventorySocket("transferItem", payload);
       }
+      return true;
     } catch (error) {
       console.error(`${SYSTEM_ID} | Search inventory transfer failed`, error);
+      if (!notify) return false;
       ui.notifications.warn(error.message || "Не удалось перенести предмет.");
     }
-    return null;
+    return false;
   }
 
   #canInteract() {
@@ -693,6 +696,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   async #onSearchRootClick(event) {
+    const bulkButton = event.target?.closest?.("[data-search-bulk-transfer]");
+    if (bulkButton && this.element?.contains(bulkButton)) {
+      await this.#onSearchBulkTransferClick(event, bulkButton);
+      return;
+    }
+
     const currencyButton = event.target?.closest?.("[data-search-currency][data-search-actor-uuid]");
     if (currencyButton && this.element?.contains(currencyButton)) {
       await this.#onSearchCurrencyClick(event, currencyButton);
@@ -734,6 +743,110 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       targetY: null,
       targetItemId: ""
     });
+  }
+
+  async #onSearchBulkTransferClick(event, button) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!this.#canInteract() || this.#bulkTransferInProgress) return;
+
+    const direction = String(button?.dataset?.searchBulkTransfer ?? "");
+    const sourceActor = direction === "take" ? this.#searchedActor : this.#searcherActor;
+    const targetActor = direction === "take" ? this.#searcherActor : this.#searchedActor;
+    if (!sourceActor || !targetActor || sourceActor.uuid === targetActor.uuid) return;
+
+    if (direction === "put") {
+      const confirmed = await DialogV2.confirm({
+        window: {
+          title: "Положить все"
+        },
+        content: `<p>Перенести все предметы и валюту из <strong>${escapeHTML(sourceActor.name)}</strong> в <strong>${escapeHTML(targetActor.name)}</strong>?</p>`,
+        yes: {
+          label: "Да",
+          icon: "fa-solid fa-check"
+        },
+        no: {
+          label: "Нет"
+        },
+        rejectClose: false,
+        modal: true
+      });
+      if (!confirmed) return;
+    }
+
+    this.#bulkTransferInProgress = true;
+    this.element?.querySelectorAll("[data-search-bulk-transfer]").forEach(element => {
+      element.disabled = true;
+    });
+    this.#clearInventoryTooltip({ force: true });
+
+    try {
+      const result = await this.#transferAllBetweenActors(sourceActor, targetActor);
+      if (result.failedItems > 0) {
+        ui.notifications.warn(`Не удалось перенести предметов: ${result.failedItems}.`);
+      }
+      if (!result.items && !result.currencies && !result.failedItems) {
+        ui.notifications.info("Нечего переносить.");
+      }
+    } finally {
+      this.#bulkTransferInProgress = false;
+      this.element?.querySelectorAll("[data-search-bulk-transfer]").forEach(element => {
+        element.disabled = !this.#canInteract();
+      });
+    }
+  }
+
+  async #transferAllBetweenActors(sourceActor, targetActor) {
+    const result = {
+      items: 0,
+      failedItems: 0,
+      currencies: 0
+    };
+
+    const sourceItemIds = getBulkTransferSourceItemIds(sourceActor);
+    for (const itemId of sourceItemIds) {
+      const item = sourceActor.items?.get(itemId);
+      if (!item) continue;
+      const targetParentId = getQuickTransferTargetParentId({ sourceActor, targetActor, sourceItem: item });
+      if (targetParentId === null) {
+        result.failedItems += 1;
+        continue;
+      }
+      const moved = await this.#executeSearchTransfer({
+        searcherActorUuid: this.#searcherActorUuid,
+        searchedActorUuid: this.#searchedActorUuid,
+        sourceActorUuid: sourceActor.uuid,
+        targetActorUuid: targetActor.uuid,
+        itemId: item.id,
+        targetMode: "inventory",
+        targetParentId,
+        targetEquipmentSlot: "",
+        targetWeaponSet: "",
+        targetWeaponSlot: "",
+        targetX: null,
+        targetY: null,
+        targetItemId: ""
+      }, { notify: false });
+      if (moved) result.items += 1;
+      else result.failedItems += 1;
+    }
+
+    for (const currency of getCurrencySettings()) {
+      const currencyKey = String(currency?.key ?? "");
+      const amount = Math.max(0, toInteger(sourceActor.system?.currencies?.[currencyKey]));
+      if (!currencyKey || !amount) continue;
+      const moved = await this.#executeSearchCurrencyTransfer({
+        searcherActorUuid: this.#searcherActorUuid,
+        searchedActorUuid: this.#searchedActorUuid,
+        sourceActorUuid: sourceActor.uuid,
+        targetActorUuid: targetActor.uuid,
+        currencyKey,
+        amount
+      }, { notify: false });
+      if (moved) result.currencies += 1;
+    }
+
+    return result;
   }
 
   async #onSearchCurrencyClick(event, button) {
@@ -802,6 +915,24 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       console.error(`${SYSTEM_ID} | Search currency transfer failed`, error);
       ui.notifications.warn(error.message || "Не удалось перенести валюту.");
     }
+  }
+
+  async #executeSearchCurrencyTransfer(payload, { notify = true } = {}) {
+    const sourceActor = this.#getActorByUuid(String(payload?.sourceActorUuid ?? ""));
+    const targetActor = this.#getActorByUuid(String(payload?.targetActorUuid ?? ""));
+    if (!sourceActor || !targetActor) return false;
+    try {
+      if (canModifySearchTransferDirectly(sourceActor, targetActor)) {
+        await performSearchCurrencyTransfer(payload, game.user?.id ?? "");
+      } else {
+        await requestSearchInventorySocket("transferCurrency", payload);
+      }
+      return true;
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Search currency transfer failed`, error);
+      if (notify) ui.notifications.warn(error.message || "Не удалось перенести валюту.");
+    }
+    return false;
   }
 
   #onInventoryTooltipPointerOver(event) {
@@ -1658,6 +1789,27 @@ function getQuickTransferParentCandidates(actor) {
     parentIds.push(id);
   }
   return parentIds;
+}
+
+function getBulkTransferSourceItemIds(actor) {
+  const items = (actor?.items?.contents ?? []).filter(item => item && item.type !== "trauma" && item.type !== "disease");
+  const itemMap = new Map(items.map(item => [item.id, item]));
+  const selectedIds = new Set(items.map(item => item.id));
+  return items
+    .filter(item => !hasBulkTransferSelectedAncestor(item, itemMap, selectedIds))
+    .map(item => item.id);
+}
+
+function hasBulkTransferSelectedAncestor(item, itemMap, selectedIds) {
+  const visited = new Set();
+  let parentId = getItemContainerParentId(item);
+  while (parentId) {
+    if (selectedIds.has(parentId)) return true;
+    if (visited.has(parentId)) return false;
+    visited.add(parentId);
+    parentId = getItemContainerParentId(itemMap.get(parentId));
+  }
+  return false;
 }
 
 function canQuickTransferItemIntoParent({ sourceActor, targetActor, sourceItem, parentId = ROOT_CONTAINER_ID } = {}) {
