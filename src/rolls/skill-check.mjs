@@ -1,5 +1,6 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getSkillSettings } from "../settings/accessors.mjs";
+import { normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const { DialogV2 } = foundry.applications.api;
@@ -52,7 +53,7 @@ export async function requestSkillCheck({
   if (animate) await playSkillCheckAnimation(outcome);
   if (!createMessage) return outcome;
 
-  const message = await publishSkillCheckMessage(outcome, { requester });
+  const message = await publishSkillCheckMessageSafely(() => publishSkillCheckMessage(outcome, { requester }));
   return {
     ...outcome,
     message
@@ -79,7 +80,7 @@ export async function requestSkillCheckBatch({
   }
 
   if (!createMessage) return { outcomes, message: undefined };
-  const message = await publishSkillCheckBatchMessage(outcomes, { requester, title });
+  const message = await publishSkillCheckMessageSafely(() => publishSkillCheckBatchMessage(outcomes, { requester, title }));
   return { outcomes, message };
 }
 
@@ -103,6 +104,16 @@ export function createSkillCheckBatchCollector({ requester = "", title = "" } = 
   };
 }
 
+async function publishSkillCheckMessageSafely(publisher) {
+  try {
+    return await publisher();
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Skill check chat card failed`, error);
+    ui.notifications.warn("Проверка выполнена, но карточка проверки навыка не была создана.");
+    return undefined;
+  }
+}
+
 async function publishSkillCheckBatchMessage(outcomes = [], { requester = "", title = "" } = {}) {
   const normalizedOutcomes = outcomes.filter(Boolean);
   if (!normalizedOutcomes.length) return undefined;
@@ -110,7 +121,7 @@ async function publishSkillCheckBatchMessage(outcomes = [], { requester = "", ti
   const context = buildSkillCheckBatchViewContext(normalizedOutcomes, { title });
   const content = await renderTemplate(TEMPLATES.skillCheckBatchChatCard, context);
   return ChatMessage.create({
-    speaker: ChatMessage.getSpeaker({ actor: context.actor }),
+    speaker: ChatMessage.getSpeaker({ actor: normalizedOutcomes[0]?.actor }),
     content,
     sound: null,
     rolls: normalizedOutcomes.flatMap(outcome => outcome.rolls.map(roll => roll.toJSON())),
@@ -131,7 +142,7 @@ function buildSkillCheckBatchViewContext(outcomes = [], { title = "" } = {}) {
   const counts = countSkillCheckResults(outcomes);
   const total = outcomes.length;
   return {
-    actor: first.actor,
+    actor: prepareSkillCheckActorView(first.actor),
     skill: first.skill,
     title: String(title || first.skill?.label || game.i18n.localize("FALLOUTMAW.SkillCheck.TerminalTitle")),
     total,
@@ -296,7 +307,7 @@ async function publishSkillCheckMessage(outcome, { requester = "" } = {}) {
 function buildSkillCheckViewContext(outcome) {
   const { actor, check, skill, rolls, selectedRoll, edge, finalSkillValue, total, critical, autoFailure, result } = outcome;
   return {
-    actor,
+    actor: prepareSkillCheckActorView(actor),
     skill,
     difficulty: toInteger(check.difficulty),
     situationalModifier: toInteger(check.situationalModifier),
@@ -315,6 +326,13 @@ function buildSkillCheckViewContext(outcome) {
       hasMultipleRolls: rolls.length > 1
     },
     result
+  };
+}
+
+function prepareSkillCheckActorView(actor) {
+  return {
+    name: actor?.name ?? "",
+    img: normalizeImagePath(actor?.img, "icons/svg/mystery-man.svg")
   };
 }
 

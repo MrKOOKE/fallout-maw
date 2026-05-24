@@ -8186,6 +8186,16 @@ label.fallout-maw-mitigation-cell {
   flex: 0 0 auto;
 }
 
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-currency-chip[data-search-currency] {
+  cursor: pointer;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-currency-chip[data-search-currency]:hover {
+  box-shadow:
+    inset 0 0 0 1px rgba(234, 224, 139, 0.78),
+    0 0 0 1px rgba(234, 224, 139, 0.22);
+}
+
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-inventory-stack {
   display: flex;
   flex: 1 1 auto;

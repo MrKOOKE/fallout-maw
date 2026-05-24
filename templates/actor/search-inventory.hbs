@@ -29,7 +29,7 @@
             <section class="fallout-maw-panel">
               <div class="fallout-maw-currency-list">
                 {{#each currencies}}
-                <div class="fallout-maw-currency-chip" title="{{label}} | {{localize 'FALLOUTMAW.Common.Value'}}: {{value}}">
+                <div class="fallout-maw-currency-chip" data-search-currency="{{key}}" data-search-actor-uuid="{{../uuid}}" title="{{label}} | {{localize 'FALLOUTMAW.Common.Value'}}: {{value}}">
                   <span class="fallout-maw-currency-icon">
                     {{#if hasImage}}
                     <img src="{{img}}" alt="{{label}}">

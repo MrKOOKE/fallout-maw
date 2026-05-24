@@ -735,7 +735,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const key = String(target.dataset.systemActionKey ?? "");
     if (!["medicine", "repair", "search"].includes(key)) return undefined;
 
-    this.#activeTray = "";
     void this.render({ force: true });
     if (key === "search") return this.#openSearchInventory();
     if (key === "repair") return requestRepairTarget(this.token);
@@ -754,7 +753,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       return undefined;
     }
 
-    this.#activeTray = "";
     void this.render({ force: true });
     return openSearchInventoryWindow({
       searcherActor: this.actor,

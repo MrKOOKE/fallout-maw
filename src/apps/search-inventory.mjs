@@ -4,6 +4,7 @@ import { createDefaultInventorySize } from "../settings/creature-options.mjs";
 import { getCurrencySettings } from "../settings/accessors.mjs";
 import {
   FALLBACK_ICON,
+  escapeHTML,
   formatWeight,
   normalizeImagePath,
   prepareInventoryContext
@@ -43,7 +44,7 @@ import {
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
-const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 const SEARCH_INVENTORY_REFERENCE_WIDTH = 2560;
 const SEARCH_INVENTORY_REFERENCE_HEIGHT = 1440;
@@ -78,12 +79,15 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #draggedItemId = "";
   #draggedActorUuid = "";
   #dragDrop = null;
+  #hoverPreviewInputKey = "";
+  #hoverPreviewKey = "";
   #hookIds = [];
   #renderRefresh = null;
   #scrollPositions = new Map();
   #tooltipAnchorElement = null;
   #tooltipActorUuid = "";
   #tooltipCloseTimer = null;
+  #tooltipDocumentPointerDownHandler = null;
   #tooltipElement = null;
   #tooltipItemId = "";
   #tooltipPinned = false;
@@ -192,6 +196,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#hoverPreviewInputKey = "";
+    this.#hoverPreviewKey = "";
     this.setPosition();
     this.#bindViewportResize();
     this._dragDrop.bind(this.element);
@@ -210,6 +216,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#draggedItemId = "";
     this.#draggedActorUuid = "";
     this.#clearInventoryTooltip({ force: true });
+    this.#unbindInventoryTooltipDocumentClose();
     this.#scrollPositions.clear();
     if (searchInventoryWindow === this) searchInventoryWindow = null;
   }
@@ -339,7 +346,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#clearInventoryTooltip({ force: true });
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
     this.#draggedItemData = this.#getPreviewItemData(event);
-    this.#setInventoryHoverPreview(zone);
+    this.#setInventoryHoverPreview(zone, event);
   }
 
   _onDragEnd() {
@@ -371,6 +378,17 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const placementRequest = getDropZonePlacementRequest(zone);
     const parentId = placementRequest.mode === "inventory" ? getDropZoneParentId(zone) : ROOT_CONTAINER_ID;
     const targetItem = this.#getTargetStackItem(zone, targetActor, item.id, parentId);
+    const pointerPlacement = placementRequest.mode === "inventory"
+      ? getSearchDropPlacementForPointer({
+        actor: targetActor,
+        itemData: item.toObject(),
+        sourceActor,
+        sourceItemId: item.id,
+        parentId,
+        event,
+        zone
+      })
+      : null;
     const payload = {
       searcherActorUuid: this.#searcherActorUuid,
       searchedActorUuid: this.#searchedActorUuid,
@@ -382,11 +400,18 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       targetEquipmentSlot: placementRequest.equipmentSlot,
       targetWeaponSet: placementRequest.weaponSet,
       targetWeaponSlot: placementRequest.weaponSlot,
-      targetX: placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.x) : null,
-      targetY: placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.y) : null,
+      targetX: pointerPlacement?.x ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.x) : null),
+      targetY: pointerPlacement?.y ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.y) : null),
       targetItemId: targetItem?.id ?? ""
     };
 
+    return this.#executeSearchTransfer(payload);
+  }
+
+  async #executeSearchTransfer(payload) {
+    const sourceActor = this.#getActorByUuid(String(payload?.sourceActorUuid ?? ""));
+    const targetActor = this.#getActorByUuid(String(payload?.targetActorUuid ?? ""));
+    if (!sourceActor || !targetActor) return null;
     try {
       if (canModifySearchTransferDirectly(sourceActor, targetActor)) {
         await performSearchInventoryTransfer(payload, game.user?.id ?? "");
@@ -437,11 +462,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     );
     if (!grid || !this.element?.contains(grid)) return null;
 
-    for (const cell of grid.querySelectorAll("[data-inventory-cell]")) {
-      const rect = cell.getBoundingClientRect();
-      if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) return cell;
-    }
-    return null;
+    const actor = this.#getActorByUuid(String(grid.dataset.searchActorUuid ?? ""));
+    const pointer = getSearchInventoryGridPointerPosition(eventOrTarget, grid, actor, getDropZoneParentId(grid));
+    if (!pointer) return null;
+    const x = Math.round(pointer.x);
+    const y = Math.round(pointer.y);
+    return grid.querySelector(`[data-inventory-cell][data-x="${x}"][data-y="${y}"]`) ?? null;
   }
 
   #getPreviewItemData(event) {
@@ -498,16 +524,25 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const hoveredElement = document.elementFromPoint(event.clientX, event.clientY);
     const hoveredZone = hoveredElement?.closest?.("[data-search-drop-zone]") ?? null;
     if (hoveredZone === zone) return;
+    if (zone.closest("[data-inventory-grid]") && hoveredElement?.closest?.("[data-inventory-grid]") === zone.closest("[data-inventory-grid]")) return;
     this.#clearInventoryHoverPreview();
   }
 
-  #setInventoryHoverPreview(zone = null) {
-    this.#clearInventoryHoverPreview();
-    if (!zone) return;
+  #setInventoryHoverPreview(zone = null, event = null) {
+    if (!zone) {
+      this.#clearInventoryHoverPreview();
+      return;
+    }
 
     const actor = this.#getActorByUuid(String(zone.dataset.searchActorUuid ?? ""));
     if (zone.dataset.equipmentSlot || (zone.dataset.weaponSet && zone.dataset.weaponSlot)) {
-      if (!actor || !this.#draggedItemData) return;
+      const inputKey = `slot:${actor?.uuid ?? ""}:${zone.dataset.equipmentSlot ?? ""}:${zone.dataset.weaponSet ?? ""}:${zone.dataset.weaponSlot ?? ""}:${this.#draggedActorUuid}:${this.#draggedItemId}`;
+      if (this.#hoverPreviewInputKey === inputKey) return;
+      this.#hoverPreviewInputKey = inputKey;
+      if (!actor || !this.#draggedItemData) {
+        this.#clearInventoryHoverPreviewClasses();
+        return;
+      }
       const placementRequest = getDropZonePlacementRequest(zone);
       const excludeItemIds = actor.uuid === this.#draggedActorUuid && this.#draggedItemId ? [this.#draggedItemId] : [];
       if (resolveActorPlacement(actor, this.#draggedItemData, {
@@ -518,18 +553,26 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         x: 1,
         y: 1
       }, excludeItemIds)) {
-        zone.classList.add("drop-preview");
+        this.#applySingleZonePreview(zone, inputKey);
+        return;
       }
+      this.#clearInventoryHoverPreviewClasses();
       return;
     }
-    if (zone.dataset.inventoryCell === undefined) return;
+    if (zone.dataset.inventoryCell === undefined) {
+      this.#clearInventoryHoverPreview();
+      return;
+    }
 
     if (!actor || !this.#draggedItemData) {
-      zone.classList.add("drop-preview");
+      this.#applySingleZonePreview(zone, `inventory-cell:${zone.dataset.searchActorUuid ?? ""}:${getDropZoneParentId(zone)}:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}`);
       return;
     }
 
     const parentId = getDropZoneParentId(zone);
+    const inputKey = `inventory:${actor.uuid}:${parentId}:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}:${this.#draggedActorUuid}:${this.#draggedItemId}`;
+    if (this.#hoverPreviewInputKey === inputKey) return;
+    this.#hoverPreviewInputKey = inputKey;
     const targetItem = this.#getTargetStackItem(zone, actor, this.#draggedItemId, parentId);
     const targetHasStackRoom = targetItem
       && areStackable(this.#draggedItemData, targetItem)
@@ -539,21 +582,36 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       return;
     }
 
-    const placement = getDropPlacementForItem({
+    const placement = getSearchDropPlacementForPointer({
       actor,
       itemData: this.#draggedItemData,
       sourceActor: this.#getActorByUuid(this.#draggedActorUuid),
       sourceItemId: this.#draggedItemId,
       parentId,
-      x: toInteger(zone.dataset.x),
-      y: toInteger(zone.dataset.y)
+      event,
+      zone
     });
-    if (!placement) return;
+    if (!placement) {
+      this.#clearInventoryHoverPreviewClasses();
+      return;
+    }
     this.#applyInventoryPlacementPreview(actor, parentId, placement);
+  }
+
+  #applySingleZonePreview(zone, key = "") {
+    const previewKey = `zone:${key}`;
+    if (this.#hoverPreviewKey === previewKey) return;
+    this.#clearInventoryHoverPreviewClasses();
+    this.#hoverPreviewKey = previewKey;
+    zone?.classList?.add("drop-preview");
   }
 
   #applyInventoryPlacementPreview(actor, parentId, placement) {
     if (!placement) return;
+    const previewKey = `inventory:${actor.uuid}:${parentId ?? ROOT_CONTAINER_ID}:${placement.x}:${placement.y}:${placement.width}:${placement.height}`;
+    if (this.#hoverPreviewKey === previewKey) return;
+    this.#clearInventoryHoverPreviewClasses();
+    this.#hoverPreviewKey = previewKey;
     const escapedUuid = CSS.escape(actor.uuid);
     const escapedParentId = CSS.escape(parentId ?? ROOT_CONTAINER_ID);
     for (let y = placement.y; y < placement.y + placement.height; y += 1) {
@@ -571,6 +629,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   #clearInventoryHoverPreview() {
+    this.#hoverPreviewInputKey = "";
+    this.#clearInventoryHoverPreviewClasses();
+  }
+
+  #clearInventoryHoverPreviewClasses() {
+    this.#hoverPreviewKey = "";
     this.element?.querySelectorAll(".drop-preview").forEach(element => element.classList.remove("drop-preview"));
   }
 
@@ -617,7 +681,127 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     root.dataset.tooltipBound = "true";
     root.addEventListener("pointerover", event => this.#onInventoryTooltipPointerOver(event));
     root.addEventListener("pointerout", event => this.#onInventoryTooltipPointerOut(event));
+    root.addEventListener("mousedown", event => this.#onInventoryTooltipMiddleMouseDown(event));
     root.addEventListener("auxclick", event => this.#onInventoryTooltipAuxClick(event));
+    root.addEventListener("click", event => void this.#onSearchRootClick(event));
+  }
+
+  #onInventoryTooltipMiddleMouseDown(event) {
+    if (event.button !== 1) return;
+    if (!event.target?.closest?.("[data-tooltip-item], .fallout-maw-inventory-tooltip")) return;
+    event.preventDefault();
+  }
+
+  async #onSearchRootClick(event) {
+    const currencyButton = event.target?.closest?.("[data-search-currency][data-search-actor-uuid]");
+    if (currencyButton && this.element?.contains(currencyButton)) {
+      await this.#onSearchCurrencyClick(event, currencyButton);
+      return;
+    }
+
+    if (!event.shiftKey) return;
+    const itemElement = event.target?.closest?.("[data-item-id][data-search-actor-uuid]");
+    if (!itemElement || !this.element?.contains(itemElement)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    await this.#transferItemToOppositeRoot(itemElement);
+  }
+
+  async #transferItemToOppositeRoot(itemElement) {
+    if (!this.#canInteract()) return;
+    const sourceActor = this.#getActorByUuid(String(itemElement?.dataset?.searchActorUuid ?? ""));
+    const targetActor = sourceActor?.uuid === this.#searcherActorUuid ? this.#searchedActor : this.#searcherActor;
+    const item = sourceActor?.items?.get(String(itemElement?.dataset?.itemId ?? ""));
+    if (!sourceActor || !targetActor || !item || sourceActor.uuid === targetActor.uuid) return;
+    const targetParentId = getQuickTransferTargetParentId({ sourceActor, targetActor, sourceItem: item });
+    if (targetParentId === null) {
+      ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+      return;
+    }
+    this.#clearInventoryTooltip({ force: true });
+    await this.#executeSearchTransfer({
+      searcherActorUuid: this.#searcherActorUuid,
+      searchedActorUuid: this.#searchedActorUuid,
+      sourceActorUuid: sourceActor.uuid,
+      targetActorUuid: targetActor.uuid,
+      itemId: item.id,
+      targetMode: "inventory",
+      targetParentId,
+      targetEquipmentSlot: "",
+      targetWeaponSet: "",
+      targetWeaponSlot: "",
+      targetX: null,
+      targetY: null,
+      targetItemId: ""
+    });
+  }
+
+  async #onSearchCurrencyClick(event, button) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!this.#canInteract()) return;
+
+    const sourceActor = this.#getActorByUuid(String(button?.dataset?.searchActorUuid ?? ""));
+    const targetActor = sourceActor?.uuid === this.#searcherActorUuid ? this.#searchedActor : this.#searcherActor;
+    const currencyKey = String(button?.dataset?.searchCurrency ?? "");
+    if (!sourceActor || !targetActor || !currencyKey || sourceActor.uuid === targetActor.uuid) return;
+
+    const currency = getCurrencySettings().find(entry => entry.key === currencyKey);
+    const available = Math.max(0, toInteger(sourceActor.system?.currencies?.[currencyKey]));
+    if (!available) {
+      ui.notifications.warn("У актера нет этой валюты.");
+      return;
+    }
+
+    const actionLabel = sourceActor.uuid === this.#searchedActorUuid ? "Забрать" : "Переложить";
+    const formData = await DialogV2.input({
+      window: {
+        title: `${actionLabel} валюту`
+      },
+      content: `
+        <p><strong>${escapeHTML(sourceActor.name)}</strong> -> <strong>${escapeHTML(targetActor.name)}</strong></p>
+        <label class="fallout-maw-stacked-field">
+          <span>${escapeHTML(currency?.label ?? currencyKey)}: 0 / ${available}</span>
+          <input type="number" name="amount" value="${available}" min="1" max="${available}" step="1" autofocus>
+        </label>
+      `,
+      ok: {
+        label: actionLabel,
+        icon: "fa-solid fa-coins",
+        callback: (_event, okButton) => new FormDataExtended(okButton.form).object
+      },
+      buttons: [{
+        action: "cancel",
+        label: "Отмена"
+      }],
+      position: {
+        width: 420
+      },
+      rejectClose: false
+    });
+    if (!formData || formData === "cancel") return;
+
+    const amount = Math.max(1, Math.min(available, toInteger(formData.amount)));
+    if (!amount) return;
+    const payload = {
+      searcherActorUuid: this.#searcherActorUuid,
+      searchedActorUuid: this.#searchedActorUuid,
+      sourceActorUuid: sourceActor.uuid,
+      targetActorUuid: targetActor.uuid,
+      currencyKey,
+      amount
+    };
+
+    try {
+      if (canModifySearchTransferDirectly(sourceActor, targetActor)) {
+        await performSearchCurrencyTransfer(payload, game.user?.id ?? "");
+      } else {
+        await requestSearchInventorySocket("transferCurrency", payload);
+      }
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Search currency transfer failed`, error);
+      ui.notifications.warn(error.message || "Не удалось перенести валюту.");
+    }
   }
 
   #onInventoryTooltipPointerOver(event) {
@@ -669,6 +853,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     tooltip.className = "fallout-maw-inventory-tooltip";
     tooltip.classList.toggle("pinned", Boolean(pinned));
     tooltip.style.setProperty("--fallout-maw-ui-scale", String(this.#uiScale));
+    tooltip.style.pointerEvents = pinned ? "auto" : "none";
     tooltip.innerHTML = await renderInventoryItemTooltipHTML(item, actor, {
       activeWeaponIndex: this.#tooltipWeaponTabIndex,
       baseMode: false
@@ -686,6 +871,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       event.stopPropagation();
       this.#tooltipPinned = true;
       tooltip.classList.add("pinned");
+      tooltip.style.pointerEvents = "auto";
+      this.#bindInventoryTooltipDocumentClose();
     });
     document.body.append(tooltip);
     this.#tooltipElement = tooltip;
@@ -693,6 +880,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#tooltipAnchorElement = anchor;
     this.#tooltipActorUuid = actor.uuid;
     this.#tooltipItemId = item.id;
+    if (pinned) this.#bindInventoryTooltipDocumentClose();
     this.#positionInventoryTooltip();
     requestAnimationFrame(() => {
       const description = tooltip.querySelector(".description");
@@ -756,6 +944,29 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#tooltipCloseTimer = null;
   }
 
+  #bindInventoryTooltipDocumentClose() {
+    if (this.#tooltipDocumentPointerDownHandler) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#tooltipDocumentPointerDownHandler = event => {
+      const insideTooltip = this.#tooltipElement?.contains(event.target);
+      if (event.button === 1 && insideTooltip) {
+        event.preventDefault();
+        return;
+      }
+      if (!this.#tooltipPinned || !this.#tooltipElement) return;
+      if (insideTooltip) return;
+      this.#clearInventoryTooltip({ force: true });
+    };
+    view.document.addEventListener("pointerdown", this.#tooltipDocumentPointerDownHandler, { capture: true });
+  }
+
+  #unbindInventoryTooltipDocumentClose() {
+    if (!this.#tooltipDocumentPointerDownHandler) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    view.document.removeEventListener("pointerdown", this.#tooltipDocumentPointerDownHandler, { capture: true });
+    this.#tooltipDocumentPointerDownHandler = null;
+  }
+
   #clearInventoryTooltip({ force = false, keepAnchor = false } = {}) {
     if (this.#tooltipTimer) {
       const view = this.element?.ownerDocument?.defaultView ?? window;
@@ -764,6 +975,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
     this.#cancelInventoryTooltipClose();
     if (this.#tooltipPinned && !force) return;
+    this.#unbindInventoryTooltipDocumentClose();
     this.#tooltipElement?.remove();
     this.#tooltipElement = null;
     this.#tooltipPinned = false;
@@ -878,6 +1090,37 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
     targetY: payload.targetY,
     targetItemId: String(payload.targetItemId ?? "")
   });
+}
+
+async function performSearchCurrencyTransfer(payload = {}, requesterUserId = "") {
+  const searcherActor = await resolveActor(payload.searcherActorUuid);
+  const searchedActor = await resolveActor(payload.searchedActorUuid);
+  const sourceActor = await resolveActor(payload.sourceActorUuid);
+  const targetActor = await resolveActor(payload.targetActorUuid);
+  if (!searcherActor || !searchedActor || !sourceActor || !targetActor) throw new Error("Actor not found.");
+
+  const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
+  if (requester && !requester.isGM && !searcherActor.testUserPermission(requester, "OWNER")) {
+    throw new Error("No searcher actor owner permission.");
+  }
+
+  const allowedActorUuids = new Set([searcherActor.uuid, searchedActor.uuid]);
+  if (!allowedActorUuids.has(sourceActor.uuid) || !allowedActorUuids.has(targetActor.uuid) || sourceActor.uuid === targetActor.uuid) {
+    throw new Error("Search currency transfer actor mismatch.");
+  }
+
+  const currencyKey = String(payload.currencyKey ?? "");
+  const currencyExists = getCurrencySettings().some(entry => entry.key === currencyKey);
+  if (!currencyKey || !currencyExists) throw new Error("Invalid currency.");
+
+  const available = Math.max(0, toInteger(sourceActor.system?.currencies?.[currencyKey]));
+  const amount = Math.max(0, Math.min(available, toInteger(payload.amount)));
+  if (!amount) throw new Error("No currency to transfer.");
+
+  const targetAmount = Math.max(0, toInteger(targetActor.system?.currencies?.[currencyKey]));
+  await sourceActor.update({ [`system.currencies.${currencyKey}`]: available - amount });
+  await targetActor.update({ [`system.currencies.${currencyKey}`]: targetAmount + amount });
+  return { amount };
 }
 
 async function transferItemBetweenActors({
@@ -1110,6 +1353,7 @@ async function transferContainerTree({ sourceActor, targetActor, sourceItem, tar
     const newParentId = idMap.get(oldParentId);
     if (!newParentId) continue;
     delete childData._id;
+    delete childData.id;
     foundry.utils.mergeObject(childData, {
       system: {
         equipped: false,
@@ -1143,6 +1387,7 @@ function buildContainerTreeValidationCreates(rootCreateData, sourceItem, contain
     const syntheticId = `synthetic-container-child-${index += 1}`;
     const childData = child.toObject();
     delete childData._id;
+    delete childData.id;
     foundry.utils.mergeObject(childData, {
       _id: syntheticId,
       id: syntheticId,
@@ -1241,16 +1486,81 @@ function getRequestedTargetPlacement({
   return getFirstAvailableActorInventoryPlacement(targetActor, targetParentId, itemData, excluded, []);
 }
 
-function getDropPlacementForItem({ actor, itemData, sourceActor, sourceItemId = "", parentId = ROOT_CONTAINER_ID, x = 1, y = 1 } = {}) {
-  const placement = createInventoryPlacement(x, y, itemData, actor.items);
+function getSearchDropPlacementForPointer({ actor, itemData, sourceActor, sourceItemId = "", parentId = ROOT_CONTAINER_ID, event = null, zone = null } = {}) {
+  if (!actor || !itemData) return null;
+  const grid = zone?.closest?.("[data-inventory-grid]");
+  const pointer = getSearchInventoryGridPointerPosition(event, grid, actor, parentId);
+  const fallbackCellX = toInteger(zone?.dataset?.x);
+  const fallbackCellY = toInteger(zone?.dataset?.y);
+  const anchor = pointer ?? {
+    x: fallbackCellX,
+    y: fallbackCellY
+  };
+  if (!anchor.x || !anchor.y) return null;
+
+  const dimensions = getActorInventoryContextDimensions(actor, parentId);
+  const basePlacement = createInventoryPlacement(1, 1, itemData, actor.items);
   if (isContainerItem(itemData) && sourceActor) {
     const footprint = getItemFootprint(sourceActor.items?.get(sourceItemId) ?? itemData, sourceActor.items);
-    placement.width = footprint.width;
-    placement.height = footprint.height;
+    basePlacement.width = footprint.width;
+    basePlacement.height = footprint.height;
   }
-  return isActorInventoryPlacementAvailable(actor, parentId, placement, sourceItemId ? [sourceItemId] : [], [])
-    ? placement
-    : null;
+
+  const excludeItemIds = sourceActor?.uuid === actor.uuid && sourceItemId ? [sourceItemId] : [];
+  const maxX = Math.max(1, dimensions.columns - basePlacement.width + 1);
+  const maxY = Math.max(1, dimensions.rows - basePlacement.height + 1);
+  const preferredX = Math.max(1, Math.min(maxX, Math.round(anchor.x - ((basePlacement.width - 1) / 2))));
+  const preferredY = Math.max(1, Math.min(maxY, Math.round(anchor.y - ((basePlacement.height - 1) / 2))));
+  const preferredPlacement = { ...basePlacement, x: preferredX, y: preferredY };
+  if (isActorInventoryPlacementAvailable(actor, parentId, preferredPlacement, excludeItemIds, [])) return preferredPlacement;
+
+  const candidates = [];
+  for (let y = 1; y <= maxY; y += 1) {
+    for (let x = 1; x <= maxX; x += 1) {
+      if (x === preferredX && y === preferredY) continue;
+      const placement = { ...basePlacement, x, y };
+      const centerX = x + ((placement.width - 1) / 2);
+      const centerY = y + ((placement.height - 1) / 2);
+      candidates.push({
+        placement,
+        distance: ((centerX - anchor.x) ** 2) + ((centerY - anchor.y) ** 2)
+      });
+    }
+  }
+
+  candidates.sort((left, right) => (
+    (left.distance - right.distance)
+    || (left.placement.y - right.placement.y)
+    || (left.placement.x - right.placement.x)
+  ));
+  return candidates.find(candidate => (
+    isActorInventoryPlacementAvailable(actor, parentId, candidate.placement, excludeItemIds, [])
+  ))?.placement ?? null;
+}
+
+function getSearchInventoryGridPointerPosition(event = null, grid = null, actor = null, parentId = ROOT_CONTAINER_ID) {
+  const clientX = Number(event?.clientX);
+  const clientY = Number(event?.clientY);
+  if (!grid || !actor || !Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+
+  const gridRect = grid.getBoundingClientRect();
+  if (clientX < gridRect.left || clientX > gridRect.right || clientY < gridRect.top || clientY > gridRect.bottom) return null;
+
+  const firstCell = grid.querySelector('[data-inventory-cell][data-x="1"][data-y="1"]') ?? grid.querySelector("[data-inventory-cell]");
+  if (!firstCell) return null;
+  const firstRect = firstCell.getBoundingClientRect();
+  const secondColumnRect = grid.querySelector('[data-inventory-cell][data-y="1"][data-x="2"]')?.getBoundingClientRect();
+  const secondRowRect = grid.querySelector('[data-inventory-cell][data-x="1"][data-y="2"]')?.getBoundingClientRect();
+  const pitchX = secondColumnRect ? Math.max(1, secondColumnRect.left - firstRect.left) : Math.max(1, firstRect.width);
+  const pitchY = secondRowRect ? Math.max(1, secondRowRect.top - firstRect.top) : Math.max(1, firstRect.height);
+  const firstCenterX = firstRect.left + (firstRect.width / 2);
+  const firstCenterY = firstRect.top + (firstRect.height / 2);
+  const dimensions = getActorInventoryContextDimensions(actor, parentId);
+
+  return {
+    x: Math.max(1, Math.min(dimensions.columns, ((clientX - firstCenterX) / pitchX) + 1)),
+    y: Math.max(1, Math.min(dimensions.rows, ((clientY - firstCenterY) / pitchY) + 1))
+  };
 }
 
 function resolveActorPlacement(actor, itemData, placement = {}, excludeItemIds = [], reservedPlacements = [], parentId = ROOT_CONTAINER_ID) {
@@ -1329,6 +1639,54 @@ function getActorWeaponPlacementSlotKeys(actor, itemData, placement = {}) {
   return getRequiredWeaponSlotsForItem(race, itemData, setKey, primarySlotKey).map(slot => slot.key);
 }
 
+function getQuickTransferTargetParentId({ sourceActor, targetActor, sourceItem } = {}) {
+  if (!sourceActor || !targetActor || !sourceItem) return null;
+  const candidateParentIds = getQuickTransferParentCandidates(targetActor);
+  for (const parentId of candidateParentIds) {
+    if (!canQuickTransferItemIntoParent({ sourceActor, targetActor, sourceItem, parentId })) continue;
+    return parentId;
+  }
+  return null;
+}
+
+function getQuickTransferParentCandidates(actor) {
+  const parentIds = [ROOT_CONTAINER_ID];
+  const inventory = prepareInventoryContext(actor, getActorRace(actor));
+  for (const container of inventory.containers ?? []) {
+    const id = String(container?.id ?? "");
+    if (!id || parentIds.includes(id)) continue;
+    parentIds.push(id);
+  }
+  return parentIds;
+}
+
+function canQuickTransferItemIntoParent({ sourceActor, targetActor, sourceItem, parentId = ROOT_CONTAINER_ID } = {}) {
+  const itemData = sourceItem?.toObject?.();
+  if (!itemData) return false;
+  if (parentId && !targetActor.items?.get(parentId)) return false;
+
+  if (sourceActor.uuid === targetActor.uuid) {
+    if (parentId === sourceItem.id) return false;
+    if (getAllContainedItems(sourceItem.id, sourceActor.items).some(item => item.id === parentId)) return false;
+  }
+
+  const excludeItemIds = sourceActor.uuid === targetActor.uuid ? [sourceItem.id] : [];
+  const stackRoom = isContainerItem(itemData)
+    ? 0
+    : findCompatibleStackTargets(targetActor, itemData, null, excludeItemIds, parentId).reduce((total, target) => (
+      total + Math.max(0, getItemMaxStack(target) - getItemQuantity(target))
+    ), 0);
+  const quantity = Math.max(1, getItemQuantity(sourceItem));
+  const placement = getFirstAvailableActorInventoryPlacement(targetActor, parentId, itemData, excludeItemIds, []);
+  if (!placement && stackRoom < quantity) return false;
+
+  if (!parentId) return true;
+  const container = targetActor.items?.get(parentId);
+  const currentLoad = getContainerContentsWeight(container, targetActor.items);
+  const addedLoad = getItemTotalWeight(sourceItem, sourceActor.items);
+  return currentLoad + addedLoad <= getContainerMaxLoad(container) + 0.0001;
+}
+
 function getEquipmentItemForActorSlot(actor, slot, excludeItemIds = []) {
   const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
   const slotSelectionKey = getEquipmentSlotSelectionKey(slot.label);
@@ -1355,6 +1713,7 @@ function getActorRace(actor) {
 function createInventoryStackData(itemData, quantity, parentId, placement, { equipped = false } = {}) {
   const createData = foundry.utils.deepClone(itemData);
   delete createData._id;
+  delete createData.id;
   const storedPlacement = createStoredPlacement(placement, itemData);
   foundry.utils.mergeObject(createData, {
     system: {
@@ -1473,11 +1832,10 @@ function projectActorInventoryState(actor, { updates = [], deletes = [], creates
   let syntheticIndex = 0;
   for (const createData of creates) {
     const syntheticId = String(createData?._id ?? `synthetic-${syntheticIndex += 1}`);
-    itemMap.set(syntheticId, foundry.utils.mergeObject(
-      foundry.utils.deepClone(createData),
-      { _id: syntheticId, id: syntheticId },
-      { inplace: false }
-    ));
+    const nextData = foundry.utils.deepClone(createData);
+    nextData._id = syntheticId;
+    nextData.id = syntheticId;
+    itemMap.set(syntheticId, nextData);
   }
 
   return Array.from(itemMap.values());
@@ -1641,9 +1999,12 @@ async function handleSearchInventorySocketMessage(message = {}) {
   if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
 
   try {
-    const result = message.action === "transferItem"
-      ? await performSearchInventoryTransfer(message.payload ?? {}, message.requesterUserId ?? "")
-      : undefined;
+    let result;
+    if (message.action === "transferItem") {
+      result = await performSearchInventoryTransfer(message.payload ?? {}, message.requesterUserId ?? "");
+    } else if (message.action === "transferCurrency") {
+      result = await performSearchCurrencyTransfer(message.payload ?? {}, message.requesterUserId ?? "");
+    }
     game.socket.emit(SEARCH_INVENTORY_SOCKET, {
       scope: SEARCH_INVENTORY_SOCKET_SCOPE,
       type: "response",

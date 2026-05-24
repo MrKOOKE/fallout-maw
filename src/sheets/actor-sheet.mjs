@@ -1287,6 +1287,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     const createData = foundry.utils.deepClone(itemData);
     delete createData._id;
+    delete createData.id;
     foundry.utils.mergeObject(createData, {
       system: {
         equipped: resolvedPlacement.mode === "equipment",
@@ -1457,6 +1458,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #createInventoryStackData(itemData, quantity, placement, parentId = ROOT_CONTAINER_ID) {
     const createData = foundry.utils.deepClone(itemData);
     delete createData._id;
+    delete createData.id;
     const storedPlacement = createStoredPlacement(placement, itemData);
     foundry.utils.mergeObject(createData, {
       system: {
@@ -1513,11 +1515,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     let syntheticIndex = 0;
     for (const createData of creates) {
       const syntheticId = String(createData?._id ?? `synthetic-${syntheticIndex += 1}`);
-      itemMap.set(syntheticId, foundry.utils.mergeObject(
-        foundry.utils.deepClone(createData),
-        { _id: syntheticId, id: syntheticId },
-        { inplace: false }
-      ));
+      const nextData = foundry.utils.deepClone(createData);
+      nextData._id = syntheticId;
+      nextData.id = syntheticId;
+      itemMap.set(syntheticId, nextData);
     }
 
     return Array.from(itemMap.values());
