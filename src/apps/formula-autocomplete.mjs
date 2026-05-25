@@ -5,13 +5,17 @@ const IDENTIFIER_BEFORE_CARET = /[\p{L}_][\p{L}\p{N}_]*$/u;
 const MAX_SUGGESTIONS = 10;
 const MENU_VIEWPORT_PADDING = 12;
 
-export function activateFormulaAutocomplete(html, { characteristics = [], skills = [] } = {}) {
+export function activateFormulaAutocomplete(html, { characteristics = [], skills = [], variables = [] } = {}) {
   const root = getHtmlRoot(html);
   if (!root) return;
 
   const tokenGroups = {
     characteristics: buildTokens(characteristics, "characteristic"),
-    all: [...buildTokens(characteristics, "characteristic"), ...buildTokens(skills, "skill")]
+    all: [
+      ...buildTokens(characteristics, "characteristic"),
+      ...buildTokens(skills, "skill"),
+      ...buildTokens(variables, "variable")
+    ]
   };
 
   for (const input of root.querySelectorAll(FORMULA_INPUT_SELECTOR)) {

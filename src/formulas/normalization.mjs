@@ -17,6 +17,8 @@ const FALLBACK_ICON = "icons/svg/d20-grey.svg";
 
 export const IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const DEFAULT_TRACK_COLOR = "#8f8456";
+const OLD_DEFAULT_HEALTH_FORMULA = "10 + str + con*2";
+const OLD_EXPLICIT_LIMB_HEALTH_FORMULA = "head + eyes + torso + groin + leftArm + rightArm + leftLeg + rightLeg";
 const DEFAULT_RESOURCE_COLORS = Object.freeze({
   health: "#c64b44",
   energy: "#4f9f61",
@@ -317,7 +319,8 @@ function normalizeProficiencyInfluenceRange(range = {}, defaults = { min: 0, max
 }
 
 export function normalizeResourceSettings(settings) {
-  return normalizeFormulaSettings(settings, createDefaultResourceSettings(), "Ресурс");
+  const normalized = normalizeFormulaSettings(settings, createDefaultResourceSettings(), "Ресурс");
+  return migrateResourceSettings(normalized);
 }
 
 export function normalizeNeedSettings(settings) {
@@ -398,6 +401,23 @@ function normalizeFormulaSettings(settings, defaults, defaultLabel) {
     },
     defaultLabel
   );
+}
+
+function migrateResourceSettings(settings = []) {
+  const defaultHealthFormula = DEFAULT_RESOURCES.find(resource => resource.key === "health")?.formula;
+  return settings.map(setting => {
+    if (setting.key !== "health") return setting;
+    const formula = normalizeFormulaText(setting.formula);
+    if (
+      formula !== normalizeFormulaText(OLD_DEFAULT_HEALTH_FORMULA)
+      && formula !== normalizeFormulaText(OLD_EXPLICIT_LIMB_HEALTH_FORMULA)
+    ) return setting;
+    return { ...setting, formula: defaultHealthFormula ?? setting.formula };
+  });
+}
+
+function normalizeFormulaText(value = "") {
+  return String(value ?? "").replace(/\s+/g, "").toLowerCase();
 }
 
 function normalizeCollectionInput(settings, defaults) {

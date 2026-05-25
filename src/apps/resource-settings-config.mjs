@@ -12,6 +12,10 @@ import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 import { activateSettingsReorder } from "./settings-reorder.mjs";
 
+const RESOURCE_FORMULA_VARIABLES = Object.freeze([
+  Object.freeze({ key: "limbs", abbr: "limbs", label: "Все части тела" })
+]);
+
 export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
     super(options);
@@ -56,7 +60,8 @@ export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
     await super._onRender(context, options);
     activateFormulaAutocomplete(this.element, {
       characteristics: getCharacteristicSettings(),
-      skills: getSkillSettings()
+      skills: getSkillSettings(),
+      variables: RESOURCE_FORMULA_VARIABLES
     });
     activateSettingsReorder(this.element, "[data-resource-row]");
   }
@@ -141,6 +146,7 @@ function validateFormulaSettings(settings, validationPrefix) {
   const abbreviations = new Set();
   const characteristics = getCharacteristicSettings();
   const skills = getSkillSettings();
+  const variables = RESOURCE_FORMULA_VARIABLES.map(entry => entry.key);
 
   for (const [index, setting] of settings.entries()) {
     const key = String(setting.key ?? "").trim();
@@ -156,7 +162,7 @@ function validateFormulaSettings(settings, validationPrefix) {
     abbreviations.add(abbr);
 
     try {
-      validateFormula(setting.formula, { allowSkills: true, characteristics, skills });
+      validateFormula(setting.formula, { allowSkills: true, characteristics, skills, variables });
     } catch (error) {
       throwValidationError(`${setting.label || key}: ${error.message}`);
     }

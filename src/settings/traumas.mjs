@@ -109,7 +109,7 @@ function normalizeTraumaLimb(value = {}, limb = {}, damageTypes = [], legacyStag
 
   return {
     label: String(limb?.label ?? limb?.name ?? limb?.key ?? ""),
-    stateMax: Math.max(0, toInteger(limb?.stateMax)),
+    stateMax: String(limb?.stateMax ?? "0").trim() || "0",
     stages: normalizeTraumaStages(stagesSource, damageTypes)
   };
 }
@@ -181,7 +181,7 @@ function normalizeLimbSetLimbs(limbs = [], { sort = true } = {}) {
     .map(limb => ({
       key: String(limb?.key ?? "").trim(),
       label: String(limb?.label ?? limb?.name ?? limb?.key ?? "").trim(),
-      stateMax: Math.max(0, toInteger(limb?.stateMax)),
+      stateMax: String(limb?.stateMax ?? "0").trim() || "0",
       damageMultiplier: toDecimal(limb?.damageMultiplier, 1),
       aimedDifficultyPercent: toInteger(limb?.aimedDifficultyPercent)
     }))

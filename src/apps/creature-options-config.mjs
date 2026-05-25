@@ -278,7 +278,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     race.limbs.push({
       key: id,
       label: "Новая конечность",
-      stateMax: 100,
+      stateMax: "100 + con * 5",
       damageMultiplier: 1,
       aimedDifficultyPercent: 0,
       critical: false,
@@ -540,7 +540,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       return {
         key,
         label: row.querySelector("[data-field='label']")?.value?.trim() || localize("FALLOUTMAW.Common.Untitled"),
-        stateMax: Math.max(0, toInteger(existing.stateMax ?? 100)),
+        stateMax: String(existing.stateMax ?? "100").trim() || "100",
         damageMultiplier: toDecimal(existing.damageMultiplier, 1),
         aimedDifficultyPercent: toInteger(existing.aimedDifficultyPercent),
         critical: parseBoolean(existing.critical),
@@ -625,6 +625,15 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       } catch (error) {
         ui.notifications.error(`${race.name || race.id} / ${localize("FALLOUTMAW.Common.Load")}: ${error.message}`);
         throw error;
+      }
+
+      for (const limb of race.limbs ?? []) {
+        try {
+          validateFormula(limb.stateMax ?? "100", { allowSkills: true, characteristics, skills });
+        } catch (error) {
+          ui.notifications.error(`${race.name || race.id} / ${limb.label || limb.key}: ${error.message}`);
+          throw error;
+        }
       }
 
       const usedNeedKeys = new Set();
@@ -743,6 +752,10 @@ class LimbSettingsConfig extends FalloutMaWFormApplicationV2 {
   async _onRender(context, options) {
     await super._onRender(context, options);
     activateEffectKeyAutocomplete(this.element, buildEffectKeyTokens());
+    activateFormulaAutocomplete(this.element, {
+      characteristics: getCharacteristicSettings(),
+      skills: getSkillSettings()
+    });
   }
 
   async _processFormData(_event, _form, formData) {
@@ -799,7 +812,7 @@ function normalizeLimbSettings(limb = {}) {
   return {
     key: String(limb?.key ?? "").trim(),
     label: String(limb?.label ?? limb?.name ?? limb?.key ?? "").trim(),
-    stateMax: Math.max(0, toInteger(limb?.stateMax ?? 100)),
+    stateMax: String(limb?.stateMax ?? "100").trim() || "100",
     damageMultiplier: toDecimal(limb?.damageMultiplier, 1),
     aimedDifficultyPercent: toInteger(limb?.aimedDifficultyPercent),
     critical,

@@ -696,7 +696,7 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
 
   for (const [limbKey, state] of limbStates) {
     if (!state.totalDelta) continue;
-    updateData[`system.limbs.${limbKey}.value`] = state.nextValue;
+    setLimbValueUpdate(updateData, actor, limbKey, state.nextValue);
   }
   for (const [limbKey, accumulation] of damageAccumulation) {
     updateData[`system.limbs.${limbKey}.damageAccumulation`] = normalizeDamageAccumulation(accumulation);
@@ -771,6 +771,7 @@ export async function restoreDestroyedLimb(actor, limbKey = "") {
     await deleteLimbLossEffects(freshActor, limbKey);
     await freshActor.update({
       [`system.limbs.${limbKey}.value`]: max,
+      [`system.limbs.${limbKey}.spent`]: 0,
       [`system.limbs.${limbKey}.damageAccumulation`]: {}
     }, { falloutMawSkipDamageStatusSync: true });
     await queueActorDamageStatusSync(freshActor);
@@ -803,6 +804,7 @@ export function getDamageCostModifierState(actor) {
 
 export function prepareActorDamageUpdate(actor, changes = {}, options = {}) {
   if (!options?.falloutMawSkipDamageStatusSync) distributeManualHealthValueUpdate(actor, changes, options);
+  synchronizeManualLimbValueUpdates(actor, changes);
   return preventCriticalLimbHealthRecovery(actor, changes);
 }
 
@@ -983,6 +985,7 @@ function buildFullDamageRestoreUpdate(actor) {
   for (const [key, limb] of Object.entries(actor?.system?.limbs ?? {})) {
     const max = Math.max(0, toInteger(limb?.max));
     updates[`system.limbs.${key}.value`] = max;
+    updates[`system.limbs.${key}.spent`] = 0;
     updates[`system.limbs.${key}.damageAccumulation`] = {};
   }
   for (const [key, resource] of Object.entries(actor?.system?.resources ?? {})) {
@@ -2121,7 +2124,7 @@ function distributeManualHealthValueUpdate(actor, changes = {}, options = {}) {
   const amount = Math.abs(delta);
   const result = calculateManualAggregateHealthAdjustment(actor, amount, mode);
   for (const [limbKey, value] of Object.entries(result.values)) {
-    setUpdatePath(changes, `system.limbs.${limbKey}.value`, value);
+    setLimbValueUpdate(changes, actor, limbKey, value);
   }
   if (mode === MODE_HEALING && result.healthDelta > 0) {
     options.falloutMawShockHealingDelta = (Number(options.falloutMawShockHealingDelta) || 0) + result.healthDelta;
@@ -2165,7 +2168,7 @@ async function applyDamageEntriesBatch(actor, entries = []) {
 
   for (const [limbKey, state] of limbStates) {
     if (!state.totalDelta) continue;
-    updateData[`system.limbs.${limbKey}.value`] = state.nextValue;
+    setLimbValueUpdate(updateData, actor, limbKey, state.nextValue);
   }
   for (const [limbKey, accumulation] of damageAccumulation) {
     updateData[`system.limbs.${limbKey}.damageAccumulation`] = normalizeDamageAccumulation(accumulation);
@@ -2576,17 +2579,27 @@ function calculateTargetedLimbDamage(actor, limbKey = "", amount = 0, { damageTy
 
   const currentValue = getLimbStateValue(actor, limbKey, limbStates);
   if (currentValue < 0) {
+    const limbResult = applyDamageAllocations(actor, new Map([[limbKey, damage]]), {
+      damageType,
+      damageTypeKey,
+      limbStates,
+      damageAccumulation
+    });
     const shockCheck = {
       limbKey,
       damage,
       difficulty: Math.max(0, roundDamageAmount(damage * (isCriticalLimb(actor, limbKey) ? 3 : 1)))
     };
-    const result = calculateEvenLimbDamage(actor, damage, {
+    const spreadResult = calculateEvenLimbDamage(actor, damage, {
       damageType,
       damageTypeKey,
       limbStates,
       damageAccumulation,
       excludeLimbKeys: new Set([limbKey])
+    });
+    const result = createLimbMutationResult(limbStates, damageAccumulation, {
+      healthDelta: limbResult.healthDelta + spreadResult.healthDelta,
+      limbDelta: Array.from(limbStates.values()).reduce((sum, entry) => sum + entry.totalDelta, 0)
     });
     result.shockCheck = shockCheck;
     return result;
@@ -3122,6 +3135,29 @@ function getResponsibleGM() {
     .filter(user => user.active && user.isGM)
     .sort((left, right) => left.id.localeCompare(right.id))
     .at(0) ?? null;
+}
+
+function synchronizeManualLimbValueUpdates(actor, changes = {}) {
+  for (const [limbKey, limb] of Object.entries(actor?.system?.limbs ?? {})) {
+    const valuePath = `system.limbs.${limbKey}.value`;
+    if (!hasUpdatePath(changes, valuePath)) continue;
+    const value = toInteger(getUpdatePath(changes, valuePath));
+    setUpdatePath(changes, `system.limbs.${limbKey}.spent`, calculateLimbSpentFromValue(limb, value));
+  }
+}
+
+function setLimbValueUpdate(updateData, actor, limbKey, value) {
+  const limb = actor?.system?.limbs?.[limbKey];
+  setUpdatePath(updateData, `system.limbs.${limbKey}.value`, value);
+  setUpdatePath(updateData, `system.limbs.${limbKey}.spent`, calculateLimbSpentFromValue(limb, value));
+}
+
+function calculateLimbSpentFromValue(limb, value) {
+  const max = Math.max(0, toInteger(limb?.max));
+  const min = -max;
+  const capacity = Math.max(0, max - min);
+  const boundedValue = Math.min(Math.max(toInteger(value), min), max);
+  return Math.min(Math.max(0, max - boundedValue), capacity);
 }
 
 function hasUpdatePath(object, path) {

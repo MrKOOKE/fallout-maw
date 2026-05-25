@@ -3,6 +3,7 @@ import {
   normalizeActorDevelopment
 } from "../../advancement/index.mjs";
 import {
+  evaluateFormula,
   evaluateFormulaMap,
   evaluateNeedSettings,
   evaluateResourceSettings,
@@ -119,7 +120,6 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       this.progression.researchPointsPerLevel = toInteger(race.progression.researchPointsPerLevel);
     }
 
-    replaceObjectContents(this.limbs, normalizeLimbMap(this.limbs, race?.limbs ?? []));
     replaceObjectContents(this.development, normalizeActorDevelopment(this.development, characteristicSettings, skillSettings));
 
     const skillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, this.characteristics);
@@ -134,12 +134,25 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     replaceObjectContents(this.proficiencies, normalizeProficiencyMap(this.proficiencies, proficiencySettings));
 
     const skillValues = getSkillValues(this.skills);
+    const limbMaximums = evaluateLimbMaximums(
+      race?.limbs ?? [],
+      characteristicSettings,
+      skillSettings,
+      this.characteristics,
+      skillValues
+    );
+    replaceObjectContents(
+      this.limbs,
+      normalizeLimbMap(this.limbs, race?.limbs ?? [], limbMaximums, this.parent?._source?.system?.limbs ?? {})
+    );
+
     const resourceMaximums = evaluateResourceSettings(
       resourceSettings,
       characteristicSettings,
       skillSettings,
       this.characteristics,
-      skillValues
+      skillValues,
+      buildLimbResourceFormulaVariables(limbMaximums)
     );
     replaceObjectContents(this.resources, normalizeResourceMap(this.resources, resourceSettings, resourceMaximums, {
       trackSpent: true
@@ -242,9 +255,10 @@ function limbField() {
     damageMultiplier: new NumberField({ required: true, initial: 1, persisted: false }),
     aimedDifficultyPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
     critical: new BooleanField({ required: true, initial: false, persisted: false }),
-    min: new NumberField({ required: true, integer: true, initial: -100 }),
+    min: new NumberField({ required: true, integer: true, initial: -100, persisted: false }),
+    spent: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     value: new NumberField({ required: true, integer: true, initial: 0 }),
-    max: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    max: new NumberField({ required: true, integer: true, min: 0, initial: 0, persisted: false }),
     damageAccumulation: new TypedObjectField(new NumberField({ required: true, min: 0, initial: 0 }), {
       required: true,
       initial: {}
@@ -333,26 +347,40 @@ function normalizeResourceMap(currentResources = {}, settings = [], maximums = {
   );
 }
 
-function normalizeLimbMap(currentLimbs = {}, settings = []) {
+function normalizeLimbMap(currentLimbs = {}, settings = [], maximums = {}, sourceLimbs = {}) {
   return Object.fromEntries(
     settings.map(setting => {
       const current = currentLimbs?.[setting.key];
-      const max = Math.max(0, toInteger(setting?.stateMax));
+      const source = sourceLimbs?.[setting.key];
+      const max = Math.max(0, toInteger(maximums?.[setting.key] ?? setting?.stateMax));
       const min = -max;
-      const fallbackValue = current && typeof current === "object" ? current.value : max;
-      const value = Math.min(Math.max(toInteger(fallbackValue), min), max);
+      const spent = normalizeLimbSpent(current, source, min, max);
+      const value = Math.min(Math.max(max - spent, min), max);
       return [setting.key, {
         label: String(setting?.label ?? setting?.name ?? setting?.key ?? ""),
         damageMultiplier: toDecimal(setting?.damageMultiplier, 1),
         aimedDifficultyPercent: toInteger(setting?.aimedDifficultyPercent),
         critical: Boolean(setting?.critical),
         min,
+        spent,
         value,
         max,
         damageAccumulation: normalizeDamageAccumulation(current?.damageAccumulation)
       }];
     })
   );
+}
+
+function normalizeLimbSpent(current, source, min, max) {
+  const capacity = Math.max(0, max - min);
+  if (!current || typeof current !== "object") return 0;
+
+  const hasSourceSpent = source && typeof source === "object" && Object.hasOwn(source, "spent");
+  const explicitSpent = hasSourceSpent ? Number(source.spent) : NaN;
+  if (Number.isFinite(explicitSpent)) return Math.min(Math.max(0, Math.trunc(explicitSpent)), capacity);
+
+  const currentValue = Math.min(Math.max(toInteger(current.value), min), max);
+  return Math.min(Math.max(0, max - currentValue), capacity);
 }
 
 function toDecimal(value, fallback = 0) {
@@ -388,6 +416,34 @@ function buildEmptyLimbDamageMap(limbs = {}, damageTypeSettings = []) {
       Object.fromEntries(damageTypeSettings.map(damageType => [damageType.key, 0]))
     ])
   );
+}
+
+function evaluateLimbMaximums(settings = [], characteristicSettings = [], skillSettings = [], characteristics = {}, skills = {}) {
+  return Object.fromEntries(
+    settings.map(setting => {
+      const key = String(setting?.key ?? "").trim();
+      try {
+        return [
+          key,
+          Math.max(0, evaluateFormula(setting?.stateMax ?? "0", {
+            characteristicSettings,
+            skillSettings,
+            characteristics,
+            skills
+          }))
+        ];
+      } catch (error) {
+        console.warn(`fallout-maw | Limb state formula failed for ${key}: ${error.message}`);
+        return [key, 0];
+      }
+    }).filter(([key]) => key)
+  );
+}
+
+function buildLimbResourceFormulaVariables(limbMaximums = {}) {
+  return {
+    limbs: Object.values(limbMaximums ?? {}).reduce((sum, value) => sum + Math.max(0, toInteger(value)), 0)
+  };
 }
 
 function buildLimbDamageDefenseMap(limbs = {}, defenseValues = {}) {

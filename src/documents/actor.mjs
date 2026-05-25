@@ -393,7 +393,7 @@ function maximizeResourceMap(resources = {}) {
       const min = Number(resource?.min) || 0;
       const bonus = toInteger(resource?.bonus);
       const max = Number(resource?.max) || min;
-      return [key, { ...resource, min, bonus, value: max, max }];
+      return [key, { ...resource, min, bonus, spent: 0, value: max, max }];
     })
   );
 }

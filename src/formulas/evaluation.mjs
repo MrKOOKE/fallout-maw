@@ -5,12 +5,14 @@ import { parseFormula, normalizeFormulaOptions } from "./parser.mjs";
 import { normalizeCharacteristicSettings, normalizeFormulaMap, normalizeNeedSettings, normalizeResourceSettings, normalizeSkillSettings } from "./normalization.mjs";
 
 export function evaluateFormula(formula, data = {}) {
-  const options = normalizeFormulaOptions({
+  const formulaOptions = {
     characteristics: data.characteristicSettings,
     skills: data.skillSettings,
-    allowSkills: Boolean(data.skills)
-  });
-  const expression = parseFormula(String(formula ?? "0"), options);
+    allowSkills: Boolean(data.skills),
+    variables: data.variables
+  };
+  const options = normalizeFormulaOptions(formulaOptions);
+  const expression = parseFormula(String(formula ?? "0"), formulaOptions);
   const value = expression.evaluate(identifier => {
     const normalized = identifier.toLowerCase();
     const characteristic = options.characteristicAliases[normalized];
@@ -18,6 +20,9 @@ export function evaluateFormula(formula, data = {}) {
 
     const skill = options.skillAliases[normalized];
     if (skill) return Number(data.skills?.[skill] ?? data[skill]) || 0;
+
+    const variable = options.variableAliases[normalized];
+    if (variable) return Number(data.formulaVariables?.[variable] ?? data[variable]) || 0;
 
     throw new Error(format("FALLOUTMAW.Formula.UnknownParameter", { identifier }));
   });
@@ -71,9 +76,10 @@ export function evaluateResourceSettings(
   characteristicSettings,
   skillSettings,
   characteristics = {},
-  skills = {}
+  skills = {},
+  variables = {}
 ) {
-  return evaluateFormulaSettings(normalizeResourceSettings(resourceSettings), characteristicSettings, skillSettings, characteristics, skills);
+  return evaluateFormulaSettings(normalizeResourceSettings(resourceSettings), characteristicSettings, skillSettings, characteristics, skills, variables);
 }
 
 export function evaluateNeedSettings(
@@ -86,7 +92,7 @@ export function evaluateNeedSettings(
   return evaluateFormulaSettings(normalizeNeedSettings(needSettings), characteristicSettings, skillSettings, characteristics, skills);
 }
 
-function evaluateFormulaSettings(settings = [], characteristicSettings, skillSettings, characteristics = {}, skills = {}) {
+function evaluateFormulaSettings(settings = [], characteristicSettings, skillSettings, characteristics = {}, skills = {}, variables = {}) {
   const normalizedCharacteristics = normalizeCharacteristicSettings(characteristicSettings);
   const normalizedSkills = normalizeSkillSettings(skillSettings);
 
@@ -101,7 +107,9 @@ function evaluateFormulaSettings(settings = [], characteristicSettings, skillSet
               characteristicSettings: normalizedCharacteristics,
               skillSettings: normalizedSkills,
               characteristics,
-              skills
+              skills,
+              formulaVariables: variables,
+              variables: Object.keys(variables ?? {})
             })
           )
         ];

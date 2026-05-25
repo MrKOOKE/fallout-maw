@@ -145,10 +145,14 @@ function normalizeLimbs(limbs) {
       usedKeys.add(key);
       const defaultLimb = defaultsByKey.get(key);
       const critical = parseBoolean(limb?.critical, Boolean(defaultLimb?.critical));
+      const rawStateMax = String(limb?.stateMax ?? defaultLimb?.stateMax ?? "100").trim() || "100";
+      const stateMax = defaultLimb && rawStateMax === "100"
+        ? String(defaultLimb.stateMax ?? rawStateMax)
+        : rawStateMax;
       return {
         key,
         label: String(limb?.label ?? limb?.name ?? "").trim() || defaultLimb?.label || localize("FALLOUTMAW.Common.Untitled"),
-        stateMax: Math.max(0, toInteger(limb?.stateMax ?? defaultLimb?.stateMax ?? 100)),
+        stateMax,
         damageMultiplier: toDecimal(limb?.damageMultiplier ?? defaultLimb?.damageMultiplier ?? 1, 1),
         aimedDifficultyPercent: toInteger(limb?.aimedDifficultyPercent ?? defaultLimb?.aimedDifficultyPercent ?? 0),
         critical,

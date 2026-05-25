@@ -252,7 +252,7 @@ export class TraumaGroupSettingsConfig extends FalloutMaWFormApplicationV2 {
       if (!limbKey) continue;
       limbs[limbKey] = {
         label: limbElement.querySelector("[data-trauma-limb-label]")?.textContent?.trim() ?? "",
-        stateMax: Number(limbElement.dataset.traumaLimbStateMax) || 0,
+        stateMax: String(limbElement.dataset.traumaLimbStateMax ?? "0").trim() || "0",
         stages: Array.from(limbElement.querySelectorAll(".fallout-maw-trauma-profile")).map(stageElement => {
           const stageId = stageElement.dataset.traumaStage || foundry.utils.randomID();
           const thresholdPercent = Number(stageElement.querySelector("[data-trauma-stage-threshold]")?.value) || 0;
