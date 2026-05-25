@@ -6665,7 +6665,7 @@ label.fallout-maw-mitigation-cell {
 }
 
 .currency-settings .fallout-maw-settings-row {
-  grid-template-columns: 2rem 6rem minmax(0, 0.68fr) minmax(0, 0.9fr) 110px 2.5rem;
+  grid-template-columns: 2rem 6rem minmax(0, 0.68fr) minmax(0, 0.9fr) 110px 9rem 2.5rem;
 }
 
 .currency-settings {
@@ -6688,6 +6688,13 @@ label.fallout-maw-mitigation-cell {
 .currency-settings input[type="number"] {
   min-width: 0;
   width: 100%;
+}
+
+.currency-settings .fallout-maw-checkbox-cell {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  margin: 0;
 }
 
 .limb-settings .fallout-maw-settings-row {
@@ -8294,12 +8301,84 @@ label.fallout-maw-mitigation-cell {
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-currency-chip[data-search-currency] {
   cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-currency-chip[data-search-currency] .fallout-maw-currency-amount {
+  transition: color 120ms ease;
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-currency-chip[data-search-currency]:hover {
   box-shadow:
     inset 0 0 0 1px rgba(234, 224, 139, 0.78),
     0 0 0 1px rgba(234, 224, 139, 0.22);
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-currency-chip.trade-primary {
+  border-color: rgba(111, 210, 118, 0.92);
+  box-shadow:
+    inset 0 0 0 1px rgba(111, 210, 118, 0.48),
+    0 0 0 1px rgba(111, 210, 118, 0.22);
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-currency-chip.trade-preview-positive {
+  border-color: rgba(111, 210, 118, 0.98);
+  box-shadow:
+    inset 0 0 0 1px rgba(111, 210, 118, 0.62),
+    0 0 12px rgba(111, 210, 118, 0.22);
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-currency-chip.trade-preview-positive .fallout-maw-currency-amount {
+  color: #bdf0a6;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-currency-chip.trade-preview-negative {
+  border-color: rgba(218, 92, 76, 0.98);
+  box-shadow:
+    inset 0 0 0 1px rgba(218, 92, 76, 0.58),
+    0 0 12px rgba(218, 92, 76, 0.22);
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-currency-chip.trade-preview-negative .fallout-maw-currency-amount {
+  color: #ff9a86;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-price {
+  background: rgba(5, 8, 5, 0.9);
+  border: 1px solid rgba(111, 210, 118, 0.56);
+  border-radius: 0;
+  box-sizing: border-box;
+  color: #bdf0a6;
+  font-family: var(--fallout-maw-actor-mono-font);
+  font-size: 0.75rem;
+  line-height: 1;
+  left: 0.15rem;
+  min-width: 1.2rem;
+  overflow: hidden;
+  padding: 0.15rem;
+  pointer-events: none;
+  position: absolute;
+  text-align: center;
+  text-overflow: ellipsis;
+  top: 0.15rem;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+.fallout-maw-trade-quantity-price {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.65rem 0 0;
+}
+
+.fallout-maw-trade-quantity-price strong {
+  color: #bdf0a6;
+  font-family: var(--fallout-maw-actor-mono-font);
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-inventory-stack {

@@ -10,20 +10,25 @@ export function normalizeCurrencySettings(settings) {
   const source = normalizeCollectionInput(settings, createDefaultCurrencySettings());
   const used = new Set();
   const currencies = [];
+  let primaryTradeAssigned = false;
 
   for (const raw of source) {
     const key = String(raw?.key ?? "").trim();
     if (!IDENTIFIER_PATTERN.test(key) || used.has(key)) continue;
 
+    const primaryTrade = Boolean(raw?.primaryTrade) && !primaryTradeAssigned;
+    if (primaryTrade) primaryTradeAssigned = true;
     used.add(key);
     currencies.push({
       key,
       label: String(raw?.label ?? raw?.name ?? "").trim() || `Валюта ${currencies.length + 1}`,
       img: String(raw?.img ?? raw?.image ?? "").trim(),
-      value: normalizeCurrencyValue(raw?.value)
+      value: normalizeCurrencyValue(raw?.value),
+      primaryTrade
     });
   }
 
+  if (currencies.length && !primaryTradeAssigned) currencies[0].primaryTrade = true;
   return currencies;
 }
 

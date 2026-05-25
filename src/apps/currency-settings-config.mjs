@@ -52,6 +52,7 @@ export class CurrencySettingsConfig extends FalloutMaWFormApplicationV2 {
   async _onRender(context, options) {
     await super._onRender(context, options);
     activateSettingsReorder(this.element, "[data-currency-row]");
+    this.#bindPrimaryTradeCurrencyControls();
   }
 
   async _processFormData(_event, _form, _formData) {
@@ -70,7 +71,8 @@ export class CurrencySettingsConfig extends FalloutMaWFormApplicationV2 {
       key: this.#getUniqueKey("newCurrency"),
       label: "Новая валюта",
       img: "",
-      value: 1
+      value: 1,
+      primaryTrade: !this.currencies.length
     });
     return this.forceRender();
   }
@@ -121,8 +123,21 @@ export class CurrencySettingsConfig extends FalloutMaWFormApplicationV2 {
       key: row.querySelector("[data-field='key']")?.value?.trim() ?? "",
       label: row.querySelector("[data-field='label']")?.value?.trim() ?? "",
       img: row.querySelector("[data-field='img']")?.value?.trim() ?? "",
-      value: row.querySelector("[data-field='value']")?.value?.trim() ?? "0"
+      value: row.querySelector("[data-field='value']")?.value?.trim() ?? "0",
+      primaryTrade: Boolean(row.querySelector("[data-field='primaryTrade']")?.checked)
     }));
+  }
+
+  #bindPrimaryTradeCurrencyControls() {
+    const checkboxes = Array.from(this.form?.querySelectorAll("[data-field='primaryTrade']") ?? []);
+    for (const checkbox of checkboxes) {
+      checkbox.addEventListener("change", event => {
+        if (!event.currentTarget.checked) return;
+        for (const other of checkboxes) {
+          if (other !== event.currentTarget) other.checked = false;
+        }
+      });
+    }
   }
 
   #validateCurrencies(currencies) {

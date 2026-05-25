@@ -55,9 +55,12 @@ const SEARCH_INVENTORY_FALLBACK_VIEWPORT_HEIGHT = 720;
 const SEARCH_INVENTORY_SOCKET = `system.${SYSTEM_ID}`;
 const SEARCH_INVENTORY_SOCKET_SCOPE = "fallout-maw.searchInventory";
 const SEARCH_INVENTORY_SOCKET_TIMEOUT = 10000;
+const SEARCH_INVENTORY_MODE_SEARCH = "search";
+const SEARCH_INVENTORY_MODE_TRADE = "trade";
 
 let searchInventoryWindow = null;
 const pendingSearchInventorySocketRequests = new Map();
+const pendingSearchInventoryTradeInvites = new Map();
 const searchInventoryOperationQueues = new Map();
 
 export function registerSearchInventorySocket() {
@@ -69,7 +72,67 @@ export function openSearchInventoryWindow({ searcherActor, searchedActor } = {})
   if (searcherActor.uuid === searchedActor.uuid) return undefined;
 
   searchInventoryWindow ??= new SearchInventoryApplication();
-  searchInventoryWindow.setActors(searcherActor, searchedActor);
+  searchInventoryWindow.setActors(searcherActor, searchedActor, {
+    mode: SEARCH_INVENTORY_MODE_SEARCH,
+    sessionId: "",
+    tradeCurrencyKey: ""
+  });
+  return searchInventoryWindow.render({ force: true });
+}
+
+export async function requestTradeInventoryWindow({ traderActor, tradeActor } = {}) {
+  if (!traderActor || !tradeActor) return undefined;
+  if (traderActor.uuid === tradeActor.uuid) return undefined;
+
+  const recipientUser = getPrimaryActorOwnerUser(tradeActor);
+  if (!recipientUser) {
+    ui.notifications.warn("Нет активного владельца актера для торговли.");
+    return undefined;
+  }
+
+  const sessionId = foundry.utils.randomID();
+  const tradeCurrencyKey = getPrimaryTradeCurrencyKey();
+  const payload = {
+    sessionId,
+    searcherActorUuid: traderActor.uuid,
+    searchedActorUuid: tradeActor.uuid,
+    tradeCurrencyKey,
+    requesterUserId: game.user?.id ?? "",
+    recipientUserId: recipientUser.id
+  };
+
+  if (recipientUser.id === game.user?.id) {
+    const accepted = await confirmTradeInvite(payload);
+    if (!accepted) return undefined;
+  } else {
+    let response;
+    try {
+      response = await requestTradeInviteSocket(payload, recipientUser);
+    } catch (error) {
+      ui.notifications.warn(error.message || "Запрос торговли не принят.");
+      return undefined;
+    }
+    if (!response?.accepted) return undefined;
+  }
+
+  return openTradeInventoryWindow({
+    searcherActor: traderActor,
+    searchedActor: tradeActor,
+    sessionId,
+    tradeCurrencyKey
+  });
+}
+
+async function openTradeInventoryWindow({ searcherActor, searchedActor, sessionId = "", tradeCurrencyKey = "" } = {}) {
+  if (!searcherActor || !searchedActor) return undefined;
+  if (searcherActor.uuid === searchedActor.uuid) return undefined;
+
+  searchInventoryWindow ??= new SearchInventoryApplication();
+  searchInventoryWindow.setActors(searcherActor, searchedActor, {
+    mode: SEARCH_INVENTORY_MODE_TRADE,
+    sessionId,
+    tradeCurrencyKey: normalizeTradeCurrencyKey(tradeCurrencyKey)
+  });
   return searchInventoryWindow.render({ force: true });
 }
 
@@ -78,6 +141,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #searchedActorUuid = "";
   #searcherActor = null;
   #searchedActor = null;
+  #mode = SEARCH_INVENTORY_MODE_SEARCH;
+  #tradeSessionId = "";
+  #tradeCurrencyKey = "";
+  #suppressCloseBroadcast = false;
   #draggedItemData = null;
   #draggedItemId = "";
   #draggedActorUuid = "";
@@ -120,6 +187,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   get title() {
     const searchedName = this.#searchedActor?.name ?? "";
+    if (this.#isTradeMode()) return searchedName ? `Торговля: ${searchedName}` : "Торговля";
     return searchedName ? `Обыск: ${searchedName}` : "Обыск";
   }
 
@@ -148,12 +216,29 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     });
   }
 
-  setActors(searcherActor, searchedActor) {
+  setActors(searcherActor, searchedActor, { mode = SEARCH_INVENTORY_MODE_SEARCH, sessionId = "", tradeCurrencyKey = "" } = {}) {
     this.#searcherActorUuid = searcherActor?.uuid ?? "";
     this.#searchedActorUuid = searchedActor?.uuid ?? "";
     this.#searcherActor = searcherActor ?? null;
     this.#searchedActor = searchedActor ?? null;
+    this.#mode = mode === SEARCH_INVENTORY_MODE_TRADE ? SEARCH_INVENTORY_MODE_TRADE : SEARCH_INVENTORY_MODE_SEARCH;
+    this.#tradeSessionId = String(sessionId ?? "");
+    this.#tradeCurrencyKey = normalizeTradeCurrencyKey(tradeCurrencyKey);
     this.#clearInventoryDropPreview();
+  }
+
+  matchesTradeSession(sessionId) {
+    return this.#isTradeMode() && this.#tradeSessionId === String(sessionId ?? "");
+  }
+
+  async closeTradeSessionFromSocket(sessionId) {
+    if (!this.matchesTradeSession(sessionId)) return undefined;
+    this.#suppressCloseBroadcast = true;
+    return this.close({ force: true });
+  }
+
+  setTradeCurrencyKey(currencyKey) {
+    this.#setTradeCurrencyKey(currencyKey);
   }
 
   async _prepareContext(options) {
@@ -162,20 +247,26 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#searchedActor = await resolveActor(this.#searchedActorUuid);
 
     const canInteract = this.#canInteract();
+    const isTrade = this.#isTradeMode();
     return {
       ...context,
       canInteract,
+      isTrade,
       fallbackIcon: FALLBACK_ICON,
       actors: [
         prepareSearchActorContext(this.#searcherActor, {
           side: "searcher",
           roleLabel: "Обыскивающий",
-          canInteract
+          canInteract,
+          mode: this.#mode,
+          tradeCurrencyKey: this.#tradeCurrencyKey
         }),
         prepareSearchActorContext(this.#searchedActor, {
           side: "searched",
           roleLabel: "Обыскиваемый",
-          canInteract
+          canInteract,
+          mode: this.#mode,
+          tradeCurrencyKey: this.#tradeCurrencyKey
         })
       ].filter(Boolean)
     };
@@ -222,6 +313,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#clearInventoryTooltip({ force: true });
     this.#unbindInventoryTooltipDocumentClose();
     this.#scrollPositions.clear();
+    if (this.#isTradeMode() && this.#tradeSessionId && !this.#suppressCloseBroadcast) {
+      broadcastTradeSessionClose(this.#tradeSessionId);
+    }
+    this.#suppressCloseBroadcast = false;
     if (searchInventoryWindow === this) searchInventoryWindow = null;
   }
 
@@ -383,7 +478,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const parentId = placementRequest.mode === "inventory" ? getDropZoneParentId(zone) : ROOT_CONTAINER_ID;
     const targetItem = this.#getTargetStackItem(zone, targetActor, item.id, parentId);
     if (canStackItems(item.toObject(), targetItem)) {
-      const quantity = await this.#getSearchStackQuantity(item, targetItem, event);
+      const quantity = await this.#getSearchStackQuantity(item, targetItem, event, { sourceActor, targetActor });
       if (!quantity) return null;
       return this.#executeSearchStackTransfer({
         searcherActorUuid: this.#searcherActorUuid,
@@ -407,6 +502,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         zone
       })
       : null;
+    const quantity = await this.#getSearchTransferQuantity(item, event, { sourceActor, targetActor });
+    if (!quantity) return null;
     const payload = {
       searcherActorUuid: this.#searcherActorUuid,
       searchedActorUuid: this.#searchedActorUuid,
@@ -420,13 +517,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       targetWeaponSlot: placementRequest.weaponSlot,
       targetX: pointerPlacement?.x ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.x) : null),
       targetY: pointerPlacement?.y ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.y) : null),
-      targetItemId: targetItem?.id ?? ""
+      targetItemId: targetItem?.id ?? "",
+      quantity
     };
 
     return this.#executeSearchTransfer(payload);
   }
 
-  async #getSearchStackQuantity(sourceItem, targetItem, event) {
+  async #getSearchStackQuantity(sourceItem, targetItem, event, { sourceActor = null, targetActor = null } = {}) {
     const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
     const availableSpace = Math.max(0, getItemMaxStack(targetItem) - getItemQuantity(targetItem));
     const maxTransfer = Math.min(sourceQuantity, availableSpace);
@@ -437,11 +535,33 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       title: "Сложить предметы",
       actionLabel: "Сложить",
       max: maxTransfer,
-      value: maxTransfer
+      value: maxTransfer,
+      trade: this.#getTradeQuantityPromptData(sourceActor, targetActor)
     });
   }
 
+  async #getSearchTransferQuantity(sourceItem, event, { sourceActor = null, targetActor = null } = {}) {
+    const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
+    if (event?.shiftKey || sourceQuantity <= 1 || isContainerItem(sourceItem)) return sourceQuantity;
+    return promptSearchItemStackQuantity({
+      item: sourceItem,
+      title: "Перенести предметы",
+      actionLabel: "Перенести",
+      max: sourceQuantity,
+      value: sourceQuantity,
+      trade: this.#getTradeQuantityPromptData(sourceActor, targetActor)
+    });
+  }
+
+  #getTradeQuantityPromptData(sourceActor = null, targetActor = null) {
+    if (!this.#isTradeMode() || !sourceActor || !targetActor || sourceActor.uuid === targetActor.uuid) return null;
+    return {
+      currencyKey: this.#tradeCurrencyKey
+    };
+  }
+
   async #executeSearchStackTransfer(payload, { notify = true } = {}) {
+    payload = this.#prepareSearchOperationPayload(payload);
     const sourceActor = this.#getActorByUuid(String(payload?.sourceActorUuid ?? ""));
     const targetActor = this.#getActorByUuid(String(payload?.targetActorUuid ?? ""));
     if (!sourceActor || !targetActor) return false;
@@ -463,6 +583,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   async #executeSearchTransfer(payload, { notify = true } = {}) {
+    payload = this.#prepareSearchOperationPayload(payload);
     const sourceActor = this.#getActorByUuid(String(payload?.sourceActorUuid ?? ""));
     const targetActor = this.#getActorByUuid(String(payload?.targetActorUuid ?? ""));
     if (!sourceActor || !targetActor) return false;
@@ -485,7 +606,26 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   #canInteract() {
+    if (this.#isTradeMode()) {
+      return Boolean(game.user?.isGM
+        || this.#searcherActor?.testUserPermission?.(game.user, "OWNER")
+        || this.#searchedActor?.testUserPermission?.(game.user, "OWNER"));
+    }
     return Boolean(game.user?.isGM || this.#searcherActor?.testUserPermission?.(game.user, "OWNER"));
+  }
+
+  #isTradeMode() {
+    return this.#mode === SEARCH_INVENTORY_MODE_TRADE;
+  }
+
+  #prepareSearchOperationPayload(payload = {}) {
+    if (!this.#isTradeMode()) return payload;
+    return {
+      ...payload,
+      mode: SEARCH_INVENTORY_MODE_TRADE,
+      tradeSessionId: this.#tradeSessionId,
+      tradeCurrencyKey: this.#tradeCurrencyKey
+    };
   }
 
   #getActorByUuid(uuid) {
@@ -769,6 +909,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     root.dataset.tooltipBound = "true";
     root.addEventListener("pointerover", event => this.#onInventoryTooltipPointerOver(event));
     root.addEventListener("pointerout", event => this.#onInventoryTooltipPointerOut(event));
+    root.addEventListener("pointerover", event => this.#onTradeItemPointerOver(event));
+    root.addEventListener("pointerout", event => this.#onTradeItemPointerOut(event));
     root.addEventListener("mousedown", event => this.#onInventoryTooltipMiddleMouseDown(event));
     root.addEventListener("auxclick", event => this.#onInventoryTooltipAuxClick(event));
     root.addEventListener("click", event => void this.#onSearchRootClick(event));
@@ -791,6 +933,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
     const currencyButton = event.target?.closest?.("[data-search-currency][data-search-actor-uuid]");
     if (currencyButton && this.element?.contains(currencyButton)) {
+      if (this.#isTradeMode()) return;
       await this.#onSearchCurrencyClick(event, currencyButton);
       return;
     }
@@ -804,6 +947,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   #onSearchRootContextMenu(event) {
+    const currencyButton = event.target?.closest?.("[data-search-currency][data-search-actor-uuid]");
+    if (currencyButton && this.element?.contains(currencyButton) && this.#isTradeMode()) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.#showTradeCurrencyContextMenu(currencyButton, event);
+      return;
+    }
+
     const itemElement = event.target?.closest?.("[data-item-id][data-search-actor-uuid]");
     if (!itemElement || !this.element?.contains(itemElement) || !this.#canInteract()) return;
     const actor = this.#getActorByUuid(String(itemElement.dataset.searchActorUuid ?? ""));
@@ -870,6 +1021,93 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (action === "delete" && game.user?.isGM) return item.delete();
       return undefined;
     });
+  }
+
+  #showTradeCurrencyContextMenu(button, event) {
+    if (!this.#canInteract()) return;
+    const currencyKey = String(button?.dataset?.searchCurrency ?? "");
+    const currency = getCurrencySettings().find(entry => entry.key === currencyKey);
+    if (!currency) return;
+
+    this.#clearInventoryTooltip({ force: true });
+    document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
+
+    const menu = document.createElement("nav");
+    menu.className = "fallout-maw-inventory-context-menu";
+    menu.style.left = `${event.clientX}px`;
+    menu.style.top = `${event.clientY}px`;
+    menu.innerHTML = `<button type="button" data-action="tradePrimary"><i class="fa-solid fa-coins"></i>Сделать основной</button>`;
+    document.body.append(menu);
+
+    menu.addEventListener("click", clickEvent => {
+      const action = clickEvent.target.closest("button")?.dataset.action;
+      if (action !== "tradePrimary") return;
+      clickEvent.preventDefault();
+      menu.remove();
+      this.#setTradeCurrencyKey(currencyKey, { broadcast: true });
+    });
+  }
+
+  #setTradeCurrencyKey(currencyKey, { broadcast = false } = {}) {
+    if (!this.#isTradeMode()) return;
+    const normalized = normalizeTradeCurrencyKey(currencyKey);
+    if (normalized === this.#tradeCurrencyKey) return;
+    this.#tradeCurrencyKey = normalized;
+    if (broadcast) broadcastTradeCurrencyChange(this.#tradeSessionId, normalized);
+    if (this.rendered) {
+      this.#captureScrollPositions();
+      void this.render({ force: true });
+    }
+  }
+
+  #onTradeItemPointerOver(event) {
+    if (!this.#isTradeMode()) return;
+    const itemElement = event.target?.closest?.("[data-item-id][data-search-actor-uuid][data-trade-price]");
+    if (!itemElement || !this.element?.contains(itemElement)) return;
+    this.#previewTradeCurrencyForItem(itemElement);
+  }
+
+  #onTradeItemPointerOut(event) {
+    if (!this.#isTradeMode()) return;
+    const itemElement = event.target?.closest?.("[data-item-id][data-search-actor-uuid][data-trade-price]");
+    if (!itemElement || !this.element?.contains(itemElement)) return;
+    if (itemElement.contains(event.relatedTarget)) return;
+    this.#clearTradeCurrencyPreview();
+  }
+
+  #previewTradeCurrencyForItem(itemElement) {
+    this.#clearTradeCurrencyPreview();
+    const localActorUuid = this.#getLocalTradeActorUuid();
+    const itemActorUuid = String(itemElement?.dataset?.searchActorUuid ?? "");
+    const price = Math.max(0, toInteger(itemElement?.dataset?.tradePrice));
+    if (!localActorUuid || !itemActorUuid || !price || !this.#tradeCurrencyKey) return;
+
+    const chip = this.element?.querySelector(
+      `[data-search-currency="${CSS.escape(this.#tradeCurrencyKey)}"][data-search-actor-uuid="${CSS.escape(localActorUuid)}"]`
+    );
+    const amountElement = chip?.querySelector?.(".fallout-maw-currency-amount");
+    if (!chip || !amountElement) return;
+
+    const baseAmount = Math.max(0, toInteger(chip.dataset.tradeBaseAmount ?? amountElement.textContent));
+    const delta = itemActorUuid === localActorUuid ? price : -price;
+    amountElement.textContent = String(baseAmount + delta);
+    chip.classList.add("trade-preview");
+    chip.classList.toggle("trade-preview-positive", delta > 0);
+    chip.classList.toggle("trade-preview-negative", delta < 0);
+  }
+
+  #clearTradeCurrencyPreview() {
+    for (const chip of this.element?.querySelectorAll(".fallout-maw-currency-chip.trade-preview") ?? []) {
+      const amountElement = chip.querySelector(".fallout-maw-currency-amount");
+      if (amountElement) amountElement.textContent = String(toInteger(chip.dataset.tradeBaseAmount ?? amountElement.textContent));
+      chip.classList.remove("trade-preview", "trade-preview-positive", "trade-preview-negative");
+    }
+  }
+
+  #getLocalTradeActorUuid() {
+    if (this.#searcherActor?.testUserPermission?.(game.user, "OWNER")) return this.#searcherActor.uuid;
+    if (this.#searchedActor?.testUserPermission?.(game.user, "OWNER")) return this.#searchedActor.uuid;
+    return game.user?.isGM ? (this.#searcherActor?.uuid ?? this.#searchedActor?.uuid ?? "") : "";
   }
 
   #openSearchContainerSheet(item) {
@@ -1364,25 +1602,31 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 }
 
-function prepareSearchActorContext(actor, { side = "", roleLabel = "", canInteract = false } = {}) {
+function prepareSearchActorContext(actor, { side = "", roleLabel = "", canInteract = false, mode = SEARCH_INVENTORY_MODE_SEARCH, tradeCurrencyKey = "" } = {}) {
   if (!actor) return null;
+  const isTrade = mode === SEARCH_INVENTORY_MODE_TRADE;
+  const selectedTradeCurrencyKey = normalizeTradeCurrencyKey(tradeCurrencyKey);
   const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
   const inventory = prepareInventoryContext(actor, race);
-  const decoratedInventory = decorateInventoryForSearch(inventory, actor.uuid, canInteract);
+  const decoratedInventory = decorateInventoryForSearch(inventory, actor.uuid, canInteract, {
+    isTrade,
+    tradeCurrencyKey: selectedTradeCurrencyKey
+  });
   const loadValue = Math.max(0, Number(actor.system?.load?.value) || 0);
   const loadMax = Math.max(0, Number(actor.system?.load?.max) || 0);
   const loadRatio = loadMax > 0 ? loadValue / loadMax : 0;
   const currencies = getCurrencySettings().map(currency => ({
     ...currency,
     amount: toInteger(actor.system?.currencies?.[currency.key]),
-    hasImage: Boolean(currency.img)
+    hasImage: Boolean(currency.img),
+    tradePrimary: isTrade && currency.key === selectedTradeCurrencyKey
   }));
 
   return {
     side,
     roleLabel,
     uuid: actor.uuid,
-    name: actor.name,
+    name: isTrade ? `${actor.name} (Бартер: ${getActorBarterValue(actor)})` : actor.name,
     img: normalizeImagePath(actor.img, "icons/svg/mystery-man.svg"),
     inventory: decoratedInventory,
     currencies,
@@ -1396,11 +1640,12 @@ function prepareSearchActorContext(actor, { side = "", roleLabel = "", canIntera
   };
 }
 
-function decorateInventoryForSearch(inventory, actorUuid, canInteract) {
+function decorateInventoryForSearch(inventory, actorUuid, canInteract, { isTrade = false, tradeCurrencyKey = "" } = {}) {
   const decorateItem = item => item ? {
     ...item,
     actorUuid,
-    draggableClass: canInteract ? "draggable" : ""
+    draggableClass: canInteract ? "draggable" : "",
+    tradePrice: isTrade ? formatItemTradePrice(item, tradeCurrencyKey) : ""
   } : item;
 
   return {
@@ -1439,10 +1684,7 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
   const targetActor = await resolveActor(payload.targetActorUuid);
   if (!searcherActor || !searchedActor || !sourceActor || !targetActor) throw new Error("Actor not found.");
 
-  const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
-  if (requester && !requester.isGM && !searcherActor.testUserPermission(requester, "OWNER")) {
-    throw new Error("No searcher actor owner permission.");
-  }
+  validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
 
   const allowedActorUuids = new Set([searcherActor.uuid, searchedActor.uuid]);
   if (!allowedActorUuids.has(sourceActor.uuid) || !allowedActorUuids.has(targetActor.uuid)) {
@@ -1451,10 +1693,20 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
 
   const item = sourceActor.items?.get(String(payload.itemId ?? ""));
   if (!item) throw new Error("Item not found.");
+  const quantity = getTransferItemQuantity(item, payload.quantity);
   const targetParentId = String(payload.targetParentId ?? ROOT_CONTAINER_ID);
   validateTargetParent(targetActor, targetParentId);
 
-  return transferItemBetweenActors({
+  const tradePayment = getTradePaymentRequest({
+    payload,
+    buyerActor: targetActor,
+    sellerActor: sourceActor,
+    item,
+    quantity
+  });
+  if (tradePayment) ensureTradeItemPayment(tradePayment);
+
+  const result = await transferItemBetweenActors({
     sourceActor,
     targetActor,
     sourceItem: item,
@@ -1465,8 +1717,11 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
     targetWeaponSlot: String(payload.targetWeaponSlot ?? ""),
     targetX: payload.targetX,
     targetY: payload.targetY,
-    targetItemId: String(payload.targetItemId ?? "")
+    targetItemId: String(payload.targetItemId ?? ""),
+    quantity
   });
+  if (tradePayment) await applyTradeItemPayment(tradePayment);
+  return result;
 }
 
 async function performSearchInventorySplit(payload = {}, requesterUserId = "") {
@@ -1475,10 +1730,7 @@ async function performSearchInventorySplit(payload = {}, requesterUserId = "") {
   const actor = await resolveActor(payload.actorUuid);
   if (!searcherActor || !searchedActor || !actor) throw new Error("Actor not found.");
 
-  const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
-  if (requester && !requester.isGM && !searcherActor.testUserPermission(requester, "OWNER")) {
-    throw new Error("No searcher actor owner permission.");
-  }
+  validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
 
   const allowedActorUuids = new Set([searcherActor.uuid, searchedActor.uuid]);
   if (!allowedActorUuids.has(actor.uuid)) throw new Error("Search split actor mismatch.");
@@ -1495,10 +1747,7 @@ async function performSearchInventoryStack(payload = {}, requesterUserId = "") {
   const targetActor = await resolveActor(payload.targetActorUuid);
   if (!searcherActor || !searchedActor || !sourceActor || !targetActor) throw new Error("Actor not found.");
 
-  const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
-  if (requester && !requester.isGM && !searcherActor.testUserPermission(requester, "OWNER")) {
-    throw new Error("No searcher actor owner permission.");
-  }
+  validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
 
   const allowedActorUuids = new Set([searcherActor.uuid, searchedActor.uuid]);
   if (!allowedActorUuids.has(sourceActor.uuid) || !allowedActorUuids.has(targetActor.uuid)) {
@@ -1508,14 +1757,26 @@ async function performSearchInventoryStack(payload = {}, requesterUserId = "") {
   const sourceItem = sourceActor.items?.get(String(payload.itemId ?? ""));
   const targetItem = targetActor.items?.get(String(payload.targetItemId ?? ""));
   if (!sourceItem || !targetItem) throw new Error("Item not found.");
-  return stackActorInventoryItem({
+  const quantity = toInteger(payload.quantity);
+  const tradePayment = getTradePaymentRequest({
+    payload,
+    buyerActor: targetActor,
+    sellerActor: sourceActor,
+    item: sourceItem,
+    quantity
+  });
+  if (tradePayment) ensureTradeItemPayment(tradePayment);
+
+  const result = await stackActorInventoryItem({
     sourceActor,
     targetActor,
     sourceItem,
     targetItem,
     targetParentId: String(payload.targetParentId ?? ROOT_CONTAINER_ID),
-    quantity: toInteger(payload.quantity)
+    quantity
   });
+  if (tradePayment) await applyTradeItemPayment(tradePayment);
+  return result;
 }
 
 async function performSearchCurrencyTransfer(payload = {}, requesterUserId = "") {
@@ -1525,10 +1786,7 @@ async function performSearchCurrencyTransfer(payload = {}, requesterUserId = "")
   const targetActor = await resolveActor(payload.targetActorUuid);
   if (!searcherActor || !searchedActor || !sourceActor || !targetActor) throw new Error("Actor not found.");
 
-  const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
-  if (requester && !requester.isGM && !searcherActor.testUserPermission(requester, "OWNER")) {
-    throw new Error("No searcher actor owner permission.");
-  }
+  validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
 
   const allowedActorUuids = new Set([searcherActor.uuid, searchedActor.uuid]);
   if (!allowedActorUuids.has(sourceActor.uuid) || !allowedActorUuids.has(targetActor.uuid) || sourceActor.uuid === targetActor.uuid) {
@@ -1549,6 +1807,112 @@ async function performSearchCurrencyTransfer(payload = {}, requesterUserId = "")
   return { amount };
 }
 
+function validateSearchOrTradeRequester(payload = {}, requesterUserId = "", searcherActor = null, searchedActor = null) {
+  const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
+  if (!requester || requester.isGM) return;
+  if (isTradePayload(payload)) {
+    if (searcherActor?.testUserPermission?.(requester, "OWNER")) return;
+    if (searchedActor?.testUserPermission?.(requester, "OWNER")) return;
+    throw new Error("No trade actor owner permission.");
+  }
+  if (!searcherActor?.testUserPermission?.(requester, "OWNER")) {
+    throw new Error("No searcher actor owner permission.");
+  }
+}
+
+function isTradePayload(payload = {}) {
+  return payload?.mode === SEARCH_INVENTORY_MODE_TRADE;
+}
+
+function getTradePaymentRequest({ payload = {}, buyerActor = null, sellerActor = null, item = null, quantity = 1 } = {}) {
+  if (!isTradePayload(payload) || !buyerActor || !sellerActor || !item || buyerActor.uuid === sellerActor.uuid) return null;
+  return {
+    buyerActor,
+    sellerActor,
+    item,
+    currencyKey: normalizeTradeCurrencyKey(payload.tradeCurrencyKey),
+    quantity
+  };
+}
+
+function getTransferItemQuantity(item, quantity = 0) {
+  const sourceQuantity = Math.max(1, getItemQuantity(item));
+  if (isContainerItem(item)) return 1;
+  const requested = toInteger(quantity);
+  return requested > 0 ? Math.max(1, Math.min(sourceQuantity, requested)) : sourceQuantity;
+}
+
+async function removeTransferredItemQuantity(actor, item, quantity = 0) {
+  const sourceQuantity = Math.max(1, getItemQuantity(item));
+  const transferQuantity = Math.max(1, Math.min(sourceQuantity, toInteger(quantity) || sourceQuantity));
+  if (transferQuantity >= sourceQuantity) return actor.deleteEmbeddedDocuments("Item", [item.id]);
+  return actor.updateEmbeddedDocuments("Item", [{
+    _id: item.id,
+    "system.quantity": sourceQuantity - transferQuantity
+  }]);
+}
+
+function ensureTradeItemPayment({ buyerActor, item, currencyKey, quantity = 1 } = {}) {
+  const price = calculateItemTradePrice(item, currencyKey, quantity);
+  if (price <= 0) return;
+  const available = getActorCurrencyAmount(buyerActor, currencyKey);
+  if (available < price) {
+    const currency = getCurrencySettings().find(entry => entry.key === currencyKey);
+    throw new Error(`Недостаточно валюты: ${buyerActor?.name ?? ""} (${price} ${currency?.label ?? currencyKey}).`);
+  }
+}
+
+async function applyTradeItemPayment({ buyerActor, sellerActor, item, currencyKey, quantity = 1 } = {}) {
+  const price = calculateItemTradePrice(item, currencyKey, quantity);
+  if (price <= 0) return { price: 0 };
+  const buyerAmount = getActorCurrencyAmount(buyerActor, currencyKey);
+  const sellerAmount = getActorCurrencyAmount(sellerActor, currencyKey);
+  if (buyerAmount < price) throw new Error("Недостаточно валюты.");
+  await buyerActor.update({ [`system.currencies.${currencyKey}`]: buyerAmount - price });
+  await sellerActor.update({ [`system.currencies.${currencyKey}`]: sellerAmount + price });
+  return { price, currencyKey };
+}
+
+function calculateItemTradePrice(item, currencyKey = "", quantity = 1) {
+  const unitPrice = Math.max(0, Number(item?.system?.price ?? item?.price) || 0);
+  const itemQuantity = Math.max(1, toInteger(quantity));
+  if (!unitPrice) return 0;
+
+  const currencies = getCurrencySettings();
+  const targetCurrency = currencies.find(entry => entry.key === currencyKey) ?? currencies.find(entry => entry.primaryTrade) ?? currencies.at(0);
+  const sourceCurrencyKey = String(item?.system?.priceCurrency ?? item?.priceCurrency ?? "");
+  const sourceCurrency = currencies.find(entry => entry.key === sourceCurrencyKey) ?? targetCurrency;
+  const sourceValue = Math.max(0, Number(sourceCurrency?.value) || 0);
+  const targetValue = Math.max(0, Number(targetCurrency?.value) || 0);
+  if (!sourceValue || !targetValue) return Math.ceil(unitPrice * itemQuantity);
+  return Math.ceil((unitPrice * itemQuantity * sourceValue) / targetValue);
+}
+
+function formatItemTradePrice(item, currencyKey = "") {
+  const price = calculateItemTradePrice(item, currencyKey, 1);
+  if (price <= 0) return "";
+  return price;
+}
+
+function getActorCurrencyAmount(actor, currencyKey = "") {
+  return Math.max(0, toInteger(actor?.system?.currencies?.[currencyKey]));
+}
+
+function normalizeTradeCurrencyKey(currencyKey = "") {
+  const currencies = getCurrencySettings();
+  const key = String(currencyKey ?? "");
+  if (currencies.some(entry => entry.key === key)) return key;
+  return getPrimaryTradeCurrencyKey(currencies);
+}
+
+function getPrimaryTradeCurrencyKey(currencies = getCurrencySettings()) {
+  return String((currencies.find(entry => entry.primaryTrade) ?? currencies.at(0))?.key ?? "");
+}
+
+function getActorBarterValue(actor) {
+  return toInteger(actor?.system?.skills?.barter?.value);
+}
+
 async function transferItemBetweenActors({
   sourceActor,
   targetActor,
@@ -1560,9 +1924,12 @@ async function transferItemBetweenActors({
   targetWeaponSlot = "",
   targetX = null,
   targetY = null,
-  targetItemId = ""
+  targetItemId = "",
+  quantity = 0
 } = {}) {
   const itemData = sourceItem.toObject();
+  const transferQuantity = getTransferItemQuantity(sourceItem, quantity);
+  foundry.utils.setProperty(itemData, "system.quantity", transferQuantity);
   const targetItem = targetItemId ? targetActor.items?.get(targetItemId) : null;
   const targetStackPlacement = targetMode === "inventory" && targetItem && areStackable(itemData, targetItem) && getItemQuantity(targetItem) < getItemMaxStack(targetItem)
     ? normalizeInventoryPlacement(targetItem.system?.placement ?? {}, targetItem, targetActor.items)
@@ -1631,13 +1998,16 @@ async function createExternalPlacedItem(actor, itemData, placement, { sourceActo
     throwInventoryNoSpace();
   }
   const created = await actor.createEmbeddedDocuments("Item", [createData]);
-  await sourceActor.deleteEmbeddedDocuments("Item", [sourceItem.id]);
+  await removeTransferredItemQuantity(sourceActor, sourceItem, getItemQuantity(itemData));
   return created;
 }
 
 async function insertItemIntoActorInventory(actor, itemData, requestedPlacement, { sourceItem = null, targetItem = null, parentId = ROOT_CONTAINER_ID } = {}) {
   const maxStack = getItemMaxStack(itemData);
-  let remainingQuantity = Math.max(1, getItemQuantity(itemData));
+  const transferQuantity = Math.max(1, getItemQuantity(itemData));
+  const sourceOriginalQuantity = sourceItem ? Math.max(1, getItemQuantity(sourceItem)) : 0;
+  const partialSourceTransfer = Boolean(sourceItem && transferQuantity < sourceOriginalQuantity);
+  let remainingQuantity = transferQuantity;
   const excludedIds = [sourceItem?.id ?? ""].filter(Boolean);
   const preferredPlacement = normalizeInventoryPlacement(requestedPlacement, itemData, actor.items);
   const usableTargetItem = targetItem && areStackable(itemData, targetItem) ? targetItem : null;
@@ -1661,7 +2031,7 @@ async function insertItemIntoActorInventory(actor, itemData, requestedPlacement,
   let sourceUpdate = null;
   let deleteSource = Boolean(sourceItem);
 
-  if (sourceItem && remainingQuantity > 0) {
+  if (sourceItem && !partialSourceTransfer && remainingQuantity > 0) {
     const sourcePlacement = getSourcePlacement(actor, sourceItem, itemData, usableTargetItem ? null : preferredPlacement, usableTargetItem, parentId, reservedPlacements);
     if (!sourcePlacement) throwInventoryNoSpace();
     const sourceQuantity = Math.min(remainingQuantity, maxStack);
@@ -1685,8 +2055,12 @@ async function insertItemIntoActorInventory(actor, itemData, requestedPlacement,
   }
 
   if (!validateActorProjectedInventoryState(actor, {
-    updates: [...targetUpdates, ...(sourceUpdate ? [sourceUpdate] : [])],
-    deletes: (!sourceUpdate && deleteSource && sourceItem) ? [sourceItem.id] : [],
+    updates: [
+      ...targetUpdates,
+      ...(sourceUpdate ? [sourceUpdate] : []),
+      ...(partialSourceTransfer ? [{ _id: sourceItem.id, "system.quantity": sourceOriginalQuantity - transferQuantity }] : [])
+    ],
+    deletes: (!partialSourceTransfer && !sourceUpdate && deleteSource && sourceItem) ? [sourceItem.id] : [],
     creates: createData
   })) {
     throwInventoryNoSpace();
@@ -1694,6 +2068,7 @@ async function insertItemIntoActorInventory(actor, itemData, requestedPlacement,
 
   if (targetUpdates.length) await actor.updateEmbeddedDocuments("Item", targetUpdates);
   if (sourceUpdate) await actor.updateEmbeddedDocuments("Item", [sourceUpdate]);
+  else if (partialSourceTransfer) await actor.updateEmbeddedDocuments("Item", [{ _id: sourceItem.id, "system.quantity": sourceOriginalQuantity - transferQuantity }]);
   else if (deleteSource && sourceItem) await actor.deleteEmbeddedDocuments("Item", [sourceItem.id]);
   if (createData.length) return actor.createEmbeddedDocuments("Item", createData);
   return null;
@@ -1747,7 +2122,7 @@ async function insertExternalItemIntoActorInventory(actor, itemData, requestedPl
 
   if (targetUpdates.length) await actor.updateEmbeddedDocuments("Item", targetUpdates);
   if (createData.length) await actor.createEmbeddedDocuments("Item", createData);
-  await sourceActor.deleteEmbeddedDocuments("Item", [sourceItem.id]);
+  await removeTransferredItemQuantity(sourceActor, sourceItem, getItemQuantity(itemData));
   return null;
 }
 
@@ -2277,6 +2652,13 @@ function canStackItems(sourceData, targetItem = null) {
 async function promptSearchItemStackQuantity({ item, title = "Количество", actionLabel = "Ок", max = 1, value = 1 } = {}) {
   const limit = Math.max(1, toInteger(max));
   const initial = Math.max(1, Math.min(limit, toInteger(value) || limit));
+  const trade = arguments[0]?.trade ?? null;
+  const currencyKey = String(trade?.currencyKey ?? "");
+  const currency = getCurrencySettings().find(entry => entry.key === normalizeTradeCurrencyKey(currencyKey));
+  const hasTradePrice = Boolean(trade && currencyKey);
+  const tradePriceContent = hasTradePrice
+    ? `<p class="fallout-maw-trade-quantity-price" data-trade-quantity-price><span>Итого</span><strong data-trade-quantity-total>${calculateItemTradePrice(item, currencyKey, initial)} ${escapeHTML(currency?.label ?? currencyKey)}</strong></p>`
+    : "";
   const formData = await DialogV2.input({
     window: { title },
     content: `
@@ -2285,7 +2667,21 @@ async function promptSearchItemStackQuantity({ item, title = "Количеств
         <span>${game.i18n.localize("FALLOUTMAW.Item.Quantity")}: 1 / ${limit}</span>
         <input type="number" name="quantity" value="${initial}" min="1" max="${limit}" step="1" autofocus>
       </label>
+      ${tradePriceContent}
     `,
+    render: (_event, dialog) => {
+      if (!hasTradePrice) return;
+      const input = dialog.element?.querySelector("input[name='quantity']");
+      const total = dialog.element?.querySelector("[data-trade-quantity-total]");
+      if (!input || !total) return;
+      const updateTotal = () => {
+        const quantity = Math.max(1, Math.min(limit, toInteger(input.value)));
+        total.textContent = `${calculateItemTradePrice(item, currencyKey, quantity)} ${currency?.label ?? currencyKey}`;
+      };
+      input.addEventListener("input", updateTotal);
+      input.addEventListener("change", updateTotal);
+      updateTotal();
+    },
     ok: {
       label: actionLabel,
       icon: "fa-solid fa-check",
@@ -2557,6 +2953,7 @@ async function enqueueSearchInventoryOperation(operation) {
 }
 
 async function requestSearchInventorySocket(action, payload = {}, gm = getResponsibleGM()) {
+  if (!gm && isTradePayload(payload)) throw new Error("Нет активного GM для торговли.");
   if (!gm) throw new Error("Нет активного GM для обыска.");
   const requestId = foundry.utils.randomID();
   const requesterUserId = game.user?.id ?? "";
@@ -2581,6 +2978,51 @@ async function requestSearchInventorySocket(action, payload = {}, gm = getRespon
   return promise;
 }
 
+async function requestTradeInviteSocket(payload = {}, recipientUser = null) {
+  if (!recipientUser?.active) throw new Error("Владелец актера не в сети.");
+  const requestId = foundry.utils.randomID();
+  const requesterUserId = game.user?.id ?? "";
+
+  const promise = new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      pendingSearchInventorySocketRequests.delete(requestId);
+      reject(new Error("Владелец актера не ответил на торговлю."));
+    }, SEARCH_INVENTORY_SOCKET_TIMEOUT);
+    pendingSearchInventorySocketRequests.set(requestId, { resolve, reject, timeout });
+  });
+
+  game.socket.emit(SEARCH_INVENTORY_SOCKET, {
+    scope: SEARCH_INVENTORY_SOCKET_SCOPE,
+    type: "tradeInvite",
+    requestId,
+    requesterUserId,
+    recipientUserId: recipientUser.id,
+    payload
+  });
+  return promise;
+}
+
+function broadcastTradeSessionClose(sessionId = "") {
+  if (!sessionId) return;
+  game.socket.emit(SEARCH_INVENTORY_SOCKET, {
+    scope: SEARCH_INVENTORY_SOCKET_SCOPE,
+    type: "tradeClose",
+    sessionId,
+    senderUserId: game.user?.id ?? ""
+  });
+}
+
+function broadcastTradeCurrencyChange(sessionId = "", currencyKey = "") {
+  if (!sessionId || !currencyKey) return;
+  game.socket.emit(SEARCH_INVENTORY_SOCKET, {
+    scope: SEARCH_INVENTORY_SOCKET_SCOPE,
+    type: "tradeCurrency",
+    sessionId,
+    currencyKey,
+    senderUserId: game.user?.id ?? ""
+  });
+}
+
 async function handleSearchInventorySocketMessage(message = {}) {
   if (message?.scope !== SEARCH_INVENTORY_SOCKET_SCOPE) return;
 
@@ -2592,6 +3034,36 @@ async function handleSearchInventorySocketMessage(message = {}) {
     pendingSearchInventorySocketRequests.delete(message.requestId);
     if (message.ok) pending.resolve(message.result);
     else pending.reject(new Error(message.error || "Search inventory socket request failed."));
+    return;
+  }
+
+  if (message.type === "tradeInviteResponse") {
+    if (message.recipientUserId && message.recipientUserId !== game.user?.id) return;
+    const pending = pendingSearchInventorySocketRequests.get(message.requestId);
+    if (!pending) return;
+    window.clearTimeout(pending.timeout);
+    pendingSearchInventorySocketRequests.delete(message.requestId);
+    if (message.ok) pending.resolve(message.result);
+    else pending.reject(new Error(message.error || "Запрос торговли отклонен."));
+    return;
+  }
+
+  if (message.type === "tradeInvite") {
+    if (message.recipientUserId !== game.user?.id) return;
+    await handleTradeInviteSocketMessage(message);
+    return;
+  }
+
+  if (message.type === "tradeClose") {
+    if (message.senderUserId === game.user?.id) return;
+    await searchInventoryWindow?.closeTradeSessionFromSocket?.(message.sessionId);
+    return;
+  }
+
+  if (message.type === "tradeCurrency") {
+    if (message.senderUserId === game.user?.id) return;
+    if (!searchInventoryWindow?.matchesTradeSession?.(message.sessionId)) return;
+    searchInventoryWindow.setTradeCurrencyKey(message.currencyKey);
     return;
   }
 
@@ -2638,11 +3110,97 @@ async function handleSearchInventorySocketMessage(message = {}) {
   }
 }
 
+async function handleTradeInviteSocketMessage(message = {}) {
+  const payload = message.payload ?? {};
+  const inviteKey = getTradeInviteKey(payload);
+  if (pendingSearchInventoryTradeInvites.has(inviteKey)) {
+    game.socket.emit(SEARCH_INVENTORY_SOCKET, {
+      scope: SEARCH_INVENTORY_SOCKET_SCOPE,
+      type: "tradeInviteResponse",
+      requestId: message.requestId,
+      recipientUserId: message.requesterUserId,
+      ok: false,
+      error: "Запрос торговли уже открыт."
+    });
+    return;
+  }
+
+  pendingSearchInventoryTradeInvites.set(inviteKey, true);
+  try {
+    const accepted = await confirmTradeInvite(payload);
+    if (accepted) {
+      const searcherActor = await resolveActor(payload.searcherActorUuid);
+      const searchedActor = await resolveActor(payload.searchedActorUuid);
+      await openTradeInventoryWindow({
+        searcherActor,
+        searchedActor,
+        sessionId: payload.sessionId,
+        tradeCurrencyKey: payload.tradeCurrencyKey
+      });
+    }
+    game.socket.emit(SEARCH_INVENTORY_SOCKET, {
+      scope: SEARCH_INVENTORY_SOCKET_SCOPE,
+      type: "tradeInviteResponse",
+      requestId: message.requestId,
+      recipientUserId: message.requesterUserId,
+      ok: true,
+      result: { accepted }
+    });
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Trade invite failed`, error);
+    game.socket.emit(SEARCH_INVENTORY_SOCKET, {
+      scope: SEARCH_INVENTORY_SOCKET_SCOPE,
+      type: "tradeInviteResponse",
+      requestId: message.requestId,
+      recipientUserId: message.requesterUserId,
+      ok: false,
+      error: error.message
+    });
+  } finally {
+    pendingSearchInventoryTradeInvites.delete(inviteKey);
+  }
+}
+
 function getResponsibleGM() {
   return (game.users?.contents ?? [])
     .filter(user => user.active && user.isGM)
     .sort((left, right) => left.id.localeCompare(right.id))
     .at(0) ?? null;
+}
+
+function getPrimaryActorOwnerUser(actor) {
+  const users = (game.users?.contents ?? [])
+    .filter(user => user.active && actor?.testUserPermission?.(user, "OWNER"))
+    .sort((left, right) => Number(left.isGM) - Number(right.isGM) || left.id.localeCompare(right.id));
+  return users.at(0) ?? getResponsibleGM();
+}
+
+function getTradeInviteKey(payload = {}) {
+  return [
+    String(payload.requesterUserId ?? ""),
+    String(payload.recipientUserId ?? ""),
+    String(payload.searcherActorUuid ?? ""),
+    String(payload.searchedActorUuid ?? "")
+  ].join("|");
+}
+
+async function confirmTradeInvite(payload = {}) {
+  const searcherActor = await resolveActor(payload.searcherActorUuid);
+  const searchedActor = await resolveActor(payload.searchedActorUuid);
+  if (!searcherActor || !searchedActor) throw new Error("Actor not found.");
+  return DialogV2.confirm({
+    window: { title: "Торговля" },
+    content: `<p><strong>${escapeHTML(searcherActor.name)}</strong> предлагает торговлю с <strong>${escapeHTML(searchedActor.name)}</strong>.</p>`,
+    yes: {
+      label: "Принять",
+      icon: "fa-solid fa-check"
+    },
+    no: {
+      label: "Отклонить"
+    },
+    rejectClose: false,
+    modal: true
+  });
 }
 
 async function resolveActor(uuid) {

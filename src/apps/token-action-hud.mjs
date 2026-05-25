@@ -27,7 +27,7 @@ import { useFirstAidItem } from "../items/first-aid.mjs";
 import { openLimbDamageDialog } from "./limb-damage-dialog.mjs";
 import { requestMedicineTarget } from "./medicine-dialog.mjs";
 import { requestRepairTarget } from "./repair-dialog.mjs";
-import { openSearchInventoryWindow } from "./search-inventory.mjs";
+import { openSearchInventoryWindow, requestTradeInventoryWindow } from "./search-inventory.mjs";
 import {
   FALLBACK_ICON,
   normalizeImagePath,
@@ -735,9 +735,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   static #onUseSystemAction(event, target) {
     event.preventDefault();
     const key = String(target.dataset.systemActionKey ?? "");
-    if (!["medicine", "repair", "search"].includes(key)) return undefined;
+    if (!["medicine", "repair", "search", "trade"].includes(key)) return undefined;
 
     void this.render({ force: true });
+    if (key === "trade") return this.#requestTradeInventory();
     if (key === "search") return this.#openSearchInventory();
     if (key === "repair") return requestRepairTarget(this.token);
     return requestMedicineTarget(this.token);
@@ -759,6 +760,25 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     return openSearchInventoryWindow({
       searcherActor: this.actor,
       searchedActor: targetActor
+    });
+  }
+
+  #requestTradeInventory() {
+    const targetData = getFirstHudTarget();
+    const targetActor = targetData.actor;
+    if (!targetActor) {
+      ui.notifications.warn("Для торговли выберите цель.");
+      return undefined;
+    }
+    if (targetActor.uuid === this.actor?.uuid) {
+      ui.notifications.warn("Нужна другая цель для торговли.");
+      return undefined;
+    }
+
+    void this.render({ force: true });
+    return requestTradeInventoryWindow({
+      traderActor: this.actor,
+      tradeActor: targetActor
     });
   }
 

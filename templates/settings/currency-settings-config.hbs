@@ -15,6 +15,7 @@
         <span>{{localize "FALLOUTMAW.Common.Key"}}</span>
         <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
         <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span>Первичная в торговле</span>
         <span></span>
       </div>
       {{#each currencies}}
@@ -33,6 +34,9 @@
         <input type="text" data-field="key" value="{{key}}">
         <input type="text" data-field="label" value="{{label}}">
         <input type="number" data-field="value" value="{{value}}" min="0" step="0.01">
+        <label class="fallout-maw-checkbox-cell" title="Первичная валюта по умолчанию для торговли">
+          <input type="checkbox" data-field="primaryTrade" {{#if primaryTrade}}checked{{/if}}>
+        </label>
         <button type="button" data-action="deleteCurrency" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
       </div>
       {{else}}

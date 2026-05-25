@@ -1,10 +1,11 @@
-<div class="fallout-maw-sheet fallout-maw-search-sheet" data-search-root>
+<div class="fallout-maw-sheet fallout-maw-search-sheet" data-search-root {{#if isTrade}}data-trade-root{{/if}}>
   <header class="fallout-maw-sheet-header fallout-maw-search-header">
     {{#each actors}}
     <section class="fallout-maw-search-actor-title fallout-maw-search-actor-title--{{side}}">
       <div class="fallout-maw-title-display">{{name}}</div>
     </section>
     {{/each}}
+    {{#unless isTrade}}
     <div class="fallout-maw-search-bulk-controls">
       <button type="button" data-search-bulk-transfer="put" title="Положить все" {{#unless canInteract}}disabled{{/unless}}>
         <img src="icons/svg/chest.svg" alt="Положить все">
@@ -13,6 +14,7 @@
         <img src="icons/svg/item-bag.svg" alt="Забрать все">
       </button>
     </div>
+    {{/unless}}
   </header>
 
   <div class="fallout-maw-sheet-body fallout-maw-search-sheet-body">
@@ -37,7 +39,7 @@
             <section class="fallout-maw-panel">
               <div class="fallout-maw-currency-list">
                 {{#each currencies}}
-                <div class="fallout-maw-currency-chip" data-search-currency="{{key}}" data-search-actor-uuid="{{../uuid}}" title="{{label}} | {{localize 'FALLOUTMAW.Common.Value'}}: {{value}}">
+                <div class="fallout-maw-currency-chip {{#if tradePrimary}}trade-primary{{/if}}" data-search-currency="{{key}}" data-search-actor-uuid="{{../uuid}}" data-trade-base-amount="{{amount}}" title="{{label}} | {{localize 'FALLOUTMAW.Common.Value'}}: {{value}}">
                   <span class="fallout-maw-currency-icon">
                     {{#if hasImage}}
                     <img src="{{img}}" alt="{{label}}">
@@ -64,8 +66,9 @@
                     <div class="fallout-maw-slot-card-label">{{label}}</div>
                     <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large" data-search-drop-zone data-search-actor-uuid="{{../uuid}}" data-equipment-slot="{{key}}">
                       {{#if item}}
-                      <article class="{{item.draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}}" data-search-actor-uuid="{{item.actorUuid}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+                      <article class="{{item.draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}}" data-search-actor-uuid="{{item.actorUuid}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}" {{#if item.tradePrice}}data-trade-price="{{item.tradePrice}}"{{/if}}>
                         <img src="{{item.img}}" alt="{{item.name}}">
+                        {{#if item.tradePrice}}<span class="fallout-maw-trade-price">{{item.tradePrice}}</span>{{/if}}
                         {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
                       </article>
                       {{/if}}
@@ -87,8 +90,9 @@
                         <div class="fallout-maw-slot-card-label">{{label}}</div>
                         <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-weapon-slot" data-search-drop-zone data-search-actor-uuid="{{actorUuid}}" data-weapon-set="{{weaponSetKey}}" data-weapon-slot="{{key}}">
                           {{#if item}}
-                          <article class="{{#unless phantom}}{{item.draggableClass}}{{/unless}} fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}} {{#if phantom}}phantom{{/if}} {{#if useDisabled}}unusable{{/if}}" data-search-actor-uuid="{{item.actorUuid}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+                          <article class="{{#unless phantom}}{{item.draggableClass}}{{/unless}} fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}} {{#if phantom}}phantom{{/if}} {{#if useDisabled}}unusable{{/if}}" data-search-actor-uuid="{{item.actorUuid}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}" {{#if item.tradePrice}}data-trade-price="{{item.tradePrice}}"{{/if}}>
                             <img src="{{item.img}}" alt="{{item.name}}">
+                            {{#if item.tradePrice}}<span class="fallout-maw-trade-price">{{item.tradePrice}}</span>{{/if}}
                             {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
                           </article>
                           {{/if}}
@@ -112,8 +116,9 @@
                   <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}}" data-search-drop-zone data-search-actor-uuid="{{../uuid}}" data-inventory-cell data-inventory-parent-id="" data-x="{{x}}" data-y="{{y}}" style="{{style}}"></div>
                   {{/each}}
                   {{#each inventory.grid.items}}
-                  <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if equipped}}equipped{{/if}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
+                  <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if equipped}}equipped{{/if}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="" data-x="{{placement.x}}" data-y="{{placement.y}}" {{#if tradePrice}}data-trade-price="{{tradePrice}}"{{/if}} style="{{gridStyle}}">
                     <img src="{{img}}" alt="{{name}}">
+                    {{#if tradePrice}}<span class="fallout-maw-trade-price">{{tradePrice}}</span>{{/if}}
                     {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
                   </article>
                   {{/each}}
@@ -137,8 +142,9 @@
                     <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}}" data-search-drop-zone data-search-actor-uuid="{{../actorUuid}}" data-inventory-cell data-inventory-parent-id="{{../id}}" data-x="{{x}}" data-y="{{y}}" style="{{style}}"></div>
                     {{/each}}
                     {{#each grid.items}}
-                    <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if equipped}}equipped{{/if}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
+                    <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if equipped}}equipped{{/if}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" {{#if tradePrice}}data-trade-price="{{tradePrice}}"{{/if}} style="{{gridStyle}}">
                       <img src="{{img}}" alt="{{name}}">
+                      {{#if tradePrice}}<span class="fallout-maw-trade-price">{{tradePrice}}</span>{{/if}}
                       {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
                     </article>
                     {{/each}}

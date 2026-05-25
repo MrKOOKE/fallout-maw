@@ -49,6 +49,12 @@ export const DEFAULT_SYSTEM_ACTION_SETTINGS = Object.freeze([
     label: "Обыск",
     img: "icons/svg/eye.svg",
     toolKey: ""
+  },
+  {
+    key: "trade",
+    label: "Торговля",
+    img: "icons/svg/coins.svg",
+    toolKey: ""
   }
 ]);
 

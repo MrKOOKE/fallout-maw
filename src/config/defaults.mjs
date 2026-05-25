@@ -19,10 +19,10 @@ export const DEFAULT_LOAD_FORMULA = "20 + 10*str";
 export const DEFAULT_LOAD_LIMIT_PERCENT = 150;
 
 export const DEFAULT_CURRENCIES = Object.freeze([
-  { key: "caps", label: "Крышки", img: "", value: 1 },
-  { key: "denarii", label: "Динарии", img: "", value: 2 },
-  { key: "ncrDollars", label: "Доллары НКР", img: "", value: 3 },
-  { key: "brotherhoodChecks", label: "Чеки братства", img: "", value: 6 }
+  { key: "caps", label: "Крышки", img: "", value: 1, primaryTrade: true },
+  { key: "denarii", label: "Динарии", img: "", value: 2, primaryTrade: false },
+  { key: "ncrDollars", label: "Доллары НКР", img: "", value: 3, primaryTrade: false },
+  { key: "brotherhoodChecks", label: "Чеки братства", img: "", value: 6, primaryTrade: false }
 ]);
 
 export const DEFAULT_SKILLS = Object.freeze([
