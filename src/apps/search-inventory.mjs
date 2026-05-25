@@ -56,6 +56,7 @@ const SEARCH_INVENTORY_SOCKET_TIMEOUT = 10000;
 
 let searchInventoryWindow = null;
 const pendingSearchInventorySocketRequests = new Map();
+const searchInventoryOperationQueues = new Map();
 
 export function registerSearchInventorySocket() {
   game.socket.on(SEARCH_INVENTORY_SOCKET, handleSearchInventorySocketMessage);
@@ -414,10 +415,13 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const targetActor = this.#getActorByUuid(String(payload?.targetActorUuid ?? ""));
     if (!sourceActor || !targetActor) return false;
     try {
-      if (canModifySearchTransferDirectly(sourceActor, targetActor)) {
-        await performSearchInventoryTransfer(payload, game.user?.id ?? "");
+      const responsibleGM = getResponsibleGM();
+      if (responsibleGM && responsibleGM.id !== game.user?.id) {
+        await requestSearchInventorySocket("transferItem", payload, responsibleGM);
+      } else if (canModifySearchTransferDirectly(sourceActor, targetActor)) {
+        await enqueueSearchInventoryOperation(() => performSearchInventoryTransfer(payload, game.user?.id ?? ""));
       } else {
-        await requestSearchInventorySocket("transferItem", payload);
+        await requestSearchInventorySocket("transferItem", payload, responsibleGM);
       }
       return true;
     } catch (error) {
@@ -906,10 +910,13 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     };
 
     try {
-      if (canModifySearchTransferDirectly(sourceActor, targetActor)) {
-        await performSearchCurrencyTransfer(payload, game.user?.id ?? "");
+      const responsibleGM = getResponsibleGM();
+      if (responsibleGM && responsibleGM.id !== game.user?.id) {
+        await requestSearchInventorySocket("transferCurrency", payload, responsibleGM);
+      } else if (canModifySearchTransferDirectly(sourceActor, targetActor)) {
+        await enqueueSearchInventoryOperation(() => performSearchCurrencyTransfer(payload, game.user?.id ?? ""));
       } else {
-        await requestSearchInventorySocket("transferCurrency", payload);
+        await requestSearchInventorySocket("transferCurrency", payload, responsibleGM);
       }
     } catch (error) {
       console.error(`${SYSTEM_ID} | Search currency transfer failed`, error);
@@ -922,10 +929,13 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const targetActor = this.#getActorByUuid(String(payload?.targetActorUuid ?? ""));
     if (!sourceActor || !targetActor) return false;
     try {
-      if (canModifySearchTransferDirectly(sourceActor, targetActor)) {
-        await performSearchCurrencyTransfer(payload, game.user?.id ?? "");
+      const responsibleGM = getResponsibleGM();
+      if (responsibleGM && responsibleGM.id !== game.user?.id) {
+        await requestSearchInventorySocket("transferCurrency", payload, responsibleGM);
+      } else if (canModifySearchTransferDirectly(sourceActor, targetActor)) {
+        await enqueueSearchInventoryOperation(() => performSearchCurrencyTransfer(payload, game.user?.id ?? ""));
       } else {
-        await requestSearchInventorySocket("transferCurrency", payload);
+        await requestSearchInventorySocket("transferCurrency", payload, responsibleGM);
       }
       return true;
     } catch (error) {
@@ -2108,6 +2118,21 @@ function canModifySearchTransferDirectly(sourceActor, targetActor) {
   ));
 }
 
+async function enqueueSearchInventoryOperation(operation) {
+  const key = "global";
+  const previous = searchInventoryOperationQueues.get(key) ?? Promise.resolve();
+  const current = previous.catch(() => null).then(operation);
+  searchInventoryOperationQueues.set(key, current);
+
+  try {
+    return await current;
+  } finally {
+    if (searchInventoryOperationQueues.get(key) === current) {
+      searchInventoryOperationQueues.delete(key);
+    }
+  }
+}
+
 async function requestSearchInventorySocket(action, payload = {}, gm = getResponsibleGM()) {
   if (!gm) throw new Error("Нет активного GM для обыска.");
   const requestId = foundry.utils.randomID();
@@ -2153,9 +2178,13 @@ async function handleSearchInventorySocketMessage(message = {}) {
   try {
     let result;
     if (message.action === "transferItem") {
-      result = await performSearchInventoryTransfer(message.payload ?? {}, message.requesterUserId ?? "");
+      result = await enqueueSearchInventoryOperation(
+        () => performSearchInventoryTransfer(message.payload ?? {}, message.requesterUserId ?? "")
+      );
     } else if (message.action === "transferCurrency") {
-      result = await performSearchCurrencyTransfer(message.payload ?? {}, message.requesterUserId ?? "");
+      result = await enqueueSearchInventoryOperation(
+        () => performSearchCurrencyTransfer(message.payload ?? {}, message.requesterUserId ?? "")
+      );
     }
     game.socket.emit(SEARCH_INVENTORY_SOCKET, {
       scope: SEARCH_INVENTORY_SOCKET_SCOPE,
