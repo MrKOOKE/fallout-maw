@@ -40,6 +40,7 @@ const DAMAGE_NUMBER_ANIMATION_MS = 900;
 const DAMAGE_MITIGATION_ICON_ANIMATION_MS = 1000;
 const HEALING_NUMBER_COLOR = "#62d96b";
 const EQUIPMENT_CONDITION_UNCONDITIONAL_RATIO = 0.2;
+const DAMAGE_MITIGATION_PENETRATION_FLAT_STEP = 3;
 const RESISTANCE_OVERHEAT_DURATION_SECONDS = 24;
 const RESISTANCE_OVERHEAT_RATIO = 0.1;
 const RESISTANCE_OVERHEAT_EFFECT_KIND = "resistanceOverheat";
@@ -380,6 +381,16 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
   }
 
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
+  const periodic = damageType?.settings?.periodic;
+  if (shouldSplitPeriodicDamage(data, mode, periodic)) {
+    return applyPeriodicSplitDamageApplicationNow(actor, data, {
+      createSummary,
+      damageType,
+      periodic,
+      scope
+    });
+  }
+
   const mitigationResult = mode === MODE_DAMAGE && data.applyMitigation
     ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source, {
       damageType,
@@ -412,49 +423,6 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
     }
   }
 
-  const periodic = damageType?.settings?.periodic;
-  if (mode === MODE_DAMAGE && data.processDamageTypeSettings && periodic?.enabled) {
-    const immediateAmount = roundDamageAmount(effectiveAmount * (Number(periodic.immediatePercent) || 0) / 100);
-    const delayedAmount = roundDamageAmount(effectiveAmount * (Number(periodic.delayedPercent) || 0) / 100);
-    const immediateResult = immediateAmount > 0
-      ? await applyDirectDamageApplication(actor, {
-        ...data,
-        amount: immediateAmount,
-        damageTypeKey: damageType?.key ?? data.damageTypeKey,
-        mode,
-        scope
-      }, damageType)
-      : { actor, amount: 0, healthDelta: 0, limbDelta: 0, createdTraumas: [] };
-    if (delayedAmount > 0) await createPeriodicDamageEffect(actor, {
-      damageType,
-      limbKey: data.limbKey,
-      scope,
-      amount: delayedAmount,
-      settings: periodic,
-      source: data.source,
-      worldTime: getDamageApplicationWorldTime(data.source)
-    });
-    if (immediateResult.healthDelta > 0) {
-      await createResourceLimitEffect(actor, {
-        damageType,
-        healthDelta: immediateResult.healthDelta,
-        source: data.source,
-        worldTime: getDamageApplicationWorldTime(data.source)
-      });
-      broadcastDamageNumbers(actor, [{
-        amount: immediateResult.healthDelta,
-        damageTypeKey: damageType?.key ?? data.damageTypeKey
-      }]);
-    }
-    const result = {
-      ...immediateResult,
-      amount: immediateAmount,
-      delayedAmount
-    };
-    if (createSummary) await publishDamageSummaryMessage([result]);
-    return result;
-  }
-
   const result = await applyDirectDamageApplication(actor, {
     ...data,
     amount: effectiveAmount,
@@ -482,6 +450,37 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
       mode: MODE_HEALING
     }]);
   }
+  if (createSummary) await publishDamageSummaryMessage([result]);
+  return result;
+}
+
+async function applyPeriodicSplitDamageApplicationNow(actor, data = {}, { createSummary = true, damageType = null, periodic = {}, scope = SCOPE_HEALTH } = {}) {
+  const { immediateAmount, delayedAmount } = calculatePeriodicDamageSplit(data.amount, periodic);
+  const source = markPeriodicDamageSplitSource(data.source);
+  const immediateResult = immediateAmount > 0
+    ? await applyDamageApplicationNow({
+      ...data,
+      amount: immediateAmount,
+      damageTypeKey: damageType?.key ?? data.damageTypeKey,
+      source
+    }, { createSummary: false })
+    : { actor, amount: 0, healthDelta: 0, limbDelta: 0, mode: MODE_DAMAGE, scope, createdTraumas: [] };
+
+  if (delayedAmount > 0) await createPeriodicDamageEffect(actor, {
+    damageType,
+    limbKey: data.limbKey,
+    scope,
+    amount: delayedAmount,
+    settings: periodic,
+    source: data.source,
+    worldTime: getDamageApplicationWorldTime(data.source)
+  });
+
+  const result = {
+    ...immediateResult,
+    amount: immediateAmount,
+    delayedAmount
+  };
   if (createSummary) await publishDamageSummaryMessage([result]);
   return result;
 }
@@ -571,6 +570,27 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
 async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDamageState = null } = {}) {
   const scope = normalizeScope(data.scope, data.limbKey);
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
+  const periodic = damageType?.settings?.periodic;
+  if (shouldSplitPeriodicDamage(data, MODE_DAMAGE, periodic)) {
+    const { immediateAmount, delayedAmount } = calculatePeriodicDamageSplit(data.amount, periodic);
+    if (delayedAmount > 0) await createPeriodicDamageEffect(actor, {
+      damageType,
+      limbKey: data.limbKey,
+      scope,
+      amount: delayedAmount,
+      settings: periodic,
+      source: data.source,
+      worldTime: getDamageApplicationWorldTime(data.source)
+    });
+    if (!immediateAmount) return null;
+    return prepareDamageBatchEntry(actor, {
+      ...data,
+      amount: immediateAmount,
+      damageTypeKey: damageType?.key ?? data.damageTypeKey,
+      source: markPeriodicDamageSplitSource(data.source)
+    }, { equipmentConditionDamageState });
+  }
+
   const mitigationResult = data.applyMitigation
     ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source, {
       damageType,
@@ -607,43 +627,6 @@ async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDam
       settings: needIncrease
     });
     if (needIncrease.preventHealthDamage) return null;
-  }
-
-  const periodic = damageType?.settings?.periodic;
-  if (data.processDamageTypeSettings && periodic?.enabled) {
-    const immediateAmount = roundDamageAmount(effectiveAmount * (Number(periodic.immediatePercent) || 0) / 100);
-    const delayedAmount = roundDamageAmount(effectiveAmount * (Number(periodic.delayedPercent) || 0) / 100);
-    if (delayedAmount > 0) await createPeriodicDamageEffect(actor, {
-      damageType,
-      limbKey: data.limbKey,
-      scope,
-      amount: delayedAmount,
-      settings: periodic,
-      source: data.source,
-      worldTime: getDamageApplicationWorldTime(data.source)
-    });
-    if (!immediateAmount) {
-      return damageMitigationDisplay
-        ? {
-          ...data,
-          amount: 0,
-          damageTypeKey: damageType?.key ?? data.damageTypeKey,
-          damageType,
-          scope,
-          damageMitigationDisplay,
-          resistanceOverheat: mitigationResult.resistanceOverheat
-        }
-        : null;
-    }
-    return {
-      ...data,
-      amount: immediateAmount,
-      damageTypeKey: damageType?.key ?? data.damageTypeKey,
-      damageType,
-      scope,
-      damageMitigationDisplay,
-      resistanceOverheat: mitigationResult.resistanceOverheat
-    };
   }
 
   return {
@@ -1989,17 +1972,20 @@ function isMissingDocumentError(error) {
 }
 
 async function applyPeriodicDamageBatch(actor, entries = []) {
-  const damageTypes = getDamageTypeSettings();
-  const normalizedEntries = combinePeriodicDamageEntries(entries)
+  const requests = combinePeriodicDamageEntries(entries)
     .map(entry => ({
-      ...entry,
+      actorUuid: actor.uuid,
+      limbKey: entry.limbKey,
       amount: roundDamageAmount(entry.amount),
-      scope: normalizeScope(entry.scope, entry.limbKey),
-      damageType: damageTypes.find(damageType => damageType.key === entry.damageTypeKey) ?? null
+      damageTypeKey: entry.damageTypeKey,
+      scope: entry.scope,
+      applyMitigation: true,
+      processDamageTypeSettings: true,
+      source: markPeriodicDamageTickSource(entry.source)
     }))
     .filter(entry => entry.amount > 0);
-  const result = await applyDamageEntriesBatch(actor, normalizedEntries);
-  return result;
+  if (!requests.length) return [];
+  return applyDamageApplicationsNow({ actorUuid: actor.uuid, requests }, { createSummary: false });
 }
 
 async function applyDamageEntriesBatch(actor, entries = []) {
@@ -2671,6 +2657,39 @@ function getDamageApplicationWorldTime(source = {}) {
   return Number.isFinite(value) ? value : (Number(game.time?.worldTime) || 0);
 }
 
+function shouldSplitPeriodicDamage(data = {}, mode = MODE_DAMAGE, periodic = null) {
+  return mode === MODE_DAMAGE
+    && data.processDamageTypeSettings
+    && periodic?.enabled
+    && !isPeriodicDamageSplitSuppressed(data.source);
+}
+
+function calculatePeriodicDamageSplit(amount = 0, periodic = {}) {
+  const incoming = Math.max(0, roundDamageAmount(amount));
+  return {
+    immediateAmount: roundDamageAmount(incoming * (Number(periodic.immediatePercent) || 0) / 100),
+    delayedAmount: roundDamageAmount(incoming * (Number(periodic.delayedPercent) || 0) / 100)
+  };
+}
+
+function isPeriodicDamageSplitSuppressed(source = {}) {
+  return Boolean(source?.falloutMawPeriodicDamageNoSplit || source?.periodicDamageEffectUuid);
+}
+
+function markPeriodicDamageSplitSource(source = {}) {
+  return {
+    ...(source && typeof source === "object" ? source : {}),
+    falloutMawPeriodicDamageNoSplit: true
+  };
+}
+
+function markPeriodicDamageTickSource(source = {}) {
+  return {
+    ...markPeriodicDamageSplitSource(source),
+    falloutMawPeriodicDamageTick: true
+  };
+}
+
 function normalizeScope(scope, limbKey = "") {
   if (scope === SCOPE_HEALTH) return SCOPE_HEALTH;
   if (scope === SCOPE_LIMB) return limbKey ? SCOPE_LIMB : SCOPE_HEALTH;
@@ -2939,7 +2958,7 @@ function combineDamageMitigationDisplays(displays = []) {
 function getDamageMitigationPenetration(source = {}) {
   const penetrationPower = Math.max(0, toInteger(source?.penetrationPower));
   const penetrationStep = Math.max(0, toInteger(source?.penetrationStep));
-  return Math.max(0, penetrationPower - penetrationStep);
+  return Math.max(0, penetrationPower - penetrationStep) * DAMAGE_MITIGATION_PENETRATION_FLAT_STEP;
 }
 
 async function applyResistanceOverheats(actor, entries = []) {
