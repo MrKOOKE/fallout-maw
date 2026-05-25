@@ -8273,21 +8273,44 @@ label.fallout-maw-mitigation-cell {
   gap: 0.65rem;
   min-height: 0;
   min-width: 0;
-  overflow: hidden;
-}
-
-.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-equipment-pane {
-  flex: 0 0 auto;
-  max-height: 26rem;
-}
-
-.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-equipment-pane .fallout-maw-pane-scroll {
   overflow-x: hidden;
   overflow-y: auto;
 }
 
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-equipment-pane {
+  flex: 0 0 auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-equipment-pane .fallout-maw-pane-scroll,
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-side .fallout-maw-inventory-pane .fallout-maw-pane-scroll {
+  flex: 0 0 auto;
+  overflow: visible;
+  padding-right: 0;
+  scrollbar-gutter: auto;
+}
+
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-equipment-pane .fallout-maw-equipment-slot-list {
   grid-template-columns: repeat(auto-fill, minmax(calc(var(--fallout-maw-actor-large-slot-size) + 1rem), max-content));
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-equipment-pane .fallout-maw-weapon-set-list {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-equipment-pane .fallout-maw-weapon-set {
+  flex: 0 1 max-content;
+  max-width: 100%;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-equipment-pane .fallout-maw-weapon-slot-list {
+  display: flex;
+  flex-wrap: wrap;
+  width: max-content;
+  max-width: 100%;
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-side--searched .fallout-maw-panel > h2,
@@ -8304,10 +8327,15 @@ label.fallout-maw-mitigation-cell {
   justify-content: end;
 }
 
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-side--searched .fallout-maw-weapon-set-list {
+  justify-content: end;
+}
+
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-side .fallout-maw-inventory-pane {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
   min-width: 0;
+  overflow: visible;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-container-title strong {
