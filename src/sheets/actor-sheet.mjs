@@ -3691,7 +3691,23 @@ function serializeWeaponSlotRequirement(system = {}) {
 }
 
 function serializeItemFunctions(functions = {}) {
-  return JSON.stringify(functions ?? {});
+  return JSON.stringify(normalizeItemFunctionsForStack(functions));
+}
+
+function normalizeItemFunctionsForStack(functions = {}) {
+  return normalizeStackComparableValue(functions);
+}
+
+function normalizeStackComparableValue(value) {
+  if (typeof value?.toObject === "function") return normalizeStackComparableValue(value.toObject(false));
+  if (value instanceof Set) return Array.from(value).sort();
+  if (Array.isArray(value)) return value.map(entry => normalizeStackComparableValue(entry));
+  if (!value || typeof value !== "object") return value ?? null;
+
+  const entries = Object.entries(value)
+    .filter(([, entryValue]) => entryValue !== undefined)
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
+  return Object.fromEntries(entries.map(([key, entryValue]) => [key, normalizeStackComparableValue(entryValue)]));
 }
 
 function getInventoryGridDimensions(race) {

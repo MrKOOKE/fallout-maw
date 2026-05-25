@@ -2423,7 +2423,7 @@ function areStackable(sourceData, targetItem) {
     && getItemFootprint(sourceSystem).height === getItemFootprint(targetSystem).height
     && serializeSet(getSelectedEquipmentSlotKeys(sourceSystem)) === serializeSet(getSelectedEquipmentSlotKeys(targetSystem))
     && serializeWeaponSlotRequirement(sourceSystem) === serializeWeaponSlotRequirement(targetSystem)
-    && JSON.stringify(sourceSystem.functions ?? {}) === JSON.stringify(targetSystem.functions ?? {})
+    && serializeItemFunctions(sourceSystem.functions) === serializeItemFunctions(targetSystem.functions)
   );
 }
 
@@ -2434,6 +2434,26 @@ function serializeSet(set) {
 function serializeWeaponSlotRequirement(system = {}) {
   const requirement = getWeaponSlotRequirement(system);
   return `${requirement.mode}:${serializeSet(requirement.selectedKeys)}`;
+}
+
+function serializeItemFunctions(functions = {}) {
+  return JSON.stringify(normalizeItemFunctionsForStack(functions));
+}
+
+function normalizeItemFunctionsForStack(functions = {}) {
+  return normalizeStackComparableValue(functions);
+}
+
+function normalizeStackComparableValue(value) {
+  if (typeof value?.toObject === "function") return normalizeStackComparableValue(value.toObject(false));
+  if (value instanceof Set) return Array.from(value).sort();
+  if (Array.isArray(value)) return value.map(entry => normalizeStackComparableValue(entry));
+  if (!value || typeof value !== "object") return value ?? null;
+
+  const entries = Object.entries(value)
+    .filter(([, entryValue]) => entryValue !== undefined)
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
+  return Object.fromEntries(entries.map(([key, entryValue]) => [key, normalizeStackComparableValue(entryValue)]));
 }
 
 function validateActorLoadLimit(actor, projectedItems = []) {
