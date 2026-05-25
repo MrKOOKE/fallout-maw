@@ -42,9 +42,11 @@ import {
   isContainerWeaponSetKey
 } from "../utils/equipment-slots.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
+import { FalloutMaWContainerSheet } from "../sheets/container-sheet.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const { FormDataExtended } = foundry.applications.ux;
 
 const SEARCH_INVENTORY_REFERENCE_WIDTH = 2560;
 const SEARCH_INVENTORY_REFERENCE_HEIGHT = 1440;
@@ -380,6 +382,20 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const placementRequest = getDropZonePlacementRequest(zone);
     const parentId = placementRequest.mode === "inventory" ? getDropZoneParentId(zone) : ROOT_CONTAINER_ID;
     const targetItem = this.#getTargetStackItem(zone, targetActor, item.id, parentId);
+    if (canStackItems(item.toObject(), targetItem)) {
+      const quantity = await this.#getSearchStackQuantity(item, targetItem, event);
+      if (!quantity) return null;
+      return this.#executeSearchStackTransfer({
+        searcherActorUuid: this.#searcherActorUuid,
+        searchedActorUuid: this.#searchedActorUuid,
+        sourceActorUuid: sourceActor.uuid,
+        targetActorUuid: targetActor.uuid,
+        itemId: item.id,
+        targetItemId: targetItem.id,
+        targetParentId: parentId,
+        quantity
+      });
+    }
     const pointerPlacement = placementRequest.mode === "inventory"
       ? getSearchDropPlacementForPointer({
         actor: targetActor,
@@ -408,6 +424,42 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     };
 
     return this.#executeSearchTransfer(payload);
+  }
+
+  async #getSearchStackQuantity(sourceItem, targetItem, event) {
+    const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
+    const availableSpace = Math.max(0, getItemMaxStack(targetItem) - getItemQuantity(targetItem));
+    const maxTransfer = Math.min(sourceQuantity, availableSpace);
+    if (maxTransfer <= 0) return 0;
+    if (event?.shiftKey || maxTransfer <= 1) return maxTransfer;
+    return promptSearchItemStackQuantity({
+      item: sourceItem,
+      title: "Сложить предметы",
+      actionLabel: "Сложить",
+      max: maxTransfer,
+      value: maxTransfer
+    });
+  }
+
+  async #executeSearchStackTransfer(payload, { notify = true } = {}) {
+    const sourceActor = this.#getActorByUuid(String(payload?.sourceActorUuid ?? ""));
+    const targetActor = this.#getActorByUuid(String(payload?.targetActorUuid ?? ""));
+    if (!sourceActor || !targetActor) return false;
+    try {
+      const responsibleGM = getResponsibleGM();
+      if (responsibleGM && responsibleGM.id !== game.user?.id) {
+        await requestSearchInventorySocket("stackItem", payload, responsibleGM);
+      } else if (canModifySearchTransferDirectly(sourceActor, targetActor)) {
+        await enqueueSearchInventoryOperation(() => performSearchInventoryStack(payload, game.user?.id ?? ""));
+      } else {
+        await requestSearchInventorySocket("stackItem", payload, responsibleGM);
+      }
+      return true;
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Search inventory stack failed`, error);
+      if (notify) ui.notifications.warn(error.message || "Не удалось сложить предметы.");
+    }
+    return false;
   }
 
   async #executeSearchTransfer(payload, { notify = true } = {}) {
@@ -453,6 +505,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const target = eventOrTarget?.target ?? eventOrTarget;
     const pointedCell = this.#getInventoryCellAtPointer(eventOrTarget, target);
     if (pointedCell) return pointedCell;
+
+    const targetItem = target?.closest?.("[data-inventory-grid-item][data-item-id][data-search-actor-uuid]");
+    if (targetItem && this.element?.contains(targetItem)) return targetItem;
     return target?.closest?.("[data-search-drop-zone]") ?? null;
   }
 
@@ -566,7 +621,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       this.#clearInventoryHoverPreviewClasses();
       return;
     }
-    if (zone.dataset.inventoryCell === undefined) {
+    if (zone.dataset.inventoryCell === undefined && zone.dataset.inventoryGridItem === undefined) {
       this.#clearInventoryHoverPreview();
       return;
     }
@@ -585,7 +640,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       && areStackable(this.#draggedItemData, targetItem)
       && getItemQuantity(targetItem) < getItemMaxStack(targetItem);
     if (targetHasStackRoom) {
-      this.#applyInventoryPlacementPreview(actor, parentId, normalizeInventoryPlacement(targetItem.system?.placement ?? {}, targetItem, actor.items));
+      this.#applyInventoryStackPreview(actor, parentId, targetItem);
       return;
     }
 
@@ -630,6 +685,30 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
   }
 
+  #applyInventoryStackPreview(actor, parentId, targetItem) {
+    if (!actor || !targetItem) return;
+    const previewKey = `stack:${actor.uuid}:${parentId ?? ROOT_CONTAINER_ID}:${targetItem.id}:${getItemQuantity(targetItem)}:${getItemMaxStack(targetItem)}`;
+    if (this.#hoverPreviewKey === previewKey) return;
+    this.#clearInventoryHoverPreviewClasses();
+    this.#hoverPreviewKey = previewKey;
+
+    const escapedUuid = CSS.escape(actor.uuid);
+    const escapedParentId = CSS.escape(parentId ?? ROOT_CONTAINER_ID);
+    const escapedItemId = CSS.escape(targetItem.id);
+    this.element?.querySelector(
+      `[data-inventory-grid-item][data-search-actor-uuid="${escapedUuid}"][data-item-id="${escapedItemId}"][data-inventory-parent-id="${escapedParentId}"]`
+    )?.classList.add("drop-stack-preview");
+
+    const placement = normalizeInventoryPlacement(targetItem.system?.placement ?? {}, targetItem, actor.items);
+    for (let y = placement.y; y < placement.y + placement.height; y += 1) {
+      for (let x = placement.x; x < placement.x + placement.width; x += 1) {
+        this.element?.querySelector(
+          `[data-inventory-cell][data-search-actor-uuid="${escapedUuid}"][data-inventory-parent-id="${escapedParentId}"][data-x="${x}"][data-y="${y}"]`
+        )?.classList.add("drop-stack-preview");
+      }
+    }
+  }
+
   #clearInventoryDropPreview() {
     this.#clearInventoryHoverPreview();
     this.element?.querySelectorAll(".drop-match-preview").forEach(element => element.classList.remove("drop-match-preview"));
@@ -642,7 +721,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   #clearInventoryHoverPreviewClasses() {
     this.#hoverPreviewKey = "";
-    this.element?.querySelectorAll(".drop-preview").forEach(element => element.classList.remove("drop-preview"));
+    this.element?.querySelectorAll(".drop-preview, .drop-stack-preview").forEach(element => {
+      element.classList.remove("drop-preview", "drop-stack-preview");
+    });
   }
 
   #highlightEquipmentSlotsForItem(itemData) {
@@ -691,6 +772,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     root.addEventListener("mousedown", event => this.#onInventoryTooltipMiddleMouseDown(event));
     root.addEventListener("auxclick", event => this.#onInventoryTooltipAuxClick(event));
     root.addEventListener("click", event => void this.#onSearchRootClick(event));
+    root.addEventListener("contextmenu", event => this.#onSearchRootContextMenu(event));
   }
 
   #onInventoryTooltipMiddleMouseDown(event) {
@@ -700,6 +782,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   async #onSearchRootClick(event) {
+    document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
     const bulkButton = event.target?.closest?.("[data-search-bulk-transfer]");
     if (bulkButton && this.element?.contains(bulkButton)) {
       await this.#onSearchBulkTransferClick(event, bulkButton);
@@ -718,6 +801,159 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     event.preventDefault();
     event.stopPropagation();
     await this.#transferItemToOppositeRoot(itemElement);
+  }
+
+  #onSearchRootContextMenu(event) {
+    const itemElement = event.target?.closest?.("[data-item-id][data-search-actor-uuid]");
+    if (!itemElement || !this.element?.contains(itemElement) || !this.#canInteract()) return;
+    const actor = this.#getActorByUuid(String(itemElement.dataset.searchActorUuid ?? ""));
+    const item = actor?.items?.get(String(itemElement.dataset.itemId ?? ""));
+    if (!actor || !item) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.#showInventoryContextMenu(actor, item, event);
+  }
+
+  #showInventoryContextMenu(actor, item, event) {
+    this.#clearInventoryTooltip({ force: true });
+    document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
+
+    const placementMode = String(item.system?.placement?.mode ?? "");
+    const isSlottedEquipment = placementMode === "equipment";
+    const isSlottedWeapon = placementMode === "weapon";
+    const isSlottedItem = isSlottedEquipment || isSlottedWeapon;
+    const isEquipped = Boolean(item.system?.equipped);
+    const isContainer = isContainerItem(item);
+    const menuOptions = [];
+
+    if (game.user?.isGM) {
+      menuOptions.push(["edit", "fa-pen-to-square", game.i18n.localize("FALLOUTMAW.Common.Edit")]);
+    }
+    if (isContainer) {
+      menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
+    }
+    if (isSlottedItem || isEquipped) {
+      menuOptions.push(["unequip", "fa-hand", game.i18n.localize("FALLOUTMAW.Item.Unequip")]);
+    } else {
+      menuOptions.push(["equip", "fa-shirt", game.i18n.localize("FALLOUTMAW.Item.Equip")]);
+    }
+    if (getItemQuantity(item) > 1) {
+      menuOptions.push(["split", "fa-code-branch", "Разделить"]);
+    }
+    if (game.user?.isGM && !isSlottedItem) {
+      menuOptions.push(["copy", "fa-copy", game.i18n.localize("FALLOUTMAW.Common.Copy")]);
+    }
+    if (game.user?.isGM) {
+      menuOptions.push(["delete", "fa-trash", game.i18n.localize("FALLOUTMAW.Common.Delete")]);
+    }
+
+    const menu = document.createElement("nav");
+    menu.className = "fallout-maw-inventory-context-menu";
+    menu.style.left = `${event.clientX}px`;
+    menu.style.top = `${event.clientY}px`;
+    menu.innerHTML = menuOptions
+      .map(([action, icon, label]) => `<button type="button" data-action="${action}"><i class="fa-solid ${icon}"></i>${label}</button>`)
+      .join("");
+    document.body.append(menu);
+
+    menu.addEventListener("click", async clickEvent => {
+      const action = clickEvent.target.closest("button")?.dataset.action;
+      if (!action) return;
+      clickEvent.preventDefault();
+      menu.remove();
+      if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
+      if (action === "open") return this.#openSearchContainerSheet(item);
+      if (action === "equip") return this.#equipSearchItem(actor, item);
+      if (action === "unequip") return this.#unequipSearchItem(actor, item);
+      if (action === "split") return this.#splitSearchItem(actor, item);
+      if (action === "copy" && game.user?.isGM) return copyActorInventoryItem(actor, item);
+      if (action === "delete" && game.user?.isGM) return item.delete();
+      return undefined;
+    });
+  }
+
+  #openSearchContainerSheet(item) {
+    if (!isContainerItem(item)) return null;
+    const app = new FalloutMaWContainerSheet({ document: item });
+    app.render({ force: true });
+    app.bringToFront();
+    return app;
+  }
+
+  async #equipSearchItem(actor, item) {
+    return this.#executeSearchTransfer({
+      searcherActorUuid: this.#searcherActorUuid,
+      searchedActorUuid: this.#searchedActorUuid,
+      sourceActorUuid: actor.uuid,
+      targetActorUuid: actor.uuid,
+      itemId: item.id,
+      targetMode: "equipment",
+      targetParentId: ROOT_CONTAINER_ID,
+      targetEquipmentSlot: "",
+      targetWeaponSet: "",
+      targetWeaponSlot: "",
+      targetX: null,
+      targetY: null,
+      targetItemId: ""
+    });
+  }
+
+  async #unequipSearchItem(actor, item) {
+    const placement = getFirstAvailableActorInventoryPlacement(actor, ROOT_CONTAINER_ID, item, [item.id], []);
+    if (!placement) {
+      ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+      return null;
+    }
+    return this.#executeSearchTransfer({
+      searcherActorUuid: this.#searcherActorUuid,
+      searchedActorUuid: this.#searchedActorUuid,
+      sourceActorUuid: actor.uuid,
+      targetActorUuid: actor.uuid,
+      itemId: item.id,
+      targetMode: "inventory",
+      targetParentId: ROOT_CONTAINER_ID,
+      targetEquipmentSlot: "",
+      targetWeaponSet: "",
+      targetWeaponSlot: "",
+      targetX: placement.x,
+      targetY: placement.y,
+      targetItemId: ""
+    });
+  }
+
+  async #splitSearchItem(actor, item) {
+    const quantity = getItemQuantity(item);
+    if (quantity <= 1) return null;
+    const amount = await promptSearchItemStackQuantity({
+      item,
+      title: "Разделить предмет",
+      actionLabel: "Разделить",
+      max: quantity - 1,
+      value: Math.max(1, Math.floor(quantity / 2))
+    });
+    if (!amount) return null;
+
+    const payload = {
+      searcherActorUuid: this.#searcherActorUuid,
+      searchedActorUuid: this.#searchedActorUuid,
+      actorUuid: actor.uuid,
+      itemId: item.id,
+      amount
+    };
+    try {
+      const responsibleGM = getResponsibleGM();
+      if (responsibleGM && responsibleGM.id !== game.user?.id) {
+        await requestSearchInventorySocket("splitItem", payload, responsibleGM);
+      } else if (game.user?.isGM || actor.testUserPermission?.(game.user, "OWNER")) {
+        await enqueueSearchInventoryOperation(() => performSearchInventorySplit(payload, game.user?.id ?? ""));
+      } else {
+        await requestSearchInventorySocket("splitItem", payload, responsibleGM);
+      }
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Search inventory split failed`, error);
+      ui.notifications.warn(error.message || "Не удалось разделить предмет.");
+    }
+    return null;
   }
 
   async #transferItemToOppositeRoot(itemElement) {
@@ -1230,6 +1466,55 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
     targetX: payload.targetX,
     targetY: payload.targetY,
     targetItemId: String(payload.targetItemId ?? "")
+  });
+}
+
+async function performSearchInventorySplit(payload = {}, requesterUserId = "") {
+  const searcherActor = await resolveActor(payload.searcherActorUuid);
+  const searchedActor = await resolveActor(payload.searchedActorUuid);
+  const actor = await resolveActor(payload.actorUuid);
+  if (!searcherActor || !searchedActor || !actor) throw new Error("Actor not found.");
+
+  const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
+  if (requester && !requester.isGM && !searcherActor.testUserPermission(requester, "OWNER")) {
+    throw new Error("No searcher actor owner permission.");
+  }
+
+  const allowedActorUuids = new Set([searcherActor.uuid, searchedActor.uuid]);
+  if (!allowedActorUuids.has(actor.uuid)) throw new Error("Search split actor mismatch.");
+
+  const item = actor.items?.get(String(payload.itemId ?? ""));
+  if (!item) throw new Error("Item not found.");
+  return splitActorInventoryItem(actor, item, toInteger(payload.amount));
+}
+
+async function performSearchInventoryStack(payload = {}, requesterUserId = "") {
+  const searcherActor = await resolveActor(payload.searcherActorUuid);
+  const searchedActor = await resolveActor(payload.searchedActorUuid);
+  const sourceActor = await resolveActor(payload.sourceActorUuid);
+  const targetActor = await resolveActor(payload.targetActorUuid);
+  if (!searcherActor || !searchedActor || !sourceActor || !targetActor) throw new Error("Actor not found.");
+
+  const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
+  if (requester && !requester.isGM && !searcherActor.testUserPermission(requester, "OWNER")) {
+    throw new Error("No searcher actor owner permission.");
+  }
+
+  const allowedActorUuids = new Set([searcherActor.uuid, searchedActor.uuid]);
+  if (!allowedActorUuids.has(sourceActor.uuid) || !allowedActorUuids.has(targetActor.uuid)) {
+    throw new Error("Search stack actor mismatch.");
+  }
+
+  const sourceItem = sourceActor.items?.get(String(payload.itemId ?? ""));
+  const targetItem = targetActor.items?.get(String(payload.targetItemId ?? ""));
+  if (!sourceItem || !targetItem) throw new Error("Item not found.");
+  return stackActorInventoryItem({
+    sourceActor,
+    targetActor,
+    sourceItem,
+    targetItem,
+    targetParentId: String(payload.targetParentId ?? ROOT_CONTAINER_ID),
+    quantity: toInteger(payload.quantity)
   });
 }
 
@@ -1899,6 +2184,124 @@ function createInventoryStackData(itemData, quantity, parentId, placement, { equ
   return createData;
 }
 
+async function copyActorInventoryItem(actor, item) {
+  const data = item.toObject();
+  delete data._id;
+  delete data.id;
+  const parentId = getItemContainerParentId(item);
+  const placement = getFirstAvailableActorInventoryPlacement(actor, parentId, data, [], []);
+  if (!placement) throwInventoryNoSpace();
+  foundry.utils.setProperty(data, "system.container.parentId", parentId);
+  foundry.utils.setProperty(data, "system.placement", createStoredPlacement(placement, data));
+  if (!validateActorProjectedInventoryState(actor, { creates: [data] })) throwInventoryNoSpace();
+  return actor.createEmbeddedDocuments("Item", [data]);
+}
+
+async function splitActorInventoryItem(actor, item, amount) {
+  const quantity = getItemQuantity(item);
+  const splitQuantity = Math.max(1, Math.min(quantity - 1, toInteger(amount)));
+  if (quantity <= 1 || !splitQuantity) throw new Error("No quantity to split.");
+
+  const data = item.toObject();
+  delete data._id;
+  delete data.id;
+  foundry.utils.setProperty(data, "system.quantity", splitQuantity);
+  const parentId = getItemContainerParentId(item);
+  const placement = getFirstAvailableActorInventoryPlacement(actor, parentId, data, [item.id], []);
+  if (!placement) throwInventoryNoSpace();
+  foundry.utils.setProperty(data, "system.container.parentId", parentId);
+  foundry.utils.setProperty(data, "system.placement", createStoredPlacement(placement, data));
+  const updateData = {
+    _id: item.id,
+    "system.quantity": quantity - splitQuantity
+  };
+  if (!validateActorProjectedInventoryState(actor, { updates: [updateData], creates: [data] })) throwInventoryNoSpace();
+  await actor.updateEmbeddedDocuments("Item", [updateData]);
+  return actor.createEmbeddedDocuments("Item", [data]);
+}
+
+async function stackActorInventoryItem({
+  sourceActor,
+  targetActor,
+  sourceItem,
+  targetItem,
+  targetParentId = ROOT_CONTAINER_ID,
+  quantity = 0
+} = {}) {
+  if (!canStackItems(sourceItem?.toObject?.(), targetItem)) throw new Error("Items cannot be stacked.");
+  if (getItemContainerParentId(targetItem) !== targetParentId) throw new Error("Invalid stack target.");
+
+  const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
+  const targetQuantity = getItemQuantity(targetItem);
+  const availableSpace = Math.max(0, getItemMaxStack(targetItem) - targetQuantity);
+  const appliedQuantity = Math.min(Math.max(1, toInteger(quantity)), sourceQuantity, availableSpace);
+  if (!appliedQuantity) throw new Error("No stack room.");
+
+  const targetUpdate = {
+    _id: targetItem.id,
+    "system.quantity": targetQuantity + appliedQuantity
+  };
+
+  if (sourceActor.uuid === targetActor.uuid) {
+    const updates = [targetUpdate];
+    const deletes = [];
+    if (appliedQuantity >= sourceQuantity) deletes.push(sourceItem.id);
+    else updates.push({
+      _id: sourceItem.id,
+      "system.quantity": sourceQuantity - appliedQuantity
+    });
+    if (!validateActorProjectedInventoryState(targetActor, { updates, deletes })) throwInventoryNoSpace();
+    await targetActor.updateEmbeddedDocuments("Item", updates);
+    if (deletes.length) await targetActor.deleteEmbeddedDocuments("Item", deletes);
+    return targetActor.items.get(targetItem.id) ?? null;
+  }
+
+  if (!validateActorProjectedInventoryState(targetActor, { updates: [targetUpdate] })) throwInventoryNoSpace();
+  await targetActor.updateEmbeddedDocuments("Item", [targetUpdate]);
+  if (appliedQuantity >= sourceQuantity) await sourceActor.deleteEmbeddedDocuments("Item", [sourceItem.id]);
+  else await sourceActor.updateEmbeddedDocuments("Item", [{
+    _id: sourceItem.id,
+    "system.quantity": sourceQuantity - appliedQuantity
+  }]);
+  return targetActor.items.get(targetItem.id) ?? null;
+}
+
+function canStackItems(sourceData, targetItem = null) {
+  return Boolean(
+    targetItem
+    && areStackable(sourceData, targetItem)
+    && getItemQuantity(targetItem) < getItemMaxStack(targetItem)
+  );
+}
+
+async function promptSearchItemStackQuantity({ item, title = "Количество", actionLabel = "Ок", max = 1, value = 1 } = {}) {
+  const limit = Math.max(1, toInteger(max));
+  const initial = Math.max(1, Math.min(limit, toInteger(value) || limit));
+  const formData = await DialogV2.input({
+    window: { title },
+    content: `
+      <p><strong>${escapeHTML(item?.name ?? "")}</strong></p>
+      <label class="fallout-maw-stacked-field">
+        <span>${game.i18n.localize("FALLOUTMAW.Item.Quantity")}: 1 / ${limit}</span>
+        <input type="number" name="quantity" value="${initial}" min="1" max="${limit}" step="1" autofocus>
+      </label>
+    `,
+    ok: {
+      label: actionLabel,
+      icon: "fa-solid fa-check",
+      callback: (_event, button) => new FormDataExtended(button.form).object
+    },
+    buttons: [{
+      action: "cancel",
+      label: game.i18n.localize("FALLOUTMAW.Common.Cancel")
+    }],
+    position: { width: 420 },
+    rejectClose: false
+  });
+  if (!formData || formData === "cancel") return 0;
+  return Math.max(1, Math.min(limit, toInteger(formData.quantity)));
+}
+
 function createInventoryItemUpdate(itemId, quantity, parentId, placement, itemData) {
   return createPlacementItemUpdate(itemId, quantity, parentId, placement, itemData, { equipped: false });
 }
@@ -2180,6 +2583,14 @@ async function handleSearchInventorySocketMessage(message = {}) {
     if (message.action === "transferItem") {
       result = await enqueueSearchInventoryOperation(
         () => performSearchInventoryTransfer(message.payload ?? {}, message.requesterUserId ?? "")
+      );
+    } else if (message.action === "stackItem") {
+      result = await enqueueSearchInventoryOperation(
+        () => performSearchInventoryStack(message.payload ?? {}, message.requesterUserId ?? "")
+      );
+    } else if (message.action === "splitItem") {
+      result = await enqueueSearchInventoryOperation(
+        () => performSearchInventorySplit(message.payload ?? {}, message.requesterUserId ?? "")
       );
     } else if (message.action === "transferCurrency") {
       result = await enqueueSearchInventoryOperation(

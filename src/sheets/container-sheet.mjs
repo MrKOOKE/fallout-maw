@@ -24,7 +24,8 @@ import {
 import { toInteger } from "../utils/numbers.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
-const { HandlebarsApplicationMixin } = foundry.applications.api;
+const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const { FormDataExtended } = foundry.applications.ux;
 
 export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #draggedItemData = null;
@@ -166,6 +167,12 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
 
     const zone = this.#getDropZone(event);
     const targetItem = this.#getTargetStackItem(zone, dropped.item?.id ?? "");
+    if (this.#canStackDroppedItem(dropped.itemData, targetItem)) {
+      const quantity = await this.#getDroppedStackQuantity(dropped, targetItem, event);
+      if (!quantity) return null;
+      return this.#stackDroppedItemQuantity(dropped.item, dropped.itemData, targetItem, quantity);
+    }
+
     let placement = this.#getPlacementForDropZone(zone, dropped.itemData, [dropped.item?.id ?? ""]);
     if (!placement) return null;
     if (targetItem && !this.#areStackable(dropped.itemData, targetItem)) {
@@ -188,6 +195,8 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     const pointedCell = this.#getInventoryCellAtPointer(eventOrTarget, target);
     if (pointedCell) return pointedCell;
 
+    const targetItem = target?.closest?.("[data-inventory-grid-item][data-item-id]");
+    if (targetItem && this.element?.contains(targetItem)) return targetItem;
     const cell = target?.closest?.("[data-inventory-cell]");
     if (cell) return cell;
     return target?.closest?.("[data-container-drop-surface]") ?? null;
@@ -339,7 +348,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   #setInventoryHoverPreview(zone = null) {
     this.#clearInventoryHoverPreview();
     if (!zone) return;
-    if (zone.dataset.inventoryCell !== undefined) {
+    if (zone.dataset.inventoryCell !== undefined || zone.dataset.inventoryGridItem !== undefined) {
       this.#setInventoryCellHoverPreview(zone);
     }
   }
@@ -356,7 +365,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       && this.#areStackable(this.#draggedItemData, targetItem)
       && (getItemQuantity(targetItem) < getItemMaxStack(targetItem));
     if (targetHasStackRoom) {
-      this.#applyInventoryPlacementPreview(normalizeInventoryPlacement(targetItem.system?.placement ?? {}, targetItem, this.actor.items));
+      this.#applyInventoryStackPreview(targetItem);
       return;
     }
 
@@ -382,9 +391,26 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     }
   }
 
+  #applyInventoryStackPreview(targetItem) {
+    if (!targetItem) return;
+    const escapedItemId = CSS.escape(targetItem.id);
+    this.element?.querySelector(
+      `[data-inventory-grid-item][data-item-id="${escapedItemId}"]`
+    )?.classList.add("drop-stack-preview");
+
+    const placement = normalizeInventoryPlacement(targetItem.system?.placement ?? {}, targetItem, this.actor.items);
+    for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
+      for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
+        this.element?.querySelector(
+          `[data-inventory-cell][data-x="${x}"][data-y="${y}"]`
+        )?.classList.add("drop-stack-preview");
+      }
+    }
+  }
+
   #clearInventoryHoverPreview() {
-    this.element?.querySelectorAll(".drop-preview").forEach(element => {
-      element.classList.remove("drop-preview");
+    this.element?.querySelectorAll(".drop-preview, .drop-stack-preview").forEach(element => {
+      element.classList.remove("drop-preview", "drop-stack-preview");
     });
   }
 
@@ -400,6 +426,57 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
 
   async #moveOwnedItem(item, placement, targetItem = null) {
     return this.#insertItemIntoContainer(item.toObject(), placement, { sourceItem: item, targetItem });
+  }
+
+  #canStackDroppedItem(itemData, targetItem = null) {
+    return Boolean(
+      targetItem
+      && this.#areStackable(itemData, targetItem)
+      && getItemQuantity(targetItem) < getItemMaxStack(targetItem)
+    );
+  }
+
+  async #getDroppedStackQuantity(dropped, targetItem, event) {
+    const sourceQuantity = Math.max(1, getItemQuantity(dropped?.item ?? dropped?.itemData));
+    const availableSpace = Math.max(0, getItemMaxStack(targetItem) - getItemQuantity(targetItem));
+    const maxTransfer = Math.min(sourceQuantity, availableSpace);
+    if (maxTransfer <= 0) return 0;
+    if (event?.shiftKey || maxTransfer <= 1) return maxTransfer;
+    return promptItemStackQuantity({
+      item: dropped?.item ?? dropped?.itemData,
+      title: "Сложить предметы",
+      actionLabel: "Сложить",
+      max: maxTransfer,
+      value: maxTransfer
+    });
+  }
+
+  async #stackDroppedItemQuantity(sourceItem, itemData, targetItem, quantity) {
+    const transferQuantity = Math.max(1, toInteger(quantity));
+    const sourceOwned = sourceItem?.parent === this.actor;
+    const sourceQuantity = Math.max(1, getItemQuantity(sourceOwned ? sourceItem : itemData));
+    const targetQuantity = getItemQuantity(targetItem);
+    const availableSpace = Math.max(0, getItemMaxStack(targetItem) - targetQuantity);
+    const appliedQuantity = Math.min(transferQuantity, sourceQuantity, availableSpace);
+    if (!appliedQuantity) return null;
+
+    const updates = [{
+      _id: targetItem.id,
+      "system.quantity": targetQuantity + appliedQuantity
+    }];
+    const deletes = [];
+    if (sourceOwned) {
+      if (appliedQuantity >= sourceQuantity) deletes.push(sourceItem.id);
+      else updates.push({
+        _id: sourceItem.id,
+        "system.quantity": sourceQuantity - appliedQuantity
+      });
+    }
+
+    if (!this.#validateProjectedInventoryState({ updates, deletes })) return null;
+    await this.actor.updateEmbeddedDocuments("Item", updates);
+    if (deletes.length) await this.actor.deleteEmbeddedDocuments("Item", deletes);
+    return this.actor.items.get(targetItem.id) ?? null;
   }
 
   async #createOrStackDroppedItem(itemData, placement, targetItem = null) {
@@ -623,13 +700,20 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
     const menu = document.createElement("nav");
     menu.className = "fallout-maw-inventory-context-menu";
-    const menuOptions = [
-      ["edit", "fa-pen-to-square", game.i18n.localize("FALLOUTMAW.Common.Edit")]
-    ];
+    const menuOptions = [];
+    if (game.user?.isGM) {
+      menuOptions.push(["edit", "fa-pen-to-square", game.i18n.localize("FALLOUTMAW.Common.Edit")]);
+    }
     if (isContainerItem(item)) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
     }
-    menuOptions.push(["delete", "fa-trash", game.i18n.localize("FALLOUTMAW.Common.Delete")]);
+    if (getItemQuantity(item) > 1) {
+      menuOptions.push(["split", "fa-code-branch", "Разделить"]);
+    }
+    if (game.user?.isGM) {
+      menuOptions.push(["copy", "fa-copy", game.i18n.localize("FALLOUTMAW.Common.Copy")]);
+      menuOptions.push(["delete", "fa-trash", game.i18n.localize("FALLOUTMAW.Common.Delete")]);
+    }
     menu.innerHTML = menuOptions
       .map(([action, icon, label]) => `<button type="button" data-action="${action}"><i class="fa-solid ${icon}"></i>${label}</button>`)
       .join("");
@@ -642,16 +726,65 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       if (!action) return;
       clickEvent.preventDefault();
       menu.remove();
-      if (action === "edit") return item.sheet?.render(true);
+      if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") {
         const app = new FalloutMaWContainerSheet({ document: item });
         app.render({ force: true });
         app.bringToFront();
         return app;
       }
-      if (action === "delete") return item.delete();
+      if (action === "split") return this.#splitInventoryItem(item);
+      if (action === "copy" && game.user?.isGM) return this.#copyInventoryItem(item);
+      if (action === "delete" && game.user?.isGM) return item.delete();
       return undefined;
     });
+  }
+
+  async #copyInventoryItem(item) {
+    const data = item.toObject();
+    delete data._id;
+    delete data.id;
+    const placement = this.#getFirstAvailableInventoryPlacement(data, [], []);
+    if (!placement) {
+      this.#warnValidation({ reason: "no-space" });
+      return null;
+    }
+    foundry.utils.setProperty(data, "system.container.parentId", this.item.id);
+    foundry.utils.setProperty(data, "system.placement", createStoredPlacement(placement, data));
+    if (!this.#validateProjectedInventoryState({ creates: [data] })) return null;
+    return this.actor.createEmbeddedDocuments("Item", [data]);
+  }
+
+  async #splitInventoryItem(item) {
+    const quantity = getItemQuantity(item);
+    if (quantity <= 1) return null;
+    const amount = await promptItemStackQuantity({
+      item,
+      title: "Разделить предмет",
+      actionLabel: "Разделить",
+      max: quantity - 1,
+      value: Math.max(1, Math.floor(quantity / 2))
+    });
+    if (!amount) return null;
+
+    const data = item.toObject();
+    delete data._id;
+    delete data.id;
+    foundry.utils.setProperty(data, "system.quantity", amount);
+    const placement = this.#getFirstAvailableInventoryPlacement(data, [item.id], []);
+    if (!placement) {
+      this.#warnValidation({ reason: "no-space" });
+      return null;
+    }
+    foundry.utils.setProperty(data, "system.container.parentId", this.item.id);
+    foundry.utils.setProperty(data, "system.placement", createStoredPlacement(placement, data));
+    const updateData = {
+      _id: item.id,
+      "system.quantity": quantity - amount
+    };
+    if (!this.#validateProjectedInventoryState({ updates: [updateData], creates: [data] })) return null;
+    await item.update({ "system.quantity": quantity - amount });
+    return this.actor.createEmbeddedDocuments("Item", [data]);
   }
 
   #areStackable(sourceData, targetItem) {
@@ -674,6 +807,43 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
 
 function serializeItemFunctions(functions = {}) {
   return JSON.stringify(functions ?? {});
+}
+
+async function promptItemStackQuantity({ item, title = "Количество", actionLabel = "Ок", max = 1, value = 1 } = {}) {
+  const limit = Math.max(1, toInteger(max));
+  const initial = Math.max(1, Math.min(limit, toInteger(value) || limit));
+  const formData = await DialogV2.input({
+    window: { title },
+    content: `
+      <p><strong>${escapeHTML(item?.name ?? "")}</strong></p>
+      <label class="fallout-maw-stacked-field">
+        <span>${game.i18n.localize("FALLOUTMAW.Item.Quantity")}: 1 / ${limit}</span>
+        <input type="number" name="quantity" value="${initial}" min="1" max="${limit}" step="1" autofocus>
+      </label>
+    `,
+    ok: {
+      label: actionLabel,
+      icon: "fa-solid fa-check",
+      callback: (_event, button) => new FormDataExtended(button.form).object
+    },
+    buttons: [{
+      action: "cancel",
+      label: game.i18n.localize("FALLOUTMAW.Common.Cancel")
+    }],
+    position: { width: 420 },
+    rejectClose: false
+  });
+  if (!formData || formData === "cancel") return 0;
+  return Math.max(1, Math.min(limit, toInteger(formData.quantity)));
+}
+
+function escapeHTML(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function formatWeight(value) {
