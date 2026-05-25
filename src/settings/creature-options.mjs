@@ -25,6 +25,7 @@ export function createRaceDefaults(characteristics = [], damageTypes = []) {
     equipmentSlots: createDefaultEquipmentSlots(),
     weaponSets: createDefaultWeaponSets(),
     inventorySize: createDefaultInventorySize(),
+    damageDefenses: Object.fromEntries(damageTypes.map(entry => [entry.key, "0"])),
     damageResistances: Object.fromEntries(damageTypes.map(entry => [entry.key, "0"])),
     needSettings: createDefaultNeedSettings(),
     progression: {
@@ -92,7 +93,8 @@ export function normalizeCreatureOptions(options = {}, characteristics = [], dam
         equipmentSlots: normalizeEquipmentSlots(race.equipmentSlots),
         weaponSets: normalizeWeaponSets(race.weaponSets, limbs),
         inventorySize: normalizeInventorySize(race.inventorySize),
-        damageResistances: normalizeFormulaMap(race.damageResistances, damageTypes),
+        damageDefenses: normalizeFormulaMap(race.damageDefenses ?? race.damageResistances, damageTypes),
+        damageResistances: normalizeFormulaMap(race.damageDefenses ? race.damageResistances : {}, damageTypes),
         needSettings: normalizeRaceNeedSettings(race.needSettings),
         progression: {
           skillPointsPerLevel: toInteger(race.progression?.skillPointsPerLevel),

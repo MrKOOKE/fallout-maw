@@ -40,6 +40,11 @@ const DAMAGE_NUMBER_ANIMATION_MS = 900;
 const DAMAGE_MITIGATION_ICON_ANIMATION_MS = 1000;
 const HEALING_NUMBER_COLOR = "#62d96b";
 const EQUIPMENT_CONDITION_UNCONDITIONAL_RATIO = 0.2;
+const RESISTANCE_OVERHEAT_DURATION_SECONDS = 24;
+const RESISTANCE_OVERHEAT_RATIO = 0.1;
+const RESISTANCE_OVERHEAT_EFFECT_KIND = "resistanceOverheat";
+const RESISTANCE_OVERHEAT_EFFECT_NAME = "Перегрев сопротивлений";
+const RESISTANCE_OVERHEAT_EFFECT_IMG = "icons/svg/fire-shield.svg";
 const STATUS_EFFECTS = Object.freeze({
   dead: "dead",
   unconscious: "unconscious",
@@ -55,7 +60,6 @@ const EQUIPMENT_CONDITION_DAMAGE_VARIABLES = Object.freeze([
   "blocked",
   "protected",
   "penetrated",
-  "thresholdBlocked",
   "unconditional",
   "condition",
   "conditionMax",
@@ -379,12 +383,14 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
   const mitigationResult = mode === MODE_DAMAGE && data.applyMitigation
     ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source, {
       damageType,
-      includeEquipmentConditionDamage: data.processDamageTypeSettings
+      includeEquipmentConditionDamage: data.processDamageTypeSettings,
+      includeResistanceOverheat: data.processDamageTypeSettings
     })
     : { amount: data.amount, display: null };
   const mitigatedAmount = mitigationResult.amount;
   if (mode === MODE_DAMAGE && data.applyMitigation && data.processDamageTypeSettings) {
     await applyEquipmentConditionDamage(actor, mitigationResult.equipmentConditionDamage);
+    await applyResistanceOverheats(actor, [mitigationResult.resistanceOverheat]);
   }
   const effectiveAmount = mode === MODE_DAMAGE && data.processDamageTypeSettings
     ? applyLimbHealthMultiplier(actor, mitigatedAmount, damageType, data.limbKey)
@@ -523,6 +529,7 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
   const batchRequests = [];
   const singleResults = [];
   const mitigationDisplays = [];
+  const resistanceOverheats = [];
   const equipmentConditionDamageState = createEquipmentConditionDamageState(actor);
   for (const request of requests) {
     const data = normalizeDamageRequest({ ...request, actorUuid });
@@ -533,6 +540,7 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
 
     const entry = await prepareDamageBatchEntry(actor, data, { equipmentConditionDamageState });
     if (entry?.damageMitigationDisplay) mitigationDisplays.push(entry.damageMitigationDisplay);
+    if (entry?.resistanceOverheat) resistanceOverheats.push(entry.resistanceOverheat);
     if (entry?.amount > 0) batchRequests.push(entry);
   }
 
@@ -543,6 +551,7 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
     ? await applyDamageEntriesBatch(actor, batchRequests)
     : undefined;
   await applyEquipmentConditionDamage(actor, getEquipmentConditionDamageStateEntries(equipmentConditionDamageState));
+  await applyResistanceOverheats(actor, resistanceOverheats);
   if (batchResult?.resourceLimitEntries?.length) {
     for (const entry of batchResult.resourceLimitEntries) {
       const damageType = getDamageTypeSettings().find(type => type.key === entry.damageTypeKey);
@@ -566,6 +575,7 @@ async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDam
     ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source, {
       damageType,
       includeEquipmentConditionDamage: data.processDamageTypeSettings,
+      includeResistanceOverheat: data.processDamageTypeSettings,
       equipmentConditionDamageState: data.processDamageTypeSettings ? equipmentConditionDamageState : null
     })
     : { amount: data.amount, display: null };
@@ -584,7 +594,8 @@ async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDam
         damageTypeKey: damageType?.key ?? data.damageTypeKey,
         damageType,
         scope,
-        damageMitigationDisplay
+        damageMitigationDisplay,
+        resistanceOverheat: mitigationResult.resistanceOverheat
       }
       : null;
   }
@@ -619,7 +630,8 @@ async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDam
           damageTypeKey: damageType?.key ?? data.damageTypeKey,
           damageType,
           scope,
-          damageMitigationDisplay
+          damageMitigationDisplay,
+          resistanceOverheat: mitigationResult.resistanceOverheat
         }
         : null;
     }
@@ -629,7 +641,8 @@ async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDam
       damageTypeKey: damageType?.key ?? data.damageTypeKey,
       damageType,
       scope,
-      damageMitigationDisplay
+      damageMitigationDisplay,
+      resistanceOverheat: mitigationResult.resistanceOverheat
     };
   }
 
@@ -639,7 +652,8 @@ async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDam
     damageTypeKey: damageType?.key ?? data.damageTypeKey,
     damageType,
     scope,
-    damageMitigationDisplay
+    damageMitigationDisplay,
+    resistanceOverheat: mitigationResult.resistanceOverheat
   };
 }
 
@@ -2706,40 +2720,52 @@ function calculateEffectiveDamage(actor, amount, damageTypeKey = "", limbKey = "
 
 function calculateDamageMitigation(actor, amount, damageTypeKey = "", limbKey = "", source = {}, options = {}) {
   const incomingDamage = Math.max(0, Math.floor(Number(amount) || 0));
-  if (!incomingDamage) return { amount: 0, display: null, equipmentConditionDamage: [] };
-  if (!damageTypeKey) return { amount: incomingDamage, display: null, equipmentConditionDamage: [] };
+  if (!incomingDamage) return { amount: 0, display: null, equipmentConditionDamage: [], resistanceOverheat: null };
+  if (!damageTypeKey) return { amount: incomingDamage, display: null, equipmentConditionDamage: [], resistanceOverheat: null };
 
   const mitigationPenetration = getDamageMitigationPenetration(source);
   const equipmentSources = options.includeEquipmentConditionDamage
     ? getEquipmentConditionDamageSources(actor, damageTypeKey, limbKey)
     : [];
   const itemWear = new Map();
-  const rawDefense = Math.min(100, actor.getDamageDefense?.(damageTypeKey, limbKey) ?? 0);
-  const defenseReduction = Math.min(rawDefense, mitigationPenetration);
-  const defense = Math.max(0, rawDefense - defenseReduction);
-  const rawResistance = Math.min(100, actor.getDamageResistance?.(damageTypeKey, limbKey) ?? 0);
-  const resistance = Math.max(0, rawResistance - Math.max(0, mitigationPenetration - defenseReduction));
-  const reduction = actor.getDamageReduction?.(damageTypeKey, limbKey) ?? 0;
+  const defenseSources = equipmentSources.filter(entry => entry.mode === DAMAGE_MITIGATION_MODES.defense);
+  const resistanceSources = equipmentSources.filter(entry => entry.mode === DAMAGE_MITIGATION_MODES.resistance);
+  const rawDefense = Math.max(0, actor.getDamageDefense?.(damageTypeKey, limbKey) ?? 0);
+  const defensePenetration = Math.min(rawDefense, mitigationPenetration);
+  const defense = Math.max(0, rawDefense - defensePenetration);
   let remaining = incomingDamage;
-  const defenseBlocked = Math.floor((remaining * Math.max(0, defense)) / 100);
-  addEquipmentLayerWear(itemWear, equipmentSources.filter(entry => entry.mode === DAMAGE_MITIGATION_MODES.defense), {
-    incoming: remaining,
+  const defenseProtected = Math.min(remaining, rawDefense);
+  const defenseBlocked = Math.min(remaining, defense);
+  addEquipmentProtectionWear(itemWear, defenseSources, {
+    incoming: incomingDamage,
+    protectedAmount: defenseProtected,
     blocked: defenseBlocked
   });
   remaining = Math.max(0, remaining - defenseBlocked);
-  const resistanceBlocked = Math.floor((remaining * Math.max(0, resistance)) / 100);
-  addEquipmentLayerWear(itemWear, equipmentSources.filter(entry => entry.mode === DAMAGE_MITIGATION_MODES.resistance), {
+  const rawResistance = Math.max(0, actor.getDamageResistance?.(damageTypeKey, limbKey) ?? 0);
+  const resistancePenetration = Math.max(0, mitigationPenetration - defensePenetration);
+  const resistance = Math.max(0, rawResistance - resistancePenetration);
+  const resistanceProtected = Math.min(remaining, rawResistance);
+  const resistanceBlocked = Math.min(remaining, resistance);
+  addEquipmentProtectionWear(itemWear, resistanceSources, {
     incoming: remaining,
+    protectedAmount: resistanceProtected,
     blocked: resistanceBlocked
   });
   remaining = Math.max(0, remaining - resistanceBlocked);
-  const thresholdBlocked = Math.min(remaining, Math.max(0, reduction));
-  addEquipmentThresholdWear(itemWear, equipmentSources, thresholdBlocked);
   addEquipmentUnconditionalWear(itemWear, equipmentSources, incomingDamage);
-  const finalAmount = Math.max(0, remaining - reduction);
+  const finalAmount = remaining;
+  const overheatAmount = options.includeResistanceOverheat
+    ? roundHalfUp(resistanceBlocked * RESISTANCE_OVERHEAT_RATIO)
+    : 0;
   return {
     amount: finalAmount,
     display: null,
+    resistanceOverheat: overheatAmount > 0 ? {
+      damageTypeKey,
+      amount: overheatAmount,
+      blocked: resistanceBlocked
+    } : null,
     equipmentConditionDamage: options.includeEquipmentConditionDamage
       ? calculateEquipmentConditionDamage(actor, itemWear, {
         damageType: options.damageType,
@@ -2775,22 +2801,21 @@ function getEquipmentConditionDamageSources(actor, damageTypeKey = "", limbKey =
       item,
       itemId: item.id,
       mode: String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense),
-      mitigation: value,
-      finalReduction: Math.floor(Math.max(0, toInteger(mitigation.finalReduction)) * weakeningRatio)
+      mitigation: value
     });
   }
 
   return sources;
 }
 
-function addEquipmentLayerWear(itemWear, sources = [], { incoming = 0, blocked = 0 } = {}) {
+function addEquipmentProtectionWear(itemWear, sources = [], { incoming = 0, protectedAmount = 0, blocked = 0 } = {}) {
   const layerIncoming = Math.max(0, Math.floor(Number(incoming) || 0));
   if (!layerIncoming || !sources.length) return;
 
   const totalMitigation = sources.reduce((sum, source) => sum + Math.max(0, toInteger(source.mitigation)), 0);
   if (totalMitigation <= 0) return;
 
-  const protectedTotal = Math.floor((layerIncoming * Math.min(100, totalMitigation)) / 100);
+  const protectedTotal = Math.min(layerIncoming, Math.max(0, Math.floor(Number(protectedAmount) || 0)));
   if (!protectedTotal) return;
 
   const blockedTotal = Math.min(protectedTotal, Math.max(0, Math.floor(Number(blocked) || 0)));
@@ -2805,21 +2830,6 @@ function addEquipmentLayerWear(itemWear, sources = [], { incoming = 0, blocked =
     wear.blocked += blockedAmount;
     wear.penetrated += Math.max(0, protectedAmount - blockedAmount);
     wear.mitigation += Math.max(0, toInteger(source.mitigation));
-  }
-}
-
-function addEquipmentThresholdWear(itemWear, sources = [], thresholdBlocked = 0) {
-  const amount = Math.max(0, Math.floor(Number(thresholdBlocked) || 0));
-  if (!amount) return;
-
-  const reductionSources = sources.filter(source => source.finalReduction > 0);
-  const allocations = allocateIntegerByWeight(amount, reductionSources, source => source.finalReduction);
-  for (const source of reductionSources) {
-    const allocated = allocations.get(source.itemId) ?? 0;
-    if (!allocated) continue;
-    const wear = getOrCreateEquipmentWear(itemWear, source);
-    wear.thresholdBlocked += allocated;
-    wear.blocked += allocated;
   }
 }
 
@@ -2844,7 +2854,6 @@ function getOrCreateEquipmentWear(itemWear, source) {
       protected: 0,
       blocked: 0,
       penetrated: 0,
-      thresholdBlocked: 0,
       unconditional: 0,
       mitigation: 0
     };
@@ -2930,7 +2939,116 @@ function combineDamageMitigationDisplays(displays = []) {
 function getDamageMitigationPenetration(source = {}) {
   const penetrationPower = Math.max(0, toInteger(source?.penetrationPower));
   const penetrationStep = Math.max(0, toInteger(source?.penetrationStep));
-  return Math.max(0, penetrationPower - penetrationStep) * 10;
+  return Math.max(0, penetrationPower - penetrationStep);
+}
+
+async function applyResistanceOverheats(actor, entries = []) {
+  const totals = new Map();
+  for (const entry of entries ?? []) {
+    const damageTypeKey = String(entry?.damageTypeKey ?? "").trim();
+    const amount = Math.max(0, toInteger(entry?.amount));
+    if (!damageTypeKey || !amount) continue;
+    totals.set(damageTypeKey, (totals.get(damageTypeKey) ?? 0) + amount);
+  }
+  return applyResistanceOverheat(actor, totals);
+}
+
+async function applyResistanceOverheat(actor, increments = new Map()) {
+  if (!actor || !(increments instanceof Map) || !increments.size) return [];
+  const existing = Array.from(actor.effects ?? [])
+    .filter(effect => !effect.disabled && isResistanceOverheatEffect(effect));
+  const totals = getResistanceOverheatEffectTotals(existing);
+  for (const [damageTypeKey, amount] of increments) {
+    const key = String(damageTypeKey ?? "").trim();
+    const value = Math.max(0, toInteger(amount));
+    if (!key || !value) continue;
+    totals.set(key, (totals.get(key) ?? 0) + value);
+  }
+  const cleanTotals = new Map(Array.from(totals)
+    .map(([damageTypeKey, amount]) => [String(damageTypeKey ?? "").trim(), Math.max(0, toInteger(amount))])
+    .filter(([damageTypeKey, amount]) => damageTypeKey && amount));
+  if (!cleanTotals.size) return [];
+
+  const startTime = Number(game.time?.worldTime) || 0;
+  const flagData = {
+    kind: RESISTANCE_OVERHEAT_EFFECT_KIND,
+    resistances: Object.fromEntries(cleanTotals)
+  };
+  const changes = buildResistanceOverheatChanges(actor, cleanTotals);
+
+  if (existing[0]) {
+    const updates = [{
+      _id: existing[0].id,
+      name: RESISTANCE_OVERHEAT_EFFECT_NAME,
+      img: RESISTANCE_OVERHEAT_EFFECT_IMG,
+      disabled: false,
+      showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+      "duration.seconds": RESISTANCE_OVERHEAT_DURATION_SECONDS,
+      "duration.startTime": startTime,
+      "system.changes": changes,
+      [`flags.${TRAUMA_FLAG_SCOPE}.kind`]: "temporary",
+      [`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}`]: flagData
+    }];
+    const obsolete = existing.slice(1).map(effect => effect.id);
+    if (obsolete.length) await actor.deleteEmbeddedDocuments("ActiveEffect", obsolete, { animate: false });
+    return actor.updateEmbeddedDocuments("ActiveEffect", updates, { animate: false });
+  }
+
+  return actor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: RESISTANCE_OVERHEAT_EFFECT_NAME,
+    img: RESISTANCE_OVERHEAT_EFFECT_IMG,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    duration: {
+      seconds: RESISTANCE_OVERHEAT_DURATION_SECONDS,
+      startTime
+    },
+    flags: {
+      [TRAUMA_FLAG_SCOPE]: {
+        kind: "temporary",
+        [DAMAGE_EFFECT_FLAG_KEY]: flagData
+      }
+    },
+    system: { changes }
+  }], { animate: false });
+}
+
+function getResistanceOverheatEffectTotals(effects = []) {
+  const totals = new Map();
+  for (const effect of effects ?? []) {
+    const data = effect?.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY)
+      ?? effect?.flags?.[TRAUMA_FLAG_SCOPE]?.[DAMAGE_EFFECT_FLAG_KEY];
+    if (data?.kind !== RESISTANCE_OVERHEAT_EFFECT_KIND) continue;
+    for (const [damageTypeKey, amount] of Object.entries(data.resistances ?? {})) {
+      const key = String(damageTypeKey ?? "").trim();
+      const value = Math.max(0, toInteger(amount));
+      if (!key || !value) continue;
+      totals.set(key, (totals.get(key) ?? 0) + value);
+    }
+    const legacyDamageTypeKey = String(data.damageTypeKey ?? "").trim();
+    const legacyAmount = Math.max(0, toInteger(data.amount));
+    if (legacyDamageTypeKey && legacyAmount) {
+      totals.set(legacyDamageTypeKey, (totals.get(legacyDamageTypeKey) ?? 0) + legacyAmount);
+    }
+  }
+  return totals;
+}
+
+function buildResistanceOverheatChanges(actor, totals = new Map()) {
+  return Array.from(totals, ([damageTypeKey, amount]) => ({
+    key: `system.damageResistances.all.${damageTypeKey}`,
+    type: "add",
+    value: String(-Math.max(0, toInteger(amount))),
+    phase: "final",
+    priority: 0
+  }));
+}
+
+function isResistanceOverheatEffect(effect) {
+  const data = effect?.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY)
+    ?? effect?.flags?.[TRAUMA_FLAG_SCOPE]?.[DAMAGE_EFFECT_FLAG_KEY];
+  return data?.kind === RESISTANCE_OVERHEAT_EFFECT_KIND;
 }
 
 function calculateEquipmentConditionDamage(actor, itemWear = new Map(), { damageType = null, damageTypeKey = "", incoming = 0, final = 0, penetration = 0, state = null } = {}) {
@@ -2955,7 +3073,6 @@ function calculateEquipmentConditionDamage(actor, itemWear = new Map(), { damage
         blocked: wear.blocked,
         protected: wear.protected,
         penetrated: wear.penetrated,
-        thresholdBlocked: wear.thresholdBlocked,
         unconditional: wear.unconditional,
         condition,
         conditionMax,
@@ -3080,6 +3197,11 @@ function calculateLimbStateDamage(actor, limb, { healthDelta = 0, amount = 0, sc
 function roundDamageAmount(value) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.round(number)) : 0;
+}
+
+function roundHalfUp(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.floor(number + 0.5)) : 0;
 }
 
 function buildAccumulationUpdate(actor, limbKey, damageTypeKey, amount, mode) {

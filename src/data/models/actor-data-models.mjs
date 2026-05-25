@@ -63,13 +63,6 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       skills: new TypedObjectField(skillField(), { required: true, initial: {} }),
       researches: new ArrayField(researchField(), { required: true, initial: [] }),
       proficiencies: new TypedObjectField(resourceField(), { required: true, initial: {} }),
-      damageResistances: new TypedObjectField(
-        new TypedObjectField(new NumberField({ required: true, integer: true, initial: 0 }), {
-          required: true,
-          initial: {}
-        }),
-        { required: true, initial: {}, persisted: false }
-      ),
       damageDefenses: new TypedObjectField(
         new TypedObjectField(new NumberField({ required: true, integer: true, initial: 0 }), {
           required: true,
@@ -77,7 +70,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         }),
         { required: true, initial: {}, persisted: false }
       ),
-      damageReductions: new TypedObjectField(
+      damageResistances: new TypedObjectField(
         new TypedObjectField(new NumberField({ required: true, integer: true, initial: 0 }), {
           required: true,
           initial: {}
@@ -109,9 +102,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.needs ??= {};
     this.limbs ??= {};
     this.currencies ??= {};
-    this.damageResistances ??= {};
     this.damageDefenses ??= {};
-    this.damageReductions ??= {};
+    this.damageResistances ??= {};
     this.development ??= {};
 
     const baseCharacteristics = normalizeNumberMap(this.characteristics, characteristicSettings);
@@ -164,7 +156,18 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       defaultToMin: true
     }));
 
-    const baseDamageResistances = buildLimbDamageResistanceMap(
+    const baseDamageDefenses = buildLimbDamageDefenseMap(
+      this.limbs,
+      evaluateFormulaMap(
+        getRaceDamageDefenseFormulas(race, damageTypeSettings),
+        damageTypeSettings,
+        characteristicSettings,
+        skillSettings,
+        this.characteristics,
+        skillValues
+      )
+    );
+    const baseDamageResistances = buildLimbDamageDefenseMap(
       this.limbs,
       evaluateFormulaMap(
         getRaceDamageResistanceFormulas(race, damageTypeSettings),
@@ -176,9 +179,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       )
     );
     const itemMitigation = buildEquippedItemDamageMitigation(this.parent?.items, this.limbs, damageTypeSettings);
+    replaceObjectContents(this.damageDefenses, mergeLimbDamageMaps(baseDamageDefenses, itemMitigation.defenses));
     replaceObjectContents(this.damageResistances, mergeLimbDamageMaps(baseDamageResistances, itemMitigation.resistances));
-    replaceObjectContents(this.damageDefenses, itemMitigation.defenses);
-    replaceObjectContents(this.damageReductions, itemMitigation.reductions);
   }
 }
 
@@ -203,8 +205,12 @@ export class HazardDataModel extends BaseActorDataModel {
   }
 }
 
+function getRaceDamageDefenseFormulas(race, damageTypeSettings) {
+  return normalizeFormulaMap(race?.damageDefenses ?? race?.damageResistances, damageTypeSettings);
+}
+
 function getRaceDamageResistanceFormulas(race, damageTypeSettings) {
-  return normalizeFormulaMap(race?.damageResistances, damageTypeSettings);
+  return normalizeFormulaMap(race?.damageDefenses ? race?.damageResistances : {}, damageTypeSettings);
 }
 
 function skillField() {
@@ -361,12 +367,6 @@ function normalizeDamageAccumulation(value = {}) {
   );
 }
 
-function buildLimbDamageResistanceMap(limbs = {}, resistanceValues = {}) {
-  return Object.fromEntries(
-    Object.keys(limbs ?? {}).map(limbKey => [limbKey, { ...resistanceValues }])
-  );
-}
-
 function normalizeProficiencyMap(currentProficiencies = {}, proficiencySettings = []) {
   return Object.fromEntries(
     proficiencySettings.map(proficiency => {
@@ -389,10 +389,15 @@ function buildEmptyLimbDamageMap(limbs = {}, damageTypeSettings = []) {
   );
 }
 
+function buildLimbDamageDefenseMap(limbs = {}, defenseValues = {}) {
+  return Object.fromEntries(
+    Object.keys(limbs ?? {}).map(limbKey => [limbKey, { ...defenseValues }])
+  );
+}
+
 function buildEquippedItemDamageMitigation(items, limbs = {}, damageTypeSettings = []) {
   const defenses = buildEmptyLimbDamageMap(limbs, damageTypeSettings);
   const resistances = buildEmptyLimbDamageMap(limbs, damageTypeSettings);
-  const reductions = buildEmptyLimbDamageMap(limbs, damageTypeSettings);
   const limbKeys = new Set(Object.keys(limbs ?? {}));
   const damageTypeKeys = new Set(damageTypeSettings.map(damageType => damageType.key));
 
@@ -400,7 +405,6 @@ function buildEquippedItemDamageMitigation(items, limbs = {}, damageTypeSettings
     if (item.type !== "gear" || !item.system?.equipped || !hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation)) continue;
     const mitigation = getDamageMitigationFunction(item);
     const mode = String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense);
-    const finalReduction = Math.max(0, toInteger(mitigation.finalReduction));
     const weakening = getConditionWeakeningData(item);
     const weakeningRatio = weakening.active ? weakening.ratio : 1;
 
@@ -412,16 +416,13 @@ function buildEquippedItemDamageMitigation(items, limbs = {}, damageTypeSettings
         const value = baseValue > 0 ? Math.floor(baseValue * weakeningRatio) : baseValue;
         if (!value) continue;
 
-        if (mode === DAMAGE_MITIGATION_MODES.defense) defenses[limbKey][damageTypeKey] += value;
-        else if (mode === DAMAGE_MITIGATION_MODES.resistance) resistances[limbKey][damageTypeKey] += value;
-        else continue;
-
-        reductions[limbKey][damageTypeKey] += Math.floor(finalReduction * weakeningRatio);
+        if (mode === DAMAGE_MITIGATION_MODES.resistance) resistances[limbKey][damageTypeKey] += value;
+        else defenses[limbKey][damageTypeKey] += value;
       }
     }
   }
 
-  return { defenses, resistances, reductions };
+  return { defenses, resistances };
 }
 
 function mergeLimbDamageMaps(base = {}, bonus = {}) {

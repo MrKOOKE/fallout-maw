@@ -18,6 +18,7 @@ import {
   getUniqueLimbSets,
   normalizeTraumaSettings
 } from "../settings/traumas.mjs";
+import { buildDamageMitigationEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 
 export class TraumaSettingsConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
@@ -436,6 +437,7 @@ function buildEffectKeyTokens() {
       path: `system.proficiencies.${entry.key}.bonus`,
       group: "Владения"
     })),
+    ...buildDamageMitigationEffectKeyTokens(),
     createEffectKeyToken({ code: "blind", key: "blind", label: "Слепота", path: "status.blind", group: "Статусы" }),
     createEffectKeyToken({ code: "moveCost", key: "movement", label: "Стоимость перемещения", path: "system.costs.movement", group: "Стоимость" }),
     createEffectKeyToken({ code: "actionCost", key: "action", label: "Стоимость действий", path: "system.costs.action", group: "Стоимость" })

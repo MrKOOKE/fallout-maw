@@ -2,12 +2,14 @@ import { TEMPLATES } from "../constants.mjs";
 import { createDefaultNeedSettings, IDENTIFIER_PATTERN, validateFormula } from "../formulas/index.mjs";
 import {
   getCharacteristicSettings,
+  getDamageTypeSettings,
   getNeedSettings,
   getProficiencySettings,
   getResourceSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
 import { format, localize } from "../utils/i18n.mjs";
+import { buildDamageMitigationEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateEffectKeyAutocomplete, createEffectKeyToken } from "./effect-key-autocomplete.mjs";
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
@@ -533,6 +535,7 @@ function buildEffectKeyTokens() {
       label: entry.label,
       path: `system.proficiencies.${entry.key}.bonus`,
       group: "Владения"
-    }))
+    })),
+    ...buildDamageMitigationEffectKeyTokens()
   ].filter(Boolean);
 }

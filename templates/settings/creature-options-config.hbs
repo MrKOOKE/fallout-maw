@@ -240,13 +240,28 @@
         </div>
       </section>
 
+      <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.defenses.cssClass}}" data-creature-section="defenses">
+        <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
+          <button type="button" data-creature-section-toggle aria-expanded="{{sections.defenses.ariaExpanded}}"><i class="fa-solid {{sections.defenses.iconClass}}"></i><span>{{localize "FALLOUTMAW.Common.DamageDefenses"}}</span></button>
+        </header>
+        <p class="hint">{{localize "FALLOUTMAW.Settings.CreatureOptions.DamageDefenseFormulaHint"}}</p>
+        <div class="fallout-maw-list-grid two-columns">
+          {{#each damageTypes}}
+          <label>
+            <span>{{label}}</span>
+            <input type="text" name="race.damageDefenses.{{key}}" value="{{formula}}" data-formula-autocomplete="all">
+          </label>
+          {{/each}}
+        </div>
+      </section>
+
       <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.resistances.cssClass}}" data-creature-section="resistances">
         <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
           <button type="button" data-creature-section-toggle aria-expanded="{{sections.resistances.ariaExpanded}}"><i class="fa-solid {{sections.resistances.iconClass}}"></i><span>{{localize "FALLOUTMAW.Common.DamageResistances"}}</span></button>
         </header>
-        <p class="hint">{{localize "FALLOUTMAW.Settings.CreatureOptions.DamageFormulaHint"}}</p>
+        <p class="hint">{{localize "FALLOUTMAW.Settings.CreatureOptions.DamageResistanceFormulaHint"}}</p>
         <div class="fallout-maw-list-grid two-columns">
-          {{#each damageTypes}}
+          {{#each resistanceDamageTypes}}
           <label>
             <span>{{label}}</span>
             <input type="text" name="race.damageResistances.{{key}}" value="{{formula}}" data-formula-autocomplete="all">

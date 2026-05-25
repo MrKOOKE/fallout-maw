@@ -8,6 +8,7 @@ import {
   getSelectedDamageMitigationLimbSetIds
 } from "../utils/damage-mitigation-display.mjs";
 import {
+  DAMAGE_MITIGATION_MODES,
   ITEM_FUNCTIONS,
   createToolFunctionKey,
   getDamageSourceFunction,
@@ -502,7 +503,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       this.#functionPickerActive = false;
       return this.item.update({
         "system.functions.damageMitigation.enabled": true,
-        "system.functions.damageMitigation.mode": "defense"
+        "system.functions.damageMitigation.mode": DAMAGE_MITIGATION_MODES.defense
       });
     }
 
@@ -2563,10 +2564,17 @@ function isWorldDamageSourceItem(item) {
 }
 
 function buildDamageMitigationModeChoices(item) {
-  const mode = String(item.system?.functions?.damageMitigation?.mode || "defense");
+  const mode = String(item.system?.functions?.damageMitigation?.mode || DAMAGE_MITIGATION_MODES.defense);
   return [
-    { value: "defense", label: game.i18n.localize("FALLOUTMAW.Item.MitigationModeDefense"), selected: mode === "defense" },
-    { value: "resistance", label: game.i18n.localize("FALLOUTMAW.Item.MitigationModeResistance"), selected: mode === "resistance" }
+    {
+      value: DAMAGE_MITIGATION_MODES.defense,
+      label: game.i18n.localize("FALLOUTMAW.Item.MitigationModeDefense"),
+      selected: mode === DAMAGE_MITIGATION_MODES.defense
+    },
+    {
+      value: DAMAGE_MITIGATION_MODES.resistance,
+      label: game.i18n.localize("FALLOUTMAW.Item.MitigationModeResistance"),
+      selected: mode === DAMAGE_MITIGATION_MODES.resistance
+    }
   ];
 }
-

@@ -3,6 +3,7 @@ import { escapeHtml, getHtmlRoot } from "../utils/dom.mjs";
 const FORMULA_INPUT_SELECTOR = "input[data-formula-autocomplete]";
 const IDENTIFIER_BEFORE_CARET = /[\p{L}_][\p{L}\p{N}_]*$/u;
 const MAX_SUGGESTIONS = 10;
+const MENU_VIEWPORT_PADDING = 12;
 
 export function activateFormulaAutocomplete(html, { characteristics = [], skills = [] } = {}) {
   const root = getHtmlRoot(html);
@@ -168,9 +169,19 @@ class FormulaAutocomplete {
   #position() {
     if (!this.menu) return;
     const rect = this.input.getBoundingClientRect();
-    this.menu.style.left = `${rect.left}px`;
     this.menu.style.top = `${rect.bottom + 2}px`;
-    this.menu.style.width = `${Math.max(rect.width, 220)}px`;
+    const minWidth = Math.max(rect.width, 220);
+    const maxWidth = Math.max(minWidth, window.innerWidth - (MENU_VIEWPORT_PADDING * 2));
+
+    this.menu.style.minWidth = `${minWidth}px`;
+    this.menu.style.maxWidth = `${maxWidth}px`;
+    this.menu.style.width = "max-content";
+
+    const width = Math.min(Math.max(this.menu.scrollWidth, minWidth), maxWidth);
+    const leftMax = window.innerWidth - width - MENU_VIEWPORT_PADDING;
+    const left = Math.min(Math.max(rect.left, MENU_VIEWPORT_PADDING), leftMax);
+    this.menu.style.left = `${Math.max(MENU_VIEWPORT_PADDING, left)}px`;
+    this.menu.style.width = `${width}px`;
   }
 
   #setActive(index) {

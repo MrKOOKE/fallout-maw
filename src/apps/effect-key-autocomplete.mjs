@@ -3,6 +3,7 @@ import { escapeHtml, getHtmlRoot } from "../utils/dom.mjs";
 const EFFECT_KEY_INPUT_SELECTOR = "input[data-effect-key-autocomplete]";
 const TOKEN_BEFORE_CARET = /[\p{L}_][\p{L}\p{N}_]*$/u;
 const MAX_SUGGESTIONS = 12;
+const MENU_VIEWPORT_PADDING = 12;
 
 export function activateEffectKeyAutocomplete(html, tokens = []) {
   const root = getHtmlRoot(html);
@@ -135,7 +136,7 @@ class EffectKeyAutocomplete {
   #render() {
     if (!this.menu) {
       this.menu = document.createElement("div");
-      this.menu.className = "fallout-maw-formula-autocomplete";
+      this.menu.className = "fallout-maw-formula-autocomplete fallout-maw-effect-key-autocomplete";
       this.menu.addEventListener("mousedown", event => event.preventDefault());
       document.body.appendChild(this.menu);
     }
@@ -164,9 +165,19 @@ class EffectKeyAutocomplete {
   #position() {
     if (!this.menu) return;
     const rect = this.input.getBoundingClientRect();
-    this.menu.style.left = `${rect.left}px`;
     this.menu.style.top = `${rect.bottom + 2}px`;
-    this.menu.style.width = `${Math.max(rect.width, 300)}px`;
+    const minWidth = Math.max(rect.width, 300);
+    const maxWidth = Math.max(minWidth, window.innerWidth - (MENU_VIEWPORT_PADDING * 2));
+
+    this.menu.style.minWidth = `${minWidth}px`;
+    this.menu.style.maxWidth = `${maxWidth}px`;
+    this.menu.style.width = "max-content";
+
+    const width = Math.min(Math.max(this.menu.scrollWidth, minWidth), maxWidth);
+    const leftMax = window.innerWidth - width - MENU_VIEWPORT_PADDING;
+    const left = Math.min(Math.max(rect.left, MENU_VIEWPORT_PADDING), leftMax);
+    this.menu.style.left = `${Math.max(MENU_VIEWPORT_PADDING, left)}px`;
+    this.menu.style.width = `${width}px`;
   }
 
   #setActive(index) {

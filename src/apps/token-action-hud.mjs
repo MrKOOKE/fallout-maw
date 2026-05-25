@@ -43,7 +43,7 @@ import {
   getContextInventoryItems,
   getItemQuantity
 } from "../utils/inventory-containers.mjs";
-import { ITEM_FUNCTIONS, getConditionFunction, getConditionWeakeningData, getDamageMitigationFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction, isActiveItem } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, getConditionFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction, isActiveItem } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
@@ -67,12 +67,14 @@ const TOKEN_ACTION_HUD_SCALE_DEFAULT = 50;
 const TOKEN_ACTION_HUD_SCALE_MIN = 25;
 const TOKEN_ACTION_HUD_SCALE_MAX = 100;
 const HUD_METER_SECTION_KEYS = Object.freeze(["resources", "needs"]);
-const HUD_LIMB_LAYER_KEYS = Object.freeze(["state", "defense", "resistance", "reduction"]);
+const HUD_LIMB_LAYER_KEYS = Object.freeze(["state", "defense", "resistance"]);
 const HUD_LIMB_LAYERS = Object.freeze([
   { key: "state", label: "Состояние" },
-  { key: "defense", label: "Защита" },
-  { key: "resistance", label: "Сопротивление" },
-  { key: "reduction", label: "Итоговое снижение" }
+  { key: "defense", label: "Защита" }
+]);
+const HUD_LIMB_LAYER_CHOICES = Object.freeze([
+  ...HUD_LIMB_LAYERS,
+  { key: "resistance", label: "Сопротивление" }
 ]);
 const HUD_SILENT_ITEM_UPDATE_PATHS = new Set([
   "system.functions.weapon.magazine.value",
@@ -1537,8 +1539,8 @@ function prepareLimbLayerContext(activeLayer = "state") {
   const active = HUD_LIMB_LAYER_KEYS.includes(activeLayer) ? activeLayer : "state";
   return {
     key: active,
-    label: HUD_LIMB_LAYERS.find(layer => layer.key === active)?.label ?? "Состояние",
-    choices: HUD_LIMB_LAYERS.map(layer => ({
+    label: HUD_LIMB_LAYER_CHOICES.find(layer => layer.key === active)?.label ?? "Состояние",
+    choices: HUD_LIMB_LAYER_CHOICES.filter(layer => HUD_LIMB_LAYER_KEYS.includes(layer.key)).map(layer => ({
       ...layer,
       selected: layer.key === active
     }))
@@ -1551,28 +1553,27 @@ function prepareDisplayLimbs(actor, layer = "state") {
     prepareLimbDisplayData(actor, key, limb)
   ]));
   if (layer === "defense" || layer === "resistance") return prepareMitigationLayerLimbs(actor, baseLimbs, layer);
-  if (layer === "reduction") return prepareReductionLayerLimbs(actor, baseLimbs);
   return baseLimbs;
 }
 
 function prepareMitigationLayerLimbs(actor, limbs = {}, layer = "defense") {
   const damageTypes = getDamageTypeSettings();
-  const source = layer === "defense" ? actor.system?.damageDefenses : actor.system?.damageResistances;
+  const source = layer === "resistance" ? actor.system?.damageResistances : actor.system?.damageDefenses;
   return Object.fromEntries(Object.entries(limbs ?? {}).map(([key, limb]) => {
     const rows = damageTypes.map(damageType => {
       const value = toInteger(source?.[key]?.[damageType.key]);
       return {
         label: String(damageType.label ?? damageType.key),
         value,
-        display: `${value}%`
+        display: formatSignedNumber(value)
       };
     });
-    const score = averageMitigationPercent(rows.map(row => row.value));
+    const score = averageMitigationValue(rows.map(row => row.value));
     return [key, {
       ...limb,
       fill: getMitigationLayerColor(score),
-      displayValue: `${formatSignedNumber(score)}%`,
-      displayMax: "100%",
+      displayValue: formatSignedNumber(score),
+      displayMax: "",
       popoverRows: rows.map(row => ({
         label: row.label,
         value: row.display
@@ -1581,24 +1582,7 @@ function prepareMitigationLayerLimbs(actor, limbs = {}, layer = "defense") {
   }));
 }
 
-function prepareReductionLayerLimbs(actor, limbs = {}) {
-  const reductions = getFlatLimbFinalReductions(actor);
-  return Object.fromEntries(Object.entries(limbs ?? {}).map(([key, limb]) => {
-    const value = toInteger(reductions[key]);
-    return [key, {
-      ...limb,
-      fill: getMitigationLayerColor(value),
-      displayValue: formatSignedNumber(value),
-      displayMax: "100",
-      popoverRows: [{
-        label: "Итоговое снижение",
-        value: formatSignedNumber(value)
-      }]
-    }];
-  }));
-}
-
-function averageMitigationPercent(values = []) {
+function averageMitigationValue(values = []) {
   if (!values.length) return 0;
   const total = values.reduce((sum, value) => sum + Math.max(-100, Math.min(100, toInteger(value))), 0);
   return Math.round(total / values.length);
@@ -1620,26 +1604,6 @@ function mixColor(from, to, ratio) {
 function formatSignedNumber(value) {
   const number = toInteger(value);
   return number > 0 ? `+${number}` : String(number);
-}
-
-function getFlatLimbFinalReductions(actor) {
-  const result = Object.fromEntries(Object.keys(actor.system?.limbs ?? {}).map(key => [key, 0]));
-  for (const item of actor.items?.contents ?? []) {
-    if (item.type !== "gear" || !item.system?.equipped || !hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation)) continue;
-    const mitigation = getDamageMitigationFunction(item);
-    const weakening = getConditionWeakeningData(item);
-    const finalReduction = Math.floor(Math.max(0, toInteger(mitigation.finalReduction)) * (weakening.active ? weakening.ratio : 1));
-    if (!finalReduction) continue;
-    for (const [limbKey, damageEntries] of Object.entries(mitigation.entries ?? {})) {
-      if (!Object.hasOwn(result, limbKey) || !hasAnyMitigationEntry(damageEntries)) continue;
-      result[limbKey] += finalReduction;
-    }
-  }
-  return result;
-}
-
-function hasAnyMitigationEntry(damageEntries = {}) {
-  return Object.values(damageEntries ?? {}).some(entry => toInteger(entry?.value) !== 0);
 }
 
 function parseLimbPopoverRows(target) {

@@ -28,7 +28,7 @@ const DEFAULT_RESOURCE_LIMIT_RESOURCES = Object.freeze([
   Object.freeze({ resourceKey: "actionPoints", percent: 100 }),
   Object.freeze({ resourceKey: "movementPoints", percent: 100 })
 ]);
-const DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA = "protected + thresholdBlocked * 0.5 + unconditional";
+const DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA = "protected + unconditional";
 const DEFAULT_NEED_COLORS = Object.freeze({
   hunger: "#c9a24a",
   thirst: "#58a6d6",
@@ -130,7 +130,7 @@ const DEFAULT_DAMAGE_TYPE_SETTINGS_BY_KEY = Object.freeze({
   acid: Object.freeze({
     equipmentConditionDamage: Object.freeze({
       enabled: true,
-      formula: "(protected + thresholdBlocked * 0.5) * 3 + unconditional"
+      formula: "protected * 3 + unconditional"
     })
   }),
   cryo: Object.freeze({

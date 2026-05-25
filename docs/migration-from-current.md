@@ -26,7 +26,6 @@ This refactor keeps the existing game concepts and splits them into smaller doma
 - Configurable characteristics, skills, damage types, creature types, and races.
 - Formula-based skill values.
 - Formula-based action/movement resource maximums.
-- Formula-based race damage resistances.
 - Actor creation dialog race/type picker.
 
 ## Not runtime-tested here

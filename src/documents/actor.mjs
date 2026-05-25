@@ -11,6 +11,7 @@ import {
   getCharacteristicSettings,
   getCreatureOptions,
   getCurrencySettings,
+  getDamageTypeSettings,
   getLevelSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
@@ -105,6 +106,57 @@ export class FalloutMaWActor extends Actor {
     prepareActorLoadData(this);
   }
 
+  applyActiveEffects(phase) {
+    const ActiveEffect = getDocumentClass("ActiveEffect");
+    if (typeof phase !== "string") {
+      phase = this._completedActiveEffectPhases?.has("initial") ? "final" : "initial";
+      console.warn('Actor#applyActiveEffects must be called with a string phase identifier, with "initial" as the first phase.');
+    } else if (!(phase in ActiveEffect.CHANGE_PHASES)) {
+      console.error(`"${phase}" is not a registered ActiveEffect application phase.`);
+      return;
+    }
+    this._completedActiveEffectPhases ??= new Set();
+    if (this._completedActiveEffectPhases.has(phase)) {
+      console.error(`ActiveEffect application phase "${phase}" has already completed and cannot be run again.`);
+      return;
+    }
+    this._completedActiveEffectPhases.add(phase);
+
+    const changes = [];
+    const tokenChanges = [];
+    for (const effect of this.allApplicableEffects()) {
+      if (!effect.active) continue;
+      for (const change of effect.system.changes) {
+        if ((change.key === "") || (change.phase !== phase)) continue;
+        for (const expandedChange of expandAllLimbEffectChange(this, change)) {
+          const copy = foundry.utils.deepClone(expandedChange);
+          copy.effect = effect;
+          if (copy.key?.startsWith("token.")) {
+            copy.key = copy.key.slice(6);
+            tokenChanges.push(copy);
+          } else {
+            changes.push(copy);
+          }
+        }
+      }
+      if (phase === "initial") {
+        for (const statusId of effect.statuses) this.statuses.add(statusId);
+      }
+    }
+    changes.sort((a, b) => a.priority - b.priority);
+    ActiveEffect._shimChanges(changes);
+    this.tokenActiveEffectChanges[phase] = tokenChanges;
+
+    const overrides = {};
+    const replacementData = this.getRollData();
+    for (const change of changes) {
+      const result = ActiveEffect.applyChange(this, change, { replacementData });
+      if (foundry.utils.isPlainObject(result)) Object.assign(overrides, result);
+    }
+
+    foundry.utils.mergeObject(this.overrides, foundry.utils.expandObject(overrides));
+  }
+
   get health() {
     return this.system?.resources?.health;
   }
@@ -197,19 +249,14 @@ export class FalloutMaWActor extends Actor {
     return this.update({ "system.researches": nextResearches });
   }
 
-  getDamageResistance(damageTypeKey, limbKey = "") {
-    const resolvedLimbKey = limbKey || Object.keys(this.system?.limbs ?? {})[0] || "";
-    return Math.floor(Number(this.system?.damageResistances?.[resolvedLimbKey]?.[damageTypeKey]) || 0);
-  }
-
   getDamageDefense(damageTypeKey, limbKey = "") {
     const resolvedLimbKey = limbKey || Object.keys(this.system?.limbs ?? {})[0] || "";
     return Math.floor(Number(this.system?.damageDefenses?.[resolvedLimbKey]?.[damageTypeKey]) || 0);
   }
 
-  getDamageReduction(damageTypeKey, limbKey = "") {
+  getDamageResistance(damageTypeKey, limbKey = "") {
     const resolvedLimbKey = limbKey || Object.keys(this.system?.limbs ?? {})[0] || "";
-    return Math.floor(Number(this.system?.damageReductions?.[resolvedLimbKey]?.[damageTypeKey]) || 0);
+    return Math.floor(Number(this.system?.damageResistances?.[resolvedLimbKey]?.[damageTypeKey]) || 0);
   }
 
   async applyDamage(amount = 0, { damageTypeKey = "", limbKey = "" } = {}) {
@@ -227,6 +274,29 @@ export class FalloutMaWActor extends Actor {
     return this;
   }
 
+}
+
+const DAMAGE_MITIGATION_EFFECT_KEY_PATTERN = /^system\.(damageDefenses|damageResistances)\.([^.]+)\.([^.]+)$/;
+const ALL_LIMB_SELECTORS = new Set(["all", "allLimbs", "*"]);
+const ALL_DAMAGE_TYPE_SELECTORS = new Set(["all", "allDamageTypes", "*"]);
+
+function expandAllLimbEffectChange(actor, change = {}) {
+  const match = String(change.key ?? "").trim().match(DAMAGE_MITIGATION_EFFECT_KEY_PATTERN);
+  if (!match) return [change];
+  const [, mitigationKey, limbSelector, damageTypeSelector] = match;
+  if (!ALL_LIMB_SELECTORS.has(limbSelector) && !ALL_DAMAGE_TYPE_SELECTORS.has(damageTypeSelector)) return [change];
+
+  const limbKeys = ALL_LIMB_SELECTORS.has(limbSelector)
+    ? Object.keys(actor.system?.limbs ?? {})
+    : [limbSelector];
+  const damageTypeKeys = ALL_DAMAGE_TYPE_SELECTORS.has(damageTypeSelector)
+    ? getDamageTypeSettings().map(damageType => damageType.key).filter(Boolean)
+    : [damageTypeSelector];
+
+  return limbKeys.flatMap(limbKey => damageTypeKeys.map(damageTypeKey => ({
+    ...change,
+    key: `system.${mitigationKey}.${limbKey}.${damageTypeKey}`
+  })));
 }
 
 function applyCreatureRaceDefaults(actor) {

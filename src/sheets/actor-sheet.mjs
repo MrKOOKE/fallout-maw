@@ -2604,11 +2604,7 @@ function buildDamageMitigationTooltipSection(item, actor) {
   const modeLabel = mode === DAMAGE_MITIGATION_MODES.resistance
     ? game.i18n.localize("FALLOUTMAW.Item.MitigationModeResistance")
     : game.i18n.localize("FALLOUTMAW.Item.MitigationModeDefense");
-  const rows = [
-    [game.i18n.localize("FALLOUTMAW.Item.MitigationMode"), modeLabel]
-  ];
-  const finalReduction = Math.max(0, toInteger(mitigation.finalReduction));
-  if (finalReduction) rows.push([game.i18n.localize("FALLOUTMAW.Item.FinalDamageReduction"), finalReduction]);
+  const rows = [[game.i18n.localize("FALLOUTMAW.Item.MitigationMode"), modeLabel]];
   const tableHTML = renderDamageMitigationTooltipTables(buildDamageMitigationTables(item, getCreatureOptions(), getDamageTypeSettings(), {
     actorRaceId: actor?.system?.creature?.raceId ?? ""
   }));
@@ -3932,9 +3928,8 @@ function buildEffectPathLabelMap({
     value: valueLabel,
     max: maximumLabel
   });
-  addDamageEffectPathLabels(map, "system.damageResistances", game.i18n.localize("FALLOUTMAW.Common.DamageResistances"), limbs, damageTypeSettings);
   addDamageEffectPathLabels(map, "system.damageDefenses", game.i18n.localize("FALLOUTMAW.Common.DamageDefenses"), limbs, damageTypeSettings);
-  addDamageEffectPathLabels(map, "system.damageReductions", localizeOrFallback("FALLOUTMAW.Common.DamageReductions", "Damage Reduction"), limbs, damageTypeSettings);
+  addDamageEffectPathLabels(map, "system.damageResistances", game.i18n.localize("FALLOUTMAW.Common.DamageResistances"), limbs, damageTypeSettings);
 
   return map;
 }
@@ -3951,10 +3946,22 @@ function addEffectPathLabels(map, rootPath, entries = [], fields = {}) {
 }
 
 function addDamageEffectPathLabels(map, rootPath, rootLabel, limbs = [], damageTypes = []) {
+  const allLabel = localizeOrFallback("FALLOUTMAW.Common.All", "Все");
+  const allLimbsLabel = `${allLabel} ${localizeOrFallback("FALLOUTMAW.Common.Limbs", "части тела").toLocaleLowerCase()}`;
+  const allDamageTypesLabel = `${allLabel} ${localizeOrFallback("FALLOUTMAW.Common.DamageTypes", "типы урона").toLocaleLowerCase()}`;
+  map.set(`${rootPath}.all.all`, `${rootLabel}: ${allLimbsLabel}, ${allDamageTypesLabel}`);
+  for (const damageType of damageTypes) {
+    const damageTypeKey = String(damageType?.key ?? "");
+    const damageTypeLabel = String(damageType?.label ?? damageTypeKey);
+    if (!damageTypeKey) continue;
+    map.set(`${rootPath}.all.${damageTypeKey}`, `${rootLabel}: ${allLimbsLabel}, ${damageTypeLabel}`);
+  }
+
   for (const limb of limbs) {
     const limbKey = String(limb?.key ?? "");
     const limbLabel = String(limb?.label ?? limbKey);
     if (!limbKey) continue;
+    map.set(`${rootPath}.${limbKey}.all`, `${rootLabel}: ${limbLabel}, ${allDamageTypesLabel}`);
     for (const damageType of damageTypes) {
       const damageTypeKey = String(damageType?.key ?? "");
       const damageTypeLabel = String(damageType?.label ?? damageTypeKey);

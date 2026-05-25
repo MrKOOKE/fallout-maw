@@ -6882,9 +6882,11 @@ label.fallout-maw-mitigation-cell {
   background: #17131b;
   border: 1px solid rgba(210, 185, 145, 0.55);
   border-radius: 5px;
+  box-sizing: border-box;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
   color: #efe0c4;
   max-height: 220px;
+  overflow-x: hidden;
   overflow-y: auto;
   position: fixed;
   z-index: 99999;
@@ -6925,6 +6927,23 @@ label.fallout-maw-mitigation-cell {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.fallout-maw-effect-key-autocomplete .fallout-maw-formula-autocomplete-option {
+  min-width: max-content;
+}
+
+.fallout-maw-effect-key-autocomplete .fallout-maw-formula-autocomplete-option strong {
+  flex: 0 0 auto;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.fallout-maw-effect-key-autocomplete .fallout-maw-formula-autocomplete-option span {
+  flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .application.fallout-maw-actor-sheet {

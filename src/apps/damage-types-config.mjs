@@ -295,8 +295,8 @@ function normalizeSettingsFromForm(settings = {}) {
     },
     equipmentConditionDamage: {
       enabled: toBoolean(settings.equipmentConditionDamage?.enabled, true),
-      formula: String(settings.equipmentConditionDamage?.formula ?? "protected + thresholdBlocked * 0.5 + unconditional").trim()
-        || "protected + thresholdBlocked * 0.5 + unconditional"
+      formula: String(settings.equipmentConditionDamage?.formula ?? "protected + unconditional").trim()
+        || "protected + unconditional"
     }
   };
 }

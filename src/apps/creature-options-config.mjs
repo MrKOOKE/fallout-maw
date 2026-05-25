@@ -16,6 +16,7 @@ import {
   createRaceDefaults
 } from "../settings/creature-options.mjs";
 import { format, localize } from "../utils/i18n.mjs";
+import { buildDamageMitigationEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateEffectKeyAutocomplete, createEffectKeyToken } from "./effect-key-autocomplete.mjs";
@@ -25,7 +26,7 @@ import { NeedAdvancedSettingsConfig } from "./need-settings-config.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
-const CREATURE_SECTION_KEYS = Object.freeze(["type", "race", "base", "development", "limbs", "equipment", "inventory", "resistances", "needs"]);
+const CREATURE_SECTION_KEYS = Object.freeze(["type", "race", "base", "development", "limbs", "equipment", "inventory", "defenses", "resistances", "needs"]);
 
 export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
   #editorMode = "type";
@@ -130,6 +131,10 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       })),
       inventorySize: selectedRace?.inventorySize ?? createDefaultInventorySize(),
       damageTypes: damageTypes.map(damageType => ({
+        ...damageType,
+        formula: String(selectedRace?.damageDefenses?.[damageType.key] ?? selectedRace?.damageResistances?.[damageType.key] ?? "0")
+      })),
+      resistanceDamageTypes: damageTypes.map(damageType => ({
         ...damageType,
         formula: String(selectedRace?.damageResistances?.[damageType.key] ?? "0")
       })),
@@ -507,6 +512,12 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       columns: Math.max(1, toInteger(formData.race?.inventorySize?.columns ?? createDefaultInventorySize().columns)),
       rows: Math.max(1, toInteger(formData.race?.inventorySize?.rows ?? createDefaultInventorySize().rows))
     };
+    race.damageDefenses = Object.fromEntries(
+      getDamageTypeSettings().map(damageType => [
+        damageType.key,
+        String(formData.race?.damageDefenses?.[damageType.key] ?? "0").trim() || "0"
+      ])
+    );
     race.damageResistances = Object.fromEntries(
       getDamageTypeSettings().map(damageType => [
         damageType.key,
@@ -586,14 +597,23 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     const characteristics = getCharacteristicSettings();
     const skills = getSkillSettings();
     const damageTypes = getDamageTypeSettings();
-
     for (const race of this.creatureOptions.races) {
+      for (const damageType of damageTypes) {
+        const formula = race.damageDefenses?.[damageType.key] ?? "0";
+        try {
+          validateFormula(formula, { allowSkills: true, characteristics, skills });
+        } catch (error) {
+          const label = `${race.name || race.id} / ${damageType.label || damageType.key}`;
+          ui.notifications.error(`${label}: ${error.message}`);
+          throw error;
+        }
+      }
       for (const damageType of damageTypes) {
         const formula = race.damageResistances?.[damageType.key] ?? "0";
         try {
           validateFormula(formula, { allowSkills: true, characteristics, skills });
         } catch (error) {
-          const label = `${race.name || race.id} / ${damageType.label || damageType.key}`;
+          const label = `${race.name || race.id} / ${game.i18n.localize("FALLOUTMAW.Common.DamageResistances")} / ${damageType.label || damageType.key}`;
           ui.notifications.error(`${label}: ${error.message}`);
           throw error;
         }
@@ -821,6 +841,7 @@ function buildEffectKeyTokens() {
     ...getResourceSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.resources.${entry.key}.bonus`, group: "Ресурсы" })),
     ...getNeedSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.needs.${entry.key}.bonus`, group: "Потребности" })),
     ...getProficiencySettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.proficiencies.${entry.key}.bonus`, group: "Владения" })),
+    ...buildDamageMitigationEffectKeyTokens(),
     createEffectKeyToken({ code: "blind", key: "blind", label: "Слепота", path: "status.blind", group: "Статусы" }),
     createEffectKeyToken({ code: "moveCost", key: "movement", label: "Стоимость перемещения", path: "system.costs.movement", group: "Стоимость" }),
     createEffectKeyToken({ code: "actionCost", key: "action", label: "Стоимость действий", path: "system.costs.action", group: "Стоимость" })
