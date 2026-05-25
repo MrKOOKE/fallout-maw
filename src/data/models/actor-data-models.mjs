@@ -144,6 +144,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     replaceObjectContents(this.resources, normalizeResourceMap(this.resources, resourceSettings, resourceMaximums, {
       trackSpent: true
     }));
+    synchronizeAggregateHealthResource(this.resources, this.limbs);
 
     const needMaximums = evaluateNeedSettings(
       needSettings,
@@ -437,6 +438,22 @@ function mergeLimbDamageMaps(base = {}, bonus = {}) {
       )
     ])
   );
+}
+
+function synchronizeAggregateHealthResource(resources = {}, limbs = {}) {
+  const health = resources?.health;
+  if (!health) return;
+
+  const entries = Object.values(limbs ?? {}).filter(limb => limb && typeof limb === "object");
+  const min = 0;
+  const max = entries.reduce((sum, limb) => sum + Math.max(0, toInteger(limb?.max)), 0);
+  const value = entries.reduce((sum, limb) => sum + Math.max(0, toInteger(limb?.value)), 0);
+
+  health.min = min;
+  health.bonus = 0;
+  health.max = max;
+  health.value = Math.min(Math.max(value, min), max);
+  health.spent = Math.max(0, max - health.value);
 }
 
 function getTrackedResourceSpent(resource, min, max) {

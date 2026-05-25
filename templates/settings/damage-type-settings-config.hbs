@@ -1,14 +1,13 @@
 <div class="fallout-maw-config-body">
-  <section class="fallout-maw-panel">
+  <section class="fallout-maw-panel" hidden>
     <header class="fallout-maw-panel-header">
       <h2>{{damageType.label}}</h2>
       <p class="hint">{{damageType.key}}</p>
     </header>
 
-    <div class="fallout-maw-list-grid two-columns">
-      <label>
+    <div class="fallout-maw-list-grid two-columns" hidden>
+      <label hidden>
         <span>Множитель состояния конечности</span>
-        <input type="number" name="settings.limbStateDamage.multiplier" value="{{settings.limbStateDamage.multiplier}}" min="0" step="0.1">
       </label>
     </div>
   </section>

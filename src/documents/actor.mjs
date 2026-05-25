@@ -66,7 +66,7 @@ export class FalloutMaWActor extends Actor {
   async _preUpdate(changes, options, user) {
     if ((await super._preUpdate(changes, options, user)) === false) return false;
     if (!["character", "npc"].includes(this.type)) return undefined;
-    prepareActorDamageUpdate(this, changes);
+    prepareActorDamageUpdate(this, changes, options);
     syncTrackedResourceValueUpdates(this, changes);
     return undefined;
   }
@@ -424,6 +424,7 @@ function initializeProficiencyMap(proficiencies = {}) {
 
 function syncTrackedResourceValueUpdates(actor, changes) {
   for (const resourceKey of Object.keys(actor.system?.resources ?? {})) {
+    if (resourceKey === "health") continue;
     const currentResource = actor.system?.resources?.[resourceKey];
     if (!currentResource) continue;
     foundry.utils.setProperty(

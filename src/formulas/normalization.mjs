@@ -74,7 +74,6 @@ const DEFAULT_NEED_SETTINGS_BY_KEY = Object.freeze({
   })
 });
 const DEFAULT_DAMAGE_TYPE_SETTINGS = Object.freeze({
-  limbStateDamage: Object.freeze({ multiplier: 1 }),
   periodic: Object.freeze({
     enabled: false,
     effectName: "",
@@ -104,7 +103,6 @@ const DEFAULT_DAMAGE_TYPE_SETTINGS = Object.freeze({
   })
 });
 const DEFAULT_DAMAGE_TYPE_SETTINGS_BY_KEY = Object.freeze({
-  bludgeoning: Object.freeze({ limbStateDamage: Object.freeze({ multiplier: 2 }) }),
   fire: Object.freeze({
     periodic: Object.freeze({
       enabled: true,
@@ -481,11 +479,8 @@ function normalizeDamageTypeBehavior(settings = {}, key = "") {
     : {
       ...defaults.resourceLimit,
       resources: source.resourceBlock ? DEFAULT_RESOURCE_LIMIT_RESOURCES : defaults.resourceLimit.resources
-    };
+  };
   return {
-    limbStateDamage: {
-      multiplier: Math.max(0, toDecimal(source.limbStateDamage?.multiplier, defaults.limbStateDamage.multiplier))
-    },
     periodic: {
       enabled: Boolean(source.periodic?.enabled ?? defaults.periodic.enabled),
       effectName: String(source.periodic?.effectName ?? defaults.periodic.effectName ?? "").trim(),

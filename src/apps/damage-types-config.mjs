@@ -267,9 +267,6 @@ function toDecimal(value, fallback = 0) {
 function normalizeSettingsFromForm(settings = {}) {
   const resourceLimit = settings.resourceLimit ?? settings.resourceBlock ?? {};
   return {
-    limbStateDamage: {
-      multiplier: toDecimal(settings.limbStateDamage?.multiplier, 1)
-    },
     periodic: {
       enabled: toBoolean(settings.periodic?.enabled, false),
       effectName: String(settings.periodic?.effectName ?? "").trim(),
