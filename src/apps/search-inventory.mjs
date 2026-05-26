@@ -3713,7 +3713,7 @@ async function createCompletedTradeItem(targetActor, itemData, containedItems = 
   validateTargetParent(targetActor, targetParentId);
   const targetItem = targetItemId ? targetActor.items?.get(targetItemId) : null;
   const targetStack = targetMode === "inventory"
-    ? findCompatibleStackTargets(targetActor, itemData, targetItem, [], targetParentId).at(0)
+    ? getCompatibleStackTarget(targetActor, itemData, targetItem, [], targetParentId).at(0)
     : null;
   const targetStackPlacement = targetStack
     ? normalizeInventoryPlacement(targetStack.system?.placement ?? {}, targetStack, targetActor.items)
@@ -3917,7 +3917,7 @@ async function insertItemIntoActorInventory(actor, itemData, requestedPlacement,
   const excludedIds = [sourceItem?.id ?? ""].filter(Boolean);
   const preferredPlacement = normalizeInventoryPlacement(requestedPlacement, itemData, actor.items);
   const usableTargetItem = targetItem && areStackable(itemData, targetItem) ? targetItem : null;
-  const stackTargets = findCompatibleStackTargets(actor, itemData, usableTargetItem, excludedIds, parentId);
+  const stackTargets = getCompatibleStackTarget(actor, itemData, usableTargetItem, excludedIds, parentId);
   const targetUpdates = [];
 
   for (const stackTarget of stackTargets) {
@@ -3989,7 +3989,7 @@ async function insertExternalItemIntoActorInventory(actor, itemData, requestedPl
   const maxStack = getItemMaxStack(itemData);
   let remainingQuantity = Math.max(1, getItemQuantity(itemData));
   const usableTargetItem = targetItem && areStackable(itemData, targetItem) ? targetItem : null;
-  const stackTargets = findCompatibleStackTargets(actor, itemData, usableTargetItem, [], parentId);
+  const stackTargets = getCompatibleStackTarget(actor, itemData, usableTargetItem, [], parentId);
   const targetUpdates = [];
 
   for (const stackTarget of stackTargets) {
@@ -4128,6 +4128,17 @@ function findCompatibleStackTargets(actor, itemData, preferredTarget = null, exc
     targets.push(item);
   }
   return targets;
+}
+
+function getCompatibleStackTarget(actor, itemData, preferredTarget = null, excludeItemIds = [], parentId = ROOT_CONTAINER_ID) {
+  const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+  const canUsePreferredTarget = preferredTarget
+    && !excluded.has(preferredTarget.id)
+    && getItemContainerParentId(preferredTarget) === parentId
+    && preferredTarget.system?.placement?.mode === "inventory"
+    && areStackable(itemData, preferredTarget)
+    && getItemQuantity(preferredTarget) < getItemMaxStack(preferredTarget);
+  return canUsePreferredTarget ? [preferredTarget] : [];
 }
 
 function getSourcePlacement(actor, sourceItem, itemData, preferredPlacement = null, targetItem = null, parentId = ROOT_CONTAINER_ID, reservedPlacements = []) {

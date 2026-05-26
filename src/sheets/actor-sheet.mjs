@@ -1393,7 +1393,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     let remainingQuantity = Math.max(1, getItemQuantity(itemData));
     const excludedIds = [sourceItem?.id ?? ""].filter(Boolean);
     const preferredPlacement = normalizeInventoryPlacement(requestedPlacement, itemData, this.actor.items);
-    const stackTargets = this.#findCompatibleStackTargets(itemData, targetItem, excludedIds, parentId);
+    const stackTargets = this.#getCompatibleStackTarget(itemData, targetItem, excludedIds, parentId);
     const targetUpdates = [];
 
     for (const stackTarget of stackTargets) {
@@ -1483,26 +1483,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return null;
   }
 
-  #findCompatibleStackTargets(itemData, preferredTarget = null, excludeItemIds = [], parentId = ROOT_CONTAINER_ID) {
+  #getCompatibleStackTarget(itemData, preferredTarget = null, excludeItemIds = [], parentId = ROOT_CONTAINER_ID) {
     const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
-    const targets = [];
     const canUsePreferredTarget = preferredTarget
       && !excluded.has(preferredTarget.id)
       && (getItemContainerParentId(preferredTarget) === parentId)
       && preferredTarget.system?.placement?.mode === "inventory"
       && this.#areStackable(itemData, preferredTarget)
       && (getItemQuantity(preferredTarget) < getItemMaxStack(preferredTarget));
-    if (canUsePreferredTarget) targets.push(preferredTarget);
-
-    for (const item of this.#getContextInventoryItems(parentId)) {
-      if (!item || excluded.has(item.id)) continue;
-      if (targets.some(target => target.id === item.id)) continue;
-      if (!this.#areStackable(itemData, item)) continue;
-      if (getItemQuantity(item) >= getItemMaxStack(item)) continue;
-      targets.push(item);
-    }
-
-    return targets;
+    return canUsePreferredTarget ? [preferredTarget] : [];
   }
 
   #getSourceInventoryPlacement(
@@ -1877,7 +1866,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     delete data.id;
     foundry.utils.setProperty(data, "system.quantity", amount);
     const parentId = getItemContainerParentId(item);
-    const placement = this.#getFirstAvailableInventoryPlacement(data, [item.id], [], parentId);
+    const placement = this.#getFirstAvailableInventoryPlacement(data, [], [], parentId);
     if (!placement) {
       this.#warnInventoryNoSpace();
       return null;

@@ -489,7 +489,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     let remainingQuantity = Math.max(1, getItemQuantity(itemData));
     const excludedIds = [sourceItem?.id ?? ""].filter(Boolean);
     const preferredPlacement = normalizeInventoryPlacement(requestedPlacement, itemData, this.actor.items);
-    const stackTargets = this.#findCompatibleStackTargets(itemData, targetItem, excludedIds);
+    const stackTargets = this.#getCompatibleStackTarget(itemData, targetItem, excludedIds);
     const targetUpdates = [];
 
     for (const stackTarget of stackTargets) {
@@ -572,25 +572,14 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     return null;
   }
 
-  #findCompatibleStackTargets(itemData, preferredTarget = null, excludeItemIds = []) {
+  #getCompatibleStackTarget(itemData, preferredTarget = null, excludeItemIds = []) {
     const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
-    const targets = [];
     const canUsePreferredTarget = preferredTarget
       && !excluded.has(preferredTarget.id)
       && (getItemContainerParentId(preferredTarget) === this.item.id)
       && this.#areStackable(itemData, preferredTarget)
       && (getItemQuantity(preferredTarget) < getItemMaxStack(preferredTarget));
-    if (canUsePreferredTarget) targets.push(preferredTarget);
-
-    for (const item of getContextInventoryItems(this.item.id, this.actor.items)) {
-      if (!item || excluded.has(item.id)) continue;
-      if (targets.some(target => target.id === item.id)) continue;
-      if (!this.#areStackable(itemData, item)) continue;
-      if (getItemQuantity(item) >= getItemMaxStack(item)) continue;
-      targets.push(item);
-    }
-
-    return targets;
+    return canUsePreferredTarget ? [preferredTarget] : [];
   }
 
   #getSourcePlacement(sourceItem, itemData, preferredPlacement = null, targetItem = null, reservedPlacements = []) {
@@ -771,7 +760,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     delete data._id;
     delete data.id;
     foundry.utils.setProperty(data, "system.quantity", amount);
-    const placement = this.#getFirstAvailableInventoryPlacement(data, [item.id], []);
+    const placement = this.#getFirstAvailableInventoryPlacement(data, [], []);
     if (!placement) {
       this.#warnValidation({ reason: "no-space" });
       return null;
