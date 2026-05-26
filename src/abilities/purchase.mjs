@@ -33,12 +33,29 @@ export async function completeAbilityResearch(actor, researchId = "") {
   if (!research || research.type !== "ability") return null;
   if (Number(research.progress) < Number(research.target)) return null;
 
-  const created = await grantCatalogAbility(actor, research.sourceId);
+  const created = await grantAbilityResearchReward(actor, research);
   await actor.deleteResearch(researchId);
   return {
     research,
     item: created
   };
+}
+
+export async function grantAbilityResearchReward(actor, research = {}) {
+  if (!actor) return null;
+  const sourceId = String(research?.sourceId ?? "").trim();
+  if (sourceId && actorHasAbility(actor, sourceId)) return null;
+
+  const itemData = getAbilityRewardItemData(research) ?? getCatalogAbilityRewardItemData(sourceId);
+  if (!itemData) return null;
+  const normalizedItemData = foundry.utils.deepClone(itemData);
+  delete normalizedItemData._id;
+
+  const rewardSourceId = getRewardAbilitySourceId(normalizedItemData) || sourceId;
+  if (rewardSourceId && actorHasAbility(actor, rewardSourceId)) return null;
+
+  const created = await actor.createEmbeddedDocuments("Item", [normalizedItemData]);
+  return created?.[0] ?? null;
 }
 
 export async function clearAbilityResearchSpending(actor, sourceId = "") {
@@ -52,4 +69,22 @@ export async function clearAbilityResearchSpending(actor, sourceId = "") {
 
 export function getAbilitySourceFlagPath() {
   return `flags.${FALLOUT_MAW.id}.${ABILITY_SOURCE_FLAG}`;
+}
+
+function getAbilityRewardItemData(research = {}) {
+  for (const reward of research.rewards ?? []) {
+    const itemData = reward?.itemData;
+    if (itemData?.type === "ability") return itemData;
+  }
+  return null;
+}
+
+function getCatalogAbilityRewardItemData(sourceId = "") {
+  const entry = findCatalogAbility(sourceId);
+  if (!entry) return null;
+  return prepareAbilityItemData(entry.ability, { categoryId: entry.category.id });
+}
+
+function getRewardAbilitySourceId(itemData = {}) {
+  return String(itemData?.flags?.[FALLOUT_MAW.id]?.[ABILITY_SOURCE_FLAG]?.id ?? "");
 }

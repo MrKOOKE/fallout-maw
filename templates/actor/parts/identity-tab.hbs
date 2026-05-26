@@ -120,20 +120,14 @@
     <h2>Способности</h2>
     <div class="fallout-maw-ability-card-grid">
       {{#each abilities}}
-      <article class="fallout-maw-ability-card">
+      <article class="fallout-maw-ability-card" data-ability-id="{{id}}" data-tooltip-item="{{id}}">
         <img src="{{img}}" alt="" width="42" height="42">
-        <div>
-          <header>
-            <strong>{{name}}</strong>
-            <span>{{cost}} ОИ</span>
-          </header>
-          {{#if description}}<div class="fallout-maw-ability-description">{{{description}}}</div>{{/if}}
-          {{#if effects}}
-          <ul>
-            {{#each effects}}<li>{{this}}</li>{{/each}}
-          </ul>
-          {{/if}}
-        </div>
+        <strong>{{name}}</strong>
+        {{#if ../freeEdit}}
+        <button type="button" class="fallout-maw-ability-delete" data-action="deleteAbility" data-tooltip-ignore title="{{localize 'FALLOUTMAW.Common.Delete'}}">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+        {{/if}}
       </article>
       {{else}}
       <p class="fallout-maw-empty-list">Способности не изучены.</p>

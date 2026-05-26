@@ -73,8 +73,7 @@ export function normalizeAbilityEntry(value = {}, index = 0) {
 
 export function normalizeAbilityFunctions(value = []) {
   return (Array.isArray(value) ? value : Object.values(value ?? {}))
-    .map((entry, index) => normalizeAbilityFunction(entry, index))
-    .filter(entry => entry.target);
+    .map((entry, index) => normalizeAbilityFunction(entry, index));
 }
 
 export function createAbilityFunction(type = ABILITY_FUNCTION_TYPES.characteristicBonus) {

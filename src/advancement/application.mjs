@@ -14,8 +14,9 @@ import {
   getSkillAdvancementSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
-import { actorHasAbility, completeAbilityResearch, findCatalogAbility, grantCatalogAbility } from "../abilities/purchase.mjs";
+import { actorHasAbility, completeAbilityResearch, findCatalogAbility } from "../abilities/purchase.mjs";
 import { formatResearchValue } from "../research/storage.mjs";
+import { prepareAbilityItemData } from "../settings/abilities.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { localize } from "../utils/i18n.mjs";
@@ -30,9 +31,11 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #actorUpdateHookId = null;
   #draft = null;
   #experienceSyncTimer = null;
+  #expandedAbilityCategories = new Set();
   #floor = null;
   #page = "development";
   #repeatState = null;
+  #selectedAbilitySourceId = "";
   #suppressNextRepeatClick = false;
   #snapshot = null;
 
@@ -64,11 +67,13 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       increaseSkill: this.#onIncreaseSkill,
       nextPage: this.#onNextPage,
       previousPage: this.#onPreviousPage,
+      selectAbility: this.#onSelectAbility,
       spendAbilityResearch: this.#onSpendAbilityResearch,
       startAbilityResearch: this.#onStartAbilityResearch,
       completeAbilityResearch: this.#onCompleteAbilityResearch,
       levelUp: this.#onLevelUp,
       resetDevelopment: this.#onResetDevelopment,
+      toggleAbilityCategory: this.#onToggleAbilityCategory,
       toggleSignatureSkill: this.#onToggleSignatureSkill
     }
   };
@@ -112,6 +117,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       ? 100
       : Math.max(0, Math.min(100, ((currentExperience - currentThreshold) / experienceRange) * 100));
     const canLevelUp = (this.#draft.level < maxLevel) && (currentExperience >= nextThreshold);
+    const abilityCategories = this.#prepareAbilityCategories(remaining.researches, skillSettings);
+    const selectedAbility = this.#prepareSelectedAbility(abilityCategories);
 
     return {
       ...(await super._prepareContext(options)),
@@ -123,6 +130,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       experienceCurrent: currentExperience,
       experienceNext: nextThreshold,
       skillPointsPerLevel: Math.max(0, toInteger(this.actor.system?.progression?.skillPointsPerLevel)),
+      researchPointsPerLevel: Math.max(0, toInteger(this.actor.system?.progression?.researchPointsPerLevel)),
       characteristicPointsDisplay: `${remaining.characteristics} / ${Math.max(remaining.characteristics, toInteger(this.#draft.development.points.characteristics) - floorCharacteristicSpent)}`,
       skillPointsDisplay: `${remaining.skills} / ${Math.max(remaining.skills, toInteger(this.#draft.development.points.skills) - floorSkillSpent)}`,
       signatureSkillPointsDisplay: `${remaining.signatureSkills} / ${Math.max(remaining.signatureSkills, toInteger(this.#draft.development.points.signatureSkills) - floorSignatureSpent)}`,
@@ -155,7 +163,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
             : (remaining.signatureSkills > 0)
         };
       }),
-      abilityCategories: this.#prepareAbilityCategories(remaining.researches, skillSettings)
+      abilityCategories,
+      selectedAbility
     };
   }
 
@@ -167,6 +176,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   async _onRender(context, options) {
     await super._onRender(context, options);
     this.#activateRepeatButtons();
+    this.#activateAbilitySearch();
   }
 
   async _preClose(options) {
@@ -313,6 +323,26 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     }
   }
 
+  #activateAbilitySearch() {
+    const input = this.element?.querySelector?.("[data-ability-search]");
+    if (!(input instanceof HTMLInputElement)) return;
+
+    input.addEventListener("input", () => {
+      const query = input.value.trim().toLocaleLowerCase();
+      for (const category of this.element.querySelectorAll("[data-ability-category]")) {
+        let visibleCount = 0;
+        category.classList.toggle("searching", Boolean(query));
+        for (const entry of category.querySelectorAll("[data-ability-entry]")) {
+          const searchText = entry.dataset.abilitySearchText?.toLocaleLowerCase() ?? "";
+          const visible = !query || searchText.includes(query);
+          entry.hidden = !visible;
+          if (visible) visibleCount += 1;
+        }
+        category.hidden = query ? visibleCount === 0 : false;
+      }
+    });
+  }
+
   #syncDraftFromForm() {
     return undefined;
   }
@@ -374,6 +404,23 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
+  static #onToggleAbilityCategory(event, target) {
+    event.preventDefault();
+    const categoryId = target.dataset.categoryId ?? "";
+    if (!categoryId) return undefined;
+    if (this.#expandedAbilityCategories.has(categoryId)) this.#expandedAbilityCategories.delete(categoryId);
+    else this.#expandedAbilityCategories.add(categoryId);
+    return this.forceRender();
+  }
+
+  static #onSelectAbility(event, target) {
+    event.preventDefault();
+    const sourceId = target.dataset.abilitySourceId ?? "";
+    if (!sourceId) return undefined;
+    this.#selectedAbilitySourceId = sourceId;
+    return this.forceRender();
+  }
+
   static async #onSpendAbilityResearch(event, target) {
     event.preventDefault();
     await this.#ensureDraft();
@@ -383,37 +430,26 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const entry = findCatalogAbility(sourceId);
     if (!entry || actorHasAbility(this.actor, sourceId)) return this.forceRender();
     if (entry.ability.system?.acquisition?.onlyManual) return this.forceRender();
+    const research = this.#getAbilityResearch(sourceId);
+    if (!research) return this.forceRender();
 
     const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
-    const cost = Math.max(0, toInteger(entry.ability.system?.cost));
-    if (cost <= 0) {
-      await grantCatalogAbility(this.actor, sourceId);
-      return this.forceRender();
-    }
     if (remaining.researches <= 0) return this.forceRender();
 
     const current = toInteger(this.#draft.development.abilityResearches?.[sourceId]);
-    const research = this.#getAbilityResearch(sourceId);
-    const currentProgress = Math.max(current, Number(research?.progress) || 0);
-    const investment = Math.min(remaining.researches, Math.max(0, cost - currentProgress));
+    const targetValue = Math.max(1, Number(research.target) || toInteger(entry.ability.system?.cost) || 1);
+    const currentProgress = Math.max(0, Number(research.progress) || 0);
+    const investment = Math.min(remaining.researches, Math.max(0, targetValue - currentProgress));
     if (investment <= 0) return this.forceRender();
 
     this.#draft.development.abilityResearches[sourceId] = current + investment;
     await this.#applyDraftToActor();
 
-    if (research) {
-      await this.actor.updateResearch(research.id, {
-        progress: Math.min(cost, Number(research.progress) + investment),
-        target: cost
-      });
-    } else if (!entry.ability.system?.acquisition?.onlyFree && currentProgress + investment < cost) {
-      await this.actor.createResearch(this.#createAbilityResearchData(entry, currentProgress + investment));
-    }
-
-    if (currentProgress + investment >= cost) {
-      await grantCatalogAbility(this.actor, sourceId);
-      if (research) await this.actor.deleteResearch(research.id);
-    }
+    await this.actor.updateResearch(research.id, {
+      progress: Math.min(targetValue, currentProgress + investment),
+      target: targetValue,
+      freeSpent: Math.max(0, Number(research.freeSpent) || 0) + investment
+    });
 
     this.#syncDraftFromActor();
     return this.forceRender();
@@ -427,12 +463,9 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
     const entry = findCatalogAbility(sourceId);
     if (!entry || actorHasAbility(this.actor, sourceId)) return this.forceRender();
-    if (entry.ability.system?.acquisition?.onlyFree) return this.forceRender();
     if (this.#getAbilityResearch(sourceId)) return this.forceRender();
 
-    const cost = Math.max(1, toInteger(entry.ability.system?.cost));
-    const progress = Math.min(cost, toInteger(this.#draft.development.abilityResearches?.[sourceId]));
-    await this.actor.createResearch(this.#createAbilityResearchData(entry, progress));
+    await this.actor.createResearch(this.#createAbilityResearchData(entry));
     return this.forceRender();
   }
 
@@ -454,21 +487,34 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const catalog = getAbilityCatalog();
     return (catalog.categories ?? []).map(category => ({
       ...category,
-      abilities: (category.abilities ?? []).map(ability => this.#prepareAbilityEntry(category, ability, availableResearchPoints, skillSettings))
+      expanded: this.#expandedAbilityCategories.has(String(category.id ?? "")),
+      abilities: (category.abilities ?? [])
+        .filter(ability => !actorHasAbility(this.actor, String(ability?.id ?? "")))
+        .map(ability => this.#prepareAbilityEntry(category, ability, availableResearchPoints, skillSettings))
     }));
+  }
+
+  #prepareSelectedAbility(categories = []) {
+    if (!this.#selectedAbilitySourceId) return null;
+    const selected = categories.flatMap(category => category.abilities ?? []).find(ability => ability.sourceId === this.#selectedAbilitySourceId) ?? null;
+    if (!selected) {
+      this.#selectedAbilitySourceId = "";
+      return null;
+    }
+    return selected;
   }
 
   #prepareAbilityEntry(category, ability, availableResearchPoints = 0, skillSettings = []) {
     const sourceId = String(ability?.id ?? "");
     const cost = Math.max(0, toInteger(ability?.system?.cost));
-    const spent = toInteger(this.#draft.development?.abilityResearches?.[sourceId]);
     const research = this.#getAbilityResearch(sourceId);
-    const progress = Math.min(cost, Math.max(spent, Number(research?.progress) || 0));
-    const remainingCost = Math.max(0, cost - progress);
+    const target = Math.max(1, Number(research?.target) || cost || 1);
+    const progress = research ? Math.min(target, Math.max(0, Number(research.progress) || 0)) : 0;
+    const remainingCost = Math.max(0, target - progress);
     const owned = actorHasAbility(this.actor, sourceId);
     const onlyFree = Boolean(ability?.system?.acquisition?.onlyFree);
     const onlyManual = Boolean(ability?.system?.acquisition?.onlyManual);
-    const completed = cost <= 0 || progress >= cost;
+    const completed = Boolean(research) && progress >= target;
     const skillLabel = skillSettings.find(skill => skill.key === ability?.system?.acquisition?.skillKey)?.label ?? skillSettings[0]?.label ?? "";
     return {
       ...ability,
@@ -476,18 +522,20 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       categoryId: category.id,
       cost,
       progress,
-      progressLabel: `${formatResearchValue(progress)} / ${formatResearchValue(cost)}`,
-      progressPercent: cost > 0 ? Math.min(100, (progress / cost) * 100).toFixed(2) : "100",
+      progressLabel: `${formatResearchValue(progress)} / ${formatResearchValue(target)}`,
+      progressPercent: target > 0 ? Math.min(100, (progress / target) * 100).toFixed(2) : "100",
       remainingCost,
       owned,
       onlyFree,
       onlyManual,
-      canSpendFree: !owned && !onlyManual && ((cost <= 0) || (remainingCost > 0 && availableResearchPoints > 0)),
+      canSpendFree: !owned && Boolean(research) && !onlyManual && remainingCost > 0 && availableResearchPoints > 0,
       freeSpendAmount: Math.min(availableResearchPoints, remainingCost),
-      canStartManual: !owned && !onlyFree && !research && !completed,
+      canStartManual: !owned && !research,
       canComplete: !owned && Boolean(research) && completed,
       researchId: research?.id ?? "",
       researchActive: Boolean(research),
+      selected: sourceId === this.#selectedAbilitySourceId,
+      statusLabel: owned ? "Изучено" : research ? "Исследуется" : "Не изучено",
       acquisitionLabel: onlyFree ? "Только свободные ОИ" : onlyManual ? "Только ручное исследование" : "Свободные ОИ или ручное исследование",
       manualLabel: skillLabel ? `${skillLabel}, сложность ${toInteger(ability?.system?.acquisition?.difficulty ?? 60)}` : ""
     };
@@ -502,15 +550,27 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const skillSettings = getSkillSettings();
     const skillKey = String(ability.system?.acquisition?.skillKey || skillSettings[0]?.key || "");
     const target = Math.max(1, toInteger(ability.system?.cost));
+    const itemData = prepareAbilityItemData(ability, { categoryId: entry.category.id });
+    const initialProgress = toInteger(ability.system?.cost) <= 0 ? target : progress;
     return {
       name: ability.name,
       skillKey,
-      progress: Math.min(Math.max(0, Number(progress) || 0), target),
+      progress: Math.min(Math.max(0, Number(initialProgress) || 0), target),
       target,
       difficulty: Math.max(0, toInteger(ability.system?.acquisition?.difficulty ?? 60)),
       type: "ability",
       sourceId: ability.id,
-      sourceCategoryId: entry.category.id
+      sourceCategoryId: entry.category.id,
+      freeSpent: 0,
+      rewards: [
+        {
+          type: "item",
+          name: itemData.name,
+          img: itemData.img,
+          quantity: 1,
+          itemData
+        }
+      ]
     };
   }
 

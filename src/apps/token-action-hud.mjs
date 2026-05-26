@@ -47,6 +47,7 @@ import { ITEM_FUNCTIONS, getConditionFunction, getDamageSourceFunction, getEnabl
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
+import { AdvancementApplication } from "../advancement/application.mjs";
 import {
   applyWeaponModuleModifiers,
   getWeaponModuleSlots,
@@ -309,6 +310,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #itemTooltipNestedPinned = false;
   #itemTooltipAnchorElement = null;
   #itemTooltipItemId = "";
+  #itemTooltipTimer = null;
+  #itemTooltipPinned = false;
   #itemTooltipWeaponTabIndex = 0;
   #itemTooltipBaseMode = false;
   #itemTooltipPointerDownHandler = null;
@@ -397,7 +400,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const weaponActionRows = prepareWeaponActionRows(actor, selectedWeapon, selectedWeaponDisabled, hudIcons);
     const skills = prepareSkillButtons(actor, hudIcons);
     const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg", { activeOnly: true });
-    const abilities = prepareOwnedItemButtons(actor, "ability", "icons/svg/aura.svg");
+    const abilities = prepareOwnedAbilityButtons(actor, "icons/svg/aura.svg");
     const systemActions = prepareSystemActionButtons();
     const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, systemActions, hudIcons);
     const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, systemActions, weaponActionRows, weaponSet, weaponSets);
@@ -445,6 +448,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   _attachFrameListeners() {
     super._attachFrameListeners();
     this.element.addEventListener("pointerdown", event => this.#onHudItemMiddlePointerDown(event));
+    this.element.addEventListener("mouseover", event => this.#onHudItemTooltipMouseOver(event));
+    this.element.addEventListener("mouseout", event => this.#onHudItemTooltipMouseOut(event));
     this.element.addEventListener("click", event => this.#onHudItemTooltipHudActivation(event), { capture: true });
     this.element.addEventListener("auxclick", event => this.#onHudItemTooltipHudActivation(event), { capture: true });
     this.element.addEventListener("contextmenu", event => this.#onHudItemTooltipHudActivation(event), { capture: true });
@@ -734,8 +739,14 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   static #onUseSystemAction(event, target) {
     event.preventDefault();
     const key = String(target.dataset.systemActionKey ?? "");
-    if (!["medicine", "repair", "search", "trade"].includes(key)) return undefined;
+    if (!["advancement", "medicine", "repair", "search", "trade"].includes(key)) return undefined;
 
+    if (key === "advancement") {
+      if (!this.actor?.isOwner) return undefined;
+      this.#activeTray = "";
+      void this.render({ force: true });
+      return new AdvancementApplication(this.actor).render(true);
+    }
     void this.render({ force: true });
     if (key === "trade") return this.#requestTradeInventory();
     if (key === "search") return this.#openSearchInventory();
@@ -815,7 +826,32 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     }
     this.#itemTooltipBaseMode = Boolean(event.altKey);
     this.#itemTooltipWeaponTabIndex = 0;
-    void this.#showHudItemTooltip(item, button);
+    void this.#showHudItemTooltip(item, button, { pinned: true });
+  }
+
+  #onHudItemTooltipMouseOver(event) {
+    if (this.#itemTooltipPinned) return;
+    const button = this.#getHudTooltipItemElement(event.target);
+    if (!button || button.contains(event.relatedTarget)) return;
+    const item = this.actor?.items.get(String(button.dataset.hudTooltipItem ?? ""));
+    if (!item) return;
+
+    this.#clearHudItemTooltip();
+    this.#itemTooltipBaseMode = Boolean(event.altKey);
+    this.#itemTooltipWeaponTabIndex = 0;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#itemTooltipTimer = view.setTimeout(() => {
+      this.#itemTooltipTimer = null;
+      void this.#showHudItemTooltip(item, button, { pinned: false });
+    }, 300);
+  }
+
+  #onHudItemTooltipMouseOut(event) {
+    if (this.#itemTooltipPinned) return;
+    const button = this.#getHudTooltipItemElement(event.target);
+    if (!button || button.contains(event.relatedTarget)) return;
+    if (this.#itemTooltipElement?.contains(event.relatedTarget)) return;
+    this.#clearHudItemTooltip();
   }
 
   #onLimbLayerOptionClick(event) {
@@ -841,6 +877,12 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!button || !this.element?.contains(button)) return null;
     const action = String(button.dataset.action ?? "");
     return ["openItem", "useItem", "selectHudWeapon", "useWeaponAction", "toggleWeaponActions"].includes(action) ? button : null;
+  }
+
+  #getHudTooltipItemElement(target) {
+    if (!(target instanceof Element)) return null;
+    const button = target.closest("[data-hud-tooltip-item]");
+    return button && this.element?.contains(button) ? button : null;
   }
 
   #onLimbControlKeyDown(event) {
@@ -927,10 +969,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#scheduleLimbPopoverClose();
   }
 
-  async #showHudItemTooltip(item, anchor) {
+  async #showHudItemTooltip(item, anchor, { pinned = true } = {}) {
     this.#clearHudItemTooltip();
     const tooltip = document.createElement("aside");
-    tooltip.className = "fallout-maw-inventory-tooltip pinned";
+    tooltip.className = "fallout-maw-inventory-tooltip";
+    tooltip.classList.toggle("pinned", Boolean(pinned));
     tooltip.style.setProperty("--fallout-maw-ui-scale", String(tokenActionHudScaleFactor(getTokenActionHudScalePercent())));
     tooltip.innerHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
       activeWeaponIndex: this.#itemTooltipWeaponTabIndex,
@@ -941,11 +984,18 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     tooltip.addEventListener("pointerout", event => this.#onHudItemTooltipPointerOut(event));
     tooltip.addEventListener("auxclick", event => this.#onHudItemTooltipAuxClick(event));
     tooltip.addEventListener("contextmenu", event => this.#onHudItemTooltipContextMenu(event));
+    tooltip.addEventListener("mouseleave", event => {
+      if (this.#itemTooltipPinned) return;
+      if (this.#itemTooltipAnchorElement?.contains(event.relatedTarget)) return;
+      if (this.#itemTooltipNestedElement?.contains(event.relatedTarget)) return;
+      this.#clearHudItemTooltip();
+    });
     document.body.append(tooltip);
     this.#itemTooltipElement = tooltip;
     this.#itemTooltipAnchorElement = anchor;
     this.#itemTooltipItemId = item.id;
-    this.#bindHudItemTooltipDocumentListeners();
+    this.#itemTooltipPinned = Boolean(pinned);
+    if (pinned) this.#bindHudItemTooltipDocumentListeners();
     this.#positionHudItemTooltip();
     requestAnimationFrame(() => {
       const description = tooltip.querySelector(".description");
@@ -1348,6 +1398,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #clearHudItemTooltip() {
     const view = this.element?.ownerDocument?.defaultView ?? window;
+    if (this.#itemTooltipTimer) {
+      view.clearTimeout(this.#itemTooltipTimer);
+      this.#itemTooltipTimer = null;
+    }
     if (this.#itemTooltipPointerDownHandler) {
       view.document.removeEventListener("pointerdown", this.#itemTooltipPointerDownHandler, { capture: true });
       this.#itemTooltipPointerDownHandler = null;
@@ -1362,6 +1416,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#itemTooltipElement = null;
     this.#itemTooltipAnchorElement = null;
     this.#itemTooltipItemId = "";
+    this.#itemTooltipPinned = false;
     this.#itemTooltipWeaponTabIndex = 0;
     this.#itemTooltipBaseMode = false;
   }
@@ -1702,11 +1757,53 @@ function prepareOwnedItemButtons(actor, type, fallbackIcon, { activeOnly = false
     }));
 }
 
+function prepareOwnedAbilityButtons(actor, fallbackIcon) {
+  return actor.items
+    .filter(item => item.type === "ability")
+    .map(item => ({
+      id: item.id,
+      name: item.name,
+      img: normalizeImagePath(item.img, fallbackIcon),
+      active: isActiveAbility(item)
+    }));
+}
+
+function prepareAbilityGroups(abilities = []) {
+  return [
+    {
+      key: "active",
+      label: "Активные",
+      items: abilities.filter(ability => ability.active),
+      emptyLabel: "Активных способностей нет."
+    },
+    {
+      key: "passive",
+      label: "Пассивные",
+      items: abilities.filter(ability => !ability.active),
+      emptyLabel: "Пассивных способностей нет."
+    }
+  ];
+}
+
+function isActiveAbility(item) {
+  const system = item?.system ?? {};
+  if (system.active || system.activation?.enabled || system.use?.enabled) return true;
+  const passiveFunctionTypes = new Set(["characteristicBonus", "skillBonus"]);
+  return (Array.isArray(system.functions) ? system.functions : [])
+    .some(entry => entry?.type && !passiveFunctionTypes.has(entry.type));
+}
+
 function prepareSystemActionButtons() {
-  return getSystemActionSettings().map(action => ({
+  const advancementAction = {
+    key: "advancement",
+    label: "Повышение уровня",
+    img: normalizeImagePath("icons/svg/upgrade.svg", "icons/svg/aura.svg")
+  };
+  const configuredActions = getSystemActionSettings().map(action => ({
     ...action,
     img: normalizeImagePath(action.img, "icons/svg/aura.svg")
   }));
+  return [advancementAction, ...configuredActions];
 }
 
 function prepareTrayContext(activeTray, skills, items, abilities, systemActions, weaponActionRows, weaponSet = null, weaponSets = []) {
@@ -1727,6 +1824,7 @@ function prepareTrayContext(activeTray, skills, items, abilities, systemActions,
     skills,
     items,
     abilities,
+    abilityGroups: prepareAbilityGroups(abilities),
     systemActions,
     weaponActionRows,
     weaponSet,

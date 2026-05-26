@@ -16,7 +16,9 @@ export function prepareResearchForStorage(research = {}, { generateId = true } =
     difficulty: Math.max(0, toInteger(research.difficulty ?? RESEARCH_DEFAULT_DIFFICULTY)),
     type: String(research.type ?? "").trim(),
     sourceId: String(research.sourceId ?? "").trim(),
-    sourceCategoryId: String(research.sourceCategoryId ?? "").trim()
+    sourceCategoryId: String(research.sourceCategoryId ?? "").trim(),
+    freeSpent: Math.max(0, Number(research.freeSpent) || 0),
+    rewards: normalizeResearchRewards(research.rewards)
   };
 }
 
@@ -63,6 +65,32 @@ export function formatResearchValue(value) {
   const numeric = roundResearchValue(value);
   if (Number.isInteger(numeric)) return String(numeric);
   return numeric.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function normalizeResearchRewards(rewards = []) {
+  return (Array.isArray(rewards) ? rewards : [])
+    .map(normalizeResearchReward)
+    .filter(Boolean);
+}
+
+function normalizeResearchReward(reward = {}) {
+  const type = String(reward?.type ?? reward?.rewardType ?? "item").trim() || "item";
+  const normalized = {
+    ...foundry.utils.deepClone(reward ?? {}),
+    type,
+    name: String(reward?.name ?? "").trim(),
+    img: String(reward?.img ?? "").trim(),
+    quantity: Math.max(1, toInteger(reward?.quantity ?? reward?.qty ?? 1))
+  };
+
+  if (foundry.utils.isPlainObject(reward?.itemData)) {
+    normalized.itemData = foundry.utils.deepClone(reward.itemData);
+    normalized.name ||= String(normalized.itemData.name ?? "").trim();
+    normalized.img ||= String(normalized.itemData.img ?? "").trim();
+  }
+
+  if (reward?.uuid) normalized.uuid = String(reward.uuid).trim();
+  return normalized;
 }
 
 function buildResearchMeterStyle() {

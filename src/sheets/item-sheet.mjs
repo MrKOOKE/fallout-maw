@@ -16,6 +16,11 @@ import {
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { FALLBACK_ICON, normalizeImagePath } from "../utils/actor-display-data.mjs";
+import {
+  ABILITY_FUNCTION_TYPES,
+  createAbilityFunction,
+  normalizeAbilityFunctions
+} from "../settings/abilities.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
@@ -164,6 +169,22 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         disabled: tool.enabled
       }))
     ];
+    const abilityFunctionChoices = [
+      {
+        value: "",
+        label: "Выберите функцию",
+        disabled: true,
+        selected: true
+      },
+      {
+        value: ABILITY_FUNCTION_TYPES.characteristicBonus,
+        label: "Изменение характеристики"
+      },
+      {
+        value: ABILITY_FUNCTION_TYPES.skillBonus,
+        label: "Изменение навыка"
+      }
+    ];
 
     for (const group of equipmentSlotGroups) {
       for (const slot of group.slots) {
@@ -228,6 +249,17 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       canAddItemFunction: availableFunctionChoices.some(choice => choice.value && !choice.disabled),
       showFunctionPicker: this.#functionPickerActive,
       isAbility: type === "ability",
+      isAbilityOnlyFree: Boolean(item.system?.acquisition?.onlyFree),
+      isAbilityOnlyManual: Boolean(item.system?.acquisition?.onlyManual),
+      canAddAbilityFunction: true,
+      abilityFunctionChoices,
+      abilityResearchSkillChoices: skillSettings.map((skill, index) => ({
+        key: skill.key,
+        label: skill.label,
+        selected: skill.key === item.system?.acquisition?.skillKey || (!item.system?.acquisition?.skillKey && index === 0)
+      })),
+      abilityFunctions: normalizeAbilityFunctions(item.system?.functions ?? [])
+        .map(entry => prepareAbilityFunctionForDisplay(entry, characteristicSettings, skillSettings)),
       itemFunctionChoices: availableFunctionChoices,
       currencies: getCurrencySettings().map(currency => ({
         ...currency,
@@ -329,6 +361,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onBrowseWeaponExplosionSound(event));
     });
     this.element?.querySelector("[data-add-item-function]")?.addEventListener("click", event => this.#onAddItemFunction(event));
+    this.element?.querySelector("[data-add-ability-function]")?.addEventListener("click", event => this.#onAddAbilityFunction(event));
     this.element?.querySelector("[data-add-additional-weapon-function]")?.addEventListener("click", event => this.#onAddAdditionalWeaponFunction(event));
     this.element?.querySelector("[data-add-module-weapon-function]")?.addEventListener("click", event => this.#onAddModuleWeaponFunction(event));
     this.element?.querySelectorAll("[data-delete-additional-weapon-function]").forEach(button => {
@@ -338,6 +371,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onDeleteModuleWeaponFunction(event));
     });
     this.element?.querySelector("[data-choose-item-function]")?.addEventListener("change", event => this.#onChooseItemFunction(event));
+    this.element?.querySelector("[data-choose-ability-function]")?.addEventListener("change", event => this.#onChooseAbilityFunction(event));
+    this.element?.querySelectorAll("[data-delete-ability-function]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityFunction(event));
+    });
+    this.element?.querySelector("[data-ability-only-free]")?.addEventListener("change", event => this.#onAbilityOnlyFreeChange(event));
+    this.element?.querySelector("[data-ability-only-manual]")?.addEventListener("change", event => this.#onAbilityOnlyManualChange(event));
     this.element?.querySelectorAll("[data-container-load-reduction]").forEach(input => {
       input.addEventListener("input", event => this.#onContainerLoadReductionInput(event));
       input.addEventListener("change", event => this.#onContainerLoadReductionChange(event));
@@ -474,6 +513,55 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     }
 
     return this.item.update({ [`${path}.${actionKey}.${mode}.enabled`]: input.checked });
+  }
+
+  #onAddAbilityFunction(event) {
+    event.preventDefault();
+    this.#functionPickerActive = true;
+    return this.render({ force: true });
+  }
+
+  #onChooseAbilityFunction(event) {
+    event.preventDefault();
+    const functionType = String(event.currentTarget?.value ?? "");
+    if (!Object.values(ABILITY_FUNCTION_TYPES).includes(functionType)) return undefined;
+    const functions = normalizeAbilityFunctions(this.item.system?.functions ?? []);
+    functions.push(createAbilityFunction(functionType));
+    this.#functionPickerActive = false;
+    return this.item.update({ "system.functions": functions });
+  }
+
+  #onDeleteAbilityFunction(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const row = event.currentTarget?.closest?.("[data-ability-function-row]");
+    const functionId = String(row?.dataset.functionId ?? "");
+    const rowIndex = Number(row?.dataset.functionIndex ?? -1);
+    const functions = normalizeAbilityFunctions(this.item.system?.functions ?? []);
+    const index = functionId
+      ? functions.findIndex(entry => entry.id === functionId)
+      : rowIndex;
+    if (index < 0) return undefined;
+    functions.splice(index, 1);
+    return this.item.update({ "system.functions": functions });
+  }
+
+  #onAbilityOnlyFreeChange(event) {
+    event.preventDefault();
+    const checked = Boolean(event.currentTarget?.checked);
+    return this.item.update({
+      "system.acquisition.onlyFree": checked,
+      "system.acquisition.onlyManual": checked ? false : Boolean(this.item.system?.acquisition?.onlyManual)
+    });
+  }
+
+  #onAbilityOnlyManualChange(event) {
+    event.preventDefault();
+    const checked = Boolean(event.currentTarget?.checked);
+    return this.item.update({
+      "system.acquisition.onlyFree": checked ? false : Boolean(this.item.system?.acquisition?.onlyFree),
+      "system.acquisition.onlyManual": checked
+    });
   }
 
   #onAddItemFunction(event) {
@@ -1473,6 +1561,25 @@ function getItemFunctionLabel(functionKey = "") {
   const toolKey = getToolKeyFromFunctionKey(functionKey);
   if (toolKey) return getToolSettings().find(tool => tool.key === toolKey)?.label ?? toolKey;
   return game.i18n.localize("FALLOUTMAW.Item.Function");
+}
+
+function prepareAbilityFunctionForDisplay(entry, characteristics, skills) {
+  const type = String(entry?.type ?? ABILITY_FUNCTION_TYPES.characteristicBonus);
+  const targetSettings = type === ABILITY_FUNCTION_TYPES.skillBonus ? skills : characteristics;
+  return {
+    ...entry,
+    typeLabel: type === ABILITY_FUNCTION_TYPES.skillBonus ? "Изменение навыка" : "Изменение характеристики",
+    conditionEnabled: Boolean(entry?.condition?.enabled),
+    conditionLte: String(entry?.condition?.operator ?? "lte") !== "gte",
+    conditionGte: String(entry?.condition?.operator ?? "lte") === "gte",
+    value: toInteger(entry?.value),
+    conditionPercent: Math.max(0, Math.min(100, toInteger(entry?.condition?.percent ?? 50))),
+    targetChoices: targetSettings.map(setting => ({
+      key: setting.key,
+      label: setting.label,
+      selected: setting.key === entry?.target
+    }))
+  };
 }
 
 function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, proficiencySettings, characteristicSettings, hasConditionFunction) {

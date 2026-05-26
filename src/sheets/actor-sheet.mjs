@@ -149,6 +149,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         openLimbControl: this.#onOpenLimbControl,
         deleteTrauma: this.#onDeleteTrauma,
         deleteDisease: this.#onDeleteDisease,
+        deleteAbility: this.#onDeleteAbility,
         createResearch: this.#onCreateResearch,
         deleteResearch: this.#onDeleteResearch,
         manageResearch: this.#onManageResearch,
@@ -507,6 +508,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return this.actor.items.get(itemId)?.delete();
   }
 
+  static #onDeleteAbility(event, target) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!this.#freeEdit) return undefined;
+    const itemId = target.closest("[data-ability-id]")?.dataset.abilityId ?? "";
+    const item = this.actor.items.get(itemId);
+    if (item?.type !== "ability") return undefined;
+    return item.delete();
+  }
+
   #activateLimbControlClicks() {
     const root = this.element;
     if (!root || root.dataset.limbControlClicksBound === "true") return;
@@ -758,20 +769,23 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #onInventoryContextMenu(event) {
-    const itemElement = event.target?.closest?.("[data-item-id]");
+    const itemElement = event.target?.closest?.("[data-item-id], [data-ability-id]");
     if (!itemElement) return;
 
-    event.preventDefault();
-    event.stopPropagation();
-    const item = this.actor.items.get(itemElement.dataset.itemId);
+    const itemId = itemElement.dataset.itemId ?? itemElement.dataset.abilityId ?? "";
+    const item = this.actor.items.get(itemId);
     if (!item) return;
 
+    if (item.type === "ability" && !game.user?.isGM) return;
+    event.preventDefault();
+    event.stopPropagation();
     this.#showInventoryContextMenu(item, event);
   }
 
   #onInventoryItemMouseOver(event) {
     if (this.#inventoryContextMenuOpen) return;
     if (this.#tooltipPinned) return;
+    if (event.target?.closest?.("[data-tooltip-ignore]")) return;
     const itemElement = event.target?.closest?.("[data-tooltip-item]");
     if (!itemElement) return;
     if (itemElement.contains(event.relatedTarget)) return;
@@ -797,6 +811,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #onInventoryItemMouseMove(event) {
     if (this.#inventoryContextMenuOpen) return;
     if (this.#tooltipPinned) return;
+    if (event.target?.closest?.("[data-tooltip-ignore]")) return;
     if (!event.target?.closest?.("[data-tooltip-item]")) return;
     this.#tooltipPointer = { x: event.clientX, y: event.clientY };
   }
@@ -1741,6 +1756,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#clearInventoryTooltip({ force: true });
     this.#closeInventoryContextMenu();
     this.#inventoryContextMenuOpen = true;
+    const isAbility = item.type === "ability";
     const placementMode = String(item.system?.placement?.mode ?? "");
     const isSlottedEquipment = placementMode === "equipment";
     const isSlottedWeapon = placementMode === "weapon";
@@ -1755,6 +1771,27 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const menuOptions = [];
     if (game.user?.isGM) {
       menuOptions.push(["edit", "fa-pen-to-square", game.i18n.localize("FALLOUTMAW.Common.Edit")]);
+    }
+    if (isAbility) {
+      if (game.user?.isGM) {
+        menuOptions.push(["delete", "fa-trash", game.i18n.localize("FALLOUTMAW.Common.Delete")]);
+      }
+      menu.innerHTML = menuOptions
+        .map(([action, icon, label]) => `<button type="button" data-action="${action}"><i class="fa-solid ${icon}"></i>${label}</button>`)
+        .join("");
+      document.body.append(menu);
+      this.#positionOverlayAtPointer(menu, { x: event.clientX, y: event.clientY }, 8);
+
+      menu.addEventListener("click", clickEvent => {
+        const action = clickEvent.target.closest("button")?.dataset.action;
+        if (!action) return;
+        clickEvent.preventDefault();
+        this.#closeInventoryContextMenu();
+        if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
+        if (action === "delete" && game.user?.isGM) return item.delete();
+        return undefined;
+      });
+      return;
     }
     if (isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
@@ -2574,7 +2611,16 @@ export async function renderInventoryItemTooltipHTML(item, actor, { activeWeapon
       relativeTo: item
     })
     : "";
+  if (item.type === "ability") return renderAbilityItemTooltipContentHTML(item, { descriptionHTML });
   return renderInventoryItemTooltipContentHTML(item, actor, { activeWeaponIndex, baseMode, descriptionHTML });
+}
+
+function renderAbilityItemTooltipContentHTML(item, { descriptionHTML = "" } = {}) {
+  return `
+    <section class="content fallout-maw-ability-tooltip-content">
+      <section class="description">${descriptionHTML || "Описание не задано."}</section>
+    </section>
+  `;
 }
 
 function renderInventoryItemTooltipContentHTML(item, actor, { activeWeaponIndex = 0, baseMode = false, descriptionHTML = "" } = {}) {

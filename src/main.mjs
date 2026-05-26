@@ -28,6 +28,7 @@ import { registerMedicineSocket } from "./apps/medicine-dialog.mjs";
 import { registerRepairSocket } from "./apps/repair-dialog.mjs";
 import { registerSearchInventorySocket } from "./apps/search-inventory.mjs";
 import { registerFirstAidSocket } from "./items/first-aid.mjs";
+import { registerAbilityEffectHooks, syncLoadedActorAbilityEffects } from "./abilities/effects.mjs";
 import { registerNeedThresholdHooks } from "./needs/need-thresholds.mjs";
 import { registerSystemSheets } from "./sheets/index.mjs";
 import { FalloutMaWDragDrop } from "./utils/drag-drop.mjs";
@@ -59,6 +60,7 @@ Hooks.once("init", () => {
   registerSystemSheets();
   registerTrackableAttributes();
   registerCombatMovementHooks();
+  registerAbilityEffectHooks();
   registerNeedThresholdHooks();
   registerSkillCheckControlHooks();
   registerTokenActionHudHooks();
@@ -82,6 +84,7 @@ Hooks.once("ready", async () => {
   registerTokenActionHudSocket();
   refreshTokenActionHudControlButton();
   syncTokenActionHud();
+  await syncLoadedActorAbilityEffects();
 });
 
 Hooks.on("dropCanvasData", async (canvas, data, event) => {

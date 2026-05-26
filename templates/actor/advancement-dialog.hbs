@@ -1,4 +1,5 @@
 <div class="fallout-maw-config-body fallout-maw-advancement-body">
+  {{#if isDevelopmentPage}}
   <section class="fallout-maw-panel fallout-maw-advancement-hero">
     <div class="fallout-maw-advancement-hero-layout">
       <div class="fallout-maw-advancement-hero-main">
@@ -38,6 +39,10 @@
           <span>{{localize "FALLOUTMAW.Actor.SkillPointsPerLevel"}}</span>
           <strong>{{skillPointsPerLevel}}</strong>
         </div>
+        <div class="fallout-maw-advancement-side-stat">
+          <span>ОИ за уровень</span>
+          <strong>{{researchPointsPerLevel}}</strong>
+        </div>
         <button type="button" class="fallout-maw-advancement-action-button fallout-maw-advancement-reset-button" data-action="resetDevelopment">
           <i class="fa-solid fa-rotate-left"></i>
           {{localize "FALLOUTMAW.Advancement.Reset"}}
@@ -46,7 +51,6 @@
     </div>
   </section>
 
-  {{#if isDevelopmentPage}}
   <section class="fallout-maw-panel fallout-maw-advancement-section">
     <div class="fallout-maw-advancement-section-title">
       <h2>{{localize "FALLOUTMAW.Common.Characteristics"}}</h2>
@@ -114,61 +118,77 @@
   {{/if}}
 
   {{#if isAbilitiesPage}}
-  <section class="fallout-maw-panel fallout-maw-advancement-section fallout-maw-advancement-abilities-page">
-    <div class="fallout-maw-advancement-section-title">
-      <h2>Способности</h2>
-    </div>
-    <div class="fallout-maw-advancement-meter fallout-maw-advancement-research-meter">
-      <span>Свободные ОИ</span>
-      <strong>{{researchPointsDisplay}}</strong>
+  <section class="fallout-maw-advancement-talents">
+    <div class="fallout-maw-advancement-talents-row fallout-maw-advancement-available-abilities">
+      <div class="fallout-maw-advancement-talents-header">Доступные способности</div>
+      <input type="text" class="fallout-maw-advancement-talent-search-input" data-ability-search placeholder="Поиск способностей...">
+
+      <div class="fallout-maw-advancement-talents-list">
+        {{#each abilityCategories}}
+        <div class="fallout-maw-advancement-talent-group{{#unless expanded}} collapsed{{/unless}}" data-ability-category>
+          <button type="button" class="fallout-maw-advancement-talent-group-header" data-action="toggleAbilityCategory" data-category-id="{{id}}">
+            <span class="fallout-maw-advancement-collapse-icon">{{#if expanded}}▾{{else}}▸{{/if}}</span>
+            <span>{{name}}</span>
+          </button>
+          <div class="fallout-maw-advancement-talent-group-abilities">
+            {{#each abilities}}
+            <button
+              type="button"
+              class="fallout-maw-advancement-talent-item{{#if selected}} selected{{/if}}{{#if owned}} owned{{/if}}{{#if researchActive}} research-active{{/if}}"
+              data-action="selectAbility"
+              data-ability-entry
+              data-ability-search-text="{{name}} {{acquisitionLabel}} {{manualLabel}}"
+              data-ability-source-id="{{sourceId}}"
+            >
+              <img class="fallout-maw-advancement-talent-icon" src="{{img}}" alt="">
+              <span class="fallout-maw-advancement-talent-name">{{name}}</span>
+            </button>
+            {{else}}
+            <p class="fallout-maw-empty-list fallout-maw-advancement-talent-empty">В каталоге нет способностей.</p>
+            {{/each}}
+          </div>
+        </div>
+        {{/each}}
+      </div>
     </div>
 
-    <div class="fallout-maw-advancement-ability-catalog">
-      {{#each abilityCategories}}
-      <section class="fallout-maw-advancement-ability-category">
-        <header class="fallout-maw-advancement-ability-category-title">
-          <h3>{{name}}</h3>
-        </header>
-        <div class="fallout-maw-advancement-ability-list">
-          {{#each abilities}}
-          <article class="fallout-maw-advancement-ability-card{{#if owned}} owned{{/if}}" data-ability-source-id="{{sourceId}}" data-research-id="{{researchId}}">
-            <img src="{{img}}" alt="" width="42" height="42">
-            <div class="fallout-maw-advancement-ability-main">
-              <header>
-                <strong>{{name}}</strong>
-                <span>{{acquisitionLabel}}</span>
-              </header>
-              {{#if description}}<div class="fallout-maw-advancement-ability-description">{{{description}}}</div>{{/if}}
-              <div class="fallout-maw-research-progress-bar fallout-maw-advancement-ability-progress">
-                <span style="width: {{progressPercent}}%;"></span>
-              </div>
-              <div class="fallout-maw-advancement-ability-meta">
-                <span>Прогресс: {{progressLabel}}</span>
-                {{#if manualLabel}}<span>{{manualLabel}}</span>{{/if}}
-                {{#if owned}}<span>Изучено</span>{{else if researchActive}}<span>Исследуется</span>{{/if}}
-              </div>
-            </div>
-            <div class="fallout-maw-advancement-ability-actions">
-              <button type="button" class="fallout-maw-advancement-action-button" data-action="spendAbilityResearch" {{#unless canSpendFree}}disabled{{/unless}}>
-                <i class="fa-solid fa-flask"></i>
-                +{{freeSpendAmount}} ОИ
-              </button>
-              <button type="button" class="fallout-maw-advancement-action-button" data-action="startAbilityResearch" {{#unless canStartManual}}disabled{{/unless}}>
-                <i class="fa-solid fa-book-open"></i>
-                Ручное
-              </button>
-              <button type="button" class="fallout-maw-advancement-action-button" data-action="completeAbilityResearch" {{#unless canComplete}}disabled{{/unless}}>
-                <i class="fa-solid fa-check"></i>
-                Завершить
-              </button>
-            </div>
-          </article>
-          {{else}}
-          <p class="fallout-maw-empty-list">В каталоге нет способностей.</p>
-          {{/each}}
+    <div class="fallout-maw-advancement-talents-row fallout-maw-advancement-details-row">
+      {{#if selectedAbility}}
+      <div class="fallout-maw-advancement-talents-details">
+        <div class="fallout-maw-advancement-talent-details-content">
+          <div class="fallout-maw-advancement-talent-details-name">{{selectedAbility.name}}</div>
+          <div class="fallout-maw-advancement-talent-research-info">
+            <div><span>Статус:</span> {{selectedAbility.statusLabel}}</div>
+            <div><span>Стоимость:</span> {{selectedAbility.cost}} ОИ</div>
+            <div><span>Прогресс:</span> {{selectedAbility.progressLabel}}</div>
+            <div><span>Приобретение:</span> {{selectedAbility.acquisitionLabel}}</div>
+            {{#if selectedAbility.manualLabel}}<div><span>Ручное исследование:</span> {{selectedAbility.manualLabel}}</div>{{/if}}
+          </div>
         </div>
-      </section>
-      {{/each}}
+      </div>
+      <div class="fallout-maw-advancement-talent-action-panel" data-ability-source-id="{{selectedAbility.sourceId}}" data-research-id="{{selectedAbility.researchId}}">
+        <button type="button" class="fallout-maw-advancement-talent-action-button primary" data-action="startAbilityResearch" {{#unless selectedAbility.canStartManual}}disabled{{/unless}}>
+          Начать исследование
+        </button>
+        <button type="button" class="fallout-maw-advancement-talent-action-button secondary" data-action="spendAbilityResearch" {{#unless selectedAbility.canSpendFree}}disabled{{/unless}}>
+          Вложить очки
+        </button>
+        <button type="button" class="fallout-maw-advancement-talent-action-button tertiary" data-action="completeAbilityResearch" {{#unless selectedAbility.canComplete}}disabled{{/unless}}>
+          Завершить
+        </button>
+        <div class="fallout-maw-advancement-talents-points">Свободные очки исследований: {{researchPointsDisplay}}</div>
+      </div>
+      {{else}}
+      <div class="fallout-maw-advancement-talents-details">
+        <div class="fallout-maw-advancement-details-placeholder">Выберите способность для просмотра данных исследования</div>
+      </div>
+      <div class="fallout-maw-advancement-talent-action-panel">
+        <button type="button" class="fallout-maw-advancement-talent-action-button primary" disabled>Начать исследование</button>
+        <button type="button" class="fallout-maw-advancement-talent-action-button secondary" disabled>Вложить очки</button>
+        <button type="button" class="fallout-maw-advancement-talent-action-button tertiary" disabled>Завершить</button>
+        <div class="fallout-maw-advancement-talents-points">Свободные очки исследований: {{researchPointsDisplay}}</div>
+      </div>
+      {{/if}}
     </div>
   </section>
   {{/if}}

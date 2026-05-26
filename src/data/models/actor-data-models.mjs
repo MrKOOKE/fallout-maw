@@ -35,7 +35,7 @@ import {
 import { normalizeResearchCollection } from "../../research/storage.mjs";
 import { toInteger } from "../../utils/numbers.mjs";
 
-const { ArrayField, BooleanField, HTMLField, NumberField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
+const { ArrayField, BooleanField, HTMLField, NumberField, ObjectField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
 
 export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
   static defineSchema() {
@@ -94,12 +94,10 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     const resourceSettings = getResourceSettings();
     const proficiencySettings = getProficiencySettings();
     const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
-    const abilityBonuses = collectOwnedAbilityBonuses(
-      this.parent?.items,
-      this.parent?._source?.system ?? this,
-      characteristicSettings,
-      skillSettings
-    );
+    const abilityBonuses = {
+      characteristics: Object.fromEntries(characteristicSettings.map(entry => [entry.key, 0])),
+      skills: Object.fromEntries(skillSettings.map(entry => [entry.key, 0]))
+    };
 
     this.characteristics ??= {};
     this.skills ??= {};
@@ -259,7 +257,9 @@ function researchField() {
     difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
     type: new StringField({ required: true, blank: true, initial: "" }),
     sourceId: new StringField({ required: true, blank: true, initial: "" }),
-    sourceCategoryId: new StringField({ required: true, blank: true, initial: "" })
+    sourceCategoryId: new StringField({ required: true, blank: true, initial: "" }),
+    freeSpent: new NumberField({ required: true, min: 0, initial: 0 }),
+    rewards: new ArrayField(new ObjectField({ required: true, initial: {} }), { required: true, initial: [] })
   });
 }
 
@@ -313,50 +313,6 @@ function normalizeCharacteristicMap(currentCharacteristics = {}, characteristicS
       toInteger(currentCharacteristics?.[characteristic.key]) + toInteger(developmentBonuses?.[characteristic.key])
     ])
   );
-}
-
-function collectOwnedAbilityBonuses(items, sourceSystem = {}, characteristicSettings = [], skillSettings = []) {
-  const characteristicKeys = new Set(characteristicSettings.map(entry => entry.key));
-  const skillKeys = new Set(skillSettings.map(entry => entry.key));
-  const bonuses = {
-    characteristics: Object.fromEntries(characteristicSettings.map(entry => [entry.key, 0])),
-    skills: Object.fromEntries(skillSettings.map(entry => [entry.key, 0]))
-  };
-  const healthPercent = getHealthPercent(sourceSystem);
-
-  for (const item of items?.contents ?? Array.from(items ?? [])) {
-    if (item?.type !== "ability") continue;
-    for (const entry of item.system?.functions ?? []) {
-      if (!abilityConditionApplies(entry?.condition, healthPercent)) continue;
-      const target = String(entry?.target ?? "");
-      const value = toInteger(entry?.value);
-      if (!target || !value) continue;
-      if (entry.type === "skillBonus" && skillKeys.has(target)) bonuses.skills[target] += value;
-      else if (entry.type === "characteristicBonus" && characteristicKeys.has(target)) bonuses.characteristics[target] += value;
-    }
-  }
-
-  return bonuses;
-}
-
-function abilityConditionApplies(condition = {}, healthPercent = 100) {
-  if (!condition?.enabled) return true;
-  const threshold = Math.max(0, Math.min(100, toInteger(condition.percent ?? 50)));
-  return String(condition.operator ?? "lte") === "gte"
-    ? healthPercent >= threshold
-    : healthPercent <= threshold;
-}
-
-function getHealthPercent(sourceSystem = {}) {
-  const health = sourceSystem?.resources?.health;
-  const max = Math.max(0, Number(health?.max) || 0);
-  if (max > 0) {
-    const value = Number.isFinite(Number(health?.value))
-      ? Number(health.value)
-      : max - Math.max(0, Number(health?.spent) || 0);
-    return Math.max(0, Math.min(100, (value / max) * 100));
-  }
-  return 100;
 }
 
 function mergeNumberMaps(...maps) {
