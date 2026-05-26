@@ -195,6 +195,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #draggedItemData = null;
   #draggedItemId = "";
   #draggedActorUuid = "";
+  #draggedTradeOfferKind = "";
+  #draggedTradeOfferKey = "";
   #dragDrop = null;
   #bulkTransferInProgress = false;
   #hoverPreviewInputKey = "";
@@ -435,6 +437,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#draggedItemData = null;
     this.#draggedItemId = "";
     this.#draggedActorUuid = "";
+    this.#draggedTradeOfferKind = "";
+    this.#draggedTradeOfferKey = "";
     this.#clearInventoryTooltip({ force: true });
     this.#unbindInventoryTooltipDocumentClose();
     this.#scrollPositions.clear();
@@ -548,6 +552,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   async _onDragStart(event) {
     this.#clearInventoryTooltip({ force: true });
     this.#clearInventoryDropPreview();
+    this.#draggedTradeOfferKind = "";
+    this.#draggedTradeOfferKey = "";
     const offerEntry = event.currentTarget?.closest?.("[data-trade-offer-entry]");
     if (this.#isTradeMode() && this.#tradeOffers.completed && offerEntry) {
       const side = String(offerEntry.dataset.tradeOfferSide ?? "");
@@ -561,6 +567,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       this.#draggedItemId = String(entry?.itemId ?? key);
       this.#draggedActorUuid = String(entry?.sourceActorUuid ?? "");
       this.#draggedItemData = itemData;
+      this.#draggedTradeOfferKind = kind;
+      this.#draggedTradeOfferKey = key;
       if (itemData) this.#highlightEquipmentSlotsForItem(itemData);
       event.dataTransfer?.setData("text/plain", JSON.stringify({
         type: "Item",
@@ -587,6 +595,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#draggedItemId = item.id;
     this.#draggedActorUuid = actor.uuid;
     this.#draggedItemData = item.toObject();
+    this.#draggedTradeOfferKind = String(offerEntry?.dataset?.tradeOfferKind ?? "");
+    this.#draggedTradeOfferKey = String(offerEntry?.dataset?.tradeOfferKey ?? "");
     this.#highlightEquipmentSlotsForItem(this.#draggedItemData);
     event.dataTransfer?.setData("text/plain", JSON.stringify({
       type: "Item",
@@ -617,6 +627,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#draggedItemData = null;
     this.#draggedItemId = "";
     this.#draggedActorUuid = "";
+    this.#draggedTradeOfferKind = "";
+    this.#draggedTradeOfferKey = "";
     this.#clearInventoryDropPreview();
     this.element?.querySelectorAll(".dragging").forEach(element => element.classList.remove("dragging"));
   }
@@ -624,14 +636,11 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   async _onDrop(event) {
     event.stopPropagation();
     const data = this.#getDragEventData(event);
-    this.#draggedItemData = null;
-    this.#draggedItemId = "";
-    this.#draggedActorUuid = "";
-    this.#clearInventoryDropPreview();
+    try {
     if (data?.type !== "Item" || !this.#canInteract()) return null;
 
     if (this.#isTradeMode() && this.#tradeOffers.completed && data.falloutMawTradeOffer) {
-      return this.#dropCompletedTradeOfferEntry({ data, event });
+      return await this.#dropCompletedTradeOfferEntry({ data, event });
     }
 
     const sourceActor = this.#getActorByUuid(String(data.sourceActorUuid ?? data.actorUuid ?? ""));
@@ -641,8 +650,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const zone = this.#getDropZone(event);
     const tradeOfferActorUuid = String(zone?.dataset?.tradeOfferActorUuid ?? zone?.closest?.("[data-trade-offer-actor-uuid]")?.dataset?.tradeOfferActorUuid ?? "");
     if (this.#isTradeMode() && tradeOfferActorUuid) {
-      if (data.falloutMawTradeOffer) return this.#moveTradeOfferEntry({ data, item, zone, event });
-      return this.#addItemToTradeOffer({ sourceActor, item, offerActorUuid: tradeOfferActorUuid, event, zone });
+      if (data.falloutMawTradeOffer) return await this.#moveTradeOfferEntry({ data, item, zone, event });
+      return await this.#addItemToTradeOffer({ sourceActor, item, offerActorUuid: tradeOfferActorUuid, event, zone });
     }
     const targetActorUuid = String(zone?.dataset?.searchActorUuid ?? zone?.closest?.("[data-search-actor-uuid]")?.dataset?.searchActorUuid ?? "");
     const targetActor = this.#getActorByUuid(targetActorUuid);
@@ -659,7 +668,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (canStackItems(item.toObject(), targetItem)) {
       const quantity = await this.#getSearchStackQuantity(item, targetItem, event, { sourceActor, targetActor });
       if (!quantity) return null;
-      return this.#executeSearchStackTransfer({
+      return await this.#executeSearchStackTransfer({
         searcherActorUuid: this.#searcherActorUuid,
         searchedActorUuid: this.#searchedActorUuid,
         sourceActorUuid: sourceActor.uuid,
@@ -724,6 +733,15 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       await this.render({ force: true });
     }
     return moved;
+    } finally {
+      this.#draggedItemData = null;
+      this.#draggedItemId = "";
+      this.#draggedActorUuid = "";
+      this.#draggedTradeOfferKind = "";
+      this.#draggedTradeOfferKey = "";
+      this.#clearInventoryDropPreview();
+      this.element?.querySelectorAll(".dragging").forEach(element => element.classList.remove("dragging"));
+    }
   }
 
   async #dropCompletedTradeOfferEntry({ data = {}, event = null } = {}) {
@@ -1184,9 +1202,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const width = Math.max(1, Math.min(columns, toInteger(footprint?.width) || 1));
     const height = Math.max(1, toInteger(footprint?.height) || 1);
     const occupied = getTradeOfferOccupiedPlacements(this.#tradeOffers[side], { excludeKind: entryKind, excludeKey: entryKey });
-    const anchorCell = grid && zone ? getTradeOfferAnchorCellFromEvent(grid, event) : null;
-    if (zone && !anchorCell) return null;
-    const pointer = getTradeOfferGridPointerPlacement(anchorCell, { columns, width, height });
+    const pointerPosition = grid && zone ? getTradeOfferGridPointerPosition(grid, event, { columns }) : null;
+    if (zone && !pointerPosition) return null;
+    const pointer = getTradeOfferGridPointerPlacement(pointerPosition, { columns, width, height });
     const rows = Math.max(TRADE_OFFER_MAX_ROWS, pointer ? pointer.y + height : height);
     if (pointer && isTradeOfferPlacementAvailable(pointer, occupied, columns, rows)) return { ...pointer, columns };
     const placement = pointer
@@ -1205,7 +1223,6 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   #syncRenderedTradeOfferColumns() {
     if (!this.#isTradeMode() || !this.rendered) return;
-    if (this.#tradeSessionSnapshot) return;
     let changed = false;
     for (const grid of this.element?.querySelectorAll("[data-trade-offer-grid][data-trade-offer-actor-uuid]") ?? []) {
       const side = this.#getTradeSideForActor(String(grid.dataset.tradeOfferActorUuid ?? ""));
@@ -1327,6 +1344,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (this.#draggedItemData) return this.#draggedItemData;
     const data = this.#getDragEventData(event);
     if (data?.type !== "Item") return null;
+    this.#draggedTradeOfferKind = String(data.tradeOfferKind ?? "");
+    this.#draggedTradeOfferKey = String(data.tradeOfferKey ?? "");
     if (this.#isTradeMode() && this.#tradeOffers.completed && data.falloutMawTradeOffer && data.tradeOfferKind === "item") {
       const entry = findTradeOfferEntry(this.#tradeOffers?.[String(data.tradeOfferSide ?? "")], "item", String(data.tradeOfferKey ?? ""));
       const itemData = getTradeOfferEntryItemData(entry, this.#getActorByUuid(String(entry?.sourceActorUuid ?? "")));
@@ -1524,14 +1543,16 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const side = this.#getTradeSideForActor(offerActorUuid);
     const sourceActor = this.#getActorByUuid(this.#draggedActorUuid);
     const sourceItem = sourceActor?.items?.get(this.#draggedItemId);
+    const entryKind = this.#draggedTradeOfferKind || "item";
+    const entryKey = this.#draggedTradeOfferKey || this.#draggedItemId;
     const placement = side
-      ? this.#getTradeOfferDropPlacement({ side, zone, event, item: sourceItem ?? this.#draggedItemData, entryKind: "item", entryKey: this.#draggedItemId })
+      ? this.#getTradeOfferDropPlacement({ side, zone, event, item: sourceItem ?? this.#draggedItemData, entryKind, entryKey })
       : null;
     if (!placement) {
       this.#clearInventoryHoverPreviewClasses();
       return;
     }
-    const previewKey = `trade-offer:${offerActorUuid}:${placement.x}:${placement.y}:${placement.width}:${placement.height}:${this.#draggedActorUuid}:${this.#draggedItemId}`;
+    const previewKey = `trade-offer:${offerActorUuid}:${placement.x}:${placement.y}:${placement.width}:${placement.height}:${this.#draggedActorUuid}:${this.#draggedItemId}:${entryKind}:${entryKey}`;
     if (this.#hoverPreviewKey === previewKey) return;
     this.#clearInventoryHoverPreviewClasses();
     this.#hoverPreviewKey = previewKey;
@@ -3576,23 +3597,39 @@ function getTradeOfferOccupiedPlacements(offer = {}, { excludeKind = "", exclude
   return occupied;
 }
 
-function getTradeOfferAnchorCellFromEvent(grid = null, event = null) {
+function getTradeOfferGridPointerPosition(grid = null, event = null, { columns = TRADE_OFFER_DEFAULT_COLUMNS } = {}) {
   const clientX = Number(event?.clientX);
   const clientY = Number(event?.clientY);
   if (!grid || !Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
-  const pointed = document.elementFromPoint(clientX, clientY)?.closest?.("[data-trade-offer-cell]");
-  if (!pointed || !grid.contains(pointed)) return null;
-  if (pointed.classList.contains("fallout-maw-trade-offer-preview-cell")) return null;
-  return pointed;
+
+  const gridRect = grid.getBoundingClientRect();
+  if (clientX < gridRect.left || clientX > gridRect.right || clientY < gridRect.top || clientY > gridRect.bottom) return null;
+
+  const firstCell = grid.querySelector('[data-trade-offer-cell][data-x="1"][data-y="1"]') ?? grid.querySelector("[data-trade-offer-cell]");
+  if (!firstCell) return null;
+
+  const firstRect = firstCell.getBoundingClientRect();
+  const secondColumnRect = grid.querySelector('[data-trade-offer-cell][data-y="1"][data-x="2"]')?.getBoundingClientRect();
+  const secondRowRect = grid.querySelector('[data-trade-offer-cell][data-x="1"][data-y="2"]')?.getBoundingClientRect();
+  const pitchX = secondColumnRect ? Math.max(1, secondColumnRect.left - firstRect.left) : Math.max(1, firstRect.width);
+  const pitchY = secondRowRect ? Math.max(1, secondRowRect.top - firstRect.top) : pitchX;
+  const firstCenterX = firstRect.left + (firstRect.width / 2);
+  const firstCenterY = firstRect.top + (firstRect.height / 2);
+  const columnCount = Math.max(1, toInteger(columns) || TRADE_OFFER_DEFAULT_COLUMNS);
+
+  return {
+    x: Math.max(1, Math.min(columnCount, ((clientX - firstCenterX) / pitchX) + 1)),
+    y: Math.max(1, ((clientY - firstCenterY) / pitchY) + 1)
+  };
 }
 
-function getTradeOfferGridPointerPlacement(anchorCell = null, { columns = TRADE_OFFER_DEFAULT_COLUMNS, width = 1, height = 1 } = {}) {
-  if (!anchorCell) return null;
-  const anchorX = toInteger(anchorCell.dataset.x);
-  const anchorY = toInteger(anchorCell.dataset.y);
-  if (!anchorX || !anchorY) return null;
+function getTradeOfferGridPointerPlacement(pointer = null, { columns = TRADE_OFFER_DEFAULT_COLUMNS, width = 1, height = 1 } = {}) {
+  if (!pointer) return null;
+  const anchorX = Number(pointer.x);
+  const anchorY = Number(pointer.y);
+  if (!Number.isFinite(anchorX) || !Number.isFinite(anchorY)) return null;
   const rawX = Math.round(anchorX - ((width - 1) / 2));
-  const rawY = anchorY;
+  const rawY = Math.round(anchorY - ((height - 1) / 2));
   return normalizeTradeOfferPlacement({
     x: Math.max(1, Math.min(Math.max(1, columns - width + 1), rawX)),
     y: Math.max(1, rawY),

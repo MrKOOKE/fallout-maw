@@ -67,6 +67,7 @@
             </section>
           </section>
 
+          <div class="fallout-maw-search-inventory-stack fallout-maw-pane-scroll" data-search-scroll-key="{{side}}:inventory-stack" data-search-drop-zone data-search-actor-uuid="{{uuid}}" data-inventory-parent-id="">
           {{#if ../isTrade}}
           <section class="fallout-maw-panel fallout-maw-trade-offer">
             <header class="fallout-maw-trade-offer-header">
@@ -99,7 +100,7 @@
               <div class="fallout-maw-inventory-cell fallout-maw-trade-offer-cell {{#if occupied}}occupied{{/if}}" data-search-drop-zone data-search-actor-uuid="{{../uuid}}" data-trade-offer-actor-uuid="{{../uuid}}" data-trade-offer-cell data-x="{{x}}" data-y="{{y}}" style="{{style}}"></div>
               {{/each}}
               {{#each tradeOffer.items}}
-              <article class="{{#if ../tradeOffer.canControl}}draggable fallout-maw-draggable-item{{/if}} fallout-maw-inventory-item fallout-maw-inventory-grid-item fallout-maw-trade-offer-item" draggable="{{#if ../tradeOffer.canControl}}true{{else}}false{{/if}}" style="{{gridStyle}}" data-trade-offer-entry data-trade-offer-kind="item" data-trade-offer-side="{{side}}" data-trade-offer-key="{{offerKey}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}">
+              <article class="{{#if ../tradeOffer.canControl}}draggable fallout-maw-draggable-item{{/if}} fallout-maw-inventory-item fallout-maw-inventory-grid-item fallout-maw-trade-offer-item" draggable="{{#if ../tradeOffer.canControl}}true{{else}}false{{/if}}" style="{{gridStyle}}" data-trade-offer-entry data-trade-offer-kind="item" data-trade-offer-side="{{side}}" data-trade-offer-key="{{offerKey}}" data-trade-offer-actor-uuid="{{../uuid}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-x="{{placement.x}}" data-y="{{placement.y}}">
                 <img src="{{img}}" alt="{{name}}">
                 {{#if price}}<span class="fallout-maw-trade-price">{{price}}</span>{{/if}}
                 {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
@@ -111,7 +112,7 @@
               </article>
               {{/each}}
               {{#each tradeOffer.currencies}}
-              <article class="{{#if completed}}{{#if ../tradeOffer.canControl}}draggable fallout-maw-draggable-item{{/if}}{{/if}} fallout-maw-inventory-item fallout-maw-inventory-grid-item fallout-maw-trade-offer-currency" draggable="{{#if completed}}{{#if ../tradeOffer.canControl}}true{{else}}false{{/if}}{{else}}false{{/if}}" style="{{gridStyle}}" title="{{label}}: {{amount}}" data-trade-offer-entry data-trade-offer-kind="currency" data-trade-offer-side="{{side}}" data-trade-offer-key="{{offerKey}}" data-search-actor-uuid="{{../uuid}}" data-item-id="{{offerKey}}">
+              <article class="{{#if completed}}{{#if ../tradeOffer.canControl}}draggable fallout-maw-draggable-item{{/if}}{{/if}} fallout-maw-inventory-item fallout-maw-inventory-grid-item fallout-maw-trade-offer-currency" draggable="{{#if completed}}{{#if ../tradeOffer.canControl}}true{{else}}false{{/if}}{{else}}false{{/if}}" style="{{gridStyle}}" title="{{label}}: {{amount}}" data-trade-offer-entry data-trade-offer-kind="currency" data-trade-offer-side="{{side}}" data-trade-offer-key="{{offerKey}}" data-trade-offer-actor-uuid="{{../uuid}}" data-search-actor-uuid="{{../uuid}}" data-item-id="{{offerKey}}" data-inventory-grid-item data-x="{{placement.x}}" data-y="{{placement.y}}">
                 <span class="fallout-maw-currency-icon">
                   {{#if hasImage}}
                   <img src="{{img}}" alt="{{label}}">
@@ -131,7 +132,6 @@
           </section>
           {{/if}}
 
-          <div class="fallout-maw-search-inventory-stack fallout-maw-pane-scroll" data-search-scroll-key="{{side}}:inventory-stack" data-search-drop-zone data-search-actor-uuid="{{uuid}}" data-inventory-parent-id="">
             <section class="fallout-maw-panel fallout-maw-equipment-pane fallout-maw-search-equipment-pane {{#if equipmentCollapsed}}collapsed{{/if}}">
               <h2 {{#if ../isTrade}}class="fallout-maw-trade-equipment-toggle" data-trade-equipment-toggle{{/if}}>
                 {{#if ../isTrade}}

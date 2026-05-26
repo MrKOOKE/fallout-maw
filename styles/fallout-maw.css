@@ -8863,9 +8863,9 @@ label.fallout-maw-mitigation-cell {
   grid-auto-rows: var(--fallout-maw-inventory-cell-size);
   grid-template-columns: repeat(var(--fallout-maw-trade-offer-columns, 12), var(--fallout-maw-inventory-cell-size));
   min-height: var(--fallout-maw-inventory-cell-size);
-  overflow: hidden;
+  overflow: visible;
   position: relative;
-  width: auto;
+  width: max-content;
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-offer-grid.trade-offer-drop-preview::after {
