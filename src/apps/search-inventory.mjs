@@ -765,7 +765,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   #getTradeOfferGridColumns(zone = null) {
-    const grid = zone?.closest?.("[data-trade-offer-grid]") ?? zone?.querySelector?.("[data-trade-offer-grid]") ?? zone;
+    const grid = this.#getTradeOfferGridElement(zone);
+    if (!grid) return TRADE_OFFER_DEFAULT_COLUMNS;
     const container = grid?.parentElement ?? grid;
     const containerStyles = container ? getComputedStyle(container) : null;
     const horizontalPadding = (parseFloat(containerStyles?.paddingLeft) || 0) + (parseFloat(containerStyles?.paddingRight) || 0);
@@ -782,7 +783,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   #getTradeOfferDropPlacement({ side = "", zone = null, event = null, item = null, entryKind = "item", entryKey = "" } = {}) {
-    const grid = zone?.closest?.("[data-trade-offer-grid]") ?? zone?.querySelector?.("[data-trade-offer-grid]") ?? zone;
+    const grid = this.#getTradeOfferGridElement(zone);
+    if (!grid) return null;
     const columns = this.#getTradeOfferGridColumns(grid);
     const footprint = entryKind === "currency" ? { width: 1, height: 1 } : getItemFootprint(item, this.#getActorForTradeSide(side)?.items);
     const width = Math.max(1, Math.min(columns, toInteger(footprint?.width) || 1));
@@ -795,6 +797,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       ? findNearestAvailableTradeOfferPlacement(occupied, columns, rows, { width, height }, pointer)
       : findFirstAvailableTradeOfferPlacement(occupied, columns, rows, { width, height });
     return placement ? { ...placement, columns } : null;
+  }
+
+  #getTradeOfferGridElement(zone = null) {
+    if (!zone) return null;
+    if (zone.matches?.("[data-trade-offer-grid]")) return zone;
+    return zone.closest?.("[data-trade-offer-grid]")
+      ?? zone.querySelector?.("[data-trade-offer-grid]")
+      ?? null;
   }
 
   #syncRenderedTradeOfferColumns() {
@@ -1095,7 +1105,11 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 
   #applyTradeOfferPreview(zone = null, event = null) {
-    const grid = zone?.closest?.("[data-trade-offer-grid]") ?? zone;
+    const grid = this.#getTradeOfferGridElement(zone);
+    if (!grid) {
+      this.#clearInventoryHoverPreviewClasses();
+      return;
+    }
     const offerActorUuid = String(grid?.dataset?.tradeOfferActorUuid ?? "");
     const side = this.#getTradeSideForActor(offerActorUuid);
     const sourceActor = this.#getActorByUuid(this.#draggedActorUuid);
