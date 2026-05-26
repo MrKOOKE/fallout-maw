@@ -60,18 +60,27 @@
           <section class="fallout-maw-panel fallout-maw-trade-offer">
             <header class="fallout-maw-trade-offer-header">
               <h2>
-                <span>Предложение</span>
+                <span>{{#if tradeOffer.completed}}Купленное{{else}}Предложение{{/if}}</span>
+                {{#unless tradeOffer.completed}}
                 <strong>{{tradeOffer.total}}</strong>
                 <em class="fallout-maw-trade-offer-difference fallout-maw-trade-offer-difference--{{tradeOffer.differenceClass}}">({{tradeOffer.differenceLabel}})</em>
+                {{/unless}}
               </h2>
               <div class="fallout-maw-trade-offer-actions">
                 <button type="button" class="fallout-maw-trade-offer-clear" data-trade-offer-remove="all" data-trade-side="{{tradeOffer.side}}" title="Забрать все" {{#unless ../canInteract}}disabled{{/unless}}>
                   <i class="fa-solid fa-box-open"></i>
                 </button>
+                {{#if tradeOffer.completed}}
+                <button type="button" class="fallout-maw-trade-ready-button" data-trade-restart {{#unless ../canInteract}}disabled{{/unless}}>
+                  <i class="fa-solid fa-rotate-right"></i>
+                  <span>Возобновить торговлю</span>
+                </button>
+                {{else}}
                 <button type="button" class="fallout-maw-trade-ready-button {{#if tradeOffer.ready}}ready{{/if}}" data-trade-ready="{{tradeOffer.side}}" {{#unless ../canInteract}}disabled{{/unless}}>
                   <i class="fa-solid fa-check"></i>
                   <span>Подтвердить</span>
                 </button>
+                {{/if}}
               </div>
             </header>
             <div class="fallout-maw-trade-offer-grid" data-search-drop-zone data-search-actor-uuid="{{uuid}}" data-trade-offer-grid data-trade-offer-actor-uuid="{{uuid}}" style="--fallout-maw-trade-offer-columns: {{tradeOffer.grid.columns}};">
@@ -83,9 +92,11 @@
                 <img src="{{img}}" alt="{{name}}">
                 {{#if price}}<span class="fallout-maw-trade-price">{{price}}</span>{{/if}}
                 {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
+                {{#unless completed}}
                 <button type="button" class="fallout-maw-trade-offer-remove" data-trade-offer-remove="item" data-trade-side="{{side}}" data-trade-offer-key="{{offerKey}}" title="Убрать">
                   <i class="fa-solid fa-xmark"></i>
                 </button>
+                {{/unless}}
               </article>
               {{/each}}
               {{#each tradeOffer.currencies}}
@@ -98,9 +109,11 @@
                   {{/if}}
                 </span>
                 <strong>{{amount}}</strong>
+                {{#unless completed}}
                 <button type="button" class="fallout-maw-trade-offer-remove" data-trade-offer-remove="currency" data-trade-side="{{side}}" data-trade-offer-key="{{offerKey}}" title="Убрать">
                   <i class="fa-solid fa-xmark"></i>
                 </button>
+                {{/unless}}
               </article>
               {{/each}}
             </div>

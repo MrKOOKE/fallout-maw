@@ -8437,6 +8437,7 @@ label.fallout-maw-mitigation-cell {
   line-height: 1;
   padding: 0 0.45rem;
   transition: none;
+  white-space: nowrap;
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-offer-clear {
