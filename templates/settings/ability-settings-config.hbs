@@ -1,0 +1,60 @@
+<div class="fallout-maw-config-body">
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>Способности/Особенности</h2>
+      <div class="fallout-maw-button-row">
+        <button type="button" data-action="addCategory"><i class="fa-solid fa-plus"></i> Добавить каталог</button>
+        <button type="button" data-action="resetDefaults"><i class="fa-solid fa-rotate-left"></i> {{localize "FALLOUTMAW.Common.ResetDefaults"}}</button>
+      </div>
+    </header>
+
+    <div class="fallout-maw-ability-category-list">
+      {{#each catalog.categories}}
+      <article class="fallout-maw-panel fallout-maw-ability-category" data-ability-category-row data-category-id="{{id}}">
+        <header class="fallout-maw-ability-category-header">
+          <button type="button" class="fallout-maw-icon-button fallout-maw-drag-handle" data-drag-handle title="Сортировать">
+            <i class="fa-solid fa-grip-vertical"></i>
+          </button>
+          <label>
+            <span>Каталог</span>
+            <input type="text" data-field="categoryName" value="{{name}}" {{#if locked}}disabled{{/if}}>
+          </label>
+          <button type="button" data-action="addAbility"><i class="fa-solid fa-plus"></i> Создать способность</button>
+          <button type="button" class="fallout-maw-icon-button" data-action="deleteCategory" {{#unless deletable}}disabled{{/unless}}>
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </header>
+
+        <div class="fallout-maw-ability-compact-list">
+          {{#each abilities}}
+          <div class="fallout-maw-ability-compact-row" data-ability-row data-ability-id="{{id}}">
+            <img src="{{img}}" alt="" width="34" height="34">
+            <input type="hidden" data-field="abilityImg" value="{{img}}">
+            <label>
+              <span>Название</span>
+              <input type="text" data-field="abilityName" value="{{name}}">
+            </label>
+            <label>
+              <span>Стоимость ОИ</span>
+              <input type="number" data-field="abilityCost" value="{{cost}}" min="0" step="1">
+            </label>
+            <button type="button" class="fallout-maw-icon-button" data-action="editAbility" title="Редактировать способность">
+              <i class="fa-solid fa-pen"></i>
+            </button>
+            <button type="button" class="fallout-maw-icon-button" data-action="deleteAbility" title="Удалить способность">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+          {{else}}
+          <p class="fallout-maw-empty-list">В каталоге нет способностей.</p>
+          {{/each}}
+        </div>
+      </article>
+      {{/each}}
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  </footer>
+</div>

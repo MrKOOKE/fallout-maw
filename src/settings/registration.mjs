@@ -10,6 +10,7 @@ import {
 } from "../formulas/index.mjs";
 import { createDefaultCurrencySettings } from "./currency-settings.mjs";
 import { localize } from "../utils/i18n.mjs";
+import { AbilitySettingsConfig } from "../apps/ability-settings-config.mjs";
 import { CharacteristicsConfig } from "../apps/characteristics-config.mjs";
 import { CreatureOptionsConfig } from "../apps/creature-options-config.mjs";
 import { CurrencySettingsConfig } from "../apps/currency-settings-config.mjs";
@@ -25,6 +26,7 @@ import { TokenActionHudSettings } from "../apps/token-action-hud-settings-config
 import { TraumaSettingsConfig } from "../apps/trauma-settings-config.mjs";
 import { refreshPreparedActors, syncSettingsIntoSystemConfig } from "./accessors.mjs";
 import {
+  ABILITIES_CATALOG_SETTING,
   CHARACTERISTICS_SETTING,
   CREATURE_OPTIONS_SETTING,
   CURRENCY_SETTINGS_SETTING,
@@ -46,6 +48,7 @@ import {
   TOKEN_ACTION_HUD_ENABLED_SETTING,
   TOKEN_ACTION_HUD_SCALE_SETTING
 } from "./constants.mjs";
+import { createDefaultAbilityCatalog } from "./abilities.mjs";
 import { createEmptyCreatureOptions } from "./creature-options.mjs";
 import { createDefaultDiseaseSettings } from "./diseases.mjs";
 import { createDefaultLevelSettings } from "./levels.mjs";
@@ -145,6 +148,15 @@ export function registerSystemSettings() {
       entries: createDefaultProficiencySettings(),
       influence: createDefaultProficiencyInfluenceSettings()
     },
+    onChange: refreshPreparedActors
+  });
+
+  game.settings.register(FALLOUT_MAW.id, ABILITIES_CATALOG_SETTING, {
+    name: "Способности/Особенности",
+    scope: "world",
+    config: false,
+    type: Object,
+    default: createDefaultAbilityCatalog(createDefaultSkillSettings()),
     onChange: refreshPreparedActors
   });
 
@@ -285,6 +297,14 @@ export function registerSystemSettings() {
     label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-shield-halved",
     type: DamageTypesConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "abilitySettingsMenu", {
+    name: "Способности/Особенности",
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-wand-sparkles",
+    type: AbilitySettingsConfig,
     restricted: true
   });
 

@@ -18,6 +18,7 @@ import {
 } from "../formulas/index.mjs";
 import { createDefaultCurrencySettings, normalizeCurrencySettings } from "./currency-settings.mjs";
 import {
+  ABILITIES_CATALOG_SETTING,
   CHARACTERISTICS_SETTING,
   CREATURE_OPTIONS_SETTING,
   CURRENCY_SETTINGS_SETTING,
@@ -35,6 +36,7 @@ import {
   TRAUMA_SETTINGS_SETTING,
   TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING
 } from "./constants.mjs";
+import { createDefaultAbilityCatalog, normalizeAbilityCatalog } from "./abilities.mjs";
 import { createEmptyCreatureOptions, normalizeCreatureOptions } from "./creature-options.mjs";
 import { createDefaultDiseaseSettings, normalizeDiseaseSettings } from "./diseases.mjs";
 import { createDefaultLevelSettings, normalizeLevelSettings } from "./levels.mjs";
@@ -203,6 +205,24 @@ export function getProficiencySettings() {
   } catch (_error) {
     return createDefaultProficiencySettings();
   }
+}
+
+export function getAbilityCatalog() {
+  try {
+    return normalizeAbilityCatalog(game.settings.get(FALLOUT_MAW.id, ABILITIES_CATALOG_SETTING), getSkillSettings());
+  } catch (_error) {
+    return createDefaultAbilityCatalog(getSkillSettings());
+  }
+}
+
+export async function setAbilityCatalog(catalog) {
+  const normalized = normalizeAbilityCatalog(catalog, getSkillSettings());
+  await game.settings.set(FALLOUT_MAW.id, ABILITIES_CATALOG_SETTING, normalized);
+  return normalized;
+}
+
+export async function resetAbilityCatalog() {
+  return setAbilityCatalog(createDefaultAbilityCatalog(getSkillSettings()));
 }
 
 export function getProficiencyInfluenceSettings() {

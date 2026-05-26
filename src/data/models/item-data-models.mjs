@@ -84,9 +84,31 @@ export class AbilityDataModel extends BaseItemDataModel {
     return {
       ...super.defineSchema(),
       cost: new NumberField({ required: true, min: 0, initial: 0 }),
-      formula: new StringField({ required: true, blank: true, initial: "" })
+      formula: new StringField({ required: true, blank: true, initial: "" }),
+      acquisition: new SchemaField({
+        onlyFree: new BooleanField({ required: true, initial: false }),
+        onlyManual: new BooleanField({ required: true, initial: false }),
+        skillKey: new StringField({ required: true, blank: true, initial: "" }),
+        difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 })
+      }),
+      functions: new ArrayField(abilityFunctionField(), { required: true, initial: [] })
     };
   }
+}
+
+function abilityFunctionField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+    type: new StringField({ required: true, blank: false, choices: ["characteristicBonus", "skillBonus"], initial: "characteristicBonus" }),
+    target: new StringField({ required: true, blank: true, initial: "" }),
+    value: new NumberField({ required: true, integer: true, initial: 0 }),
+    condition: new SchemaField({
+      enabled: new BooleanField({ required: true, initial: false }),
+      resource: new StringField({ required: true, blank: false, choices: ["health"], initial: "health" }),
+      operator: new StringField({ required: true, blank: false, choices: ["lte", "gte"], initial: "lte" }),
+      percent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 50 })
+    })
+  });
 }
 
 function containerFunctionField() {

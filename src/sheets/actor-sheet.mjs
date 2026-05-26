@@ -337,6 +337,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           developmentBonus: toInteger(current.developmentBonus)
         });
       }),
+      abilities: prepareAbilityEntries(actor, {
+        characteristicSettings,
+        skillSettings
+      }),
       proficiencies: proficiencySettings.map(proficiency => {
         const current = actor.system.proficiencies?.[proficiency.key] ?? {};
         return prepareDisplayIndicatorEntry({
@@ -3830,7 +3834,7 @@ function getActorLoadLimitExceededMessage() {
 function prepareInventoryContext(actor, race) {
   const currencies = getCurrencySettings();
   const { columns, rows } = getInventoryGridDimensions(race);
-  const allItems = actor.items.contents.filter(item => item.type !== "trauma" && item.type !== "disease");
+  const allItems = actor.items.contents.filter(item => !["ability", "trauma", "disease"].includes(item.type));
   const allItemData = allItems.map(item => createInventoryItemData(item, allItems, currencies));
   const assignedItemIds = new Set();
   const topLevelItems = allItemData.filter(item => !item.parentId);
@@ -3933,6 +3937,33 @@ function createInventoryItemData(item, allItems, currencies = [], placement = nu
       maxLoad: Math.max(0, Number(container.maxLoad) || 0)
     }
   };
+}
+
+function prepareAbilityEntries(actor, { characteristicSettings = [], skillSettings = [] } = {}) {
+  const characteristicLabels = new Map(characteristicSettings.map(entry => [entry.key, entry.label]));
+  const skillLabels = new Map(skillSettings.map(entry => [entry.key, entry.label]));
+  return actor.items.filter(item => item.type === "ability").map(item => ({
+    id: item.id,
+    uuid: item.uuid,
+    name: item.name,
+    img: item.img,
+    description: item.system?.description ?? "",
+    cost: toInteger(item.system?.cost),
+    effects: prepareAbilityEffectSummaries(item.system?.functions, characteristicLabels, skillLabels)
+  }));
+}
+
+function prepareAbilityEffectSummaries(functions = [], characteristicLabels = new Map(), skillLabels = new Map()) {
+  return (Array.isArray(functions) ? functions : []).map(entry => {
+    const labelMap = entry?.type === "skillBonus" ? skillLabels : characteristicLabels;
+    const targetLabel = labelMap.get(entry?.target) ?? entry?.target ?? "";
+    const value = toInteger(entry?.value);
+    const sign = value >= 0 ? "+" : "";
+    const condition = entry?.condition?.enabled
+      ? ` при ОЗ ${entry.condition.operator === "gte" ? ">=" : "<="} ${toInteger(entry.condition.percent)}%`
+      : "";
+    return `${targetLabel}: ${sign}${value}${condition}`;
+  }).filter(Boolean);
 }
 
 function prepareTraumaEntries(actor, settings = {}) {

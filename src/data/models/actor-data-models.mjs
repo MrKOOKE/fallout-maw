@@ -94,6 +94,12 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     const resourceSettings = getResourceSettings();
     const proficiencySettings = getProficiencySettings();
     const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
+    const abilityBonuses = collectOwnedAbilityBonuses(
+      this.parent?.items,
+      this.parent?._source?.system ?? this,
+      characteristicSettings,
+      skillSettings
+    );
 
     this.characteristics ??= {};
     this.skills ??= {};
@@ -109,7 +115,11 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
 
     const baseCharacteristics = normalizeNumberMap(this.characteristics, characteristicSettings);
     const characteristicBonuses = normalizeNumberMap(this.development?.characteristics, characteristicSettings);
-    replaceObjectContents(this.characteristics, normalizeCharacteristicMap(baseCharacteristics, characteristicSettings, characteristicBonuses));
+    replaceObjectContents(this.characteristics, normalizeCharacteristicMap(
+      baseCharacteristics,
+      characteristicSettings,
+      mergeNumberMaps(characteristicBonuses, abilityBonuses.characteristics)
+    ));
     this.attributes.initiative = toInteger(this.characteristics.perception);
     replaceObjectContents(this.currencies, normalizeNumberMap(this.currencies, currencySettings));
 
@@ -129,7 +139,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       skillAdvancementSettings,
       this.development
     );
-    replaceObjectContents(this.skills, normalizeSkillMap(this.skills, skillSettings, skillBases, skillBonuses, skillAdvancementSettings));
+    replaceObjectContents(this.skills, normalizeSkillMap(this.skills, skillSettings, skillBases, skillBonuses, skillAdvancementSettings, abilityBonuses.skills));
     replaceArrayContents(this.researches, normalizeResearchCollection(this.researches));
     replaceObjectContents(this.proficiencies, normalizeProficiencyMap(this.proficiencies, proficiencySettings));
 
@@ -233,6 +243,7 @@ function skillField() {
     min: new NumberField({ required: true, integer: true, initial: 0 }),
     bonus: new NumberField({ required: true, integer: true, initial: 0 }),
     developmentBonus: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+    abilityBonus: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
     max: new NumberField({ required: true, integer: true, min: 0, initial: DEFAULT_SKILL_DEVELOPMENT_LIMIT }),
     value: new NumberField({ required: true, integer: true, initial: 0 })
   });
@@ -245,7 +256,10 @@ function researchField() {
     skillKey: new StringField({ required: true, blank: true, initial: "" }),
     progress: new NumberField({ required: true, min: 0, initial: 0 }),
     target: new NumberField({ required: true, min: 1, initial: 1 }),
-    difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 })
+    difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
+    type: new StringField({ required: true, blank: true, initial: "" }),
+    sourceId: new StringField({ required: true, blank: true, initial: "" }),
+    sourceCategoryId: new StringField({ required: true, blank: true, initial: "" })
   });
 }
 
@@ -276,7 +290,7 @@ function replaceArrayContents(target, source) {
   target.push(...source);
 }
 
-function normalizeSkillMap(currentSkills = {}, skillSettings = [], skillBases = {}, skillBonuses = {}, skillAdvancementSettings = {}) {
+function normalizeSkillMap(currentSkills = {}, skillSettings = [], skillBases = {}, skillBonuses = {}, skillAdvancementSettings = {}, abilityBonuses = {}) {
   const min = 0;
   const max = Math.max(min, toInteger(skillAdvancementSettings?.developmentLimit ?? DEFAULT_SKILL_DEVELOPMENT_LIMIT));
   return Object.fromEntries(
@@ -285,8 +299,9 @@ function normalizeSkillMap(currentSkills = {}, skillSettings = [], skillBases = 
       const base = toInteger(skillBases?.[skill.key]);
       const bonus = toInteger(current.bonus);
       const developmentBonus = toInteger(skillBonuses?.[skill.key]);
-      const value = Math.min(Math.max(base + bonus + developmentBonus, min), max);
-      return [skill.key, { base, min, bonus, developmentBonus, value, max }];
+      const abilityBonus = toInteger(abilityBonuses?.[skill.key]);
+      const value = Math.min(Math.max(base + bonus + developmentBonus + abilityBonus, min), max);
+      return [skill.key, { base, min, bonus, developmentBonus, abilityBonus, value, max }];
     })
   );
 }
@@ -298,6 +313,60 @@ function normalizeCharacteristicMap(currentCharacteristics = {}, characteristicS
       toInteger(currentCharacteristics?.[characteristic.key]) + toInteger(developmentBonuses?.[characteristic.key])
     ])
   );
+}
+
+function collectOwnedAbilityBonuses(items, sourceSystem = {}, characteristicSettings = [], skillSettings = []) {
+  const characteristicKeys = new Set(characteristicSettings.map(entry => entry.key));
+  const skillKeys = new Set(skillSettings.map(entry => entry.key));
+  const bonuses = {
+    characteristics: Object.fromEntries(characteristicSettings.map(entry => [entry.key, 0])),
+    skills: Object.fromEntries(skillSettings.map(entry => [entry.key, 0]))
+  };
+  const healthPercent = getHealthPercent(sourceSystem);
+
+  for (const item of items?.contents ?? Array.from(items ?? [])) {
+    if (item?.type !== "ability") continue;
+    for (const entry of item.system?.functions ?? []) {
+      if (!abilityConditionApplies(entry?.condition, healthPercent)) continue;
+      const target = String(entry?.target ?? "");
+      const value = toInteger(entry?.value);
+      if (!target || !value) continue;
+      if (entry.type === "skillBonus" && skillKeys.has(target)) bonuses.skills[target] += value;
+      else if (entry.type === "characteristicBonus" && characteristicKeys.has(target)) bonuses.characteristics[target] += value;
+    }
+  }
+
+  return bonuses;
+}
+
+function abilityConditionApplies(condition = {}, healthPercent = 100) {
+  if (!condition?.enabled) return true;
+  const threshold = Math.max(0, Math.min(100, toInteger(condition.percent ?? 50)));
+  return String(condition.operator ?? "lte") === "gte"
+    ? healthPercent >= threshold
+    : healthPercent <= threshold;
+}
+
+function getHealthPercent(sourceSystem = {}) {
+  const health = sourceSystem?.resources?.health;
+  const max = Math.max(0, Number(health?.max) || 0);
+  if (max > 0) {
+    const value = Number.isFinite(Number(health?.value))
+      ? Number(health.value)
+      : max - Math.max(0, Number(health?.spent) || 0);
+    return Math.max(0, Math.min(100, (value / max) * 100));
+  }
+  return 100;
+}
+
+function mergeNumberMaps(...maps) {
+  const result = {};
+  for (const map of maps) {
+    for (const [key, value] of Object.entries(map ?? {})) {
+      result[key] = toInteger(result[key]) + toInteger(value);
+    }
+  }
+  return result;
 }
 
 function developmentField() {
@@ -321,6 +390,10 @@ function developmentField() {
         points: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
         signature: new BooleanField({ required: true, initial: false })
       }),
+      { required: true, initial: {} }
+    ),
+    abilityResearches: new TypedObjectField(
+      new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
       { required: true, initial: {} }
     )
   });

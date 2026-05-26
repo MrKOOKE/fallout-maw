@@ -3298,6 +3298,9 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-advancement-footer {
   background: rgba(14, 15, 14, 0.98);
   border-top: 1px solid rgba(202, 168, 92, 0.12);
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 3rem minmax(0, 1fr) 3rem;
   margin-top: 0.25rem;
   padding-bottom: 0.65rem;
   padding-top: 0.9rem;
@@ -6080,6 +6083,110 @@ label.fallout-maw-mitigation-cell {
   z-index: 1;
 }
 
+.fallout-maw-advancement-page-button {
+  align-items: center;
+  background: rgba(34, 33, 29, 0.78);
+  border: 1px solid var(--fallout-maw-adv-border);
+  color: var(--fallout-maw-adv-text);
+  display: inline-flex;
+  justify-content: center;
+  min-height: 2.9rem;
+  padding: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.fallout-maw-advancement-page-button[disabled] {
+  opacity: 0.35;
+}
+
+.fallout-maw-advancement-abilities-page {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.fallout-maw-advancement-research-meter {
+  justify-self: stretch;
+}
+
+.fallout-maw-advancement-ability-catalog,
+.fallout-maw-advancement-ability-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.fallout-maw-advancement-ability-category-title h3 {
+  color: var(--fallout-maw-adv-accent-strong);
+  font-size: 1rem;
+  margin: 0 0 0.45rem;
+}
+
+.fallout-maw-advancement-ability-card {
+  align-items: start;
+  background: rgba(12, 13, 11, 0.86);
+  border: 1px solid rgba(212, 181, 93, 0.24);
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 2.8rem minmax(0, 1fr) minmax(170px, auto);
+  padding: 0.65rem;
+}
+
+.fallout-maw-advancement-ability-card.owned {
+  border-color: rgba(140, 178, 100, 0.42);
+}
+
+.fallout-maw-advancement-ability-card > img {
+  border: 1px solid rgba(212, 181, 93, 0.3);
+  height: 2.6rem;
+  object-fit: cover;
+  width: 2.6rem;
+}
+
+.fallout-maw-advancement-ability-main {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.fallout-maw-advancement-ability-main header,
+.fallout-maw-advancement-ability-meta {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+}
+
+.fallout-maw-advancement-ability-main header strong {
+  color: var(--fallout-maw-adv-accent-strong);
+}
+
+.fallout-maw-advancement-ability-main header span,
+.fallout-maw-advancement-ability-meta {
+  color: var(--fallout-maw-adv-text-soft);
+  font-size: 0.86rem;
+}
+
+.fallout-maw-advancement-ability-description {
+  color: var(--fallout-maw-adv-text);
+  font-size: 0.9rem;
+  max-height: 5rem;
+  overflow: auto;
+}
+
+.fallout-maw-advancement-ability-progress {
+  height: 0.55rem;
+}
+
+.fallout-maw-advancement-ability-actions {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.fallout-maw-advancement-ability-actions .fallout-maw-advancement-action-button {
+  min-height: 2.1rem;
+  white-space: nowrap;
+}
+
 .fallout-maw-token-hud-action-tile {
   flex-basis: var(--fallout-maw-token-hud-action-tile-width);
   height: var(--fallout-maw-token-hud-tile);
@@ -6663,6 +6770,34 @@ label.fallout-maw-mitigation-cell {
 .disease-settings-config [data-disease-row].collapsed [data-disease-collapse-body] {
   display: none;
 }
+
+.ability-settings-config .fallout-maw-ability-category-list,
+.ability-settings-config .fallout-maw-ability-compact-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ability-settings-config .fallout-maw-ability-category-header {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 2.25rem minmax(220px, 1fr) max-content 2.25rem;
+}
+
+.ability-settings-config .fallout-maw-ability-compact-row {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 2.5rem minmax(180px, 1fr) 8rem 2.25rem 2.25rem;
+}
+
+.ability-settings-config .fallout-maw-ability-compact-row img {
+  border: 1px solid rgba(210, 185, 145, 0.35);
+  height: 2.25rem;
+  object-fit: cover;
+  width: 2.25rem;
+}
+
 
 .currency-settings .fallout-maw-settings-row {
   grid-template-columns: 2rem 6rem minmax(0, 0.68fr) minmax(0, 0.9fr) 110px 9rem 2.5rem;
@@ -7559,6 +7694,54 @@ label.fallout-maw-mitigation-cell {
 
 .application.fallout-maw-actor-sheet .fallout-maw-resource-grid {
   gap: 0.55rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-ability-card-grid {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-ability-card {
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 239, 168, 0.022) 0 1px, transparent 1px 5px),
+    linear-gradient(180deg, rgba(6, 9, 7, 0.98), rgba(11, 13, 9, 0.96));
+  border: 2px solid rgba(131, 119, 74, 0.42);
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 2.8rem minmax(0, 1fr);
+  min-height: 4rem;
+  padding: 0.55rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-ability-card > img {
+  border: 1px solid rgba(255, 239, 168, 0.18);
+  height: 2.6rem;
+  object-fit: cover;
+  width: 2.6rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-ability-card header {
+  align-items: baseline;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-ability-card strong {
+  color: var(--fallout-maw-actor-text-strong);
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-ability-card span,
+.application.fallout-maw-actor-sheet .fallout-maw-ability-card li,
+.application.fallout-maw-actor-sheet .fallout-maw-ability-description {
+  color: var(--fallout-maw-actor-text);
+  font-size: var(--fallout-maw-actor-text-size);
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-ability-card ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1rem;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-resource-card,
@@ -9078,7 +9261,10 @@ label.fallout-maw-mitigation-cell {
   .fallout-maw-advancement-characteristics,
   .fallout-maw-advancement-skills,
   .fallout-maw-advancement-skill-row,
-  .fallout-maw-advancement-row {
+  .fallout-maw-advancement-row,
+  .fallout-maw-advancement-ability-card,
+  .ability-settings-config .fallout-maw-ability-category-header,
+  .ability-settings-config .fallout-maw-ability-compact-row {
     grid-template-columns: 1fr;
   }
 

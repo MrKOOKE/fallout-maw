@@ -12,6 +12,10 @@ export function calculateSpentSignatureSkillPoints(development = {}) {
   return Object.values(development?.skills ?? {}).reduce((total, skill) => total + (skill?.signature ? 1 : 0), 0);
 }
 
+export function calculateSpentResearchPoints(development = {}) {
+  return Object.values(development?.abilityResearches ?? {}).reduce((total, value) => total + (Number(value) || 0), 0);
+}
+
 export function calculateRemainingDevelopmentPoints(development = {}) {
   return {
     characteristics: Math.max(0, (Number(development?.points?.characteristics) || 0) - calculateSpentCharacteristicPoints(development)),
@@ -19,7 +23,7 @@ export function calculateRemainingDevelopmentPoints(development = {}) {
     traits: Math.max(0, Number(development?.points?.traits) || 0),
     proficiencies: Math.max(0, Number(development?.points?.proficiencies) || 0),
     skills: Math.max(0, (Number(development?.points?.skills) || 0) - calculateSpentSkillPoints(development)),
-    researches: Math.max(0, Number(development?.points?.researches) || 0)
+    researches: Math.max(0, (Number(development?.points?.researches) || 0) - calculateSpentResearchPoints(development))
   };
 }
 

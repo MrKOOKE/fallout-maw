@@ -50,6 +50,8 @@ export const TEMPLATES = Object.freeze({
     currencies: `systems/${SYSTEM_ID}/templates/settings/currency-settings-config.hbs`,
     damageTypes: `systems/${SYSTEM_ID}/templates/settings/damage-types-config.hbs`,
     damageTypeSettings: `systems/${SYSTEM_ID}/templates/settings/damage-type-settings-config.hbs`,
+    abilities: `systems/${SYSTEM_ID}/templates/settings/ability-settings-config.hbs`,
+    abilityEditor: `systems/${SYSTEM_ID}/templates/settings/ability-catalog-item-editor.hbs`,
     diseases: `systems/${SYSTEM_ID}/templates/settings/disease-settings-config.hbs`,
     levels: `systems/${SYSTEM_ID}/templates/settings/level-settings-config.hbs`,
     needs: `systems/${SYSTEM_ID}/templates/settings/need-settings-config.hbs`,

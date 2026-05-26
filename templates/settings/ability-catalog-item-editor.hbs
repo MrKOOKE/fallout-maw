@@ -1,0 +1,119 @@
+<div class="fallout-maw-sheet-body">
+<header class="sheet-header fallout-maw-sheet-header">
+  <input type="hidden" data-field="img" value="{{ability.img}}">
+  <img class="profile-img" src="{{ability.img}}" data-action="editAbilityImage" title="{{ability.name}}" height="80" width="80">
+  <div class="fallout-maw-header-fields">
+    <input class="fallout-maw-title-input" data-field="name" type="text" value="{{ability.name}}" placeholder="{{localize 'DOCUMENT.FIELDS.name.label'}}">
+  </div>
+</header>
+
+<nav class="sheet-tabs tabs fallout-maw-item-tabs" data-group="primary">
+  <a class="item {{tabs.details.cssClass}}" data-action="selectTab" data-group="{{tabs.details.group}}" data-tab="{{tabs.details.id}}">Общие данные</a>
+  <a class="item {{tabs.functions.cssClass}}" data-action="selectTab" data-group="{{tabs.functions.group}}" data-tab="{{tabs.functions.id}}">Функции</a>
+</nav>
+
+<section class="tab {{tabs.details.cssClass}}" data-group="{{tabs.details.group}}" data-tab="{{tabs.details.id}}">
+  <section class="fallout-maw-panel">
+    <h2>Приобретение</h2>
+    <div class="fallout-maw-list-grid two-columns">
+      <label>
+        <span>Стоимость ОИ</span>
+        <input type="number" data-field="cost" value="{{system.cost}}" min="0" step="1">
+      </label>
+      <label class="fallout-maw-inline-checkbox">
+        <span>Только свободные ОИ</span>
+        <input type="checkbox" data-field="onlyFree" {{checked onlyFree}}>
+      </label>
+      <label class="fallout-maw-inline-checkbox">
+        <span>Только ручное исследование</span>
+        <input type="checkbox" data-field="onlyManual" {{checked onlyManual}}>
+      </label>
+      <label>
+        <span>Навык ручного исследования</span>
+        <select data-field="researchSkillKey">
+          {{#each researchSkillChoices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
+        <span>Сложность ручного исследования</span>
+        <input type="number" data-field="researchDifficulty" value="{{researchDifficulty}}" min="0" step="1">
+      </label>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel fallout-maw-description-panel">
+    <h2>Описание</h2>
+    <prose-mirror data-field="description" value="{{ability.description}}" class="sized" compact>
+      {{{descriptionHTML}}}
+    </prose-mirror>
+  </section>
+</section>
+
+<section class="tab {{tabs.functions.cssClass}}" data-group="{{tabs.functions.group}}" data-tab="{{tabs.functions.id}}">
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>Функции</h2>
+      <div class="fallout-maw-inline-controls">
+        <button type="button" data-action="addFunction" {{#unless canAddFunction}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить функцию</button>
+      </div>
+    </div>
+    {{#if showFunctionPicker}}
+    <div class="fallout-maw-function-picker">
+      <select data-choose-ability-function>
+        {{#each functionChoices}}
+        <option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>
+        {{/each}}
+      </select>
+    </div>
+    {{/if}}
+  </section>
+
+  {{#each functions}}
+  <section class="fallout-maw-panel" data-ability-function-row data-function-id="{{id}}" data-function-type="{{type}}">
+    <div class="fallout-maw-panel-header">
+      <h2>{{typeLabel}}</h2>
+      <button type="button" class="fallout-maw-icon-button" data-action="deleteFunction"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>Цель</span>
+        <select data-field="functionTarget">
+          {{#each targetChoices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
+        <span>Изменение</span>
+        <input type="number" data-field="functionValue" value="{{value}}" step="1">
+      </label>
+      <label class="fallout-maw-inline-checkbox">
+        <span>Условие по ОЗ</span>
+        <input type="checkbox" data-field="conditionEnabled" {{checked conditionEnabled}}>
+      </label>
+      <label>
+        <span>Оператор</span>
+        <select data-field="conditionOperator">
+          <option value="lte" {{#if conditionLte}}selected{{/if}}>&lt;=</option>
+          <option value="gte" {{#if conditionGte}}selected{{/if}}>&gt;=</option>
+        </select>
+      </label>
+      <label>
+        <span>Процент ОЗ</span>
+        <input type="number" data-field="conditionPercent" value="{{conditionPercent}}" min="0" max="100" step="1">
+      </label>
+    </div>
+  </section>
+  {{else}}
+  <section class="fallout-maw-panel">
+    <p class="fallout-maw-empty-list">Функции не настроены.</p>
+  </section>
+  {{/each}}
+</section>
+
+<footer class="sheet-footer flexrow">
+  <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+</footer>
+</div>

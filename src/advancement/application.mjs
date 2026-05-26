@@ -9,10 +9,13 @@ import { FALLOUT_MAW } from "../config/system-config.mjs";
 import {
   getCharacteristicSettings,
   getCreatureOptions,
+  getAbilityCatalog,
   getLevelSettings,
   getSkillAdvancementSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
+import { actorHasAbility, completeAbilityResearch, findCatalogAbility, grantCatalogAbility } from "../abilities/purchase.mjs";
+import { formatResearchValue } from "../research/storage.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { localize } from "../utils/i18n.mjs";
@@ -28,6 +31,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #draft = null;
   #experienceSyncTimer = null;
   #floor = null;
+  #page = "development";
   #repeatState = null;
   #suppressNextRepeatClick = false;
   #snapshot = null;
@@ -58,6 +62,11 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       increaseCharacteristic: this.#onIncreaseCharacteristic,
       decreaseSkill: this.#onDecreaseSkill,
       increaseSkill: this.#onIncreaseSkill,
+      nextPage: this.#onNextPage,
+      previousPage: this.#onPreviousPage,
+      spendAbilityResearch: this.#onSpendAbilityResearch,
+      startAbilityResearch: this.#onStartAbilityResearch,
+      completeAbilityResearch: this.#onCompleteAbilityResearch,
       levelUp: this.#onLevelUp,
       resetDevelopment: this.#onResetDevelopment,
       toggleSignatureSkill: this.#onToggleSignatureSkill
@@ -117,6 +126,10 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       characteristicPointsDisplay: `${remaining.characteristics} / ${Math.max(remaining.characteristics, toInteger(this.#draft.development.points.characteristics) - floorCharacteristicSpent)}`,
       skillPointsDisplay: `${remaining.skills} / ${Math.max(remaining.skills, toInteger(this.#draft.development.points.skills) - floorSkillSpent)}`,
       signatureSkillPointsDisplay: `${remaining.signatureSkills} / ${Math.max(remaining.signatureSkills, toInteger(this.#draft.development.points.signatureSkills) - floorSignatureSpent)}`,
+      researchPointsDisplay: `${remaining.researches} / ${Math.max(remaining.researches, toInteger(this.#draft.development.points.researches))}`,
+      page: this.#page,
+      isDevelopmentPage: this.#page === "development",
+      isAbilitiesPage: this.#page === "abilities",
       characteristics: characteristicSettings.map(characteristic => {
         const floorPoints = toInteger(this.#floor.development.characteristics?.[characteristic.key]);
         const currentPoints = toInteger(this.#draft.development.characteristics?.[characteristic.key]);
@@ -141,7 +154,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
             ? canUnsetSignature
             : (remaining.signatureSkills > 0)
         };
-      })
+      }),
+      abilityCategories: this.#prepareAbilityCategories(remaining.researches, skillSettings)
     };
   }
 
@@ -348,10 +362,156 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     return true;
   }
 
+  static #onNextPage(event) {
+    event.preventDefault();
+    this.#page = "abilities";
+    return this.forceRender();
+  }
+
+  static #onPreviousPage(event) {
+    event.preventDefault();
+    this.#page = "development";
+    return this.forceRender();
+  }
+
+  static async #onSpendAbilityResearch(event, target) {
+    event.preventDefault();
+    await this.#ensureDraft();
+    this.#syncDraftFromForm();
+
+    const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
+    const entry = findCatalogAbility(sourceId);
+    if (!entry || actorHasAbility(this.actor, sourceId)) return this.forceRender();
+    if (entry.ability.system?.acquisition?.onlyManual) return this.forceRender();
+
+    const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
+    const cost = Math.max(0, toInteger(entry.ability.system?.cost));
+    if (cost <= 0) {
+      await grantCatalogAbility(this.actor, sourceId);
+      return this.forceRender();
+    }
+    if (remaining.researches <= 0) return this.forceRender();
+
+    const current = toInteger(this.#draft.development.abilityResearches?.[sourceId]);
+    const research = this.#getAbilityResearch(sourceId);
+    const currentProgress = Math.max(current, Number(research?.progress) || 0);
+    const investment = Math.min(remaining.researches, Math.max(0, cost - currentProgress));
+    if (investment <= 0) return this.forceRender();
+
+    this.#draft.development.abilityResearches[sourceId] = current + investment;
+    await this.#applyDraftToActor();
+
+    if (research) {
+      await this.actor.updateResearch(research.id, {
+        progress: Math.min(cost, Number(research.progress) + investment),
+        target: cost
+      });
+    } else if (!entry.ability.system?.acquisition?.onlyFree && currentProgress + investment < cost) {
+      await this.actor.createResearch(this.#createAbilityResearchData(entry, currentProgress + investment));
+    }
+
+    if (currentProgress + investment >= cost) {
+      await grantCatalogAbility(this.actor, sourceId);
+      if (research) await this.actor.deleteResearch(research.id);
+    }
+
+    this.#syncDraftFromActor();
+    return this.forceRender();
+  }
+
+  static async #onStartAbilityResearch(event, target) {
+    event.preventDefault();
+    await this.#ensureDraft();
+    this.#syncDraftFromForm();
+
+    const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
+    const entry = findCatalogAbility(sourceId);
+    if (!entry || actorHasAbility(this.actor, sourceId)) return this.forceRender();
+    if (entry.ability.system?.acquisition?.onlyFree) return this.forceRender();
+    if (this.#getAbilityResearch(sourceId)) return this.forceRender();
+
+    const cost = Math.max(1, toInteger(entry.ability.system?.cost));
+    const progress = Math.min(cost, toInteger(this.#draft.development.abilityResearches?.[sourceId]));
+    await this.actor.createResearch(this.#createAbilityResearchData(entry, progress));
+    return this.forceRender();
+  }
+
+  static async #onCompleteAbilityResearch(event, target) {
+    event.preventDefault();
+    const researchId = target.closest("[data-ability-source-id]")?.dataset.researchId ?? "";
+    if (!researchId) return undefined;
+    await completeAbilityResearch(this.actor, researchId);
+    return this.forceRender();
+  }
+
   #getSkillDevelopmentLimit() {
     const characteristicSettings = getCharacteristicSettings();
     const skillSettings = getSkillSettings();
     return Math.max(0, toInteger(getSkillAdvancementSettings(characteristicSettings, skillSettings).developmentLimit));
+  }
+
+  #prepareAbilityCategories(availableResearchPoints = 0, skillSettings = []) {
+    const catalog = getAbilityCatalog();
+    return (catalog.categories ?? []).map(category => ({
+      ...category,
+      abilities: (category.abilities ?? []).map(ability => this.#prepareAbilityEntry(category, ability, availableResearchPoints, skillSettings))
+    }));
+  }
+
+  #prepareAbilityEntry(category, ability, availableResearchPoints = 0, skillSettings = []) {
+    const sourceId = String(ability?.id ?? "");
+    const cost = Math.max(0, toInteger(ability?.system?.cost));
+    const spent = toInteger(this.#draft.development?.abilityResearches?.[sourceId]);
+    const research = this.#getAbilityResearch(sourceId);
+    const progress = Math.min(cost, Math.max(spent, Number(research?.progress) || 0));
+    const remainingCost = Math.max(0, cost - progress);
+    const owned = actorHasAbility(this.actor, sourceId);
+    const onlyFree = Boolean(ability?.system?.acquisition?.onlyFree);
+    const onlyManual = Boolean(ability?.system?.acquisition?.onlyManual);
+    const completed = cost <= 0 || progress >= cost;
+    const skillLabel = skillSettings.find(skill => skill.key === ability?.system?.acquisition?.skillKey)?.label ?? skillSettings[0]?.label ?? "";
+    return {
+      ...ability,
+      sourceId,
+      categoryId: category.id,
+      cost,
+      progress,
+      progressLabel: `${formatResearchValue(progress)} / ${formatResearchValue(cost)}`,
+      progressPercent: cost > 0 ? Math.min(100, (progress / cost) * 100).toFixed(2) : "100",
+      remainingCost,
+      owned,
+      onlyFree,
+      onlyManual,
+      canSpendFree: !owned && !onlyManual && ((cost <= 0) || (remainingCost > 0 && availableResearchPoints > 0)),
+      freeSpendAmount: Math.min(availableResearchPoints, remainingCost),
+      canStartManual: !owned && !onlyFree && !research && !completed,
+      canComplete: !owned && Boolean(research) && completed,
+      researchId: research?.id ?? "",
+      researchActive: Boolean(research),
+      acquisitionLabel: onlyFree ? "Только свободные ОИ" : onlyManual ? "Только ручное исследование" : "Свободные ОИ или ручное исследование",
+      manualLabel: skillLabel ? `${skillLabel}, сложность ${toInteger(ability?.system?.acquisition?.difficulty ?? 60)}` : ""
+    };
+  }
+
+  #getAbilityResearch(sourceId = "") {
+    return (this.actor.system?.researches ?? []).find(research => research.type === "ability" && research.sourceId === sourceId) ?? null;
+  }
+
+  #createAbilityResearchData(entry, progress = 0) {
+    const ability = entry.ability;
+    const skillSettings = getSkillSettings();
+    const skillKey = String(ability.system?.acquisition?.skillKey || skillSettings[0]?.key || "");
+    const target = Math.max(1, toInteger(ability.system?.cost));
+    return {
+      name: ability.name,
+      skillKey,
+      progress: Math.min(Math.max(0, Number(progress) || 0), target),
+      target,
+      difficulty: Math.max(0, toInteger(ability.system?.acquisition?.difficulty ?? 60)),
+      type: "ability",
+      sourceId: ability.id,
+      sourceCategoryId: entry.category.id
+    };
   }
 
   async #applyRepeatAction(action, key) {

@@ -108,7 +108,7 @@ export function getInventoryGridDimensions(race) {
 export function prepareInventoryContext(actor, race) {
   const currencies = getCurrencySettings();
   const { columns, rows } = getInventoryGridDimensions(race);
-  const allItems = actor.items.contents.filter(item => item.type !== "trauma" && item.type !== "disease");
+  const allItems = actor.items.contents.filter(item => !["ability", "trauma", "disease"].includes(item.type));
   const allItemData = allItems.map(item => createInventoryItemData(item, allItems, currencies));
   const assignedItemIds = new Set();
   const topLevelItems = allItemData.filter(item => !item.parentId);

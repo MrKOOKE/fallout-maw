@@ -46,6 +46,7 @@
     </div>
   </section>
 
+  {{#if isDevelopmentPage}}
   <section class="fallout-maw-panel fallout-maw-advancement-section">
     <div class="fallout-maw-advancement-section-title">
       <h2>{{localize "FALLOUTMAW.Common.Characteristics"}}</h2>
@@ -110,8 +111,71 @@
       </div>
     </div>
   </section>
+  {{/if}}
+
+  {{#if isAbilitiesPage}}
+  <section class="fallout-maw-panel fallout-maw-advancement-section fallout-maw-advancement-abilities-page">
+    <div class="fallout-maw-advancement-section-title">
+      <h2>Способности</h2>
+    </div>
+    <div class="fallout-maw-advancement-meter fallout-maw-advancement-research-meter">
+      <span>Свободные ОИ</span>
+      <strong>{{researchPointsDisplay}}</strong>
+    </div>
+
+    <div class="fallout-maw-advancement-ability-catalog">
+      {{#each abilityCategories}}
+      <section class="fallout-maw-advancement-ability-category">
+        <header class="fallout-maw-advancement-ability-category-title">
+          <h3>{{name}}</h3>
+        </header>
+        <div class="fallout-maw-advancement-ability-list">
+          {{#each abilities}}
+          <article class="fallout-maw-advancement-ability-card{{#if owned}} owned{{/if}}" data-ability-source-id="{{sourceId}}" data-research-id="{{researchId}}">
+            <img src="{{img}}" alt="" width="42" height="42">
+            <div class="fallout-maw-advancement-ability-main">
+              <header>
+                <strong>{{name}}</strong>
+                <span>{{acquisitionLabel}}</span>
+              </header>
+              {{#if description}}<div class="fallout-maw-advancement-ability-description">{{{description}}}</div>{{/if}}
+              <div class="fallout-maw-research-progress-bar fallout-maw-advancement-ability-progress">
+                <span style="width: {{progressPercent}}%;"></span>
+              </div>
+              <div class="fallout-maw-advancement-ability-meta">
+                <span>Прогресс: {{progressLabel}}</span>
+                {{#if manualLabel}}<span>{{manualLabel}}</span>{{/if}}
+                {{#if owned}}<span>Изучено</span>{{else if researchActive}}<span>Исследуется</span>{{/if}}
+              </div>
+            </div>
+            <div class="fallout-maw-advancement-ability-actions">
+              <button type="button" class="fallout-maw-advancement-action-button" data-action="spendAbilityResearch" {{#unless canSpendFree}}disabled{{/unless}}>
+                <i class="fa-solid fa-flask"></i>
+                +{{freeSpendAmount}} ОИ
+              </button>
+              <button type="button" class="fallout-maw-advancement-action-button" data-action="startAbilityResearch" {{#unless canStartManual}}disabled{{/unless}}>
+                <i class="fa-solid fa-book-open"></i>
+                Ручное
+              </button>
+              <button type="button" class="fallout-maw-advancement-action-button" data-action="completeAbilityResearch" {{#unless canComplete}}disabled{{/unless}}>
+                <i class="fa-solid fa-check"></i>
+                Завершить
+              </button>
+            </div>
+          </article>
+          {{else}}
+          <p class="fallout-maw-empty-list">В каталоге нет способностей.</p>
+          {{/each}}
+        </div>
+      </section>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
 
   <footer class="sheet-footer flexrow fallout-maw-advancement-footer">
+    <button type="button" class="fallout-maw-advancement-page-button" data-action="previousPage" {{#if isDevelopmentPage}}disabled{{/if}}><i class="fa-solid fa-chevron-left"></i></button>
     <button type="submit" class="fallout-maw-advancement-save-button"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+    <button type="button" class="fallout-maw-advancement-page-button" data-action="nextPage" {{#if isAbilitiesPage}}disabled{{/if}}><i class="fa-solid fa-chevron-right"></i></button>
   </footer>
 </div>

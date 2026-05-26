@@ -117,6 +117,31 @@
   </section>
 
   <section class="fallout-maw-panel">
+    <h2>Способности</h2>
+    <div class="fallout-maw-ability-card-grid">
+      {{#each abilities}}
+      <article class="fallout-maw-ability-card">
+        <img src="{{img}}" alt="" width="42" height="42">
+        <div>
+          <header>
+            <strong>{{name}}</strong>
+            <span>{{cost}} ОИ</span>
+          </header>
+          {{#if description}}<div class="fallout-maw-ability-description">{{{description}}}</div>{{/if}}
+          {{#if effects}}
+          <ul>
+            {{#each effects}}<li>{{this}}</li>{{/each}}
+          </ul>
+          {{/if}}
+        </div>
+      </article>
+      {{else}}
+      <p class="fallout-maw-empty-list">Способности не изучены.</p>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
     <h2>{{localize "FALLOUTMAW.Common.Proficiencies"}}</h2>
     <div class="fallout-maw-resource-grid">
       {{#each proficiencies}}

@@ -13,7 +13,10 @@ export function prepareResearchForStorage(research = {}, { generateId = true } =
     skillKey: String(research.skillKey ?? "").trim(),
     progress: clampResearchProgress(research.progress, target),
     target,
-    difficulty: Math.max(0, toInteger(research.difficulty ?? RESEARCH_DEFAULT_DIFFICULTY))
+    difficulty: Math.max(0, toInteger(research.difficulty ?? RESEARCH_DEFAULT_DIFFICULTY)),
+    type: String(research.type ?? "").trim(),
+    sourceId: String(research.sourceId ?? "").trim(),
+    sourceCategoryId: String(research.sourceCategoryId ?? "").trim()
   };
 }
 

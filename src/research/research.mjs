@@ -1,4 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
+import { completeAbilityResearch } from "../abilities/purchase.mjs";
 import { requestSkillCheckBatch } from "../rolls/skill-check.mjs";
 import { format, localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -89,6 +90,7 @@ export async function applyResearchTime(actor, researchId, duration = {}, { crea
 export async function finalizeResearch(actor, researchId) {
   const research = getResearchById(actor.system?.researches, researchId);
   if (!research || (Number(research.progress) < Number(research.target))) return null;
+  if (research.type === "ability") return finalizeAbilityResearch(actor, researchId, research);
 
   const content = await renderTemplate(TEMPLATES.researchCompleteChatCard, {
     actor,
@@ -121,6 +123,46 @@ export async function finalizeResearch(actor, researchId) {
   return {
     research,
     message
+  };
+}
+
+async function finalizeAbilityResearch(actor, researchId, research) {
+  const result = await completeAbilityResearch(actor, researchId);
+  if (!result) return null;
+
+  const content = await renderTemplate(TEMPLATES.researchCompleteChatCard, {
+    actor,
+    research: {
+      ...research,
+      progressLabel: formatResearchValue(research.progress),
+      targetLabel: formatResearchValue(research.target)
+    },
+    completionMessage: format("FALLOUTMAW.Research.CompletedChatMessage", {
+      actor: actor.name,
+      name: research.name
+    })
+  });
+
+  const message = await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    content,
+    flags: {
+      "fallout-maw": {
+        research: {
+          id: research.id,
+          name: research.name,
+          completed: true,
+          type: "ability",
+          sourceId: research.sourceId
+        }
+      }
+    }
+  });
+
+  return {
+    research,
+    message,
+    item: result.item
   };
 }
 
