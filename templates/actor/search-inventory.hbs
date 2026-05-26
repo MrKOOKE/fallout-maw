@@ -109,15 +109,11 @@
 
           <div class="fallout-maw-search-inventory-stack fallout-maw-pane-scroll" data-search-scroll-key="{{side}}:inventory-stack" data-search-drop-zone data-search-actor-uuid="{{uuid}}" data-inventory-parent-id="">
             <section class="fallout-maw-panel fallout-maw-equipment-pane fallout-maw-search-equipment-pane {{#if equipmentCollapsed}}collapsed{{/if}}">
-              <h2>
+              <h2 {{#if ../isTrade}}class="fallout-maw-trade-equipment-toggle" data-trade-equipment-toggle{{/if}}>
                 {{#if ../isTrade}}
-                <button type="button" class="fallout-maw-trade-equipment-toggle" data-trade-equipment-toggle>
-                  <i class="fa-solid {{#if equipmentCollapsed}}fa-chevron-right{{else}}fa-chevron-down{{/if}}"></i>
-                  <span>{{localize "FALLOUTMAW.Common.Equipment"}}</span>
-                </button>
-                {{else}}
-                {{localize "FALLOUTMAW.Common.Equipment"}}
-                {{/if}}
+                <i class="fa-solid {{#if equipmentCollapsed}}fa-chevron-right{{else}}fa-chevron-down{{/if}}"></i>
+                <span>{{localize "FALLOUTMAW.Common.Equipment"}}</span>
+                {{else}}{{localize "FALLOUTMAW.Common.Equipment"}}{{/if}}
               </h2>
               <div class="fallout-maw-pane-scroll fallout-maw-equipment-scroll" data-trade-equipment-body>
                 <div class="fallout-maw-equipment-slot-list">

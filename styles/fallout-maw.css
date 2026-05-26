@@ -8588,21 +8588,21 @@ label.fallout-maw-mitigation-cell {
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-equipment-toggle {
-  align-items: center;
-  background: transparent;
-  border: 0;
   color: inherit;
   cursor: pointer;
-  display: inline-flex;
-  font: inherit;
-  gap: 0.45rem;
-  padding: 0;
-  text-align: inherit;
+  user-select: none;
+  transition: color 80ms ease;
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-equipment-toggle i {
+  flex: 0 0 auto;
   font-size: 0.8em;
-  width: 0.9rem;
+  text-align: center;
+  width: 0.75rem;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-equipment-toggle:hover {
+  color: var(--fallout-maw-actor-accent);
 }
 
 .fallout-maw-trade-quantity-price {
