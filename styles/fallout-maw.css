@@ -321,7 +321,7 @@
 }
 
 .fallout-maw-token-action-hud-icon-grid {
-  display: grid;
+  display: inline-grid;
   gap: 0.75rem;
   margin-top: 0.85rem;
 }
@@ -8472,6 +8472,7 @@ label.fallout-maw-mitigation-cell {
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-offer-grid {
+  box-sizing: border-box;
   display: grid;
   gap: var(--fallout-maw-inventory-grid-gap);
   grid-auto-rows: var(--fallout-maw-inventory-cell-size);
@@ -8479,8 +8480,7 @@ label.fallout-maw-mitigation-cell {
   min-height: var(--fallout-maw-inventory-cell-size);
   overflow: hidden;
   position: relative;
-  width: max-content;
-  max-width: 100%;
+  width: auto;
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-offer-grid.trade-offer-drop-preview::after {

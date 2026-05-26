@@ -629,6 +629,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (!quantity) return null;
 
     const placement = this.#getTradeOfferDropPlacement({ side, zone, event, item, entryKind: "item", entryKey: item.id });
+    if (zone && !placement) return null;
     this.#tradeOffers = addTradeOfferItem(this.#tradeOffers, side, item, quantity, placement);
     this.#resetTradeReady();
     this.#broadcastTradeOffers();
@@ -772,25 +773,36 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const horizontalPadding = (parseFloat(containerStyles?.paddingLeft) || 0) + (parseFloat(containerStyles?.paddingRight) || 0);
     const width = Math.max(
       0,
-      (Number(container?.clientWidth) || Number(container?.getBoundingClientRect?.().width) || Number(grid?.getBoundingClientRect?.().width) || 0)
+      (Number(container?.clientWidth) || 0)
       - horizontalPadding
     );
     const styles = grid ? getComputedStyle(grid) : null;
-    const cellSize = parseFloat(styles?.getPropertyValue("--fallout-maw-inventory-cell-size")) || 80;
     const gap = parseFloat(styles?.columnGap) || parseFloat(styles?.gap) || 0;
+    const firstCell = grid?.querySelector?.("[data-trade-offer-cell]");
+    const secondCell = grid?.querySelector?.('[data-trade-offer-cell][data-y="1"][data-x="2"]');
+    const firstWidth = Number(firstCell?.offsetWidth) || 0;
+    const cellSize = firstWidth
+      ? (secondCell ? Math.max(1, Number(secondCell.offsetLeft) - Number(firstCell.offsetLeft) - gap) : firstWidth)
+      : (parseFloat(styles?.getPropertyValue("--fallout-maw-inventory-cell-size")) || 80);
     if (!width || !cellSize) return TRADE_OFFER_DEFAULT_COLUMNS;
-    return Math.max(1, Math.floor(((width + gap) / (cellSize + gap)) - 0.01));
+    const pitch = Math.max(1, cellSize + gap);
+    let columns = Math.max(1, Math.floor((width + gap) / pitch));
+    while (columns > 1 && ((columns * cellSize) + ((columns - 1) * gap)) > width - 1) columns -= 1;
+    return columns;
   }
 
   #getTradeOfferDropPlacement({ side = "", zone = null, event = null, item = null, entryKind = "item", entryKey = "" } = {}) {
-    const grid = this.#getTradeOfferGridElement(zone);
-    if (!grid) return null;
-    const columns = this.#getTradeOfferGridColumns(grid);
+    const actor = this.#getActorForTradeSide(side);
+    const grid = this.#getTradeOfferGridElement(zone)
+      ?? (actor ? this.element?.querySelector(`[data-trade-offer-grid][data-trade-offer-actor-uuid="${CSS.escape(actor.uuid)}"]`) : null);
+    const columns = grid ? this.#getTradeOfferGridColumns(grid) : Math.max(1, toInteger(this.#tradeOffers?.[side]?.columns) || TRADE_OFFER_DEFAULT_COLUMNS);
     const footprint = entryKind === "currency" ? { width: 1, height: 1 } : getItemFootprint(item, this.#getActorForTradeSide(side)?.items);
     const width = Math.max(1, Math.min(columns, toInteger(footprint?.width) || 1));
     const height = Math.max(1, toInteger(footprint?.height) || 1);
     const occupied = getTradeOfferOccupiedPlacements(this.#tradeOffers[side], { excludeKind: entryKind, excludeKey: entryKey });
-    const pointer = getTradeOfferGridPointerPlacement(grid, event, { columns, width, height });
+    const anchorCell = grid && zone ? getTradeOfferAnchorCellFromEvent(grid, event) : null;
+    if (zone && !anchorCell) return null;
+    const pointer = getTradeOfferGridPointerPlacement(anchorCell, { columns, width, height });
     const rows = Math.max(TRADE_OFFER_MAX_ROWS, pointer ? pointer.y + height : height);
     if (pointer && isTradeOfferPlacementAvailable(pointer, occupied, columns, rows)) return { ...pointer, columns };
     const placement = pointer
@@ -977,6 +989,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const hoveredZone = hoveredElement?.closest?.("[data-search-drop-zone]") ?? null;
     if (hoveredZone === zone) return;
     if (zone.closest("[data-inventory-grid]") && hoveredElement?.closest?.("[data-inventory-grid]") === zone.closest("[data-inventory-grid]")) return;
+    if (zone.closest("[data-trade-offer-grid]") && hoveredElement?.closest?.("[data-trade-offer-grid]") === zone.closest("[data-trade-offer-grid]")) return;
     this.#clearInventoryHoverPreview();
   }
 
@@ -1115,7 +1128,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const sourceActor = this.#getActorByUuid(this.#draggedActorUuid);
     const sourceItem = sourceActor?.items?.get(this.#draggedItemId);
     const placement = side
-      ? this.#getTradeOfferDropPlacement({ side, zone: grid, event, item: sourceItem ?? this.#draggedItemData, entryKind: "item", entryKey: this.#draggedItemId })
+      ? this.#getTradeOfferDropPlacement({ side, zone, event, item: sourceItem ?? this.#draggedItemData, entryKind: "item", entryKey: this.#draggedItemId })
       : null;
     if (!placement) {
       this.#clearInventoryHoverPreviewClasses();
@@ -1137,8 +1150,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   #ensureTradeOfferPreviewRows(grid = null, requiredRows = 1, columns = TRADE_OFFER_DEFAULT_COLUMNS) {
     if (!grid) return;
-    const currentRows = Math.max(0, ...Array.from(grid.querySelectorAll("[data-trade-offer-cell]"), cell => toInteger(cell.dataset.y)));
+    const currentRows = Math.max(0, ...Array.from(grid.querySelectorAll("[data-trade-offer-cell]:not(.fallout-maw-trade-offer-preview-cell)"), cell => toInteger(cell.dataset.y)));
     const rowCount = Math.max(currentRows, toInteger(requiredRows));
+    if (rowCount <= currentRows) return;
     const columnCount = Math.max(1, toInteger(columns) || TRADE_OFFER_DEFAULT_COLUMNS);
     for (let y = currentRows + 1; y <= rowCount; y += 1) {
       for (let x = 1; x <= columnCount; x += 1) {
@@ -1165,6 +1179,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   #clearInventoryDropPreview() {
     this.#clearInventoryHoverPreview();
+    this.#clearTradeOfferPreviewCells();
     this.element?.querySelectorAll(".drop-match-preview").forEach(element => element.classList.remove("drop-match-preview"));
   }
 
@@ -1175,12 +1190,16 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   #clearInventoryHoverPreviewClasses() {
     this.#hoverPreviewKey = "";
-    this.element?.querySelectorAll(".fallout-maw-trade-offer-preview-cell").forEach(element => element.remove());
+    this.#clearTradeOfferPreviewCells();
     this.element?.querySelectorAll(".drop-preview, .drop-stack-preview, .trade-offer-drop-preview").forEach(element => {
       element.classList.remove("drop-preview", "drop-stack-preview", "trade-offer-drop-preview");
       element.style?.removeProperty("--fallout-maw-trade-preview-width");
       element.style?.removeProperty("--fallout-maw-trade-preview-height");
     });
+  }
+
+  #clearTradeOfferPreviewCells() {
+    this.element?.querySelectorAll(".fallout-maw-trade-offer-preview-cell").forEach(element => element.remove());
   }
 
   #highlightEquipmentSlotsForItem(itemData) {
@@ -2632,24 +2651,23 @@ function getTradeOfferOccupiedPlacements(offer = {}, { excludeKind = "", exclude
   return occupied;
 }
 
-function getTradeOfferGridPointerPlacement(zone = null, event = null, { columns = TRADE_OFFER_DEFAULT_COLUMNS, width = 1, height = 1 } = {}) {
+function getTradeOfferAnchorCellFromEvent(grid = null, event = null) {
   const clientX = Number(event?.clientX);
   const clientY = Number(event?.clientY);
-  if (!zone || !Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+  if (!grid || !Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+  const pointed = document.elementFromPoint(clientX, clientY)?.closest?.("[data-trade-offer-cell]");
+  if (!pointed || !grid.contains(pointed)) return null;
+  if (pointed.classList.contains("fallout-maw-trade-offer-preview-cell")) return null;
+  return pointed;
+}
 
-  const firstCell = zone.querySelector('[data-trade-offer-cell][data-x="1"][data-y="1"]') ?? zone.querySelector("[data-trade-offer-cell]");
-  if (!firstCell) return null;
-  const firstRect = firstCell.getBoundingClientRect();
-  const secondColumnRect = zone.querySelector('[data-trade-offer-cell][data-y="1"][data-x="2"]')?.getBoundingClientRect();
-  const secondRowRect = zone.querySelector('[data-trade-offer-cell][data-x="1"][data-y="2"]')?.getBoundingClientRect();
-  const pitchX = secondColumnRect ? Math.max(1, secondColumnRect.left - firstRect.left) : Math.max(1, firstRect.width);
-  const pitchY = secondRowRect ? Math.max(1, secondRowRect.top - firstRect.top) : Math.max(1, firstRect.height);
-  const firstCenterX = firstRect.left + (firstRect.width / 2);
-  const firstCenterY = firstRect.top + (firstRect.height / 2);
-  const anchorX = ((clientX - firstCenterX) / pitchX) + 1;
-  const anchorY = ((clientY - firstCenterY) / pitchY) + 1;
+function getTradeOfferGridPointerPlacement(anchorCell = null, { columns = TRADE_OFFER_DEFAULT_COLUMNS, width = 1, height = 1 } = {}) {
+  if (!anchorCell) return null;
+  const anchorX = toInteger(anchorCell.dataset.x);
+  const anchorY = toInteger(anchorCell.dataset.y);
+  if (!anchorX || !anchorY) return null;
   const rawX = Math.round(anchorX - ((width - 1) / 2));
-  const rawY = Math.round(anchorY - ((height - 1) / 2));
+  const rawY = anchorY;
   return normalizeTradeOfferPlacement({
     x: Math.max(1, Math.min(Math.max(1, columns - width + 1), rawX)),
     y: Math.max(1, rawY),
