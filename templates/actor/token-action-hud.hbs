@@ -195,7 +195,7 @@
         <span class="fallout-maw-token-hud-weapon-set-row-title">{{label}}</span>
         <span class="fallout-maw-token-hud-weapon-set-row-slots">
           {{#each slots}}
-          <span class="fallout-maw-token-hud-set-slot-preview {{#if selected}}active{{/if}} {{#if phantom}}phantom{{/if}} {{#if useDisabled}}unusable{{/if}} {{#unless item}}empty{{/unless}}">
+          <span class="fallout-maw-token-hud-set-slot-preview {{#if selected}}active{{/if}} {{#if phantom}}phantom{{/if}} {{#if useDisabled}}unusable{{/if}} {{#unless item}}empty{{/unless}}" {{#if hudAspectStyle}}style="{{hudAspectStyle}}"{{/if}}>
             {{#if item}}
             <img src="{{item.img}}" alt="{{item.name}}" onerror="this.src='{{../../fallbackIcon}}'">
             <span>{{item.name}}</span>
@@ -219,7 +219,7 @@
         <i class="fa-solid fa-caret-up" inert></i>
       </button>
       {{#each weaponSet.weapons}}
-      <button type="button" class="fallout-maw-token-hud-main-action fallout-maw-token-hud-weapon-button {{#if selected}}active{{/if}} {{#if useDisabled}}unusable{{/if}} variable-width" data-action="toggleWeaponActions" data-item-id="{{item.id}}" data-weapon-set="{{weaponSetKey}}" title="{{item.name}}" {{#if useDisabled}}disabled{{/if}}>
+      <button type="button" class="fallout-maw-token-hud-main-action fallout-maw-token-hud-weapon-button {{#if selected}}active{{/if}} {{#if useDisabled}}unusable{{/if}} variable-width" data-action="toggleWeaponActions" data-item-id="{{item.id}}" data-weapon-set="{{weaponSetKey}}" title="{{item.name}}" {{#if hudAspectStyle}}style="{{hudAspectStyle}}"{{/if}} {{#if useDisabled}}disabled{{/if}}>
         <img src="{{item.img}}" alt="{{item.name}}" onerror="this.src='{{../fallbackIcon}}'">
         <span>{{item.name}}</span>
       </button>

@@ -495,8 +495,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     ) ?? [];
     for (const image of images) {
       const applyAspect = () => {
-        setHudTileImageAspect(image);
-        this.#scheduleLayout();
+        if (setHudTileImageAspect(image)) this.#scheduleLayout();
       };
       if (image.complete && image.naturalWidth && image.naturalHeight) applyAspect();
       else image.addEventListener("load", applyAspect, { once: true });
@@ -1774,16 +1773,25 @@ function prepareHudWeaponSets(weaponSets = [], activeSetKey = "", selectedWeapon
     active: set.key === activeSetKey,
     slots: (set.slots ?? []).map(slot => ({
       ...slot,
+      hudAspectStyle: getHudItemAspectStyle(slot.item),
       weaponSetKey: set.key,
       emptyIcon: normalizeImagePath(hudIcons.emptyWeaponSlotIcon, "icons/svg/combat.svg"),
       selected: Boolean(slot.item?.id && !slot.phantom && slot.item.id === selectedWeaponId)
     })),
     weapons: getUniqueHudWeaponSlots(set.slots ?? []).map(slot => ({
       ...slot,
+      hudAspectStyle: getHudItemAspectStyle(slot.item),
       weaponSetKey: set.key,
       selected: Boolean(slot.item?.id && slot.item.id === selectedWeaponId)
     }))
   }));
+}
+
+function getHudItemAspectStyle(item = null) {
+  const width = Math.max(1, toInteger(item?.placement?.width));
+  const height = Math.max(1, toInteger(item?.placement?.height));
+  const aspect = Math.max(1, width / height);
+  return `--fallout-maw-hud-image-aspect: ${aspect};`;
 }
 
 function getUniqueHudWeaponSlots(slots = []) {
@@ -2524,11 +2532,13 @@ function balanceTokenActionHudPopup(popup, availableWidth) {
 function setHudTileImageAspect(image) {
   const width = Number(image?.naturalWidth);
   const height = Number(image?.naturalHeight);
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return false;
   const tile = image.closest(".fallout-maw-token-hud-main-action, .fallout-maw-token-hud-weapon-slot, .fallout-maw-token-hud-set-slot-preview");
-  if (!tile) return;
+  if (!tile) return false;
+  if (tile.style.getPropertyValue("--fallout-maw-hud-image-aspect")) return false;
   const aspect = Math.max(1, width / height);
   tile.style.setProperty("--fallout-maw-hud-image-aspect", String(aspect));
+  return true;
 }
 
 function positionLimbPopover(popover, target) {
