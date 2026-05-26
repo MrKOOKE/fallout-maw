@@ -435,7 +435,7 @@ export function validateInventoryTree(items, rootDimensions) {
 
 function isInventoryManagedItem(itemOrSystem = null) {
   const type = getItemType(itemOrSystem);
-  return type !== "trauma" && type !== "disease";
+  return !["ability", "trauma", "disease"].includes(type);
 }
 
 function validateContextPlacements(contextItems, columns, rows, allItems) {

@@ -2,7 +2,18 @@
   <header class="fallout-maw-sheet-header fallout-maw-search-header">
     {{#each actors}}
     <section class="fallout-maw-search-actor-title fallout-maw-search-actor-title--{{side}}">
-      <div class="fallout-maw-title-display">{{name}}</div>
+      <div class="fallout-maw-title-display">
+      {{#if selector.canSelect}}
+        <span>{{selector.label}}</span>
+        <select class="fallout-maw-trade-actor-select" data-trade-actor-select="{{side}}" aria-label="{{selector.label}}">
+        {{#each selector.options}}
+          <option value="{{actorUuid}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+        {{/each}}
+        </select>
+      {{else}}
+        <span>{{name}}</span>
+      {{/if}}
+      </div>
     </section>
     {{/each}}
     {{#unless isTrade}}
@@ -67,16 +78,16 @@
                 {{/unless}}
               </h2>
               <div class="fallout-maw-trade-offer-actions">
-                <button type="button" class="fallout-maw-trade-offer-clear" data-trade-offer-remove="all" data-trade-side="{{tradeOffer.side}}" title="Забрать все" {{#unless ../canInteract}}disabled{{/unless}}>
+                <button type="button" class="fallout-maw-trade-offer-clear" data-trade-offer-remove="all" data-trade-side="{{tradeOffer.side}}" title="Забрать все" {{#unless tradeOffer.canControl}}disabled{{/unless}}>
                   <i class="fa-solid fa-box-open"></i>
                 </button>
                 {{#if tradeOffer.completed}}
-                <button type="button" class="fallout-maw-trade-ready-button" data-trade-restart {{#unless ../canInteract}}disabled{{/unless}}>
+                <button type="button" class="fallout-maw-trade-ready-button" data-trade-restart {{#unless tradeOffer.canControl}}disabled{{/unless}}>
                   <i class="fa-solid fa-rotate-right"></i>
                   <span>Возобновить торговлю</span>
                 </button>
                 {{else}}
-                <button type="button" class="fallout-maw-trade-ready-button {{#if tradeOffer.ready}}ready{{/if}}" data-trade-ready="{{tradeOffer.side}}" {{#unless ../canInteract}}disabled{{/unless}}>
+                <button type="button" class="fallout-maw-trade-ready-button {{#if tradeOffer.ready}}ready{{/if}}" data-trade-ready="{{tradeOffer.side}}" {{#unless tradeOffer.canConfirm}}disabled{{/unless}}>
                   <i class="fa-solid fa-check"></i>
                   <span>Подтвердить</span>
                 </button>
@@ -88,19 +99,19 @@
               <div class="fallout-maw-inventory-cell fallout-maw-trade-offer-cell {{#if occupied}}occupied{{/if}}" data-search-drop-zone data-search-actor-uuid="{{../uuid}}" data-trade-offer-actor-uuid="{{../uuid}}" data-trade-offer-cell data-x="{{x}}" data-y="{{y}}" style="{{style}}"></div>
               {{/each}}
               {{#each tradeOffer.items}}
-              <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item fallout-maw-trade-offer-item" draggable="true" style="{{gridStyle}}" data-trade-offer-entry data-trade-offer-kind="item" data-trade-offer-side="{{side}}" data-trade-offer-key="{{offerKey}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}">
+              <article class="{{#if ../tradeOffer.canControl}}draggable fallout-maw-draggable-item{{/if}} fallout-maw-inventory-item fallout-maw-inventory-grid-item fallout-maw-trade-offer-item" draggable="{{#if ../tradeOffer.canControl}}true{{else}}false{{/if}}" style="{{gridStyle}}" data-trade-offer-entry data-trade-offer-kind="item" data-trade-offer-side="{{side}}" data-trade-offer-key="{{offerKey}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}">
                 <img src="{{img}}" alt="{{name}}">
                 {{#if price}}<span class="fallout-maw-trade-price">{{price}}</span>{{/if}}
                 {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
                 {{#unless completed}}
-                <button type="button" class="fallout-maw-trade-offer-remove" data-trade-offer-remove="item" data-trade-side="{{side}}" data-trade-offer-key="{{offerKey}}" title="Убрать">
+                <button type="button" class="fallout-maw-trade-offer-remove" data-trade-offer-remove="item" data-trade-side="{{side}}" data-trade-offer-key="{{offerKey}}" title="Убрать" {{#unless ../tradeOffer.canControl}}disabled{{/unless}}>
                   <i class="fa-solid fa-xmark"></i>
                 </button>
                 {{/unless}}
               </article>
               {{/each}}
               {{#each tradeOffer.currencies}}
-              <article class="fallout-maw-inventory-item fallout-maw-inventory-grid-item fallout-maw-trade-offer-currency" style="{{gridStyle}}" title="{{label}}: {{amount}}" data-trade-offer-entry data-trade-offer-kind="currency" data-trade-offer-side="{{side}}" data-trade-offer-key="{{offerKey}}">
+              <article class="{{#if completed}}{{#if ../tradeOffer.canControl}}draggable fallout-maw-draggable-item{{/if}}{{/if}} fallout-maw-inventory-item fallout-maw-inventory-grid-item fallout-maw-trade-offer-currency" draggable="{{#if completed}}{{#if ../tradeOffer.canControl}}true{{else}}false{{/if}}{{else}}false{{/if}}" style="{{gridStyle}}" title="{{label}}: {{amount}}" data-trade-offer-entry data-trade-offer-kind="currency" data-trade-offer-side="{{side}}" data-trade-offer-key="{{offerKey}}" data-search-actor-uuid="{{../uuid}}" data-item-id="{{offerKey}}">
                 <span class="fallout-maw-currency-icon">
                   {{#if hasImage}}
                   <img src="{{img}}" alt="{{label}}">
@@ -110,7 +121,7 @@
                 </span>
                 <strong>{{amount}}</strong>
                 {{#unless completed}}
-                <button type="button" class="fallout-maw-trade-offer-remove" data-trade-offer-remove="currency" data-trade-side="{{side}}" data-trade-offer-key="{{offerKey}}" title="Убрать">
+                <button type="button" class="fallout-maw-trade-offer-remove" data-trade-offer-remove="currency" data-trade-side="{{side}}" data-trade-offer-key="{{offerKey}}" title="Убрать" {{#unless ../tradeOffer.canControl}}disabled{{/unless}}>
                   <i class="fa-solid fa-xmark"></i>
                 </button>
                 {{/unless}}

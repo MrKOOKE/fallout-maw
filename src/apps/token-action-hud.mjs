@@ -98,6 +98,7 @@ let tokenActionHudLayoutRefresh = null;
 let tokenActionHudPreviewPercent = null;
 let tokenActionHudMovementPreview = null;
 const pendingTokenActionHudSocketRequests = new Map();
+const hudImageAspectCache = new Map();
 
 export function registerTokenActionHudHooks() {
   if (hooksRegistered) return;
@@ -1886,10 +1887,22 @@ function prepareHudWeaponSets(weaponSets = [], activeSetKey = "", selectedWeapon
 }
 
 function getHudItemAspectStyle(item = null) {
+  const cachedAspect = getCachedHudImageAspect(item?.img);
+  if (cachedAspect) return `--fallout-maw-hud-image-aspect: ${cachedAspect};`;
+
   const width = Math.max(1, toInteger(item?.placement?.width));
   const height = Math.max(1, toInteger(item?.placement?.height));
   const aspect = Math.max(1, width / height);
   return `--fallout-maw-hud-image-aspect: ${aspect};`;
+}
+
+function getCachedHudImageAspect(src = "") {
+  const keys = getHudImageAspectCacheKeys(src);
+  for (const key of keys) {
+    const value = hudImageAspectCache.get(key);
+    if (value) return value;
+  }
+  return 0;
 }
 
 function getUniqueHudWeaponSlots(slots = []) {
@@ -2633,10 +2646,21 @@ function setHudTileImageAspect(image) {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return false;
   const tile = image.closest(".fallout-maw-token-hud-main-action, .fallout-maw-token-hud-weapon-slot, .fallout-maw-token-hud-set-slot-preview");
   if (!tile) return false;
-  if (tile.style.getPropertyValue("--fallout-maw-hud-image-aspect")) return false;
   const aspect = Math.max(1, width / height);
-  tile.style.setProperty("--fallout-maw-hud-image-aspect", String(aspect));
+  const aspectText = String(aspect);
+  for (const key of getHudImageAspectCacheKeys(image.getAttribute("src") || image.currentSrc || image.src)) {
+    hudImageAspectCache.set(key, aspectText);
+  }
+  if (tile.style.getPropertyValue("--fallout-maw-hud-image-aspect") === aspectText) return false;
+  tile.style.setProperty("--fallout-maw-hud-image-aspect", aspectText);
   return true;
+}
+
+function getHudImageAspectCacheKeys(src = "") {
+  return Array.from(new Set([
+    String(src ?? "").trim(),
+    normalizeImagePath(src)
+  ].filter(Boolean)));
 }
 
 function positionLimbPopover(popover, target) {
