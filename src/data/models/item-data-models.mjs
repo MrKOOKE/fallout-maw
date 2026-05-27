@@ -74,7 +74,8 @@ export class GearDataModel extends BaseItemDataModel {
         columns: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
         rows: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
         maxLoad: new NumberField({ required: true, min: 0, initial: 0 })
-      })
+      }),
+      craft: craftRecipeField()
     };
   }
 }
@@ -356,6 +357,50 @@ function weaponDamageTypeField() {
   return new SchemaField({
     key: new StringField({ required: true, blank: false, initial: "firearm" }),
     percent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 100 })
+  });
+}
+
+function craftRecipeField() {
+  return new SchemaField({
+    nodes: new ArrayField(craftNodeField(), { required: true, initial: [] }),
+    links: new ArrayField(craftLinkField(), { required: true, initial: [] }),
+    viewport: new SchemaField({
+      x: new NumberField({ required: true, initial: 0 }),
+      y: new NumberField({ required: true, initial: 0 }),
+      zoom: new NumberField({ required: true, min: 0.1, initial: 1 })
+    })
+  });
+}
+
+function craftNodeField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: false, initial: () => foundry.utils.randomID() }),
+    itemUuid: new StringField({ required: true, blank: true, initial: "" }),
+    name: new StringField({ required: true, blank: true, initial: "" }),
+    img: new StringField({ required: true, blank: true, initial: "" }),
+    type: new StringField({ required: true, blank: true, initial: "" }),
+    x: new NumberField({ required: true, integer: true, initial: 0 }),
+    y: new NumberField({ required: true, integer: true, initial: 0 }),
+    width: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+    height: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+    quantity: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+    root: new BooleanField({ required: true, initial: false })
+  });
+}
+
+function craftLinkField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: false, initial: () => foundry.utils.randomID() }),
+    fromNodeId: new StringField({ required: true, blank: false, initial: "" }),
+    toNodeId: new StringField({ required: true, blank: false, initial: "" }),
+    skillKey: new StringField({ required: true, blank: true, initial: "repair" }),
+    difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
+    bendX: new NumberField({ required: false, nullable: true, initial: null }),
+    bendY: new NumberField({ required: false, nullable: true, initial: null }),
+    fromAnchorSide: new StringField({ required: true, blank: true, initial: "" }),
+    fromAnchorOffset: new NumberField({ required: false, nullable: true, initial: null }),
+    toAnchorSide: new StringField({ required: true, blank: true, initial: "" }),
+    toAnchorOffset: new NumberField({ required: false, nullable: true, initial: null })
   });
 }
 

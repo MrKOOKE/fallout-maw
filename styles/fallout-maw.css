@@ -388,7 +388,7 @@
   border-bottom: 1px solid var(--fallout-maw-border);
   display: grid;
   gap: 0.35rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   margin-bottom: 0.75rem;
 }
 
@@ -427,6 +427,293 @@
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
+}
+
+.fallout-maw-craft-editor {
+  --fallout-maw-craft-cell-size: var(--fallout-maw-inventory-cell-size);
+  --fallout-maw-craft-grid-gap: var(--fallout-maw-inventory-grid-gap);
+  --fallout-maw-craft-cell-step: calc(var(--fallout-maw-craft-cell-size) + var(--fallout-maw-craft-grid-gap));
+  --fallout-maw-craft-scaled-step: var(--fallout-maw-craft-cell-step);
+  background:
+    linear-gradient(rgba(210, 185, 145, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(210, 185, 145, 0.045) 1px, transparent 1px),
+    radial-gradient(circle at 50% 50%, rgba(220, 198, 146, 0.05), transparent 22rem),
+    rgba(0, 0, 0, 0.18);
+  background-position:
+    calc(50% + var(--craft-pan-x, 0px)) calc(50% + var(--craft-pan-y, 0px)),
+    calc(50% + var(--craft-pan-x, 0px)) calc(50% + var(--craft-pan-y, 0px)),
+    center,
+    center;
+  background-size:
+    var(--fallout-maw-craft-scaled-step) var(--fallout-maw-craft-scaled-step),
+    var(--fallout-maw-craft-scaled-step) var(--fallout-maw-craft-scaled-step),
+    auto,
+    auto;
+  border: 1px solid rgba(210, 185, 145, 0.26);
+  display: block;
+  flex: 1 1 auto;
+  min-height: 34rem;
+  overflow: hidden;
+  position: relative;
+  user-select: none;
+}
+
+.fallout-maw-craft-world {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  transform: translate(var(--craft-pan-x, 0), var(--craft-pan-y, 0)) scale(var(--craft-zoom, 1));
+  transform-origin: 50% 50%;
+}
+
+.fallout-maw-craft-links {
+  height: 100%;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  position: absolute;
+  width: 100%;
+  z-index: 1;
+}
+
+.fallout-maw-craft-link {
+  cursor: pointer;
+  pointer-events: visibleStroke;
+}
+
+.fallout-maw-craft-link-hit,
+.fallout-maw-craft-link-shadow,
+.fallout-maw-craft-link-wall,
+.fallout-maw-craft-link-glass,
+.fallout-maw-craft-link-highlight,
+.fallout-maw-craft-link-preview {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fallout-maw-craft-link-hit {
+  fill: none;
+  pointer-events: stroke;
+  stroke: rgba(0, 0, 0, 0);
+  stroke-width: 28;
+}
+
+.fallout-maw-craft-link-shadow {
+  fill: none;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.48));
+  pointer-events: none;
+  stroke: rgba(0, 0, 0, 0.34);
+  stroke-width: 12;
+}
+
+.fallout-maw-craft-link-wall {
+  fill: none;
+  pointer-events: none;
+  stroke: rgba(75, 226, 207, 0.72);
+  stroke-width: 9;
+}
+
+.fallout-maw-craft-link-glass {
+  fill: none;
+  filter: none;
+  pointer-events: none;
+  stroke: rgba(196, 255, 246, 0.3);
+  stroke-width: 5.8;
+}
+
+.fallout-maw-craft-link-highlight {
+  fill: none;
+  pointer-events: none;
+  stroke: rgba(240, 255, 252, 0.42);
+  stroke-width: 1.1;
+}
+
+.fallout-maw-craft-link.selected .fallout-maw-craft-link-glass {
+  filter: drop-shadow(0 0 6px rgba(98, 220, 205, 0.32));
+}
+
+.fallout-maw-craft-link.selected .fallout-maw-craft-link-wall {
+  stroke: rgba(255, 231, 142, 0.94);
+}
+
+.fallout-maw-craft-link.selected .fallout-maw-craft-link-highlight {
+  stroke: rgba(255, 249, 204, 0.7);
+}
+
+.fallout-maw-craft-link-socket-shadow {
+  fill: rgba(0, 0, 0, 0.34);
+  pointer-events: none;
+}
+
+.fallout-maw-craft-link-socket {
+  cursor: grab;
+  fill: rgba(34, 129, 119, 0.72);
+  pointer-events: visiblePainted;
+  stroke: rgba(160, 255, 240, 0.86);
+  stroke-width: 1.4;
+}
+
+.fallout-maw-craft-link.selected .fallout-maw-craft-link-socket {
+  fill: rgba(129, 105, 35, 0.8);
+  stroke: rgba(255, 234, 147, 0.96);
+}
+
+.fallout-maw-craft-link-preview {
+  fill: none;
+  pointer-events: none;
+  stroke: rgba(238, 214, 135, 0.76);
+  stroke-dasharray: 12 9;
+  stroke-width: 8;
+}
+
+.fallout-maw-craft-node,
+.fallout-maw-craft-snap-preview {
+  --craft-node-width: var(--fallout-maw-craft-cell-size);
+  --craft-node-height: var(--fallout-maw-craft-cell-size);
+  --craft-node-half-width: 26px;
+  --craft-node-half-height: 26px;
+  --craft-offset-x: 0px;
+  --craft-offset-y: 0px;
+  height: var(--craft-node-height);
+  left: calc(50% + var(--craft-offset-x) - var(--craft-node-half-width));
+  position: absolute;
+  top: calc(50% + var(--craft-offset-y) - var(--craft-node-half-height));
+  width: var(--craft-node-width);
+}
+
+.fallout-maw-craft-node {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: #f2e1bf;
+  cursor: grab;
+  min-height: 0;
+  min-width: 0;
+  overflow: visible;
+  padding: 0;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+.fallout-maw-craft-node-image {
+  background: rgba(25, 22, 20, 0.9);
+  border: 1px solid rgba(158, 140, 103, 0.72);
+  border-radius: 4px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 6px 14px rgba(0, 0, 0, 0.28);
+  display: block;
+  height: 100%;
+  padding: 0.18rem;
+  position: relative;
+  width: 100%;
+}
+
+.fallout-maw-craft-node.root {
+  z-index: 3;
+}
+
+.fallout-maw-craft-node.root .fallout-maw-craft-node-image {
+  border-color: rgba(238, 214, 135, 0.95);
+  box-shadow:
+    inset 0 0 0 1px rgba(238, 214, 135, 0.22),
+    0 0 16px rgba(238, 214, 135, 0.18);
+}
+
+.fallout-maw-craft-node.selected .fallout-maw-craft-node-image,
+.fallout-maw-craft-node.attach-target .fallout-maw-craft-node-image {
+  border-color: rgba(244, 223, 145, 0.98);
+  box-shadow:
+    inset 0 0 0 1px rgba(244, 223, 145, 0.32),
+    0 0 14px rgba(244, 223, 145, 0.24);
+}
+
+.fallout-maw-craft-node.attaching .fallout-maw-craft-node-image {
+  outline: 2px dashed rgba(244, 223, 145, 0.72);
+  outline-offset: 4px;
+}
+
+.fallout-maw-craft-node.dragging {
+  cursor: grabbing;
+  opacity: 0.88;
+}
+
+.fallout-maw-craft-node img {
+  border: 0;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+  width: 100%;
+}
+
+.fallout-maw-craft-node-quantity {
+  align-items: center;
+  background: rgba(8, 7, 6, 0.92);
+  border: 1px solid rgba(238, 214, 135, 0.72);
+  border-radius: 2px;
+  bottom: 0.12rem;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.55);
+  color: #fff3d8;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 700;
+  justify-content: center;
+  line-height: 1;
+  min-height: 1rem;
+  min-width: 1rem;
+  padding: 0.08rem 0.24rem;
+  position: absolute;
+  right: 0.12rem;
+}
+
+.fallout-maw-craft-snap-preview {
+  background: rgba(238, 214, 135, 0.12);
+  border: 1px dashed rgba(238, 214, 135, 0.86);
+  box-shadow:
+    inset 0 0 0 1px rgba(238, 214, 135, 0.12),
+    0 0 18px rgba(238, 214, 135, 0.18);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.fallout-maw-craft-popover {
+  background: rgba(6, 6, 8, 0.94);
+  border: 1px solid rgba(210, 185, 145, 0.42);
+  border-radius: 4px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  color: var(--fallout-maw-text);
+  max-width: calc(100% - 1rem);
+  padding: 0.65rem;
+  pointer-events: auto;
+  position: absolute;
+  width: min(15rem, calc(100% - 1rem));
+  z-index: 6;
+}
+
+.fallout-maw-craft-popover-section {
+  align-content: start;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.fallout-maw-craft-popover-section h3 {
+  border: 0;
+  color: #fff3d8;
+  font-size: 1rem;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.fallout-maw-craft-popover-section p {
+  margin: 0;
+}
+
+.fallout-maw-craft-popover-section button {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+  justify-content: center;
 }
 
 .fallout-maw-effects-tab {

@@ -40,11 +40,27 @@ const DEFAULT_RELOAD_ACTION_POINT_COST = 2;
 const DEFAULT_ATTACK_ANIMATION_DELAY_MS = 200;
 const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 20;
 const DEFAULT_ITEM_SHEET_HEIGHT = 4000;
+const CRAFT_ROOT_NODE_ID = "root";
+const CRAFT_GRID_FALLBACK_STEP = 56;
+const CRAFT_DRAG_THRESHOLD_PX = 4;
+const CRAFT_MIN_ZOOM = 0.45;
+const CRAFT_MAX_ZOOM = 2.5;
+const CRAFT_SOCKET_DEPTH_PX = 9;
+const CRAFT_SOCKET_HALF_WIDTH_PX = 8;
 let itemSheetSourceSyncHooksRegistered = false;
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #functionPickerActive = false;
   #mitigationFillDrag = null;
+  #craftSelection = null;
+  #craftAttachSourceNodeId = "";
+  #craftPanDrag = null;
+  #craftNodeDrag = null;
+  #craftLinkDrag = null;
+  #craftSocketDrag = null;
+  #craftLinkRenderFrame = 0;
+  #craftViewportOverride = null;
+  #craftViewportPersistTimeout = 0;
 
   static DEFAULT_OPTIONS = {
     classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-item-sheet", "sheet", "item"],
@@ -71,7 +87,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     primary: {
       tabs: [
         { id: "details", group: "primary", label: "FALLOUTMAW.Item.DetailsTab" },
-        { id: "functions", group: "primary", label: "FALLOUTMAW.Item.FunctionsTab" }
+        { id: "functions", group: "primary", label: "FALLOUTMAW.Item.FunctionsTab" },
+        { id: "craft", group: "primary", label: "FALLOUTMAW.Item.CraftTab" }
       ],
       initial: "details"
     }
@@ -210,6 +227,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       }
     }
 
+    const craft = prepareCraftContext(item, skillSettings, this.#craftSelection, this.#craftAttachSourceNodeId);
+
     return foundry.utils.mergeObject(context, {
       item,
       system: item.system,
@@ -285,6 +304,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       damageMitigationModeChoices: buildDamageMitigationModeChoices(item),
       damageMitigationLimbSetChoices: buildDamageMitigationLimbSetChoices(item, creatureOptions),
       damageMitigationTables: buildDamageMitigationTables(item, creatureOptions, damageTypeSettings),
+      craft,
       totalWeight: item.totalWeight
     }, { inplace: false });
   }
@@ -443,6 +463,686 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-mitigation-limb-set-choice]").forEach(button => {
       button.addEventListener("click", event => this.#onMitigationLimbSetChoice(event));
     });
+    this.#activateCraftEditor();
+  }
+
+  #activateCraftEditor() {
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    if (!workspace) return;
+    workspace.addEventListener("contextmenu", event => event.preventDefault());
+    workspace.addEventListener("pointerdown", event => this.#onCraftWorkspacePointerDown(event));
+    workspace.addEventListener("dragover", event => this.#onCraftDragOver(event));
+    workspace.addEventListener("drop", event => this.#onCraftDrop(event));
+    workspace.addEventListener("dragleave", event => this.#onCraftDragLeave(event));
+    workspace.addEventListener("wheel", event => this.#onCraftWheel(event), { passive: false });
+    workspace.addEventListener("pointermove", event => this.#onCraftAttachPointerMove(event));
+    workspace.querySelectorAll("[data-craft-node-id]").forEach(node => {
+      node.addEventListener("pointerdown", event => this.#onCraftNodePointerDown(event));
+    });
+    workspace.querySelector("[data-craft-attach-node]")?.addEventListener("click", event => this.#onCraftAttachNode(event));
+    workspace.querySelector("[data-craft-detach-node]")?.addEventListener("click", event => this.#onCraftDetachNode(event));
+    workspace.querySelector("[data-craft-delete-node]")?.addEventListener("click", event => this.#onCraftDeleteNode(event));
+    workspace.querySelector("[data-craft-cancel-attach]")?.addEventListener("click", event => this.#onCraftCancelAttach(event));
+    workspace.querySelector("[data-craft-node-quantity]")?.addEventListener("change", event => this.#onCraftNodeQuantityChange(event));
+    const viewport = this.#getCraftViewport();
+    this.#setCraftViewportStyle(viewport.x, viewport.y, viewport.zoom);
+    this.#syncCraftNodeLayouts();
+    this.#renderCraftLinks();
+    this.#positionCraftPopover();
+  }
+
+  #onCraftWorkspacePointerDown(event) {
+    if (event.target?.closest?.(".fallout-maw-craft-popover")) return;
+    if (event.button === 0) {
+      if (event.target?.closest?.("[data-craft-node-id], [data-craft-link-id]")) return;
+      if (!this.#craftSelection && !this.#craftAttachSourceNodeId) return;
+      this.#craftSelection = null;
+      this.#craftAttachSourceNodeId = "";
+      this.#hideCraftSnapPreview();
+      return this.render({ force: true });
+    }
+    if (event.button !== 2) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const viewport = this.#getCraftViewport();
+    this.#craftPanDrag = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: viewport.x,
+      startY: viewport.y,
+      moved: false
+    };
+    const onMove = moveEvent => this.#onCraftPanMove(moveEvent);
+    const onUp = upEvent => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      this.#onCraftPanEnd(upEvent);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp, { once: true });
+  }
+
+  #onCraftPanMove(event) {
+    const drag = this.#craftPanDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    event.preventDefault();
+    const nextX = drag.startX + (event.clientX - drag.startClientX);
+    const nextY = drag.startY + (event.clientY - drag.startClientY);
+    drag.moved = true;
+    this.#setCraftViewportStyle(nextX, nextY);
+  }
+
+  #onCraftPanEnd(event) {
+    const drag = this.#craftPanDrag;
+    this.#craftPanDrag = null;
+    if (!drag || event.pointerId !== drag.pointerId || !drag.moved) return;
+    const nextX = Math.round(drag.startX + (event.clientX - drag.startClientX));
+    const nextY = Math.round(drag.startY + (event.clientY - drag.startClientY));
+    return this.item.update({
+      "system.craft.viewport.x": nextX,
+      "system.craft.viewport.y": nextY,
+      "system.craft.viewport.zoom": this.#getCraftViewport().zoom
+    });
+  }
+
+  #getCraftViewport() {
+    return this.#craftViewportOverride ?? getCraftViewport(this.item);
+  }
+
+  #setCraftViewportStyle(x, y, zoom = this.#getCraftViewport().zoom) {
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    const world = this.element?.querySelector("[data-craft-world]");
+    if (!world) return;
+    const viewport = normalizeCraftViewport({ x, y, zoom });
+    this.#craftViewportOverride = viewport;
+    workspace?.style.setProperty("--craft-pan-x", `${viewport.x}px`);
+    workspace?.style.setProperty("--craft-pan-y", `${viewport.y}px`);
+    workspace?.style.setProperty("--craft-zoom", String(viewport.zoom));
+    workspace?.style.setProperty("--fallout-maw-craft-scaled-step", `${Math.round(getCraftGridStep(workspace) * viewport.zoom)}px`);
+    world.style.setProperty("--craft-pan-x", `${viewport.x}px`);
+    world.style.setProperty("--craft-pan-y", `${viewport.y}px`);
+    world.style.setProperty("--craft-zoom", String(viewport.zoom));
+    this.#scheduleCraftLinkRender();
+    this.#positionCraftPopover();
+  }
+
+  #onCraftDragOver(event) {
+    if (event.target?.closest?.(".fallout-maw-craft-popover")) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    const workspace = event.currentTarget;
+    const coords = this.#getCraftPointerGridCoordinates(event);
+    const data = this.#getPreviewCraftDropData(event);
+    this.#showCraftSnapPreview(coords, data);
+  }
+
+  async #onCraftDrop(event) {
+    if (event.target?.closest?.(".fallout-maw-craft-popover")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.#hideCraftSnapPreview();
+    const data = this.#getDragEventData(event);
+    if (data?.type !== "Item") return undefined;
+    const droppedItem = await foundry.utils.getDocumentClass("Item").fromDropData(data);
+    if (!isValidCraftComponentItem(droppedItem)) {
+      ui.notifications.warn("В крафт можно добавлять только предметы из глобального хранилища, кроме болезней, травм и способностей.");
+      return undefined;
+    }
+
+    const coords = this.#getCraftPointerGridCoordinates(event);
+    const nodes = getCraftNodesWithRoot(this.item);
+    nodes.push(createCraftNodeFromItem(droppedItem, coords));
+    this.#craftSelection = { type: "node", id: nodes[nodes.length - 1].id };
+    this.#craftAttachSourceNodeId = "";
+    return this.#updateCraftRecipe({ nodes });
+  }
+
+  #onCraftDragLeave(event) {
+    const workspace = event.currentTarget;
+    if (event.relatedTarget && workspace.contains(event.relatedTarget)) return;
+    this.#hideCraftSnapPreview();
+  }
+
+  #onCraftWheel(event) {
+    if (event.target?.closest?.(".fallout-maw-craft-popover")) return;
+    event.preventDefault();
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    const rect = workspace?.getBoundingClientRect();
+    if (!rect) return undefined;
+    const viewport = this.#getCraftViewport();
+    const factor = Math.exp(-event.deltaY * 0.0015);
+    const nextZoom = clampCraftZoom(viewport.zoom * factor);
+    if (Math.abs(nextZoom - viewport.zoom) < 0.001) return undefined;
+    const pointerX = event.clientX - rect.left - (rect.width / 2);
+    const pointerY = event.clientY - rect.top - (rect.height / 2);
+    const worldX = (pointerX - viewport.x) / viewport.zoom;
+    const worldY = (pointerY - viewport.y) / viewport.zoom;
+    const nextX = pointerX - (worldX * nextZoom);
+    const nextY = pointerY - (worldY * nextZoom);
+    this.#setCraftViewportStyle(nextX, nextY, nextZoom);
+    this.#scheduleCraftViewportPersist(nextX, nextY, nextZoom);
+    return undefined;
+  }
+
+  #scheduleCraftViewportPersist(x, y, zoom) {
+    if (this.#craftViewportPersistTimeout) window.clearTimeout(this.#craftViewportPersistTimeout);
+    this.#craftViewportPersistTimeout = window.setTimeout(() => {
+      this.#craftViewportPersistTimeout = 0;
+      this.item.update({
+        "system.craft.viewport.x": Math.round(x),
+        "system.craft.viewport.y": Math.round(y),
+        "system.craft.viewport.zoom": clampCraftZoom(zoom)
+      });
+    }, 140);
+  }
+
+  #getPreviewCraftDropData(event) {
+    const data = this.#getDragEventData(event);
+    const source = data?.data?.system ?? {};
+    const placement = source?.placement ?? {};
+    return {
+      width: Math.max(1, toInteger(placement.width) || 1),
+      height: Math.max(1, toInteger(placement.height) || 1)
+    };
+  }
+
+  #getCraftPointerGridCoordinates(event) {
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    const rect = workspace?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    const viewport = this.#getCraftViewport();
+    const step = getCraftGridStep(workspace);
+    return {
+      x: Math.round((event.clientX - rect.left - (rect.width / 2) - viewport.x) / (step * viewport.zoom)),
+      y: Math.round((event.clientY - rect.top - (rect.height / 2) - viewport.y) / (step * viewport.zoom))
+    };
+  }
+
+  #onCraftNodePointerDown(event) {
+    if (event.button !== 0) return;
+    const nodeElement = event.currentTarget;
+    const nodeId = String(nodeElement.dataset.craftNodeId ?? "");
+    if (!nodeId) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (this.#craftAttachSourceNodeId) {
+      if (nodeId !== this.#craftAttachSourceNodeId) return this.#createCraftLink(this.#craftAttachSourceNodeId, nodeId);
+      this.#craftAttachSourceNodeId = "";
+      return this.render({ force: true });
+    }
+
+    this.#craftNodeDrag = {
+      pointerId: event.pointerId,
+      nodeId,
+      element: nodeElement,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: Number(nodeElement.dataset.craftX) || 0,
+      startY: Number(nodeElement.dataset.craftY) || 0,
+      moved: false
+    };
+
+    const onMove = moveEvent => this.#onCraftNodeMove(moveEvent);
+    const onUp = upEvent => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      this.#onCraftNodeEnd(upEvent);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp, { once: true });
+  }
+
+  #onCraftNodeMove(event) {
+    const drag = this.#craftNodeDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    event.preventDefault();
+    const dx = event.clientX - drag.startClientX;
+    const dy = event.clientY - drag.startClientY;
+    if (!drag.moved && Math.hypot(dx, dy) < CRAFT_DRAG_THRESHOLD_PX) return;
+    drag.moved = true;
+    drag.element.classList.add("dragging");
+    const step = getCraftGridStep(this.element?.querySelector("[data-craft-workspace]"));
+    const zoom = this.#getCraftViewport().zoom;
+    const nextX = drag.startX + Math.round(dx / (step * zoom));
+    const nextY = drag.startY + Math.round(dy / (step * zoom));
+    drag.nextX = nextX;
+    drag.nextY = nextY;
+    this.#showCraftSnapPreview({ x: nextX, y: nextY }, {
+      width: Number(drag.element.dataset.craftWidth) || 1,
+      height: Number(drag.element.dataset.craftHeight) || 1
+    });
+  }
+
+  #onCraftNodeEnd(event) {
+    const drag = this.#craftNodeDrag;
+    this.#craftNodeDrag = null;
+    if (!drag || event.pointerId !== drag.pointerId) return undefined;
+    drag.element.classList.remove("dragging");
+    this.#hideCraftSnapPreview();
+    if (!drag.moved) {
+      this.#craftSelection = { type: "node", id: drag.nodeId };
+      this.#craftAttachSourceNodeId = "";
+      return this.render({ force: true });
+    }
+    const nextX = Number(drag.nextX ?? drag.startX) || 0;
+    const nextY = Number(drag.nextY ?? drag.startY) || 0;
+    drag.element.dataset.craftX = String(nextX);
+    drag.element.dataset.craftY = String(nextY);
+    drag.element.style.setProperty("--craft-x", String(nextX));
+    drag.element.style.setProperty("--craft-y", String(nextY));
+    this.#applyCraftElementLayout(drag.element, {
+      x: nextX,
+      y: nextY,
+      width: Number(drag.element.dataset.craftWidth) || 1,
+      height: Number(drag.element.dataset.craftHeight) || 1
+    });
+    this.#scheduleCraftLinkRender();
+    const nodes = getCraftNodesWithRoot(this.item).map(node => (
+      node.id === drag.nodeId ? { ...node, x: nextX, y: nextY } : node
+    ));
+    this.#craftSelection = null;
+    this.#craftAttachSourceNodeId = "";
+    return this.#updateCraftRecipe({ nodes });
+  }
+
+  #onCraftAttachNode(event) {
+    event.preventDefault();
+    const nodeId = String(event.currentTarget.dataset.craftAttachNode ?? "");
+    if (!nodeId) return undefined;
+    this.#craftSelection = { type: "node", id: nodeId };
+    this.#craftAttachSourceNodeId = nodeId;
+    return this.render({ force: true });
+  }
+
+  #onCraftCancelAttach(event) {
+    event.preventDefault();
+    this.#craftAttachSourceNodeId = "";
+    return this.render({ force: true });
+  }
+
+  #onCraftDetachNode(event) {
+    event.preventDefault();
+    const nodeId = String(event.currentTarget.dataset.craftDetachNode ?? "");
+    if (!nodeId) return undefined;
+    const links = getCraftLinks(this.item).filter(link => link.fromNodeId !== nodeId && link.toNodeId !== nodeId);
+    this.#craftSelection = { type: "node", id: nodeId };
+    this.#craftAttachSourceNodeId = "";
+    return this.#updateCraftRecipe({ links });
+  }
+
+  #onCraftNodeQuantityChange(event) {
+    const nodeId = String(event.currentTarget.dataset.craftNodeQuantity ?? "");
+    if (!nodeId) return undefined;
+    const quantity = Math.max(1, toInteger(event.currentTarget.value) || 1);
+    event.currentTarget.value = String(quantity);
+    const nodes = getCraftNodesWithRoot(this.item).map(node => (
+      node.id === nodeId ? { ...node, quantity } : node
+    ));
+    this.#craftSelection = { type: "node", id: nodeId };
+    return this.#updateCraftRecipe({ nodes });
+  }
+
+  #onCraftDeleteNode(event) {
+    event.preventDefault();
+    const nodeId = String(event.currentTarget.dataset.craftDeleteNode ?? "");
+    if (!nodeId) return undefined;
+    const nodes = getCraftNodesWithRoot(this.item);
+    const node = nodes.find(entry => entry.id === nodeId);
+    if (!node || node.root) return undefined;
+    const links = getCraftLinks(this.item).filter(link => link.fromNodeId !== nodeId && link.toNodeId !== nodeId);
+    this.#craftSelection = null;
+    this.#craftAttachSourceNodeId = "";
+    return this.#updateCraftRecipe({
+      nodes: nodes.filter(entry => entry.id !== nodeId),
+      links
+    });
+  }
+
+  #onCraftAttachPointerMove(event) {
+    if (!this.#craftAttachSourceNodeId) return;
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    if (!workspace) return;
+    workspace.querySelectorAll(".fallout-maw-craft-node.attach-target").forEach(node => node.classList.remove("attach-target"));
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.("[data-craft-node-id]");
+    if (target && workspace.contains(target) && target.dataset.craftNodeId !== this.#craftAttachSourceNodeId) {
+      target.classList.add("attach-target");
+    }
+    this.#renderCraftLinks({ previewEvent: event });
+  }
+
+  #showCraftSnapPreview({ x = 0, y = 0 } = {}, { width = 1, height = 1 } = {}) {
+    const preview = this.element?.querySelector("[data-craft-snap-preview]");
+    if (!preview) return;
+    preview.hidden = false;
+    preview.style.setProperty("--craft-x", String(x));
+    preview.style.setProperty("--craft-y", String(y));
+    preview.style.setProperty("--craft-width", String(Math.max(1, toInteger(width) || 1)));
+    preview.style.setProperty("--craft-height", String(Math.max(1, toInteger(height) || 1)));
+    this.#applyCraftElementLayout(preview, { x, y, width, height });
+  }
+
+  #hideCraftSnapPreview() {
+    this.element?.querySelector("[data-craft-snap-preview]")?.setAttribute("hidden", "");
+  }
+
+  #scheduleCraftLinkRender() {
+    if (this.#craftLinkRenderFrame) return;
+    this.#craftLinkRenderFrame = requestAnimationFrame(() => {
+      this.#craftLinkRenderFrame = 0;
+      this.#renderCraftLinks();
+    });
+  }
+
+  #syncCraftNodeLayouts() {
+    this.element?.querySelectorAll("[data-craft-node-id]").forEach(node => {
+      this.#applyCraftElementLayout(node, {
+        x: Number(node.dataset.craftX) || 0,
+        y: Number(node.dataset.craftY) || 0,
+        width: Number(node.dataset.craftWidth) || 1,
+        height: Number(node.dataset.craftHeight) || 1
+      });
+    });
+  }
+
+  #applyCraftElementLayout(element, { x = 0, y = 0, width = 1, height = 1 } = {}) {
+    const metrics = getCraftGridMetrics(this.element?.querySelector("[data-craft-workspace]"));
+    const normalizedWidth = Math.max(1, toInteger(width) || 1);
+    const normalizedHeight = Math.max(1, toInteger(height) || 1);
+    const widthPx = (normalizedWidth * metrics.cell) + ((normalizedWidth - 1) * metrics.gap);
+    const heightPx = (normalizedHeight * metrics.cell) + ((normalizedHeight - 1) * metrics.gap);
+    element.style.setProperty("--craft-offset-x", `${(Number(x) || 0) * metrics.step}px`);
+    element.style.setProperty("--craft-offset-y", `${(Number(y) || 0) * metrics.step}px`);
+    element.style.setProperty("--craft-node-width", `${widthPx}px`);
+    element.style.setProperty("--craft-node-height", `${heightPx}px`);
+    element.style.setProperty("--craft-node-half-width", `${widthPx / 2}px`);
+    element.style.setProperty("--craft-node-half-height", `${heightPx / 2}px`);
+  }
+
+  async #createCraftLink(fromNodeId, toNodeId) {
+    const nodes = getCraftNodesWithRoot(this.item);
+    if (!nodes.some(node => node.id === fromNodeId) || !nodes.some(node => node.id === toNodeId)) return undefined;
+    const links = getCraftLinks(this.item).filter(link => !(link.fromNodeId === fromNodeId && link.toNodeId === toNodeId));
+    const skillKey = getDefaultCraftSkillKey(getSkillSettings());
+    const link = {
+      id: foundry.utils.randomID(),
+      fromNodeId,
+      toNodeId,
+      skillKey,
+      difficulty: 60
+    };
+    links.push(link);
+    this.#craftSelection = { type: "link", id: link.id };
+    this.#craftAttachSourceNodeId = "";
+    return this.#updateCraftRecipe({ nodes, links });
+  }
+
+  #renderCraftLinks({ previewEvent = null } = {}) {
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    const svg = workspace?.querySelector("[data-craft-links]");
+    if (!workspace || !svg) return;
+    svg.replaceChildren();
+    const nodes = new Map(Array.from(workspace.querySelectorAll("[data-craft-node-id]")).map(node => [node.dataset.craftNodeId, node]));
+    const selectedLinkId = this.#craftSelection?.type === "link" ? this.#craftSelection.id : "";
+    for (const link of getCraftLinks(this.item)) {
+      const from = nodes.get(link.fromNodeId);
+      const to = nodes.get(link.toNodeId);
+      if (!from || !to) continue;
+      const bend = this.#craftLinkDrag?.linkId === link.id
+        ? this.#craftLinkDrag.bend
+        : this.#craftSocketDrag?.linkId === link.id
+          ? this.#craftSocketDrag.bend
+        : getCraftLinkBend(link);
+      const anchors = this.#craftLinkDrag?.linkId === link.id
+        ? this.#craftLinkDrag.anchors
+        : this.#craftSocketDrag?.linkId === link.id
+          ? this.#craftSocketDrag.anchors
+          : getCraftLinkAnchors(link);
+      this.#appendCraftLinkPath(svg, getCraftConnectorGeometry(from, to, svg, bend, anchors), link, selectedLinkId);
+    }
+    if (this.#craftAttachSourceNodeId && previewEvent) {
+      const source = nodes.get(this.#craftAttachSourceNodeId);
+      if (source) this.#appendCraftPreviewPath(svg, getCraftConnectorPathToPoint(source, previewEvent, svg));
+    }
+    this.#positionCraftPopover();
+  }
+
+  #appendCraftLinkPath(svg, geometry, link, selectedLinkId) {
+    if (!geometry?.centerPath) return;
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    group.classList.add("fallout-maw-craft-link");
+    if (link.id === selectedLinkId) group.classList.add("selected");
+    group.dataset.craftLinkId = link.id;
+    for (const [className, pathData] of [
+      ["fallout-maw-craft-link-hit", geometry.centerPath],
+      ["fallout-maw-craft-link-shadow", geometry.centerPath],
+      ["fallout-maw-craft-link-wall", geometry.centerPath],
+      ["fallout-maw-craft-link-glass", geometry.centerPath],
+      ["fallout-maw-craft-link-highlight", geometry.centerPath]
+    ]) {
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.classList.add(className);
+      path.setAttribute("d", pathData);
+      group.appendChild(path);
+    }
+    for (const [role, point] of [["from", geometry.start], ["to", geometry.end]]) {
+      for (const [className, socketPath] of [
+        ["fallout-maw-craft-link-socket-shadow", point.socketPath],
+        ["fallout-maw-craft-link-socket", point.socketPath]
+      ]) {
+        const socket = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        socket.classList.add(className);
+        socket.dataset.craftSocketRole = role;
+        socket.setAttribute("d", socketPath);
+        if (className === "fallout-maw-craft-link-socket") {
+          socket.addEventListener("pointerdown", event => this.#onCraftSocketPointerDown(event, link, role, svg));
+        }
+        group.appendChild(socket);
+      }
+    }
+    group.addEventListener("pointerdown", event => this.#onCraftLinkPointerDown(event, link, svg));
+    group.addEventListener("dblclick", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.#craftSelection = { type: "link", id: link.id };
+      this.#craftAttachSourceNodeId = "";
+      this.render({ force: true });
+    });
+    svg.appendChild(group);
+  }
+
+  #onCraftLinkPointerDown(event, link, svg) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const start = getCraftSvgPointFromEvent(event, svg);
+    const anchors = this.#getCraftLinkAnchorData(link, svg);
+    this.#craftLinkDrag = {
+      pointerId: event.pointerId,
+      linkId: link.id,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      bend: start,
+      anchors,
+      moved: false
+    };
+    const onMove = moveEvent => this.#onCraftLinkMove(moveEvent);
+    const onUp = upEvent => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      this.#onCraftLinkEnd(upEvent);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp, { once: true });
+  }
+
+  #onCraftLinkMove(event) {
+    const drag = this.#craftLinkDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    event.preventDefault();
+    const dx = event.clientX - drag.startClientX;
+    const dy = event.clientY - drag.startClientY;
+    if (!drag.moved && Math.hypot(dx, dy) < CRAFT_DRAG_THRESHOLD_PX) return;
+    const svg = this.element?.querySelector("[data-craft-links]");
+    if (!svg) return;
+    drag.moved = true;
+    drag.bend = this.#constrainCraftLinkBend(drag.linkId, getCraftSvgPointFromEvent(event, svg), drag.anchors);
+    this.#renderCraftLinks();
+  }
+
+  #constrainCraftLinkBend(linkId, point, anchors = null) {
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    const svg = workspace?.querySelector("[data-craft-links]");
+    const link = getCraftLinks(this.item).find(entry => entry.id === linkId);
+    const fromElement = link ? workspace?.querySelector(`[data-craft-node-id="${CSS.escape(link.fromNodeId)}"]`) : null;
+    const toElement = link ? workspace?.querySelector(`[data-craft-node-id="${CSS.escape(link.toNodeId)}"]`) : null;
+    const from = getElementRectRelativeToSvg(fromElement, svg);
+    const to = getElementRectRelativeToSvg(toElement, svg);
+    if (!from || !to) return point;
+    const startAnchor = getCraftResolvedAnchor(from, anchors?.from ?? getCraftLinkAnchor(link, "from"), point);
+    const endAnchor = getCraftResolvedAnchor(to, anchors?.to ?? getCraftLinkAnchor(link, "to"), point);
+    return constrainBendPoint(point, startAnchor.tubePoint, endAnchor.tubePoint, 72);
+  }
+
+  #onCraftLinkEnd(event) {
+    const drag = this.#craftLinkDrag;
+    this.#craftLinkDrag = null;
+    if (!drag || event.pointerId !== drag.pointerId) return undefined;
+    this.#craftSelection = { type: "link", id: drag.linkId };
+    this.#craftAttachSourceNodeId = "";
+    if (!drag.moved) return this.render({ force: true });
+    const links = getCraftLinks(this.item).map(link => (
+      link.id === drag.linkId
+        ? { ...link, bendX: drag.bend.x, bendY: drag.bend.y, ...buildCraftAnchorUpdateData(drag.anchors) }
+        : link
+    ));
+    this.#craftSelection = null;
+    return this.#updateCraftRecipe({ links });
+  }
+
+  #onCraftSocketPointerDown(event, link, role, svg) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const anchors = this.#getCraftLinkAnchorData(link, svg);
+    this.#craftSocketDrag = {
+      pointerId: event.pointerId,
+      linkId: link.id,
+      role,
+      anchors,
+      bend: getCraftLinkBend(link),
+      moved: false,
+      startClientX: event.clientX,
+      startClientY: event.clientY
+    };
+    const onMove = moveEvent => this.#onCraftSocketMove(moveEvent);
+    const onUp = upEvent => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      this.#onCraftSocketEnd(upEvent);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp, { once: true });
+  }
+
+  #onCraftSocketMove(event) {
+    const drag = this.#craftSocketDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    event.preventDefault();
+    const dx = event.clientX - drag.startClientX;
+    const dy = event.clientY - drag.startClientY;
+    if (!drag.moved && Math.hypot(dx, dy) < CRAFT_DRAG_THRESHOLD_PX) return;
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    const svg = workspace?.querySelector("[data-craft-links]");
+    const link = getCraftLinks(this.item).find(entry => entry.id === drag.linkId);
+    const nodeId = drag.role === "from" ? link?.fromNodeId : link?.toNodeId;
+    const nodeElement = nodeId ? workspace?.querySelector(`[data-craft-node-id="${CSS.escape(nodeId)}"]`) : null;
+    const rect = getElementRectRelativeToSvg(nodeElement, svg);
+    if (!rect || !svg) return;
+    drag.moved = true;
+    drag.anchors = {
+      ...drag.anchors,
+      [drag.role]: anchorToData(getNearestRectAnchor(rect, getCraftSvgPointFromEvent(event, svg)))
+    };
+    this.#renderCraftLinks();
+  }
+
+  #onCraftSocketEnd(event) {
+    const drag = this.#craftSocketDrag;
+    this.#craftSocketDrag = null;
+    if (!drag || event.pointerId !== drag.pointerId) return undefined;
+    if (!drag.moved) return undefined;
+    const links = getCraftLinks(this.item).map(link => (
+      link.id === drag.linkId ? { ...link, ...buildCraftAnchorUpdateData(drag.anchors) } : link
+    ));
+    this.#craftSelection = null;
+    return this.#updateCraftRecipe({ links });
+  }
+
+  #getCraftLinkAnchorData(link, svg) {
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    const fromElement = workspace?.querySelector(`[data-craft-node-id="${CSS.escape(link.fromNodeId)}"]`);
+    const toElement = workspace?.querySelector(`[data-craft-node-id="${CSS.escape(link.toNodeId)}"]`);
+    const from = getElementRectRelativeToSvg(fromElement, svg);
+    const to = getElementRectRelativeToSvg(toElement, svg);
+    if (!from || !to) return getCraftLinkAnchors(link);
+    const bend = getCraftLinkBend(link);
+    const fromAnchor = getCraftResolvedAnchor(from, getCraftLinkAnchor(link, "from"), bend ?? getRectCenter(to));
+    const toAnchor = getCraftResolvedAnchor(to, getCraftLinkAnchor(link, "to"), bend ?? getRectCenter(from));
+    return {
+      from: anchorToData(fromAnchor),
+      to: anchorToData(toAnchor)
+    };
+  }
+
+  #appendCraftPreviewPath(svg, pathData) {
+    if (!pathData) return;
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.classList.add("fallout-maw-craft-link-preview");
+    path.setAttribute("d", pathData);
+    svg.appendChild(path);
+  }
+
+  #updateCraftRecipe({ nodes = null, links = null, viewport = null } = {}) {
+    const updateData = {};
+    if (nodes) updateData["system.craft.nodes"] = nodes.map(normalizeCraftNode);
+    if (links) updateData["system.craft.links"] = links.map(normalizeCraftLink);
+    if (viewport) updateData["system.craft.viewport"] = normalizeCraftViewport(viewport);
+    return this.item.update(updateData);
+  }
+
+  #positionCraftPopover() {
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    const popover = workspace?.querySelector("[data-craft-popover]");
+    if (!workspace || !popover || popover.hidden) return;
+    const workspaceRect = workspace.getBoundingClientRect();
+    const target = this.#getCraftPopoverTargetElement(workspace);
+    if (!target) return;
+    const targetRect = target.getBoundingClientRect();
+    const preferredLeft = targetRect.right - workspaceRect.left + 12;
+    const preferredTop = targetRect.top - workspaceRect.top;
+    const popoverWidth = popover.offsetWidth || 220;
+    const popoverHeight = popover.offsetHeight || 160;
+    let left = preferredLeft;
+    if ((left + popoverWidth + 8) > workspaceRect.width) left = (targetRect.left - workspaceRect.left) - popoverWidth - 12;
+    left = Math.max(8, Math.min(workspaceRect.width - popoverWidth - 8, left));
+    const top = Math.max(8, Math.min(workspaceRect.height - popoverHeight - 8, preferredTop));
+    popover.style.left = `${Math.round(left)}px`;
+    popover.style.top = `${Math.round(top)}px`;
+  }
+
+  #getCraftPopoverTargetElement(workspace) {
+    if (this.#craftSelection?.type === "node") {
+      return workspace.querySelector(`[data-craft-node-id="${CSS.escape(this.#craftSelection.id)}"]`);
+    }
+    if (this.#craftSelection?.type === "link") {
+      return workspace.querySelector(`[data-craft-link-id="${CSS.escape(this.#craftSelection.id)}"]`);
+    }
+    if (this.#craftAttachSourceNodeId) {
+      return workspace.querySelector(`[data-craft-node-id="${CSS.escape(this.#craftAttachSourceNodeId)}"]`);
+    }
+    return null;
   }
 
   #onEquipmentSlotChoice(event) {
@@ -2376,6 +3076,603 @@ function getNextAdditionalWeaponFunctionName(additionalWeapons = []) {
 
 function getDefaultAdditionalWeaponFunctionName(index) {
   return `${game.i18n.localize("FALLOUTMAW.Item.AdditionalWeaponFunction")} ${index + 1}`;
+}
+
+function prepareCraftContext(item, skillSettings = [], selection = null, attachSourceNodeId = "") {
+  const nodes = getCraftNodesWithRoot(item);
+  const links = getCraftLinks(item);
+  const viewport = getCraftViewport(item);
+  const selectedNodeIndex = selection?.type === "node"
+    ? nodes.findIndex(node => node.id === selection.id)
+    : -1;
+  const selectedNode = selectedNodeIndex >= 0
+    ? prepareCraftNodeForDisplay(nodes[selectedNodeIndex], selectedNodeIndex, links)
+    : null;
+  const selectedLinkIndex = selection?.type === "link"
+    ? links.findIndex(link => link.id === selection.id)
+    : -1;
+  const selectedLink = selectedLinkIndex >= 0
+    ? prepareCraftLinkForDisplay(links[selectedLinkIndex], selectedLinkIndex, nodes, skillSettings)
+    : null;
+  const attachSourceNode = nodes.find(node => node.id === attachSourceNodeId) ?? null;
+  return {
+    nodes: nodes.map((node, index) => ({
+      ...prepareCraftNodeForDisplay(node, index, links),
+      style: buildCraftNodeStyle(node),
+      selected: selection?.type === "node" && selection.id === node.id,
+      attaching: attachSourceNodeId === node.id
+    })),
+    links,
+    viewport,
+    viewportStyle: `--craft-pan-x: ${Math.round(viewport.x)}px; --craft-pan-y: ${Math.round(viewport.y)}px; --craft-zoom: ${viewport.zoom};`,
+    selectedNode,
+    selectedLink,
+    attachSourceNode,
+    hasPopover: Boolean(selectedNode || selectedLink || attachSourceNode)
+  };
+}
+
+function prepareCraftNodeForDisplay(node, index, links) {
+  const quantity = Math.max(1, toInteger(node.quantity) || 1);
+  const linked = links.some(link => link.fromNodeId === node.id || link.toNodeId === node.id);
+  return {
+    ...node,
+    index,
+    linked,
+    quantity,
+    hasQuantityBadge: quantity > 1
+  };
+}
+
+function prepareCraftLinkForDisplay(link, index, nodes, skillSettings = []) {
+  const from = nodes.find(node => node.id === link.fromNodeId);
+  const to = nodes.find(node => node.id === link.toNodeId);
+  const skillKey = String(link.skillKey ?? getDefaultCraftSkillKey(skillSettings));
+  return {
+    ...link,
+    index,
+    title: `${from?.name ?? "?"} -> ${to?.name ?? "?"}`,
+    difficulty: Math.max(0, toInteger(link.difficulty) || 60),
+    skillChoices: skillSettings.map((skill, skillIndex) => ({
+      key: skill.key,
+      label: skill.label,
+      selected: skill.key === skillKey || (!skillKey && skillIndex === 0)
+    }))
+  };
+}
+
+function buildCraftNodeStyle(node) {
+  const width = Math.max(1, toInteger(node.width) || 1);
+  const height = Math.max(1, toInteger(node.height) || 1);
+  const widthPx = (width * 52) + ((width - 1) * 4);
+  const heightPx = (height * 52) + ((height - 1) * 4);
+  return [
+    `--craft-x: ${Number(node.x) || 0};`,
+    `--craft-y: ${Number(node.y) || 0};`,
+    `--craft-width: ${width};`,
+    `--craft-height: ${height};`,
+    `--craft-offset-x: ${(Number(node.x) || 0) * CRAFT_GRID_FALLBACK_STEP}px;`,
+    `--craft-offset-y: ${(Number(node.y) || 0) * CRAFT_GRID_FALLBACK_STEP}px;`,
+    `--craft-node-width: ${widthPx}px;`,
+    `--craft-node-height: ${heightPx}px;`,
+    `--craft-node-half-width: ${widthPx / 2}px;`,
+    `--craft-node-half-height: ${heightPx / 2}px;`
+  ].join(" ");
+}
+
+function getCraftNodesWithRoot(item) {
+  const nodes = getCraftNodes(item);
+  const rootIndex = nodes.findIndex(node => node.root);
+  const root = createCraftRootNode(item, rootIndex >= 0 ? nodes[rootIndex] : {});
+  if (rootIndex >= 0) {
+    nodes[rootIndex] = root;
+    return nodes;
+  }
+  return [root, ...nodes];
+}
+
+function getCraftNodes(item) {
+  return Array.from(item.system?.craft?.nodes ?? [])
+    .map(normalizeCraftNode)
+    .filter(node => node.id);
+}
+
+function getCraftLinks(item) {
+  const nodeIds = new Set(getCraftNodesWithRoot(item).map(node => node.id));
+  return Array.from(item.system?.craft?.links ?? [])
+    .map(normalizeCraftLink)
+    .filter(link => link.id && nodeIds.has(link.fromNodeId) && nodeIds.has(link.toNodeId) && link.fromNodeId !== link.toNodeId);
+}
+
+function getCraftViewport(item) {
+  return normalizeCraftViewport(item.system?.craft?.viewport ?? {});
+}
+
+function createCraftRootNode(item, source = {}) {
+  const placement = item.system?.placement ?? {};
+  return normalizeCraftNode({
+    ...source,
+    id: String(source.id || CRAFT_ROOT_NODE_ID),
+    itemUuid: item.uuid,
+    name: item.name,
+    img: normalizeImagePath(item.img || FALLBACK_ICON),
+    type: item.type,
+    width: Math.max(1, toInteger(placement.width) || toInteger(source.width) || 1),
+    height: Math.max(1, toInteger(placement.height) || toInteger(source.height) || 1),
+    quantity: Math.max(1, toInteger(source.quantity) || 1),
+    root: true
+  });
+}
+
+function createCraftNodeFromItem(item, { x = 0, y = 0 } = {}) {
+  const placement = item.system?.placement ?? {};
+  return normalizeCraftNode({
+    id: foundry.utils.randomID(),
+    itemUuid: item.uuid,
+    name: item.name,
+    img: normalizeImagePath(item.img || FALLBACK_ICON),
+    type: item.type,
+    x,
+    y,
+    width: Math.max(1, toInteger(placement.width) || 1),
+    height: Math.max(1, toInteger(placement.height) || 1),
+    quantity: 1,
+    root: false
+  });
+}
+
+function normalizeCraftNode(node = {}) {
+  return {
+    id: String(node.id || foundry.utils.randomID()),
+    itemUuid: String(node.itemUuid ?? ""),
+    name: String(node.name ?? ""),
+    img: normalizeImagePath(String(node.img || FALLBACK_ICON)),
+    type: String(node.type ?? ""),
+    x: toInteger(node.x),
+    y: toInteger(node.y),
+    width: Math.max(1, toInteger(node.width) || 1),
+    height: Math.max(1, toInteger(node.height) || 1),
+    quantity: Math.max(1, toInteger(node.quantity) || 1),
+    root: Boolean(node.root)
+  };
+}
+
+function normalizeCraftLink(link = {}) {
+  const bendX = Number(link.bendX);
+  const bendY = Number(link.bendY);
+  const fromAnchorOffset = Number(link.fromAnchorOffset);
+  const toAnchorOffset = Number(link.toAnchorOffset);
+  return {
+    id: String(link.id || foundry.utils.randomID()),
+    fromNodeId: String(link.fromNodeId ?? ""),
+    toNodeId: String(link.toNodeId ?? ""),
+    skillKey: String(link.skillKey ?? "repair"),
+    difficulty: Math.max(0, toInteger(link.difficulty) || 60),
+    bendX: Number.isFinite(bendX) ? bendX : null,
+    bendY: Number.isFinite(bendY) ? bendY : null,
+    fromAnchorSide: normalizeCraftAnchorSide(link.fromAnchorSide),
+    fromAnchorOffset: Number.isFinite(fromAnchorOffset) ? clampNumber(fromAnchorOffset, 0, 1) : null,
+    toAnchorSide: normalizeCraftAnchorSide(link.toAnchorSide),
+    toAnchorOffset: Number.isFinite(toAnchorOffset) ? clampNumber(toAnchorOffset, 0, 1) : null
+  };
+}
+
+function normalizeCraftViewport(viewport = {}) {
+  return {
+    x: Math.round(Number(viewport.x) || 0),
+    y: Math.round(Number(viewport.y) || 0),
+    zoom: clampCraftZoom(viewport.zoom)
+  };
+}
+
+function clampCraftZoom(value) {
+  const zoom = Number(value);
+  if (!Number.isFinite(zoom)) return 1;
+  return Math.max(CRAFT_MIN_ZOOM, Math.min(CRAFT_MAX_ZOOM, zoom));
+}
+
+function isValidCraftComponentItem(item) {
+  return Boolean(item && !item.actor && !["ability", "trauma", "disease"].includes(item.type));
+}
+
+function getDefaultCraftSkillKey(skillSettings = []) {
+  return skillSettings.some(skill => skill.key === "repair")
+    ? "repair"
+    : String(skillSettings.at(0)?.key ?? "");
+}
+
+function getCraftGridStep(element) {
+  return getCraftGridMetrics(element).step;
+}
+
+function getCraftGridMetrics(element) {
+  const computed = element ? getComputedStyle(element) : null;
+  const cell = parseCssLength(computed?.getPropertyValue("--fallout-maw-inventory-cell-size"), element) || 52;
+  const gap = parseCssLength(computed?.getPropertyValue("--fallout-maw-inventory-grid-gap"), element) || 4;
+  const step = Math.max(1, cell + gap) || CRAFT_GRID_FALLBACK_STEP;
+  return { cell, gap, step };
+}
+
+function parseCssLength(value, element) {
+  const raw = String(value ?? "").trim();
+  const numeric = Number.parseFloat(raw);
+  if (!Number.isFinite(numeric)) return 0;
+  if (raw.endsWith("rem")) return numeric * (Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16);
+  if (raw.endsWith("em")) return numeric * (Number.parseFloat(getComputedStyle(element).fontSize) || 16);
+  return numeric;
+}
+
+function getCraftConnectorPath(fromElement, toElement, svg, bend = null) {
+  const from = getElementRectRelativeToSvg(fromElement, svg);
+  const to = getElementRectRelativeToSvg(toElement, svg);
+  if (!from || !to) return "";
+  return buildCraftConnectorGeometry(from, to, bend).centerPath;
+}
+
+function getCraftConnectorGeometry(fromElement, toElement, svg, bend = null, anchors = null) {
+  const from = getElementRectRelativeToSvg(fromElement, svg);
+  const to = getElementRectRelativeToSvg(toElement, svg);
+  if (!from || !to) return null;
+  return buildCraftConnectorGeometry(from, to, bend, anchors);
+}
+
+function getCraftConnectorPathToPoint(fromElement, event, svg) {
+  const from = getElementRectRelativeToSvg(fromElement, svg);
+  const svgRect = svg.getBoundingClientRect();
+  const zoom = getCraftSvgZoom(svg);
+  const to = {
+    left: (event.clientX - svgRect.left) / zoom,
+    right: (event.clientX - svgRect.left) / zoom,
+    top: (event.clientY - svgRect.top) / zoom,
+    bottom: (event.clientY - svgRect.top) / zoom,
+    width: 1,
+    height: 1
+  };
+  if (!from) return "";
+  return buildCraftConnectorGeometry(from, to, null).centerPath;
+}
+
+function getCraftSvgPointFromEvent(event, svg) {
+  const svgRect = svg.getBoundingClientRect();
+  const zoom = getCraftSvgZoom(svg);
+  return {
+    x: (event.clientX - svgRect.left) / zoom,
+    y: (event.clientY - svgRect.top) / zoom
+  };
+}
+
+function getElementRectRelativeToSvg(element, svg) {
+  if (!element || !svg) return null;
+  const rect = element.getBoundingClientRect();
+  const svgRect = svg.getBoundingClientRect();
+  const zoom = getCraftSvgZoom(svg);
+  return {
+    left: (rect.left - svgRect.left) / zoom,
+    right: (rect.right - svgRect.left) / zoom,
+    top: (rect.top - svgRect.top) / zoom,
+    bottom: (rect.bottom - svgRect.top) / zoom,
+    width: rect.width / zoom,
+    height: rect.height / zoom
+  };
+}
+
+function getCraftSvgZoom(svg) {
+  const workspace = svg?.closest?.("[data-craft-workspace]");
+  const zoom = Number.parseFloat(getComputedStyle(workspace ?? svg).getPropertyValue("--craft-zoom"));
+  return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+}
+
+function getCraftLinkBend(link) {
+  const x = Number(link.bendX);
+  const y = Number(link.bendY);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+function buildCraftConnectorGeometry(from, to, bend = null, anchors = null) {
+  const fromCenter = getRectCenter(from);
+  const toCenter = getRectCenter(to);
+  let startAnchor;
+  let endAnchor;
+  let path;
+  if (bend) {
+    startAnchor = getCraftResolvedAnchor(from, anchors?.from, bend);
+    endAnchor = getCraftResolvedAnchor(to, anchors?.to, bend);
+    const constrainedBend = constrainBendPoint(bend, startAnchor.tubePoint, endAnchor.tubePoint, 72);
+    startAnchor = getCraftResolvedAnchor(from, anchors?.from, constrainedBend);
+    endAnchor = getCraftResolvedAnchor(to, anchors?.to, constrainedBend);
+    path = buildBentTubeCenterPath(startAnchor, constrainedBend, endAnchor);
+  } else {
+    startAnchor = getCraftResolvedAnchor(from, anchors?.from, toCenter);
+    endAnchor = getCraftResolvedAnchor(to, anchors?.to, fromCenter);
+    path = buildDefaultTubeCenterPath(startAnchor, endAnchor);
+  }
+  return {
+    centerPath: path,
+    start: {
+      ...startAnchor.tubePoint,
+      socketPath: buildCraftSocketPath(startAnchor)
+    },
+    end: {
+      ...endAnchor.tubePoint,
+      socketPath: buildCraftSocketPath(endAnchor)
+    }
+  };
+}
+
+function buildDefaultTubeCenterPath(startAnchor, endAnchor) {
+  const start = startAnchor.tubePoint;
+  const end = endAnchor.tubePoint;
+  const distance = Math.max(1, getPointDistance(start, end));
+  const handle = Math.max(36, Math.min(130, distance * 0.42));
+  const c1 = addScaledVector(start, startAnchor.normal, handle);
+  const c2 = addScaledVector(end, endAnchor.normal, handle);
+  return `M ${formatPoint(start)} C ${formatPoint(c1)} ${formatPoint(c2)} ${formatPoint(end)}`;
+}
+
+function buildBentTubeCenterPath(startAnchor, bend, endAnchor) {
+  const start = startAnchor.tubePoint;
+  const end = endAnchor.tubePoint;
+  const startDistance = getPointDistance(start, bend);
+  const endDistance = getPointDistance(end, bend);
+  const startHandle = Math.max(34, Math.min(115, startDistance * 0.42));
+  const endHandle = Math.max(34, Math.min(115, endDistance * 0.42));
+  const bendTangent = getBendTangent(start, bend, end);
+  const bendHandleA = Math.max(28, Math.min(100, startDistance * 0.34));
+  const bendHandleB = Math.max(28, Math.min(100, endDistance * 0.34));
+  const c1 = addScaledVector(start, startAnchor.normal, startHandle);
+  const c2 = addScaledVector(bend, bendTangent, -bendHandleA);
+  const c3 = addScaledVector(bend, bendTangent, bendHandleB);
+  const c4 = addScaledVector(end, endAnchor.normal, endHandle);
+  return `M ${formatPoint(start)} C ${formatPoint(c1)} ${formatPoint(c2)} ${formatPoint(bend)} C ${formatPoint(c3)} ${formatPoint(c4)} ${formatPoint(end)}`;
+}
+
+function buildQuadraticPath(start, control, end) {
+  return `M ${formatPoint(start)} Q ${formatPoint(control)} ${formatPoint(end)}`;
+}
+
+function getRectAnchor(rect, toward) {
+  const center = getRectCenter(rect);
+  const dx = toward.x - center.x;
+  const dy = toward.y - center.y;
+  if (!dx && !dy) {
+    const normal = { x: 0, y: 1 };
+    return {
+      side: "bottom",
+      offset: 0.5,
+      point: center,
+      tubePoint: addScaledVector(center, normal, CRAFT_SOCKET_DEPTH_PX),
+      normal,
+      tangent: { x: 1, y: 0 }
+    };
+  }
+  const halfWidth = Math.max(1, rect.width / 2);
+  const halfHeight = Math.max(1, rect.height / 2);
+  const socketHalfWidth = CRAFT_SOCKET_HALF_WIDTH_PX;
+  let point;
+  let normal;
+  let side;
+  let offset;
+  if (Math.abs(dx / halfWidth) > Math.abs(dy / halfHeight)) {
+    const sign = Math.sign(dx) || 1;
+    const scale = halfWidth / Math.abs(dx);
+    point = {
+      x: center.x + (sign * halfWidth),
+      y: clampNumber(center.y + (dy * scale), rect.top + socketHalfWidth, rect.bottom - socketHalfWidth)
+    };
+    side = sign < 0 ? "left" : "right";
+    offset = (point.y - rect.top) / Math.max(1, rect.height);
+    normal = { x: sign, y: 0 };
+  } else {
+    const sign = Math.sign(dy) || 1;
+    const scale = halfHeight / Math.abs(dy);
+    point = {
+      x: clampNumber(center.x + (dx * scale), rect.left + socketHalfWidth, rect.right - socketHalfWidth),
+      y: center.y + (sign * halfHeight)
+    };
+    side = sign < 0 ? "top" : "bottom";
+    offset = (point.x - rect.left) / Math.max(1, rect.width);
+    normal = { x: 0, y: sign };
+  }
+  return {
+    side,
+    offset: clampNumber(offset, 0, 1),
+    point,
+    tubePoint: addScaledVector(point, normal, CRAFT_SOCKET_DEPTH_PX),
+    normal,
+    tangent: { x: -normal.y, y: normal.x }
+  };
+}
+
+function getNearestRectAnchor(rect, point) {
+  const distances = [
+    { side: "left", value: Math.abs(point.x - rect.left) },
+    { side: "right", value: Math.abs(point.x - rect.right) },
+    { side: "top", value: Math.abs(point.y - rect.top) },
+    { side: "bottom", value: Math.abs(point.y - rect.bottom) }
+  ].sort((a, b) => a.value - b.value);
+  const side = distances[0]?.side ?? "bottom";
+  const offset = side === "left" || side === "right"
+    ? (point.y - rect.top) / Math.max(1, rect.height)
+    : (point.x - rect.left) / Math.max(1, rect.width);
+  return getRectAnchorFromData(rect, { side, offset });
+}
+
+function getCraftResolvedAnchor(rect, anchor, fallbackToward) {
+  return anchor?.side ? getRectAnchorFromData(rect, anchor) : getRectAnchor(rect, fallbackToward);
+}
+
+function getRectAnchorFromData(rect, anchor) {
+  const side = normalizeCraftAnchorSide(anchor?.side) || "bottom";
+  const rawOffset = Number(anchor?.offset);
+  const offset = Number.isFinite(rawOffset) ? clampNumber(rawOffset, 0, 1) : 0.5;
+  const socketHalfWidth = CRAFT_SOCKET_HALF_WIDTH_PX;
+  let point;
+  let normal;
+  if (side === "left" || side === "right") {
+    const sign = side === "left" ? -1 : 1;
+    point = {
+      x: sign < 0 ? rect.left : rect.right,
+      y: clampNumber(rect.top + (rect.height * offset), rect.top + socketHalfWidth, rect.bottom - socketHalfWidth)
+    };
+    normal = { x: sign, y: 0 };
+  } else {
+    const sign = side === "top" ? -1 : 1;
+    point = {
+      x: clampNumber(rect.left + (rect.width * offset), rect.left + socketHalfWidth, rect.right - socketHalfWidth),
+      y: sign < 0 ? rect.top : rect.bottom
+    };
+    normal = { x: 0, y: sign };
+  }
+  return {
+    side,
+    offset,
+    point,
+    tubePoint: addScaledVector(point, normal, CRAFT_SOCKET_DEPTH_PX),
+    normal,
+    tangent: { x: -normal.y, y: normal.x }
+  };
+}
+
+function anchorToData(anchor) {
+  return {
+    side: normalizeCraftAnchorSide(anchor?.side),
+    offset: Number.isFinite(Number(anchor?.offset)) ? clampNumber(Number(anchor.offset), 0, 1) : null
+  };
+}
+
+function getCraftLinkAnchor(link, role) {
+  return {
+    side: normalizeCraftAnchorSide(link?.[`${role}AnchorSide`]),
+    offset: Number.isFinite(Number(link?.[`${role}AnchorOffset`]))
+      ? clampNumber(Number(link[`${role}AnchorOffset`]), 0, 1)
+      : null
+  };
+}
+
+function getCraftLinkAnchors(link) {
+  return {
+    from: getCraftLinkAnchor(link, "from"),
+    to: getCraftLinkAnchor(link, "to")
+  };
+}
+
+function buildCraftAnchorUpdateData(anchors = {}) {
+  return {
+    fromAnchorSide: normalizeCraftAnchorSide(anchors.from?.side),
+    fromAnchorOffset: Number.isFinite(Number(anchors.from?.offset)) ? clampNumber(Number(anchors.from.offset), 0, 1) : null,
+    toAnchorSide: normalizeCraftAnchorSide(anchors.to?.side),
+    toAnchorOffset: Number.isFinite(Number(anchors.to?.offset)) ? clampNumber(Number(anchors.to.offset), 0, 1) : null
+  };
+}
+
+function normalizeCraftAnchorSide(side) {
+  const value = String(side ?? "");
+  return ["left", "right", "top", "bottom"].includes(value) ? value : "";
+}
+
+function buildCraftSocketPath(anchor) {
+  const halfWidth = CRAFT_SOCKET_HALF_WIDTH_PX;
+  const inset = 0.5;
+  const outer = addScaledVector(anchor.point, anchor.normal, CRAFT_SOCKET_DEPTH_PX);
+  const inner = addScaledVector(anchor.point, anchor.normal, inset);
+  const corners = [
+    addScaledVector(inner, anchor.tangent, -halfWidth),
+    addScaledVector(inner, anchor.tangent, halfWidth),
+    addScaledVector(outer, anchor.tangent, halfWidth),
+    addScaledVector(outer, anchor.tangent, -halfWidth)
+  ];
+  return `M ${formatPoint(corners[0])} L ${formatPoint(corners[1])} L ${formatPoint(corners[2])} L ${formatPoint(corners[3])} Z`;
+}
+
+function constrainBendPoint(point, start, end, minDistance) {
+  let constrained = { ...point };
+  constrained = pushPointFromAnchor(constrained, start, minDistance);
+  constrained = pushPointFromAnchor(constrained, end, minDistance);
+  return constrained;
+}
+
+function pushPointFromAnchor(point, anchor, minDistance) {
+  const dx = point.x - anchor.x;
+  const dy = point.y - anchor.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance >= minDistance) return point;
+  if (distance < 1) {
+    return { x: anchor.x + minDistance, y: anchor.y };
+  }
+  const scale = minDistance / distance;
+  return {
+    x: anchor.x + (dx * scale),
+    y: anchor.y + (dy * scale)
+  };
+}
+
+function getBendTangent(start, bend, end) {
+  const incoming = normalizeVector({ x: bend.x - start.x, y: bend.y - start.y });
+  const outgoing = normalizeVector({ x: end.x - bend.x, y: end.y - bend.y });
+  const tangent = normalizeVector({ x: incoming.x + outgoing.x, y: incoming.y + outgoing.y });
+  if (tangent.x || tangent.y) return tangent;
+  return normalizeVector({ x: end.x - start.x, y: end.y - start.y });
+}
+
+function normalizeVector(vector) {
+  const length = Math.hypot(vector.x, vector.y);
+  if (length < 0.0001) return { x: 0, y: 0 };
+  return { x: vector.x / length, y: vector.y / length };
+}
+
+function getPointDistance(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function addScaledVector(point, vector, scale) {
+  return {
+    x: point.x + (vector.x * scale),
+    y: point.y + (vector.y * scale)
+  };
+}
+
+function addVectors(a, b) {
+  return {
+    x: a.x + b.x,
+    y: a.y + b.y
+  };
+}
+
+function clampNumber(value, min, max) {
+  if (min > max) return (min + max) / 2;
+  return Math.max(min, Math.min(max, value));
+}
+
+function formatPoint(point) {
+  return `${roundPathNumber(point.x)} ${roundPathNumber(point.y)}`;
+}
+
+function getRectCenter(rect) {
+  return {
+    x: rect.left + (rect.width / 2),
+    y: rect.top + (rect.height / 2)
+  };
+}
+
+function getRectEdgePoint(rect, toward) {
+  const center = getRectCenter(rect);
+  const dx = toward.x - center.x;
+  const dy = toward.y - center.y;
+  if (!dx && !dy) return center;
+  const halfWidth = Math.max(1, rect.width / 2);
+  const halfHeight = Math.max(1, rect.height / 2);
+  const scale = Math.min(
+    dx ? Math.abs(halfWidth / dx) : Number.POSITIVE_INFINITY,
+    dy ? Math.abs(halfHeight / dy) : Number.POSITIVE_INFINITY
+  );
+  return {
+    x: center.x + (dx * scale),
+    y: center.y + (dy * scale)
+  };
+}
+
+function roundPathNumber(value) {
+  return Number(value).toFixed(2).replace(/\.?0+$/, "");
 }
 
 function getWeaponFunctionSection(element) {

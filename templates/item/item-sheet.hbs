@@ -292,6 +292,7 @@
 <nav class="sheet-tabs tabs fallout-maw-item-tabs" data-group="primary">
   <a class="item {{tabs.details.cssClass}}" data-action="tab" data-group="{{tabs.details.group}}" data-tab="{{tabs.details.id}}">{{localize "FALLOUTMAW.Item.DetailsTab"}}</a>
   <a class="item {{tabs.functions.cssClass}}" data-action="tab" data-group="{{tabs.functions.group}}" data-tab="{{tabs.functions.id}}">{{localize "FALLOUTMAW.Item.FunctionsTab"}}</a>
+  <a class="item {{tabs.craft.cssClass}}" data-action="tab" data-group="{{tabs.craft.group}}" data-tab="{{tabs.craft.id}}">Крафт</a>
 </nav>
 
 <section class="tab {{tabs.details.cssClass}}" data-group="{{tabs.details.group}}" data-tab="{{tabs.details.id}}">
@@ -1472,6 +1473,84 @@
   </section>
   {{/if}}
   {{/each}}
+</section>
+
+<section class="tab {{tabs.craft.cssClass}}" data-group="{{tabs.craft.group}}" data-tab="{{tabs.craft.id}}">
+  <div class="fallout-maw-craft-editor" data-craft-workspace style="{{craft.viewportStyle}}">
+    <div class="fallout-maw-craft-world" data-craft-world style="{{craft.viewportStyle}}">
+      <svg class="fallout-maw-craft-links" data-craft-links aria-hidden="true"></svg>
+      <div class="fallout-maw-craft-snap-preview" data-craft-snap-preview hidden></div>
+      {{#each craft.nodes}}
+      <button type="button" class="fallout-maw-craft-node {{#if root}}root{{/if}} {{#if selected}}selected{{/if}} {{#if attaching}}attaching{{/if}}" data-craft-node-id="{{id}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" style="{{style}}">
+        <span class="fallout-maw-craft-node-image">
+          <img src="{{img}}" alt="{{name}}">
+          {{#if hasQuantityBadge}}
+          <span class="fallout-maw-craft-node-quantity">{{quantity}}</span>
+          {{/if}}
+        </span>
+      </button>
+      {{/each}}
+    </div>
+
+    {{#if craft.hasPopover}}
+    <div class="fallout-maw-craft-popover" data-craft-popover>
+      {{#if craft.selectedNode}}
+      <section class="fallout-maw-craft-popover-section">
+        <h3>{{craft.selectedNode.name}}</h3>
+        <label>
+          <span>Количество</span>
+          <input type="number" value="{{craft.selectedNode.quantity}}" min="1" step="1" data-craft-node-quantity="{{craft.selectedNode.id}}">
+        </label>
+        {{#if craft.selectedNode.linked}}
+        <button type="button" data-craft-detach-node="{{craft.selectedNode.id}}">
+          <i class="fa-solid fa-link-slash"></i> Открепить
+        </button>
+        {{else}}
+        <button type="button" data-craft-attach-node="{{craft.selectedNode.id}}">
+          <i class="fa-solid fa-link"></i> Прикрепить
+        </button>
+        {{/if}}
+        {{#if craft.attachSourceNode}}
+        <p>Выберите предмет для связи.</p>
+        <button type="button" data-craft-cancel-attach>
+          <i class="fa-solid fa-xmark"></i> Отменить
+        </button>
+        {{/if}}
+        {{#unless craft.selectedNode.root}}
+        <button type="button" data-craft-delete-node="{{craft.selectedNode.id}}">
+          <i class="fa-solid fa-trash"></i> Удалить
+        </button>
+        {{/unless}}
+      </section>
+      {{else if craft.selectedLink}}
+      <section class="fallout-maw-craft-popover-section">
+        <h3>Связь</h3>
+        <p>{{craft.selectedLink.title}}</p>
+        <label>
+          <span>Навык</span>
+          <select name="system.craft.links.{{craft.selectedLink.index}}.skillKey">
+            {{#each craft.selectedLink.skillChoices}}
+            <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+        </label>
+        <label>
+          <span>Сложность</span>
+          <input type="number" name="system.craft.links.{{craft.selectedLink.index}}.difficulty" value="{{craft.selectedLink.difficulty}}" min="0" step="1">
+        </label>
+      </section>
+      {{else if craft.attachSourceNode}}
+      <section class="fallout-maw-craft-popover-section">
+        <h3>Прикрепление</h3>
+        <p>{{craft.attachSourceNode.name}}</p>
+        <button type="button" data-craft-cancel-attach>
+          <i class="fa-solid fa-xmark"></i> Отменить
+        </button>
+      </section>
+      {{/if}}
+    </div>
+    {{/if}}
+  </div>
 </section>
 {{else}}
 <section class="fallout-maw-panel">
