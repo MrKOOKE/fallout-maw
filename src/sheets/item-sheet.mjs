@@ -468,6 +468,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   }
 
   #activateCraftEditor() {
+    this.#craftResizeObserver?.disconnect();
+    this.#craftResizeObserver = null;
     const workspace = this.element?.querySelector("[data-craft-workspace]");
     if (!workspace) return;
     workspace.addEventListener("contextmenu", event => event.preventDefault());
@@ -488,8 +490,6 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelector('[data-action="tab"][data-tab="craft"]')?.addEventListener("click", () => {
       this.#scheduleCraftLinkRenderAfterLayout();
     });
-    this.#craftResizeObserver?.disconnect();
-    this.#craftResizeObserver = null;
     if (typeof ResizeObserver === "function") {
       this.#craftResizeObserver = new ResizeObserver(() => this.#scheduleCraftLinkRender());
       this.#craftResizeObserver.observe(workspace);
@@ -559,10 +559,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (!drag || event.pointerId !== drag.pointerId || !drag.moved) return;
     const nextX = Math.round(drag.startX + (event.clientX - drag.startClientX));
     const nextY = Math.round(drag.startY + (event.clientY - drag.startClientY));
+    const viewport = this.#setCraftViewportStyle(nextX, nextY);
     return this.item.update({
-      "system.craft.viewport.x": nextX,
-      "system.craft.viewport.y": nextY,
-      "system.craft.viewport.zoom": this.#getCraftViewport().zoom
+      "system.craft.viewport.x": viewport.x,
+      "system.craft.viewport.y": viewport.y,
+      "system.craft.viewport.zoom": viewport.zoom
     });
   }
 
@@ -573,8 +574,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   #setCraftViewportStyle(x, y, zoom = this.#getCraftViewport().zoom) {
     const workspace = this.element?.querySelector("[data-craft-workspace]");
     const world = this.element?.querySelector("[data-craft-world]");
-    if (!world) return;
-    const viewport = normalizeCraftViewport({ x, y, zoom });
+    if (!world) return normalizeCraftViewport({ x, y, zoom });
+    const viewport = this.#clampCraftViewport(normalizeCraftViewport({ x, y, zoom }));
     this.#craftViewportOverride = viewport;
     workspace?.style.setProperty("--craft-pan-x", `${viewport.x}px`);
     workspace?.style.setProperty("--craft-pan-y", `${viewport.y}px`);
@@ -585,6 +586,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     world.style.setProperty("--craft-zoom", String(viewport.zoom));
     this.#scheduleCraftLinkRender();
     this.#positionCraftPopover();
+    return viewport;
+  }
+
+  #clampCraftViewport(viewport) {
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    return clampCraftViewportToVisibleNode(viewport, workspace, getCraftNodesWithRoot(this.item));
   }
 
   #onCraftDragOver(event) {
@@ -640,8 +647,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const worldY = (pointerY - viewport.y) / viewport.zoom;
     const nextX = pointerX - (worldX * nextZoom);
     const nextY = pointerY - (worldY * nextZoom);
-    this.#setCraftViewportStyle(nextX, nextY, nextZoom);
-    this.#scheduleCraftViewportPersist(nextX, nextY, nextZoom);
+    const nextViewport = this.#setCraftViewportStyle(nextX, nextY, nextZoom);
+    if (this.#craftPanDrag) {
+      this.#craftPanDrag.startClientX = event.clientX;
+      this.#craftPanDrag.startClientY = event.clientY;
+      this.#craftPanDrag.startX = nextViewport.x;
+      this.#craftPanDrag.startY = nextViewport.y;
+    }
+    this.#scheduleCraftViewportPersist(nextViewport.x, nextViewport.y, nextViewport.zoom);
     return undefined;
   }
 
@@ -3374,6 +3387,68 @@ function getCraftGridMetrics(element) {
   const gap = parseCssLength(computed?.getPropertyValue("--fallout-maw-inventory-grid-gap"), element) || 4;
   const step = Math.max(1, cell + gap) || CRAFT_GRID_FALLBACK_STEP;
   return { cell, gap, step };
+}
+
+function clampCraftViewportToVisibleNode(viewport, workspace, nodes = []) {
+  const rect = workspace?.getBoundingClientRect();
+  if (!rect || rect.width <= 0 || rect.height <= 0 || !nodes.length) return viewport;
+  if (nodes.some(node => isCraftNodeVisibleInViewport(node, viewport, workspace))) return viewport;
+  let nearestAdjustment = null;
+  for (const node of nodes) {
+    const nodeRect = getCraftNodeScreenRect(node, viewport, workspace);
+    const dx = getCraftNodeContainmentDelta(nodeRect.left, nodeRect.right, rect.width);
+    const dy = getCraftNodeContainmentDelta(nodeRect.top, nodeRect.bottom, rect.height);
+    const distance = Math.hypot(dx, dy);
+    if (!nearestAdjustment || distance < nearestAdjustment.distance) {
+      nearestAdjustment = { dx, dy, distance };
+    }
+  }
+  if (!nearestAdjustment) return viewport;
+  return normalizeCraftViewport({
+    ...viewport,
+    x: viewport.x + nearestAdjustment.dx,
+    y: viewport.y + nearestAdjustment.dy
+  });
+}
+
+function isCraftNodeVisibleInViewport(node, viewport, workspace) {
+  const workspaceRect = workspace?.getBoundingClientRect();
+  if (!workspaceRect || workspaceRect.width <= 0 || workspaceRect.height <= 0) return true;
+  const nodeRect = getCraftNodeScreenRect(node, viewport, workspace);
+  return nodeRect.left >= 0
+    && nodeRect.right <= workspaceRect.width
+    && nodeRect.top >= 0
+    && nodeRect.bottom <= workspaceRect.height;
+}
+
+function getCraftNodeContainmentDelta(start, end, size) {
+  const nodeSize = end - start;
+  if (nodeSize > size) return (size / 2) - ((start + end) / 2);
+  if (start < 0) return -start;
+  if (end > size) return size - end;
+  return 0;
+}
+
+function getCraftNodeScreenRect(node, viewport, workspace) {
+  const metrics = getCraftGridMetrics(workspace);
+  const width = Math.max(1, toInteger(node.width) || 1);
+  const height = Math.max(1, toInteger(node.height) || 1);
+  const widthPx = (width * metrics.cell) + ((width - 1) * metrics.gap);
+  const heightPx = (height * metrics.cell) + ((height - 1) * metrics.gap);
+  const centerX = ((Number(node.x) || 0) * metrics.step);
+  const centerY = ((Number(node.y) || 0) * metrics.step);
+  const workspaceRect = workspace.getBoundingClientRect();
+  const zoom = clampCraftZoom(viewport.zoom);
+  const screenCenterX = (workspaceRect.width / 2) + viewport.x + (centerX * zoom);
+  const screenCenterY = (workspaceRect.height / 2) + viewport.y + (centerY * zoom);
+  const halfWidth = (widthPx * zoom) / 2;
+  const halfHeight = (heightPx * zoom) / 2;
+  return {
+    left: screenCenterX - halfWidth,
+    right: screenCenterX + halfWidth,
+    top: screenCenterY - halfHeight,
+    bottom: screenCenterY + halfHeight
+  };
 }
 
 function parseCssLength(value, element) {
