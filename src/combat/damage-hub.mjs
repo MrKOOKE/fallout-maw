@@ -1084,7 +1084,7 @@ async function synchronizeActorVitalStatuses(actor) {
   const dead = hasDestroyedCriticalLimb(actor);
   if (dead) {
     if (hasShockUnconscious(actor)) await actor.unsetFlag(SYSTEM_ID, SHOCK_UNCONSCIOUS_FLAG_KEY);
-    await setActorStatus(actor, STATUS_EFFECTS.unconscious, false);
+    await setActorStatus(actor, STATUS_EFFECTS.unconscious, false, { animate: false });
     await setActorStatus(actor, STATUS_EFFECTS.dead, true);
     return;
   }
@@ -1113,8 +1113,33 @@ async function performNegativeLimbShockCheck(actor, shockCheck = null) {
   return outcome;
 }
 
+function aggregateNegativeLimbShockChecks(actor, shockChecks = []) {
+  const entries = shockChecks
+    .filter(entry => entry && Number(entry.difficulty) > 0)
+    .map(entry => ({
+      limbKey: String(entry.limbKey ?? ""),
+      damage: Math.max(0, roundDamageAmount(entry.damage)),
+      difficulty: Math.max(0, roundDamageAmount(entry.difficulty))
+    }));
+  if (!entries.length) return null;
+  if (entries.length === 1) return entries[0];
+
+  const limbKeys = Array.from(new Set(entries.map(entry => entry.limbKey).filter(Boolean)));
+  return {
+    limbKey: limbKeys.at(0) ?? "",
+    limbKeys,
+    damage: entries.reduce((sum, entry) => sum + entry.damage, 0),
+    difficulty: entries.reduce((sum, entry) => sum + entry.difficulty, 0)
+  };
+}
+
 function getNegativeLimbShockRequester(actor, shockCheck = {}) {
-  const label = getLimbLabel(actor, shockCheck.limbKey);
+  const limbKeys = Array.isArray(shockCheck.limbKeys) && shockCheck.limbKeys.length
+    ? shockCheck.limbKeys
+    : [shockCheck.limbKey].filter(Boolean);
+  const label = limbKeys.length > 1
+    ? limbKeys.map(limbKey => getLimbLabel(actor, limbKey)).join(", ")
+    : getLimbLabel(actor, limbKeys.at(0) ?? shockCheck.limbKey);
   return `${label}: шок (${shockCheck.damage})`;
 }
 
@@ -1172,32 +1197,32 @@ function calculateShockRecoveryTarget(actor) {
   return Math.max(1, roundDamageAmount(total / (count * 2)));
 }
 
-async function setActorStatus(actor, statusId = "", active = false) {
+async function setActorStatus(actor, statusId = "", active = false, options = {}) {
   if (!statusId || !actor) return;
   if (actor.statuses?.has?.(statusId) === active) {
-    if (active) await ensureActorStatusOverlay(actor, getActorStatusEffectIds(actor, CONFIG.statusEffects?.[statusId]), statusId);
+    if (active) await ensureActorStatusOverlay(actor, getActorStatusEffectIds(actor, CONFIG.statusEffects?.[statusId]), statusId, options);
     return;
   }
   try {
-    await setActorStatusEffect(actor, statusId, active);
+    await setActorStatusEffect(actor, statusId, active, options);
   } catch (error) {
     if (!isMissingDocumentError(error)) throw error;
     const freshActor = fromUuidSync(actor.uuid) ?? actor;
     if (freshActor.statuses?.has?.(statusId) === active) return;
     if (!active) return;
-    await setActorStatusEffect(freshActor, statusId, active);
+    await setActorStatusEffect(freshActor, statusId, active, options);
   }
 }
 
-async function setActorStatusEffect(actor, statusId = "", active = false) {
+async function setActorStatusEffect(actor, statusId = "", active = false, options = {}) {
   const status = CONFIG.statusEffects?.[statusId];
   if (!status) return undefined;
-  const animationOptions = getStatusAnimationOptions(statusId);
+  const animationOptions = getStatusAnimationOptions(statusId, options);
 
   const existing = getActorStatusEffectIds(actor, status);
   if (existing.length) {
     if (active) {
-      await ensureActorStatusOverlay(actor, existing, statusId);
+      await ensureActorStatusOverlay(actor, existing, statusId, options);
       return true;
     }
     await actor.deleteEmbeddedDocuments("ActiveEffect", existing, animationOptions);
@@ -1215,7 +1240,7 @@ async function setActorStatusEffect(actor, statusId = "", active = false) {
   });
 }
 
-async function ensureActorStatusOverlay(actor, effectIds = [], statusId = "") {
+async function ensureActorStatusOverlay(actor, effectIds = [], statusId = "", options = {}) {
   if (!isOverlayStatusEffect(statusId)) return;
   const updates = effectIds
     .map(effectId => actor?.effects?.get(effectId))
@@ -1224,14 +1249,16 @@ async function ensureActorStatusOverlay(actor, effectIds = [], statusId = "") {
       _id: effect.id,
       "flags.core.overlay": true
     }));
-  if (updates.length) await actor.updateEmbeddedDocuments("ActiveEffect", updates, getStatusAnimationOptions(statusId));
+  if (updates.length) await actor.updateEmbeddedDocuments("ActiveEffect", updates, getStatusAnimationOptions(statusId, options));
 }
 
 function isOverlayStatusEffect(statusId = "") {
   return OVERLAY_STATUS_EFFECTS.has(statusId);
 }
 
-function getStatusAnimationOptions(statusId = "") {
+function getStatusAnimationOptions(statusId = "", { animate = null } = {}) {
+  if (animate === false) return { animate: false };
+  if (animate === true) return {};
   return isOverlayStatusEffect(statusId) ? {} : { animate: false };
 }
 
@@ -2316,7 +2343,8 @@ async function applyDamageEntriesBatch(actor, entries = []) {
 
   if (Object.keys(updateData).length) await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
   const destroyedLimbKeys = await applyDestroyedLimbConsequences(actor, Array.from(limbStates.keys()));
-  for (const shockCheck of shockChecks) await performNegativeLimbShockCheck(actor, shockCheck);
+  const shockCheck = aggregateNegativeLimbShockChecks(actor, shockChecks);
+  if (shockCheck) await performNegativeLimbShockCheck(actor, shockCheck);
   await queueActorDamageStatusSync(actor);
   const requestedHealthDamage = normalizedEntries.reduce((sum, entry) => sum + entry.amount, 0);
   const healthDeltasByType = buildBatchDamageNumberEntries(normalizedEntries, actualHealthDelta, requestedHealthDamage);
