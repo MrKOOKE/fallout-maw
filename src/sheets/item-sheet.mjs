@@ -59,6 +59,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   #craftLinkDrag = null;
   #craftSocketDrag = null;
   #craftLinkRenderFrame = 0;
+  #craftResizeObserver = null;
   #craftViewportOverride = null;
   #craftViewportPersistTimeout = 0;
 
@@ -484,16 +485,35 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     workspace.querySelector("[data-craft-delete-node]")?.addEventListener("click", event => this.#onCraftDeleteNode(event));
     workspace.querySelector("[data-craft-cancel-attach]")?.addEventListener("click", event => this.#onCraftCancelAttach(event));
     workspace.querySelector("[data-craft-node-quantity]")?.addEventListener("change", event => this.#onCraftNodeQuantityChange(event));
+    this.element?.querySelector('[data-action="tab"][data-tab="craft"]')?.addEventListener("click", () => {
+      this.#scheduleCraftLinkRenderAfterLayout();
+    });
+    this.#craftResizeObserver?.disconnect();
+    this.#craftResizeObserver = null;
+    if (typeof ResizeObserver === "function") {
+      this.#craftResizeObserver = new ResizeObserver(() => this.#scheduleCraftLinkRender());
+      this.#craftResizeObserver.observe(workspace);
+    }
     const viewport = this.#getCraftViewport();
     this.#setCraftViewportStyle(viewport.x, viewport.y, viewport.zoom);
     this.#syncCraftNodeLayouts();
-    this.#renderCraftLinks();
+    this.#scheduleCraftLinkRenderAfterLayout();
     this.#positionCraftPopover();
   }
 
   #onCraftWorkspacePointerDown(event) {
     if (event.target?.closest?.(".fallout-maw-craft-popover")) return;
     if (event.button === 0) {
+      if (this.#craftAttachSourceNodeId) {
+        const workspace = event.currentTarget;
+        const target = getCraftAttachTarget(workspace, event, this.#craftAttachSourceNodeId);
+        const targetNodeId = String(target?.dataset?.craftNodeId ?? "");
+        if (targetNodeId) {
+          event.preventDefault();
+          event.stopPropagation();
+          return this.#createCraftLink(this.#craftAttachSourceNodeId, targetNodeId, event);
+        }
+      }
       if (event.target?.closest?.("[data-craft-node-id], [data-craft-link-id]")) return;
       if (!this.#craftSelection && !this.#craftAttachSourceNodeId) return;
       this.#craftSelection = null;
@@ -831,8 +851,26 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (this.#craftLinkRenderFrame) return;
     this.#craftLinkRenderFrame = requestAnimationFrame(() => {
       this.#craftLinkRenderFrame = 0;
+      if (!this.#isCraftWorkspaceRenderable()) return;
+      this.#syncCraftNodeLayouts();
       this.#renderCraftLinks();
     });
+  }
+
+  #scheduleCraftLinkRenderAfterLayout() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => this.#scheduleCraftLinkRender());
+    });
+  }
+
+  #isCraftWorkspaceRenderable() {
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    const svg = workspace?.querySelector("[data-craft-links]");
+    if (!workspace || !svg) return false;
+    if (!workspace.getClientRects().length || !svg.getClientRects().length) return false;
+    const workspaceRect = workspace.getBoundingClientRect();
+    const svgRect = svg.getBoundingClientRect();
+    return workspaceRect.width > 0 && workspaceRect.height > 0 && svgRect.width > 0 && svgRect.height > 0;
   }
 
   #syncCraftNodeLayouts() {
@@ -899,6 +937,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const workspace = this.element?.querySelector("[data-craft-workspace]");
     const svg = workspace?.querySelector("[data-craft-links]");
     if (!workspace || !svg) return;
+    if (!this.#isCraftWorkspaceRenderable()) return;
     svg.replaceChildren();
     const nodes = new Map(Array.from(workspace.querySelectorAll("[data-craft-node-id]")).map(node => [node.dataset.craftNodeId, node]));
     const selectedLinkId = this.#craftSelection?.type === "link" ? this.#craftSelection.id : "";
