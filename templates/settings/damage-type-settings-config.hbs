@@ -15,6 +15,34 @@
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
       <label class="fallout-maw-section-toggle">
+        <input type="hidden" name="settings.bleeding.enabled" value="false">
+        <input type="checkbox" name="settings.bleeding.enabled" value="true" {{checked settings.bleeding.enabled}}>
+        <span>Кровотечение</span>
+      </label>
+    </header>
+    <div class="fallout-maw-list-grid two-columns">
+      <label>
+        <span>Название эффекта</span>
+        <input type="text" name="settings.bleeding.effectName" value="{{settings.bleeding.effectName}}">
+      </label>
+      <label>
+        <span>Изображение эффекта</span>
+        <file-picker type="image" name="settings.bleeding.img" value="{{settings.bleeding.img}}"></file-picker>
+      </label>
+      <label>
+        <span>% от прошедшего урона</span>
+        <input type="number" name="settings.bleeding.percent" value="{{settings.bleeding.percent}}" min="0" max="100" step="1">
+      </label>
+      <label>
+        <span>Длительность, секунд</span>
+        <input type="number" name="settings.bleeding.durationSeconds" value="{{settings.bleeding.durationSeconds}}" min="1" step="1">
+      </label>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <label class="fallout-maw-section-toggle">
         <input type="hidden" name="settings.equipmentConditionDamage.enabled" value="false">
         <input type="checkbox" name="settings.equipmentConditionDamage.enabled" value="true" {{checked settings.equipmentConditionDamage.enabled}}>
         <span>Повреждение защитного снаряжения</span>

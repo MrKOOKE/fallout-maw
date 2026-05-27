@@ -1,4 +1,4 @@
-import { TEMPLATES } from "../constants.mjs";
+import { BLEEDING_DAMAGE_TYPE_KEY, TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN } from "../formulas/index.mjs";
 import {
   getDamageTypeSettings,
@@ -53,7 +53,8 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
       ...(await super._prepareContext(options)),
       damageTypes: this.damageTypes.map(damageType => ({
         ...damageType,
-        hasImage: Boolean(damageType.img)
+        hasImage: Boolean(damageType.img),
+        locked: isLockedDamageType(damageType)
       }))
     };
   }
@@ -86,6 +87,7 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
     if (index < 0) return undefined;
 
     this.damageTypes = this.#readDamageTypesFromForm();
+    if (isLockedDamageType(this.damageTypes[index])) return undefined;
     this.damageTypes.splice(index, 1);
     return this.forceRender();
   }
@@ -98,6 +100,7 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
     if (index < 0) return undefined;
 
     this.damageTypes = this.#readDamageTypesFromForm();
+    if (isLockedDamageType(this.damageTypes[index])) return undefined;
     const current = this.damageTypes[index]?.img ?? "";
     const picker = new foundry.applications.apps.FilePicker.implementation({
       type: "image",
@@ -126,6 +129,7 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
     const index = rows.indexOf(target.closest("[data-damage-type-row]"));
     const damageType = this.damageTypes[index];
     if (!damageType) return undefined;
+    if (isLockedDamageType(damageType)) return undefined;
 
     return new DamageTypeSettingsConfig({
       damageType,
@@ -145,6 +149,18 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
       const existing = this.damageTypes.find(damageType => damageType.key === key)?.settings
         ?? this.damageTypes[index]?.settings
         ?? {};
+      const current = this.damageTypes[index] ?? {};
+      if (isLockedDamageType(current)) {
+        return {
+          key: current.key,
+          label: current.label,
+          color: current.color,
+          img: current.img,
+          locked: true,
+          system: true,
+          settings: foundry.utils.deepClone(existing)
+        };
+      }
       return {
         key,
         label: row.querySelector("[data-field='label']")?.value?.trim() ?? "",
@@ -276,6 +292,13 @@ function normalizeSettingsFromForm(settings = {}) {
       tickCount: toInteger(settings.periodic?.tickCount),
       intervalSeconds: toInteger(settings.periodic?.intervalSeconds || 6)
     },
+    bleeding: {
+      enabled: toBoolean(settings.bleeding?.enabled, false),
+      effectName: String(settings.bleeding?.effectName ?? "Кровотечение").trim(),
+      img: String(settings.bleeding?.img ?? "icons/skills/wounds/blood-drip-droplet-red.webp").trim(),
+      percent: Math.max(0, Math.min(100, toDecimal(settings.bleeding?.percent, 0))),
+      durationSeconds: Math.max(1, toInteger(settings.bleeding?.durationSeconds || 24))
+    },
     needIncrease: {
       enabled: toBoolean(settings.needIncrease?.enabled, false),
       needKey: String(settings.needIncrease?.needKey ?? "").trim(),
@@ -343,6 +366,10 @@ function toBoolean(value, fallback = false) {
   if (value === true || value === "true" || value === "on" || value === "1") return true;
   if (value === false || value === "false" || value === "0" || value === "") return false;
   return fallback;
+}
+
+function isLockedDamageType(damageType = {}) {
+  return Boolean(damageType?.locked || damageType?.system || damageType?.key === BLEEDING_DAMAGE_TYPE_KEY);
 }
 
 function throwValidationError(message) {

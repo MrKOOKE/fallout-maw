@@ -1,4 +1,4 @@
-import { SYSTEM_ID, TEMPLATES, TRAUMA_CREATE_OPTION } from "../constants.mjs";
+import { BLEEDING_DAMAGE_TYPE_KEY, SYSTEM_ID, TEMPLATES, TRAUMA_CREATE_OPTION } from "../constants.mjs";
 import { evaluateFormulaVariables } from "../formulas/index.mjs";
 import {
   getCreatureOptions,
@@ -28,6 +28,7 @@ const DAMAGE_EFFECT_FLAG_KEY = "damageEffect";
 const LIMB_LOSS_EFFECT_KIND = "limbLoss";
 const SHOCK_UNCONSCIOUS_FLAG_KEY = "shockUnconscious";
 const FIRST_AID_TEMPORARY_EFFECT_KIND = "firstAidTemporary";
+const BLEEDING_DAMAGE_EFFECT_KIND = "bleedingDamage";
 const REGION_DAMAGE_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
 const REGION_DAMAGE_FLAG_KEY = "periodicDamage";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
@@ -53,6 +54,10 @@ const STATUS_EFFECTS = Object.freeze({
   unconscious: "unconscious",
   blind: "blind"
 });
+const OVERLAY_STATUS_EFFECTS = new Set([
+  STATUS_EFFECTS.dead,
+  STATUS_EFFECTS.unconscious
+]);
 const COST_EFFECT_KEYS = Object.freeze({
   movement: "system.costs.movement",
   action: "system.costs.action"
@@ -439,6 +444,14 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
       source: data.source,
       worldTime: getDamageApplicationWorldTime(data.source)
     });
+    await createBleedingDamageEffect(actor, {
+      damageType,
+      limbKey: data.limbKey,
+      scope,
+      healthDelta: result.healthDelta,
+      source: data.source,
+      worldTime: getDamageApplicationWorldTime(data.source)
+    });
   }
   if (mode === MODE_DAMAGE && result.healthDelta > 0) {
     broadcastDamageNumbers(actor, [{
@@ -571,6 +584,11 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
         source: entry.source,
         worldTime: getDamageApplicationWorldTime(entry.source)
       });
+    }
+  }
+  if (batchResult?.bleedingEntries?.length) {
+    for (const entry of batchResult.bleedingEntries) {
+      await createBleedingDamageEffect(actor, entry);
     }
   }
   const results = [batchResult, ...singleResults].filter(Boolean);
@@ -1156,37 +1174,65 @@ function calculateShockRecoveryTarget(actor) {
 
 async function setActorStatus(actor, statusId = "", active = false) {
   if (!statusId || !actor) return;
-  if (actor.statuses?.has?.(statusId) === active) return;
+  if (actor.statuses?.has?.(statusId) === active) {
+    if (active) await ensureActorStatusOverlay(actor, getActorStatusEffectIds(actor, CONFIG.statusEffects?.[statusId]), statusId);
+    return;
+  }
   try {
-    await setActorStatusNoAnimation(actor, statusId, active);
+    await setActorStatusEffect(actor, statusId, active);
   } catch (error) {
     if (!isMissingDocumentError(error)) throw error;
     const freshActor = fromUuidSync(actor.uuid) ?? actor;
     if (freshActor.statuses?.has?.(statusId) === active) return;
     if (!active) return;
-    await setActorStatusNoAnimation(freshActor, statusId, active);
+    await setActorStatusEffect(freshActor, statusId, active);
   }
 }
 
-async function setActorStatusNoAnimation(actor, statusId = "", active = false) {
+async function setActorStatusEffect(actor, statusId = "", active = false) {
   const status = CONFIG.statusEffects?.[statusId];
   if (!status) return undefined;
+  const animationOptions = getStatusAnimationOptions(statusId);
 
   const existing = getActorStatusEffectIds(actor, status);
   if (existing.length) {
-    if (active) return true;
-    await actor.deleteEmbeddedDocuments("ActiveEffect", existing, { animate: false });
+    if (active) {
+      await ensureActorStatusOverlay(actor, existing, statusId);
+      return true;
+    }
+    await actor.deleteEmbeddedDocuments("ActiveEffect", existing, animationOptions);
     return false;
   }
 
   if (!active && active !== undefined) return undefined;
   const ActiveEffect = getDocumentClass("ActiveEffect");
   const effect = await ActiveEffect.fromStatusEffect(statusId);
+  if (isOverlayStatusEffect(statusId)) effect.updateSource({ "flags.core.overlay": true });
   return ActiveEffect.implementation.create(effect, {
     parent: actor,
     keepId: true,
-    animate: false
+    ...animationOptions
   });
+}
+
+async function ensureActorStatusOverlay(actor, effectIds = [], statusId = "") {
+  if (!isOverlayStatusEffect(statusId)) return;
+  const updates = effectIds
+    .map(effectId => actor?.effects?.get(effectId))
+    .filter(effect => effect && !effect.flags?.core?.overlay)
+    .map(effect => ({
+      _id: effect.id,
+      "flags.core.overlay": true
+    }));
+  if (updates.length) await actor.updateEmbeddedDocuments("ActiveEffect", updates, getStatusAnimationOptions(statusId));
+}
+
+function isOverlayStatusEffect(statusId = "") {
+  return OVERLAY_STATUS_EFFECTS.has(statusId);
+}
+
+function getStatusAnimationOptions(statusId = "") {
+  return isOverlayStatusEffect(statusId) ? {} : { animate: false };
 }
 
 function getActorStatusEffectIds(actor, status) {
@@ -1308,6 +1354,51 @@ async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = ""
     system: { changes: [] }
   };
   return actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+}
+
+async function createBleedingDamageEffect(actor, { damageType = {}, limbKey = "", scope = SCOPE_HEALTH, healthDelta = 0, source = {}, worldTime = null } = {}) {
+  const settings = damageType?.settings?.bleeding;
+  if (!shouldCreateBleedingDamageEffect(damageType, settings, source)) return [];
+
+  const totalAmount = roundDamageAmount((Number(healthDelta) || 0) * (Number(settings.percent) || 0) / 100);
+  if (totalAmount <= 0) return [];
+
+  const durationSeconds = Math.max(1, toInteger(settings.durationSeconds || ROUND_SECONDS));
+  const tickCount = Math.max(1, Math.ceil(durationSeconds / ROUND_SECONDS));
+  const tickAmounts = distributeIntegerAmountAcrossTicks(totalAmount, tickCount);
+  if (!tickAmounts.some(amount => amount > 0)) return [];
+
+  const startTime = Number.isFinite(Number(worldTime)) ? Number(worldTime) : (Number(game.time?.worldTime) || 0);
+  const endTime = startTime + (ROUND_SECONDS * tickCount);
+  const effectName = String(settings.effectName || "Кровотечение").trim();
+  return actor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: effectName,
+    img: String(settings.img || "icons/skills/wounds/blood-drip-droplet-red.webp"),
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    flags: {
+      [TRAUMA_FLAG_SCOPE]: {
+        kind: "temporary",
+        [DAMAGE_EFFECT_FLAG_KEY]: {
+          kind: BLEEDING_DAMAGE_EFFECT_KIND,
+          damageTypeKey: BLEEDING_DAMAGE_TYPE_KEY,
+          sourceDamageTypeKey: damageType?.key ?? "",
+          limbKey,
+          scope,
+          tickAmounts,
+          totalTicks: tickCount,
+          remainingTicks: tickCount,
+          intervalSeconds: ROUND_SECONDS,
+          startTime,
+          endTime,
+          nextTickTime: startTime + ROUND_SECONDS,
+          source
+        }
+      }
+    },
+    system: { changes: [] }
+  }]);
 }
 
 async function createResourceLimitEffect(actor, { damageType = {}, healthDelta = 0, source = {}, worldTime = null } = {}) {
@@ -1924,7 +2015,7 @@ async function preserveTimedDamageEffects(deltaTime) {
 }
 
 function buildIgnoredTimedDamageEffectUpdate(effect, data, elapsed) {
-  if (data.kind === "periodicDamage") {
+  if (data.kind === "periodicDamage" || data.kind === BLEEDING_DAMAGE_EFFECT_KIND) {
     const updateData = {};
     const startTime = Number(data.startTime);
     const endTime = Number(data.endTime);
@@ -1966,6 +2057,7 @@ function preventIgnoredTimedDamageEffectDeletion(effect, _options, _userId) {
 
 function isDamageHubManagedTimedEffect(data) {
   return data?.kind === "periodicDamage"
+    || data?.kind === BLEEDING_DAMAGE_EFFECT_KIND
     || data?.kind === "periodicHealing"
     || data?.kind === FIRST_AID_TEMPORARY_EFFECT_KIND;
 }
@@ -1973,6 +2065,7 @@ function isDamageHubManagedTimedEffect(data) {
 function collectDamageHubManagedTimedEffectTicks(effect, data, now) {
   if (data.kind === "periodicHealing") return collectPeriodicHealingEffectTicks(effect, data, now);
   if (data.kind === FIRST_AID_TEMPORARY_EFFECT_KIND) return collectFirstAidTemporaryEffectTicks(effect, data, now);
+  if (data.kind === BLEEDING_DAMAGE_EFFECT_KIND) return collectBleedingDamageEffectTicks(effect, data, now);
   return collectPeriodicDamageEffectTicks(effect, data, now);
 }
 
@@ -2000,6 +2093,53 @@ function collectPeriodicDamageEffectTicks(effect, data, now) {
         dueTicks,
         worldTime: Number.isFinite(Number(now)) ? Number(now) : (Number(game.time?.worldTime) || 0)
       }
+    }]
+    : [];
+  const shouldDelete = remainingTicks <= 0 || (Number(data.endTime) && now >= Number(data.endTime) && dueTicks === 0);
+  return {
+    entries: entries.filter(entry => entry.amount > 0),
+    update: !shouldDelete && dueTicks > 0
+      ? {
+        effectId: effect.id,
+        data: {
+          [`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.remainingTicks`]: remainingTicks,
+          [`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.nextTickTime`]: nextTickTime
+        }
+      }
+      : null,
+    deleteEffectId: shouldDelete ? effect.id : ""
+  };
+}
+
+function collectBleedingDamageEffectTicks(effect, data, now) {
+  const intervalSeconds = Math.max(1, toInteger(data.intervalSeconds || ROUND_SECONDS));
+  const tickAmounts = Array.isArray(data.tickAmounts) ? data.tickAmounts.map(amount => Math.max(0, toInteger(amount))) : [];
+  const totalTicks = Math.max(tickAmounts.length, toInteger(data.totalTicks));
+  let remainingTicks = Math.max(0, toInteger(data.remainingTicks));
+  let nextTickTime = Number(data.nextTickTime) || ((Number(data.startTime) || 0) + intervalSeconds);
+  let dueTicks = 0;
+
+  while (remainingTicks > 0 && now >= nextTickTime) {
+    dueTicks += 1;
+    remainingTicks -= 1;
+    nextTickTime += intervalSeconds;
+  }
+
+  const startIndex = Math.max(0, totalTicks - toInteger(data.remainingTicks));
+  const amount = tickAmounts.slice(startIndex, startIndex + dueTicks)
+    .reduce((sum, value) => sum + Math.max(0, toInteger(value)), 0);
+  const entries = dueTicks > 0
+    ? [{
+      limbKey: data.limbKey,
+      amount,
+      damageTypeKey: BLEEDING_DAMAGE_TYPE_KEY,
+      scope: data.scope,
+      source: markBleedingDamageTickSource({
+        ...(data.source ?? {}),
+        bleedingDamageEffectUuid: effect.uuid,
+        dueTicks,
+        worldTime: Number.isFinite(Number(now)) ? Number(now) : (Number(game.time?.worldTime) || 0)
+      })
     }]
     : [];
   const shouldDelete = remainingTicks <= 0 || (Number(data.endTime) && now >= Number(data.endTime) && dueTicks === 0);
@@ -2140,7 +2280,7 @@ async function applyDamageEntriesBatch(actor, entries = []) {
       scope: normalizeScope(entry.scope, entry.limbKey)
     }))
     .filter(entry => entry.amount > 0);
-  if (!normalizedEntries.length) return { actor, amount: 0, healthDelta: 0, limbDelta: 0, createdTraumas: [], healthDeltasByType: [], resourceLimitEntries: [] };
+  if (!normalizedEntries.length) return { actor, amount: 0, healthDelta: 0, limbDelta: 0, createdTraumas: [], healthDeltasByType: [], resourceLimitEntries: [], bleedingEntries: [] };
 
   const updateData = {};
   let actualHealthDelta = 0;
@@ -2185,6 +2325,11 @@ async function applyDamageEntriesBatch(actor, entries = []) {
     actualHealthDelta,
     requestedHealthDamage
   );
+  const bleedingEntries = buildBatchBleedingEntries(
+    normalizedEntries.filter(entry => entry.processDamageTypeSettings !== false),
+    actualHealthDelta,
+    requestedHealthDamage
+  );
   if (actualHealthDelta > 0) {
     broadcastDamageNumbers(actor, healthDeltasByType);
   }
@@ -2215,6 +2360,7 @@ async function applyDamageEntriesBatch(actor, entries = []) {
     scope: SCOPE_HEALTH_AND_LIMB,
     healthDeltasByType,
     resourceLimitEntries,
+    bleedingEntries,
     createdTraumas
   };
 }
@@ -2270,6 +2416,48 @@ function buildBatchDamageNumberEntries(entries = [], actualHealthDelta = 0, requ
   return rows
     .filter(row => row.amount > 0)
     .map(({ damageTypeKey, amount, source }) => ({ damageTypeKey, amount, source }));
+}
+
+function buildBatchBleedingEntries(entries = [], actualHealthDelta = 0, requestedHealthDamage = 0) {
+  if (!actualHealthDelta || !requestedHealthDamage) return [];
+  const healthRatio = actualHealthDelta / requestedHealthDamage;
+  const rows = entries
+    .map((entry, index) => {
+      const exact = entry.amount * healthRatio;
+      return {
+        index,
+        entry,
+        exact,
+        healthDelta: Math.floor(exact),
+        fraction: exact - Math.floor(exact)
+      };
+    })
+    .filter(row => row.exact > 0);
+  let remaining = actualHealthDelta - rows.reduce((sum, row) => sum + row.healthDelta, 0);
+  for (const row of rows.sort((left, right) => right.fraction - left.fraction)) {
+    if (remaining <= 0) break;
+    row.healthDelta += 1;
+    remaining -= 1;
+  }
+  return rows
+    .sort((left, right) => left.index - right.index)
+    .map(row => ({
+      damageType: row.entry.damageType,
+      limbKey: row.entry.limbKey,
+      scope: row.entry.scope,
+      healthDelta: row.healthDelta,
+      source: row.entry.source && typeof row.entry.source === "object" ? row.entry.source : {},
+      worldTime: getDamageApplicationWorldTime(row.entry.source)
+    }))
+    .filter(entry => entry.healthDelta > 0)
+    .map(entry => ({
+      damageType: entry.damageType,
+      limbKey: entry.limbKey,
+      scope: entry.scope,
+      healthDelta: entry.healthDelta,
+      source: entry.source && typeof entry.source === "object" ? entry.source : {},
+      worldTime: getDamageApplicationWorldTime(entry.source)
+    }));
 }
 
 function buildBatchLimbDeltaEntries(actor, limbStates = new Map()) {
@@ -3106,6 +3294,28 @@ function isPeriodicDamageSplitSuppressed(source = {}) {
   return Boolean(source?.falloutMawPeriodicDamageNoSplit || source?.periodicDamageEffectUuid);
 }
 
+function shouldCreateBleedingDamageEffect(damageType = {}, bleeding = null, source = {}) {
+  return Boolean(
+    damageType?.key
+    && damageType.key !== BLEEDING_DAMAGE_TYPE_KEY
+    && bleeding?.enabled
+    && !source?.falloutMawBleedingDamageTick
+    && !source?.bleedingDamageEffectUuid
+  );
+}
+
+function distributeIntegerAmountAcrossTicks(amount = 0, tickCount = 1) {
+  const total = roundDamageAmount(amount);
+  const count = Math.max(1, toInteger(tickCount));
+  const base = Math.floor(total / count);
+  let remainder = total - (base * count);
+  return Array.from({ length: count }, () => {
+    const extra = remainder > 0 ? 1 : 0;
+    if (remainder > 0) remainder -= 1;
+    return base + extra;
+  });
+}
+
 function markPeriodicDamageSplitSource(source = {}) {
   return {
     ...(source && typeof source === "object" ? source : {}),
@@ -3117,6 +3327,14 @@ function markPeriodicDamageTickSource(source = {}) {
   return {
     ...markPeriodicDamageSplitSource(source),
     falloutMawPeriodicDamageTick: true
+  };
+}
+
+function markBleedingDamageTickSource(source = {}) {
+  return {
+    ...markPeriodicDamageSplitSource(source),
+    ...(source && typeof source === "object" ? source : {}),
+    falloutMawBleedingDamageTick: true
   };
 }
 

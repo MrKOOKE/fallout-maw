@@ -20,8 +20,8 @@
       </div>
       {{#each damageTypes}}
       <div class="fallout-maw-settings-row" data-damage-type-row>
-        <button type="button" class="fallout-maw-drag-handle" data-drag-handle title="{{localize 'FALLOUTMAW.Common.Reorder'}}"><i class="fa-solid fa-grip-lines"></i></button>
-        <button type="button" class="fallout-maw-damage-type-preview-button" data-action="browseDamageTypeImage" title="{{label}}">
+        <button type="button" class="fallout-maw-drag-handle" {{#unless locked}}data-drag-handle{{/unless}} title="{{localize 'FALLOUTMAW.Common.Reorder'}}" {{#if locked}}disabled{{/if}}><i class="fa-solid fa-grip-lines"></i></button>
+        <button type="button" class="fallout-maw-damage-type-preview-button" data-action="browseDamageTypeImage" title="{{label}}" {{#if locked}}disabled{{/if}}>
           <span class="fallout-maw-damage-type-preview" style="--fallout-maw-damage-type-color: {{color}};">
             {{#if hasImage}}
             <img src="{{img}}" alt="{{label}}">
@@ -31,11 +31,11 @@
           </span>
         </button>
         <input type="hidden" data-field="img" value="{{img}}">
-        <input type="text" data-field="key" value="{{key}}">
-        <input type="text" data-field="label" value="{{label}}">
-        <input type="color" data-field="color" value="{{color}}">
-        <button type="button" class="fallout-maw-icon-button" data-action="openDamageTypeSettings" title="Доп. настройки урона"><i class="fa-solid fa-gear"></i></button>
-        <button type="button" data-action="deleteDamageType" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        <input type="text" data-field="key" value="{{key}}" {{#if locked}}disabled{{/if}}>
+        <input type="text" data-field="label" value="{{label}}" {{#if locked}}disabled{{/if}}>
+        <input type="color" data-field="color" value="{{color}}" {{#if locked}}disabled{{/if}}>
+        <button type="button" class="fallout-maw-icon-button" data-action="openDamageTypeSettings" title="Доп. настройки урона" {{#if locked}}disabled{{/if}}><i class="fa-solid fa-gear"></i></button>
+        <button type="button" data-action="deleteDamageType" title="{{localize 'FALLOUTMAW.Common.Delete'}}" {{#if locked}}disabled{{/if}}><i class="fa-solid fa-trash"></i></button>
       </div>
       {{else}}
       <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.DamageTypes.Empty"}}</p>

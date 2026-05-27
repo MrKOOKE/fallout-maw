@@ -261,6 +261,10 @@
         </header>
         <p class="hint">{{localize "FALLOUTMAW.Settings.CreatureOptions.DamageResistanceFormulaHint"}}</p>
         <div class="fallout-maw-list-grid two-columns">
+          <label>
+            <span>Сопротивление кровотечению</span>
+            <input type="text" name="race.bleedingResistanceFormula" value="{{bleedingResistanceFormula}}" data-formula-autocomplete="all">
+          </label>
           {{#each resistanceDamageTypes}}
           <label>
             <span>{{label}}</span>

@@ -28,7 +28,7 @@ import {
   getWeaponSlotRequirementSize,
   isContainerWeaponSetKey
 } from "../utils/equipment-slots.mjs";
-import { buildDamageMitigationTables } from "../utils/damage-mitigation-display.mjs";
+import { buildDamageMitigationTables, buildDamageTypeIconStyle } from "../utils/damage-mitigation-display.mjs";
   import {
     completeResearch,
     deleteResearchWithConfirm,
@@ -2827,9 +2827,9 @@ function renderDamageMitigationTooltipTables(tables = []) {
 function renderDamageTypeIcon(damageType = {}) {
   const img = String(damageType.damageTypeImg ?? "").trim() || "icons/svg/d20-grey.svg";
   const label = String(damageType.damageTypeLabel ?? "");
-  const color = String(damageType.damageTypeColor ?? "").trim() || "#f0d48a";
+  const style = String(damageType.damageTypeIconStyle ?? "").trim() || buildDamageTypeIconStyle(damageType);
   return `
-    <span class="fallout-maw-damage-type-icon" style="--fallout-maw-damage-type-color: ${escapeAttribute(color)};">
+    <span class="fallout-maw-damage-type-icon" style="${escapeAttribute(style)}">
       <img src="${escapeAttribute(img)}" alt="${escapeAttribute(label)}">
     </span>
   `;

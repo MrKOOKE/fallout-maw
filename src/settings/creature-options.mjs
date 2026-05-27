@@ -12,6 +12,8 @@ import { toInteger } from "../utils/numbers.mjs";
 import { createDefaultNeedSettings, normalizeFormulaMap, normalizeNeedSettings } from "../formulas/index.mjs";
 import { normalizeLimbSilhouette } from "../utils/limb-silhouette.mjs";
 
+export const DEFAULT_BLEEDING_RESISTANCE_FORMULA = "0";
+
 export function createEmptyCreatureOptions() {
   return { types: [], races: [] };
 }
@@ -25,6 +27,7 @@ export function createRaceDefaults(characteristics = [], damageTypes = []) {
     equipmentSlots: createDefaultEquipmentSlots(),
     weaponSets: createDefaultWeaponSets(),
     inventorySize: createDefaultInventorySize(),
+    bleedingResistanceFormula: DEFAULT_BLEEDING_RESISTANCE_FORMULA,
     damageDefenses: Object.fromEntries(damageTypes.map(entry => [entry.key, "0"])),
     damageResistances: Object.fromEntries(damageTypes.map(entry => [entry.key, "0"])),
     needSettings: createDefaultNeedSettings(),
@@ -93,6 +96,7 @@ export function normalizeCreatureOptions(options = {}, characteristics = [], dam
         equipmentSlots: normalizeEquipmentSlots(race.equipmentSlots),
         weaponSets: normalizeWeaponSets(race.weaponSets, limbs),
         inventorySize: normalizeInventorySize(race.inventorySize),
+        bleedingResistanceFormula: normalizeBleedingResistanceFormula(race.bleedingResistanceFormula),
         damageDefenses: normalizeFormulaMap(race.damageDefenses ?? race.damageResistances, damageTypes),
         damageResistances: normalizeFormulaMap(race.damageDefenses ? race.damageResistances : {}, damageTypes),
         needSettings: normalizeRaceNeedSettings(race.needSettings),
@@ -104,6 +108,10 @@ export function normalizeCreatureOptions(options = {}, characteristics = [], dam
     });
 
   return normalized;
+}
+
+function normalizeBleedingResistanceFormula(value) {
+  return String(value ?? DEFAULT_BLEEDING_RESISTANCE_FORMULA).trim() || DEFAULT_BLEEDING_RESISTANCE_FORMULA;
 }
 
 function normalizeRaceCharacteristics(values = {}, characteristics = []) {

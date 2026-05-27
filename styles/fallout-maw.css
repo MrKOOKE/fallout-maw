@@ -2037,23 +2037,48 @@ label.fallout-maw-mitigation-cell {
 }
 
 .fallout-maw-damage-type-icon {
+  --fallout-maw-damage-type-color: #f0d48a;
+  --fallout-maw-damage-type-image: url("/icons/svg/d20-grey.svg");
   align-items: center;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.2)),
-    var(--fallout-maw-damage-type-color, #f0d48a);
+    linear-gradient(135deg, rgba(255, 244, 185, 0.12), rgba(0, 0, 0, 0.36)),
+    rgba(10, 13, 8, 0.9);
   border: 1px solid rgba(255, 235, 170, 0.28);
   border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(255, 235, 170, 0.06);
   display: inline-flex;
   height: 1.65rem;
   justify-content: center;
   overflow: hidden;
+  position: relative;
   width: 1.65rem;
+}
+
+.fallout-maw-damage-type-icon::before {
+  background: var(--fallout-maw-damage-type-color);
+  content: "";
+  display: block;
+  filter: drop-shadow(0 0 3px var(--fallout-maw-damage-type-color));
+  height: 74%;
+  mask-image: var(--fallout-maw-damage-type-image);
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  width: 74%;
+  -webkit-mask-image: var(--fallout-maw-damage-type-image);
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
 }
 
 .fallout-maw-damage-type-icon img {
   display: block;
   height: 100%;
   object-fit: cover;
+  opacity: 0;
+  position: absolute;
   width: 100%;
 }
 

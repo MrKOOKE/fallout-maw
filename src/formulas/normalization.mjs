@@ -11,6 +11,7 @@ import {
   DEFAULT_SKILL_ADVANCEMENT,
   DEFAULT_SKILLS
 } from "../config/defaults.mjs";
+import { BLEEDING_DAMAGE_TYPE_KEY } from "../constants.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const FALLBACK_ICON = "icons/svg/d20-grey.svg";
@@ -31,6 +32,14 @@ const DEFAULT_RESOURCE_LIMIT_RESOURCES = Object.freeze([
   Object.freeze({ resourceKey: "movementPoints", percent: 100 })
 ]);
 const DEFAULT_EQUIPMENT_CONDITION_DAMAGE_FORMULA = "protected + unconditional";
+const BLEEDING_DAMAGE_TYPE = Object.freeze({
+  key: BLEEDING_DAMAGE_TYPE_KEY,
+  label: "Кровотечение",
+  color: "#b82020",
+  img: "icons/skills/wounds/blood-drip-droplet-red.webp",
+  locked: true,
+  system: true
+});
 const DEFAULT_NEED_COLORS = Object.freeze({
   hunger: "#c9a24a",
   thirst: "#58a6d6",
@@ -76,6 +85,13 @@ const DEFAULT_NEED_SETTINGS_BY_KEY = Object.freeze({
   })
 });
 const DEFAULT_DAMAGE_TYPE_SETTINGS = Object.freeze({
+  bleeding: Object.freeze({
+    enabled: false,
+    effectName: "Кровотечение",
+    img: "icons/skills/wounds/blood-drip-droplet-red.webp",
+    percent: 0,
+    durationSeconds: 24
+  }),
   periodic: Object.freeze({
     enabled: false,
     effectName: "",
@@ -105,6 +121,33 @@ const DEFAULT_DAMAGE_TYPE_SETTINGS = Object.freeze({
   })
 });
 const DEFAULT_DAMAGE_TYPE_SETTINGS_BY_KEY = Object.freeze({
+  piercing: Object.freeze({
+    bleeding: Object.freeze({
+      enabled: true,
+      effectName: "Кровотечение",
+      img: "icons/skills/wounds/blood-drip-droplet-red.webp",
+      percent: 20,
+      durationSeconds: 24
+    })
+  }),
+  firearm: Object.freeze({
+    bleeding: Object.freeze({
+      enabled: true,
+      effectName: "Кровотечение",
+      img: "icons/skills/wounds/blood-drip-droplet-red.webp",
+      percent: 20,
+      durationSeconds: 24
+    })
+  }),
+  slashing: Object.freeze({
+    bleeding: Object.freeze({
+      enabled: true,
+      effectName: "Обильное кровотечение",
+      img: "icons/skills/wounds/injury-triple-slash-bleed.webp",
+      percent: 40,
+      durationSeconds: 12
+    })
+  }),
   fire: Object.freeze({
     periodic: Object.freeze({
       enabled: true,
@@ -344,11 +387,11 @@ export function normalizeNeedSettings(settings) {
 
 export function normalizeDamageTypeSettings(settings) {
   const source = normalizeCollectionInput(settings, createDefaultDamageTypeSettings());
-  return normalizeKeyedEntries(
+  return ensureSystemDamageTypes(normalizeKeyedEntries(
     source,
     entry => normalizeDamageTypeEntry(entry),
     "Тип урона"
-  );
+  ));
 }
 
 export function normalizeFormulaMap(values = {}, definitions = [], defaultFormula = "0") {
@@ -473,12 +516,30 @@ function normalizeHexColorString(value) {
 
 function normalizeDamageTypeEntry(entry = {}) {
   const key = String(entry?.key ?? "").trim();
+  if (key === BLEEDING_DAMAGE_TYPE_KEY) return createBleedingDamageType(entry?.settings);
   return {
     key,
     label: String(entry?.label ?? entry?.name ?? "").trim(),
     color: normalizeHexColor(entry?.color, getDefaultDamageTypeColor(key)),
     img: normalizeImagePath(entry?.img ?? getDefaultDamageTypeImage(key)),
     settings: normalizeDamageTypeBehavior(entry?.settings, key)
+  };
+}
+
+function ensureSystemDamageTypes(entries = []) {
+  const index = entries.findIndex(entry => entry.key === BLEEDING_DAMAGE_TYPE_KEY);
+  const bleeding = createBleedingDamageType(index >= 0 ? entries[index]?.settings : undefined);
+  if (index >= 0) {
+    entries[index] = bleeding;
+    return entries;
+  }
+  return [...entries, bleeding];
+}
+
+function createBleedingDamageType(settings = {}) {
+  return {
+    ...BLEEDING_DAMAGE_TYPE,
+    settings: normalizeDamageTypeBehavior(settings, BLEEDING_DAMAGE_TYPE_KEY)
   };
 }
 
@@ -501,6 +562,13 @@ function normalizeDamageTypeBehavior(settings = {}, key = "") {
       resources: source.resourceBlock ? DEFAULT_RESOURCE_LIMIT_RESOURCES : defaults.resourceLimit.resources
   };
   return {
+    bleeding: {
+      enabled: Boolean(source.bleeding?.enabled ?? defaults.bleeding.enabled),
+      effectName: String(source.bleeding?.effectName ?? defaults.bleeding.effectName ?? "").trim(),
+      img: String(source.bleeding?.img ?? defaults.bleeding.img ?? "").trim(),
+      percent: clampPercent(toDecimal(source.bleeding?.percent, defaults.bleeding.percent)),
+      durationSeconds: Math.max(1, toInteger(source.bleeding?.durationSeconds ?? defaults.bleeding.durationSeconds))
+    },
     periodic: {
       enabled: Boolean(source.periodic?.enabled ?? defaults.periodic.enabled),
       effectName: String(source.periodic?.effectName ?? defaults.periodic.effectName ?? "").trim(),

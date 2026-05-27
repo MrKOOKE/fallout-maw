@@ -25,7 +25,7 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
     const context = await super._prepareContext(options);
     const source = this.document.toObject();
     const system = source.system ?? {};
-    const damageTypes = getDamageTypeSettings();
+    const damageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
     const damageEntries = normalizeDamageEntries(system.damageEntries);
 
     return {
@@ -58,7 +58,7 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
 
   static async #onAddDamageEntry(event) {
     event.preventDefault();
-    const damageTypes = getDamageTypeSettings();
+    const damageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
     const entries = this.#getFormDamageEntries();
     entries.push({
       damageTypeKey: damageTypes[0]?.key ?? "",
@@ -85,11 +85,15 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
   #renderDamageEntries(entries = []) {
     const container = this.form?.querySelector(".fallout-maw-damage-entry-list");
     if (!container) return;
-    const damageTypes = getDamageTypeSettings();
+    const damageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
     container.innerHTML = entries.length
       ? entries.map((entry, index) => renderDamageEntryRow(entry, index, damageTypes)).join("")
       : `<p class="fallout-maw-empty-list">${escapeHtml(game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.NoDamageEntries"))}</p>`;
   }
+}
+
+function getConfigurableDamageTypes(damageTypes = []) {
+  return damageTypes.filter(damageType => !damageType?.locked && !damageType?.system);
 }
 
 function buildDamageTypeChoices(damageTypes = [], selected = "") {

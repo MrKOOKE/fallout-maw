@@ -23,6 +23,7 @@ import {
   getSkillAdvancementSettings,
   getSkillSettings
 } from "../../settings/accessors.mjs";
+import { BLEEDING_DAMAGE_TYPE_KEY } from "../../constants.mjs";
 import { DEFAULT_SKILL_DEVELOPMENT_LIMIT } from "../../config/defaults.mjs";
 import { resourceField } from "./resources.mjs";
 import {
@@ -200,6 +201,12 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         skillValues
       )
     );
+    applyBleedingResistanceFormula(baseDamageResistances, this.limbs, race, {
+      characteristicSettings,
+      skillSettings,
+      characteristics: this.characteristics,
+      skills: skillValues
+    });
     const itemMitigation = buildEquippedItemDamageMitigation(this.parent?.items, this.limbs, damageTypeSettings);
     replaceObjectContents(this.damageDefenses, mergeLimbDamageMaps(baseDamageDefenses, itemMitigation.defenses));
     replaceObjectContents(this.damageResistances, mergeLimbDamageMaps(baseDamageResistances, itemMitigation.resistances));
@@ -233,6 +240,20 @@ function getRaceDamageDefenseFormulas(race, damageTypeSettings) {
 
 function getRaceDamageResistanceFormulas(race, damageTypeSettings) {
   return normalizeFormulaMap(race?.damageDefenses ? race?.damageResistances : {}, damageTypeSettings);
+}
+
+function applyBleedingResistanceFormula(resistances = {}, limbs = {}, race = null, formulaContext = {}) {
+  const formula = String(race?.bleedingResistanceFormula ?? "0").trim() || "0";
+  let value = 0;
+  try {
+    value = Math.max(0, evaluateFormula(formula, formulaContext));
+  } catch (error) {
+    console.warn(`fallout-maw | Bleeding resistance formula failed for ${race?.id ?? "race"}: ${error.message}`);
+  }
+  for (const limbKey of Object.keys(limbs ?? {})) {
+    resistances[limbKey] ??= {};
+    resistances[limbKey][BLEEDING_DAMAGE_TYPE_KEY] = value;
+  }
 }
 
 function skillField() {

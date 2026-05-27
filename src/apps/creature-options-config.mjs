@@ -13,7 +13,8 @@ import {
 import {
   createDefaultInventorySize,
   createDefaultRaceBaseParameters,
-  createRaceDefaults
+  createRaceDefaults,
+  DEFAULT_BLEEDING_RESISTANCE_FORMULA
 } from "../settings/creature-options.mjs";
 import { format, localize } from "../utils/i18n.mjs";
 import { buildDamageMitigationEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
@@ -86,6 +87,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
   async _prepareContext(options) {
     const characteristics = getCharacteristicSettings();
     const damageTypes = getDamageTypeSettings();
+    const configurableDamageTypes = getConfigurableDamageTypes(damageTypes);
     const selectedType = this.creatureOptions.types.find(type => type.id === this.activeTypeId) ?? this.creatureOptions.types[0] ?? null;
     const racesForType = selectedType ? this.creatureOptions.races.filter(race => race.typeId === selectedType.id) : [];
     const selectedRace = racesForType.find(race => race.id === this.activeRaceId) ?? racesForType[0] ?? null;
@@ -130,14 +132,15 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         }))
       })),
       inventorySize: selectedRace?.inventorySize ?? createDefaultInventorySize(),
-      damageTypes: damageTypes.map(damageType => ({
+      damageTypes: configurableDamageTypes.map(damageType => ({
         ...damageType,
         formula: String(selectedRace?.damageDefenses?.[damageType.key] ?? selectedRace?.damageResistances?.[damageType.key] ?? "0")
       })),
-      resistanceDamageTypes: damageTypes.map(damageType => ({
+      resistanceDamageTypes: configurableDamageTypes.map(damageType => ({
         ...damageType,
         formula: String(selectedRace?.damageResistances?.[damageType.key] ?? "0")
       })),
+      bleedingResistanceFormula: String(selectedRace?.bleedingResistanceFormula ?? DEFAULT_BLEEDING_RESISTANCE_FORMULA),
       needSettings: selectedRace?.needSettings ?? []
     };
   }
@@ -512,14 +515,17 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       columns: Math.max(1, toInteger(formData.race?.inventorySize?.columns ?? createDefaultInventorySize().columns)),
       rows: Math.max(1, toInteger(formData.race?.inventorySize?.rows ?? createDefaultInventorySize().rows))
     };
+    race.bleedingResistanceFormula = String(formData.race?.bleedingResistanceFormula ?? DEFAULT_BLEEDING_RESISTANCE_FORMULA).trim()
+      || DEFAULT_BLEEDING_RESISTANCE_FORMULA;
+    const configurableDamageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
     race.damageDefenses = Object.fromEntries(
-      getDamageTypeSettings().map(damageType => [
+      configurableDamageTypes.map(damageType => [
         damageType.key,
         String(formData.race?.damageDefenses?.[damageType.key] ?? "0").trim() || "0"
       ])
     );
     race.damageResistances = Object.fromEntries(
-      getDamageTypeSettings().map(damageType => [
+      configurableDamageTypes.map(damageType => [
         damageType.key,
         String(formData.race?.damageResistances?.[damageType.key] ?? "0").trim() || "0"
       ])
@@ -596,8 +602,14 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
   #validateRaceFormulas() {
     const characteristics = getCharacteristicSettings();
     const skills = getSkillSettings();
-    const damageTypes = getDamageTypeSettings();
+    const damageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
     for (const race of this.creatureOptions.races) {
+      try {
+        validateFormula(race.bleedingResistanceFormula ?? DEFAULT_BLEEDING_RESISTANCE_FORMULA, { allowSkills: true, characteristics, skills });
+      } catch (error) {
+        ui.notifications.error(`${race.name || race.id} / Сопротивление кровотечению: ${error.message}`);
+        throw error;
+      }
       for (const damageType of damageTypes) {
         const formula = race.damageDefenses?.[damageType.key] ?? "0";
         try {
@@ -880,4 +892,8 @@ function parseBoolean(value, fallback = false) {
   if (Array.isArray(value)) return value.some(entry => parseBoolean(entry, false));
   if (typeof value === "boolean") return value;
   return ["true", "1", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
+function getConfigurableDamageTypes(damageTypes = []) {
+  return damageTypes.filter(damageType => !damageType?.locked && !damageType?.system);
 }

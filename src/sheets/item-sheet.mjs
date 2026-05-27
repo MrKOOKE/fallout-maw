@@ -1087,7 +1087,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const section = getWeaponFunctionSection(event.currentTarget);
     const path = getWeaponFunctionPath(section);
     const entries = readWeaponDamageTypeRows(section);
-    const damageTypes = getDamageTypeSettings();
+    const damageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
     const existingKeys = new Set(entries.map(entry => entry.key));
     const key = damageTypes.find(type => !existingKeys.has(type.key))?.key
       ?? damageTypes.at(0)?.key
@@ -1137,7 +1137,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   #onAddDamageSourceDamageType(event) {
     event.preventDefault();
     const entries = readDamageSourceDamageTypeRows(this.element);
-    const damageTypes = getDamageTypeSettings();
+    const damageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
     const existingKeys = new Set(entries.map(entry => entry.key));
     const key = damageTypes.find(type => !existingKeys.has(type.key))?.key
       ?? damageTypes.at(0)?.key
@@ -1182,7 +1182,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   #onAddDamageSourceVolleyRegionDamage(event) {
     event.preventDefault();
     const entries = readDamageSourceVolleyRegionDamageRows(this.element);
-    const damageTypes = getDamageTypeSettings();
+    const damageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
     const existingKeys = new Set(entries.map(entry => entry.damageTypeKey));
     const damageTypeKey = damageTypes.find(type => !existingKeys.has(type.key))?.key
       ?? damageTypes.at(0)?.key
@@ -1276,7 +1276,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const section = getWeaponFunctionSection(event.currentTarget);
     const path = getWeaponFunctionPath(section);
     const entries = readVolleyRegionDamageRows(section);
-    const damageTypes = getDamageTypeSettings();
+    const damageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
     const existingKeys = new Set(entries.map(entry => entry.damageTypeKey));
     const damageTypeKey = damageTypes.find(type => !existingKeys.has(type.key))?.key
       ?? damageTypes.at(0)?.key
@@ -1897,8 +1897,9 @@ function buildWeaponCriticalFailureConsequenceRows(actionData = {}, weaponData =
 }
 
 function buildWeaponDamageTypeChoices(item, damageTypeSettings) {
+  const choices = getConfigurableDamageTypes(damageTypeSettings);
   const selected = String(item.system?.functions?.weapon?.damageTypeKey ?? "");
-  return damageTypeSettings.map(damageType => ({
+  return choices.map(damageType => ({
     value: damageType.key,
     label: damageType.label,
     selected: damageType.key === selected
@@ -2055,16 +2056,17 @@ function getWeaponFunctionDataList(item) {
 }
 
 function buildWeaponDamageTypeRowsForData(weaponData, damageTypeSettings, sourceWeaponData) {
+  const choices = getConfigurableDamageTypes(damageTypeSettings);
   const rows = normalizeWeaponDamageTypeRows(
     weaponData,
-    damageTypeSettings,
+    choices,
     sourceWeaponData
   );
   return rows.map((entry, index) => ({
     index,
     key: entry.key,
     percent: clampPercent(entry.percent),
-    choices: damageTypeSettings.map(damageType => ({
+    choices: choices.map(damageType => ({
       value: damageType.key,
       label: damageType.label,
       selected: damageType.key === entry.key
@@ -2073,11 +2075,12 @@ function buildWeaponDamageTypeRowsForData(weaponData, damageTypeSettings, source
 }
 
 function buildVolleyRegionDamageRowsForData(entries = [], damageTypeSettings = []) {
+  const choices = getConfigurableDamageTypes(damageTypeSettings);
   return normalizeVolleyRegionDamageEntries(entries).map((entry, index) => ({
     index,
     damageTypeKey: entry.damageTypeKey,
     amount: Math.max(0, toInteger(entry.amount)),
-    choices: damageTypeSettings.map(damageType => ({
+    choices: choices.map(damageType => ({
       value: damageType.key,
       label: damageType.label,
       selected: damageType.key === entry.damageTypeKey
@@ -2532,10 +2535,11 @@ function clampPercent(value) {
 }
 
 function normalizeWeaponDamageTypeRows(weaponData = {}, damageTypeSettings = [], sourceWeaponData = null) {
-  const validKeys = new Set(damageTypeSettings.map(type => type.key));
-  const fallbackKey = String(weaponData?.damageTypeKey ?? "").trim()
-    || damageTypeSettings.at(0)?.key
-    || "firearm";
+  const validKeys = new Set(getConfigurableDamageTypes(damageTypeSettings).map(type => type.key));
+  const configuredFallback = String(weaponData?.damageTypeKey ?? "").trim();
+  const fallbackKey = validKeys.has(configuredFallback)
+    ? configuredFallback
+    : damageTypeSettings.at(0)?.key ?? "firearm";
   const hasConfiguredDamageTypes = sourceWeaponData ? Object.hasOwn(sourceWeaponData, "damageTypes") : Array.isArray(weaponData?.damageTypes);
   const rows = hasConfiguredDamageTypes && Array.isArray(weaponData?.damageTypes)
     ? weaponData.damageTypes
@@ -2564,6 +2568,10 @@ function readVolleyRegionDamageRows(root) {
     damageTypeKey: String(row.querySelector("[data-volley-region-damage-type]")?.value ?? "").trim(),
     amount: Math.max(0, toInteger(row.querySelector("[data-volley-region-damage-amount]")?.value))
   })));
+}
+
+function getConfigurableDamageTypes(damageTypeSettings = []) {
+  return damageTypeSettings.filter(damageType => !damageType?.locked && !damageType?.system);
 }
 
 function readDamageSourceVolleyRegionDamageRows(root) {
