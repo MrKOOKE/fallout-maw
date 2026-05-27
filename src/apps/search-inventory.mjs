@@ -312,7 +312,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#tradeOffers = normalizeTradeOffersState(state);
     if (this.rendered) {
       this.#captureScrollPositions();
-      void this.render({ force: true });
+      void this.#renderPreservingWindowStack();
     }
   }
 
@@ -344,7 +344,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#searchedActorUuid = selected.searched || this.#searchedActorUuid;
     if (render && this.rendered) {
       this.#captureScrollPositions();
-      void this.render({ force: true });
+      void this.#renderPreservingWindowStack();
     }
   }
 
@@ -404,7 +404,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (!this.rendered) return;
       this.#captureScrollPositions();
       this.#clearInventoryTooltip({ force: true });
-      void this.render({ force: true });
+      void this.#renderPreservingWindowStack();
     }, 60);
     this.#hookIds = [
       ["updateActor", Hooks.on("updateActor", actor => this.#scheduleRefreshForActor(actor))],
@@ -426,6 +426,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#activateWeaponSlotAspectSizing();
     this.#restoreScrollPositions();
     this.#syncRenderedTradeOfferColumns();
+  }
+
+  #renderPreservingWindowStack(options = {}) {
+    return this.render({ ...options, force: !this.rendered });
   }
 
   async _onClose(options) {
@@ -637,102 +641,102 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     event.stopPropagation();
     const data = this.#getDragEventData(event);
     try {
-    if (data?.type !== "Item" || !this.#canInteract()) return null;
+      if (data?.type !== "Item" || !this.#canInteract()) return null;
 
-    if (this.#isTradeMode() && this.#tradeOffers.completed && data.falloutMawTradeOffer) {
-      return await this.#dropCompletedTradeOfferEntry({ data, event });
-    }
+      if (this.#isTradeMode() && this.#tradeOffers.completed && data.falloutMawTradeOffer) {
+        return await this.#dropCompletedTradeOfferEntry({ data, event });
+      }
 
-    const sourceActor = this.#getActorByUuid(String(data.sourceActorUuid ?? data.actorUuid ?? ""));
-    const item = sourceActor?.items?.get(String(data.itemId ?? ""));
-    if (!sourceActor || !item) return null;
+      const sourceActor = this.#getActorByUuid(String(data.sourceActorUuid ?? data.actorUuid ?? ""));
+      const item = sourceActor?.items?.get(String(data.itemId ?? ""));
+      if (!sourceActor || !item) return null;
 
-    const zone = this.#getDropZone(event);
-    const tradeOfferActorUuid = String(zone?.dataset?.tradeOfferActorUuid ?? zone?.closest?.("[data-trade-offer-actor-uuid]")?.dataset?.tradeOfferActorUuid ?? "");
-    if (this.#isTradeMode() && tradeOfferActorUuid) {
-      if (data.falloutMawTradeOffer) return await this.#moveTradeOfferEntry({ data, item, zone, event });
-      return await this.#addItemToTradeOffer({ sourceActor, item, offerActorUuid: tradeOfferActorUuid, event, zone });
-    }
-    const targetActorUuid = String(zone?.dataset?.searchActorUuid ?? zone?.closest?.("[data-search-actor-uuid]")?.dataset?.searchActorUuid ?? "");
-    const targetActor = this.#getActorByUuid(targetActorUuid);
-    if (!targetActor) return null;
-    const completedTradeOfferDrop = Boolean(this.#isTradeMode() && this.#tradeOffers.completed && data.falloutMawTradeOffer);
-    if (this.#isTradeMode() && sourceActor.uuid !== targetActor.uuid && !completedTradeOfferDrop) {
-      ui.notifications.warn("В торговле предметы сначала кладутся в предложение.");
-      return null;
-    }
+      const zone = this.#getDropZone(event);
+      const tradeOfferActorUuid = String(zone?.dataset?.tradeOfferActorUuid ?? zone?.closest?.("[data-trade-offer-actor-uuid]")?.dataset?.tradeOfferActorUuid ?? "");
+      if (this.#isTradeMode() && tradeOfferActorUuid) {
+        if (data.falloutMawTradeOffer) return await this.#moveTradeOfferEntry({ data, item, zone, event });
+        return await this.#addItemToTradeOffer({ sourceActor, item, offerActorUuid: tradeOfferActorUuid, event, zone });
+      }
+      const targetActorUuid = String(zone?.dataset?.searchActorUuid ?? zone?.closest?.("[data-search-actor-uuid]")?.dataset?.searchActorUuid ?? "");
+      const targetActor = this.#getActorByUuid(targetActorUuid);
+      if (!targetActor) return null;
+      const completedTradeOfferDrop = Boolean(this.#isTradeMode() && this.#tradeOffers.completed && data.falloutMawTradeOffer);
+      if (this.#isTradeMode() && sourceActor.uuid !== targetActor.uuid && !completedTradeOfferDrop) {
+        ui.notifications.warn("В торговле предметы сначала кладутся в предложение.");
+        return null;
+      }
 
-    const placementRequest = getDropZonePlacementRequest(zone);
-    const parentId = placementRequest.mode === "inventory" ? getDropZoneParentId(zone) : ROOT_CONTAINER_ID;
-    const targetItem = this.#getTargetStackItem(zone, targetActor, item.id, parentId);
-    if (canStackItems(item.toObject(), targetItem)) {
-      const quantity = await this.#getSearchStackQuantity(item, targetItem, event, { sourceActor, targetActor });
+      const placementRequest = getDropZonePlacementRequest(zone);
+      const parentId = placementRequest.mode === "inventory" ? getDropZoneParentId(zone) : ROOT_CONTAINER_ID;
+      const targetItem = this.#getTargetStackItem(zone, targetActor, item.id, parentId);
+      if (canStackItems(item.toObject(), targetItem)) {
+        const quantity = await this.#getSearchStackQuantity(item, targetItem, event, { sourceActor, targetActor });
+        if (!quantity) return null;
+        return await this.#executeSearchStackTransfer({
+          searcherActorUuid: this.#searcherActorUuid,
+          searchedActorUuid: this.#searchedActorUuid,
+          sourceActorUuid: sourceActor.uuid,
+          targetActorUuid: targetActor.uuid,
+          itemId: item.id,
+          targetItemId: targetItem.id,
+          targetParentId: parentId,
+          quantity
+        });
+      }
+      const pointerPlacement = placementRequest.mode === "inventory"
+        ? getSearchDropPlacementForPointer({
+          actor: targetActor,
+          itemData: item.toObject(),
+          sourceActor,
+          sourceItemId: item.id,
+          parentId,
+          event,
+          zone
+        })
+        : null;
+      const quantity = await this.#getSearchTransferQuantity(item, event, { sourceActor, targetActor });
       if (!quantity) return null;
-      return await this.#executeSearchStackTransfer({
+      const payload = {
         searcherActorUuid: this.#searcherActorUuid,
         searchedActorUuid: this.#searchedActorUuid,
         sourceActorUuid: sourceActor.uuid,
         targetActorUuid: targetActor.uuid,
         itemId: item.id,
-        targetItemId: targetItem.id,
+        targetMode: placementRequest.mode,
         targetParentId: parentId,
+        targetEquipmentSlot: placementRequest.equipmentSlot,
+        targetWeaponSet: placementRequest.weaponSet,
+        targetWeaponSlot: placementRequest.weaponSlot,
+        targetX: pointerPlacement?.x ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.x) : null),
+        targetY: pointerPlacement?.y ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.y) : null),
+        targetItemId: targetItem?.id ?? "",
         quantity
-      });
-    }
-    const pointerPlacement = placementRequest.mode === "inventory"
-      ? getSearchDropPlacementForPointer({
-        actor: targetActor,
-        itemData: item.toObject(),
-        sourceActor,
-        sourceItemId: item.id,
-        parentId,
-        event,
-        zone
-      })
-      : null;
-    const quantity = await this.#getSearchTransferQuantity(item, event, { sourceActor, targetActor });
-    if (!quantity) return null;
-    const payload = {
-      searcherActorUuid: this.#searcherActorUuid,
-      searchedActorUuid: this.#searchedActorUuid,
-      sourceActorUuid: sourceActor.uuid,
-      targetActorUuid: targetActor.uuid,
-      itemId: item.id,
-      targetMode: placementRequest.mode,
-      targetParentId: parentId,
-      targetEquipmentSlot: placementRequest.equipmentSlot,
-      targetWeaponSet: placementRequest.weaponSet,
-      targetWeaponSlot: placementRequest.weaponSlot,
-      targetX: pointerPlacement?.x ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.x) : null),
-      targetY: pointerPlacement?.y ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.y) : null),
-      targetItemId: targetItem?.id ?? "",
-      quantity
-    };
+      };
 
-    const moved = await this.#executeSearchTransfer(payload);
-    if (moved && this.#tradeOffers.completed && data.falloutMawTradeOffer) {
-      if (this.#tradeSessionSnapshot) {
-        const result = await requestTradeSessionAction("reduceCompletedTradeEntry", this.#prepareTradeSessionActionPayload({
-          side: String(data.tradeOfferSide ?? ""),
-          kind: String(data.tradeOfferKind ?? ""),
-          key: String(data.tradeOfferKey ?? ""),
+      const moved = await this.#executeSearchTransfer(payload);
+      if (moved && this.#tradeOffers.completed && data.falloutMawTradeOffer) {
+        if (this.#tradeSessionSnapshot) {
+          const result = await requestTradeSessionAction("reduceCompletedTradeEntry", this.#prepareTradeSessionActionPayload({
+            side: String(data.tradeOfferSide ?? ""),
+            kind: String(data.tradeOfferKind ?? ""),
+            key: String(data.tradeOfferKey ?? ""),
+            quantity
+          }));
+          if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: true });
+          return moved;
+        }
+        this.#tradeOffers = reduceTradeOfferEntryQuantity(
+          this.#tradeOffers,
+          String(data.tradeOfferSide ?? ""),
+          String(data.tradeOfferKind ?? ""),
+          String(data.tradeOfferKey ?? ""),
           quantity
-        }));
-        if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: true });
-        return moved;
+        );
+        this.#broadcastTradeOffers();
+        this.#captureScrollPositions();
+        await this.#renderPreservingWindowStack();
       }
-      this.#tradeOffers = reduceTradeOfferEntryQuantity(
-        this.#tradeOffers,
-        String(data.tradeOfferSide ?? ""),
-        String(data.tradeOfferKind ?? ""),
-        String(data.tradeOfferKey ?? ""),
-        quantity
-      );
-      this.#broadcastTradeOffers();
-      this.#captureScrollPositions();
-      await this.render({ force: true });
-    }
-    return moved;
+      return moved;
     } finally {
       this.#draggedItemData = null;
       this.#draggedItemId = "";
@@ -816,7 +820,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       this.#tradeOffers = normalizeTradeOffersState(result?.offers ?? this.#tradeOffers);
       this.#broadcastTradeOffers();
       this.#captureScrollPositions();
-      await this.render({ force: true });
+      await this.#renderPreservingWindowStack();
       return result;
     } catch (error) {
       console.error(`${SYSTEM_ID} | Completed trade claim failed`, error);
@@ -871,7 +875,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       this.#tradeOffers = normalizeTradeOffersState(result?.offers ?? this.#tradeOffers);
       this.#broadcastTradeOffers();
       this.#captureScrollPositions();
-      await this.render({ force: true });
+      await this.#renderPreservingWindowStack();
       return result;
     } catch (error) {
       console.error(`${SYSTEM_ID} | Completed trade currency claim failed`, error);
@@ -901,8 +905,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (event?.shiftKey || sourceQuantity <= 1 || isContainerItem(sourceItem)) return sourceQuantity;
     return promptSearchItemStackQuantity({
       item: sourceItem,
-      title: "Перенести предметы",
-      actionLabel: "Перенести",
+      title: "РџРµСЂРµРЅРµСЃС‚Рё РїСЂРµРґРјРµС‚С‹",
+      actionLabel: "РџРµСЂРµРЅРµСЃС‚Рё",
       max: sourceQuantity,
       value: sourceQuantity,
       trade: this.#getTradeQuantityPromptData(sourceActor, targetActor)
@@ -962,7 +966,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#resetTradeReady();
     this.#broadcastTradeOffers();
     this.#captureScrollPositions();
-    return this.render({ force: true });
+    return this.#renderPreservingWindowStack();
   }
 
   async #moveTradeOfferEntry({ data = {}, item = null, zone = null, event = null } = {}) {
@@ -989,7 +993,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (!this.#tradeOffers.completed) this.#resetTradeReady();
     this.#broadcastTradeOffers();
     this.#captureScrollPositions();
-    return this.render({ force: true });
+    return this.#renderPreservingWindowStack();
   }
 
   async #executeSearchStackTransfer(payload, { notify = true } = {}) {
@@ -1235,7 +1239,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (!changed) return;
     this.#captureScrollPositions();
     requestAnimationFrame(() => {
-      if (this.rendered) void this.render({ force: true });
+      if (this.rendered) void this.#renderPreservingWindowStack();
     });
   }
 
@@ -1282,13 +1286,13 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       this.#broadcastTradeOffers();
       ui.notifications.info("Обмен совершен.");
       this.#captureScrollPositions();
-      await this.render({ force: true });
+      await this.#renderPreservingWindowStack();
     } catch (error) {
       console.error(`${SYSTEM_ID} | Trade completion failed`, error);
       this.#resetTradeReady();
       this.#broadcastTradeOffers();
       ui.notifications.warn(error.message || "Не удалось завершить обмен.");
-      await this.render({ force: true });
+      await this.#renderPreservingWindowStack();
     } finally {
       this.#tradeCompletionInProgress = false;
     }
@@ -1686,7 +1690,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       event.stopPropagation();
       this.#tradeEquipmentCollapsed = !this.#tradeEquipmentCollapsed;
       this.#captureScrollPositions();
-      await this.render({ force: true });
+      await this.#renderPreservingWindowStack();
       return;
     }
 
@@ -1880,7 +1884,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#tradeOffers[side].ready = !this.#tradeOffers[side].ready;
     this.#broadcastTradeOffers();
     this.#captureScrollPositions();
-    await this.render({ force: true });
+    await this.#renderPreservingWindowStack();
     if (this.#tradeOffers.searcher.ready && this.#tradeOffers.searched.ready) {
       await this.#completeTradeOffers();
     }
@@ -1898,7 +1902,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#tradeOffers = createEmptyTradeOffers();
     this.#broadcastTradeOffers();
     this.#captureScrollPositions();
-    await this.render({ force: true });
+    await this.#renderPreservingWindowStack();
   }
 
   async #claimCompletedTradeOfferEntry(entryElement = null) {
@@ -1928,7 +1932,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#tradeOffers = normalizeTradeOffersState(result?.offers ?? this.#tradeOffers);
     this.#broadcastTradeOffers();
     this.#captureScrollPositions();
-    await this.render({ force: true });
+    await this.#renderPreservingWindowStack();
   }
 
   async #onTradeOfferRemoveClick(event, button) {
@@ -1964,7 +1968,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (!this.#tradeOffers.completed) this.#resetTradeReady();
     this.#broadcastTradeOffers();
     this.#captureScrollPositions();
-    await this.render({ force: true });
+    await this.#renderPreservingWindowStack();
   }
 
   async #claimCompletedTradeOfferSide(side = "") {
@@ -2008,7 +2012,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       }
     }
     this.#captureScrollPositions();
-    await this.render({ force: true });
+    await this.#renderPreservingWindowStack();
   }
 
   async #onTradeCurrencyClick(event, button) {
@@ -2074,7 +2078,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#resetTradeReady();
     this.#broadcastTradeOffers();
     this.#captureScrollPositions();
-    await this.render({ force: true });
+    await this.#renderPreservingWindowStack();
   }
 
   async #promptTradeCurrencyRemoval(side = "", currencyKey = "") {
@@ -2126,7 +2130,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (broadcast) broadcastTradeCurrencyChange(this.#tradeSessionId, normalized);
     if (this.rendered) {
       this.#captureScrollPositions();
-      void this.render({ force: true });
+      void this.#renderPreservingWindowStack();
     }
   }
 
