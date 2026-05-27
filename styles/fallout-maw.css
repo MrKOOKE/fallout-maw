@@ -7066,6 +7066,15 @@ label.fallout-maw-mitigation-cell {
   border-color: rgba(94, 255, 148, 0.7);
 }
 
+.fallout-maw-aimed-limb-menu button.destroyed,
+.fallout-maw-aimed-limb-menu button.destroyed:hover,
+.fallout-maw-aimed-limb-menu button.destroyed.hover {
+  background: rgba(0, 0, 0, 0.68);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.42);
+  cursor: not-allowed;
+}
+
 .fallout-maw-aimed-limb-menu span {
   overflow: hidden;
   text-overflow: ellipsis;

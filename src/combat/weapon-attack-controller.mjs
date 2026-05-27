@@ -1,7 +1,7 @@
 import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./attack-animations.mjs";
-import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplication, getDamageCostModifierState, getLimbHealingCap, requestDamageApplications, runDamageHubOperation } from "./damage-hub.mjs";
+import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplication, getDamageCostModifierState, getLimbHealingCap, isLimbDestroyed, requestDamageApplications, runDamageHubOperation } from "./damage-hub.mjs";
 import { createThrownItemTile } from "../canvas/thrown-items.mjs";
 import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageSourceFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction } from "../utils/item-functions.mjs";
 import { getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings } from "../settings/accessors.mjs";
@@ -199,6 +199,7 @@ class WeaponAttackController {
 
     const button = event.target?.closest?.("[data-limb-key]");
     if (!button || this.aimedMode !== "limb") return true;
+    if (button.disabled || button.dataset.destroyed === "true") return true;
     const limbKey = button.dataset.limbKey ?? "";
     if (this.requiresDirectionSelection) {
       this.selectedLimbKey = limbKey;
@@ -631,28 +632,32 @@ class WeaponAttackController {
       return { damageRequests, trajectory, checkBatch };
     }
 
-    damageRequests.push(...firstRequest);
-    hasSuccessfulHit = true;
     finalAnimationPoint = selectPointOnTrajectoryPastTarget(selectedTarget, trajectory);
-
-    if (penetrationsUsed < penetrationPower) {
+    if (firstRequest.length) {
+      damageRequests.push(...firstRequest);
+      hasSuccessfulHit = true;
       const estimate = estimateDamageRequestGroup(firstRequest);
       if (estimate.healthDamage >= penetrationThreshold) penetrationsUsed += 1;
     }
 
     for (const entry of subsequentTargets) {
-      if (penetrationsUsed <= 0 || penetrationsUsed > penetrationPower) break;
-      const damageAmount = getPenetratedDamageAmount(baseDamage, penetrationsUsed);
+      const passthroughStep = hasSuccessfulHit ? penetrationsUsed : 0;
+      if (hasSuccessfulHit && (penetrationsUsed <= 0 || penetrationsUsed > penetrationPower)) break;
+      const damageAmount = getPenetratedDamageAmount(baseDamage, passthroughStep);
       if (damageAmount <= 0) break;
 
       const request = await this.resolveDirectedAttackAgainstTarget(entry.target, {
         mode: "thrust",
         damageAmount,
-        difficultyBonus: penetrationsUsed * 20,
-        penetrationStep: penetrationsUsed,
+        difficultyBonus: passthroughStep * 20,
+        penetrationStep: passthroughStep,
         checkBatch
       });
       if (!request) break;
+      if (!request.length) {
+        finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, trajectory);
+        continue;
+      }
 
       damageRequests.push(...request);
       hasSuccessfulHit = true;
@@ -689,6 +694,7 @@ class WeaponAttackController {
         checkBatch
       });
       if (!request) break;
+      if (!request.length) continue;
       damageRequests.push(...request);
       hitTargets.push(target);
     }
@@ -703,6 +709,7 @@ class WeaponAttackController {
   async resolveDirectedAttackAgainstTarget(target, { limbKey = "", mode = "thrust", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
     if (isDeadTarget(target)) return null;
     const resolvedLimbKey = limbKey || selectRandomLimbKey(target.actor);
+    if (!resolvedLimbKey || isLimbDestroyed(target.actor, resolvedLimbKey)) return [];
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
     const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
@@ -771,24 +778,24 @@ class WeaponAttackController {
       return { damageRequests, trajectory, checkBatch };
     }
 
-    damageRequests.push(...firstRequest);
-    hasSuccessfulHit = true;
     finalAnimationPoint = selectPointOnTrajectoryPastTarget(selectedTarget, trajectory);
-
-    if (penetrationsUsed < penetrationPower) {
+    if (firstRequest.length) {
+      damageRequests.push(...firstRequest);
+      hasSuccessfulHit = true;
       const estimate = estimateDamageRequestGroup(firstRequest);
       if (estimate.healthDamage >= penetrationThreshold) penetrationsUsed += 1;
     }
 
     for (const entry of subsequentTargets) {
-      if (penetrationsUsed <= 0 || penetrationsUsed > penetrationPower) break;
-      const damageAmount = getPenetratedDamageAmount(baseDamage, penetrationsUsed);
+      const passthroughStep = hasSuccessfulHit ? penetrationsUsed : 0;
+      if (hasSuccessfulHit && (penetrationsUsed <= 0 || penetrationsUsed > penetrationPower)) break;
+      const damageAmount = getPenetratedDamageAmount(baseDamage, passthroughStep);
       if (damageAmount <= 0) break;
 
       const request = await this.resolveAttackAgainstTarget(entry.target, {
         damageAmount,
-        difficultyBonus: penetrationsUsed * 20,
-        penetrationStep: penetrationsUsed,
+        difficultyBonus: passthroughStep * 20,
+        penetrationStep: passthroughStep,
         checkBatch
       });
       if (!request) {
@@ -796,6 +803,10 @@ class WeaponAttackController {
           ? selectPointOnTrajectoryPastTarget(entry.target, trajectory)
           : selectMissPointNearTarget(this.token, entry.target, trajectory);
         break;
+      }
+      if (!request.length) {
+        finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, trajectory);
+        continue;
       }
 
       damageRequests.push(...request);
@@ -864,6 +875,10 @@ class WeaponAttackController {
           : selectMissPointNearTarget(this.token, entry.target, trajectory);
         break;
       }
+      if (!request.length) {
+        finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, trajectory);
+        continue;
+      }
 
       damageRequests.push(...request);
       hasSuccessfulHit = true;
@@ -884,7 +899,8 @@ class WeaponAttackController {
 
   async resolveAttackAgainstTarget(target, { damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
     if (isDeadTarget(target)) return null;
-    const limbKey = selectRandomLimbKey(target.actor);
+    const limbKey = selectRandomLimbKey(target.actor, { includeDestroyed: true });
+    if (!limbKey || isLimbDestroyed(target.actor, limbKey)) return [];
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
     const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
@@ -1075,6 +1091,7 @@ class WeaponAttackController {
 
   async resolveAimedAttackAgainstTarget(target, { limbKey = "", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
     if (isDeadTarget(target)) return null;
+    if (!limbKey || isLimbDestroyed(target.actor, limbKey)) return [];
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
     const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
     const outcome = await requestSkillCheck({
@@ -1334,9 +1351,12 @@ class WeaponAttackController {
     if (!this.limbMenu) this.createLimbMenu();
     this.limbMenu.dataset.mode = this.aimedMode;
     this.limbMenu.innerHTML = rows.map(row => `
-      <button type="button" ${row.direction ? `data-attack-direction="${escapeHtml(row.key)}"` : `data-limb-key="${escapeHtml(row.key)}"`} class="${row.key === this.hoveredLimbKey ? "hover" : ""}">
+      <button type="button" ${row.direction ? `data-attack-direction="${escapeHtml(row.key)}"` : `data-limb-key="${escapeHtml(row.key)}"`} class="${[
+        row.key === this.hoveredLimbKey ? "hover" : "",
+        row.destroyed ? "destroyed" : ""
+      ].filter(Boolean).join(" ")}" ${row.destroyed ? 'data-destroyed="true" disabled' : ""}>
         <span>${escapeHtml(row.label)}</span>
-        <strong class="${getAimedChanceClass(row.chance)}">${row.chance}%</strong>
+        <strong class="${getAimedChanceClass(row.chance)}">${row.destroyed ? "—" : `${row.chance}%`}</strong>
       </button>
     `).join("");
     this.positionLimbMenu(target);
@@ -1489,7 +1509,10 @@ class WeaponAttackController {
       .map(([key, limb]) => ({
         key,
         label: String(limb.label ?? key),
-        chance: getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, key, blockerBonus, this.weaponFunctionId)
+        destroyed: isLimbDestroyed(target.actor, key),
+        chance: isLimbDestroyed(target.actor, key)
+          ? 0
+          : getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, key, blockerBonus, this.weaponFunctionId)
       }));
   }
 
@@ -3898,9 +3921,9 @@ function getTokenCenter(token) {
   };
 }
 
-function selectRandomLimbKey(actor) {
+function selectRandomLimbKey(actor, { includeDestroyed = false } = {}) {
   const keys = Object.entries(actor.system?.limbs ?? {})
-    .filter(([_key, limb]) => limb && typeof limb === "object")
+    .filter(([key, limb]) => limb && typeof limb === "object" && (includeDestroyed || !isLimbDestroyed(actor, key)))
     .map(([key]) => key);
   return keys[Math.floor(Math.random() * keys.length)] ?? "";
 }

@@ -553,6 +553,7 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
   const singleResults = [];
   const mitigationDisplays = [];
   const resistanceOverheats = [];
+  const pendingPeriodicDamageEffects = [];
   const equipmentConditionDamageState = createEquipmentConditionDamageState(actor);
   for (const request of requests) {
     const data = normalizeDamageRequest({ ...request, actorUuid });
@@ -561,7 +562,7 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
       continue;
     }
 
-    const entry = await prepareDamageBatchEntry(actor, data, { equipmentConditionDamageState });
+    const entry = await prepareDamageBatchEntry(actor, data, { equipmentConditionDamageState, pendingPeriodicDamageEffects });
     if (entry?.damageMitigationDisplay) mitigationDisplays.push(entry.damageMitigationDisplay);
     if (entry?.resistanceOverheat) resistanceOverheats.push(entry.resistanceOverheat);
     if (entry?.amount > 0) batchRequests.push(entry);
@@ -575,6 +576,9 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
     : undefined;
   await applyEquipmentConditionDamage(actor, getEquipmentConditionDamageStateEntries(equipmentConditionDamageState));
   await applyResistanceOverheats(actor, resistanceOverheats);
+  for (const entry of pendingPeriodicDamageEffects) {
+    await createPeriodicDamageEffect(actor, entry);
+  }
   if (batchResult?.resourceLimitEntries?.length) {
     for (const entry of batchResult.resourceLimitEntries) {
       const damageType = getDamageTypeSettings().find(type => type.key === entry.damageTypeKey);
@@ -596,13 +600,13 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
   return results;
 }
 
-async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDamageState = null } = {}) {
+async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDamageState = null, pendingPeriodicDamageEffects = null } = {}) {
   const scope = normalizeScope(data.scope, data.limbKey);
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
   const periodic = damageType?.settings?.periodic;
   if (shouldSplitPeriodicDamage(data, MODE_DAMAGE, periodic)) {
     const { immediateAmount, delayedAmount } = calculatePeriodicDamageSplit(data.amount, periodic);
-    if (delayedAmount > 0) await createPeriodicDamageEffect(actor, {
+    if (delayedAmount > 0) pendingPeriodicDamageEffects?.push({
       damageType,
       limbKey: data.limbKey,
       scope,
@@ -617,7 +621,7 @@ async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDam
       amount: immediateAmount,
       damageTypeKey: damageType?.key ?? data.damageTypeKey,
       source: markPeriodicDamageSplitSource(data.source)
-    }, { equipmentConditionDamageState });
+    }, { equipmentConditionDamageState, pendingPeriodicDamageEffects });
   }
 
   const mitigationResult = data.applyMitigation
@@ -935,6 +939,7 @@ async function applyDestroyedLimbConsequencesNow(actor, limbKeys = []) {
     destroyed.add(limbKey);
     await deleteLimbTraumas(actor, limbKey);
     await deleteLimbLossEffects(actor, limbKey);
+    await deleteLimbTimedDamageEffects(actor, limbKey);
     if (!isCriticalLimb(actor, limbKey)) await createLimbLossEffect(actor, limbKey);
   }
   return destroyed;
@@ -957,6 +962,19 @@ async function deleteLimbLossEffects(actor, limbKey = "") {
     .map(effect => effect.id)
     .filter(Boolean);
   await deleteActorActiveEffects(actor, ids);
+}
+
+async function deleteLimbTimedDamageEffects(actor, limbKey = "") {
+  const key = String(limbKey ?? "").trim();
+  if (!key) return [];
+  const ids = Array.from(actor?.effects ?? [])
+    .filter(effect => {
+      const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
+      return isLimbTimedDamageEffect(data) && data.limbKey === key;
+    })
+    .map(effect => effect.id)
+    .filter(Boolean);
+  return deleteActorActiveEffects(actor, ids);
 }
 
 async function deleteDamageStateItems(actor) {
@@ -1345,6 +1363,7 @@ export function getResourceLimitState(actor) {
 export const getResourceBlockState = getResourceLimitState;
 
 async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = "", scope = SCOPE_HEALTH, amount = 0, settings = {}, source = {}, worldTime = null } = {}) {
+  if (!canCreateLimbTimedDamageEffect(actor, limbKey)) return [];
   const tickCount = Math.max(0, toInteger(settings.tickCount));
   const tickAmount = tickCount > 0 ? roundDamageAmount(amount / tickCount) : 0;
   if (!tickCount || !tickAmount) return [];
@@ -1384,6 +1403,7 @@ async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = ""
 }
 
 async function createBleedingDamageEffect(actor, { damageType = {}, limbKey = "", scope = SCOPE_HEALTH, healthDelta = 0, source = {}, worldTime = null } = {}) {
+  if (!canCreateLimbTimedDamageEffect(actor, limbKey)) return [];
   const settings = damageType?.settings?.bleeding;
   if (!shouldCreateBleedingDamageEffect(damageType, settings, source)) return [];
 
@@ -1426,6 +1446,11 @@ async function createBleedingDamageEffect(actor, { damageType = {}, limbKey = ""
     },
     system: { changes: [] }
   }]);
+}
+
+function canCreateLimbTimedDamageEffect(actor, limbKey = "") {
+  const key = String(limbKey ?? "").trim();
+  return !key || !isLimbDestroyed(actor, key);
 }
 
 async function createResourceLimitEffect(actor, { damageType = {}, healthDelta = 0, source = {}, worldTime = null } = {}) {
@@ -2089,9 +2114,20 @@ function isDamageHubManagedTimedEffect(data) {
     || data?.kind === FIRST_AID_TEMPORARY_EFFECT_KIND;
 }
 
+function isLimbTimedDamageEffect(data) {
+  return data?.kind === "periodicDamage" || data?.kind === BLEEDING_DAMAGE_EFFECT_KIND;
+}
+
 function collectDamageHubManagedTimedEffectTicks(effect, data, now) {
   if (data.kind === "periodicHealing") return collectPeriodicHealingEffectTicks(effect, data, now);
   if (data.kind === FIRST_AID_TEMPORARY_EFFECT_KIND) return collectFirstAidTemporaryEffectTicks(effect, data, now);
+  if (isLimbTimedDamageEffect(data) && data.limbKey && isLimbDestroyed(effect?.parent, data.limbKey)) {
+    return {
+      entries: [],
+      update: null,
+      deleteEffectId: effect.id ?? ""
+    };
+  }
   if (data.kind === BLEEDING_DAMAGE_EFFECT_KIND) return collectBleedingDamageEffectTicks(effect, data, now);
   return collectPeriodicDamageEffectTicks(effect, data, now);
 }
@@ -2794,6 +2830,7 @@ function calculateTargetedLimbDamage(actor, limbKey = "", amount = 0, { damageTy
   if (!limb || damage <= 0) return createLimbMutationResult(limbStates, damageAccumulation);
 
   const currentValue = getLimbStateValue(actor, limbKey, limbStates);
+  if (currentValue <= toInteger(limb.min)) return createLimbMutationResult(limbStates, damageAccumulation);
   if (currentValue < 0) {
     const limbResult = applyDamageAllocations(actor, new Map([[limbKey, damage]]), {
       damageType,
@@ -3432,7 +3469,7 @@ function updateTouchesPath(object, path) {
 
 function selectRandomDamageLimbKey(actor) {
   const keys = Object.entries(actor?.system?.limbs ?? {})
-    .filter(([_key, limb]) => limb && typeof limb === "object")
+    .filter(([key, limb]) => limb && typeof limb === "object" && !isLimbDestroyed(actor, key))
     .map(([key]) => key);
   return keys[Math.floor(Math.random() * keys.length)] ?? "";
 }
