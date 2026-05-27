@@ -794,8 +794,24 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!item) return;
     this.#tooltipBaseMode = Boolean(event.altKey);
     this.#tooltipPointer = { x: event.clientX, y: event.clientY };
+    this.#cancelInventoryTooltipClose();
+    if (this.#tooltipElement && !this.#tooltipPinned) {
+      if (this.#tooltipTimer) {
+        clearTimeout(this.#tooltipTimer);
+        this.#tooltipTimer = null;
+      }
+      this.#clearNestedInventoryTooltip({ force: true });
+      this.#tooltipAnchorElement = itemElement;
+      this.#tooltipItemId = item.id;
+      this.#tooltipWeaponTabIndex = 0;
+      void this.#showInventoryTooltip(item, { refresh: true });
+      return;
+    }
+
     this.#clearInventoryTooltip();
     this.#tooltipAnchorElement = itemElement;
+    this.#tooltipItemId = item.id;
+    this.#tooltipWeaponTabIndex = 0;
     this.#tooltipTimer = setTimeout(() => this.#showInventoryTooltip(item), 500);
   }
 
@@ -820,8 +836,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (this.#tooltipPinned) return;
     const itemElement = event.target?.closest?.("[data-tooltip-item]");
     if (!itemElement || itemElement.contains(event.relatedTarget)) return;
+    const nextItemElement = event.relatedTarget?.closest?.("[data-tooltip-item]");
+    if (nextItemElement && this.element?.contains(nextItemElement)) return;
     if (this.#tooltipElement?.contains(event.relatedTarget)) return;
-    this.#clearInventoryTooltip();
+    this.#scheduleInventoryTooltipClose();
   }
 
   #onInventoryMiddleMouseDown(event) {
@@ -1967,10 +1985,29 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       activeWeaponIndex: this.#tooltipWeaponTabIndex,
       baseMode: this.#tooltipBaseMode
     });
+    if (refresh && this.#tooltipItemId !== item.id) return;
     if (!this.#tooltipTimer && !pinned && !refresh) return;
     if (this.#tooltipTimer) {
       clearTimeout(this.#tooltipTimer);
       this.#tooltipTimer = null;
+    }
+
+    if (this.#tooltipElement && !this.#tooltipPinned && !pinned) {
+      this.#clearNestedInventoryTooltip({ force: true });
+      this.#tooltipElement.innerHTML = tooltipHTML;
+      this.#tooltipElement.classList.remove("pinned");
+      this.#tooltipElement.style.pointerEvents = "none";
+      this.#tooltipPinned = false;
+      this.#tooltipItemId = item.id;
+      this.#bindInventoryTooltipAltMode();
+      this.#positionInventoryTooltip();
+      requestAnimationFrame(() => {
+        if (!this.#tooltipElement) return;
+        const description = this.#tooltipElement.querySelector(".description");
+        description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+        this.#positionInventoryTooltip();
+      });
+      return;
     }
 
     const tooltip = document.createElement("aside");

@@ -312,6 +312,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #itemTooltipAnchorElement = null;
   #itemTooltipItemId = "";
   #itemTooltipTimer = null;
+  #itemTooltipCloseTimer = null;
   #itemTooltipPinned = false;
   #itemTooltipWeaponTabIndex = 0;
   #itemTooltipBaseMode = false;
@@ -837,9 +838,25 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const item = this.actor?.items.get(String(button.dataset.hudTooltipItem ?? ""));
     if (!item) return;
 
-    this.#clearHudItemTooltip();
+    this.#cancelHudItemTooltipClose();
     this.#itemTooltipBaseMode = Boolean(event.altKey);
     this.#itemTooltipWeaponTabIndex = 0;
+    this.#itemTooltipAnchorElement = button;
+    this.#itemTooltipItemId = item.id;
+    if (this.#itemTooltipElement && !this.#itemTooltipPinned) {
+      const view = this.element?.ownerDocument?.defaultView ?? window;
+      if (this.#itemTooltipTimer) {
+        view.clearTimeout(this.#itemTooltipTimer);
+        this.#itemTooltipTimer = null;
+      }
+      this.#clearNestedHudItemTooltip({ force: true });
+      void this.#showHudItemTooltip(item, button, { pinned: false, refresh: true });
+      return;
+    }
+
+    this.#clearHudItemTooltip();
+    this.#itemTooltipAnchorElement = button;
+    this.#itemTooltipItemId = item.id;
     const view = this.element?.ownerDocument?.defaultView ?? window;
     this.#itemTooltipTimer = view.setTimeout(() => {
       this.#itemTooltipTimer = null;
@@ -851,8 +868,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (this.#itemTooltipPinned) return;
     const button = this.#getHudTooltipItemElement(event.target);
     if (!button || button.contains(event.relatedTarget)) return;
+    if (this.#getHudTooltipItemElement(event.relatedTarget)) return;
     if (this.#itemTooltipElement?.contains(event.relatedTarget)) return;
-    this.#clearHudItemTooltip();
+    this.#scheduleHudItemTooltipClose();
   }
 
   #onLimbLayerOptionClick(event) {
@@ -970,17 +988,37 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#scheduleLimbPopoverClose();
   }
 
-  async #showHudItemTooltip(item, anchor, { pinned = true } = {}) {
+  async #showHudItemTooltip(item, anchor, { pinned = true, refresh = false } = {}) {
+    const tooltipHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
+      activeWeaponIndex: this.#itemTooltipWeaponTabIndex,
+      baseMode: this.#itemTooltipBaseMode
+    });
+    if (refresh && this.#itemTooltipItemId !== item.id) return;
+
+    if (refresh && this.#itemTooltipElement && !this.#itemTooltipPinned && !pinned) {
+      this.#itemTooltipElement.innerHTML = tooltipHTML;
+      this.#itemTooltipElement.classList.remove("pinned");
+      this.#itemTooltipElement.style.pointerEvents = "none";
+      this.#itemTooltipAnchorElement = anchor;
+      this.#itemTooltipItemId = item.id;
+      this.#itemTooltipPinned = false;
+      this.#positionHudItemTooltip();
+      requestAnimationFrame(() => {
+        if (!this.#itemTooltipElement) return;
+        const description = this.#itemTooltipElement.querySelector(".description");
+        description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+        this.#positionHudItemTooltip();
+      });
+      return;
+    }
+
     this.#clearHudItemTooltip();
     const tooltip = document.createElement("aside");
     tooltip.className = "fallout-maw-inventory-tooltip";
     tooltip.classList.toggle("pinned", Boolean(pinned));
     tooltip.style.setProperty("--fallout-maw-ui-scale", String(tokenActionHudScaleFactor(getTokenActionHudScalePercent())));
     tooltip.style.pointerEvents = pinned ? "auto" : "none";
-    tooltip.innerHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
-      activeWeaponIndex: this.#itemTooltipWeaponTabIndex,
-      baseMode: this.#itemTooltipBaseMode
-    });
+    tooltip.innerHTML = tooltipHTML;
     tooltip.addEventListener("click", event => this.#onHudItemTooltipClick(event));
     tooltip.addEventListener("pointerover", event => this.#onHudItemTooltipPointerOver(event));
     tooltip.addEventListener("pointerout", event => this.#onHudItemTooltipPointerOut(event));
@@ -990,7 +1028,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       if (this.#itemTooltipPinned) return;
       if (this.#itemTooltipAnchorElement?.contains(event.relatedTarget)) return;
       if (this.#itemTooltipNestedElement?.contains(event.relatedTarget)) return;
-      this.#clearHudItemTooltip();
+      this.#scheduleHudItemTooltipClose();
     });
     document.body.append(tooltip);
     this.#itemTooltipElement = tooltip;
@@ -1291,6 +1329,22 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#itemTooltipNestedCloseTimer = null;
   }
 
+  #scheduleHudItemTooltipClose() {
+    if (this.#itemTooltipPinned || this.#itemTooltipCloseTimer) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#itemTooltipCloseTimer = view.setTimeout(() => {
+      this.#itemTooltipCloseTimer = null;
+      this.#clearHudItemTooltip();
+    }, 160);
+  }
+
+  #cancelHudItemTooltipClose() {
+    if (!this.#itemTooltipCloseTimer) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    view.clearTimeout(this.#itemTooltipCloseTimer);
+    this.#itemTooltipCloseTimer = null;
+  }
+
   #clearNestedHudItemTooltip({ force = false } = {}) {
     this.#cancelNestedHudItemTooltipClose();
     if (this.#itemTooltipNestedPinned && !force) return;
@@ -1405,6 +1459,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       view.clearTimeout(this.#itemTooltipTimer);
       this.#itemTooltipTimer = null;
     }
+    this.#cancelHudItemTooltipClose();
     if (this.#itemTooltipPointerDownHandler) {
       view.document.removeEventListener("pointerdown", this.#itemTooltipPointerDownHandler, { capture: true });
       this.#itemTooltipPointerDownHandler = null;

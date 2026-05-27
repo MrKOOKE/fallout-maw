@@ -2495,6 +2495,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (this.#tooltipPinned) return;
     const anchor = event.target?.closest?.("[data-tooltip-item][data-search-actor-uuid]");
     if (!anchor || !this.element?.contains(anchor)) return;
+    this.#cancelInventoryTooltipClose();
     if (this.#tooltipAnchorElement === anchor && this.#tooltipElement) return;
     this.#scheduleInventoryTooltip(anchor);
   }
@@ -2503,6 +2504,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const anchor = event.target?.closest?.("[data-tooltip-item][data-search-actor-uuid]");
     if (!anchor || !this.element?.contains(anchor)) return;
     if (anchor.contains(event.relatedTarget) || this.#tooltipElement?.contains(event.relatedTarget)) return;
+    const nextAnchor = event.relatedTarget?.closest?.("[data-tooltip-item][data-search-actor-uuid]");
+    if (nextAnchor && this.element?.contains(nextAnchor)) return;
     if (!this.#tooltipPinned) this.#scheduleInventoryTooltipClose();
   }
 
@@ -2518,22 +2521,59 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   #scheduleInventoryTooltip(anchor) {
     if (this.#tooltipPinned) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    if (this.#tooltipElement && !this.#tooltipPinned) {
+      if (this.#tooltipTimer) {
+        view.clearTimeout(this.#tooltipTimer);
+        this.#tooltipTimer = null;
+      }
+      this.#tooltipAnchorElement = anchor;
+      this.#tooltipActorUuid = String(anchor.dataset.searchActorUuid ?? "");
+      this.#tooltipItemId = String(anchor.dataset.tooltipItem ?? anchor.dataset.itemId ?? "");
+      this.#tooltipWeaponTabIndex = 0;
+      void this.#showInventoryTooltip(anchor, { refresh: true });
+      return;
+    }
+
     this.#clearInventoryTooltip();
     this.#tooltipAnchorElement = anchor;
     this.#tooltipActorUuid = String(anchor.dataset.searchActorUuid ?? "");
     this.#tooltipItemId = String(anchor.dataset.tooltipItem ?? anchor.dataset.itemId ?? "");
-    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#tooltipWeaponTabIndex = 0;
     this.#tooltipTimer = view.setTimeout(() => {
       this.#tooltipTimer = null;
       void this.#showInventoryTooltip(anchor);
     }, 420);
   }
 
-  async #showInventoryTooltip(anchor = this.#tooltipAnchorElement, { pinned = false } = {}) {
+  async #showInventoryTooltip(anchor = this.#tooltipAnchorElement, { pinned = false, refresh = false } = {}) {
     const actor = this.#getActorByUuid(String(anchor?.dataset?.searchActorUuid ?? this.#tooltipActorUuid));
     const itemId = String(anchor?.dataset?.tooltipItem ?? anchor?.dataset?.itemId ?? this.#tooltipItemId);
     const item = actor?.items?.get(itemId);
     if (!actor || !item) return;
+
+    const tooltipHTML = await renderInventoryItemTooltipHTML(item, actor, {
+      activeWeaponIndex: this.#tooltipWeaponTabIndex,
+      baseMode: false
+    });
+    if (refresh && ((this.#tooltipActorUuid !== actor.uuid) || (this.#tooltipItemId !== item.id))) return;
+
+    if (refresh && this.#tooltipElement && !this.#tooltipPinned && !pinned) {
+      this.#tooltipElement.innerHTML = tooltipHTML;
+      this.#tooltipElement.classList.remove("pinned");
+      this.#tooltipElement.style.pointerEvents = "none";
+      this.#tooltipPinned = false;
+      this.#tooltipAnchorElement = anchor;
+      this.#tooltipActorUuid = actor.uuid;
+      this.#tooltipItemId = item.id;
+      this.#positionInventoryTooltip();
+      requestAnimationFrame(() => {
+        const description = this.#tooltipElement?.querySelector(".description");
+        description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+        this.#positionInventoryTooltip();
+      });
+      return;
+    }
 
     this.#clearInventoryTooltip({ keepAnchor: true });
     const tooltip = document.createElement("aside");
@@ -2541,10 +2581,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     tooltip.classList.toggle("pinned", Boolean(pinned));
     tooltip.style.setProperty("--fallout-maw-ui-scale", String(this.#uiScale));
     tooltip.style.pointerEvents = pinned ? "auto" : "none";
-    tooltip.innerHTML = await renderInventoryItemTooltipHTML(item, actor, {
-      activeWeaponIndex: this.#tooltipWeaponTabIndex,
-      baseMode: false
-    });
+    tooltip.innerHTML = tooltipHTML;
     tooltip.addEventListener("pointerenter", () => this.#cancelInventoryTooltipClose());
     tooltip.addEventListener("pointerleave", event => {
       if (this.#tooltipPinned) return;
