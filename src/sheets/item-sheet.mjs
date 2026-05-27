@@ -47,6 +47,7 @@ const CRAFT_MIN_ZOOM = 0.45;
 const CRAFT_MAX_ZOOM = 2.5;
 const CRAFT_SOCKET_DEPTH_PX = 9;
 const CRAFT_SOCKET_HALF_WIDTH_PX = 8;
+const CRAFT_BLOCK_SEARCH_RADIUS = 24;
 let itemSheetSourceSyncHooksRegistered = false;
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
@@ -482,8 +483,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     workspace.querySelectorAll("[data-craft-node-id]").forEach(node => {
       node.addEventListener("pointerdown", event => this.#onCraftNodePointerDown(event));
     });
+    workspace.querySelectorAll("[data-craft-block-id]:not([data-craft-node-id])").forEach(block => {
+      block.addEventListener("pointerdown", event => this.#onCraftBlockPointerDown(event));
+    });
     workspace.querySelector("[data-craft-attach-node]")?.addEventListener("click", event => this.#onCraftAttachNode(event));
     workspace.querySelector("[data-craft-detach-node]")?.addEventListener("click", event => this.#onCraftDetachNode(event));
+    workspace.querySelector("[data-craft-extract-node]")?.addEventListener("click", event => this.#onCraftExtractNode(event));
     workspace.querySelector("[data-craft-delete-node]")?.addEventListener("click", event => this.#onCraftDeleteNode(event));
     workspace.querySelector("[data-craft-cancel-attach]")?.addEventListener("click", event => this.#onCraftCancelAttach(event));
     workspace.querySelector("[data-craft-node-quantity]")?.addEventListener("change", event => this.#onCraftNodeQuantityChange(event));
@@ -598,10 +603,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (event.target?.closest?.(".fallout-maw-craft-popover")) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-    const workspace = event.currentTarget;
-    const coords = this.#getCraftPointerGridCoordinates(event);
     const data = this.#getPreviewCraftDropData(event);
-    this.#showCraftSnapPreview(coords, data);
+    const coords = this.#getCraftPointerGridCoordinates(event, data);
+    const preview = this.#getCraftExternalDropPreview(event, coords, data);
+    this.#showCraftSnapPreview(preview, preview);
   }
 
   async #onCraftDrop(event) {
@@ -617,12 +622,29 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return undefined;
     }
 
-    const coords = this.#getCraftPointerGridCoordinates(event);
+    const footprint = getCraftItemFootprint(droppedItem);
+    const coords = this.#getCraftPointerGridCoordinates(event, footprint);
     const nodes = getCraftNodesWithRoot(this.item);
-    nodes.push(createCraftNodeFromItem(droppedItem, coords));
-    this.#craftSelection = { type: "node", id: nodes[nodes.length - 1].id };
+    const newNode = createCraftNodeFromItem(droppedItem, coords);
+    const target = this.#getCraftDropTarget(event);
+    if (target) {
+      const result = mergeCraftNodesIntoTarget({
+        nodes: [...nodes, newNode],
+        links: getCraftLinks(this.item),
+        movingNodeIds: [newNode.id],
+        target,
+        preferredPoint: coords
+      });
+      this.#craftSelection = { type: "node", id: newNode.id };
+      this.#craftAttachSourceNodeId = "";
+      return this.#updateCraftRecipe(result);
+    }
+
+    nodes.push(newNode);
+    const placedNodes = placeExtractedCraftNode(nodes, newNode.id);
+    this.#craftSelection = { type: "node", id: newNode.id };
     this.#craftAttachSourceNodeId = "";
-    return this.#updateCraftRecipe({ nodes });
+    return this.#updateCraftRecipe({ nodes: placedNodes });
   }
 
   #onCraftDragLeave(event) {
@@ -680,16 +702,74 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     };
   }
 
-  #getCraftPointerGridCoordinates(event) {
+  #getCraftPointerGridCoordinates(event, { width = 1, height = 1 } = {}) {
     const workspace = this.element?.querySelector("[data-craft-workspace]");
     const rect = workspace?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
     const viewport = this.#getCraftViewport();
     const step = getCraftGridStep(workspace);
+    const rawX = (event.clientX - rect.left - (rect.width / 2) - viewport.x) / (step * viewport.zoom);
+    const rawY = (event.clientY - rect.top - (rect.height / 2) - viewport.y) / (step * viewport.zoom);
     return {
-      x: Math.round((event.clientX - rect.left - (rect.width / 2) - viewport.x) / (step * viewport.zoom)),
-      y: Math.round((event.clientY - rect.top - (rect.height / 2) - viewport.y) / (step * viewport.zoom))
+      x: snapCraftGridCoordinate(rawX, width),
+      y: snapCraftGridCoordinate(rawY, height)
     };
+  }
+
+  #getCraftExternalDropPreview(event, coords = { x: 0, y: 0 }, { width = 1, height = 1 } = {}) {
+    const previewNode = normalizeCraftNode({
+      id: "__preview__",
+      x: coords.x,
+      y: coords.y,
+      width,
+      height
+    });
+    const nodes = getCraftNodesWithRoot(this.item);
+    const target = this.#getCraftDropTarget(event);
+    if (target) {
+      const result = mergeCraftNodesIntoTarget({
+        nodes: [...nodes, previewNode],
+        links: getCraftLinks(this.item),
+        movingNodeIds: [previewNode.id],
+        target,
+        preferredPoint: coords
+      });
+      return getCraftNodesBounds(result.nodes.filter(node => node.id === previewNode.id)) ?? craftNodeToBounds(previewNode);
+    }
+    const position = findNearestFreeCraftNodePosition(previewNode, getCraftOccupiedBounds(nodes));
+    return craftNodeToBounds({ ...previewNode, ...position });
+  }
+
+  #getCraftDropTarget(event, { excludeNodeIds = new Set(), excludeBlockId = "" } = {}) {
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    if (!workspace) return null;
+    const excludedNodes = excludeNodeIds instanceof Set ? excludeNodeIds : new Set(excludeNodeIds ?? []);
+    const pointElement = document.elementFromPoint(event.clientX, event.clientY);
+    const directNode = pointElement?.closest?.("[data-craft-node-id]");
+    if (directNode && workspace.contains(directNode)) {
+      const nodeId = String(directNode.dataset.craftNodeId ?? "");
+      const blockId = String(directNode.dataset.craftBlockId ?? "");
+      if (!excludedNodes.has(nodeId) && (!blockId || blockId !== excludeBlockId)) return { type: "node", id: nodeId };
+    }
+    const directBlock = pointElement?.closest?.("[data-craft-block-id]");
+    if (directBlock && workspace.contains(directBlock)) {
+      const blockId = String(directBlock.dataset.craftBlockId ?? "");
+      if (blockId && blockId !== excludeBlockId) return { type: "block", id: blockId };
+    }
+
+    let nearest = null;
+    let nearestDistance = 34;
+    for (const element of workspace.querySelectorAll("[data-craft-node-id], [data-craft-block-id]")) {
+      const nodeId = String(element.dataset.craftNodeId ?? "");
+      const blockId = String(element.dataset.craftBlockId ?? "");
+      if ((nodeId && excludedNodes.has(nodeId)) || (blockId && blockId === excludeBlockId)) continue;
+      const distance = getPointToDomRectDistance(event.clientX, event.clientY, element.getBoundingClientRect());
+      if (distance < nearestDistance) {
+        nearest = nodeId ? { type: "node", id: nodeId } : { type: "block", id: blockId };
+        nearestDistance = distance;
+      }
+    }
+    return nearest;
   }
 
   #onCraftNodePointerDown(event) {
@@ -706,14 +786,74 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return this.render({ force: true });
     }
 
+    const nodes = getCraftNodesWithRoot(this.item);
+    const node = nodes.find(entry => entry.id === nodeId);
+    if (!node) return;
+    const blockId = String(node.blockId ?? "");
+    const movingNodeIds = blockId && !event.shiftKey
+      ? nodes.filter(entry => entry.blockId === blockId).map(entry => entry.id)
+      : [nodeId];
+    const movingNodes = nodes.filter(entry => movingNodeIds.includes(entry.id));
+    const bounds = getCraftNodesBounds(movingNodes) ?? craftNodeToBounds(node);
     this.#craftNodeDrag = {
       pointerId: event.pointerId,
       nodeId,
+      blockId: blockId && !event.shiftKey ? blockId : "",
+      sourceBlockId: blockId,
+      movingNodeIds,
       element: nodeElement,
       startClientX: event.clientX,
       startClientY: event.clientY,
       startX: Number(nodeElement.dataset.craftX) || 0,
       startY: Number(nodeElement.dataset.craftY) || 0,
+      previewX: bounds.x,
+      previewY: bounds.y,
+      previewWidth: bounds.width,
+      previewHeight: bounds.height,
+      moved: false
+    };
+
+    const onMove = moveEvent => this.#onCraftNodeMove(moveEvent);
+    const onUp = upEvent => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      this.#onCraftNodeEnd(upEvent);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp, { once: true });
+  }
+
+  #onCraftBlockPointerDown(event) {
+    if (event.button !== 0 || this.#craftAttachSourceNodeId) return;
+    const blockElement = event.currentTarget;
+    const blockId = String(blockElement.dataset.craftBlockId ?? "");
+    if (!blockId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const nodes = getCraftNodesWithRoot(this.item);
+    const movingNodeIds = nodes.filter(node => node.blockId === blockId).map(node => node.id);
+    if (!movingNodeIds.length) return;
+    const bounds = getCraftNodesBounds(nodes.filter(node => movingNodeIds.includes(node.id))) ?? {
+      x: Number(blockElement.dataset.craftX) || 0,
+      y: Number(blockElement.dataset.craftY) || 0,
+      width: Number(blockElement.dataset.craftWidth) || 1,
+      height: Number(blockElement.dataset.craftHeight) || 1
+    };
+    this.#craftNodeDrag = {
+      pointerId: event.pointerId,
+      nodeId: "",
+      blockId,
+      sourceBlockId: blockId,
+      movingNodeIds,
+      element: blockElement,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: Number(blockElement.dataset.craftX) || 0,
+      startY: Number(blockElement.dataset.craftY) || 0,
+      previewX: bounds.x,
+      previewY: bounds.y,
+      previewWidth: bounds.width,
+      previewHeight: bounds.height,
       moved: false
     };
 
@@ -735,49 +875,93 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const dy = event.clientY - drag.startClientY;
     if (!drag.moved && Math.hypot(dx, dy) < CRAFT_DRAG_THRESHOLD_PX) return;
     drag.moved = true;
-    drag.element.classList.add("dragging");
+    this.#setCraftDraggingState(drag, true);
     const step = getCraftGridStep(this.element?.querySelector("[data-craft-workspace]"));
     const zoom = this.#getCraftViewport().zoom;
-    const nextX = drag.startX + Math.round(dx / (step * zoom));
-    const nextY = drag.startY + Math.round(dy / (step * zoom));
-    drag.nextX = nextX;
-    drag.nextY = nextY;
-    this.#showCraftSnapPreview({ x: nextX, y: nextY }, {
-      width: Number(drag.element.dataset.craftWidth) || 1,
-      height: Number(drag.element.dataset.craftHeight) || 1
+    const deltaX = Math.round(dx / (step * zoom));
+    const deltaY = Math.round(dy / (step * zoom));
+    drag.deltaX = deltaX;
+    drag.deltaY = deltaY;
+    const resolved = resolveCraftDragPlacement(getCraftNodesWithRoot(this.item), drag.movingNodeIds, {
+      deltaX,
+      deltaY,
+      movingBlockId: drag.blockId,
+      sourceBlockId: drag.sourceBlockId
     });
+    drag.resolvedDeltaX = resolved.deltaX;
+    drag.resolvedDeltaY = resolved.deltaY;
+    const preview = this.#getCraftNodeDragPreview(drag, resolved.deltaX, resolved.deltaY);
+    this.#showCraftSnapPreview({ x: preview.x, y: preview.y }, preview);
+  }
+
+  #getCraftNodeDragPreview(drag, deltaX = 0, deltaY = 0) {
+    const movingIds = new Set(drag.movingNodeIds ?? [drag.nodeId].filter(Boolean));
+    const movingNodes = getCraftNodesWithRoot(this.item)
+      .filter(node => movingIds.has(node.id))
+      .map(node => ({ ...node, x: node.x + deltaX, y: node.y + deltaY }));
+    return getCraftNodesBounds(movingNodes) ?? {
+      x: (Number(drag.previewX) || 0) + deltaX,
+      y: (Number(drag.previewY) || 0) + deltaY,
+      width: Math.max(1, toInteger(drag.previewWidth) || 1),
+      height: Math.max(1, toInteger(drag.previewHeight) || 1)
+    };
   }
 
   #onCraftNodeEnd(event) {
     const drag = this.#craftNodeDrag;
     this.#craftNodeDrag = null;
     if (!drag || event.pointerId !== drag.pointerId) return undefined;
-    drag.element.classList.remove("dragging");
+    this.#setCraftDraggingState(drag, false);
     this.#hideCraftSnapPreview();
     if (!drag.moved) {
-      this.#craftSelection = { type: "node", id: drag.nodeId };
+      this.#craftSelection = drag.nodeId ? { type: "node", id: drag.nodeId } : { type: "block", id: drag.blockId };
       this.#craftAttachSourceNodeId = "";
       return this.render({ force: true });
     }
-    const nextX = Number(drag.nextX ?? drag.startX) || 0;
-    const nextY = Number(drag.nextY ?? drag.startY) || 0;
-    drag.element.dataset.craftX = String(nextX);
-    drag.element.dataset.craftY = String(nextY);
-    drag.element.style.setProperty("--craft-x", String(nextX));
-    drag.element.style.setProperty("--craft-y", String(nextY));
-    this.#applyCraftElementLayout(drag.element, {
-      x: nextX,
-      y: nextY,
-      width: Number(drag.element.dataset.craftWidth) || 1,
-      height: Number(drag.element.dataset.craftHeight) || 1
-    });
-    this.#scheduleCraftLinkRender();
-    const nodes = getCraftNodesWithRoot(this.item).map(node => (
-      node.id === drag.nodeId ? { ...node, x: nextX, y: nextY } : node
+    const deltaX = Number(drag.resolvedDeltaX ?? drag.deltaX ?? 0) || 0;
+    const deltaY = Number(drag.resolvedDeltaY ?? drag.deltaY ?? 0) || 0;
+    const movingIds = new Set(drag.movingNodeIds ?? [drag.nodeId].filter(Boolean));
+    const target = this.#getCraftDropTarget(event, { excludeNodeIds: movingIds, excludeBlockId: drag.blockId });
+    const shiftedNodes = getCraftNodesWithRoot(this.item).map(node => (
+      movingIds.has(node.id) ? { ...node, x: node.x + deltaX, y: node.y + deltaY } : node
     ));
+
+    if (target) {
+      const result = mergeCraftNodesIntoTarget({
+        nodes: shiftedNodes,
+        links: getCraftLinks(this.item),
+        movingNodeIds: [...movingIds],
+        target,
+        preferredPoint: this.#getCraftPointerGridCoordinates(event, {
+          width: drag.previewWidth,
+          height: drag.previewHeight
+        })
+      });
+      this.#craftSelection = drag.nodeId ? { type: "node", id: drag.nodeId } : null;
+      this.#craftAttachSourceNodeId = "";
+      return this.#updateCraftRecipe(result);
+    }
+
+    const nodes = resolveCraftMoveCollisions(shiftedNodes, [...movingIds], {
+      movingBlockId: drag.blockId,
+      sourceBlockId: drag.sourceBlockId
+    });
     this.#craftSelection = null;
     this.#craftAttachSourceNodeId = "";
     return this.#updateCraftRecipe({ nodes });
+  }
+
+  #setCraftDraggingState(drag, enabled) {
+    const method = enabled ? "add" : "remove";
+    drag.element?.classList?.[method]?.("dragging");
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    if (drag.blockId) {
+      workspace?.querySelector(`[data-craft-block-id="${CSS.escape(drag.blockId)}"]`)?.classList?.[method]?.("dragging");
+      workspace?.querySelector(`[data-craft-block-frame-id="${CSS.escape(drag.blockId)}"]`)?.classList?.[method]?.("dragging");
+    }
+    for (const nodeId of drag.movingNodeIds ?? []) {
+      workspace?.querySelector(`[data-craft-node-id="${CSS.escape(nodeId)}"]`)?.classList?.[method]?.("dragging");
+    }
   }
 
   #onCraftAttachNode(event) {
@@ -803,6 +987,20 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.#craftSelection = { type: "node", id: nodeId };
     this.#craftAttachSourceNodeId = "";
     return this.#updateCraftRecipe({ links });
+  }
+
+  #onCraftExtractNode(event) {
+    event.preventDefault();
+    const nodeId = String(event.currentTarget.dataset.craftExtractNode ?? "");
+    if (!nodeId) return undefined;
+    let nodes = getCraftNodesWithRoot(this.item).map(node => (
+      node.id === nodeId ? { ...node, blockId: "" } : node
+    ));
+    const normalized = normalizeCraftRecipeParts(nodes, getCraftLinks(this.item));
+    nodes = placeExtractedCraftNode(normalized.nodes, nodeId);
+    this.#craftSelection = { type: "node", id: nodeId };
+    this.#craftAttachSourceNodeId = "";
+    return this.#updateCraftRecipe({ nodes, links: normalized.links });
   }
 
   #onCraftNodeQuantityChange(event) {
@@ -839,7 +1037,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (!workspace) return;
     workspace.querySelectorAll(".fallout-maw-craft-node.attach-target").forEach(node => node.classList.remove("attach-target"));
     const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.("[data-craft-node-id]");
-    if (target && workspace.contains(target) && target.dataset.craftNodeId !== this.#craftAttachSourceNodeId) {
+    if (target
+      && workspace.contains(target)
+      && target.dataset.craftNodeId !== this.#craftAttachSourceNodeId
+      && this.#canCreateCraftLink(this.#craftAttachSourceNodeId, String(target.dataset.craftNodeId ?? ""))
+    ) {
       target.classList.add("attach-target");
     }
     this.#renderCraftLinks({ previewEvent: event });
@@ -887,6 +1089,22 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   }
 
   #syncCraftNodeLayouts() {
+    this.element?.querySelectorAll("[data-craft-block-id]").forEach(block => {
+      this.#applyCraftElementLayout(block, {
+        x: Number(block.dataset.craftX) || 0,
+        y: Number(block.dataset.craftY) || 0,
+        width: Number(block.dataset.craftWidth) || 1,
+        height: Number(block.dataset.craftHeight) || 1
+      });
+    });
+    this.element?.querySelectorAll("[data-craft-block-frame-id]").forEach(block => {
+      this.#applyCraftElementLayout(block, {
+        x: Number(block.dataset.craftX) || 0,
+        y: Number(block.dataset.craftY) || 0,
+        width: Number(block.dataset.craftWidth) || 1,
+        height: Number(block.dataset.craftHeight) || 1
+      });
+    });
     this.element?.querySelectorAll("[data-craft-node-id]").forEach(node => {
       this.#applyCraftElementLayout(node, {
         x: Number(node.dataset.craftX) || 0,
@@ -914,7 +1132,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   async #createCraftLink(fromNodeId, toNodeId, event = null) {
     const nodes = getCraftNodesWithRoot(this.item);
     if (!nodes.some(node => node.id === fromNodeId) || !nodes.some(node => node.id === toNodeId)) return undefined;
-    const links = getCraftLinks(this.item).filter(link => !(link.fromNodeId === fromNodeId && link.toNodeId === toNodeId));
+    if (getCraftResolvedEndpointId(nodes.find(node => node.id === fromNodeId)) === getCraftResolvedEndpointId(nodes.find(node => node.id === toNodeId))) {
+      return undefined;
+    }
+    const links = getCraftLinks(this.item).filter(link => (
+      getCraftResolvedLinkKey(link, nodes) !== getCraftResolvedPairKey(fromNodeId, toNodeId, nodes)
+    ));
     const skillKey = getDefaultCraftSkillKey(getSkillSettings());
     const anchors = event ? this.#getCraftNewLinkAnchors(fromNodeId, toNodeId, event) : {};
     const link = {
@@ -934,8 +1157,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   #getCraftNewLinkAnchors(fromNodeId, toNodeId, event) {
     const workspace = this.element?.querySelector("[data-craft-workspace]");
     const svg = workspace?.querySelector("[data-craft-links]");
-    const fromElement = workspace?.querySelector(`[data-craft-node-id="${CSS.escape(fromNodeId)}"]`);
-    const toElement = workspace?.querySelector(`[data-craft-node-id="${CSS.escape(toNodeId)}"]`);
+    const fromElement = this.#getCraftEndpointElement(fromNodeId, workspace);
+    const toElement = this.#getCraftEndpointElement(toNodeId, workspace);
     const from = getElementRectRelativeToSvg(fromElement, svg);
     const to = getElementRectRelativeToSvg(toElement, svg);
     if (!from || !to || !svg) return {};
@@ -952,11 +1175,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (!workspace || !svg) return;
     if (!this.#isCraftWorkspaceRenderable()) return;
     svg.replaceChildren();
-    const nodes = new Map(Array.from(workspace.querySelectorAll("[data-craft-node-id]")).map(node => [node.dataset.craftNodeId, node]));
+    const nodeData = new Map(getCraftNodesWithRoot(this.item).map(node => [node.id, node]));
     const selectedLinkId = this.#craftSelection?.type === "link" ? this.#craftSelection.id : "";
     for (const link of getCraftLinks(this.item)) {
-      const from = nodes.get(link.fromNodeId);
-      const to = nodes.get(link.toNodeId);
+      const fromNode = nodeData.get(link.fromNodeId);
+      const toNode = nodeData.get(link.toNodeId);
+      if (!fromNode || !toNode || getCraftResolvedEndpointId(fromNode) === getCraftResolvedEndpointId(toNode)) continue;
+      const from = this.#getCraftEndpointElement(link.fromNodeId, workspace);
+      const to = this.#getCraftEndpointElement(link.toNodeId, workspace);
       if (!from || !to) continue;
       const bend = this.#craftLinkDrag?.linkId === link.id
         ? this.#craftLinkDrag.bend
@@ -971,17 +1197,34 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       this.#appendCraftLinkPath(svg, getCraftConnectorGeometry(from, to, svg, bend, anchors), link, selectedLinkId);
     }
     if (this.#craftAttachSourceNodeId && previewEvent) {
-      const source = nodes.get(this.#craftAttachSourceNodeId);
+      const source = this.#getCraftEndpointElement(this.#craftAttachSourceNodeId, workspace);
       if (source) {
         const target = getCraftAttachTarget(workspace, previewEvent, this.#craftAttachSourceNodeId);
-        if (target) target.classList.add("attach-target");
-        const geometry = target
-          ? getCraftAttachPreviewGeometry(source, target, svg, previewEvent)
+        const targetNodeId = String(target?.dataset?.craftNodeId ?? "");
+        const canLinkTarget = targetNodeId && this.#canCreateCraftLink(this.#craftAttachSourceNodeId, targetNodeId);
+        if (target && canLinkTarget) target.classList.add("attach-target");
+        const geometry = target && canLinkTarget
+          ? getCraftAttachPreviewGeometry(source, this.#getCraftEndpointElement(targetNodeId, workspace), svg, previewEvent)
           : getCraftConnectorGeometryToPoint(source, previewEvent, svg);
         this.#appendCraftPreviewConnector(svg, geometry);
       }
     }
     this.#positionCraftPopover();
+  }
+
+  #canCreateCraftLink(fromNodeId, toNodeId) {
+    const nodes = getCraftNodesWithRoot(this.item);
+    const from = nodes.find(node => node.id === fromNodeId);
+    const to = nodes.find(node => node.id === toNodeId);
+    return Boolean(from && to && getCraftResolvedEndpointId(from) !== getCraftResolvedEndpointId(to));
+  }
+
+  #getCraftEndpointElement(nodeId, workspace = this.element?.querySelector("[data-craft-workspace]")) {
+    const node = getCraftNodesWithRoot(this.item).find(entry => entry.id === nodeId);
+    const blockId = String(node?.blockId ?? "");
+    return (blockId ? workspace?.querySelector(`[data-craft-block-id="${CSS.escape(blockId)}"]`) : null)
+      ?? workspace?.querySelector(`[data-craft-node-id="${CSS.escape(nodeId)}"]`)
+      ?? null;
   }
 
   #appendCraftLinkPath(svg, geometry, link, selectedLinkId) {
@@ -1121,7 +1364,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const svg = workspace?.querySelector("[data-craft-links]");
     const link = getCraftLinks(this.item).find(entry => entry.id === drag.linkId);
     const nodeId = drag.role === "from" ? link?.fromNodeId : link?.toNodeId;
-    const nodeElement = nodeId ? workspace?.querySelector(`[data-craft-node-id="${CSS.escape(nodeId)}"]`) : null;
+    const nodeElement = nodeId ? this.#getCraftEndpointElement(nodeId, workspace) : null;
     const rect = getElementRectRelativeToSvg(nodeElement, svg);
     if (!rect || !svg) return;
     drag.moved = true;
@@ -1146,8 +1389,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   #getCraftLinkAnchorData(link, svg) {
     const workspace = this.element?.querySelector("[data-craft-workspace]");
-    const fromElement = workspace?.querySelector(`[data-craft-node-id="${CSS.escape(link.fromNodeId)}"]`);
-    const toElement = workspace?.querySelector(`[data-craft-node-id="${CSS.escape(link.toNodeId)}"]`);
+    const fromElement = this.#getCraftEndpointElement(link.fromNodeId, workspace);
+    const toElement = this.#getCraftEndpointElement(link.toNodeId, workspace);
     const from = getElementRectRelativeToSvg(fromElement, svg);
     const to = getElementRectRelativeToSvg(toElement, svg);
     if (!from || !to) return getCraftLinkAnchors(link);
@@ -1192,8 +1435,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   #updateCraftRecipe({ nodes = null, links = null, viewport = null } = {}) {
     const updateData = {};
-    if (nodes) updateData["system.craft.nodes"] = nodes.map(normalizeCraftNode);
-    if (links) updateData["system.craft.links"] = links.map(normalizeCraftLink);
+    if (nodes || links) {
+      const normalized = normalizeCraftRecipeParts(
+        nodes ? nodes.map(normalizeCraftNode) : getCraftNodesWithRoot(this.item),
+        links ? links.map(normalizeCraftLink) : getCraftLinks(this.item)
+      );
+      if (nodes) updateData["system.craft.nodes"] = normalized.nodes;
+      if (nodes || links) updateData["system.craft.links"] = normalized.links;
+    }
     if (viewport) updateData["system.craft.viewport"] = normalizeCraftViewport(viewport);
     return this.item.update(updateData);
   }
@@ -3167,6 +3416,7 @@ function getDefaultAdditionalWeaponFunctionName(index) {
 function prepareCraftContext(item, skillSettings = [], selection = null, attachSourceNodeId = "") {
   const nodes = getCraftNodesWithRoot(item);
   const links = getCraftLinks(item);
+  const blocks = getCraftBlocks(nodes);
   const viewport = getCraftViewport(item);
   const selectedNodeIndex = selection?.type === "node"
     ? nodes.findIndex(node => node.id === selection.id)
@@ -3182,6 +3432,12 @@ function prepareCraftContext(item, skillSettings = [], selection = null, attachS
     : null;
   const attachSourceNode = nodes.find(node => node.id === attachSourceNodeId) ?? null;
   return {
+    blocks: blocks.map(block => ({
+      ...block,
+      label: `Craft block ${block.id}`,
+      style: buildCraftNodeStyle(block),
+      selected: selection?.type === "block" && selection.id === block.id
+    })),
     nodes: nodes.map((node, index) => ({
       ...prepareCraftNodeForDisplay(node, index, links),
       style: buildCraftNodeStyle(node),
@@ -3208,6 +3464,12 @@ function prepareCraftNodeForDisplay(node, index, links) {
     quantity,
     hasQuantityBadge: quantity > 1
   };
+}
+
+function getCraftBlocks(nodes = []) {
+  return Array.from(groupCraftNodesByBlock(nodes).entries())
+    .map(([id, blockNodes]) => ({ id, nodeIds: blockNodes.map(node => node.id), ...getCraftNodesBounds(blockNodes) }))
+    .filter(block => block.nodeIds.length > 1 && block.width > 0 && block.height > 0);
 }
 
 function prepareCraftLinkForDisplay(link, index, nodes, skillSettings = []) {
@@ -3264,10 +3526,8 @@ function getCraftNodes(item) {
 }
 
 function getCraftLinks(item) {
-  const nodeIds = new Set(getCraftNodesWithRoot(item).map(node => node.id));
-  return Array.from(item.system?.craft?.links ?? [])
-    .map(normalizeCraftLink)
-    .filter(link => link.id && nodeIds.has(link.fromNodeId) && nodeIds.has(link.toNodeId) && link.fromNodeId !== link.toNodeId);
+  const nodes = getCraftNodesWithRoot(item);
+  return normalizeCraftLinksForNodes(Array.from(item.system?.craft?.links ?? []), nodes);
 }
 
 function getCraftViewport(item) {
@@ -3276,6 +3536,8 @@ function getCraftViewport(item) {
 
 function createCraftRootNode(item, source = {}) {
   const placement = item.system?.placement ?? {};
+  const width = Math.max(1, toInteger(placement.width) || toInteger(source.width) || 1);
+  const height = Math.max(1, toInteger(placement.height) || toInteger(source.height) || 1);
   return normalizeCraftNode({
     ...source,
     id: String(source.id || CRAFT_ROOT_NODE_ID),
@@ -3283,15 +3545,16 @@ function createCraftRootNode(item, source = {}) {
     name: item.name,
     img: normalizeImagePath(item.img || FALLBACK_ICON),
     type: item.type,
-    width: Math.max(1, toInteger(placement.width) || toInteger(source.width) || 1),
-    height: Math.max(1, toInteger(placement.height) || toInteger(source.height) || 1),
+    width,
+    height,
     quantity: Math.max(1, toInteger(source.quantity) || 1),
+    blockId: String(source.blockId ?? ""),
     root: true
   });
 }
 
 function createCraftNodeFromItem(item, { x = 0, y = 0 } = {}) {
-  const placement = item.system?.placement ?? {};
+  const { width, height } = getCraftItemFootprint(item);
   return normalizeCraftNode({
     id: foundry.utils.randomID(),
     itemUuid: item.uuid,
@@ -3300,27 +3563,45 @@ function createCraftNodeFromItem(item, { x = 0, y = 0 } = {}) {
     type: item.type,
     x,
     y,
-    width: Math.max(1, toInteger(placement.width) || 1),
-    height: Math.max(1, toInteger(placement.height) || 1),
+    width,
+    height,
     quantity: 1,
+    blockId: "",
     root: false
   });
 }
 
 function normalizeCraftNode(node = {}) {
+  const width = Math.max(1, toInteger(node.width) || 1);
+  const height = Math.max(1, toInteger(node.height) || 1);
   return {
     id: String(node.id || foundry.utils.randomID()),
     itemUuid: String(node.itemUuid ?? ""),
     name: String(node.name ?? ""),
     img: normalizeImagePath(String(node.img || FALLBACK_ICON)),
     type: String(node.type ?? ""),
-    x: toInteger(node.x),
-    y: toInteger(node.y),
-    width: Math.max(1, toInteger(node.width) || 1),
-    height: Math.max(1, toInteger(node.height) || 1),
+    x: snapCraftGridCoordinate(node.x, width),
+    y: snapCraftGridCoordinate(node.y, height),
+    width,
+    height,
     quantity: Math.max(1, toInteger(node.quantity) || 1),
+    blockId: String(node.blockId ?? ""),
     root: Boolean(node.root)
   };
+}
+
+function getCraftItemFootprint(item) {
+  const placement = item?.system?.placement ?? {};
+  return {
+    width: Math.max(1, toInteger(placement.width) || 1),
+    height: Math.max(1, toInteger(placement.height) || 1)
+  };
+}
+
+function snapCraftGridCoordinate(value, size = 1) {
+  const number = Number(value);
+  const offset = (Math.max(1, toInteger(size) || 1) - 1) / 2;
+  return (Number.isFinite(number) ? Math.round(number - offset) : 0) + offset;
 }
 
 function normalizeCraftLink(link = {}) {
@@ -3345,6 +3626,316 @@ function normalizeCraftLink(link = {}) {
     toAnchorSide: normalizeCraftAnchorSide(link.toAnchorSide),
     toAnchorOffset: Number.isFinite(toAnchorOffset) ? clampNumber(toAnchorOffset, 0, 1) : null
   };
+}
+
+function normalizeCraftRecipeParts(nodes = [], links = []) {
+  const normalizedNodes = normalizeCraftBlockMembership(nodes.map(normalizeCraftNode));
+  return {
+    nodes: normalizedNodes,
+    links: normalizeCraftLinksForNodes(links, normalizedNodes)
+  };
+}
+
+function normalizeCraftBlockMembership(nodes = []) {
+  const blockCounts = new Map();
+  for (const node of nodes) {
+    if (!node.blockId) continue;
+    blockCounts.set(node.blockId, (blockCounts.get(node.blockId) ?? 0) + 1);
+  }
+  return nodes.map(node => (
+    node.blockId && (blockCounts.get(node.blockId) ?? 0) > 1 ? node : { ...node, blockId: "" }
+  ));
+}
+
+function normalizeCraftLinksForNodes(links = [], nodes = []) {
+  const nodeIds = new Set(nodes.map(node => node.id));
+  const result = [];
+  const used = new Set();
+  for (const rawLink of links) {
+    const link = normalizeCraftLink(rawLink);
+    if (!link.id || !nodeIds.has(link.fromNodeId) || !nodeIds.has(link.toNodeId) || link.fromNodeId === link.toNodeId) continue;
+    const key = getCraftResolvedLinkKey(link, nodes);
+    if (!key || used.has(key)) continue;
+    used.add(key);
+    result.push(link);
+  }
+  return result;
+}
+
+function getCraftResolvedLinkKey(link, nodes = []) {
+  return getCraftResolvedPairKey(link.fromNodeId, link.toNodeId, nodes);
+}
+
+function getCraftResolvedPairKey(fromNodeId, toNodeId, nodes = []) {
+  const from = nodes.find(node => node.id === fromNodeId);
+  const to = nodes.find(node => node.id === toNodeId);
+  const fromKey = getCraftResolvedEndpointId(from);
+  const toKey = getCraftResolvedEndpointId(to);
+  if (!fromKey || !toKey || fromKey === toKey) return "";
+  return [fromKey, toKey].sort().join("|");
+}
+
+function getCraftResolvedEndpointId(node) {
+  if (!node) return "";
+  return node.blockId ? `block:${node.blockId}` : `node:${node.id}`;
+}
+
+function groupCraftNodesByBlock(nodes = []) {
+  const groups = new Map();
+  for (const node of nodes) {
+    const blockId = String(node.blockId ?? "");
+    if (!blockId) continue;
+    const group = groups.get(blockId) ?? [];
+    group.push(node);
+    groups.set(blockId, group);
+  }
+  return groups;
+}
+
+function craftNodeToBounds(node = {}) {
+  const width = Math.max(1, toInteger(node.width) || 1);
+  const height = Math.max(1, toInteger(node.height) || 1);
+  const x = Number(node.x) || 0;
+  const y = Number(node.y) || 0;
+  return {
+    left: x - (width / 2),
+    right: x + (width / 2),
+    top: y - (height / 2),
+    bottom: y + (height / 2),
+    x,
+    y,
+    width,
+    height
+  };
+}
+
+function getCraftNodesBounds(nodes = []) {
+  const bounds = nodes.map(craftNodeToBounds);
+  if (!bounds.length) return null;
+  const left = Math.min(...bounds.map(bound => bound.left));
+  const right = Math.max(...bounds.map(bound => bound.right));
+  const top = Math.min(...bounds.map(bound => bound.top));
+  const bottom = Math.max(...bounds.map(bound => bound.bottom));
+  return {
+    left,
+    right,
+    top,
+    bottom,
+    x: (left + right) / 2,
+    y: (top + bottom) / 2,
+    width: Math.max(1, Math.round(right - left)),
+    height: Math.max(1, Math.round(bottom - top))
+  };
+}
+
+function mergeCraftNodesIntoTarget({ nodes = [], links = [], movingNodeIds = [], target = null, preferredPoint = null } = {}) {
+  const movingIds = new Set(movingNodeIds);
+  const targetNodes = getCraftTargetNodes(nodes, target).filter(node => !movingIds.has(node.id));
+  const movingNodes = nodes.filter(node => movingIds.has(node.id));
+  if (!targetNodes.length || !movingNodes.length) return { nodes, links };
+  const targetBlockId = String(targetNodes.find(node => node.blockId)?.blockId ?? foundry.utils.randomID());
+  const targetNodeIds = new Set(targetNodes.map(node => node.id));
+  let nextNodes = nodes.map(node => {
+    if (movingIds.has(node.id) || targetNodeIds.has(node.id) || (node.blockId && targetNodes.some(targetNode => targetNode.blockId === node.blockId))) {
+      return { ...node, blockId: targetBlockId };
+    }
+    return node;
+  });
+  const nextMovingNodes = nextNodes.filter(node => movingIds.has(node.id));
+  const stationaryNodes = nextNodes.filter(node => !movingIds.has(node.id));
+  const placement = findCraftGroupPlacement({
+    movingNodes: nextMovingNodes,
+    stationaryNodes,
+    targetBounds: getCraftNodesBounds(nextNodes.filter(node => node.blockId === targetBlockId && !movingIds.has(node.id))) ?? getCraftNodesBounds(targetNodes),
+    preferredPoint
+  });
+  nextNodes = nextNodes.map(node => (
+    movingIds.has(node.id) ? { ...node, x: node.x + placement.dx, y: node.y + placement.dy } : node
+  ));
+  return normalizeCraftRecipeParts(nextNodes, links);
+}
+
+function getCraftTargetNodes(nodes = [], target = null) {
+  if (!target) return [];
+  if (target.type === "block") return nodes.filter(node => node.blockId === target.id);
+  const targetNode = nodes.find(node => node.id === target.id);
+  if (!targetNode) return [];
+  return targetNode.blockId ? nodes.filter(node => node.blockId === targetNode.blockId) : [targetNode];
+}
+
+function placeExtractedCraftNode(nodes = [], nodeId = "") {
+  const node = nodes.find(entry => entry.id === nodeId);
+  if (!node) return nodes;
+  const blockers = getCraftOccupiedBounds(nodes, { excludeNodeIds: [nodeId] });
+  const position = findNearestFreeCraftNodePosition(node, blockers);
+  return nodes.map(entry => (
+    entry.id === nodeId ? { ...entry, x: position.x, y: position.y } : entry
+  ));
+}
+
+function getCraftOccupiedBounds(nodes = [], { excludeNodeIds = [], ignoreBlockIds = [] } = {}) {
+  const excluded = new Set(excludeNodeIds);
+  const ignoredBlocks = new Set(ignoreBlockIds);
+  const candidates = nodes.filter(node => !excluded.has(node.id));
+  const occupied = [];
+  const groupedNodeIds = new Set();
+  for (const [blockId, blockNodes] of groupCraftNodesByBlock(candidates).entries()) {
+    if (ignoredBlocks.has(blockId)) continue;
+    if (blockNodes.length <= 1) continue;
+    const bounds = getCraftNodesBounds(blockNodes);
+    if (!bounds) continue;
+    occupied.push(bounds);
+    blockNodes.forEach(node => groupedNodeIds.add(node.id));
+  }
+  for (const node of candidates) {
+    if (groupedNodeIds.has(node.id)) continue;
+    occupied.push(craftNodeToBounds(node));
+  }
+  return occupied;
+}
+
+function getCraftDragBlockers(nodes = [], movingNodeIds = [], { movingBlockId = "", sourceBlockId = "" } = {}) {
+  const ignoreBlockIds = [];
+  if (movingBlockId) ignoreBlockIds.push(movingBlockId);
+  else if (sourceBlockId) ignoreBlockIds.push(sourceBlockId);
+  return getCraftOccupiedBounds(nodes, { excludeNodeIds: movingNodeIds, ignoreBlockIds });
+}
+
+function findNearestFreeCraftNodePosition(node = {}, blockers = []) {
+  const width = Math.max(1, toInteger(node.width) || 1);
+  const height = Math.max(1, toInteger(node.height) || 1);
+  const origin = {
+    x: snapCraftGridCoordinate(node.x, width),
+    y: snapCraftGridCoordinate(node.y, height)
+  };
+  let best = null;
+  const seen = new Set();
+  for (let radius = 0; radius <= CRAFT_BLOCK_SEARCH_RADIUS; radius += 1) {
+    for (let offsetX = -radius; offsetX <= radius; offsetX += 1) {
+      for (let offsetY = -radius; offsetY <= radius; offsetY += 1) {
+        if (Math.max(Math.abs(offsetX), Math.abs(offsetY)) !== radius) continue;
+        const candidate = {
+          x: snapCraftGridCoordinate(origin.x + offsetX, width),
+          y: snapCraftGridCoordinate(origin.y + offsetY, height)
+        };
+        const key = `${candidate.x}:${candidate.y}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const bounds = craftNodeToBounds({ ...node, ...candidate, width, height });
+        if (blockers.some(blocker => craftBoundsOverlap(bounds, blocker))) continue;
+        const distance = ((candidate.x - origin.x) ** 2) + ((candidate.y - origin.y) ** 2);
+        const score = distance + (candidate.y * 0.0001) + (candidate.x * 0.000001);
+        if (!best || score < best.score) best = { ...candidate, score };
+      }
+    }
+    if (best) return { x: best.x, y: best.y };
+  }
+  return origin;
+}
+
+function findCraftGroupPlacement({ movingNodes = [], stationaryNodes = [], targetBounds = null, preferredPoint = null } = {}) {
+  const movingBounds = getCraftNodesBounds(movingNodes);
+  if (!movingBounds || !targetBounds) return { dx: 0, dy: 0 };
+  const desired = preferredPoint ?? { x: targetBounds.x, y: targetBounds.y };
+  let best = null;
+  for (let radius = 0; radius <= CRAFT_BLOCK_SEARCH_RADIUS; radius += 1) {
+    const minX = Math.floor(targetBounds.left - movingBounds.width - radius);
+    const maxX = Math.ceil(targetBounds.right + movingBounds.width + radius);
+    const minY = Math.floor(targetBounds.top - movingBounds.height - radius);
+    const maxY = Math.ceil(targetBounds.bottom + movingBounds.height + radius);
+    for (let x = minX; x <= maxX; x += 1) {
+      for (let y = minY; y <= maxY; y += 1) {
+        const candidateX = snapCraftGridCoordinate(x, movingBounds.width);
+        const candidateY = snapCraftGridCoordinate(y, movingBounds.height);
+        const dx = candidateX - movingBounds.x;
+        const dy = candidateY - movingBounds.y;
+        if (craftNodesOverlapAny(movingNodes, stationaryNodes, dx, dy)) continue;
+        const movedBounds = offsetCraftBounds(movingBounds, dx, dy);
+        const distance = Math.hypot(movedBounds.x - desired.x, movedBounds.y - desired.y);
+        const expansion = getCraftBoundsUnionArea(targetBounds, movedBounds);
+        const score = distance + (expansion * 0.001);
+        if (!best || score < best.score) best = { dx, dy, score };
+      }
+    }
+    if (best) return best;
+  }
+  return { dx: 0, dy: 0 };
+}
+
+function resolveCraftDragPlacement(nodes = [], movingNodeIds = [], { deltaX = 0, deltaY = 0, movingBlockId = "", sourceBlockId = "" } = {}) {
+  const movingIds = new Set(movingNodeIds);
+  const movingNodes = nodes.filter(node => movingIds.has(node.id));
+  if (!movingNodes.length) return { deltaX, deltaY, bounds: null };
+  const blockers = getCraftDragBlockers(nodes, [...movingIds], { movingBlockId, sourceBlockId });
+  const preferredBounds = offsetCraftBounds(getCraftNodesBounds(movingNodes), deltaX, deltaY);
+  if (!blockers.some(blocker => craftBoundsOverlap(preferredBounds, blocker))) {
+    return { deltaX, deltaY, bounds: preferredBounds };
+  }
+  return findNearestFreeCraftGroupDelta(movingNodes, blockers, { deltaX, deltaY });
+}
+
+function resolveCraftMoveCollisions(nodes = [], movingNodeIds = [], options = {}) {
+  const resolved = resolveCraftDragPlacement(nodes, movingNodeIds, { ...options, deltaX: 0, deltaY: 0 });
+  if (!resolved.deltaX && !resolved.deltaY) return nodes;
+  const movingIds = new Set(movingNodeIds);
+  return nodes.map(node => (
+    movingIds.has(node.id) ? { ...node, x: node.x + resolved.deltaX, y: node.y + resolved.deltaY } : node
+  ));
+}
+
+function findNearestFreeCraftGroupDelta(movingNodes = [], blockers = [], { deltaX = 0, deltaY = 0 } = {}) {
+  const originBounds = getCraftNodesBounds(movingNodes);
+  if (!originBounds) return { deltaX, deltaY, bounds: null };
+  let best = null;
+  const seen = new Set();
+  for (let radius = 0; radius <= CRAFT_BLOCK_SEARCH_RADIUS; radius += 1) {
+    for (let offsetX = -radius; offsetX <= radius; offsetX += 1) {
+      for (let offsetY = -radius; offsetY <= radius; offsetY += 1) {
+        if (Math.max(Math.abs(offsetX), Math.abs(offsetY)) !== radius) continue;
+        const candidateDeltaX = deltaX + offsetX;
+        const candidateDeltaY = deltaY + offsetY;
+        const key = `${candidateDeltaX}:${candidateDeltaY}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const bounds = offsetCraftBounds(originBounds, candidateDeltaX, candidateDeltaY);
+        if (blockers.some(blocker => craftBoundsOverlap(bounds, blocker))) continue;
+        const distance = (offsetX ** 2) + (offsetY ** 2);
+        const score = distance + (bounds.y * 0.0001) + (bounds.x * 0.000001);
+        if (!best || score < best.score) best = { deltaX: candidateDeltaX, deltaY: candidateDeltaY, bounds, score };
+      }
+    }
+    if (best) return best;
+  }
+  return { deltaX, deltaY, bounds: offsetCraftBounds(originBounds, deltaX, deltaY) };
+}
+
+function craftNodesOverlapAny(movingNodes = [], stationaryNodes = [], dx = 0, dy = 0) {
+  return movingNodes.some(moving => {
+    const movingBounds = offsetCraftBounds(craftNodeToBounds(moving), dx, dy);
+    return stationaryNodes.some(stationary => craftBoundsOverlap(movingBounds, craftNodeToBounds(stationary)));
+  });
+}
+
+function craftBoundsOverlap(a, b) {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+function offsetCraftBounds(bounds, dx = 0, dy = 0) {
+  return {
+    ...bounds,
+    left: bounds.left + dx,
+    right: bounds.right + dx,
+    top: bounds.top + dy,
+    bottom: bounds.bottom + dy,
+    x: bounds.x + dx,
+    y: bounds.y + dy
+  };
+}
+
+function getCraftBoundsUnionArea(a, b) {
+  const width = Math.max(a.right, b.right) - Math.min(a.left, b.left);
+  const height = Math.max(a.bottom, b.bottom) - Math.min(a.top, b.top);
+  return Math.max(0, width * height);
 }
 
 function toOptionalNumber(value) {

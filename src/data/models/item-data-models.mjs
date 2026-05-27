@@ -379,11 +379,12 @@ function craftNodeField() {
     name: new StringField({ required: true, blank: true, initial: "" }),
     img: new StringField({ required: true, blank: true, initial: "" }),
     type: new StringField({ required: true, blank: true, initial: "" }),
-    x: new NumberField({ required: true, integer: true, initial: 0 }),
-    y: new NumberField({ required: true, integer: true, initial: 0 }),
+    x: new NumberField({ required: true, initial: 0 }),
+    y: new NumberField({ required: true, initial: 0 }),
     width: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     height: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     quantity: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+    blockId: new StringField({ required: true, blank: true, initial: "" }),
     root: new BooleanField({ required: true, initial: false })
   });
 }

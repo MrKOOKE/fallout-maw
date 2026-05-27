@@ -1480,8 +1480,11 @@
     <div class="fallout-maw-craft-world" data-craft-world style="{{craft.viewportStyle}}">
       <svg class="fallout-maw-craft-links" data-craft-links aria-hidden="true"></svg>
       <div class="fallout-maw-craft-snap-preview" data-craft-snap-preview hidden></div>
+      {{#each craft.blocks}}
+      <button type="button" class="fallout-maw-craft-block {{#if selected}}selected{{/if}}" data-craft-block-id="{{id}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" style="{{style}}" aria-label="{{label}}"></button>
+      {{/each}}
       {{#each craft.nodes}}
-      <button type="button" class="fallout-maw-craft-node {{#if root}}root{{/if}} {{#if selected}}selected{{/if}} {{#if attaching}}attaching{{/if}}" data-craft-node-id="{{id}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" style="{{style}}">
+      <button type="button" class="fallout-maw-craft-node {{#if root}}root{{/if}} {{#if selected}}selected{{/if}} {{#if attaching}}attaching{{/if}} {{#if blockId}}in-block{{/if}}" data-craft-node-id="{{id}}" data-craft-block-id="{{blockId}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" style="{{style}}">
         <span class="fallout-maw-craft-node-image">
           <img src="{{img}}" alt="{{name}}">
           {{#if hasQuantityBadge}}
@@ -1489,6 +1492,9 @@
           {{/if}}
         </span>
       </button>
+      {{/each}}
+      {{#each craft.blocks}}
+      <div class="fallout-maw-craft-block-frame {{#if selected}}selected{{/if}}" data-craft-block-frame-id="{{id}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" style="{{style}}" aria-hidden="true"></div>
       {{/each}}
     </div>
 
@@ -1514,6 +1520,11 @@
         <p>Выберите предмет для связи.</p>
         <button type="button" data-craft-cancel-attach>
           <i class="fa-solid fa-xmark"></i> Отменить
+        </button>
+        {{/if}}
+        {{#if craft.selectedNode.blockId}}
+        <button type="button" data-craft-extract-node="{{craft.selectedNode.id}}">
+          <i class="fa-solid fa-up-right-from-square"></i> Извлечь
         </button>
         {{/if}}
         {{#unless craft.selectedNode.root}}
