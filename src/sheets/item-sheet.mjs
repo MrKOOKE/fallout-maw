@@ -668,7 +668,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.stopPropagation();
 
     if (this.#craftAttachSourceNodeId) {
-      if (nodeId !== this.#craftAttachSourceNodeId) return this.#createCraftLink(this.#craftAttachSourceNodeId, nodeId);
+      if (nodeId !== this.#craftAttachSourceNodeId) return this.#createCraftLink(this.#craftAttachSourceNodeId, nodeId, event);
       this.#craftAttachSourceNodeId = "";
       return this.render({ force: true });
     }
@@ -751,7 +751,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.preventDefault();
     const nodeId = String(event.currentTarget.dataset.craftAttachNode ?? "");
     if (!nodeId) return undefined;
-    this.#craftSelection = { type: "node", id: nodeId };
+    this.#craftSelection = null;
     this.#craftAttachSourceNodeId = nodeId;
     return this.render({ force: true });
   }
@@ -860,22 +860,39 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     element.style.setProperty("--craft-node-half-height", `${heightPx / 2}px`);
   }
 
-  async #createCraftLink(fromNodeId, toNodeId) {
+  async #createCraftLink(fromNodeId, toNodeId, event = null) {
     const nodes = getCraftNodesWithRoot(this.item);
     if (!nodes.some(node => node.id === fromNodeId) || !nodes.some(node => node.id === toNodeId)) return undefined;
     const links = getCraftLinks(this.item).filter(link => !(link.fromNodeId === fromNodeId && link.toNodeId === toNodeId));
     const skillKey = getDefaultCraftSkillKey(getSkillSettings());
+    const anchors = event ? this.#getCraftNewLinkAnchors(fromNodeId, toNodeId, event) : {};
     const link = {
       id: foundry.utils.randomID(),
       fromNodeId,
       toNodeId,
       skillKey,
-      difficulty: 60
+      difficulty: 60,
+      ...buildCraftAnchorUpdateData(anchors)
     };
     links.push(link);
     this.#craftSelection = { type: "link", id: link.id };
     this.#craftAttachSourceNodeId = "";
     return this.#updateCraftRecipe({ nodes, links });
+  }
+
+  #getCraftNewLinkAnchors(fromNodeId, toNodeId, event) {
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    const svg = workspace?.querySelector("[data-craft-links]");
+    const fromElement = workspace?.querySelector(`[data-craft-node-id="${CSS.escape(fromNodeId)}"]`);
+    const toElement = workspace?.querySelector(`[data-craft-node-id="${CSS.escape(toNodeId)}"]`);
+    const from = getElementRectRelativeToSvg(fromElement, svg);
+    const to = getElementRectRelativeToSvg(toElement, svg);
+    if (!from || !to || !svg) return {};
+    const cursor = getCraftSvgPointFromEvent(event, svg);
+    return {
+      from: anchorToData(getCraftResolvedAnchor(from, null, getRectCenter(to))),
+      to: anchorToData(getCraftSnapAnchor(to, cursor, getRectCenter(from)))
+    };
   }
 
   #renderCraftLinks({ previewEvent = null } = {}) {
@@ -903,7 +920,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     }
     if (this.#craftAttachSourceNodeId && previewEvent) {
       const source = nodes.get(this.#craftAttachSourceNodeId);
-      if (source) this.#appendCraftPreviewPath(svg, getCraftConnectorPathToPoint(source, previewEvent, svg));
+      if (source) {
+        const target = getCraftAttachTarget(workspace, previewEvent, this.#craftAttachSourceNodeId);
+        if (target) target.classList.add("attach-target");
+        const geometry = target
+          ? getCraftAttachPreviewGeometry(source, target, svg, previewEvent)
+          : getCraftConnectorGeometryToPoint(source, previewEvent, svg);
+        this.#appendCraftPreviewConnector(svg, geometry);
+      }
     }
     this.#positionCraftPopover();
   }
@@ -963,7 +987,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       linkId: link.id,
       startClientX: event.clientX,
       startClientY: event.clientY,
-      bend: start,
+      bend: getCraftLinkBend(link) ?? start,
       anchors,
       moved: false
     };
@@ -987,31 +1011,19 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const svg = this.element?.querySelector("[data-craft-links]");
     if (!svg) return;
     drag.moved = true;
-    drag.bend = this.#constrainCraftLinkBend(drag.linkId, getCraftSvgPointFromEvent(event, svg), drag.anchors);
+    drag.bend = getCraftSvgPointFromEvent(event, svg);
     this.#renderCraftLinks();
-  }
-
-  #constrainCraftLinkBend(linkId, point, anchors = null) {
-    const workspace = this.element?.querySelector("[data-craft-workspace]");
-    const svg = workspace?.querySelector("[data-craft-links]");
-    const link = getCraftLinks(this.item).find(entry => entry.id === linkId);
-    const fromElement = link ? workspace?.querySelector(`[data-craft-node-id="${CSS.escape(link.fromNodeId)}"]`) : null;
-    const toElement = link ? workspace?.querySelector(`[data-craft-node-id="${CSS.escape(link.toNodeId)}"]`) : null;
-    const from = getElementRectRelativeToSvg(fromElement, svg);
-    const to = getElementRectRelativeToSvg(toElement, svg);
-    if (!from || !to) return point;
-    const startAnchor = getCraftResolvedAnchor(from, anchors?.from ?? getCraftLinkAnchor(link, "from"), point);
-    const endAnchor = getCraftResolvedAnchor(to, anchors?.to ?? getCraftLinkAnchor(link, "to"), point);
-    return constrainBendPoint(point, startAnchor.tubePoint, endAnchor.tubePoint, 72);
   }
 
   #onCraftLinkEnd(event) {
     const drag = this.#craftLinkDrag;
     this.#craftLinkDrag = null;
     if (!drag || event.pointerId !== drag.pointerId) return undefined;
-    this.#craftSelection = { type: "link", id: drag.linkId };
     this.#craftAttachSourceNodeId = "";
-    if (!drag.moved) return this.render({ force: true });
+    if (!drag.moved) {
+      this.#craftSelection = { type: "link", id: drag.linkId };
+      return this.render({ force: true });
+    }
     const links = getCraftLinks(this.item).map(link => (
       link.id === drag.linkId
         ? { ...link, bendX: drag.bend.x, bendY: drag.bend.y, ...buildCraftAnchorUpdateData(drag.anchors) }
@@ -1096,12 +1108,34 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     };
   }
 
-  #appendCraftPreviewPath(svg, pathData) {
-    if (!pathData) return;
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.classList.add("fallout-maw-craft-link-preview");
-    path.setAttribute("d", pathData);
-    svg.appendChild(path);
+  #appendCraftPreviewConnector(svg, geometry) {
+    if (!geometry?.centerPath) return;
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    group.classList.add("fallout-maw-craft-link", "preview");
+    for (const [className, pathData] of [
+      ["fallout-maw-craft-link-shadow", geometry.centerPath],
+      ["fallout-maw-craft-link-wall", geometry.centerPath],
+      ["fallout-maw-craft-link-glass", geometry.centerPath],
+      ["fallout-maw-craft-link-highlight", geometry.centerPath]
+    ]) {
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.classList.add(className);
+      path.setAttribute("d", pathData);
+      group.appendChild(path);
+    }
+    if (geometry.start?.socketPath) {
+      const socket = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      socket.classList.add("fallout-maw-craft-link-socket");
+      socket.setAttribute("d", geometry.start.socketPath);
+      group.appendChild(socket);
+    }
+    if (geometry.end?.socketPath) {
+      const socket = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      socket.classList.add("fallout-maw-craft-link-socket");
+      socket.setAttribute("d", geometry.end.socketPath);
+      group.appendChild(socket);
+    }
+    svg.appendChild(group);
   }
 
   #updateCraftRecipe({ nodes = null, links = null, viewport = null } = {}) {
@@ -3108,7 +3142,7 @@ function prepareCraftContext(item, skillSettings = [], selection = null, attachS
     selectedNode,
     selectedLink,
     attachSourceNode,
-    hasPopover: Boolean(selectedNode || selectedLink || attachSourceNode)
+    hasPopover: Boolean(selectedNode || selectedLink)
   };
 }
 
@@ -3238,23 +3272,33 @@ function normalizeCraftNode(node = {}) {
 }
 
 function normalizeCraftLink(link = {}) {
-  const bendX = Number(link.bendX);
-  const bendY = Number(link.bendY);
-  const fromAnchorOffset = Number(link.fromAnchorOffset);
-  const toAnchorOffset = Number(link.toAnchorOffset);
+  let bendX = toOptionalNumber(link.bendX);
+  let bendY = toOptionalNumber(link.bendY);
+  const fromAnchorOffset = toOptionalNumber(link.fromAnchorOffset);
+  const toAnchorOffset = toOptionalNumber(link.toAnchorOffset);
+  if (bendX === 0 && bendY === 0) {
+    bendX = null;
+    bendY = null;
+  }
   return {
     id: String(link.id || foundry.utils.randomID()),
     fromNodeId: String(link.fromNodeId ?? ""),
     toNodeId: String(link.toNodeId ?? ""),
     skillKey: String(link.skillKey ?? "repair"),
     difficulty: Math.max(0, toInteger(link.difficulty) || 60),
-    bendX: Number.isFinite(bendX) ? bendX : null,
-    bendY: Number.isFinite(bendY) ? bendY : null,
+    bendX,
+    bendY,
     fromAnchorSide: normalizeCraftAnchorSide(link.fromAnchorSide),
     fromAnchorOffset: Number.isFinite(fromAnchorOffset) ? clampNumber(fromAnchorOffset, 0, 1) : null,
     toAnchorSide: normalizeCraftAnchorSide(link.toAnchorSide),
     toAnchorOffset: Number.isFinite(toAnchorOffset) ? clampNumber(toAnchorOffset, 0, 1) : null
   };
+}
+
+function toOptionalNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function normalizeCraftViewport(viewport = {}) {
@@ -3302,13 +3346,6 @@ function parseCssLength(value, element) {
   return numeric;
 }
 
-function getCraftConnectorPath(fromElement, toElement, svg, bend = null) {
-  const from = getElementRectRelativeToSvg(fromElement, svg);
-  const to = getElementRectRelativeToSvg(toElement, svg);
-  if (!from || !to) return "";
-  return buildCraftConnectorGeometry(from, to, bend).centerPath;
-}
-
 function getCraftConnectorGeometry(fromElement, toElement, svg, bend = null, anchors = null) {
   const from = getElementRectRelativeToSvg(fromElement, svg);
   const to = getElementRectRelativeToSvg(toElement, svg);
@@ -3316,20 +3353,55 @@ function getCraftConnectorGeometry(fromElement, toElement, svg, bend = null, anc
   return buildCraftConnectorGeometry(from, to, bend, anchors);
 }
 
-function getCraftConnectorPathToPoint(fromElement, event, svg) {
+function getCraftConnectorGeometryToPoint(fromElement, event, svg) {
   const from = getElementRectRelativeToSvg(fromElement, svg);
-  const svgRect = svg.getBoundingClientRect();
-  const zoom = getCraftSvgZoom(svg);
+  const point = getCraftSvgPointFromEvent(event, svg);
   const to = {
-    left: (event.clientX - svgRect.left) / zoom,
-    right: (event.clientX - svgRect.left) / zoom,
-    top: (event.clientY - svgRect.top) / zoom,
-    bottom: (event.clientY - svgRect.top) / zoom,
+    left: point.x,
+    right: point.x,
+    top: point.y,
+    bottom: point.y,
     width: 1,
     height: 1
   };
-  if (!from) return "";
-  return buildCraftConnectorGeometry(from, to, null).centerPath;
+  if (!from) return null;
+  return buildCraftConnectorGeometry(from, to, null, {
+    from: anchorToData(getCraftResolvedAnchor(from, null, point))
+  });
+}
+
+function getCraftAttachPreviewGeometry(fromElement, toElement, svg, event) {
+  const from = getElementRectRelativeToSvg(fromElement, svg);
+  const to = getElementRectRelativeToSvg(toElement, svg);
+  const point = getCraftSvgPointFromEvent(event, svg);
+  if (!from || !to) return null;
+  return buildCraftConnectorGeometry(from, to, null, {
+    from: anchorToData(getCraftResolvedAnchor(from, null, getRectCenter(to))),
+    to: anchorToData(getCraftSnapAnchor(to, point, getRectCenter(from)))
+  });
+}
+
+function getCraftAttachTarget(workspace, event, sourceNodeId) {
+  const pointElement = document.elementFromPoint(event.clientX, event.clientY)?.closest?.("[data-craft-node-id]");
+  if (pointElement && workspace.contains(pointElement) && pointElement.dataset.craftNodeId !== sourceNodeId) return pointElement;
+  let nearest = null;
+  let nearestDistance = 34;
+  for (const node of workspace.querySelectorAll("[data-craft-node-id]")) {
+    if (node.dataset.craftNodeId === sourceNodeId) continue;
+    const rect = node.getBoundingClientRect();
+    const distance = getPointToDomRectDistance(event.clientX, event.clientY, rect);
+    if (distance < nearestDistance) {
+      nearest = node;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
+}
+
+function getPointToDomRectDistance(x, y, rect) {
+  const dx = Math.max(rect.left - x, 0, x - rect.right);
+  const dy = Math.max(rect.top - y, 0, y - rect.bottom);
+  return Math.hypot(dx, dy);
 }
 
 function getCraftSvgPointFromEvent(event, svg) {
@@ -3363,8 +3435,8 @@ function getCraftSvgZoom(svg) {
 }
 
 function getCraftLinkBend(link) {
-  const x = Number(link.bendX);
-  const y = Number(link.bendY);
+  const x = toOptionalNumber(link.bendX);
+  const y = toOptionalNumber(link.bendY);
   return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
 }
 
@@ -3377,10 +3449,7 @@ function buildCraftConnectorGeometry(from, to, bend = null, anchors = null) {
   if (bend) {
     startAnchor = getCraftResolvedAnchor(from, anchors?.from, bend);
     endAnchor = getCraftResolvedAnchor(to, anchors?.to, bend);
-    const constrainedBend = constrainBendPoint(bend, startAnchor.tubePoint, endAnchor.tubePoint, 72);
-    startAnchor = getCraftResolvedAnchor(from, anchors?.from, constrainedBend);
-    endAnchor = getCraftResolvedAnchor(to, anchors?.to, constrainedBend);
-    path = buildBentTubeCenterPath(startAnchor, constrainedBend, endAnchor);
+    path = buildBentTubeCenterPath(startAnchor, bend, endAnchor);
   } else {
     startAnchor = getCraftResolvedAnchor(from, anchors?.from, toCenter);
     endAnchor = getCraftResolvedAnchor(to, anchors?.to, fromCenter);
@@ -3403,31 +3472,33 @@ function buildDefaultTubeCenterPath(startAnchor, endAnchor) {
   const start = startAnchor.tubePoint;
   const end = endAnchor.tubePoint;
   const distance = Math.max(1, getPointDistance(start, end));
-  const handle = Math.max(36, Math.min(130, distance * 0.42));
-  const c1 = addScaledVector(start, startAnchor.normal, handle);
-  const c2 = addScaledVector(end, endAnchor.normal, handle);
+  const direction = normalizeVector({ x: end.x - start.x, y: end.y - start.y });
+  const baseHandle = Math.min(120, distance * 0.34);
+  const startHandle = baseHandle * Math.max(0, dotVector(startAnchor.normal, direction));
+  const endHandle = baseHandle * Math.max(0, dotVector(endAnchor.normal, { x: -direction.x, y: -direction.y }));
+  const c1 = addScaledVector(start, startAnchor.normal, startHandle);
+  const c2 = addScaledVector(end, endAnchor.normal, endHandle);
   return `M ${formatPoint(start)} C ${formatPoint(c1)} ${formatPoint(c2)} ${formatPoint(end)}`;
 }
 
 function buildBentTubeCenterPath(startAnchor, bend, endAnchor) {
   const start = startAnchor.tubePoint;
   const end = endAnchor.tubePoint;
+  if (isPointNearSegment(bend, start, end, 10)) return buildDefaultTubeCenterPath(startAnchor, endAnchor);
   const startDistance = getPointDistance(start, bend);
   const endDistance = getPointDistance(end, bend);
-  const startHandle = Math.max(34, Math.min(115, startDistance * 0.42));
-  const endHandle = Math.max(34, Math.min(115, endDistance * 0.42));
+  const startDirection = normalizeVector({ x: bend.x - start.x, y: bend.y - start.y });
+  const endDirection = normalizeVector({ x: end.x - bend.x, y: end.y - bend.y });
+  const startHandle = Math.min(100, startDistance * 0.34) * Math.max(0, dotVector(startAnchor.normal, startDirection));
+  const endHandle = Math.min(100, endDistance * 0.34) * Math.max(0, dotVector(endAnchor.normal, { x: -endDirection.x, y: -endDirection.y }));
   const bendTangent = getBendTangent(start, bend, end);
-  const bendHandleA = Math.max(28, Math.min(100, startDistance * 0.34));
-  const bendHandleB = Math.max(28, Math.min(100, endDistance * 0.34));
+  const bendHandleA = Math.min(90, startDistance * 0.28);
+  const bendHandleB = Math.min(90, endDistance * 0.28);
   const c1 = addScaledVector(start, startAnchor.normal, startHandle);
   const c2 = addScaledVector(bend, bendTangent, -bendHandleA);
   const c3 = addScaledVector(bend, bendTangent, bendHandleB);
   const c4 = addScaledVector(end, endAnchor.normal, endHandle);
   return `M ${formatPoint(start)} C ${formatPoint(c1)} ${formatPoint(c2)} ${formatPoint(bend)} C ${formatPoint(c3)} ${formatPoint(c4)} ${formatPoint(end)}`;
-}
-
-function buildQuadraticPath(start, control, end) {
-  return `M ${formatPoint(start)} Q ${formatPoint(control)} ${formatPoint(end)}`;
 }
 
 function getRectAnchor(rect, toward) {
@@ -3497,6 +3568,16 @@ function getNearestRectAnchor(rect, point) {
   return getRectAnchorFromData(rect, { side, offset });
 }
 
+function getCraftSnapAnchor(rect, point, fallbackToward) {
+  return isPointInsideRect(point, rect)
+    ? getRectAnchor(rect, fallbackToward)
+    : getNearestRectAnchor(rect, point);
+}
+
+function isPointInsideRect(point, rect) {
+  return point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom;
+}
+
 function getCraftResolvedAnchor(rect, anchor, fallbackToward) {
   return anchor?.side ? getRectAnchorFromData(rect, anchor) : getRectAnchor(rect, fallbackToward);
 }
@@ -3534,18 +3615,18 @@ function getRectAnchorFromData(rect, anchor) {
 }
 
 function anchorToData(anchor) {
+  const offset = toOptionalNumber(anchor?.offset);
   return {
     side: normalizeCraftAnchorSide(anchor?.side),
-    offset: Number.isFinite(Number(anchor?.offset)) ? clampNumber(Number(anchor.offset), 0, 1) : null
+    offset: Number.isFinite(offset) ? clampNumber(offset, 0, 1) : null
   };
 }
 
 function getCraftLinkAnchor(link, role) {
+  const offset = toOptionalNumber(link?.[`${role}AnchorOffset`]);
   return {
     side: normalizeCraftAnchorSide(link?.[`${role}AnchorSide`]),
-    offset: Number.isFinite(Number(link?.[`${role}AnchorOffset`]))
-      ? clampNumber(Number(link[`${role}AnchorOffset`]), 0, 1)
-      : null
+    offset: Number.isFinite(offset) ? clampNumber(offset, 0, 1) : null
   };
 }
 
@@ -3557,11 +3638,13 @@ function getCraftLinkAnchors(link) {
 }
 
 function buildCraftAnchorUpdateData(anchors = {}) {
+  const fromOffset = toOptionalNumber(anchors.from?.offset);
+  const toOffset = toOptionalNumber(anchors.to?.offset);
   return {
     fromAnchorSide: normalizeCraftAnchorSide(anchors.from?.side),
-    fromAnchorOffset: Number.isFinite(Number(anchors.from?.offset)) ? clampNumber(Number(anchors.from.offset), 0, 1) : null,
+    fromAnchorOffset: Number.isFinite(fromOffset) ? clampNumber(fromOffset, 0, 1) : null,
     toAnchorSide: normalizeCraftAnchorSide(anchors.to?.side),
-    toAnchorOffset: Number.isFinite(Number(anchors.to?.offset)) ? clampNumber(Number(anchors.to.offset), 0, 1) : null
+    toAnchorOffset: Number.isFinite(toOffset) ? clampNumber(toOffset, 0, 1) : null
   };
 }
 
@@ -3584,28 +3667,6 @@ function buildCraftSocketPath(anchor) {
   return `M ${formatPoint(corners[0])} L ${formatPoint(corners[1])} L ${formatPoint(corners[2])} L ${formatPoint(corners[3])} Z`;
 }
 
-function constrainBendPoint(point, start, end, minDistance) {
-  let constrained = { ...point };
-  constrained = pushPointFromAnchor(constrained, start, minDistance);
-  constrained = pushPointFromAnchor(constrained, end, minDistance);
-  return constrained;
-}
-
-function pushPointFromAnchor(point, anchor, minDistance) {
-  const dx = point.x - anchor.x;
-  const dy = point.y - anchor.y;
-  const distance = Math.hypot(dx, dy);
-  if (distance >= minDistance) return point;
-  if (distance < 1) {
-    return { x: anchor.x + minDistance, y: anchor.y };
-  }
-  const scale = minDistance / distance;
-  return {
-    x: anchor.x + (dx * scale),
-    y: anchor.y + (dy * scale)
-  };
-}
-
 function getBendTangent(start, bend, end) {
   const incoming = normalizeVector({ x: bend.x - start.x, y: bend.y - start.y });
   const outgoing = normalizeVector({ x: end.x - bend.x, y: end.y - bend.y });
@@ -3620,8 +3681,29 @@ function normalizeVector(vector) {
   return { x: vector.x / length, y: vector.y / length };
 }
 
+function dotVector(a, b) {
+  return (a.x * b.x) + (a.y * b.y);
+}
+
 function getPointDistance(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function isPointNearSegment(point, start, end, threshold) {
+  return getPointToSegmentDistance(point, start, end) <= threshold;
+}
+
+function getPointToSegmentDistance(point, start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = (dx * dx) + (dy * dy);
+  if (lengthSquared < 0.0001) return getPointDistance(point, start);
+  const t = clampNumber(((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared, 0, 1);
+  const projection = {
+    x: start.x + (dx * t),
+    y: start.y + (dy * t)
+  };
+  return getPointDistance(point, projection);
 }
 
 function addScaledVector(point, vector, scale) {
