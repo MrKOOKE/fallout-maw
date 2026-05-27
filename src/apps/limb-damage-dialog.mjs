@@ -45,7 +45,7 @@ export async function openLimbDamageDialog(actor, limbKey = "") {
       amount,
       damageTypeKey: data.damageTypeKey,
       mode: data.mode === "healing" ? "healing" : "damage",
-      scope: data.affectHealth ? "healthAndLimb" : "limb",
+      scope: "healthAndLimb",
       applyMitigation: false,
       processDamageTypeSettings: false,
       source: {
