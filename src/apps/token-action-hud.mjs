@@ -976,6 +976,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     tooltip.className = "fallout-maw-inventory-tooltip";
     tooltip.classList.toggle("pinned", Boolean(pinned));
     tooltip.style.setProperty("--fallout-maw-ui-scale", String(tokenActionHudScaleFactor(getTokenActionHudScalePercent())));
+    tooltip.style.pointerEvents = pinned ? "auto" : "none";
     tooltip.innerHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
       activeWeaponIndex: this.#itemTooltipWeaponTabIndex,
       baseMode: this.#itemTooltipBaseMode
@@ -1014,6 +1015,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       activeWeaponIndex: this.#itemTooltipWeaponTabIndex,
       baseMode: this.#itemTooltipBaseMode
     });
+    this.#itemTooltipElement.style.pointerEvents = this.#itemTooltipPinned ? "auto" : "none";
     this.#clampHudItemTooltipToViewport(this.#itemTooltipElement);
     requestAnimationFrame(() => {
       if (!this.#itemTooltipElement) return;

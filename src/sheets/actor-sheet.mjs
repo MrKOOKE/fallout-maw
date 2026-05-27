@@ -1976,6 +1976,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const tooltip = document.createElement("aside");
     tooltip.className = "fallout-maw-inventory-tooltip";
     tooltip.classList.toggle("pinned", Boolean(pinned));
+    tooltip.style.pointerEvents = pinned ? "auto" : "none";
     this.#applyOverlayUiScale(tooltip);
     tooltip.innerHTML = tooltipHTML;
     tooltip.addEventListener("pointerenter", () => this.#cancelInventoryTooltipClose());
@@ -2119,6 +2120,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       baseMode: this.#tooltipBaseMode
     });
     this.#tooltipElement.classList.toggle("pinned", this.#tooltipPinned);
+    this.#tooltipElement.style.pointerEvents = this.#tooltipPinned ? "auto" : "none";
     this.#clampInventoryTooltipToViewport(this.#tooltipElement);
     requestAnimationFrame(() => {
       if (!this.#tooltipElement) return;
@@ -2131,6 +2133,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #toggleWeaponModulePicker(slotElement) {
     this.#tooltipPinned = true;
     this.#tooltipElement?.classList.add("pinned");
+    if (this.#tooltipElement) this.#tooltipElement.style.pointerEvents = "auto";
     this.#bindInventoryTooltipDocumentClose();
     const weaponIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipWeaponIndex));
     const slotIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipModuleSlotIndex));
@@ -2218,6 +2221,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #pinInventoryTooltip() {
     this.#tooltipPinned = true;
     this.#tooltipElement?.classList.add("pinned");
+    if (this.#tooltipElement) this.#tooltipElement.style.pointerEvents = "auto";
     this.#bindInventoryTooltipDocumentClose();
   }
 
