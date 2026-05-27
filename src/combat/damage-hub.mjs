@@ -2910,7 +2910,7 @@ function createLimbShockCheck(actor, limbKey = "", damage = 0, nextValue = null)
 }
 
 function calculateLimbShockDifficulty(actor, limbKey = "", damage = 0, nextValue = null) {
-  const base = Math.max(0, roundDamageAmount(damage * (isCriticalLimb(actor, limbKey) ? 3 : 1)));
+  const base = Math.max(0, roundDamageAmount(damage * (isCriticalLimb(actor, limbKey) ? 2 : 1)));
   return Math.max(0, roundDamageAmount(base * getLimbShockStateMultiplier(actor, limbKey, nextValue)));
 }
 
@@ -2918,12 +2918,10 @@ function getLimbShockStateMultiplier(actor, limbKey = "", nextValue = null) {
   const limb = actor?.system?.limbs?.[limbKey];
   if (!limb) return 1;
   const min = toInteger(limb.min);
-  const max = Math.max(min, toInteger(limb.max));
-  const span = Math.max(1, max - min);
+  const span = Math.max(1, Math.abs(min));
   const value = Number.isFinite(Number(nextValue)) ? toInteger(nextValue) : toInteger(limb.value);
-  const remainingRatio = Math.min(1, Math.max(0, (value - min) / span));
-  if (remainingRatio <= 0.1) return 2;
-  return 1 + Math.min(1, Math.max(0, (1 - remainingRatio) / 0.9));
+  const negativeDepthRatio = Math.min(1, Math.max(0, -value / span));
+  return 1 + negativeDepthRatio;
 }
 
 function calculateEvenLimbHealing(actor, amount = 0, { limbStates = new Map() } = {}) {
