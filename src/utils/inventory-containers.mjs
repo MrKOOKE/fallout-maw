@@ -346,36 +346,25 @@ export function buildInventoryCellStyle(x, y, placement = null) {
 }
 
 export function prepareInventoryGridContext(contextItems, columns, rows, allItems, mapItem) {
-  const items = getItemsArray(contextItems);
-  const reservedPlacements = [];
+  const resolved = resolveInventoryGridPlacements(contextItems, columns, rows, allItems);
+  const reservedPlacements = resolved.placements;
   const placedItems = [];
-  const preferredItems = items
-    .filter(item => String(item.system?.placement?.mode ?? "inventory") === "inventory")
-    .sort((left, right) => {
-      const leftPlacement = left.system?.placement ?? {};
-      const rightPlacement = right.system?.placement ?? {};
-      const yDifference = toInteger(leftPlacement.y) - toInteger(rightPlacement.y);
-      if (yDifference !== 0) return yDifference;
-      return toInteger(leftPlacement.x) - toInteger(rightPlacement.x);
-    });
-  const deferredItems = items.filter(item => !preferredItems.includes(item));
 
-  for (const item of [...preferredItems, ...deferredItems]) {
-    const preferredPlacement = normalizeInventoryPlacement(item.system?.placement ?? {}, item, allItems);
-    const placement = isInventoryPlacementAvailable(preferredPlacement, [], columns, rows, allItems, [], reservedPlacements)
-      ? preferredPlacement
-      : findFirstAvailableInventoryPlacement([], columns, rows, item, allItems, [], reservedPlacements);
-    if (!placement) continue;
-    reservedPlacements.push(placement);
-    placedItems.push(mapItem(item, placement));
+  for (const entry of resolved.items) {
+    placedItems.push({
+      ...mapItem(entry.item, entry.placement, { phantom: entry.phantom }),
+      phantom: entry.phantom
+    });
   }
 
   const cells = [];
-  for (let y = 1; y <= rows; y += 1) {
-    for (let x = 1; x <= columns; x += 1) {
+  for (let y = 1; y <= resolved.rows; y += 1) {
+    for (let x = 1; x <= resolved.columns; x += 1) {
+      const phantom = y > rows || x > columns;
       cells.push({
         x,
         y,
+        phantom,
         occupied: reservedPlacements.some(placement => placementContainsInventoryCell(placement, x, y)),
         style: buildInventoryCellStyle(x, y)
       });
@@ -383,8 +372,11 @@ export function prepareInventoryGridContext(contextItems, columns, rows, allItem
   }
 
   return {
-    columns,
-    rows,
+    columns: resolved.columns,
+    rows: resolved.rows,
+    baseColumns: columns,
+    baseRows: rows,
+    hasPhantomItems: resolved.items.some(item => item.phantom),
     cells,
     items: placedItems
   };
@@ -439,12 +431,93 @@ function isInventoryManagedItem(itemOrSystem = null) {
 }
 
 function validateContextPlacements(contextItems, columns, rows, allItems) {
-  const placements = [];
-  for (const item of getItemsArray(contextItems)) {
-    const placement = normalizeInventoryPlacement(item.system?.placement ?? {}, item, allItems);
-    if (!isInventoryPlacementWithinBounds(placement, columns, rows)) return false;
-    if (placements.some(existing => inventoryPlacementsOverlap(existing, placement))) return false;
-    placements.push(placement);
+  return Boolean(resolveInventoryGridPlacements(contextItems, columns, rows, allItems));
+}
+
+function resolveInventoryGridPlacements(contextItems, columns, rows, allItems) {
+  columns = Math.max(1, toInteger(columns) || 1);
+  rows = Math.max(1, toInteger(rows) || 1);
+
+  const items = getItemsArray(contextItems);
+  const reservedPlacements = [];
+  const resolvedItems = [];
+  let visualColumns = columns;
+  let visualRows = rows;
+  const reservePlacement = (item, placement, phantom = false) => {
+    reservedPlacements.push(placement);
+    resolvedItems.push({ item, placement, phantom });
+    visualColumns = Math.max(visualColumns, placement.x + placement.width - 1);
+    visualRows = Math.max(visualRows, placement.y + placement.height - 1);
+  };
+  const preferredItems = items
+    .filter(item => String(item.system?.placement?.mode ?? "inventory") === "inventory")
+    .sort((left, right) => {
+      const leftPlacement = left.system?.placement ?? {};
+      const rightPlacement = right.system?.placement ?? {};
+      const yDifference = toInteger(leftPlacement.y) - toInteger(rightPlacement.y);
+      if (yDifference !== 0) return yDifference;
+      return toInteger(leftPlacement.x) - toInteger(rightPlacement.x);
+    });
+  const deferredItems = items.filter(item => !preferredItems.includes(item));
+  const unresolvedItems = [];
+
+  for (const item of preferredItems) {
+    const preferredPlacement = normalizeInventoryPlacement(item.system?.placement ?? {}, item, allItems);
+    if (isInventoryPlacementAvailable(preferredPlacement, [], columns, rows, allItems, [], reservedPlacements)) {
+      reservePlacement(item, preferredPlacement, false);
+      continue;
+    }
+    unresolvedItems.push(item);
   }
-  return true;
+
+  for (const item of [...unresolvedItems, ...deferredItems]) {
+    let phantom = false;
+    let placement = findFirstAvailableInventoryPlacement([], columns, rows, item, allItems, [], reservedPlacements);
+    if (!placement) {
+      placement = findFirstPhantomInventoryPlacement(item, allItems, columns, rows, reservedPlacements);
+      phantom = true;
+    }
+    if (!placement) return null;
+    reservePlacement(item, placement, phantom);
+  }
+
+  return {
+    columns: visualColumns,
+    rows: visualRows,
+    placements: reservedPlacements,
+    items: resolvedItems
+  };
+}
+
+function findFirstPhantomInventoryPlacement(itemOrSystem, allItems, columns, rows, reservedPlacements = []) {
+  const footprint = getItemFootprint(itemOrSystem, allItems);
+  const visualColumns = Math.max(1, columns, footprint.width);
+  const maxY = rows + Math.max(64, (reservedPlacements.length + 1) * Math.max(1, footprint.height + 1));
+
+  for (let y = rows + 1; y <= maxY; y += 1) {
+    for (let x = 1; x <= (visualColumns - footprint.width + 1); x += 1) {
+      const candidate = {
+        mode: "inventory",
+        equipmentSlot: "",
+        weaponSet: "",
+        weaponSlot: "",
+        x,
+        y,
+        width: footprint.width,
+        height: footprint.height
+      };
+      if (!reservedPlacements.some(existing => inventoryPlacementsOverlap(candidate, existing))) return candidate;
+    }
+  }
+
+  return {
+    mode: "inventory",
+    equipmentSlot: "",
+    weaponSet: "",
+    weaponSlot: "",
+    x: 1,
+    y: maxY + 1,
+    width: footprint.width,
+    height: footprint.height
+  };
 }

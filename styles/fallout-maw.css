@@ -1920,6 +1920,17 @@
   border-color: transparent;
 }
 
+.fallout-maw-inventory-cell.phantom {
+  background: rgba(160, 56, 48, 0.08);
+  border-color: rgba(210, 95, 72, 0.5);
+  border-style: dashed;
+}
+
+.fallout-maw-inventory-cell.phantom.occupied {
+  background: rgba(160, 56, 48, 0.06);
+  border-color: rgba(210, 95, 72, 0.36);
+}
+
 .fallout-maw-inventory-cell.drop-stack-preview,
 .fallout-maw-inventory-grid-item.drop-stack-preview {
   background: rgba(238, 214, 90, 0.18);
@@ -1971,6 +1982,11 @@
   cursor: default;
   filter: grayscale(0.35);
   opacity: 0.46;
+}
+
+.fallout-maw-inventory-grid-item.phantom {
+  border-color: rgba(210, 95, 72, 0.74);
+  cursor: grab;
 }
 
 .fallout-maw-inventory-item.unusable {
@@ -8983,6 +8999,17 @@ label.fallout-maw-mitigation-cell {
   border-radius: 0;
 }
 
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-cell.phantom {
+  background: rgba(178, 58, 48, 0.1);
+  border-color: rgba(207, 96, 70, 0.58);
+  border-style: dashed;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-cell.phantom.occupied {
+  background: rgba(178, 58, 48, 0.07);
+  border-color: rgba(207, 96, 70, 0.42);
+}
+
 .application.fallout-maw-actor-sheet .fallout-maw-inventory-item.equipped {
   box-shadow: inset 0 0 0 1px rgba(220, 197, 110, 0.82), 0 0 14px rgba(220, 197, 110, 0.06);
 }
@@ -8990,6 +9017,11 @@ label.fallout-maw-mitigation-cell {
 .application.fallout-maw-actor-sheet .fallout-maw-inventory-item.phantom {
   filter: grayscale(0.35);
   opacity: 0.46;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-inventory-grid-item.phantom {
+  border-color: rgba(207, 96, 70, 0.82);
+  cursor: grab;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-inventory-item.unusable {
