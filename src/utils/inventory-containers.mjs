@@ -335,6 +335,40 @@ export function findFirstAvailableInventoryPlacement(
   return null;
 }
 
+export function findFirstAvailableResolvedInventoryPlacement(
+  contextItems,
+  columns,
+  rows,
+  itemOrSystem = null,
+  allItems = contextItems,
+  excludeItemIds = [],
+  reservedPlacements = []
+) {
+  columns = Math.max(1, toInteger(columns) || 1);
+  rows = Math.max(1, toInteger(rows) || 1);
+
+  const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+  const visibleContextItems = getItemsArray(contextItems).filter(item => !excluded.has(getItemId(item)));
+  const resolved = resolveInventoryGridPlacements(visibleContextItems, columns, rows, allItems);
+  if (!resolved) return null;
+
+  const occupiedPlacements = resolved.items
+    .filter(entry => !entry.phantom)
+    .map(entry => entry.placement);
+
+  for (let y = 1; y <= rows; y += 1) {
+    for (let x = 1; x <= columns; x += 1) {
+      const candidate = createInventoryPlacement(x, y, itemOrSystem, allItems);
+      if (!isInventoryPlacementWithinBounds(candidate, columns, rows)) continue;
+      if (reservedPlacements.some(existing => inventoryPlacementsOverlap(candidate, existing))) continue;
+      if (occupiedPlacements.some(existing => inventoryPlacementsOverlap(candidate, existing))) continue;
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 export function buildInventoryCellStyle(x, y, placement = null) {
   if (placement) {
     return [

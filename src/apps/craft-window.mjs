@@ -31,11 +31,16 @@ import { FalloutMaWContainerSheet } from "../sheets/container-sheet.mjs";
 import {
   ROOT_CONTAINER_ID,
   createStoredPlacement,
-  findFirstAvailableInventoryPlacement,
+  findFirstAvailableResolvedInventoryPlacement,
+  getContainerContentsWeight,
   getContainerDimensions,
+  getContainerMaxLoad,
   getContextInventoryItems,
+  getItemContainerParentId,
+  getItemId,
   getItemMaxStack,
   getItemQuantity,
+  getItemTotalWeight,
   isContainerItem,
   normalizeInventoryPlacement,
   placementContainsInventoryCell
@@ -1213,7 +1218,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const actor = await resolveActor(this.#actorUuid);
     const recipe = await resolveDocument(this.#selectedRecipeUuid);
     this.#selectedRecipe = recipe;
-    const validation = validateCraftRequest(actor, recipe, this.#craftMode);
+    const validation = await validateCraftRequest(actor, recipe, this.#craftMode);
     if (!validation.valid) {
       ui.notifications.warn(validation.message);
       return undefined;
@@ -1259,6 +1264,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       success: linkResults.every(result => result.success),
       requirements: validation.requirements,
       outputs: validation.outputs,
+      outputPlan: validation.outputPlan,
       linkResults
     };
     this.#captureScrollPositions();
@@ -1491,7 +1497,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 }
 
-function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE) {
+async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE) {
   mode = normalizeCraftMode(mode);
   if (!actor?.isOwner) return { valid: false, message: "Нет прав на крафт этим актером." };
   if (!recipe) return { valid: false, message: "Рецепт не выбран." };
@@ -1521,19 +1527,26 @@ function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE) {
       message: mode === CRAFT_MODE_DISASSEMBLY ? "Нет предмета для разбора." : "Недостаточно компонентов для крафта."
     };
   }
+  const requirements = craft.requirements.map(requirement => ({
+    key: requirement.key,
+    sourceUuid: requirement.sourceUuid,
+    sourceKeys: requirement.sourceKeys,
+    fingerprint: requirement.fingerprint,
+    quantity: requirement.quantity
+  }));
+  const outputs = craft.outputs.map(output => ({
+    sourceUuid: output.sourceUuid,
+    quantity: output.quantity
+  }));
+  const spendPlan = createCraftRequirementSpendPlan(actor, requirements);
+  const outputPlan = await createCraftOutputPlan(actor, recipe, mode, outputs, spendPlan);
+  if (!outputPlan.valid) return outputPlan;
+
   return {
     valid: true,
-    requirements: craft.requirements.map(requirement => ({
-      key: requirement.key,
-      sourceUuid: requirement.sourceUuid,
-      sourceKeys: requirement.sourceKeys,
-      fingerprint: requirement.fingerprint,
-      quantity: requirement.quantity
-    })),
-    outputs: craft.outputs.map(output => ({
-      sourceUuid: output.sourceUuid,
-      quantity: output.quantity
-    })),
+    requirements,
+    outputs,
+    outputPlan,
     links: craft.links.map((link, index) => ({
       id: link.id,
       key: getCraftResolvedLinkKey(link, craft.nodes),
@@ -1550,16 +1563,24 @@ async function applyCraftOperation(operation) {
   if (!actor?.isOwner) throw new Error("Нет прав на крафт этим актером.");
   if (!recipe) throw new Error("Рецепт не найден.");
 
-  await spendCraftRequirements(actor, operation.requirements);
+  const spendPlan = createCraftRequirementSpendPlan(actor, operation.requirements);
+  const outputPlan = operation.success
+    ? (operation.outputPlan ?? await createCraftOutputPlan(actor, recipe, operation.mode, operation.outputs, spendPlan))
+    : { valid: true, updates: [], creates: [] };
+  if (!outputPlan.valid) throw new Error(outputPlan.message);
+
+  await spendCraftRequirements(actor, operation.requirements, spendPlan);
   if (!operation.success) return;
-  if (normalizeCraftMode(operation.mode) === CRAFT_MODE_DISASSEMBLY) {
-    await createCraftOutputResults(actor, operation.outputs);
-    return;
-  }
-  await createCraftResult(actor, recipe);
+  await applyCraftOutputPlan(actor, outputPlan);
 }
 
-async function spendCraftRequirements(actor, requirements = []) {
+async function spendCraftRequirements(actor, requirements = [], plan = null) {
+  const spendPlan = plan ?? createCraftRequirementSpendPlan(actor, requirements);
+  if (spendPlan.updates.length) await actor.updateEmbeddedDocuments("Item", spendPlan.updates);
+  if (spendPlan.deletes.length) await actor.deleteEmbeddedDocuments("Item", spendPlan.deletes);
+}
+
+function createCraftRequirementSpendPlan(actor, requirements = []) {
   const updates = [];
   const deletes = [];
 
@@ -1584,64 +1605,239 @@ async function spendCraftRequirements(actor, requirements = []) {
     if (remaining > 0) throw new Error("Компоненты закончились до завершения крафта.");
   }
 
-  if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
-  if (deletes.length) await actor.deleteEmbeddedDocuments("Item", deletes);
+  return { updates, deletes };
 }
 
-async function createCraftResult(actor, recipe) {
-  const data = recipe.toObject();
-  delete data._id;
-  delete data.folder;
-  foundry.utils.setProperty(data, "system.quantity", 1);
-  foundry.utils.setProperty(data, "system.equipped", false);
-  foundry.utils.setProperty(data, "system.container.parentId", "");
-
-  const placement = getCraftResultPlacement(actor, data);
-  const storedPlacement = placement
-    ? createStoredPlacement(placement, data)
-    : createStoredPlacement({ mode: "inventory", x: 1, y: 1 }, data);
-  foundry.utils.setProperty(data, "system.placement", storedPlacement);
-
-  data._stats ??= {};
-  data._stats.compendiumSource = recipe.pack ? recipe.uuid : null;
-  data._stats.duplicateSource = recipe.pack ? null : recipe.uuid;
-  data._stats.exportSource = null;
-
-  await actor.createEmbeddedDocuments("Item", [data]);
+async function createCraftOutputPlan(actor, recipe, mode = CRAFT_MODE_CREATE, outputs = [], spendPlan = null) {
+  const outputSpecs = await getCraftOutputSpecs(recipe, mode, outputs);
+  if (!outputSpecs.length) return { valid: true, updates: [], creates: [] };
+  const projectedItems = projectCraftInventoryState(actor, spendPlan ?? { updates: [], deletes: [] });
+  return planCraftOutputPlacement(actor, outputSpecs, projectedItems);
 }
 
-async function createCraftOutputResults(actor, outputs = []) {
+async function getCraftOutputSpecs(recipe, mode = CRAFT_MODE_CREATE, outputs = []) {
+  if (normalizeCraftMode(mode) !== CRAFT_MODE_DISASSEMBLY) {
+    return mergeCraftOutputSpecs([{
+      data: createCraftOutputItemData(recipe, { mode }),
+      quantity: getCraftRecipeOutputQuantity(recipe)
+    }]);
+  }
+
+  const specs = [];
   for (const output of outputs) {
     const source = await resolveDocument(output.sourceUuid);
     if (!source) throw new Error("Результат разбора не найден.");
-    const data = source.toObject();
-    delete data._id;
-    delete data.folder;
-    foundry.utils.setProperty(data, "system.quantity", Math.max(1, toInteger(output.quantity) || 1));
-    foundry.utils.setProperty(data, "system.equipped", false);
-    foundry.utils.setProperty(data, "system.container.parentId", "");
-
-    const placement = getCraftResultPlacement(actor, data);
-    const storedPlacement = placement
-      ? createStoredPlacement(placement, data)
-      : createStoredPlacement({ mode: "inventory", x: 1, y: 1 }, data);
-    foundry.utils.setProperty(data, "system.placement", storedPlacement);
-
-    data._stats ??= {};
-    data._stats.compendiumSource = source.pack ? source.uuid : (source._stats?.compendiumSource ?? null);
-    data._stats.duplicateSource = source.pack ? null : source.uuid;
-    data._stats.exportSource = null;
-    await actor.createEmbeddedDocuments("Item", [data]);
+    specs.push({
+      data: createCraftOutputItemData(source, { mode }),
+      quantity: Math.max(1, toInteger(output.quantity) || 1)
+    });
   }
+  return mergeCraftOutputSpecs(specs);
 }
 
-function getCraftResultPlacement(actor, itemData) {
+function getCraftRecipeOutputQuantity(recipe) {
+  const root = getCraftNodesWithRoot(recipe, CRAFT_MODE_CREATE).find(node => node.root);
+  return Math.max(1, toInteger(root?.quantity) || toInteger(recipe?.system?.quantity) || 1);
+}
+
+function createCraftOutputItemData(source, { mode = CRAFT_MODE_CREATE } = {}) {
+  const data = source.toObject();
+  delete data._id;
+  delete data.id;
+  delete data.folder;
+  foundry.utils.setProperty(data, "system.equipped", false);
+  foundry.utils.setProperty(data, "system.container.parentId", ROOT_CONTAINER_ID);
+  foundry.utils.setProperty(data, "system.placement.mode", "inventory");
+  foundry.utils.setProperty(data, "system.placement.equipmentSlot", "");
+  foundry.utils.setProperty(data, "system.placement.weaponSet", "");
+  foundry.utils.setProperty(data, "system.placement.weaponSlot", "");
+
+  data._stats ??= {};
+  if (normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY) {
+    data._stats.compendiumSource = source.pack ? source.uuid : (source._stats?.compendiumSource ?? null);
+    data._stats.duplicateSource = source.pack ? null : source.uuid;
+  } else {
+    data._stats.compendiumSource = source.pack ? source.uuid : null;
+    data._stats.duplicateSource = source.pack ? null : source.uuid;
+  }
+  data._stats.exportSource = null;
+  return data;
+}
+
+function mergeCraftOutputSpecs(specs = []) {
+  const merged = [];
+  for (const spec of specs) {
+    const quantity = Math.max(1, toInteger(spec?.quantity) || 1);
+    const data = foundry.utils.deepClone(spec?.data ?? {});
+    foundry.utils.setProperty(data, "system.quantity", 1);
+    const key = getCraftItemFingerprint(data);
+    const existing = merged.find(entry => entry.key === key);
+    if (existing) {
+      existing.quantity += quantity;
+      continue;
+    }
+    merged.push({ key, data, quantity });
+  }
+  return merged;
+}
+
+function planCraftOutputPlacement(actor, outputSpecs = [], projectedItems = []) {
+  const updates = [];
+  const creates = [];
+  const planningItems = projectedItems.map(item => foundry.utils.deepClone(item));
+
+  for (const spec of outputSpecs) {
+    const maxStack = getItemMaxStack(spec.data);
+    let remainingQuantity = Math.max(1, toInteger(spec.quantity) || 1);
+
+    for (const target of getCraftOutputStackTargets(actor, spec.data, planningItems)) {
+      if (remainingQuantity <= 0) break;
+      const availableSpace = Math.max(0, getItemMaxStack(target) - getItemQuantity(target));
+      if (!availableSpace) continue;
+      const stackQuantity = Math.min(remainingQuantity, availableSpace);
+      if (!canCraftOutputIncreaseStack(target, stackQuantity, spec.data, planningItems)) continue;
+
+      const nextQuantity = getItemQuantity(target) + stackQuantity;
+      upsertCraftOutputUpdate(updates, target, { "system.quantity": nextQuantity });
+      foundry.utils.setProperty(target, "system.quantity", nextQuantity);
+      remainingQuantity -= stackQuantity;
+    }
+
+    while (remainingQuantity > 0) {
+      const stackQuantity = Math.min(remainingQuantity, maxStack);
+      const createData = foundry.utils.deepClone(spec.data);
+      foundry.utils.setProperty(createData, "system.quantity", stackQuantity);
+      const target = findCraftOutputTarget(actor, createData, planningItems);
+      if (!target) {
+        return {
+          valid: false,
+          message: "Даже после расхода компонентов не хватает места или грузоподъемности для результатов крафта."
+        };
+      }
+
+      const storedPlacement = createStoredPlacement(target.placement, createData);
+      foundry.utils.setProperty(createData, "system.equipped", false);
+      foundry.utils.setProperty(createData, "system.container.parentId", target.parentId);
+      foundry.utils.setProperty(createData, "system.placement", storedPlacement);
+      creates.push(createData);
+
+      const syntheticId = `craft-output-${creates.length}`;
+      const projectedCreate = foundry.utils.deepClone(createData);
+      projectedCreate._id = syntheticId;
+      projectedCreate.id = syntheticId;
+      planningItems.push(projectedCreate);
+      remainingQuantity -= stackQuantity;
+    }
+  }
+
+  return { valid: true, updates, creates };
+}
+
+function getCraftOutputStackTargets(actor, itemData, planningItems = []) {
+  const parentIds = new Set(getCraftOutputContexts(actor, planningItems).map(context => context.parentId));
+  return planningItems.filter(item => (
+    actor?.items?.has(getItemId(item))
+    && parentIds.has(getItemContainerParentId(item))
+    && canStackItems(itemData, item)
+  ));
+}
+
+function canCraftOutputIncreaseStack(targetItem, quantity, itemData, planningItems = []) {
+  const parentId = getItemContainerParentId(targetItem);
+  if (!parentId) return true;
+  const container = planningItems.find(item => getItemId(item) === parentId);
+  if (!container) return false;
+  const maxLoad = getContainerMaxLoad(container);
+  const extraData = foundry.utils.deepClone(itemData);
+  foundry.utils.setProperty(extraData, "system.quantity", quantity);
+  const projectedLoad = getContainerContentsWeight(container, planningItems) + getItemTotalWeight(extraData, planningItems);
+  return projectedLoad <= maxLoad;
+}
+
+function upsertCraftOutputUpdate(updates, item, changes = {}) {
+  const itemId = getItemId(item);
+  if (!itemId) return;
+  const existing = updates.find(update => update._id === itemId);
+  if (existing) {
+    Object.assign(existing, changes);
+    return;
+  }
+  updates.push({ _id: itemId, ...changes });
+}
+
+function findCraftOutputTarget(actor, itemData, planningItems = []) {
+  for (const context of getCraftOutputContexts(actor, planningItems)) {
+    if (context.parentId && !canCraftContainerAcceptItem(context.parentId, itemData, planningItems)) continue;
+    const placement = findFirstAvailableResolvedInventoryPlacement(
+      getContextInventoryItems(context.parentId, planningItems),
+      context.dimensions.columns,
+      context.dimensions.rows,
+      itemData,
+      planningItems,
+      [],
+      []
+    );
+    if (placement) return { parentId: context.parentId, placement };
+  }
+  return null;
+}
+
+function getCraftOutputContexts(actor, planningItems = []) {
   const race = getActorRace(actor);
   const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
-  const columns = Math.max(1, toInteger(inventorySize.columns) || createDefaultInventorySize().columns);
-  const rows = Math.max(1, toInteger(inventorySize.rows) || createDefaultInventorySize().rows);
-  const contextItems = getContextInventoryItems(ROOT_CONTAINER_ID, actor.items.contents);
-  return findFirstAvailableInventoryPlacement(contextItems, columns, rows, itemData, actor.items.contents, [], []);
+  const contexts = [{
+    parentId: ROOT_CONTAINER_ID,
+    dimensions: {
+      columns: Math.max(1, toInteger(inventorySize.columns) || createDefaultInventorySize().columns),
+      rows: Math.max(1, toInteger(inventorySize.rows) || createDefaultInventorySize().rows)
+    }
+  }];
+
+  for (const item of planningItems) {
+    if (!isContainerItem(item) || !item.system?.equipped) continue;
+    const containerId = getItemId(item);
+    if (!containerId) continue;
+    contexts.push({
+      parentId: containerId,
+      dimensions: getContainerDimensions(item)
+    });
+  }
+  return contexts;
+}
+
+function canCraftContainerAcceptItem(containerId, itemData, planningItems = []) {
+  const container = planningItems.find(item => getItemId(item) === containerId);
+  if (!container) return false;
+  const projectedLoad = getContainerContentsWeight(container, planningItems) + getItemTotalWeight(itemData, planningItems);
+  return projectedLoad <= getContainerMaxLoad(container);
+}
+
+function projectCraftInventoryState(actor, { updates = [], deletes = [], creates = [] } = {}) {
+  const itemMap = new Map(actor.items.contents.map(item => [item.id, item.toObject()]));
+  for (const update of updates) {
+    if (!update?._id || !itemMap.has(update._id)) continue;
+    const nextData = foundry.utils.deepClone(itemMap.get(update._id));
+    for (const [key, value] of Object.entries(update)) {
+      if (key === "_id") continue;
+      foundry.utils.setProperty(nextData, key, value);
+    }
+    itemMap.set(update._id, nextData);
+  }
+  for (const deleteId of deletes) itemMap.delete(deleteId);
+  let syntheticIndex = 0;
+  for (const createData of creates) {
+    const syntheticId = String(createData?._id ?? `synthetic-${syntheticIndex += 1}`);
+    const nextData = foundry.utils.deepClone(createData);
+    nextData._id = syntheticId;
+    nextData.id = syntheticId;
+    itemMap.set(syntheticId, nextData);
+  }
+  return Array.from(itemMap.values());
+}
+
+async function applyCraftOutputPlan(actor, outputPlan = {}) {
+  if (outputPlan.updates?.length) await actor.updateEmbeddedDocuments("Item", outputPlan.updates);
+  if (outputPlan.creates?.length) await actor.createEmbeddedDocuments("Item", outputPlan.creates);
 }
 
 function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CREATE, pulse = null } = {}) {
