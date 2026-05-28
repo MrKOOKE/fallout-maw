@@ -2,7 +2,12 @@
 import { getCreatureOptions } from "../settings/accessors.mjs";
 import { createDefaultInventorySize } from "../settings/creature-options.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { canUseWeaponSlotForItem, getRaceEquipmentSlotsForItem } from "../utils/equipment-slots.mjs";
+import {
+  canUseWeaponSlotForItem,
+  getRaceEquipmentSlotsForItem,
+  getSelectedEquipmentSlotKeys,
+  getWeaponSlotRequirement
+} from "../utils/equipment-slots.mjs";
 import {
   canStackItems,
   copyActorInventoryItem,
@@ -1367,7 +1372,7 @@ function validateCraftRequest(actor, recipe) {
   const craft = getCraftRenderData(recipe, actor);
   if (!craft.links.length) return { valid: false, message: "В рецепте нет связей для проверок." };
   if (!craft.requirements.length) return { valid: false, message: "В рецепте нет компонентов." };
-  if (craft.requirements.some(requirement => !requirement.sourceUuid)) {
+  if (craft.requirements.some(requirement => !requirement.sourceUuid && !requirement.fingerprint)) {
     return { valid: false, message: "В рецепте есть компонент без исходного документа." };
   }
   if (craft.requirements.some(requirement => requirement.owned < requirement.quantity)) {
@@ -1376,7 +1381,10 @@ function validateCraftRequest(actor, recipe) {
   return {
     valid: true,
     requirements: craft.requirements.map(requirement => ({
+      key: requirement.key,
       sourceUuid: requirement.sourceUuid,
+      sourceKeys: requirement.sourceKeys,
+      fingerprint: requirement.fingerprint,
       quantity: requirement.quantity
     })),
     links: craft.links.map(link => ({
@@ -1405,8 +1413,7 @@ async function spendCraftRequirements(actor, requirements = []) {
   for (const requirement of requirements) {
     let remaining = Math.max(0, toInteger(requirement.quantity));
     if (!remaining) continue;
-    const sourceUuid = String(requirement.sourceUuid ?? "");
-    const candidates = actor.items.contents.filter(item => getActorItemSourceUuid(item) === sourceUuid);
+    const candidates = actor.items.contents.filter(item => craftItemMatchesRequirement(item, requirement));
 
     for (const item of candidates) {
       if (remaining <= 0) break;
@@ -1490,14 +1497,15 @@ function createEmptyCraftContext(busy = false) {
 function getCraftRenderData(recipe, actor) {
   const nodes = getCraftNodesWithRoot(recipe);
   const links = getCraftLinks(recipe);
-  const requirementsBySource = getCraftRequirementsBySource(nodes);
-  const ownedBySource = getActorOwnedCraftSources(actor);
+  const requirements = getCraftRequirements(nodes);
+  const requirementByNodeId = new Map(requirements.flatMap(requirement => requirement.nodeIds.map(nodeId => [nodeId, requirement])));
+  const ownedByRequirement = getActorOwnedCraftRequirements(actor, requirements);
   const blocks = getCraftBlocks(nodes);
   const viewport = getCraftViewport(recipe);
   const sourceMissing = new Set(
-    Array.from(requirementsBySource.entries())
-      .filter(([sourceUuid, quantity]) => (ownedBySource.get(sourceUuid) ?? 0) < quantity)
-      .map(([sourceUuid]) => sourceUuid)
+    requirements
+      .filter(requirement => (ownedByRequirement.get(requirement.key) ?? 0) < requirement.quantity)
+      .map(requirement => requirement.key)
   );
 
   return {
@@ -1507,54 +1515,178 @@ function getCraftRenderData(recipe, actor) {
       style: buildCraftNodeStyle(block)
     })),
     nodes: nodes.map((node, index) => {
-      const sourceUuid = getCraftNodeSourceUuid(node);
+      const requirement = node.root ? null : requirementByNodeId.get(node.id);
+      const sourceUuid = requirement?.sourceUuid ?? getCraftNodeSourceUuid(node);
       const quantity = Math.max(1, toInteger(node.quantity) || 1);
-      const owned = node.root ? quantity : (ownedBySource.get(sourceUuid) ?? 0);
+      const owned = node.root ? quantity : (ownedByRequirement.get(requirement?.key) ?? 0);
       return {
         ...node,
         index,
         sourceUuid,
+        sourceKeys: requirement?.sourceKeys ?? [],
         quantity,
         owned,
-        missing: !node.root && sourceMissing.has(sourceUuid),
+        missing: !node.root && sourceMissing.has(requirement?.key),
         style: buildCraftNodeStyle(node)
       };
     }),
     links,
-    requirements: Array.from(requirementsBySource.entries()).map(([sourceUuid, quantity]) => ({
-      sourceUuid,
-      quantity,
-      owned: ownedBySource.get(sourceUuid) ?? 0
+    requirements: requirements.map(requirement => ({
+      key: requirement.key,
+      sourceUuid: requirement.sourceUuid,
+      sourceKeys: requirement.sourceKeys,
+      fingerprint: requirement.fingerprint,
+      quantity: requirement.quantity,
+      owned: ownedByRequirement.get(requirement.key) ?? 0
     })),
     viewport,
     viewportStyle: `--craft-pan-x: ${Math.round(viewport.x)}px; --craft-pan-y: ${Math.round(viewport.y)}px; --craft-zoom: ${viewport.zoom};`
   };
 }
 
-function getCraftRequirementsBySource(nodes = []) {
-  const requirements = new Map();
+function getCraftRequirements(nodes = []) {
+  const requirements = [];
   for (const node of nodes) {
     if (node.root) continue;
     const sourceUuid = getCraftNodeSourceUuid(node);
     const quantity = Math.max(1, toInteger(node.quantity) || 1);
-    requirements.set(sourceUuid, (requirements.get(sourceUuid) ?? 0) + quantity);
+    const sourceItem = resolveDocumentSync(sourceUuid);
+    const sourceKeys = getCraftItemSourceKeys(sourceItem, sourceUuid);
+    const fingerprint = getCraftItemFingerprint(sourceItem ?? node);
+    const key = getCraftRequirementKey({ sourceKeys, fingerprint, sourceUuid });
+    const existing = requirements.find(requirement => requirement.key === key);
+    if (existing) {
+      existing.quantity += quantity;
+      existing.nodeIds.push(node.id);
+      continue;
+    }
+    requirements.push({
+      key,
+      sourceUuid,
+      sourceKeys: Array.from(sourceKeys),
+      fingerprint,
+      quantity,
+      nodeIds: [node.id]
+    });
   }
   return requirements;
 }
 
-function getActorOwnedCraftSources(actor) {
+function getActorOwnedCraftRequirements(actor, requirements = []) {
   const sources = new Map();
-  for (const item of actor?.items?.contents ?? []) {
-    const sourceUuid = getActorItemSourceUuid(item);
-    if (!sourceUuid) continue;
-    sources.set(sourceUuid, (sources.get(sourceUuid) ?? 0) + getItemQuantity(item));
+  for (const requirement of requirements) {
+    let quantity = 0;
+    for (const item of actor?.items?.contents ?? []) {
+      if (!craftItemMatchesRequirement(item, requirement)) continue;
+      quantity += getItemQuantity(item);
+    }
+    sources.set(requirement.key, quantity);
   }
   return sources;
 }
 
-function getActorItemSourceUuid(item) {
-  const stats = item?._stats ?? item?._source?._stats ?? {};
-  return String(stats.compendiumSource || stats.duplicateSource || "").trim();
+function craftItemMatchesRequirement(item, requirement = {}) {
+  if (getItemQuantity(item) <= 0) return false;
+  const fingerprint = String(requirement.fingerprint ?? "");
+  if (fingerprint && getCraftItemFingerprint(item) !== fingerprint) return false;
+
+  const requirementKeys = new Set(Array.from(requirement.sourceKeys ?? []).map(key => String(key ?? "").trim()).filter(Boolean));
+  const itemKeys = getCraftItemSourceKeys(item);
+  if (requirementKeys.size && itemKeys.size) {
+    return setsIntersect(requirementKeys, itemKeys);
+  }
+
+  return Boolean(fingerprint);
+}
+
+function getCraftRequirementKey({ sourceKeys = new Set(), fingerprint = "", sourceUuid = "" } = {}) {
+  const normalizedKeys = Array.from(sourceKeys).map(key => String(key ?? "").trim()).filter(Boolean).sort();
+  return JSON.stringify({
+    source: normalizedKeys.length ? normalizedKeys : [String(sourceUuid ?? "").trim()].filter(Boolean),
+    fingerprint: String(fingerprint ?? "")
+  });
+}
+
+function getCraftItemSourceKeys(itemOrDocument = null, fallbackUuid = "") {
+  const keys = new Set();
+  collectCraftItemSourceKeys(keys, itemOrDocument, fallbackUuid);
+  return keys;
+}
+
+function collectCraftItemSourceKeys(keys, itemOrDocument = null, fallbackUuid = "", depth = 0) {
+  if (depth > 4) return;
+  const document = typeof itemOrDocument === "string" ? resolveDocumentSync(itemOrDocument) : itemOrDocument;
+  for (const key of [
+    fallbackUuid,
+    document?.uuid,
+    document?._stats?.compendiumSource,
+    document?._stats?.duplicateSource,
+    document?._source?._stats?.compendiumSource,
+    document?._source?._stats?.duplicateSource,
+    foundry.utils.getProperty(document, "flags.core.sourceId"),
+    foundry.utils.getProperty(document, "_source.flags.core.sourceId"),
+    foundry.utils.getProperty(document, "flags.fallout-maw.sourceId"),
+    foundry.utils.getProperty(document, "_source.flags.fallout-maw.sourceId")
+  ]) {
+    const normalized = String(key ?? "").trim();
+    if (normalized) keys.add(normalized);
+  }
+
+  for (const key of Array.from(keys)) {
+    if (key === fallbackUuid || key === document?.uuid) continue;
+    const sourceDocument = resolveDocumentSync(key);
+    if (sourceDocument) collectCraftItemSourceKeys(keys, sourceDocument, "", depth + 1);
+  }
+}
+
+function getCraftItemFingerprint(itemOrNode = null) {
+  const system = itemOrNode?.system ?? itemOrNode ?? {};
+  const footprint = getCraftItemFootprint(itemOrNode);
+  const weaponRequirement = getWeaponSlotRequirement(system);
+  return JSON.stringify(normalizeStackComparableValue({
+    type: itemOrNode?.type ?? system?.type ?? "",
+    name: itemOrNode?.name ?? "",
+    img: normalizeImagePath(itemOrNode?.img || FALLBACK_ICON),
+    weight: Number(system.weight) || 0,
+    price: Number(system.price) || 0,
+    priceCurrency: String(system.priceCurrency ?? ""),
+    maxStack: getItemMaxStack(itemOrNode),
+    width: footprint.width,
+    height: footprint.height,
+    equipmentSlots: Array.from(getSelectedEquipmentSlotKeys(system)).sort(),
+    weaponSlotRequirement: {
+      mode: weaponRequirement.mode,
+      selectedKeys: Array.from(weaponRequirement.selectedKeys).sort()
+    },
+    functions: system.functions ?? {}
+  }));
+}
+
+function normalizeStackComparableValue(value) {
+  if (typeof value?.toObject === "function") return normalizeStackComparableValue(value.toObject(false));
+  if (value instanceof Set) return Array.from(value).sort();
+  if (Array.isArray(value)) return value.map(entry => normalizeStackComparableValue(entry));
+  if (!value || typeof value !== "object") return value ?? null;
+
+  const entries = Object.entries(value)
+    .filter(([, entryValue]) => entryValue !== undefined)
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
+  return Object.fromEntries(entries.map(([key, entryValue]) => [key, normalizeStackComparableValue(entryValue)]));
+}
+
+function setsIntersect(left, right) {
+  for (const value of left) {
+    if (right.has(value)) return true;
+  }
+  return false;
+}
+
+function getCraftItemFootprint(itemOrNode = null) {
+  const placement = itemOrNode?.system?.placement ?? itemOrNode?.placement ?? {};
+  return {
+    width: Math.max(1, toInteger(placement.width) || toInteger(itemOrNode?.width) || 1),
+    height: Math.max(1, toInteger(placement.height) || toInteger(itemOrNode?.height) || 1)
+  };
 }
 
 function getCraftNodeSourceUuid(node) {
@@ -2424,7 +2556,11 @@ async function resolveDocument(uuid) {
 function resolveDocumentSync(uuid) {
   const normalized = String(uuid ?? "").trim();
   if (!normalized) return null;
-  return globalThis.fromUuidSync?.(normalized) ?? foundry.utils.fromUuidSync?.(normalized) ?? null;
+  try {
+    return globalThis.fromUuidSync?.(normalized) ?? foundry.utils.fromUuidSync?.(normalized) ?? null;
+  } catch (_error) {
+    return null;
+  }
 }
 
 function waitForAnimationFrame() {
