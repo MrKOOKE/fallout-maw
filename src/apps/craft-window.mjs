@@ -550,7 +550,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       if (canStackItems(item.toObject(), targetItem)) {
         quantity = await this.#getCraftStackQuantity(item, targetItem, event);
       } else {
-        quantity = await this.#getCraftTransferQuantity(item, event);
+        quantity = Math.max(1, getItemQuantity(item));
       }
       if (!quantity) return null;
       const pointerPlacement = placementRequest.mode === "inventory"
@@ -656,18 +656,6 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       actionLabel: "Сложить",
       max: maxTransfer,
       value: maxTransfer
-    });
-  }
-
-  async #getCraftTransferQuantity(sourceItem, event) {
-    const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
-    if (event?.shiftKey || sourceQuantity <= 1 || isContainerItem(sourceItem)) return sourceQuantity;
-    return promptSearchItemStackQuantity({
-      item: sourceItem,
-      title: "Перенести предметы",
-      actionLabel: "Перенести",
-      max: sourceQuantity,
-      value: sourceQuantity
     });
   }
 
@@ -1734,12 +1722,17 @@ function planCraftOutputPlacement(actor, outputSpecs = [], projectedItems = []) 
 }
 
 function getCraftOutputStackTargets(actor, itemData, planningItems = []) {
-  const parentIds = new Set(getCraftOutputContexts(actor, planningItems).map(context => context.parentId));
+  const contextOrder = new Map(getCraftOutputContexts(actor, planningItems).map((context, index) => [context.parentId, index]));
   return planningItems.filter(item => (
     actor?.items?.has(getItemId(item))
-    && parentIds.has(getItemContainerParentId(item))
+    && contextOrder.has(getItemContainerParentId(item))
     && canStackItems(itemData, item)
-  ));
+  )).sort((left, right) => {
+    const leftContext = contextOrder.get(getItemContainerParentId(left)) ?? Number.MAX_SAFE_INTEGER;
+    const rightContext = contextOrder.get(getItemContainerParentId(right)) ?? Number.MAX_SAFE_INTEGER;
+    if (leftContext !== rightContext) return leftContext - rightContext;
+    return getItemQuantity(right) - getItemQuantity(left);
+  });
 }
 
 function canCraftOutputIncreaseStack(targetItem, quantity, itemData, planningItems = []) {
@@ -1845,6 +1838,7 @@ function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CR
   const data = getCraftRenderData(recipe, actor, mode);
   const missingCount = data.requirements.filter(requirement => requirement.owned < requirement.quantity).length;
   const checks = getCraftCheckSummaries(data.links);
+  const hasRequiredComponents = missingCount === 0;
   return {
     mode,
     ...data,
@@ -1855,7 +1849,7 @@ function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CR
       pulseClass: shouldPulseCraftNode(node, mode, pulse) ? (pulse.success ? "craft-pulse-success" : "craft-pulse-failure") : ""
     })),
     checks,
-    canCraft: Boolean(actor?.isOwner && !busy && data.links.length && data.requirements.length && (mode !== CRAFT_MODE_DISASSEMBLY || data.outputs.length)),
+    canCraft: Boolean(actor?.isOwner && !busy && data.links.length && data.requirements.length && hasRequiredComponents && (mode !== CRAFT_MODE_DISASSEMBLY || data.outputs.length)),
     summary: missingCount
       ? (mode === CRAFT_MODE_DISASSEMBLY ? "Нет предмета для разбора" : `Не хватает компонентов: ${missingCount}`)
       : (mode === CRAFT_MODE_DISASSEMBLY ? `Результаты: ${data.outputs.length}` : `Компоненты: ${data.requirements.length}`)
