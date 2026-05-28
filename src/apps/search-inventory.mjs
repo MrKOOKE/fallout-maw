@@ -4334,7 +4334,7 @@ export function getSearchDropPlacementForPointer({ actor, itemData, sourceActor,
   ))?.placement ?? null;
 }
 
-function getSearchInventoryGridPointerPosition(event = null, grid = null, actor = null, parentId = ROOT_CONTAINER_ID) {
+export function getSearchInventoryGridPointerPosition(event = null, grid = null, actor = null, parentId = ROOT_CONTAINER_ID) {
   const clientX = Number(event?.clientX);
   const clientY = Number(event?.clientY);
   if (!grid || !actor || !Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;

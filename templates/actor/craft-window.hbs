@@ -154,7 +154,7 @@
 
     <aside class="fallout-maw-craft-window-recipes">
       <h2>Рецепты</h2>
-      <div class="fallout-maw-craft-window-recipe-list fallout-maw-pane-scroll">
+      <div class="fallout-maw-craft-window-recipe-list fallout-maw-pane-scroll" data-search-scroll-key="craft:recipes">
         {{#each recipes}}
         <article class="fallout-maw-craft-window-recipe {{#if selected}}selected{{/if}}" role="button" tabindex="0" data-recipe-uuid="{{uuid}}">
           <img src="{{img}}" alt="{{name}}">

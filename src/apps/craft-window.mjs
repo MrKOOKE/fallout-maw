@@ -10,6 +10,7 @@ import {
   getDropZonePlacementRequest,
   getFirstAvailableActorInventoryPlacement,
   getSearchDropPlacementForPointer,
+  getSearchInventoryGridPointerPosition,
   prepareSearchActorContext,
   promptSearchItemStackQuantity,
   resolveActorPlacement,
@@ -88,7 +89,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #tooltipWeaponTabIndex = 0;
   #hookIds = [];
   #linkRenderFrame = 0;
+  #renderRefresh = null;
   #resizeObserver = null;
+  #scrollPositions = new Map();
   #viewportResizeHandler = null;
   #uiScale = 1;
 
@@ -196,6 +199,12 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _onFirstRender(context, options) {
     await super._onFirstRender(context, options);
+    this.#renderRefresh = foundry.utils.debounce(() => {
+      if (!this.rendered) return;
+      this.#captureScrollPositions();
+      this.#clearInventoryTooltip({ force: true });
+      void this.#renderPreservingWindowStack();
+    }, 60);
     this.#hookIds = [
       ["updateActor", Hooks.on("updateActor", actor => this.#scheduleRefreshForActor(actor))],
       ["deleteActor", Hooks.on("deleteActor", actor => this.#scheduleRefreshForActor(actor))],
@@ -207,13 +216,21 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#hoverPreviewInputKey = "";
+    this.#hoverPreviewKey = "";
     this.setPosition();
     this.#bindViewportResize();
     this._dragDrop.bind(this.element);
     this.#bindInventoryListeners();
+    this.#activateWeaponSlotAspectSizing();
+    this.#restoreScrollPositions();
     this.#activateControls();
     this.#activateCraftViewer();
     this.#startPendingOperation();
+  }
+
+  #renderPreservingWindowStack(options = {}) {
+    return this.render({ ...options, force: !this.rendered });
   }
 
   async _onClose(options) {
@@ -227,6 +244,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
     for (const [hookName, hookId] of this.#hookIds) Hooks.off(hookName, hookId);
     this.#hookIds = [];
+    this.#scrollPositions.clear();
     if (craftWindow === this) craftWindow = null;
   }
 
@@ -281,16 +299,51 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#viewportResizeHandler = null;
   }
 
+  #activateWeaponSlotAspectSizing() {
+    const images = this.element?.querySelectorAll(".fallout-maw-weapon-slot .fallout-maw-inventory-item > img") ?? [];
+    for (const image of images) {
+      const applyAspect = () => setWeaponSlotImageAspect(image);
+      if (image.complete && image.naturalWidth && image.naturalHeight) applyAspect();
+      else image.addEventListener("load", applyAspect, { once: true });
+    }
+  }
+
+  #captureScrollPositions() {
+    this.element?.querySelectorAll("[data-search-scroll-key]").forEach(element => {
+      const key = String(element.dataset.searchScrollKey ?? "");
+      if (!key) return;
+      this.#scrollPositions.set(key, {
+        left: element.scrollLeft ?? 0,
+        top: element.scrollTop ?? 0
+      });
+    });
+  }
+
+  #restoreScrollPositions() {
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    view.requestAnimationFrame(() => {
+      if (!this.rendered) return;
+      for (const element of this.element?.querySelectorAll("[data-search-scroll-key]") ?? []) {
+        const key = String(element.dataset.searchScrollKey ?? "");
+        const position = this.#scrollPositions.get(key);
+        if (!position) continue;
+        element.scrollLeft = position.left;
+        element.scrollTop = position.top;
+      }
+    });
+  }
+
   #activateControls() {
     this.element?.querySelectorAll("[data-recipe-uuid]").forEach(button => {
       button.addEventListener("click", event => {
         event.preventDefault();
         if (this.#busy) return;
+        this.#captureScrollPositions();
         this.#selectedRecipeUuid = String(event.currentTarget?.dataset?.recipeUuid ?? "");
         this.#selectedRecipe = null;
         this.#craftViewportOverride = null;
         this.#pulse = null;
-        void this.render({ force: true });
+        void this.#renderPreservingWindowStack();
       });
       button.addEventListener("keydown", event => {
         if (!["Enter", " "].includes(event.key)) return;
@@ -402,6 +455,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       if (!item) return null;
       const zone = this.#getInventoryDropZone(event);
       if (!zone) return null;
+      this.#captureScrollPositions();
       const placementRequest = getDropZonePlacementRequest(zone);
       const parentId = placementRequest.mode === "inventory" ? getDropZoneParentId(zone) : ROOT_CONTAINER_ID;
       const targetItem = this.#getTargetStackItem(zone, item, parentId);
@@ -437,7 +491,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         targetItemId: targetItem?.id ?? "",
         quantity
       });
-      if (this.rendered) await this.render({ force: true });
+      if (this.rendered) await this.#renderPreservingWindowStack();
       return moved;
     } finally {
       this._onDragEnd();
@@ -446,12 +500,32 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #getInventoryDropZone(eventOrTarget) {
     const target = eventOrTarget?.target ?? eventOrTarget;
-    const pointedElement = Number.isFinite(Number(eventOrTarget?.clientX))
-      ? document.elementFromPoint(eventOrTarget.clientX, eventOrTarget.clientY)
-      : null;
-    return pointedElement?.closest?.("[data-inventory-cell], [data-inventory-grid-item], [data-search-drop-zone]")
-      ?? target?.closest?.("[data-inventory-cell], [data-inventory-grid-item], [data-search-drop-zone]")
-      ?? null;
+    const pointedCell = this.#getInventoryCellAtPointer(eventOrTarget, target);
+    if (pointedCell) return pointedCell;
+
+    const targetItem = target?.closest?.("[data-inventory-grid-item][data-item-id][data-search-actor-uuid]");
+    if (targetItem && this.element?.contains(targetItem)) return targetItem;
+    return target?.closest?.("[data-search-drop-zone]") ?? null;
+  }
+
+  #getInventoryCellAtPointer(eventOrTarget, target = null) {
+    const clientX = Number(eventOrTarget?.clientX);
+    const clientY = Number(eventOrTarget?.clientY);
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+
+    const pointedElement = document.elementFromPoint(clientX, clientY);
+    const grid = (
+      target?.closest?.("[data-inventory-grid]")
+      ?? pointedElement?.closest?.("[data-inventory-grid]")
+      ?? null
+    );
+    if (!grid || !this.element?.contains(grid)) return null;
+
+    const pointer = getSearchInventoryGridPointerPosition(eventOrTarget, grid, this.#actor, getDropZoneParentId(grid));
+    if (!pointer) return null;
+    const x = Math.round(pointer.x);
+    const y = Math.round(pointer.y);
+    return grid.querySelector(`[data-inventory-cell][data-x="${x}"][data-y="${y}"]`) ?? null;
   }
 
   #getTargetStackItem(target, sourceItem, parentId = ROOT_CONTAINER_ID) {
@@ -468,8 +542,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const y = toInteger(cell.dataset.y);
     return getContextInventoryItems(parentId, this.#actor.items).find(item => {
       if (item.id === sourceItem.id) return false;
-      const placement = item.system?.placement ?? {};
-      if (String(placement.mode ?? "inventory") !== "inventory") return false;
+      const placement = normalizeInventoryPlacement(item.system?.placement ?? {}, item, this.#actor.items);
       return placementContainsInventoryCell(placement, x, y);
     }) ?? null;
   }
@@ -517,23 +590,25 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       return;
     }
 
+    const actor = zone.dataset.searchActorUuid === this.#actor?.uuid ? this.#actor : null;
     if (zone.dataset.equipmentSlot || (zone.dataset.weaponSet && zone.dataset.weaponSlot)) {
-      const inputKey = `slot:${zone.dataset.equipmentSlot ?? ""}:${zone.dataset.weaponSet ?? ""}:${zone.dataset.weaponSlot ?? ""}:${this.#draggedItemId}`;
+      const inputKey = `slot:${actor?.uuid ?? ""}:${zone.dataset.equipmentSlot ?? ""}:${zone.dataset.weaponSet ?? ""}:${zone.dataset.weaponSlot ?? ""}:${this.#actor?.uuid ?? ""}:${this.#draggedItemId}`;
       if (this.#hoverPreviewInputKey === inputKey) return;
       this.#hoverPreviewInputKey = inputKey;
-      if (!this.#actor || !this.#draggedItemData) {
+      if (!actor || !this.#draggedItemData) {
         this.#clearInventoryHoverPreviewClasses();
         return;
       }
       const placementRequest = getDropZonePlacementRequest(zone);
-      if (resolveActorPlacement(this.#actor, this.#draggedItemData, {
+      const excludeItemIds = actor.uuid === this.#actor?.uuid && this.#draggedItemId ? [this.#draggedItemId] : [];
+      if (resolveActorPlacement(actor, this.#draggedItemData, {
         mode: placementRequest.mode,
         equipmentSlot: placementRequest.equipmentSlot,
         weaponSet: placementRequest.weaponSet,
         weaponSlot: placementRequest.weaponSlot,
         x: 1,
         y: 1
-      }, this.#draggedItemId ? [this.#draggedItemId] : [])) {
+      }, excludeItemIds)) {
         this.#applySingleZonePreview(zone, inputKey);
         return;
       }
@@ -546,24 +621,24 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       return;
     }
 
-    const parentId = getDropZoneParentId(zone);
-    if (!this.#actor || !this.#draggedItemData) {
-      this.#applySingleZonePreview(zone, `inventory-cell:${parentId}:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}`);
+    if (!actor || !this.#draggedItemData) {
+      this.#applySingleZonePreview(zone, `inventory-cell:${zone.dataset.searchActorUuid ?? ""}:${getDropZoneParentId(zone)}:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}`);
       return;
     }
 
-    const inputKey = `inventory:${this.#actor.uuid}:${parentId}:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}:${this.#draggedItemId}`;
+    const parentId = getDropZoneParentId(zone);
+    const inputKey = `inventory:${actor.uuid}:${parentId}:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}:${this.#actor?.uuid ?? ""}:${this.#draggedItemId}`;
     if (this.#hoverPreviewInputKey === inputKey) return;
     this.#hoverPreviewInputKey = inputKey;
-    const sourceItem = this.#actor.items.get(this.#draggedItemId);
+    const sourceItem = this.#actor?.items.get(this.#draggedItemId);
     const targetItem = sourceItem ? this.#getTargetStackItem(zone, sourceItem, parentId) : null;
     if (canStackItems(this.#draggedItemData, targetItem)) {
-      this.#applyInventoryStackPreview(parentId, targetItem);
+      this.#applyInventoryStackPreview(actor, parentId, targetItem);
       return;
     }
 
     const placement = getSearchDropPlacementForPointer({
-      actor: this.#actor,
+      actor,
       itemData: this.#draggedItemData,
       sourceActor: this.#actor,
       sourceItemId: this.#draggedItemId,
@@ -575,7 +650,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#clearInventoryHoverPreviewClasses();
       return;
     }
-    this.#applyInventoryPlacementPreview(parentId, placement);
+    this.#applyInventoryPlacementPreview(actor, parentId, placement);
   }
 
   #applySingleZonePreview(zone, key = "") {
@@ -586,40 +661,42 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     zone?.classList?.add("drop-preview");
   }
 
-  #applyInventoryPlacementPreview(parentId, placement) {
+  #applyInventoryPlacementPreview(actor, parentId, placement) {
     if (!placement) return;
-    const previewKey = `inventory:${parentId ?? ROOT_CONTAINER_ID}:${placement.x}:${placement.y}:${placement.width}:${placement.height}`;
+    const previewKey = `inventory:${actor.uuid}:${parentId ?? ROOT_CONTAINER_ID}:${placement.x}:${placement.y}:${placement.width}:${placement.height}`;
     if (this.#hoverPreviewKey === previewKey) return;
     this.#clearInventoryHoverPreviewClasses();
     this.#hoverPreviewKey = previewKey;
+    const escapedUuid = CSS.escape(actor.uuid);
     const escapedParentId = CSS.escape(parentId ?? ROOT_CONTAINER_ID);
     for (let y = placement.y; y < placement.y + placement.height; y += 1) {
       for (let x = placement.x; x < placement.x + placement.width; x += 1) {
         this.element?.querySelector(
-          `[data-inventory-cell][data-inventory-parent-id="${escapedParentId}"][data-x="${x}"][data-y="${y}"]`
+          `[data-inventory-cell][data-search-actor-uuid="${escapedUuid}"][data-inventory-parent-id="${escapedParentId}"][data-x="${x}"][data-y="${y}"]`
         )?.classList.add("drop-preview");
       }
     }
   }
 
-  #applyInventoryStackPreview(parentId, targetItem) {
-    if (!targetItem) return;
-    const previewKey = `stack:${parentId ?? ROOT_CONTAINER_ID}:${targetItem.id}:${getItemQuantity(targetItem)}:${getItemMaxStack(targetItem)}`;
+  #applyInventoryStackPreview(actor, parentId, targetItem) {
+    if (!actor || !targetItem) return;
+    const previewKey = `stack:${actor.uuid}:${parentId ?? ROOT_CONTAINER_ID}:${targetItem.id}:${getItemQuantity(targetItem)}:${getItemMaxStack(targetItem)}`;
     if (this.#hoverPreviewKey === previewKey) return;
     this.#clearInventoryHoverPreviewClasses();
     this.#hoverPreviewKey = previewKey;
 
+    const escapedUuid = CSS.escape(actor.uuid);
     const escapedParentId = CSS.escape(parentId ?? ROOT_CONTAINER_ID);
     const escapedItemId = CSS.escape(targetItem.id);
     this.element?.querySelector(
-      `[data-inventory-grid-item][data-item-id="${escapedItemId}"][data-inventory-parent-id="${escapedParentId}"]`
+      `[data-inventory-grid-item][data-search-actor-uuid="${escapedUuid}"][data-item-id="${escapedItemId}"][data-inventory-parent-id="${escapedParentId}"]`
     )?.classList.add("drop-stack-preview");
 
-    const placement = normalizeInventoryPlacement(targetItem.system?.placement ?? {}, targetItem, this.#actor.items);
+    const placement = normalizeInventoryPlacement(targetItem.system?.placement ?? {}, targetItem, actor.items);
     for (let y = placement.y; y < placement.y + placement.height; y += 1) {
       for (let x = placement.x; x < placement.x + placement.width; x += 1) {
         this.element?.querySelector(
-          `[data-inventory-cell][data-inventory-parent-id="${escapedParentId}"][data-x="${x}"][data-y="${y}"]`
+          `[data-inventory-cell][data-search-actor-uuid="${escapedUuid}"][data-inventory-parent-id="${escapedParentId}"][data-x="${x}"][data-y="${y}"]`
         )?.classList.add("drop-stack-preview");
       }
     }
@@ -1010,18 +1087,18 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #scheduleRefreshForActor(actor) {
     if (!actor || actor.uuid !== this.#actorUuid) return;
-    if (this.rendered) void this.render({ force: true });
+    this.#renderRefresh?.();
   }
 
   #scheduleRefreshForItem(item) {
     if (!item) return;
     if (item.parent?.uuid === this.#actorUuid) {
-      if (this.rendered && !this.#busy) void this.render({ force: true });
+      if (!this.#busy) this.#renderRefresh?.();
       return;
     }
     if (!item.parent) {
       craftRecipeCache = null;
-      if (this.rendered && !this.#busy) void this.render({ force: true });
+      if (!this.#busy) this.#renderRefresh?.();
     }
   }
 
@@ -1040,7 +1117,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
     this.#busy = true;
     this.#pulse = null;
-    await this.render({ force: true });
+    this.#captureScrollPositions();
+    await this.#renderPreservingWindowStack();
 
     const linkResults = [];
     for (const link of validation.links) {
@@ -1054,7 +1132,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       });
       if (!outcome) {
         this.#busy = false;
-        await this.render({ force: true });
+        this.#captureScrollPositions();
+        await this.#renderPreservingWindowStack();
         ui.notifications.warn("Проверка крафта не выполнена.");
         return undefined;
       }
@@ -1074,7 +1153,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       requirements: validation.requirements,
       linkResults
     };
-    await this.render({ force: true });
+    this.#captureScrollPositions();
+    await this.#renderPreservingWindowStack();
     return undefined;
   }
 
@@ -1106,7 +1186,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#busy = false;
       this.#pendingOperation = null;
       this.#startedOperationId = "";
-      if (this.rendered) await this.render({ force: true });
+      if (this.rendered) {
+        this.#captureScrollPositions();
+        await this.#renderPreservingWindowStack();
+      }
     }
   }
 
@@ -2238,14 +2321,13 @@ function getDragEventData(event) {
   return null;
 }
 
-function escapeHTML(value = "") {
-  return String(value ?? "").replace(/[&<>"']/g, character => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "\"": "&quot;",
-    "'": "&#39;"
-  }[character]));
+function setWeaponSlotImageAspect(image) {
+  const width = Number(image?.naturalWidth);
+  const height = Number(image?.naturalHeight);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
+  const slot = image.closest(".fallout-maw-weapon-slot");
+  if (!slot) return;
+  slot.style.setProperty("--fallout-maw-weapon-slot-image-aspect", String(Math.max(1, width / height)));
 }
 
 async function resolveActor(uuid) {
