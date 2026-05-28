@@ -9808,7 +9808,11 @@ label.fallout-maw-mitigation-cell {
 }
 
 .fallout-maw-craft-window-actions .fallout-maw-craft-modebar-tabs button {
-  min-height: 2.25rem;
+  font-size: 1.16rem;
+  line-height: 1.1;
+  min-height: 3rem;
+  min-width: 6.4rem;
+  padding: 0.45rem 0.75rem;
 }
 
 .fallout-maw-craft-window-hammer:disabled {
@@ -9846,7 +9850,9 @@ label.fallout-maw-mitigation-cell {
   border: 0;
   color: #e8d488;
   flex: 0 0 auto;
-  font-size: 1.05rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.15;
   margin: 0;
 }
 
@@ -9899,13 +9905,13 @@ label.fallout-maw-mitigation-cell {
   cursor: pointer;
   display: grid;
   font-family: "Courier New", Courier, monospace;
-  font-size: 1rem;
+  font-size: 1.3rem;
   font-weight: 700;
   gap: 0.45rem;
   grid-template-columns: auto minmax(0, 1fr) auto;
   line-height: 1.1;
-  min-height: 1.65rem;
-  padding: 0.12rem 0.2rem;
+  min-height: 2.25rem;
+  padding: 0.18rem 0.25rem;
   text-align: left;
   text-shadow: none;
   transition: color 0.12s ease;
@@ -9995,7 +10001,7 @@ label.fallout-maw-mitigation-cell {
 }
 
 .fallout-maw-craft-window-recipe span {
-  font-size: 1.15rem;
+  font-size: 1.3rem;
   line-height: 1.2;
   min-width: 0;
   overflow: hidden;
