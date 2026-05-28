@@ -43,6 +43,10 @@
         <input type="number" name="system.quantity" value="{{system.quantity}}" min="{{#if isContainerFunction}}1{{else}}0{{/if}}" {{#if isContainerFunction}}disabled{{/if}}>
       </label>
       <label>
+        <span>Категория предмета</span>
+        <input type="text" name="system.itemCategory" value="{{system.itemCategory}}">
+      </label>
+      <label>
         <span>{{localize "FALLOUTMAW.Item.Weight"}}</span>
         <input type="number" name="system.weight" value="{{system.weight}}" min="0" step="0.1">
       </label>
@@ -306,6 +310,10 @@
       <label>
         <span>{{localize "FALLOUTMAW.Item.MaxStack"}}</span>
         <input type="number" name="system.maxStack" value="{{system.maxStack}}" min="1" step="1" {{#if isContainerFunction}}disabled{{/if}}>
+      </label>
+      <label>
+        <span>Категория предмета</span>
+        <input type="text" name="system.itemCategory" value="{{system.itemCategory}}">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.Weight"}}</span>

@@ -147,7 +147,7 @@
           <div class="fallout-maw-craft-node readonly {{#if root}}root{{/if}} {{#if missing}}missing{{/if}} {{pulseClass}}" data-craft-node-id="{{id}}" data-craft-block-id="{{blockId}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" data-tooltip-uuid="{{tooltipUuid}}" style="{{style}}">
             <span class="fallout-maw-craft-node-image">
               <img src="{{img}}" alt="{{name}}">
-              <span class="fallout-maw-craft-node-quantity">{{owned}}/{{quantity}}</span>
+              <span class="fallout-maw-craft-node-quantity">{{quantityLabel}}</span>
             </span>
           </div>
           {{/each}}
@@ -163,12 +163,26 @@
 
     <aside class="fallout-maw-craft-window-recipes">
       <h2>Рецепты</h2>
+      <label class="fallout-maw-craft-window-recipe-search">
+        <input type="search" value="{{recipeSearch}}" placeholder="Поиск" data-craft-recipe-search>
+      </label>
       <div class="fallout-maw-craft-window-recipe-list fallout-maw-pane-scroll" data-search-scroll-key="craft:recipes">
-        {{#each recipes}}
-        <article class="fallout-maw-craft-window-recipe {{#if selected}}selected{{/if}}" role="button" tabindex="0" data-recipe-uuid="{{uuid}}" data-tooltip-uuid="{{uuid}}">
-          <img src="{{img}}" alt="{{name}}">
-          <span class="name">{{name}}</span>
-        </article>
+        {{#each recipeCategories}}
+        <section class="fallout-maw-craft-window-recipe-category {{#if collapsed}}collapsed{{/if}}" data-craft-recipe-category="{{label}}">
+          <div class="fallout-maw-craft-window-recipe-category-header" role="button" tabindex="0" data-craft-recipe-category-toggle="{{key}}" aria-expanded="{{#if collapsed}}false{{else}}true{{/if}}">
+            <i class="fa-solid {{#if collapsed}}fa-caret-right{{else}}fa-caret-down{{/if}}"></i>
+            <span>{{label}}</span>
+            <strong>{{count}}</strong>
+          </div>
+          <div class="fallout-maw-craft-window-recipe-category-list">
+            {{#each recipes}}
+            <article class="fallout-maw-craft-window-recipe {{#if selected}}selected{{/if}} {{#if missing}}missing{{/if}}" role="button" tabindex="0" data-recipe-uuid="{{uuid}}" data-tooltip-uuid="{{uuid}}" data-recipe-search-text="{{displayName}} {{../label}}">
+              <img src="{{img}}" alt="{{displayName}}">
+              <span class="name">{{displayName}}</span>
+            </article>
+            {{/each}}
+          </div>
+        </section>
         {{else}}
         <p class="fallout-maw-empty-list">Рецептов нет.</p>
         {{/each}}

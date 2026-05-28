@@ -90,6 +90,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #draggedItemId = "";
   #craftPanDrag = null;
   #craftViewportOverride = null;
+  #expandedRecipeCategories = new Set();
   #hoverPreviewInputKey = "";
   #hoverPreviewKey = "";
   #tooltipAnchorElement = null;
@@ -105,6 +106,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #hookIds = [];
   #linkRenderFrame = 0;
   #renderRefresh = null;
+  #recipeSearch = "";
   #resizeObserver = null;
   #scrollPositions = new Map();
   #viewportResizeHandler = null;
@@ -198,13 +200,15 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     return {
       ...context,
       actor: actorContext,
-      recipes: recipes.map(recipe => ({
-        ...recipe,
-        selected: recipe.uuid === this.#selectedRecipeUuid
-      })),
+      recipeCategories: prepareCraftRecipeCategories(recipes, this.#actor, {
+        expandedCategories: this.#expandedRecipeCategories,
+        search: this.#recipeSearch,
+        selectedRecipeUuid: this.#selectedRecipeUuid
+      }),
+      recipeSearch: this.#recipeSearch,
       recipe: selectedRecipe ? {
         uuid: selectedRecipe.uuid,
-        name: selectedRecipe.name,
+        name: getCraftRecipeDisplayName(selectedRecipe),
         img: normalizeImagePath(selectedRecipe.img, FALLBACK_ICON)
       } : null,
       inventory: actorContext.inventory,
@@ -350,6 +354,27 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #activateControls() {
+    const search = this.element?.querySelector("[data-craft-recipe-search]");
+    search?.addEventListener("input", event => {
+      this.#recipeSearch = String(event.currentTarget?.value ?? "");
+      this.#filterRecipeList();
+    });
+    this.element?.querySelectorAll("[data-craft-recipe-category-toggle]").forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        const category = String(event.currentTarget?.dataset?.craftRecipeCategoryToggle ?? "");
+        if (!category) return;
+        if (this.#expandedRecipeCategories.has(category)) this.#expandedRecipeCategories.delete(category);
+        else this.#expandedRecipeCategories.add(category);
+        this.#captureScrollPositions();
+        void this.#renderPreservingWindowStack();
+      });
+      button.addEventListener("keydown", event => {
+        if (!["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        event.currentTarget?.click();
+      });
+    });
     this.element?.querySelectorAll("[data-recipe-uuid]").forEach(button => {
       button.addEventListener("click", event => {
         event.preventDefault();
@@ -368,6 +393,23 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       });
     });
     this.element?.querySelector('[data-action="craft"]')?.addEventListener("click", event => this.#onCraft(event));
+    this.#filterRecipeList();
+  }
+
+  #filterRecipeList() {
+    const query = normalizeCraftSearchText(this.#recipeSearch);
+    this.element?.querySelectorAll("[data-craft-recipe-category]").forEach(category => {
+      const categoryText = normalizeCraftSearchText(category.dataset.craftRecipeCategory ?? "");
+      let visibleCount = 0;
+      category.querySelectorAll("[data-recipe-uuid]").forEach(recipe => {
+        const recipeText = normalizeCraftSearchText(recipe.dataset.recipeSearchText ?? recipe.textContent ?? "");
+        const visible = !query || recipeText.includes(query) || categoryText.includes(query);
+        recipe.hidden = !visible;
+        if (visible) visibleCount += 1;
+      });
+      category.classList.toggle("searching", Boolean(query));
+      category.hidden = visibleCount < 1;
+    });
   }
 
   #activateCraftViewer() {
@@ -1535,7 +1577,7 @@ function prepareCraftContext(recipe, actor, { busy = false, pulse = null } = {})
       pulseClass: node.root && pulse ? (pulse.success ? "craft-pulse-success" : "craft-pulse-failure") : ""
     })),
     checks,
-    canCraft: Boolean(actor?.isOwner && !busy && data.links.length && data.requirements.length && missingCount === 0),
+    canCraft: Boolean(actor?.isOwner && !busy && data.links.length && data.requirements.length),
     summary: missingCount
       ? `Не хватает компонентов: ${missingCount}`
       : `Компоненты: ${data.requirements.length}`
@@ -1614,6 +1656,7 @@ function getCraftRenderData(recipe, actor) {
         sourceKeys: requirement?.sourceKeys ?? [],
         quantity,
         owned,
+        quantityLabel: node.root ? `${quantity}х` : `${owned}/${quantity}`,
         missing: !node.root && sourceMissing.has(requirement?.key),
         style: buildCraftNodeStyle(node)
       };
@@ -1820,7 +1863,7 @@ function createCraftRootNode(item, source = {}) {
     type: item?.type ?? "",
     width,
     height,
-    quantity: Math.max(1, toInteger(source.quantity) || 1),
+    quantity: Math.max(1, toInteger(source.quantity) || toInteger(item?.system?.quantity) || 1),
     blockId: String(source.blockId ?? ""),
     root: true
   });
@@ -2598,6 +2641,60 @@ function getCraftFailureBreakFraction(recipeUuid = "", linkId = "") {
   return 0.3 + ((Math.abs(hash) % 401) / 1000);
 }
 
+function prepareCraftRecipeCategories(recipes = [], actor = null, { selectedRecipeUuid = "", search = "", expandedCategories = new Set() } = {}) {
+  const normalizedSearch = normalizeCraftSearchText(search);
+  const categories = new Map();
+  for (const recipe of recipes) {
+    const category = getCraftRecipeCategory(recipe);
+    const displayName = getCraftRecipeDisplayName(recipe);
+    if (normalizedSearch && !normalizeCraftSearchText(`${displayName} ${category}`).includes(normalizedSearch)) continue;
+    const missing = getCraftRecipeMissingCount(recipe, actor) > 0;
+    const entry = {
+      ...recipe,
+      displayName,
+      missing,
+      selected: recipe.uuid === selectedRecipeUuid
+    };
+    if (!categories.has(category)) {
+      categories.set(category, {
+        key: category,
+        label: category,
+        recipes: []
+      });
+    }
+    categories.get(category).recipes.push(entry);
+  }
+
+  return Array.from(categories.values())
+    .map(category => ({
+      ...category,
+      collapsed: !normalizedSearch && !expandedCategories.has(category.key),
+      count: category.recipes.length,
+      recipes: category.recipes.sort((left, right) => left.displayName.localeCompare(right.displayName, game.i18n.lang))
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label, game.i18n.lang));
+}
+
+function getCraftRecipeMissingCount(recipe, actor) {
+  if (!actor) return 0;
+  const data = getCraftRenderData(recipe, actor);
+  return data.requirements.filter(requirement => requirement.owned < requirement.quantity).length;
+}
+
+function getCraftRecipeCategory(recipe) {
+  return String(recipe?.system?.itemCategory ?? "").trim() || "Без категории";
+}
+
+function getCraftRecipeDisplayName(recipe) {
+  const name = String(recipe?.name ?? "");
+  const quantity = Math.max(1, toInteger(recipe?.system?.quantity) || 1);
+  return quantity > 1 ? `${name} (${quantity}х)` : name;
+}
+
+function normalizeCraftSearchText(value = "") {
+  return String(value ?? "").trim().toLocaleLowerCase(game.i18n.lang);
+}
+
 async function getCraftRecipeSummaries() {
   const now = Date.now();
   if (craftRecipeCache && (now - craftRecipeCacheTime) < 5000) return craftRecipeCache;
@@ -2614,7 +2711,7 @@ async function getCraftRecipeSummaries() {
     if (pack.documentName !== "Item") continue;
     let index;
     try {
-      index = await pack.getIndex({ fields: ["type", "img", "system.craft.nodes", "system.craft.links"] });
+      index = await pack.getIndex({ fields: ["type", "img", "system.quantity", "system.itemCategory", "system.placement", "system.craft.nodes", "system.craft.links"] });
     } catch (_error) {
       continue;
     }
@@ -2627,7 +2724,14 @@ async function getCraftRecipeSummaries() {
       recipes.push({
         uuid,
         name: String(entry.name ?? ""),
-        img: normalizeImagePath(entry.img, FALLBACK_ICON)
+        img: normalizeImagePath(entry.img, FALLBACK_ICON),
+        type: entry.type,
+        system: {
+          quantity: Math.max(1, toInteger(entry.system?.quantity) || 1),
+          itemCategory: String(entry.system?.itemCategory ?? ""),
+          placement: foundry.utils.deepClone(entry.system?.placement ?? {}),
+          craft: foundry.utils.deepClone(craft)
+        }
       });
     }
   }
@@ -2650,7 +2754,14 @@ function prepareRecipeSummary(item) {
   return {
     uuid: item.uuid,
     name: item.name,
-    img: normalizeImagePath(item.img, FALLBACK_ICON)
+    img: normalizeImagePath(item.img, FALLBACK_ICON),
+    type: item.type,
+    system: {
+      quantity: Math.max(1, toInteger(item.system?.quantity) || 1),
+      itemCategory: String(item.system?.itemCategory ?? ""),
+      placement: foundry.utils.deepClone(item.system?.placement ?? {}),
+      craft: foundry.utils.deepClone(item.system?.craft ?? {})
+    }
   };
 }
 
