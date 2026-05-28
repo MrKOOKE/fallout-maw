@@ -1509,7 +1509,7 @@
         </label>
         {{#if craft.selectedNode.linked}}
         <button type="button" data-craft-detach-node="{{craft.selectedNode.id}}">
-          <i class="fa-solid fa-link-slash"></i> Открепить
+          <i class="fa-solid fa-trash"></i> Удалить
         </button>
         {{else}}
         <button type="button" data-craft-attach-node="{{craft.selectedNode.id}}">
@@ -1549,6 +1549,9 @@
           <span>Сложность</span>
           <input type="number" name="system.craft.links.{{craft.selectedLink.index}}.difficulty" value="{{craft.selectedLink.difficulty}}" min="0" step="1">
         </label>
+        <button type="button" data-craft-delete-link="{{craft.selectedLink.id}}">
+          <i class="fa-solid fa-trash"></i> Удалить
+        </button>
       </section>
       {{else if craft.attachSourceNode}}
       <section class="fallout-maw-craft-popover-section">

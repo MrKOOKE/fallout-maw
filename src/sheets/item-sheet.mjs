@@ -489,6 +489,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     workspace.querySelector("[data-craft-attach-node]")?.addEventListener("click", event => this.#onCraftAttachNode(event));
     workspace.querySelector("[data-craft-detach-node]")?.addEventListener("click", event => this.#onCraftDetachNode(event));
     workspace.querySelector("[data-craft-extract-node]")?.addEventListener("click", event => this.#onCraftExtractNode(event));
+    workspace.querySelector("[data-craft-delete-link]")?.addEventListener("click", event => this.#onCraftDeleteLink(event));
     workspace.querySelector("[data-craft-delete-node]")?.addEventListener("click", event => this.#onCraftDeleteNode(event));
     workspace.querySelector("[data-craft-cancel-attach]")?.addEventListener("click", event => this.#onCraftCancelAttach(event));
     workspace.querySelector("[data-craft-node-quantity]")?.addEventListener("change", event => this.#onCraftNodeQuantityChange(event));
@@ -921,7 +922,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const deltaX = Number(drag.resolvedDeltaX ?? drag.deltaX ?? 0) || 0;
     const deltaY = Number(drag.resolvedDeltaY ?? drag.deltaY ?? 0) || 0;
     const movingIds = new Set(drag.movingNodeIds ?? [drag.nodeId].filter(Boolean));
-    const target = this.#getCraftDropTarget(event, { excludeNodeIds: movingIds, excludeBlockId: drag.blockId });
+    const target = this.#getCraftDropTarget(event, {
+      excludeNodeIds: movingIds,
+      excludeBlockId: drag.blockId || drag.sourceBlockId
+    });
     const shiftedNodes = getCraftNodesWithRoot(this.item).map(node => (
       movingIds.has(node.id) ? { ...node, x: node.x + deltaX, y: node.y + deltaY } : node
     ));
@@ -985,6 +989,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (!nodeId) return undefined;
     const links = getCraftLinks(this.item).filter(link => link.fromNodeId !== nodeId && link.toNodeId !== nodeId);
     this.#craftSelection = { type: "node", id: nodeId };
+    this.#craftAttachSourceNodeId = "";
+    return this.#updateCraftRecipe({ links });
+  }
+
+  #onCraftDeleteLink(event) {
+    event.preventDefault();
+    const linkId = String(event.currentTarget.dataset.craftDeleteLink ?? "");
+    if (!linkId) return undefined;
+    const links = getCraftLinks(this.item).filter(link => link.id !== linkId);
+    this.#craftSelection = null;
     this.#craftAttachSourceNodeId = "";
     return this.#updateCraftRecipe({ links });
   }
