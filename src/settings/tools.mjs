@@ -55,6 +55,12 @@ export const DEFAULT_SYSTEM_ACTION_SETTINGS = Object.freeze([
     label: "Торговля",
     img: "icons/svg/coins.svg",
     toolKey: ""
+  },
+  {
+    key: "craft",
+    label: "Крафт",
+    img: "icons/tools/smithing/hammer-sledge-steel-grey.webp",
+    toolKey: "repair"
   }
 ]);
 

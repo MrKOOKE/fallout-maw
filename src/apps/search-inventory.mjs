@@ -2711,7 +2711,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   }
 }
 
-function prepareSearchActorContext(actor, {
+export function prepareSearchActorContext(actor, {
   side = "",
   roleLabel = "",
   canInteract = false,
@@ -3897,7 +3897,7 @@ function buildCompletedContainerTreeValidationCreates(rootCreateData, rootItemDa
   return creates;
 }
 
-async function transferItemBetweenActors({
+export async function transferItemBetweenActors({
   sourceActor,
   targetActor,
   sourceItem,
@@ -4282,7 +4282,7 @@ function getRequestedTargetPlacement({
   return getFirstAvailableActorInventoryPlacement(targetActor, targetParentId, itemData, excluded, []);
 }
 
-function getSearchDropPlacementForPointer({ actor, itemData, sourceActor, sourceItemId = "", parentId = ROOT_CONTAINER_ID, event = null, zone = null } = {}) {
+export function getSearchDropPlacementForPointer({ actor, itemData, sourceActor, sourceItemId = "", parentId = ROOT_CONTAINER_ID, event = null, zone = null } = {}) {
   if (!actor || !itemData) return null;
   const grid = zone?.closest?.("[data-inventory-grid]");
   const pointer = getSearchInventoryGridPointerPosition(event, grid, actor, parentId);
@@ -4359,7 +4359,7 @@ function getSearchInventoryGridPointerPosition(event = null, grid = null, actor 
   };
 }
 
-function resolveActorPlacement(actor, itemData, placement = {}, excludeItemIds = [], reservedPlacements = [], parentId = ROOT_CONTAINER_ID) {
+export function resolveActorPlacement(actor, itemData, placement = {}, excludeItemIds = [], reservedPlacements = [], parentId = ROOT_CONTAINER_ID) {
   if (placement.mode === "equipment") return resolveActorEquipmentPlacement(actor, itemData, placement, excludeItemIds);
   if (placement.mode === "weapon") return resolveActorWeaponPlacement(actor, itemData, placement, excludeItemIds);
 
@@ -4554,7 +4554,7 @@ function createInventoryStackData(itemData, quantity, parentId, placement, { equ
   return createData;
 }
 
-async function copyActorInventoryItem(actor, item) {
+export async function copyActorInventoryItem(actor, item) {
   const data = item.toObject();
   delete data._id;
   delete data.id;
@@ -4567,7 +4567,7 @@ async function copyActorInventoryItem(actor, item) {
   return actor.createEmbeddedDocuments("Item", [data]);
 }
 
-async function splitActorInventoryItem(actor, item, amount) {
+export async function splitActorInventoryItem(actor, item, amount) {
   const quantity = getItemQuantity(item);
   const splitQuantity = Math.max(1, Math.min(quantity - 1, toInteger(amount)));
   if (quantity <= 1 || !splitQuantity) throw new Error("No quantity to split.");
@@ -4636,7 +4636,7 @@ async function stackActorInventoryItem({
   return targetActor.items.get(targetItem.id) ?? null;
 }
 
-function canStackItems(sourceData, targetItem = null) {
+export function canStackItems(sourceData, targetItem = null) {
   return Boolean(
     targetItem
     && areStackable(sourceData, targetItem)
@@ -4644,7 +4644,7 @@ function canStackItems(sourceData, targetItem = null) {
   );
 }
 
-async function promptSearchItemStackQuantity({ item, title = "Количество", actionLabel = "Ок", max = 1, value = 1 } = {}) {
+export async function promptSearchItemStackQuantity({ item, title = "Количество", actionLabel = "Ок", max = 1, value = 1 } = {}) {
   const limit = Math.max(1, toInteger(max));
   const initial = Math.max(1, Math.min(limit, toInteger(value) || limit));
   const trade = arguments[0]?.trade ?? null;
@@ -4715,7 +4715,7 @@ function createPlacementItemUpdate(itemId, quantity, parentId, placement, itemDa
   };
 }
 
-function getFirstAvailableActorInventoryPlacement(actor, parentId, itemData, excludeItemIds = [], reservedPlacements = []) {
+export function getFirstAvailableActorInventoryPlacement(actor, parentId, itemData, excludeItemIds = [], reservedPlacements = []) {
   const dimensions = getActorInventoryContextDimensions(actor, parentId);
   return findFirstAvailableInventoryPlacement(
     getContextInventoryItems(parentId, actor.items),
@@ -4887,7 +4887,7 @@ function throwInventoryNoSpace() {
   throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
 }
 
-function getDropZoneParentId(zone) {
+export function getDropZoneParentId(zone) {
   return String(zone?.dataset?.inventoryParentId ?? zone?.dataset?.containerId ?? ROOT_CONTAINER_ID);
 }
 
@@ -4900,7 +4900,7 @@ function setWeaponSlotImageAspect(image) {
   slot.style.setProperty("--fallout-maw-weapon-slot-image-aspect", String(Math.max(1, width / height)));
 }
 
-function getDropZonePlacementRequest(zone) {
+export function getDropZonePlacementRequest(zone) {
   if (zone?.dataset?.equipmentSlot) {
     return {
       mode: "equipment",

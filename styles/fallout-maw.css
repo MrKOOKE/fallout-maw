@@ -567,6 +567,34 @@
   stroke-width: 8;
 }
 
+.fallout-maw-craft-link.readonly {
+  cursor: default;
+  pointer-events: none;
+}
+
+.fallout-maw-craft-link-fluid {
+  fill: none;
+  opacity: 0;
+  pointer-events: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4.8;
+}
+
+.fallout-maw-craft-link-fluid.active {
+  opacity: 1;
+}
+
+.fallout-maw-craft-link-fluid-gold {
+  filter: drop-shadow(0 0 5px rgba(255, 213, 90, 0.65));
+  stroke: rgba(255, 203, 77, 0.96);
+}
+
+.fallout-maw-craft-link-fluid-red {
+  filter: drop-shadow(0 0 6px rgba(255, 58, 58, 0.66));
+  stroke: rgba(228, 42, 42, 0.96);
+}
+
 .fallout-maw-craft-block,
 .fallout-maw-craft-block-frame,
 .fallout-maw-craft-node,
@@ -9440,6 +9468,336 @@ label.fallout-maw-mitigation-cell {
   min-height: 0;
   min-width: 0;
   overflow: visible;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window {
+  --fallout-maw-craft-window-sidebar-width: 19rem;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .window-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-craft-window-sheet {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-craft-window-body {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 50%) minmax(0, calc(50% - var(--fallout-maw-craft-window-sidebar-width))) var(--fallout-maw-craft-window-sidebar-width);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-craft-window-inventory,
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-craft-window-craft,
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-craft-window-recipes {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-craft-window-inventory {
+  display: flex;
+  flex-direction: column;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-craft-window-inventory-stack {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+  scrollbar-gutter: stable;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-equipment-pane,
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-inventory-pane {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+  overflow: visible;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-equipment-pane .fallout-maw-pane-scroll,
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-inventory-pane .fallout-maw-pane-scroll {
+  flex: 0 0 auto;
+  overflow: visible;
+  padding-right: 0;
+  scrollbar-gutter: auto;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-equipment-slot-list {
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--fallout-maw-actor-large-slot-size) + 1rem), max-content));
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-weapon-set-list {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-weapon-set {
+  flex: 0 1 max-content;
+  max-width: 100%;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-weapon-slot-list {
+  display: flex;
+  flex-wrap: wrap;
+  width: max-content;
+  max-width: 100%;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-craft-window-craft {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-rows: minmax(10rem, 30%) minmax(0, 70%);
+}
+
+.fallout-maw-craft-window-toolbar,
+.fallout-maw-craft-window-recipes {
+  background:
+    repeating-linear-gradient(180deg, rgba(171, 224, 132, 0.018) 0 1px, transparent 1px 5px),
+    linear-gradient(180deg, rgba(6, 9, 7, 0.98), rgba(12, 14, 9, 0.96));
+  border: 2px solid rgba(131, 119, 74, 0.44);
+  border-radius: 0;
+  box-shadow:
+    inset 3px 3px 0 rgba(0, 0, 0, 0.72),
+    inset -1px -1px 0 rgba(219, 219, 186, 0.12),
+    0 3px 0 rgba(0, 0, 0, 0.68);
+}
+
+.fallout-maw-craft-window-toolbar {
+  align-items: center;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) 5.5rem;
+  min-height: 0;
+  padding: 1rem;
+}
+
+.fallout-maw-craft-window-title {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  min-width: 0;
+}
+
+.fallout-maw-craft-window-title img {
+  aspect-ratio: 1;
+  border: 1px solid rgba(238, 214, 135, 0.56);
+  height: 4rem;
+  object-fit: contain;
+  width: 4rem;
+}
+
+.fallout-maw-craft-window-title strong {
+  color: #fff3d8;
+  display: block;
+  font-size: 1.35rem;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-craft-window-title span {
+  color: rgba(226, 216, 180, 0.78);
+  display: block;
+  font-size: 0.92rem;
+  line-height: 1.25;
+  margin-top: 0.25rem;
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-craft-window-hammer {
+  align-items: center;
+  aspect-ratio: 1;
+  display: inline-flex;
+  font-size: 2.1rem;
+  justify-content: center;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+  width: 5.5rem;
+}
+
+.fallout-maw-craft-window-hammer:disabled {
+  filter: grayscale(1);
+  opacity: 0.42;
+}
+
+.fallout-maw-craft-viewer {
+  min-height: 0;
+}
+
+.fallout-maw-craft-window-empty {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(210, 185, 145, 0.26);
+  color: rgba(226, 216, 180, 0.72);
+  display: flex;
+  justify-content: center;
+  min-height: 0;
+  text-align: center;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-craft-window-recipes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.75rem;
+}
+
+.fallout-maw-craft-window-recipes h2 {
+  border: 0;
+  color: #fff3d8;
+  flex: 0 0 auto;
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.fallout-maw-craft-window-recipe-list {
+  display: grid;
+  flex: 1 1 auto;
+  align-content: start;
+  gap: 0.5rem;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0.25rem;
+}
+
+.fallout-maw-craft-window-recipe {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(232, 212, 136, 0.25);
+  border-radius: 4px;
+  box-shadow: none;
+  color: #e8d488;
+  cursor: pointer;
+  display: grid;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  gap: 0.5rem;
+  grid-template-columns: 3.75rem minmax(0, 1fr);
+  justify-content: start;
+  letter-spacing: 0.03em;
+  line-height: 1.15;
+  min-height: 4.5rem;
+  outline: 0;
+  padding: 0.38rem;
+  text-align: left;
+  text-shadow: 0 0 8px rgba(232, 212, 136, 0.22);
+  text-transform: uppercase;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease, background 0.12s ease, opacity 0.12s ease, filter 0.12s ease;
+  width: 100%;
+}
+
+.fallout-maw-craft-window-recipe:hover,
+.fallout-maw-craft-window-recipe:focus-visible {
+  background: rgba(232, 212, 136, 0.12);
+  border-color: rgba(232, 212, 136, 0.45);
+  box-shadow: 0 0 10px rgba(232, 212, 136, 0.18);
+  color: #f6e8ad;
+  transform: translateY(-1px);
+}
+
+.fallout-maw-craft-window-recipe img {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(232, 212, 136, 0.25);
+  height: 3.75rem;
+  object-fit: contain;
+  width: 3.75rem;
+}
+
+.fallout-maw-craft-window-recipe span {
+  line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-craft-window-recipe.selected {
+  background: rgba(232, 212, 136, 0.16);
+  border-color: #e8d488;
+  box-shadow: 0 0 10px rgba(232, 212, 136, 0.3) inset;
+  color: #fff3d8;
+}
+
+.fallout-maw-craft-node.readonly,
+.fallout-maw-craft-block.readonly {
+  cursor: default;
+  pointer-events: none;
+}
+
+.fallout-maw-craft-block.readonly {
+  opacity: 0.86;
+}
+
+.fallout-maw-craft-node.missing .fallout-maw-craft-node-image {
+  border-color: rgba(217, 69, 61, 0.95);
+  box-shadow:
+    inset 0 0 0 1px rgba(217, 69, 61, 0.26),
+    0 0 13px rgba(217, 69, 61, 0.22);
+}
+
+.fallout-maw-craft-node.missing .fallout-maw-craft-node-quantity {
+  border-color: rgba(217, 69, 61, 0.95);
+  color: #ffd5d1;
+}
+
+.fallout-maw-craft-node.craft-pulse-success .fallout-maw-craft-node-image {
+  animation: fallout-maw-craft-pulse-gold 0.85s ease-in-out 2;
+}
+
+.fallout-maw-craft-node.craft-pulse-failure .fallout-maw-craft-node-image {
+  animation: fallout-maw-craft-pulse-red 0.85s ease-in-out 2;
+}
+
+@keyframes fallout-maw-craft-pulse-gold {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 1px rgba(238, 214, 135, 0.22),
+      0 0 16px rgba(238, 214, 135, 0.18);
+  }
+
+  50% {
+    box-shadow:
+      inset 0 0 0 2px rgba(255, 224, 116, 0.78),
+      0 0 28px rgba(255, 204, 67, 0.55);
+  }
+}
+
+@keyframes fallout-maw-craft-pulse-red {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 1px rgba(217, 69, 61, 0.28),
+      0 0 16px rgba(217, 69, 61, 0.2);
+  }
+
+  50% {
+    box-shadow:
+      inset 0 0 0 2px rgba(255, 83, 76, 0.82),
+      0 0 30px rgba(255, 35, 35, 0.52);
+  }
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-container-title strong {

@@ -1,0 +1,2273 @@
+﻿import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { getCreatureOptions } from "../settings/accessors.mjs";
+import { createDefaultInventorySize } from "../settings/creature-options.mjs";
+import { requestSkillCheck } from "../rolls/skill-check.mjs";
+import { canUseWeaponSlotForItem, getRaceEquipmentSlotsForItem } from "../utils/equipment-slots.mjs";
+import {
+  canStackItems,
+  copyActorInventoryItem,
+  getDropZoneParentId,
+  getDropZonePlacementRequest,
+  getFirstAvailableActorInventoryPlacement,
+  getSearchDropPlacementForPointer,
+  prepareSearchActorContext,
+  promptSearchItemStackQuantity,
+  resolveActorPlacement,
+  splitActorInventoryItem,
+  transferItemBetweenActors
+} from "./search-inventory.mjs";
+import {
+  FALLBACK_ICON,
+  normalizeImagePath
+} from "../utils/actor-display-data.mjs";
+import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
+import { FalloutMaWContainerSheet } from "../sheets/container-sheet.mjs";
+import {
+  ROOT_CONTAINER_ID,
+  createStoredPlacement,
+  findFirstAvailableInventoryPlacement,
+  getContainerDimensions,
+  getContextInventoryItems,
+  getItemMaxStack,
+  getItemQuantity,
+  isContainerItem,
+  normalizeInventoryPlacement,
+  placementContainsInventoryCell
+} from "../utils/inventory-containers.mjs";
+import { toInteger } from "../utils/numbers.mjs";
+
+const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+
+const CRAFT_WINDOW_REFERENCE_WIDTH = 2560;
+const CRAFT_WINDOW_REFERENCE_HEIGHT = 1440;
+const CRAFT_WINDOW_FALLBACK_VIEWPORT_WIDTH = 1280;
+const CRAFT_WINDOW_FALLBACK_VIEWPORT_HEIGHT = 720;
+const CRAFT_ROOT_NODE_ID = "root";
+const CRAFT_GRID_FALLBACK_STEP = 56;
+const CRAFT_MIN_ZOOM = 0.45;
+const CRAFT_MAX_ZOOM = 2.5;
+const CRAFT_SOCKET_DEPTH_PX = 9;
+const CRAFT_SOCKET_HALF_WIDTH_PX = 8;
+const CRAFT_FLOW_DURATION_MS = 1000;
+
+let craftWindow = null;
+let craftRecipeCache = null;
+let craftRecipeCacheTime = 0;
+
+export function openCraftWindow({ actor } = {}) {
+  if (!actor) return undefined;
+  craftWindow ??= new CraftWindowApplication();
+  craftWindow.setActor(actor);
+  return craftWindow.render({ force: true });
+}
+
+class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
+  #actorUuid = "";
+  #actor = null;
+  #selectedRecipeUuid = "";
+  #selectedRecipe = null;
+  #busy = false;
+  #pendingOperation = null;
+  #startedOperationId = "";
+  #pulse = null;
+  #dragDrop = null;
+  #draggedItemData = null;
+  #draggedItemId = "";
+  #craftPanDrag = null;
+  #craftViewportOverride = null;
+  #hoverPreviewInputKey = "";
+  #hoverPreviewKey = "";
+  #tooltipAnchorElement = null;
+  #tooltipActorUuid = "";
+  #tooltipCloseTimer = null;
+  #tooltipDocumentPointerDownHandler = null;
+  #tooltipElement = null;
+  #tooltipItemId = "";
+  #tooltipPinned = false;
+  #tooltipTimer = null;
+  #tooltipWeaponTabIndex = 0;
+  #hookIds = [];
+  #linkRenderFrame = 0;
+  #resizeObserver = null;
+  #viewportResizeHandler = null;
+  #uiScale = 1;
+
+  static DEFAULT_OPTIONS = {
+    id: "fallout-maw-craft-window",
+    classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-actor-sheet", "fallout-maw-search-inventory", "fallout-maw-craft-window", "sheet", "actor"],
+    position: {
+      width: CRAFT_WINDOW_REFERENCE_WIDTH,
+      height: CRAFT_WINDOW_REFERENCE_HEIGHT
+    },
+    window: {
+      resizable: false
+    }
+  };
+
+  static PARTS = {
+    body: {
+      template: TEMPLATES.craftWindow
+    }
+  };
+
+  get title() {
+    return "Крафт";
+  }
+
+  setActor(actor) {
+    const actorUuid = String(actor?.uuid ?? "");
+    if (actorUuid !== this.#actorUuid) {
+      this.#selectedRecipeUuid = "";
+      this.#selectedRecipe = null;
+      this.#craftViewportOverride = null;
+      this.#pulse = null;
+      this.#pendingOperation = null;
+      this.#startedOperationId = "";
+    }
+    this.#actorUuid = actorUuid;
+    this.#actor = actor ?? null;
+  }
+
+  get _dragDrop() {
+    return this.#dragDrop ??= new foundry.applications.ux.DragDrop.implementation({
+      dragSelector: ".draggable",
+      dropSelector: "[data-search-root]",
+      permissions: {
+        dragstart: this._canDragStart.bind(this),
+        drop: this._canDragDrop.bind(this)
+      },
+      callbacks: {
+        dragstart: this._onDragStart.bind(this),
+        dragover: this._onDragOver.bind(this),
+        dragleave: this._onDragLeave.bind(this),
+        drop: this._onDrop.bind(this),
+        dragend: this._onDragEnd.bind(this)
+      }
+    });
+  }
+
+  setPosition(position = {}) {
+    const fullscreenPosition = this.#getFullscreenPosition(position);
+    const result = super.setPosition(fullscreenPosition);
+    this.#applyUiScale(fullscreenPosition.scale);
+    return result;
+  }
+
+  async _prepareContext(options) {
+    const context = await super._prepareContext(options);
+    this.#actor = await resolveActor(this.#actorUuid);
+    const recipes = await getCraftRecipeSummaries();
+    if (!this.#selectedRecipeUuid || !recipes.some(recipe => recipe.uuid === this.#selectedRecipeUuid)) {
+      this.#selectedRecipeUuid = recipes[0]?.uuid ?? "";
+    }
+
+    const selectedRecipe = this.#selectedRecipeUuid ? await resolveDocument(this.#selectedRecipeUuid) : null;
+    this.#selectedRecipe = selectedRecipe;
+    const actorContext = prepareSearchActorContext(this.#actor, {
+      side: "searcher",
+      roleLabel: "",
+      canInteract: Boolean(this.#actor?.isOwner && !this.#busy),
+      mode: "search"
+    }) ?? createEmptyActorContext(this.#actor);
+    const craft = selectedRecipe
+      ? prepareCraftContext(selectedRecipe, this.#actor, {
+        busy: this.#busy,
+        pulse: this.#pulse?.recipeUuid === selectedRecipe.uuid ? this.#pulse : null
+      })
+      : createEmptyCraftContext(this.#busy);
+
+    return {
+      ...context,
+      actor: actorContext,
+      recipes: recipes.map(recipe => ({
+        ...recipe,
+        selected: recipe.uuid === this.#selectedRecipeUuid
+      })),
+      recipe: selectedRecipe ? {
+        uuid: selectedRecipe.uuid,
+        name: selectedRecipe.name,
+        img: normalizeImagePath(selectedRecipe.img, FALLBACK_ICON)
+      } : null,
+      inventory: actorContext.inventory,
+      craft,
+      load: actorContext.load
+    };
+  }
+
+  async _onFirstRender(context, options) {
+    await super._onFirstRender(context, options);
+    this.#hookIds = [
+      ["updateActor", Hooks.on("updateActor", actor => this.#scheduleRefreshForActor(actor))],
+      ["deleteActor", Hooks.on("deleteActor", actor => this.#scheduleRefreshForActor(actor))],
+      ["createItem", Hooks.on("createItem", item => this.#scheduleRefreshForItem(item))],
+      ["updateItem", Hooks.on("updateItem", item => this.#scheduleRefreshForItem(item))],
+      ["deleteItem", Hooks.on("deleteItem", item => this.#scheduleRefreshForItem(item))]
+    ];
+  }
+
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    this.setPosition();
+    this.#bindViewportResize();
+    this._dragDrop.bind(this.element);
+    this.#bindInventoryListeners();
+    this.#activateControls();
+    this.#activateCraftViewer();
+    this.#startPendingOperation();
+  }
+
+  async _onClose(options) {
+    await super._onClose(options);
+    this.#unbindViewportResize();
+    this.#resizeObserver?.disconnect();
+    this.#resizeObserver = null;
+    this.#clearInventoryDropPreview();
+    this.#clearInventoryTooltip({ force: true });
+    this.#unbindInventoryTooltipDocumentClose();
+    document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
+    for (const [hookName, hookId] of this.#hookIds) Hooks.off(hookName, hookId);
+    this.#hookIds = [];
+    if (craftWindow === this) craftWindow = null;
+  }
+
+  #getFullscreenPosition(position = {}) {
+    const { viewportWidth, viewportHeight } = this.#getViewportMetrics();
+    const scale = Math.max(
+      0.1,
+      Math.min(
+        viewportWidth / CRAFT_WINDOW_REFERENCE_WIDTH,
+        viewportHeight / CRAFT_WINDOW_REFERENCE_HEIGHT
+      ) || 1
+    );
+    const width = CRAFT_WINDOW_REFERENCE_WIDTH;
+    const height = CRAFT_WINDOW_REFERENCE_HEIGHT;
+    return {
+      ...position,
+      left: Math.max(0, (viewportWidth - (width * scale)) / 2),
+      top: Math.max(0, (viewportHeight - (height * scale)) / 2),
+      width,
+      height,
+      scale
+    };
+  }
+
+  #getViewportMetrics() {
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    const documentElement = view.document?.documentElement ?? document.documentElement;
+    return {
+      view,
+      viewportWidth: view.innerWidth || documentElement?.clientWidth || CRAFT_WINDOW_FALLBACK_VIEWPORT_WIDTH,
+      viewportHeight: view.innerHeight || documentElement?.clientHeight || CRAFT_WINDOW_FALLBACK_VIEWPORT_HEIGHT
+    };
+  }
+
+  #applyUiScale(scale = 1) {
+    const normalizedScale = Math.max(0.1, Number(scale) || 1);
+    this.#uiScale = normalizedScale;
+    this.element?.style?.setProperty("--fallout-maw-ui-scale", String(normalizedScale));
+  }
+
+  #bindViewportResize() {
+    if (this.#viewportResizeHandler) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#viewportResizeHandler = () => this.setPosition();
+    view.addEventListener("resize", this.#viewportResizeHandler);
+  }
+
+  #unbindViewportResize() {
+    if (!this.#viewportResizeHandler) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    view.removeEventListener("resize", this.#viewportResizeHandler);
+    this.#viewportResizeHandler = null;
+  }
+
+  #activateControls() {
+    this.element?.querySelectorAll("[data-recipe-uuid]").forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        if (this.#busy) return;
+        this.#selectedRecipeUuid = String(event.currentTarget?.dataset?.recipeUuid ?? "");
+        this.#selectedRecipe = null;
+        this.#craftViewportOverride = null;
+        this.#pulse = null;
+        void this.render({ force: true });
+      });
+      button.addEventListener("keydown", event => {
+        if (!["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        button.click();
+      });
+    });
+    this.element?.querySelector('[data-action="craft"]')?.addEventListener("click", event => this.#onCraft(event));
+  }
+
+  #activateCraftViewer() {
+    this.#resizeObserver?.disconnect();
+    this.#resizeObserver = null;
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    if (!workspace) return;
+    workspace.addEventListener("contextmenu", event => event.preventDefault());
+    workspace.addEventListener("pointerdown", event => this.#onCraftWorkspacePointerDown(event));
+    workspace.addEventListener("wheel", event => this.#onCraftWheel(event), { passive: false });
+    const viewport = this.#getCraftViewport();
+    this.#setCraftViewportStyle(viewport.x, viewport.y, viewport.zoom);
+    this.#syncCraftNodeLayouts();
+    this.#scheduleCraftLinkRenderAfterLayout();
+    if (typeof ResizeObserver !== "undefined") {
+      this.#resizeObserver = new ResizeObserver(() => this.#scheduleCraftLinkRender());
+      this.#resizeObserver.observe(workspace);
+    }
+  }
+
+  #bindInventoryListeners() {
+    const root = this.element?.querySelector("[data-search-root]");
+    if (!root || root.dataset.craftInventoryBound) return;
+    root.dataset.craftInventoryBound = "true";
+    root.addEventListener("pointerover", event => this.#onInventoryTooltipPointerOver(event));
+    root.addEventListener("pointerout", event => this.#onInventoryTooltipPointerOut(event));
+    root.addEventListener("mousedown", event => this.#onInventoryTooltipMiddleMouseDown(event));
+    root.addEventListener("auxclick", event => this.#onInventoryTooltipAuxClick(event));
+    root.addEventListener("contextmenu", event => this.#onInventoryContextMenu(event));
+    root.addEventListener("click", event => {
+      if (!event.target?.closest?.(".fallout-maw-inventory-context-menu")) {
+        document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
+      }
+    });
+  }
+
+  _canDragStart() {
+    return Boolean(this.#actor?.isOwner && !this.#busy);
+  }
+
+  _canDragDrop() {
+    return Boolean(this.#actor?.isOwner && !this.#busy);
+  }
+
+  _onDragStart(event) {
+    this.#clearInventoryTooltip({ force: true });
+    this.#clearInventoryDropPreview();
+    const itemElement = event.currentTarget?.closest?.("[data-item-id][data-search-actor-uuid]");
+    const itemId = String(itemElement?.dataset?.itemId ?? "");
+    const item = this.#actor?.items?.get(itemId);
+    if (!item || !this._canDragStart()) return;
+    this.#draggedItemId = item.id;
+    this.#draggedItemData = item.toObject();
+    event.dataTransfer?.setData("text/plain", JSON.stringify({
+      type: "Item",
+      uuid: item.uuid,
+      itemId: item.id,
+      actorUuid: this.#actor.uuid,
+      sourceActorUuid: this.#actor.uuid,
+      falloutMawSearchInventory: true
+    }));
+    this.#highlightEquipmentSlotsForItem(item);
+    event.currentTarget?.classList?.add("dragging");
+  }
+
+  _onDragOver(event) {
+    event.stopPropagation();
+    const zone = this.#getInventoryDropZone(event);
+    if (!zone || !this._canDragDrop()) return;
+    event.preventDefault();
+    this.#clearInventoryTooltip({ force: true });
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    this.#draggedItemData = this.#getPreviewItemData(event);
+    this.#setInventoryHoverPreview(zone, event);
+  }
+
+  _onDragLeave(event) {
+    const zone = event.target?.closest?.("[data-search-drop-zone]");
+    if (!zone) return;
+    const hoveredElement = document.elementFromPoint(event.clientX, event.clientY);
+    if (hoveredElement?.closest?.("[data-search-drop-zone]") === zone) return;
+    if (zone.closest("[data-inventory-grid]") && hoveredElement?.closest?.("[data-inventory-grid]") === zone.closest("[data-inventory-grid]")) return;
+    this.#clearInventoryHoverPreview();
+  }
+
+  _onDragEnd() {
+    this.#draggedItemData = null;
+    this.#draggedItemId = "";
+    this.#clearInventoryDropPreview();
+    this.element?.querySelectorAll(".dragging").forEach(element => element.classList.remove("dragging"));
+  }
+
+  async _onDrop(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      if (!this._canDragDrop()) return null;
+      const data = getDragEventData(event);
+      if (data?.type !== "Item") return null;
+      const item = this.#actor?.items?.get(String(data.itemId ?? ""));
+      if (!item) return null;
+      const zone = this.#getInventoryDropZone(event);
+      if (!zone) return null;
+      const placementRequest = getDropZonePlacementRequest(zone);
+      const parentId = placementRequest.mode === "inventory" ? getDropZoneParentId(zone) : ROOT_CONTAINER_ID;
+      const targetItem = this.#getTargetStackItem(zone, item, parentId);
+      let quantity;
+      if (canStackItems(item.toObject(), targetItem)) {
+        quantity = await this.#getCraftStackQuantity(item, targetItem, event);
+      } else {
+        quantity = await this.#getCraftTransferQuantity(item, event);
+      }
+      if (!quantity) return null;
+      const pointerPlacement = placementRequest.mode === "inventory"
+        ? getSearchDropPlacementForPointer({
+          actor: this.#actor,
+          itemData: item.toObject(),
+          sourceActor: this.#actor,
+          sourceItemId: item.id,
+          parentId,
+          event,
+          zone
+        })
+        : null;
+      const moved = await transferItemBetweenActors({
+        sourceActor: this.#actor,
+        targetActor: this.#actor,
+        sourceItem: item,
+        targetMode: placementRequest.mode,
+        targetParentId: parentId,
+        targetEquipmentSlot: placementRequest.equipmentSlot,
+        targetWeaponSet: placementRequest.weaponSet,
+        targetWeaponSlot: placementRequest.weaponSlot,
+        targetX: pointerPlacement?.x ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.x) : null),
+        targetY: pointerPlacement?.y ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.y) : null),
+        targetItemId: targetItem?.id ?? "",
+        quantity
+      });
+      if (this.rendered) await this.render({ force: true });
+      return moved;
+    } finally {
+      this._onDragEnd();
+    }
+  }
+
+  #getInventoryDropZone(eventOrTarget) {
+    const target = eventOrTarget?.target ?? eventOrTarget;
+    const pointedElement = Number.isFinite(Number(eventOrTarget?.clientX))
+      ? document.elementFromPoint(eventOrTarget.clientX, eventOrTarget.clientY)
+      : null;
+    return pointedElement?.closest?.("[data-inventory-cell], [data-inventory-grid-item], [data-search-drop-zone]")
+      ?? target?.closest?.("[data-inventory-cell], [data-inventory-grid-item], [data-search-drop-zone]")
+      ?? null;
+  }
+
+  #getTargetStackItem(target, sourceItem, parentId = ROOT_CONTAINER_ID) {
+    const itemElement = target?.closest?.("[data-item-id][data-search-actor-uuid]");
+    if (itemElement && itemElement.dataset.searchActorUuid === this.#actor?.uuid && itemElement.dataset.itemId !== sourceItem.id) {
+      if (!itemElement.closest("[data-inventory-grid]")) return null;
+      if (String(itemElement.dataset.inventoryParentId ?? ROOT_CONTAINER_ID) !== String(parentId ?? ROOT_CONTAINER_ID)) return null;
+      return this.#actor.items.get(itemElement.dataset.itemId) ?? null;
+    }
+
+    const cell = target?.closest?.("[data-inventory-cell]");
+    if (!cell) return null;
+    const x = toInteger(cell.dataset.x);
+    const y = toInteger(cell.dataset.y);
+    return getContextInventoryItems(parentId, this.#actor.items).find(item => {
+      if (item.id === sourceItem.id) return false;
+      const placement = item.system?.placement ?? {};
+      if (String(placement.mode ?? "inventory") !== "inventory") return false;
+      return placementContainsInventoryCell(placement, x, y);
+    }) ?? null;
+  }
+
+  #getPreviewItemData(event) {
+    if (this.#draggedItemData) return this.#draggedItemData;
+    const data = getDragEventData(event);
+    if (data?.type !== "Item") return null;
+    const item = this.#actor?.items?.get(String(data.itemId ?? ""));
+    if (!item) return null;
+    this.#draggedItemId = item.id;
+    return item.toObject();
+  }
+
+  async #getCraftStackQuantity(sourceItem, targetItem, event) {
+    const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
+    const availableSpace = Math.max(0, getItemMaxStack(targetItem) - getItemQuantity(targetItem));
+    const maxTransfer = Math.min(sourceQuantity, availableSpace);
+    if (maxTransfer <= 0) return 0;
+    if (event?.shiftKey || maxTransfer <= 1) return maxTransfer;
+    return promptSearchItemStackQuantity({
+      item: sourceItem,
+      title: "Сложить предметы",
+      actionLabel: "Сложить",
+      max: maxTransfer,
+      value: maxTransfer
+    });
+  }
+
+  async #getCraftTransferQuantity(sourceItem, event) {
+    const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
+    if (event?.shiftKey || sourceQuantity <= 1 || isContainerItem(sourceItem)) return sourceQuantity;
+    return promptSearchItemStackQuantity({
+      item: sourceItem,
+      title: "Перенести предметы",
+      actionLabel: "Перенести",
+      max: sourceQuantity,
+      value: sourceQuantity
+    });
+  }
+
+  #setInventoryHoverPreview(zone = null, event = null) {
+    if (!zone) {
+      this.#clearInventoryHoverPreview();
+      return;
+    }
+
+    if (zone.dataset.equipmentSlot || (zone.dataset.weaponSet && zone.dataset.weaponSlot)) {
+      const inputKey = `slot:${zone.dataset.equipmentSlot ?? ""}:${zone.dataset.weaponSet ?? ""}:${zone.dataset.weaponSlot ?? ""}:${this.#draggedItemId}`;
+      if (this.#hoverPreviewInputKey === inputKey) return;
+      this.#hoverPreviewInputKey = inputKey;
+      if (!this.#actor || !this.#draggedItemData) {
+        this.#clearInventoryHoverPreviewClasses();
+        return;
+      }
+      const placementRequest = getDropZonePlacementRequest(zone);
+      if (resolveActorPlacement(this.#actor, this.#draggedItemData, {
+        mode: placementRequest.mode,
+        equipmentSlot: placementRequest.equipmentSlot,
+        weaponSet: placementRequest.weaponSet,
+        weaponSlot: placementRequest.weaponSlot,
+        x: 1,
+        y: 1
+      }, this.#draggedItemId ? [this.#draggedItemId] : [])) {
+        this.#applySingleZonePreview(zone, inputKey);
+        return;
+      }
+      this.#clearInventoryHoverPreviewClasses();
+      return;
+    }
+
+    if (zone.dataset.inventoryCell === undefined && zone.dataset.inventoryGridItem === undefined) {
+      this.#clearInventoryHoverPreview();
+      return;
+    }
+
+    const parentId = getDropZoneParentId(zone);
+    if (!this.#actor || !this.#draggedItemData) {
+      this.#applySingleZonePreview(zone, `inventory-cell:${parentId}:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}`);
+      return;
+    }
+
+    const inputKey = `inventory:${this.#actor.uuid}:${parentId}:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}:${this.#draggedItemId}`;
+    if (this.#hoverPreviewInputKey === inputKey) return;
+    this.#hoverPreviewInputKey = inputKey;
+    const sourceItem = this.#actor.items.get(this.#draggedItemId);
+    const targetItem = sourceItem ? this.#getTargetStackItem(zone, sourceItem, parentId) : null;
+    if (canStackItems(this.#draggedItemData, targetItem)) {
+      this.#applyInventoryStackPreview(parentId, targetItem);
+      return;
+    }
+
+    const placement = getSearchDropPlacementForPointer({
+      actor: this.#actor,
+      itemData: this.#draggedItemData,
+      sourceActor: this.#actor,
+      sourceItemId: this.#draggedItemId,
+      parentId,
+      event,
+      zone
+    });
+    if (!placement) {
+      this.#clearInventoryHoverPreviewClasses();
+      return;
+    }
+    this.#applyInventoryPlacementPreview(parentId, placement);
+  }
+
+  #applySingleZonePreview(zone, key = "") {
+    const previewKey = `zone:${key}`;
+    if (this.#hoverPreviewKey === previewKey) return;
+    this.#clearInventoryHoverPreviewClasses();
+    this.#hoverPreviewKey = previewKey;
+    zone?.classList?.add("drop-preview");
+  }
+
+  #applyInventoryPlacementPreview(parentId, placement) {
+    if (!placement) return;
+    const previewKey = `inventory:${parentId ?? ROOT_CONTAINER_ID}:${placement.x}:${placement.y}:${placement.width}:${placement.height}`;
+    if (this.#hoverPreviewKey === previewKey) return;
+    this.#clearInventoryHoverPreviewClasses();
+    this.#hoverPreviewKey = previewKey;
+    const escapedParentId = CSS.escape(parentId ?? ROOT_CONTAINER_ID);
+    for (let y = placement.y; y < placement.y + placement.height; y += 1) {
+      for (let x = placement.x; x < placement.x + placement.width; x += 1) {
+        this.element?.querySelector(
+          `[data-inventory-cell][data-inventory-parent-id="${escapedParentId}"][data-x="${x}"][data-y="${y}"]`
+        )?.classList.add("drop-preview");
+      }
+    }
+  }
+
+  #applyInventoryStackPreview(parentId, targetItem) {
+    if (!targetItem) return;
+    const previewKey = `stack:${parentId ?? ROOT_CONTAINER_ID}:${targetItem.id}:${getItemQuantity(targetItem)}:${getItemMaxStack(targetItem)}`;
+    if (this.#hoverPreviewKey === previewKey) return;
+    this.#clearInventoryHoverPreviewClasses();
+    this.#hoverPreviewKey = previewKey;
+
+    const escapedParentId = CSS.escape(parentId ?? ROOT_CONTAINER_ID);
+    const escapedItemId = CSS.escape(targetItem.id);
+    this.element?.querySelector(
+      `[data-inventory-grid-item][data-item-id="${escapedItemId}"][data-inventory-parent-id="${escapedParentId}"]`
+    )?.classList.add("drop-stack-preview");
+
+    const placement = normalizeInventoryPlacement(targetItem.system?.placement ?? {}, targetItem, this.#actor.items);
+    for (let y = placement.y; y < placement.y + placement.height; y += 1) {
+      for (let x = placement.x; x < placement.x + placement.width; x += 1) {
+        this.element?.querySelector(
+          `[data-inventory-cell][data-inventory-parent-id="${escapedParentId}"][data-x="${x}"][data-y="${y}"]`
+        )?.classList.add("drop-stack-preview");
+      }
+    }
+  }
+
+  #clearInventoryDropPreview() {
+    this.#clearInventoryHoverPreview();
+    this.element?.querySelectorAll(".drop-match-preview").forEach(element => element.classList.remove("drop-match-preview"));
+  }
+
+  #clearInventoryHoverPreview() {
+    this.#hoverPreviewInputKey = "";
+    this.#clearInventoryHoverPreviewClasses();
+  }
+
+  #clearInventoryHoverPreviewClasses() {
+    this.#hoverPreviewKey = "";
+    this.element?.querySelectorAll(".drop-preview, .drop-stack-preview").forEach(element => {
+      element.classList.remove("drop-preview", "drop-stack-preview");
+    });
+  }
+
+  #highlightEquipmentSlotsForItem(item) {
+    const race = getActorRace(this.#actor);
+    for (const slot of getRaceEquipmentSlotsForItem(race, item)) {
+      this.element?.querySelector(`[data-equipment-slot="${CSS.escape(slot.key)}"]`)?.classList.add("drop-match-preview");
+    }
+    for (const set of race?.weaponSets ?? []) {
+      for (const slot of set.slots ?? []) {
+        if (!canUseWeaponSlotForItem(race, item, set.key, slot.key)) continue;
+        this.element?.querySelector(`[data-weapon-set="${CSS.escape(set.key)}"][data-weapon-slot="${CSS.escape(slot.key)}"]`)?.classList.add("drop-match-preview");
+      }
+    }
+    this.element?.querySelectorAll('[data-weapon-set^="container:"][data-weapon-slot]').forEach(element => {
+      element.classList.add("drop-match-preview");
+    });
+  }
+
+  #onInventoryContextMenu(event) {
+    const itemElement = event.target?.closest?.("[data-item-id][data-search-actor-uuid]");
+    if (!itemElement || !this.element?.contains(itemElement) || !this.#actor?.isOwner || this.#busy) return;
+    const item = this.#actor.items.get(String(itemElement.dataset.itemId ?? ""));
+    if (!item) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.#showInventoryContextMenu(item, event);
+  }
+
+  #onInventoryTooltipPointerOver(event) {
+    if (this.#tooltipPinned) return;
+    const anchor = event.target?.closest?.("[data-tooltip-item][data-search-actor-uuid]");
+    if (!anchor || !this.element?.contains(anchor)) return;
+    this.#cancelInventoryTooltipClose();
+    if (this.#tooltipAnchorElement === anchor && this.#tooltipElement) return;
+    this.#scheduleInventoryTooltip(anchor);
+  }
+
+  #onInventoryTooltipPointerOut(event) {
+    const anchor = event.target?.closest?.("[data-tooltip-item][data-search-actor-uuid]");
+    if (!anchor || !this.element?.contains(anchor)) return;
+    if (anchor.contains(event.relatedTarget) || this.#tooltipElement?.contains(event.relatedTarget)) return;
+    const nextAnchor = event.relatedTarget?.closest?.("[data-tooltip-item][data-search-actor-uuid]");
+    if (nextAnchor && this.element?.contains(nextAnchor)) return;
+    if (!this.#tooltipPinned) this.#scheduleInventoryTooltipClose();
+  }
+
+  #onInventoryTooltipMiddleMouseDown(event) {
+    if (event.button !== 1) return;
+    if (!event.target?.closest?.("[data-tooltip-item], .fallout-maw-inventory-tooltip")) return;
+    event.preventDefault();
+  }
+
+  #onInventoryTooltipAuxClick(event) {
+    if (event.button !== 1) return;
+    const anchor = event.target?.closest?.("[data-tooltip-item][data-search-actor-uuid]");
+    if (!anchor || !this.element?.contains(anchor)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.#clearInventoryTooltip({ force: true });
+    void this.#showInventoryTooltip(anchor, { pinned: true });
+  }
+
+  #scheduleInventoryTooltip(anchor) {
+    if (this.#tooltipPinned) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    if (this.#tooltipElement && !this.#tooltipPinned) {
+      if (this.#tooltipTimer) {
+        view.clearTimeout(this.#tooltipTimer);
+        this.#tooltipTimer = null;
+      }
+      this.#tooltipAnchorElement = anchor;
+      this.#tooltipActorUuid = String(anchor.dataset.searchActorUuid ?? "");
+      this.#tooltipItemId = String(anchor.dataset.tooltipItem ?? anchor.dataset.itemId ?? "");
+      this.#tooltipWeaponTabIndex = 0;
+      void this.#showInventoryTooltip(anchor, { refresh: true });
+      return;
+    }
+
+    this.#clearInventoryTooltip();
+    this.#tooltipAnchorElement = anchor;
+    this.#tooltipActorUuid = String(anchor.dataset.searchActorUuid ?? "");
+    this.#tooltipItemId = String(anchor.dataset.tooltipItem ?? anchor.dataset.itemId ?? "");
+    this.#tooltipWeaponTabIndex = 0;
+    this.#tooltipTimer = view.setTimeout(() => {
+      this.#tooltipTimer = null;
+      void this.#showInventoryTooltip(anchor);
+    }, 420);
+  }
+
+  async #showInventoryTooltip(anchor = this.#tooltipAnchorElement, { pinned = false, refresh = false } = {}) {
+    const actor = this.#actor;
+    const itemId = String(anchor?.dataset?.tooltipItem ?? anchor?.dataset?.itemId ?? this.#tooltipItemId);
+    const item = actor?.items?.get(itemId);
+    if (!actor || !item) return;
+
+    const tooltipHTML = await renderInventoryItemTooltipHTML(item, actor, {
+      activeWeaponIndex: this.#tooltipWeaponTabIndex,
+      baseMode: false
+    });
+    if (refresh && ((this.#tooltipActorUuid !== actor.uuid) || (this.#tooltipItemId !== item.id))) return;
+
+    if (refresh && this.#tooltipElement && !this.#tooltipPinned && !pinned) {
+      this.#tooltipElement.innerHTML = tooltipHTML;
+      this.#tooltipElement.classList.remove("pinned");
+      this.#tooltipElement.style.pointerEvents = "none";
+      this.#tooltipPinned = false;
+      this.#tooltipAnchorElement = anchor;
+      this.#tooltipActorUuid = actor.uuid;
+      this.#tooltipItemId = item.id;
+      this.#positionInventoryTooltip();
+      requestAnimationFrame(() => {
+        const description = this.#tooltipElement?.querySelector(".description");
+        description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+        this.#positionInventoryTooltip();
+      });
+      return;
+    }
+
+    this.#clearInventoryTooltip({ keepAnchor: true });
+    const tooltip = document.createElement("aside");
+    tooltip.className = "fallout-maw-inventory-tooltip";
+    tooltip.classList.toggle("pinned", Boolean(pinned));
+    tooltip.style.setProperty("--fallout-maw-ui-scale", String(this.#uiScale));
+    tooltip.style.pointerEvents = pinned ? "auto" : "none";
+    tooltip.innerHTML = tooltipHTML;
+    tooltip.addEventListener("pointerenter", () => this.#cancelInventoryTooltipClose());
+    tooltip.addEventListener("pointerleave", event => {
+      if (this.#tooltipPinned) return;
+      if (this.#tooltipAnchorElement?.contains(event.relatedTarget)) return;
+      this.#scheduleInventoryTooltipClose();
+    });
+    tooltip.addEventListener("click", event => this.#onTooltipClick(event));
+    tooltip.addEventListener("auxclick", event => {
+      if (event.button !== 1) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.#tooltipPinned = true;
+      tooltip.classList.add("pinned");
+      tooltip.style.pointerEvents = "auto";
+      this.#bindInventoryTooltipDocumentClose();
+    });
+    document.body.append(tooltip);
+    this.#tooltipElement = tooltip;
+    this.#tooltipPinned = Boolean(pinned);
+    this.#tooltipAnchorElement = anchor;
+    this.#tooltipActorUuid = actor.uuid;
+    this.#tooltipItemId = item.id;
+    if (pinned) this.#bindInventoryTooltipDocumentClose();
+    this.#positionInventoryTooltip();
+    requestAnimationFrame(() => {
+      const description = tooltip.querySelector(".description");
+      description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+      this.#positionInventoryTooltip();
+    });
+  }
+
+  #onTooltipClick(event) {
+    const button = event.target?.closest?.("[data-tooltip-weapon-tab]");
+    if (!button || !this.#tooltipElement?.contains(button)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const index = Math.max(0, toInteger(button.dataset.tooltipWeaponTab));
+    this.#tooltipWeaponTabIndex = index;
+    this.#tooltipElement.querySelectorAll("[data-tooltip-weapon-tab]").forEach(entry => {
+      const active = toInteger(entry.dataset.tooltipWeaponTab) === index;
+      entry.classList.toggle("active", active);
+      entry.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    this.#tooltipElement.querySelectorAll("[data-tooltip-weapon-panel]").forEach(panel => {
+      panel.classList.toggle("active", toInteger(panel.dataset.tooltipWeaponPanel) === index);
+    });
+    this.#positionInventoryTooltip();
+  }
+
+  #positionInventoryTooltip() {
+    if (!this.#tooltipElement || !this.#tooltipAnchorElement?.isConnected) return;
+    const { viewportWidth, viewportHeight } = this.#getViewportMetrics();
+    const margin = Math.max(8, 12 * this.#uiScale);
+    const gap = Math.max(10, 12 * this.#uiScale);
+    const anchorRect = this.#tooltipAnchorElement.getBoundingClientRect();
+    let tooltipRect = this.#tooltipElement.getBoundingClientRect();
+    let left = anchorRect.right + gap;
+    if ((left + tooltipRect.width) > (viewportWidth - margin)) left = anchorRect.left - tooltipRect.width - gap;
+    left = Math.max(margin, Math.min(viewportWidth - tooltipRect.width - margin, left));
+    let top = anchorRect.top + ((anchorRect.height - tooltipRect.height) / 2);
+    top = Math.max(margin, Math.min(viewportHeight - tooltipRect.height - margin, top));
+    this.#tooltipElement.style.left = `${Math.round(left)}px`;
+    this.#tooltipElement.style.top = `${Math.round(top)}px`;
+    this.#tooltipElement.style.maxHeight = `${Math.max(220, viewportHeight - (margin * 2))}px`;
+    tooltipRect = this.#tooltipElement.getBoundingClientRect();
+    if ((tooltipRect.top + tooltipRect.height) > (viewportHeight - margin)) {
+      this.#tooltipElement.style.top = `${Math.round(Math.max(margin, viewportHeight - tooltipRect.height - margin))}px`;
+    }
+  }
+
+  #scheduleInventoryTooltipClose() {
+    if (this.#tooltipPinned || this.#tooltipCloseTimer) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#tooltipCloseTimer = view.setTimeout(() => {
+      this.#tooltipCloseTimer = null;
+      this.#clearInventoryTooltip();
+    }, 120);
+  }
+
+  #cancelInventoryTooltipClose() {
+    if (!this.#tooltipCloseTimer) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    view.clearTimeout(this.#tooltipCloseTimer);
+    this.#tooltipCloseTimer = null;
+  }
+
+  #bindInventoryTooltipDocumentClose() {
+    if (this.#tooltipDocumentPointerDownHandler) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#tooltipDocumentPointerDownHandler = event => {
+      const insideTooltip = this.#tooltipElement?.contains(event.target);
+      if (event.button === 1 && insideTooltip) {
+        event.preventDefault();
+        return;
+      }
+      if (!this.#tooltipPinned || !this.#tooltipElement) return;
+      if (insideTooltip) return;
+      this.#clearInventoryTooltip({ force: true });
+    };
+    view.document.addEventListener("pointerdown", this.#tooltipDocumentPointerDownHandler, { capture: true });
+  }
+
+  #unbindInventoryTooltipDocumentClose() {
+    if (!this.#tooltipDocumentPointerDownHandler) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    view.document.removeEventListener("pointerdown", this.#tooltipDocumentPointerDownHandler, { capture: true });
+    this.#tooltipDocumentPointerDownHandler = null;
+  }
+
+  #clearInventoryTooltip({ force = false, keepAnchor = false } = {}) {
+    if (this.#tooltipTimer) {
+      const view = this.element?.ownerDocument?.defaultView ?? window;
+      view.clearTimeout(this.#tooltipTimer);
+      this.#tooltipTimer = null;
+    }
+    this.#cancelInventoryTooltipClose();
+    if (this.#tooltipPinned && !force) return;
+    this.#unbindInventoryTooltipDocumentClose();
+    this.#tooltipElement?.remove();
+    this.#tooltipElement = null;
+    this.#tooltipPinned = false;
+    if (!keepAnchor) {
+      this.#tooltipAnchorElement = null;
+      this.#tooltipActorUuid = "";
+      this.#tooltipItemId = "";
+    }
+  }
+
+  #showInventoryContextMenu(item, event) {
+    this.#clearInventoryTooltip({ force: true });
+    document.querySelectorAll(".fallout-maw-inventory-context-menu").forEach(menu => menu.remove());
+
+    const placementMode = String(item.system?.placement?.mode ?? "");
+    const isSlottedEquipment = placementMode === "equipment";
+    const isSlottedWeapon = placementMode === "weapon";
+    const isSlottedItem = isSlottedEquipment || isSlottedWeapon;
+    const isEquipped = Boolean(item.system?.equipped);
+    const isContainer = isContainerItem(item);
+    const menuOptions = [];
+
+    if (game.user?.isGM) {
+      menuOptions.push(["edit", "fa-pen-to-square", game.i18n.localize("FALLOUTMAW.Common.Edit")]);
+    }
+    if (isContainer) {
+      menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
+    }
+    if (isSlottedItem || isEquipped) {
+      menuOptions.push(["unequip", "fa-hand", game.i18n.localize("FALLOUTMAW.Item.Unequip")]);
+    } else {
+      menuOptions.push(["equip", "fa-shirt", game.i18n.localize("FALLOUTMAW.Item.Equip")]);
+    }
+    if (getItemQuantity(item) > 1) {
+      menuOptions.push(["split", "fa-code-branch", "Разделить"]);
+    }
+    if (game.user?.isGM && !isSlottedItem) {
+      menuOptions.push(["copy", "fa-copy", game.i18n.localize("FALLOUTMAW.Common.Copy")]);
+    }
+    if (game.user?.isGM) {
+      menuOptions.push(["delete", "fa-trash", game.i18n.localize("FALLOUTMAW.Common.Delete")]);
+    }
+
+    const menu = document.createElement("nav");
+    menu.className = "fallout-maw-inventory-context-menu";
+    menu.style.left = `${event.clientX}px`;
+    menu.style.top = `${event.clientY}px`;
+    menu.innerHTML = menuOptions
+      .map(([action, icon, label]) => `<button type="button" data-action="${action}"><i class="fa-solid ${icon}"></i>${label}</button>`)
+      .join("");
+    document.body.append(menu);
+
+    menu.addEventListener("click", async clickEvent => {
+      const action = clickEvent.target.closest("button")?.dataset.action;
+      if (!action) return;
+      clickEvent.preventDefault();
+      menu.remove();
+      if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
+      if (action === "open") return this.#openCraftContainerSheet(item);
+      if (action === "equip") return this.#equipCraftItem(item);
+      if (action === "unequip") return this.#unequipCraftItem(item);
+      if (action === "split") return this.#splitCraftItem(item);
+      if (action === "copy" && game.user?.isGM) return copyActorInventoryItem(this.#actor, item);
+      if (action === "delete" && game.user?.isGM) return item.delete();
+      return undefined;
+    });
+  }
+
+  #openCraftContainerSheet(item) {
+    if (!isContainerItem(item)) return null;
+    const app = new FalloutMaWContainerSheet({ document: item });
+    app.render({ force: true });
+    app.bringToFront();
+    return app;
+  }
+
+  async #equipCraftItem(item) {
+    return transferItemBetweenActors({
+      sourceActor: this.#actor,
+      targetActor: this.#actor,
+      sourceItem: item,
+      targetMode: "equipment",
+      targetParentId: ROOT_CONTAINER_ID,
+      quantity: getItemQuantity(item)
+    });
+  }
+
+  async #unequipCraftItem(item) {
+    const placement = getFirstAvailableActorInventoryPlacement(this.#actor, ROOT_CONTAINER_ID, item, [item.id], []);
+    if (!placement) {
+      ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+      return null;
+    }
+    return transferItemBetweenActors({
+      sourceActor: this.#actor,
+      targetActor: this.#actor,
+      sourceItem: item,
+      targetMode: "inventory",
+      targetParentId: ROOT_CONTAINER_ID,
+      targetX: placement.x,
+      targetY: placement.y,
+      quantity: getItemQuantity(item)
+    });
+  }
+
+  async #splitCraftItem(item) {
+    const quantity = getItemQuantity(item);
+    if (quantity <= 1) return null;
+    const amount = await promptSearchItemStackQuantity({
+      item,
+      title: "Разделить предмет",
+      actionLabel: "Разделить",
+      max: quantity - 1,
+      value: Math.max(1, Math.floor(quantity / 2))
+    });
+    if (!amount) return null;
+    try {
+      return await splitActorInventoryItem(this.#actor, item, amount);
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Craft inventory split failed`, error);
+      ui.notifications.warn(error.message || "Не удалось разделить предмет.");
+    }
+    return null;
+  }
+
+  #scheduleRefreshForActor(actor) {
+    if (!actor || actor.uuid !== this.#actorUuid) return;
+    if (this.rendered) void this.render({ force: true });
+  }
+
+  #scheduleRefreshForItem(item) {
+    if (!item) return;
+    if (item.parent?.uuid === this.#actorUuid) {
+      if (this.rendered && !this.#busy) void this.render({ force: true });
+      return;
+    }
+    if (!item.parent) {
+      craftRecipeCache = null;
+      if (this.rendered && !this.#busy) void this.render({ force: true });
+    }
+  }
+
+  async #onCraft(event) {
+    event.preventDefault();
+    if (this.#busy) return undefined;
+
+    const actor = await resolveActor(this.#actorUuid);
+    const recipe = await resolveDocument(this.#selectedRecipeUuid);
+    this.#selectedRecipe = recipe;
+    const validation = validateCraftRequest(actor, recipe);
+    if (!validation.valid) {
+      ui.notifications.warn(validation.message);
+      return undefined;
+    }
+
+    this.#busy = true;
+    this.#pulse = null;
+    await this.render({ force: true });
+
+    const linkResults = [];
+    for (const link of validation.links) {
+      const outcome = await requestSkillCheck({
+        actor,
+        skillKey: link.skillKey,
+        data: { difficulty: link.difficulty },
+        animate: false,
+        createMessage: true,
+        requester: "Крафт"
+      });
+      if (!outcome) {
+        this.#busy = false;
+        await this.render({ force: true });
+        ui.notifications.warn("Проверка крафта не выполнена.");
+        return undefined;
+      }
+      linkResults.push({
+        linkId: link.id,
+        success: outcome.result?.key === "success" || outcome.result?.key === "criticalSuccess",
+        resultKey: String(outcome.result?.key ?? "failure")
+      });
+    }
+
+    const operationId = foundry.utils.randomID();
+    this.#pendingOperation = {
+      id: operationId,
+      actorUuid: actor.uuid,
+      recipeUuid: recipe.uuid,
+      success: linkResults.every(result => result.success),
+      requirements: validation.requirements,
+      linkResults
+    };
+    await this.render({ force: true });
+    return undefined;
+  }
+
+  #startPendingOperation() {
+    const operation = this.#pendingOperation;
+    if (!operation || this.#startedOperationId === operation.id) return;
+    this.#startedOperationId = operation.id;
+    void this.#runCraftOperationAnimation(operation);
+  }
+
+  async #runCraftOperationAnimation(operation) {
+    await waitForAnimationFrame();
+    this.#renderCraftLinks(operation);
+    await waitForAnimationFrame();
+    await animateCraftLinks(this.element, operation);
+
+    if (this.#pendingOperation?.id !== operation.id) return;
+    try {
+      await applyCraftOperation(operation);
+      this.#pulse = {
+        recipeUuid: operation.recipeUuid,
+        success: operation.success
+      };
+      ui.notifications.info(operation.success ? "Крафт выполнен." : "Крафт провален. Ресурсы потрачены.");
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Craft operation failed`, error);
+      ui.notifications.warn(error.message || "Крафт не завершен.");
+    } finally {
+      this.#busy = false;
+      this.#pendingOperation = null;
+      this.#startedOperationId = "";
+      if (this.rendered) await this.render({ force: true });
+    }
+  }
+
+  #syncCraftNodeLayouts() {
+    this.element?.querySelectorAll("[data-craft-block-id]").forEach(block => {
+      applyCraftElementLayout(block, {
+        x: Number(block.dataset.craftX) || 0,
+        y: Number(block.dataset.craftY) || 0,
+        width: Number(block.dataset.craftWidth) || 1,
+        height: Number(block.dataset.craftHeight) || 1
+      });
+    });
+    this.element?.querySelectorAll("[data-craft-block-frame-id]").forEach(block => {
+      applyCraftElementLayout(block, {
+        x: Number(block.dataset.craftX) || 0,
+        y: Number(block.dataset.craftY) || 0,
+        width: Number(block.dataset.craftWidth) || 1,
+        height: Number(block.dataset.craftHeight) || 1
+      });
+    });
+    this.element?.querySelectorAll("[data-craft-node-id]").forEach(node => {
+      applyCraftElementLayout(node, {
+        x: Number(node.dataset.craftX) || 0,
+        y: Number(node.dataset.craftY) || 0,
+        width: Number(node.dataset.craftWidth) || 1,
+        height: Number(node.dataset.craftHeight) || 1
+      });
+    });
+  }
+
+  #scheduleCraftLinkRender() {
+    if (this.#linkRenderFrame) return;
+    this.#linkRenderFrame = requestAnimationFrame(() => {
+      this.#linkRenderFrame = 0;
+      this.#syncCraftNodeLayouts();
+      this.#renderCraftLinks(this.#pendingOperation);
+    });
+  }
+
+  #scheduleCraftLinkRenderAfterLayout() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => this.#scheduleCraftLinkRender());
+    });
+  }
+
+  #getCraftViewport() {
+    if (this.#craftViewportOverride) return this.#craftViewportOverride;
+    return this.#selectedRecipe ? getCraftViewport(this.#selectedRecipe) : normalizeCraftViewport();
+  }
+
+  #setCraftViewportStyle(x, y, zoom = this.#getCraftViewport().zoom) {
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    const world = this.element?.querySelector("[data-craft-world]");
+    const viewport = normalizeCraftViewport({ x, y, zoom });
+    this.#craftViewportOverride = viewport;
+    workspace?.style.setProperty("--craft-pan-x", `${viewport.x}px`);
+    workspace?.style.setProperty("--craft-pan-y", `${viewport.y}px`);
+    workspace?.style.setProperty("--craft-zoom", String(viewport.zoom));
+    workspace?.style.setProperty("--fallout-maw-craft-scaled-step", `${Math.round(getCraftGridMetrics(workspace).step * viewport.zoom)}px`);
+    world?.style.setProperty("--craft-pan-x", `${viewport.x}px`);
+    world?.style.setProperty("--craft-pan-y", `${viewport.y}px`);
+    world?.style.setProperty("--craft-zoom", String(viewport.zoom));
+    this.#scheduleCraftLinkRender();
+    return viewport;
+  }
+
+  #onCraftWorkspacePointerDown(event) {
+    if (event.button !== 2) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const viewport = this.#getCraftViewport();
+    this.#craftPanDrag = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: viewport.x,
+      startY: viewport.y,
+      moved: false
+    };
+    const onMove = moveEvent => this.#onCraftPanMove(moveEvent);
+    const onUp = upEvent => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      this.#onCraftPanEnd(upEvent);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp, { once: true });
+  }
+
+  #onCraftPanMove(event) {
+    const drag = this.#craftPanDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    event.preventDefault();
+    const nextX = drag.startX + (event.clientX - drag.startClientX);
+    const nextY = drag.startY + (event.clientY - drag.startClientY);
+    drag.moved = true;
+    this.#setCraftViewportStyle(nextX, nextY);
+  }
+
+  #onCraftPanEnd(event) {
+    const drag = this.#craftPanDrag;
+    this.#craftPanDrag = null;
+    if (!drag || event.pointerId !== drag.pointerId || !drag.moved) return;
+    const nextX = Math.round(drag.startX + (event.clientX - drag.startClientX));
+    const nextY = Math.round(drag.startY + (event.clientY - drag.startClientY));
+    this.#setCraftViewportStyle(nextX, nextY);
+  }
+
+  #onCraftWheel(event) {
+    event.preventDefault();
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    const rect = workspace?.getBoundingClientRect();
+    if (!rect) return undefined;
+    const viewport = this.#getCraftViewport();
+    const factor = Math.exp(-event.deltaY * 0.0015);
+    const nextZoom = clampCraftZoom(viewport.zoom * factor);
+    if (Math.abs(nextZoom - viewport.zoom) < 0.001) return undefined;
+    const pointerX = event.clientX - rect.left - (rect.width / 2);
+    const pointerY = event.clientY - rect.top - (rect.height / 2);
+    const worldX = (pointerX - viewport.x) / viewport.zoom;
+    const worldY = (pointerY - viewport.y) / viewport.zoom;
+    const nextX = pointerX - (worldX * nextZoom);
+    const nextY = pointerY - (worldY * nextZoom);
+    const nextViewport = this.#setCraftViewportStyle(nextX, nextY, nextZoom);
+    if (this.#craftPanDrag) {
+      this.#craftPanDrag.startClientX = event.clientX;
+      this.#craftPanDrag.startClientY = event.clientY;
+      this.#craftPanDrag.startX = nextViewport.x;
+      this.#craftPanDrag.startY = nextViewport.y;
+    }
+    return undefined;
+  }
+
+  #renderCraftLinks(operation = null) {
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    const svg = workspace?.querySelector("[data-craft-links]");
+    if (!workspace || !svg || !this.#selectedRecipeUuid) return;
+    if (!workspace.getClientRects().length || !svg.getClientRects().length) return;
+    svg.replaceChildren();
+
+    const recipe = this.#selectedRecipe;
+    if (!recipe) return;
+    const craft = getCraftRenderData(recipe, this.#actor);
+    const nodeData = new Map(craft.nodes.map(node => [node.id, node]));
+    const resultByLink = new Map((operation?.linkResults ?? []).map(result => [result.linkId, result]));
+
+    for (const link of craft.links) {
+      const fromNode = nodeData.get(link.fromNodeId);
+      const toNode = nodeData.get(link.toNodeId);
+      if (!fromNode || !toNode || getCraftResolvedEndpointId(fromNode) === getCraftResolvedEndpointId(toNode)) continue;
+      const flow = getCraftLinkFlow(link, nodeData);
+      const from = getCraftEndpointElement(workspace, craft.nodes, flow.fromNodeId);
+      const to = getCraftEndpointElement(workspace, craft.nodes, flow.toNodeId);
+      if (!from || !to) continue;
+      const anchors = flow.reversed
+        ? { from: getCraftLinkAnchor(link, "to"), to: getCraftLinkAnchor(link, "from") }
+        : getCraftLinkAnchors(link);
+      const geometry = getCraftConnectorGeometry(from, to, svg, getCraftLinkBend(link), anchors);
+      appendCraftLinkPath(svg, geometry, link, {
+        result: resultByLink.get(link.id),
+        recipeUuid: recipe.uuid
+      });
+    }
+  }
+}
+
+function validateCraftRequest(actor, recipe) {
+  if (!actor?.isOwner) return { valid: false, message: "Нет прав на крафт этим актером." };
+  if (!recipe) return { valid: false, message: "Рецепт не выбран." };
+  const craft = getCraftRenderData(recipe, actor);
+  if (!craft.links.length) return { valid: false, message: "В рецепте нет связей для проверок." };
+  if (!craft.requirements.length) return { valid: false, message: "В рецепте нет компонентов." };
+  if (craft.requirements.some(requirement => !requirement.sourceUuid)) {
+    return { valid: false, message: "В рецепте есть компонент без исходного документа." };
+  }
+  if (craft.requirements.some(requirement => requirement.owned < requirement.quantity)) {
+    return { valid: false, message: "Недостаточно компонентов для крафта." };
+  }
+  return {
+    valid: true,
+    requirements: craft.requirements.map(requirement => ({
+      sourceUuid: requirement.sourceUuid,
+      quantity: requirement.quantity
+    })),
+    links: craft.links.map(link => ({
+      id: link.id,
+      skillKey: String(link.skillKey ?? "repair") || "repair",
+      difficulty: Math.max(0, toInteger(link.difficulty) || 60)
+    }))
+  };
+}
+
+async function applyCraftOperation(operation) {
+  const actor = await resolveActor(operation.actorUuid);
+  const recipe = await resolveDocument(operation.recipeUuid);
+  if (!actor?.isOwner) throw new Error("Нет прав на крафт этим актером.");
+  if (!recipe) throw new Error("Рецепт не найден.");
+
+  await spendCraftRequirements(actor, operation.requirements);
+  if (!operation.success) return;
+  await createCraftResult(actor, recipe);
+}
+
+async function spendCraftRequirements(actor, requirements = []) {
+  const updates = [];
+  const deletes = [];
+
+  for (const requirement of requirements) {
+    let remaining = Math.max(0, toInteger(requirement.quantity));
+    if (!remaining) continue;
+    const sourceUuid = String(requirement.sourceUuid ?? "");
+    const candidates = actor.items.contents.filter(item => getActorItemSourceUuid(item) === sourceUuid);
+
+    for (const item of candidates) {
+      if (remaining <= 0) break;
+      const quantity = getItemQuantity(item);
+      if (quantity <= 0) continue;
+      if (quantity <= remaining) {
+        deletes.push(item.id);
+        remaining -= quantity;
+      } else {
+        updates.push({ _id: item.id, "system.quantity": quantity - remaining });
+        remaining = 0;
+      }
+    }
+
+    if (remaining > 0) throw new Error("Компоненты закончились до завершения крафта.");
+  }
+
+  if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
+  if (deletes.length) await actor.deleteEmbeddedDocuments("Item", deletes);
+}
+
+async function createCraftResult(actor, recipe) {
+  const data = recipe.toObject();
+  delete data._id;
+  delete data.folder;
+  foundry.utils.setProperty(data, "system.quantity", 1);
+  foundry.utils.setProperty(data, "system.equipped", false);
+  foundry.utils.setProperty(data, "system.container.parentId", "");
+
+  const placement = getCraftResultPlacement(actor, data);
+  const storedPlacement = placement
+    ? createStoredPlacement(placement, data)
+    : createStoredPlacement({ mode: "inventory", x: 1, y: 1 }, data);
+  foundry.utils.setProperty(data, "system.placement", storedPlacement);
+
+  data._stats ??= {};
+  data._stats.compendiumSource = recipe.pack ? recipe.uuid : null;
+  data._stats.duplicateSource = recipe.pack ? null : recipe.uuid;
+  data._stats.exportSource = null;
+
+  await actor.createEmbeddedDocuments("Item", [data]);
+}
+
+function getCraftResultPlacement(actor, itemData) {
+  const race = getActorRace(actor);
+  const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
+  const columns = Math.max(1, toInteger(inventorySize.columns) || createDefaultInventorySize().columns);
+  const rows = Math.max(1, toInteger(inventorySize.rows) || createDefaultInventorySize().rows);
+  const contextItems = getContextInventoryItems(ROOT_CONTAINER_ID, actor.items.contents);
+  return findFirstAvailableInventoryPlacement(contextItems, columns, rows, itemData, actor.items.contents, [], []);
+}
+
+function prepareCraftContext(recipe, actor, { busy = false, pulse = null } = {}) {
+  const data = getCraftRenderData(recipe, actor);
+  const missingCount = data.requirements.filter(requirement => requirement.owned < requirement.quantity).length;
+  return {
+    ...data,
+    nodes: data.nodes.map(node => ({
+      ...node,
+      pulseClass: node.root && pulse ? (pulse.success ? "craft-pulse-success" : "craft-pulse-failure") : ""
+    })),
+    canCraft: Boolean(actor?.isOwner && !busy && data.links.length && data.requirements.length && missingCount === 0),
+    summary: missingCount
+      ? `Не хватает компонентов: ${missingCount}`
+      : `Компоненты: ${data.requirements.length}, проверки: ${data.links.length}`
+  };
+}
+
+function createEmptyCraftContext(busy = false) {
+  return {
+    blocks: [],
+    nodes: [],
+    links: [],
+    requirements: [],
+    viewportStyle: "",
+    canCraft: !busy && false,
+    summary: ""
+  };
+}
+
+function getCraftRenderData(recipe, actor) {
+  const nodes = getCraftNodesWithRoot(recipe);
+  const links = getCraftLinks(recipe);
+  const requirementsBySource = getCraftRequirementsBySource(nodes);
+  const ownedBySource = getActorOwnedCraftSources(actor);
+  const blocks = getCraftBlocks(nodes);
+  const viewport = getCraftViewport(recipe);
+  const sourceMissing = new Set(
+    Array.from(requirementsBySource.entries())
+      .filter(([sourceUuid, quantity]) => (ownedBySource.get(sourceUuid) ?? 0) < quantity)
+      .map(([sourceUuid]) => sourceUuid)
+  );
+
+  return {
+    blocks: blocks.map(block => ({
+      ...block,
+      label: `Craft block ${block.id}`,
+      style: buildCraftNodeStyle(block)
+    })),
+    nodes: nodes.map((node, index) => {
+      const sourceUuid = getCraftNodeSourceUuid(node);
+      const quantity = Math.max(1, toInteger(node.quantity) || 1);
+      const owned = node.root ? quantity : (ownedBySource.get(sourceUuid) ?? 0);
+      return {
+        ...node,
+        index,
+        sourceUuid,
+        quantity,
+        owned,
+        missing: !node.root && sourceMissing.has(sourceUuid),
+        style: buildCraftNodeStyle(node)
+      };
+    }),
+    links,
+    requirements: Array.from(requirementsBySource.entries()).map(([sourceUuid, quantity]) => ({
+      sourceUuid,
+      quantity,
+      owned: ownedBySource.get(sourceUuid) ?? 0
+    })),
+    viewport,
+    viewportStyle: `--craft-pan-x: ${Math.round(viewport.x)}px; --craft-pan-y: ${Math.round(viewport.y)}px; --craft-zoom: ${viewport.zoom};`
+  };
+}
+
+function getCraftRequirementsBySource(nodes = []) {
+  const requirements = new Map();
+  for (const node of nodes) {
+    if (node.root) continue;
+    const sourceUuid = getCraftNodeSourceUuid(node);
+    const quantity = Math.max(1, toInteger(node.quantity) || 1);
+    requirements.set(sourceUuid, (requirements.get(sourceUuid) ?? 0) + quantity);
+  }
+  return requirements;
+}
+
+function getActorOwnedCraftSources(actor) {
+  const sources = new Map();
+  for (const item of actor?.items?.contents ?? []) {
+    const sourceUuid = getActorItemSourceUuid(item);
+    if (!sourceUuid) continue;
+    sources.set(sourceUuid, (sources.get(sourceUuid) ?? 0) + getItemQuantity(item));
+  }
+  return sources;
+}
+
+function getActorItemSourceUuid(item) {
+  const stats = item?._stats ?? item?._source?._stats ?? {};
+  return String(stats.compendiumSource || stats.duplicateSource || "").trim();
+}
+
+function getCraftNodeSourceUuid(node) {
+  return String(node?.itemUuid ?? "").trim();
+}
+
+function getCraftNodesWithRoot(item) {
+  const nodes = getCraftNodes(item);
+  const rootIndex = nodes.findIndex(node => node.root);
+  const root = createCraftRootNode(item, rootIndex >= 0 ? nodes[rootIndex] : {});
+  if (rootIndex >= 0) {
+    nodes[rootIndex] = root;
+    return nodes;
+  }
+  return [root, ...nodes];
+}
+
+function getCraftNodes(item) {
+  return Array.from(item?.system?.craft?.nodes ?? [])
+    .map(normalizeCraftNode)
+    .filter(node => node.id);
+}
+
+function getCraftLinks(item) {
+  const nodes = getCraftNodesWithRoot(item);
+  return normalizeCraftLinksForNodes(Array.from(item?.system?.craft?.links ?? []), nodes);
+}
+
+function getCraftViewport(item) {
+  return normalizeCraftViewport(item?.system?.craft?.viewport ?? {});
+}
+
+function createCraftRootNode(item, source = {}) {
+  const placement = item?.system?.placement ?? {};
+  const width = Math.max(1, toInteger(placement.width) || toInteger(source.width) || 1);
+  const height = Math.max(1, toInteger(placement.height) || toInteger(source.height) || 1);
+  return normalizeCraftNode({
+    ...source,
+    id: String(source.id || CRAFT_ROOT_NODE_ID),
+    itemUuid: item?.uuid ?? "",
+    name: item?.name ?? "",
+    img: normalizeImagePath(item?.img || FALLBACK_ICON),
+    type: item?.type ?? "",
+    width,
+    height,
+    quantity: Math.max(1, toInteger(source.quantity) || 1),
+    blockId: String(source.blockId ?? ""),
+    root: true
+  });
+}
+
+function normalizeCraftNode(node = {}) {
+  const width = Math.max(1, toInteger(node.width) || 1);
+  const height = Math.max(1, toInteger(node.height) || 1);
+  return {
+    id: String(node.id ?? ""),
+    itemUuid: String(node.itemUuid ?? ""),
+    name: String(node.name ?? ""),
+    img: normalizeImagePath(node.img, FALLBACK_ICON),
+    type: String(node.type ?? ""),
+    x: snapCraftGridCoordinate(node.x, width),
+    y: snapCraftGridCoordinate(node.y, height),
+    width,
+    height,
+    quantity: Math.max(1, toInteger(node.quantity) || 1),
+    blockId: String(node.blockId ?? ""),
+    root: Boolean(node.root)
+  };
+}
+
+function normalizeCraftLink(link = {}) {
+  return {
+    id: String(link.id || foundry.utils.randomID()),
+    fromNodeId: String(link.fromNodeId ?? ""),
+    toNodeId: String(link.toNodeId ?? ""),
+    skillKey: String(link.skillKey ?? "repair"),
+    difficulty: Math.max(0, toInteger(link.difficulty) || 60),
+    bendX: toOptionalNumber(link.bendX),
+    bendY: toOptionalNumber(link.bendY),
+    fromAnchorSide: normalizeCraftAnchorSide(link.fromAnchorSide),
+    fromAnchorOffset: toOptionalNumber(link.fromAnchorOffset),
+    toAnchorSide: normalizeCraftAnchorSide(link.toAnchorSide),
+    toAnchorOffset: toOptionalNumber(link.toAnchorOffset)
+  };
+}
+
+function normalizeCraftLinksForNodes(links = [], nodes = []) {
+  const nodeIds = new Set(nodes.map(node => node.id));
+  const byResolvedPair = new Map();
+  for (const rawLink of links) {
+    const link = normalizeCraftLink(rawLink);
+    if (!nodeIds.has(link.fromNodeId) || !nodeIds.has(link.toNodeId) || link.fromNodeId === link.toNodeId) continue;
+    const key = getCraftResolvedLinkKey(link, nodes);
+    if (!key || byResolvedPair.has(key)) continue;
+    byResolvedPair.set(key, link);
+  }
+  return Array.from(byResolvedPair.values());
+}
+
+function getCraftResolvedLinkKey(link, nodes = []) {
+  return getCraftResolvedPairKey(link.fromNodeId, link.toNodeId, nodes);
+}
+
+function getCraftResolvedPairKey(fromNodeId, toNodeId, nodes = []) {
+  const from = nodes.find(node => node.id === fromNodeId);
+  const to = nodes.find(node => node.id === toNodeId);
+  const fromKey = getCraftResolvedEndpointId(from);
+  const toKey = getCraftResolvedEndpointId(to);
+  if (!fromKey || !toKey || fromKey === toKey) return "";
+  return [fromKey, toKey].sort().join("|");
+}
+
+function getCraftResolvedEndpointId(node) {
+  if (!node) return "";
+  return node.blockId ? `block:${node.blockId}` : `node:${node.id}`;
+}
+
+function getCraftBlocks(nodes = []) {
+  return Array.from(groupCraftNodesByBlock(nodes).entries())
+    .map(([id, blockNodes]) => ({ id, nodeIds: blockNodes.map(node => node.id), ...getCraftNodesBounds(blockNodes) }))
+    .filter(block => block.nodeIds.length > 1 && block.width > 0 && block.height > 0);
+}
+
+function groupCraftNodesByBlock(nodes = []) {
+  const groups = new Map();
+  for (const node of nodes) {
+    if (!node.blockId) continue;
+    if (!groups.has(node.blockId)) groups.set(node.blockId, []);
+    groups.get(node.blockId).push(node);
+  }
+  return groups;
+}
+
+function craftNodeToBounds(node = {}) {
+  const width = Math.max(1, toInteger(node.width) || 1);
+  const height = Math.max(1, toInteger(node.height) || 1);
+  const x = Number(node.x) || 0;
+  const y = Number(node.y) || 0;
+  const left = x - ((width - 1) / 2);
+  const top = y - ((height - 1) / 2);
+  return {
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+    width,
+    height,
+    x: left + ((width - 1) / 2),
+    y: top + ((height - 1) / 2)
+  };
+}
+
+function getCraftNodesBounds(nodes = []) {
+  const bounds = nodes.map(craftNodeToBounds);
+  if (!bounds.length) return null;
+  const left = Math.min(...bounds.map(bound => bound.left));
+  const top = Math.min(...bounds.map(bound => bound.top));
+  const right = Math.max(...bounds.map(bound => bound.right));
+  const bottom = Math.max(...bounds.map(bound => bound.bottom));
+  return {
+    x: (left + right) / 2,
+    y: (top + bottom) / 2,
+    width: Math.max(1, Math.ceil(right - left)),
+    height: Math.max(1, Math.ceil(bottom - top))
+  };
+}
+
+function buildCraftNodeStyle(node) {
+  const width = Math.max(1, toInteger(node.width) || 1);
+  const height = Math.max(1, toInteger(node.height) || 1);
+  const widthPx = (width * 52) + ((width - 1) * 4);
+  const heightPx = (height * 52) + ((height - 1) * 4);
+  return [
+    `--craft-x: ${Number(node.x) || 0};`,
+    `--craft-y: ${Number(node.y) || 0};`,
+    `--craft-width: ${width};`,
+    `--craft-height: ${height};`,
+    `--craft-offset-x: ${(Number(node.x) || 0) * CRAFT_GRID_FALLBACK_STEP}px;`,
+    `--craft-offset-y: ${(Number(node.y) || 0) * CRAFT_GRID_FALLBACK_STEP}px;`,
+    `--craft-node-width: ${widthPx}px;`,
+    `--craft-node-height: ${heightPx}px;`,
+    `--craft-node-half-width: ${widthPx / 2}px;`,
+    `--craft-node-half-height: ${heightPx / 2}px;`
+  ].join(" ");
+}
+
+function snapCraftGridCoordinate(value, size = 1) {
+  const numericSize = Math.max(1, toInteger(size) || 1);
+  const offset = numericSize % 2 === 0 ? 0.5 : 0;
+  const number = Number(value);
+  return (Number.isFinite(number) ? Math.round(number - offset) : 0) + offset;
+}
+
+function normalizeCraftViewport(viewport = {}) {
+  return {
+    x: Math.round(Number(viewport.x) || 0),
+    y: Math.round(Number(viewport.y) || 0),
+    zoom: clampCraftZoom(viewport.zoom)
+  };
+}
+
+function clampCraftZoom(value) {
+  const zoom = Number(value);
+  if (!Number.isFinite(zoom)) return 1;
+  return Math.max(CRAFT_MIN_ZOOM, Math.min(CRAFT_MAX_ZOOM, zoom));
+}
+
+function applyCraftElementLayout(element, { x = 0, y = 0, width = 1, height = 1 } = {}) {
+  const metrics = getCraftGridMetrics(element?.closest?.("[data-craft-workspace]"));
+  const normalizedWidth = Math.max(1, toInteger(width) || 1);
+  const normalizedHeight = Math.max(1, toInteger(height) || 1);
+  const widthPx = (normalizedWidth * metrics.cell) + ((normalizedWidth - 1) * metrics.gap);
+  const heightPx = (normalizedHeight * metrics.cell) + ((normalizedHeight - 1) * metrics.gap);
+  element.style.setProperty("--craft-offset-x", `${(Number(x) || 0) * metrics.step}px`);
+  element.style.setProperty("--craft-offset-y", `${(Number(y) || 0) * metrics.step}px`);
+  element.style.setProperty("--craft-node-width", `${widthPx}px`);
+  element.style.setProperty("--craft-node-height", `${heightPx}px`);
+  element.style.setProperty("--craft-node-half-width", `${widthPx / 2}px`);
+  element.style.setProperty("--craft-node-half-height", `${heightPx / 2}px`);
+}
+
+function getCraftGridMetrics(element) {
+  const styles = element ? getComputedStyle(element) : null;
+  const cell = Math.max(1, cssDimensionToPixels(styles?.getPropertyValue("--fallout-maw-craft-cell-size") || "52px", element)) || 52;
+  const gap = Math.max(0, cssDimensionToPixels(styles?.getPropertyValue("--fallout-maw-craft-grid-gap") || "4px", element)) || 4;
+  const step = Math.max(1, cell + gap) || CRAFT_GRID_FALLBACK_STEP;
+  return { cell, gap, step };
+}
+
+function cssDimensionToPixels(value, element = document.documentElement) {
+  const raw = String(value ?? "").trim();
+  const numeric = Number.parseFloat(raw);
+  if (!Number.isFinite(numeric)) return 0;
+  if (raw.endsWith("rem")) return numeric * (Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16);
+  if (raw.endsWith("em")) return numeric * (Number.parseFloat(getComputedStyle(element).fontSize) || 16);
+  return numeric;
+}
+
+function getCraftLinkFlow(link, nodeData) {
+  const from = nodeData.get(link.fromNodeId);
+  const to = nodeData.get(link.toNodeId);
+  if (from?.root && !to?.root) return { fromNodeId: link.toNodeId, toNodeId: link.fromNodeId, reversed: true };
+  return { fromNodeId: link.fromNodeId, toNodeId: link.toNodeId, reversed: false };
+}
+
+function getCraftEndpointElement(workspace, nodes, nodeId) {
+  const node = nodes.find(entry => entry.id === nodeId);
+  const blockId = String(node?.blockId ?? "");
+  return (blockId ? workspace?.querySelector(`[data-craft-block-id="${CSS.escape(blockId)}"]`) : null)
+    ?? workspace?.querySelector(`[data-craft-node-id="${CSS.escape(nodeId)}"]`)
+    ?? null;
+}
+
+function appendCraftLinkPath(svg, geometry, link, { result = null, recipeUuid = "" } = {}) {
+  if (!geometry?.centerPath) return;
+  const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  group.classList.add("fallout-maw-craft-link", "readonly");
+  group.dataset.craftLinkId = link.id;
+  group.dataset.craftRecipeUuid = recipeUuid;
+  if (result) {
+    group.dataset.craftFlowResult = result.success ? "success" : "failure";
+    group.dataset.craftFlowBreak = String(getCraftFailureBreakFraction(recipeUuid, link.id));
+  }
+  for (const [className, pathData] of [
+    ["fallout-maw-craft-link-shadow", geometry.centerPath],
+    ["fallout-maw-craft-link-wall", geometry.centerPath],
+    ["fallout-maw-craft-link-glass", geometry.centerPath],
+    ["fallout-maw-craft-link-highlight", geometry.centerPath],
+    ["fallout-maw-craft-link-fluid fallout-maw-craft-link-fluid-gold", geometry.centerPath],
+    ["fallout-maw-craft-link-fluid fallout-maw-craft-link-fluid-red", geometry.centerPath]
+  ]) {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    for (const token of className.split(" ")) path.classList.add(token);
+    path.setAttribute("d", pathData);
+    group.appendChild(path);
+  }
+  for (const point of [geometry.start, geometry.end]) {
+    if (!point?.socketPath) continue;
+    const socket = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    socket.classList.add("fallout-maw-craft-link-socket");
+    socket.setAttribute("d", point.socketPath);
+    group.appendChild(socket);
+  }
+  svg.appendChild(group);
+}
+
+function getCraftConnectorGeometry(fromElement, toElement, svg, bend = null, anchors = null) {
+  const from = getElementRectRelativeToSvg(fromElement, svg);
+  const to = getElementRectRelativeToSvg(toElement, svg);
+  if (!from || !to) return null;
+  return buildCraftConnectorGeometry(from, to, bend, anchors);
+}
+
+function getElementRectRelativeToSvg(element, svg) {
+  if (!element || !svg) return null;
+  const rect = element.getBoundingClientRect();
+  const svgRect = svg.getBoundingClientRect();
+  const zoom = getCraftSvgZoom(svg);
+  return {
+    left: (rect.left - svgRect.left) / zoom,
+    right: (rect.right - svgRect.left) / zoom,
+    top: (rect.top - svgRect.top) / zoom,
+    bottom: (rect.bottom - svgRect.top) / zoom,
+    width: rect.width / zoom,
+    height: rect.height / zoom
+  };
+}
+
+function getCraftSvgZoom(svg) {
+  const workspace = svg?.closest?.("[data-craft-workspace]");
+  const zoom = Number.parseFloat(getComputedStyle(workspace ?? svg).getPropertyValue("--craft-zoom"));
+  return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+}
+
+function buildCraftConnectorGeometry(from, to, bend = null, anchors = null) {
+  const fromCenter = getRectCenter(from);
+  const toCenter = getRectCenter(to);
+  let startAnchor;
+  let endAnchor;
+  let path;
+  if (bend) {
+    startAnchor = getCraftResolvedAnchor(from, anchors?.from, bend);
+    endAnchor = getCraftResolvedAnchor(to, anchors?.to, bend);
+    path = buildBentTubeCenterPath(startAnchor, bend, endAnchor);
+  } else {
+    startAnchor = getCraftResolvedAnchor(from, anchors?.from, toCenter);
+    endAnchor = getCraftResolvedAnchor(to, anchors?.to, fromCenter);
+    path = buildDefaultTubeCenterPath(startAnchor, endAnchor);
+  }
+  return {
+    centerPath: path,
+    start: {
+      ...startAnchor.tubePoint,
+      socketPath: buildCraftSocketPath(startAnchor)
+    },
+    end: {
+      ...endAnchor.tubePoint,
+      socketPath: buildCraftSocketPath(endAnchor)
+    }
+  };
+}
+
+function buildDefaultTubeCenterPath(startAnchor, endAnchor) {
+  const start = startAnchor.tubePoint;
+  const end = endAnchor.tubePoint;
+  const distance = Math.max(1, getPointDistance(start, end));
+  const direction = normalizeVector({ x: end.x - start.x, y: end.y - start.y });
+  const baseHandle = Math.min(120, distance * 0.34);
+  const startHandle = baseHandle * Math.max(0, dotVector(startAnchor.normal, direction));
+  const endHandle = baseHandle * Math.max(0, dotVector(endAnchor.normal, { x: -direction.x, y: -direction.y }));
+  const c1 = addScaledVector(start, startAnchor.normal, startHandle);
+  const c2 = addScaledVector(end, endAnchor.normal, endHandle);
+  return `M ${formatPoint(start)} C ${formatPoint(c1)} ${formatPoint(c2)} ${formatPoint(end)}`;
+}
+
+function buildBentTubeCenterPath(startAnchor, bend, endAnchor) {
+  const start = startAnchor.tubePoint;
+  const end = endAnchor.tubePoint;
+  if (isPointNearSegment(bend, start, end, 10)) return buildDefaultTubeCenterPath(startAnchor, endAnchor);
+  const startDistance = getPointDistance(start, bend);
+  const endDistance = getPointDistance(end, bend);
+  const startDirection = normalizeVector({ x: bend.x - start.x, y: bend.y - start.y });
+  const endDirection = normalizeVector({ x: end.x - bend.x, y: end.y - bend.y });
+  const startHandle = Math.min(100, startDistance * 0.34) * Math.max(0, dotVector(startAnchor.normal, startDirection));
+  const endHandle = Math.min(100, endDistance * 0.34) * Math.max(0, dotVector(endAnchor.normal, { x: -endDirection.x, y: -endDirection.y }));
+  const bendTangent = getBendTangent(start, bend, end);
+  const bendHandleA = Math.min(90, startDistance * 0.28);
+  const bendHandleB = Math.min(90, endDistance * 0.28);
+  const c1 = addScaledVector(start, startAnchor.normal, startHandle);
+  const c2 = addScaledVector(bend, bendTangent, -bendHandleA);
+  const c3 = addScaledVector(bend, bendTangent, bendHandleB);
+  const c4 = addScaledVector(end, endAnchor.normal, endHandle);
+  return `M ${formatPoint(start)} C ${formatPoint(c1)} ${formatPoint(c2)} ${formatPoint(bend)} C ${formatPoint(c3)} ${formatPoint(c4)} ${formatPoint(end)}`;
+}
+
+function getRectCenter(rect) {
+  return {
+    x: (rect.left + rect.right) / 2,
+    y: (rect.top + rect.bottom) / 2
+  };
+}
+
+function getCraftResolvedAnchor(rect, anchor, fallbackToward) {
+  return anchor?.side ? getRectAnchorFromData(rect, anchor) : getRectAnchor(rect, fallbackToward);
+}
+
+function getRectAnchor(rect, toward) {
+  const center = getRectCenter(rect);
+  const dx = toward.x - center.x;
+  const dy = toward.y - center.y;
+  if (!dx && !dy) {
+    const normal = { x: 0, y: 1 };
+    return {
+      side: "bottom",
+      offset: 0.5,
+      point: center,
+      tubePoint: addScaledVector(center, normal, CRAFT_SOCKET_DEPTH_PX),
+      normal,
+      tangent: { x: 1, y: 0 }
+    };
+  }
+  const halfWidth = Math.max(1, rect.width / 2);
+  const halfHeight = Math.max(1, rect.height / 2);
+  const socketHalfWidth = CRAFT_SOCKET_HALF_WIDTH_PX;
+  let point;
+  let normal;
+  let side;
+  let offset;
+  if (Math.abs(dx / halfWidth) > Math.abs(dy / halfHeight)) {
+    const sign = Math.sign(dx) || 1;
+    const scale = halfWidth / Math.abs(dx);
+    point = {
+      x: center.x + (sign * halfWidth),
+      y: clampNumber(center.y + (dy * scale), rect.top + socketHalfWidth, rect.bottom - socketHalfWidth)
+    };
+    side = sign < 0 ? "left" : "right";
+    offset = (point.y - rect.top) / Math.max(1, rect.height);
+    normal = { x: sign, y: 0 };
+  } else {
+    const sign = Math.sign(dy) || 1;
+    const scale = halfHeight / Math.abs(dy);
+    point = {
+      x: clampNumber(center.x + (dx * scale), rect.left + socketHalfWidth, rect.right - socketHalfWidth),
+      y: center.y + (sign * halfHeight)
+    };
+    side = sign < 0 ? "top" : "bottom";
+    offset = (point.x - rect.left) / Math.max(1, rect.width);
+    normal = { x: 0, y: sign };
+  }
+  return {
+    side,
+    offset: clampNumber(offset, 0, 1),
+    point,
+    tubePoint: addScaledVector(point, normal, CRAFT_SOCKET_DEPTH_PX),
+    normal,
+    tangent: { x: -normal.y, y: normal.x }
+  };
+}
+
+function getRectAnchorFromData(rect, anchor) {
+  const side = normalizeCraftAnchorSide(anchor?.side) || "bottom";
+  const rawOffset = Number(anchor?.offset);
+  const offset = Number.isFinite(rawOffset) ? clampNumber(rawOffset, 0, 1) : 0.5;
+  const socketHalfWidth = CRAFT_SOCKET_HALF_WIDTH_PX;
+  let point;
+  let normal;
+  if (side === "left" || side === "right") {
+    const sign = side === "left" ? -1 : 1;
+    point = {
+      x: sign < 0 ? rect.left : rect.right,
+      y: clampNumber(rect.top + (rect.height * offset), rect.top + socketHalfWidth, rect.bottom - socketHalfWidth)
+    };
+    normal = { x: sign, y: 0 };
+  } else {
+    const sign = side === "top" ? -1 : 1;
+    point = {
+      x: clampNumber(rect.left + (rect.width * offset), rect.left + socketHalfWidth, rect.right - socketHalfWidth),
+      y: sign < 0 ? rect.top : rect.bottom
+    };
+    normal = { x: 0, y: sign };
+  }
+  return {
+    side,
+    offset,
+    point,
+    tubePoint: addScaledVector(point, normal, CRAFT_SOCKET_DEPTH_PX),
+    normal,
+    tangent: { x: -normal.y, y: normal.x }
+  };
+}
+
+function getCraftLinkBend(link) {
+  const x = toOptionalNumber(link.bendX);
+  const y = toOptionalNumber(link.bendY);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+function getCraftLinkAnchor(link, role) {
+  const offset = toOptionalNumber(link?.[`${role}AnchorOffset`]);
+  return {
+    side: normalizeCraftAnchorSide(link?.[`${role}AnchorSide`]),
+    offset: Number.isFinite(offset) ? clampNumber(offset, 0, 1) : null
+  };
+}
+
+function getCraftLinkAnchors(link) {
+  return {
+    from: getCraftLinkAnchor(link, "from"),
+    to: getCraftLinkAnchor(link, "to")
+  };
+}
+
+function normalizeCraftAnchorSide(side) {
+  const value = String(side ?? "");
+  return ["left", "right", "top", "bottom"].includes(value) ? value : "";
+}
+
+function buildCraftSocketPath(anchor) {
+  const halfWidth = CRAFT_SOCKET_HALF_WIDTH_PX;
+  const inset = 0.5;
+  const outer = addScaledVector(anchor.point, anchor.normal, CRAFT_SOCKET_DEPTH_PX);
+  const inner = addScaledVector(anchor.point, anchor.normal, inset);
+  const corners = [
+    addScaledVector(inner, anchor.tangent, -halfWidth),
+    addScaledVector(inner, anchor.tangent, halfWidth),
+    addScaledVector(outer, anchor.tangent, halfWidth),
+    addScaledVector(outer, anchor.tangent, -halfWidth)
+  ];
+  return `M ${formatPoint(corners[0])} L ${formatPoint(corners[1])} L ${formatPoint(corners[2])} L ${formatPoint(corners[3])} Z`;
+}
+
+function getBendTangent(start, bend, end) {
+  const incoming = normalizeVector({ x: bend.x - start.x, y: bend.y - start.y });
+  const outgoing = normalizeVector({ x: end.x - bend.x, y: end.y - bend.y });
+  const tangent = normalizeVector({ x: incoming.x + outgoing.x, y: incoming.y + outgoing.y });
+  if (tangent.x || tangent.y) return tangent;
+  return normalizeVector({ x: end.x - start.x, y: end.y - start.y });
+}
+
+function normalizeVector(vector) {
+  const length = Math.hypot(vector.x, vector.y);
+  if (length < 0.0001) return { x: 0, y: 0 };
+  return { x: vector.x / length, y: vector.y / length };
+}
+
+function dotVector(a, b) {
+  return (a.x * b.x) + (a.y * b.y);
+}
+
+function getPointDistance(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function isPointNearSegment(point, start, end, threshold) {
+  return getPointToSegmentDistance(point, start, end) <= threshold;
+}
+
+function getPointToSegmentDistance(point, start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = (dx * dx) + (dy * dy);
+  if (lengthSquared < 0.0001) return getPointDistance(point, start);
+  const t = clampNumber(((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared, 0, 1);
+  const projection = {
+    x: start.x + (dx * t),
+    y: start.y + (dy * t)
+  };
+  return getPointDistance(point, projection);
+}
+
+function addScaledVector(point, vector, scale) {
+  return {
+    x: point.x + (vector.x * scale),
+    y: point.y + (vector.y * scale)
+  };
+}
+
+function clampNumber(value, min, max) {
+  if (min > max) return (min + max) / 2;
+  return Math.max(min, Math.min(max, value));
+}
+
+function formatPoint(point) {
+  return `${roundPathNumber(point.x)} ${roundPathNumber(point.y)}`;
+}
+
+function roundPathNumber(value) {
+  return Number(value).toFixed(2).replace(/\.?0+$/, "");
+}
+
+function toOptionalNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+async function animateCraftLinks(element, operation) {
+  const groups = Array.from(element?.querySelectorAll("[data-craft-link-id]") ?? [])
+    .filter(group => operation.linkResults.some(result => result.linkId === group.dataset.craftLinkId));
+  if (!groups.length) {
+    await delay(CRAFT_FLOW_DURATION_MS);
+    return;
+  }
+  await Promise.all(groups.map(group => animateCraftLinkGroup(group)));
+}
+
+function animateCraftLinkGroup(group) {
+  const gold = group.querySelector(".fallout-maw-craft-link-fluid-gold");
+  const red = group.querySelector(".fallout-maw-craft-link-fluid-red");
+  if (!gold || !red) return delay(CRAFT_FLOW_DURATION_MS);
+  const total = Math.max(1, gold.getTotalLength?.() ?? 1);
+  const success = group.dataset.craftFlowResult !== "failure";
+  const breakFraction = Math.max(0.3, Math.min(0.7, Number(group.dataset.craftFlowBreak) || 0.5));
+  const breakLength = success ? total : total * breakFraction;
+
+  red.style.strokeDasharray = `0 ${total}`;
+  red.style.strokeDashoffset = "0";
+  gold.style.strokeDasharray = `0 ${total}`;
+  gold.style.strokeDashoffset = "0";
+  gold.classList.add("active");
+  red.classList.add("active");
+
+  return new Promise(resolve => {
+    const startedAt = performance.now();
+    const step = now => {
+      const elapsed = Math.max(0, now - startedAt);
+      const progress = Math.min(1, elapsed / CRAFT_FLOW_DURATION_MS);
+      if (success) {
+        gold.style.strokeDasharray = `${total * progress} ${total}`;
+      } else {
+        const goldProgress = Math.min(progress / breakFraction, 1);
+        const redProgress = progress <= breakFraction ? 0 : (progress - breakFraction) / (1 - breakFraction);
+        gold.style.strokeDasharray = `${breakLength * goldProgress} ${total}`;
+        red.style.strokeDasharray = `${(total - breakLength) * redProgress} ${total}`;
+        red.style.strokeDashoffset = String(-breakLength);
+      }
+      if (progress < 1) requestAnimationFrame(step);
+      else resolve();
+    };
+    requestAnimationFrame(step);
+  });
+}
+
+function getCraftFailureBreakFraction(recipeUuid = "", linkId = "") {
+  const source = `${recipeUuid}:${linkId}`;
+  let hash = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    hash = ((hash << 5) - hash) + source.charCodeAt(index);
+    hash |= 0;
+  }
+  return 0.3 + ((Math.abs(hash) % 401) / 1000);
+}
+
+async function getCraftRecipeSummaries() {
+  const now = Date.now();
+  if (craftRecipeCache && (now - craftRecipeCacheTime) < 5000) return craftRecipeCache;
+  const recipes = [];
+  const seen = new Set();
+
+  for (const item of game.items?.contents ?? []) {
+    if (!isCraftRecipeItem(item) || seen.has(item.uuid)) continue;
+    seen.add(item.uuid);
+    recipes.push(prepareRecipeSummary(item));
+  }
+
+  for (const pack of game.packs ?? []) {
+    if (pack.documentName !== "Item") continue;
+    let index;
+    try {
+      index = await pack.getIndex({ fields: ["type", "img", "system.craft.nodes", "system.craft.links"] });
+    } catch (_error) {
+      continue;
+    }
+    for (const entry of index) {
+      if (entry.type !== "gear") continue;
+      const craft = entry.system?.craft ?? {};
+      if (!hasCraftRecipeData(craft) || seen.has(entry.uuid)) continue;
+      const uuid = entry.uuid ?? `Compendium.${pack.collection}.Item.${entry._id}`;
+      seen.add(uuid);
+      recipes.push({
+        uuid,
+        name: String(entry.name ?? ""),
+        img: normalizeImagePath(entry.img, FALLBACK_ICON)
+      });
+    }
+  }
+
+  recipes.sort((left, right) => left.name.localeCompare(right.name));
+  craftRecipeCache = recipes;
+  craftRecipeCacheTime = now;
+  return recipes;
+}
+
+function isCraftRecipeItem(item) {
+  return item?.type === "gear" && !item.parent && hasCraftRecipeData(item.system?.craft);
+}
+
+function hasCraftRecipeData(craft = {}) {
+  return Boolean((craft?.nodes ?? []).length || (craft?.links ?? []).length);
+}
+
+function prepareRecipeSummary(item) {
+  return {
+    uuid: item.uuid,
+    name: item.name,
+    img: normalizeImagePath(item.img, FALLBACK_ICON)
+  };
+}
+
+function getActorRace(actor) {
+  const raceId = actor?.system?.creature?.raceId;
+  return getCreatureOptions().races.find(entry => entry.id === raceId) ?? null;
+}
+
+function createEmptyInventoryContext() {
+  return {
+    equipmentSlots: [],
+    weaponSets: [],
+    containers: [],
+    grid: {
+      columns: 1,
+      rows: 1,
+      cells: [],
+      items: []
+    }
+  };
+}
+
+function prepareCraftInventoryContext(inventory, actor) {
+  const actorUuid = actor?.uuid ?? "";
+  const mapItem = item => item ? {
+    ...item,
+    actorUuid,
+    draggableClass: actor?.isOwner ? "draggable" : ""
+  } : null;
+  return {
+    ...inventory,
+    equipmentSlots: (inventory.equipmentSlots ?? []).map(slot => ({
+      ...slot,
+      item: mapItem(slot.item)
+    })),
+    weaponSets: (inventory.weaponSets ?? []).map(set => ({
+      ...set,
+      slots: (set.slots ?? []).map(slot => ({
+        ...slot,
+        actorUuid,
+        item: mapItem(slot.item)
+      }))
+    })),
+    grid: {
+      ...inventory.grid,
+      items: (inventory.grid?.items ?? []).map(mapItem)
+    },
+    containers: (inventory.containers ?? []).map(container => ({
+      ...mapItem(container),
+      grid: {
+        ...container.grid,
+        items: (container.grid?.items ?? []).map(mapItem)
+      }
+    }))
+  };
+}
+
+function getCraftInventoryDimensions(actor, parentId = ROOT_CONTAINER_ID) {
+  if (parentId) {
+    const container = actor?.items?.get(parentId);
+    if (container) return getContainerDimensions(container);
+  }
+  const race = getActorRace(actor);
+  const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
+  return {
+    columns: Math.max(1, toInteger(inventorySize.columns) || createDefaultInventorySize().columns),
+    rows: Math.max(1, toInteger(inventorySize.rows) || createDefaultInventorySize().rows)
+  };
+}
+
+function getDragEventData(event) {
+  const cachedPayload = CONFIG.ux.DragDrop?.getPayload?.();
+  if (cachedPayload && typeof cachedPayload === "object") return cachedPayload;
+  for (const type of ["application/json", "text/plain"]) {
+    const raw = event.dataTransfer?.getData(type);
+    if (!raw) continue;
+    try {
+      return JSON.parse(raw);
+    } catch (_error) {
+      continue;
+    }
+  }
+  return null;
+}
+
+function escapeHTML(value = "") {
+  return String(value ?? "").replace(/[&<>"']/g, character => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  }[character]));
+}
+
+async function resolveActor(uuid) {
+  return resolveDocument(uuid);
+}
+
+async function resolveDocument(uuid) {
+  const normalized = String(uuid ?? "").trim();
+  if (!normalized) return null;
+  return (await globalThis.fromUuid?.(normalized)) ?? resolveDocumentSync(normalized);
+}
+
+function resolveDocumentSync(uuid) {
+  const normalized = String(uuid ?? "").trim();
+  if (!normalized) return null;
+  return globalThis.fromUuidSync?.(normalized) ?? foundry.utils.fromUuidSync?.(normalized) ?? null;
+}
+
+function waitForAnimationFrame() {
+  return new Promise(resolve => requestAnimationFrame(resolve));
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}

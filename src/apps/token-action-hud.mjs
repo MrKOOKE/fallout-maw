@@ -28,6 +28,7 @@ import { openLimbDamageDialog } from "./limb-damage-dialog.mjs";
 import { requestMedicineTarget } from "./medicine-dialog.mjs";
 import { requestRepairTarget } from "./repair-dialog.mjs";
 import { openSearchInventoryWindow, requestTradeInventoryWindow } from "./search-inventory.mjs";
+import { openCraftWindow } from "./craft-window.mjs";
 import {
   FALLBACK_ICON,
   normalizeImagePath,
@@ -741,7 +742,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   static #onUseSystemAction(event, target) {
     event.preventDefault();
     const key = String(target.dataset.systemActionKey ?? "");
-    if (!["advancement", "medicine", "repair", "search", "trade"].includes(key)) return undefined;
+    if (!["advancement", "medicine", "repair", "search", "trade", "craft"].includes(key)) return undefined;
 
     if (key === "advancement") {
       if (!this.actor?.isOwner) return undefined;
@@ -750,6 +751,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       return new AdvancementApplication(this.actor).render(true);
     }
     void this.render({ force: true });
+    if (key === "craft") return openCraftWindow({ actor: this.actor });
     if (key === "trade") return this.#requestTradeInventory();
     if (key === "search") return this.#openSearchInventory();
     if (key === "repair") return requestRepairTarget(this.token);

@@ -1,0 +1,169 @@
+<div class="fallout-maw-sheet fallout-maw-search-sheet fallout-maw-craft-window-sheet" data-craft-window-root data-search-root>
+  <div class="fallout-maw-sheet-body fallout-maw-craft-window-body">
+    <section class="fallout-maw-craft-window-inventory fallout-maw-search-side fallout-maw-search-side--searcher" data-search-actor-uuid="{{actor.uuid}}" data-search-side="searcher">
+      <section class="fallout-maw-panel fallout-maw-load-panel">
+        <div class="fallout-maw-load-meter fallout-maw-load-meter--{{load.trend}} fallout-maw-load-meter--{{load.state}}" aria-label="{{localize 'FALLOUTMAW.Common.Load'}}">
+          <div class="fallout-maw-load-meter-track">
+            <div class="fallout-maw-load-meter-fill" style="width: {{load.percent}}%;"></div>
+          </div>
+          <strong class="fallout-maw-load-meter-value">{{load.value}} / {{load.max}} {{localize "FALLOUTMAW.Common.Kg"}}</strong>
+        </div>
+      </section>
+
+      <div class="fallout-maw-craft-window-inventory-stack fallout-maw-search-inventory-stack fallout-maw-pane-scroll" data-search-scroll-key="craft:inventory-stack" data-search-drop-zone data-search-actor-uuid="{{actor.uuid}}" data-inventory-parent-id="">
+        <section class="fallout-maw-panel fallout-maw-equipment-pane">
+          <h2>{{localize "FALLOUTMAW.Common.Equipment"}}</h2>
+          <div class="fallout-maw-pane-scroll fallout-maw-equipment-scroll">
+            <div class="fallout-maw-equipment-slot-list">
+              {{#each inventory.equipmentSlots}}
+              <div class="fallout-maw-slot-card">
+                <div class="fallout-maw-slot-card-label">{{label}}</div>
+                <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large" data-search-drop-zone data-search-actor-uuid="{{../actor.uuid}}" data-equipment-slot="{{key}}">
+                  {{#if item}}
+                  <article class="{{item.draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}}" data-search-actor-uuid="{{item.actorUuid}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+                    <img src="{{item.img}}" alt="{{item.name}}">
+                    {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
+                  </article>
+                  {{/if}}
+                </div>
+              </div>
+              {{else}}
+              <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoEquipmentSlots"}}</p>
+              {{/each}}
+            </div>
+
+            <h2>{{localize "FALLOUTMAW.Common.Weapon"}}</h2>
+            <div class="fallout-maw-weapon-set-list">
+              {{#each inventory.weaponSets}}
+              <section class="fallout-maw-weapon-set">
+                <h3>{{label}}</h3>
+                <div class="fallout-maw-weapon-slot-list">
+                  {{#each slots}}
+                  <div class="fallout-maw-slot-card">
+                    <div class="fallout-maw-slot-card-label">{{label}}</div>
+                    <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-weapon-slot" data-search-drop-zone data-search-actor-uuid="{{actorUuid}}" data-weapon-set="{{weaponSetKey}}" data-weapon-slot="{{key}}">
+                      {{#if item}}
+                      <article class="{{#unless phantom}}{{item.draggableClass}}{{/unless}} fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}} {{#if phantom}}phantom{{/if}} {{#if useDisabled}}unusable{{/if}}" data-search-actor-uuid="{{item.actorUuid}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+                        <img src="{{item.img}}" alt="{{item.name}}">
+                        {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
+                      </article>
+                      {{/if}}
+                    </div>
+                  </div>
+                  {{/each}}
+                </div>
+              </section>
+              {{else}}
+              <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoWeaponSets"}}</p>
+              {{/each}}
+            </div>
+          </div>
+        </section>
+
+        <section class="fallout-maw-panel fallout-maw-inventory-pane">
+          <h2>{{localize "FALLOUTMAW.Common.Inventory"}}</h2>
+          <div class="fallout-maw-pane-scroll fallout-maw-inventory-scroll">
+            <div class="fallout-maw-inventory-grid" data-search-drop-zone data-search-actor-uuid="{{actor.uuid}}" data-inventory-grid data-inventory-parent-id="" style="--fallout-maw-inventory-columns: {{inventory.grid.columns}};">
+              {{#each inventory.grid.cells}}
+              <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}}" data-search-drop-zone data-search-actor-uuid="{{../actor.uuid}}" data-inventory-cell data-inventory-parent-id="" data-x="{{x}}" data-y="{{y}}" style="{{style}}"></div>
+              {{/each}}
+              {{#each inventory.grid.items}}
+              <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if equipped}}equipped{{/if}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
+                <img src="{{img}}" alt="{{name}}">
+                {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
+              </article>
+              {{/each}}
+            </div>
+
+            {{#each inventory.containers}}
+            <section class="fallout-maw-container-section" data-search-drop-zone data-search-actor-uuid="{{actorUuid}}" data-container-id="{{id}}" data-inventory-parent-id="{{id}}">
+              <div class="fallout-maw-panel-header fallout-maw-container-header">
+                <div class="fallout-maw-container-overview {{draggableClass}} fallout-maw-draggable-item" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}">
+                  <strong class="fallout-maw-container-overview-name">{{name}}</strong>
+                  <div class="fallout-maw-load-meter fallout-maw-load-meter--{{load.trend}} fallout-maw-load-meter--{{load.state}}" aria-label="{{localize 'FALLOUTMAW.Item.ContainerCurrentLoad'}}">
+                    <div class="fallout-maw-load-meter-track">
+                      <div class="fallout-maw-load-meter-fill" style="width: {{load.percent}}%;"></div>
+                    </div>
+                    <strong class="fallout-maw-load-meter-value">{{load.value}} / {{load.max}} {{localize "FALLOUTMAW.Common.Kg"}}</strong>
+                  </div>
+                </div>
+              </div>
+              <div class="fallout-maw-inventory-grid" data-search-drop-zone data-search-actor-uuid="{{actorUuid}}" data-inventory-grid data-inventory-parent-id="{{id}}" style="--fallout-maw-inventory-columns: {{grid.columns}};">
+                {{#each grid.cells}}
+                <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}}" data-search-drop-zone data-search-actor-uuid="{{../actorUuid}}" data-inventory-cell data-inventory-parent-id="{{../id}}" data-x="{{x}}" data-y="{{y}}" style="{{style}}"></div>
+                {{/each}}
+                {{#each grid.items}}
+                <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if equipped}}equipped{{/if}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
+                  <img src="{{img}}" alt="{{name}}">
+                  {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
+                </article>
+                {{/each}}
+              </div>
+            </section>
+            {{/each}}
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section class="fallout-maw-craft-window-craft">
+      <header class="fallout-maw-craft-window-toolbar">
+        <div class="fallout-maw-craft-window-title">
+          {{#if recipe}}
+          <img src="{{recipe.img}}" alt="{{recipe.name}}">
+          <div>
+            <strong>{{recipe.name}}</strong>
+            <span>{{craft.summary}}</span>
+          </div>
+          {{else}}
+          <div>
+            <strong>Нет рецепта</strong>
+            <span>Создайте рецепт на предмете.</span>
+          </div>
+          {{/if}}
+        </div>
+        <button type="button" class="fallout-maw-craft-window-hammer" data-action="craft" title="Произвести крафт" {{#unless craft.canCraft}}disabled{{/unless}}>
+          <i class="fa-solid fa-hammer"></i>
+        </button>
+      </header>
+
+      {{#if recipe}}
+      <div class="fallout-maw-craft-editor fallout-maw-craft-viewer" data-craft-workspace style="{{craft.viewportStyle}}">
+        <div class="fallout-maw-craft-world" data-craft-world style="{{craft.viewportStyle}}">
+          <svg class="fallout-maw-craft-links" data-craft-links aria-hidden="true"></svg>
+          {{#each craft.blocks}}
+          <div class="fallout-maw-craft-block readonly" data-craft-block-id="{{id}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" style="{{style}}" aria-label="{{label}}"></div>
+          {{/each}}
+          {{#each craft.nodes}}
+          <div class="fallout-maw-craft-node readonly {{#if root}}root{{/if}} {{#if missing}}missing{{/if}} {{pulseClass}}" data-craft-node-id="{{id}}" data-craft-block-id="{{blockId}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" style="{{style}}">
+            <span class="fallout-maw-craft-node-image">
+              <img src="{{img}}" alt="{{name}}">
+              <span class="fallout-maw-craft-node-quantity">{{owned}}/{{quantity}}</span>
+            </span>
+          </div>
+          {{/each}}
+          {{#each craft.blocks}}
+          <div class="fallout-maw-craft-block-frame readonly" data-craft-block-frame-id="{{id}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" style="{{style}}" aria-hidden="true"></div>
+          {{/each}}
+        </div>
+      </div>
+      {{else}}
+      <div class="fallout-maw-craft-window-empty">Нет доступных рецептов</div>
+      {{/if}}
+    </section>
+
+    <aside class="fallout-maw-craft-window-recipes">
+      <h2>Рецепты</h2>
+      <div class="fallout-maw-craft-window-recipe-list fallout-maw-pane-scroll">
+        {{#each recipes}}
+        <article class="fallout-maw-craft-window-recipe {{#if selected}}selected{{/if}}" role="button" tabindex="0" data-recipe-uuid="{{uuid}}">
+          <img src="{{img}}" alt="{{name}}">
+          <span class="name">{{name}}</span>
+        </article>
+        {{else}}
+        <p class="fallout-maw-empty-list">Рецептов нет.</p>
+        {{/each}}
+      </div>
+    </aside>
+  </div>
+</div>
