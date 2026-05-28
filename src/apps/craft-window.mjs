@@ -1243,7 +1243,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #setCraftViewportStyle(x, y, zoom = this.#getCraftViewport().zoom) {
     const workspace = this.element?.querySelector("[data-craft-workspace]");
     const world = this.element?.querySelector("[data-craft-world]");
-    const viewport = normalizeCraftViewport({ x, y, zoom });
+    const viewport = this.#clampCraftViewport(normalizeCraftViewport({ x, y, zoom }));
     this.#craftViewportOverride = viewport;
     workspace?.style.setProperty("--craft-pan-x", `${viewport.x}px`);
     workspace?.style.setProperty("--craft-pan-y", `${viewport.y}px`);
@@ -1254,6 +1254,11 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     world?.style.setProperty("--craft-zoom", String(viewport.zoom));
     this.#scheduleCraftLinkRender();
     return viewport;
+  }
+
+  #clampCraftViewport(viewport) {
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    return clampCraftViewportToVisibleNode(viewport, workspace, this.#selectedRecipe ? getCraftNodesWithRoot(this.#selectedRecipe) : []);
   }
 
   #onCraftWorkspacePointerDown(event) {
@@ -1621,18 +1626,26 @@ function normalizeCraftNode(node = {}) {
 }
 
 function normalizeCraftLink(link = {}) {
+  let bendX = toOptionalNumber(link.bendX);
+  let bendY = toOptionalNumber(link.bendY);
+  const fromAnchorOffset = toOptionalNumber(link.fromAnchorOffset);
+  const toAnchorOffset = toOptionalNumber(link.toAnchorOffset);
+  if (bendX === 0 && bendY === 0) {
+    bendX = null;
+    bendY = null;
+  }
   return {
     id: String(link.id || foundry.utils.randomID()),
     fromNodeId: String(link.fromNodeId ?? ""),
     toNodeId: String(link.toNodeId ?? ""),
     skillKey: String(link.skillKey ?? "repair"),
     difficulty: Math.max(0, toInteger(link.difficulty) || 60),
-    bendX: toOptionalNumber(link.bendX),
-    bendY: toOptionalNumber(link.bendY),
+    bendX,
+    bendY,
     fromAnchorSide: normalizeCraftAnchorSide(link.fromAnchorSide),
-    fromAnchorOffset: toOptionalNumber(link.fromAnchorOffset),
+    fromAnchorOffset: Number.isFinite(fromAnchorOffset) ? clampNumber(fromAnchorOffset, 0, 1) : null,
     toAnchorSide: normalizeCraftAnchorSide(link.toAnchorSide),
-    toAnchorOffset: toOptionalNumber(link.toAnchorOffset)
+    toAnchorOffset: Number.isFinite(toAnchorOffset) ? clampNumber(toAnchorOffset, 0, 1) : null
   };
 }
 
@@ -1688,17 +1701,15 @@ function craftNodeToBounds(node = {}) {
   const height = Math.max(1, toInteger(node.height) || 1);
   const x = Number(node.x) || 0;
   const y = Number(node.y) || 0;
-  const left = x - ((width - 1) / 2);
-  const top = y - ((height - 1) / 2);
   return {
-    left,
-    top,
-    right: left + width,
-    bottom: top + height,
+    left: x - (width / 2),
+    right: x + (width / 2),
+    top: y - (height / 2),
+    bottom: y + (height / 2),
+    x,
+    y,
     width,
-    height,
-    x: left + ((width - 1) / 2),
-    y: top + ((height - 1) / 2)
+    height
   };
 }
 
@@ -1706,14 +1717,18 @@ function getCraftNodesBounds(nodes = []) {
   const bounds = nodes.map(craftNodeToBounds);
   if (!bounds.length) return null;
   const left = Math.min(...bounds.map(bound => bound.left));
-  const top = Math.min(...bounds.map(bound => bound.top));
   const right = Math.max(...bounds.map(bound => bound.right));
+  const top = Math.min(...bounds.map(bound => bound.top));
   const bottom = Math.max(...bounds.map(bound => bound.bottom));
   return {
+    left,
+    right,
+    top,
+    bottom,
     x: (left + right) / 2,
     y: (top + bottom) / 2,
-    width: Math.max(1, Math.ceil(right - left)),
-    height: Math.max(1, Math.ceil(bottom - top))
+    width: Math.max(1, Math.round(right - left)),
+    height: Math.max(1, Math.round(bottom - top))
   };
 }
 
@@ -1777,6 +1792,68 @@ function getCraftGridMetrics(element) {
   const gap = Math.max(0, cssDimensionToPixels(styles?.getPropertyValue("--fallout-maw-craft-grid-gap") || "4px", element)) || 4;
   const step = Math.max(1, cell + gap) || CRAFT_GRID_FALLBACK_STEP;
   return { cell, gap, step };
+}
+
+function clampCraftViewportToVisibleNode(viewport, workspace, nodes = []) {
+  const rect = workspace?.getBoundingClientRect();
+  if (!rect || rect.width <= 0 || rect.height <= 0 || !nodes.length) return viewport;
+  if (nodes.some(node => isCraftNodeVisibleInViewport(node, viewport, workspace))) return viewport;
+  let nearestAdjustment = null;
+  for (const node of nodes) {
+    const nodeRect = getCraftNodeScreenRect(node, viewport, workspace);
+    const dx = getCraftNodeContainmentDelta(nodeRect.left, nodeRect.right, rect.width);
+    const dy = getCraftNodeContainmentDelta(nodeRect.top, nodeRect.bottom, rect.height);
+    const distance = Math.hypot(dx, dy);
+    if (!nearestAdjustment || distance < nearestAdjustment.distance) {
+      nearestAdjustment = { dx, dy, distance };
+    }
+  }
+  if (!nearestAdjustment) return viewport;
+  return normalizeCraftViewport({
+    ...viewport,
+    x: viewport.x + nearestAdjustment.dx,
+    y: viewport.y + nearestAdjustment.dy
+  });
+}
+
+function isCraftNodeVisibleInViewport(node, viewport, workspace) {
+  const workspaceRect = workspace?.getBoundingClientRect();
+  if (!workspaceRect || workspaceRect.width <= 0 || workspaceRect.height <= 0) return true;
+  const nodeRect = getCraftNodeScreenRect(node, viewport, workspace);
+  return nodeRect.left >= 0
+    && nodeRect.right <= workspaceRect.width
+    && nodeRect.top >= 0
+    && nodeRect.bottom <= workspaceRect.height;
+}
+
+function getCraftNodeContainmentDelta(start, end, size) {
+  const nodeSize = end - start;
+  if (nodeSize > size) return (size / 2) - ((start + end) / 2);
+  if (start < 0) return -start;
+  if (end > size) return size - end;
+  return 0;
+}
+
+function getCraftNodeScreenRect(node, viewport, workspace) {
+  const metrics = getCraftGridMetrics(workspace);
+  const width = Math.max(1, toInteger(node.width) || 1);
+  const height = Math.max(1, toInteger(node.height) || 1);
+  const widthPx = (width * metrics.cell) + ((width - 1) * metrics.gap);
+  const heightPx = (height * metrics.cell) + ((height - 1) * metrics.gap);
+  const centerX = (Number(node.x) || 0) * metrics.step;
+  const centerY = (Number(node.y) || 0) * metrics.step;
+  const workspaceRect = workspace.getBoundingClientRect();
+  const zoom = clampCraftZoom(viewport.zoom);
+  const screenCenterX = (workspaceRect.width / 2) + viewport.x + (centerX * zoom);
+  const screenCenterY = (workspaceRect.height / 2) + viewport.y + (centerY * zoom);
+  const halfWidth = (widthPx * zoom) / 2;
+  const halfHeight = (heightPx * zoom) / 2;
+  return {
+    left: screenCenterX - halfWidth,
+    right: screenCenterX + halfWidth,
+    top: screenCenterY - halfHeight,
+    bottom: screenCenterY + halfHeight
+  };
 }
 
 function cssDimensionToPixels(value, element = document.documentElement) {
@@ -1860,8 +1937,12 @@ function getElementRectRelativeToSvg(element, svg) {
 
 function getCraftSvgZoom(svg) {
   const workspace = svg?.closest?.("[data-craft-workspace]");
-  const zoom = Number.parseFloat(getComputedStyle(workspace ?? svg).getPropertyValue("--craft-zoom"));
-  return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  const styles = getComputedStyle(workspace ?? svg);
+  const zoom = Number.parseFloat(styles.getPropertyValue("--craft-zoom"));
+  const uiScale = Number.parseFloat(styles.getPropertyValue("--fallout-maw-ui-scale"));
+  const totalScale = (Number.isFinite(zoom) && zoom > 0 ? zoom : 1)
+    * (Number.isFinite(uiScale) && uiScale > 0 ? uiScale : 1);
+  return totalScale > 0 ? totalScale : 1;
 }
 
 function buildCraftConnectorGeometry(from, to, bend = null, anchors = null) {

@@ -9563,7 +9563,7 @@ label.fallout-maw-mitigation-cell {
 .application.fallout-maw-actor-sheet.fallout-maw-craft-window .fallout-maw-craft-window-craft {
   display: grid;
   gap: 0.75rem;
-  grid-template-rows: minmax(10rem, 30%) minmax(0, 70%);
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .fallout-maw-craft-window-toolbar,
@@ -9641,6 +9641,10 @@ label.fallout-maw-mitigation-cell {
 }
 
 .fallout-maw-craft-viewer {
+  --fallout-maw-craft-cell-size: 3.25rem;
+  --fallout-maw-craft-grid-gap: 0.25rem;
+  --fallout-maw-craft-cell-step: calc(var(--fallout-maw-craft-cell-size) + var(--fallout-maw-craft-grid-gap));
+  --fallout-maw-craft-scaled-step: var(--fallout-maw-craft-cell-step);
   min-height: 0;
 }
 
