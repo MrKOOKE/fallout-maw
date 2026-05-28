@@ -1,5 +1,5 @@
 ﻿import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
-import { getCreatureOptions } from "../settings/accessors.mjs";
+import { getCreatureOptions, getSkillSettings } from "../settings/accessors.mjs";
 import { createDefaultInventorySize } from "../settings/creature-options.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import {
@@ -55,6 +55,14 @@ const CRAFT_MAX_ZOOM = 2.5;
 const CRAFT_SOCKET_DEPTH_PX = 9;
 const CRAFT_SOCKET_HALF_WIDTH_PX = 8;
 const CRAFT_FLOW_DURATION_MS = 1000;
+const CRAFT_FLOW_SOCKET_PHASE_FRACTION = 0.14;
+const CRAFT_FLOW_FAILURE_BLEND_FRACTION = 0.16;
+const CRAFT_FLOW_GOLD = { r: 255, g: 203, b: 77 };
+const CRAFT_FLOW_RED = { r: 228, g: 42, b: 42 };
+const CRAFT_FLOW_SOCKET_GOLD_FILL = { r: 255, g: 203, b: 77, a: 0.92 };
+const CRAFT_FLOW_SOCKET_RED_FILL = { r: 228, g: 42, b: 42, a: 0.9 };
+const CRAFT_FLOW_SOCKET_GOLD_STROKE = { r: 255, g: 242, b: 171, a: 0.86 };
+const CRAFT_FLOW_SOCKET_RED_STROKE = { r: 255, g: 196, b: 184, a: 0.82 };
 
 let craftWindow = null;
 let craftRecipeCache = null;
@@ -75,6 +83,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #busy = false;
   #pendingOperation = null;
   #startedOperationId = "";
+  #animatingOperationId = "";
   #pulse = null;
   #dragDrop = null;
   #draggedItemData = null;
@@ -87,6 +96,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #tooltipActorUuid = "";
   #tooltipCloseTimer = null;
   #tooltipDocumentPointerDownHandler = null;
+  #tooltipDocumentUuid = "";
   #tooltipElement = null;
   #tooltipItemId = "";
   #tooltipPinned = false;
@@ -131,6 +141,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#pulse = null;
       this.#pendingOperation = null;
       this.#startedOperationId = "";
+      this.#animatingOperationId = "";
     }
     this.#actorUuid = actorUuid;
     this.#actor = actor ?? null;
@@ -752,7 +763,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #onInventoryTooltipPointerOver(event) {
     if (this.#tooltipPinned) return;
-    const anchor = event.target?.closest?.("[data-tooltip-item][data-search-actor-uuid]");
+    const anchor = event.target?.closest?.("[data-tooltip-item][data-search-actor-uuid], [data-tooltip-uuid]");
     if (!anchor || !this.element?.contains(anchor)) return;
     this.#cancelInventoryTooltipClose();
     if (this.#tooltipAnchorElement === anchor && this.#tooltipElement) return;
@@ -760,23 +771,23 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #onInventoryTooltipPointerOut(event) {
-    const anchor = event.target?.closest?.("[data-tooltip-item][data-search-actor-uuid]");
+    const anchor = event.target?.closest?.("[data-tooltip-item][data-search-actor-uuid], [data-tooltip-uuid]");
     if (!anchor || !this.element?.contains(anchor)) return;
     if (anchor.contains(event.relatedTarget) || this.#tooltipElement?.contains(event.relatedTarget)) return;
-    const nextAnchor = event.relatedTarget?.closest?.("[data-tooltip-item][data-search-actor-uuid]");
+    const nextAnchor = event.relatedTarget?.closest?.("[data-tooltip-item][data-search-actor-uuid], [data-tooltip-uuid]");
     if (nextAnchor && this.element?.contains(nextAnchor)) return;
     if (!this.#tooltipPinned) this.#scheduleInventoryTooltipClose();
   }
 
   #onInventoryTooltipMiddleMouseDown(event) {
     if (event.button !== 1) return;
-    if (!event.target?.closest?.("[data-tooltip-item], .fallout-maw-inventory-tooltip")) return;
+    if (!event.target?.closest?.("[data-tooltip-item], [data-tooltip-uuid], .fallout-maw-inventory-tooltip")) return;
     event.preventDefault();
   }
 
   #onInventoryTooltipAuxClick(event) {
     if (event.button !== 1) return;
-    const anchor = event.target?.closest?.("[data-tooltip-item][data-search-actor-uuid]");
+    const anchor = event.target?.closest?.("[data-tooltip-item][data-search-actor-uuid], [data-tooltip-uuid]");
     if (!anchor || !this.element?.contains(anchor)) return;
     event.preventDefault();
     event.stopPropagation();
@@ -794,6 +805,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       }
       this.#tooltipAnchorElement = anchor;
       this.#tooltipActorUuid = String(anchor.dataset.searchActorUuid ?? "");
+      this.#tooltipDocumentUuid = String(anchor.dataset.tooltipUuid ?? "");
       this.#tooltipItemId = String(anchor.dataset.tooltipItem ?? anchor.dataset.itemId ?? "");
       this.#tooltipWeaponTabIndex = 0;
       void this.#showInventoryTooltip(anchor, { refresh: true });
@@ -803,6 +815,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#clearInventoryTooltip();
     this.#tooltipAnchorElement = anchor;
     this.#tooltipActorUuid = String(anchor.dataset.searchActorUuid ?? "");
+    this.#tooltipDocumentUuid = String(anchor.dataset.tooltipUuid ?? "");
     this.#tooltipItemId = String(anchor.dataset.tooltipItem ?? anchor.dataset.itemId ?? "");
     this.#tooltipWeaponTabIndex = 0;
     this.#tooltipTimer = view.setTimeout(() => {
@@ -812,16 +825,20 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async #showInventoryTooltip(anchor = this.#tooltipAnchorElement, { pinned = false, refresh = false } = {}) {
-    const actor = this.#actor;
-    const itemId = String(anchor?.dataset?.tooltipItem ?? anchor?.dataset?.itemId ?? this.#tooltipItemId);
-    const item = actor?.items?.get(itemId);
-    if (!actor || !item) return;
+    const tooltipData = await this.#resolveTooltipItem(anchor);
+    if (!tooltipData?.item) return;
+    const { actor, item } = tooltipData;
 
     const tooltipHTML = await renderInventoryItemTooltipHTML(item, actor, {
       activeWeaponIndex: this.#tooltipWeaponTabIndex,
       baseMode: false
     });
-    if (refresh && ((this.#tooltipActorUuid !== actor.uuid) || (this.#tooltipItemId !== item.id))) return;
+    const documentUuid = String(item.uuid ?? "");
+    if (refresh && (
+      this.#tooltipDocumentUuid
+        ? this.#tooltipDocumentUuid !== documentUuid
+        : ((this.#tooltipActorUuid !== String(actor?.uuid ?? "")) || (this.#tooltipItemId !== item.id))
+    )) return;
 
     if (refresh && this.#tooltipElement && !this.#tooltipPinned && !pinned) {
       this.#tooltipElement.innerHTML = tooltipHTML;
@@ -829,7 +846,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#tooltipElement.style.pointerEvents = "none";
       this.#tooltipPinned = false;
       this.#tooltipAnchorElement = anchor;
-      this.#tooltipActorUuid = actor.uuid;
+      this.#tooltipActorUuid = String(actor?.uuid ?? "");
+      this.#tooltipDocumentUuid = documentUuid;
       this.#tooltipItemId = item.id;
       this.#positionInventoryTooltip();
       requestAnimationFrame(() => {
@@ -867,7 +885,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#tooltipElement = tooltip;
     this.#tooltipPinned = Boolean(pinned);
     this.#tooltipAnchorElement = anchor;
-    this.#tooltipActorUuid = actor.uuid;
+    this.#tooltipActorUuid = String(actor?.uuid ?? "");
+    this.#tooltipDocumentUuid = documentUuid;
     this.#tooltipItemId = item.id;
     if (pinned) this.#bindInventoryTooltipDocumentClose();
     this.#positionInventoryTooltip();
@@ -915,6 +934,19 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if ((tooltipRect.top + tooltipRect.height) > (viewportHeight - margin)) {
       this.#tooltipElement.style.top = `${Math.round(Math.max(margin, viewportHeight - tooltipRect.height - margin))}px`;
     }
+  }
+
+  async #resolveTooltipItem(anchor = this.#tooltipAnchorElement) {
+    const documentUuid = String(anchor?.dataset?.tooltipUuid ?? this.#tooltipDocumentUuid ?? "").trim();
+    if (documentUuid) {
+      const item = await resolveDocument(documentUuid);
+      if (item) return { item, actor: item.parent?.documentName === "Actor" ? item.parent : null };
+    }
+    const actorUuid = String(anchor?.dataset?.searchActorUuid ?? this.#tooltipActorUuid ?? "");
+    const actor = actorUuid && actorUuid === this.#actor?.uuid ? this.#actor : await resolveActor(actorUuid || this.#actorUuid);
+    const itemId = String(anchor?.dataset?.tooltipItem ?? anchor?.dataset?.itemId ?? this.#tooltipItemId ?? "");
+    const item = actor?.items?.get(itemId);
+    return item ? { item, actor } : null;
   }
 
   #scheduleInventoryTooltipClose() {
@@ -971,6 +1003,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!keepAnchor) {
       this.#tooltipAnchorElement = null;
       this.#tooltipActorUuid = "";
+      this.#tooltipDocumentUuid = "";
       this.#tooltipItemId = "";
     }
   }
@@ -1144,6 +1177,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       }
       linkResults.push({
         linkId: link.id,
+        linkKey: link.key,
+        linkIndex: link.index,
         success: outcome.result?.key === "success" || outcome.result?.key === "criticalSuccess",
         resultKey: String(outcome.result?.key ?? "failure")
       });
@@ -1171,27 +1206,35 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async #runCraftOperationAnimation(operation) {
-    await waitForAnimationFrame();
-    this.#renderCraftLinks(operation);
-    await waitForAnimationFrame();
-    await animateCraftLinks(this.element, operation);
-
-    if (this.#pendingOperation?.id !== operation.id) return;
+    this.#animatingOperationId = operation.id;
     try {
-      await applyCraftOperation(operation);
-      this.#pulse = {
-        recipeUuid: operation.recipeUuid,
-        success: operation.success
-      };
-      ui.notifications.info(operation.success ? "Крафт выполнен." : "Крафт провален. Ресурсы потрачены.");
-    } catch (error) {
-      console.error(`${SYSTEM_ID} | Craft operation failed`, error);
-      ui.notifications.warn(error.message || "Крафт не завершен.");
+      await waitForAnimationFrame();
+      this.#cancelScheduledCraftLinkRender();
+      this.#syncCraftNodeLayouts();
+      this.#renderCraftLinks(operation);
+      await waitForAnimationFrame();
+      this.#cancelScheduledCraftLinkRender();
+      await animateCraftLinks(this.element, operation);
+
+      if (this.#pendingOperation?.id !== operation.id) return;
+      try {
+        await applyCraftOperation(operation);
+        this.#pulse = {
+          recipeUuid: operation.recipeUuid,
+          success: operation.success
+        };
+      } catch (error) {
+        console.error(`${SYSTEM_ID} | Craft operation failed`, error);
+        ui.notifications.warn(error.message || "Крафт не завершен.");
+      }
     } finally {
-      this.#busy = false;
-      this.#pendingOperation = null;
-      this.#startedOperationId = "";
-      if (this.rendered) {
+      if (this.#animatingOperationId === operation.id) this.#animatingOperationId = "";
+      if (this.#pendingOperation?.id === operation.id) {
+        this.#busy = false;
+        this.#pendingOperation = null;
+        this.#startedOperationId = "";
+      }
+      if (this.rendered && !this.#pendingOperation) {
         this.#captureScrollPositions();
         await this.#renderPreservingWindowStack();
       }
@@ -1226,12 +1269,20 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #scheduleCraftLinkRender() {
+    if (this.#animatingOperationId) return;
     if (this.#linkRenderFrame) return;
     this.#linkRenderFrame = requestAnimationFrame(() => {
       this.#linkRenderFrame = 0;
+      if (this.#animatingOperationId) return;
       this.#syncCraftNodeLayouts();
       this.#renderCraftLinks(this.#pendingOperation);
     });
+  }
+
+  #cancelScheduledCraftLinkRender() {
+    if (!this.#linkRenderFrame) return;
+    cancelAnimationFrame(this.#linkRenderFrame);
+    this.#linkRenderFrame = 0;
   }
 
   #scheduleCraftLinkRenderAfterLayout() {
@@ -1344,12 +1395,13 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!recipe) return;
     const craft = getCraftRenderData(recipe, this.#actor);
     const nodeData = new Map(craft.nodes.map(node => [node.id, node]));
-    const resultByLink = new Map((operation?.linkResults ?? []).map(result => [result.linkId, result]));
+    const resultByLink = createCraftLinkResultMap(operation?.linkResults ?? []);
 
-    for (const link of craft.links) {
+    for (const [linkIndex, link] of craft.links.entries()) {
       const fromNode = nodeData.get(link.fromNodeId);
       const toNode = nodeData.get(link.toNodeId);
       if (!fromNode || !toNode || getCraftResolvedEndpointId(fromNode) === getCraftResolvedEndpointId(toNode)) continue;
+      const linkKey = getCraftResolvedLinkKey(link, craft.nodes);
       const flow = getCraftLinkFlow(link, nodeData);
       const from = getCraftEndpointElement(workspace, craft.nodes, flow.fromNodeId);
       const to = getCraftEndpointElement(workspace, craft.nodes, flow.toNodeId);
@@ -1359,8 +1411,12 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         : getCraftLinkAnchors(link);
       const geometry = getCraftConnectorGeometry(from, to, svg, getCraftLinkBend(link), anchors);
       appendCraftLinkPath(svg, geometry, link, {
-        result: resultByLink.get(link.id),
-        recipeUuid: recipe.uuid
+        result: resultByLink.get(`id:${link.id}`)
+          ?? resultByLink.get(`key:${linkKey}`)
+          ?? resultByLink.get(`index:${linkIndex}`),
+        recipeUuid: recipe.uuid,
+        linkKey,
+        linkIndex
       });
     }
   }
@@ -1387,8 +1443,10 @@ function validateCraftRequest(actor, recipe) {
       fingerprint: requirement.fingerprint,
       quantity: requirement.quantity
     })),
-    links: craft.links.map(link => ({
+    links: craft.links.map((link, index) => ({
       id: link.id,
+      key: getCraftResolvedLinkKey(link, craft.nodes),
+      index,
       skillKey: String(link.skillKey ?? "repair") || "repair",
       difficulty: Math.max(0, toInteger(link.difficulty) || 60)
     }))
@@ -1469,16 +1527,18 @@ function getCraftResultPlacement(actor, itemData) {
 function prepareCraftContext(recipe, actor, { busy = false, pulse = null } = {}) {
   const data = getCraftRenderData(recipe, actor);
   const missingCount = data.requirements.filter(requirement => requirement.owned < requirement.quantity).length;
+  const checks = getCraftCheckSummaries(data.links);
   return {
     ...data,
     nodes: data.nodes.map(node => ({
       ...node,
       pulseClass: node.root && pulse ? (pulse.success ? "craft-pulse-success" : "craft-pulse-failure") : ""
     })),
+    checks,
     canCraft: Boolean(actor?.isOwner && !busy && data.links.length && data.requirements.length && missingCount === 0),
     summary: missingCount
       ? `Не хватает компонентов: ${missingCount}`
-      : `Компоненты: ${data.requirements.length}, проверки: ${data.links.length}`
+      : `Компоненты: ${data.requirements.length}`
   };
 }
 
@@ -1488,10 +1548,37 @@ function createEmptyCraftContext(busy = false) {
     nodes: [],
     links: [],
     requirements: [],
+    checks: [],
     viewportStyle: "",
     canCraft: !busy && false,
     summary: ""
   };
+}
+
+function getCraftCheckSummaries(links = []) {
+  const skillLabels = new Map(getSkillSettings().map(skill => [skill.key, skill.label]));
+  const byCheck = new Map();
+  for (const link of links) {
+    const skillKey = String(link.skillKey ?? "repair") || "repair";
+    const skillLabel = skillLabels.get(skillKey) ?? skillKey;
+    const difficulty = Math.max(0, toInteger(link.difficulty) || 60);
+    const key = `${skillKey}:${difficulty}`;
+    const existing = byCheck.get(key);
+    if (existing) {
+      existing.count += 1;
+      existing.label = getCraftCheckLabel(existing);
+      continue;
+    }
+    const entry = { index: byCheck.size, skillKey, skillLabel, difficulty, count: 1, label: "" };
+    entry.label = getCraftCheckLabel(entry);
+    byCheck.set(key, entry);
+  }
+  return Array.from(byCheck.values());
+}
+
+function getCraftCheckLabel(check) {
+  const suffix = check.count > 1 ? ` (${check.count}х)` : "";
+  return `${check.skillLabel}: Сложность ${check.difficulty}${suffix}`;
 }
 
 function getCraftRenderData(recipe, actor) {
@@ -1523,6 +1610,7 @@ function getCraftRenderData(recipe, actor) {
         ...node,
         index,
         sourceUuid,
+        tooltipUuid: node.root ? recipe.uuid : sourceUuid,
         sourceKeys: requirement?.sourceKeys ?? [],
         quantity,
         owned,
@@ -1767,7 +1855,7 @@ function normalizeCraftLink(link = {}) {
     bendY = null;
   }
   return {
-    id: String(link.id || foundry.utils.randomID()),
+    id: String(link.id || getCraftFallbackLinkId(link)),
     fromNodeId: String(link.fromNodeId ?? ""),
     toNodeId: String(link.toNodeId ?? ""),
     skillKey: String(link.skillKey ?? "repair"),
@@ -1779,6 +1867,22 @@ function normalizeCraftLink(link = {}) {
     toAnchorSide: normalizeCraftAnchorSide(link.toAnchorSide),
     toAnchorOffset: Number.isFinite(toAnchorOffset) ? clampNumber(toAnchorOffset, 0, 1) : null
   };
+}
+
+function getCraftFallbackLinkId(link = {}) {
+  return [
+    "link",
+    String(link.fromNodeId ?? ""),
+    String(link.toNodeId ?? ""),
+    String(link.skillKey ?? "repair"),
+    String(link.difficulty ?? 60),
+    String(link.fromAnchorSide ?? ""),
+    String(link.fromAnchorOffset ?? ""),
+    String(link.toAnchorSide ?? ""),
+    String(link.toAnchorOffset ?? ""),
+    String(link.bendX ?? ""),
+    String(link.bendY ?? "")
+  ].join(":");
 }
 
 function normalizeCraftLinksForNodes(links = [], nodes = []) {
@@ -2012,35 +2116,40 @@ function getCraftEndpointElement(workspace, nodes, nodeId) {
     ?? null;
 }
 
-function appendCraftLinkPath(svg, geometry, link, { result = null, recipeUuid = "" } = {}) {
+function appendCraftLinkPath(svg, geometry, link, { result = null, recipeUuid = "", linkKey = "", linkIndex = null } = {}) {
   if (!geometry?.centerPath) return;
   const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
   group.classList.add("fallout-maw-craft-link", "readonly");
   group.dataset.craftLinkId = link.id;
+  if (linkKey) group.dataset.craftLinkKey = linkKey;
+  if (linkIndex !== null && linkIndex !== undefined) group.dataset.craftLinkIndex = String(linkIndex);
   group.dataset.craftRecipeUuid = recipeUuid;
   if (result) {
     group.dataset.craftFlowResult = result.success ? "success" : "failure";
-    group.dataset.craftFlowBreak = String(getCraftFailureBreakFraction(recipeUuid, link.id));
+    group.dataset.craftFlowBreak = String(getCraftFailureBreakFraction(recipeUuid, linkKey || link.id));
   }
   for (const [className, pathData] of [
     ["fallout-maw-craft-link-shadow", geometry.centerPath],
     ["fallout-maw-craft-link-wall", geometry.centerPath],
     ["fallout-maw-craft-link-glass", geometry.centerPath],
     ["fallout-maw-craft-link-highlight", geometry.centerPath],
-    ["fallout-maw-craft-link-fluid fallout-maw-craft-link-fluid-gold", geometry.centerPath],
-    ["fallout-maw-craft-link-fluid fallout-maw-craft-link-fluid-red", geometry.centerPath]
+    ["fallout-maw-craft-link-fluid fallout-maw-craft-link-fluid-gold", geometry.centerPath]
   ]) {
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     for (const token of className.split(" ")) path.classList.add(token);
     path.setAttribute("d", pathData);
     group.appendChild(path);
   }
-  for (const point of [geometry.start, geometry.end]) {
+  for (const [socketIndex, point] of [geometry.start, geometry.end].entries()) {
     if (!point?.socketPath) continue;
     const socket = document.createElementNS("http://www.w3.org/2000/svg", "path");
     socket.classList.add("fallout-maw-craft-link-socket");
     socket.setAttribute("d", point.socketPath);
     group.appendChild(socket);
+    const fluidSocket = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    fluidSocket.classList.add("fallout-maw-craft-link-fluid-socket", socketIndex === 0 ? "start" : "end");
+    fluidSocket.setAttribute("d", point.socketPath);
+    group.appendChild(fluidSocket);
   }
   svg.appendChild(group);
 }
@@ -2340,8 +2449,13 @@ function toOptionalNumber(value) {
 }
 
 async function animateCraftLinks(element, operation) {
+  const resultByLink = createCraftLinkResultMap(operation?.linkResults ?? []);
   const groups = Array.from(element?.querySelectorAll("[data-craft-link-id]") ?? [])
-    .filter(group => operation.linkResults.some(result => result.linkId === group.dataset.craftLinkId));
+    .filter(group => (
+      resultByLink.has(`id:${group.dataset.craftLinkId ?? ""}`)
+      || resultByLink.has(`key:${group.dataset.craftLinkKey ?? ""}`)
+      || resultByLink.has(`index:${group.dataset.craftLinkIndex ?? ""}`)
+    ));
   if (!groups.length) {
     await delay(CRAFT_FLOW_DURATION_MS);
     return;
@@ -2349,41 +2463,129 @@ async function animateCraftLinks(element, operation) {
   await Promise.all(groups.map(group => animateCraftLinkGroup(group)));
 }
 
+function createCraftLinkResultMap(results = []) {
+  const map = new Map();
+  for (const result of results) {
+    const linkId = String(result?.linkId ?? "");
+    const linkKey = String(result?.linkKey ?? result?.key ?? "");
+    const linkIndex = String(result?.linkIndex ?? "");
+    if (linkId) map.set(`id:${linkId}`, result);
+    if (linkKey) map.set(`key:${linkKey}`, result);
+    if (linkIndex) map.set(`index:${linkIndex}`, result);
+  }
+  return map;
+}
+
 function animateCraftLinkGroup(group) {
   const gold = group.querySelector(".fallout-maw-craft-link-fluid-gold");
-  const red = group.querySelector(".fallout-maw-craft-link-fluid-red");
-  if (!gold || !red) return delay(CRAFT_FLOW_DURATION_MS);
+  const startSocket = group.querySelector(".fallout-maw-craft-link-fluid-socket.start");
+  const endSocket = group.querySelector(".fallout-maw-craft-link-fluid-socket.end");
+  if (!gold) return delay(CRAFT_FLOW_DURATION_MS);
   const total = Math.max(1, gold.getTotalLength?.() ?? 1);
   const success = group.dataset.craftFlowResult !== "failure";
   const breakFraction = Math.max(0.3, Math.min(0.7, Number(group.dataset.craftFlowBreak) || 0.5));
-  const breakLength = success ? total : total * breakFraction;
 
-  red.style.strokeDasharray = `0 ${total}`;
-  red.style.strokeDashoffset = "0";
-  gold.style.strokeDasharray = `0 ${total}`;
-  gold.style.strokeDashoffset = "0";
-  gold.classList.add("active");
-  red.classList.add("active");
+  initializeCraftFlowPath(gold, total);
+  setCraftFlowOpacity(gold, 1);
+  setCraftFlowTone(gold, 0);
+  setCraftFlowSocketOpacity(startSocket, 0);
+  setCraftFlowSocketOpacity(endSocket, 0);
+  setCraftFlowSocketTone(startSocket, 0);
+  setCraftFlowSocketTone(endSocket, 0);
 
   return new Promise(resolve => {
     const startedAt = performance.now();
     const step = now => {
       const elapsed = Math.max(0, now - startedAt);
       const progress = Math.min(1, elapsed / CRAFT_FLOW_DURATION_MS);
-      if (success) {
-        gold.style.strokeDasharray = `${total * progress} ${total}`;
+      const goldPhases = getCraftFlowPhaseProgress(progress);
+      const goldFilledLength = total * goldPhases.pipe;
+      const redTone = success ? 0 : clampNumber((progress - breakFraction) / CRAFT_FLOW_FAILURE_BLEND_FRACTION, 0, 1);
+      drawCraftFlowFill(gold, total, goldFilledLength);
+      setCraftFlowTone(gold, redTone);
+      setCraftFlowSocketOpacity(startSocket, goldPhases.startSocket);
+      setCraftFlowSocketOpacity(endSocket, goldPhases.endSocket);
+      setCraftFlowSocketTone(startSocket, redTone);
+      setCraftFlowSocketTone(endSocket, redTone);
+      if (progress < 1) {
+        requestAnimationFrame(step);
       } else {
-        const goldProgress = Math.min(progress / breakFraction, 1);
-        const redProgress = progress <= breakFraction ? 0 : (progress - breakFraction) / (1 - breakFraction);
-        gold.style.strokeDasharray = `${breakLength * goldProgress} ${total}`;
-        red.style.strokeDasharray = `${(total - breakLength) * redProgress} ${total}`;
-        red.style.strokeDashoffset = String(-breakLength);
+        const finalTone = success ? 0 : 1;
+        drawCraftFlowFill(gold, total, total);
+        setCraftFlowTone(gold, finalTone);
+        setCraftFlowSocketOpacity(startSocket, 1);
+        setCraftFlowSocketOpacity(endSocket, 1);
+        setCraftFlowSocketTone(startSocket, finalTone);
+        setCraftFlowSocketTone(endSocket, finalTone);
+        resolve();
       }
-      if (progress < 1) requestAnimationFrame(step);
-      else resolve();
     };
     requestAnimationFrame(step);
   });
+}
+
+function initializeCraftFlowPath(path, total) {
+  path.classList.add("active");
+  path.setAttribute("stroke-dasharray", `0 ${total}`);
+  path.setAttribute("stroke-dashoffset", "0");
+}
+
+function drawCraftFlowFill(path, total, visibleLength, startLength = 0) {
+  const start = Math.max(0, Math.min(total, startLength));
+  const end = Math.max(start, Math.min(total, visibleLength));
+  const visible = Math.max(0, end - start);
+  path.setAttribute("stroke-dasharray", `${visible} ${total}`);
+  path.setAttribute("stroke-dashoffset", String(-start));
+}
+
+function getCraftFlowPhaseProgress(progress) {
+  const socketPhase = CRAFT_FLOW_SOCKET_PHASE_FRACTION;
+  const pipePhase = Math.max(0.001, 1 - (socketPhase * 2));
+  return {
+    startSocket: clampNumber(progress / socketPhase, 0, 1),
+    pipe: clampNumber((progress - socketPhase) / pipePhase, 0, 1),
+    endSocket: clampNumber((progress - socketPhase - pipePhase) / socketPhase, 0, 1)
+  };
+}
+
+function setCraftFlowOpacity(path, opacity) {
+  path.style.opacity = String(clampNumber(opacity, 0, 1));
+}
+
+function setCraftFlowTone(path, tone) {
+  const amount = clampNumber(tone, 0, 1);
+  const color = mixCraftFlowColor(CRAFT_FLOW_GOLD, CRAFT_FLOW_RED, amount);
+  path.style.stroke = `rgba(${color.r}, ${color.g}, ${color.b}, 0.96)`;
+  path.style.filter = `drop-shadow(0 0 ${5 + amount}px rgba(${color.r}, ${color.g}, ${color.b}, ${0.65 + (amount * 0.01)}))`;
+}
+
+function setCraftFlowSocketOpacity(socket, opacity) {
+  if (!socket) return;
+  socket.style.opacity = String(clampNumber(opacity, 0, 1));
+}
+
+function setCraftFlowSocketTone(socket, tone) {
+  if (!socket) return;
+  const amount = clampNumber(tone, 0, 1);
+  const fill = mixCraftFlowColor(CRAFT_FLOW_SOCKET_GOLD_FILL, CRAFT_FLOW_SOCKET_RED_FILL, amount);
+  const stroke = mixCraftFlowColor(CRAFT_FLOW_SOCKET_GOLD_STROKE, CRAFT_FLOW_SOCKET_RED_STROKE, amount);
+  socket.style.fill = formatCraftFlowColor(fill);
+  socket.style.stroke = formatCraftFlowColor(stroke);
+  socket.style.filter = `drop-shadow(0 0 ${6 + amount}px rgba(${fill.r}, ${fill.g}, ${fill.b}, ${0.56 + (amount * 0.06)}))`;
+}
+
+function mixCraftFlowColor(from, to, amount) {
+  return {
+    r: Math.round(from.r + ((to.r - from.r) * amount)),
+    g: Math.round(from.g + ((to.g - from.g) * amount)),
+    b: Math.round(from.b + ((to.b - from.b) * amount)),
+    a: from.a === undefined || to.a === undefined ? undefined : from.a + ((to.a - from.a) * amount)
+  };
+}
+
+function formatCraftFlowColor(color) {
+  const alpha = Number.isFinite(color.a) ? color.a : 1;
+  return `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
 }
 
 function getCraftFailureBreakFraction(recipeUuid = "", linkId = "") {

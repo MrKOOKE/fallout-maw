@@ -590,9 +590,13 @@
   stroke: rgba(255, 203, 77, 0.96);
 }
 
-.fallout-maw-craft-link-fluid-red {
-  filter: drop-shadow(0 0 6px rgba(255, 58, 58, 0.66));
-  stroke: rgba(228, 42, 42, 0.96);
+.fallout-maw-craft-link-fluid-socket {
+  fill: rgba(255, 203, 77, 0.92);
+  filter: drop-shadow(0 0 6px rgba(255, 213, 90, 0.56));
+  opacity: 0;
+  pointer-events: none;
+  stroke: rgba(255, 242, 171, 0.86);
+  stroke-width: 1.4;
 }
 
 .fallout-maw-craft-block,
@@ -9596,6 +9600,18 @@ label.fallout-maw-mitigation-cell {
   min-width: 0;
 }
 
+.fallout-maw-craft-window-title-body {
+  align-items: center;
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: minmax(10rem, max-content) minmax(0, 1fr);
+  min-width: 0;
+}
+
+.fallout-maw-craft-window-title-main {
+  min-width: 0;
+}
+
 .fallout-maw-craft-window-title img {
   aspect-ratio: 1;
   border: 1px solid rgba(238, 214, 135, 0.56);
@@ -9621,6 +9637,26 @@ label.fallout-maw-mitigation-cell {
   line-height: 1.25;
   margin-top: 0.25rem;
   overflow-wrap: anywhere;
+}
+
+.fallout-maw-craft-window-checks {
+  align-content: start;
+  display: grid;
+  gap: 0.2rem 1rem;
+  grid-auto-columns: max-content;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, max-content);
+  justify-content: start;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.fallout-maw-craft-window-checks span {
+  color: #f4e6ba;
+  font-size: 1.02rem;
+  line-height: 1.15;
+  margin-top: 0;
+  white-space: nowrap;
 }
 
 .fallout-maw-craft-window-hammer {
@@ -9744,10 +9780,14 @@ label.fallout-maw-mitigation-cell {
   color: #fff3d8;
 }
 
-.fallout-maw-craft-node.readonly,
 .fallout-maw-craft-block.readonly {
   cursor: default;
   pointer-events: none;
+}
+
+.fallout-maw-craft-node.readonly {
+  cursor: default;
+  pointer-events: auto;
 }
 
 .fallout-maw-craft-block.readonly {

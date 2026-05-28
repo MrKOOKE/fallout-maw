@@ -110,10 +110,19 @@
       <header class="fallout-maw-craft-window-toolbar">
         <div class="fallout-maw-craft-window-title">
           {{#if recipe}}
-          <img src="{{recipe.img}}" alt="{{recipe.name}}">
-          <div>
-            <strong>{{recipe.name}}</strong>
-            <span>{{craft.summary}}</span>
+          <img src="{{recipe.img}}" alt="{{recipe.name}}" data-tooltip-uuid="{{recipe.uuid}}">
+          <div class="fallout-maw-craft-window-title-body">
+            <div class="fallout-maw-craft-window-title-main">
+              <strong data-tooltip-uuid="{{recipe.uuid}}">{{recipe.name}}</strong>
+              <span>{{craft.summary}}</span>
+            </div>
+            {{#if craft.checks.length}}
+            <div class="fallout-maw-craft-window-checks">
+              {{#each craft.checks}}
+              <span>{{label}}</span>
+              {{/each}}
+            </div>
+            {{/if}}
           </div>
           {{else}}
           <div>
@@ -135,7 +144,7 @@
           <div class="fallout-maw-craft-block readonly" data-craft-block-id="{{id}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" style="{{style}}" aria-label="{{label}}"></div>
           {{/each}}
           {{#each craft.nodes}}
-          <div class="fallout-maw-craft-node readonly {{#if root}}root{{/if}} {{#if missing}}missing{{/if}} {{pulseClass}}" data-craft-node-id="{{id}}" data-craft-block-id="{{blockId}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" style="{{style}}">
+          <div class="fallout-maw-craft-node readonly {{#if root}}root{{/if}} {{#if missing}}missing{{/if}} {{pulseClass}}" data-craft-node-id="{{id}}" data-craft-block-id="{{blockId}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" data-tooltip-uuid="{{tooltipUuid}}" style="{{style}}">
             <span class="fallout-maw-craft-node-image">
               <img src="{{img}}" alt="{{name}}">
               <span class="fallout-maw-craft-node-quantity">{{owned}}/{{quantity}}</span>
@@ -156,7 +165,7 @@
       <h2>Рецепты</h2>
       <div class="fallout-maw-craft-window-recipe-list fallout-maw-pane-scroll" data-search-scroll-key="craft:recipes">
         {{#each recipes}}
-        <article class="fallout-maw-craft-window-recipe {{#if selected}}selected{{/if}}" role="button" tabindex="0" data-recipe-uuid="{{uuid}}">
+        <article class="fallout-maw-craft-window-recipe {{#if selected}}selected{{/if}}" role="button" tabindex="0" data-recipe-uuid="{{uuid}}" data-tooltip-uuid="{{uuid}}">
           <img src="{{img}}" alt="{{name}}">
           <span class="name">{{name}}</span>
         </article>

@@ -3628,7 +3628,7 @@ function normalizeCraftLink(link = {}) {
     bendY = null;
   }
   return {
-    id: String(link.id || foundry.utils.randomID()),
+    id: String(link.id || getCraftFallbackLinkId(link)),
     fromNodeId: String(link.fromNodeId ?? ""),
     toNodeId: String(link.toNodeId ?? ""),
     skillKey: String(link.skillKey ?? "repair"),
@@ -3640,6 +3640,22 @@ function normalizeCraftLink(link = {}) {
     toAnchorSide: normalizeCraftAnchorSide(link.toAnchorSide),
     toAnchorOffset: Number.isFinite(toAnchorOffset) ? clampNumber(toAnchorOffset, 0, 1) : null
   };
+}
+
+function getCraftFallbackLinkId(link = {}) {
+  return [
+    "link",
+    String(link.fromNodeId ?? ""),
+    String(link.toNodeId ?? ""),
+    String(link.skillKey ?? "repair"),
+    String(link.difficulty ?? 60),
+    String(link.fromAnchorSide ?? ""),
+    String(link.fromAnchorOffset ?? ""),
+    String(link.toAnchorSide ?? ""),
+    String(link.toAnchorOffset ?? ""),
+    String(link.bendX ?? ""),
+    String(link.bendY ?? "")
+  ].join(":");
 }
 
 function normalizeCraftRecipeParts(nodes = [], links = []) {
