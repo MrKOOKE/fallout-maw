@@ -363,13 +363,27 @@ function weaponDamageTypeField() {
 
 function craftRecipeField() {
   return new SchemaField({
+    mode: new StringField({ required: true, blank: false, choices: ["craft", "disassembly"], initial: "craft" }),
     nodes: new ArrayField(craftNodeField(), { required: true, initial: [] }),
     links: new ArrayField(craftLinkField(), { required: true, initial: [] }),
-    viewport: new SchemaField({
-      x: new NumberField({ required: true, initial: 0 }),
-      y: new NumberField({ required: true, initial: 0 }),
-      zoom: new NumberField({ required: true, min: 0.1, initial: 1 })
-    })
+    viewport: craftViewportField(),
+    disassembly: craftRecipeLayoutField()
+  });
+}
+
+function craftRecipeLayoutField() {
+  return new SchemaField({
+    nodes: new ArrayField(craftNodeField(), { required: true, initial: [] }),
+    links: new ArrayField(craftLinkField(), { required: true, initial: [] }),
+    viewport: craftViewportField()
+  });
+}
+
+function craftViewportField() {
+  return new SchemaField({
+    x: new NumberField({ required: true, initial: 0 }),
+    y: new NumberField({ required: true, initial: 0 }),
+    zoom: new NumberField({ required: true, min: 0.1, initial: 1 })
   });
 }
 

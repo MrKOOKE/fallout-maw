@@ -1484,7 +1484,19 @@
 </section>
 
 <section class="tab {{tabs.craft.cssClass}}" data-group="{{tabs.craft.group}}" data-tab="{{tabs.craft.id}}">
-  <div class="fallout-maw-craft-editor" data-craft-workspace style="{{craft.viewportStyle}}">
+  <div class="fallout-maw-craft-modebar">
+    <div class="fallout-maw-craft-modebar-tabs" role="tablist">
+      {{#each craft.modes}}
+      <button type="button" class="{{#if selected}}active{{/if}}" data-craft-mode="{{key}}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}">{{label}}</button>
+      {{/each}}
+    </div>
+    {{#if craft.canReverseCreation}}
+    <button type="button" class="fallout-maw-craft-reverse-button" data-craft-reverse-creation>
+      <i class="fa-solid fa-rotate"></i> Реверсировать Создание
+    </button>
+    {{/if}}
+  </div>
+  <div class="fallout-maw-craft-editor fallout-maw-craft-mode-{{craft.mode}}" data-craft-workspace style="{{craft.viewportStyle}}">
     <div class="fallout-maw-craft-world" data-craft-world style="{{craft.viewportStyle}}">
       <svg class="fallout-maw-craft-links" data-craft-links aria-hidden="true"></svg>
       <div class="fallout-maw-craft-snap-preview" data-craft-snap-preview hidden></div>
@@ -1547,7 +1559,7 @@
         <p>{{craft.selectedLink.title}}</p>
         <label>
           <span>Навык</span>
-          <select name="system.craft.links.{{craft.selectedLink.index}}.skillKey">
+          <select name="{{craft.linkFieldPrefix}}.{{craft.selectedLink.index}}.skillKey">
             {{#each craft.selectedLink.skillChoices}}
             <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
             {{/each}}
@@ -1555,7 +1567,7 @@
         </label>
         <label>
           <span>Сложность</span>
-          <input type="number" name="system.craft.links.{{craft.selectedLink.index}}.difficulty" value="{{craft.selectedLink.difficulty}}" min="0" step="1">
+          <input type="number" name="{{craft.linkFieldPrefix}}.{{craft.selectedLink.index}}.difficulty" value="{{craft.selectedLink.difficulty}}" min="0" step="1">
         </label>
         <button type="button" data-craft-delete-link="{{craft.selectedLink.id}}">
           <i class="fa-solid fa-trash"></i> Удалить

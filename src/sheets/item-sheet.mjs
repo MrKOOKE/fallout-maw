@@ -48,11 +48,15 @@ const CRAFT_MAX_ZOOM = 2.5;
 const CRAFT_SOCKET_DEPTH_PX = 9;
 const CRAFT_SOCKET_HALF_WIDTH_PX = 8;
 const CRAFT_BLOCK_SEARCH_RADIUS = 24;
+const CRAFT_MODE_CREATE = "craft";
+const CRAFT_MODE_DISASSEMBLY = "disassembly";
 let itemSheetSourceSyncHooksRegistered = false;
+const activeCraftModes = new WeakMap();
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #functionPickerActive = false;
   #mitigationFillDrag = null;
+  #craftMode = CRAFT_MODE_CREATE;
   #craftSelection = null;
   #craftAttachSourceNodeId = "";
   #craftPanDrag = null;
@@ -229,7 +233,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       }
     }
 
-    const craft = prepareCraftContext(item, skillSettings, this.#craftSelection, this.#craftAttachSourceNodeId);
+    activeCraftModes.set(item, this.#craftMode);
+    const craft = prepareCraftContext(item, skillSettings, this.#craftSelection, this.#craftAttachSourceNodeId, this.#craftMode);
 
     return foundry.utils.mergeObject(context, {
       item,
@@ -493,6 +498,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     workspace.querySelector("[data-craft-delete-node]")?.addEventListener("click", event => this.#onCraftDeleteNode(event));
     workspace.querySelector("[data-craft-cancel-attach]")?.addEventListener("click", event => this.#onCraftCancelAttach(event));
     workspace.querySelector("[data-craft-node-quantity]")?.addEventListener("change", event => this.#onCraftNodeQuantityChange(event));
+    this.element?.querySelectorAll("[data-craft-mode]").forEach(button => {
+      button.addEventListener("click", event => this.#onCraftModeChange(event));
+    });
+    this.element?.querySelector("[data-craft-reverse-creation]")?.addEventListener("click", event => this.#onCraftReverseCreation(event));
     this.element?.querySelector('[data-action="tab"][data-tab="craft"]')?.addEventListener("click", () => {
       this.#scheduleCraftLinkRenderAfterLayout();
     });
@@ -566,10 +575,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const nextX = Math.round(drag.startX + (event.clientX - drag.startClientX));
     const nextY = Math.round(drag.startY + (event.clientY - drag.startClientY));
     const viewport = this.#setCraftViewportStyle(nextX, nextY);
+    const path = getCraftRecipeDataPath(getActiveCraftMode(this.item));
     return this.item.update({
-      "system.craft.viewport.x": viewport.x,
-      "system.craft.viewport.y": viewport.y,
-      "system.craft.viewport.zoom": viewport.zoom
+      [`${path}.viewport.x`]: viewport.x,
+      [`${path}.viewport.y`]: viewport.y,
+      [`${path}.viewport.zoom`]: viewport.zoom
     });
   }
 
@@ -685,10 +695,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (this.#craftViewportPersistTimeout) window.clearTimeout(this.#craftViewportPersistTimeout);
     this.#craftViewportPersistTimeout = window.setTimeout(() => {
       this.#craftViewportPersistTimeout = 0;
+      const path = getCraftRecipeDataPath(getActiveCraftMode(this.item));
       this.item.update({
-        "system.craft.viewport.x": Math.round(x),
-        "system.craft.viewport.y": Math.round(y),
-        "system.craft.viewport.zoom": clampCraftZoom(zoom)
+        [`${path}.viewport.x`]: Math.round(x),
+        [`${path}.viewport.y`]: Math.round(y),
+        [`${path}.viewport.zoom`]: clampCraftZoom(zoom)
       });
     }, 140);
   }
@@ -966,6 +977,50 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     for (const nodeId of drag.movingNodeIds ?? []) {
       workspace?.querySelector(`[data-craft-node-id="${CSS.escape(nodeId)}"]`)?.classList?.[method]?.("dragging");
     }
+  }
+
+  #onCraftModeChange(event) {
+    event.preventDefault();
+    const mode = normalizeCraftMode(event.currentTarget?.dataset?.craftMode);
+    if (mode === this.#craftMode) return undefined;
+    this.#craftMode = mode;
+    activeCraftModes.set(this.item, mode);
+    this.#craftSelection = null;
+    this.#craftAttachSourceNodeId = "";
+    this.#craftViewportOverride = null;
+    return this.render({ force: true });
+  }
+
+  async #onCraftReverseCreation(event) {
+    event.preventDefault();
+    const confirmed = await DialogV2.confirm({
+      window: {
+        title: "Реверсировать создание"
+      },
+      content: "<p>Скопировать схему создания в разбор, развернув связи и отзеркалив сетку относительно предмета?</p>",
+      yes: {
+        icon: "fa-solid fa-rotate",
+        label: "Реверсировать"
+      },
+      no: {
+        label: game.i18n.localize("Cancel")
+      },
+      rejectClose: false,
+      modal: true
+    });
+    if (!confirmed) return undefined;
+
+    const reversed = createReversedCraftRecipe(this.item);
+    this.#craftMode = CRAFT_MODE_DISASSEMBLY;
+    activeCraftModes.set(this.item, this.#craftMode);
+    this.#craftSelection = null;
+    this.#craftAttachSourceNodeId = "";
+    this.#craftViewportOverride = null;
+    return this.item.update({
+      "system.craft.disassembly.nodes": reversed.nodes,
+      "system.craft.disassembly.links": reversed.links,
+      "system.craft.disassembly.viewport": reversed.viewport
+    });
   }
 
   #onCraftAttachNode(event) {
@@ -1449,15 +1504,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   #updateCraftRecipe({ nodes = null, links = null, viewport = null } = {}) {
     const updateData = {};
+    const path = getCraftRecipeDataPath(getActiveCraftMode(this.item));
     if (nodes || links) {
       const normalized = normalizeCraftRecipeParts(
         nodes ? nodes.map(normalizeCraftNode) : getCraftNodesWithRoot(this.item),
         links ? links.map(normalizeCraftLink) : getCraftLinks(this.item)
       );
-      if (nodes) updateData["system.craft.nodes"] = normalized.nodes;
-      if (nodes || links) updateData["system.craft.links"] = normalized.links;
+      if (nodes) updateData[`${path}.nodes`] = normalized.nodes;
+      if (nodes || links) updateData[`${path}.links`] = normalized.links;
     }
-    if (viewport) updateData["system.craft.viewport"] = normalizeCraftViewport(viewport);
+    if (viewport) updateData[`${path}.viewport`] = normalizeCraftViewport(viewport);
     return this.item.update(updateData);
   }
 
@@ -3427,7 +3483,8 @@ function getDefaultAdditionalWeaponFunctionName(index) {
   return `${game.i18n.localize("FALLOUTMAW.Item.AdditionalWeaponFunction")} ${index + 1}`;
 }
 
-function prepareCraftContext(item, skillSettings = [], selection = null, attachSourceNodeId = "") {
+function prepareCraftContext(item, skillSettings = [], selection = null, attachSourceNodeId = "", mode = CRAFT_MODE_CREATE) {
+  mode = normalizeCraftMode(mode);
   const nodes = getCraftNodesWithRoot(item);
   const links = getCraftLinks(item);
   const blocks = getCraftBlocks(nodes);
@@ -3446,6 +3503,21 @@ function prepareCraftContext(item, skillSettings = [], selection = null, attachS
     : null;
   const attachSourceNode = nodes.find(node => node.id === attachSourceNodeId) ?? null;
   return {
+    mode,
+    modes: [
+      {
+        key: CRAFT_MODE_CREATE,
+        label: "Создание",
+        selected: mode === CRAFT_MODE_CREATE
+      },
+      {
+        key: CRAFT_MODE_DISASSEMBLY,
+        label: "Разбор",
+        selected: mode === CRAFT_MODE_DISASSEMBLY
+      }
+    ],
+    canReverseCreation: mode === CRAFT_MODE_DISASSEMBLY && hasCraftRecipeData(getCraftRecipeData(item, CRAFT_MODE_CREATE)),
+    linkFieldPrefix: mode === CRAFT_MODE_DISASSEMBLY ? "system.craft.disassembly.links" : "system.craft.links",
     blocks: blocks.map(block => ({
       ...block,
       label: `Craft block ${block.id}`,
@@ -3466,6 +3538,28 @@ function prepareCraftContext(item, skillSettings = [], selection = null, attachS
     attachSourceNode,
     hasPopover: Boolean(selectedNode || selectedLink)
   };
+}
+
+function normalizeCraftMode(mode) {
+  return String(mode ?? "") === CRAFT_MODE_DISASSEMBLY ? CRAFT_MODE_DISASSEMBLY : CRAFT_MODE_CREATE;
+}
+
+function getActiveCraftMode(item) {
+  return normalizeCraftMode(activeCraftModes.get(item));
+}
+
+function getCraftRecipeDataPath(mode = CRAFT_MODE_CREATE) {
+  return normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY ? "system.craft.disassembly" : "system.craft";
+}
+
+function getCraftRecipeData(item, mode = getActiveCraftMode(item)) {
+  const craft = item?.system?.craft ?? {};
+  if (normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY) return craft.disassembly ?? {};
+  return craft;
+}
+
+function hasCraftRecipeData(craft = {}) {
+  return Boolean((craft?.nodes ?? []).length || (craft?.links ?? []).length);
 }
 
 function prepareCraftNodeForDisplay(node, index, links) {
@@ -3534,18 +3628,18 @@ function getCraftNodesWithRoot(item) {
 }
 
 function getCraftNodes(item) {
-  return Array.from(item.system?.craft?.nodes ?? [])
+  return Array.from(getCraftRecipeData(item)?.nodes ?? [])
     .map(normalizeCraftNode)
     .filter(node => node.id);
 }
 
 function getCraftLinks(item) {
   const nodes = getCraftNodesWithRoot(item);
-  return normalizeCraftLinksForNodes(Array.from(item.system?.craft?.links ?? []), nodes);
+  return normalizeCraftLinksForNodes(Array.from(getCraftRecipeData(item)?.links ?? []), nodes);
 }
 
 function getCraftViewport(item) {
-  return normalizeCraftViewport(item.system?.craft?.viewport ?? {});
+  return normalizeCraftViewport(getCraftRecipeData(item)?.viewport ?? {});
 }
 
 function createCraftRootNode(item, source = {}) {
@@ -3664,6 +3758,69 @@ function normalizeCraftRecipeParts(nodes = [], links = []) {
     nodes: normalizedNodes,
     links: normalizeCraftLinksForNodes(links, normalizedNodes)
   };
+}
+
+function createReversedCraftRecipe(item) {
+  const sourceNodes = getCraftNodesWithRootForMode(item, CRAFT_MODE_CREATE);
+  const sourceLinks = getCraftLinksForMode(item, CRAFT_MODE_CREATE);
+  const root = sourceNodes.find(node => node.root) ?? createCraftRootNode(item);
+  const rootY = Number(root.y) || 0;
+  const nodes = sourceNodes.map(node => normalizeCraftNode({
+    ...foundry.utils.deepClone(node),
+    y: mirrorCraftY(node.y, rootY)
+  }));
+  const links = sourceLinks.map(link => normalizeCraftLink({
+    ...foundry.utils.deepClone(link),
+    fromNodeId: link.toNodeId,
+    toNodeId: link.fromNodeId,
+    bendY: Number.isFinite(toOptionalNumber(link.bendY)) ? mirrorCraftY(link.bendY, rootY) : null,
+    fromAnchorSide: mirrorCraftVerticalAnchorSide(link.toAnchorSide),
+    fromAnchorOffset: link.toAnchorOffset,
+    toAnchorSide: mirrorCraftVerticalAnchorSide(link.fromAnchorSide),
+    toAnchorOffset: link.fromAnchorOffset
+  }));
+  return {
+    ...normalizeCraftRecipeParts(nodes, links),
+    viewport: normalizeCraftViewport(getCraftViewportForMode(item, CRAFT_MODE_CREATE))
+  };
+}
+
+function getCraftNodesWithRootForMode(item, mode) {
+  const nodes = getCraftNodesForMode(item, mode);
+  const rootIndex = nodes.findIndex(node => node.root);
+  const root = createCraftRootNode(item, rootIndex >= 0 ? nodes[rootIndex] : {});
+  if (rootIndex >= 0) {
+    nodes[rootIndex] = root;
+    return nodes;
+  }
+  return [root, ...nodes];
+}
+
+function getCraftNodesForMode(item, mode) {
+  return Array.from(getCraftRecipeData(item, mode)?.nodes ?? [])
+    .map(normalizeCraftNode)
+    .filter(node => node.id);
+}
+
+function getCraftLinksForMode(item, mode) {
+  const nodes = getCraftNodesWithRootForMode(item, mode);
+  return normalizeCraftLinksForNodes(Array.from(getCraftRecipeData(item, mode)?.links ?? []), nodes);
+}
+
+function getCraftViewportForMode(item, mode) {
+  return normalizeCraftViewport(getCraftRecipeData(item, mode)?.viewport ?? {});
+}
+
+function mirrorCraftY(value, originY = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? originY - (number - originY) : originY;
+}
+
+function mirrorCraftVerticalAnchorSide(side) {
+  const normalized = normalizeCraftAnchorSide(side);
+  if (normalized === "top") return "bottom";
+  if (normalized === "bottom") return "top";
+  return normalized;
 }
 
 function normalizeCraftBlockMembership(nodes = []) {

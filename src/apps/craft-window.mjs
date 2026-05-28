@@ -63,6 +63,8 @@ const CRAFT_FLOW_SOCKET_GOLD_FILL = { r: 255, g: 203, b: 77, a: 0.92 };
 const CRAFT_FLOW_SOCKET_RED_FILL = { r: 228, g: 42, b: 42, a: 0.9 };
 const CRAFT_FLOW_SOCKET_GOLD_STROKE = { r: 255, g: 242, b: 171, a: 0.86 };
 const CRAFT_FLOW_SOCKET_RED_STROKE = { r: 255, g: 196, b: 184, a: 0.82 };
+const CRAFT_MODE_CREATE = "craft";
+const CRAFT_MODE_DISASSEMBLY = "disassembly";
 
 let craftWindow = null;
 let craftRecipeCache = null;
@@ -80,6 +82,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #actor = null;
   #selectedRecipeUuid = "";
   #selectedRecipe = null;
+  #craftMode = CRAFT_MODE_CREATE;
   #busy = false;
   #pendingOperation = null;
   #startedOperationId = "";
@@ -178,8 +181,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const context = await super._prepareContext(options);
     this.#actor = await resolveActor(this.#actorUuid);
     const recipes = await getCraftRecipeSummaries();
-    if (!this.#selectedRecipeUuid || !recipes.some(recipe => recipe.uuid === this.#selectedRecipeUuid)) {
-      this.#selectedRecipeUuid = recipes[0]?.uuid ?? "";
+    const modeRecipes = recipes.filter(recipe => hasCraftRecipeDataForMode(recipe.system?.craft, this.#craftMode));
+    if (!this.#selectedRecipeUuid || !modeRecipes.some(recipe => recipe.uuid === this.#selectedRecipeUuid)) {
+      this.#selectedRecipeUuid = modeRecipes[0]?.uuid ?? "";
     }
 
     const selectedRecipe = this.#selectedRecipeUuid ? await resolveDocument(this.#selectedRecipeUuid) : null;
@@ -193,6 +197,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const craft = selectedRecipe
       ? prepareCraftContext(selectedRecipe, this.#actor, {
         busy: this.#busy,
+        mode: this.#craftMode,
         pulse: this.#pulse?.recipeUuid === selectedRecipe.uuid ? this.#pulse : null
       })
       : createEmptyCraftContext(this.#busy);
@@ -202,6 +207,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       actor: actorContext,
       recipeCategories: prepareCraftRecipeCategories(recipes, this.#actor, {
         expandedCategories: this.#expandedRecipeCategories,
+        mode: this.#craftMode,
         search: this.#recipeSearch,
         selectedRecipeUuid: this.#selectedRecipeUuid
       }),
@@ -212,6 +218,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         img: normalizeImagePath(selectedRecipe.img, FALLBACK_ICON)
       } : null,
       inventory: actorContext.inventory,
+      craftMode: this.#craftMode,
+      craftModes: getCraftModeChoices(this.#craftMode),
       craft,
       load: actorContext.load
     };
@@ -390,6 +398,21 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         if (!["Enter", " "].includes(event.key)) return;
         event.preventDefault();
         button.click();
+      });
+    });
+    this.element?.querySelectorAll("[data-craft-mode]").forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        if (this.#busy) return;
+        const mode = normalizeCraftMode(event.currentTarget?.dataset?.craftMode);
+        if (mode === this.#craftMode) return;
+        this.#craftMode = mode;
+        this.#selectedRecipeUuid = "";
+        this.#selectedRecipe = null;
+        this.#craftViewportOverride = null;
+        this.#pulse = null;
+        this.#captureScrollPositions();
+        void this.#renderPreservingWindowStack();
       });
     });
     this.element?.querySelector('[data-action="craft"]')?.addEventListener("click", event => this.#onCraft(event));
@@ -1189,7 +1212,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const actor = await resolveActor(this.#actorUuid);
     const recipe = await resolveDocument(this.#selectedRecipeUuid);
     this.#selectedRecipe = recipe;
-    const validation = validateCraftRequest(actor, recipe);
+    const validation = validateCraftRequest(actor, recipe, this.#craftMode);
     if (!validation.valid) {
       ui.notifications.warn(validation.message);
       return undefined;
@@ -1208,7 +1231,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         data: { difficulty: link.difficulty },
         animate: false,
         createMessage: true,
-        requester: "Крафт"
+        requester: this.#craftMode === CRAFT_MODE_DISASSEMBLY ? "Разбор" : "Крафт"
       });
       if (!outcome) {
         this.#busy = false;
@@ -1231,8 +1254,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       id: operationId,
       actorUuid: actor.uuid,
       recipeUuid: recipe.uuid,
+      mode: this.#craftMode,
       success: linkResults.every(result => result.success),
       requirements: validation.requirements,
+      outputs: validation.outputs,
       linkResults
     };
     this.#captureScrollPositions();
@@ -1335,7 +1360,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #getCraftViewport() {
     if (this.#craftViewportOverride) return this.#craftViewportOverride;
-    return this.#selectedRecipe ? getCraftViewport(this.#selectedRecipe) : normalizeCraftViewport();
+    return this.#selectedRecipe ? getCraftViewport(this.#selectedRecipe, this.#craftMode) : normalizeCraftViewport();
   }
 
   #setCraftViewportStyle(x, y, zoom = this.#getCraftViewport().zoom) {
@@ -1356,7 +1381,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #clampCraftViewport(viewport) {
     const workspace = this.element?.querySelector("[data-craft-workspace]");
-    return clampCraftViewportToVisibleNode(viewport, workspace, this.#selectedRecipe ? getCraftNodesWithRoot(this.#selectedRecipe) : []);
+    return clampCraftViewportToVisibleNode(viewport, workspace, this.#selectedRecipe ? getCraftNodesWithRoot(this.#selectedRecipe, this.#craftMode) : []);
   }
 
   #onCraftWorkspacePointerDown(event) {
@@ -1435,7 +1460,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const recipe = this.#selectedRecipe;
     if (!recipe) return;
-    const craft = getCraftRenderData(recipe, this.#actor);
+    const craft = getCraftRenderData(recipe, this.#actor, operation?.mode ?? this.#craftMode);
     const nodeData = new Map(craft.nodes.map(node => [node.id, node]));
     const resultByLink = createCraftLinkResultMap(operation?.linkResults ?? []);
 
@@ -1444,7 +1469,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       const toNode = nodeData.get(link.toNodeId);
       if (!fromNode || !toNode || getCraftResolvedEndpointId(fromNode) === getCraftResolvedEndpointId(toNode)) continue;
       const linkKey = getCraftResolvedLinkKey(link, craft.nodes);
-      const flow = getCraftLinkFlow(link, nodeData);
+      const flow = getCraftLinkFlow(link, nodeData, operation?.mode ?? this.#craftMode);
       const from = getCraftEndpointElement(workspace, craft.nodes, flow.fromNodeId);
       const to = getCraftEndpointElement(workspace, craft.nodes, flow.toNodeId);
       if (!from || !to) continue;
@@ -1464,17 +1489,35 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 }
 
-function validateCraftRequest(actor, recipe) {
+function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE) {
+  mode = normalizeCraftMode(mode);
   if (!actor?.isOwner) return { valid: false, message: "Нет прав на крафт этим актером." };
   if (!recipe) return { valid: false, message: "Рецепт не выбран." };
-  const craft = getCraftRenderData(recipe, actor);
+  const craft = getCraftRenderData(recipe, actor, mode);
   if (!craft.links.length) return { valid: false, message: "В рецепте нет связей для проверок." };
-  if (!craft.requirements.length) return { valid: false, message: "В рецепте нет компонентов." };
+  if (!craft.requirements.length) {
+    return {
+      valid: false,
+      message: mode === CRAFT_MODE_DISASSEMBLY ? "В рецепте нет предмета для разбора." : "В рецепте нет компонентов."
+    };
+  }
   if (craft.requirements.some(requirement => !requirement.sourceUuid && !requirement.fingerprint)) {
-    return { valid: false, message: "В рецепте есть компонент без исходного документа." };
+    return {
+      valid: false,
+      message: mode === CRAFT_MODE_DISASSEMBLY ? "В рецепте есть предмет разбора без исходного документа." : "В рецепте есть компонент без исходного документа."
+    };
+  }
+  if (mode === CRAFT_MODE_DISASSEMBLY && !craft.outputs.length) {
+    return { valid: false, message: "В рецепте нет результатов разбора." };
+  }
+  if (mode === CRAFT_MODE_DISASSEMBLY && craft.outputs.some(output => !output.sourceUuid)) {
+    return { valid: false, message: "В рецепте есть результат разбора без исходного документа." };
   }
   if (craft.requirements.some(requirement => requirement.owned < requirement.quantity)) {
-    return { valid: false, message: "Недостаточно компонентов для крафта." };
+    return {
+      valid: false,
+      message: mode === CRAFT_MODE_DISASSEMBLY ? "Нет предмета для разбора." : "Недостаточно компонентов для крафта."
+    };
   }
   return {
     valid: true,
@@ -1484,6 +1527,10 @@ function validateCraftRequest(actor, recipe) {
       sourceKeys: requirement.sourceKeys,
       fingerprint: requirement.fingerprint,
       quantity: requirement.quantity
+    })),
+    outputs: craft.outputs.map(output => ({
+      sourceUuid: output.sourceUuid,
+      quantity: output.quantity
     })),
     links: craft.links.map((link, index) => ({
       id: link.id,
@@ -1503,6 +1550,10 @@ async function applyCraftOperation(operation) {
 
   await spendCraftRequirements(actor, operation.requirements);
   if (!operation.success) return;
+  if (normalizeCraftMode(operation.mode) === CRAFT_MODE_DISASSEMBLY) {
+    await createCraftOutputResults(actor, operation.outputs);
+    return;
+  }
   await createCraftResult(actor, recipe);
 }
 
@@ -1557,6 +1608,31 @@ async function createCraftResult(actor, recipe) {
   await actor.createEmbeddedDocuments("Item", [data]);
 }
 
+async function createCraftOutputResults(actor, outputs = []) {
+  for (const output of outputs) {
+    const source = await resolveDocument(output.sourceUuid);
+    if (!source) throw new Error("Результат разбора не найден.");
+    const data = source.toObject();
+    delete data._id;
+    delete data.folder;
+    foundry.utils.setProperty(data, "system.quantity", Math.max(1, toInteger(output.quantity) || 1));
+    foundry.utils.setProperty(data, "system.equipped", false);
+    foundry.utils.setProperty(data, "system.container.parentId", "");
+
+    const placement = getCraftResultPlacement(actor, data);
+    const storedPlacement = placement
+      ? createStoredPlacement(placement, data)
+      : createStoredPlacement({ mode: "inventory", x: 1, y: 1 }, data);
+    foundry.utils.setProperty(data, "system.placement", storedPlacement);
+
+    data._stats ??= {};
+    data._stats.compendiumSource = source.pack ? source.uuid : (source._stats?.compendiumSource ?? null);
+    data._stats.duplicateSource = source.pack ? null : source.uuid;
+    data._stats.exportSource = null;
+    await actor.createEmbeddedDocuments("Item", [data]);
+  }
+}
+
 function getCraftResultPlacement(actor, itemData) {
   const race = getActorRace(actor);
   const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
@@ -1566,21 +1642,25 @@ function getCraftResultPlacement(actor, itemData) {
   return findFirstAvailableInventoryPlacement(contextItems, columns, rows, itemData, actor.items.contents, [], []);
 }
 
-function prepareCraftContext(recipe, actor, { busy = false, pulse = null } = {}) {
-  const data = getCraftRenderData(recipe, actor);
+function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CREATE, pulse = null } = {}) {
+  mode = normalizeCraftMode(mode);
+  const data = getCraftRenderData(recipe, actor, mode);
   const missingCount = data.requirements.filter(requirement => requirement.owned < requirement.quantity).length;
   const checks = getCraftCheckSummaries(data.links);
   return {
+    mode,
     ...data,
+    actionTitle: mode === CRAFT_MODE_DISASSEMBLY ? "Разобрать" : "Произвести крафт",
+    actionIcon: mode === CRAFT_MODE_DISASSEMBLY ? "fa-screwdriver-wrench" : "fa-hammer",
     nodes: data.nodes.map(node => ({
       ...node,
       pulseClass: node.root && pulse ? (pulse.success ? "craft-pulse-success" : "craft-pulse-failure") : ""
     })),
     checks,
-    canCraft: Boolean(actor?.isOwner && !busy && data.links.length && data.requirements.length),
+    canCraft: Boolean(actor?.isOwner && !busy && data.links.length && data.requirements.length && (mode !== CRAFT_MODE_DISASSEMBLY || data.outputs.length)),
     summary: missingCount
-      ? `Не хватает компонентов: ${missingCount}`
-      : `Компоненты: ${data.requirements.length}`
+      ? (mode === CRAFT_MODE_DISASSEMBLY ? "Нет предмета для разбора" : `Не хватает компонентов: ${missingCount}`)
+      : (mode === CRAFT_MODE_DISASSEMBLY ? `Результаты: ${data.outputs.length}` : `Компоненты: ${data.requirements.length}`)
   };
 }
 
@@ -1590,7 +1670,10 @@ function createEmptyCraftContext(busy = false) {
     nodes: [],
     links: [],
     requirements: [],
+    outputs: [],
     checks: [],
+    actionTitle: "",
+    actionIcon: "fa-hammer",
     viewportStyle: "",
     canCraft: !busy && false,
     summary: ""
@@ -1623,14 +1706,18 @@ function getCraftCheckLabel(check) {
   return `${check.skillLabel}: Сложность ${check.difficulty}${suffix}`;
 }
 
-function getCraftRenderData(recipe, actor) {
-  const nodes = getCraftNodesWithRoot(recipe);
-  const links = getCraftLinks(recipe);
-  const requirements = getCraftRequirements(nodes);
+function getCraftRenderData(recipe, actor, mode = CRAFT_MODE_CREATE) {
+  mode = normalizeCraftMode(mode);
+  const nodes = getCraftNodesWithRoot(recipe, mode);
+  const links = getCraftLinks(recipe, mode);
+  const requirements = mode === CRAFT_MODE_DISASSEMBLY
+    ? getCraftRequirements(nodes.filter(node => node.root), { includeRoot: true })
+    : getCraftRequirements(nodes);
+  const outputs = mode === CRAFT_MODE_DISASSEMBLY ? getCraftOutputs(nodes) : [];
   const requirementByNodeId = new Map(requirements.flatMap(requirement => requirement.nodeIds.map(nodeId => [nodeId, requirement])));
   const ownedByRequirement = getActorOwnedCraftRequirements(actor, requirements);
   const blocks = getCraftBlocks(nodes);
-  const viewport = getCraftViewport(recipe);
+  const viewport = getCraftViewport(recipe, mode);
   const sourceMissing = new Set(
     requirements
       .filter(requirement => (ownedByRequirement.get(requirement.key) ?? 0) < requirement.quantity)
@@ -1644,10 +1731,10 @@ function getCraftRenderData(recipe, actor) {
       style: buildCraftNodeStyle(block)
     })),
     nodes: nodes.map((node, index) => {
-      const requirement = node.root ? null : requirementByNodeId.get(node.id);
+      const requirement = requirementByNodeId.get(node.id) ?? null;
       const sourceUuid = requirement?.sourceUuid ?? getCraftNodeSourceUuid(node);
       const quantity = Math.max(1, toInteger(node.quantity) || 1);
-      const owned = node.root ? quantity : (ownedByRequirement.get(requirement?.key) ?? 0);
+      const owned = node.root && mode !== CRAFT_MODE_DISASSEMBLY ? quantity : (ownedByRequirement.get(requirement?.key) ?? 0);
       return {
         ...node,
         index,
@@ -1656,8 +1743,8 @@ function getCraftRenderData(recipe, actor) {
         sourceKeys: requirement?.sourceKeys ?? [],
         quantity,
         owned,
-        quantityLabel: node.root ? `${quantity}х` : `${owned}/${quantity}`,
-        missing: !node.root && sourceMissing.has(requirement?.key),
+        quantityLabel: node.root && mode !== CRAFT_MODE_DISASSEMBLY ? `${quantity}х` : (requirement ? `${owned}/${quantity}` : `${quantity}х`),
+        missing: Boolean(requirement && sourceMissing.has(requirement.key)),
         style: buildCraftNodeStyle(node)
       };
     }),
@@ -1670,15 +1757,16 @@ function getCraftRenderData(recipe, actor) {
       quantity: requirement.quantity,
       owned: ownedByRequirement.get(requirement.key) ?? 0
     })),
+    outputs,
     viewport,
     viewportStyle: `--craft-pan-x: ${Math.round(viewport.x)}px; --craft-pan-y: ${Math.round(viewport.y)}px; --craft-zoom: ${viewport.zoom};`
   };
 }
 
-function getCraftRequirements(nodes = []) {
+function getCraftRequirements(nodes = [], { includeRoot = false } = {}) {
   const requirements = [];
   for (const node of nodes) {
-    if (node.root) continue;
+    if (node.root && !includeRoot) continue;
     const sourceUuid = getCraftNodeSourceUuid(node);
     const quantity = Math.max(1, toInteger(node.quantity) || 1);
     const sourceItem = resolveDocumentSync(sourceUuid);
@@ -1701,6 +1789,15 @@ function getCraftRequirements(nodes = []) {
     });
   }
   return requirements;
+}
+
+function getCraftOutputs(nodes = []) {
+  return nodes
+    .filter(node => !node.root)
+    .map(node => ({
+      sourceUuid: getCraftNodeSourceUuid(node),
+      quantity: Math.max(1, toInteger(node.quantity) || 1)
+    }));
 }
 
 function getActorOwnedCraftRequirements(actor, requirements = []) {
@@ -1824,8 +1921,34 @@ function getCraftNodeSourceUuid(node) {
   return String(node?.itemUuid ?? "").trim();
 }
 
-function getCraftNodesWithRoot(item) {
-  const nodes = getCraftNodes(item);
+function normalizeCraftMode(mode) {
+  return String(mode ?? "") === CRAFT_MODE_DISASSEMBLY ? CRAFT_MODE_DISASSEMBLY : CRAFT_MODE_CREATE;
+}
+
+function getCraftModeChoices(activeMode = CRAFT_MODE_CREATE) {
+  const mode = normalizeCraftMode(activeMode);
+  return [
+    {
+      key: CRAFT_MODE_CREATE,
+      label: "Создание",
+      selected: mode === CRAFT_MODE_CREATE
+    },
+    {
+      key: CRAFT_MODE_DISASSEMBLY,
+      label: "Разбор",
+      selected: mode === CRAFT_MODE_DISASSEMBLY
+    }
+  ];
+}
+
+function getCraftRecipeData(item, mode = CRAFT_MODE_CREATE) {
+  const craft = item?.system?.craft ?? {};
+  if (normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY) return craft.disassembly ?? {};
+  return craft;
+}
+
+function getCraftNodesWithRoot(item, mode = CRAFT_MODE_CREATE) {
+  const nodes = getCraftNodes(item, mode);
   const rootIndex = nodes.findIndex(node => node.root);
   const root = createCraftRootNode(item, rootIndex >= 0 ? nodes[rootIndex] : {});
   if (rootIndex >= 0) {
@@ -1835,19 +1958,19 @@ function getCraftNodesWithRoot(item) {
   return [root, ...nodes];
 }
 
-function getCraftNodes(item) {
-  return Array.from(item?.system?.craft?.nodes ?? [])
+function getCraftNodes(item, mode = CRAFT_MODE_CREATE) {
+  return Array.from(getCraftRecipeData(item, mode)?.nodes ?? [])
     .map(normalizeCraftNode)
     .filter(node => node.id);
 }
 
-function getCraftLinks(item) {
-  const nodes = getCraftNodesWithRoot(item);
-  return normalizeCraftLinksForNodes(Array.from(item?.system?.craft?.links ?? []), nodes);
+function getCraftLinks(item, mode = CRAFT_MODE_CREATE) {
+  const nodes = getCraftNodesWithRoot(item, mode);
+  return normalizeCraftLinksForNodes(Array.from(getCraftRecipeData(item, mode)?.links ?? []), nodes);
 }
 
-function getCraftViewport(item) {
-  return normalizeCraftViewport(item?.system?.craft?.viewport ?? {});
+function getCraftViewport(item, mode = CRAFT_MODE_CREATE) {
+  return normalizeCraftViewport(getCraftRecipeData(item, mode)?.viewport ?? {});
 }
 
 function createCraftRootNode(item, source = {}) {
@@ -2144,9 +2267,14 @@ function cssDimensionToPixels(value, element = document.documentElement) {
   return numeric;
 }
 
-function getCraftLinkFlow(link, nodeData) {
+function getCraftLinkFlow(link, nodeData, mode = CRAFT_MODE_CREATE) {
+  mode = normalizeCraftMode(mode);
   const from = nodeData.get(link.fromNodeId);
   const to = nodeData.get(link.toNodeId);
+  if (mode === CRAFT_MODE_DISASSEMBLY) {
+    if (!from?.root && to?.root) return { fromNodeId: link.toNodeId, toNodeId: link.fromNodeId, reversed: true };
+    return { fromNodeId: link.fromNodeId, toNodeId: link.toNodeId, reversed: false };
+  }
   if (from?.root && !to?.root) return { fromNodeId: link.toNodeId, toNodeId: link.fromNodeId, reversed: true };
   return { fromNodeId: link.fromNodeId, toNodeId: link.toNodeId, reversed: false };
 }
@@ -2641,14 +2769,16 @@ function getCraftFailureBreakFraction(recipeUuid = "", linkId = "") {
   return 0.3 + ((Math.abs(hash) % 401) / 1000);
 }
 
-function prepareCraftRecipeCategories(recipes = [], actor = null, { selectedRecipeUuid = "", search = "", expandedCategories = new Set() } = {}) {
+function prepareCraftRecipeCategories(recipes = [], actor = null, { selectedRecipeUuid = "", search = "", expandedCategories = new Set(), mode = CRAFT_MODE_CREATE } = {}) {
+  mode = normalizeCraftMode(mode);
   const normalizedSearch = normalizeCraftSearchText(search);
   const categories = new Map();
   for (const recipe of recipes) {
+    if (!hasCraftRecipeDataForMode(recipe.system?.craft, mode)) continue;
     const category = getCraftRecipeCategory(recipe);
     const displayName = getCraftRecipeDisplayName(recipe);
     if (normalizedSearch && !normalizeCraftSearchText(`${displayName} ${category}`).includes(normalizedSearch)) continue;
-    const missing = getCraftRecipeMissingCount(recipe, actor) > 0;
+    const missing = getCraftRecipeMissingCount(recipe, actor, mode) > 0;
     const entry = {
       ...recipe,
       displayName,
@@ -2675,9 +2805,9 @@ function prepareCraftRecipeCategories(recipes = [], actor = null, { selectedReci
     .sort((left, right) => left.label.localeCompare(right.label, game.i18n.lang));
 }
 
-function getCraftRecipeMissingCount(recipe, actor) {
+function getCraftRecipeMissingCount(recipe, actor, mode = CRAFT_MODE_CREATE) {
   if (!actor) return 0;
-  const data = getCraftRenderData(recipe, actor);
+  const data = getCraftRenderData(recipe, actor, mode);
   return data.requirements.filter(requirement => requirement.owned < requirement.quantity).length;
 }
 
@@ -2711,7 +2841,7 @@ async function getCraftRecipeSummaries() {
     if (pack.documentName !== "Item") continue;
     let index;
     try {
-      index = await pack.getIndex({ fields: ["type", "img", "system.quantity", "system.itemCategory", "system.placement", "system.craft.nodes", "system.craft.links"] });
+      index = await pack.getIndex({ fields: ["type", "img", "system.quantity", "system.itemCategory", "system.placement", "system.craft.nodes", "system.craft.links", "system.craft.disassembly.nodes", "system.craft.disassembly.links", "system.craft.disassembly.viewport"] });
     } catch (_error) {
       continue;
     }
@@ -2747,7 +2877,12 @@ function isCraftRecipeItem(item) {
 }
 
 function hasCraftRecipeData(craft = {}) {
-  return Boolean((craft?.nodes ?? []).length || (craft?.links ?? []).length);
+  return hasCraftRecipeDataForMode(craft, CRAFT_MODE_CREATE) || hasCraftRecipeDataForMode(craft, CRAFT_MODE_DISASSEMBLY);
+}
+
+function hasCraftRecipeDataForMode(craft = {}, mode = CRAFT_MODE_CREATE) {
+  const recipe = normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY ? craft?.disassembly : craft;
+  return Boolean((recipe?.nodes ?? []).length || (recipe?.links ?? []).length);
 }
 
 function prepareRecipeSummary(item) {
