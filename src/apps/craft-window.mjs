@@ -65,6 +65,7 @@ const CRAFT_FLOW_SOCKET_GOLD_STROKE = { r: 255, g: 242, b: 171, a: 0.86 };
 const CRAFT_FLOW_SOCKET_RED_STROKE = { r: 255, g: 196, b: 184, a: 0.82 };
 const CRAFT_MODE_CREATE = "craft";
 const CRAFT_MODE_DISASSEMBLY = "disassembly";
+const CRAFT_LEGACY_BEND_PIXEL_THRESHOLD = 80;
 
 let craftWindow = null;
 let craftRecipeCache = null;
@@ -198,7 +199,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       ? prepareCraftContext(selectedRecipe, this.#actor, {
         busy: this.#busy,
         mode: this.#craftMode,
-        pulse: this.#pulse?.recipeUuid === selectedRecipe.uuid ? this.#pulse : null
+        pulse: this.#pulse?.recipeUuid === selectedRecipe.uuid && this.#pulse?.mode === this.#craftMode ? this.#pulse : null
       })
       : createEmptyCraftContext(this.#busy);
 
@@ -1288,6 +1289,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         await applyCraftOperation(operation);
         this.#pulse = {
           recipeUuid: operation.recipeUuid,
+          mode: normalizeCraftMode(operation.mode),
           success: operation.success
         };
       } catch (error) {
@@ -1476,7 +1478,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       const anchors = flow.reversed
         ? { from: getCraftLinkAnchor(link, "to"), to: getCraftLinkAnchor(link, "from") }
         : getCraftLinkAnchors(link);
-      const geometry = getCraftConnectorGeometry(from, to, svg, getCraftLinkBend(link), anchors);
+      const geometry = getCraftConnectorGeometry(from, to, svg, getCraftLinkBend(link, svg), anchors);
       appendCraftLinkPath(svg, geometry, link, {
         result: resultByLink.get(`id:${link.id}`)
           ?? resultByLink.get(`key:${linkKey}`)
@@ -1654,7 +1656,7 @@ function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CR
     actionIcon: mode === CRAFT_MODE_DISASSEMBLY ? "fa-screwdriver-wrench" : "fa-hammer",
     nodes: data.nodes.map(node => ({
       ...node,
-      pulseClass: node.root && pulse ? (pulse.success ? "craft-pulse-success" : "craft-pulse-failure") : ""
+      pulseClass: shouldPulseCraftNode(node, mode, pulse) ? (pulse.success ? "craft-pulse-success" : "craft-pulse-failure") : ""
     })),
     checks,
     canCraft: Boolean(actor?.isOwner && !busy && data.links.length && data.requirements.length && (mode !== CRAFT_MODE_DISASSEMBLY || data.outputs.length)),
@@ -1662,6 +1664,11 @@ function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CR
       ? (mode === CRAFT_MODE_DISASSEMBLY ? "Нет предмета для разбора" : `Не хватает компонентов: ${missingCount}`)
       : (mode === CRAFT_MODE_DISASSEMBLY ? `Результаты: ${data.outputs.length}` : `Компоненты: ${data.requirements.length}`)
   };
+}
+
+function shouldPulseCraftNode(node, mode = CRAFT_MODE_CREATE, pulse = null) {
+  if (!pulse) return false;
+  return normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY ? !node.root : node.root;
 }
 
 function createEmptyCraftContext(busy = false) {
@@ -2514,10 +2521,44 @@ function getRectAnchorFromData(rect, anchor) {
   };
 }
 
-function getCraftLinkBend(link) {
+function getRawCraftLinkBend(link) {
   const x = toOptionalNumber(link.bendX);
   const y = toOptionalNumber(link.bendY);
   return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+function getCraftLinkBend(link, svg = null) {
+  const bend = getRawCraftLinkBend(link);
+  if (!bend) return null;
+  if (!svg) return bend;
+  if (isLegacyCraftBend(link)) return null;
+  return craftStoredBendToSvgPoint(svg, bend);
+}
+
+function isLegacyCraftBend(link) {
+  const bend = getRawCraftLinkBend(link);
+  if (!bend) return false;
+  return Math.max(Math.abs(bend.x), Math.abs(bend.y)) > CRAFT_LEGACY_BEND_PIXEL_THRESHOLD;
+}
+
+function craftStoredBendToSvgPoint(svg, bend) {
+  const center = getCraftSvgLocalCenter(svg);
+  const metrics = getCraftGridMetrics(svg?.closest?.("[data-craft-workspace]"));
+  return {
+    x: center.x + (bend.x * metrics.step),
+    y: center.y + (bend.y * metrics.step)
+  };
+}
+
+function getCraftSvgLocalCenter(svg) {
+  const rect = svg?.getBoundingClientRect?.();
+  const zoom = getCraftSvgZoom(svg);
+  const width = rect?.width ? rect.width / zoom : 0;
+  const height = rect?.height ? rect.height / zoom : 0;
+  return {
+    x: width / 2,
+    y: height / 2
+  };
 }
 
 function getCraftLinkAnchor(link, role) {

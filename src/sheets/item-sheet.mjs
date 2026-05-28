@@ -50,6 +50,7 @@ const CRAFT_SOCKET_HALF_WIDTH_PX = 8;
 const CRAFT_BLOCK_SEARCH_RADIUS = 24;
 const CRAFT_MODE_CREATE = "craft";
 const CRAFT_MODE_DISASSEMBLY = "disassembly";
+const CRAFT_LEGACY_BEND_PIXEL_THRESHOLD = 80;
 let itemSheetSourceSyncHooksRegistered = false;
 const activeCraftModes = new WeakMap();
 
@@ -504,6 +505,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelector("[data-craft-reverse-creation]")?.addEventListener("click", event => this.#onCraftReverseCreation(event));
     this.element?.querySelector('[data-action="tab"][data-tab="craft"]')?.addEventListener("click", () => {
       this.#scheduleCraftLinkRenderAfterLayout();
+      requestAnimationFrame(() => requestAnimationFrame(() => this.#normalizeLegacyCraftBends()));
     });
     if (typeof ResizeObserver === "function") {
       this.#craftResizeObserver = new ResizeObserver(() => this.#scheduleCraftLinkRender());
@@ -513,6 +515,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.#setCraftViewportStyle(viewport.x, viewport.y, viewport.zoom);
     this.#syncCraftNodeLayouts();
     this.#scheduleCraftLinkRenderAfterLayout();
+    this.#normalizeLegacyCraftBends();
     this.#positionCraftPopover();
   }
 
@@ -1257,7 +1260,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         ? this.#craftLinkDrag.bend
         : this.#craftSocketDrag?.linkId === link.id
           ? this.#craftSocketDrag.bend
-        : getCraftLinkBend(link);
+        : getCraftLinkBend(link, svg);
       const anchors = this.#craftLinkDrag?.linkId === link.id
         ? this.#craftLinkDrag.anchors
         : this.#craftSocketDrag?.linkId === link.id
@@ -1351,7 +1354,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       linkId: link.id,
       startClientX: event.clientX,
       startClientY: event.clientY,
-      bend: getCraftLinkBend(link) ?? start,
+      bend: getCraftLinkBend(link, svg) ?? start,
       anchors,
       moved: false
     };
@@ -1388,9 +1391,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       this.#craftSelection = { type: "link", id: drag.linkId };
       return this.render({ force: true });
     }
+    const svg = this.element?.querySelector("[data-craft-links]");
+    if (!svg) return undefined;
     const links = getCraftLinks(this.item).map(link => (
       link.id === drag.linkId
-        ? { ...link, bendX: drag.bend.x, bendY: drag.bend.y, ...buildCraftAnchorUpdateData(drag.anchors) }
+        ? { ...link, ...craftSvgPointToStoredBend(svg, drag.bend), ...buildCraftAnchorUpdateData(drag.anchors) }
         : link
     ));
     this.#craftSelection = null;
@@ -1407,7 +1412,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       linkId: link.id,
       role,
       anchors,
-      bend: getCraftLinkBend(link),
+      bend: getCraftLinkBend(link, svg),
       moved: false,
       startClientX: event.clientX,
       startClientY: event.clientY
@@ -1463,7 +1468,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const from = getElementRectRelativeToSvg(fromElement, svg);
     const to = getElementRectRelativeToSvg(toElement, svg);
     if (!from || !to) return getCraftLinkAnchors(link);
-    const bend = getCraftLinkBend(link);
+    const bend = getCraftLinkBend(link, svg);
     const fromAnchor = getCraftResolvedAnchor(from, getCraftLinkAnchor(link, "from"), bend ?? getRectCenter(to));
     const toAnchor = getCraftResolvedAnchor(to, getCraftLinkAnchor(link, "to"), bend ?? getRectCenter(from));
     return {
@@ -1515,6 +1520,20 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     }
     if (viewport) updateData[`${path}.viewport`] = normalizeCraftViewport(viewport);
     return this.item.update(updateData);
+  }
+
+  #normalizeLegacyCraftBends() {
+    const svg = this.element?.querySelector("[data-craft-links]");
+    if (!svg) return undefined;
+    const rect = svg.getBoundingClientRect();
+    if (!svg.getClientRects().length || rect.width <= 0 || rect.height <= 0) return undefined;
+    const links = getCraftLinks(this.item);
+    if (!links.some(link => isLegacyCraftBend(link))) return undefined;
+    return this.#updateCraftRecipe({
+      links: links.map(link => (
+        isLegacyCraftBend(link) ? { ...link, ...craftSvgPointToStoredBend(svg, getRawCraftLinkBend(link)) } : link
+      ))
+    });
   }
 
   #positionCraftPopover() {
@@ -4326,10 +4345,57 @@ function getCraftSvgZoom(svg) {
   return Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
 }
 
-function getCraftLinkBend(link) {
+function getRawCraftLinkBend(link) {
   const x = toOptionalNumber(link.bendX);
   const y = toOptionalNumber(link.bendY);
   return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+function getCraftLinkBend(link, svg = null) {
+  const bend = getRawCraftLinkBend(link);
+  if (!bend) return null;
+  if (!svg || isLegacyCraftBend(link)) return bend;
+  return craftStoredBendToSvgPoint(svg, bend);
+}
+
+function isLegacyCraftBend(link) {
+  const bend = getRawCraftLinkBend(link);
+  if (!bend) return false;
+  return Math.max(Math.abs(bend.x), Math.abs(bend.y)) > CRAFT_LEGACY_BEND_PIXEL_THRESHOLD;
+}
+
+function craftStoredBendToSvgPoint(svg, bend) {
+  const center = getCraftSvgLocalCenter(svg);
+  const metrics = getCraftGridMetrics(svg?.closest?.("[data-craft-workspace]"));
+  return {
+    x: center.x + (bend.x * metrics.step),
+    y: center.y + (bend.y * metrics.step)
+  };
+}
+
+function craftSvgPointToStoredBend(svg, point) {
+  const center = getCraftSvgLocalCenter(svg);
+  const metrics = getCraftGridMetrics(svg?.closest?.("[data-craft-workspace]"));
+  return {
+    bendX: roundCraftBendCoordinate((Number(point?.x) || 0) - center.x, metrics.step),
+    bendY: roundCraftBendCoordinate((Number(point?.y) || 0) - center.y, metrics.step)
+  };
+}
+
+function roundCraftBendCoordinate(value, step) {
+  const normalizedStep = Math.max(1, Number(step) || CRAFT_GRID_FALLBACK_STEP);
+  return Math.round((value / normalizedStep) * 1000) / 1000;
+}
+
+function getCraftSvgLocalCenter(svg) {
+  const rect = svg?.getBoundingClientRect?.();
+  const zoom = getCraftSvgZoom(svg);
+  const width = rect?.width ? rect.width / zoom : 0;
+  const height = rect?.height ? rect.height / zoom : 0;
+  return {
+    x: width / 2,
+    y: height / 2
+  };
 }
 
 function buildCraftConnectorGeometry(from, to, bend = null, anchors = null) {
