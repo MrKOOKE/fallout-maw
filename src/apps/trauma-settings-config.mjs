@@ -60,7 +60,7 @@ export class TraumaSettingsConfig extends FalloutMaWFormApplicationV2 {
       ...(await super._prepareContext(options)),
       groups: limbSets.map(group => ({
         ...group,
-        limbsLabel: group.limbs.map(limb => `${limb.label} (${limb.stateMax})`).join(", "),
+        limbsLabel: group.limbs.map(limb => limb.label).join(", "),
         traumaStagesCount: countTraumaStages(this.settings.groups?.[group.id])
       })),
       hasGroups: limbSets.length > 0
@@ -134,7 +134,7 @@ export class TraumaGroupSettingsConfig extends FalloutMaWFormApplicationV2 {
       ...(await super._prepareContext(options)),
       group: group ? {
         ...group,
-        limbsLabel: group.limbs.map(limb => `${limb.label} (${limb.stateMax})`).join(", "),
+        limbsLabel: group.limbs.map(limb => limb.label).join(", "),
         limbs: group.limbs.map(limb => {
           const config = this.settings.groups?.[group.id]?.limbs?.[limb.key] ?? createEmptyLimbConfig(limb);
           return {

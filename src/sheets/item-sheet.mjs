@@ -22,12 +22,15 @@ import {
   ABILITY_CONDITION_TYPES,
   ABILITY_EQUIPMENT_OPERATORS,
   ABILITY_FUNCTION_TYPES,
+  ABILITY_HEALTH_LIMB_ALL,
+  ABILITY_HEALTH_TARGETS,
   createAbilityChange,
   createAbilityCondition,
   createAbilityFunction,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import { captureApplicationScrollPositions, restoreApplicationScrollPositions } from "../utils/application-scroll.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
   getWeaponModuleSlots,
@@ -45,7 +48,6 @@ const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
 const DEFAULT_RELOAD_ACTION_POINT_COST = 2;
 const DEFAULT_ATTACK_ANIMATION_DELAY_MS = 200;
 const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 20;
-const DEFAULT_ITEM_SHEET_HEIGHT = 4000;
 const CRAFT_ROOT_NODE_ID = "root";
 const CRAFT_GRID_FALLBACK_STEP = 56;
 const CRAFT_DRAG_THRESHOLD_PX = 4;
@@ -61,6 +63,7 @@ let itemSheetSourceSyncHooksRegistered = false;
 const activeCraftModes = new WeakMap();
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
+  #scrollPositions = new Map();
   #functionPickerActive = false;
   #mitigationFillDrag = null;
   #craftMode = CRAFT_MODE_CREATE;
@@ -111,12 +114,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.document;
   }
 
-  _initializeApplicationOptions(options) {
-    options = super._initializeApplicationOptions(options);
-    if (!["disease", "trauma"].includes(String(options.document?.type ?? "")) && options.position?.height === "auto") {
-      options.position.height = DEFAULT_ITEM_SHEET_HEIGHT;
-    }
-    return options;
+  render(options = {}) {
+    this.#captureScrollPositions();
+    return super.render(options);
   }
 
   async _prepareContext(options) {
@@ -418,6 +418,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-add-ability-condition]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityCondition(event));
     });
+    this.element?.querySelectorAll("[data-add-ability-condition-alternative]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityConditionAlternative(event));
+    });
     this.element?.querySelectorAll("[data-delete-ability-condition]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAbilityCondition(event));
     });
@@ -428,6 +431,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onDeleteAbilityPenalty(event));
     });
     this.element?.querySelectorAll("[data-ability-condition-type]").forEach(select => {
+      select.addEventListener("change", event => this.#onAbilityConditionTypeChange(event));
+    });
+    this.element?.querySelectorAll("[data-ability-condition-health-target]").forEach(select => {
       select.addEventListener("change", event => this.#onAbilityConditionTypeChange(event));
     });
     this.element?.querySelector("[data-ability-only-free]")?.addEventListener("change", event => this.#onAbilityOnlyFreeChange(event));
@@ -499,6 +505,21 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onMitigationLimbSetChoice(event));
     });
     this.#activateCraftEditor();
+    this.#restoreScrollPositions();
+  }
+
+  #captureScrollPositions() {
+    this.#scrollPositions = captureApplicationScrollPositions(this.element, [
+      ".window-content",
+      ".fallout-maw-sheet-body > .tab.active"
+    ]);
+  }
+
+  #restoreScrollPositions() {
+    restoreApplicationScrollPositions(this.element, this.#scrollPositions, [
+      ".window-content",
+      ".fallout-maw-sheet-body > .tab.active"
+    ]);
   }
 
   #activateCraftEditor() {
@@ -1738,6 +1759,21 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.item.update({ "system.functions": functions });
   }
 
+  #onAddAbilityConditionAlternative(event) {
+    event.preventDefault();
+    const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
+    const conditionIndex = Number(event.currentTarget?.closest?.("[data-ability-condition-row]")?.dataset.conditionIndex ?? -1);
+    const functions = normalizeAbilityFunctions(this.item.system?.functions ?? []);
+    const conditions = functions[functionIndex]?.conditions;
+    const condition = conditions?.[conditionIndex];
+    if (!condition) return undefined;
+
+    const groupId = String(condition.groupId ?? "").trim() || foundry.utils.randomID();
+    condition.groupId = groupId;
+    conditions.splice(conditionIndex + 1, 0, createAbilityCondition({ type: "", groupId }));
+    return this.item.update({ "system.functions": functions });
+  }
+
   #onDeleteAbilityCondition(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -1773,7 +1809,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.preventDefault();
     const path = String(event.currentTarget?.name ?? "");
     if (!path) return undefined;
-    await this.item.update({ [path]: event.currentTarget.value });
+    const updateData = { [path]: event.currentTarget.value };
+    if (event.currentTarget?.matches?.("[data-ability-condition-health-target]")) {
+      updateData[path.replace(/\.healthTarget$/, ".limbKey")] = ABILITY_HEALTH_LIMB_ALL;
+    }
+    await this.item.update(updateData);
     return this.render({ force: true });
   }
 
@@ -2797,12 +2837,14 @@ function getItemFunctionLabel(functionKey = "") {
 
 function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0) {
   const type = String(entry?.type ?? ABILITY_FUNCTION_TYPES.effectChanges);
+  const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index));
   return {
     ...entry,
     functionIndex,
     typeLabel: type === ABILITY_FUNCTION_TYPES.acquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка",
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index)),
-    conditions: (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index)),
+    conditions,
+    conditionGroups: buildAbilityConditionDisplayGroups(conditions),
     penalties: (entry?.penalties ?? []).map((change, index) => prepareAbilityPenaltyForDisplay(change, functionIndex, index)),
     hasConditions: Boolean(entry?.conditions?.length),
     hasPenalties: Boolean(entry?.penalties?.length),
@@ -2831,15 +2873,28 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index) {
   const type = String(condition?.type ?? "");
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
+  const healthTarget = Object.values(ABILITY_HEALTH_TARGETS).includes(condition?.healthTarget)
+    ? condition.healthTarget
+    : ABILITY_HEALTH_TARGETS.general;
+  const isHealthGeneral = healthTarget === ABILITY_HEALTH_TARGETS.general;
+  const isHealthLimb = healthTarget === ABILITY_HEALTH_TARGETS.limb;
+  const isHealthCriticalLimb = healthTarget === ABILITY_HEALTH_TARGETS.criticalLimb;
   return {
     ...condition,
     functionIndex,
     index,
+    healthTarget,
     isPending: !isHealth && !isEquipment,
     isHealth,
+    isHealthGeneral,
+    isHealthLimb,
+    isHealthCriticalLimb,
+    showLimbChoice: isHealth && !isHealthGeneral,
     isEquipment,
     typeLabel: getAbilityConditionTypeLabel(type),
     typeChoices: buildAbilityConditionTypeChoices(type),
+    healthTargetChoices: buildAbilityHealthTargetChoices(healthTarget),
+    limbChoices: buildAbilityLimbChoices(condition?.limbKey, { criticalOnly: isHealthCriticalLimb }),
     healthOperatorChoices: [
       { value: "lte", label: "<=", selected: String(condition?.operator ?? "lte") !== "gte" },
       { value: "gte", label: ">=", selected: String(condition?.operator ?? "lte") === "gte" }
@@ -2850,6 +2905,27 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index) {
     ],
     equipmentSlotChoices: buildAbilityEquipmentSlotChoices(condition?.equipmentSlotKey)
   };
+}
+
+function buildAbilityConditionDisplayGroups(conditions = []) {
+  const groups = [];
+  for (const condition of conditions) {
+    const groupId = String(condition?.groupId ?? "").trim();
+    const previous = groups.at(-1);
+    if (groupId && previous?.groupId === groupId) {
+      previous.conditions.push(condition);
+    } else {
+      groups.push({
+        id: groupId || condition?.id || foundry.utils.randomID(),
+        groupId,
+        conditions: [condition]
+      });
+    }
+  }
+  return groups.map(group => ({
+    ...group,
+    isOrGroup: Boolean(group.groupId && group.conditions.length > 1)
+  }));
 }
 
 function getAbilityConditionTypeLabel(type) {
@@ -2875,6 +2951,36 @@ function buildAbilityConditionTypeChoices(selected = "") {
     { value: ABILITY_CONDITION_TYPES.healthPercent, label: "Состояние ОЗ", selected: selected === ABILITY_CONDITION_TYPES.healthPercent },
     { value: ABILITY_CONDITION_TYPES.equipmentSlotOccupied, label: "Занятость слотов экипировки", selected: selected === ABILITY_CONDITION_TYPES.equipmentSlotOccupied }
   ];
+}
+
+function buildAbilityHealthTargetChoices(selected = ABILITY_HEALTH_TARGETS.general) {
+  return [
+    { value: ABILITY_HEALTH_TARGETS.general, label: "Общее" },
+    { value: ABILITY_HEALTH_TARGETS.limb, label: "Конечности" },
+    { value: ABILITY_HEALTH_TARGETS.criticalLimb, label: "Критические конечности" }
+  ].map(choice => ({
+    ...choice,
+    selected: choice.value === selected
+  }));
+}
+
+function buildAbilityLimbChoices(selected = ABILITY_HEALTH_LIMB_ALL, { criticalOnly = false } = {}) {
+  const selectedKey = String(selected ?? ABILITY_HEALTH_LIMB_ALL).trim() || ABILITY_HEALTH_LIMB_ALL;
+  const limbs = new Map([[ABILITY_HEALTH_LIMB_ALL, "Все"]]);
+  for (const race of getCreatureOptions().races ?? []) {
+    for (const limb of race.limbs ?? []) {
+      if (criticalOnly && !limb?.critical) continue;
+      const key = String(limb?.key ?? "").trim();
+      if (!key || limbs.has(key)) continue;
+      limbs.set(key, String(limb?.label || key));
+    }
+  }
+  if (selectedKey && !limbs.has(selectedKey)) limbs.set(selectedKey, selectedKey);
+  return Array.from(limbs.entries()).map(([value, label]) => ({
+    value,
+    label,
+    selected: value === selectedKey
+  }));
 }
 
 function buildAbilityEquipmentSlotChoices(selected = "") {

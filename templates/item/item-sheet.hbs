@@ -300,9 +300,14 @@
         </div>
       </div>
       <div class="fallout-maw-ability-conditions">
+        {{#each conditionGroups}}
+        {{#if isOrGroup}}
+        <div class="fallout-maw-ability-condition-or-group">
+        {{/if}}
         {{#each conditions}}
         <div class="fallout-maw-ability-condition-row{{#if isPending}} empty{{else}} configured{{/if}}" data-ability-condition-row data-condition-index="{{index}}">
           <input type="hidden" name="system.functions.{{functionIndex}}.conditions.{{index}}.id" value="{{id}}">
+          <input type="hidden" name="system.functions.{{functionIndex}}.conditions.{{index}}.groupId" value="{{groupId}}">
           {{#if isPending}}
           <label>
             <span>Условие</span>
@@ -318,10 +323,31 @@
           <div class="fallout-maw-ability-condition-card">
             <div class="fallout-maw-ability-condition-card-header">
               <h4>{{typeLabel}}</h4>
-              <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-condition title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+              <div class="fallout-maw-inline-controls">
+                <button type="button" data-add-ability-condition-alternative><i class="fa-solid fa-plus"></i> ИЛИ</button>
+                <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-condition title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+              </div>
             </div>
             <div class="fallout-maw-ability-condition-fields">
               {{#if isHealth}}
+              <label>
+                <span>Состояние ОЗ чего</span>
+                <select name="system.functions.{{functionIndex}}.conditions.{{index}}.healthTarget" data-ability-condition-health-target>
+                  {{#each healthTargetChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </label>
+              {{#if showLimbChoice}}
+              <label>
+                <span>Конечность</span>
+                <select name="system.functions.{{functionIndex}}.conditions.{{index}}.limbKey">
+                  {{#each limbChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </label>
+              {{/if}}
               <label>
                 <span>Оператор</span>
                 <select name="system.functions.{{functionIndex}}.conditions.{{index}}.operator">
@@ -357,6 +383,10 @@
           </div>
           {{/if}}
         </div>
+        {{/each}}
+        {{#if isOrGroup}}
+        </div>
+        {{/if}}
         {{/each}}
       </div>
     </div>

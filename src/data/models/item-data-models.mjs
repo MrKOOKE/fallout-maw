@@ -142,6 +142,7 @@ function abilityChangeField() {
 function abilityConditionField() {
   return new SchemaField({
     id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+    groupId: new StringField({ required: true, blank: true, initial: "" }),
     type: new StringField({
       required: true,
       blank: true,
@@ -150,6 +151,13 @@ function abilityConditionField() {
     }),
     operator: new StringField({ required: true, blank: false, choices: ["lte", "gte", "occupied", "empty"], initial: "lte" }),
     percent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 50 }),
+    healthTarget: new StringField({
+      required: true,
+      blank: false,
+      choices: ["general", "limb", "criticalLimb"],
+      initial: "general"
+    }),
+    limbKey: new StringField({ required: true, blank: false, initial: "all" }),
     equipmentSlotKey: new StringField({ required: true, blank: true, initial: "" })
   });
 }

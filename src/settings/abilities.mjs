@@ -17,6 +17,14 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   equipmentSlotOccupied: "equipmentSlotOccupied"
 });
 
+export const ABILITY_HEALTH_TARGETS = Object.freeze({
+  general: "general",
+  limb: "limb",
+  criticalLimb: "criticalLimb"
+});
+
+export const ABILITY_HEALTH_LIMB_ALL = "all";
+
 export const ABILITY_ACQUISITION_CONDITION_TYPES = Object.freeze({
   race: "race"
 });
@@ -127,6 +135,7 @@ export function createAbilityCondition(type = ABILITY_CONDITION_TYPES.healthPerc
   const data = typeof type === "object" && type !== null ? type : { type };
   return normalizeAbilityCondition({
     id: foundry.utils.randomID(),
+    groupId: "",
     ...data
   });
 }
@@ -284,26 +293,38 @@ function normalizeAbilityCondition(value = {}) {
   const type = Object.values(ABILITY_CONDITION_TYPES).includes(rawType)
     ? rawType
     : legacyEnabled ? ABILITY_CONDITION_TYPES.healthPercent : "";
-  if (!type) return { id: "", type: "" };
+  const groupId = String(value?.groupId ?? "").trim();
+  if (!type) return { id: String(value?.id ?? "").trim() || "", groupId, type: "" };
 
   if (type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied) {
     return {
       id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+      groupId,
       type,
       operator: String(value?.operator ?? "") === ABILITY_EQUIPMENT_OPERATORS.empty
         ? ABILITY_EQUIPMENT_OPERATORS.empty
         : ABILITY_EQUIPMENT_OPERATORS.occupied,
       equipmentSlotKey: String(value?.equipmentSlotKey ?? "").trim(),
-      percent: 50
+      percent: 50,
+      healthTarget: ABILITY_HEALTH_TARGETS.general,
+      limbKey: ABILITY_HEALTH_LIMB_ALL
     };
   }
 
+  const rawHealthTarget = String(value?.healthTarget ?? "").trim();
+  const healthTarget = Object.values(ABILITY_HEALTH_TARGETS).includes(rawHealthTarget)
+    ? rawHealthTarget
+    : ABILITY_HEALTH_TARGETS.general;
+
   return {
     id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+    groupId,
     type,
     operator: String(value?.operator ?? "lte") === "gte" ? "gte" : "lte",
     percent: Math.max(0, Math.min(100, toInteger(value?.percent ?? 50))),
-    equipmentSlotKey: ""
+    equipmentSlotKey: "",
+    healthTarget,
+    limbKey: String(value?.limbKey ?? ABILITY_HEALTH_LIMB_ALL).trim() || ABILITY_HEALTH_LIMB_ALL
   };
 }
 

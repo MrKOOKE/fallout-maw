@@ -16,7 +16,7 @@ export function normalizeTraumaSettings(value = {}, creatureOptions = {}, damage
   const normalizedGroups = {};
 
   for (const limbSet of getUniqueLimbSets(creatureOptions)) {
-    normalizedGroups[limbSet.id] = normalizeTraumaGroup(sourceGroups[limbSet.id], limbSet, damageTypes);
+    normalizedGroups[limbSet.id] = normalizeTraumaGroup(getTraumaGroupSource(sourceGroups, limbSet), limbSet, damageTypes);
   }
 
   return { groups: normalizedGroups };
@@ -44,9 +44,12 @@ export function getUniqueLimbSets(creatureOptions = {}) {
     const group = groups.get(id) ?? {
       id,
       limbs,
+      legacyIds: [],
       races: [],
       raceNames: ""
     };
+    const legacyId = getLegacyLimbSetId(limbs);
+    if (legacyId && !group.legacyIds.includes(legacyId)) group.legacyIds.push(legacyId);
     group.races.push({ id: race.id, name: race.name || race.id });
     group.raceNames = group.races.map(entry => entry.name).join(", ");
     groups.set(id, group);
@@ -59,8 +62,37 @@ export function getLimbSetId(limbs = []) {
   const normalized = normalizeLimbSetLimbs(limbs, { sort: true });
   if (!normalized.length) return "";
   return normalized
+    .map(limb => limb.key)
+    .join("|");
+}
+
+function getLegacyLimbSetId(limbs = []) {
+  const normalized = normalizeLimbSetLimbs(limbs, { sort: true });
+  if (!normalized.length) return "";
+  return normalized
     .map(limb => `${limb.key}:${limb.label}:${limb.stateMax}:${limb.damageMultiplier}:${limb.aimedDifficultyPercent}`)
     .join("|");
+}
+
+function getTraumaGroupSource(sourceGroups = {}, limbSet = {}) {
+  if (sourceGroups?.[limbSet.id]) return sourceGroups[limbSet.id];
+  return mergeTraumaGroupSources((limbSet.legacyIds ?? []).map(id => sourceGroups?.[id]).filter(Boolean));
+}
+
+function mergeTraumaGroupSources(sources = []) {
+  if (!sources.length) return {};
+  if (sources.length === 1) return sources[0];
+
+  const merged = { limbs: {} };
+  for (const source of sources) {
+    for (const [limbKey, limb] of Object.entries(source?.limbs ?? {})) {
+      const existingStages = merged.limbs[limbKey]?.stages ?? [];
+      const stages = Array.isArray(limb?.stages) ? limb.stages : [];
+      if (existingStages.length && !stages.length) continue;
+      merged.limbs[limbKey] = limb;
+    }
+  }
+  return merged;
 }
 
 export function normalizeTraumaGroup(value = {}, limbSet = { limbs: [] }, damageTypes = []) {

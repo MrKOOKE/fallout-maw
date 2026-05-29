@@ -1,3 +1,5 @@
+import { captureApplicationScrollPositions, restoreApplicationScrollPositions } from "../utils/application-scroll.mjs";
+
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 /**
@@ -7,6 +9,8 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
  * this element is a form, while the Handlebars template provides only the form body.
  */
 export class FalloutMaWFormApplicationV2 extends HandlebarsApplicationMixin(ApplicationV2) {
+  #scrollPositions = new Map();
+
   static DEFAULT_OPTIONS = {
     tag: "form",
     classes: ["fallout-maw", "fallout-maw-config-form"],
@@ -37,8 +41,30 @@ export class FalloutMaWFormApplicationV2 extends HandlebarsApplicationMixin(Appl
     return this.element instanceof HTMLFormElement ? this.element : this.element?.querySelector("form");
   }
 
+  render(options = {}) {
+    this.#captureScrollPositions();
+    return super.render(options);
+  }
+
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    this.#restoreScrollPositions();
+  }
+
   forceRender() {
     return this.render({ force: true });
+  }
+
+  #captureScrollPositions() {
+    this.#scrollPositions = captureApplicationScrollPositions(this.element, this.constructor.scrollPreservationSelectors);
+  }
+
+  #restoreScrollPositions() {
+    restoreApplicationScrollPositions(this.element, this.#scrollPositions, this.constructor.scrollPreservationSelectors);
+  }
+
+  static get scrollPreservationSelectors() {
+    return [".window-content", ".fallout-maw-sheet-body > .tab.active"];
   }
 }
 

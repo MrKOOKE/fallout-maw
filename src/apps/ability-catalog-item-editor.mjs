@@ -6,6 +6,8 @@ import {
   ABILITY_CONDITION_TYPES,
   ABILITY_EQUIPMENT_OPERATORS,
   ABILITY_FUNCTION_TYPES,
+  ABILITY_HEALTH_LIMB_ALL,
+  ABILITY_HEALTH_TARGETS,
   LOCKED_FEATURES_CATEGORY_ID,
   createAbilityAcquisitionCondition,
   createAbilityChange,
@@ -39,7 +41,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-item-sheet", "sheet", "item", "ability-catalog-item-editor"],
     position: {
       width: 930,
-      height: 900
+      height: "auto"
     },
     window: {
       resizable: true
@@ -52,6 +54,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       addFunctionChange: this.#onAddFunctionChange,
       deleteFunctionChange: this.#onDeleteFunctionChange,
       addFunctionCondition: this.#onAddFunctionCondition,
+      addFunctionConditionAlternative: this.#onAddFunctionConditionAlternative,
       deleteFunctionCondition: this.#onDeleteFunctionCondition,
       addFunctionPenalty: this.#onAddFunctionPenalty,
       deleteFunctionPenalty: this.#onDeleteFunctionPenalty,
@@ -121,6 +124,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.element?.querySelectorAll?.("[data-field='conditionType']")?.forEach(select => {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
     });
+    this.element?.querySelectorAll?.("[data-field='conditionHealthTarget']")?.forEach(select => {
+      select.addEventListener("change", event => this.#onConditionTypeChange(event));
+    });
     this.element?.querySelectorAll?.("[data-field='acquisitionRequirementType']")?.forEach(select => {
       select.addEventListener("change", event => this.#onAcquisitionRequirementTypeChange(event));
     });
@@ -180,6 +186,14 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
   #onConditionTypeChange(event) {
     event.preventDefault();
     this.#syncFromForm();
+    if (event.currentTarget?.dataset?.field === "conditionHealthTarget") {
+      const functionRow = event.currentTarget.closest("[data-ability-function-row]");
+      const conditionRow = event.currentTarget.closest("[data-ability-condition-row]");
+      const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
+      const conditionIndex = getRowIndex(functionRow, "[data-ability-condition-row]", conditionRow);
+      const condition = this.ability.system.functions?.[functionIndex]?.conditions?.[conditionIndex];
+      if (condition) condition.limbKey = ABILITY_HEALTH_LIMB_ALL;
+    }
     this.#activeTab = "functions";
     return this.forceRender();
   }
@@ -223,6 +237,23 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const functionRow = target.closest("[data-ability-function-row]");
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
     if (functionIndex >= 0) this.ability.system.functions[functionIndex]?.conditions?.push(createAbilityCondition(""));
+    return this.forceRender();
+  }
+
+  static #onAddFunctionConditionAlternative(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const functionRow = target.closest("[data-ability-function-row]");
+    const conditionRow = target.closest("[data-ability-condition-row]");
+    const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
+    const conditionIndex = getRowIndex(functionRow, "[data-ability-condition-row]", conditionRow);
+    const conditions = this.ability.system.functions?.[functionIndex]?.conditions;
+    const condition = conditions?.[conditionIndex];
+    if (!condition) return this.forceRender();
+
+    const groupId = String(condition.groupId ?? "").trim() || foundry.utils.randomID();
+    condition.groupId = groupId;
+    conditions.splice(conditionIndex + 1, 0, createAbilityCondition({ type: "", groupId }));
     return this.forceRender();
   }
 
@@ -324,9 +355,12 @@ function readAbilityChanges(root, selector) {
 function readAbilityConditions(root) {
   return Array.from(root?.querySelectorAll("[data-ability-condition-row]") ?? []).map(row => ({
     id: row.dataset.conditionId || foundry.utils.randomID(),
+    groupId: row.querySelector("[data-field='conditionGroupId']")?.value ?? row.dataset.conditionGroupId ?? "",
     type: row.querySelector("[data-field='conditionType']")?.value || "",
     operator: row.querySelector("[data-field='conditionOperator']")?.value ?? "lte",
     percent: row.querySelector("[data-field='conditionPercent']")?.value ?? 50,
+    healthTarget: row.querySelector("[data-field='conditionHealthTarget']")?.value ?? ABILITY_HEALTH_TARGETS.general,
+    limbKey: row.querySelector("[data-field='conditionLimbKey']")?.value ?? ABILITY_HEALTH_LIMB_ALL,
     equipmentSlotKey: row.querySelector("[data-field='conditionEquipmentSlotKey']")?.value ?? ""
   }));
 }
@@ -347,13 +381,15 @@ function readFieldValue(element, fallback = "") {
 
 function prepareFunctionForDisplay(entry) {
   const normalized = normalizeAbilityFunctions([entry])[0] ?? createAbilityFunction();
+  const conditions = normalized.conditions.map(prepareConditionForDisplay);
   return {
     ...normalized,
     typeLabel: normalized.type === ABILITY_FUNCTION_TYPES.acquisitionChanges
       ? "Разовое изменение при приобретении"
       : "Свободная настройка",
     changes: normalized.changes.map(prepareChangeForDisplay),
-    conditions: normalized.conditions.map(prepareConditionForDisplay),
+    conditions,
+    conditionGroups: buildConditionDisplayGroups(conditions),
     penalties: normalized.penalties.map(prepareChangeForDisplay),
     hasConditions: Boolean(normalized.conditions.length),
     hasPenalties: Boolean(normalized.penalties.length),
@@ -374,13 +410,26 @@ function prepareConditionForDisplay(condition) {
   const type = String(condition?.type ?? "");
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
+  const healthTarget = Object.values(ABILITY_HEALTH_TARGETS).includes(condition?.healthTarget)
+    ? condition.healthTarget
+    : ABILITY_HEALTH_TARGETS.general;
+  const isHealthGeneral = healthTarget === ABILITY_HEALTH_TARGETS.general;
+  const isHealthLimb = healthTarget === ABILITY_HEALTH_TARGETS.limb;
+  const isHealthCriticalLimb = healthTarget === ABILITY_HEALTH_TARGETS.criticalLimb;
   return {
     ...condition,
+    healthTarget,
     isPending: !isHealth && !isEquipment,
     isHealth,
+    isHealthGeneral,
+    isHealthLimb,
+    isHealthCriticalLimb,
+    showLimbChoice: isHealth && !isHealthGeneral,
     isEquipment,
     typeLabel: getConditionTypeLabel(type),
     typeChoices: buildConditionTypeChoices(type),
+    healthTargetChoices: buildHealthTargetChoices(healthTarget),
+    limbChoices: buildLimbChoices(condition?.limbKey, { criticalOnly: isHealthCriticalLimb }),
     healthOperatorChoices: [
       { value: "lte", label: "<=", selected: String(condition?.operator ?? "lte") !== "gte" },
       { value: "gte", label: ">=", selected: String(condition?.operator ?? "lte") === "gte" }
@@ -391,6 +440,27 @@ function prepareConditionForDisplay(condition) {
     ],
     equipmentSlotChoices: buildEquipmentSlotChoices(condition?.equipmentSlotKey)
   };
+}
+
+function buildConditionDisplayGroups(conditions = []) {
+  const groups = [];
+  for (const condition of conditions) {
+    const groupId = String(condition?.groupId ?? "").trim();
+    const previous = groups.at(-1);
+    if (groupId && previous?.groupId === groupId) {
+      previous.conditions.push(condition);
+    } else {
+      groups.push({
+        id: groupId || condition?.id || foundry.utils.randomID(),
+        groupId,
+        conditions: [condition]
+      });
+    }
+  }
+  return groups.map(group => ({
+    ...group,
+    isOrGroup: Boolean(group.groupId && group.conditions.length > 1)
+  }));
 }
 
 function prepareAcquisitionRequirementForDisplay(requirement) {
@@ -443,6 +513,36 @@ function buildConditionTypeChoices(selected = "") {
     { value: ABILITY_CONDITION_TYPES.healthPercent, label: "Состояние ОЗ", selected: selected === ABILITY_CONDITION_TYPES.healthPercent },
     { value: ABILITY_CONDITION_TYPES.equipmentSlotOccupied, label: "Занятость слотов экипировки", selected: selected === ABILITY_CONDITION_TYPES.equipmentSlotOccupied }
   ];
+}
+
+function buildHealthTargetChoices(selected = ABILITY_HEALTH_TARGETS.general) {
+  return [
+    { value: ABILITY_HEALTH_TARGETS.general, label: "Общее" },
+    { value: ABILITY_HEALTH_TARGETS.limb, label: "Конечности" },
+    { value: ABILITY_HEALTH_TARGETS.criticalLimb, label: "Критические конечности" }
+  ].map(choice => ({
+    ...choice,
+    selected: choice.value === selected
+  }));
+}
+
+function buildLimbChoices(selected = ABILITY_HEALTH_LIMB_ALL, { criticalOnly = false } = {}) {
+  const selectedKey = String(selected ?? ABILITY_HEALTH_LIMB_ALL).trim() || ABILITY_HEALTH_LIMB_ALL;
+  const limbs = new Map([[ABILITY_HEALTH_LIMB_ALL, "Все"]]);
+  for (const race of getCreatureOptions().races ?? []) {
+    for (const limb of race.limbs ?? []) {
+      if (criticalOnly && !limb?.critical) continue;
+      const key = String(limb?.key ?? "").trim();
+      if (!key || limbs.has(key)) continue;
+      limbs.set(key, String(limb?.label || key));
+    }
+  }
+  if (selectedKey && !limbs.has(selectedKey)) limbs.set(selectedKey, selectedKey);
+  return Array.from(limbs.entries()).map(([value, label]) => ({
+    value,
+    label,
+    selected: value === selectedKey
+  }));
 }
 
 function buildAcquisitionRequirementTypeChoices(selected = "") {

@@ -3,6 +3,8 @@ import {
   ABILITY_CONDITION_TYPES,
   ABILITY_EQUIPMENT_OPERATORS,
   ABILITY_FUNCTION_TYPES,
+  ABILITY_HEALTH_LIMB_ALL,
+  ABILITY_HEALTH_TARGETS,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import { getEquipmentSlotSelectionKey, getSelectedEquipmentSlotKeys } from "../utils/equipment-slots.mjs";
@@ -42,7 +44,22 @@ export function getAbilitySkillAdvancementBaseBonuses(actor, skillSettings = [])
 }
 
 export function abilityConditionsApply(actor, conditions = []) {
-  return (conditions ?? []).every(condition => abilityConditionApplies(actor, condition));
+  const standalone = [];
+  const groups = new Map();
+  for (const condition of conditions ?? []) {
+    if (!condition?.type) continue;
+    const groupId = String(condition?.groupId ?? "").trim();
+    if (!groupId) {
+      standalone.push(condition);
+      continue;
+    }
+    const entries = groups.get(groupId) ?? [];
+    entries.push(condition);
+    groups.set(groupId, entries);
+  }
+
+  return standalone.every(condition => abilityConditionApplies(actor, condition))
+    && Array.from(groups.values()).every(group => group.some(condition => abilityConditionApplies(actor, condition)));
 }
 
 export function abilityConditionApplies(actor, condition = {}) {
@@ -53,8 +70,11 @@ export function abilityConditionApplies(actor, condition = {}) {
 
   if (condition.type === ABILITY_CONDITION_TYPES.healthPercent) {
     const threshold = Math.max(0, Math.min(100, toInteger(condition.percent ?? 50)));
-    const healthPercent = getHealthPercent(actor?.system);
-    return condition.operator === "gte" ? healthPercent >= threshold : healthPercent <= threshold;
+    const percentages = getHealthPercentages(actor, condition);
+    if (!percentages.length) return false;
+    return condition.operator === "gte"
+      ? percentages.every(percent => percent >= threshold)
+      : percentages.some(percent => percent <= threshold);
   }
 
   return true;
@@ -98,6 +118,24 @@ function isActorEquipmentSlotOccupied(actor, requestedSlotKey = "") {
 
 function getHealthPercent(sourceSystem = {}) {
   const health = sourceSystem?.resources?.health;
+  return getResourcePercent(health);
+}
+
+function getHealthPercentages(actor, condition = {}) {
+  const target = Object.values(ABILITY_HEALTH_TARGETS).includes(condition?.healthTarget)
+    ? condition.healthTarget
+    : ABILITY_HEALTH_TARGETS.general;
+  if (target === ABILITY_HEALTH_TARGETS.general) return [getHealthPercent(actor?.system)];
+
+  const requestedLimbKey = String(condition?.limbKey ?? ABILITY_HEALTH_LIMB_ALL).trim() || ABILITY_HEALTH_LIMB_ALL;
+  const criticalOnly = target === ABILITY_HEALTH_TARGETS.criticalLimb;
+  return Object.entries(actor?.system?.limbs ?? {})
+    .filter(([key, limb]) => requestedLimbKey === ABILITY_HEALTH_LIMB_ALL || key === requestedLimbKey)
+    .filter(([_key, limb]) => !criticalOnly || Boolean(limb?.critical))
+    .map(([_key, limb]) => getResourcePercent(limb));
+}
+
+function getResourcePercent(health = {}) {
   const max = Math.max(0, Number(health?.max) || 0);
   if (max <= 0) return 100;
 
