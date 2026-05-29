@@ -2,6 +2,13 @@ import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { AdvancementApplication } from "../advancement/application.mjs";
 import {
+  calculateRemainingDevelopmentPoints,
+  calculateSpentCharacteristicPoints,
+  calculateSpentSignatureSkillPoints,
+  calculateSpentSkillPoints,
+  calculateSpentTraitPoints
+} from "../advancement/index.mjs";
+import {
   getCharacteristicSettings,
   getCreatureOptions,
   getCurrencySettings,
@@ -353,6 +360,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           settingMax: toInteger(proficiency.max)
         });
       }),
+      developmentPointEntries: prepareDevelopmentPointEntries(actor.system?.development, actor.system?.proficiencies),
       researches: prepareResearchesForDisplay(actor.system?.researches, skillSettings, actor.system?.skills),
       damageResistances: damageTypeSettings.map(damageType => ({
         ...damageType,
@@ -395,6 +403,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#activateInventoryInteractions();
     this.#activateWeaponSlotAspectSizing();
     this.#activateLimbControlClicks();
+    this.#activateDevelopmentPointInputs();
     this.#activateTabScrollPersistence();
     this.#restoreActiveTabScroll();
     this.#syncFreeEditHeaderButton();
@@ -524,6 +533,28 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     root.dataset.limbControlClicksBound = "true";
     root.addEventListener("click", event => this.#onLimbControlClick(event), { capture: true });
     root.addEventListener("keydown", event => this.#onLimbControlKeyDown(event), { capture: true });
+  }
+
+  #activateDevelopmentPointInputs() {
+    const root = this.element;
+    if (!root || root.dataset.developmentPointInputsBound === "true") return;
+    root.dataset.developmentPointInputsBound = "true";
+    root.addEventListener("change", event => {
+      const input = event.target?.closest?.("[data-development-point-input]");
+      if (!input) return;
+      event.preventDefault();
+      event.stopPropagation();
+      return this.#onDevelopmentPointInputChange(input);
+    }, { capture: true });
+  }
+
+  async #onDevelopmentPointInputChange(input) {
+    if (!this.#freeEdit) return undefined;
+    const key = String(input.dataset.developmentPointInput ?? "");
+    if (!key) return undefined;
+    const spent = getSpentDevelopmentPointValue(this.actor.system?.development, this.actor.system?.proficiencies, key);
+    const remaining = Math.max(0, toInteger(input.value));
+    return this.actor.update({ [`system.development.points.${key}`]: remaining + spent });
   }
 
   #syncFreeEditHeaderButton() {
@@ -4324,6 +4355,34 @@ function prepareEffectCategories(effects = []) {
   }
 
   return categories;
+}
+
+function prepareDevelopmentPointEntries(development = {}, proficiencies = {}) {
+  const remaining = calculateRemainingDevelopmentPoints(development);
+  remaining.proficiencies = Math.max(0, toInteger(development?.points?.proficiencies) - getSpentProficiencyPoints(proficiencies));
+  return [
+    { key: "characteristics", label: "Очки характеристик" },
+    { key: "signatureSkills", label: "Очки коронных" },
+    { key: "skills", label: "Очки навыков" },
+    { key: "traits", label: "Очки особенностей" },
+    { key: "proficiencies", label: "Очки владений" }
+  ].map(entry => ({
+    ...entry,
+    value: toInteger(remaining?.[entry.key])
+  }));
+}
+
+function getSpentDevelopmentPointValue(development = {}, proficiencies = {}, key = "") {
+  if (key === "characteristics") return calculateSpentCharacteristicPoints(development);
+  if (key === "signatureSkills") return calculateSpentSignatureSkillPoints(development);
+  if (key === "skills") return calculateSpentSkillPoints(development);
+  if (key === "traits") return calculateSpentTraitPoints(development);
+  if (key === "proficiencies") return getSpentProficiencyPoints(proficiencies);
+  return 0;
+}
+
+function getSpentProficiencyPoints(proficiencies = {}) {
+  return Object.values(proficiencies ?? {}).reduce((total, entry) => total + Math.max(0, toInteger(entry?.value)), 0);
 }
 
 function prepareLimbDisplayData(actor, limbKey, limb = {}) {

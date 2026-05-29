@@ -24,7 +24,11 @@ import {
   getSkillSettings
 } from "../../settings/accessors.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY } from "../../constants.mjs";
-import { DEFAULT_SKILL_DEVELOPMENT_LIMIT } from "../../config/defaults.mjs";
+import {
+  DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
+  DEFAULT_SKILL_DEVELOPMENT_LIMIT,
+  DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
+} from "../../config/defaults.mjs";
 import { resourceField } from "./resources.mjs";
 import {
   DAMAGE_MITIGATION_MODES,
@@ -81,8 +85,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         { required: true, initial: {}, persisted: false }
       ),
       progression: new SchemaField({
-        skillPointsPerLevel: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-        researchPointsPerLevel: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+        skillPointsPerLevel: new StringField({ required: true, blank: true, initial: DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA }),
+        researchPointsPerLevel: new StringField({ required: true, blank: true, initial: DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA })
       }),
       development: developmentField()
     };
@@ -126,8 +130,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     const race = getCreatureOptions(characteristicSettings, damageTypeSettings).races.find(entry => entry.id === this.creature?.raceId);
     const needSettings = getRaceNeedSettings(race);
     if (race?.progression) {
-      this.progression.skillPointsPerLevel = toInteger(race.progression.skillPointsPerLevel);
-      this.progression.researchPointsPerLevel = toInteger(race.progression.researchPointsPerLevel);
+      this.progression.skillPointsPerLevel = String(race.progression.skillPointsPerLevel ?? DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA);
+      this.progression.researchPointsPerLevel = String(race.progression.researchPointsPerLevel ?? DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA);
     }
 
     replaceObjectContents(this.development, normalizeActorDevelopment(this.development, characteristicSettings, skillSettings));

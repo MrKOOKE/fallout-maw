@@ -5,6 +5,8 @@ import {
   DEFAULT_LIMBS,
   DEFAULT_LOAD_FORMULA,
   DEFAULT_LOAD_LIMIT_PERCENT,
+  DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
+  DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA,
   DEFAULT_WEAPON_SETS
 } from "../config/defaults.mjs";
 import { localize } from "../utils/i18n.mjs";
@@ -31,8 +33,8 @@ export function createRaceDefaults(characteristics = [], damageTypes = []) {
     damageResistances: Object.fromEntries(damageTypes.map(entry => [entry.key, "0"])),
     needSettings: createDefaultNeedSettings(),
     progression: {
-      skillPointsPerLevel: 0,
-      researchPointsPerLevel: 0
+      skillPointsPerLevel: DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA,
+      researchPointsPerLevel: DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA
     }
   };
 }
@@ -99,8 +101,14 @@ export function normalizeCreatureOptions(options = {}, characteristics = [], dam
         damageResistances: normalizeFormulaMap(race.damageResistances, damageTypes),
         needSettings: normalizeRaceNeedSettings(race.needSettings),
         progression: {
-          skillPointsPerLevel: toInteger(race.progression?.skillPointsPerLevel),
-          researchPointsPerLevel: toInteger(race.progression?.researchPointsPerLevel)
+          skillPointsPerLevel: normalizeProgressionFormula(
+            race.progression?.skillPointsPerLevel,
+            DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
+          ),
+          researchPointsPerLevel: normalizeProgressionFormula(
+            race.progression?.researchPointsPerLevel,
+            DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA
+          )
         }
       };
     });
@@ -135,6 +143,10 @@ function normalizeRaceBaseParameters(values = {}) {
     loadFormula: String(values?.loadFormula ?? defaults.loadFormula).trim() || defaults.loadFormula,
     loadLimitPercent: Math.max(0, toInteger(values?.loadLimitPercent ?? defaults.loadLimitPercent))
   };
+}
+
+function normalizeProgressionFormula(value, fallback) {
+  return String(value ?? fallback).trim() || fallback;
 }
 
 function normalizeLimbs(limbs) {

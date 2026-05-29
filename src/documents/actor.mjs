@@ -16,6 +16,10 @@ import {
   getSkillSettings
 } from "../settings/accessors.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
+import {
+  DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
+  DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
+} from "../config/defaults.mjs";
 import { getItemActorLoadWeight, getItemContainerParentId } from "../utils/inventory-containers.mjs";
 import { handleActorDamageUpdate, prepareActorDamageUpdate, requestDamageApplication } from "../combat/damage-hub.mjs";
 import { migrateActorData } from "../migrations/documents.mjs";
@@ -173,14 +177,24 @@ export class FalloutMaWActor extends Actor {
     const skillSettings = getSkillSettings();
     const race = getCreatureOptions().races.find(entry => entry.id === this.system?.creature?.raceId);
     const normalizedLevel = Math.max(1, toInteger(level));
-    const skillPointsPerLevel = Math.max(0, toInteger(race?.progression?.skillPointsPerLevel ?? this.system?.progression?.skillPointsPerLevel));
-    const researchPointsPerLevel = Math.max(0, toInteger(race?.progression?.researchPointsPerLevel ?? this.system?.progression?.researchPointsPerLevel));
 
     const characteristics = Object.fromEntries(
       characteristicSettings.map(characteristic => [
         characteristic.key,
         toInteger(race?.characteristics?.[characteristic.key] ?? this.system?.characteristics?.[characteristic.key])
       ])
+    );
+    const skillPointsPerLevel = evaluateProgressionFormula(
+      race?.progression?.skillPointsPerLevel ?? this.system?.progression?.skillPointsPerLevel,
+      characteristics,
+      characteristicSettings,
+      DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
+    );
+    const researchPointsPerLevel = evaluateProgressionFormula(
+      race?.progression?.researchPointsPerLevel ?? this.system?.progression?.researchPointsPerLevel,
+      characteristics,
+      characteristicSettings,
+      DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA
     );
 
     const development = cloneActorDevelopment({}, characteristicSettings, skillSettings);
@@ -355,6 +369,18 @@ function prepareActorLoadData(actor) {
     ), 0).toFixed(1)
   );
   actor.system.load = { min: 0, spent: 0, bonus: 0, value, max, limit, limitPercent };
+}
+
+function evaluateProgressionFormula(formula, characteristics, characteristicSettings, fallback = "0") {
+  try {
+    return Math.max(0, evaluateFormula(String(formula ?? fallback).trim() || fallback, {
+      characteristicSettings,
+      characteristics
+    }));
+  } catch (error) {
+    console.warn(`Fallout MaW | Progression formula error: ${error.message}`);
+    return Math.max(0, toInteger(fallback));
+  }
 }
 
 function activateCreatureCreateDialog(dialog) {

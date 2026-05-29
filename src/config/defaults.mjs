@@ -15,6 +15,8 @@ export const DEFAULT_BASE_PARAMETER_POOLS = Object.freeze({
   proficiencyPoints: 500
 });
 
+export const DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA = "10 + int";
+export const DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA = "1000";
 export const DEFAULT_LOAD_FORMULA = "20 + 10*str";
 export const DEFAULT_LOAD_LIMIT_PERCENT = 150;
 

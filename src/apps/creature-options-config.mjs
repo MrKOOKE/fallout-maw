@@ -522,8 +522,8 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     );
     race.needSettings = this.#readRaceNeedsFromForm();
     race.progression = {
-      skillPointsPerLevel: toInteger(formData.race?.progression?.skillPointsPerLevel),
-      researchPointsPerLevel: toInteger(formData.race?.progression?.researchPointsPerLevel)
+      skillPointsPerLevel: String(formData.race?.progression?.skillPointsPerLevel ?? "10 + int").trim() || "10 + int",
+      researchPointsPerLevel: String(formData.race?.progression?.researchPointsPerLevel ?? "1000").trim() || "1000"
     };
   }
 
@@ -617,6 +617,18 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       } catch (error) {
         ui.notifications.error(`${race.name || race.id} / ${localize("FALLOUTMAW.Common.Load")}: ${error.message}`);
         throw error;
+      }
+
+      for (const [key, label] of [
+        ["skillPointsPerLevel", localize("FALLOUTMAW.Settings.CreatureOptions.SkillPointsPerLevel")],
+        ["researchPointsPerLevel", localize("FALLOUTMAW.Settings.CreatureOptions.ResearchPointsPerLevel")]
+      ]) {
+        try {
+          validateFormula(race.progression?.[key] ?? "0", { characteristics });
+        } catch (error) {
+          ui.notifications.error(`${race.name || race.id} / ${label}: ${error.message}`);
+          throw error;
+        }
       }
 
       for (const limb of race.limbs ?? []) {

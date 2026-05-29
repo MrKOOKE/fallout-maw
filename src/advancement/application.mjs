@@ -14,6 +14,11 @@ import {
   getSkillAdvancementSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
+import { evaluateFormula } from "../formulas/index.mjs";
+import {
+  DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
+  DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
+} from "../config/defaults.mjs";
 import { actorHasAbility, completeAbilityResearch, findCatalogAbility, grantCatalogAbility } from "../abilities/purchase.mjs";
 import { formatResearchValue } from "../research/storage.mjs";
 import { ABILITY_ACQUISITION_CONDITION_TYPES, LOCKED_FEATURES_CATEGORY_ID, prepareAbilityItemData } from "../settings/abilities.mjs";
@@ -29,10 +34,14 @@ const ADVANCEMENT_COMMIT_FLAG = "advancementCommit";
 export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #activeEffectHooks = [];
   #actorUpdateHookId = null;
+  #abilityTooltipAnchor = null;
+  #abilityTooltipElement = null;
+  #abilityTooltipTimer = null;
   #draft = null;
   #experienceSyncTimer = null;
   #expandedAbilityCategories = new Set();
   #floor = null;
+  #isClosing = false;
   #page = "development";
   #repeatState = null;
   #selectedAbilitySourceId = "";
@@ -130,8 +139,18 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       experienceBarStyle: `width: ${experiencePercent.toFixed(2)}%;`,
       experienceCurrent: currentExperience,
       experienceNext: nextThreshold,
-      skillPointsPerLevel: Math.max(0, toInteger(this.actor.system?.progression?.skillPointsPerLevel)),
-      researchPointsPerLevel: Math.max(0, toInteger(this.actor.system?.progression?.researchPointsPerLevel)),
+      skillPointsPerLevel: evaluateProgressionFormula(
+        this.actor.system?.progression?.skillPointsPerLevel,
+        liveCharacteristics,
+        characteristicSettings,
+        DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
+      ),
+      researchPointsPerLevel: evaluateProgressionFormula(
+        this.actor.system?.progression?.researchPointsPerLevel,
+        liveCharacteristics,
+        characteristicSettings,
+        DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA
+      ),
       characteristicPointsDisplay: `${remaining.characteristics} / ${Math.max(remaining.characteristics, toInteger(this.#draft.development.points.characteristics) - floorCharacteristicSpent)}`,
       skillPointsDisplay: `${remaining.skills} / ${Math.max(remaining.skills, toInteger(this.#draft.development.points.skills) - floorSkillSpent)}`,
       signatureSkillPointsDisplay: `${remaining.signatureSkills} / ${Math.max(remaining.signatureSkills, toInteger(this.#draft.development.points.signatureSkills) - floorSignatureSpent)}`,
@@ -177,21 +196,25 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#clearAbilityDescriptionTooltip();
     this.#activateRepeatButtons();
     this.#activateAbilitySearch();
+    this.#activateAbilityDescriptionTooltips();
   }
 
   async _preClose(options) {
+    this.#isClosing = true;
     window.clearTimeout(this.#experienceSyncTimer);
+    this.#clearAbilityDescriptionTooltip();
     this.#stopRepeat();
-    this.#syncDraftFromForm();
-    await this.#saveDraft({ notify: false });
     if (this.#actorUpdateHookId !== null) {
       Hooks.off("updateActor", this.#actorUpdateHookId);
       this.#actorUpdateHookId = null;
     }
     for (const hook of this.#activeEffectHooks) Hooks.off(hook.event, hook.id);
     this.#activeEffectHooks = [];
+    this.#syncDraftFromForm();
+    await this.#saveDraft({ notify: false });
     await super._preClose(options);
   }
 
@@ -264,8 +287,18 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (toInteger(this.#draft.development.experience) < nextThreshold) return;
 
     this.#draft.level += 1;
-    this.#draft.development.points.skills += Math.max(0, toInteger(this.actor.system?.progression?.skillPointsPerLevel));
-    this.#draft.development.points.researches += Math.max(0, toInteger(this.actor.system?.progression?.researchPointsPerLevel));
+    this.#draft.development.points.skills += evaluateProgressionFormula(
+      this.actor.system?.progression?.skillPointsPerLevel,
+      this.actor.system?.characteristics,
+      getCharacteristicSettings(),
+      DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
+    );
+    this.#draft.development.points.researches += evaluateProgressionFormula(
+      this.actor.system?.progression?.researchPointsPerLevel,
+      this.actor.system?.characteristics,
+      getCharacteristicSettings(),
+      DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA
+    );
     await this.#applyDraftToActor();
     return this.forceRender();
   }
@@ -343,6 +376,59 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         category.hidden = query ? visibleCount === 0 : false;
       }
     });
+  }
+
+  #activateAbilityDescriptionTooltips() {
+    const root = this.element;
+    if (!root || root.dataset.abilityDescriptionTooltipsBound === "true") return;
+    root.dataset.abilityDescriptionTooltipsBound = "true";
+    root.addEventListener("pointerover", event => this.#onAbilityDescriptionPointerOver(event));
+    root.addEventListener("pointerout", event => this.#onAbilityDescriptionPointerOut(event));
+  }
+
+  #onAbilityDescriptionPointerOver(event) {
+    const anchor = event.target?.closest?.("[data-ability-description-tooltip]");
+    if (!anchor || anchor.contains(event.relatedTarget)) return;
+    const html = String(anchor.dataset.abilityDescriptionTooltip ?? "").trim();
+    if (!html) return;
+
+    this.#clearAbilityDescriptionTooltip();
+    this.#abilityTooltipAnchor = anchor;
+    this.#abilityTooltipTimer = window.setTimeout(() => this.#showAbilityDescriptionTooltip(anchor, html), 500);
+  }
+
+  #onAbilityDescriptionPointerOut(event) {
+    const anchor = event.target?.closest?.("[data-ability-description-tooltip]");
+    if (!anchor || anchor.contains(event.relatedTarget)) return;
+    if (this.#abilityTooltipElement?.contains(event.relatedTarget)) return;
+    this.#clearAbilityDescriptionTooltip();
+  }
+
+  #showAbilityDescriptionTooltip(anchor, html) {
+    if (this.#abilityTooltipTimer) {
+      window.clearTimeout(this.#abilityTooltipTimer);
+      this.#abilityTooltipTimer = null;
+    }
+    if (!anchor?.isConnected || this.#abilityTooltipAnchor !== anchor) return;
+
+    const tooltip = document.createElement("aside");
+    tooltip.className = "fallout-maw-inventory-tooltip fallout-maw-ability-description-tooltip";
+    tooltip.style.pointerEvents = "none";
+    tooltip.innerHTML = `<div class="content"><section class="description">${html}</section></div>`;
+    document.body.append(tooltip);
+    this.#abilityTooltipElement = tooltip;
+    positionAbilityDescriptionTooltip(tooltip, anchor);
+    requestAnimationFrame(() => positionAbilityDescriptionTooltip(tooltip, anchor));
+  }
+
+  #clearAbilityDescriptionTooltip() {
+    if (this.#abilityTooltipTimer) {
+      window.clearTimeout(this.#abilityTooltipTimer);
+      this.#abilityTooltipTimer = null;
+    }
+    this.#abilityTooltipElement?.remove();
+    this.#abilityTooltipElement = null;
+    this.#abilityTooltipAnchor = null;
   }
 
   #syncDraftFromForm() {
@@ -549,6 +635,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const skillLabel = skillSettings.find(skill => skill.key === ability?.system?.acquisition?.skillKey)?.label ?? skillSettings[0]?.label ?? "";
     const acquisitionAvailable = abilityAcquisitionRequirementsMet(this.actor, ability);
     const requirementLabel = getAbilityAcquisitionRequirementLabel(ability);
+    const descriptionTooltipHTML = renderAbilityDescriptionTooltipHTML(ability?.description);
     return {
       ...ability,
       sourceId,
@@ -564,6 +651,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       onlyManual,
       acquisitionAvailable,
       requirementLabel,
+      descriptionTooltipHTML,
       canPurchaseTrait: isFeature && !owned && acquisitionAvailable && toInteger(remaining.traits) > 0,
       canSpendFree: !isFeature && !owned && Boolean(research) && !onlyManual && remainingCost > 0 && toInteger(remaining.researches) > 0,
       freeSpendAmount: Math.min(toInteger(remaining.researches), remainingCost),
@@ -687,6 +775,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   }
 
   async #onActorUpdated(updatedActor, changes) {
+    if (this.#isClosing) return;
     if (updatedActor?.id !== this.actor?.id) return;
     if (!this.rendered) return;
 
@@ -704,6 +793,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   }
 
   async #onActiveEffectChanged(effect) {
+    if (this.#isClosing) return;
     if (effect?.parent?.id !== this.actor?.id) return;
     if (!this.rendered) return;
     await this.forceRender();
@@ -790,4 +880,59 @@ function getAbilityAcquisitionRequirementLabel(ability = {}) {
     labels.push(`Раса: ${race?.name || raceId}`);
   }
   return labels.join("; ");
+}
+
+function evaluateProgressionFormula(formula, characteristics, characteristicSettings, fallback = "0") {
+  try {
+    return Math.max(0, evaluateFormula(String(formula ?? fallback).trim() || fallback, {
+      characteristicSettings,
+      characteristics
+    }));
+  } catch (error) {
+    console.warn(`Fallout MaW | Progression formula error: ${error.message}`);
+    return Math.max(0, toInteger(fallback));
+  }
+}
+
+function renderAbilityDescriptionTooltipHTML(value = "") {
+  const html = String(value ?? "").trim();
+  if (!html) return "";
+  return html;
+}
+
+function positionAbilityDescriptionTooltip(element, anchor) {
+  if (!element || !anchor?.isConnected) return;
+  const margin = 8;
+  const gap = 12;
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  const anchorRect = anchor.getBoundingClientRect();
+  let tooltipRect = element.getBoundingClientRect();
+
+  let left = anchorRect.left - tooltipRect.width - gap;
+  let direction = "left";
+  if (left < margin) {
+    left = anchorRect.right + gap;
+    direction = "right";
+  }
+  if ((left + tooltipRect.width) > (viewportWidth - margin)) {
+    left = Math.max(margin, viewportWidth - tooltipRect.width - margin);
+    direction = "clamped";
+  }
+
+  let top = anchorRect.top + ((anchorRect.height - tooltipRect.height) / 2);
+  if (top < margin) top = margin;
+  if ((top + tooltipRect.height) > (viewportHeight - margin)) {
+    top = Math.max(margin, viewportHeight - tooltipRect.height - margin);
+  }
+
+  element.dataset.tooltipDirection = direction;
+  element.style.left = `${Math.round(left)}px`;
+  element.style.top = `${Math.round(top)}px`;
+  element.style.setProperty("--fallout-maw-tooltip-max-height", `${Math.max(160, viewportHeight - (margin * 2))}px`);
+
+  tooltipRect = element.getBoundingClientRect();
+  if ((tooltipRect.top + tooltipRect.height) > (viewportHeight - margin)) {
+    element.style.top = `${Math.round(Math.max(margin, viewportHeight - tooltipRect.height - margin))}px`;
+  }
 }

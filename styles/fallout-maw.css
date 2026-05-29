@@ -1386,6 +1386,17 @@
   width: 32px;
 }
 
+.fallout-maw-development-points-grid {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.fallout-maw-development-points-grid label {
+  display: grid;
+  gap: 0.25rem;
+}
+
 .fallout-maw-floating-add {
   align-items: center;
   border-radius: 999px;

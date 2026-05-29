@@ -154,4 +154,18 @@
       {{/each}}
     </div>
   </section>
+
+  {{#if freeEdit}}
+  <section class="fallout-maw-panel">
+    <h2>Показатели</h2>
+    <div class="fallout-maw-development-points-grid">
+      {{#each developmentPointEntries}}
+      <label>
+        <span>{{label}}</span>
+        <input type="number" data-development-point-input="{{key}}" value="{{value}}" min="0" step="1">
+      </label>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
 </section>
