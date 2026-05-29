@@ -28,7 +28,6 @@ export function createRaceDefaults(characteristics = [], damageTypes = []) {
     weaponSets: createDefaultWeaponSets(),
     inventorySize: createDefaultInventorySize(),
     bleedingResistanceFormula: DEFAULT_BLEEDING_RESISTANCE_FORMULA,
-    damageDefenses: Object.fromEntries(damageTypes.map(entry => [entry.key, "0"])),
     damageResistances: Object.fromEntries(damageTypes.map(entry => [entry.key, "0"])),
     needSettings: createDefaultNeedSettings(),
     progression: {
@@ -97,8 +96,7 @@ export function normalizeCreatureOptions(options = {}, characteristics = [], dam
         weaponSets: normalizeWeaponSets(race.weaponSets, limbs),
         inventorySize: normalizeInventorySize(race.inventorySize),
         bleedingResistanceFormula: normalizeBleedingResistanceFormula(race.bleedingResistanceFormula),
-        damageDefenses: normalizeFormulaMap(race.damageDefenses ?? race.damageResistances, damageTypes),
-        damageResistances: normalizeFormulaMap(race.damageDefenses ? race.damageResistances : {}, damageTypes),
+        damageResistances: normalizeFormulaMap(race.damageResistances, damageTypes),
         needSettings: normalizeRaceNeedSettings(race.needSettings),
         progression: {
           skillPointsPerLevel: toInteger(race.progression?.skillPointsPerLevel),

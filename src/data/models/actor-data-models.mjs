@@ -179,17 +179,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       defaultToMin: true
     }));
 
-    const baseDamageDefenses = buildLimbDamageDefenseMap(
-      this.limbs,
-      evaluateFormulaMap(
-        getRaceDamageDefenseFormulas(race, damageTypeSettings),
-        damageTypeSettings,
-        characteristicSettings,
-        skillSettings,
-        this.characteristics,
-        skillValues
-      )
-    );
+    const baseDamageDefenses = buildEmptyLimbDamageMap(this.limbs, damageTypeSettings);
     const baseDamageResistances = buildLimbDamageDefenseMap(
       this.limbs,
       evaluateFormulaMap(
@@ -234,12 +224,8 @@ export class HazardDataModel extends BaseActorDataModel {
   }
 }
 
-function getRaceDamageDefenseFormulas(race, damageTypeSettings) {
-  return normalizeFormulaMap(race?.damageDefenses ?? race?.damageResistances, damageTypeSettings);
-}
-
 function getRaceDamageResistanceFormulas(race, damageTypeSettings) {
-  return normalizeFormulaMap(race?.damageDefenses ? race?.damageResistances : {}, damageTypeSettings);
+  return normalizeFormulaMap(race?.damageResistances, damageTypeSettings);
 }
 
 function applyBleedingResistanceFormula(resistances = {}, limbs = {}, race = null, formulaContext = {}) {

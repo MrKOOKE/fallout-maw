@@ -27,7 +27,7 @@ import { NeedAdvancedSettingsConfig } from "./need-settings-config.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
-const CREATURE_SECTION_KEYS = Object.freeze(["type", "race", "base", "development", "limbs", "equipment", "inventory", "defenses", "resistances", "needs"]);
+const CREATURE_SECTION_KEYS = Object.freeze(["type", "race", "base", "development", "limbs", "equipment", "inventory", "resistances", "needs"]);
 
 export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
   #editorMode = "type";
@@ -132,10 +132,6 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         }))
       })),
       inventorySize: selectedRace?.inventorySize ?? createDefaultInventorySize(),
-      damageTypes: configurableDamageTypes.map(damageType => ({
-        ...damageType,
-        formula: String(selectedRace?.damageDefenses?.[damageType.key] ?? selectedRace?.damageResistances?.[damageType.key] ?? "0")
-      })),
       resistanceDamageTypes: configurableDamageTypes.map(damageType => ({
         ...damageType,
         formula: String(selectedRace?.damageResistances?.[damageType.key] ?? "0")
@@ -518,12 +514,6 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     race.bleedingResistanceFormula = String(formData.race?.bleedingResistanceFormula ?? DEFAULT_BLEEDING_RESISTANCE_FORMULA).trim()
       || DEFAULT_BLEEDING_RESISTANCE_FORMULA;
     const configurableDamageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
-    race.damageDefenses = Object.fromEntries(
-      configurableDamageTypes.map(damageType => [
-        damageType.key,
-        String(formData.race?.damageDefenses?.[damageType.key] ?? "0").trim() || "0"
-      ])
-    );
     race.damageResistances = Object.fromEntries(
       configurableDamageTypes.map(damageType => [
         damageType.key,
@@ -609,16 +599,6 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       } catch (error) {
         ui.notifications.error(`${race.name || race.id} / Сопротивление кровотечению: ${error.message}`);
         throw error;
-      }
-      for (const damageType of damageTypes) {
-        const formula = race.damageDefenses?.[damageType.key] ?? "0";
-        try {
-          validateFormula(formula, { allowSkills: true, characteristics, skills });
-        } catch (error) {
-          const label = `${race.name || race.id} / ${damageType.label || damageType.key}`;
-          ui.notifications.error(`${label}: ${error.message}`);
-          throw error;
-        }
       }
       for (const damageType of damageTypes) {
         const formula = race.damageResistances?.[damageType.key] ?? "0";

@@ -497,7 +497,6 @@
         "CharacteristicDistributionPoints": "Characteristic distribution points",
         "CreateRace": "Create Race",
         "CreateType": "Create Type",
-        "DamageDefenseFormulaHint": "Defense formulas can use characteristic and skill codes.",
         "DamageResistanceFormulaHint": "Resistance formulas can use characteristic and skill codes. Resistance overheats from blocked damage.",
         "DeleteRace": "Delete Race",
         "DeleteRaceConfirm": "Delete race \"{id}\"?",
