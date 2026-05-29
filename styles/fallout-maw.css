@@ -7081,6 +7081,49 @@ label.fallout-maw-mitigation-cell {
   text-align: center;
 }
 
+.fallout-maw-ability-change-choice-list {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.fallout-maw-ability-change-choice {
+  align-items: center;
+  background: rgba(12, 13, 11, 0.82);
+  border: 1px solid rgba(212, 181, 93, 0.42);
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 2.4rem;
+  padding: 0.4rem 0.55rem;
+}
+
+.fallout-maw-ability-change-choice input {
+  accent-color: #d6a84f;
+}
+
+.fallout-maw-ability-change-choice.selected {
+  background: rgba(232, 212, 136, 0.12);
+  border-color: rgba(245, 221, 141, 0.62);
+}
+
+.fallout-maw-ability-change-choice.unavailable {
+  background: rgba(8, 9, 8, 0.58);
+  border-color: rgba(212, 181, 93, 0.14);
+  opacity: 0.42;
+}
+
+.fallout-maw-ability-change-choice.unavailable input {
+  opacity: 0.35;
+}
+
+.fallout-maw-ability-change-choice span {
+  color: var(--fallout-maw-adv-text);
+  min-width: 0;
+}
+
 .fallout-maw-token-hud-action-tile {
   flex-basis: var(--fallout-maw-token-hud-action-tile-width);
   height: var(--fallout-maw-token-hud-tile);

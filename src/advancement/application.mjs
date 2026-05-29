@@ -520,12 +520,18 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const research = this.#getAbilityResearch(sourceId);
     if (!research) return this.forceRender();
 
-    const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
-    if (remaining.researches <= 0) return this.forceRender();
-
     const current = toInteger(this.#draft.development.abilityResearches?.[sourceId]);
     const targetValue = Math.max(1, Number(research.target) || toInteger(entry.ability.system?.cost) || 1);
     const currentProgress = Math.max(0, Number(research.progress) || 0);
+    if (currentProgress >= targetValue) {
+      await completeAbilityResearch(this.actor, research.id);
+      this.#syncDraftFromActor();
+      return this.forceRender();
+    }
+
+    const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
+    if (remaining.researches <= 0) return this.forceRender();
+
     const investment = Math.min(remaining.researches, Math.max(0, targetValue - currentProgress));
     if (investment <= 0) return this.forceRender();
 
@@ -624,6 +630,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const owned = actorHasAbility(this.actor, sourceId);
     const onlyFree = Boolean(ability?.system?.acquisition?.onlyFree);
     const onlyManual = Boolean(ability?.system?.acquisition?.onlyManual);
+    const completed = Boolean(research) && progress >= target;
     const skillLabel = skillSettings.find(skill => skill.key === ability?.system?.acquisition?.skillKey)?.label ?? skillSettings[0]?.label ?? "";
     const acquisitionAvailable = abilityAcquisitionRequirementsMet(this.actor, ability);
     const requirementLabel = getAbilityAcquisitionRequirementLabel(ability);
@@ -645,7 +652,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       requirementLabel,
       descriptionTooltipHTML,
       canPurchaseTrait: isFeature && !owned && acquisitionAvailable && toInteger(remaining.traits) > 0,
-      canSpendFree: !isFeature && !owned && Boolean(research) && !onlyManual && remainingCost > 0 && toInteger(remaining.researches) > 0,
+      canSpendFree: !isFeature && !owned && Boolean(research) && !onlyManual && (completed || (remainingCost > 0 && toInteger(remaining.researches) > 0)),
+      canSelectRewardChanges: completed,
       freeSpendAmount: Math.min(toInteger(remaining.researches), remainingCost),
       canStartManual: !isFeature && !owned && !research,
       researchId: research?.id ?? "",

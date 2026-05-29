@@ -182,7 +182,11 @@
           Начать исследование
         </button>
         <button type="button" class="fallout-maw-advancement-talent-action-button secondary" data-action="spendAbilityResearch" {{#unless selectedAbility.canSpendFree}}disabled{{/unless}}>
+          {{#if selectedAbility.canSelectRewardChanges}}
+          Выбрать изменения
+          {{else}}
           Вложить очки
+          {{/if}}
         </button>
         <div class="fallout-maw-advancement-talents-points">Свободные ОИ: {{researchPointsDisplay}}</div>
         {{/if}}

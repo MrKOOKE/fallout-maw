@@ -146,7 +146,7 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "healthPercent", "equipmentSlotOccupied"],
+      choices: ["", "healthPercent", "equipmentSlotOccupied", "limitedChanges"],
       initial: ""
     }),
     operator: new StringField({ required: true, blank: false, choices: ["lte", "gte", "occupied", "empty"], initial: "lte" }),
@@ -158,7 +158,8 @@ function abilityConditionField() {
       initial: "general"
     }),
     limbKey: new StringField({ required: true, blank: false, initial: "all" }),
-    equipmentSlotKey: new StringField({ required: true, blank: true, initial: "" })
+    equipmentSlotKey: new StringField({ required: true, blank: true, initial: "" }),
+    limit: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
   });
 }
 

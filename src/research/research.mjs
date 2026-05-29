@@ -129,6 +129,7 @@ export async function finalizeResearch(actor, researchId) {
 async function finalizeAbilityResearch(actor, researchId, research) {
   const result = await completeAbilityResearch(actor, researchId);
   if (!result) return null;
+  if (result.blocked) return null;
 
   const content = await renderTemplate(TEMPLATES.researchCompleteChatCard, {
     actor,

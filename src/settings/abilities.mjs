@@ -14,7 +14,8 @@ export const ABILITY_FUNCTION_TYPES = Object.freeze({
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
   healthPercent: "healthPercent",
-  equipmentSlotOccupied: "equipmentSlotOccupied"
+  equipmentSlotOccupied: "equipmentSlotOccupied",
+  limitedChanges: "limitedChanges"
 });
 
 export const ABILITY_HEALTH_TARGETS = Object.freeze({
@@ -295,6 +296,20 @@ function normalizeAbilityCondition(value = {}) {
     : legacyEnabled ? ABILITY_CONDITION_TYPES.healthPercent : "";
   const groupId = String(value?.groupId ?? "").trim();
   if (!type) return { id: String(value?.id ?? "").trim() || "", groupId, type: "" };
+
+  if (type === ABILITY_CONDITION_TYPES.limitedChanges) {
+    return {
+      id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+      groupId,
+      type,
+      operator: "lte",
+      percent: 50,
+      equipmentSlotKey: "",
+      healthTarget: ABILITY_HEALTH_TARGETS.general,
+      limbKey: ABILITY_HEALTH_LIMB_ALL,
+      limit: Math.max(1, toInteger(value?.limit ?? value?.count ?? 1))
+    };
+  }
 
   if (type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied) {
     return {

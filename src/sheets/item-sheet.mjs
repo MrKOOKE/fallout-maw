@@ -1790,7 +1790,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.preventDefault();
     const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
     const functions = normalizeAbilityFunctions(this.item.system?.functions ?? []);
-    if (!functions[functionIndex]?.conditions?.length) return undefined;
+    if (!functions[functionIndex]?.conditions?.some(condition => isAbilityRuntimeCondition(condition?.type))) return undefined;
     functions[functionIndex].penalties.push(createAbilityChange());
     return this.item.update({ "system.functions": functions });
   }
@@ -2848,12 +2848,18 @@ function activateItemEffectKeyAutocompletes(root) {
 
 function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0) {
   const type = String(entry?.type ?? ABILITY_FUNCTION_TYPES.effectChanges);
-  const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index));
   const isAcquisitionChanges = type === ABILITY_FUNCTION_TYPES.acquisitionChanges;
+  const isEffectChanges = type === ABILITY_FUNCTION_TYPES.effectChanges;
+  const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
+    changeCount: entry?.changes?.length ?? 0,
+    allowLimitedChanges: isEffectChanges
+  }));
+  const hasRuntimeConditions = (entry?.conditions ?? []).some(condition => isAbilityRuntimeCondition(condition?.type));
   return {
     ...entry,
     functionIndex,
     isAcquisitionChanges,
+    isEffectChanges,
     typeLabel: isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка",
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index)),
     conditions,
@@ -2861,7 +2867,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0) {
     penalties: (entry?.penalties ?? []).map((change, index) => prepareAbilityPenaltyForDisplay(change, functionIndex, index)),
     hasConditions: Boolean(entry?.conditions?.length),
     hasPenalties: Boolean(entry?.penalties?.length),
-    canAddPenalty: Boolean(entry?.conditions?.length)
+    canAddPenalty: hasRuntimeConditions
   };
 }
 
@@ -2882,10 +2888,12 @@ function prepareAbilityPenaltyForDisplay(change, functionIndex, index) {
   };
 }
 
-function prepareAbilityConditionForDisplay(condition, functionIndex, index) {
+function prepareAbilityConditionForDisplay(condition, functionIndex, index, { changeCount = 0, allowLimitedChanges = false } = {}) {
   const type = String(condition?.type ?? "");
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
+  const isLimitedChanges = type === ABILITY_CONDITION_TYPES.limitedChanges;
+  const maxLimit = Math.max(1, changeCount);
   const healthTarget = Object.values(ABILITY_HEALTH_TARGETS).includes(condition?.healthTarget)
     ? condition.healthTarget
     : ABILITY_HEALTH_TARGETS.general;
@@ -2897,15 +2905,20 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index) {
     functionIndex,
     index,
     healthTarget,
-    isPending: !isHealth && !isEquipment,
+    isPending: !isHealth && !isEquipment && !isLimitedChanges,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
     isHealthCriticalLimb,
     showLimbChoice: isHealth && !isHealthGeneral,
     isEquipment,
+    isLimitedChanges,
+    canAddAlternative: !isLimitedChanges,
+    changeLimit: Math.max(1, Math.min(maxLimit, toInteger(condition?.limit ?? 1))),
+    changeLimitMax: maxLimit,
+    changeLimitTotal: changeCount,
     typeLabel: getAbilityConditionTypeLabel(type),
-    typeChoices: buildAbilityConditionTypeChoices(type),
+    typeChoices: buildAbilityConditionTypeChoices(type, { allowLimitedChanges }),
     healthTargetChoices: buildAbilityHealthTargetChoices(healthTarget),
     limbChoices: buildAbilityLimbChoices(condition?.limbKey, { criticalOnly: isHealthCriticalLimb }),
     healthOperatorChoices: [
@@ -2942,7 +2955,7 @@ function buildAbilityConditionDisplayGroups(conditions = []) {
 }
 
 function getAbilityConditionTypeLabel(type) {
-  return buildAbilityConditionTypeChoices(type).find(choice => choice.value === type)?.label ?? type;
+  return buildAbilityConditionTypeChoices(type, { allowLimitedChanges: true }).find(choice => choice.value === type)?.label ?? type;
 }
 
 function buildAbilityChangeTypeChoices(selected = ABILITY_CHANGE_TYPES.add) {
@@ -2958,12 +2971,27 @@ function buildAbilityChangeTypeChoices(selected = ABILITY_CHANGE_TYPES.add) {
   }));
 }
 
-function buildAbilityConditionTypeChoices(selected = "") {
-  return [
+function buildAbilityConditionTypeChoices(selected = "", { allowLimitedChanges = true } = {}) {
+  const choices = [
     { value: "", label: "", selected: !selected },
     { value: ABILITY_CONDITION_TYPES.healthPercent, label: "Состояние ОЗ", selected: selected === ABILITY_CONDITION_TYPES.healthPercent },
     { value: ABILITY_CONDITION_TYPES.equipmentSlotOccupied, label: "Занятость слотов экипировки", selected: selected === ABILITY_CONDITION_TYPES.equipmentSlotOccupied }
   ];
+  if (allowLimitedChanges || selected === ABILITY_CONDITION_TYPES.limitedChanges) {
+    choices.push({
+      value: ABILITY_CONDITION_TYPES.limitedChanges,
+      label: "Ограниченное количество изменений",
+      selected: selected === ABILITY_CONDITION_TYPES.limitedChanges
+    });
+  }
+  return choices;
+}
+
+function isAbilityRuntimeCondition(type = "") {
+  return [
+    ABILITY_CONDITION_TYPES.healthPercent,
+    ABILITY_CONDITION_TYPES.equipmentSlotOccupied
+  ].includes(type);
 }
 
 function buildAbilityHealthTargetChoices(selected = ABILITY_HEALTH_TARGETS.general) {

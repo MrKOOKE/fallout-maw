@@ -324,7 +324,9 @@
             <div class="fallout-maw-ability-condition-card-header">
               <h4>{{typeLabel}}</h4>
               <div class="fallout-maw-inline-controls">
+                {{#if canAddAlternative}}
                 <button type="button" data-add-ability-condition-alternative><i class="fa-solid fa-plus"></i> ИЛИ</button>
+                {{/if}}
                 <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-condition title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
               </div>
             </div>
@@ -377,6 +379,16 @@
                   <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
                   {{/each}}
                 </select>
+              </label>
+              {{/if}}
+              {{#if isLimitedChanges}}
+              <label>
+                <span>Выбрать изменений</span>
+                <input type="number" name="system.functions.{{functionIndex}}.conditions.{{index}}.limit" value="{{changeLimit}}" min="1" max="{{changeLimitMax}}" step="1">
+              </label>
+              <label>
+                <span>Всего изменений</span>
+                <input type="number" value="{{changeLimitTotal}}" disabled>
               </label>
               {{/if}}
             </div>
