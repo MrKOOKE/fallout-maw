@@ -1,8 +1,14 @@
 import { SYSTEM_ID } from "../constants.mjs";
-import { getAbilitySourceId } from "../settings/abilities.mjs";
-import { getAbilityEffectChanges } from "./evaluation.mjs";
+import {
+  ABILITY_CONDITION_TYPES,
+  ABILITY_FUNCTION_TYPES,
+  getAbilitySourceId,
+  normalizeAbilityFunctions
+} from "../settings/abilities.mjs";
+import { abilityConditionsApply, getAbilityEffectChanges } from "./evaluation.mjs";
 
 const ABILITY_EFFECT_FLAG_KEY = "abilityEffect";
+const ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL = 1;
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const processingActors = new Set();
 
@@ -77,7 +83,8 @@ async function syncSingleAbilityEffect(actor, item) {
   }
 
   const sourceId = getAbilitySourceId(item);
-  const signature = JSON.stringify({ itemId: item.id, sourceId, changes });
+  const showIcon = getAbilityEffectShowIcon(actor, item);
+  const signature = JSON.stringify({ itemId: item.id, sourceId, changes, showIcon });
   const current = existing.find(effect => effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.signature === signature);
   const obsolete = existing.filter(effect => effect.id !== current?.id).map(effect => effect.id);
   if (obsolete.length) await actor.deleteEmbeddedDocuments("ActiveEffect", obsolete);
@@ -88,14 +95,15 @@ async function syncSingleAbilityEffect(actor, item) {
     if (current.name !== item.name) update.name = item.name;
     if (current.img !== item.img) update.img = item.img;
     if (current.origin !== item.uuid) update.origin = item.uuid;
+    if (current.showIcon !== showIcon) update.showIcon = showIcon;
     if (Object.keys(update).length) await current.update(update);
     return;
   }
 
-  await actor.createEmbeddedDocuments("ActiveEffect", [buildAbilityActiveEffectData(item, changes, signature, sourceId)]);
+  await actor.createEmbeddedDocuments("ActiveEffect", [buildAbilityActiveEffectData(item, changes, signature, sourceId, showIcon)]);
 }
 
-function buildAbilityActiveEffectData(item, changes, signature, sourceId) {
+function buildAbilityActiveEffectData(item, changes, signature, sourceId, showIcon) {
   return {
     type: "base",
     name: item.name,
@@ -103,7 +111,7 @@ function buildAbilityActiveEffectData(item, changes, signature, sourceId) {
     origin: item.uuid,
     transfer: false,
     disabled: false,
-    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    showIcon,
     system: { changes },
     flags: {
       [SYSTEM_ID]: {
@@ -121,6 +129,38 @@ function buildAbilityActiveEffectData(item, changes, signature, sourceId) {
 function buildAbilityEffectChanges(actor, item) {
   return getAbilityEffectChanges(actor, item)
     .filter(change => !String(change?.key ?? "").startsWith("system.skillAdvancementBase."));
+}
+
+function getAbilityEffectShowIcon(actor, item) {
+  return hasActiveRuntimeAbilityState(actor, item)
+    ? ACTIVE_EFFECT_SHOW_ICON_ALWAYS
+    : ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL;
+}
+
+function hasActiveRuntimeAbilityState(actor, item) {
+  return normalizeAbilityFunctions(item?.system?.functions ?? [])
+    .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
+    .some(entry => {
+      const conditions = entry.conditions ?? [];
+      if (!hasRuntimeConditions(conditions)) return false;
+      return abilityConditionsApply(actor, conditions)
+        ? hasApplicableAbilityChanges(entry.changes)
+        : hasApplicableAbilityChanges(entry.penalties);
+    });
+}
+
+function hasRuntimeConditions(conditions = []) {
+  return conditions.some(condition => (
+    condition?.type && condition.type !== ABILITY_CONDITION_TYPES.limitedChanges
+  ));
+}
+
+function hasApplicableAbilityChanges(changes = []) {
+  return (changes ?? []).some(change => (
+    String(change?.key ?? "").trim()
+    && String(change?.value ?? "") !== ""
+    && !String(change?.key ?? "").startsWith("system.skillAdvancementBase.")
+  ));
 }
 
 async function deleteAbilityEffects(actor, abilityItemId = "") {

@@ -105,9 +105,17 @@ export function getInventoryGridDimensions(race) {
   };
 }
 
+export function getActorInventoryGridDimensions(actor, race) {
+  const inventory = actor?.system?.inventory;
+  const columns = toInteger(inventory?.columns);
+  const rows = toInteger(inventory?.rows);
+  if (columns > 0 && rows > 0) return { columns, rows };
+  return getInventoryGridDimensions(race);
+}
+
 export function prepareInventoryContext(actor, race) {
   const currencies = getCurrencySettings();
-  const { columns, rows } = getInventoryGridDimensions(race);
+  const { columns, rows } = getActorInventoryGridDimensions(actor, race);
   const allItems = actor.items.contents.filter(item => !["ability", "trauma", "disease"].includes(item.type));
   const allItemData = allItems.map(item => createInventoryItemData(item, allItems, currencies));
   const assignedItemIds = new Set();

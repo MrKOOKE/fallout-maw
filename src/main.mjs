@@ -5,7 +5,6 @@ import { registerCombatMovementHooks } from "./combat/movement-resources.mjs";
 import { registerDataModels, registerTrackableAttributes } from "./data/index.mjs";
 import { FalloutMaWActor, FalloutMaWItem } from "./documents/index.mjs";
 import { getCreatureOptions } from "./settings/accessors.mjs";
-import { createDefaultInventorySize } from "./settings/creature-options.mjs";
 import { registerSystemSettings, finalizeSystemSettings } from "./settings/index.mjs";
 import {
   refreshSkillCheckControlButton,
@@ -42,6 +41,7 @@ import {
   isContainerItem,
   validateInventoryTree
 } from "./utils/inventory-containers.mjs";
+import { getActorInventoryGridDimensions } from "./utils/actor-display-data.mjs";
 
 Hooks.once("init", () => {
   console.log(`${FALLOUT_MAW.title} | Initializing system`);
@@ -148,11 +148,7 @@ function getDropTargetToken(canvas, data) {
 
 function getActorRootInventoryDimensions(actor) {
   const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
-  const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
-  return {
-    columns: Math.max(1, toInteger(inventorySize.columns) || createDefaultInventorySize().columns),
-    rows: Math.max(1, toInteger(inventorySize.rows) || createDefaultInventorySize().rows)
-  };
+  return getActorInventoryGridDimensions(actor, race);
 }
 
 function findFirstActorDropPlacement(actor, item) {
@@ -219,7 +215,3 @@ function findFirstActorDropPlacement(actor, item) {
   return null;
 }
 
-function toInteger(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? Math.trunc(number) : 0;
-}

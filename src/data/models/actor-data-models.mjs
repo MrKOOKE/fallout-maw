@@ -29,6 +29,7 @@ import {
   DEFAULT_SKILL_DEVELOPMENT_LIMIT,
   DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
 } from "../../config/defaults.mjs";
+import { createDefaultInventorySize } from "../../settings/creature-options.mjs";
 import { resourceField } from "./resources.mjs";
 import {
   DAMAGE_MITIGATION_MODES,
@@ -50,6 +51,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       resources: new TypedObjectField(resourceField(), { required: true, initial: {} }),
       needs: new TypedObjectField(resourceField(), { required: true, initial: {} }),
       load: resourceField(0, 0, { required: true, persisted: false }),
+      inventory: inventoryField(),
       limbs: new TypedObjectField(limbField(), { required: true, initial: {} }),
       currencies: new TypedObjectField(
         new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
@@ -111,6 +113,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.proficiencies ??= {};
     this.resources ??= {};
     this.needs ??= {};
+    this.inventory ??= {};
     this.limbs ??= {};
     this.currencies ??= {};
     this.damageDefenses ??= {};
@@ -129,6 +132,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
 
     const race = getCreatureOptions(characteristicSettings, damageTypeSettings).races.find(entry => entry.id === this.creature?.raceId);
     const needSettings = getRaceNeedSettings(race);
+    prepareActorInventorySize(this.inventory, race);
     if (race?.progression) {
       this.progression.skillPointsPerLevel = String(race.progression.skillPointsPerLevel ?? DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA);
       this.progression.researchPointsPerLevel = String(race.progression.researchPointsPerLevel ?? DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA);
@@ -277,6 +281,15 @@ function researchField() {
   });
 }
 
+function inventoryField() {
+  return new SchemaField({
+    columns: new NumberField({ required: true, integer: true, min: 1, initial: 1, persisted: false }),
+    rows: new NumberField({ required: true, integer: true, min: 1, initial: 1, persisted: false }),
+    columnsBonus: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+    rowsBonus: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
+  }, { required: true, persisted: false });
+}
+
 function limbField() {
   return new SchemaField({
     label: new StringField({ required: true, blank: true, initial: "" }),
@@ -292,6 +305,17 @@ function limbField() {
       initial: {}
     })
   });
+}
+
+function prepareActorInventorySize(inventory = {}, race = null) {
+  const fallback = createDefaultInventorySize();
+  const size = race?.inventorySize ?? fallback;
+  const columnsBonus = toInteger(inventory.columnsBonus);
+  const rowsBonus = toInteger(inventory.rowsBonus);
+  inventory.columnsBonus = columnsBonus;
+  inventory.rowsBonus = rowsBonus;
+  inventory.columns = Math.max(1, toInteger(size.columns ?? fallback.columns) + columnsBonus);
+  inventory.rows = Math.max(1, toInteger(size.rows ?? fallback.rows) + rowsBonus);
 }
 
 function replaceObjectContents(target, source) {

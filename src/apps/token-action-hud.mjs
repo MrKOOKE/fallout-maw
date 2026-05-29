@@ -31,11 +31,11 @@ import { openSearchInventoryWindow, requestTradeInventoryWindow } from "./search
 import { openCraftWindow } from "./craft-window.mjs";
 import {
   FALLBACK_ICON,
+  getActorInventoryGridDimensions,
   normalizeImagePath,
   prepareIndicatorEntry,
   prepareInventoryContext
 } from "../utils/actor-display-data.mjs";
-import { createDefaultInventorySize } from "../settings/creature-options.mjs";
 import {
   ROOT_CONTAINER_ID,
   createStoredPlacement,
@@ -2492,12 +2492,7 @@ function getFirstAvailableRootInventoryPlacement(actor, itemData) {
 
 function getActorRootInventoryDimensions(actor) {
   const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId);
-  const fallback = createDefaultInventorySize();
-  const inventorySize = race?.inventorySize ?? fallback;
-  return {
-    columns: Math.max(1, toInteger(inventorySize.columns) || fallback.columns),
-    rows: Math.max(1, toInteger(inventorySize.rows) || fallback.rows)
-  };
+  return getActorInventoryGridDimensions(actor, race);
 }
 
 async function requestTokenActionHudSocket(action, payload = {}, gm = getResponsibleGM()) {

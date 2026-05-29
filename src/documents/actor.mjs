@@ -349,7 +349,8 @@ function prepareActorLoadData(actor) {
   const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
   const characteristics = actor.system?.characteristics ?? {};
   const skills = getSkillValues(actor.system?.skills ?? {});
-  const max = race?.baseParameters?.loadFormula
+  const bonus = Math.trunc(Number(actor.system?.load?.bonus) || 0);
+  const baseMax = race?.baseParameters?.loadFormula
     ? Math.max(0, evaluateFormula(race.baseParameters.loadFormula, {
       characteristicSettings: getCharacteristicSettings(),
       skillSettings: getSkillSettings(),
@@ -357,6 +358,7 @@ function prepareActorLoadData(actor) {
       skills
     }))
     : 0;
+  const max = Math.max(0, baseMax + bonus);
   const limitPercent = Math.max(0, Number(race?.baseParameters?.loadLimitPercent) || 0);
   const limit = max > 0 && limitPercent > 0
     ? Number(((max * limitPercent) / 100).toFixed(1))
@@ -368,7 +370,7 @@ function prepareActorLoadData(actor) {
         : total + (Number(getItemActorLoadWeight(item, actor.items)) || 0)
     ), 0).toFixed(1)
   );
-  actor.system.load = { min: 0, spent: 0, bonus: 0, value, max, limit, limitPercent };
+  actor.system.load = { min: 0, spent: 0, bonus, value, max, limit, limitPercent };
 }
 
 function evaluateProgressionFormula(formula, characteristics, characteristicSettings, fallback = "0") {

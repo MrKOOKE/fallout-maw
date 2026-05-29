@@ -46,6 +46,27 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
       path: `system.proficiencies.${entry.key}.bonus`,
       group: game.i18n.localize("FALLOUTMAW.Common.Proficiencies")
     })),
+    createEffectKeyToken({
+      code: "load",
+      key: "load",
+      label: game.i18n.localize("FALLOUTMAW.Common.Load"),
+      path: "system.load.bonus",
+      group: game.i18n.localize("FALLOUTMAW.Common.Load")
+    }),
+    createEffectKeyToken({
+      code: "inventoryWidth",
+      key: "inventoryWidth",
+      label: "Инвентарь: ширина",
+      path: "system.inventory.columnsBonus",
+      group: game.i18n.localize("FALLOUTMAW.Common.Inventory")
+    }),
+    createEffectKeyToken({
+      code: "inventoryHeight",
+      key: "inventoryHeight",
+      label: "Инвентарь: высота",
+      path: "system.inventory.rowsBonus",
+      group: game.i18n.localize("FALLOUTMAW.Common.Inventory")
+    }),
     ...buildDamageMitigationEffectKeyTokens(),
     createEffectKeyToken({
       code: "blind",

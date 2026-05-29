@@ -1,10 +1,10 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
-import { createDefaultInventorySize } from "../settings/creature-options.mjs";
 import {
   FALLBACK_ICON,
   escapeHTML,
   formatWeight,
+  getActorInventoryGridDimensions,
   normalizeImagePath,
   prepareInventoryContext
 } from "../utils/actor-display-data.mjs";
@@ -4744,11 +4744,7 @@ function isActorInventoryPlacementAvailable(actor, parentId, placement, excludeI
 function getActorInventoryContextDimensions(actor, parentId = ROOT_CONTAINER_ID) {
   if (parentId) return getContainerDimensions(actor.items?.get(parentId));
   const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
-  const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
-  return {
-    columns: Math.max(1, toInteger(inventorySize.columns) || createDefaultInventorySize().columns),
-    rows: Math.max(1, toInteger(inventorySize.rows) || createDefaultInventorySize().rows)
-  };
+  return getActorInventoryGridDimensions(actor, race);
 }
 
 function validateTargetParent(actor, parentId = ROOT_CONTAINER_ID) {
@@ -4859,13 +4855,10 @@ function validateActorLoadLimit(actor, projectedItems = []) {
 }
 
 function getActorLoadLimit(actor) {
-  const preparedLimit = Number(actor?.system?.load?.limit) || 0;
-  if (preparedLimit > 0) return preparedLimit;
   const max = Number(actor?.system?.load?.max) || 0;
-  if (max <= 0) return 0;
-  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId) ?? null;
-  const percent = Math.max(0, Number(race?.baseParameters?.loadLimitPercent) || 0);
-  return percent > 0 ? (max * percent) / 100 : 0;
+  const percent = Math.max(0, Number(actor?.system?.load?.limitPercent) || 0);
+  if (max > 0 && percent > 0) return (max * percent) / 100;
+  return Number(actor?.system?.load?.limit) || 0;
 }
 
 function calculateActorLoad(items = []) {

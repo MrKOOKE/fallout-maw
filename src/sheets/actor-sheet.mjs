@@ -1204,7 +1204,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (parentId && (parentId !== ROOT_CONTAINER_ID)) {
       return getContainerDimensions(this.actor.items.get(parentId));
     }
-    return getInventoryGridDimensions(this.#getCurrentRace());
+    return getInventoryGridDimensions(this.#getCurrentRace(), this.actor);
   }
 
   #getFirstAvailableInventoryPlacement(itemData = null, excludeItemIds = [], reservedPlacements = [], parentId = ROOT_CONTAINER_ID) {
@@ -1600,7 +1600,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #validateProjectedInventoryState({ updates = [], deletes = [], creates = [] } = {}) {
     const projectedItems = this.#projectInventoryState({ updates, deletes, creates });
-    const validation = validateInventoryTree(projectedItems, getInventoryGridDimensions(this.#getCurrentRace()));
+    const validation = validateInventoryTree(projectedItems, getInventoryGridDimensions(this.#getCurrentRace(), this.actor));
     if (validation.valid) {
       const loadValidation = validateActorLoadLimit(this.actor, projectedItems);
       if (loadValidation.valid) return true;
@@ -3821,7 +3821,11 @@ function normalizeStackComparableValue(value) {
   return Object.fromEntries(entries.map(([key, entryValue]) => [key, normalizeStackComparableValue(entryValue)]));
 }
 
-function getInventoryGridDimensions(race) {
+function getInventoryGridDimensions(race, actor = null) {
+  const actorInventory = actor?.system?.inventory;
+  const columns = toInteger(actorInventory?.columns);
+  const rows = toInteger(actorInventory?.rows);
+  if (columns > 0 && rows > 0) return { columns, rows };
   const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
   return {
     columns: Math.max(1, toInteger(inventorySize.columns)),
@@ -3914,13 +3918,10 @@ function validateActorLoadLimit(actor, projectedItems = []) {
 }
 
 function getActorLoadLimit(actor) {
-  const preparedLimit = Number(actor?.system?.load?.limit) || 0;
-  if (preparedLimit > 0) return preparedLimit;
   const max = Number(actor?.system?.load?.max) || 0;
-  if (max <= 0) return 0;
-  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId) ?? null;
-  const percent = Math.max(0, Number(race?.baseParameters?.loadLimitPercent) || 0);
-  return percent > 0 ? (max * percent) / 100 : 0;
+  const percent = Math.max(0, Number(actor?.system?.load?.limitPercent) || 0);
+  if (max > 0 && percent > 0) return (max * percent) / 100;
+  return Number(actor?.system?.load?.limit) || 0;
 }
 
 function calculateActorLoad(items = []) {
@@ -3940,7 +3941,7 @@ function getActorLoadLimitExceededMessage() {
 
 function prepareInventoryContext(actor, race) {
   const currencies = getCurrencySettings();
-  const { columns, rows } = getInventoryGridDimensions(race);
+  const { columns, rows } = getInventoryGridDimensions(race, actor);
   const allItems = actor.items.contents.filter(item => !["ability", "trauma", "disease"].includes(item.type));
   const allItemData = allItems.map(item => createInventoryItemData(item, allItems, currencies));
   const assignedItemIds = new Set();
@@ -4182,6 +4183,11 @@ function buildEffectPathLabelMap({
   for (const entry of characteristicSettings) {
     map.set(`system.characteristics.${entry.key}`, entry.label);
   }
+
+  map.set("system.load.max", game.i18n.localize("FALLOUTMAW.Common.Load"));
+  map.set("system.load.bonus", game.i18n.localize("FALLOUTMAW.Common.Load"));
+  map.set("system.inventory.columnsBonus", "Инвентарь: ширина");
+  map.set("system.inventory.rowsBonus", "Инвентарь: высота");
 
   addEffectPathLabels(map, "system.skills", skillSettings, {
     value: valueLabel,
