@@ -1325,6 +1325,11 @@
   padding-left: 0.65rem;
 }
 
+.fallout-maw-acquisition-requirements {
+  display: grid;
+  gap: 0.45rem;
+}
+
 .fallout-maw-ability-condition-row {
   align-items: end;
   display: grid;
@@ -6837,6 +6842,22 @@ label.fallout-maw-mitigation-cell {
   border-color: rgba(140, 178, 100, 0.42);
 }
 
+.fallout-maw-advancement-talent-item.unavailable {
+  border-color: rgba(230, 76, 70, 0.52);
+  color: #ff7a75;
+}
+
+.fallout-maw-advancement-talent-item.unavailable::after {
+  background: rgba(230, 76, 70, 0.18);
+  bottom: 0;
+  content: "";
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
 .fallout-maw-advancement-talent-icon {
   border: 1px solid rgba(212, 181, 93, 0.34);
   flex: 0 0 2.25rem;
@@ -7532,11 +7553,22 @@ label.fallout-maw-mitigation-cell {
   gap: 0.75rem;
 }
 
+.ability-settings-config .fallout-maw-ability-category-shell {
+  align-items: start;
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+}
+
+.ability-settings-config .fallout-maw-ability-category-drag {
+  margin-top: 2.05rem;
+}
+
 .ability-settings-config .fallout-maw-ability-category-header {
   align-items: end;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: 2.25rem minmax(220px, 1fr) max-content 2.25rem;
+  grid-template-columns: minmax(220px, 1fr) max-content 2.25rem;
 }
 
 .ability-settings-config .fallout-maw-ability-compact-row {
@@ -7544,6 +7576,10 @@ label.fallout-maw-mitigation-cell {
   display: grid;
   gap: 0.75rem;
   grid-template-columns: 2.5rem minmax(180px, 1fr) 8rem 2.25rem 2.25rem;
+}
+
+.ability-settings-config .fallout-maw-ability-compact-row.feature {
+  grid-template-columns: 2.5rem minmax(180px, 1fr) 2.25rem 2.25rem;
 }
 
 .ability-settings-config .fallout-maw-ability-compact-row img {

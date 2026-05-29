@@ -17,6 +17,10 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   equipmentSlotOccupied: "equipmentSlotOccupied"
 });
 
+export const ABILITY_ACQUISITION_CONDITION_TYPES = Object.freeze({
+  race: "race"
+});
+
 export const ABILITY_EQUIPMENT_OPERATORS = Object.freeze({
   occupied: "occupied",
   empty: "empty"
@@ -87,6 +91,7 @@ export function normalizeAbilityEntry(value = {}, index = 0) {
       cost: Math.max(0, toInteger(system.cost ?? value?.cost)),
       formula: String(system.formula ?? value?.formula ?? "").trim(),
       acquisition: normalizeAbilityAcquisition(system.acquisition ?? value?.acquisition),
+      acquisitionRequirements: normalizeAbilityAcquisitionConditions(system.acquisitionRequirements ?? value?.acquisitionRequirements),
       functions: normalizeAbilityFunctions(system.functions ?? value?.functions)
     }
   };
@@ -126,6 +131,14 @@ export function createAbilityCondition(type = ABILITY_CONDITION_TYPES.healthPerc
   });
 }
 
+export function createAbilityAcquisitionCondition(type = "") {
+  const data = typeof type === "object" && type !== null ? type : { type };
+  return normalizeAbilityAcquisitionCondition({
+    id: foundry.utils.randomID(),
+    ...data
+  });
+}
+
 export function prepareAbilityItemData(ability = {}, { categoryId = "" } = {}) {
   const normalized = normalizeAbilityEntry(ability);
   return {
@@ -137,6 +150,7 @@ export function prepareAbilityItemData(ability = {}, { categoryId = "" } = {}) {
       cost: normalized.system.cost,
       formula: normalized.system.formula,
       acquisition: foundry.utils.deepClone(normalized.system.acquisition),
+      acquisitionRequirements: foundry.utils.deepClone(normalized.system.acquisitionRequirements),
       functions: foundry.utils.deepClone(normalized.system.functions)
     },
     flags: {
@@ -245,6 +259,23 @@ function normalizeAbilityChange(value = {}) {
 function normalizeAbilityConditions(value = []) {
   return (Array.isArray(value) ? value : Object.values(value ?? {}))
     .map(normalizeAbilityCondition);
+}
+
+function normalizeAbilityAcquisitionConditions(value = []) {
+  return (Array.isArray(value) ? value : Object.values(value ?? {}))
+    .map(normalizeAbilityAcquisitionCondition);
+}
+
+function normalizeAbilityAcquisitionCondition(value = {}) {
+  const rawType = String(value?.type ?? "").trim();
+  const type = Object.values(ABILITY_ACQUISITION_CONDITION_TYPES).includes(rawType) ? rawType : "";
+  if (!type) return { id: String(value?.id ?? "").trim() || "", type: "" };
+
+  return {
+    id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+    type,
+    raceId: String(value?.raceId ?? "").trim()
+  };
 }
 
 function normalizeAbilityCondition(value = {}) {

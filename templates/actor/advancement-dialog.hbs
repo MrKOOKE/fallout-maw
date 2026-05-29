@@ -134,7 +134,7 @@
             {{#each abilities}}
             <button
               type="button"
-              class="fallout-maw-advancement-talent-item{{#if selected}} selected{{/if}}{{#if owned}} owned{{/if}}{{#if researchActive}} research-active{{/if}}"
+              class="fallout-maw-advancement-talent-item{{#if selected}} selected{{/if}}{{#if owned}} owned{{/if}}{{#if researchActive}} research-active{{/if}}{{#unless acquisitionAvailable}} unavailable{{/unless}}"
               data-action="selectAbility"
               data-ability-entry
               data-ability-search-text="{{name}} {{acquisitionLabel}} {{manualLabel}}"
@@ -159,10 +159,14 @@
           <div class="fallout-maw-advancement-talent-details-name">{{selectedAbility.name}}</div>
           <div class="fallout-maw-advancement-talent-research-info">
             <div><span>Статус:</span> {{selectedAbility.statusLabel}}</div>
+            {{#if selectedAbility.isFeature}}
+            {{#if selectedAbility.requirementLabel}}<div><span>Условия:</span> {{selectedAbility.requirementLabel}}</div>{{/if}}
+            {{else}}
             <div><span>Стоимость:</span> {{selectedAbility.cost}} ОИ</div>
             <div><span>Прогресс:</span> {{selectedAbility.progressLabel}}</div>
             <div><span>Приобретение:</span> {{selectedAbility.acquisitionLabel}}</div>
             {{#if selectedAbility.manualLabel}}<div><span>Ручное исследование:</span> {{selectedAbility.manualLabel}}</div>{{/if}}
+            {{/if}}
           </div>
         </div>
       </div>

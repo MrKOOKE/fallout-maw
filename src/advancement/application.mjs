@@ -16,7 +16,7 @@ import {
 } from "../settings/accessors.mjs";
 import { actorHasAbility, completeAbilityResearch, findCatalogAbility, grantCatalogAbility } from "../abilities/purchase.mjs";
 import { formatResearchValue } from "../research/storage.mjs";
-import { LOCKED_FEATURES_CATEGORY_ID, prepareAbilityItemData } from "../settings/abilities.mjs";
+import { ABILITY_ACQUISITION_CONDITION_TYPES, LOCKED_FEATURES_CATEGORY_ID, prepareAbilityItemData } from "../settings/abilities.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { localize } from "../utils/i18n.mjs";
@@ -487,6 +487,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
     const entry = findCatalogAbility(sourceId);
     if (!entry || entry.category?.id !== LOCKED_FEATURES_CATEGORY_ID || actorHasAbility(this.actor, sourceId)) return this.forceRender();
+    if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability)) return this.forceRender();
 
     const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
     if (remaining.traits < 1) return this.forceRender();
@@ -546,6 +547,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const onlyManual = Boolean(ability?.system?.acquisition?.onlyManual);
     const completed = Boolean(research) && progress >= target;
     const skillLabel = skillSettings.find(skill => skill.key === ability?.system?.acquisition?.skillKey)?.label ?? skillSettings[0]?.label ?? "";
+    const acquisitionAvailable = abilityAcquisitionRequirementsMet(this.actor, ability);
+    const requirementLabel = getAbilityAcquisitionRequirementLabel(ability);
     return {
       ...ability,
       sourceId,
@@ -559,7 +562,9 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       owned,
       onlyFree,
       onlyManual,
-      canPurchaseTrait: isFeature && !owned && toInteger(remaining.traits) > 0,
+      acquisitionAvailable,
+      requirementLabel,
+      canPurchaseTrait: isFeature && !owned && acquisitionAvailable && toInteger(remaining.traits) > 0,
       canSpendFree: !isFeature && !owned && Boolean(research) && !onlyManual && remainingCost > 0 && toInteger(remaining.researches) > 0,
       freeSpendAmount: Math.min(toInteger(remaining.researches), remainingCost),
       canStartManual: !isFeature && !owned && !research,
@@ -567,7 +572,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       researchId: research?.id ?? "",
       researchActive: Boolean(research),
       selected: sourceId === this.#selectedAbilitySourceId,
-      statusLabel: owned ? "Изучено" : research ? "Исследуется" : "Не изучено",
+      statusLabel: owned ? "Изучено" : !acquisitionAvailable ? "Недоступно" : research ? "Исследуется" : "Не изучено",
       acquisitionLabel: onlyFree ? "Только свободные ОИ" : onlyManual ? "Только ручное исследование" : "Свободные ОИ или ручное исследование",
       manualLabel: skillLabel ? `${skillLabel}, сложность ${toInteger(ability?.system?.acquisition?.difficulty ?? 60)}` : ""
     };
@@ -763,4 +768,26 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #hasDraftChanges() {
     return JSON.stringify(this.#draft) !== JSON.stringify(this.#snapshot);
   }
+}
+
+function abilityAcquisitionRequirementsMet(actor, ability = {}) {
+  return (ability.system?.acquisitionRequirements ?? []).every(requirement => {
+    if (requirement?.type !== ABILITY_ACQUISITION_CONDITION_TYPES.race) return true;
+    const raceId = String(requirement.raceId ?? "").trim();
+    if (!raceId) return true;
+    return String(actor?.system?.creature?.raceId ?? "") === raceId;
+  });
+}
+
+function getAbilityAcquisitionRequirementLabel(ability = {}) {
+  const labels = [];
+  const races = getCreatureOptions().races ?? [];
+  for (const requirement of ability.system?.acquisitionRequirements ?? []) {
+    if (requirement?.type !== ABILITY_ACQUISITION_CONDITION_TYPES.race) continue;
+    const raceId = String(requirement.raceId ?? "").trim();
+    if (!raceId) continue;
+    const race = races.find(entry => entry.id === raceId);
+    labels.push(`Раса: ${race?.name || raceId}`);
+  }
+  return labels.join("; ");
 }

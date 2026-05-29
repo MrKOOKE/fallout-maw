@@ -1,10 +1,13 @@
 import { TEMPLATES } from "../constants.mjs";
 import { getCreatureOptions, getSkillSettings } from "../settings/accessors.mjs";
 import {
+  ABILITY_ACQUISITION_CONDITION_TYPES,
   ABILITY_CHANGE_TYPES,
   ABILITY_CONDITION_TYPES,
   ABILITY_EQUIPMENT_OPERATORS,
   ABILITY_FUNCTION_TYPES,
+  LOCKED_FEATURES_CATEGORY_ID,
+  createAbilityAcquisitionCondition,
   createAbilityChange,
   createAbilityCondition,
   createAbilityFunction,
@@ -51,7 +54,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       addFunctionCondition: this.#onAddFunctionCondition,
       deleteFunctionCondition: this.#onDeleteFunctionCondition,
       addFunctionPenalty: this.#onAddFunctionPenalty,
-      deleteFunctionPenalty: this.#onDeleteFunctionPenalty
+      deleteFunctionPenalty: this.#onDeleteFunctionPenalty,
+      addAcquisitionRequirement: this.#onAddAcquisitionRequirement,
+      deleteAcquisitionRequirement: this.#onDeleteAcquisitionRequirement
     }
   };
 
@@ -62,7 +67,11 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return `Способность: ${this.ability.name}`;
+    return `${this.#isFeature ? "Особенность" : "Способность"}: ${this.ability.name}`;
+  }
+
+  get #isFeature() {
+    return this.categoryId === LOCKED_FEATURES_CATEGORY_ID;
   }
 
   async _prepareContext(options) {
@@ -74,6 +83,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       ...(await super._prepareContext(options)),
       ability: this.ability,
       system: this.ability.system,
+      isFeature: this.#isFeature,
       isDetailsTab: this.#activeTab === "details",
       isFunctionsTab: this.#activeTab === "functions",
       tabs: {
@@ -94,6 +104,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       functionChoices: buildFunctionChoices(),
       onlyFree: Boolean(this.ability.system?.acquisition?.onlyFree),
       onlyManual: Boolean(this.ability.system?.acquisition?.onlyManual),
+      acquisitionRequirements: (this.ability.system?.acquisitionRequirements ?? []).map(prepareAcquisitionRequirementForDisplay),
       researchDifficulty: Math.max(0, toInteger(this.ability.system?.acquisition?.difficulty ?? 60)),
       researchSkillChoices: skills.map((skill, index) => ({
         key: skill.key,
@@ -109,6 +120,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.element?.querySelector?.("[data-choose-ability-function]")?.addEventListener("change", event => this.#onChooseFunction(event));
     this.element?.querySelectorAll?.("[data-field='conditionType']")?.forEach(select => {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
+    });
+    this.element?.querySelectorAll?.("[data-field='acquisitionRequirementType']")?.forEach(select => {
+      select.addEventListener("change", event => this.#onAcquisitionRequirementTypeChange(event));
     });
     activateEffectKeyAutocomplete(this.element, buildEffectKeyTokens());
   }
@@ -167,6 +181,13 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     this.#syncFromForm();
     this.#activeTab = "functions";
+    return this.forceRender();
+  }
+
+  #onAcquisitionRequirementTypeChange(event) {
+    event.preventDefault();
+    this.#syncFromForm();
+    this.#activeTab = "details";
     return this.forceRender();
   }
 
@@ -237,6 +258,24 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
+  static #onAddAcquisitionRequirement(event) {
+    event.preventDefault();
+    this.#syncFromForm();
+    this.ability.system.acquisitionRequirements ??= [];
+    this.ability.system.acquisitionRequirements.push(createAbilityAcquisitionCondition(""));
+    this.#activeTab = "details";
+    return this.forceRender();
+  }
+
+  static #onDeleteAcquisitionRequirement(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const index = getRowIndex(this.form, "[data-acquisition-requirement-row]", target.closest("[data-acquisition-requirement-row]"));
+    if (index >= 0) this.ability.system.acquisitionRequirements?.splice(index, 1);
+    this.#activeTab = "details";
+    return this.forceRender();
+  }
+
   #syncFromForm() {
     if (!this.form) return;
     const onlyFree = Boolean(this.form.querySelector("[data-field='onlyFree']")?.checked);
@@ -247,13 +286,14 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       description: readFieldValue(this.form.querySelector("[data-field='description']"), this.ability.description),
       system: {
         ...(this.ability.system ?? {}),
-        cost: this.form.querySelector("[data-field='cost']")?.value ?? this.ability.system?.cost,
         acquisition: {
           onlyFree,
           onlyManual: onlyFree ? false : Boolean(this.form.querySelector("[data-field='onlyManual']")?.checked),
           skillKey: this.form.querySelector("[data-field='researchSkillKey']")?.value ?? this.ability.system?.acquisition?.skillKey,
           difficulty: this.form.querySelector("[data-field='researchDifficulty']")?.value ?? this.ability.system?.acquisition?.difficulty
         },
+        cost: this.#isFeature ? 0 : this.form.querySelector("[data-field='cost']")?.value ?? this.ability.system?.cost,
+        acquisitionRequirements: readAcquisitionRequirements(this.form.querySelector("[data-acquisition-requirements]")),
         functions: readAbilityFunctions(this.form)
       }
     });
@@ -288,6 +328,14 @@ function readAbilityConditions(root) {
     operator: row.querySelector("[data-field='conditionOperator']")?.value ?? "lte",
     percent: row.querySelector("[data-field='conditionPercent']")?.value ?? 50,
     equipmentSlotKey: row.querySelector("[data-field='conditionEquipmentSlotKey']")?.value ?? ""
+  }));
+}
+
+function readAcquisitionRequirements(root) {
+  return Array.from(root?.querySelectorAll("[data-acquisition-requirement-row]") ?? []).map(row => ({
+    id: row.dataset.requirementId || foundry.utils.randomID(),
+    type: row.querySelector("[data-field='acquisitionRequirementType']")?.value || "",
+    raceId: row.querySelector("[data-field='acquisitionRequirementRaceId']")?.value ?? ""
   }));
 }
 
@@ -345,8 +393,25 @@ function prepareConditionForDisplay(condition) {
   };
 }
 
+function prepareAcquisitionRequirementForDisplay(requirement) {
+  const type = String(requirement?.type ?? "");
+  const isPending = type !== ABILITY_ACQUISITION_CONDITION_TYPES.race;
+  return {
+    ...requirement,
+    isPending,
+    isRace: type === ABILITY_ACQUISITION_CONDITION_TYPES.race,
+    typeLabel: getAcquisitionRequirementTypeLabel(type),
+    typeChoices: buildAcquisitionRequirementTypeChoices(type),
+    raceChoices: buildRaceChoices(requirement?.raceId)
+  };
+}
+
 function getConditionTypeLabel(type) {
   return buildConditionTypeChoices(type).find(choice => choice.value === type)?.label ?? type;
+}
+
+function getAcquisitionRequirementTypeLabel(type) {
+  return buildAcquisitionRequirementTypeChoices(type).find(choice => choice.value === type)?.label ?? type;
 }
 
 function buildFunctionChoices() {
@@ -378,6 +443,23 @@ function buildConditionTypeChoices(selected = "") {
     { value: ABILITY_CONDITION_TYPES.healthPercent, label: "Состояние ОЗ", selected: selected === ABILITY_CONDITION_TYPES.healthPercent },
     { value: ABILITY_CONDITION_TYPES.equipmentSlotOccupied, label: "Занятость слотов экипировки", selected: selected === ABILITY_CONDITION_TYPES.equipmentSlotOccupied }
   ];
+}
+
+function buildAcquisitionRequirementTypeChoices(selected = "") {
+  return [
+    { value: "", label: "", selected: !selected },
+    { value: ABILITY_ACQUISITION_CONDITION_TYPES.race, label: "Раса", selected: selected === ABILITY_ACQUISITION_CONDITION_TYPES.race }
+  ];
+}
+
+function buildRaceChoices(selected = "") {
+  const races = [...(getCreatureOptions().races ?? [])];
+  if (selected && !races.some(race => race.id === selected)) races.push({ id: selected, name: selected });
+  return races.map(race => ({
+    value: race.id,
+    label: race.name || race.id,
+    selected: race.id === selected
+  }));
 }
 
 function buildEquipmentSlotChoices(selected = "") {

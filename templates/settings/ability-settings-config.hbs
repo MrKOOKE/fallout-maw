@@ -10,16 +10,17 @@
 
     <div class="fallout-maw-ability-category-list">
       {{#each catalog.categories}}
-      <article class="fallout-maw-panel fallout-maw-ability-category" data-ability-category-row data-category-id="{{id}}">
+      <div class="fallout-maw-ability-category-shell" data-ability-category-row data-category-id="{{id}}">
+        <button type="button" class="fallout-maw-icon-button fallout-maw-drag-handle fallout-maw-ability-category-drag" data-drag-handle title="Сортировать">
+          <i class="fa-solid fa-grip-vertical"></i>
+        </button>
+      <article class="fallout-maw-panel fallout-maw-ability-category">
         <header class="fallout-maw-ability-category-header">
-          <button type="button" class="fallout-maw-icon-button fallout-maw-drag-handle" data-drag-handle title="Сортировать">
-            <i class="fa-solid fa-grip-vertical"></i>
-          </button>
           <label>
             <span>Каталог</span>
             <input type="text" data-field="categoryName" value="{{name}}" {{#if locked}}disabled{{/if}}>
           </label>
-          <button type="button" data-action="addAbility"><i class="fa-solid fa-plus"></i> Создать способность</button>
+          <button type="button" data-action="addAbility"><i class="fa-solid fa-plus"></i> {{createLabel}}</button>
           <button type="button" class="fallout-maw-icon-button" data-action="deleteCategory" {{#unless deletable}}disabled{{/unless}}>
             <i class="fa-solid fa-trash"></i>
           </button>
@@ -27,17 +28,19 @@
 
         <div class="fallout-maw-ability-compact-list">
           {{#each abilities}}
-          <div class="fallout-maw-ability-compact-row" data-ability-row data-ability-id="{{id}}">
+          <div class="fallout-maw-ability-compact-row{{#if isFeature}} feature{{/if}}" data-ability-row data-ability-id="{{id}}">
             <img src="{{img}}" alt="" width="34" height="34">
             <input type="hidden" data-field="abilityImg" value="{{img}}">
             <label>
               <span>Название</span>
               <input type="text" data-field="abilityName" value="{{name}}">
             </label>
+            {{#unless isFeature}}
             <label>
               <span>Стоимость ОИ</span>
               <input type="number" data-field="abilityCost" value="{{cost}}" min="0" step="1">
             </label>
+            {{/unless}}
             <button type="button" class="fallout-maw-icon-button" data-action="editAbility" title="Редактировать способность">
               <i class="fa-solid fa-pen"></i>
             </button>
@@ -46,10 +49,11 @@
             </button>
           </div>
           {{else}}
-          <p class="fallout-maw-empty-list">В каталоге нет способностей.</p>
+          <p class="fallout-maw-empty-list">{{emptyLabel}}</p>
           {{/each}}
         </div>
       </article>
+      </div>
       {{/each}}
     </div>
   </section>

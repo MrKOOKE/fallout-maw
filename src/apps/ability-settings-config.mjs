@@ -1,6 +1,6 @@
 import { TEMPLATES } from "../constants.mjs";
 import { getAbilityCatalog, getSkillSettings, resetAbilityCatalog, setAbilityCatalog } from "../settings/accessors.mjs";
-import { normalizeAbilityCatalog, normalizeAbilityEntry } from "../settings/abilities.mjs";
+import { LOCKED_FEATURES_CATEGORY_ID, normalizeAbilityCatalog, normalizeAbilityEntry } from "../settings/abilities.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { AbilityCatalogItemEditor } from "./ability-catalog-item-editor.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
@@ -48,9 +48,13 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
       catalog: {
         categories: (this.catalog.categories ?? []).map(category => ({
           ...category,
+          isFeatures: category.id === LOCKED_FEATURES_CATEGORY_ID,
           deletable: !category.locked,
+          createLabel: category.id === LOCKED_FEATURES_CATEGORY_ID ? "Создать особенность" : "Создать способность",
+          emptyLabel: category.id === LOCKED_FEATURES_CATEGORY_ID ? "В каталоге нет особенностей." : "В каталоге нет способностей.",
           abilities: (category.abilities ?? []).map(ability => ({
             ...ability,
+            isFeature: category.id === LOCKED_FEATURES_CATEGORY_ID,
             cost: toInteger(ability.system?.cost)
           }))
         }))
@@ -106,7 +110,9 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
             description: existingAbility.description,
             system: {
               ...(existingAbility.system ?? {}),
-              cost: abilityRow.querySelector("[data-field='abilityCost']")?.value ?? existingAbility.system?.cost
+              cost: categoryId === LOCKED_FEATURES_CATEGORY_ID
+                ? 0
+                : abilityRow.querySelector("[data-field='abilityCost']")?.value ?? existingAbility.system?.cost
             }
           }, abilityIndex);
         })
@@ -143,10 +149,11 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
     const category = this.catalog.categories[categoryIndex];
     if (!category) return undefined;
     const firstSkill = getSkillSettings()[0]?.key ?? "";
+    const isFeatures = category.id === LOCKED_FEATURES_CATEGORY_ID;
     const ability = normalizeAbilityEntry({
       id: foundry.utils.randomID(),
-      name: "Новая способность",
-      img: "icons/svg/aura.svg",
+      name: isFeatures ? "Новая особенность" : "Новая способность",
+      img: isFeatures ? "icons/svg/upgrade.svg" : "icons/svg/aura.svg",
       system: {
         cost: 0,
         acquisition: {

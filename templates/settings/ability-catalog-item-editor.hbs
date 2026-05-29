@@ -13,6 +13,53 @@
 </nav>
 
 <section class="tab {{tabs.details.cssClass}}" data-group="{{tabs.details.group}}" data-tab="{{tabs.details.id}}">
+  {{#if isFeature}}
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>Условия приобретения</h2>
+      <button type="button" data-action="addAcquisitionRequirement"><i class="fa-solid fa-plus"></i> Добавить условие</button>
+    </div>
+    <div class="fallout-maw-acquisition-requirements" data-acquisition-requirements>
+      {{#each acquisitionRequirements}}
+      <div class="fallout-maw-ability-condition-row{{#if isPending}} empty{{else}} configured{{/if}}" data-acquisition-requirement-row data-requirement-id="{{id}}">
+        {{#if isPending}}
+        <label>
+          <span>Условие</span>
+          <select data-field="acquisitionRequirementType">
+            {{#each typeChoices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+        </label>
+        <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteAcquisitionRequirement" title="Удалить условие"><i class="fa-solid fa-trash"></i></button>
+        {{else}}
+        <input type="hidden" data-field="acquisitionRequirementType" value="{{type}}">
+        <div class="fallout-maw-ability-condition-card">
+          <div class="fallout-maw-ability-condition-card-header">
+            <h4>{{typeLabel}}</h4>
+            <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteAcquisitionRequirement" title="Удалить условие"><i class="fa-solid fa-trash"></i></button>
+          </div>
+          <div class="fallout-maw-ability-condition-fields">
+            {{#if isRace}}
+            <label>
+              <span>Раса</span>
+              <select data-field="acquisitionRequirementRaceId">
+                {{#each raceChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </label>
+            {{/if}}
+          </div>
+        </div>
+        {{/if}}
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">Условия приобретения не настроены.</p>
+      {{/each}}
+    </div>
+  </section>
+  {{else}}
   <section class="fallout-maw-panel">
     <h2>Приобретение</h2>
     <div class="fallout-maw-list-grid two-columns">
@@ -42,6 +89,7 @@
       </label>
     </div>
   </section>
+  {{/if}}
 
   <section class="fallout-maw-panel fallout-maw-description-panel">
     <h2>Описание</h2>

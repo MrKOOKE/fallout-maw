@@ -93,6 +93,7 @@ export class AbilityDataModel extends BaseItemDataModel {
         skillKey: new StringField({ required: true, blank: true, initial: "" }),
         difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 })
       }),
+      acquisitionRequirements: new ArrayField(abilityAcquisitionRequirementField(), { required: true, initial: [] }),
       functions: new ArrayField(abilityFunctionField(), { required: true, initial: [] })
     };
   }
@@ -150,6 +151,19 @@ function abilityConditionField() {
     operator: new StringField({ required: true, blank: false, choices: ["lte", "gte", "occupied", "empty"], initial: "lte" }),
     percent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 50 }),
     equipmentSlotKey: new StringField({ required: true, blank: true, initial: "" })
+  });
+}
+
+function abilityAcquisitionRequirementField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+    type: new StringField({
+      required: true,
+      blank: true,
+      choices: ["", "race"],
+      initial: ""
+    }),
+    raceId: new StringField({ required: true, blank: true, initial: "" })
   });
 }
 
