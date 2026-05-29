@@ -140,7 +140,7 @@
           <span></span>
         </div>
         <div class="fallout-maw-trauma-effect-row">
-          <input type="text" data-field="changeKey" data-effect-key-autocomplete value="{{key}}">
+          <input type="text" data-field="changeKey" data-effect-key-autocomplete {{#if ../isAcquisitionChanges}}data-ability-acquisition-change-key{{/if}} value="{{key}}">
           <select data-field="changeType">
             {{#each typeChoices}}
             <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>

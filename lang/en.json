@@ -416,6 +416,9 @@
       "SkillPoints": "Skill Points",
       "SignatureSkillPoints": "Signature Skill Points",
       "CharacteristicPoints": "Characteristic Points",
+      "TraitPoints": "Trait Points",
+      "ProficiencyPoints": "Proficiency Points",
+      "ResearchPoints": "Research Points",
       "BaseSkill": "Base Skill",
       "DevelopmentBonus": "Development Bonus",
       "ToggleSignatureSkill": "Toggle Signature Skill"

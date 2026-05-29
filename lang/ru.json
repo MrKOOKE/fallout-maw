@@ -415,6 +415,9 @@
       "SkillPoints": "Очки навыков",
       "SignatureSkillPoints": "Очки коронных навыков",
       "CharacteristicPoints": "Очки характеристик",
+      "TraitPoints": "Очки особенностей",
+      "ProficiencyPoints": "Очки владений",
+      "ResearchPoints": "Очки исследований",
       "BaseSkill": "База навыка",
       "DevelopmentBonus": "Бонус развития",
       "ToggleSignatureSkill": "Переключить коронный навык"

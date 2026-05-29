@@ -17,6 +17,7 @@ import {
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import { buildAbilityAcquisitionChangeKeyTokens } from "../utils/ability-acquisition-change-keys.mjs";
 import { getEquipmentSlotSelectionKey } from "../utils/equipment-slots.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { activateEffectKeyAutocomplete } from "./effect-key-autocomplete.mjs";
@@ -130,7 +131,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.element?.querySelectorAll?.("[data-field='acquisitionRequirementType']")?.forEach(select => {
       select.addEventListener("change", event => this.#onAcquisitionRequirementTypeChange(event));
     });
-    activateEffectKeyAutocomplete(this.element, buildEffectKeyTokens());
+    activateAbilityFunctionKeyAutocomplete(this.element);
   }
 
   async _processFormData(_event, _form, _formData) {
@@ -382,9 +383,11 @@ function readFieldValue(element, fallback = "") {
 function prepareFunctionForDisplay(entry) {
   const normalized = normalizeAbilityFunctions([entry])[0] ?? createAbilityFunction();
   const conditions = normalized.conditions.map(prepareConditionForDisplay);
+  const isAcquisitionChanges = normalized.type === ABILITY_FUNCTION_TYPES.acquisitionChanges;
   return {
     ...normalized,
-    typeLabel: normalized.type === ABILITY_FUNCTION_TYPES.acquisitionChanges
+    isAcquisitionChanges,
+    typeLabel: isAcquisitionChanges
       ? "Разовое изменение при приобретении"
       : "Свободная настройка",
     changes: normalized.changes.map(prepareChangeForDisplay),
@@ -490,6 +493,16 @@ function buildFunctionChoices() {
     { value: ABILITY_FUNCTION_TYPES.effectChanges, label: "Свободная настройка" },
     { value: ABILITY_FUNCTION_TYPES.acquisitionChanges, label: "Разовое изменение при приобретении" }
   ];
+}
+
+function activateAbilityFunctionKeyAutocomplete(root) {
+  if (!root) return;
+  activateEffectKeyAutocomplete(root, buildEffectKeyTokens(), {
+    selector: "input[data-effect-key-autocomplete]:not([data-ability-acquisition-change-key])"
+  });
+  activateEffectKeyAutocomplete(root, buildAbilityAcquisitionChangeKeyTokens(), {
+    selector: "input[data-ability-acquisition-change-key]"
+  });
 }
 
 function buildChangeTypeChoices(selected = ABILITY_CHANGE_TYPES.add) {

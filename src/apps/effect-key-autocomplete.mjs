@@ -5,11 +5,11 @@ const TOKEN_BEFORE_CARET = /[\p{L}_][\p{L}\p{N}_]*$/u;
 const MAX_SUGGESTIONS = 12;
 const MENU_VIEWPORT_PADDING = 12;
 
-export function activateEffectKeyAutocomplete(html, tokens = []) {
+export function activateEffectKeyAutocomplete(html, tokens = [], { selector = EFFECT_KEY_INPUT_SELECTOR } = {}) {
   const root = getHtmlRoot(html);
   if (!root || !tokens.length) return;
 
-  for (const input of root.querySelectorAll(EFFECT_KEY_INPUT_SELECTOR)) {
+  for (const input of root.querySelectorAll(selector)) {
     if (input.dataset.effectKeyAutocompleteActive === "true") continue;
     input.dataset.effectKeyAutocompleteActive = "true";
     new EffectKeyAutocomplete(input, tokens);

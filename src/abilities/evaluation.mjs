@@ -8,6 +8,7 @@ import {
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import { getEquipmentSlotSelectionKey, getSelectedEquipmentSlotKeys } from "../utils/equipment-slots.mjs";
+import { isAbilityAcquisitionChangeKey } from "../utils/ability-acquisition-change-keys.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 export function getAbilityEffectChanges(actor, item) {
@@ -21,7 +22,7 @@ export function getAbilityAcquisitionChanges(itemOrData) {
   return normalizeAbilityFunctions(itemOrData?.system?.functions ?? [])
     .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.acquisitionChanges)
     .flatMap(entry => entry.changes)
-    .filter(change => change.key && change.value !== "");
+    .filter(change => change.key && change.value !== "" && isAbilityAcquisitionChangeKey(change.key));
 }
 
 export function getAbilitySkillAdvancementBaseBonuses(actor, skillSettings = []) {

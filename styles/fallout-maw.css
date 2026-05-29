@@ -6835,6 +6835,7 @@ label.fallout-maw-mitigation-cell {
   background: rgba(232, 212, 136, 0.08);
   border-bottom: 1px solid rgba(212, 181, 93, 0.34);
   color: var(--fallout-maw-adv-accent-strong);
+  font-size: 1.05rem;
   font-weight: 700;
   padding: 0.55rem 0.75rem;
   text-align: center;
@@ -6845,6 +6846,7 @@ label.fallout-maw-mitigation-cell {
   background: rgba(10, 10, 10, 0.8);
   border: 1px solid rgba(212, 181, 93, 0.34);
   color: var(--fallout-maw-adv-text);
+  font-size: 1rem;
   margin: 0.55rem;
   min-height: 2rem;
   outline: 0;
@@ -6881,6 +6883,7 @@ label.fallout-maw-mitigation-cell {
   border: 1px solid rgba(212, 181, 93, 0.28);
   color: var(--fallout-maw-adv-accent-strong);
   display: flex;
+  font-size: 1rem;
   font-weight: 700;
   gap: 0.45rem;
   grid-column: 1 / -1;
@@ -6976,7 +6979,8 @@ label.fallout-maw-mitigation-cell {
 
 .fallout-maw-advancement-talent-name {
   flex: 1 1 auto;
-  font-size: 0.95rem;
+  font-size: 1rem;
+  font-weight: 600;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -7007,6 +7011,7 @@ label.fallout-maw-mitigation-cell {
   align-items: center;
   color: var(--fallout-maw-adv-text-soft);
   display: flex;
+  font-size: 1rem;
   font-style: italic;
   height: 100%;
   justify-content: center;
@@ -7016,6 +7021,7 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-advancement-talent-details-name {
   border-bottom: 1px solid rgba(212, 181, 93, 0.24);
   color: var(--fallout-maw-adv-accent-strong);
+  font-size: 1.1rem;
   font-weight: 700;
   margin-bottom: 0.65rem;
   padding-bottom: 0.35rem;
@@ -7029,6 +7035,7 @@ label.fallout-maw-mitigation-cell {
 
 .fallout-maw-advancement-talent-research-info div {
   color: var(--fallout-maw-adv-text);
+  font-size: 1rem;
   min-width: 0;
 }
 
@@ -7047,6 +7054,7 @@ label.fallout-maw-mitigation-cell {
   background: rgba(20, 20, 20, 0.85);
   border: 1px solid rgba(212, 181, 93, 0.38);
   color: var(--fallout-maw-adv-text);
+  font-size: 1rem;
   min-height: 2rem;
   padding: 0.35rem 0.55rem;
   text-transform: uppercase;
@@ -7066,6 +7074,8 @@ label.fallout-maw-mitigation-cell {
   background: rgba(0, 0, 0, 0.26);
   border: 1px solid rgba(212, 181, 93, 0.2);
   color: var(--fallout-maw-adv-text-soft);
+  font-size: 1rem;
+  font-weight: 600;
   margin-top: auto;
   padding: 0.35rem;
   text-align: center;

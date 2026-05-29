@@ -103,14 +103,14 @@ async function applyAbilityAcquisitionChanges(actor, item) {
     const key = String(change?.key ?? "").trim();
     if (!key.startsWith("system.")) continue;
 
-    const current = Number(foundry.utils.getProperty(actor, key)) || 0;
+    const current = Number(foundry.utils.getProperty(updates, key) ?? foundry.utils.getProperty(actor, key)) || 0;
     const value = Number(change?.value) || 0;
     let next = value;
     if (change.type === "add") next = current + value;
     else if (change.type === "multiply") next = current * value;
     else if (change.type === "upgrade") next = Math.max(current, value);
     else if (change.type === "downgrade") next = Math.min(current, value);
-    foundry.utils.setProperty(updates, key, next);
+    foundry.utils.setProperty(updates, key, Math.max(0, next));
   }
 
   if (Object.keys(foundry.utils.flattenObject(updates)).length) await actor.update(updates);

@@ -30,6 +30,7 @@ import {
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import { buildAbilityAcquisitionChangeKeyTokens } from "../utils/ability-acquisition-change-keys.mjs";
 import { captureApplicationScrollPositions, restoreApplicationScrollPositions } from "../utils/application-scroll.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
@@ -476,7 +477,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-delete-first-aid-need]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteFirstAidNeed(event));
     });
-    activateEffectKeyAutocomplete(this.element, buildEffectKeyTokens({ includeFirstAidHealing: true }));
+    activateItemEffectKeyAutocompletes(this.element);
     this.element?.querySelectorAll("[data-add-weapon-special-property]").forEach(button => {
       button.addEventListener("click", event => this.#onAddWeaponSpecialProperty(event));
     });
@@ -2835,13 +2836,25 @@ function getItemFunctionLabel(functionKey = "") {
   return game.i18n.localize("FALLOUTMAW.Item.Function");
 }
 
+function activateItemEffectKeyAutocompletes(root) {
+  if (!root) return;
+  activateEffectKeyAutocomplete(root, buildEffectKeyTokens({ includeFirstAidHealing: true }), {
+    selector: "input[data-effect-key-autocomplete]:not([data-ability-acquisition-change-key])"
+  });
+  activateEffectKeyAutocomplete(root, buildAbilityAcquisitionChangeKeyTokens(), {
+    selector: "input[data-ability-acquisition-change-key]"
+  });
+}
+
 function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0) {
   const type = String(entry?.type ?? ABILITY_FUNCTION_TYPES.effectChanges);
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index));
+  const isAcquisitionChanges = type === ABILITY_FUNCTION_TYPES.acquisitionChanges;
   return {
     ...entry,
     functionIndex,
-    typeLabel: type === ABILITY_FUNCTION_TYPES.acquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка",
+    isAcquisitionChanges,
+    typeLabel: isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка",
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index)),
     conditions,
     conditionGroups: buildAbilityConditionDisplayGroups(conditions),
