@@ -1588,6 +1588,10 @@
           {{/each}}
         </select>
       </label>
+      <label class="fallout-maw-inline-checkbox">
+        <span>Использовать как предмет</span>
+        <input type="checkbox" name="system.functions.tools.{{key}}.useAsItem" {{checked useAsItem}}>
+      </label>
     </div>
   </section>
   {{/if}}
@@ -1635,18 +1639,15 @@
       <section class="fallout-maw-craft-popover-section">
         <h3>{{craft.selectedNode.name}}</h3>
         <label>
-          <span>Количество</span>
+          <span>{{#if craft.selectedNode.isToolRequirement}}Расход инструмента{{else}}Количество{{/if}}</span>
           <input type="number" value="{{craft.selectedNode.quantity}}" min="1" step="1" data-craft-node-quantity="{{craft.selectedNode.id}}">
         </label>
-        {{#if craft.selectedNode.linked}}
-        <button type="button" data-craft-detach-node="{{craft.selectedNode.id}}">
-          <i class="fa-solid fa-trash"></i> Удалить
-        </button>
-        {{else}}
+        {{#if craft.selectedNode.isToolRequirement}}
+        <p>{{craft.selectedNode.toolRequirementLabel}}</p>
+        {{/if}}
         <button type="button" data-craft-attach-node="{{craft.selectedNode.id}}">
           <i class="fa-solid fa-link"></i> Прикрепить
         </button>
-        {{/if}}
         {{#if craft.attachSourceNode}}
         <p>Выберите предмет для связи.</p>
         <button type="button" data-craft-cancel-attach>
@@ -1658,11 +1659,6 @@
           <i class="fa-solid fa-up-right-from-square"></i> Извлечь
         </button>
         {{/if}}
-        {{#unless craft.selectedNode.root}}
-        <button type="button" data-craft-delete-node="{{craft.selectedNode.id}}">
-          <i class="fa-solid fa-trash"></i> Удалить
-        </button>
-        {{/unless}}
       </section>
       {{else if craft.selectedLink}}
       <section class="fallout-maw-craft-popover-section">
@@ -1679,6 +1675,10 @@
         <label>
           <span>Сложность</span>
           <input type="number" name="{{craft.linkFieldPrefix}}.{{craft.selectedLink.index}}.difficulty" value="{{craft.selectedLink.difficulty}}" min="0" step="1">
+        </label>
+        <label class="fallout-maw-inline-checkbox">
+          <span>Без проверок</span>
+          <input type="checkbox" data-craft-link-no-check="{{craft.selectedLink.id}}" {{checked craft.selectedLink.noCheck}}>
         </label>
         <button type="button" data-craft-delete-link="{{craft.selectedLink.id}}">
           <i class="fa-solid fa-trash"></i> Удалить

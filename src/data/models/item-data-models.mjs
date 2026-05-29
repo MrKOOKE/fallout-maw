@@ -465,6 +465,7 @@ function craftLinkField() {
     toNodeId: new StringField({ required: true, blank: false, initial: "" }),
     skillKey: new StringField({ required: true, blank: true, initial: "repair" }),
     difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
+    noCheck: new BooleanField({ required: true, initial: false }),
     bendX: new NumberField({ required: false, nullable: true, initial: null }),
     bendY: new NumberField({ required: false, nullable: true, initial: null }),
     fromAnchorSide: new StringField({ required: true, blank: true, initial: "" }),
@@ -492,6 +493,7 @@ function weaponRequirementField() {
 function toolFunctionField() {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
+    useAsItem: new BooleanField({ required: true, initial: false }),
     toolClass: new StringField({ required: true, blank: false, choices: ["D", "C", "B", "A", "S"], initial: "D" }),
     supply: new SchemaField({
       value: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),

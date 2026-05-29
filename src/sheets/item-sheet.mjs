@@ -12,6 +12,7 @@ import {
   ITEM_FUNCTIONS,
   createToolFunctionKey,
   getDamageSourceFunction,
+  getEnabledToolFunctions,
   getToolKeyFromFunctionKey,
   hasItemFunction
 } from "../utils/item-functions.mjs";
@@ -525,6 +526,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     workspace.querySelector("[data-craft-delete-node]")?.addEventListener("click", event => this.#onCraftDeleteNode(event));
     workspace.querySelector("[data-craft-cancel-attach]")?.addEventListener("click", event => this.#onCraftCancelAttach(event));
     workspace.querySelector("[data-craft-node-quantity]")?.addEventListener("change", event => this.#onCraftNodeQuantityChange(event));
+    workspace.querySelector("[data-craft-link-no-check]")?.addEventListener("change", event => this.#onCraftLinkNoCheckChange(event));
     this.element?.querySelectorAll("[data-craft-mode]").forEach(button => {
       button.addEventListener("click", event => this.#onCraftModeChange(event));
     });
@@ -1111,6 +1113,17 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     ));
     this.#craftSelection = { type: "node", id: nodeId };
     return this.#updateCraftRecipe({ nodes });
+  }
+
+  #onCraftLinkNoCheckChange(event) {
+    const linkId = String(event.currentTarget.dataset.craftLinkNoCheck ?? "");
+    if (!linkId) return undefined;
+    const noCheck = Boolean(event.currentTarget.checked);
+    const links = getCraftLinks(this.item).map(link => (
+      link.id === linkId ? { ...link, noCheck } : link
+    ));
+    this.#craftSelection = { type: "link", id: linkId };
+    return this.#updateCraftRecipe({ links });
   }
 
   #onCraftDeleteNode(event) {
@@ -1874,6 +1887,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       this.#functionPickerActive = false;
       return this.item.update({
         [`system.functions.tools.${toolKey}.enabled`]: true,
+        [`system.functions.tools.${toolKey}.useAsItem`]: false,
         [`system.functions.tools.${toolKey}.toolClass`]: "D",
         [`system.functions.tools.${toolKey}.supply.value`]: 0,
         [`system.functions.tools.${toolKey}.supply.max`]: 0,
@@ -3777,13 +3791,46 @@ function hasCraftRecipeData(craft = {}) {
 function prepareCraftNodeForDisplay(node, index, links) {
   const quantity = Math.max(1, toInteger(node.quantity) || 1);
   const linked = links.some(link => link.fromNodeId === node.id || link.toNodeId === node.id);
+  const toolRequirements = getCraftNodeToolRequirements(node);
   return {
     ...node,
     index,
     linked,
+    isToolRequirement: toolRequirements.length > 0,
+    toolRequirementLabel: formatCraftToolRequirementLabel(toolRequirements),
     quantity,
     hasQuantityBadge: quantity > 1
   };
+}
+
+function getCraftNodeToolRequirements(node = {}) {
+  const source = resolveCraftNodeSourceItem(node);
+  if (!source) return [];
+  return getEnabledToolFunctions(source)
+    .filter(tool => !tool.useAsItem)
+    .map(tool => ({
+      toolKey: String(tool.toolKey ?? ""),
+      toolClass: String(tool.toolClass ?? "D")
+    }))
+    .filter(tool => tool.toolKey);
+}
+
+function resolveCraftNodeSourceItem(node = {}) {
+  const uuid = String(node?.itemUuid ?? "").trim();
+  if (!uuid) return null;
+  try {
+    return globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function formatCraftToolRequirementLabel(requirements = []) {
+  if (!requirements.length) return "";
+  const toolLabels = new Map(getToolSettings().map(tool => [tool.key, tool.label]));
+  return requirements
+    .map(requirement => `${toolLabels.get(requirement.toolKey) ?? requirement.toolKey} ${requirement.toolClass}`)
+    .join(", ");
 }
 
 function getCraftBlocks(nodes = []) {
@@ -3801,6 +3848,7 @@ function prepareCraftLinkForDisplay(link, index, nodes, skillSettings = []) {
     index,
     title: `${from?.name ?? "?"} -> ${to?.name ?? "?"}`,
     difficulty: Math.max(0, toInteger(link.difficulty) || 60),
+    noCheck: Boolean(link.noCheck),
     skillChoices: skillSettings.map((skill, skillIndex) => ({
       key: skill.key,
       label: skill.label,
@@ -3842,7 +3890,23 @@ function getCraftNodesWithRoot(item) {
 function getCraftNodes(item) {
   return Array.from(getCraftRecipeData(item)?.nodes ?? [])
     .map(normalizeCraftNode)
+    .map(refreshCraftNodeFromSource)
     .filter(node => node.id);
+}
+
+function refreshCraftNodeFromSource(node = {}) {
+  if (node.root) return node;
+  const source = resolveCraftNodeSourceItem(node);
+  if (!source) return node;
+  const footprint = getCraftItemFootprint(source);
+  return normalizeCraftNode({
+    ...node,
+    name: source.name ?? node.name,
+    img: normalizeImagePath(source.img || node.img, FALLBACK_ICON),
+    type: source.type ?? node.type,
+    width: footprint.width,
+    height: footprint.height
+  });
 }
 
 function getCraftLinks(item) {
@@ -3939,6 +4003,7 @@ function normalizeCraftLink(link = {}) {
     toNodeId: String(link.toNodeId ?? ""),
     skillKey: String(link.skillKey ?? "repair"),
     difficulty: Math.max(0, toInteger(link.difficulty) || 60),
+    noCheck: Boolean(link.noCheck),
     bendX,
     bendY,
     fromAnchorSide: normalizeCraftAnchorSide(link.fromAnchorSide),
@@ -3959,6 +4024,7 @@ function getCraftFallbackLinkId(link = {}) {
     String(link.fromAnchorOffset ?? ""),
     String(link.toAnchorSide ?? ""),
     String(link.toAnchorOffset ?? ""),
+    String(link.noCheck ?? false),
     String(link.bendX ?? ""),
     String(link.bendY ?? "")
   ].join(":");
@@ -4011,6 +4077,7 @@ function getCraftNodesWithRootForMode(item, mode) {
 function getCraftNodesForMode(item, mode) {
   return Array.from(getCraftRecipeData(item, mode)?.nodes ?? [])
     .map(normalizeCraftNode)
+    .map(refreshCraftNodeFromSource)
     .filter(node => node.id);
 }
 
@@ -4966,6 +5033,7 @@ function buildToolFunctionEntries(item, toolSettings, skillSettings) {
       ...tool,
       functionKey: createToolFunctionKey(tool.key),
       enabled: Boolean(data.enabled),
+      useAsItem: Boolean(data.useAsItem),
       toolClass,
       classChoices: classChoices.map(value => ({
         value,

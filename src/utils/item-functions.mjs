@@ -181,6 +181,14 @@ export function getToolFunction(itemOrSystem = null, toolKey = "") {
   return getItemSystem(itemOrSystem).functions?.tools?.[toolKey] ?? {};
 }
 
+export function getEnabledToolFunctions(itemOrSystem = null) {
+  const tools = getItemSystem(itemOrSystem).functions?.tools;
+  if (!tools || typeof tools !== "object") return [];
+  return Object.entries(tools)
+    .filter(([, data]) => data?.enabled)
+    .map(([toolKey, data]) => ({ ...data, toolKey }));
+}
+
 function getInstalledModuleWeaponFunctions(itemOrSystem = null) {
   const primary = getWeaponFunction(itemOrSystem);
   const slots = Array.isArray(primary?.moduleSlots) ? primary.moduleSlots : [];

@@ -796,6 +796,10 @@
     0 0 16px rgba(238, 214, 135, 0.18);
 }
 
+.fallout-maw-craft-node.tool-requirement {
+  cursor: pointer;
+}
+
 .fallout-maw-craft-node.selected .fallout-maw-craft-node-image,
 .fallout-maw-craft-node.attach-target .fallout-maw-craft-node-image {
   border-color: rgba(244, 223, 145, 0.98);
@@ -889,6 +893,89 @@
   display: inline-flex;
   gap: 0.4rem;
   justify-content: center;
+}
+
+.fallout-maw-craft-tool-picker {
+  background: rgba(6, 6, 8, 0.94);
+  border: 1px solid rgba(210, 185, 145, 0.42);
+  border-radius: 4px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  color: var(--fallout-maw-text);
+  cursor: default;
+  left: calc(100% + 0.75rem);
+  padding: 0.65rem;
+  pointer-events: auto;
+  position: absolute;
+  top: 0;
+  width: 22rem;
+  z-index: 12;
+}
+
+.fallout-maw-craft-tool-picker h3 {
+  border: 0;
+  color: #fff3d8;
+  font-size: 1rem;
+  line-height: 1.2;
+  margin: 0 0 0.55rem;
+}
+
+.fallout-maw-craft-tool-picker-group,
+.fallout-maw-craft-tool-picker-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.fallout-maw-craft-tool-picker-group p {
+  margin: 0;
+}
+
+.fallout-maw-craft-tool-picker-list label {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(232, 212, 136, 0.25);
+  border-radius: 4px;
+  box-shadow: none;
+  color: #e8d488;
+  cursor: pointer;
+  display: grid;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  gap: 0.5rem;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  min-height: 2.35rem;
+  padding: 0.25rem 0.45rem;
+  width: 100%;
+}
+
+.fallout-maw-craft-tool-picker-list label:hover,
+.fallout-maw-craft-tool-picker-list label.selected {
+  background: rgba(232, 212, 136, 0.12);
+  border-color: rgba(238, 214, 135, 0.95);
+  box-shadow: 0 0 10px rgba(232, 212, 136, 0.18);
+}
+
+.fallout-maw-craft-tool-picker-list label.missing {
+  opacity: 0.62;
+}
+
+.fallout-maw-craft-tool-picker-list input {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.fallout-maw-craft-tool-picker-list img {
+  border: 1px solid rgba(210, 185, 145, 0.38);
+  height: 2rem;
+  object-fit: cover;
+  width: 2rem;
+}
+
+.fallout-maw-craft-tool-picker-list span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fallout-maw-effects-tab {
