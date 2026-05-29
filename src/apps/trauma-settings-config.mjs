@@ -190,7 +190,13 @@ export class TraumaGroupSettingsConfig extends FalloutMaWFormApplicationV2 {
     const ids = getLimbIds(target);
     const limb = this.settings.groups?.[ids.groupId]?.limbs?.[ids.limbKey];
     if (!limb || !ids.stageId) return undefined;
-    limb.stages = limb.stages.filter(stage => stage.id !== ids.stageId);
+    const stage = limb.stages.find(entry => entry.id === ids.stageId);
+    if (!stage) return undefined;
+    delete stage.profiles?.[ids.damageTypeKey];
+    limb.stages = limb.stages.filter(entry => (
+      entry.id !== ids.stageId
+      || Object.values(entry.profiles ?? {}).some(profile => isConfiguredTraumaProfile(profile))
+    ));
     return this.forceRender();
   }
 

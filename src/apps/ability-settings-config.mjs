@@ -86,7 +86,6 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
     if (index >= 0) category.abilities[index] = normalized;
     else category.abilities.push(normalized);
     this.catalog = await setAbilityCatalog(this.catalog);
-    await this.forceRender();
     return normalized;
   }
 

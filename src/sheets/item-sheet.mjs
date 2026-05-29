@@ -588,7 +588,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       this.#craftSelection = null;
       this.#craftAttachSourceNodeId = "";
       this.#hideCraftSnapPreview();
-      return this.render({ force: true });
+      return this.render();
     }
     if (event.button !== 2) return;
     event.preventDefault();
@@ -849,7 +849,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (this.#craftAttachSourceNodeId) {
       if (nodeId !== this.#craftAttachSourceNodeId) return this.#createCraftLink(this.#craftAttachSourceNodeId, nodeId, event);
       this.#craftAttachSourceNodeId = "";
-      return this.render({ force: true });
+      return this.render();
     }
 
     const nodes = getCraftNodesWithRoot(this.item);
@@ -982,7 +982,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (!drag.moved) {
       this.#craftSelection = drag.nodeId ? { type: "node", id: drag.nodeId } : { type: "block", id: drag.blockId };
       this.#craftAttachSourceNodeId = "";
-      return this.render({ force: true });
+      return this.render();
     }
     const deltaX = Number(drag.resolvedDeltaX ?? drag.deltaX ?? 0) || 0;
     const deltaY = Number(drag.resolvedDeltaY ?? drag.deltaY ?? 0) || 0;
@@ -1042,7 +1042,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.#craftSelection = null;
     this.#craftAttachSourceNodeId = "";
     this.#craftViewportOverride = null;
-    return this.render({ force: true });
+    return this.render();
   }
 
   async #onCraftReverseCreation(event) {
@@ -1083,13 +1083,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (!nodeId) return undefined;
     this.#craftSelection = null;
     this.#craftAttachSourceNodeId = nodeId;
-    return this.render({ force: true });
+    return this.render();
   }
 
   #onCraftCancelAttach(event) {
     event.preventDefault();
     this.#craftAttachSourceNodeId = "";
-    return this.render({ force: true });
+    return this.render();
   }
 
   #onCraftDetachNode(event) {
@@ -1400,7 +1400,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       event.stopPropagation();
       this.#craftSelection = { type: "link", id: link.id };
       this.#craftAttachSourceNodeId = "";
-      this.render({ force: true });
+      this.render();
     });
     svg.appendChild(group);
   }
@@ -1451,7 +1451,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.#craftAttachSourceNodeId = "";
     if (!drag.moved) {
       this.#craftSelection = { type: "link", id: drag.linkId };
-      return this.render({ force: true });
+      return this.render();
     }
     const svg = this.element?.querySelector("[data-craft-links]");
     if (!svg) return undefined;
@@ -1705,7 +1705,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.preventDefault();
     this.#functionPickerActive = true;
     await this.#submitCurrentForm();
-    return this.render({ force: true });
+    return this.render();
   }
 
   #onChooseAbilityFunction(event) {
@@ -1817,7 +1817,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       updateData[path.replace(/\.healthTarget$/, ".limbKey")] = ABILITY_HEALTH_LIMB_ALL;
     }
     await this.#submitCurrentForm(updateData);
-    return this.render({ force: true });
+    return this.render();
   }
 
   #onAbilityOnlyFreeChange(event) {
@@ -1854,7 +1854,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   #onAddItemFunction(event) {
     event.preventDefault();
     this.#functionPickerActive = true;
-    return this.render({ force: true });
+    return this.render();
   }
 
   #onChooseItemFunction(event) {

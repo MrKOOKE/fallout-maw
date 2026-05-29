@@ -52,7 +52,7 @@ export class FalloutMaWFormApplicationV2 extends HandlebarsApplicationMixin(Appl
   }
 
   forceRender() {
-    return this.render({ force: true });
+    return this.render();
   }
 
   #captureScrollPositions() {

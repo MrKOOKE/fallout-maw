@@ -28,6 +28,7 @@ const TextEditor = foundry.applications.ux.TextEditor.implementation;
 export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
   #activeTab = "details";
   #functionPickerActive = false;
+  #saveDebounced;
 
   constructor(catalogApp, categoryId, abilityId, options = {}) {
     super(options);
@@ -35,6 +36,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.categoryId = categoryId;
     this.abilityId = abilityId;
     this.ability = normalizeAbilityEntry(catalogApp.getAbility(categoryId, abilityId));
+    this.#saveDebounced = foundry.utils.debounce(() => void this.#persist(), 250);
   }
 
   static DEFAULT_OPTIONS = {
@@ -121,6 +123,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.form?.addEventListener("input", this.#onAutosaveInput);
+    this.form?.addEventListener("change", this.#onAutosaveChange);
     this.element?.querySelector?.("[data-choose-ability-function]")?.addEventListener("change", event => this.#onChooseFunction(event));
     this.element?.querySelectorAll?.("[data-field='conditionType']")?.forEach(select => {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
@@ -135,17 +139,24 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
   }
 
   async _processFormData(_event, _form, _formData) {
-    this.#syncFromForm();
-    this.ability = await this.catalogApp.saveAbility(this.categoryId, this.ability);
-    ui.notifications.info("Способность сохранена.");
-    return this.forceRender();
+    return this.#persist();
   }
+
+  #onAutosaveInput = event => {
+    if (!event.target?.closest?.("[data-field]")) return;
+    this.#saveDebounced();
+  };
+
+  #onAutosaveChange = event => {
+    if (!event.target?.closest?.("[data-field]")) return;
+    return this.#persist();
+  };
 
   static #onSelectTab(event, target) {
     event.preventDefault();
     this.#syncFromForm();
     this.#activeTab = target.dataset.tab ?? "details";
-    return this.forceRender();
+    return this.#persist({ render: true, sync: false });
   }
 
   static #onEditAbilityImage(event) {
@@ -159,7 +170,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
           ...this.ability,
           img: path
         });
-        this.forceRender();
+        void this.#persist({ render: true, sync: false });
       }
     });
     return picker.render(true);
@@ -170,7 +181,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.#syncFromForm();
     this.#functionPickerActive = true;
     this.#activeTab = "functions";
-    return this.forceRender();
+    return this.#persist({ render: true, sync: false });
   }
 
   #onChooseFunction(event) {
@@ -181,11 +192,12 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.ability.system.functions.push(createAbilityFunction(selected));
     this.#functionPickerActive = false;
     this.#activeTab = "functions";
-    return this.forceRender();
+    return this.#persist({ render: true, sync: false });
   }
 
   #onConditionTypeChange(event) {
     event.preventDefault();
+    event.stopPropagation();
     this.#syncFromForm();
     if (event.currentTarget?.dataset?.field === "conditionHealthTarget") {
       const functionRow = event.currentTarget.closest("[data-ability-function-row]");
@@ -196,14 +208,15 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       if (condition) condition.limbKey = ABILITY_HEALTH_LIMB_ALL;
     }
     this.#activeTab = "functions";
-    return this.forceRender();
+    return this.#persist({ render: true, sync: false });
   }
 
   #onAcquisitionRequirementTypeChange(event) {
     event.preventDefault();
+    event.stopPropagation();
     this.#syncFromForm();
     this.#activeTab = "details";
-    return this.forceRender();
+    return this.#persist({ render: true, sync: false });
   }
 
   static #onDeleteFunction(event, target) {
@@ -212,7 +225,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const row = target.closest("[data-ability-function-row]");
     const index = getRowIndex(this.form, "[data-ability-function-row]", row);
     if (index >= 0) this.ability.system.functions.splice(index, 1);
-    return this.forceRender();
+    return this.#persist({ render: true, sync: false });
   }
 
   static #onAddFunctionChange(event, target) {
@@ -220,7 +233,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.#syncFromForm();
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", target.closest("[data-ability-function-row]"));
     if (functionIndex >= 0) this.ability.system.functions[functionIndex]?.changes?.push(createAbilityChange());
-    return this.forceRender();
+    return this.#persist({ render: true, sync: false });
   }
 
   static #onDeleteFunctionChange(event, target) {
@@ -229,7 +242,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", target.closest("[data-ability-function-row]"));
     const changeIndex = getRowIndex(target.closest("[data-ability-function-row]"), "[data-ability-change-row]", target.closest("[data-ability-change-row]"));
     if (functionIndex >= 0 && changeIndex >= 0) this.ability.system.functions[functionIndex]?.changes?.splice(changeIndex, 1);
-    return this.forceRender();
+    return this.#persist({ render: true, sync: false });
   }
 
   static #onAddFunctionCondition(event, target) {
@@ -238,7 +251,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const functionRow = target.closest("[data-ability-function-row]");
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
     if (functionIndex >= 0) this.ability.system.functions[functionIndex]?.conditions?.push(createAbilityCondition(""));
-    return this.forceRender();
+    return this.#persist({ render: true, sync: false });
   }
 
   static #onAddFunctionConditionAlternative(event, target) {
@@ -250,12 +263,12 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const conditionIndex = getRowIndex(functionRow, "[data-ability-condition-row]", conditionRow);
     const conditions = this.ability.system.functions?.[functionIndex]?.conditions;
     const condition = conditions?.[conditionIndex];
-    if (!condition) return this.forceRender();
+    if (!condition) return this.#persist({ render: true, sync: false });
 
     const groupId = String(condition.groupId ?? "").trim() || foundry.utils.randomID();
     condition.groupId = groupId;
     conditions.splice(conditionIndex + 1, 0, createAbilityCondition({ type: "", groupId }));
-    return this.forceRender();
+    return this.#persist({ render: true, sync: false });
   }
 
   static #onDeleteFunctionCondition(event, target) {
@@ -268,7 +281,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     if (functionIndex >= 0 && conditionIndex >= 0) {
       this.ability.system.functions[functionIndex]?.conditions?.splice(conditionIndex, 1);
     }
-    return this.forceRender();
+    return this.#persist({ render: true, sync: false });
   }
 
   static #onAddFunctionPenalty(event, target) {
@@ -277,7 +290,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", target.closest("[data-ability-function-row]"));
     const entry = this.ability.system.functions[functionIndex];
     if (entry?.conditions?.some(condition => isRuntimeCondition(condition?.type))) entry.penalties.push(createAbilityChange());
-    return this.forceRender();
+    return this.#persist({ render: true, sync: false });
   }
 
   static #onDeleteFunctionPenalty(event, target) {
@@ -287,7 +300,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const penaltyIndex = getRowIndex(functionRow, "[data-ability-penalty-row]", target.closest("[data-ability-penalty-row]"));
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
     if (functionIndex >= 0 && penaltyIndex >= 0) this.ability.system.functions[functionIndex]?.penalties?.splice(penaltyIndex, 1);
-    return this.forceRender();
+    return this.#persist({ render: true, sync: false });
   }
 
   static #onAddAcquisitionRequirement(event) {
@@ -296,7 +309,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.ability.system.acquisitionRequirements ??= [];
     this.ability.system.acquisitionRequirements.push(createAbilityAcquisitionCondition(""));
     this.#activeTab = "details";
-    return this.forceRender();
+    return this.#persist({ render: true, sync: false });
   }
 
   static #onDeleteAcquisitionRequirement(event, target) {
@@ -305,7 +318,15 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     const index = getRowIndex(this.form, "[data-acquisition-requirement-row]", target.closest("[data-acquisition-requirement-row]"));
     if (index >= 0) this.ability.system.acquisitionRequirements?.splice(index, 1);
     this.#activeTab = "details";
-    return this.forceRender();
+    return this.#persist({ render: true, sync: false });
+  }
+
+  async #persist({ render = false, sync = true } = {}) {
+    if (sync) this.#syncFromForm();
+    const saved = await this.catalogApp.saveAbility(this.categoryId, this.ability);
+    if (saved) this.ability = saved;
+    if (render) return this.render();
+    return saved;
   }
 
   #syncFromForm() {

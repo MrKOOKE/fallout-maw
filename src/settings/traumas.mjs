@@ -147,14 +147,23 @@ function normalizeTraumaLimb(value = {}, limb = {}, damageTypes = [], legacyStag
 }
 
 function normalizeTraumaStages(stages = [], damageTypes = []) {
-  const seenIds = new Set();
-  return stages
-    .map((stage, index) => normalizeTraumaStage(stage, index, damageTypes))
-    .filter(stage => {
-      if (seenIds.has(stage.id)) return false;
-      seenIds.add(stage.id);
-      return true;
-    })
+  const merged = new Map();
+  for (const [index, sourceStage] of stages.entries()) {
+    const stage = normalizeTraumaStage(sourceStage, index, damageTypes);
+    const key = String(stage.thresholdPercent);
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, stage);
+      continue;
+    }
+
+    for (const damageType of damageTypes) {
+      const profile = stage.profiles?.[damageType.key];
+      if (isConfiguredTraumaProfile(profile)) existing.profiles[damageType.key] = profile;
+    }
+  }
+
+  return Array.from(merged.values())
     .sort((left, right) => right.thresholdPercent - left.thresholdPercent);
 }
 
@@ -186,6 +195,15 @@ function normalizeTraumaProfile(value = {}, damageType = {}, thresholdPercent = 
     effects: normalizeTraumaEffects(hasContent ? value.effects : []),
     thresholdPercent
   };
+}
+
+function isConfiguredTraumaProfile(profile) {
+  if (!profile) return false;
+  return Boolean(
+    String(profile.name ?? "").trim()
+    || String(profile.img ?? "").trim()
+    || (profile.effects ?? []).length
+  );
 }
 
 function normalizeHealingToolClass(value) {

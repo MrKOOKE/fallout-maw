@@ -1070,23 +1070,31 @@ class WeaponAttackController {
   }
 
   resolveVolleyDamageAgainstTarget(target, geometry, blastOutcome) {
-    const limbKey = selectRandomLimbKey(target.actor);
     const falloff = getVolleyDamageFalloff(target, geometry);
     const baseDamage = Math.round(getWeaponDamage(this.weapon, this.weaponFunctionId) * falloff);
     const damageAmount = getCriticalDamageAmount(this.weapon, baseDamage, blastOutcome.outcome, this.weaponFunctionId);
-    return buildWeaponDamageRequests(this.weapon, {
-      actor: target.actor,
-      limbKey,
-      amount: damageAmount,
-      source: {
-        weaponUuid: this.weapon.uuid,
-        actionKey: this.actionKey,
-        attackerUuid: this.token.actor.uuid,
-        tokenId: this.token.id,
-        blastCenter: serializePoint(geometry.end),
-        blastRadius: getVolleyDamageRadius(this.weapon, this.weaponFunctionId)
-      }
-    }, this.weaponFunctionId);
+    const pelletDamages = distributeIntegerAmount(damageAmount, Array(getWeaponPelletCount(this.weapon, this.weaponFunctionId)).fill(1));
+    const requests = [];
+    for (let pelletIndex = 0; pelletIndex < pelletDamages.length; pelletIndex += 1) {
+      const amount = pelletDamages[pelletIndex] ?? 0;
+      if (amount <= 0) continue;
+      const limbKey = selectRandomLimbKey(target.actor);
+      requests.push(...buildWeaponDamageRequests(this.weapon, {
+        actor: target.actor,
+        limbKey,
+        amount,
+        source: {
+          weaponUuid: this.weapon.uuid,
+          actionKey: this.actionKey,
+          attackerUuid: this.token.actor.uuid,
+          tokenId: this.token.id,
+          blastCenter: serializePoint(geometry.end),
+          blastRadius: getVolleyDamageRadius(this.weapon, this.weaponFunctionId),
+          pelletIndex
+        }
+      }, this.weaponFunctionId));
+    }
+    return requests;
   }
 
   async resolveAimedAttackAgainstTarget(target, { limbKey = "", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {

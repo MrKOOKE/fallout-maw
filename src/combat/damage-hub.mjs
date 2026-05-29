@@ -591,9 +591,7 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
     }
   }
   if (batchResult?.bleedingEntries?.length) {
-    for (const entry of batchResult.bleedingEntries) {
-      await createBleedingDamageEffect(actor, entry);
-    }
+    await createCombinedBleedingDamageEffect(actor, batchResult.bleedingEntries);
   }
   const results = [batchResult, ...singleResults].filter(Boolean);
   if (createSummary) await publishDamageSummaryMessage(results);
@@ -1416,27 +1414,98 @@ async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = ""
 }
 
 async function createBleedingDamageEffect(actor, { damageType = {}, limbKey = "", scope = SCOPE_HEALTH, healthDelta = 0, source = {}, worldTime = null } = {}) {
-  if (!canCreateLimbTimedDamageEffect(actor, limbKey)) return [];
+  const effectData = buildBleedingDamageEffectData(actor, [{ damageType, limbKey, scope, healthDelta, source, worldTime }]);
+  if (!effectData) return [];
+  return actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+}
+
+async function createCombinedBleedingDamageEffect(actor, entries = []) {
+  const effectData = buildBleedingDamageEffectData(actor, entries);
+  if (!effectData) return [];
+  return actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+}
+
+function buildBleedingDamageEffectData(actor, entries = []) {
+  const bleedingEntries = (Array.isArray(entries) ? entries : [entries])
+    .map(entry => buildBleedingDamageEffectEntry(actor, entry))
+    .filter(Boolean);
+  if (!bleedingEntries.length) return null;
+
+  const totalTicks = Math.max(...bleedingEntries.map(entry => entry.tickAmounts.length));
+  const startTime = Math.min(...bleedingEntries.map(entry => entry.startTime));
+  const endTime = startTime + (ROUND_SECONDS * totalTicks);
+  const tickAmounts = Array.from({ length: totalTicks }, (_value, index) => (
+    bleedingEntries.reduce((sum, entry) => sum + Math.max(0, toInteger(entry.tickAmounts[index])), 0)
+  ));
+  if (!tickAmounts.some(amount => amount > 0)) return null;
+
+  const names = new Set(bleedingEntries.map(entry => entry.effectName).filter(Boolean));
+  const limbs = new Set(bleedingEntries.map(entry => entry.limbKey));
+  const scopes = new Set(bleedingEntries.map(entry => entry.scope));
+  const effectName = names.size === 1 ? bleedingEntries[0].effectName : "РљСЂРѕРІРѕС‚РµС‡РµРЅРёРµ";
+  const img = bleedingEntries.find(entry => entry.img)?.img || "icons/skills/wounds/blood-drip-droplet-red.webp";
+
+  return {
+    type: "base",
+    name: effectName,
+    img,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    flags: {
+      [TRAUMA_FLAG_SCOPE]: {
+        kind: "temporary",
+        [DAMAGE_EFFECT_FLAG_KEY]: {
+          kind: BLEEDING_DAMAGE_EFFECT_KIND,
+          damageTypeKey: BLEEDING_DAMAGE_TYPE_KEY,
+          sourceDamageTypeKey: bleedingEntries.length === 1 ? bleedingEntries[0].sourceDamageTypeKey : "",
+          limbKey: limbs.size === 1 ? bleedingEntries[0].limbKey : "",
+          scope: scopes.size === 1 ? bleedingEntries[0].scope : SCOPE_HEALTH_AND_LIMB,
+          tickAmounts,
+          entries: bleedingEntries.map(entry => ({
+            sourceDamageTypeKey: entry.sourceDamageTypeKey,
+            limbKey: entry.limbKey,
+            scope: entry.scope,
+            tickAmounts: entry.tickAmounts,
+            source: entry.source
+          })),
+          totalTicks,
+          remainingTicks: totalTicks,
+          intervalSeconds: ROUND_SECONDS,
+          startTime,
+          endTime,
+          nextTickTime: startTime + ROUND_SECONDS,
+          source: bleedingEntries.length === 1 ? bleedingEntries[0].source : { combined: true }
+        }
+      }
+    },
+    system: { changes: [] }
+  };
+}
+
+function buildBleedingDamageEffectEntry(actor, { damageType = {}, limbKey = "", scope = SCOPE_HEALTH, healthDelta = 0, source = {}, worldTime = null } = {}) {
+  if (!canCreateLimbTimedDamageEffect(actor, limbKey)) return null;
   const settings = damageType?.settings?.bleeding;
-  if (!shouldCreateBleedingDamageEffect(damageType, settings, source)) return [];
+  if (!shouldCreateBleedingDamageEffect(damageType, settings, source)) return null;
 
   const totalAmount = roundDamageAmount((Number(healthDelta) || 0) * (Number(settings.percent) || 0) / 100);
-  if (totalAmount <= 0) return [];
+  if (totalAmount <= 0) return null;
 
   const durationSeconds = Math.max(1, toInteger(settings.durationSeconds || ROUND_SECONDS));
   const tickCount = Math.max(1, Math.ceil(durationSeconds / ROUND_SECONDS));
   const tickAmounts = distributeIntegerAmountAcrossTicks(totalAmount, tickCount);
-  if (!tickAmounts.some(amount => amount > 0)) return [];
+  if (!tickAmounts.some(amount => amount > 0)) return null;
 
   const startTime = Number.isFinite(Number(worldTime)) ? Number(worldTime) : (Number(game.time?.worldTime) || 0);
-  const endTime = startTime + (ROUND_SECONDS * tickCount);
   const effectName = String(settings.effectName || "Кровотечение").trim();
-  return actor.createEmbeddedDocuments("ActiveEffect", [{
-    type: "base",
-    name: effectName,
+  return {
+    sourceDamageTypeKey: damageType?.key ?? "",
+    limbKey,
+    scope,
+    tickAmounts,
+    startTime,
+    effectName,
     img: String(settings.img || "icons/skills/wounds/blood-drip-droplet-red.webp"),
-    disabled: false,
-    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    source,
     flags: {
       [TRAUMA_FLAG_SCOPE]: {
         kind: "temporary",
@@ -1451,14 +1520,14 @@ async function createBleedingDamageEffect(actor, { damageType = {}, limbKey = ""
           remainingTicks: tickCount,
           intervalSeconds: ROUND_SECONDS,
           startTime,
-          endTime,
+          endTime: startTime + (ROUND_SECONDS * tickCount),
           nextTickTime: startTime + ROUND_SECONDS,
           source
         }
       }
     },
     system: { changes: [] }
-  }]);
+  };
 }
 
 function canCreateLimbTimedDamageEffect(actor, limbKey = "") {
@@ -2202,21 +2271,8 @@ function collectBleedingDamageEffectTicks(effect, data, now) {
   }
 
   const startIndex = Math.max(0, totalTicks - toInteger(data.remainingTicks));
-  const amount = tickAmounts.slice(startIndex, startIndex + dueTicks)
-    .reduce((sum, value) => sum + Math.max(0, toInteger(value)), 0);
   const entries = dueTicks > 0
-    ? [{
-      limbKey: data.limbKey,
-      amount,
-      damageTypeKey: BLEEDING_DAMAGE_TYPE_KEY,
-      scope: data.scope,
-      source: markBleedingDamageTickSource({
-        ...(data.source ?? {}),
-        bleedingDamageEffectUuid: effect.uuid,
-        dueTicks,
-        worldTime: Number.isFinite(Number(now)) ? Number(now) : (Number(game.time?.worldTime) || 0)
-      })
-    }]
+    ? buildBleedingDamageTickRequests(effect, data, startIndex, dueTicks, now)
     : [];
   const shouldDelete = remainingTicks <= 0 || (Number(data.endTime) && now >= Number(data.endTime) && dueTicks === 0);
   return {
@@ -2232,6 +2288,39 @@ function collectBleedingDamageEffectTicks(effect, data, now) {
       : null,
     deleteEffectId: shouldDelete ? effect.id : ""
   };
+}
+
+function buildBleedingDamageTickRequests(effect, data = {}, startIndex = 0, dueTicks = 0, now = null) {
+  const worldTime = Number.isFinite(Number(now)) ? Number(now) : (Number(game.time?.worldTime) || 0);
+  const sources = Array.isArray(data.entries) && data.entries.length
+    ? data.entries
+    : [{
+      limbKey: data.limbKey,
+      scope: data.scope,
+      tickAmounts: Array.isArray(data.tickAmounts) ? data.tickAmounts : [],
+      source: data.source
+    }];
+
+  return sources
+    .filter(entry => !entry.limbKey || !isLimbDestroyed(effect?.parent, entry.limbKey))
+    .map(entry => {
+      const amounts = Array.isArray(entry.tickAmounts) ? entry.tickAmounts : [];
+      const amount = amounts.slice(startIndex, startIndex + dueTicks)
+        .reduce((sum, value) => sum + Math.max(0, toInteger(value)), 0);
+      return {
+        limbKey: entry.limbKey,
+        amount,
+        damageTypeKey: BLEEDING_DAMAGE_TYPE_KEY,
+        scope: entry.scope,
+        source: markBleedingDamageTickSource({
+          ...(entry.source ?? {}),
+          bleedingDamageEffectUuid: effect.uuid,
+          dueTicks,
+          worldTime
+        })
+      };
+    })
+    .filter(entry => entry.amount > 0);
 }
 
 function collectPeriodicHealingEffectTicks(effect, data, now) {
@@ -4046,7 +4135,7 @@ async function createTriggeredTraumas(actor, { limbKey, damageTypeKey, previousV
   const triggeredStages = stages.filter(stage => (
     previousPercent > Number(stage.thresholdPercent)
     && nextPercent <= Number(stage.thresholdPercent)
-    && !existingLimbTraumas.some(item => item.system?.stageId === stage.id)
+    && !existingLimbTraumas.some(item => hasTraumaStageEntry(item, stage, limbKey, damageTypes))
   )).sort((left, right) => Number(right.thresholdPercent) - Number(left.thresholdPercent));
   if (!triggeredStages.length) return [];
 
@@ -4084,6 +4173,15 @@ async function createTriggeredTraumas(actor, { limbKey, damageTypeKey, previousV
     await actor.deleteEmbeddedDocuments("Item", existingLimbTraumas.map(item => item.id), { animate: false });
   }
   return created;
+}
+
+function hasTraumaStageEntry(item, stage = {}, limbKey = "", damageTypes = []) {
+  if (item.system?.stageId === stage.id) return true;
+  const thresholdPercent = toInteger(stage.thresholdPercent);
+  return getTraumaSourceEntries(item, damageTypes).some(source => (
+    source.limbKey === limbKey
+    && toInteger(source.thresholdPercent) === thresholdPercent
+  ));
 }
 
 function buildTraumaItemData(actor, { limb, limbKey, limbSetId, stage, damageTypes, damageTypeKey, latestDamage, snapshot, nextValue }) {
@@ -4289,7 +4387,10 @@ function combineDamageTypeEntries(entries = [], damageTypes = []) {
 
 function selectTraumaProfile(stage, snapshot = {}, latestDamageTypeKey = "", latestDamage = 0) {
   const weighted = Object.entries(snapshot ?? {})
-    .map(([key, value]) => [key, Math.max(0, Number(value) || 0) + (key === latestDamageTypeKey ? Math.max(0, Number(latestDamage) || 0) : 0)])
+    .map(([key, value]) => [key, Math.max(
+      Math.max(0, Number(value) || 0),
+      key === latestDamageTypeKey ? Math.max(0, Number(latestDamage) || 0) : 0
+    )])
     .sort((left, right) => right[1] - left[1]);
   if (latestDamageTypeKey && !weighted.some(([key]) => key === latestDamageTypeKey)) {
     weighted.push([latestDamageTypeKey, Math.max(0, Number(latestDamage) || 0)]);
