@@ -101,15 +101,55 @@ export class AbilityDataModel extends BaseItemDataModel {
 function abilityFunctionField() {
   return new SchemaField({
     id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
-    type: new StringField({ required: true, blank: false, choices: ["characteristicBonus", "skillBonus"], initial: "characteristicBonus" }),
+    type: new StringField({
+      required: true,
+      blank: false,
+      choices: ["effectChanges", "acquisitionChanges", "characteristicBonus", "skillBonus"],
+      initial: "effectChanges"
+    }),
+    changes: new ArrayField(abilityChangeField(), { required: true, initial: [] }),
+    conditions: new ArrayField(abilityConditionField(), { required: true, initial: [] }),
+    penalties: new ArrayField(abilityChangeField(), { required: true, initial: [] }),
     target: new StringField({ required: true, blank: true, initial: "" }),
-    value: new NumberField({ required: true, integer: true, initial: 0 }),
+    value: new NumberField({ required: true, initial: 0 }),
     condition: new SchemaField({
       enabled: new BooleanField({ required: true, initial: false }),
       resource: new StringField({ required: true, blank: false, choices: ["health"], initial: "health" }),
-      operator: new StringField({ required: true, blank: false, choices: ["lte", "gte"], initial: "lte" }),
-      percent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 50 })
+      operator: new StringField({ required: true, blank: false, choices: ["lte", "gte", "occupied", "empty"], initial: "lte" }),
+      percent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 50 }),
+      equipmentSlotKey: new StringField({ required: true, blank: true, initial: "" })
     })
+  });
+}
+
+function abilityChangeField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+    key: new StringField({ required: true, blank: true, initial: "" }),
+    type: new StringField({
+      required: true,
+      blank: false,
+      choices: ["add", "multiply", "override", "upgrade", "downgrade"],
+      initial: "add"
+    }),
+    value: new StringField({ required: true, blank: true, initial: "0" }),
+    phase: new StringField({ required: true, blank: false, initial: "initial" }),
+    priority: new NumberField({ required: false, nullable: true, integer: true, initial: null })
+  });
+}
+
+function abilityConditionField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+    type: new StringField({
+      required: true,
+      blank: true,
+      choices: ["", "healthPercent", "equipmentSlotOccupied"],
+      initial: ""
+    }),
+    operator: new StringField({ required: true, blank: false, choices: ["lte", "gte", "occupied", "empty"], initial: "lte" }),
+    percent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 50 }),
+    equipmentSlotKey: new StringField({ required: true, blank: true, initial: "" })
   });
 }
 

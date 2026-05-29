@@ -251,40 +251,151 @@
   <section class="fallout-maw-panel" data-ability-function-row data-function-id="{{id}}" data-function-index="{{@index}}" data-function-type="{{type}}">
     <div class="fallout-maw-panel-header">
       <h2>{{typeLabel}}</h2>
-      <button type="button" class="fallout-maw-icon-button" data-delete-ability-function title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      <div class="fallout-maw-inline-controls">
+        <button type="button" data-add-ability-change><i class="fa-solid fa-plus"></i> Добавить строку</button>
+        <button type="button" data-add-ability-condition><i class="fa-solid fa-plus"></i> Добавить условие</button>
+        <button type="button" class="fallout-maw-icon-button" data-delete-ability-function title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
     </div>
     <input type="hidden" name="system.functions.{{@index}}.id" value="{{id}}">
     <input type="hidden" name="system.functions.{{@index}}.type" value="{{type}}">
-    <input type="hidden" name="system.functions.{{@index}}.condition.resource" value="health">
-    <div class="fallout-maw-list-grid three-columns">
-      <label>
-        <span>Цель</span>
-        <select name="system.functions.{{@index}}.target">
-          {{#each targetChoices}}
-          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-          {{/each}}
-        </select>
-      </label>
-      <label>
-        <span>Изменение</span>
-        <input type="number" name="system.functions.{{@index}}.value" value="{{value}}" step="1">
-      </label>
-      <label class="fallout-maw-inline-checkbox">
-        <span>Условие по ОЗ</span>
-        <input type="checkbox" name="system.functions.{{@index}}.condition.enabled" {{checked conditionEnabled}}>
-      </label>
-      <label>
-        <span>Оператор</span>
-        <select name="system.functions.{{@index}}.condition.operator">
-          <option value="lte" {{#if conditionLte}}selected{{/if}}>&lt;=</option>
-          <option value="gte" {{#if conditionGte}}selected{{/if}}>&gt;=</option>
-        </select>
-      </label>
-      <label>
-        <span>Процент ОЗ</span>
-        <input type="number" name="system.functions.{{@index}}.condition.percent" value="{{conditionPercent}}" min="0" max="100" step="1">
-      </label>
+    <div data-ability-changes>
+      {{#each changes}}
+      <div class="fallout-maw-ability-change-card" data-ability-change-row data-change-index="{{index}}">
+        <input type="hidden" name="system.functions.{{functionIndex}}.changes.{{index}}.id" value="{{id}}">
+        <input type="hidden" name="system.functions.{{functionIndex}}.changes.{{index}}.phase" value="initial">
+        <div class="fallout-maw-trauma-effect-row fallout-maw-grid-header">
+          <span>Ключ</span>
+          <span>Тип</span>
+          <span>Значение</span>
+          <span>Приоритет</span>
+          <span></span>
+        </div>
+        <div class="fallout-maw-trauma-effect-row">
+          <input type="text" name="system.functions.{{functionIndex}}.changes.{{index}}.key" value="{{key}}" data-effect-key-autocomplete>
+          <select name="system.functions.{{functionIndex}}.changes.{{index}}.type">
+            {{#each typeChoices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+          <input type="text" name="system.functions.{{functionIndex}}.changes.{{index}}.value" value="{{value}}">
+          <input type="number" name="system.functions.{{functionIndex}}.changes.{{index}}.priority" value="{{priority}}" step="1">
+          <div class="fallout-maw-inline-controls">
+            <button type="button" class="fallout-maw-icon-button" data-delete-ability-change title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </div>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">Строки изменений не настроены.</p>
+      {{/each}}
     </div>
+
+    {{#if hasConditions}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-panel-header">
+        <h3>Условие</h3>
+        <div class="fallout-maw-inline-controls">
+          <button type="button" data-add-ability-condition><i class="fa-solid fa-plus"></i> Добавить условие</button>
+          <button type="button" data-add-ability-penalty {{#unless canAddPenalty}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить штраф за невыполнение</button>
+        </div>
+      </div>
+      <div class="fallout-maw-ability-conditions">
+        {{#each conditions}}
+        <div class="fallout-maw-ability-condition-row{{#if isPending}} empty{{else}} configured{{/if}}" data-ability-condition-row data-condition-index="{{index}}">
+          <input type="hidden" name="system.functions.{{functionIndex}}.conditions.{{index}}.id" value="{{id}}">
+          {{#if isPending}}
+          <label>
+            <span>Условие</span>
+            <select name="system.functions.{{functionIndex}}.conditions.{{index}}.type" data-ability-condition-type>
+              {{#each typeChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-condition title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          {{else}}
+          <input type="hidden" name="system.functions.{{functionIndex}}.conditions.{{index}}.type" value="{{type}}">
+          <div class="fallout-maw-ability-condition-card">
+            <div class="fallout-maw-ability-condition-card-header">
+              <h4>{{typeLabel}}</h4>
+              <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-condition title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+            </div>
+            <div class="fallout-maw-ability-condition-fields">
+              {{#if isHealth}}
+              <label>
+                <span>Оператор</span>
+                <select name="system.functions.{{functionIndex}}.conditions.{{index}}.operator">
+                  {{#each healthOperatorChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </label>
+              <label>
+                <span>Процент ОЗ</span>
+                <input type="number" name="system.functions.{{functionIndex}}.conditions.{{index}}.percent" value="{{percent}}" min="0" max="100" step="1">
+              </label>
+              {{/if}}
+              {{#if isEquipment}}
+              <label>
+                <span>Слот экипировки</span>
+                <select name="system.functions.{{functionIndex}}.conditions.{{index}}.equipmentSlotKey">
+                  {{#each equipmentSlotChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </label>
+              <label>
+                <span>Оператор</span>
+                <select name="system.functions.{{functionIndex}}.conditions.{{index}}.operator">
+                  {{#each equipmentOperatorChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </label>
+              {{/if}}
+            </div>
+          </div>
+          {{/if}}
+        </div>
+        {{/each}}
+      </div>
+    </div>
+    {{/if}}
+
+    {{#if hasPenalties}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-panel-header">
+        <h3>Штрафы</h3>
+        <button type="button" data-add-ability-penalty><i class="fa-solid fa-plus"></i> Добавить строку</button>
+      </div>
+      <div>
+        {{#each penalties}}
+        <div class="fallout-maw-ability-change-card" data-ability-penalty-row data-penalty-index="{{penaltyIndex}}">
+          <input type="hidden" name="system.functions.{{functionIndex}}.penalties.{{penaltyIndex}}.id" value="{{id}}">
+          <input type="hidden" name="system.functions.{{functionIndex}}.penalties.{{penaltyIndex}}.phase" value="initial">
+          <div class="fallout-maw-trauma-effect-row fallout-maw-grid-header">
+            <span>Ключ</span>
+            <span>Тип</span>
+            <span>Значение</span>
+            <span>Приоритет</span>
+            <span></span>
+          </div>
+          <div class="fallout-maw-trauma-effect-row">
+            <input type="text" name="system.functions.{{functionIndex}}.penalties.{{penaltyIndex}}.key" value="{{key}}" data-effect-key-autocomplete>
+            <select name="system.functions.{{functionIndex}}.penalties.{{penaltyIndex}}.type">
+              {{#each typeChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+            <input type="text" name="system.functions.{{functionIndex}}.penalties.{{penaltyIndex}}.value" value="{{value}}">
+            <input type="number" name="system.functions.{{functionIndex}}.penalties.{{penaltyIndex}}.priority" value="{{priority}}" step="1">
+            <button type="button" class="fallout-maw-icon-button" data-delete-ability-penalty title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </div>
+        {{/each}}
+      </div>
+    </div>
+    {{/if}}
   </section>
   {{else}}
   <section class="fallout-maw-panel">

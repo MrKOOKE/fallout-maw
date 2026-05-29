@@ -74,37 +74,148 @@
   <section class="fallout-maw-panel" data-ability-function-row data-function-id="{{id}}" data-function-type="{{type}}">
     <div class="fallout-maw-panel-header">
       <h2>{{typeLabel}}</h2>
-      <button type="button" class="fallout-maw-icon-button" data-action="deleteFunction"><i class="fa-solid fa-trash"></i></button>
+      <div class="fallout-maw-inline-controls">
+        <button type="button" data-action="addFunctionChange"><i class="fa-solid fa-plus"></i> Добавить строку</button>
+        <button type="button" data-action="addFunctionCondition"><i class="fa-solid fa-plus"></i> Добавить условие</button>
+        <button type="button" class="fallout-maw-icon-button" data-action="deleteFunction"><i class="fa-solid fa-trash"></i></button>
+      </div>
     </div>
-    <div class="fallout-maw-list-grid three-columns">
-      <label>
-        <span>Цель</span>
-        <select data-field="functionTarget">
-          {{#each targetChoices}}
-          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-          {{/each}}
-        </select>
-      </label>
-      <label>
-        <span>Изменение</span>
-        <input type="number" data-field="functionValue" value="{{value}}" step="1">
-      </label>
-      <label class="fallout-maw-inline-checkbox">
-        <span>Условие по ОЗ</span>
-        <input type="checkbox" data-field="conditionEnabled" {{checked conditionEnabled}}>
-      </label>
-      <label>
-        <span>Оператор</span>
-        <select data-field="conditionOperator">
-          <option value="lte" {{#if conditionLte}}selected{{/if}}>&lt;=</option>
-          <option value="gte" {{#if conditionGte}}selected{{/if}}>&gt;=</option>
-        </select>
-      </label>
-      <label>
-        <span>Процент ОЗ</span>
-        <input type="number" data-field="conditionPercent" value="{{conditionPercent}}" min="0" max="100" step="1">
-      </label>
+
+    <div data-ability-changes>
+      {{#each changes}}
+      <div class="fallout-maw-ability-change-card" data-ability-change-row data-change-id="{{id}}">
+        <div class="fallout-maw-trauma-effect-row fallout-maw-grid-header">
+          <span>Ключ</span>
+          <span>Тип</span>
+          <span>Значение</span>
+          <span>Приоритет</span>
+          <span></span>
+        </div>
+        <div class="fallout-maw-trauma-effect-row">
+          <input type="text" data-field="changeKey" data-effect-key-autocomplete value="{{key}}">
+          <select data-field="changeType">
+            {{#each typeChoices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+          <input type="text" data-field="changeValue" value="{{value}}">
+          <input type="number" data-field="changePriority" value="{{priority}}" step="1">
+          <div class="fallout-maw-inline-controls">
+            <button type="button" class="fallout-maw-icon-button" data-action="deleteFunctionChange" title="Удалить строку"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </div>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">Строки изменений не настроены.</p>
+      {{/each}}
     </div>
+
+    {{#if hasConditions}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-panel-header">
+        <h3>Условие</h3>
+        <div class="fallout-maw-inline-controls">
+          <button type="button" data-action="addFunctionCondition"><i class="fa-solid fa-plus"></i> Добавить условие</button>
+          <button type="button" data-action="addFunctionPenalty" {{#unless canAddPenalty}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить штраф за невыполнение</button>
+        </div>
+      </div>
+      <div class="fallout-maw-ability-conditions" data-ability-conditions>
+        {{#each conditions}}
+        <div class="fallout-maw-ability-condition-row{{#if isPending}} empty{{else}} configured{{/if}}" data-ability-condition-row data-condition-id="{{id}}">
+          {{#if isPending}}
+          <label>
+            <span>Условие</span>
+            <select data-field="conditionType">
+              {{#each typeChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteFunctionCondition" title="Удалить условие"><i class="fa-solid fa-trash"></i></button>
+          {{else}}
+          <input type="hidden" data-field="conditionType" value="{{type}}">
+          <div class="fallout-maw-ability-condition-card">
+            <div class="fallout-maw-ability-condition-card-header">
+              <h4>{{typeLabel}}</h4>
+              <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteFunctionCondition" title="Удалить условие"><i class="fa-solid fa-trash"></i></button>
+            </div>
+            <div class="fallout-maw-ability-condition-fields">
+
+              {{#if isHealth}}
+              <label>
+                <span>Оператор</span>
+                <select data-field="conditionOperator">
+                  {{#each healthOperatorChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </label>
+              <label>
+                <span>Процент ОЗ</span>
+                <input type="number" data-field="conditionPercent" value="{{percent}}" min="0" max="100" step="1">
+              </label>
+              {{/if}}
+
+              {{#if isEquipment}}
+              <label>
+                <span>Слот экипировки</span>
+                <select data-field="conditionEquipmentSlotKey">
+                  {{#each equipmentSlotChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </label>
+              <label>
+                <span>Оператор</span>
+                <select data-field="conditionOperator">
+                  {{#each equipmentOperatorChoices}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                  {{/each}}
+                </select>
+              </label>
+              {{/if}}
+
+            </div>
+          </div>
+          {{/if}}
+        </div>
+        {{/each}}
+      </div>
+    </div>
+    {{/if}}
+
+    {{#if hasPenalties}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-panel-header">
+        <h3>Штрафы</h3>
+        <button type="button" data-action="addFunctionPenalty"><i class="fa-solid fa-plus"></i> Добавить строку</button>
+      </div>
+      <div data-ability-penalties>
+        {{#each penalties}}
+        <div class="fallout-maw-ability-change-card" data-ability-penalty-row data-change-id="{{id}}">
+          <div class="fallout-maw-trauma-effect-row fallout-maw-grid-header">
+            <span>Ключ</span>
+            <span>Тип</span>
+            <span>Значение</span>
+            <span>Приоритет</span>
+            <span></span>
+          </div>
+          <div class="fallout-maw-trauma-effect-row">
+            <input type="text" data-field="changeKey" data-effect-key-autocomplete value="{{key}}">
+            <select data-field="changeType">
+              {{#each typeChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+            <input type="text" data-field="changeValue" value="{{value}}">
+            <input type="number" data-field="changePriority" value="{{priority}}" step="1">
+            <button type="button" class="fallout-maw-icon-button" data-action="deleteFunctionPenalty" title="Удалить строку"><i class="fa-solid fa-trash"></i></button>
+          </div>
+        </div>
+        {{/each}}
+      </div>
+    </div>
+    {{/if}}
   </section>
   {{else}}
   <section class="fallout-maw-panel">

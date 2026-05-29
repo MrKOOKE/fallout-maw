@@ -34,6 +34,7 @@ import {
   hasItemFunction
 } from "../../utils/item-functions.mjs";
 import { normalizeResearchCollection } from "../../research/storage.mjs";
+import { getAbilitySkillAdvancementBaseBonuses } from "../../abilities/evaluation.mjs";
 import { toInteger } from "../../utils/numbers.mjs";
 
 const { ArrayField, BooleanField, HTMLField, NumberField, ObjectField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
@@ -132,11 +133,13 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     replaceObjectContents(this.development, normalizeActorDevelopment(this.development, characteristicSettings, skillSettings));
 
     const skillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, this.characteristics);
+    const skillAdvancementBaseBonuses = getAbilitySkillAdvancementBaseBonuses(this.parent, skillSettings);
     const skillBonuses = calculateSkillDevelopmentBonuses(
       skillSettings,
       this.characteristics,
       skillAdvancementSettings,
-      this.development
+      this.development,
+      skillAdvancementBaseBonuses
     );
     replaceObjectContents(this.skills, normalizeSkillMap(this.skills, skillSettings, skillBases, skillBonuses, skillAdvancementSettings, abilityBonuses.skills));
     replaceArrayContents(this.researches, normalizeResearchCollection(this.researches));
@@ -346,6 +349,10 @@ function developmentField() {
     }),
     characteristics: new TypedObjectField(
       new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+      { required: true, initial: {} }
+    ),
+    traits: new TypedObjectField(
+      new BooleanField({ required: true, initial: false }),
       { required: true, initial: {} }
     ),
     skills: new TypedObjectField(

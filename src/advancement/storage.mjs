@@ -13,6 +13,7 @@ export function createDefaultActorDevelopment(characteristicSettings = [], skill
       researches: 0
     },
     characteristics: Object.fromEntries(characteristicSettings.map(entry => [entry.key, 0])),
+    traits: {},
     skills: Object.fromEntries(skillSettings.map(entry => [entry.key, { points: 0, signature: false }])),
     abilityResearches: {}
   };
@@ -35,6 +36,7 @@ export function normalizeActorDevelopment(development = {}, characteristicSettin
     characteristics: Object.fromEntries(
       characteristicSettings.map(entry => [entry.key, Math.max(0, toInteger(development?.characteristics?.[entry.key]))])
     ),
+    traits: normalizeTraitSpending(development?.traits),
     skills: Object.fromEntries(
       skillSettings.map(entry => [entry.key, normalizeSkillDevelopment(development?.skills?.[entry.key])])
     ),
@@ -51,6 +53,15 @@ function normalizeSkillDevelopment(entry = {}) {
     points: Math.max(0, toInteger(entry?.points)),
     signature: Boolean(entry?.signature)
   };
+}
+
+function normalizeTraitSpending(value = {}) {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, selected]) => [String(key).trim(), Boolean(selected)])
+      .filter(([key, selected]) => key && selected)
+  );
 }
 
 function normalizeAbilityResearchSpending(value = {}) {

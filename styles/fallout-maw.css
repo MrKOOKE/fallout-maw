@@ -1296,6 +1296,91 @@
   margin: 0 0 0.5rem;
 }
 
+.fallout-maw-ability-change-card {
+  border: 1px solid rgba(120, 120, 120, 0.18);
+  border-radius: 6px;
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+  padding: 0.6rem;
+}
+
+.fallout-maw-ability-change-card .fallout-maw-trauma-effect-row {
+  grid-template-columns: minmax(260px, 1fr) 110px 110px 90px 84px;
+}
+
+.fallout-maw-ability-subsection {
+  border-top: 1px solid rgba(120, 120, 120, 0.18);
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+}
+
+.fallout-maw-ability-conditions {
+  border-left: 2px solid rgba(212, 181, 93, 0.28);
+  display: grid;
+  gap: 0.45rem;
+  margin-left: 0.4rem;
+  padding-left: 0.65rem;
+}
+
+.fallout-maw-ability-condition-row {
+  align-items: end;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(210px, 1fr) minmax(160px, 1fr) minmax(120px, 0.8fr) auto;
+}
+
+.fallout-maw-ability-condition-row.empty {
+  grid-template-columns: minmax(0, 1fr) 44px;
+}
+
+.fallout-maw-ability-condition-row.configured {
+  display: block;
+}
+
+.fallout-maw-ability-condition-row label {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.fallout-maw-ability-condition-card {
+  border: 1px solid rgba(210, 190, 140, 0.18);
+  border-radius: 4px;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.6rem;
+}
+
+.fallout-maw-ability-condition-card-header {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.fallout-maw-ability-condition-card-header h4 {
+  color: var(--color-text-light-highlight);
+  font-size: 1rem;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.fallout-maw-ability-condition-fields {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.fallout-maw-square-delete-button {
+  align-self: end;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  width: 32px;
+}
+
 .fallout-maw-floating-add {
   align-items: center;
   border-radius: 999px;
@@ -6695,6 +6780,14 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-advancement-talent-group-header:hover {
   background: rgba(232, 212, 136, 0.14);
   border-color: rgba(245, 221, 141, 0.48);
+}
+
+.fallout-maw-advancement-talent-group-header.trait-available {
+  color: #7bdc8a;
+}
+
+.fallout-maw-advancement-talent-group-header.trait-empty {
+  color: #ff6b66;
 }
 
 .fallout-maw-advancement-collapse-icon {

@@ -1,4 +1,4 @@
-import { FALLOUT_MAW } from "../config/system-config.mjs";
+﻿import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { MIGRATION_STATE_SETTING } from "../settings/constants.mjs";
 
 const SETTING_MIGRATIONS = Object.freeze([
@@ -38,3 +38,4 @@ function isPrimaryActiveGM() {
     .sort((left, right) => left.id.localeCompare(right.id));
   return activeGMs.at(0)?.id === game.user?.id;
 }
+

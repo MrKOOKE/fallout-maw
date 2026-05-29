@@ -16,20 +16,24 @@ export function calculateSpentResearchPoints(development = {}) {
   return Object.values(development?.abilityResearches ?? {}).reduce((total, value) => total + (Number(value) || 0), 0);
 }
 
+export function calculateSpentTraitPoints(development = {}) {
+  return Object.values(development?.traits ?? {}).reduce((total, selected) => total + (selected ? 1 : 0), 0);
+}
+
 export function calculateRemainingDevelopmentPoints(development = {}) {
   return {
     characteristics: Math.max(0, (Number(development?.points?.characteristics) || 0) - calculateSpentCharacteristicPoints(development)),
     signatureSkills: Math.max(0, (Number(development?.points?.signatureSkills) || 0) - calculateSpentSignatureSkillPoints(development)),
-    traits: Math.max(0, Number(development?.points?.traits) || 0),
+    traits: Math.max(0, (Number(development?.points?.traits) || 0) - calculateSpentTraitPoints(development)),
     proficiencies: Math.max(0, Number(development?.points?.proficiencies) || 0),
     skills: Math.max(0, (Number(development?.points?.skills) || 0) - calculateSpentSkillPoints(development)),
     researches: Math.max(0, (Number(development?.points?.researches) || 0) - calculateSpentResearchPoints(development))
   };
 }
 
-export function calculateSkillPointMultiplier(skillKey, characteristics = {}, advancementSettings = {}) {
+export function calculateSkillPointMultiplier(skillKey, characteristics = {}, advancementSettings = {}, baseBonuses = {}) {
   const entry = advancementSettings?.entries?.[skillKey] ?? {};
-  let multiplier = Number(entry?.base) || 0;
+  let multiplier = (Number(entry?.base) || 0) + (Number(baseBonuses?.[skillKey]) || 0);
 
   for (const [characteristicKey, coefficient] of Object.entries(entry?.characteristics ?? {})) {
     multiplier += (Number(characteristics?.[characteristicKey]) || 0) * (Number(coefficient) || 0);
@@ -38,9 +42,9 @@ export function calculateSkillPointMultiplier(skillKey, characteristics = {}, ad
   return multiplier;
 }
 
-export function calculateSkillDevelopmentBonus(skillKey, characteristics = {}, advancementSettings = {}, developmentSkill = {}) {
+export function calculateSkillDevelopmentBonus(skillKey, characteristics = {}, advancementSettings = {}, developmentSkill = {}, baseBonuses = {}) {
   const points = Math.max(0, Number(developmentSkill?.points) || 0);
-  const investedValue = points * calculateSkillPointMultiplier(skillKey, characteristics, advancementSettings);
+  const investedValue = points * calculateSkillPointMultiplier(skillKey, characteristics, advancementSettings, baseBonuses);
   if (!developmentSkill?.signature) return investedValue;
 
   const signatureMultiplier = Number(advancementSettings?.signatureMultiplier) || 0;
@@ -52,13 +56,14 @@ export function calculateSkillDevelopmentBonuses(
   skillSettings = [],
   characteristics = {},
   advancementSettings = {},
-  development = {}
+  development = {},
+  baseBonuses = {}
 ) {
   const normalized = normalizeActorDevelopment(development, [], skillSettings);
   return Object.fromEntries(
     skillSettings.map(skill => [
       skill.key,
-      calculateSkillDevelopmentBonus(skill.key, characteristics, advancementSettings, normalized.skills?.[skill.key])
+      calculateSkillDevelopmentBonus(skill.key, characteristics, advancementSettings, normalized.skills?.[skill.key], baseBonuses)
     ])
   );
 }

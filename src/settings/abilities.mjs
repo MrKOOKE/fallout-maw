@@ -1,12 +1,33 @@
-import { createDefaultSkillSettings, normalizeSkillSettings } from "../formulas/index.mjs";
+﻿import { createDefaultSkillSettings, normalizeSkillSettings } from "../formulas/index.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 export const LOCKED_FEATURES_CATEGORY_ID = "features";
 export const GENERAL_ABILITY_CATEGORY_ID = "general";
 export const ABILITY_SOURCE_FLAG = "abilitySource";
+
 export const ABILITY_FUNCTION_TYPES = Object.freeze({
+  effectChanges: "effectChanges",
+  acquisitionChanges: "acquisitionChanges",
   characteristicBonus: "characteristicBonus",
   skillBonus: "skillBonus"
+});
+
+export const ABILITY_CONDITION_TYPES = Object.freeze({
+  healthPercent: "healthPercent",
+  equipmentSlotOccupied: "equipmentSlotOccupied"
+});
+
+export const ABILITY_EQUIPMENT_OPERATORS = Object.freeze({
+  occupied: "occupied",
+  empty: "empty"
+});
+
+export const ABILITY_CHANGE_TYPES = Object.freeze({
+  add: "add",
+  multiply: "multiply",
+  override: "override",
+  upgrade: "upgrade",
+  downgrade: "downgrade"
 });
 
 export function createDefaultAbilityCatalog(skillSettings = createDefaultSkillSettings()) {
@@ -76,18 +97,32 @@ export function normalizeAbilityFunctions(value = []) {
     .map((entry, index) => normalizeAbilityFunction(entry, index));
 }
 
-export function createAbilityFunction(type = ABILITY_FUNCTION_TYPES.characteristicBonus) {
+export function createAbilityFunction(type = ABILITY_FUNCTION_TYPES.effectChanges) {
   return normalizeAbilityFunction({
     id: foundry.utils.randomID(),
     type,
-    target: "",
-    value: 0,
-    condition: {
-      enabled: false,
-      resource: "health",
-      operator: "lte",
-      percent: 50
-    }
+    changes: [],
+    conditions: [],
+    penalties: []
+  });
+}
+
+export function createAbilityChange() {
+  return normalizeAbilityChange({
+    id: foundry.utils.randomID(),
+    key: "",
+    type: ABILITY_CHANGE_TYPES.add,
+    value: "0",
+    phase: "initial",
+    priority: null
+  });
+}
+
+export function createAbilityCondition(type = ABILITY_CONDITION_TYPES.healthPercent) {
+  const data = typeof type === "object" && type !== null ? type : { type };
+  return normalizeAbilityCondition({
+    id: foundry.utils.randomID(),
+    ...data
   });
 }
 
@@ -117,6 +152,10 @@ export function prepareAbilityItemData(ability = {}, { categoryId = "" } = {}) {
 
 export function getAbilitySourceId(item) {
   return String(item?.getFlag?.("fallout-maw", ABILITY_SOURCE_FLAG)?.id ?? item?.flags?.["fallout-maw"]?.[ABILITY_SOURCE_FLAG]?.id ?? "");
+}
+
+export function getAbilitySourceCategoryId(item) {
+  return String(item?.getFlag?.("fallout-maw", ABILITY_SOURCE_FLAG)?.categoryId ?? item?.flags?.["fallout-maw"]?.[ABILITY_SOURCE_FLAG]?.categoryId ?? "");
 }
 
 function createAbilityCategory({ id = "", name = "", locked = false, abilities = [] } = {}) {
@@ -149,21 +188,96 @@ function normalizeAbilityAcquisition(value = {}) {
 }
 
 function normalizeAbilityFunction(value = {}, index = 0) {
-  const type = Object.values(ABILITY_FUNCTION_TYPES).includes(value?.type)
-    ? value.type
-    : ABILITY_FUNCTION_TYPES.characteristicBonus;
-  const condition = value?.condition ?? {};
+  const rawType = String(value?.type ?? "").trim();
+  const isLegacy = [ABILITY_FUNCTION_TYPES.characteristicBonus, ABILITY_FUNCTION_TYPES.skillBonus].includes(rawType);
+  const type = Object.values(ABILITY_FUNCTION_TYPES).includes(rawType) && !isLegacy
+    ? rawType
+    : ABILITY_FUNCTION_TYPES.effectChanges;
+  const conditions = normalizeAbilityConditions(value?.conditions ?? (value?.condition ? [value.condition] : []));
   return {
     id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
     type,
-    target: String(value?.target ?? "").trim(),
-    value: toInteger(value?.value),
-    condition: {
-      enabled: Boolean(condition?.enabled),
-      resource: "health",
-      operator: String(condition?.operator ?? "lte") === "gte" ? "gte" : "lte",
-      percent: Math.max(0, Math.min(100, toInteger(condition?.percent ?? 50)))
-    },
+    changes: isLegacy
+      ? legacyFunctionToChanges(value)
+      : normalizeAbilityChanges(value?.changes ?? value?.effects),
+    conditions,
+    penalties: normalizeAbilityChanges(value?.penalties),
     sort: index
   };
 }
+
+function legacyFunctionToChanges(value = {}) {
+  const target = String(value?.target ?? "").trim();
+  const amount = toNumber(value?.value);
+  if (!target || !amount) return [];
+  const key = value.type === ABILITY_FUNCTION_TYPES.skillBonus
+    ? `system.skills.${target}.bonus`
+    : `system.characteristics.${target}`;
+  return [normalizeAbilityChange({
+    id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+    key,
+    type: ABILITY_CHANGE_TYPES.add,
+    value: String(amount),
+    phase: "initial",
+    priority: null
+  })];
+}
+
+function normalizeAbilityChanges(value = []) {
+  return (Array.isArray(value) ? value : Object.values(value ?? {}))
+    .map(normalizeAbilityChange);
+}
+
+function normalizeAbilityChange(value = {}) {
+  const type = Object.values(ABILITY_CHANGE_TYPES).includes(value?.type) ? value.type : ABILITY_CHANGE_TYPES.add;
+  return {
+    id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+    key: String(value?.key ?? "").trim(),
+    type,
+    value: String(value?.value ?? "0"),
+    phase: String(value?.phase || "initial"),
+    priority: value?.priority === "" || value?.priority === null || value?.priority === undefined
+      ? null
+      : toInteger(value.priority)
+  };
+}
+
+function normalizeAbilityConditions(value = []) {
+  return (Array.isArray(value) ? value : Object.values(value ?? {}))
+    .map(normalizeAbilityCondition);
+}
+
+function normalizeAbilityCondition(value = {}) {
+  const legacyEnabled = Boolean(value?.enabled);
+  const rawType = String(value?.type ?? "").trim();
+  const type = Object.values(ABILITY_CONDITION_TYPES).includes(rawType)
+    ? rawType
+    : legacyEnabled ? ABILITY_CONDITION_TYPES.healthPercent : "";
+  if (!type) return { id: "", type: "" };
+
+  if (type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied) {
+    return {
+      id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+      type,
+      operator: String(value?.operator ?? "") === ABILITY_EQUIPMENT_OPERATORS.empty
+        ? ABILITY_EQUIPMENT_OPERATORS.empty
+        : ABILITY_EQUIPMENT_OPERATORS.occupied,
+      equipmentSlotKey: String(value?.equipmentSlotKey ?? "").trim(),
+      percent: 50
+    };
+  }
+
+  return {
+    id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+    type,
+    operator: String(value?.operator ?? "lte") === "gte" ? "gte" : "lte",
+    percent: Math.max(0, Math.min(100, toInteger(value?.percent ?? 50))),
+    equipmentSlotKey: ""
+  };
+}
+
+function toNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+

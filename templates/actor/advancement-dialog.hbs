@@ -126,9 +126,9 @@
       <div class="fallout-maw-advancement-talents-list">
         {{#each abilityCategories}}
         <div class="fallout-maw-advancement-talent-group{{#unless expanded}} collapsed{{/unless}}" data-ability-category>
-          <button type="button" class="fallout-maw-advancement-talent-group-header" data-action="toggleAbilityCategory" data-category-id="{{id}}">
+          <button type="button" class="fallout-maw-advancement-talent-group-header {{traitAvailabilityClass}}" data-action="toggleAbilityCategory" data-category-id="{{id}}">
             <span class="fallout-maw-advancement-collapse-icon">{{#if expanded}}▾{{else}}▸{{/if}}</span>
-            <span>{{name}}</span>
+            <span>{{displayName}}</span>
           </button>
           <div class="fallout-maw-advancement-talent-group-abilities">
             {{#each abilities}}
@@ -167,6 +167,12 @@
         </div>
       </div>
       <div class="fallout-maw-advancement-talent-action-panel" data-ability-source-id="{{selectedAbility.sourceId}}" data-research-id="{{selectedAbility.researchId}}">
+        {{#if selectedAbility.isFeature}}
+        <button type="button" class="fallout-maw-advancement-talent-action-button primary" data-action="purchaseTraitAbility" {{#unless selectedAbility.canPurchaseTrait}}disabled{{/unless}}>
+          Приобрести
+        </button>
+        <div class="fallout-maw-advancement-talents-points">Особенности: {{traitPointsDisplay}}</div>
+        {{else}}
         <button type="button" class="fallout-maw-advancement-talent-action-button primary" data-action="startAbilityResearch" {{#unless selectedAbility.canStartManual}}disabled{{/unless}}>
           Начать исследование
         </button>
@@ -177,6 +183,7 @@
           Завершить
         </button>
         <div class="fallout-maw-advancement-talents-points">Свободные очки исследований: {{researchPointsDisplay}}</div>
+        {{/if}}
       </div>
       {{else}}
       <div class="fallout-maw-advancement-talents-details">

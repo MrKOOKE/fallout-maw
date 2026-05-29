@@ -1,7 +1,6 @@
 import { SYSTEM_ID } from "../constants.mjs";
-import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { getAbilitySourceId } from "../settings/abilities.mjs";
-import { toInteger } from "../utils/numbers.mjs";
+import { getAbilityEffectChanges } from "./evaluation.mjs";
 
 const ABILITY_EFFECT_FLAG_KEY = "abilityEffect";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
@@ -9,13 +8,14 @@ const processingActors = new Set();
 
 export function registerAbilityEffectHooks() {
   Hooks.on("createItem", item => {
-    if (item?.type === "ability") void syncActorAbilityEffects(item.parent);
+    if (item?.type === "ability" || isEquipmentItem(item)) void syncActorAbilityEffects(item.parent);
   });
-  Hooks.on("updateItem", item => {
-    if (item?.type === "ability") void syncActorAbilityEffects(item.parent);
+  Hooks.on("updateItem", (item, changes) => {
+    if (item?.type === "ability" || isEquipmentItem(item) || isEquipmentItemUpdate(changes)) void syncActorAbilityEffects(item.parent);
   });
   Hooks.on("deleteItem", item => {
     if (item?.type === "ability") void deleteAbilityEffects(item.parent, item.id);
+    else if (isEquipmentItem(item)) void syncActorAbilityEffects(item.parent);
   });
   Hooks.on("updateActor", (actor, changes) => {
     if (!isAbilityEffectSyncRelevant(changes)) return;
@@ -119,54 +119,8 @@ function buildAbilityActiveEffectData(item, changes, signature, sourceId) {
 }
 
 function buildAbilityEffectChanges(actor, item) {
-  const characteristicKeys = new Set(getCharacteristicSettings().map(entry => entry.key));
-  const skillKeys = new Set(getSkillSettings().map(entry => entry.key));
-  const healthPercent = getHealthPercent(actor.system);
-  const changes = [];
-
-  for (const entry of item.system?.functions ?? []) {
-    if (!abilityConditionApplies(entry?.condition, healthPercent)) continue;
-    const target = String(entry?.target ?? "");
-    const value = toInteger(entry?.value);
-    if (!target || !value) continue;
-
-    const key = getAbilityEffectKey(entry.type, target, characteristicKeys, skillKeys);
-    if (!key) continue;
-    changes.push({
-      key,
-      type: "add",
-      value: String(value),
-      phase: "initial",
-      priority: null
-    });
-  }
-
-  return changes;
-}
-
-function getAbilityEffectKey(type, target, characteristicKeys, skillKeys) {
-  if (type === "characteristicBonus" && characteristicKeys.has(target)) return `system.characteristics.${target}`;
-  if (type === "skillBonus" && skillKeys.has(target)) return `system.skills.${target}.bonus`;
-  return "";
-}
-
-function abilityConditionApplies(condition = {}, healthPercent = 100) {
-  if (!condition?.enabled) return true;
-  const threshold = Math.max(0, Math.min(100, toInteger(condition.percent ?? 50)));
-  return String(condition.operator ?? "lte") === "gte"
-    ? healthPercent >= threshold
-    : healthPercent <= threshold;
-}
-
-function getHealthPercent(sourceSystem = {}) {
-  const health = sourceSystem?.resources?.health;
-  const max = Math.max(0, Number(health?.max) || 0);
-  if (max <= 0) return 100;
-
-  const value = Number.isFinite(Number(health?.value))
-    ? Number(health.value)
-    : max - Math.max(0, Number(health?.spent) || 0);
-  return Math.max(0, Math.min(100, (value / max) * 100));
+  return getAbilityEffectChanges(actor, item)
+    .filter(change => !String(change?.key ?? "").startsWith("system.skillAdvancementBase."));
 }
 
 async function deleteAbilityEffects(actor, abilityItemId = "") {
@@ -182,5 +136,20 @@ function isAbilityEffectSyncRelevant(changes = {}) {
   return paths.some(path => path === "system.resources.health"
     || path.startsWith("system.resources.health.")
     || path === "system.limbs"
-    || path.startsWith("system.limbs."));
+    || path.startsWith("system.limbs.")
+    || path === "system.creature.raceId");
+}
+
+function isEquipmentItem(item) {
+  if (!item?.parent || item.type === "ability") return false;
+  return item.system?.placement?.mode === "equipment"
+    || Object.values(item.system?.occupiedSlots ?? {}).some(Boolean);
+}
+
+function isEquipmentItemUpdate(changes = {}) {
+  const paths = Object.keys(foundry.utils.flattenObject(changes ?? {}));
+  return paths.some(path => path === "system.placement"
+    || path.startsWith("system.placement.")
+    || path === "system.occupiedSlots"
+    || path.startsWith("system.occupiedSlots."));
 }

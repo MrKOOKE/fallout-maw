@@ -1,6 +1,7 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { getAbilityCatalog } from "../settings/accessors.mjs";
 import { ABILITY_SOURCE_FLAG, getAbilitySourceId, prepareAbilityItemData } from "../settings/abilities.mjs";
+import { getAbilityAcquisitionChanges } from "./evaluation.mjs";
 import { getResearchById } from "../research/storage.mjs";
 
 export function findCatalogAbility(sourceId = "", catalog = getAbilityCatalog()) {
@@ -25,7 +26,9 @@ export async function grantCatalogAbility(actor, sourceId = "") {
   if (!entry) return null;
   const itemData = prepareAbilityItemData(entry.ability, { categoryId: entry.category.id });
   const created = await actor.createEmbeddedDocuments("Item", [itemData]);
-  return created?.[0] ?? null;
+  const item = created?.[0] ?? null;
+  await applyAbilityAcquisitionChanges(actor, item);
+  return item;
 }
 
 export async function completeAbilityResearch(actor, researchId = "") {
@@ -55,7 +58,9 @@ export async function grantAbilityResearchReward(actor, research = {}) {
   if (rewardSourceId && actorHasAbility(actor, rewardSourceId)) return null;
 
   const created = await actor.createEmbeddedDocuments("Item", [normalizedItemData]);
-  return created?.[0] ?? null;
+  const item = created?.[0] ?? null;
+  await applyAbilityAcquisitionChanges(actor, item);
+  return item;
 }
 
 export async function clearAbilityResearchSpending(actor, sourceId = "") {
@@ -87,4 +92,26 @@ function getCatalogAbilityRewardItemData(sourceId = "") {
 
 function getRewardAbilitySourceId(itemData = {}) {
   return String(itemData?.flags?.[FALLOUT_MAW.id]?.[ABILITY_SOURCE_FLAG]?.id ?? "");
+}
+
+async function applyAbilityAcquisitionChanges(actor, item) {
+  const changes = getAbilityAcquisitionChanges(item);
+  if (!actor || !changes.length) return;
+
+  const updates = {};
+  for (const change of changes) {
+    const key = String(change?.key ?? "").trim();
+    if (!key.startsWith("system.")) continue;
+
+    const current = Number(foundry.utils.getProperty(actor, key)) || 0;
+    const value = Number(change?.value) || 0;
+    let next = value;
+    if (change.type === "add") next = current + value;
+    else if (change.type === "multiply") next = current * value;
+    else if (change.type === "upgrade") next = Math.max(current, value);
+    else if (change.type === "downgrade") next = Math.min(current, value);
+    foundry.utils.setProperty(updates, key, next);
+  }
+
+  if (Object.keys(foundry.utils.flattenObject(updates)).length) await actor.update(updates);
 }

@@ -1,7 +1,7 @@
 import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getNeedSettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
-import { groupRaceEquipmentSlotsBySet, groupRaceWeaponSlotsBySet } from "../utils/equipment-slots.mjs";
+import { getEquipmentSlotSelectionKey, groupRaceEquipmentSlotsBySet, groupRaceWeaponSlotsBySet } from "../utils/equipment-slots.mjs";
 import {
   buildDamageMitigationLimbSetChoices,
   buildDamageMitigationTables,
@@ -17,7 +17,12 @@ import {
 } from "../utils/item-functions.mjs";
 import { FALLBACK_ICON, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
+  ABILITY_CHANGE_TYPES,
+  ABILITY_CONDITION_TYPES,
+  ABILITY_EQUIPMENT_OPERATORS,
   ABILITY_FUNCTION_TYPES,
+  createAbilityChange,
+  createAbilityCondition,
   createAbilityFunction,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
@@ -201,12 +206,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         selected: true
       },
       {
-        value: ABILITY_FUNCTION_TYPES.characteristicBonus,
-        label: "Изменение характеристики"
+        value: ABILITY_FUNCTION_TYPES.effectChanges,
+        label: "Свободная настройка"
       },
       {
-        value: ABILITY_FUNCTION_TYPES.skillBonus,
-        label: "Изменение навыка"
+        value: ABILITY_FUNCTION_TYPES.acquisitionChanges,
+        label: "Разовое изменение при приобретении"
       }
     ];
 
@@ -286,7 +291,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         selected: skill.key === item.system?.acquisition?.skillKey || (!item.system?.acquisition?.skillKey && index === 0)
       })),
       abilityFunctions: normalizeAbilityFunctions(item.system?.functions ?? [])
-        .map(entry => prepareAbilityFunctionForDisplay(entry, characteristicSettings, skillSettings)),
+        .map((entry, index) => prepareAbilityFunctionRowsForDisplay(entry, index)),
       itemFunctionChoices: availableFunctionChoices,
       currencies: getCurrencySettings().map(currency => ({
         ...currency,
@@ -402,6 +407,27 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelector("[data-choose-ability-function]")?.addEventListener("change", event => this.#onChooseAbilityFunction(event));
     this.element?.querySelectorAll("[data-delete-ability-function]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAbilityFunction(event));
+    });
+    this.element?.querySelectorAll("[data-add-ability-change]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityChange(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-change]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityChange(event));
+    });
+    this.element?.querySelectorAll("[data-add-ability-condition]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityCondition(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-condition]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityCondition(event));
+    });
+    this.element?.querySelectorAll("[data-add-ability-penalty]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityPenalty(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-penalty]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityPenalty(event));
+    });
+    this.element?.querySelectorAll("[data-ability-condition-type]").forEach(select => {
+      select.addEventListener("change", event => this.#onAbilityConditionTypeChange(event));
     });
     this.element?.querySelector("[data-ability-only-free]")?.addEventListener("change", event => this.#onAbilityOnlyFreeChange(event));
     this.element?.querySelector("[data-ability-only-manual]")?.addEventListener("change", event => this.#onAbilityOnlyManualChange(event));
@@ -1670,6 +1696,74 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.item.update({ "system.functions": functions });
   }
 
+  #onAddAbilityChange(event) {
+    event.preventDefault();
+    const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
+    const functions = normalizeAbilityFunctions(this.item.system?.functions ?? []);
+    if (!functions[functionIndex]) return undefined;
+    functions[functionIndex].changes.push(createAbilityChange());
+    return this.item.update({ "system.functions": functions });
+  }
+
+  #onDeleteAbilityChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
+    const changeIndex = Number(event.currentTarget?.closest?.("[data-ability-change-row]")?.dataset.changeIndex ?? -1);
+    const functions = normalizeAbilityFunctions(this.item.system?.functions ?? []);
+    if (!functions[functionIndex]?.changes?.[changeIndex]) return undefined;
+    functions[functionIndex].changes.splice(changeIndex, 1);
+    return this.item.update({ "system.functions": functions });
+  }
+
+  #onAddAbilityCondition(event) {
+    event.preventDefault();
+    const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
+    const functions = normalizeAbilityFunctions(this.item.system?.functions ?? []);
+    if (!functions[functionIndex]) return undefined;
+    functions[functionIndex].conditions.push(createAbilityCondition(""));
+    return this.item.update({ "system.functions": functions });
+  }
+
+  #onDeleteAbilityCondition(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
+    const conditionIndex = Number(event.currentTarget?.closest?.("[data-ability-condition-row]")?.dataset.conditionIndex ?? -1);
+    const functions = normalizeAbilityFunctions(this.item.system?.functions ?? []);
+    if (!functions[functionIndex]?.conditions?.[conditionIndex]) return undefined;
+    functions[functionIndex].conditions.splice(conditionIndex, 1);
+    return this.item.update({ "system.functions": functions });
+  }
+
+  #onAddAbilityPenalty(event) {
+    event.preventDefault();
+    const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
+    const functions = normalizeAbilityFunctions(this.item.system?.functions ?? []);
+    if (!functions[functionIndex]?.conditions?.length) return undefined;
+    functions[functionIndex].penalties.push(createAbilityChange());
+    return this.item.update({ "system.functions": functions });
+  }
+
+  #onDeleteAbilityPenalty(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
+    const penaltyIndex = Number(event.currentTarget?.closest?.("[data-ability-penalty-row]")?.dataset.penaltyIndex ?? -1);
+    const functions = normalizeAbilityFunctions(this.item.system?.functions ?? []);
+    if (!functions[functionIndex]?.penalties?.[penaltyIndex]) return undefined;
+    functions[functionIndex].penalties.splice(penaltyIndex, 1);
+    return this.item.update({ "system.functions": functions });
+  }
+
+  async #onAbilityConditionTypeChange(event) {
+    event.preventDefault();
+    const path = String(event.currentTarget?.name ?? "");
+    if (!path) return undefined;
+    await this.item.update({ [path]: event.currentTarget.value });
+    return this.render({ force: true });
+  }
+
   #onAbilityOnlyFreeChange(event) {
     event.preventDefault();
     const checked = Boolean(event.currentTarget?.checked);
@@ -2685,6 +2779,105 @@ function getItemFunctionLabel(functionKey = "") {
   const toolKey = getToolKeyFromFunctionKey(functionKey);
   if (toolKey) return getToolSettings().find(tool => tool.key === toolKey)?.label ?? toolKey;
   return game.i18n.localize("FALLOUTMAW.Item.Function");
+}
+
+function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0) {
+  const type = String(entry?.type ?? ABILITY_FUNCTION_TYPES.effectChanges);
+  return {
+    ...entry,
+    functionIndex,
+    typeLabel: type === ABILITY_FUNCTION_TYPES.acquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка",
+    changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index)),
+    conditions: (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index)),
+    penalties: (entry?.penalties ?? []).map((change, index) => prepareAbilityPenaltyForDisplay(change, functionIndex, index)),
+    hasConditions: Boolean(entry?.conditions?.length),
+    hasPenalties: Boolean(entry?.penalties?.length),
+    canAddPenalty: Boolean(entry?.conditions?.length)
+  };
+}
+
+function prepareAbilityChangeForDisplay(change, functionIndex, index) {
+  return {
+    ...change,
+    functionIndex,
+    index,
+    priority: change?.priority ?? "",
+    typeChoices: buildAbilityChangeTypeChoices(change?.type)
+  };
+}
+
+function prepareAbilityPenaltyForDisplay(change, functionIndex, index) {
+  return {
+    ...prepareAbilityChangeForDisplay(change, functionIndex, index),
+    penaltyIndex: index
+  };
+}
+
+function prepareAbilityConditionForDisplay(condition, functionIndex, index) {
+  const type = String(condition?.type ?? "");
+  const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
+  const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
+  return {
+    ...condition,
+    functionIndex,
+    index,
+    isPending: !isHealth && !isEquipment,
+    isHealth,
+    isEquipment,
+    typeLabel: getAbilityConditionTypeLabel(type),
+    typeChoices: buildAbilityConditionTypeChoices(type),
+    healthOperatorChoices: [
+      { value: "lte", label: "<=", selected: String(condition?.operator ?? "lte") !== "gte" },
+      { value: "gte", label: ">=", selected: String(condition?.operator ?? "lte") === "gte" }
+    ],
+    equipmentOperatorChoices: [
+      { value: ABILITY_EQUIPMENT_OPERATORS.occupied, label: "Занят", selected: condition?.operator !== ABILITY_EQUIPMENT_OPERATORS.empty },
+      { value: ABILITY_EQUIPMENT_OPERATORS.empty, label: "Не занят", selected: condition?.operator === ABILITY_EQUIPMENT_OPERATORS.empty }
+    ],
+    equipmentSlotChoices: buildAbilityEquipmentSlotChoices(condition?.equipmentSlotKey)
+  };
+}
+
+function getAbilityConditionTypeLabel(type) {
+  return buildAbilityConditionTypeChoices(type).find(choice => choice.value === type)?.label ?? type;
+}
+
+function buildAbilityChangeTypeChoices(selected = ABILITY_CHANGE_TYPES.add) {
+  return [
+    { value: ABILITY_CHANGE_TYPES.add, label: "Добавить" },
+    { value: ABILITY_CHANGE_TYPES.multiply, label: "Умножить" },
+    { value: ABILITY_CHANGE_TYPES.override, label: "Заменить" },
+    { value: ABILITY_CHANGE_TYPES.upgrade, label: "Повысить до" },
+    { value: ABILITY_CHANGE_TYPES.downgrade, label: "Понизить до" }
+  ].map(choice => ({
+    ...choice,
+    selected: choice.value === selected
+  }));
+}
+
+function buildAbilityConditionTypeChoices(selected = "") {
+  return [
+    { value: "", label: "", selected: !selected },
+    { value: ABILITY_CONDITION_TYPES.healthPercent, label: "Состояние ОЗ", selected: selected === ABILITY_CONDITION_TYPES.healthPercent },
+    { value: ABILITY_CONDITION_TYPES.equipmentSlotOccupied, label: "Занятость слотов экипировки", selected: selected === ABILITY_CONDITION_TYPES.equipmentSlotOccupied }
+  ];
+}
+
+function buildAbilityEquipmentSlotChoices(selected = "") {
+  const slots = new Map();
+  for (const race of getCreatureOptions().races ?? []) {
+    for (const slot of race.equipmentSlots ?? []) {
+      const key = String(slot.key || getEquipmentSlotSelectionKey(slot.label) || slot.label || "").trim();
+      if (!key || slots.has(key)) continue;
+      slots.set(key, String(slot.label || key));
+    }
+  }
+  if (selected && !slots.has(selected)) slots.set(selected, selected);
+  return Array.from(slots.entries()).map(([value, label]) => ({
+    value,
+    label,
+    selected: value === selected
+  }));
 }
 
 function prepareAbilityFunctionForDisplay(entry, characteristics, skills) {

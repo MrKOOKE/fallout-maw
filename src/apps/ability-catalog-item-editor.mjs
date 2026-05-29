@@ -1,11 +1,20 @@
 import { TEMPLATES } from "../constants.mjs";
-import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
+import { getCreatureOptions, getSkillSettings } from "../settings/accessors.mjs";
 import {
+  ABILITY_CHANGE_TYPES,
+  ABILITY_CONDITION_TYPES,
+  ABILITY_EQUIPMENT_OPERATORS,
   ABILITY_FUNCTION_TYPES,
+  createAbilityChange,
+  createAbilityCondition,
   createAbilityFunction,
-  normalizeAbilityEntry
+  normalizeAbilityEntry,
+  normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
+import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import { getEquipmentSlotSelectionKey } from "../utils/equipment-slots.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { activateEffectKeyAutocomplete } from "./effect-key-autocomplete.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
@@ -36,7 +45,13 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       editAbilityImage: this.#onEditAbilityImage,
       selectTab: this.#onSelectTab,
       addFunction: this.#onAddFunction,
-      deleteFunction: this.#onDeleteFunction
+      deleteFunction: this.#onDeleteFunction,
+      addFunctionChange: this.#onAddFunctionChange,
+      deleteFunctionChange: this.#onDeleteFunctionChange,
+      addFunctionCondition: this.#onAddFunctionCondition,
+      deleteFunctionCondition: this.#onDeleteFunctionCondition,
+      addFunctionPenalty: this.#onAddFunctionPenalty,
+      deleteFunctionPenalty: this.#onDeleteFunctionPenalty
     }
   };
 
@@ -51,7 +66,6 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
   }
 
   async _prepareContext(options) {
-    const characteristics = getCharacteristicSettings();
     const skills = getSkillSettings();
     const descriptionHTML = await TextEditor.enrichHTML(this.ability.description ?? "", {
       secrets: game.user?.isGM ?? false
@@ -77,22 +91,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       descriptionHTML,
       canAddFunction: true,
       showFunctionPicker: this.#functionPickerActive,
-      functionChoices: [
-        {
-          value: "",
-          label: "Выберите функцию",
-          disabled: true,
-          selected: true
-        },
-        {
-          value: ABILITY_FUNCTION_TYPES.characteristicBonus,
-          label: "Изменение характеристики"
-        },
-        {
-          value: ABILITY_FUNCTION_TYPES.skillBonus,
-          label: "Изменение навыка"
-        }
-      ],
+      functionChoices: buildFunctionChoices(),
       onlyFree: Boolean(this.ability.system?.acquisition?.onlyFree),
       onlyManual: Boolean(this.ability.system?.acquisition?.onlyManual),
       researchDifficulty: Math.max(0, toInteger(this.ability.system?.acquisition?.difficulty ?? 60)),
@@ -101,13 +100,17 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
         label: skill.label,
         selected: skill.key === this.ability.system?.acquisition?.skillKey || (!this.ability.system?.acquisition?.skillKey && index === 0)
       })),
-      functions: (this.ability.system?.functions ?? []).map(entry => prepareFunctionForDisplay(entry, characteristics, skills))
+      functions: normalizeAbilityFunctions(this.ability.system?.functions ?? []).map(prepareFunctionForDisplay)
     };
   }
 
   async _onRender(context, options) {
     await super._onRender(context, options);
     this.element?.querySelector?.("[data-choose-ability-function]")?.addEventListener("change", event => this.#onChooseFunction(event));
+    this.element?.querySelectorAll?.("[data-field='conditionType']")?.forEach(select => {
+      select.addEventListener("change", event => this.#onConditionTypeChange(event));
+    });
+    activateEffectKeyAutocomplete(this.element, buildEffectKeyTokens());
   }
 
   async _processFormData(_event, _form, _formData) {
@@ -153,9 +156,16 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     this.#syncFromForm();
     const selected = String(event.currentTarget?.value ?? "");
-    if (!Object.values(ABILITY_FUNCTION_TYPES).includes(selected)) return undefined;
+    if (![ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.acquisitionChanges].includes(selected)) return undefined;
     this.ability.system.functions.push(createAbilityFunction(selected));
     this.#functionPickerActive = false;
+    this.#activeTab = "functions";
+    return this.forceRender();
+  }
+
+  #onConditionTypeChange(event) {
+    event.preventDefault();
+    this.#syncFromForm();
     this.#activeTab = "functions";
     return this.forceRender();
   }
@@ -164,9 +174,66 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     this.#syncFromForm();
     const row = target.closest("[data-ability-function-row]");
-    const rows = Array.from(this.form?.querySelectorAll("[data-ability-function-row]") ?? []);
-    const index = rows.indexOf(row);
+    const index = getRowIndex(this.form, "[data-ability-function-row]", row);
     if (index >= 0) this.ability.system.functions.splice(index, 1);
+    return this.forceRender();
+  }
+
+  static #onAddFunctionChange(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", target.closest("[data-ability-function-row]"));
+    if (functionIndex >= 0) this.ability.system.functions[functionIndex]?.changes?.push(createAbilityChange());
+    return this.forceRender();
+  }
+
+  static #onDeleteFunctionChange(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", target.closest("[data-ability-function-row]"));
+    const changeIndex = getRowIndex(target.closest("[data-ability-function-row]"), "[data-ability-change-row]", target.closest("[data-ability-change-row]"));
+    if (functionIndex >= 0 && changeIndex >= 0) this.ability.system.functions[functionIndex]?.changes?.splice(changeIndex, 1);
+    return this.forceRender();
+  }
+
+  static #onAddFunctionCondition(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const functionRow = target.closest("[data-ability-function-row]");
+    const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
+    if (functionIndex >= 0) this.ability.system.functions[functionIndex]?.conditions?.push(createAbilityCondition(""));
+    return this.forceRender();
+  }
+
+  static #onDeleteFunctionCondition(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const functionRow = target.closest("[data-ability-function-row]");
+    const conditionRow = target.closest("[data-ability-condition-row]");
+    const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
+    const conditionIndex = getRowIndex(functionRow, "[data-ability-condition-row]", conditionRow);
+    if (functionIndex >= 0 && conditionIndex >= 0) {
+      this.ability.system.functions[functionIndex]?.conditions?.splice(conditionIndex, 1);
+    }
+    return this.forceRender();
+  }
+
+  static #onAddFunctionPenalty(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", target.closest("[data-ability-function-row]"));
+    const entry = this.ability.system.functions[functionIndex];
+    if (entry?.conditions?.length) entry.penalties.push(createAbilityChange());
+    return this.forceRender();
+  }
+
+  static #onDeleteFunctionPenalty(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const functionRow = target.closest("[data-ability-function-row]");
+    const penaltyIndex = getRowIndex(functionRow, "[data-ability-penalty-row]", target.closest("[data-ability-penalty-row]"));
+    const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
+    if (functionIndex >= 0 && penaltyIndex >= 0) this.ability.system.functions[functionIndex]?.penalties?.splice(penaltyIndex, 1);
     return this.forceRender();
   }
 
@@ -187,21 +254,41 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
           skillKey: this.form.querySelector("[data-field='researchSkillKey']")?.value ?? this.ability.system?.acquisition?.skillKey,
           difficulty: this.form.querySelector("[data-field='researchDifficulty']")?.value ?? this.ability.system?.acquisition?.difficulty
         },
-        functions: Array.from(this.form.querySelectorAll("[data-ability-function-row]") ?? []).map(row => ({
-          id: row.dataset.functionId || foundry.utils.randomID(),
-          type: row.dataset.functionType,
-          target: row.querySelector("[data-field='functionTarget']")?.value ?? "",
-          value: row.querySelector("[data-field='functionValue']")?.value ?? 0,
-          condition: {
-            enabled: Boolean(row.querySelector("[data-field='conditionEnabled']")?.checked),
-            resource: "health",
-            operator: row.querySelector("[data-field='conditionOperator']")?.value ?? "lte",
-            percent: row.querySelector("[data-field='conditionPercent']")?.value ?? 50
-          }
-        }))
+        functions: readAbilityFunctions(this.form)
       }
     });
   }
+}
+
+function readAbilityFunctions(root) {
+  return Array.from(root.querySelectorAll("[data-ability-function-row]") ?? []).map(row => ({
+    id: row.dataset.functionId || foundry.utils.randomID(),
+    type: row.dataset.functionType,
+    changes: readAbilityChanges(row.querySelector(":scope > [data-ability-changes]"), "[data-ability-change-row]"),
+    conditions: readAbilityConditions(row.querySelector("[data-ability-conditions]")),
+    penalties: readAbilityChanges(row.querySelector("[data-ability-penalties]"), "[data-ability-penalty-row]")
+  }));
+}
+
+function readAbilityChanges(root, selector) {
+  return Array.from(root?.querySelectorAll(selector) ?? []).map(changeRow => ({
+    id: changeRow.dataset.changeId || foundry.utils.randomID(),
+    key: changeRow.querySelector("[data-field='changeKey']")?.value ?? "",
+    type: changeRow.querySelector("[data-field='changeType']")?.value ?? ABILITY_CHANGE_TYPES.add,
+    value: changeRow.querySelector("[data-field='changeValue']")?.value ?? "0",
+    phase: "initial",
+    priority: changeRow.querySelector("[data-field='changePriority']")?.value ?? null
+  }));
+}
+
+function readAbilityConditions(root) {
+  return Array.from(root?.querySelectorAll("[data-ability-condition-row]") ?? []).map(row => ({
+    id: row.dataset.conditionId || foundry.utils.randomID(),
+    type: row.querySelector("[data-field='conditionType']")?.value || "",
+    operator: row.querySelector("[data-field='conditionOperator']")?.value ?? "lte",
+    percent: row.querySelector("[data-field='conditionPercent']")?.value ?? 50,
+    equipmentSlotKey: row.querySelector("[data-field='conditionEquipmentSlotKey']")?.value ?? ""
+  }));
 }
 
 function readFieldValue(element, fallback = "") {
@@ -210,22 +297,107 @@ function readFieldValue(element, fallback = "") {
   return element.getAttribute("value") ?? fallback;
 }
 
-function prepareFunctionForDisplay(entry, characteristics, skills) {
-  const type = String(entry?.type ?? ABILITY_FUNCTION_TYPES.characteristicBonus);
-  const targetSettings = type === ABILITY_FUNCTION_TYPES.skillBonus ? skills : characteristics;
+function prepareFunctionForDisplay(entry) {
+  const normalized = normalizeAbilityFunctions([entry])[0] ?? createAbilityFunction();
   return {
-    ...entry,
-    isSkill: type === ABILITY_FUNCTION_TYPES.skillBonus,
-    typeLabel: type === ABILITY_FUNCTION_TYPES.skillBonus ? "Изменение навыка" : "Изменение характеристики",
-    conditionEnabled: Boolean(entry?.condition?.enabled),
-    conditionLte: String(entry?.condition?.operator ?? "lte") !== "gte",
-    conditionGte: String(entry?.condition?.operator ?? "lte") === "gte",
-    value: toInteger(entry?.value),
-    conditionPercent: Math.max(0, Math.min(100, toInteger(entry?.condition?.percent ?? 50))),
-    targetChoices: targetSettings.map(setting => ({
-      key: setting.key,
-      label: setting.label,
-      selected: setting.key === entry?.target
-    }))
+    ...normalized,
+    typeLabel: normalized.type === ABILITY_FUNCTION_TYPES.acquisitionChanges
+      ? "Разовое изменение при приобретении"
+      : "Свободная настройка",
+    changes: normalized.changes.map(prepareChangeForDisplay),
+    conditions: normalized.conditions.map(prepareConditionForDisplay),
+    penalties: normalized.penalties.map(prepareChangeForDisplay),
+    hasConditions: Boolean(normalized.conditions.length),
+    hasPenalties: Boolean(normalized.penalties.length),
+    canAddPenalty: Boolean(normalized.conditions.length)
   };
+}
+
+function prepareChangeForDisplay(change, index) {
+  return {
+    ...change,
+    index,
+    priority: change.priority ?? "",
+    typeChoices: buildChangeTypeChoices(change.type)
+  };
+}
+
+function prepareConditionForDisplay(condition) {
+  const type = String(condition?.type ?? "");
+  const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
+  const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
+  return {
+    ...condition,
+    isPending: !isHealth && !isEquipment,
+    isHealth,
+    isEquipment,
+    typeLabel: getConditionTypeLabel(type),
+    typeChoices: buildConditionTypeChoices(type),
+    healthOperatorChoices: [
+      { value: "lte", label: "<=", selected: String(condition?.operator ?? "lte") !== "gte" },
+      { value: "gte", label: ">=", selected: String(condition?.operator ?? "lte") === "gte" }
+    ],
+    equipmentOperatorChoices: [
+      { value: ABILITY_EQUIPMENT_OPERATORS.occupied, label: "Занят", selected: condition?.operator !== ABILITY_EQUIPMENT_OPERATORS.empty },
+      { value: ABILITY_EQUIPMENT_OPERATORS.empty, label: "Не занят", selected: condition?.operator === ABILITY_EQUIPMENT_OPERATORS.empty }
+    ],
+    equipmentSlotChoices: buildEquipmentSlotChoices(condition?.equipmentSlotKey)
+  };
+}
+
+function getConditionTypeLabel(type) {
+  return buildConditionTypeChoices(type).find(choice => choice.value === type)?.label ?? type;
+}
+
+function buildFunctionChoices() {
+  return [
+    { value: "", label: "Выберите функцию", disabled: true, selected: true },
+    { value: ABILITY_FUNCTION_TYPES.effectChanges, label: "Свободная настройка" },
+    { value: ABILITY_FUNCTION_TYPES.acquisitionChanges, label: "Разовое изменение при приобретении" }
+  ];
+}
+
+function buildChangeTypeChoices(selected = ABILITY_CHANGE_TYPES.add) {
+  const labels = {
+    [ABILITY_CHANGE_TYPES.add]: "Добавить",
+    [ABILITY_CHANGE_TYPES.multiply]: "Умножить",
+    [ABILITY_CHANGE_TYPES.override]: "Заменить",
+    [ABILITY_CHANGE_TYPES.upgrade]: "Повысить до",
+    [ABILITY_CHANGE_TYPES.downgrade]: "Понизить до"
+  };
+  return Object.values(ABILITY_CHANGE_TYPES).map(value => ({
+    value,
+    label: labels[value] ?? value,
+    selected: value === selected
+  }));
+}
+
+function buildConditionTypeChoices(selected = "") {
+  return [
+    { value: "", label: "", selected: !selected },
+    { value: ABILITY_CONDITION_TYPES.healthPercent, label: "Состояние ОЗ", selected: selected === ABILITY_CONDITION_TYPES.healthPercent },
+    { value: ABILITY_CONDITION_TYPES.equipmentSlotOccupied, label: "Занятость слотов экипировки", selected: selected === ABILITY_CONDITION_TYPES.equipmentSlotOccupied }
+  ];
+}
+
+function buildEquipmentSlotChoices(selected = "") {
+  const slots = new Map();
+  for (const race of getCreatureOptions().races ?? []) {
+    for (const slot of race.equipmentSlots ?? []) {
+      const key = String(slot.key || getEquipmentSlotSelectionKey(slot.label) || slot.label || "").trim();
+      if (!key || slots.has(key)) continue;
+      slots.set(key, String(slot.label || key));
+    }
+  }
+  if (selected && !slots.has(selected)) slots.set(selected, selected);
+  return Array.from(slots.entries()).map(([value, label]) => ({
+    value,
+    label,
+    selected: value === selected
+  }));
+}
+
+function getRowIndex(root, selector, row) {
+  if (!root || !row) return -1;
+  return Array.from(root.querySelectorAll(selector) ?? []).indexOf(row);
 }
