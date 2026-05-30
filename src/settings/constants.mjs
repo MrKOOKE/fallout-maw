@@ -11,6 +11,7 @@ export const LEVELS_SETTING = "levels";
 export const TRAUMA_SETTINGS_SETTING = "traumaSettings";
 export const TOOL_SETTINGS_SETTING = "toolSettings";
 export const SYSTEM_ACTION_SETTINGS_SETTING = "systemActionSettings";
+export const STEALTH_SETTINGS_SETTING = "stealthSettings";
 export const SKILL_CHECK_CONTROL_SETTING = "skillCheckControl";
 export const TOKEN_ACTION_HUD_ENABLED_SETTING = "tokenActionHudEnabled";
 export const TOKEN_ACTION_HUD_SCALE_SETTING = "tokenActionHudScale";

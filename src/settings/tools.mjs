@@ -61,6 +61,12 @@ export const DEFAULT_SYSTEM_ACTION_SETTINGS = Object.freeze([
     label: "Крафт",
     img: "icons/tools/smithing/hammer-sledge-steel-grey.webp",
     toolKey: "repair"
+  },
+  {
+    key: "stealth",
+    label: "Скрытность",
+    img: "icons/svg/invisible.svg",
+    toolKey: ""
   }
 ]);
 

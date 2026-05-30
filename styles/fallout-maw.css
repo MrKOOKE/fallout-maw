@@ -6521,6 +6521,155 @@ label.fallout-maw-mitigation-cell {
   visibility: hidden;
 }
 
+.fallout-maw-settings-grid {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.fallout-maw-settings-grid.two-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fallout-maw-settings-grid.three-columns {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.fallout-maw-settings-grid label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.fallout-maw-stealth-settings-table .fallout-maw-settings-row {
+  grid-template-columns: minmax(8rem, 1fr) minmax(5rem, 0.6fr) minmax(8rem, 0.8fr) minmax(5rem, 0.6fr);
+}
+
+.fallout-maw-stealth-window-content {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.fallout-maw-stealth-header {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.fallout-maw-stealth-header h2 {
+  border: 0;
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.fallout-maw-stealth-header > strong {
+  color: var(--fallout-maw-accent);
+  font-size: 1.35rem;
+}
+
+.fallout-maw-stealth-status {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-top: 0.15rem;
+}
+
+.fallout-maw-stealth-status.hidden {
+  color: #8fd0ff;
+}
+
+.fallout-maw-stealth-status.visible {
+  color: #ffb27b;
+}
+
+.fallout-maw-stealth-panel {
+  border: 1px solid var(--fallout-maw-border);
+  border-radius: 6px;
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.65rem;
+}
+
+.fallout-maw-stealth-row,
+.fallout-maw-stealth-source {
+  align-items: center;
+  display: flex;
+  gap: 0.65rem;
+  justify-content: space-between;
+}
+
+.fallout-maw-stealth-row > span,
+.fallout-maw-stealth-source > span,
+.fallout-maw-stealth-empty {
+  color: var(--fallout-maw-text-soft);
+}
+
+.fallout-maw-stealth-light-bar {
+  background: linear-gradient(90deg, #f7df8f 0%, #bea15f 34%, #535d68 70%, #15191e 100%);
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  border-radius: 999px;
+  height: 0.75rem;
+  position: relative;
+}
+
+.fallout-maw-stealth-light-bar > span {
+  background: #ffffff;
+  border: 1px solid #151515;
+  border-radius: 999px;
+  height: 1rem;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 0.45rem;
+}
+
+.fallout-maw-stealth-sources {
+  max-height: 8rem;
+  overflow: auto;
+}
+
+.fallout-maw-stealth-actions {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fallout-maw-stealth-actions button {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+  justify-content: center;
+}
+
+.fallout-maw-stealth-target-tooltip {
+  background: rgba(12, 12, 10, 0.94);
+  border: 1px solid rgba(229, 197, 104, 0.65);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  color: #f4e7bd;
+  display: grid;
+  gap: 0.15rem;
+  left: 0;
+  min-width: 8rem;
+  padding: 0.45rem 0.55rem;
+  pointer-events: none;
+  position: fixed;
+  top: 0;
+  z-index: 10000;
+}
+
+.fallout-maw-stealth-target-tooltip[hidden] {
+  display: none;
+}
+
+.fallout-maw-stealth-target-tooltip small {
+  color: #c9bb93;
+}
+
+.fallout-maw-stealth-targeting {
+  cursor: crosshair;
+}
+
 .fallout-maw-tool-settings-table .fallout-maw-settings-row {
   grid-template-columns: 2.25rem minmax(10rem, 1fr) minmax(14rem, 2fr) 2.5rem;
 }
@@ -10862,6 +11011,8 @@ label.fallout-maw-mitigation-cell {
   .fallout-maw-race-pool-grid,
   .fallout-maw-summary-grid.two-columns,
   .fallout-maw-summary-grid.three-columns,
+  .fallout-maw-settings-grid.two-columns,
+  .fallout-maw-settings-grid.three-columns,
   .fallout-maw-summary-grid.six-columns {
     grid-template-columns: 1fr;
   }
@@ -10902,6 +11053,7 @@ label.fallout-maw-mitigation-cell {
   .currency-settings .fallout-maw-settings-row,
   .damage-type-settings .fallout-maw-settings-row,
   .limb-settings .fallout-maw-settings-row,
+  .fallout-maw-stealth-settings-table .fallout-maw-settings-row,
   .fallout-maw-skill-row {
     grid-template-columns: 1fr;
   }

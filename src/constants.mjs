@@ -22,6 +22,7 @@ export const TEMPLATES = Object.freeze({
   skillCheckAnimation: `systems/${SYSTEM_ID}/templates/actor/skill-check-animation.hbs`,
   tokenActionHud: `systems/${SYSTEM_ID}/templates/actor/token-action-hud.hbs`,
   tokenActionHudScaleSettings: `systems/${SYSTEM_ID}/templates/actor/token-action-hud-scale-settings.hbs`,
+  stealthWindow: `systems/${SYSTEM_ID}/templates/actor/stealth-window.hbs`,
   searchInventory: `systems/${SYSTEM_ID}/templates/actor/search-inventory.hbs`,
   craftWindow: `systems/${SYSTEM_ID}/templates/actor/craft-window.hbs`,
   skillCheckChatCard: `systems/${SYSTEM_ID}/templates/chat/skill-check-card.hbs`,
@@ -65,6 +66,7 @@ export const TEMPLATES = Object.freeze({
     tokenActionHud: `systems/${SYSTEM_ID}/templates/settings/token-action-hud-config.hbs`,
     tools: `systems/${SYSTEM_ID}/templates/settings/tool-settings-config.hbs`,
     systemActions: `systems/${SYSTEM_ID}/templates/settings/system-action-settings-config.hbs`,
+    stealth: `systems/${SYSTEM_ID}/templates/settings/stealth-settings-config.hbs`,
     traumaSettings: `systems/${SYSTEM_ID}/templates/settings/trauma-settings-config.hbs`,
     traumaGroupSettings: `systems/${SYSTEM_ID}/templates/settings/trauma-group-settings-config.hbs`
   })

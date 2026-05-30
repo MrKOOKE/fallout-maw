@@ -1,0 +1,51 @@
+<div class="fallout-maw-stealth-window-content">
+  <header class="fallout-maw-stealth-header">
+    <div>
+      <h2>{{actor.name}}</h2>
+      <span class="fallout-maw-stealth-status {{#if stealthed}}hidden{{else}}visible{{/if}}">
+        {{#if stealthed}}Скрыт{{else}}Виден{{/if}}
+      </span>
+    </div>
+    <strong>{{stealthValue}}%</strong>
+  </header>
+
+  <section class="fallout-maw-stealth-panel">
+    <div class="fallout-maw-stealth-row">
+      <span>Освещение</span>
+      <strong>{{lighting.condition}}</strong>
+    </div>
+    <div class="fallout-maw-stealth-light-bar" aria-hidden="true">
+      <span style="left: {{lighting.darknessPercent}}%"></span>
+    </div>
+    <div class="fallout-maw-stealth-row">
+      <span>Темнота</span>
+      <strong>{{lighting.darknessLabel}}</strong>
+    </div>
+    <div class="fallout-maw-stealth-row">
+      <span>Радиус</span>
+      <strong>{{radius}}</strong>
+    </div>
+  </section>
+
+  <section class="fallout-maw-stealth-panel">
+    <div class="fallout-maw-stealth-row">
+      <span>Бонус СЛ</span>
+      <strong>+{{lighting.modifiers.difficultyBonus}}</strong>
+    </div>
+    <div class="fallout-maw-stealth-row">
+      <span>Множитель восприятия</span>
+      <strong>x{{lighting.modifiers.perceptionMultiplier}}</strong>
+    </div>
+  </section>
+
+  <footer class="fallout-maw-stealth-actions">
+    <button type="button" data-action="toggleStealth">
+      <i class="fa-solid {{#if stealthed}}fa-eye{{else}}fa-user-ninja{{/if}}"></i>
+      {{#if stealthed}}Раскрыться{{else}}Скрыться{{/if}}
+    </button>
+    <button type="button" data-action="startTargeting" {{#unless stealthed}}disabled{{/unless}}>
+      <i class="fa-solid fa-crosshairs"></i>
+      Проверка
+    </button>
+  </footer>
+</div>

@@ -29,6 +29,7 @@ import {
   RESOURCE_SETTINGS_SETTING,
   SKILL_CHECK_CONTROL_SETTING,
   SKILL_SETTINGS_SETTING,
+  STEALTH_SETTINGS_SETTING,
   SYSTEM_ACTION_SETTINGS_SETTING,
   TIME_MECHANICS_IGNORED_SETTING,
   TIME_NEEDS_PLAYERS_ONLY_SETTING,
@@ -47,6 +48,7 @@ import {
   normalizeSystemActionSettings,
   normalizeToolSettings
 } from "./tools.mjs";
+import { createDefaultStealthSettings, normalizeStealthSettings } from "../stealth/settings.mjs";
 
 export const DEFAULT_SKILL_CHECK_CONTROL = Object.freeze({
   resultMode: "standard",
@@ -453,6 +455,24 @@ export async function setSystemActionSettings(settings) {
 
 export async function resetSystemActionSettings() {
   return setSystemActionSettings(createDefaultSystemActionSettings());
+}
+
+export function getStealthSettings() {
+  try {
+    return normalizeStealthSettings(game.settings.get(FALLOUT_MAW.id, STEALTH_SETTINGS_SETTING));
+  } catch (_error) {
+    return createDefaultStealthSettings();
+  }
+}
+
+export async function setStealthSettings(settings) {
+  const normalized = normalizeStealthSettings(settings);
+  await game.settings.set(FALLOUT_MAW.id, STEALTH_SETTINGS_SETTING, normalized);
+  return normalized;
+}
+
+export async function resetStealthSettings() {
+  return setStealthSettings(createDefaultStealthSettings());
 }
 
 export function getSkillCheckControl() {

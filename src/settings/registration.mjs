@@ -20,6 +20,7 @@ import { LevelSettingsConfig } from "../apps/level-settings-config.mjs";
 import { ProficiencySettingsConfig } from "../apps/proficiency-settings-config.mjs";
 import { ResourceSettingsConfig } from "../apps/resource-settings-config.mjs";
 import { SkillFormulasConfig } from "../apps/skill-formulas-config.mjs";
+import { StealthSettingsConfig } from "../apps/stealth-settings-config.mjs";
 import { SystemActionSettingsConfig } from "../apps/system-action-settings-config.mjs";
 import { ToolSettingsConfig } from "../apps/tool-settings-config.mjs";
 import { TokenActionHudSettings } from "../apps/token-action-hud-settings-config.mjs";
@@ -38,6 +39,7 @@ import {
   RESOURCE_SETTINGS_SETTING,
   SKILL_CHECK_CONTROL_SETTING,
   SKILL_SETTINGS_SETTING,
+  STEALTH_SETTINGS_SETTING,
   SYSTEM_ACTION_SETTINGS_SETTING,
   TIME_MECHANICS_IGNORED_SETTING,
   TIME_NEEDS_PLAYERS_ONLY_SETTING,
@@ -53,6 +55,7 @@ import { createEmptyCreatureOptions } from "./creature-options.mjs";
 import { createDefaultDiseaseSettings } from "./diseases.mjs";
 import { createDefaultLevelSettings } from "./levels.mjs";
 import { createDefaultSystemActionSettings, createDefaultToolSettings } from "./tools.mjs";
+import { createDefaultStealthSettings } from "../stealth/settings.mjs";
 import { createDefaultTraumaSettings } from "./traumas.mjs";
 import {
   DEFAULT_SKILL_CHECK_CONTROL,
@@ -204,6 +207,14 @@ export function registerSystemSettings() {
     onChange: refreshPreparedActors
   });
 
+  game.settings.register(FALLOUT_MAW.id, STEALTH_SETTINGS_SETTING, {
+    name: "Настройка скрытности",
+    scope: "world",
+    config: false,
+    type: Object,
+    default: createDefaultStealthSettings()
+  });
+
   game.settings.register(FALLOUT_MAW.id, TIME_MECHANICS_IGNORED_SETTING, {
     name: "Игнорировать механики времени",
     scope: "world",
@@ -337,6 +348,14 @@ export function registerSystemSettings() {
     label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-hand-sparkles",
     type: SystemActionSettingsConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "stealthSettingsMenu", {
+    name: "Настройка скрытности",
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-user-ninja",
+    type: StealthSettingsConfig,
     restricted: true
   });
 

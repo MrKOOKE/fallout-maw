@@ -10,6 +10,7 @@ import { toInteger } from "../utils/numbers.mjs";
 import { getRequiredWeaponSlotsForItem, getWeaponSlotRequirement, isContainerWeaponSetKey } from "../utils/equipment-slots.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
+import { getStealthAttackModifiers, revealActorFromStealth } from "../stealth/index.mjs";
 
 const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
 const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
@@ -2212,6 +2213,7 @@ function hasRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
 }
 
 async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "") {
+  if (actionKey !== "reload") await revealActorFromStealth(actor);
   if (!isCombatActionPointSpendingActive()) return;
   const cost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId);
   if (cost <= 0) return;
@@ -3063,8 +3065,11 @@ function estimateDamageRequestGroup(requests = []) {
 }
 
 function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "") {
+  const actor = getWeaponOwnerActor(weapon);
+  const stealth = getStealthAttackModifiers(actor);
   const modifier = toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier)
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance")
+    + stealth.criticalChanceBonus
     - getWeaponConditionCritChancePenalty(weapon);
   return {
     criticalSuccessBonus: Math.max(0, modifier),
@@ -3074,11 +3079,14 @@ function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "") {
 
 function getCriticalDamageAmount(weapon, amount, outcome, weaponFunctionId = "") {
   const baseAmount = Math.max(0, Number(amount) || 0);
-  if (!isCriticalSuccessAttack(outcome)) return baseAmount;
+  const stealth = getStealthAttackModifiers(getWeaponOwnerActor(weapon));
+  const stealthDamage = Math.floor(baseAmount * Math.max(0, toInteger(stealth.damageBonusPercent)) / 100);
+  const modifiedBaseAmount = baseAmount + stealthDamage;
+  if (!isCriticalSuccessAttack(outcome)) return modifiedBaseAmount;
   const rawPercent = Number(getWeaponAttackData(weapon, weaponFunctionId)?.criticalDamagePercent);
   const percent = Math.max(0, (Number.isFinite(rawPercent) ? Math.max(0, rawPercent) : 150)
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalDamage"));
-  return Math.round(baseAmount * percent / 100);
+  return Math.round(modifiedBaseAmount * percent / 100);
 }
 
 function getCriticalFailureResourceCosts(weapon, actionKey, weaponFunctionId = "") {
@@ -3170,9 +3178,12 @@ function getWeaponOwnerActor(weapon) {
 }
 
 function getAttackModeCriticalCheckModifiers(weapon, actionKey, mode, weaponFunctionId = "") {
+  const actor = getWeaponOwnerActor(weapon);
+  const stealth = getStealthAttackModifiers(actor);
   const modifier = toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier)
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance")
     + toInteger(getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.criticalChanceModifier)
+    + stealth.criticalChanceBonus
     - getWeaponConditionCritChancePenalty(weapon);
   return {
     criticalSuccessBonus: Math.max(0, modifier),
