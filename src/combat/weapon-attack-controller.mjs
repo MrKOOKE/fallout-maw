@@ -8,6 +8,7 @@ import { getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSetti
 import { ACTION_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { getRequiredWeaponSlotsForItem, getWeaponSlotRequirement, isContainerWeaponSetKey } from "../utils/equipment-slots.mjs";
+import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
 
 const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
@@ -3930,10 +3931,7 @@ function getTokenCenter(token) {
 }
 
 function selectRandomLimbKey(actor, { includeDestroyed = false } = {}) {
-  const keys = Object.entries(actor.system?.limbs ?? {})
-    .filter(([key, limb]) => limb && typeof limb === "object" && (includeDestroyed || !isLimbDestroyed(actor, key)))
-    .map(([key]) => key);
-  return keys[Math.floor(Math.random() * keys.length)] ?? "";
+  return selectRandomWeightedLimbKey(actor, { includeDestroyed });
 }
 
 function isAimedShotAction(weapon, actionKey, weaponFunctionId = "") {

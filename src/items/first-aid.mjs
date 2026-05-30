@@ -284,6 +284,9 @@ async function requestLimbSelection(actor, firstAid = {}, targetContext = null) 
     .filter(limb => limb.key);
   if (!limbs.length) return [];
 
+  const applicationColumnLabel = game.i18n.localize("FALLOUTMAW.Item.FirstAidSelectLimbsApplications");
+  const currentColumnLabel = game.i18n.localize("FALLOUTMAW.Item.FirstAidSelectLimbsCurrent");
+  const resultColumnLabel = game.i18n.localize("FALLOUTMAW.Item.FirstAidSelectLimbsResult");
   const rows = limbs.map(limb => {
     const disabled = value > 0
       ? limb.value >= limb.max
@@ -300,6 +303,8 @@ async function requestLimbSelection(actor, firstAid = {}, targetContext = null) 
   }).join("");
 
   const result = await DialogV2.wait({
+    classes: ["dialog", "fallout-maw", "fallout-maw-first-aid-limb-dialog"],
+    position: { width: 680 },
     window: { title: game.i18n.localize("FALLOUTMAW.Item.FirstAidSelectLimbs") },
     content: `
       <div class="fallout-maw-first-aid-limb-summary">
@@ -307,7 +312,15 @@ async function requestLimbSelection(actor, firstAid = {}, targetContext = null) 
         <p>${game.i18n.format("FALLOUTMAW.Item.FirstAidSelectLimbsHealing", { value: formatSignedInteger(value) })}</p>
         <p class="fallout-maw-first-aid-limb-total">${game.i18n.localize("FALLOUTMAW.Common.Total")}: <strong><span data-limb-total>0</span> / ${count}</strong></p>
       </div>
-      <div class="fallout-maw-first-aid-limb-choice-list">${rows}</div>
+      <div class="fallout-maw-first-aid-limb-choice-list">
+        <div class="fallout-maw-first-aid-limb-choice-header">
+          <span>${applicationColumnLabel}</span>
+          <span>${game.i18n.localize("FALLOUTMAW.Item.FirstAidLimbs")}</span>
+          <span>${currentColumnLabel}</span>
+          <span>${resultColumnLabel}</span>
+        </div>
+        ${rows}
+      </div>
     `,
     render: (_event, dialog) => activateFirstAidLimbSelection(dialog, { count, value }),
     buttons: [
@@ -322,7 +335,7 @@ async function requestLimbSelection(actor, firstAid = {}, targetContext = null) 
           const total = entries.reduce((sum, entry) => sum + entry.count, 0);
           if (total < 1 || total > count) {
             ui.notifications.warn(game.i18n.format("FALLOUTMAW.Item.FirstAidSelectLimbsInvalid", { count }));
-            return null;
+            return false;
           }
           return entries;
         }
@@ -331,7 +344,7 @@ async function requestLimbSelection(actor, firstAid = {}, targetContext = null) 
         action: "cancel",
         label: "Cancel",
         icon: "fa-solid fa-xmark",
-        callback: () => null
+        callback: () => false
       }
     ]
   });

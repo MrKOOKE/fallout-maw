@@ -18,6 +18,7 @@ import {
   getDamageMitigationFunction,
   hasItemFunction
 } from "../utils/item-functions.mjs";
+import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const DAMAGE_SOCKET = `system.${SYSTEM_ID}`;
@@ -3610,10 +3611,7 @@ function updateTouchesPath(object, path) {
 }
 
 function selectRandomDamageLimbKey(actor) {
-  const keys = Object.entries(actor?.system?.limbs ?? {})
-    .filter(([key, limb]) => limb && typeof limb === "object" && !isLimbDestroyed(actor, key))
-    .map(([key]) => key);
-  return keys[Math.floor(Math.random() * keys.length)] ?? "";
+  return selectRandomWeightedLimbKey(actor);
 }
 
 function calculateEffectiveDamage(actor, amount, damageTypeKey = "", limbKey = "", source = {}, options = {}) {
