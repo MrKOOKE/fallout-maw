@@ -15,6 +15,7 @@ import { createDefaultNeedSettings, normalizeFormulaMap, normalizeNeedSettings }
 import { normalizeLimbSilhouette } from "../utils/limb-silhouette.mjs";
 
 export const DEFAULT_BLEEDING_RESISTANCE_FORMULA = "0";
+export const DEFAULT_REGENERATION_FORMULA = "10 + con * 5";
 
 export function createEmptyCreatureOptions() {
   return { types: [], races: [] };
@@ -29,6 +30,7 @@ export function createRaceDefaults(characteristics = [], damageTypes = []) {
     equipmentSlots: createDefaultEquipmentSlots(),
     weaponSets: createDefaultWeaponSets(),
     inventorySize: createDefaultInventorySize(),
+    regeneration: createDefaultRegeneration(),
     bleedingResistanceFormula: DEFAULT_BLEEDING_RESISTANCE_FORMULA,
     damageResistances: Object.fromEntries(damageTypes.map(entry => [entry.key, "0"])),
     needSettings: createDefaultNeedSettings(),
@@ -65,6 +67,10 @@ export function createDefaultRaceBaseParameters() {
   return { ...DEFAULT_BASE_PARAMETER_POOLS, loadFormula: DEFAULT_LOAD_FORMULA, loadLimitPercent: DEFAULT_LOAD_LIMIT_PERCENT };
 }
 
+export function createDefaultRegeneration() {
+  return { formula: DEFAULT_REGENERATION_FORMULA };
+}
+
 export function normalizeCreatureOptions(options = {}, characteristics = [], damageTypes = []) {
   const defaults = createEmptyCreatureOptions();
   const normalized = {
@@ -97,6 +103,7 @@ export function normalizeCreatureOptions(options = {}, characteristics = [], dam
         equipmentSlots: normalizeEquipmentSlots(race.equipmentSlots),
         weaponSets: normalizeWeaponSets(race.weaponSets, limbs),
         inventorySize: normalizeInventorySize(race.inventorySize),
+        regeneration: normalizeRegeneration(race.regeneration),
         bleedingResistanceFormula: normalizeBleedingResistanceFormula(race.bleedingResistanceFormula),
         damageResistances: normalizeFormulaMap(race.damageResistances, damageTypes),
         needSettings: normalizeRaceNeedSettings(race.needSettings),
@@ -118,6 +125,12 @@ export function normalizeCreatureOptions(options = {}, characteristics = [], dam
 
 function normalizeBleedingResistanceFormula(value) {
   return String(value ?? DEFAULT_BLEEDING_RESISTANCE_FORMULA).trim() || DEFAULT_BLEEDING_RESISTANCE_FORMULA;
+}
+
+function normalizeRegeneration(value = {}) {
+  return {
+    formula: String(value?.formula ?? DEFAULT_REGENERATION_FORMULA).trim() || DEFAULT_REGENERATION_FORMULA
+  };
 }
 
 function normalizeRaceCharacteristics(values = {}, characteristics = []) {

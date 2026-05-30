@@ -29,6 +29,7 @@ import { registerSearchInventorySocket } from "./apps/search-inventory.mjs";
 import { registerFirstAidSocket } from "./items/first-aid.mjs";
 import { registerAbilityEffectHooks, syncLoadedActorAbilityEffects } from "./abilities/effects.mjs";
 import { registerNeedThresholdHooks } from "./needs/need-thresholds.mjs";
+import { registerRegenerationHooks } from "./needs/regeneration.mjs";
 import { registerSystemSheets } from "./sheets/index.mjs";
 import { FalloutMaWDragDrop } from "./utils/drag-drop.mjs";
 import {
@@ -62,6 +63,7 @@ Hooks.once("init", () => {
   registerCombatMovementHooks();
   registerAbilityEffectHooks();
   registerNeedThresholdHooks();
+  registerRegenerationHooks();
   registerSkillCheckControlHooks();
   registerTokenActionHudHooks();
   registerWorldTimeControlHooks();

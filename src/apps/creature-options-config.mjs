@@ -13,8 +13,10 @@ import {
 import {
   createDefaultInventorySize,
   createDefaultRaceBaseParameters,
+  createDefaultRegeneration,
   createRaceDefaults,
-  DEFAULT_BLEEDING_RESISTANCE_FORMULA
+  DEFAULT_BLEEDING_RESISTANCE_FORMULA,
+  DEFAULT_REGENERATION_FORMULA
 } from "../settings/creature-options.mjs";
 import { format, localize } from "../utils/i18n.mjs";
 import { buildDamageMitigationEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
@@ -27,7 +29,7 @@ import { NeedAdvancedSettingsConfig } from "./need-settings-config.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
-const CREATURE_SECTION_KEYS = Object.freeze(["type", "race", "base", "development", "limbs", "equipment", "inventory", "resistances", "needs"]);
+const CREATURE_SECTION_KEYS = Object.freeze(["type", "race", "base", "development", "regeneration", "limbs", "equipment", "inventory", "resistances", "needs"]);
 
 export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
   #editorMode = "type";
@@ -132,6 +134,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         }))
       })),
       inventorySize: selectedRace?.inventorySize ?? createDefaultInventorySize(),
+      regeneration: selectedRace?.regeneration ?? createDefaultRegeneration(),
       resistanceDamageTypes: configurableDamageTypes.map(damageType => ({
         ...damageType,
         formula: String(selectedRace?.damageResistances?.[damageType.key] ?? "0")
@@ -511,6 +514,9 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       columns: Math.max(1, toInteger(formData.race?.inventorySize?.columns ?? createDefaultInventorySize().columns)),
       rows: Math.max(1, toInteger(formData.race?.inventorySize?.rows ?? createDefaultInventorySize().rows))
     };
+    race.regeneration = {
+      formula: String(formData.race?.regeneration?.formula ?? DEFAULT_REGENERATION_FORMULA).trim() || DEFAULT_REGENERATION_FORMULA
+    };
     race.bleedingResistanceFormula = String(formData.race?.bleedingResistanceFormula ?? DEFAULT_BLEEDING_RESISTANCE_FORMULA).trim()
       || DEFAULT_BLEEDING_RESISTANCE_FORMULA;
     const configurableDamageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
@@ -609,6 +615,13 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
           ui.notifications.error(`${label}: ${error.message}`);
           throw error;
         }
+      }
+
+      try {
+        validateFormula(race.regeneration?.formula ?? DEFAULT_REGENERATION_FORMULA, { allowSkills: true, characteristics, skills });
+      } catch (error) {
+        ui.notifications.error(`${race.name || race.id} / Регенерация: ${error.message}`);
+        throw error;
       }
 
       const loadFormula = race.baseParameters?.loadFormula ?? createDefaultRaceBaseParameters().loadFormula;

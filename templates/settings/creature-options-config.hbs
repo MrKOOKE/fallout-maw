@@ -134,6 +134,18 @@
         </div>
       </section>
 
+      <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.regeneration.cssClass}}" data-creature-section="regeneration">
+        <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
+          <button type="button" data-creature-section-toggle aria-expanded="{{sections.regeneration.ariaExpanded}}"><i class="fa-solid {{sections.regeneration.iconClass}}"></i><span>Регенерация</span></button>
+        </header>
+        <div class="fallout-maw-list-grid two-columns">
+          <label>
+            <span>{{localize "FALLOUTMAW.Common.Formula"}}</span>
+            <input type="text" name="race.regeneration.formula" value="{{regeneration.formula}}" data-formula-autocomplete="all">
+          </label>
+        </div>
+      </section>
+
       <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.limbs.cssClass}}" data-creature-section="limbs">
         <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
           <button type="button" data-creature-section-toggle aria-expanded="{{sections.limbs.ariaExpanded}}"><i class="fa-solid {{sections.limbs.iconClass}}"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.Limbs"}}</span></button>
