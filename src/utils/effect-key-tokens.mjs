@@ -88,7 +88,9 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
       label: "Стоимость действий",
       path: "system.costs.action",
       group: "Стоимость"
-    })
+    }),
+    ...buildActionCostEffectKeyTokens(),
+    ...buildCombatEffectKeyTokens()
   ];
 
   if (includeFirstAidHealing) {
@@ -102,6 +104,54 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
   }
 
   return tokens.filter(Boolean);
+}
+
+export function buildActionCostEffectKeyTokens() {
+  return getWeaponActionCostEntries().map(entry => createEffectKeyToken({
+    code: entry.code,
+    key: entry.key,
+    label: entry.label,
+    path: `system.costs.actions.${entry.key}`,
+    group: "Стоимость"
+  })).filter(Boolean);
+}
+
+export function getWeaponActionCostEntries() {
+  return [
+    { key: "aimedShot", code: "aimedShotCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedShot", "Прицельный выстрел")}: стоимость` },
+    { key: "snapshot", code: "snapshotCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionSnapshot", "Выстрел на вскидку")}: стоимость` },
+    { key: "burst", code: "burstCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionBurst", "Очередь")}: стоимость` },
+    { key: "volley", code: "volleyCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionVolley", "Залп")}: стоимость` },
+    { key: "meleeAttack", code: "meleeAttackCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionMeleeAttack", "Неприцельная атака")}: стоимость` },
+    { key: "aimedMeleeAttack", code: "aimedMeleeAttackCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack", "Прицельная атака")}: стоимость` },
+    { key: "reload", code: "reloadCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionReload", "Перезарядка")}: стоимость` }
+  ];
+}
+
+export function buildCombatEffectKeyTokens() {
+  return [
+    createEffectKeyToken({
+      code: "burstStability",
+      key: "burstStability",
+      label: "Стабильность стрельбы очередью",
+      path: "system.combat.burstStability",
+      group: "Бой"
+    }),
+    createEffectKeyToken({
+      code: "incomingHealing",
+      key: "incomingHealing",
+      label: "Входящее лечение, %",
+      path: "system.healing.incomingPercent",
+      group: "Лечение"
+    }),
+    createEffectKeyToken({
+      code: "outgoingHealing",
+      key: "outgoingHealing",
+      label: "Исходящее лечение, %",
+      path: "system.healing.outgoingPercent",
+      group: "Лечение"
+    })
+  ].filter(Boolean);
 }
 
 export function buildDamageMitigationEffectKeyTokens() {
@@ -160,12 +210,12 @@ export function buildDamageMitigationEffectKeyTokens() {
 function getDamageMitigationTokenGroups() {
   return [
     {
-      rootPath: "damageDefenses",
-      groupLabel: localizeOrFallback("FALLOUTMAW.Common.DamageDefenses", "Защита от урона")
+      rootPath: "damageDefenseBonuses",
+      groupLabel: localizeOrFallback("FALLOUTMAW.Effects.DamageDefenseBonuses", "Бонус защиты от урона")
     },
     {
-      rootPath: "damageResistances",
-      groupLabel: localizeOrFallback("FALLOUTMAW.Common.DamageResistances", "Сопротивления урону")
+      rootPath: "damageResistanceBonuses",
+      groupLabel: localizeOrFallback("FALLOUTMAW.Effects.DamageResistanceBonuses", "Бонус сопротивлений урону")
     }
   ];
 }

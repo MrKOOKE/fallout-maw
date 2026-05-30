@@ -86,7 +86,26 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
     if (index >= 0) category.abilities[index] = normalized;
     else category.abilities.push(normalized);
     this.catalog = await setAbilityCatalog(this.catalog);
-    return normalized;
+    const saved = this.getAbility(categoryId, normalized.id) ?? normalized;
+    this.#syncAbilityRow(categoryId, saved);
+    return saved;
+  }
+
+  #syncAbilityRow(categoryId, ability) {
+    const categoryRow = Array.from(this.form?.querySelectorAll("[data-ability-category-row]") ?? [])
+      .find(row => row.dataset.categoryId === categoryId);
+    const abilityRow = Array.from(categoryRow?.querySelectorAll("[data-ability-row]") ?? [])
+      .find(row => row.dataset.abilityId === ability.id);
+    if (!abilityRow) return;
+
+    const nameInput = abilityRow.querySelector("[data-field='abilityName']");
+    if (nameInput) nameInput.value = ability.name;
+    const imgInput = abilityRow.querySelector("[data-field='abilityImg']");
+    if (imgInput) imgInput.value = ability.img;
+    const costInput = abilityRow.querySelector("[data-field='abilityCost']");
+    if (costInput) costInput.value = String(toInteger(ability.system?.cost));
+    const img = abilityRow.querySelector("img");
+    if (img) img.src = ability.img;
   }
 
   readCatalogFromForm() {

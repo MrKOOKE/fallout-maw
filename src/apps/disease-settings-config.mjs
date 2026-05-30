@@ -10,7 +10,7 @@ import {
   resetDiseaseSettings,
   setDiseaseSettings
 } from "../settings/accessors.mjs";
-import { buildDamageMitigationEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import { buildActionCostEffectKeyTokens, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateEffectKeyAutocomplete, createEffectKeyToken } from "./effect-key-autocomplete.mjs";
 
@@ -292,6 +292,8 @@ function buildEffectKeyTokens() {
     ...getResourceSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.resources.${entry.key}.bonus`, group: "Ресурсы" })),
     ...getNeedSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.needs.${entry.key}.bonus`, group: "Потребности" })),
     ...getProficiencySettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.proficiencies.${entry.key}`, group: "Владения" })),
-    ...buildDamageMitigationEffectKeyTokens()
+    ...buildDamageMitigationEffectKeyTokens(),
+    ...buildActionCostEffectKeyTokens(),
+    ...buildCombatEffectKeyTokens()
   ].filter(Boolean);
 }

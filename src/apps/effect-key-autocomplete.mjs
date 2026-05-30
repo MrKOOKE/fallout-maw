@@ -2,7 +2,6 @@ import { escapeHtml, getHtmlRoot } from "../utils/dom.mjs";
 
 const EFFECT_KEY_INPUT_SELECTOR = "input[data-effect-key-autocomplete]";
 const TOKEN_BEFORE_CARET = /[\p{L}_][\p{L}\p{N}_]*$/u;
-const MAX_SUGGESTIONS = 12;
 const MENU_VIEWPORT_PADDING = 12;
 
 export function activateEffectKeyAutocomplete(html, tokens = [], { selector = EFFECT_KEY_INPUT_SELECTOR } = {}) {
@@ -129,8 +128,10 @@ class EffectKeyAutocomplete {
   #findMatches(query) {
     return this.tokens
       .filter(token => token.matches.some(value => value.startsWith(query)))
-      .sort((left, right) => left.code.localeCompare(right.code))
-      .slice(0, MAX_SUGGESTIONS);
+      .sort((left, right) => (
+        getTokenSuggestionRank(left) - getTokenSuggestionRank(right)
+        || left.code.localeCompare(right.code)
+      ));
   }
 
   #render() {
@@ -220,4 +221,12 @@ function buildSearchValues(...values) {
     }
   }
   return Array.from(matches);
+}
+
+function getTokenSuggestionRank(token) {
+  const path = String(token?.path ?? "");
+  if (path.endsWith(".all.all")) return 0;
+  if (path.endsWith(".all")) return 1;
+  if (path.includes(".all.")) return 2;
+  return 3;
 }

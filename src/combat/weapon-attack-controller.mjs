@@ -269,7 +269,7 @@ class WeaponAttackController {
       this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
       const result = await this.resolveAttackPellets({
         checkBatch,
-        difficultyBonus: getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId)
+        difficultyBonus: getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId, this.token.actor)
       });
       await this.dodgeExposure.flush();
       for (const trajectory of result.trajectories) {
@@ -325,7 +325,7 @@ class WeaponAttackController {
 
     this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
-      const difficultyBonus = getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId);
+      const difficultyBonus = getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId, this.token.actor);
       const shotTrajectories = buildAttackTrajectories(this.token, getRandomBurstMissGeometry(this.token, this.geometry), [], pelletCount);
       const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), shotTrajectories.map(() => 1));
       for (const trajectory of shotTrajectories) trajectories.push({ ...trajectory, delayGroup: attackIndex });
@@ -395,7 +395,7 @@ class WeaponAttackController {
 
     this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
-      const difficultyBonus = getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId);
+      const difficultyBonus = getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId, this.token.actor);
       const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), Array(Math.max(1, toInteger(pelletCount))).fill(1));
 
       for (let pelletIndex = 0; pelletIndex < pelletDamages.length; pelletIndex += 1) {
@@ -976,7 +976,7 @@ class WeaponAttackController {
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
       const blastOutcome = await this.resolveVolleyBlastPoint(intendedGeometry, {
         checkBatch,
-        difficultyBonus: getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId)
+        difficultyBonus: getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId, this.token.actor)
       });
       const finalGeometry = {
         ...intendedGeometry,
@@ -1439,7 +1439,7 @@ class WeaponAttackController {
         label: game.i18n.localize("FALLOUTMAW.Item.AttackChanceArea"),
         chance: getVolleyAreaHitChance(this.token.actor, this.weapon, this.geometry, {
           weaponFunctionId: this.weaponFunctionId,
-          difficultyBonus: getBurstShotDifficultyBonus(this.weapon, this.actionKey, 0, this.weaponFunctionId)
+          difficultyBonus: getBurstShotDifficultyBonus(this.weapon, this.actionKey, 0, this.weaponFunctionId, this.token.actor)
         })
       }];
     }
@@ -2151,9 +2151,15 @@ function getWeaponBurstDifficultyPerShot(weapon, weaponFunctionId = "") {
   return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 10;
 }
 
-function getBurstShotDifficultyBonus(weapon, actionKey, attackIndex = 0, weaponFunctionId = "") {
+function getEffectiveWeaponBurstDifficultyPerShot(weapon, weaponFunctionId = "", actor = null) {
+  const base = getWeaponBurstDifficultyPerShot(weapon, weaponFunctionId);
+  const stabilityPercent = toInteger(actor?.system?.combat?.burstStability);
+  return Math.max(0, Math.round(base * Math.max(0, 1 - (stabilityPercent / 100))));
+}
+
+function getBurstShotDifficultyBonus(weapon, actionKey, attackIndex = 0, weaponFunctionId = "", actor = null) {
   if (actionKey !== "burst") return 0;
-  return Math.max(0, toInteger(attackIndex)) * getWeaponBurstDifficultyPerShot(weapon, weaponFunctionId);
+  return Math.max(0, toInteger(attackIndex)) * getEffectiveWeaponBurstDifficultyPerShot(weapon, weaponFunctionId, actor);
 }
 
 function getWeaponPelletCount(weapon, weaponFunctionId = "") {
@@ -2215,7 +2221,7 @@ function isCombatActionPointSpendingActive() {
 function getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId = "") {
   const value = Number(getWeaponAttackData(weapon, weaponFunctionId)?.[actionKey]?.actionPointCost);
   const baseCost = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : DEFAULT_WEAPON_ACTION_POINT_COST;
-  return applyDamageCostModifier(baseCost, getDamageCostModifierState(actor).action);
+  return applyDamageCostModifier(baseCost, getDamageCostModifierState(actor, { actionKey }).action);
 }
 
 function hasRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "") {

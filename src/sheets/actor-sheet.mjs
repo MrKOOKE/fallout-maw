@@ -4526,8 +4526,18 @@ function buildEffectPathLabelMap({
     value: valueLabel,
     max: maximumLabel
   });
-  addDamageEffectPathLabels(map, "system.damageDefenses", game.i18n.localize("FALLOUTMAW.Common.DamageDefenses"), limbs, damageTypeSettings);
-  addDamageEffectPathLabels(map, "system.damageResistances", game.i18n.localize("FALLOUTMAW.Common.DamageResistances"), limbs, damageTypeSettings);
+  addDamageEffectPathLabels(map, "system.damageDefenseBonuses", localizeOrFallback("FALLOUTMAW.Effects.DamageDefenseBonuses", "Бонус защиты от урона"), limbs, damageTypeSettings);
+  addDamageEffectPathLabels(map, "system.damageResistanceBonuses", localizeOrFallback("FALLOUTMAW.Effects.DamageResistanceBonuses", "Бонус сопротивлений урону"), limbs, damageTypeSettings);
+  map.set("system.combat.burstStability", "Стабильность стрельбы очередью");
+  map.set("system.healing.incomingPercent", "Входящее лечение, %");
+  map.set("system.healing.outgoingPercent", "Исходящее лечение, %");
+  map.set("system.costs.actions.aimedShot", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot")}: стоимость`);
+  map.set("system.costs.actions.snapshot", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot")}: стоимость`);
+  map.set("system.costs.actions.burst", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst")}: стоимость`);
+  map.set("system.costs.actions.volley", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley")}: стоимость`);
+  map.set("system.costs.actions.meleeAttack", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack")}: стоимость`);
+  map.set("system.costs.actions.aimedMeleeAttack", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack")}: стоимость`);
+  map.set("system.costs.actions.reload", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload")}: стоимость`);
   const firstAidHealingLabel = game.i18n.localize("FALLOUTMAW.Item.FirstAidHealingPerTick");
   map.set("fallout-maw.healing", firstAidHealingLabel);
   map.set("healing", firstAidHealingLabel);

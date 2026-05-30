@@ -353,6 +353,8 @@
       "ChangeMultiply": "Процент",
       "ChangeOverride": "Перезапись",
       "Create": "Создать эффект",
+      "DamageDefenseBonuses": "Бонус защиты от урона",
+      "DamageResistanceBonuses": "Бонус сопротивлений урону",
       "Disable": "Отключить",
       "Disabled": "Отключен",
       "Description": "Описание эффекта",

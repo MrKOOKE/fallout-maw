@@ -1,4 +1,5 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { getActorHealingModifierPercent } from "../combat/damage-hub.mjs";
 import { createDiseaseImmunityEffect } from "../needs/need-thresholds.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getSkillSettings, getSystemActionSettings, getToolSettings } from "../settings/accessors.mjs";
@@ -352,6 +353,7 @@ async function performTreatment({ sourceActor, targetContext, treatmentType = "t
 
   const result = await runTreatmentChecks({
     sourceActor,
+    targetContext,
     trauma,
     tool,
     initialProgress,
@@ -391,7 +393,7 @@ async function performTreatment({ sourceActor, targetContext, treatmentType = "t
   return { targetContext: updatedTargetContext };
 }
 
-async function runTreatmentChecks({ sourceActor, trauma, tool, initialProgress, maxProgress }) {
+async function runTreatmentChecks({ sourceActor, targetContext = null, trauma, tool, initialProgress, maxProgress }) {
   const skillKey = String(trauma.healingSkillKey ?? "");
   const difficulty = Math.max(1, toInteger(trauma.healingDifficulty));
   const progressPerCheck = Math.max(1, Math.ceil(maxProgress * TREATMENT_PROGRESS_STEP_RATIO));
@@ -435,7 +437,8 @@ async function runTreatmentChecks({ sourceActor, trauma, tool, initialProgress, 
       availableCharges,
       progressForCheck,
       missingProgress: remainingProgress,
-      resultKey: String(outcome.result?.key ?? "failure")
+      resultKey: String(outcome.result?.key ?? "failure"),
+      healingMultiplier: getTreatmentHealingMultiplier(sourceActor, targetContext)
     });
     if (treatment.chargesUsed <= 0) break;
 
@@ -482,7 +485,7 @@ function validateInstrumentForTreatment(actor, trauma, tool) {
   return { ok: true, message: "" };
 }
 
-function calculateTreatmentResult({ trauma, tool, availableCharges, progressForCheck, missingProgress, resultKey }) {
+function calculateTreatmentResult({ trauma, tool, availableCharges, progressForCheck, missingProgress, resultKey, healingMultiplier = 1 }) {
   const targetProgress = Math.min(progressForCheck, missingProgress);
   let efficiency = calculateBaseEfficiency(tool.toolClass, trauma.healingToolClass);
   if (resultKey === "criticalSuccess") efficiency *= 1.5;
@@ -492,8 +495,14 @@ function calculateTreatmentResult({ trauma, tool, availableCharges, progressForC
   const chargesUsed = Math.min(chargesNeeded, availableCharges);
   const normalProgress = Math.max(0, Math.ceil(chargesUsed * (efficiency / 100)));
   const progressMultiplier = resultKey === "criticalSuccess" ? 2 : resultKey === "criticalFailure" ? 0.5 : 1;
-  const progress = Math.min(missingProgress, Math.max(0, Math.floor(normalProgress * progressMultiplier)));
+  const progress = Math.min(missingProgress, Math.max(0, Math.floor(normalProgress * progressMultiplier * Math.max(0, Number(healingMultiplier) || 0))));
   return { progress, chargesUsed, efficiency };
+}
+
+function getTreatmentHealingMultiplier(sourceActor, targetContext = null) {
+  const outgoing = Math.max(0, 1 + (getActorHealingModifierPercent(sourceActor, "outgoing") / 100));
+  const incoming = Math.max(0, 1 + (toInteger(targetContext?.incomingHealingPercent) / 100));
+  return outgoing * incoming;
 }
 
 async function applyTreatmentToTarget(targetContext, { treatmentType = "trauma", treatmentId, finalProgress, completed }) {
@@ -558,6 +567,7 @@ function buildTargetContext(actor, token = null) {
     name: token?.name ?? actor.name,
     actorName: actor.name,
     tokenName: token?.name ?? "",
+    incomingHealingPercent: getActorHealingModifierPercent(actor, "incoming"),
     traumas: actor.items
       .filter(item => item.type === "trauma")
       .map(snapshotTrauma),

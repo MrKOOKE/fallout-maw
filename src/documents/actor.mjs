@@ -11,7 +11,6 @@ import {
   getCharacteristicSettings,
   getCreatureOptions,
   getCurrencySettings,
-  getDamageTypeSettings,
   getLevelSettings,
   getProficiencySettings,
   getSkillSettings
@@ -133,15 +132,13 @@ export class FalloutMaWActor extends Actor {
       if (!effect.active) continue;
       for (const change of effect.system.changes) {
         if ((change.key === "") || (change.phase !== phase)) continue;
-        for (const expandedChange of expandAllLimbEffectChange(this, change)) {
-          const copy = foundry.utils.deepClone(expandedChange);
-          copy.effect = effect;
-          if (copy.key?.startsWith("token.")) {
-            copy.key = copy.key.slice(6);
-            tokenChanges.push(copy);
-          } else {
-            changes.push(copy);
-          }
+        const copy = foundry.utils.deepClone(change);
+        copy.effect = effect;
+        if (copy.key?.startsWith("token.")) {
+          copy.key = copy.key.slice(6);
+          tokenChanges.push(copy);
+        } else {
+          changes.push(copy);
         }
       }
       if (phase === "initial") {
@@ -291,29 +288,6 @@ export class FalloutMaWActor extends Actor {
     return this;
   }
 
-}
-
-const DAMAGE_MITIGATION_EFFECT_KEY_PATTERN = /^system\.(damageDefenses|damageResistances)\.([^.]+)\.([^.]+)$/;
-const ALL_LIMB_SELECTORS = new Set(["all", "allLimbs", "*"]);
-const ALL_DAMAGE_TYPE_SELECTORS = new Set(["all", "allDamageTypes", "*"]);
-
-function expandAllLimbEffectChange(actor, change = {}) {
-  const match = String(change.key ?? "").trim().match(DAMAGE_MITIGATION_EFFECT_KEY_PATTERN);
-  if (!match) return [change];
-  const [, mitigationKey, limbSelector, damageTypeSelector] = match;
-  if (!ALL_LIMB_SELECTORS.has(limbSelector) && !ALL_DAMAGE_TYPE_SELECTORS.has(damageTypeSelector)) return [change];
-
-  const limbKeys = ALL_LIMB_SELECTORS.has(limbSelector)
-    ? Object.keys(actor.system?.limbs ?? {})
-    : [limbSelector];
-  const damageTypeKeys = ALL_DAMAGE_TYPE_SELECTORS.has(damageTypeSelector)
-    ? getDamageTypeSettings().map(damageType => damageType.key).filter(Boolean)
-    : [damageTypeSelector];
-
-  return limbKeys.flatMap(limbKey => damageTypeKeys.map(damageTypeKey => ({
-    ...change,
-    key: `system.${mitigationKey}.${limbKey}.${damageTypeKey}`
-  })));
 }
 
 function applyCreatureRaceDefaults(actor) {

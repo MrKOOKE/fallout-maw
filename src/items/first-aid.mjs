@@ -1,4 +1,10 @@
-import { requestDamageApplication, requestFirstAidEffect, requestFirstAidNeedChanges, requestFirstAidRemoveEffects } from "../combat/damage-hub.mjs";
+import {
+  getActorHealingModifierPercent,
+  requestDamageApplication,
+  requestFirstAidEffect,
+  requestFirstAidNeedChanges,
+  requestFirstAidRemoveEffects
+} from "../combat/damage-hub.mjs";
 import { ACTION_RESOURCE_KEY } from "../combat/movement-resources.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
@@ -64,14 +70,15 @@ export async function useFirstAidItem({ sourceActor = null, targetActor = null, 
     ? 1 + (Math.max(0, toInteger(firstAid.criticalSuccessHealingBonus ?? CRITICAL_SUCCESS_DEFAULT_BONUS)) / 100)
     : 1;
   const effectMultiplier = resultMultiplier * criticalSuccessMultiplier;
+  const healingMultiplier = effectMultiplier * Math.max(0, 1 + (getActorHealingModifierPercent(sourceActor, "outgoing") / 100));
 
-  const healing = calculateHealingAmount(targetActor, firstAid, effectMultiplier, targetContext);
+  const healing = calculateHealingAmount(targetActor, firstAid, healingMultiplier, targetContext);
   const durationSeconds = Math.max(0, toInteger(firstAid.durationSeconds));
-  const normalizedChanges = normalizeFirstAidChanges(firstAid.changes, effectMultiplier);
+  const normalizedChanges = normalizeFirstAidChanges(firstAid.changes, effectMultiplier, healingMultiplier);
   const healingPerTick = Math.max(0, normalizedChanges.healingPerTick);
   const changes = normalizedChanges.changes;
   const needs = normalizeFirstAidNeeds(firstAid.needs, effectMultiplier);
-  const limbs = normalizeFirstAidLimbs(selectedLimbs, firstAid, effectMultiplier);
+  const limbs = normalizeFirstAidLimbs(selectedLimbs, firstAid, effectMultiplier, healingMultiplier);
   const hasImmediateHealing = healing > 0;
   const hasTimedEffect = durationSeconds > 0 && (healingPerTick > 0 || changes.length);
   if (!hasImmediateHealing && !hasTimedEffect && !needs.length && !limbs.length && !hasEffectRemoval) return false;
@@ -140,17 +147,18 @@ function calculateHealingAmount(actor, firstAid = {}, multiplier = 1, targetCont
   return Math.max(0, scaleSignedValue(base, multiplier));
 }
 
-function normalizeFirstAidChanges(changes = [], multiplier = 1) {
+function normalizeFirstAidChanges(changes = [], multiplier = 1, healingMultiplier = multiplier) {
   const source = Array.isArray(changes) ? changes : Object.values(changes ?? {});
   let healingPerTick = 0;
   const normalized = source
     .map(change => {
       const key = String(change?.key ?? "").trim();
-      const value = scaleChangeValue(change?.value, multiplier);
       if (FIRST_AID_HEALING_CHANGE_KEYS.has(key.toLocaleLowerCase())) {
+        const value = scaleHealingChangeValue(change?.value, healingMultiplier);
         healingPerTick += toInteger(value);
         return null;
       }
+      const value = scaleChangeValue(change?.value, multiplier);
       return {
       key: String(change?.key ?? "").trim(),
       type: ["add", "multiply", "override"].includes(String(change?.type ?? "")) ? String(change.type) : "add",
@@ -192,8 +200,11 @@ function getSelectedFirstAidLimbKeys(selectedLimbs = []) {
     .filter(Boolean)));
 }
 
-function normalizeFirstAidLimbs(limbs = [], firstAid = {}, multiplier = 1) {
-  const value = scaleSignedValue(toInteger(firstAid.limbSelection?.value), multiplier);
+function normalizeFirstAidLimbs(limbs = [], firstAid = {}, multiplier = 1, healingMultiplier = multiplier) {
+  const baseValue = toInteger(firstAid.limbSelection?.value);
+  const value = baseValue > 0 && Number(healingMultiplier) <= 0
+    ? 0
+    : scaleSignedValue(baseValue, baseValue > 0 ? healingMultiplier : multiplier);
   if (!value) return [];
   const source = Array.isArray(limbs) ? limbs : [];
   return source
@@ -226,6 +237,11 @@ function scaleChangeValue(value, multiplier = 1) {
   const number = Number(value);
   if (!Number.isFinite(number) || !Number.isFinite(Number(multiplier)) || Number(multiplier) === 1) return value;
   return scaleSignedValue(number, multiplier);
+}
+
+function scaleHealingChangeValue(value, multiplier = 1) {
+  if (Number(multiplier) <= 0) return 0;
+  return scaleChangeValue(value, multiplier);
 }
 
 function scaleSignedValue(value, multiplier = 1) {

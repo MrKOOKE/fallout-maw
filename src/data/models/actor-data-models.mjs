@@ -61,6 +61,13 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         level: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
         initiative: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
       }),
+      combat: new SchemaField({
+        burstStability: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
+      }),
+      healing: new SchemaField({
+        incomingPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+        outgoingPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
+      }),
       creature: new SchemaField({
         typeId: new StringField({ required: true, blank: true, initial: "" }),
         raceId: new StringField({ required: true, blank: true, initial: "" })
@@ -79,7 +86,21 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         }),
         { required: true, initial: {}, persisted: false }
       ),
+      damageDefenseBonuses: new TypedObjectField(
+        new TypedObjectField(new NumberField({ required: true, integer: true, initial: 0 }), {
+          required: true,
+          initial: {}
+        }),
+        { required: true, initial: {}, persisted: false }
+      ),
       damageResistances: new TypedObjectField(
+        new TypedObjectField(new NumberField({ required: true, integer: true, initial: 0 }), {
+          required: true,
+          initial: {}
+        }),
+        { required: true, initial: {}, persisted: false }
+      ),
+      damageResistanceBonuses: new TypedObjectField(
         new TypedObjectField(new NumberField({ required: true, integer: true, initial: 0 }), {
           required: true,
           initial: {}
@@ -116,8 +137,12 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.inventory ??= {};
     this.limbs ??= {};
     this.currencies ??= {};
+    this.combat ??= {};
+    this.healing ??= {};
     this.damageDefenses ??= {};
+    this.damageDefenseBonuses ??= {};
     this.damageResistances ??= {};
+    this.damageResistanceBonuses ??= {};
     this.development ??= {};
 
     const baseCharacteristics = normalizeNumberMap(this.characteristics, characteristicSettings);
@@ -209,8 +234,10 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       skills: skillValues
     });
     const itemMitigation = buildEquippedItemDamageMitigation(this.parent?.items, this.limbs, damageTypeSettings);
-    replaceObjectContents(this.damageDefenses, mergeLimbDamageMaps(baseDamageDefenses, itemMitigation.defenses));
-    replaceObjectContents(this.damageResistances, mergeLimbDamageMaps(baseDamageResistances, itemMitigation.resistances));
+    const damageDefenseBonuses = expandLimbDamageMapSelectors(this.damageDefenseBonuses, this.limbs, damageTypeSettings);
+    const damageResistanceBonuses = expandLimbDamageMapSelectors(this.damageResistanceBonuses, this.limbs, damageTypeSettings);
+    replaceObjectContents(this.damageDefenses, mergeLimbDamageMaps(baseDamageDefenses, itemMitigation.defenses, damageDefenseBonuses));
+    replaceObjectContents(this.damageResistances, mergeLimbDamageMaps(baseDamageResistances, itemMitigation.resistances, damageResistanceBonuses));
   }
 }
 
@@ -549,18 +576,51 @@ function buildEquippedItemDamageMitigation(items, limbs = {}, damageTypeSettings
   return { defenses, resistances };
 }
 
-function mergeLimbDamageMaps(base = {}, bonus = {}) {
+function mergeLimbDamageMaps(base = {}, ...bonuses) {
   return Object.fromEntries(
     Object.entries(base ?? {}).map(([limbKey, damageTypes]) => [
       limbKey,
       Object.fromEntries(
         Object.entries(damageTypes ?? {}).map(([damageTypeKey, value]) => [
           damageTypeKey,
-          toInteger(value) + toInteger(bonus?.[limbKey]?.[damageTypeKey])
+          toInteger(value) + bonuses.reduce((sum, bonus) => sum + toInteger(bonus?.[limbKey]?.[damageTypeKey]), 0)
         ])
       )
     ])
   );
+}
+
+function expandLimbDamageMapSelectors(source = {}, limbs = {}, damageTypeSettings = []) {
+  const result = buildEmptyLimbDamageMap(limbs, damageTypeSettings);
+  const limbKeys = Object.keys(limbs ?? {});
+  const damageTypeKeys = damageTypeSettings.map(damageType => damageType.key).filter(Boolean);
+
+  for (const [limbSelector, damageEntries] of Object.entries(source ?? {})) {
+    const selectedLimbs = isAllSelector(limbSelector)
+      ? limbKeys
+      : limbKeys.includes(limbSelector) ? [limbSelector] : [];
+    if (!selectedLimbs.length) continue;
+
+    for (const [damageTypeSelector, value] of Object.entries(damageEntries ?? {})) {
+      const selectedDamageTypes = isAllSelector(damageTypeSelector)
+        ? damageTypeKeys
+        : damageTypeKeys.includes(damageTypeSelector) ? [damageTypeSelector] : [];
+      const bonus = toInteger(value);
+      if (!selectedDamageTypes.length || !bonus) continue;
+
+      for (const limbKey of selectedLimbs) {
+        for (const damageTypeKey of selectedDamageTypes) {
+          result[limbKey][damageTypeKey] += bonus;
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+function isAllSelector(value) {
+  return String(value ?? "").trim() === "all";
 }
 
 function synchronizeAggregateHealthResource(resources = {}, limbs = {}) {

@@ -354,6 +354,8 @@
       "ChangeMultiply": "Percent",
       "ChangeOverride": "Override",
       "Create": "Create Effect",
+      "DamageDefenseBonuses": "Damage defense bonus",
+      "DamageResistanceBonuses": "Damage resistance bonus",
       "Disable": "Disable",
       "Disabled": "Disabled",
       "Description": "Effect Description",

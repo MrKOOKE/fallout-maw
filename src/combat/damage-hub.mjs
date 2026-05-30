@@ -62,7 +62,16 @@ const OVERLAY_STATUS_EFFECTS = new Set([
 ]);
 const COST_EFFECT_KEYS = Object.freeze({
   movement: "system.costs.movement",
-  action: "system.costs.action"
+  action: "system.costs.action",
+  actions: Object.freeze({
+    aimedShot: "system.costs.actions.aimedShot",
+    snapshot: "system.costs.actions.snapshot",
+    burst: "system.costs.actions.burst",
+    volley: "system.costs.actions.volley",
+    meleeAttack: "system.costs.actions.meleeAttack",
+    aimedMeleeAttack: "system.costs.actions.aimedMeleeAttack",
+    reload: "system.costs.actions.reload"
+  })
 });
 const EQUIPMENT_CONDITION_DAMAGE_VARIABLES = Object.freeze([
   "incoming",
@@ -422,10 +431,13 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
     return { actor, amount: 0, healthDelta: 0, limbDelta: 0, mode, scope, limbKey: data.limbKey };
   }
 
+  const requestedAmount = mode === MODE_HEALING
+    ? applyHealingModifierPercent(data.amount, getActorHealingModifierPercent(actor, "incoming"))
+    : data.amount;
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
   const periodic = damageType?.settings?.periodic;
   if (shouldSplitPeriodicDamage(data, mode, periodic)) {
-    return applyPeriodicSplitDamageApplicationNow(actor, data, {
+    return applyPeriodicSplitDamageApplicationNow(actor, { ...data, amount: requestedAmount }, {
       createSummary,
       damageType,
       periodic,
@@ -434,12 +446,12 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
   }
 
   const mitigationResult = mode === MODE_DAMAGE && data.applyMitigation
-    ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source, {
+    ? calculateDamageMitigation(actor, requestedAmount, damageType?.key ?? "", data.limbKey, data.source, {
       damageType,
       includeEquipmentConditionDamage: data.processDamageTypeSettings,
       includeResistanceOverheat: data.processDamageTypeSettings
     })
-    : { amount: data.amount, display: null };
+    : { amount: requestedAmount, display: null };
   const mitigatedAmount = mitigationResult.amount;
   if (mode === MODE_DAMAGE && data.applyMitigation && data.processDamageTypeSettings) {
     await applyEquipmentConditionDamage(actor, mitigationResult.equipmentConditionDamage);
@@ -853,10 +865,12 @@ export async function fullyRestoreActorDamageState(actor) {
   });
 }
 
-export function getDamageCostModifierState(actor) {
+export function getDamageCostModifierState(actor, { actionKey = "" } = {}) {
+  const action = collectCostModifier(actor, COST_EFFECT_KEYS.action);
+  const specificAction = collectCostModifier(actor, COST_EFFECT_KEYS.actions[String(actionKey ?? "").trim()]);
   return {
     movement: collectCostModifier(actor, COST_EFFECT_KEYS.movement),
-    action: collectCostModifier(actor, COST_EFFECT_KEYS.action)
+    action: mergeCostModifiers(action, specificAction)
   };
 }
 
@@ -883,6 +897,17 @@ export function applyDamageCostModifier(baseCost = 0, modifier = {}) {
   cost *= Number.isFinite(multiplier) ? multiplier : 1;
   cost += Number(modifier?.add) || 0;
   return Math.max(0, Math.ceil(cost));
+}
+
+export function getActorHealingModifierPercent(actor, direction = "incoming") {
+  const key = direction === "outgoing" ? "outgoingPercent" : "incomingPercent";
+  return toInteger(actor?.system?.healing?.[key]);
+}
+
+export function applyHealingModifierPercent(amount = 0, percent = 0) {
+  const value = Math.max(0, Number(amount) || 0);
+  if (!value) return 0;
+  return roundDamageAmount(value * Math.max(0, 1 + (toInteger(percent) / 100)));
 }
 
 function preventCriticalLimbHealthRecovery(actor, changes = {}) {
@@ -1370,6 +1395,7 @@ function isTruthyEffectValue(value) {
 
 function collectCostModifier(actor, key = "") {
   const modifier = { add: 0, multiplier: 1, override: null };
+  if (!key) return modifier;
   for (const effect of getActorApplicableEffects(actor)) {
     if (effect.disabled) continue;
     for (const change of effect.system?.changes ?? effect.changes ?? []) {
@@ -1382,6 +1408,16 @@ function collectCostModifier(actor, key = "") {
     }
   }
   return modifier;
+}
+
+function mergeCostModifiers(...modifiers) {
+  return modifiers.reduce((result, modifier) => ({
+    add: result.add + (Number(modifier?.add) || 0),
+    multiplier: result.multiplier * (Number.isFinite(Number(modifier?.multiplier)) ? Number(modifier.multiplier) : 1),
+    override: modifier?.override !== null && modifier?.override !== undefined && modifier?.override !== ""
+      ? modifier.override
+      : result.override
+  }), { add: 0, multiplier: 1, override: null });
 }
 
 function getActorApplicableEffects(actor) {
@@ -2605,7 +2641,9 @@ function distributeManualHealthValueUpdate(actor, changes = {}, options = {}) {
 
   const mode = delta > 0 ? MODE_HEALING : MODE_DAMAGE;
   if (mode === MODE_HEALING && isHealingBlocked(actor)) return false;
-  const amount = Math.abs(delta);
+  const amount = mode === MODE_HEALING
+    ? applyHealingModifierPercent(Math.abs(delta), getActorHealingModifierPercent(actor, "incoming"))
+    : Math.abs(delta);
   const result = calculateManualAggregateHealthAdjustment(actor, amount, mode);
   for (const [limbKey, value] of Object.entries(result.values)) {
     setLimbValueUpdate(changes, actor, limbKey, value);
@@ -4114,10 +4152,10 @@ function getResistanceOverheatEffectTotals(effects = []) {
 
 function buildResistanceOverheatChanges(actor, totals = new Map()) {
   return Array.from(totals, ([damageTypeKey, amount]) => ({
-    key: `system.damageResistances.all.${damageTypeKey}`,
+    key: `system.damageResistanceBonuses.all.${damageTypeKey}`,
     type: "add",
     value: String(-Math.max(0, toInteger(amount))),
-    phase: "final",
+    phase: "initial",
     priority: 0
   }));
 }
