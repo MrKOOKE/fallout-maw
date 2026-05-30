@@ -91,6 +91,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
     }),
     ...buildActionCostEffectKeyTokens(),
     ...buildActionBlockEffectKeyTokens(),
+    ...buildActionPenetrationEffectKeyTokens(),
     ...buildCombatEffectKeyTokens()
   ];
 
@@ -126,6 +127,19 @@ export function buildActionBlockEffectKeyTokens() {
       label: `${actionLabel}: Блокировка`,
       path: `system.blocks.actions.${entry.key}`,
       group: "Блокировки"
+    });
+  }).filter(Boolean);
+}
+
+export function buildActionPenetrationEffectKeyTokens() {
+  return getWeaponActionCostEntries().map(entry => {
+    const actionLabel = entry.actionLabel ?? String(entry.label || entry.key).replace(/:\s*[^:]+$/, "");
+    return createEffectKeyToken({
+      code: `${entry.key}Penetration`,
+      key: entry.key,
+      label: `${actionLabel}: пробивная сила`,
+      path: `system.penetration.actions.${entry.key}`,
+      group: "Пробивная сила"
     });
   }).filter(Boolean);
 }

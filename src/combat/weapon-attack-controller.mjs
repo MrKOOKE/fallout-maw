@@ -27,6 +27,7 @@ const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
 const BASE_VOLLEY_DIFFICULTY = 60;
 const VOLLEY_ACTION_KEY = "volley";
+const ACTION_PENETRATION_KEY_PREFIX = "system.penetration.actions.";
 const PERIODIC_DAMAGE_REGION_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
 const DEFAULT_REGION_DAMAGE_INTERVAL_SECONDS = 6;
 const REGION_SOCKET_REQUEST_TIMEOUT_MS = 60000;
@@ -259,7 +260,7 @@ class WeaponAttackController {
     const trajectories = [];
     const damageRequests = [];
     const forceBatchCheckMessage = attackCount > 1;
-    const collectCheckMessages = forceBatchCheckMessage || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId) > 0;
+    const collectCheckMessages = forceBatchCheckMessage || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey }) > 0;
     const checkBatch = collectCheckMessages
       ? createSkillCheckBatchCollector({
         requester: "weaponAttack",
@@ -317,7 +318,7 @@ class WeaponAttackController {
     const trajectories = [];
     const damageRequests = [];
     const forceBatchCheckMessage = attackCount > 1 || this.targets.length > 1 || pelletCount > 1;
-    const checkBatch = forceBatchCheckMessage || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId) > 0
+    const checkBatch = forceBatchCheckMessage || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey }) > 0
       ? createSkillCheckBatchCollector({
         requester: "weaponAttack",
         title: this.weapon.name
@@ -383,7 +384,7 @@ class WeaponAttackController {
     const trajectories = [];
     const damageRequests = [];
     const forceBatchCheckMessage = attackCount > 1;
-    const collectCheckMessages = forceBatchCheckMessage || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId) > 0;
+    const collectCheckMessages = forceBatchCheckMessage || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey }) > 0;
     const checkBatch = collectCheckMessages
       ? createSkillCheckBatchCollector({
         requester: "weaponAttack",
@@ -484,7 +485,7 @@ class WeaponAttackController {
     const pelletCount = getWeaponPelletCount(this.weapon, this.weaponFunctionId);
     const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), Array(pelletCount).fill(1));
     const trajectories = buildAimedAttackTrajectories(this.token, geometry, centerTrajectory, pelletCount);
-    const checkBatch = (pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId) > 0)
+    const checkBatch = (pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey }) > 0)
       ? createSkillCheckBatchCollector({
         requester: "weaponAttack",
         title: this.weapon.name
@@ -623,7 +624,7 @@ class WeaponAttackController {
   async resolveDirectedThrustTrajectory(selectedTarget, trajectory, { limbKey = "", checkBatch = null } = {}) {
     const damageRequests = [];
     const baseDamage = getAttackModeDamage(this.weapon, this.actionKey, "thrust", getWeaponDamage(this.weapon, this.weaponFunctionId), this.weaponFunctionId);
-    const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId);
+    const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey });
     const penetrationThreshold = Math.ceil(baseDamage * 0.5);
     const targets = getTrajectoryTargetEntries(this.token, trajectory);
     const selectedEntry = targets.find(entry => entry.target === selectedTarget)
@@ -748,6 +749,7 @@ class WeaponAttackController {
     if (!isSuccessfulAttack(outcome)) return null;
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     return buildWeaponDamageRequests(this.weapon, {
+      attackerActor: this.token.actor,
       actor: target.actor,
       limbKey: resolvedLimbKey,
       amount: damageAmount,
@@ -764,7 +766,7 @@ class WeaponAttackController {
   async resolveAimedAttackTrajectory(selectedTarget, trajectory, limbKey, { blockerBonus = 0, baseDamage = null, checkBatch = null } = {}) {
     const damageRequests = [];
     baseDamage = Math.max(0, Number(baseDamage ?? getWeaponDamage(this.weapon, this.weaponFunctionId)) || 0);
-    const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId);
+    const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey });
     const penetrationThreshold = Math.ceil(baseDamage * 0.5);
     checkBatch ??= penetrationPower > 0
       ? createSkillCheckBatchCollector({
@@ -871,7 +873,7 @@ class WeaponAttackController {
 
     const targets = getTrajectoryTargetEntries(this.token, trajectory);
     baseDamage = Math.max(0, Number(baseDamage ?? getWeaponDamage(this.weapon, this.weaponFunctionId)) || 0);
-    const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId);
+    const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey });
     const penetrationThreshold = Math.ceil(baseDamage * 0.5);
     let penetrationsUsed = 0;
     let attempted = true;
@@ -940,6 +942,7 @@ class WeaponAttackController {
     if (!isSuccessfulAttack(outcome)) return null;
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     return buildWeaponDamageRequests(this.weapon, {
+      attackerActor: this.token.actor,
       actor: target.actor,
       limbKey,
       amount: damageAmount,
@@ -1102,6 +1105,7 @@ class WeaponAttackController {
       if (amount <= 0) continue;
       const limbKey = selectRandomLimbKey(target.actor);
       requests.push(...buildWeaponDamageRequests(this.weapon, {
+        attackerActor: this.token.actor,
         actor: target.actor,
         limbKey,
         amount,
@@ -1143,6 +1147,7 @@ class WeaponAttackController {
     if (!isSuccessfulAttack(outcome)) return null;
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     return buildWeaponDamageRequests(this.weapon, {
+      attackerActor: this.token.actor,
       actor: target.actor,
       limbKey,
       amount: damageAmount,
@@ -3043,10 +3048,13 @@ function getWeaponMagazineSourceItem(weaponData = {}) {
   return globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
 }
 
-function buildWeaponDamageRequests(weapon, { actor = null, limbKey = "", amount = 0, source = {} } = {}, weaponFunctionId = "") {
+function buildWeaponDamageRequests(weapon, { attackerActor = null, actor = null, limbKey = "", amount = 0, source = {} } = {}, weaponFunctionId = "") {
   const damageTypes = getWeaponDamageTypeEntries(weapon, weaponFunctionId);
   const amounts = distributeIntegerAmount(amount, damageTypes.map(entry => entry.weight));
-  const penetrationPower = getWeaponPenetrationPower(weapon, weaponFunctionId);
+  const penetrationPower = getWeaponPenetrationPower(weapon, weaponFunctionId, {
+    actor: attackerActor,
+    actionKey: source.actionKey
+  });
   const requestSource = {
     ...source,
     penetrationPower
@@ -3253,8 +3261,39 @@ function getWeaponConditionCritChancePenalty(weapon) {
   return weakening.active ? weakening.steps * 3 : 0;
 }
 
-function getWeaponPenetrationPower(weapon, weaponFunctionId = "") {
-  return Math.max(0, toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.penetration));
+function getWeaponPenetrationPower(weapon, weaponFunctionId = "", { actor = null, actionKey = "" } = {}) {
+  const base = Math.max(0, toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.penetration));
+  const modifier = collectActionPenetrationModifier(actor, actionKey);
+  let value = base;
+  if (modifier.override !== null && modifier.override !== undefined && modifier.override !== "") value = Number(modifier.override);
+  value *= Number.isFinite(Number(modifier.multiplier)) ? Number(modifier.multiplier) : 1;
+  value += Number(modifier.add) || 0;
+  return Math.max(0, Math.trunc(value));
+}
+
+function collectActionPenetrationModifier(actor, actionKey = "") {
+  const key = `${ACTION_PENETRATION_KEY_PREFIX}${String(actionKey ?? "").trim()}`;
+  const modifier = { add: 0, multiplier: 1, override: null };
+  if (!actor || !actionKey) return modifier;
+
+  for (const effect of getActorApplicableEffects(actor)) {
+    if (effect.disabled) continue;
+    for (const change of effect.system?.changes ?? effect.changes ?? []) {
+      if (String(change?.key ?? "").trim() !== key) continue;
+      const value = Number(change.value);
+      if (!Number.isFinite(value)) continue;
+      if (change.type === "override") modifier.override = value;
+      else if (change.type === "multiply") modifier.multiplier *= value;
+      else modifier.add += value;
+    }
+  }
+
+  return modifier;
+}
+
+function getActorApplicableEffects(actor) {
+  if (typeof actor?.allApplicableEffects === "function") return Array.from(actor.allApplicableEffects());
+  return Array.from(actor?.effects ?? []);
 }
 
 function getWeaponAttackAnimationDelay(weapon, weaponFunctionId = "") {

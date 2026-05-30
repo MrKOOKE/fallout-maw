@@ -19,6 +19,7 @@ const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const SKILL_BONUS_KEY_PREFIX = "system.skills.";
 const SKILL_BONUS_KEY_SUFFIX = ".bonus";
 const ACTION_COST_KEY_PREFIX = "system.costs.actions.";
+const ACTION_PENETRATION_KEY_PREFIX = "system.penetration.actions.";
 
 export function registerAbilityCooldownHooks() {
   Hooks.on("fallout-maw.skillCheckResolved", outcome => {
@@ -51,8 +52,11 @@ export async function applyAbilityCooldownsForWeaponAction({ actor = null, actio
   const normalizedActionKey = String(actionKey ?? "").trim();
   if (!actor || !normalizedActionKey || normalizedActionKey === "reload") return [];
 
-  const changeKey = `${ACTION_COST_KEY_PREFIX}${normalizedActionKey}`;
-  return applyAbilityCooldownsForTriggeredKeys(actor, new Set([changeKey]), { trigger: "weaponAction" });
+  const changeKeys = new Set([
+    `${ACTION_COST_KEY_PREFIX}${normalizedActionKey}`,
+    `${ACTION_PENETRATION_KEY_PREFIX}${normalizedActionKey}`
+  ]);
+  return applyAbilityCooldownsForTriggeredKeys(actor, changeKeys, { trigger: "weaponAction" });
 }
 
 async function applyAbilityCooldownsForTriggeredKeys(actor, changeKeys, { trigger = "" } = {}) {
