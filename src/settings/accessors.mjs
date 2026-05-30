@@ -20,6 +20,7 @@ import { createDefaultCurrencySettings, normalizeCurrencySettings } from "./curr
 import {
   ABILITIES_CATALOG_SETTING,
   CHARACTERISTICS_SETTING,
+  COMBAT_SETTINGS_SETTING,
   CREATURE_OPTIONS_SETTING,
   CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
@@ -37,6 +38,7 @@ import {
   TRAUMA_SETTINGS_SETTING,
   TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING
 } from "./constants.mjs";
+import { createDefaultCombatSettings, normalizeCombatSettings } from "./combat.mjs";
 import { createDefaultAbilityCatalog, normalizeAbilityCatalog } from "./abilities.mjs";
 import { createEmptyCreatureOptions, normalizeCreatureOptions } from "./creature-options.mjs";
 import { createDefaultDiseaseSettings, normalizeDiseaseSettings } from "./diseases.mjs";
@@ -473,6 +475,24 @@ export async function setStealthSettings(settings) {
 
 export async function resetStealthSettings() {
   return setStealthSettings(createDefaultStealthSettings());
+}
+
+export function getCombatSettings() {
+  try {
+    return normalizeCombatSettings(game.settings.get(FALLOUT_MAW.id, COMBAT_SETTINGS_SETTING));
+  } catch (_error) {
+    return createDefaultCombatSettings();
+  }
+}
+
+export async function setCombatSettings(settings) {
+  const normalized = normalizeCombatSettings(settings);
+  await game.settings.set(FALLOUT_MAW.id, COMBAT_SETTINGS_SETTING, normalized);
+  return normalized;
+}
+
+export async function resetCombatSettings() {
+  return setCombatSettings(createDefaultCombatSettings());
 }
 
 export function getSkillCheckControl() {

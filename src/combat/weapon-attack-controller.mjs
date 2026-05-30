@@ -2,6 +2,7 @@ import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skil
 import { SYSTEM_ID } from "../constants.mjs";
 import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./attack-animations.mjs";
 import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplication, getDamageCostModifierState, getLimbHealingCap, isLimbDestroyed, requestDamageApplications, runDamageHubOperation } from "./damage-hub.mjs";
+import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier } from "./dodge-resource.mjs";
 import { createThrownItemTile } from "../canvas/thrown-items.mjs";
 import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageSourceFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction } from "../utils/item-functions.mjs";
 import { getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings } from "../settings/accessors.mjs";
@@ -112,6 +113,7 @@ class WeaponAttackController {
     this.lastPreviewBroadcastAt = 0;
     this.lastBroadcastPreviewState = null;
     this.lastTargetMarkerRenderState = null;
+    this.dodgeExposure = createDodgeAttackExposureTracker();
     this.burstTargetPreview = createBurstTargetPreviewState();
     this.burstPreviewStabilizeTimeout = null;
     this.volleyAction = isVolleyAttackAction(this.weapon, this.actionKey, this.weaponFunctionId);
@@ -264,10 +266,12 @@ class WeaponAttackController {
       : null;
     let attempted = false;
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
+      this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
       const result = await this.resolveAttackPellets({
         checkBatch,
         difficultyBonus: getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId)
       });
+      await this.dodgeExposure.flush();
       for (const trajectory of result.trajectories) {
         trajectories.push({ ...trajectory, delayGroup: attackIndex });
       }
@@ -320,6 +324,7 @@ class WeaponAttackController {
     let attempted = false;
 
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
+      this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
       const difficultyBonus = getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId);
       const shotTrajectories = buildAttackTrajectories(this.token, getRandomBurstMissGeometry(this.token, this.geometry), [], pelletCount);
       const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), shotTrajectories.map(() => 1));
@@ -338,6 +343,7 @@ class WeaponAttackController {
           if (request) damageRequests.push(...request);
         }
       }
+      await this.dodgeExposure.flush();
     }
 
     if (attempted) {
@@ -388,6 +394,7 @@ class WeaponAttackController {
     let attempted = false;
 
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
+      this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
       const difficultyBonus = getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId);
       const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), Array(Math.max(1, toInteger(pelletCount))).fill(1));
 
@@ -412,6 +419,7 @@ class WeaponAttackController {
         trajectories.push({ ...(result.trajectory ?? trajectory), delayGroup: attackIndex });
         damageRequests.push(...result.damageRequests);
       }
+      await this.dodgeExposure.flush();
     }
 
     if (attempted) {
@@ -482,6 +490,7 @@ class WeaponAttackController {
       : null;
     const damageRequests = [];
 
+    this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
     for (const [index, trajectory] of trajectories.entries()) {
       const result = await this.resolveAimedPelletTrajectory(target, trajectory, limbKey, {
         forceAimed: index === 0,
@@ -490,6 +499,7 @@ class WeaponAttackController {
       });
       damageRequests.push(...result.damageRequests);
     }
+    await this.dodgeExposure.flush();
 
     const spentQuantityItemData = getSpentQuantityItemData(this.weapon, attackCount, this.weaponFunctionId);
     await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
@@ -558,6 +568,7 @@ class WeaponAttackController {
     });
 
     if (direction.mode === "thrust") {
+      this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
       const trajectory = buildTrajectoryThroughPoint(this.token, geometry, getTokenAimPoint(target));
       const result = await this.resolveDirectedThrustTrajectory(target, trajectory, {
         limbKey: this.selectedLimbKey,
@@ -567,6 +578,7 @@ class WeaponAttackController {
       trajectories = [result.trajectory];
       attempted = true;
     } else {
+      this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
       const result = await this.resolveDirectedSwing(target, direction.key, {
         limbKey: this.selectedLimbKey,
         checkBatch,
@@ -576,6 +588,7 @@ class WeaponAttackController {
       trajectories = [result.trajectory];
       attempted = result.attempted;
     }
+    await this.dodgeExposure.flush();
 
     if (attempted) {
       const spentQuantityItemData = getSpentQuantityItemData(this.weapon, attackCount, this.weaponFunctionId);
@@ -710,6 +723,7 @@ class WeaponAttackController {
 
   async resolveDirectedAttackAgainstTarget(target, { limbKey = "", mode = "thrust", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
     if (isDeadTarget(target)) return null;
+    this.dodgeExposure.record(target.actor);
     const resolvedLimbKey = limbKey || selectRandomLimbKey(target.actor);
     if (!resolvedLimbKey || isLimbDestroyed(target.actor, resolvedLimbKey)) return [];
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
@@ -901,6 +915,7 @@ class WeaponAttackController {
 
   async resolveAttackAgainstTarget(target, { damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
     if (isDeadTarget(target)) return null;
+    this.dodgeExposure.record(target.actor);
     const limbKey = selectRandomLimbKey(target.actor, { includeDestroyed: true });
     if (!limbKey || isLimbDestroyed(target.actor, limbKey)) return [];
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
@@ -958,6 +973,7 @@ class WeaponAttackController {
       : null;
 
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
+      this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
       const blastOutcome = await this.resolveVolleyBlastPoint(intendedGeometry, {
         checkBatch,
         difficultyBonus: getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId)
@@ -981,6 +997,7 @@ class WeaponAttackController {
         const result = this.resolveVolleyDamageAgainstTarget(target, finalGeometry, blastOutcome);
         damageRequests.push(...(result ?? []));
       }
+      await this.dodgeExposure.flush();
     }
 
     this.geometry = finalGeometries[finalGeometries.length - 1] ?? intendedGeometry;
@@ -1072,6 +1089,7 @@ class WeaponAttackController {
   }
 
   resolveVolleyDamageAgainstTarget(target, geometry, blastOutcome) {
+    if (!isDeadTarget(target)) this.dodgeExposure.record(target.actor);
     const falloff = getVolleyDamageFalloff(target, geometry);
     const baseDamage = Math.round(getWeaponDamage(this.weapon, this.weaponFunctionId) * falloff);
     const damageAmount = getCriticalDamageAmount(this.weapon, baseDamage, blastOutcome.outcome, this.weaponFunctionId);
@@ -1101,6 +1119,7 @@ class WeaponAttackController {
 
   async resolveAimedAttackAgainstTarget(target, { limbKey = "", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
     if (isDeadTarget(target)) return null;
+    this.dodgeExposure.record(target.actor);
     if (!limbKey || isLimbDestroyed(target.actor, limbKey)) return [];
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
     const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);

@@ -493,6 +493,17 @@
     },
     "Settings": {
       "Open": "Open",
+      "Combat": {
+        "Title": "Combat Settings",
+        "DodgeEnabled": "Use dodge as a resource",
+        "DodgeAttackCostPercent": "Cost per attack, % of maximum dodge",
+        "DodgeBurstMultiplier": "Burst multiplier",
+        "DodgeVolleyMultiplier": "Volley multiplier",
+        "DodgeAreaDamageMultiplier": "Area damage multiplier",
+        "DodgeRoundRecoveryPercent": "Round recovery, % of maximum dodge",
+        "DodgeRestoreOnCombatStart": "Restore at combat start",
+        "DodgeRestoreOnCombatEnd": "Restore at combat end"
+      },
       "HUD": {
         "Title": "HUD Settings",
         "Scale": "Scale",
@@ -616,6 +627,7 @@
       "AdvancementSaved": "Level up saved.",
       "ActorLoadLimitExceeded": "The actor cannot carry that much weight.",
       "CharacteristicsSaved": "Characteristic settings saved.",
+      "CombatSettingsSaved": "Combat settings saved.",
       "ContainerMaxLoadExceeded": "This container cannot hold that much weight.",
       "ContainerRecursiveError": "A container cannot be placed inside itself or one of its descendants.",
       "CurrenciesSaved": "Currency settings saved.",

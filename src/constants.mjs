@@ -67,6 +67,7 @@ export const TEMPLATES = Object.freeze({
     tools: `systems/${SYSTEM_ID}/templates/settings/tool-settings-config.hbs`,
     systemActions: `systems/${SYSTEM_ID}/templates/settings/system-action-settings-config.hbs`,
     stealth: `systems/${SYSTEM_ID}/templates/settings/stealth-settings-config.hbs`,
+    combat: `systems/${SYSTEM_ID}/templates/settings/combat-settings-config.hbs`,
     traumaSettings: `systems/${SYSTEM_ID}/templates/settings/trauma-settings-config.hbs`,
     traumaGroupSettings: `systems/${SYSTEM_ID}/templates/settings/trauma-group-settings-config.hbs`
   })

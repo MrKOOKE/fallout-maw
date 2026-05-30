@@ -492,6 +492,17 @@
     },
     "Settings": {
       "Open": "Открыть",
+      "Combat": {
+        "Title": "Ведение боя",
+        "DodgeEnabled": "Использовать уклонение как ресурс",
+        "DodgeAttackCostPercent": "Расход за атаку, % от максимума уклонения",
+        "DodgeBurstMultiplier": "Множитель очереди",
+        "DodgeVolleyMultiplier": "Множитель залпа",
+        "DodgeAreaDamageMultiplier": "Множитель областного урона",
+        "DodgeRoundRecoveryPercent": "Восстановление за раунд, % от максимума уклонения",
+        "DodgeRestoreOnCombatStart": "Восстанавливать в начале боя",
+        "DodgeRestoreOnCombatEnd": "Восстанавливать в конце боя"
+      },
       "HUD": {
         "Title": "Настройки HUD",
         "Scale": "Масштаб",
@@ -611,6 +622,7 @@
       }
     },
     "Messages": {
+      "CombatSettingsSaved": "Настройки ведения боя сохранены.",
       "AdvancementSaved": "Повышение уровня сохранено.",
       "CharacteristicsSaved": "Настройки характеристик сохранены.",
       "ContainerMaxLoadExceeded": "Этот контейнер не выдерживает такой вес.",

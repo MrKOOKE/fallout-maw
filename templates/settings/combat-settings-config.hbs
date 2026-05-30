@@ -1,0 +1,49 @@
+<div class="fallout-maw-config-body">
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Settings.Combat.Title"}}</h2>
+      <div class="fallout-maw-button-row">
+        <button type="button" data-action="resetDefaults"><i class="fa-solid fa-rotate-left"></i> {{localize "FALLOUTMAW.Common.ResetDefaults"}}</button>
+      </div>
+    </header>
+
+    <div class="fallout-maw-settings-grid">
+      <label>
+        <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeEnabled"}}</span>
+        <input type="checkbox" name="dodge.enabled" {{checked settings.dodge.enabled}}>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeAttackCostPercent"}}</span>
+        <input type="number" name="dodge.attackCostPercent" value="{{settings.dodge.attackCostPercent}}" min="0" max="100" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeBurstMultiplier"}}</span>
+        <input type="number" name="dodge.burstMultiplier" value="{{settings.dodge.burstMultiplier}}" min="0" step="0.1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeVolleyMultiplier"}}</span>
+        <input type="number" name="dodge.volleyMultiplier" value="{{settings.dodge.volleyMultiplier}}" min="0" step="0.1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeAreaDamageMultiplier"}}</span>
+        <input type="number" name="dodge.areaDamageMultiplier" value="{{settings.dodge.areaDamageMultiplier}}" min="0" step="0.1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeRoundRecoveryPercent"}}</span>
+        <input type="number" name="dodge.roundRecoveryPercent" value="{{settings.dodge.roundRecoveryPercent}}" min="0" max="100" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeRestoreOnCombatStart"}}</span>
+        <input type="checkbox" name="dodge.restoreOnCombatStart" {{checked settings.dodge.restoreOnCombatStart}}>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeRestoreOnCombatEnd"}}</span>
+        <input type="checkbox" name="dodge.restoreOnCombatEnd" {{checked settings.dodge.restoreOnCombatEnd}}>
+      </label>
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  </footer>
+</div>

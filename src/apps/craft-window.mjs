@@ -215,6 +215,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         toolSelections: this.#getCraftToolSelections(selectedRecipe.uuid, this.#craftMode)
       })
       : createEmptyCraftContext(this.#busy);
+    if (selectedRecipe) this.#rememberDefaultCraftToolSelections(selectedRecipe.uuid, this.#craftMode, craft.toolRequirements);
 
     return {
       ...context,
@@ -422,9 +423,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         const mode = normalizeCraftMode(event.currentTarget?.dataset?.craftMode);
         if (mode === this.#craftMode) return;
         this.#craftMode = mode;
-        this.#selectedRecipeUuid = "";
         this.#selectedRecipe = null;
         this.#craftViewportOverride = null;
+        this.#craftToolPickerNodeId = "";
         this.#pulse = null;
         this.#captureScrollPositions();
         void this.#renderPreservingWindowStack();
@@ -1251,6 +1252,26 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     return selections;
   }
 
+  #storeCraftToolSelections(recipeUuid = this.#selectedRecipeUuid, mode = this.#craftMode, selections = {}, { onlyMissing = false } = {}) {
+    if (!recipeUuid) return;
+    for (const [requirementKey, itemId] of Object.entries(normalizeCraftToolSelections(selections))) {
+      if (!requirementKey || !itemId) continue;
+      const storageKey = getCraftToolSelectionStorageKey(recipeUuid, mode, requirementKey);
+      if (onlyMissing && this.#craftToolSelections.has(storageKey)) continue;
+      this.#craftToolSelections.set(storageKey, itemId);
+    }
+  }
+
+  #rememberDefaultCraftToolSelections(recipeUuid = this.#selectedRecipeUuid, mode = this.#craftMode, toolRequirements = []) {
+    const selections = {};
+    for (const requirement of toolRequirements) {
+      const itemId = String(requirement?.selectedInstrument?.id ?? "");
+      if (!requirement?.key || !itemId) continue;
+      selections[requirement.key] = itemId;
+    }
+    this.#storeCraftToolSelections(recipeUuid, mode, selections, { onlyMissing: true });
+  }
+
   async #onCraft(event) {
     event.preventDefault();
     if (this.#busy) return undefined;
@@ -1263,6 +1284,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       ui.notifications.warn(validation.message);
       return undefined;
     }
+    this.#storeCraftToolSelections(recipe.uuid, this.#craftMode, validation.toolSelections);
 
     this.#busy = true;
     this.#pulse = null;
@@ -1693,6 +1715,7 @@ function createCraftToolRequirementSpendPlan(actor, requirements = [], selection
   const ownedByRequirement = new Map();
   const selectedByRequirement = new Map();
   const missingKeys = new Set();
+  const unavailableSelectedKeys = new Set();
   const normalizedSelections = normalizeCraftToolSelections(selections);
   const orderedRequirements = [...requirements]
     .sort((left, right) => toToolClassRank(right.toolClass) - toToolClassRank(left.toolClass));
@@ -1706,11 +1729,15 @@ function createCraftToolRequirementSpendPlan(actor, requirements = [], selection
     }
 
     const candidates = getActorCraftToolCandidates(actor, requirement, supplyByItemTool);
-    const selectedId = normalizedSelections[requirement.key] ?? "";
-    const selected = (selectedId ? candidates.find(candidate => candidate.id === selectedId) : null) ?? candidates[0] ?? null;
+    const hasManualSelection = Object.hasOwn(normalizedSelections, requirement.key) && Boolean(normalizedSelections[requirement.key]);
+    const selectedId = hasManualSelection ? normalizedSelections[requirement.key] : "";
+    const selected = hasManualSelection
+      ? candidates.find(candidate => candidate.id === selectedId) ?? null
+      : getDefaultCraftToolCandidate(candidates, requirement);
     const owned = selected?.supplyValue ?? 0;
     ownedByRequirement.set(requirement.key, owned);
     if (selected) selectedByRequirement.set(requirement.key, { ...selected, supplyValue: owned });
+    else if (hasManualSelection) unavailableSelectedKeys.add(requirement.key);
 
     let remaining = requiredQuantity;
     if (selected?.supplyValue > 0) {
@@ -1728,7 +1755,9 @@ function createCraftToolRequirementSpendPlan(actor, requirements = [], selection
 
   return {
     valid: missingKeys.size === 0,
-    message: missingKeys.size ? "Недостаточно зарядов подходящих инструментов для крафта." : "",
+    message: unavailableSelectedKeys.size
+      ? "Выбранный инструмент больше недоступен для крафта."
+      : (missingKeys.size ? "Недостаточно зарядов подходящих инструментов для крафта." : ""),
     updates: Array.from(updatesByItemId.values()),
     missingKeys,
     ownedByRequirement,
@@ -1764,7 +1793,14 @@ function getActorCraftToolCandidates(actor, requirement = {}, supplyByItemTool =
       || (toToolClassRank(left.toolClass) - toToolClassRank(requiredClass)) - (toToolClassRank(right.toolClass) - toToolClassRank(requiredClass))
       || right.supplyValue - left.supplyValue
       || String(left.item.name ?? "").localeCompare(String(right.item.name ?? ""), game.i18n.lang)
+      || String(left.id ?? "").localeCompare(String(right.id ?? ""), game.i18n.lang)
     ));
+}
+
+function getDefaultCraftToolCandidate(candidates = [], requirement = {}) {
+  if (!candidates.length) return null;
+  const requiredQuantity = Math.max(0, toInteger(requirement.quantity));
+  return candidates.find(candidate => Math.max(0, toInteger(candidate.supplyValue)) >= requiredQuantity) ?? candidates[0] ?? null;
 }
 
 function prepareCraftToolCandidateForDisplay(candidate = {}, requirement = {}, selected = false) {
@@ -2297,14 +2333,15 @@ function getActorOwnedCraftRequirements(actor, requirements = []) {
 
 function craftItemMatchesRequirement(item, requirement = {}) {
   if (getItemQuantity(item) <= 0) return false;
-  const fingerprint = String(requirement.fingerprint ?? "");
-  if (fingerprint && getCraftItemFingerprint(item) !== fingerprint) return false;
 
   const requirementKeys = new Set(Array.from(requirement.sourceKeys ?? []).map(key => String(key ?? "").trim()).filter(Boolean));
   const itemKeys = getCraftItemSourceKeys(item);
   if (requirementKeys.size && itemKeys.size) {
     return setsIntersect(requirementKeys, itemKeys);
   }
+
+  const fingerprint = String(requirement.fingerprint ?? "");
+  if (fingerprint && getCraftItemFingerprint(item) !== fingerprint) return false;
 
   return Boolean(fingerprint);
 }

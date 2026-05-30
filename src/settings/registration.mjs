@@ -12,6 +12,7 @@ import { createDefaultCurrencySettings } from "./currency-settings.mjs";
 import { localize } from "../utils/i18n.mjs";
 import { AbilitySettingsConfig } from "../apps/ability-settings-config.mjs";
 import { CharacteristicsConfig } from "../apps/characteristics-config.mjs";
+import { CombatSettingsConfig } from "../apps/combat-settings-config.mjs";
 import { CreatureOptionsConfig } from "../apps/creature-options-config.mjs";
 import { CurrencySettingsConfig } from "../apps/currency-settings-config.mjs";
 import { DamageTypesConfig } from "../apps/damage-types-config.mjs";
@@ -29,6 +30,7 @@ import { refreshPreparedActors, syncSettingsIntoSystemConfig } from "./accessors
 import {
   ABILITIES_CATALOG_SETTING,
   CHARACTERISTICS_SETTING,
+  COMBAT_SETTINGS_SETTING,
   CREATURE_OPTIONS_SETTING,
   CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
@@ -51,6 +53,7 @@ import {
   TOKEN_ACTION_HUD_SCALE_SETTING
 } from "./constants.mjs";
 import { createDefaultAbilityCatalog } from "./abilities.mjs";
+import { createDefaultCombatSettings } from "./combat.mjs";
 import { createEmptyCreatureOptions } from "./creature-options.mjs";
 import { createDefaultDiseaseSettings } from "./diseases.mjs";
 import { createDefaultLevelSettings } from "./levels.mjs";
@@ -215,6 +218,14 @@ export function registerSystemSettings() {
     default: createDefaultStealthSettings()
   });
 
+  game.settings.register(FALLOUT_MAW.id, COMBAT_SETTINGS_SETTING, {
+    name: localize("FALLOUTMAW.Settings.Combat.Title"),
+    scope: "world",
+    config: false,
+    type: Object,
+    default: createDefaultCombatSettings()
+  });
+
   game.settings.register(FALLOUT_MAW.id, TIME_MECHANICS_IGNORED_SETTING, {
     name: "Игнорировать механики времени",
     scope: "world",
@@ -356,6 +367,14 @@ export function registerSystemSettings() {
     label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-user-ninja",
     type: StealthSettingsConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "combatSettingsMenu", {
+    name: localize("FALLOUTMAW.Settings.Combat.Title"),
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-hand-fist",
+    type: CombatSettingsConfig,
     restricted: true
   });
 

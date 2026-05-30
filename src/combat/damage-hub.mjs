@@ -1,4 +1,5 @@
 import { BLEEDING_DAMAGE_TYPE_KEY, SYSTEM_ID, TEMPLATES, TRAUMA_CREATE_OPTION } from "../constants.mjs";
+import { spendActorDodgeForAreaDamage, spendDodgeForAreaDamageRequests } from "./dodge-resource.mjs";
 import { evaluateFormulaVariables } from "../formulas/index.mjs";
 import {
   getCreatureOptions,
@@ -210,6 +211,7 @@ export async function requestRegionPeriodicDamage({ token = null, actor = null, 
     .filter(request => request.amount > 0 && request.damageTypeKey);
   if (!requests.length) return [];
 
+  await spendActorDodgeForAreaDamage(resolvedActor);
   return requestDamageApplications(requests);
 }
 
@@ -2124,7 +2126,10 @@ async function processRegionPeriodicDamage(now = 0, deltaTime = 0) {
   }
 
   const requests = batches.flatMap(batch => batch.requests);
-  if (requests.length) await applyDamageCycleNow(requests);
+  if (requests.length) {
+    await spendDodgeForAreaDamageRequests(requests);
+    await applyDamageCycleNow(requests);
+  }
 }
 
 async function collectRegionPeriodicDamageBehavior(region, behavior, now = 0, previousTime = now) {
