@@ -30,6 +30,7 @@ import { requestRepairTarget } from "./repair-dialog.mjs";
 import { openSearchInventoryWindow, requestTradeInventoryWindow } from "./search-inventory.mjs";
 import { openCraftWindow } from "./craft-window.mjs";
 import { openStealthWindow } from "../stealth/index.mjs";
+import { getWeaponActionBlockState } from "../abilities/runtime-state.mjs";
 import {
   FALLBACK_ICON,
   getActorInventoryGridDimensions,
@@ -727,6 +728,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
     if (isHudWeaponDisabled(this.actor, item)) return undefined;
+    const blockState = getWeaponActionBlockState(this.actor, actionKey);
+    if (blockState.blocked) {
+      ui.notifications.warn(`${this.actor?.name ?? ""}: действие заблокировано (${blockState.effect?.name ?? actionKey}).`);
+      return undefined;
+    }
     if (actionKey === "reload") {
       return openWeaponReloadDialog({
         actor: this.actor,
@@ -2093,11 +2099,12 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
     { key: "reload", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload"), configured: hasMagazineCost, visible: hasMagazineCost }
   ];
   return buttons.filter(action => action.visible !== false && action.configured).map(action => {
+    const blockState = getWeaponActionBlockState(actor, action.key);
     const actionPointCost = getWeaponActionPointCostForHud(actor, weaponData, action.key);
     return {
       ...action,
       label: String(weaponData?.[action.key]?.name ?? "").trim() || action.label,
-      disabled: forceDisabled,
+      disabled: forceDisabled || blockState.blocked,
       itemId: selectedWeapon.id,
       weaponFunctionId: weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id,
       img: normalizeImagePath(hudIcons.weaponActions?.[action.key], "icons/svg/combat.svg"),
@@ -2111,7 +2118,7 @@ function getWeaponActionPointCostForHud(actor, weaponData = {}, actionKey = "") 
   const value = Number(weaponData?.[actionKey]?.actionPointCost);
   const fallback = actionKey === "reload" ? 2 : 5;
   const baseCost = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
-  return applyDamageCostModifier(baseCost, getDamageCostModifierState(actor).action);
+  return applyDamageCostModifier(baseCost, getDamageCostModifierState(actor, { actionKey }).action);
 }
 
 function hasWeaponResourceCostData(weaponData = {}, type = "") {

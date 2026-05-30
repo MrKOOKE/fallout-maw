@@ -90,6 +90,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
       group: "Стоимость"
     }),
     ...buildActionCostEffectKeyTokens(),
+    ...buildActionBlockEffectKeyTokens(),
     ...buildCombatEffectKeyTokens()
   ];
 
@@ -114,6 +115,19 @@ export function buildActionCostEffectKeyTokens() {
     path: `system.costs.actions.${entry.key}`,
     group: "Стоимость"
   })).filter(Boolean);
+}
+
+export function buildActionBlockEffectKeyTokens() {
+  return getWeaponActionCostEntries().map(entry => {
+    const actionLabel = entry.actionLabel ?? String(entry.label || entry.key).replace(/:\s*[^:]+$/, "");
+    return createEffectKeyToken({
+      code: `${entry.key}Block`,
+      key: entry.key,
+      label: `${actionLabel}: Блокировка`,
+      path: `system.blocks.actions.${entry.key}`,
+      group: "Блокировки"
+    });
+  }).filter(Boolean);
 }
 
 export function getWeaponActionCostEntries() {

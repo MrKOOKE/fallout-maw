@@ -15,7 +15,8 @@ export const ABILITY_FUNCTION_TYPES = Object.freeze({
 export const ABILITY_CONDITION_TYPES = Object.freeze({
   healthPercent: "healthPercent",
   equipmentSlotOccupied: "equipmentSlotOccupied",
-  limitedChanges: "limitedChanges"
+  limitedChanges: "limitedChanges",
+  cooldown: "cooldown"
 });
 
 export const ABILITY_HEALTH_TARGETS = Object.freeze({
@@ -328,7 +329,23 @@ function normalizeAbilityCondition(value = {}) {
       equipmentSlotKey: "",
       healthTarget: ABILITY_HEALTH_TARGETS.general,
       limbKey: ABILITY_HEALTH_LIMB_ALL,
-      limit: Math.max(1, toInteger(value?.limit ?? value?.count ?? 1))
+      limit: Math.max(1, toInteger(value?.limit ?? value?.count ?? 1)),
+      durationSeconds: 0
+    };
+  }
+
+  if (type === ABILITY_CONDITION_TYPES.cooldown) {
+    return {
+      id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+      groupId,
+      type,
+      operator: "lte",
+      percent: 50,
+      equipmentSlotKey: "",
+      healthTarget: ABILITY_HEALTH_TARGETS.general,
+      limbKey: ABILITY_HEALTH_LIMB_ALL,
+      limit: 1,
+      durationSeconds: Math.max(0, toInteger(value?.durationSeconds ?? value?.duration ?? value?.seconds))
     };
   }
 
@@ -343,7 +360,9 @@ function normalizeAbilityCondition(value = {}) {
       equipmentSlotKey: String(value?.equipmentSlotKey ?? "").trim(),
       percent: 50,
       healthTarget: ABILITY_HEALTH_TARGETS.general,
-      limbKey: ABILITY_HEALTH_LIMB_ALL
+      limbKey: ABILITY_HEALTH_LIMB_ALL,
+      limit: 1,
+      durationSeconds: 0
     };
   }
 
@@ -360,7 +379,9 @@ function normalizeAbilityCondition(value = {}) {
     percent: Math.max(0, Math.min(100, toInteger(value?.percent ?? 50))),
     equipmentSlotKey: "",
     healthTarget,
-    limbKey: String(value?.limbKey ?? ABILITY_HEALTH_LIMB_ALL).trim() || ABILITY_HEALTH_LIMB_ALL
+    limbKey: String(value?.limbKey ?? ABILITY_HEALTH_LIMB_ALL).trim() || ABILITY_HEALTH_LIMB_ALL,
+    limit: 1,
+    durationSeconds: 0
   };
 }
 

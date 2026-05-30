@@ -12,6 +12,7 @@ import { getRequiredWeaponSlotsForItem, getWeaponSlotRequirement, isContainerWea
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
 import { getStealthAttackModifiers, revealActorFromStealth } from "../stealth/index.mjs";
+import { getWeaponActionBlockState } from "../abilities/runtime-state.mjs";
 
 const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
 const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
@@ -58,6 +59,7 @@ export function startWeaponAttack({ token = null, weapon = null, actionKey = "",
   if (!token?.actor || !weapon || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) return undefined;
   if (!getWeaponAttackData(weapon, weaponFunctionId)?.enabled) return undefined;
   if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) return undefined;
+  if (isWeaponActionBlocked(token.actor, actionKey)) return undefined;
   if (isWeaponPlacementDisabled(token.actor, weapon)) return undefined;
   if (!hasRequiredWeaponResources(weapon, getActionAttackCount(weapon, actionKey, weaponFunctionId), weaponFunctionId)) return undefined;
   if (!hasRequiredWeaponActionPoints(token.actor, weapon, actionKey, weaponFunctionId)) return undefined;
@@ -1656,6 +1658,13 @@ function hasWeaponAction(weapon, actionKey, weaponFunctionId = "") {
   return Boolean(getWeaponAttackData(weapon, weaponFunctionId)?.availableActions?.[actionKey]);
 }
 
+function isWeaponActionBlocked(actor, actionKey = "") {
+  const state = getWeaponActionBlockState(actor, actionKey);
+  if (!state.blocked) return false;
+  ui.notifications.warn(`${actor?.name ?? ""}: действие заблокировано (${state.effect?.name ?? actionKey}).`);
+  return true;
+}
+
 function hasWeaponSpecialProperty(weapon, property, weaponFunctionId = "") {
   return (getWeaponAttackData(weapon, weaponFunctionId)?.specialProperties ?? [])
     .map(value => String(value ?? ""))
@@ -2239,16 +2248,20 @@ function hasRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
 
 async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "") {
   if (actionKey !== "reload") await revealActorFromStealth(actor);
-  if (!isCombatActionPointSpendingActive()) return;
-  const cost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId);
-  if (cost <= 0) return;
-
-  const state = getCombatMovementResourceState(actor);
-  if (!state || cost > state.action.value) return;
-
-  await actor.update({
-    [`system.resources.${ACTION_RESOURCE_KEY}.value`]: Math.max(0, state.action.current - cost)
-  });
+  if (isCombatActionPointSpendingActive()) {
+    const cost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId);
+    if (cost > 0) {
+      const state = getCombatMovementResourceState(actor);
+      if (state && cost <= state.action.value) {
+        await actor.update({
+          [`system.resources.${ACTION_RESOURCE_KEY}.value`]: Math.max(0, state.action.current - cost)
+        });
+      }
+    }
+  }
+  if (actionKey !== "reload") {
+    Hooks.callAll("fallout-maw.weaponActionResolved", { actor, weapon, actionKey, weaponFunctionId });
+  }
 }
 
 async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "", extraCosts = []) {

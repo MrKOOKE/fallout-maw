@@ -388,7 +388,8 @@ function readAbilityConditions(root) {
     healthTarget: row.querySelector("[data-field='conditionHealthTarget']")?.value ?? ABILITY_HEALTH_TARGETS.general,
     limbKey: row.querySelector("[data-field='conditionLimbKey']")?.value ?? ABILITY_HEALTH_LIMB_ALL,
     equipmentSlotKey: row.querySelector("[data-field='conditionEquipmentSlotKey']")?.value ?? "",
-    limit: row.querySelector("[data-field='conditionLimit']")?.value ?? 1
+    limit: row.querySelector("[data-field='conditionLimit']")?.value ?? 1,
+    durationSeconds: row.querySelector("[data-field='conditionDurationSeconds']")?.value ?? 0
   }));
 }
 
@@ -449,6 +450,7 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
   const isLimitedChanges = type === ABILITY_CONDITION_TYPES.limitedChanges;
+  const isCooldown = type === ABILITY_CONDITION_TYPES.cooldown;
   const maxLimit = Math.max(1, changeCount);
   const healthTarget = Object.values(ABILITY_HEALTH_TARGETS).includes(condition?.healthTarget)
     ? condition.healthTarget
@@ -459,7 +461,7 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
   return {
     ...condition,
     healthTarget,
-    isPending: !isHealth && !isEquipment && !isLimitedChanges,
+    isPending: !isHealth && !isEquipment && !isLimitedChanges && !isCooldown,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -467,10 +469,12 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
     showLimbChoice: isHealth && !isHealthGeneral,
     isEquipment,
     isLimitedChanges,
-    canAddAlternative: !isLimitedChanges,
+    isCooldown,
+    canAddAlternative: !isLimitedChanges && !isCooldown,
     changeLimit: Math.max(1, Math.min(maxLimit, toInteger(condition?.limit ?? 1))),
     changeLimitMax: maxLimit,
     changeLimitTotal: changeCount,
+    durationSeconds: Math.max(0, toInteger(condition?.durationSeconds)),
     typeLabel: getConditionTypeLabel(type),
     typeChoices: buildConditionTypeChoices(type, { allowLimitedChanges }),
     healthTargetChoices: buildHealthTargetChoices(healthTarget),
@@ -582,13 +586,19 @@ function buildConditionTypeChoices(selected = "", { allowLimitedChanges = true }
       selected: selected === ABILITY_CONDITION_TYPES.limitedChanges
     });
   }
+  choices.push({
+    value: ABILITY_CONDITION_TYPES.cooldown,
+    label: "Перезарядка",
+    selected: selected === ABILITY_CONDITION_TYPES.cooldown
+  });
   return choices;
 }
 
 function isRuntimeCondition(type = "") {
   return [
     ABILITY_CONDITION_TYPES.healthPercent,
-    ABILITY_CONDITION_TYPES.equipmentSlotOccupied
+    ABILITY_CONDITION_TYPES.equipmentSlotOccupied,
+    ABILITY_CONDITION_TYPES.cooldown
   ].includes(type);
 }
 

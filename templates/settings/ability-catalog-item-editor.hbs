@@ -289,6 +289,13 @@
               </label>
               {{/if}}
 
+              {{#if isCooldown}}
+              <label>
+                <span>Длительность, секунд</span>
+                <input type="number" data-field="conditionDurationSeconds" value="{{durationSeconds}}" min="0" step="1">
+              </label>
+              {{/if}}
+
             </div>
           </div>
           {{/if}}

@@ -143,7 +143,10 @@ function hasActiveRuntimeAbilityState(actor, item) {
     .some(entry => {
       const conditions = entry.conditions ?? [];
       if (!hasRuntimeConditions(conditions)) return false;
-      return abilityConditionsApply(actor, conditions)
+      return abilityConditionsApply(actor, conditions, {
+        abilityItemId: item.id,
+        functionId: entry.id
+      })
         ? hasApplicableAbilityChanges(entry.changes)
         : hasApplicableAbilityChanges(entry.penalties);
     });

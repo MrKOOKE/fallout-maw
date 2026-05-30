@@ -10,11 +10,12 @@ import {
 import { getEquipmentSlotSelectionKey, getSelectedEquipmentSlotKeys } from "../utils/equipment-slots.mjs";
 import { isAbilityAcquisitionChangeKey } from "../utils/ability-acquisition-change-keys.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { hasAbilityFunctionCooldown } from "./runtime-state.mjs";
 
 export function getAbilityEffectChanges(actor, item) {
   return normalizeAbilityFunctions(item?.system?.functions ?? [])
     .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
-    .flatMap(entry => getConditionalFunctionChanges(actor, entry))
+    .flatMap(entry => getConditionalFunctionChanges(actor, entry, { abilityItemId: item?.id ?? "" }))
     .filter(change => change.key && change.value !== "");
 }
 
@@ -44,7 +45,7 @@ export function getAbilitySkillAdvancementBaseBonuses(actor, skillSettings = [])
   return bonuses;
 }
 
-export function abilityConditionsApply(actor, conditions = []) {
+export function abilityConditionsApply(actor, conditions = [], context = {}) {
   const standalone = [];
   const groups = new Map();
   for (const condition of conditions ?? []) {
@@ -59,11 +60,19 @@ export function abilityConditionsApply(actor, conditions = []) {
     groups.set(groupId, entries);
   }
 
-  return standalone.every(condition => abilityConditionApplies(actor, condition))
-    && Array.from(groups.values()).every(group => group.some(condition => abilityConditionApplies(actor, condition)));
+  return standalone.every(condition => abilityConditionApplies(actor, condition, context))
+    && Array.from(groups.values()).every(group => group.some(condition => abilityConditionApplies(actor, condition, context)));
 }
 
-export function abilityConditionApplies(actor, condition = {}) {
+export function abilityConditionApplies(actor, condition = {}, context = {}) {
+  if (condition.type === ABILITY_CONDITION_TYPES.cooldown) {
+    const abilityItemId = String(context?.abilityItemId ?? "").trim();
+    const functionId = String(context?.functionId ?? "").trim();
+    const conditionId = String(condition?.id ?? "").trim();
+    if (!abilityItemId || !functionId || !conditionId) return true;
+    return !hasAbilityFunctionCooldown(actor, { abilityItemId, functionId, conditionId });
+  }
+
   if (condition.type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied) {
     const occupied = isActorEquipmentSlotOccupied(actor, condition.equipmentSlotKey);
     return condition.operator === ABILITY_EQUIPMENT_OPERATORS.empty ? !occupied : occupied;
@@ -81,10 +90,10 @@ export function abilityConditionApplies(actor, condition = {}) {
   return true;
 }
 
-function getConditionalFunctionChanges(actor, entry = {}) {
+function getConditionalFunctionChanges(actor, entry = {}, context = {}) {
   const conditions = entry.conditions ?? [];
   if (!conditions.length) return entry.changes ?? [];
-  return abilityConditionsApply(actor, conditions)
+  return abilityConditionsApply(actor, conditions, { ...context, functionId: entry.id ?? "" })
     ? entry.changes ?? []
     : entry.penalties ?? [];
 }

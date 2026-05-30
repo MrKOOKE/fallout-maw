@@ -50,6 +50,7 @@ export async function requestSkillCheck({
   if (!requestData) return undefined;
 
   const outcome = await performSkillCheck(actor, resolvedSkill, normalizeRequestData(requestData));
+  Hooks.callAll("fallout-maw.skillCheckResolved", outcome);
   if (animate) await playSkillCheckAnimation(outcome);
   if (!createMessage) return outcome;
 
@@ -75,6 +76,7 @@ export async function requestSkillCheckBatch({
   const outcomes = [];
   for (const entry of preparedEntries) {
     const outcome = await performSkillCheck(entry.actor, entry.skill, normalizeRequestData(entry.data));
+    Hooks.callAll("fallout-maw.skillCheckResolved", outcome);
     if (animate) await playSkillCheckAnimation(outcome);
     outcomes.push(outcome);
   }
