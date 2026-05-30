@@ -17,7 +17,8 @@
     "src/main.mjs"
   ],
   "styles": [
-    "styles/fallout-maw.css"
+    "styles/fallout-maw.css",
+    "styles/combat-carousel.css"
   ],
   "languages": [
     {

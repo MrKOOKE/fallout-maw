@@ -18,6 +18,7 @@ import {
   registerTokenActionHudSocket,
   syncTokenActionHud
 } from "./apps/token-action-hud.mjs";
+import { initializeCombatCarousel, registerCombatCarouselHooks } from "./apps/combat-carousel.mjs";
 import { registerAnimationLibraryBrowserHooks } from "./apps/animation-library-browser.mjs";
 import { registerWorldTimeControlHooks } from "./apps/world-time-control.mjs";
 import { registerSkillCheckSocket } from "./rolls/skill-check.mjs";
@@ -71,6 +72,7 @@ Hooks.once("init", () => {
   registerRegenerationHooks();
   registerSkillCheckControlHooks();
   registerTokenActionHudHooks();
+  registerCombatCarouselHooks();
   registerWorldTimeControlHooks();
   registerAnimationLibraryBrowserHooks();
   registerStealthHooks();
@@ -93,6 +95,7 @@ Hooks.once("ready", async () => {
   registerTokenActionHudSocket();
   refreshTokenActionHudControlButton();
   syncTokenActionHud();
+  initializeCombatCarousel();
   await syncLoadedActorAbilityEffects();
 });
 

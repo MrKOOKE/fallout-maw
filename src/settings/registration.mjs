@@ -30,6 +30,8 @@ import { refreshPreparedActors, syncSettingsIntoSystemConfig } from "./accessors
 import {
   ABILITIES_CATALOG_SETTING,
   CHARACTERISTICS_SETTING,
+  COMBAT_CAROUSEL_ENABLED_SETTING,
+  COMBAT_CAROUSEL_SIZE_SETTING,
   COMBAT_SETTINGS_SETTING,
   CREATURE_OPTIONS_SETTING,
   CURRENCY_SETTINGS_SETTING,
@@ -272,6 +274,22 @@ export function registerSystemSettings() {
     config: false,
     type: Object,
     default: normalizeTokenActionHudIcons(DEFAULT_TOKEN_ACTION_HUD_ICONS)
+  });
+
+  game.settings.register(FALLOUT_MAW.id, COMBAT_CAROUSEL_ENABLED_SETTING, {
+    name: "Combat Carousel",
+    scope: "client",
+    config: false,
+    type: Boolean,
+    default: true
+  });
+
+  game.settings.register(FALLOUT_MAW.id, COMBAT_CAROUSEL_SIZE_SETTING, {
+    name: "Combat Carousel Size",
+    scope: "client",
+    config: false,
+    type: Number,
+    default: 82
   });
 
   game.settings.registerMenu(FALLOUT_MAW.id, "creatureOptionsMenu", {

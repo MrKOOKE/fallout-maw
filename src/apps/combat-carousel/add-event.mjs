@@ -1,0 +1,104 @@
+import { MODULE_ID } from "./main.mjs";
+import { HandlebarsApplication, mergeClone } from "./utils.mjs";
+
+export class AddEvent extends HandlebarsApplication {
+    constructor(combat) {
+        super();
+        this.combat = combat;
+    }
+
+    static get defaultOptions() {
+        return foundry.utils.mergeObject(super.defaultOptions, {
+            id: "combat-dock-add-event",
+            title: "FALLOUTMAW.CombatCarousel.AddEvent",
+            template: `systems/${MODULE_ID}/templates/apps/combat-carousel/add-event.hbs`,
+            width: 400,
+            height: "auto",
+            closeOnSubmit: true,
+        });
+    }
+
+    static get DEFAULT_OPTIONS() {
+        return {
+            tag: "form",
+            id: "combat-dock-add-event",
+            window: {
+                title: "FALLOUTMAW.CombatCarousel.AddEvent",
+            },
+            actions: {},
+            form: {
+                handler: this.#onSubmit,
+                closeOnSubmit: true,
+            },
+            position: {
+                width: 400,
+            },
+        };
+    }
+
+    static get PARTS() {
+        return mergeClone(super.PARTS, {
+            content: {
+                classes: ["standard-form"],
+            },
+            footer: {
+                template: "templates/generic/form-footer.hbs",
+            },
+        });
+    }
+
+    _prepareContext(options) {
+        const submitButton = {
+            type: "submit",
+            action: "submit",
+            icon: "fas fa-plus",
+            label: "FALLOUTMAW.CombatCarousel.AddEvent",
+        };
+        const recentEvents = game.settings.get(MODULE_ID, "events");
+        return { recentEvents, buttons: [submitButton] };
+    }
+
+    _onRender(context, options) {
+        super._onRender(context, options);
+        const html = this.element;
+        html.querySelectorAll(".cct-event").forEach((eventButton) => {
+            eventButton.addEventListener("click", (e) => {
+                const eventIndex = e.currentTarget.dataset.index;
+                const recentEvents = game.settings.get(MODULE_ID, "events");
+                const event = recentEvents[eventIndex];
+                html.querySelector("[name='name']").value = event.name;
+                html.querySelector("[name='img']").value = event.img;
+                html.querySelector("[name='initiative']").value = event.initiative;
+                html.querySelector("[name='duration']").value = event.duration;
+                html.querySelector("[name='hidden']").checked = event.hidden;
+            });
+        });
+    }
+
+    static async #onSubmit(event) {
+        const form = this.element;
+        const formData = new foundry.applications.ux.FormDataExtended(form).object;
+        if (!formData.name || !formData.img || (!Number.isNumeric(formData.initiative) && !formData.initiative)) return ui.notifications.error(game.i18n.localize("FALLOUTMAW.CombatCarousel.AddEventError"));
+        this.combat.createEmbeddedDocuments("Combatant", [
+            {
+                name: formData.name,
+                img: formData.img,
+                initiative: formData.initiative,
+                hidden: formData.hidden || false,
+                flags: {
+                    [MODULE_ID]: {
+                        event: true,
+                        duration: formData.duration || false,
+                        roundCreated: this.combat.round,
+                    }
+                },
+            },
+        ]);
+        let recentEvents = game.settings.get(MODULE_ID, "events");
+        const newRecentEvent = { name: formData.name, img: formData.img, initiative: formData.initiative, duration: formData.duration, hidden: formData.hidden };
+        recentEvents = recentEvents.filter((event) => event.name !== newRecentEvent.name && event.img !== newRecentEvent.img);
+        recentEvents.unshift(newRecentEvent);
+        recentEvents = recentEvents.slice(0, 10);
+        await game.settings.set(MODULE_ID, "events", recentEvents);
+    }
+}

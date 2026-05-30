@@ -653,6 +653,12 @@
       "LevelsSaved": "Level settings saved.",
       "SkillsSaved": "Skill settings saved."
     },
+    "CombatCarousel": {
+      "AddEvent": "Add Event",
+      "AddEventError": "Event name, image, and initiative are required.",
+      "Duration": "Duration (rounds)",
+      "EventExpired": "Event %n has expired."
+    },
     "Formula": {
       "ClosingParenthesisExpected": "Expected a closing parenthesis",
       "DivisionByZero": "Division by zero",
