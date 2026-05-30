@@ -487,6 +487,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-delete-first-aid-need]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteFirstAidNeed(event));
     });
+    this.element?.querySelectorAll("[data-first-aid-charge-input]").forEach(input => {
+      input.addEventListener("change", event => this.#onFirstAidChargeInputChange(event));
+    });
     activateItemEffectKeyAutocompletes(this.element);
     this.element?.querySelectorAll("[data-add-weapon-special-property]").forEach(button => {
       button.addEventListener("click", event => this.#onAddWeaponSpecialProperty(event));
@@ -1928,6 +1931,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.firstAid.criticalSuccessHealingBonus": 20,
         "system.functions.firstAid.criticalFailureDamageMin": 1,
         "system.functions.firstAid.criticalFailureDamageMax": 10,
+        "system.functions.firstAid.charges.value": 1,
+        "system.functions.firstAid.charges.max": 1,
         "system.functions.firstAid.needs": [],
         "system.functions.firstAid.limbSelection.count": 0,
         "system.functions.firstAid.limbSelection.value": 0,
@@ -2037,6 +2042,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.firstAid.criticalSuccessHealingBonus": 20,
         "system.functions.firstAid.criticalFailureDamageMin": 1,
         "system.functions.firstAid.criticalFailureDamageMax": 10,
+        "system.functions.firstAid.charges.value": 1,
+        "system.functions.firstAid.charges.max": 1,
         "system.functions.firstAid.needs": [],
         "system.functions.firstAid.limbSelection.count": 0,
         "system.functions.firstAid.limbSelection.value": 0,
@@ -2295,6 +2302,23 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const current = [...(this.item.system?.functions?.firstAid?.needs ?? [])];
     current.splice(index, 1);
     return this.item.update({ "system.functions.firstAid.needs": current });
+  }
+
+  #onFirstAidChargeInputChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const submitData = this.form
+      ? this._processFormData(null, this.form, new FormDataExtended(this.form))
+      : {};
+    const firstAid = submitData.system?.functions?.firstAid ?? this.item.system?.functions?.firstAid ?? {};
+    const max = Math.max(1, toInteger(firstAid.charges?.max) || 1);
+    const value = Math.max(0, Math.min(max, toInteger(firstAid.charges?.value)));
+    const count = Math.max(0, Math.min(max, toInteger(firstAid.limbSelection?.count)));
+    return this.#submitCurrentForm({
+      "system.functions.firstAid.charges.max": max,
+      "system.functions.firstAid.charges.value": value,
+      "system.functions.firstAid.limbSelection.count": count
+    });
   }
 
   #onAddWeaponSpecialProperty(event) {

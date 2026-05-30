@@ -15,6 +15,7 @@ import {
   getDamageTypeSettings,
   getDiseaseSettings,
   getLevelSettings,
+  getNeedSettings,
   getProficiencyInfluenceSettings,
   getProficiencySettings,
   getRaceNeedSettings,
@@ -59,6 +60,8 @@ import {
   getConditionWeakeningData,
   getDamageMitigationFunction,
   getDamageSourceFunction,
+  getFirstAidChargesData,
+  getFirstAidFunction,
   getEnabledWeaponFunctions,
   getWeaponFunctionModuleSlots,
   getModuleFunction,
@@ -2990,6 +2993,7 @@ function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex 
   const sections = [
     buildContainerTooltipSection(item, actor),
     buildConditionTooltipSection(item),
+    buildFirstAidTooltipSection(item, actor),
     buildDamageMitigationTooltipSection(item, actor),
     buildDamageSourceTooltipSection(item),
     buildModuleTooltipSection(item),
@@ -3025,6 +3029,82 @@ function buildConditionTooltipSection(item) {
   ];
   rows.push(...getConditionRecoveryMethodRows(condition));
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionCondition"), rows);
+}
+
+function buildFirstAidTooltipSection(item, actor = null) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.firstAid)) return "";
+  const firstAid = getFirstAidFunction(item);
+  const charges = getFirstAidChargesData(item);
+  const rows = [
+    [game.i18n.localize("FALLOUTMAW.Item.FirstAidCharges"), renderTooltipMeterValue(charges.value, charges.max)]
+  ];
+  const actionPointCost = Math.max(0, toInteger(firstAid.actionPointCost));
+  if (actionPointCost) rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidActionPointCost"), actionPointCost]);
+  const healing = Math.max(0, toInteger(firstAid.healing));
+  if (healing) {
+    rows.push([
+      game.i18n.localize("FALLOUTMAW.Item.FirstAidHealing"),
+      firstAid.healingIsPercentage ? `${healing}%` : healing
+    ]);
+  }
+  const limbCount = Math.max(0, Math.min(charges.value, charges.max, toInteger(firstAid.limbSelection?.count)));
+  const limbValue = toInteger(firstAid.limbSelection?.value);
+  if (limbCount && limbValue) {
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidLimbHealingPerCharge"), formatSignedNumber(limbValue)]);
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidChargeLimitPerUse"), limbCount]);
+  }
+  rows.push(...getFirstAidNeedTooltipRows(firstAid));
+  const changeRows = getFirstAidChangeTooltipRows(firstAid, actor);
+  const durationSeconds = Math.max(0, toInteger(firstAid.durationSeconds));
+  if (durationSeconds && changeRows.length) {
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidDurationSeconds"), durationSeconds]);
+  }
+  rows.push(...changeRows);
+  const maxDistance = Number(firstAid.maxDistance) || 0;
+  if (maxDistance) rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidMaxDistance"), formatNumber(maxDistance)]);
+  const difficulty = Math.max(0, toInteger(firstAid.difficulty));
+  if (difficulty) rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidDifficulty"), difficulty]);
+  const criticalSuccess = Math.max(0, toInteger(firstAid.criticalSuccessHealingBonus));
+  if (criticalSuccess) rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidCriticalSuccessBonus"), `${criticalSuccess}%`]);
+  const criticalMin = Math.max(0, toInteger(firstAid.criticalFailureDamageMin));
+  const criticalMax = Math.max(criticalMin, toInteger(firstAid.criticalFailureDamageMax));
+  if (criticalMin || criticalMax) rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidCriticalFailureDamageMax"), `${criticalMin}-${criticalMax}`]);
+  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionFirstAid"), rows);
+}
+
+function getFirstAidNeedTooltipRows(firstAid = {}) {
+  const needLabels = new Map(getNeedSettings().map(need => [need.key, need.label ?? need.key]));
+  const source = Array.isArray(firstAid.needs)
+    ? firstAid.needs
+    : Object.entries(firstAid.needs ?? {}).map(([needKey, value]) => ({ needKey, value }));
+  const values = source
+    .map(entry => {
+      const key = String(entry?.needKey ?? "").trim();
+      const value = toInteger(entry?.value);
+      if (!key || !value) return "";
+      return `${needLabels.get(key) ?? key}: ${formatSignedNumber(value)}`;
+    })
+    .filter(Boolean);
+  return values.length ? [[game.i18n.localize("FALLOUTMAW.Item.FirstAidNeeds"), values.join(", ")]] : [];
+}
+
+function getFirstAidChangeTooltipRows(firstAid = {}, actor = null) {
+  const pathLabels = buildEffectPathLabelMap({
+    characteristicSettings: getCharacteristicSettings(),
+    resourceSettings: getResourceSettings(),
+    needSettings: getNeedSettings(),
+    proficiencySettings: getProficiencySettings(),
+    skillSettings: getSkillSettings(),
+    damageTypeSettings: getDamageTypeSettings(),
+    limbs: Object.entries(actor?.system?.limbs ?? {}).map(([key, limb]) => ({
+      key,
+      label: limb?.label ?? key
+    }))
+  });
+  const rows = prepareTraumaEffectEntries(firstAid.changes, pathLabels)
+    .map(entry => entry.summary)
+    .filter(Boolean);
+  return rows.length ? [[game.i18n.localize("FALLOUTMAW.Item.FirstAidEffectChanges"), rows.join(", ")]] : [];
 }
 
 function buildDamageMitigationTooltipSection(item, actor) {
@@ -4238,6 +4318,8 @@ function prepareInventoryContext(actor, race) {
 function createInventoryItemData(item, allItems, currencies = [], placement = null) {
   const resolvedPlacement = placement ?? normalizeInventoryPlacement(item.system?.placement ?? {}, item, allItems);
   const container = item.system?.container ?? {};
+  const firstAidCharges = getFirstAidChargesData(item);
+  const showFirstAidCharges = hasItemFunction(item, ITEM_FUNCTIONS.firstAid) && firstAidCharges.max > 1;
   return {
     id: item.id,
     uuid: item.uuid,
@@ -4247,6 +4329,8 @@ function createInventoryItemData(item, allItems, currencies = [], placement = nu
     quantity: getItemQuantity(item),
     maxStack: getItemMaxStack(item),
     showQuantity: getItemMaxStack(item) > 1,
+    firstAidCharges,
+    showFirstAidCharges,
     weight: Number(item.system?.weight) || 0,
     totalWeight: Number(getItemTotalWeight(item, allItems).toFixed(1)),
     price: Number(item.system?.price) || 0,
@@ -4437,6 +4521,9 @@ function buildEffectPathLabelMap({
   });
   addDamageEffectPathLabels(map, "system.damageDefenses", game.i18n.localize("FALLOUTMAW.Common.DamageDefenses"), limbs, damageTypeSettings);
   addDamageEffectPathLabels(map, "system.damageResistances", game.i18n.localize("FALLOUTMAW.Common.DamageResistances"), limbs, damageTypeSettings);
+  const firstAidHealingLabel = game.i18n.localize("FALLOUTMAW.Item.FirstAidHealingPerTick");
+  map.set("fallout-maw.healing", firstAidHealingLabel);
+  map.set("healing", firstAidHealingLabel);
 
   return map;
 }

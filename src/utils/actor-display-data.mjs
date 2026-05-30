@@ -22,7 +22,7 @@ import {
   normalizeInventoryPlacement,
   prepareInventoryGridContext
 } from "./inventory-containers.mjs";
-import { hasItemFunction, ITEM_FUNCTIONS } from "./item-functions.mjs";
+import { getFirstAidChargesData, hasItemFunction, ITEM_FUNCTIONS } from "./item-functions.mjs";
 import { toInteger } from "./numbers.mjs";
 
 export const FALLBACK_ICON = "icons/svg/d20-grey.svg";
@@ -327,6 +327,8 @@ function getContainerWeaponSlotKey(index = 0) {
 export function createInventoryItemData(item, allItems, currencies = [], placement = null) {
   const resolvedPlacement = placement ?? normalizeInventoryPlacement(item.system?.placement ?? {}, item, allItems);
   const container = item.system?.container ?? {};
+  const firstAidCharges = getFirstAidChargesData(item);
+  const showFirstAidCharges = hasItemFunction(item, ITEM_FUNCTIONS.firstAid) && firstAidCharges.max > 1;
   return {
     id: item.id,
     uuid: item.uuid,
@@ -336,6 +338,8 @@ export function createInventoryItemData(item, allItems, currencies = [], placeme
     quantity: getItemQuantity(item),
     maxStack: getItemMaxStack(item),
     showQuantity: getItemMaxStack(item) > 1,
+    firstAidCharges,
+    showFirstAidCharges,
     weight: Number(item.system?.weight) || 0,
     totalWeight: Number(getItemTotalWeight(item, allItems).toFixed(1)),
     price: Number(item.system?.price) || 0,

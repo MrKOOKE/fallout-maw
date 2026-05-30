@@ -815,10 +815,18 @@
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.FirstAidLimbs"}}</h3>
     </div>
-    <div class="fallout-maw-list-grid two-columns">
+    <div class="fallout-maw-list-grid three-columns">
+      <label class="fallout-maw-ratio-field">
+        <span>{{localize "FALLOUTMAW.Item.FirstAidCharges"}}</span>
+        <span class="fallout-maw-ratio-control">
+          <input type="number" name="system.functions.firstAid.charges.value" value="{{system.functions.firstAid.charges.value}}" min="0" max="{{system.functions.firstAid.charges.max}}" step="1" data-first-aid-charge-input>
+          <b>/</b>
+          <input type="number" name="system.functions.firstAid.charges.max" value="{{system.functions.firstAid.charges.max}}" min="1" step="1" data-first-aid-charge-input>
+        </span>
+      </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.FirstAidLimbSelectionCount"}}</span>
-        <input type="number" name="system.functions.firstAid.limbSelection.count" value="{{system.functions.firstAid.limbSelection.count}}" min="0" step="1">
+        <input type="number" name="system.functions.firstAid.limbSelection.count" value="{{system.functions.firstAid.limbSelection.count}}" min="0" max="{{system.functions.firstAid.charges.max}}" step="1" data-first-aid-charge-input>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.FirstAidLimbSelectionValue"}}</span>

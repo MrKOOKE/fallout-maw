@@ -45,6 +45,16 @@ export function getFirstAidFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.firstAid] ?? {};
 }
 
+export function getFirstAidChargesData(itemOrSystem = null) {
+  const firstAid = getFirstAidFunction(itemOrSystem);
+  const max = Math.max(1, toWholeNumber(firstAid?.charges?.max, 1));
+  const rawValue = firstAid?.charges?.value;
+  const value = rawValue === undefined || rawValue === null || rawValue === ""
+    ? max
+    : Math.max(0, Math.min(max, toWholeNumber(rawValue, max)));
+  return { value, max };
+}
+
 export function getModuleFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.module] ?? {};
 }
@@ -254,4 +264,9 @@ function getWeaponModuleSlotItemData(slot = {}) {
   if (!uuid) return null;
   const item = globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
   return item?.toObject?.() ?? null;
+}
+
+function toWholeNumber(value, fallback = 0) {
+  const number = Math.trunc(Number(value));
+  return Number.isFinite(number) ? number : fallback;
 }

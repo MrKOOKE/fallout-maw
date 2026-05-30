@@ -44,7 +44,7 @@ import {
   getContextInventoryItems,
   getItemQuantity
 } from "../utils/inventory-containers.mjs";
-import { ITEM_FUNCTIONS, getConditionFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction, isActiveItem } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, getConditionFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getFirstAidChargesData, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction, isActiveItem } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
@@ -733,7 +733,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       item
     });
     if (used) {
-      this.#activeTray = "";
       return this.render({ force: true });
     }
     return undefined;
@@ -1808,13 +1807,18 @@ function prepareOwnedItemButtons(actor, type, fallbackIcon, { activeOnly = false
   return actor.items
     .filter(item => item.type === type)
     .filter(item => !activeOnly || isActiveItem(item))
-    .map(item => ({
-      id: item.id,
-      name: item.name,
-      img: normalizeImagePath(item.img, fallbackIcon),
-      quantity: toInteger(item.system?.quantity),
-      showQuantity: toInteger(item.system?.maxStack) > 1
-    }));
+    .map(item => {
+      const firstAidCharges = getFirstAidChargesData(item);
+      return {
+        id: item.id,
+        name: item.name,
+        img: normalizeImagePath(item.img, fallbackIcon),
+        quantity: toInteger(item.system?.quantity),
+        showQuantity: toInteger(item.system?.maxStack) > 1,
+        firstAidCharges,
+        showFirstAidCharges: hasItemFunction(item, ITEM_FUNCTIONS.firstAid) && firstAidCharges.max > 1
+      };
+    });
 }
 
 function prepareOwnedAbilityButtons(actor, fallbackIcon) {

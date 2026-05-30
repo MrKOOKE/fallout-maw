@@ -3,7 +3,7 @@ import { ACTION_RESOURCE_KEY } from "../combat/movement-resources.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
-import { getFirstAidFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
+import { getFirstAidChargesData, getFirstAidFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { getItemQuantity } from "../utils/inventory-containers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
@@ -24,15 +24,21 @@ export async function useFirstAidItem({ sourceActor = null, targetActor = null, 
   if (!sourceActor || !targetActor || !item || !hasItemFunction(item, ITEM_FUNCTIONS.firstAid)) return false;
 
   const firstAid = getFirstAidFunction(item);
-  if (getItemQuantity(item) <= 0) {
+  const charges = getFirstAidChargesData(item);
+  if (getItemQuantity(item) <= 0 || charges.value <= 0) {
     ui.notifications.warn(`${item.name}: item is depleted.`);
     return false;
   }
   if (!isTargetInFirstAidRange(sourceToken, targetToken, firstAid)) return false;
   const targetContext = await getFirstAidTargetContext(targetToken, targetActor);
   if (!targetContext) return false;
-  const selectedLimbs = await requestLimbSelection(targetActor, firstAid, targetContext);
+  const selectedLimbs = await requestLimbSelection(targetActor, limitFirstAidSelectionByCharges(firstAid, charges.value), targetContext);
   if (selectedLimbs === null) return false;
+  const chargeCost = getFirstAidChargeCost(selectedLimbs);
+  if (chargeCost > charges.value) {
+    ui.notifications.warn(`${item.name}: not enough charges.`);
+    return false;
+  }
   if (!(await spendActionPointsIfNeeded(sourceActor, firstAid))) return false;
 
   const source = {
@@ -46,7 +52,7 @@ export async function useFirstAidItem({ sourceActor = null, targetActor = null, 
   const checkResult = await rollFirstAidCheck(sourceActor, targetContext, firstAid, item);
   const resultKey = checkResult?.result?.key ?? "success";
   if (resultKey === "criticalFailure") {
-    await spendFirstAidItem(item);
+    await spendFirstAidItem(item, chargeCost);
     await applyCriticalFailureDamage(targetActor, firstAid, source);
     return true;
   }
@@ -109,7 +115,7 @@ export async function useFirstAidItem({ sourceActor = null, targetActor = null, 
     });
   }
 
-  await spendFirstAidItem(item);
+  await spendFirstAidItem(item, chargeCost);
   return true;
 }
 
@@ -169,6 +175,24 @@ function normalizeFirstAidLimbs(limbs = [], firstAid = {}, multiplier = 1) {
       value: value * Math.max(1, toInteger(entry?.count))
     }))
     .filter(entry => entry.limbKey && entry.value);
+}
+
+function limitFirstAidSelectionByCharges(firstAid = {}, availableCharges = 1) {
+  const maxApplications = Math.max(0, toInteger(firstAid.limbSelection?.count));
+  const available = Math.max(0, toInteger(availableCharges));
+  return {
+    ...firstAid,
+    limbSelection: {
+      ...(firstAid.limbSelection ?? {}),
+      count: Math.min(maxApplications, available)
+    }
+  };
+}
+
+function getFirstAidChargeCost(selectedLimbs = []) {
+  const limbApplications = (Array.isArray(selectedLimbs) ? selectedLimbs : [])
+    .reduce((total, limb) => total + Math.max(0, toInteger(limb?.count)), 0);
+  return Math.max(1, limbApplications);
 }
 
 function scaleChangeValue(value, multiplier = 1) {
@@ -277,7 +301,14 @@ async function requestLimbSelection(actor, firstAid = {}, targetContext = null) 
 
   const result = await DialogV2.wait({
     window: { title: game.i18n.localize("FALLOUTMAW.Item.FirstAidSelectLimbs") },
-    content: `<p>${game.i18n.format("FALLOUTMAW.Item.FirstAidSelectLimbsHint", { count, value })}</p><p class="fallout-maw-first-aid-limb-total">${game.i18n.localize("FALLOUTMAW.Common.Total")}: <strong><span data-limb-total>0</span> / ${count}</strong></p><div class="fallout-maw-first-aid-limb-choice-list">${rows}</div>`,
+    content: `
+      <div class="fallout-maw-first-aid-limb-summary">
+        <p>${game.i18n.format("FALLOUTMAW.Item.FirstAidSelectLimbsHint", { count })}</p>
+        <p>${game.i18n.format("FALLOUTMAW.Item.FirstAidSelectLimbsHealing", { value: formatSignedInteger(value) })}</p>
+        <p class="fallout-maw-first-aid-limb-total">${game.i18n.localize("FALLOUTMAW.Common.Total")}: <strong><span data-limb-total>0</span> / ${count}</strong></p>
+      </div>
+      <div class="fallout-maw-first-aid-limb-choice-list">${rows}</div>
+    `,
     render: (_event, dialog) => activateFirstAidLimbSelection(dialog, { count, value }),
     buttons: [
       {
@@ -366,6 +397,11 @@ function activateFirstAidLimbSelection(dialog, { count = 0, value = 0 } = {}) {
 function calculateLimbSelectionPreview(current, value, count, min, max) {
   const next = toInteger(current) + (toInteger(value) * Math.max(0, toInteger(count)));
   return Math.min(Math.max(toInteger(min), next), toInteger(max));
+}
+
+function formatSignedInteger(value) {
+  const number = toInteger(value);
+  return number > 0 ? `+${number}` : String(number);
 }
 
 function isConstructActor(actor) {
@@ -529,9 +565,25 @@ async function applyCriticalFailureDamage(actor, firstAid = {}, source = {}) {
   });
 }
 
-async function spendFirstAidItem(item) {
+async function spendFirstAidItem(item, amount = 1) {
   const quantity = getItemQuantity(item);
-  const next = Math.max(0, quantity - 1);
-  if (next <= 0) return item.delete();
-  return item.update({ "system.quantity": next });
+  const charges = getFirstAidChargesData(item);
+  const cost = Math.max(1, toInteger(amount));
+  if (charges.max <= 1) {
+    const next = Math.max(0, quantity - 1);
+    if (next <= 0) return item.delete();
+    return item.update({ "system.quantity": next });
+  }
+
+  const remainingCharges = Math.max(0, charges.value - cost);
+  if (remainingCharges > 0) {
+    return item.update({ "system.functions.firstAid.charges.value": remainingCharges });
+  }
+
+  const nextQuantity = Math.max(0, quantity - 1);
+  if (nextQuantity <= 0) return item.delete();
+  return item.update({
+    "system.quantity": nextQuantity,
+    "system.functions.firstAid.charges.value": charges.max
+  });
 }

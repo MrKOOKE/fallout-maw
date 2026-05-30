@@ -526,6 +526,10 @@ function firstAidFunctionField() {
     criticalSuccessHealingBonus: new NumberField({ required: true, integer: true, min: 0, initial: 20 }),
     criticalFailureDamageMin: new NumberField({ required: true, integer: true, min: 0, initial: 1 }),
     criticalFailureDamageMax: new NumberField({ required: true, integer: true, min: 0, initial: 10 }),
+    charges: new SchemaField({
+      value: new NumberField({ required: true, integer: true, min: 0, initial: 1 }),
+      max: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
+    }),
     needs: new ArrayField(new SchemaField({
       needKey: new StringField({ required: true, blank: true, initial: "" }),
       value: new NumberField({ required: true, integer: true, initial: 0 })
