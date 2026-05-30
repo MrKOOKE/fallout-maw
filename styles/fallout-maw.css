@@ -3657,6 +3657,22 @@ label.fallout-maw-mitigation-cell {
   display: none;
 }
 
+.fallout-maw-inventory-tooltip .fallout-maw-ability-tooltip-description .description {
+  border-top: 0;
+  margin: 0;
+  padding-top: 0;
+}
+
+.fallout-maw-inventory-tooltip .fallout-maw-advancement-tooltip-requirement.met strong,
+.fallout-maw-inventory-tooltip .fallout-maw-advancement-tooltip-requirement.met span {
+  color: #a7e083;
+}
+
+.fallout-maw-inventory-tooltip .fallout-maw-advancement-tooltip-requirement.unmet strong,
+.fallout-maw-inventory-tooltip .fallout-maw-advancement-tooltip-requirement.unmet span {
+  color: #ff8e7a;
+}
+
 .fallout-maw-inventory-context-menu {
   display: flex;
   flex-direction: column;
@@ -7038,6 +7054,31 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-token-hud-set-slot-preview.empty {
   cursor: default;
   opacity: 0.58;
+}
+
+.fallout-maw-token-hud-end-turn {
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255, 117, 91, 0.46), transparent 42%),
+    linear-gradient(180deg, rgba(134, 22, 18, 0.98), rgba(48, 7, 8, 0.98));
+  border-color: rgba(255, 91, 74, 0.82);
+  color: #ffe1d6;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.82);
+}
+
+.fallout-maw-token-hud-end-turn:hover,
+.fallout-maw-token-hud-end-turn:focus-visible {
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255, 142, 105, 0.58), transparent 44%),
+    linear-gradient(180deg, rgba(170, 31, 22, 0.98), rgba(66, 9, 10, 0.98));
+  border-color: rgba(255, 143, 101, 0.92);
+  color: #fff3ec;
+}
+
+.fallout-maw-token-hud-end-turn i {
+  color: rgba(255, 224, 214, 0.9);
+  font-size: calc(var(--fallout-maw-token-hud-tile) * 0.32);
+  position: relative;
+  z-index: 1;
 }
 
 .fallout-maw-token-hud-weapon-slot.phantom,

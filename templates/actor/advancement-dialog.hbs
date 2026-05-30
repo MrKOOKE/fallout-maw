@@ -137,7 +137,7 @@
               class="fallout-maw-advancement-talent-item{{#if selected}} selected{{/if}}{{#if owned}} owned{{/if}}{{#if researchActive}} research-active{{/if}}{{#unless acquisitionAvailable}} unavailable{{/unless}}"
               data-action="selectAbility"
               data-ability-entry
-              data-ability-search-text="{{name}} {{acquisitionLabel}} {{manualLabel}}"
+              data-ability-search-text="{{name}} {{acquisitionLabel}} {{manualLabel}} {{requirementLabel}}"
               data-ability-source-id="{{sourceId}}"
               {{#if descriptionTooltipHTML}}data-ability-description-tooltip="{{descriptionTooltipHTML}}"{{/if}}
             >
@@ -161,7 +161,6 @@
           <div class="fallout-maw-advancement-talent-research-info">
             <div><span>Статус:</span> {{selectedAbility.statusLabel}}</div>
             {{#if selectedAbility.isFeature}}
-            {{#if selectedAbility.requirementLabel}}<div><span>Условия:</span> {{selectedAbility.requirementLabel}}</div>{{/if}}
             {{else}}
             <div><span>Стоимость:</span> {{selectedAbility.cost}} ОИ</div>
             <div><span>Прогресс:</span> {{selectedAbility.progressLabel}}</div>

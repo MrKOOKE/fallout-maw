@@ -27,7 +27,9 @@ export const ABILITY_HEALTH_TARGETS = Object.freeze({
 export const ABILITY_HEALTH_LIMB_ALL = "all";
 
 export const ABILITY_ACQUISITION_CONDITION_TYPES = Object.freeze({
-  race: "race"
+  race: "race",
+  characteristic: "characteristic",
+  skill: "skill"
 });
 
 export const ABILITY_EQUIPMENT_OPERATORS = Object.freeze({
@@ -281,10 +283,29 @@ function normalizeAbilityAcquisitionCondition(value = {}) {
   const type = Object.values(ABILITY_ACQUISITION_CONDITION_TYPES).includes(rawType) ? rawType : "";
   if (!type) return { id: String(value?.id ?? "").trim() || "", type: "" };
 
+  const id = String(value?.id ?? "").trim() || foundry.utils.randomID();
+  if (type === ABILITY_ACQUISITION_CONDITION_TYPES.race) {
+    return {
+      id,
+      type,
+      raceId: String(value?.raceId ?? "").trim()
+    };
+  }
+
+  if (type === ABILITY_ACQUISITION_CONDITION_TYPES.characteristic) {
+    return {
+      id,
+      type,
+      characteristicKey: String(value?.characteristicKey ?? value?.key ?? "").trim(),
+      value: Math.max(0, toInteger(value?.value ?? value?.minimum))
+    };
+  }
+
   return {
-    id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+    id,
     type,
-    raceId: String(value?.raceId ?? "").trim()
+    skillKey: String(value?.skillKey ?? value?.key ?? "").trim(),
+    value: Math.max(0, toInteger(value?.value ?? value?.minimum))
   };
 }
 

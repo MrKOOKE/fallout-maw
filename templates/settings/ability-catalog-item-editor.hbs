@@ -13,7 +13,6 @@
 </nav>
 
 <section class="tab {{tabs.details.cssClass}}" data-group="{{tabs.details.group}}" data-tab="{{tabs.details.id}}">
-  {{#if isFeature}}
   <section class="fallout-maw-panel">
     <div class="fallout-maw-panel-header">
       <h2>Условия приобретения</h2>
@@ -50,6 +49,34 @@
               </select>
             </label>
             {{/if}}
+            {{#if isCharacteristic}}
+            <label>
+              <span>Характеристика</span>
+              <select data-field="acquisitionRequirementCharacteristicKey">
+                {{#each characteristicChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </label>
+            <label>
+              <span>Минимум</span>
+              <input type="number" data-field="acquisitionRequirementValue" value="{{value}}" min="0" step="1">
+            </label>
+            {{/if}}
+            {{#if isSkill}}
+            <label>
+              <span>Навык</span>
+              <select data-field="acquisitionRequirementSkillKey">
+                {{#each skillChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </label>
+            <label>
+              <span>Минимум</span>
+              <input type="number" data-field="acquisitionRequirementValue" value="{{value}}" min="0" step="1">
+            </label>
+            {{/if}}
           </div>
         </div>
         {{/if}}
@@ -59,7 +86,7 @@
       {{/each}}
     </div>
   </section>
-  {{else}}
+  {{#unless isFeature}}
   <section class="fallout-maw-panel">
     <h2>Приобретение</h2>
     <div class="fallout-maw-list-grid two-columns">
@@ -89,7 +116,7 @@
       </label>
     </div>
   </section>
-  {{/if}}
+  {{/unless}}
 
   <section class="fallout-maw-panel fallout-maw-description-panel">
     <h2>Описание</h2>

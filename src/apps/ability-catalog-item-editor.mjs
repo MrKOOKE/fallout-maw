@@ -1,5 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
-import { getCreatureOptions, getSkillSettings } from "../settings/accessors.mjs";
+import { getCharacteristicSettings, getCreatureOptions, getSkillSettings } from "../settings/accessors.mjs";
 import {
   ABILITY_ACQUISITION_CONDITION_TYPES,
   ABILITY_CHANGE_TYPES,
@@ -81,6 +81,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
   }
 
   async _prepareContext(options) {
+    const characteristics = getCharacteristicSettings();
     const skills = getSkillSettings();
     const descriptionHTML = await TextEditor.enrichHTML(this.ability.description ?? "", {
       secrets: game.user?.isGM ?? false
@@ -110,7 +111,10 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       functionChoices: buildFunctionChoices(),
       onlyFree: Boolean(this.ability.system?.acquisition?.onlyFree),
       onlyManual: Boolean(this.ability.system?.acquisition?.onlyManual),
-      acquisitionRequirements: (this.ability.system?.acquisitionRequirements ?? []).map(prepareAcquisitionRequirementForDisplay),
+      acquisitionRequirements: (this.ability.system?.acquisitionRequirements ?? []).map(requirement => prepareAcquisitionRequirementForDisplay(requirement, {
+        characteristicSettings: characteristics,
+        skillSettings: skills
+      })),
       researchDifficulty: Math.max(0, toInteger(this.ability.system?.acquisition?.difficulty ?? 60)),
       researchSkillChoices: skills.map((skill, index) => ({
         key: skill.key,
@@ -392,7 +396,10 @@ function readAcquisitionRequirements(root) {
   return Array.from(root?.querySelectorAll("[data-acquisition-requirement-row]") ?? []).map(row => ({
     id: row.dataset.requirementId || foundry.utils.randomID(),
     type: row.querySelector("[data-field='acquisitionRequirementType']")?.value || "",
-    raceId: row.querySelector("[data-field='acquisitionRequirementRaceId']")?.value ?? ""
+    raceId: row.querySelector("[data-field='acquisitionRequirementRaceId']")?.value ?? "",
+    characteristicKey: row.querySelector("[data-field='acquisitionRequirementCharacteristicKey']")?.value ?? "",
+    skillKey: row.querySelector("[data-field='acquisitionRequirementSkillKey']")?.value ?? "",
+    value: row.querySelector("[data-field='acquisitionRequirementValue']")?.value ?? 0
   }));
 }
 
@@ -501,16 +508,23 @@ function buildConditionDisplayGroups(conditions = []) {
   }));
 }
 
-function prepareAcquisitionRequirementForDisplay(requirement) {
+function prepareAcquisitionRequirementForDisplay(requirement, { characteristicSettings = [], skillSettings = [] } = {}) {
   const type = String(requirement?.type ?? "");
-  const isPending = type !== ABILITY_ACQUISITION_CONDITION_TYPES.race;
+  const isRace = type === ABILITY_ACQUISITION_CONDITION_TYPES.race;
+  const isCharacteristic = type === ABILITY_ACQUISITION_CONDITION_TYPES.characteristic;
+  const isSkill = type === ABILITY_ACQUISITION_CONDITION_TYPES.skill;
   return {
     ...requirement,
-    isPending,
-    isRace: type === ABILITY_ACQUISITION_CONDITION_TYPES.race,
+    value: Math.max(0, toInteger(requirement?.value)),
+    isPending: !isRace && !isCharacteristic && !isSkill,
+    isRace,
+    isCharacteristic,
+    isSkill,
     typeLabel: getAcquisitionRequirementTypeLabel(type),
     typeChoices: buildAcquisitionRequirementTypeChoices(type),
-    raceChoices: buildRaceChoices(requirement?.raceId)
+    raceChoices: buildRaceChoices(requirement?.raceId),
+    characteristicChoices: buildCharacteristicChoices(requirement?.characteristicKey, characteristicSettings),
+    skillChoices: buildSkillChoices(requirement?.skillKey, skillSettings)
   };
 }
 
@@ -609,9 +623,18 @@ function buildLimbChoices(selected = ABILITY_HEALTH_LIMB_ALL, { criticalOnly = f
 }
 
 function buildAcquisitionRequirementTypeChoices(selected = "") {
+  const labels = {
+    [ABILITY_ACQUISITION_CONDITION_TYPES.race]: "Раса",
+    [ABILITY_ACQUISITION_CONDITION_TYPES.characteristic]: "Характеристика",
+    [ABILITY_ACQUISITION_CONDITION_TYPES.skill]: "Навык"
+  };
   return [
     { value: "", label: "", selected: !selected },
-    { value: ABILITY_ACQUISITION_CONDITION_TYPES.race, label: "Раса", selected: selected === ABILITY_ACQUISITION_CONDITION_TYPES.race }
+    ...Object.values(ABILITY_ACQUISITION_CONDITION_TYPES).map(value => ({
+      value,
+      label: labels[value] ?? value,
+      selected: selected === value
+    }))
   ];
 }
 
@@ -622,6 +645,26 @@ function buildRaceChoices(selected = "") {
     value: race.id,
     label: race.name || race.id,
     selected: race.id === selected
+  }));
+}
+
+function buildCharacteristicChoices(selected = "", characteristicSettings = []) {
+  const entries = [...characteristicSettings];
+  if (selected && !entries.some(entry => entry.key === selected)) entries.push({ key: selected, label: selected });
+  return entries.map(entry => ({
+    value: entry.key,
+    label: entry.label || entry.key,
+    selected: entry.key === selected
+  }));
+}
+
+function buildSkillChoices(selected = "", skillSettings = []) {
+  const entries = [...skillSettings];
+  if (selected && !entries.some(entry => entry.key === selected)) entries.push({ key: selected, label: selected });
+  return entries.map(entry => ({
+    value: entry.key,
+    label: entry.label || entry.key,
+    selected: entry.key === selected
   }));
 }
 

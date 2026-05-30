@@ -247,6 +247,12 @@
       </button>
       {{/if}}
       {{/each}}
+      {{#if endTurnAction}}
+      <button type="button" class="fallout-maw-token-hud-main-action fallout-maw-token-hud-end-turn" data-action="endCombatTurn" title="{{endTurnAction.title}}" aria-label="{{endTurnAction.label}}">
+        <i class="{{endTurnAction.icon}}" inert></i>
+        <span>{{endTurnAction.label}}</span>
+      </button>
+      {{/if}}
     </div>
   </section>
   </div>

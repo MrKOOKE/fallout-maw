@@ -117,6 +117,10 @@ export function registerTokenActionHudHooks() {
   Hooks.on("createItem", scheduleTokenActionHudRefreshForItem);
   Hooks.on("deleteItem", scheduleTokenActionHudRefreshForItem);
   Hooks.on("updateToken", scheduleTokenActionHudRefresh);
+  Hooks.on("updateCombat", scheduleTokenActionHudRefresh);
+  Hooks.on("deleteCombat", scheduleTokenActionHudRefresh);
+  Hooks.on("createCombatant", scheduleTokenActionHudRefresh);
+  Hooks.on("deleteCombatant", scheduleTokenActionHudRefresh);
   Hooks.on("updateSetting", scheduleTokenActionHudRefreshForSetting);
   Hooks.on(MOVEMENT_RESOURCE_PREVIEW_HOOK, applyTokenActionHudMovementPreview);
   window.addEventListener("resize", scheduleTokenActionHudRefresh);
@@ -302,6 +306,32 @@ function getFirstHudTarget() {
   };
 }
 
+function prepareEndTurnAction(token) {
+  if (!isTokenCombatTurn(token, game.combat) || !canUserAdvanceCombatTurn(game.combat)) return null;
+  return {
+    label: "Конец хода",
+    title: "Завершить ход",
+    icon: "fa-solid fa-forward-step"
+  };
+}
+
+function isTokenCombatTurn(token, combat) {
+  const tokenDocument = token?.document ?? token;
+  const combatant = combat?.combatant;
+  if (!tokenDocument || !combatant) return false;
+  if (combat.round < 1 || combat.turn === null) return false;
+  if (combatant.sceneId && tokenDocument.parent?.id && combatant.sceneId !== tokenDocument.parent.id) return false;
+  return combatant.tokenId === tokenDocument.id;
+}
+
+function canUserAdvanceCombatTurn(combat) {
+  if (!combat) return false;
+  const updateData = combat.turn && combat.turn.between?.(1, combat.turns.length - 2)
+    ? { turn: 0 }
+    : { round: 0 };
+  return Boolean(combat.canUserModify?.(game.user, "update", updateData));
+}
+
 class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #token = null;
   #activeTray = "";
@@ -353,6 +383,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       useWeaponAction: { handler: TokenActionHud.#onUseWeaponAction, buttons: [0, 1] },
       gmHealSelected: TokenActionHud.#onGmHealSelected,
       gmAwardExperience: TokenActionHud.#onGmAwardExperience,
+      endCombatTurn: TokenActionHud.#onEndCombatTurn,
       openSettings: TokenActionHud.#onOpenSettings,
       rollSkill: TokenActionHud.#onRollSkill,
       openItem: { handler: TokenActionHud.#onOpenItem, buttons: [1] },
@@ -430,6 +461,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       weaponSets,
       selectedWeapon,
       actions,
+      endTurnAction: prepareEndTurnAction(this.#token),
       meterSections,
       tray,
       fallbackIcon: FALLBACK_ICON
@@ -567,6 +599,15 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     tokenActionHudScaleSettings ??= new TokenActionHudScaleSettings();
     return tokenActionHudScaleSettings.render({ force: true });
+  }
+
+  static async #onEndCombatTurn(event) {
+    event.preventDefault();
+    const combat = game.combat;
+    if (!isTokenCombatTurn(this.token, combat) || !canUserAdvanceCombatTurn(combat)) return undefined;
+    this.#activeTray = "";
+    await combat.nextTurn();
+    return this.render({ force: true });
   }
 
   static async #onGmHealSelected(event) {
@@ -1854,10 +1895,7 @@ function prepareAbilityGroups(abilities = []) {
 
 function isActiveAbility(item) {
   const system = item?.system ?? {};
-  if (system.active || system.activation?.enabled || system.use?.enabled) return true;
-  const passiveFunctionTypes = new Set(["characteristicBonus", "skillBonus"]);
-  return (Array.isArray(system.functions) ? system.functions : [])
-    .some(entry => entry?.type && !passiveFunctionTypes.has(entry.type));
+  return Boolean(system.active || system.activation?.enabled || system.use?.enabled);
 }
 
 function prepareSystemActionButtons() {

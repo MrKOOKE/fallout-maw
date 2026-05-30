@@ -23,6 +23,7 @@ import { getLevelThreshold } from "../settings/levels.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { escapeHtml } from "../utils/dom.mjs";
 import { FalloutMaWFormApplicationV2 } from "../apps/base-form-application-v2.mjs";
 
 const { DialogV2 } = foundry.applications.api;
@@ -431,7 +432,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const tooltip = document.createElement("aside");
     tooltip.className = "fallout-maw-inventory-tooltip fallout-maw-ability-description-tooltip";
     tooltip.style.pointerEvents = "none";
-    tooltip.innerHTML = `<div class="content"><section class="description">${html}</section></div>`;
+    tooltip.innerHTML = `<div class="content">${html}</div>`;
     document.body.append(tooltip);
     this.#abilityTooltipElement = tooltip;
     positionAbilityDescriptionTooltip(tooltip, anchor);
@@ -538,6 +539,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
     const entry = findCatalogAbility(sourceId);
     if (!entry || actorHasAbility(this.actor, sourceId)) return this.forceRender();
+    if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability)) return this.forceRender();
     if (entry.ability.system?.acquisition?.onlyManual) return this.forceRender();
     const research = this.#getAbilityResearch(sourceId);
     if (!research) return this.forceRender();
@@ -580,6 +582,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
     const entry = findCatalogAbility(sourceId);
     if (!entry || actorHasAbility(this.actor, sourceId)) return this.forceRender();
+    if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability)) return this.forceRender();
     if (this.#getAbilityResearch(sourceId)) return this.forceRender();
 
     await this.actor.createResearch(this.#createAbilityResearchData(entry));
@@ -671,6 +674,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         abilities: (category.abilities ?? [])
           .filter(ability => !actorHasAbility(this.actor, String(ability?.id ?? "")))
           .map(ability => this.#prepareAbilityEntry(category, ability, remaining, skillSettings))
+          .sort(compareAbilityAvailability)
       };
     });
   }
@@ -702,9 +706,10 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const onlyManual = Boolean(ability?.system?.acquisition?.onlyManual);
     const completed = Boolean(research) && progress >= target;
     const skillLabel = skillSettings.find(skill => skill.key === ability?.system?.acquisition?.skillKey)?.label ?? skillSettings[0]?.label ?? "";
-    const acquisitionAvailable = abilityAcquisitionRequirementsMet(this.actor, ability);
-    const requirementLabel = getAbilityAcquisitionRequirementLabel(ability);
-    const descriptionTooltipHTML = renderAbilityDescriptionTooltipHTML(ability?.description);
+    const requirementRows = getAbilityAcquisitionRequirementRows(this.actor, ability);
+    const acquisitionAvailable = requirementRows.every(requirement => requirement.met);
+    const requirementLabel = getAbilityAcquisitionRequirementLabel(requirementRows);
+    const descriptionTooltipHTML = renderAbilityDescriptionTooltipHTML(ability, { requirementRows });
     return {
       ...ability,
       sourceId,
@@ -722,10 +727,10 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       requirementLabel,
       descriptionTooltipHTML,
       canPurchaseTrait: isFeature && !owned && acquisitionAvailable && toInteger(remaining.traits) > 0,
-      canSpendFree: !isFeature && !owned && Boolean(research) && !onlyManual && (completed || (remainingCost > 0 && toInteger(remaining.researches) > 0)),
+      canSpendFree: !isFeature && !owned && acquisitionAvailable && Boolean(research) && !onlyManual && (completed || (remainingCost > 0 && toInteger(remaining.researches) > 0)),
       canSelectRewardChanges: completed,
       freeSpendAmount: Math.min(toInteger(remaining.researches), remainingCost),
-      canStartManual: !isFeature && !owned && !research,
+      canStartManual: !isFeature && !owned && acquisitionAvailable && !research,
       researchId: research?.id ?? "",
       researchActive: Boolean(research),
       selected: sourceId === this.#selectedAbilitySourceId,
@@ -932,25 +937,79 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 }
 
 function abilityAcquisitionRequirementsMet(actor, ability = {}) {
-  return (ability.system?.acquisitionRequirements ?? []).every(requirement => {
-    if (requirement?.type !== ABILITY_ACQUISITION_CONDITION_TYPES.race) return true;
-    const raceId = String(requirement.raceId ?? "").trim();
-    if (!raceId) return true;
-    return String(actor?.system?.creature?.raceId ?? "") === raceId;
-  });
+  return getAbilityAcquisitionRequirementRows(actor, ability).every(requirement => requirement.met);
 }
 
-function getAbilityAcquisitionRequirementLabel(ability = {}) {
-  const labels = [];
+function getAbilityAcquisitionRequirementRows(actor, ability = {}) {
+  const rows = [];
   const races = getCreatureOptions().races ?? [];
+  const characteristics = getCharacteristicSettings();
+  const skills = getSkillSettings();
   for (const requirement of ability.system?.acquisitionRequirements ?? []) {
-    if (requirement?.type !== ABILITY_ACQUISITION_CONDITION_TYPES.race) continue;
-    const raceId = String(requirement.raceId ?? "").trim();
-    if (!raceId) continue;
-    const race = races.find(entry => entry.id === raceId);
-    labels.push(`Раса: ${race?.name || raceId}`);
+    if (requirement?.type === ABILITY_ACQUISITION_CONDITION_TYPES.race) {
+      const raceId = String(requirement.raceId ?? "").trim();
+      if (!raceId) continue;
+      const currentRaceId = String(actor?.system?.creature?.raceId ?? "");
+      const race = races.find(entry => entry.id === raceId);
+      const currentRace = races.find(entry => entry.id === currentRaceId);
+      rows.push({
+        type: requirement.type,
+        label: "Раса",
+        targetLabel: race?.name || raceId,
+        currentLabel: currentRace?.name || currentRaceId || "Нет",
+        required: raceId,
+        current: currentRaceId,
+        met: currentRaceId === raceId,
+        summary: `${race?.name || raceId}: ${currentRace?.name || currentRaceId || "Нет"}`
+      });
+      continue;
+    }
+
+    if (requirement?.type === ABILITY_ACQUISITION_CONDITION_TYPES.characteristic) {
+      const key = String(requirement.characteristicKey ?? requirement.key ?? "").trim();
+      const required = Math.max(0, toInteger(requirement.value ?? requirement.minimum));
+      if (!key || required <= 0) continue;
+      const characteristic = characteristics.find(entry => entry.key === key);
+      const current = toInteger(actor?.system?.characteristics?.[key]);
+      rows.push({
+        type: requirement.type,
+        label: "Характеристика",
+        targetLabel: characteristic?.label || key,
+        current,
+        required,
+        met: current >= required,
+        summary: `${characteristic?.label || key}: ${current} / ${required}`
+      });
+      continue;
+    }
+
+    if (requirement?.type === ABILITY_ACQUISITION_CONDITION_TYPES.skill) {
+      const key = String(requirement.skillKey ?? requirement.key ?? "").trim();
+      const required = Math.max(0, toInteger(requirement.value ?? requirement.minimum));
+      if (!key || required <= 0) continue;
+      const skill = skills.find(entry => entry.key === key);
+      const current = toInteger(actor?.system?.skills?.[key]?.value);
+      rows.push({
+        type: requirement.type,
+        label: "Навык",
+        targetLabel: skill?.label || key,
+        current,
+        required,
+        met: current >= required,
+        summary: `${skill?.label || key}: ${current} / ${required}`
+      });
+    }
   }
-  return labels.join("; ");
+  return rows;
+}
+
+function getAbilityAcquisitionRequirementLabel(requirementRows = []) {
+  return requirementRows.map(requirement => requirement.summary).join("; ");
+}
+
+function compareAbilityAvailability(left, right) {
+  if (left?.acquisitionAvailable === right?.acquisitionAvailable) return 0;
+  return left?.acquisitionAvailable ? -1 : 1;
 }
 
 function evaluateProgressionFormula(formula, characteristics, characteristicSettings, fallback = "0") {
@@ -965,10 +1024,46 @@ function evaluateProgressionFormula(formula, characteristics, characteristicSett
   }
 }
 
-function renderAbilityDescriptionTooltipHTML(value = "") {
-  const html = String(value ?? "").trim();
-  if (!html) return "";
-  return html;
+function renderAbilityDescriptionTooltipHTML(ability = {}, { requirementRows = [] } = {}) {
+  const descriptionHTML = String(ability?.description ?? "").trim();
+  const titleSection = `
+    <section class="function-section single-value fallout-maw-ability-tooltip-title">
+      <h4>Название</h4>
+      <strong>${escapeHtml(ability?.name ?? "")}</strong>
+    </section>
+  `;
+  const requirementSection = requirementRows.length
+    ? `
+      <section class="function-section fallout-maw-advancement-tooltip-requirements">
+        <h4>Требования</h4>
+        <div class="function-grid">
+          ${requirementRows.map(renderAbilityRequirementTooltipRow).join("")}
+        </div>
+      </section>
+    `
+    : "";
+  const descriptionSection = descriptionHTML
+    ? `
+      <section class="function-section fallout-maw-ability-tooltip-description">
+        <h4>Описание</h4>
+        <div class="description">${descriptionHTML}</div>
+      </section>
+    `
+    : "";
+  return `${titleSection}${requirementSection}${descriptionSection}`;
+}
+
+function renderAbilityRequirementTooltipRow(requirement) {
+  const stateClass = requirement.met ? "met" : "unmet";
+  const value = requirement.type === ABILITY_ACQUISITION_CONDITION_TYPES.race
+    ? `${requirement.currentLabel} / ${requirement.targetLabel}`
+    : `${requirement.current} / ${requirement.required}`;
+  return `
+    <div class="function-row fallout-maw-advancement-tooltip-requirement ${stateClass}">
+      <span>${escapeHtml(`${requirement.label}: ${requirement.targetLabel}`)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `;
 }
 
 function positionAbilityDescriptionTooltip(element, anchor) {
