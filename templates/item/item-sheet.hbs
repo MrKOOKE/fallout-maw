@@ -1,6 +1,6 @@
 <div class="fallout-maw-sheet-body">
 <header class="sheet-header fallout-maw-sheet-header">
-  <img class="profile-img" src="{{item.img}}" {{#unless isTrauma}}data-action="editImage" data-edit="img"{{/unless}} title="{{item.name}}" height="80" width="80">
+  <img class="profile-img" src="{{item.img}}" {{#unless isTrauma}}data-action="editImage" data-edit="img"{{/unless}} title="{{item.name}}" height="80">
   <div class="fallout-maw-header-fields">
     {{#if isTrauma}}
     <h1 class="fallout-maw-title-display">{{item.name}}</h1>
@@ -29,11 +29,11 @@
     {{else}}
     <input class="fallout-maw-title-input" name="name" type="text" value="{{item.name}}" placeholder="{{localize 'DOCUMENT.FIELDS.name.label'}}">
     {{#if isGear}}
-    <div class="fallout-maw-header-grid">
-      <label class="fallout-maw-inline-checkbox">
+    <div class="fallout-maw-header-grid fallout-maw-equipped-header-grid">
+      <div class="fallout-maw-inline-checkbox fallout-maw-equipped-control">
         <span>{{localize "FALLOUTMAW.Item.Equipped"}}</span>
-        <input type="checkbox" name="system.equipped" {{checked system.equipped}}>
-      </label>
+        <input type="checkbox" name="system.equipped" aria-label="{{localize 'FALLOUTMAW.Item.Equipped'}}" {{checked system.equipped}}>
+      </div>
     </div>
     {{else if isAbility}}
     {{else}}
@@ -67,10 +67,10 @@
           {{/each}}
         </select>
       </label>
-      <label class="fallout-maw-inline-checkbox">
+      <div class="fallout-maw-inline-checkbox fallout-maw-equipped-control">
         <span>{{localize "FALLOUTMAW.Item.Equipped"}}</span>
-        <input type="checkbox" name="system.equipped" {{checked system.equipped}}>
-      </label>
+        <input type="checkbox" name="system.equipped" aria-label="{{localize 'FALLOUTMAW.Item.Equipped'}}" {{checked system.equipped}}>
+      </div>
     </div>
     {{/if}}
     {{/if}}

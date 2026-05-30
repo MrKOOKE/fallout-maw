@@ -121,6 +121,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return super.render(options);
   }
 
+  changeTab(tab, group, options) {
+    const previousTab = this.tabGroups[group];
+    super.changeTab(tab, group, options);
+    if ((group !== "primary") || (previousTab === tab)) return;
+    if (options?.updatePosition === false) return;
+    this.#fitAutoHeightToContent();
+  }
+
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
     const item = this.item;
@@ -327,6 +335,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#fitAutoHeightToContent();
     this.element?.querySelectorAll("[data-equipment-slot-choice]").forEach(button => {
       button.addEventListener("click", event => this.#onEquipmentSlotChoice(event));
     });
@@ -508,6 +517,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.#activateCraftEditor();
     this.#restoreScrollPositions();
+  }
+
+  #fitAutoHeightToContent() {
+    if (this.options.position.height !== "auto") return;
+    this.setPosition({ height: "auto" });
   }
 
   #captureScrollPositions() {

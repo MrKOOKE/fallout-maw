@@ -55,6 +55,14 @@
   margin-bottom: 0.75rem;
 }
 
+.application.fallout-maw-item-sheet .fallout-maw-sheet-header .profile-img,
+.application.fallout-maw-container-sheet .fallout-maw-sheet-header .profile-img {
+  flex: 0 0 auto;
+  height: 80px;
+  object-fit: contain;
+  width: auto;
+}
+
 .fallout-maw-header-fields {
   flex: 1;
   min-width: 0;
@@ -118,6 +126,10 @@
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
 }
 
+.fallout-maw-item-sheet .fallout-maw-equipped-header-grid {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 .fallout-maw-inline-checkbox {
   align-items: center;
   display: flex;
@@ -130,6 +142,16 @@
   flex: 0 0 auto;
   margin: 0;
   width: auto;
+}
+
+.fallout-maw-equipped-control {
+  justify-content: flex-end;
+  justify-self: end;
+  min-height: 2.1rem;
+}
+
+.fallout-maw-equipped-header-grid .fallout-maw-equipped-control {
+  grid-column: 2;
 }
 
 .fallout-maw-resource-grid {
