@@ -195,10 +195,15 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#syncPageClass();
     this.#clearAbilityDescriptionTooltip();
     this.#activateRepeatButtons();
     this.#activateAbilitySearch();
     this.#activateAbilityDescriptionTooltips();
+  }
+
+  #syncPageClass() {
+    this.element?.classList.toggle("fallout-maw-advancement-page-abilities", this.#page === "abilities");
   }
 
   async _preClose(options) {
