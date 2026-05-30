@@ -25,6 +25,7 @@ import {
   getItemMaxStack,
   getItemQuantity,
   getItemTotalWeight,
+  hasContainerCycle,
   isContainerItem,
   isInventoryPlacementAvailable,
   normalizeInventoryPlacement,
@@ -3961,26 +3962,34 @@ export async function transferItemBetweenActors({
 }
 
 async function moveOwnedItemToActorPlacement(actor, item, placement) {
-  const resolvedPlacement = resolveActorPlacement(actor, item.toObject(), placement, [item.id]);
-  if (!resolvedPlacement) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+  const placementResolution = resolveActorPlacementWithReplacements(actor, item.toObject(), placement, [item.id]);
+  if (!placementResolution) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+  const { placement: resolvedPlacement, conflicts } = placementResolution;
   const updateData = createPlacementItemUpdate(item.id, getItemQuantity(item), ROOT_CONTAINER_ID, resolvedPlacement, item, {
     equipped: resolvedPlacement.mode === "equipment"
   });
-  if (!validateActorProjectedInventoryState(actor, { updates: [updateData] })) {
+  const replacementUpdates = createActorUnequipReplacementUpdates(actor, conflicts, [item.id]);
+  if (!replacementUpdates) throwInventoryNoSpace();
+  const updates = [...replacementUpdates, updateData];
+  if (!validateActorProjectedInventoryState(actor, { updates })) {
     throwInventoryNoSpace();
   }
-  return actor.updateEmbeddedDocuments("Item", [updateData]);
+  return actor.updateEmbeddedDocuments("Item", updates);
 }
 
 async function createExternalPlacedItem(actor, itemData, placement, { sourceActor, sourceItem } = {}) {
-  const resolvedPlacement = resolveActorPlacement(actor, itemData, placement);
-  if (!resolvedPlacement) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+  const placementResolution = resolveActorPlacementWithReplacements(actor, itemData, placement);
+  if (!placementResolution) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+  const { placement: resolvedPlacement, conflicts } = placementResolution;
   const createData = createInventoryStackData(itemData, getItemQuantity(itemData), ROOT_CONTAINER_ID, resolvedPlacement, {
     equipped: resolvedPlacement.mode === "equipment"
   });
-  if (!validateActorProjectedInventoryState(actor, { creates: [createData] })) {
+  const replacementUpdates = createActorUnequipReplacementUpdates(actor, conflicts);
+  if (!replacementUpdates) throwInventoryNoSpace();
+  if (!validateActorProjectedInventoryState(actor, { updates: replacementUpdates, creates: [createData] })) {
     throwInventoryNoSpace();
   }
+  if (replacementUpdates.length) await actor.updateEmbeddedDocuments("Item", replacementUpdates);
   const created = await actor.createEmbeddedDocuments("Item", [createData]);
   await removeTransferredItemQuantity(sourceActor, sourceItem, getItemQuantity(itemData));
   return created;
@@ -4121,15 +4130,23 @@ async function transferContainerTree({ sourceActor, targetActor, sourceItem, tar
   }
 
   const rootData = sourceItem.toObject();
+  const replacementUpdates = preferredPlacement.mode === "inventory"
+    ? []
+    : createActorUnequipReplacementUpdates(
+      targetActor,
+      getActorPlacementConflictingItems(targetActor, rootData, preferredPlacement)
+    );
+  if (!replacementUpdates) throwInventoryNoSpace();
   const createData = createInventoryStackData(rootData, 1, targetParentId, preferredPlacement, {
     equipped: preferredPlacement.mode === "equipment"
   });
   const containedItems = getAllContainedItems(sourceItem.id, sourceActor.items);
   const validationCreates = buildContainerTreeValidationCreates(createData, sourceItem, containedItems);
-  if (!validateActorProjectedInventoryState(targetActor, { creates: validationCreates })) {
+  if (!validateActorProjectedInventoryState(targetActor, { updates: replacementUpdates, creates: validationCreates })) {
     throwInventoryNoSpace();
   }
 
+  if (replacementUpdates.length) await targetActor.updateEmbeddedDocuments("Item", replacementUpdates);
   const [createdRoot] = await targetActor.createEmbeddedDocuments("Item", [createData]);
   const idMap = new Map([[sourceItem.id, createdRoot.id]]);
   for (const child of containedItems) {
@@ -4257,7 +4274,7 @@ function getRequestedTargetPlacement({
       weaponSlot: "",
       x: 1,
       y: 1
-    }, excluded);
+    }, excluded, [], ROOT_CONTAINER_ID, { allowReplacement: true });
   }
   if (targetMode === "weapon") {
     return resolveActorPlacement(targetActor, itemData, {
@@ -4267,7 +4284,7 @@ function getRequestedTargetPlacement({
       weaponSlot: targetWeaponSlot,
       x: 1,
       y: 1
-    }, excluded);
+    }, excluded, [], ROOT_CONTAINER_ID, { allowReplacement: true });
   }
 
   if (Number.isFinite(Number(targetX)) && Number.isFinite(Number(targetY))) {
@@ -4359,9 +4376,17 @@ export function getSearchInventoryGridPointerPosition(event = null, grid = null,
   };
 }
 
-export function resolveActorPlacement(actor, itemData, placement = {}, excludeItemIds = [], reservedPlacements = [], parentId = ROOT_CONTAINER_ID) {
-  if (placement.mode === "equipment") return resolveActorEquipmentPlacement(actor, itemData, placement, excludeItemIds);
-  if (placement.mode === "weapon") return resolveActorWeaponPlacement(actor, itemData, placement, excludeItemIds);
+export function resolveActorPlacement(
+  actor,
+  itemData,
+  placement = {},
+  excludeItemIds = [],
+  reservedPlacements = [],
+  parentId = ROOT_CONTAINER_ID,
+  options = {}
+) {
+  if (placement.mode === "equipment") return resolveActorEquipmentPlacement(actor, itemData, placement, excludeItemIds, options);
+  if (placement.mode === "weapon") return resolveActorWeaponPlacement(actor, itemData, placement, excludeItemIds, options);
 
   const normalizedPlacement = normalizeInventoryPlacement(placement, itemData, actor.items);
   return isActorInventoryPlacementAvailable(actor, parentId, normalizedPlacement, excludeItemIds, reservedPlacements)
@@ -4369,7 +4394,18 @@ export function resolveActorPlacement(actor, itemData, placement = {}, excludeIt
     : null;
 }
 
-function resolveActorEquipmentPlacement(actor, itemData, placement = {}, excludeItemIds = []) {
+function resolveActorPlacementWithReplacements(actor, itemData, placement = {}, excludeItemIds = []) {
+  const resolvedPlacement = resolveActorPlacement(actor, itemData, placement, excludeItemIds, [], ROOT_CONTAINER_ID, {
+    allowReplacement: true
+  });
+  if (!resolvedPlacement) return null;
+  return {
+    placement: resolvedPlacement,
+    conflicts: getActorPlacementConflictingItems(actor, itemData, resolvedPlacement, excludeItemIds)
+  };
+}
+
+function resolveActorEquipmentPlacement(actor, itemData, placement = {}, excludeItemIds = [], { allowReplacement = false } = {}) {
   const race = getActorRace(actor);
   const selectedSlots = getRaceEquipmentSlotsForItem(race, itemData);
   const targetSlot = placement.equipmentSlot
@@ -4378,7 +4414,7 @@ function resolveActorEquipmentPlacement(actor, itemData, placement = {}, exclude
   if (!targetSlot) return null;
 
   const blocked = selectedSlots.some(slot => Boolean(getEquipmentItemForActorSlot(actor, slot, excludeItemIds)));
-  if (blocked) return null;
+  if (blocked && !allowReplacement) return null;
 
   const footprint = getItemFootprint(itemData);
   return {
@@ -4392,7 +4428,7 @@ function resolveActorEquipmentPlacement(actor, itemData, placement = {}, exclude
   };
 }
 
-function resolveActorWeaponPlacement(actor, itemData, placement = {}, excludeItemIds = []) {
+function resolveActorWeaponPlacement(actor, itemData, placement = {}, excludeItemIds = [], { allowReplacement = false } = {}) {
   const requiredSlotKeys = getActorWeaponPlacementSlotKeys(actor, itemData, placement);
   if (!requiredSlotKeys.length) return null;
 
@@ -4402,7 +4438,7 @@ function resolveActorWeaponPlacement(actor, itemData, placement = {}, excludeIte
     slotKey,
     excludeItemIds
   )));
-  if (blocked) return null;
+  if (blocked && !allowReplacement) return null;
 
   const footprint = getItemFootprint(itemData);
   return {
@@ -4419,6 +4455,8 @@ function getActorWeaponPlacementSlotKeys(actor, itemData, placement = {}) {
   const setKey = String(placement.weaponSet ?? "");
   const primarySlotKey = String(placement.weaponSlot ?? "");
   if (!setKey || !primarySlotKey) return [];
+  const requirement = getWeaponSlotRequirement(itemData);
+  if (!requirement.selectedKeys.size) return [];
 
   if (isContainerWeaponSetKey(setKey)) {
     const inventory = prepareInventoryContext(actor, race);
@@ -4475,6 +4513,103 @@ function hasBulkTransferSelectedAncestor(item, itemMap, selectedIds) {
     parentId = getItemContainerParentId(itemMap.get(parentId));
   }
   return false;
+}
+
+function getActorPlacementConflictingItems(actor, itemData, placement = {}, excludeItemIds = []) {
+  if (placement.mode === "equipment") return getActorEquipmentConflictingItems(actor, itemData, excludeItemIds);
+  if (placement.mode === "weapon") return getActorWeaponConflictingItems(actor, itemData, placement, excludeItemIds);
+  return [];
+}
+
+function getActorEquipmentConflictingItems(actor, itemData, excludeItemIds = []) {
+  const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+  const race = getActorRace(actor);
+  const selectedSlotKeys = new Set(
+    getRaceEquipmentSlotsForItem(race, itemData).map(slot => getEquipmentSlotSelectionKey(slot.label))
+  );
+  if (!selectedSlotKeys.size) return [];
+
+  return actor.items?.contents?.filter(item => {
+    if (excluded.has(item.id)) return false;
+    if (item.system?.placement?.mode !== "equipment") return false;
+    return Array.from(getSelectedEquipmentSlotKeys(item)).some(key => selectedSlotKeys.has(key));
+  }) ?? [];
+}
+
+function getActorWeaponConflictingItems(actor, itemData, placement = {}, excludeItemIds = []) {
+  const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+  const conflicts = new Map();
+  for (const slotKey of getActorWeaponPlacementSlotKeys(actor, itemData, placement)) {
+    const item = getWeaponItemForActorSlot(actor, placement.weaponSet, slotKey, excludeItemIds);
+    if (!item || excluded.has(item.id)) continue;
+    conflicts.set(item.id, item);
+  }
+  return Array.from(conflicts.values());
+}
+
+function createActorUnequipReplacementUpdates(actor, items = [], excludeItemIds = []) {
+  const conflicts = Array.from(new Map(items.filter(Boolean).map(item => [item.id, item])).values());
+  if (!conflicts.length) return [];
+
+  const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+  for (const item of conflicts) excluded.add(item.id);
+
+  const reservedPlacementContexts = [];
+  const updates = [];
+  for (const item of conflicts) {
+    const placementContext = getFirstAvailableActorInventoryPlacementContext(actor, item, Array.from(excluded), reservedPlacementContexts);
+    if (!placementContext) return null;
+    reservedPlacementContexts.push({ ...placementContext, itemData: item });
+    updates.push(createActorInventoryPlacementUpdate(item, placementContext));
+  }
+  return updates;
+}
+
+function getFirstAvailableActorInventoryPlacementContext(actor, itemData = null, excludeItemIds = [], reservedPlacementContexts = []) {
+  for (const parentId of getActorInventoryPlacementParentCandidates(actor, itemData, excludeItemIds)) {
+    const reservedPlacements = reservedPlacementContexts
+      .filter(entry => String(entry?.parentId ?? ROOT_CONTAINER_ID) === String(parentId ?? ROOT_CONTAINER_ID))
+      .map(entry => entry.placement);
+    if (!canFitItemWeightInActorParent(actor, itemData, parentId, reservedPlacementContexts)) continue;
+    const placement = getFirstAvailableActorInventoryPlacement(actor, parentId, itemData, excludeItemIds, reservedPlacements);
+    if (placement) return { parentId, placement };
+  }
+  return null;
+}
+
+function getActorInventoryPlacementParentCandidates(actor, itemData = null, excludeItemIds = []) {
+  const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+  const candidates = [ROOT_CONTAINER_ID];
+  const inventory = prepareInventoryContext(actor, getActorRace(actor));
+  for (const container of inventory.containers ?? []) {
+    const parentId = String(container?.id ?? "");
+    if (!parentId || excluded.has(parentId)) continue;
+    if (hasContainerCycle(itemData, parentId, actor.items)) continue;
+    candidates.push(parentId);
+  }
+  return candidates;
+}
+
+function canFitItemWeightInActorParent(actor, itemData = null, parentId = ROOT_CONTAINER_ID, reservedPlacementContexts = []) {
+  if (!parentId) return true;
+  const container = actor.items?.get(parentId);
+  if (!container) return false;
+  const currentLoad = getContainerContentsWeight(container, actor.items);
+  const reservedLoad = reservedPlacementContexts
+    .filter(entry => String(entry?.parentId ?? ROOT_CONTAINER_ID) === parentId)
+    .reduce((total, entry) => total + getItemTotalWeight(entry.itemData, actor.items), 0);
+  return currentLoad + reservedLoad + getItemTotalWeight(itemData, actor.items) <= getContainerMaxLoad(container) + 0.0001;
+}
+
+function createActorInventoryPlacementUpdate(item, placementContext = {}) {
+  return createPlacementItemUpdate(
+    item.id,
+    getItemQuantity(item),
+    String(placementContext.parentId ?? ROOT_CONTAINER_ID),
+    placementContext.placement,
+    item,
+    { equipped: false }
+  );
 }
 
 function canQuickTransferItemIntoParent({ sourceActor, targetActor, sourceItem, parentId = ROOT_CONTAINER_ID } = {}) {

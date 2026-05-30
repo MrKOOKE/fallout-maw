@@ -611,6 +611,7 @@
       "CreateTypeFirst": "Create a creature type first.",
       "CreatureOptionsSaved": "Creature options saved.",
       "DamageTypesSaved": "Damage type settings saved.",
+      "ItemHasNoEquipmentSlots": "This item has no applicable equipment or weapon slots.",
       "InventoryNoSpace": "Not enough room in the inventory for this item.",
       "NeedsSaved": "Need settings saved.",
       "ProficienciesSaved": "Proficiency settings saved.",

@@ -967,6 +967,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       highlighted = true;
     }
 
+    if (!getWeaponSlotRequirement(itemData).selectedKeys.size) return highlighted;
     for (const set of race?.weaponSets ?? []) {
       for (const slot of set.slots ?? []) {
         if (!canUseWeaponSlotForItem(race, itemData, set.key, slot.key)) continue;
@@ -1330,12 +1331,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       return this.#insertItemIntoInventory(item.toObject(), placement, { sourceItem: item, targetItem, parentId });
     }
 
-    const resolvedPlacement = this.#resolvePlacement(item.toObject(), placement, [item.id]);
-    if (!resolvedPlacement) return null;
+    const placementResolution = this.#resolvePlacementWithReplacements(item.toObject(), placement, [item.id]);
+    if (!placementResolution) return null;
+    const { placement: resolvedPlacement, conflicts } = placementResolution;
     const storedPlacement = createStoredPlacement(resolvedPlacement, item);
     const wasEquipment = item.system?.placement?.mode === "equipment";
     const isEquipment = resolvedPlacement.mode === "equipment";
     const updateData = {
+      _id: item.id,
       "system.equipped": isEquipment ? true : (wasEquipment ? false : Boolean(item.system?.equipped)),
       "system.container.parentId": ROOT_CONTAINER_ID,
       "system.placement.mode": storedPlacement.mode,
@@ -1347,8 +1350,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       "system.placement.width": storedPlacement.width,
       "system.placement.height": storedPlacement.height
     };
-    if (!this.#validateProjectedInventoryState({ updates: [{ _id: item.id, ...updateData }] })) return null;
-    return item.update(updateData);
+    const replacementUpdates = this.#createUnequipReplacementUpdates(conflicts, [item.id]);
+    if (!replacementUpdates) return null;
+    const updates = [...replacementUpdates, updateData];
+    if (!this.#validateProjectedInventoryState({ updates })) return null;
+    await this.actor.updateEmbeddedDocuments("Item", updates);
+    return this.actor.items.get(item.id) ?? null;
   }
 
   #canStackDroppedItem(itemData, targetItem = null) {
@@ -1408,8 +1415,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       return this.#insertItemIntoInventory(itemData, placement, { targetItem, parentId });
     }
 
-    const resolvedPlacement = this.#resolvePlacement(itemData, placement);
-    if (!resolvedPlacement) return null;
+    const placementResolution = this.#resolvePlacementWithReplacements(itemData, placement);
+    if (!placementResolution) return null;
+    const { placement: resolvedPlacement, conflicts } = placementResolution;
     const storedPlacement = createStoredPlacement(resolvedPlacement, itemData);
 
     const createData = foundry.utils.deepClone(itemData);
@@ -1433,7 +1441,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         }
       }
     });
-    if (!this.#validateProjectedInventoryState({ creates: [createData] })) return null;
+    const replacementUpdates = this.#createUnequipReplacementUpdates(conflicts);
+    if (!replacementUpdates) return null;
+    if (!this.#validateProjectedInventoryState({ updates: replacementUpdates, creates: [createData] })) return null;
+    if (replacementUpdates.length) await this.actor.updateEmbeddedDocuments("Item", replacementUpdates);
     return this.actor.createEmbeddedDocuments("Item", [createData]);
   }
 
@@ -1656,15 +1667,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#warnInventoryNoSpace();
   }
 
-  #resolvePlacement(itemData, placement, excludeItemIds = [], reservedPlacements = [], parentId = ROOT_CONTAINER_ID) {
+  #resolvePlacement(itemData, placement, excludeItemIds = [], reservedPlacements = [], parentId = ROOT_CONTAINER_ID, options = {}) {
     if (placement.mode === "inventory") {
       return this.#resolveInventoryPlacement(itemData, placement, excludeItemIds, reservedPlacements, parentId);
     }
     if (placement.mode === "equipment") {
-      return this.#resolveEquipmentPlacement(itemData, placement, excludeItemIds);
+      return this.#resolveEquipmentPlacement(itemData, placement, excludeItemIds, options);
     }
     if (placement.mode === "weapon") {
-      return this.#resolveWeaponPlacement(itemData, placement, excludeItemIds);
+      return this.#resolveWeaponPlacement(itemData, placement, excludeItemIds, options);
     }
 
     const footprint = getItemFootprint(itemData);
@@ -1675,7 +1686,18 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     };
   }
 
-  #resolveWeaponPlacement(itemData, placement, excludeItemIds = []) {
+  #resolvePlacementWithReplacements(itemData, placement, excludeItemIds = [], reservedPlacements = [], parentId = ROOT_CONTAINER_ID) {
+    const resolvedPlacement = this.#resolvePlacement(itemData, placement, excludeItemIds, reservedPlacements, parentId, {
+      allowReplacement: true
+    });
+    if (!resolvedPlacement) return null;
+    return {
+      placement: resolvedPlacement,
+      conflicts: this.#getPlacementConflictingItems(itemData, resolvedPlacement, excludeItemIds)
+    };
+  }
+
+  #resolveWeaponPlacement(itemData, placement, excludeItemIds = [], { allowReplacement = false } = {}) {
     if (placement.mode !== "weapon") return placement;
 
     const requiredSlotKeys = this.#getWeaponPlacementSlotKeys(itemData, placement);
@@ -1686,7 +1708,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       slotKey,
       excludeItemIds
     )));
-    if (blocked) return null;
+    if (blocked && !allowReplacement) return null;
 
     const footprint = getItemFootprint(itemData);
     return {
@@ -1701,6 +1723,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const setKey = String(placement.weaponSet ?? "");
     const primarySlotKey = String(placement.weaponSlot ?? "");
     if (!setKey || !primarySlotKey) return [];
+    const requirement = getWeaponSlotRequirement(itemData);
+    if (!requirement.selectedKeys.size) return [];
 
     if (isContainerWeaponSetKey(setKey)) {
       const inventory = prepareDisplayInventoryContext(this.actor, race);
@@ -1724,7 +1748,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       : null;
   }
 
-  #resolveEquipmentPlacement(itemData, placement, excludeItemIds = []) {
+  #resolveEquipmentPlacement(itemData, placement, excludeItemIds = [], { allowReplacement = false } = {}) {
     if (placement.mode !== "equipment") return placement;
 
     const race = this.#getCurrentRace();
@@ -1735,7 +1759,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!targetSlot) return null;
 
     const blocked = selectedSlots.some(slot => Boolean(this.#getEquipmentItemForSlot(slot, excludeItemIds)));
-    if (blocked) return null;
+    if (blocked && !allowReplacement) return null;
 
     const footprint = getItemFootprint(itemData);
     return {
@@ -1744,6 +1768,59 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       width: footprint.width,
       height: footprint.height
     };
+  }
+
+  #getPlacementConflictingItems(itemData, placement = {}, excludeItemIds = []) {
+    if (placement.mode === "equipment") return this.#getEquipmentConflictingItems(itemData, excludeItemIds);
+    if (placement.mode === "weapon") return this.#getWeaponConflictingItems(itemData, placement, excludeItemIds);
+    return [];
+  }
+
+  #getEquipmentConflictingItems(itemData, excludeItemIds = []) {
+    const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+    const race = this.#getCurrentRace();
+    const selectedSlotKeys = new Set(
+      getRaceEquipmentSlotsForItem(race, itemData).map(slot => getEquipmentSlotSelectionKey(slot.label))
+    );
+    if (!selectedSlotKeys.size) return [];
+
+    return this.actor.items.contents.filter(item => {
+      if (excluded.has(item.id)) return false;
+      if (item.system?.placement?.mode !== "equipment") return false;
+      return Array.from(getSelectedEquipmentSlotKeys(item)).some(key => selectedSlotKeys.has(key));
+    });
+  }
+
+  #getWeaponConflictingItems(itemData, placement = {}, excludeItemIds = []) {
+    const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+    const conflicts = new Map();
+    for (const slotKey of this.#getWeaponPlacementSlotKeys(itemData, placement)) {
+      const item = this.#getWeaponItemForSlot(placement.weaponSet, slotKey, excludeItemIds);
+      if (!item || excluded.has(item.id)) continue;
+      conflicts.set(item.id, item);
+    }
+    return Array.from(conflicts.values());
+  }
+
+  #createUnequipReplacementUpdates(items = [], excludeItemIds = []) {
+    const conflicts = Array.from(new Map(items.filter(Boolean).map(item => [item.id, item])).values());
+    if (!conflicts.length) return [];
+
+    const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+    for (const item of conflicts) excluded.add(item.id);
+
+    const reservedPlacements = [];
+    const updates = [];
+    for (const item of conflicts) {
+      const placementContext = this.#getFirstAvailableInventoryPlacementContext(item, Array.from(excluded), reservedPlacements);
+      if (!placementContext) {
+        this.#warnInventoryNoSpace();
+        return null;
+      }
+      reservedPlacements.push({ ...placementContext, itemData: item });
+      updates.push(this.#createInventoryPlacementUpdate(item, placementContext));
+    }
+    return updates;
   }
 
   #getEquipmentItemForSlot(slot, excludeItemIds = []) {
@@ -1790,6 +1867,51 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     );
   }
 
+  #canEquipInventoryItem(item) {
+    if (!item) return false;
+    const race = this.#getCurrentRace();
+    if (getRaceEquipmentSlotsForItem(race, item).length) return true;
+    return Boolean(this.#findAutoWeaponPlacement(item.toObject(), [item.id], { allowReplacement: true }));
+  }
+
+  #findAutoWeaponPlacement(itemData, excludeItemIds = [], { allowReplacement = false } = {}) {
+    if (!this.#isWeaponSlotItem(itemData)) return null;
+    const inventory = prepareDisplayInventoryContext(this.actor, this.#getCurrentRace());
+    const candidates = [];
+    for (const set of inventory.weaponSets ?? []) {
+      for (const slot of set.slots ?? []) {
+        candidates.push({
+          mode: "weapon",
+          equipmentSlot: "",
+          weaponSet: set.key,
+          weaponSlot: slot.key,
+          x: 1,
+          y: 1
+        });
+      }
+    }
+
+    for (const placement of candidates) {
+      const resolvedPlacement = this.#resolvePlacement(itemData, placement, excludeItemIds);
+      if (!resolvedPlacement) continue;
+      return {
+        placement: resolvedPlacement,
+        conflicts: []
+      };
+    }
+    if (!allowReplacement) return null;
+
+    for (const placement of candidates) {
+      const resolution = this.#resolvePlacementWithReplacements(itemData, placement, excludeItemIds);
+      if (resolution) return resolution;
+    }
+    return null;
+  }
+
+  #isWeaponSlotItem(itemData) {
+    return Boolean(getWeaponSlotRequirement(itemData).selectedKeys.size);
+  }
+
   #showInventoryContextMenu(item, event) {
     this.#clearInventoryTooltip({ force: true });
     this.#closeInventoryContextMenu();
@@ -1801,6 +1923,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const isSlottedItem = isSlottedEquipment || isSlottedWeapon;
     const isEquipped = Boolean(item.system?.equipped);
     const isContainer = isContainerItem(item);
+    const canEquip = this.#canEquipInventoryItem(item);
     const menu = document.createElement("nav");
     menu.className = "fallout-maw-inventory-context-menu";
     menu.dataset.pointerX = String(event.clientX);
@@ -1836,7 +1959,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }
     if (isSlottedItem || isEquipped) {
       menuOptions.push(["unequip", "fa-hand", game.i18n.localize("FALLOUTMAW.Item.Unequip")]);
-    } else {
+    } else if (canEquip) {
       menuOptions.push(["equip", "fa-shirt", game.i18n.localize("FALLOUTMAW.Item.Equip")]);
     }
     if (getItemQuantity(item) > 1) {
@@ -1934,36 +2057,25 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   async #equipInventoryItem(item) {
     const race = this.#getCurrentRace();
     const selectedSlots = getRaceEquipmentSlotsForItem(race, item);
-    if (!selectedSlots.length) {
-      const updateData = {
-        "system.equipped": true,
-        "system.container.parentId": ROOT_CONTAINER_ID
-      };
-      if (!this.#validateProjectedInventoryState({ updates: [{ _id: item.id, ...updateData }] })) return null;
-      return item.update(updateData);
+    const placementResolution = selectedSlots.length
+      ? this.#resolvePlacementWithReplacements(item.toObject(), {
+        mode: "equipment",
+        equipmentSlot: "",
+        weaponSet: "",
+        weaponSlot: "",
+        x: 1,
+        y: 1
+      }, [item.id])
+      : this.#findAutoWeaponPlacement(item.toObject(), [item.id], { allowReplacement: true });
+    if (!placementResolution) {
+      this.#warnItemHasNoSlots();
+      return null;
     }
 
-    const blocked = selectedSlots.some(slot => Boolean(this.#getEquipmentItemForSlot(slot, item.id)));
-    if (blocked) {
-      const updateData = {
-        "system.equipped": true,
-        "system.container.parentId": ROOT_CONTAINER_ID
-      };
-      if (!this.#validateProjectedInventoryState({ updates: [{ _id: item.id, ...updateData }] })) return null;
-      return item.update(updateData);
-    }
-
-    const slot = selectedSlots[0];
-    const storedPlacement = createStoredPlacement({
-      mode: "equipment",
-      equipmentSlot: slot.key,
-      weaponSet: "",
-      weaponSlot: "",
-      x: 1,
-      y: 1
-    }, item);
+    const storedPlacement = createStoredPlacement(placementResolution.placement, item);
     const updateData = {
-      "system.equipped": true,
+      _id: item.id,
+      "system.equipped": placementResolution.placement.mode === "equipment",
       "system.container.parentId": ROOT_CONTAINER_ID,
       "system.placement.mode": storedPlacement.mode,
       "system.placement.equipmentSlot": storedPlacement.equipmentSlot,
@@ -1974,26 +2086,85 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       "system.placement.width": storedPlacement.width,
       "system.placement.height": storedPlacement.height
     };
-    if (!this.#validateProjectedInventoryState({ updates: [{ _id: item.id, ...updateData }] })) return null;
-    return item.update(updateData);
+    const replacementUpdates = this.#createUnequipReplacementUpdates(placementResolution.conflicts, [item.id]);
+    if (!replacementUpdates) return null;
+    const updates = [...replacementUpdates, updateData];
+    if (!this.#validateProjectedInventoryState({ updates })) return null;
+    await this.actor.updateEmbeddedDocuments("Item", updates);
+    return this.actor.items.get(item.id) ?? null;
   }
 
   async #unequipInventoryItem(item) {
     const currentPlacement = item.system?.placement ?? {};
-    const placement = (
+    const currentParentId = getItemContainerParentId(item);
+    const currentInventoryPlacement = (
       currentPlacement.mode === "inventory"
-      && !getItemContainerParentId(item)
+      && this.#isInventoryPlacementAvailable(
+        normalizeInventoryPlacement(currentPlacement, item, this.actor.items),
+        [item.id],
+        [],
+        currentParentId
+      )
     )
-      ? normalizeInventoryPlacement(currentPlacement, item, this.actor.items)
-      : this.#getFirstAvailableInventoryPlacement(item, [item.id], [], ROOT_CONTAINER_ID);
-    if (!placement) {
+      ? {
+        parentId: currentParentId,
+        placement: normalizeInventoryPlacement(currentPlacement, item, this.actor.items)
+      }
+      : null;
+    const placementContext = currentInventoryPlacement
+      ?? this.#getFirstAvailableInventoryPlacementContext(item, [item.id]);
+    if (!placementContext) {
       this.#warnInventoryNoSpace();
       return null;
     }
-    const storedPlacement = createStoredPlacement(placement, item);
-    const updateData = {
+    const updateData = this.#createInventoryPlacementUpdate(item, placementContext);
+    if (!this.#validateProjectedInventoryState({ updates: [updateData] })) return null;
+    await this.actor.updateEmbeddedDocuments("Item", [updateData]);
+    return this.actor.items.get(item.id) ?? null;
+  }
+
+  #getFirstAvailableInventoryPlacementContext(itemData = null, excludeItemIds = [], reservedPlacementContexts = []) {
+    for (const parentId of this.#getInventoryPlacementParentCandidates(itemData, excludeItemIds)) {
+      const reservedPlacements = reservedPlacementContexts
+        .filter(entry => String(entry?.parentId ?? ROOT_CONTAINER_ID) === String(parentId ?? ROOT_CONTAINER_ID))
+        .map(entry => entry.placement);
+      if (!this.#canFitItemWeightInParent(itemData, parentId, reservedPlacementContexts)) continue;
+      const placement = this.#getFirstAvailableInventoryPlacement(itemData, excludeItemIds, reservedPlacements, parentId);
+      if (placement) return { parentId, placement };
+    }
+    return null;
+  }
+
+  #getInventoryPlacementParentCandidates(itemData = null, excludeItemIds = []) {
+    const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+    const candidates = [ROOT_CONTAINER_ID];
+    const inventory = prepareDisplayInventoryContext(this.actor, this.#getCurrentRace());
+    for (const container of inventory.containers ?? []) {
+      const parentId = String(container?.id ?? "");
+      if (!parentId || excluded.has(parentId)) continue;
+      if (hasContainerCycle(itemData, parentId, this.actor.items)) continue;
+      candidates.push(parentId);
+    }
+    return candidates;
+  }
+
+  #canFitItemWeightInParent(itemData = null, parentId = ROOT_CONTAINER_ID, reservedPlacementContexts = []) {
+    if (!parentId) return true;
+    const container = this.actor.items.get(parentId);
+    if (!container) return false;
+    const currentLoad = getContainerContentsWeight(container, this.actor.items);
+    const reservedLoad = reservedPlacementContexts
+      .filter(entry => String(entry?.parentId ?? ROOT_CONTAINER_ID) === parentId)
+      .reduce((total, entry) => total + getItemTotalWeight(entry.itemData, this.actor.items), 0);
+    return currentLoad + reservedLoad + getItemTotalWeight(itemData, this.actor.items) <= getContainerMaxLoad(container) + 0.0001;
+  }
+
+  #createInventoryPlacementUpdate(item, placementContext = {}) {
+    const storedPlacement = createStoredPlacement(placementContext.placement, item);
+    return {
+      _id: item.id,
       "system.equipped": false,
-      "system.container.parentId": ROOT_CONTAINER_ID,
+      "system.container.parentId": String(placementContext.parentId ?? ROOT_CONTAINER_ID),
       "system.placement.mode": storedPlacement.mode,
       "system.placement.equipmentSlot": storedPlacement.equipmentSlot,
       "system.placement.weaponSet": storedPlacement.weaponSet,
@@ -2003,12 +2174,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       "system.placement.width": storedPlacement.width,
       "system.placement.height": storedPlacement.height
     };
-    if (!this.#validateProjectedInventoryState({ updates: [{ _id: item.id, ...updateData }] })) return null;
-    return item.update(updateData);
   }
 
   #warnInventoryNoSpace() {
     ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+  }
+
+  #warnItemHasNoSlots() {
+    ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.ItemHasNoEquipmentSlots"));
   }
 
   async #showInventoryTooltip(item, { pinned = false, refresh = false } = {}) {
