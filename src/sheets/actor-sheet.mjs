@@ -3053,6 +3053,7 @@ function buildFirstAidTooltipSection(item, actor = null) {
     rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidLimbHealingPerCharge"), formatSignedNumber(limbValue)]);
     rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidChargeLimitPerUse"), limbCount]);
   }
+  rows.push(...getFirstAidRemoveEffectTooltipRows(firstAid));
   rows.push(...getFirstAidNeedTooltipRows(firstAid));
   const changeRows = getFirstAidChangeTooltipRows(firstAid, actor);
   const durationSeconds = Math.max(0, toInteger(firstAid.durationSeconds));
@@ -3086,6 +3087,21 @@ function getFirstAidNeedTooltipRows(firstAid = {}) {
     })
     .filter(Boolean);
   return values.length ? [[game.i18n.localize("FALLOUTMAW.Item.FirstAidNeeds"), values.join(", ")]] : [];
+}
+
+function getFirstAidRemoveEffectTooltipRows(firstAid = {}) {
+  const source = Array.isArray(firstAid.removeEffects)
+    ? firstAid.removeEffects
+    : Object.entries(firstAid.removeEffects ?? {}).map(([damageTypeKey]) => ({ damageTypeKey }));
+  const labels = new Map(getDamageTypeSettings().map(damageType => [
+    damageType.key,
+    damageType.label || damageType.key
+  ]));
+  const values = Array.from(new Set(source
+    .map(entry => String(entry?.damageTypeKey ?? entry?.key ?? "").trim())
+    .filter(Boolean)))
+    .map(key => labels.get(key) ?? key);
+  return values.length ? [[game.i18n.localize("FALLOUTMAW.Item.FirstAidRemoveEffects"), values.join(", ")]] : [];
 }
 
 function getFirstAidChangeTooltipRows(firstAid = {}, actor = null) {

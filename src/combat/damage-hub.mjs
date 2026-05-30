@@ -284,6 +284,38 @@ export async function requestFirstAidNeedChanges({
   });
 }
 
+export async function requestFirstAidRemoveEffects({
+  actor = null,
+  actorUuid = "",
+  limbKeys = [],
+  damageTypeKeys = []
+} = {}) {
+  const resolvedActor = actor ?? await fromUuid(actorUuid);
+  if (!resolvedActor) return [];
+
+  const request = normalizeFirstAidRemoveEffectsRequest({
+    actorUuid: resolvedActor.uuid,
+    limbKeys,
+    damageTypeKeys
+  });
+  if (!request.limbKeys.length || !request.damageTypeKeys.length) return [];
+
+  if (canApplyDamageLocally(resolvedActor)) {
+    return runDamageHubOperation(() => applyFirstAidRemoveEffects(resolvedActor, request));
+  }
+
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("No active GM is available to remove first aid effects.");
+    return [];
+  }
+
+  return requestDamageSocketActionFromGM(gm, {
+    action: "applyFirstAidRemoveEffects",
+    request
+  });
+}
+
 async function applyDamageCycle(requests = []) {
   return runDamageHubOperation(() => applyDamageCycleNow(requests));
 }
@@ -1663,6 +1695,24 @@ function normalizeFirstAidNeedChangesRequest(request = {}) {
   };
 }
 
+function normalizeFirstAidRemoveEffectsRequest(request = {}) {
+  const limbKeys = Array.isArray(request.limbKeys)
+    ? request.limbKeys
+    : Object.keys(request.limbKeys ?? {});
+  const damageTypeKeys = Array.isArray(request.damageTypeKeys)
+    ? request.damageTypeKeys
+    : Object.keys(request.damageTypeKeys ?? {});
+  return {
+    actorUuid: String(request.actorUuid ?? "").trim(),
+    limbKeys: Array.from(new Set(limbKeys
+      .map(key => String(key ?? "").trim())
+      .filter(Boolean))),
+    damageTypeKeys: Array.from(new Set(damageTypeKeys
+      .map(key => String(key ?? "").trim())
+      .filter(Boolean)))
+  };
+}
+
 async function applyFirstAidNeedChanges(actor, needs = []) {
   if (!actor || (!game.user?.isGM && !actor.isOwner)) return [];
   const updates = {};
@@ -1677,6 +1727,111 @@ async function applyFirstAidNeedChanges(actor, needs = []) {
   if (!Object.keys(updates).length) return [];
   await actor.update(updates);
   return Object.entries(updates).map(([path, value]) => ({ path, value }));
+}
+
+async function applyFirstAidRemoveEffects(actor, request = {}) {
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return [];
+  const limbKeys = new Set((request.limbKeys ?? []).map(key => String(key ?? "").trim()).filter(Boolean));
+  const damageTypeKeys = new Set((request.damageTypeKeys ?? []).map(key => String(key ?? "").trim()).filter(Boolean));
+  if (!limbKeys.size || !damageTypeKeys.size) return [];
+
+  const deleteIds = [];
+  const updateResults = [];
+  for (const effect of Array.from(actor.effects ?? [])) {
+    if (effect.disabled) continue;
+    const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
+    if (!isFirstAidRemovablePeriodicEffect(data, damageTypeKeys)) continue;
+    if (data.kind === BLEEDING_DAMAGE_EFFECT_KIND) {
+      const result = buildFirstAidBleedingEffectRemovalUpdate(effect, data, limbKeys, damageTypeKeys);
+      if (result.deleteEffectId) deleteIds.push(result.deleteEffectId);
+      if (result.updateData) {
+        await updatePeriodicEffect(effect, result.updateData);
+        updateResults.push({ effectId: effect.id, kind: data.kind, removed: result.removed });
+      }
+      continue;
+    }
+    if (!limbKeys.has(String(data.limbKey ?? "").trim())) continue;
+    deleteIds.push(effect.id);
+  }
+
+  const deleted = await deleteActorActiveEffects(actor, deleteIds);
+  return [
+    ...updateResults,
+    ...deleted.map(effect => ({ effectId: effect.id, kind: "deleted" }))
+  ];
+}
+
+function isFirstAidRemovablePeriodicEffect(data = {}, damageTypeKeys = new Set()) {
+  if (data?.kind === "periodicDamage") return damageTypeKeys.has(String(data.damageTypeKey ?? "").trim());
+  if (data?.kind === BLEEDING_DAMAGE_EFFECT_KIND) return damageTypeKeys.has(BLEEDING_DAMAGE_TYPE_KEY);
+  return false;
+}
+
+function buildFirstAidBleedingEffectRemovalUpdate(effect, data = {}, limbKeys = new Set(), damageTypeKeys = new Set()) {
+  if (!damageTypeKeys.has(BLEEDING_DAMAGE_TYPE_KEY)) return { removed: 0 };
+  const entries = getBleedingDamageEffectEntries(data);
+  const remainingEntries = entries.filter(entry => !limbKeys.has(String(entry.limbKey ?? "").trim()));
+  const removed = entries.length - remainingEntries.length;
+  if (!removed) return { removed: 0 };
+  if (!remainingEntries.length) return { deleteEffectId: effect.id, removed };
+  return {
+    removed,
+    updateData: {
+      [`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}`]: rebuildBleedingDamageEffectData(data, remainingEntries)
+    }
+  };
+}
+
+function getBleedingDamageEffectEntries(data = {}) {
+  const source = Array.isArray(data.entries) && data.entries.length
+    ? data.entries
+    : [{
+      sourceDamageTypeKey: data.sourceDamageTypeKey,
+      limbKey: data.limbKey,
+      scope: data.scope,
+      tickAmounts: data.tickAmounts,
+      source: data.source
+    }];
+  return source
+    .map(entry => ({
+      sourceDamageTypeKey: String(entry?.sourceDamageTypeKey ?? "").trim(),
+      limbKey: String(entry?.limbKey ?? "").trim(),
+      scope: String(entry?.scope ?? SCOPE_HEALTH),
+      tickAmounts: Array.isArray(entry?.tickAmounts)
+        ? entry.tickAmounts.map(amount => Math.max(0, toInteger(amount)))
+        : [],
+      source: entry?.source && typeof entry.source === "object" ? foundry.utils.deepClone(entry.source) : {}
+    }))
+    .filter(entry => entry.limbKey || entry.tickAmounts.some(amount => amount > 0));
+}
+
+function rebuildBleedingDamageEffectData(data = {}, entries = []) {
+  const oldTotalTicks = Math.max(0, toInteger(data.totalTicks), Array.isArray(data.tickAmounts) ? data.tickAmounts.length : 0);
+  const totalTicks = Math.max(oldTotalTicks, ...entries.map(entry => entry.tickAmounts.length));
+  const tickAmounts = Array.from({ length: totalTicks }, (_value, index) => (
+    entries.reduce((sum, entry) => sum + Math.max(0, toInteger(entry.tickAmounts[index])), 0)
+  ));
+  const limbs = new Set(entries.map(entry => entry.limbKey).filter(Boolean));
+  const scopes = new Set(entries.map(entry => entry.scope).filter(Boolean));
+  const sourceDamageTypeKeys = new Set(entries.map(entry => entry.sourceDamageTypeKey).filter(Boolean));
+  return {
+    ...foundry.utils.deepClone(data),
+    damageTypeKey: BLEEDING_DAMAGE_TYPE_KEY,
+    sourceDamageTypeKey: sourceDamageTypeKeys.size === 1 ? Array.from(sourceDamageTypeKeys)[0] : "",
+    limbKey: limbs.size === 1 ? Array.from(limbs)[0] : "",
+    scope: scopes.size === 1 ? Array.from(scopes)[0] : SCOPE_HEALTH_AND_LIMB,
+    tickAmounts,
+    entries: entries.map(entry => ({
+      sourceDamageTypeKey: entry.sourceDamageTypeKey,
+      limbKey: entry.limbKey,
+      scope: entry.scope,
+      tickAmounts: entry.tickAmounts,
+      source: entry.source
+    })),
+    totalTicks,
+    remainingTicks: Math.min(Math.max(0, toInteger(data.remainingTicks)), totalTicks),
+    source: entries.length === 1 ? entries[0].source : { combined: true }
+  };
 }
 
 function normalizeEffectChanges(changes = []) {
@@ -1800,6 +1955,23 @@ async function handleDamageSocketMessage(payload = {}) {
       ok = false;
       error = String(caught?.message ?? caught ?? "Damage hub socket request failed.");
       console.error("Fallout MaW | First aid need socket request failed", caught);
+    }
+    respondDamageHubSocketAction(payload, { ok, error, result: ok ? result : [] });
+    return;
+  }
+  if (payload.action === "applyFirstAidRemoveEffects") {
+    if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
+    let ok = true;
+    let result = [];
+    let error = "";
+    try {
+      const request = normalizeFirstAidRemoveEffectsRequest(payload.request);
+      const actor = await fromUuid(request.actorUuid);
+      if (actor) result = await runDamageHubOperation(() => applyFirstAidRemoveEffects(actor, request));
+    } catch (caught) {
+      ok = false;
+      error = String(caught?.message ?? caught ?? "Damage hub socket request failed.");
+      console.error("Fallout MaW | First aid remove effects socket request failed", caught);
     }
     respondDamageHubSocketAction(payload, { ok, error, result: ok ? result : [] });
     return;

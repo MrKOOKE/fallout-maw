@@ -1,5 +1,5 @@
 import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.mjs";
-import { TEMPLATES } from "../constants.mjs";
+import { BLEEDING_DAMAGE_TYPE_KEY, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getNeedSettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { getEquipmentSlotSelectionKey, groupRaceEquipmentSlotsBySet, groupRaceWeaponSlotsBySet } from "../utils/equipment-slots.mjs";
 import {
@@ -277,6 +277,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       hasFirstAidFunction,
       firstAidEffectRows: buildFirstAidEffectRows(item),
       firstAidNeedRows: buildFirstAidNeedRows(item),
+      firstAidRemoveEffectRows: buildFirstAidRemoveEffectRows(item, damageTypeSettings),
       conditionRecoveryMethodRows: buildConditionRecoveryMethodRows(item, toolSettings),
       hasWeaponFunction,
       hasWeaponMagazineCost: hasWeaponResourceCost(item, "magazine"),
@@ -486,6 +487,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelector("[data-add-first-aid-need]")?.addEventListener("click", event => this.#onAddFirstAidNeed(event));
     this.element?.querySelectorAll("[data-delete-first-aid-need]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteFirstAidNeed(event));
+    });
+    this.element?.querySelector("[data-add-first-aid-remove-effect]")?.addEventListener("click", event => this.#onAddFirstAidRemoveEffect(event));
+    this.element?.querySelectorAll("[data-delete-first-aid-remove-effect]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteFirstAidRemoveEffect(event));
     });
     this.element?.querySelectorAll("[data-first-aid-charge-input]").forEach(input => {
       input.addEventListener("change", event => this.#onFirstAidChargeInputChange(event));
@@ -1936,6 +1941,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.firstAid.needs": [],
         "system.functions.firstAid.limbSelection.count": 0,
         "system.functions.firstAid.limbSelection.value": 0,
+        "system.functions.firstAid.removeEffects": [],
         "system.functions.firstAid.changes": []
       });
     }
@@ -2047,6 +2053,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.firstAid.needs": [],
         "system.functions.firstAid.limbSelection.count": 0,
         "system.functions.firstAid.limbSelection.value": 0,
+        "system.functions.firstAid.removeEffects": [],
         "system.functions.firstAid.changes": []
       });
     }
@@ -2302,6 +2309,26 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const current = [...(this.item.system?.functions?.firstAid?.needs ?? [])];
     current.splice(index, 1);
     return this.item.update({ "system.functions.firstAid.needs": current });
+  }
+
+  #onAddFirstAidRemoveEffect(event) {
+    event.preventDefault();
+    const current = normalizeFirstAidRemoveEffects(this.item.system?.functions?.firstAid?.removeEffects);
+    const existing = new Set(current.map(entry => entry.damageTypeKey));
+    const damageType = getFirstAidRemovablePeriodicDamageTypes(getDamageTypeSettings())
+      .find(entry => !existing.has(entry.key));
+    if (!damageType) return undefined;
+    current.push({ damageTypeKey: damageType.key });
+    return this.item.update({ "system.functions.firstAid.removeEffects": current });
+  }
+
+  #onDeleteFirstAidRemoveEffect(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteFirstAidRemoveEffect);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const current = normalizeFirstAidRemoveEffects(this.item.system?.functions?.firstAid?.removeEffects);
+    current.splice(index, 1);
+    return this.item.update({ "system.functions.firstAid.removeEffects": current });
   }
 
   #onFirstAidChargeInputChange(event) {
@@ -5310,6 +5337,44 @@ function buildFirstAidNeedRows(item) {
       selected: entry.key === String(source[index]?.needKey ?? "")
     }))
   }));
+}
+
+function buildFirstAidRemoveEffectRows(item, damageTypeSettings = getDamageTypeSettings()) {
+  const settings = getFirstAidRemovablePeriodicDamageTypes(damageTypeSettings);
+  const source = normalizeFirstAidRemoveEffects(item.system?.functions?.firstAid?.removeEffects);
+  return source.map((entry, index) => ({
+    index,
+    damageTypeKey: entry.damageTypeKey,
+    choices: settings.map(damageType => ({
+      value: damageType.key,
+      label: damageType.label || damageType.key,
+      selected: damageType.key === entry.damageTypeKey
+    }))
+  }));
+}
+
+function normalizeFirstAidRemoveEffects(removeEffects = []) {
+  const source = Array.isArray(removeEffects)
+    ? removeEffects
+    : Object.entries(removeEffects ?? {}).map(([damageTypeKey, enabled]) => ({ damageTypeKey, enabled }));
+  return source
+    .map(entry => ({
+      damageTypeKey: String(entry?.damageTypeKey ?? entry?.key ?? "").trim()
+    }))
+    .filter(entry => entry.damageTypeKey);
+}
+
+function getFirstAidRemovablePeriodicDamageTypes(damageTypeSettings = []) {
+  return (Array.isArray(damageTypeSettings) ? damageTypeSettings : [])
+    .filter(damageType => {
+      const key = String(damageType?.key ?? "").trim();
+      return key === BLEEDING_DAMAGE_TYPE_KEY || Boolean(damageType?.settings?.periodic?.enabled);
+    })
+    .map(damageType => ({
+      key: String(damageType.key ?? "").trim(),
+      label: String(damageType.label ?? damageType.key ?? "").trim()
+    }))
+    .filter(damageType => damageType.key);
 }
 
 function buildFirstAidEffectTypeChoices(selected = "add") {

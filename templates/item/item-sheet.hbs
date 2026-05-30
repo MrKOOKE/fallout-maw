@@ -834,6 +834,28 @@
       </label>
     </div>
     <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.FirstAidRemoveEffects"}}</h3>
+      <button type="button" data-add-first-aid-remove-effect><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.FirstAidAddRemoveEffect"}}</button>
+    </div>
+    <div class="fallout-maw-effect-change-list">
+      <div class="fallout-maw-first-aid-remove-effect-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Item.FirstAidRemoveEffect"}}</span>
+        <span></span>
+      </div>
+      {{#each firstAidRemoveEffectRows}}
+      <div class="fallout-maw-first-aid-remove-effect-row">
+        <select name="system.functions.firstAid.removeEffects.{{index}}.damageTypeKey">
+          {{#each choices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <button type="button" class="fallout-maw-icon-delete-button" data-delete-first-aid-remove-effect="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.FirstAidNoRemoveEffects"}}</p>
+      {{/each}}
+    </div>
+    <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.FirstAidEffectChanges"}}</h3>
       <button type="button" data-add-first-aid-effect><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Effects.AddChange"}}</button>
     </div>

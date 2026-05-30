@@ -1,4 +1,4 @@
-import { requestDamageApplication, requestFirstAidEffect, requestFirstAidNeedChanges } from "../combat/damage-hub.mjs";
+import { requestDamageApplication, requestFirstAidEffect, requestFirstAidNeedChanges, requestFirstAidRemoveEffects } from "../combat/damage-hub.mjs";
 import { ACTION_RESOURCE_KEY } from "../combat/movement-resources.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
@@ -34,6 +34,9 @@ export async function useFirstAidItem({ sourceActor = null, targetActor = null, 
   if (!targetContext) return false;
   const selectedLimbs = await requestLimbSelection(targetActor, limitFirstAidSelectionByCharges(firstAid, charges.value), targetContext);
   if (selectedLimbs === null) return false;
+  const removeEffectDamageTypeKeys = getFirstAidRemoveEffectDamageTypeKeys(firstAid);
+  const removeEffectLimbKeys = getSelectedFirstAidLimbKeys(selectedLimbs);
+  const hasEffectRemoval = removeEffectDamageTypeKeys.length > 0 && removeEffectLimbKeys.length > 0;
   const chargeCost = getFirstAidChargeCost(selectedLimbs);
   if (chargeCost > charges.value) {
     ui.notifications.warn(`${item.name}: not enough charges.`);
@@ -71,7 +74,7 @@ export async function useFirstAidItem({ sourceActor = null, targetActor = null, 
   const limbs = normalizeFirstAidLimbs(selectedLimbs, firstAid, effectMultiplier);
   const hasImmediateHealing = healing > 0;
   const hasTimedEffect = durationSeconds > 0 && (healingPerTick > 0 || changes.length);
-  if (!hasImmediateHealing && !hasTimedEffect && !needs.length && !limbs.length) return false;
+  if (!hasImmediateHealing && !hasTimedEffect && !needs.length && !limbs.length && !hasEffectRemoval) return false;
 
   if (healing > 0) {
     await requestDamageApplication({
@@ -101,6 +104,14 @@ export async function useFirstAidItem({ sourceActor = null, targetActor = null, 
   }
 
   if (needs.length) await requestFirstAidNeedChanges({ actor: targetActor, needs });
+
+  if (hasEffectRemoval) {
+    await requestFirstAidRemoveEffects({
+      actor: targetActor,
+      limbKeys: removeEffectLimbKeys,
+      damageTypeKeys: removeEffectDamageTypeKeys
+    });
+  }
 
   if (hasTimedEffect) {
     await requestFirstAidEffect({
@@ -163,6 +174,22 @@ function normalizeFirstAidNeeds(needs = [], multiplier = 1) {
       value: scaleSignedValue(toInteger(entry?.value), multiplier)
     }))
     .filter(entry => entry.key && entry.value);
+}
+
+function getFirstAidRemoveEffectDamageTypeKeys(firstAid = {}) {
+  const source = Array.isArray(firstAid.removeEffects)
+    ? firstAid.removeEffects
+    : Object.entries(firstAid.removeEffects ?? {}).map(([damageTypeKey]) => ({ damageTypeKey }));
+  return Array.from(new Set(source
+    .map(entry => String(entry?.damageTypeKey ?? entry?.key ?? "").trim())
+    .filter(Boolean)));
+}
+
+function getSelectedFirstAidLimbKeys(selectedLimbs = []) {
+  return Array.from(new Set((Array.isArray(selectedLimbs) ? selectedLimbs : [])
+    .filter(entry => Math.max(0, toInteger(entry?.count)) > 0)
+    .map(entry => String(entry?.limbKey ?? "").trim())
+    .filter(Boolean)));
 }
 
 function normalizeFirstAidLimbs(limbs = [], firstAid = {}, multiplier = 1) {
@@ -271,7 +298,8 @@ function buildFirstAidTargetContext(actor, token = null) {
 async function requestLimbSelection(actor, firstAid = {}, targetContext = null) {
   const count = Math.max(0, toInteger(firstAid.limbSelection?.count));
   const value = toInteger(firstAid.limbSelection?.value);
-  if (!count || !value) return [];
+  const hasEffectRemoval = getFirstAidRemoveEffectDamageTypeKeys(firstAid).length > 0;
+  if (!count || (!value && !hasEffectRemoval)) return [];
   const limbs = (Array.isArray(targetContext?.limbs) && targetContext.limbs.length
     ? targetContext.limbs
     : Object.entries(actor.system?.limbs ?? {}).map(([key, limb]) => ({
@@ -290,7 +318,9 @@ async function requestLimbSelection(actor, firstAid = {}, targetContext = null) 
   const rows = limbs.map(limb => {
     const disabled = value > 0
       ? limb.value >= limb.max
-      : limb.value <= limb.min;
+      : value < 0
+        ? limb.value <= limb.min
+        : false;
     const result = calculateLimbSelectionPreview(limb.value, value, 0, limb.min, limb.max);
     return `
     <button type="button" class="fallout-maw-first-aid-limb-choice${disabled ? " disabled" : ""}" data-limb-key="${escapeHtml(limb.key)}" data-count="0" data-current="${limb.value}" data-min="${limb.min}" data-max="${limb.max}" data-disabled="${disabled ? "true" : "false"}">

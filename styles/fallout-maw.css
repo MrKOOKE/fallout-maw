@@ -1594,6 +1594,16 @@
   min-width: 0;
 }
 
+.fallout-maw-first-aid-remove-effect-row {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: minmax(220px, 1fr) 2.5rem;
+}
+
+.fallout-maw-first-aid-remove-effect-row > * {
+  min-width: 0;
+}
+
 .fallout-maw-first-aid-limb-summary {
   display: grid;
   font-size: 1.25rem;

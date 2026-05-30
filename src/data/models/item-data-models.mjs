@@ -538,6 +538,9 @@ function firstAidFunctionField() {
       count: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
       value: new NumberField({ required: true, integer: true, initial: 0 })
     }),
+    removeEffects: new ArrayField(new SchemaField({
+      damageTypeKey: new StringField({ required: true, blank: true, initial: "" })
+    }), { required: true, initial: [] }),
     changes: new ArrayField(traumaEffectField(), { required: true, initial: [] })
   });
 }
