@@ -13,6 +13,7 @@ import {
   getCurrencySettings,
   getDamageTypeSettings,
   getLevelSettings,
+  getProficiencySettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
@@ -207,7 +208,9 @@ export class FalloutMaWActor extends Actor {
     development.points.skills = skillPointsPerLevel * Math.max(0, normalizedLevel - 1);
     development.points.researches = researchPointsPerLevel * Math.max(0, normalizedLevel - 1);
 
-    return { characteristics, development };
+    const proficiencies = resetProficiencyMap(this.system?.proficiencies, getProficiencySettings());
+
+    return { characteristics, development, proficiencies };
   }
 
   async ensureDevelopmentInitialized() {
@@ -447,6 +450,18 @@ function initializeProficiencyMap(proficiencies = {}) {
       key,
       { ...proficiency, min: 0, spent: 0, bonus: toInteger(proficiency?.bonus), value: 0 }
     ])
+  );
+}
+
+function resetProficiencyMap(proficiencies = {}, proficiencySettings = []) {
+  return Object.fromEntries(
+    proficiencySettings.map(proficiency => {
+      const current = proficiencies?.[proficiency.key];
+      const min = 0;
+      const bonus = current && typeof current === "object" ? toInteger(current.bonus) : 0;
+      const max = Math.max(min, toInteger(proficiency.max) + bonus);
+      return [proficiency.key, { min, spent: 0, bonus, value: 0, max }];
+    })
   );
 }
 

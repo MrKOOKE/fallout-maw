@@ -323,7 +323,20 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#draft.level = 1;
     this.#draft.characteristics = foundry.utils.deepClone(resetData.characteristics);
     this.#draft.development = foundry.utils.deepClone(resetData.development);
-    await this.#applyDraftToActor();
+    const abilityItemIds = this.actor.items
+      .filter(item => item.type === "ability")
+      .map(item => item.id);
+    if (abilityItemIds.length) await this.actor.deleteEmbeddedDocuments("Item", abilityItemIds);
+    await this.#applyDraftToActor({
+      "system.proficiencies": foundry.utils.deepClone(resetData.proficiencies)
+    });
+    await this.actor.setFlag(FALLOUT_MAW.id, ADVANCEMENT_COMMIT_FLAG, {
+      level: this.#draft.level,
+      characteristics: foundry.utils.deepClone(this.#draft.characteristics),
+      development: foundry.utils.deepClone(this.#draft.development)
+    });
+    this.#snapshot = foundry.utils.deepClone(this.#draft);
+    this.#floor = foundry.utils.deepClone(this.#draft);
     return this.forceRender();
   }
 
@@ -816,11 +829,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     return true;
   }
 
-  async #applyDraftToActor() {
+  async #applyDraftToActor(updateData = {}) {
     await this.actor.update({
       "system.attributes.level": this.#draft.level,
       "system.characteristics": foundry.utils.deepClone(this.#draft.characteristics),
-      "system.development": foundry.utils.deepClone(this.#draft.development)
+      "system.development": foundry.utils.deepClone(this.#draft.development),
+      ...updateData
     });
   }
 

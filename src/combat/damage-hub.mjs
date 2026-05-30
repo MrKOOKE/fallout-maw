@@ -688,9 +688,10 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
   let shockCheck = null;
 
   if (mode === MODE_DAMAGE) {
+    const traumaDamageTypeKey = getTraumaDamageTypeKey(data.damageTypeKey);
     const result = shouldUpdateLimb
-      ? calculateTargetedLimbDamage(actor, data.limbKey, effectiveAmount, { damageType, damageTypeKey: data.damageTypeKey })
-      : calculateEvenLimbDamage(actor, effectiveAmount, { damageType, damageTypeKey: data.damageTypeKey });
+      ? calculateTargetedLimbDamage(actor, data.limbKey, effectiveAmount, { damageType, damageTypeKey: data.damageTypeKey, traumaDamageTypeKey })
+      : calculateEvenLimbDamage(actor, effectiveAmount, { damageType, damageTypeKey: data.damageTypeKey, traumaDamageTypeKey });
     limbStates = result.limbStates;
     damageAccumulation = result.damageAccumulation;
     shockCheck = result.shockCheck;
@@ -2454,16 +2455,19 @@ async function applyDamageEntriesBatch(actor, entries = []) {
   const shockChecks = [];
 
   for (const entry of normalizedEntries) {
+    const traumaDamageTypeKey = getTraumaDamageTypeKey(entry.damageTypeKey);
     const result = entry.limbKey && (entry.scope === SCOPE_LIMB || entry.scope === SCOPE_HEALTH_AND_LIMB)
       ? calculateTargetedLimbDamage(actor, entry.limbKey, entry.amount, {
         damageType: entry.damageType,
         damageTypeKey: entry.damageTypeKey,
+        traumaDamageTypeKey,
         limbStates,
         damageAccumulation
       })
       : calculateEvenLimbDamage(actor, entry.amount, {
         damageType: entry.damageType,
         damageTypeKey: entry.damageTypeKey,
+        traumaDamageTypeKey,
         limbStates,
         damageAccumulation
       });
@@ -2914,7 +2918,7 @@ function getManualHealthHealingTargets(actor) {
     .filter(target => target.capacity > 0);
 }
 
-function calculateEvenLimbDamage(actor, amount = 0, { damageType = null, damageTypeKey = "", limbStates = new Map(), damageAccumulation = new Map(), excludeLimbKeys = new Set() } = {}) {
+function calculateEvenLimbDamage(actor, amount = 0, { damageType = null, damageTypeKey = "", traumaDamageTypeKey = getTraumaDamageTypeKey(damageTypeKey), limbStates = new Map(), damageAccumulation = new Map(), excludeLimbKeys = new Set() } = {}) {
   const targets = getPositiveLimbTargets(actor, limbStates, excludeLimbKeys);
   const allocations = distributeCappedIntegerAmount(amount, targets.map(target => ({
     key: target.key,
@@ -2923,12 +2927,13 @@ function calculateEvenLimbDamage(actor, amount = 0, { damageType = null, damageT
   return applyDamageAllocations(actor, allocations, {
     damageType,
     damageTypeKey,
+    traumaDamageTypeKey,
     limbStates,
     damageAccumulation
   });
 }
 
-function calculateTargetedLimbDamage(actor, limbKey = "", amount = 0, { damageType = null, damageTypeKey = "", limbStates = new Map(), damageAccumulation = new Map() } = {}) {
+function calculateTargetedLimbDamage(actor, limbKey = "", amount = 0, { damageType = null, damageTypeKey = "", traumaDamageTypeKey = getTraumaDamageTypeKey(damageTypeKey), limbStates = new Map(), damageAccumulation = new Map() } = {}) {
   const limb = actor?.system?.limbs?.[limbKey];
   const damage = roundDamageAmount(amount);
   if (!limb || damage <= 0) return createLimbMutationResult(limbStates, damageAccumulation);
@@ -2940,6 +2945,7 @@ function calculateTargetedLimbDamage(actor, limbKey = "", amount = 0, { damageTy
     const limbResult = applyDamageAllocations(actor, new Map([[limbKey, damage]]), {
       damageType,
       damageTypeKey,
+      traumaDamageTypeKey,
       limbStates,
       damageAccumulation
     });
@@ -2949,6 +2955,7 @@ function calculateTargetedLimbDamage(actor, limbKey = "", amount = 0, { damageTy
     const spreadResult = calculateEvenLimbDamage(actor, damage, {
       damageType,
       damageTypeKey,
+      traumaDamageTypeKey,
       limbStates,
       damageAccumulation,
       excludeLimbKeys: new Set([limbKey])
@@ -2965,6 +2972,7 @@ function calculateTargetedLimbDamage(actor, limbKey = "", amount = 0, { damageTy
   const result = applyDamageAllocations(actor, new Map([[limbKey, damage]]), {
     damageType,
     damageTypeKey,
+    traumaDamageTypeKey,
     limbStates,
     damageAccumulation
   });
@@ -2976,6 +2984,7 @@ function calculateTargetedLimbDamage(actor, limbKey = "", amount = 0, { damageTy
   const spreadResult = calculateEvenLimbDamage(actor, negativeDamage, {
     damageType,
     damageTypeKey,
+    traumaDamageTypeKey,
     limbStates,
     damageAccumulation,
     excludeLimbKeys: new Set([limbKey])
@@ -3034,7 +3043,7 @@ function calculateTargetedLimbHealing(actor, limbKey = "", amount = 0, { limbSta
   return applyHealingAllocations(actor, new Map([[limbKey, Math.min(healing, capacity)]]), { limbStates });
 }
 
-function applyDamageAllocations(actor, allocations = new Map(), { damageType = null, damageTypeKey = "", limbStates = new Map(), damageAccumulation = new Map() } = {}) {
+function applyDamageAllocations(actor, allocations = new Map(), { damageType = null, damageTypeKey = "", traumaDamageTypeKey = getTraumaDamageTypeKey(damageTypeKey), limbStates = new Map(), damageAccumulation = new Map() } = {}) {
   let healthDelta = 0;
   for (const [limbKey, amount] of allocations) {
     const limb = actor?.system?.limbs?.[limbKey];
@@ -3053,14 +3062,21 @@ function applyDamageAllocations(actor, allocations = new Map(), { damageType = n
     const positiveLoss = Math.max(0, previousRunningValue) - Math.max(0, state.nextValue);
     healthDelta += Math.max(0, positiveLoss);
     state.totalDelta += actualLimbDelta;
-    state.damageByType[damageTypeKey || "untyped"] = (state.damageByType[damageTypeKey || "untyped"] ?? 0) + actualLimbDelta;
-    addBatchDamageAccumulation(damageAccumulation, actor, limbKey, damageTypeKey, actualLimbDelta);
+    if (traumaDamageTypeKey) {
+      state.damageByType[traumaDamageTypeKey] = (state.damageByType[traumaDamageTypeKey] ?? 0) + actualLimbDelta;
+      addBatchDamageAccumulation(damageAccumulation, actor, limbKey, traumaDamageTypeKey, actualLimbDelta);
+    }
   }
 
   return createLimbMutationResult(limbStates, damageAccumulation, {
     healthDelta,
     limbDelta: Array.from(limbStates.values()).reduce((sum, state) => sum + state.totalDelta, 0)
   });
+}
+
+function getTraumaDamageTypeKey(damageTypeKey = "") {
+  const key = String(damageTypeKey ?? "").trim();
+  return key === BLEEDING_DAMAGE_TYPE_KEY ? "" : key;
 }
 
 function applyHealingAllocations(actor, allocations = new Map(), { limbStates = new Map() } = {}) {

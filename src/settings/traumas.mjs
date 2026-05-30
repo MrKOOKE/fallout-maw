@@ -1,4 +1,5 @@
 import { toInteger } from "../utils/numbers.mjs";
+import { BLEEDING_DAMAGE_TYPE_KEY } from "../constants.mjs";
 
 const DEFAULT_TRAUMA_ICON = "icons/svg/blood.svg";
 const DEFAULT_HEALING_DIFFICULTY = 60;
@@ -14,9 +15,10 @@ export function createDefaultTraumaSettings() {
 export function normalizeTraumaSettings(value = {}, creatureOptions = {}, damageTypes = []) {
   const sourceGroups = value && typeof value === "object" ? value.groups ?? {} : {};
   const normalizedGroups = {};
+  const traumaDamageTypes = getTraumaDamageTypes(damageTypes);
 
   for (const limbSet of getUniqueLimbSets(creatureOptions)) {
-    normalizedGroups[limbSet.id] = normalizeTraumaGroup(getTraumaGroupSource(sourceGroups, limbSet), limbSet, damageTypes);
+    normalizedGroups[limbSet.id] = normalizeTraumaGroup(getTraumaGroupSource(sourceGroups, limbSet), limbSet, traumaDamageTypes);
   }
 
   return { groups: normalizedGroups };
@@ -26,11 +28,17 @@ export function getTraumaGroupForActor(actor, settings = null, creatureOptions =
   const race = creatureOptions.races.find(entry => entry.id === actor?.system?.creature?.raceId);
   const limbSetId = getLimbSetId(race?.limbs ?? []);
   const normalized = settings ?? normalizeTraumaSettings({}, creatureOptions, damageTypes);
+  const traumaDamageTypes = getTraumaDamageTypes(damageTypes);
   return {
     id: limbSetId,
     race,
-    config: normalized.groups?.[limbSetId] ?? normalizeTraumaGroup({}, { limbs: [] }, damageTypes)
+    config: normalized.groups?.[limbSetId] ?? normalizeTraumaGroup({}, { limbs: [] }, traumaDamageTypes)
   };
+}
+
+export function getTraumaDamageTypes(damageTypes = []) {
+  return (Array.isArray(damageTypes) ? damageTypes : [])
+    .filter(damageType => String(damageType?.key ?? "").trim() !== BLEEDING_DAMAGE_TYPE_KEY);
 }
 
 export function getUniqueLimbSets(creatureOptions = {}) {

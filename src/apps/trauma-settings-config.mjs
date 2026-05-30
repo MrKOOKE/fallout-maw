@@ -15,6 +15,7 @@ import {
 } from "../settings/accessors.mjs";
 import {
   createDefaultTraumaProfile,
+  getTraumaDamageTypes,
   getUniqueLimbSets,
   normalizeTraumaSettings
 } from "../settings/traumas.mjs";
@@ -24,7 +25,7 @@ export class TraumaSettingsConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
     super(options);
     this.creatureOptions = getCreatureOptions();
-    this.damageTypes = getDamageTypeSettings();
+    this.damageTypes = getTraumaDamageTypes(getDamageTypeSettings());
     this.settings = getTraumaSettings(this.creatureOptions, this.damageTypes);
   }
 
@@ -93,7 +94,7 @@ export class TraumaGroupSettingsConfig extends FalloutMaWFormApplicationV2 {
     super(options);
     this.groupId = String(options.groupId ?? "");
     this.creatureOptions = getCreatureOptions();
-    this.damageTypes = getDamageTypeSettings();
+    this.damageTypes = getTraumaDamageTypes(getDamageTypeSettings());
     this.settings = getTraumaSettings(this.creatureOptions, this.damageTypes);
   }
 
