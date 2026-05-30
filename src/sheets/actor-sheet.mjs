@@ -747,7 +747,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     root.addEventListener("mouseout", event => this.#onInventoryItemMouseOut(event));
     root.addEventListener("mousedown", event => this.#onInventoryMiddleMouseDown(event));
     root.addEventListener("auxclick", event => this.#onInventoryAuxClick(event));
-    root.addEventListener("click", () => this.#closeInventoryContextMenu());
+    root.addEventListener("click", event => this.#onInventoryClick(event));
   }
 
   #activateTabScrollPersistence() {
@@ -901,6 +901,24 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#tooltipAnchorElement = itemElement;
     this.#tooltipWeaponTabIndex = 0;
     void this.#showInventoryTooltip(item, { pinned: true });
+  }
+
+  async #onInventoryClick(event) {
+    if (event.shiftKey && event.button === 0) {
+      const itemElement = event.target?.closest?.("[data-inventory-grid-item][data-item-id]");
+      if (itemElement && this.element?.contains(itemElement)) {
+        const item = this.actor.items.get(itemElement.dataset.itemId ?? "");
+        if (item) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.#closeInventoryContextMenu();
+          this.#clearInventoryTooltip({ force: true });
+          await this.#cycleInventoryItemContainer(item);
+          return;
+        }
+      }
+    }
+    this.#closeInventoryContextMenu();
   }
 
   #getDropZone(eventOrTarget) {
@@ -2121,6 +2139,35 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!this.#validateProjectedInventoryState({ updates: [updateData] })) return null;
     await this.actor.updateEmbeddedDocuments("Item", [updateData]);
     return this.actor.items.get(item.id) ?? null;
+  }
+
+  async #cycleInventoryItemContainer(item) {
+    if (item.system?.placement?.mode !== "inventory") return null;
+
+    const currentParentId = getItemContainerParentId(item);
+    const candidates = this.#getInventoryPlacementParentCandidates(item, [item.id]);
+    if (candidates.length < 2) {
+      this.#warnInventoryNoSpace();
+      return null;
+    }
+
+    const currentIndex = candidates.findIndex(parentId => String(parentId ?? ROOT_CONTAINER_ID) === currentParentId);
+    const startIndex = currentIndex >= 0 ? currentIndex + 1 : 0;
+    for (let offset = 0; offset < candidates.length; offset += 1) {
+      const parentId = candidates[(startIndex + offset) % candidates.length];
+      if (String(parentId ?? ROOT_CONTAINER_ID) === currentParentId) continue;
+      if (!this.#canFitItemWeightInParent(item, parentId)) continue;
+      const placement = this.#getFirstAvailableInventoryPlacement(item, [item.id], [], parentId);
+      if (!placement) continue;
+
+      const updateData = this.#createInventoryPlacementUpdate(item, { parentId, placement });
+      if (!this.#validateProjectedInventoryState({ updates: [updateData] })) return null;
+      await this.actor.updateEmbeddedDocuments("Item", [updateData]);
+      return this.actor.items.get(item.id) ?? null;
+    }
+
+    this.#warnInventoryNoSpace();
+    return null;
   }
 
   #getFirstAvailableInventoryPlacementContext(itemData = null, excludeItemIds = [], reservedPlacementContexts = []) {
