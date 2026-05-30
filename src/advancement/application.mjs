@@ -1,8 +1,5 @@
 import {
   calculateRemainingDevelopmentPoints,
-  calculateSpentCharacteristicPoints,
-  calculateSpentSignatureSkillPoints,
-  calculateSpentSkillPoints,
   cloneActorDevelopment
 } from "./index.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
@@ -43,6 +40,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #floor = null;
   #isClosing = false;
   #page = "development";
+  #researchPointSessionSpent = 0;
   #repeatState = null;
   #selectedAbilitySourceId = "";
   #suppressNextRepeatClick = false;
@@ -108,9 +106,6 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const creatureOptions = getCreatureOptions();
     const race = creatureOptions.races.find(entry => entry.id === this.actor.system?.creature?.raceId) ?? null;
     const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
-    const floorCharacteristicSpent = calculateSpentCharacteristicPoints(this.#floor.development);
-    const floorSkillSpent = calculateSpentSkillPoints(this.#floor.development);
-    const floorSignatureSpent = calculateSpentSignatureSkillPoints(this.#floor.development);
     const maxLevel = levelSettings[levelSettings.length - 1]?.level ?? 100;
     const liveCharacteristics = this.actor.system?.characteristics ?? this.#draft.characteristics;
     const liveSkills = this.actor.system?.skills ?? {};
@@ -128,6 +123,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const canLevelUp = (this.#draft.level < maxLevel) && (currentExperience >= nextThreshold);
     const abilityCategories = this.#prepareAbilityCategories(remaining, skillSettings);
     const selectedAbility = this.#prepareSelectedAbility(abilityCategories);
+    const pointDisplays = this.#preparePointDisplays(remaining);
 
     return {
       ...(await super._prepareContext(options)),
@@ -150,11 +146,11 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         characteristicSettings,
         DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA
       ),
-      characteristicPointsDisplay: `${remaining.characteristics} / ${Math.max(remaining.characteristics, toInteger(this.#draft.development.points.characteristics) - floorCharacteristicSpent)}`,
-      skillPointsDisplay: `${remaining.skills} / ${Math.max(remaining.skills, toInteger(this.#draft.development.points.skills) - floorSkillSpent)}`,
-      signatureSkillPointsDisplay: `${remaining.signatureSkills} / ${Math.max(remaining.signatureSkills, toInteger(this.#draft.development.points.signatureSkills) - floorSignatureSpent)}`,
-      traitPointsDisplay: `${remaining.traits} / ${Math.max(remaining.traits, toInteger(this.#draft.development.points.traits))}`,
-      researchPointsDisplay: remaining.researches,
+      characteristicPointsDisplay: pointDisplays.characteristics,
+      skillPointsDisplay: pointDisplays.skills,
+      signatureSkillPointsDisplay: pointDisplays.signatureSkills,
+      traitPointsDisplay: pointDisplays.traits,
+      researchPointsDisplay: pointDisplays.researches,
       page: this.#page,
       isDevelopmentPage: this.#page === "development",
       isAbilitiesPage: this.#page === "abilities",
@@ -266,14 +262,16 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (currentValue) {
       if (this.#floor.development.skills[key]?.signature) return;
       this.#draft.development.skills[key].signature = false;
+      this.#draft.development.points.signatureSkills = Math.max(0, toInteger(this.#draft.development.points.signatureSkills)) + 1;
       await this.#applyDraftToActor();
       return this.forceRender();
     }
 
-    const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
-    if (remaining.signatureSkills < 1) return;
+    const available = Math.max(0, toInteger(this.#draft.development.points.signatureSkills));
+    if (available < 1) return;
 
     this.#draft.development.skills[key].signature = true;
+    this.#draft.development.points.signatureSkills = available - 1;
     await this.#applyDraftToActor();
     return this.forceRender();
   }
@@ -328,6 +326,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#draft.level = 1;
     this.#draft.characteristics = foundry.utils.deepClone(resetData.characteristics);
     this.#draft.development = foundry.utils.deepClone(resetData.development);
+    this.#researchPointSessionSpent = 0;
     const abilityItemIds = this.actor.items
       .filter(item => item.type === "ability")
       .map(item => item.id);
@@ -342,6 +341,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     });
     this.#snapshot = foundry.utils.deepClone(this.#draft);
     this.#floor = foundry.utils.deepClone(this.#draft);
+    this.#researchPointSessionSpent = 0;
     return this.forceRender();
   }
 
@@ -457,10 +457,11 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#syncDraftFromForm();
 
     if (delta > 0) {
-      const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
-      if (remaining.characteristics < 1) return false;
+      const available = Math.max(0, toInteger(this.#draft.development.points.characteristics));
+      if (available < 1) return false;
 
       this.#draft.development.characteristics[key] = toInteger(this.#draft.development.characteristics[key]) + 1;
+      this.#draft.development.points.characteristics = available - 1;
       await this.#applyDraftToActor();
       return true;
     }
@@ -470,6 +471,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (currentPoints <= minimumPoints) return false;
 
     this.#draft.development.characteristics[key] = currentPoints - 1;
+    this.#draft.development.points.characteristics = Math.max(0, toInteger(this.#draft.development.points.characteristics)) + 1;
     await this.#applyDraftToActor();
     return true;
   }
@@ -479,11 +481,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#syncDraftFromForm();
 
     if (delta > 0) {
-      const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
-      if (remaining.skills < 1) return false;
+      const available = Math.max(0, toInteger(this.#draft.development.points.skills));
+      if (available < 1) return false;
       if (toInteger(this.actor.system?.skills?.[key]?.value) >= this.#getSkillDevelopmentLimit()) return false;
 
       this.#draft.development.skills[key].points = toInteger(this.#draft.development.skills[key]?.points) + 1;
+      this.#draft.development.points.skills = available - 1;
       await this.#applyDraftToActor();
       return true;
     }
@@ -493,6 +496,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (currentPoints <= minimumPoints) return false;
 
     this.#draft.development.skills[key].points = currentPoints - 1;
+    this.#draft.development.points.skills = Math.max(0, toInteger(this.#draft.development.points.skills)) + 1;
     await this.#applyDraftToActor();
     return true;
   }
@@ -538,7 +542,6 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const research = this.#getAbilityResearch(sourceId);
     if (!research) return this.forceRender();
 
-    const current = toInteger(this.#draft.development.abilityResearches?.[sourceId]);
     const targetValue = Math.max(1, Number(research.target) || toInteger(entry.ability.system?.cost) || 1);
     const currentProgress = Math.max(0, Number(research.progress) || 0);
     if (currentProgress >= targetValue) {
@@ -547,14 +550,15 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       return this.forceRender();
     }
 
-    const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
-    if (remaining.researches <= 0) return this.forceRender();
+    const available = Math.max(0, toInteger(this.#draft.development.points.researches));
+    if (available <= 0) return this.forceRender();
 
-    const investment = Math.min(remaining.researches, Math.max(0, targetValue - currentProgress));
+    const investment = Math.min(available, Math.max(0, targetValue - currentProgress));
     if (investment <= 0) return this.forceRender();
 
-    this.#draft.development.abilityResearches[sourceId] = current + investment;
+    this.#draft.development.points.researches = available - investment;
     await this.#applyDraftToActor();
+    this.#researchPointSessionSpent += investment;
 
     const nextProgress = Math.min(targetValue, currentProgress + investment);
     await this.actor.updateResearch(research.id, {
@@ -592,11 +596,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (!entry || entry.category?.id !== LOCKED_FEATURES_CATEGORY_ID || actorHasAbility(this.actor, sourceId)) return this.forceRender();
     if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability)) return this.forceRender();
 
-    const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
-    if (remaining.traits < 1) return this.forceRender();
+    const available = Math.max(0, toInteger(this.#draft.development.points.traits));
+    if (available < 1) return this.forceRender();
 
     this.#draft.development.traits ??= {};
     this.#draft.development.traits[sourceId] = true;
+    this.#draft.development.points.traits = available - 1;
     await this.#applyDraftToActor();
     await grantCatalogAbility(this.actor, sourceId);
     this.#syncDraftFromActor();
@@ -609,11 +614,54 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     return Math.max(0, toInteger(getSkillAdvancementSettings(characteristicSettings, skillSettings).developmentLimit));
   }
 
+  #preparePointDisplays(remaining = {}) {
+    return {
+      characteristics: this.#formatSessionPointDisplay(remaining.characteristics, this.#getCharacteristicSessionSpent()),
+      signatureSkills: this.#formatSessionPointDisplay(remaining.signatureSkills, this.#getSignatureSkillSessionSpent()),
+      skills: this.#formatSessionPointDisplay(remaining.skills, this.#getSkillSessionSpent()),
+      traits: this.#formatSessionPointDisplay(remaining.traits, this.#getTraitSessionSpent()),
+      researches: this.#formatSessionPointDisplay(remaining.researches, this.#researchPointSessionSpent)
+    };
+  }
+
+  #formatSessionPointDisplay(remainingValue = 0, sessionSpent = 0) {
+    const remaining = Math.max(0, toInteger(remainingValue));
+    const total = remaining + Math.max(0, toInteger(sessionSpent));
+    return `${remaining} / ${Math.max(remaining, total)}`;
+  }
+
+  #getCharacteristicSessionSpent() {
+    return Object.entries(this.#draft?.development?.characteristics ?? {}).reduce((total, [key, value]) => {
+      const floorValue = toInteger(this.#floor?.development?.characteristics?.[key]);
+      return total + Math.max(0, toInteger(value) - floorValue);
+    }, 0);
+  }
+
+  #getSkillSessionSpent() {
+    return Object.entries(this.#draft?.development?.skills ?? {}).reduce((total, [key, value]) => {
+      const floorValue = toInteger(this.#floor?.development?.skills?.[key]?.points);
+      return total + Math.max(0, toInteger(value?.points) - floorValue);
+    }, 0);
+  }
+
+  #getSignatureSkillSessionSpent() {
+    return Object.entries(this.#draft?.development?.skills ?? {}).reduce((total, [key, value]) => {
+      const floorValue = Boolean(this.#floor?.development?.skills?.[key]?.signature);
+      return total + (value?.signature && !floorValue ? 1 : 0);
+    }, 0);
+  }
+
+  #getTraitSessionSpent() {
+    const floorTraits = this.#floor?.development?.traits ?? {};
+    return Object.entries(this.#draft?.development?.traits ?? {})
+      .reduce((total, [key, selected]) => total + (selected && !floorTraits[key] ? 1 : 0), 0);
+  }
+
   #prepareAbilityCategories(remaining = {}, skillSettings = []) {
     const catalog = getAbilityCatalog();
     return (catalog.categories ?? []).map(category => {
       const isFeatures = category.id === LOCKED_FEATURES_CATEGORY_ID;
-      const traitTotal = Math.max(0, toInteger(this.#draft.development.points.traits));
+      const traitTotal = isFeatures ? this.#getTraitSessionTotal(remaining.traits) : 0;
       const traitRemaining = Math.max(0, toInteger(remaining.traits));
       return {
         ...category,
@@ -635,6 +683,10 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       return null;
     }
     return selected;
+  }
+
+  #getTraitSessionTotal(traitRemaining = 0) {
+    return Math.max(0, toInteger(traitRemaining)) + this.#getTraitSessionSpent();
   }
 
   #prepareAbilityEntry(category, ability, remaining = {}, skillSettings = []) {
@@ -830,6 +882,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
     this.#snapshot = foundry.utils.deepClone(this.#draft);
     this.#floor = foundry.utils.deepClone(this.#draft);
+    this.#researchPointSessionSpent = 0;
     if (notify) ui.notifications.info(localize("FALLOUTMAW.Messages.AdvancementSaved"));
     return true;
   }

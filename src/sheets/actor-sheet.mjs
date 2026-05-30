@@ -2,13 +2,6 @@ import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { AdvancementApplication } from "../advancement/application.mjs";
 import {
-  calculateRemainingDevelopmentPoints,
-  calculateSpentCharacteristicPoints,
-  calculateSpentSignatureSkillPoints,
-  calculateSpentSkillPoints,
-  calculateSpentTraitPoints
-} from "../advancement/index.mjs";
-import {
   getCharacteristicSettings,
   getCreatureOptions,
   getCurrencySettings,
@@ -555,9 +548,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!this.#freeEdit) return undefined;
     const key = String(input.dataset.developmentPointInput ?? "");
     if (!key) return undefined;
-    const spent = getSpentDevelopmentPointValue(this.actor.system?.development, this.actor.system?.proficiencies, key);
-    const remaining = Math.max(0, toInteger(input.value));
-    return this.actor.update({ [`system.development.points.${key}`]: remaining + spent });
+    return this.actor.update({ [`system.development.points.${key}`]: Math.max(0, toInteger(input.value)) });
   }
 
   #syncFreeEditHeaderButton() {
@@ -4686,32 +4677,19 @@ function prepareEffectCategories(effects = []) {
   return categories;
 }
 
-function prepareDevelopmentPointEntries(development = {}, proficiencies = {}) {
-  const remaining = calculateRemainingDevelopmentPoints(development);
-  remaining.proficiencies = Math.max(0, toInteger(development?.points?.proficiencies) - getSpentProficiencyPoints(proficiencies));
+function prepareDevelopmentPointEntries(development = {}) {
+  const points = development?.points ?? {};
   return [
     { key: "characteristics", label: "Очки характеристик" },
     { key: "signatureSkills", label: "Очки коронных" },
     { key: "skills", label: "Очки навыков" },
+    { key: "researches", label: "Свободные ОИ" },
     { key: "traits", label: "Очки особенностей" },
     { key: "proficiencies", label: "Очки владений" }
   ].map(entry => ({
     ...entry,
-    value: toInteger(remaining?.[entry.key])
+    value: Math.max(0, toInteger(points?.[entry.key]))
   }));
-}
-
-function getSpentDevelopmentPointValue(development = {}, proficiencies = {}, key = "") {
-  if (key === "characteristics") return calculateSpentCharacteristicPoints(development);
-  if (key === "signatureSkills") return calculateSpentSignatureSkillPoints(development);
-  if (key === "skills") return calculateSpentSkillPoints(development);
-  if (key === "traits") return calculateSpentTraitPoints(development);
-  if (key === "proficiencies") return getSpentProficiencyPoints(proficiencies);
-  return 0;
-}
-
-function getSpentProficiencyPoints(proficiencies = {}) {
-  return Object.values(proficiencies ?? {}).reduce((total, entry) => total + Math.max(0, toInteger(entry?.value)), 0);
 }
 
 function prepareLimbDisplayData(actor, limbKey, limb = {}) {

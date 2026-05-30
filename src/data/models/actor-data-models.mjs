@@ -389,10 +389,6 @@ function developmentField() {
         signature: new BooleanField({ required: true, initial: false })
       }),
       { required: true, initial: {} }
-    ),
-    abilityResearches: new TypedObjectField(
-      new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-      { required: true, initial: {} }
     )
   });
 }

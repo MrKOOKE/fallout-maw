@@ -87,15 +87,6 @@ export async function grantAbilityResearchReward(actor, research = {}) {
   return item;
 }
 
-export async function clearAbilityResearchSpending(actor, sourceId = "") {
-  const normalizedSourceId = String(sourceId ?? "").trim();
-  if (!actor || !normalizedSourceId) return actor;
-  const spending = foundry.utils.deepClone(actor.system?.development?.abilityResearches ?? {});
-  if (!Object.hasOwn(spending, normalizedSourceId)) return actor;
-  delete spending[normalizedSourceId];
-  return actor.update({ "system.development.abilityResearches": spending });
-}
-
 export function getAbilitySourceFlagPath() {
   return `flags.${FALLOUT_MAW.id}.${ABILITY_SOURCE_FLAG}`;
 }

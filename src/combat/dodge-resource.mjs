@@ -124,6 +124,7 @@ async function restoreActorDodgeResource(actor, { mode = "full" } = {}) {
 async function spendActorDodgeResource(actor, multiplier = 1) {
   const settings = getDodgeSettings();
   if (!settings.enabled) return;
+  if (!isActiveCombatRunning()) return;
   const resource = getDodgeResource(actor);
   if (!resource) return;
 
@@ -222,6 +223,10 @@ function getCombatDodgeActors(combat) {
 
 function getDodgeSettings() {
   return getCombatSettings().dodge;
+}
+
+function isActiveCombatRunning() {
+  return Boolean(game.combat?.started);
 }
 
 function getResponsibleGM() {

@@ -323,8 +323,8 @@ class WeaponAttackController {
       : null;
     let attempted = false;
 
+    this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
-      this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
       const difficultyBonus = getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId);
       const shotTrajectories = buildAttackTrajectories(this.token, getRandomBurstMissGeometry(this.token, this.geometry), [], pelletCount);
       const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), shotTrajectories.map(() => 1));
@@ -343,8 +343,8 @@ class WeaponAttackController {
           if (request) damageRequests.push(...request);
         }
       }
-      await this.dodgeExposure.flush();
     }
+    await this.dodgeExposure.flush();
 
     if (attempted) {
       const spentQuantityItemData = getSpentQuantityItemData(this.weapon, attackCount, this.weaponFunctionId);
@@ -393,8 +393,8 @@ class WeaponAttackController {
     const assignments = buildBurstBulletAssignments(this.token, this.geometry, this.targets, projectileCount, { primaryShots });
     let attempted = false;
 
+    this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
-      this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
       const difficultyBonus = getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId);
       const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), Array(Math.max(1, toInteger(pelletCount))).fill(1));
 
@@ -419,8 +419,8 @@ class WeaponAttackController {
         trajectories.push({ ...(result.trajectory ?? trajectory), delayGroup: attackIndex });
         damageRequests.push(...result.damageRequests);
       }
-      await this.dodgeExposure.flush();
     }
+    await this.dodgeExposure.flush();
 
     if (attempted) {
       const spentQuantityItemData = getSpentQuantityItemData(this.weapon, attackCount, this.weaponFunctionId);
@@ -972,8 +972,8 @@ class WeaponAttackController {
       })
       : null;
 
+    this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
     for (let attackIndex = 0; attackIndex < attackCount; attackIndex += 1) {
-      this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
       const blastOutcome = await this.resolveVolleyBlastPoint(intendedGeometry, {
         checkBatch,
         difficultyBonus: getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId)
@@ -997,8 +997,8 @@ class WeaponAttackController {
         const result = this.resolveVolleyDamageAgainstTarget(target, finalGeometry, blastOutcome);
         damageRequests.push(...(result ?? []));
       }
-      await this.dodgeExposure.flush();
     }
+    await this.dodgeExposure.flush();
 
     this.geometry = finalGeometries[finalGeometries.length - 1] ?? intendedGeometry;
     this.targets = getPotentialTargets(this.token, this.geometry, { includeAttacker: true, includeDead: true });

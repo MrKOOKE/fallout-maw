@@ -1,33 +1,14 @@
 import { normalizeActorDevelopment } from "./storage.mjs";
 
-export function calculateSpentCharacteristicPoints(development = {}) {
-  return Object.values(development?.characteristics ?? {}).reduce((total, value) => total + (Number(value) || 0), 0);
-}
-
-export function calculateSpentSkillPoints(development = {}) {
-  return Object.values(development?.skills ?? {}).reduce((total, skill) => total + (Number(skill?.points) || 0), 0);
-}
-
-export function calculateSpentSignatureSkillPoints(development = {}) {
-  return Object.values(development?.skills ?? {}).reduce((total, skill) => total + (skill?.signature ? 1 : 0), 0);
-}
-
-export function calculateSpentResearchPoints(development = {}) {
-  return Object.values(development?.abilityResearches ?? {}).reduce((total, value) => total + (Number(value) || 0), 0);
-}
-
-export function calculateSpentTraitPoints(development = {}) {
-  return Object.values(development?.traits ?? {}).reduce((total, selected) => total + (selected ? 1 : 0), 0);
-}
-
 export function calculateRemainingDevelopmentPoints(development = {}) {
+  const points = development?.points ?? {};
   return {
-    characteristics: Math.max(0, (Number(development?.points?.characteristics) || 0) - calculateSpentCharacteristicPoints(development)),
-    signatureSkills: Math.max(0, (Number(development?.points?.signatureSkills) || 0) - calculateSpentSignatureSkillPoints(development)),
-    traits: Math.max(0, (Number(development?.points?.traits) || 0) - calculateSpentTraitPoints(development)),
-    proficiencies: Math.max(0, Number(development?.points?.proficiencies) || 0),
-    skills: Math.max(0, (Number(development?.points?.skills) || 0) - calculateSpentSkillPoints(development)),
-    researches: Math.max(0, (Number(development?.points?.researches) || 0) - calculateSpentResearchPoints(development))
+    characteristics: Math.max(0, Number(points.characteristics) || 0),
+    signatureSkills: Math.max(0, Number(points.signatureSkills) || 0),
+    traits: Math.max(0, Number(points.traits) || 0),
+    proficiencies: Math.max(0, Number(points.proficiencies) || 0),
+    skills: Math.max(0, Number(points.skills) || 0),
+    researches: Math.max(0, Number(points.researches) || 0)
   };
 }
 
