@@ -2100,7 +2100,8 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
   ];
   return buttons.filter(action => action.visible !== false && action.configured).map(action => {
     const blockState = getWeaponActionBlockState(actor, action.key);
-    const actionPointCost = getWeaponActionPointCostForHud(actor, weaponData, action.key);
+    const actionPointCostState = getWeaponActionPointCostStateForHud(actor, weaponData, action.key);
+    const actionPointCost = actionPointCostState.cost;
     return {
       ...action,
       label: String(weaponData?.[action.key]?.name ?? "").trim() || action.label,
@@ -2109,16 +2110,23 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
       weaponFunctionId: weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id,
       img: normalizeImagePath(hudIcons.weaponActions?.[action.key], "icons/svg/combat.svg"),
       actionPointCost,
+      actionPointCostClass: actionPointCostState.tone ? `cost-${actionPointCostState.tone}` : "",
       actionPointCostLabel: `${actionPointCost} ОД`
     };
   });
 }
 
 function getWeaponActionPointCostForHud(actor, weaponData = {}, actionKey = "") {
+  return getWeaponActionPointCostStateForHud(actor, weaponData, actionKey).cost;
+}
+
+function getWeaponActionPointCostStateForHud(actor, weaponData = {}, actionKey = "") {
   const value = Number(weaponData?.[actionKey]?.actionPointCost);
   const fallback = actionKey === "reload" ? 2 : 5;
   const baseCost = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
-  return applyDamageCostModifier(baseCost, getDamageCostModifierState(actor, { actionKey }).action);
+  const cost = applyDamageCostModifier(baseCost, getDamageCostModifierState(actor, { actionKey }).action);
+  const tone = cost < baseCost ? "cheaper" : (cost > baseCost ? "dearer" : "");
+  return { baseCost, cost, tone };
 }
 
 function hasWeaponResourceCostData(weaponData = {}, type = "") {

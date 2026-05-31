@@ -1091,14 +1091,30 @@
   </section>
   {{/if}}
 
+  {{#if weaponFunctionTabs}}
+  <section class="fallout-maw-panel fallout-maw-weapon-function-tabs-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Item.FunctionWeapon"}}</h2>
+      {{#if canAddAdditionalWeaponFunction}}
+      <button type="button" data-add-additional-weapon-function><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.AddAdditionalWeaponFunction"}}</button>
+      {{/if}}
+    </div>
+    <div class="fallout-maw-weapon-function-tabs">
+      {{#each weaponFunctionTabs}}
+      <button type="button" class="fallout-maw-weapon-function-tab {{#if active}}active{{/if}}" data-select-weapon-function-tab="{{id}}" aria-pressed="{{#if active}}true{{else}}false{{/if}}">
+        {{title}}
+      </button>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+
   {{#each weaponFunctionSections}}
+  {{#if active}}
   <section class="fallout-maw-panel" data-weapon-function-section data-weapon-function-path="{{path}}">
     <div class="fallout-maw-panel-header">
       <h2>{{title}}</h2>
       <div class="fallout-maw-inline-controls">
-        {{#if canAddAdditional}}
-        <button type="button" data-add-additional-weapon-function><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.AddAdditionalWeaponFunction"}}</button>
-        {{/if}}
         {{#if isModuleWeapon}}
         <button type="button" data-delete-module-weapon-function="{{id}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
         {{else if isAdditional}}
@@ -1604,6 +1620,7 @@
       </label>
     </div>
   </section>
+  {{/if}}
   {{/each}}
 
   {{#each toolFunctions}}

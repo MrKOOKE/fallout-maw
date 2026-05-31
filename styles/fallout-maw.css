@@ -3181,6 +3181,40 @@
   grid-template-columns: minmax(140px, 1fr) minmax(80px, 110px) 2.5rem;
 }
 
+.fallout-maw-weapon-function-tabs-panel {
+  margin-bottom: 0.5rem;
+}
+
+.fallout-maw-weapon-function-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.fallout-maw-weapon-function-tab {
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(215, 190, 150, 0.58);
+  border-radius: 3px;
+  color: var(--color-text-primary);
+  min-height: 2rem;
+  padding: 0.3rem 0.7rem;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.fallout-maw-weapon-function-tab:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(245, 205, 80, 0.72);
+}
+
+.fallout-maw-weapon-function-tab.active {
+  background: rgba(245, 205, 80, 0.1);
+  border-color: rgba(255, 214, 72, 1);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 214, 72, 0.42),
+    0 0 0 2px rgba(255, 214, 72, 0.95),
+    0 0 10px rgba(255, 214, 72, 0.18);
+}
+
 .fallout-maw-magazine-source-section {
   margin-top: 0.75rem;
 }
@@ -8365,6 +8399,18 @@ label.fallout-maw-mitigation-cell {
   right: 4px;
   top: 4px;
   z-index: 1;
+}
+
+.fallout-maw-token-hud-action-tile strong.cost-cheaper {
+  border-color: rgba(78, 214, 96, 0.72);
+  color: #7dff8d;
+  text-shadow: 0 0 5px rgba(78, 214, 96, 0.45);
+}
+
+.fallout-maw-token-hud-action-tile strong.cost-dearer {
+  border-color: rgba(225, 73, 66, 0.78);
+  color: #ff6f66;
+  text-shadow: 0 0 5px rgba(225, 73, 66, 0.45);
 }
 
 .fallout-maw-token-hud-action-tile .fallout-maw-token-hud-item-charges {

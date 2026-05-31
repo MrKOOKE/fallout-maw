@@ -73,6 +73,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   #craftMode = CRAFT_MODE_CREATE;
   #craftSelection = null;
   #craftAttachSourceNodeId = "";
+  #activeWeaponFunctionTab = ITEM_FUNCTIONS.weapon;
   #craftPanDrag = null;
   #craftNodeDrag = null;
   #craftLinkDrag = null;
@@ -254,6 +255,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
     activeCraftModes.set(item, this.#craftMode);
     const craft = prepareCraftContext(item, skillSettings, this.#craftSelection, this.#craftAttachSourceNodeId, this.#craftMode);
+    const weaponFunctionSections = buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, proficiencySettings, characteristicSettings, hasConditionFunction);
+    this.#activeWeaponFunctionTab = resolveActiveWeaponFunctionTab(this.#activeWeaponFunctionTab, weaponFunctionSections);
+    for (const section of weaponFunctionSections) section.active = section.tabId === this.#activeWeaponFunctionTab;
 
     return foundry.utils.mergeObject(context, {
       item,
@@ -285,7 +289,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       hasWeaponMagazineCost: hasWeaponResourceCost(item, "magazine"),
       toolFunctions,
       weaponModuleChoices: buildWeaponModuleChoices(item),
-      weaponFunctionSections: buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, proficiencySettings, characteristicSettings, hasConditionFunction),
+      weaponFunctionSections,
+      weaponFunctionTabs: buildWeaponFunctionTabs(weaponFunctionSections),
+      canAddAdditionalWeaponFunction: hasWeaponFunction,
       weaponDamageTypeChoices: buildWeaponDamageTypeChoices(item, damageTypeSettings),
       weaponDamageTypeRows: buildWeaponDamageTypeRows(item, damageTypeSettings),
       weaponSkillChoices: buildWeaponSkillChoices(item, skillSettings),
@@ -411,6 +417,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-module-weapon-function]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteModuleWeaponFunction(event));
+    });
+    this.element?.querySelectorAll("[data-select-weapon-function-tab]").forEach(button => {
+      button.addEventListener("click", event => this.#onSelectWeaponFunctionTab(event));
     });
     this.element?.querySelector("[data-choose-item-function]")?.addEventListener("change", event => this.#onChooseItemFunction(event));
     this.element?.querySelector("[data-choose-ability-function]")?.addEventListener("change", event => this.#onChooseAbilityFunction(event));
@@ -2081,15 +2090,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.preventDefault();
     const additionalWeapons = Object.fromEntries(getAdditionalWeaponFunctionEntries(this.item)
       .map(({ id, data }) => [id, foundry.utils.deepClone(data)]));
-    const baseWeapon = this.item.system?.functions?.weapon ?? {};
     const id = foundry.utils.randomID();
     additionalWeapons[id] = createDefaultWeaponFunctionData({
-      ...foundry.utils.deepClone(baseWeapon),
       id,
       name: getNextAdditionalWeaponFunctionName(Object.values(additionalWeapons)),
       enabled: true,
       moduleSlots: []
     });
+    this.#activeWeaponFunctionTab = getAdditionalWeaponFunctionTabId(id);
     return this.item.update({ "system.functions.additionalWeapons": additionalWeapons });
   }
 
@@ -2098,6 +2106,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.stopPropagation();
     const id = String(event.currentTarget?.dataset?.deleteAdditionalWeaponFunction ?? "");
     if (!id) return undefined;
+    if (this.#activeWeaponFunctionTab === getAdditionalWeaponFunctionTabId(id)) this.#activeWeaponFunctionTab = ITEM_FUNCTIONS.weapon;
     return this.item.update({ [`system.functions.additionalWeapons.${id}`]: globalThis._del });
   }
 
@@ -2112,6 +2121,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       enabled: true,
       moduleSlots: []
     });
+    this.#activeWeaponFunctionTab = getModuleWeaponFunctionTabId(id);
     return this.item.update({ "system.functions.module.additionalWeapons": moduleWeapons });
   }
 
@@ -2120,7 +2130,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.stopPropagation();
     const id = String(event.currentTarget?.dataset?.deleteModuleWeaponFunction ?? "");
     if (!id) return undefined;
+    if (this.#activeWeaponFunctionTab === getModuleWeaponFunctionTabId(id)) this.#activeWeaponFunctionTab = ITEM_FUNCTIONS.weapon;
     return this.item.update({ [`system.functions.module.additionalWeapons.${id}`]: globalThis._del });
+  }
+
+  #onSelectWeaponFunctionTab(event) {
+    event.preventDefault();
+    const tabId = String(event.currentTarget?.dataset?.selectWeaponFunctionTab ?? "");
+    if (!tabId || tabId === this.#activeWeaponFunctionTab) return undefined;
+    this.#activeWeaponFunctionTab = tabId;
+    return this.render({ force: true });
   }
 
   #onAddWeaponResourceCost(event) {
@@ -3156,6 +3175,7 @@ function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, pr
     const sourceAdditionalWeapons = getAdditionalWeaponFunctionEntries({ system: item.system?._source ?? {} });
     sections.push(buildWeaponFunctionSection({
       title: game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon"),
+      tabId: ITEM_FUNCTIONS.weapon,
       path: "system.functions.weapon",
       weaponData: primaryWeapon,
       sourceWeaponData: sourcePrimaryWeapon,
@@ -3170,6 +3190,7 @@ function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, pr
     }));
     sections.push(...additionalWeapons.map(({ id, data: weaponData }, index) => buildWeaponFunctionSection({
       title: String(weaponData?.name ?? "").trim() || getDefaultAdditionalWeaponFunctionName(index),
+      tabId: getAdditionalWeaponFunctionTabId(id),
       path: `system.functions.additionalWeapons.${id}`,
       weaponData,
       sourceWeaponData: sourceAdditionalWeapons.find(entry => entry.id === id)?.data ?? {},
@@ -3189,6 +3210,7 @@ function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, pr
     const sourceModuleWeapons = getModuleWeaponFunctionEntries({ system: item.system?._source ?? {} });
     sections.push(...moduleWeapons.map(({ id, data: weaponData }, index) => buildWeaponFunctionSection({
       title: String(weaponData?.name ?? "").trim() || getDefaultAdditionalWeaponFunctionName(index),
+      tabId: getModuleWeaponFunctionTabId(id),
       path: `system.functions.module.additionalWeapons.${id}`,
       weaponData,
       sourceWeaponData: sourceModuleWeapons.find(entry => entry.id === id)?.data ?? {},
@@ -3206,8 +3228,34 @@ function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, pr
   return sections;
 }
 
+function buildWeaponFunctionTabs(sections = []) {
+  return sections.map(section => ({
+    id: section.tabId,
+    title: section.title,
+    active: Boolean(section.active),
+    canDelete: Boolean(section.isAdditional || section.isModuleWeapon),
+    deleteId: section.id,
+    isAdditional: section.isAdditional,
+    isModuleWeapon: section.isModuleWeapon
+  }));
+}
+
+function resolveActiveWeaponFunctionTab(activeTab = ITEM_FUNCTIONS.weapon, sections = []) {
+  if (sections.some(section => section.tabId === activeTab)) return activeTab;
+  return sections.at(0)?.tabId ?? ITEM_FUNCTIONS.weapon;
+}
+
+function getAdditionalWeaponFunctionTabId(id = "") {
+  return `additional:${String(id ?? "")}`;
+}
+
+function getModuleWeaponFunctionTabId(id = "") {
+  return `module:${String(id ?? "")}`;
+}
+
 function buildWeaponFunctionSection({
   title = "",
+  tabId = ITEM_FUNCTIONS.weapon,
   path = "system.functions.weapon",
   weaponData = {},
   sourceWeaponData = {},
@@ -3228,6 +3276,7 @@ function buildWeaponFunctionSection({
   const effectiveWeaponData = getWeaponDisplayData(weaponData);
   return {
     title,
+    tabId,
     path,
     weaponData: effectiveWeaponData,
     isPrimary,

@@ -39,7 +39,7 @@ import { buildDamageMitigationTables, buildDamageTypeIconStyle } from "../utils/
   prepareResearchesForDisplay
 } from "../research/index.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { getActorTraumas, getLimbHealingCap, isLimbDestroyed } from "../combat/damage-hub.mjs";
+import { applyDamageCostModifier, getActorTraumas, getDamageCostModifierState, getLimbHealingCap, isLimbDestroyed } from "../combat/damage-hub.mjs";
 import { openLimbDamageDialog } from "../apps/limb-damage-dialog.mjs";
 import {
   prepareIndicatorEntry as prepareDisplayIndicatorEntry,
@@ -3627,7 +3627,7 @@ function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = fal
   const penetration = stats.penetration;
   if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), renderChangedNumber(penetration, baseStats.penetration, { baseMode })]);
   rows.push(...getWeaponResourceCostRows(data, baseData, { baseMode }));
-  const actions = getWeaponActionLabels(data, baseData, { baseMode });
+  const actions = getWeaponActionLabels(data, baseData, { actor, baseMode });
   if (actions.length) rows.push(["Действия", {
     html: renderTooltipValueTokens(actions)
   }]);
@@ -3984,7 +3984,7 @@ function getWeaponResourceTypeLabel(type = "") {
   return String(type || "—");
 }
 
-function getWeaponActionLabels(data = {}, baseData = {}, { baseMode = false } = {}) {
+function getWeaponActionLabels(data = {}, baseData = {}, { actor = null, baseMode = false } = {}) {
   const definitions = [
     ["aimedShot", game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot")],
     ["snapshot", game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot")],
@@ -3998,7 +3998,8 @@ function getWeaponActionLabels(data = {}, baseData = {}, { baseMode = false } = 
     .filter(([key]) => isWeaponActionEnabled(data, key))
     .map(([key, label]) => {
       const name = String(data[key]?.name ?? "").trim() || label;
-      const cost = getWeaponActionPointCost(data, key);
+      const configuredCost = getWeaponActionPointCost(data, key);
+      const cost = baseMode ? configuredCost : applyDamageCostModifier(configuredCost, getDamageCostModifierState(actor, { actionKey: key }).action);
       const baseCost = getWeaponActionPointCost(baseData, key);
       const costText = `${cost} ОД`;
       const costHtml = baseMode || cost === baseCost
