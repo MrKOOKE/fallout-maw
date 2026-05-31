@@ -21,6 +21,7 @@ import {
 import { initializeCombatCarousel, registerCombatCarouselHooks } from "./apps/combat-carousel.mjs";
 import { registerAnimationLibraryBrowserHooks } from "./apps/animation-library-browser.mjs";
 import { registerWorldTimeControlHooks } from "./apps/world-time-control.mjs";
+import { registerPersonalGeneratorHooks } from "./apps/personal-generator.mjs";
 import { registerSkillCheckSocket } from "./rolls/skill-check.mjs";
 import { registerDamageSocket } from "./combat/damage-hub.mjs";
 import { registerAttackAnimationSocket } from "./combat/attack-animations.mjs";
@@ -80,6 +81,7 @@ Hooks.once("init", () => {
   registerTokenActionHudHooks();
   registerCombatCarouselHooks();
   registerWorldTimeControlHooks();
+  registerPersonalGeneratorHooks();
   registerAnimationLibraryBrowserHooks();
   registerStealthHooks();
 });

@@ -30,6 +30,7 @@ const { FormDataExtended } = foundry.applications.ux;
 export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #draggedItemData = null;
   #draggedItemId = "";
+  #hoverPreviewKey = "";
   #dragDrop = null;
 
   static DEFAULT_OPTIONS = {
@@ -110,6 +111,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#hoverPreviewKey = "";
     this.element?.querySelectorAll("[data-item-id]").forEach(element => {
       element.addEventListener("contextmenu", event => this.#onItemContextMenu(event));
     });
@@ -365,16 +367,20 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   }
 
   #setInventoryHoverPreview(zone = null) {
-    this.#clearInventoryHoverPreview();
-    if (!zone) return;
+    if (!zone) {
+      this.#clearInventoryHoverPreview();
+      return;
+    }
     if (zone.dataset.inventoryCell !== undefined || zone.dataset.inventoryGridItem !== undefined) {
       this.#setInventoryCellHoverPreview(zone);
+      return;
     }
+    this.#clearInventoryHoverPreview();
   }
 
   #setInventoryCellHoverPreview(zone) {
     if (!this.#draggedItemData) {
-      zone.classList.add("drop-preview");
+      this.#applySingleZonePreview(zone, `cell:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}`);
       return;
     }
 
@@ -395,12 +401,27 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       this.actor.items
     );
     const excludeItemIds = sourceItemId ? [sourceItemId] : [];
-    if (!this.#isInventoryPlacementAvailable(placement, excludeItemIds)) return;
+    if (!this.#isInventoryPlacementAvailable(placement, excludeItemIds)) {
+      this.#clearInventoryHoverPreview();
+      return;
+    }
     this.#applyInventoryPlacementPreview(placement);
+  }
+
+  #applySingleZonePreview(zone, key = "") {
+    const previewKey = `single:${key}`;
+    if (this.#hoverPreviewKey === previewKey) return;
+    this.#clearInventoryHoverPreview();
+    this.#hoverPreviewKey = previewKey;
+    zone?.classList?.add("drop-preview");
   }
 
   #applyInventoryPlacementPreview(placement) {
     if (!placement) return;
+    const previewKey = `placement:${placement.x}:${placement.y}:${placement.width}:${placement.height}`;
+    if (this.#hoverPreviewKey === previewKey) return;
+    this.#clearInventoryHoverPreview();
+    this.#hoverPreviewKey = previewKey;
     for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
       for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
         this.element?.querySelector(
@@ -412,6 +433,10 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
 
   #applyInventoryStackPreview(targetItem) {
     if (!targetItem) return;
+    const previewKey = `stack:${targetItem.id}:${getItemQuantity(targetItem)}:${getItemMaxStack(targetItem)}`;
+    if (this.#hoverPreviewKey === previewKey) return;
+    this.#clearInventoryHoverPreview();
+    this.#hoverPreviewKey = previewKey;
     const escapedItemId = CSS.escape(targetItem.id);
     this.element?.querySelector(
       `[data-inventory-grid-item][data-item-id="${escapedItemId}"]`
@@ -428,6 +453,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
   }
 
   #clearInventoryHoverPreview() {
+    this.#hoverPreviewKey = "";
     this.element?.querySelectorAll(".drop-preview, .drop-stack-preview").forEach(element => {
       element.classList.remove("drop-preview", "drop-stack-preview");
     });

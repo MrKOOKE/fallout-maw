@@ -26,6 +26,7 @@ import { SystemActionSettingsConfig } from "../apps/system-action-settings-confi
 import { ToolSettingsConfig } from "../apps/tool-settings-config.mjs";
 import { TokenActionHudSettings } from "../apps/token-action-hud-settings-config.mjs";
 import { TraumaSettingsConfig } from "../apps/trauma-settings-config.mjs";
+import { PersonalNameRandomizerConfig, registerPersonalGeneratorSettings } from "../apps/personal-generator.mjs";
 import { refreshPreparedActors, syncSettingsIntoSystemConfig } from "./accessors.mjs";
 import {
   ABILITIES_CATALOG_SETTING,
@@ -71,6 +72,8 @@ import {
 import { migrateSystemSettings } from "../migrations/settings.mjs";
 
 export function registerSystemSettings() {
+  registerPersonalGeneratorSettings();
+
   game.settings.register(FALLOUT_MAW.id, MIGRATION_STATE_SETTING, {
     name: "Migration State",
     scope: "world",
@@ -393,6 +396,14 @@ export function registerSystemSettings() {
     label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-hand-fist",
     type: CombatSettingsConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "personalNameRandomizerMenu", {
+    name: "Настройки персонального генератора",
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-user-gear",
+    type: PersonalNameRandomizerConfig,
     restricted: true
   });
 

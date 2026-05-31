@@ -1,0 +1,39 @@
+<div class="fallout-maw-config-body">
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>Блоки имен персонального генератора</h2>
+      <div class="fallout-maw-button-row">
+        <button type="button" data-action="createBlock"><i class="fa-solid fa-plus"></i> Блок</button>
+        <button type="button" data-action="resetDefaults"><i class="fa-solid fa-rotate-left"></i> По умолчанию</button>
+      </div>
+    </header>
+
+    <div class="fallout-maw-pg-name-block-list">
+      {{#each blocks}}
+      <section class="fallout-maw-pg-name-block" data-name-block-row>
+        <div class="fallout-maw-pg-grid">
+          <label>
+            <span>ID</span>
+            <input type="text" data-field="id" value="{{id}}">
+          </label>
+          <label>
+            <span>Название</span>
+            <input type="text" data-field="name" value="{{name}}">
+          </label>
+          <button type="button" data-action="deleteBlock" title="Удалить"><i class="fa-solid fa-trash"></i></button>
+        </div>
+        <label>
+          <span>Имена через запятую, точку с запятой или с новой строки</span>
+          <textarea data-field="namesText" rows="4">{{namesText}}</textarea>
+        </label>
+      </section>
+      {{else}}
+      <p class="fallout-maw-empty-list">Блоки имен не созданы.</p>
+      {{/each}}
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-save"></i> Сохранить изменения</button>
+  </footer>
+</div>

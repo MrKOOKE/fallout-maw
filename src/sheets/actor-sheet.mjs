@@ -46,6 +46,7 @@ import {
   prepareInventoryContext as prepareDisplayInventoryContext
 } from "../utils/actor-display-data.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
+import { openPersonalGenerator } from "../apps/personal-generator.mjs";
 import {
   DAMAGE_MITIGATION_MODES,
   ITEM_FUNCTIONS,
@@ -113,6 +114,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #draggedItemData = null;
   #draggedItemId = "";
   #dragPreviewSourceKey = "";
+  #hoverPreviewKey = "";
   #dragDrop = null;
   #tooltipTimer = null;
   #tooltipCloseTimer = null;
@@ -148,6 +150,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       resizable: false
     },
     actions: {
+        openPersonalGenerator: this.#onOpenPersonalGenerator,
         openDevelopment: this.#onOpenDevelopment,
         toggleFreeEdit: this.#onToggleFreeEdit,
         selectLimb: this.#onSelectLimb,
@@ -211,6 +214,17 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#applyUiScale(fullscreenPosition.scale);
     this.#syncOverlayScale();
     return result;
+  }
+
+  _getHeaderControls() {
+    const controls = super._getHeaderControls();
+    controls.unshift({
+      action: "openPersonalGenerator",
+      icon: "fa-solid fa-user-gear",
+      label: "Перс. генератор",
+      ownership: "OWNER"
+    });
+    return controls;
   }
 
   get _dragDrop() {
@@ -394,6 +408,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#hoverPreviewKey = "";
     this.setPosition();
     this.#bindViewportResize();
     this.#relocateEffectsAddButton();
@@ -490,6 +505,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   static #onOpenDevelopment(event) {
     event.preventDefault();
     return new AdvancementApplication(this.actor).render(true);
+  }
+
+  static #onOpenPersonalGenerator(event) {
+    event.preventDefault();
+    return openPersonalGenerator(this.actor);
   }
 
   static #onSelectLimb(event, target) {
@@ -1043,20 +1063,28 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #setInventoryHoverPreview(zone = null, event = null) {
-    this.#clearInventoryHoverPreview();
-    if (!zone) return;
+    if (!zone) {
+      this.#clearInventoryHoverPreview();
+      return;
+    }
     if (zone.dataset.inventoryCell !== undefined || zone.dataset.inventoryGridItem !== undefined) {
       this.#setInventoryCellHoverPreview(zone, event);
       return;
     }
-    if (zone.dataset.dropZone === undefined) return;
-    if (zone.classList.contains("drop-match-preview")) return;
-    zone.classList.add("drop-preview");
+    if (zone.dataset.dropZone === undefined) {
+      this.#clearInventoryHoverPreview();
+      return;
+    }
+    if (zone.classList.contains("drop-match-preview")) {
+      this.#clearInventoryHoverPreview();
+      return;
+    }
+    this.#applySingleZonePreview(zone, `zone:${zone.dataset.dropZone ?? ""}:${zone.dataset.equipmentSlot ?? ""}:${zone.dataset.weaponSet ?? ""}:${zone.dataset.weaponSlot ?? ""}`);
   }
 
   #setInventoryCellHoverPreview(zone, event = null) {
     if (!this.#draggedItemData) {
-      zone.classList.add("drop-preview");
+      this.#applySingleZonePreview(zone, `cell:${this.#getInventoryContextParentId(zone)}:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}`);
       return;
     }
 
@@ -1081,12 +1109,27 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         this.#draggedItemData,
         this.actor.items
       );
-    if (!this.#isInventoryPlacementAvailable(placement, excludeItemIds, [], parentId)) return;
+    if (!this.#isInventoryPlacementAvailable(placement, excludeItemIds, [], parentId)) {
+      this.#clearInventoryHoverPreview();
+      return;
+    }
     this.#applyInventoryPlacementPreview(placement, parentId);
+  }
+
+  #applySingleZonePreview(zone, key = "") {
+    const previewKey = `single:${key}`;
+    if (this.#hoverPreviewKey === previewKey) return;
+    this.#clearInventoryHoverPreview();
+    this.#hoverPreviewKey = previewKey;
+    zone?.classList?.add("drop-preview");
   }
 
   #applyInventoryPlacementPreview(placement, parentId = ROOT_CONTAINER_ID) {
     if (!placement) return;
+    const previewKey = `placement:${parentId}:${placement.x}:${placement.y}:${placement.width}:${placement.height}`;
+    if (this.#hoverPreviewKey === previewKey) return;
+    this.#clearInventoryHoverPreview();
+    this.#hoverPreviewKey = previewKey;
     const escapedParentId = CSS.escape(parentId);
     for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
       for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
@@ -1099,6 +1142,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #applyInventoryStackPreview(targetItem, parentId = ROOT_CONTAINER_ID) {
     if (!targetItem) return;
+    const previewKey = `stack:${parentId}:${targetItem.id}:${getItemQuantity(targetItem)}:${getItemMaxStack(targetItem)}`;
+    if (this.#hoverPreviewKey === previewKey) return;
+    this.#clearInventoryHoverPreview();
+    this.#hoverPreviewKey = previewKey;
     const escapedItemId = CSS.escape(targetItem.id);
     const escapedParentId = CSS.escape(parentId);
     this.element?.querySelector(
@@ -1116,6 +1163,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #clearInventoryHoverPreview() {
+    this.#hoverPreviewKey = "";
     this.element?.querySelectorAll(".drop-preview, .drop-stack-preview").forEach(element => {
       element.classList.remove("drop-preview", "drop-stack-preview");
     });

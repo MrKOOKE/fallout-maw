@@ -25,6 +25,7 @@ export const TEMPLATES = Object.freeze({
   stealthWindow: `systems/${SYSTEM_ID}/templates/actor/stealth-window.hbs`,
   searchInventory: `systems/${SYSTEM_ID}/templates/actor/search-inventory.hbs`,
   craftWindow: `systems/${SYSTEM_ID}/templates/actor/craft-window.hbs`,
+  personalGenerator: `systems/${SYSTEM_ID}/templates/actor/personal-generator.hbs`,
   skillCheckChatCard: `systems/${SYSTEM_ID}/templates/chat/skill-check-card.hbs`,
   skillCheckBatchChatCard: `systems/${SYSTEM_ID}/templates/chat/skill-check-batch-card.hbs`,
   damageSummaryChatCard: `systems/${SYSTEM_ID}/templates/chat/damage-summary-card.hbs`,
@@ -68,6 +69,7 @@ export const TEMPLATES = Object.freeze({
     systemActions: `systems/${SYSTEM_ID}/templates/settings/system-action-settings-config.hbs`,
     stealth: `systems/${SYSTEM_ID}/templates/settings/stealth-settings-config.hbs`,
     combat: `systems/${SYSTEM_ID}/templates/settings/combat-settings-config.hbs`,
+    personalNameRandomizer: `systems/${SYSTEM_ID}/templates/settings/personal-name-randomizer-config.hbs`,
     traumaSettings: `systems/${SYSTEM_ID}/templates/settings/trauma-settings-config.hbs`,
     traumaGroupSettings: `systems/${SYSTEM_ID}/templates/settings/trauma-group-settings-config.hbs`
   })

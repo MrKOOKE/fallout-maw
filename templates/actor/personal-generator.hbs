@@ -1,0 +1,236 @@
+<div class="fallout-maw-personal-generator-body">
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>Персональный генератор</h2>
+      <label class="fallout-maw-inline-check">
+        <input type="checkbox" name="enabled" {{#if config.enabled}}checked{{/if}}>
+        <span>Включить для отвязанных токенов</span>
+      </label>
+    </header>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>Имя</h2>
+      <button type="button" data-action="previewNames"><i class="fa-solid fa-dice"></i> Предпросмотр</button>
+    </header>
+    <div class="fallout-maw-pg-grid">
+      <label class="fallout-maw-inline-check">
+        <input type="checkbox" name="name.enabled" {{#if config.name.enabled}}checked{{/if}}>
+        <span>Генерировать имя</span>
+      </label>
+      <label class="fallout-maw-inline-check">
+        <input type="checkbox" name="name.appendToTokenName" {{#if config.name.appendToTokenName}}checked{{/if}}>
+        <span>Применять к имени токена</span>
+      </label>
+      <label class="fallout-maw-inline-check">
+        <input type="checkbox" name="name.overwriteBaseName" {{#if config.name.overwriteBaseName}}checked{{/if}}>
+        <span>Заменять базовое имя</span>
+      </label>
+      <label class="fallout-maw-inline-check">
+        <input type="checkbox" name="name.useSurname" {{#if config.name.useSurname}}checked{{/if}}>
+        <span>Добавлять фамилию</span>
+      </label>
+      <label>
+        <span>Блок имен</span>
+        <select name="name.firstNameBlockId">
+          {{#each nameBlockChoices}}
+          <option value="{{value}}" {{#if firstSelected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
+        <span>Блок фамилий</span>
+        <select name="name.surnameBlockId">
+          {{#each nameBlockChoices}}
+          <option value="{{value}}" {{#if surnameSelected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
+        <span>Имен в предпросмотре</span>
+        <input type="number" name="name.countPreview" value="{{config.name.countPreview}}" min="1" max="30" step="1">
+      </label>
+    </div>
+    <p class="fallout-maw-pg-preview">{{generatedNamePreview}}</p>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>Валюта</h2>
+      <select name="currency.mode">
+        <option value="add" {{#unless (eq config.currency.mode "set")}}selected{{/unless}}>Добавить к базовой</option>
+        <option value="set" {{#if (eq config.currency.mode "set")}}selected{{/if}}>Заменить значением</option>
+      </select>
+    </header>
+    <label class="fallout-maw-inline-check">
+      <input type="checkbox" name="currency.enabled" {{#if config.currency.enabled}}checked{{/if}}>
+      <span>Генерировать валюту</span>
+    </label>
+    <div class="fallout-maw-settings-table fallout-maw-pg-currency-table">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>Валюта</span>
+        <span>Мин.</span>
+        <span>Макс.</span>
+      </div>
+      {{#each currencyChoices}}
+      <div class="fallout-maw-settings-row" data-currency-range="{{key}}">
+        <span>{{label}}</span>
+        <input type="number" data-field="min" value="{{range.min}}" min="0" step="1">
+        <input type="number" data-field="max" value="{{range.max}}" min="0" step="1">
+      </div>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>Изображения</h2>
+      <label class="fallout-maw-inline-check">
+        <input type="checkbox" name="images.enabled" {{#if config.images.enabled}}checked{{/if}}>
+        <span>Включить</span>
+      </label>
+    </header>
+
+    <div class="fallout-maw-pg-image-options">
+      <label class="fallout-maw-inline-check">
+        <input type="checkbox" name="images.includeCurrent" {{#if config.images.includeCurrent}}checked{{/if}}>
+        <span>Исходное изображение участвует в случайной выдаче</span>
+      </label>
+      <label class="fallout-maw-inline-check">
+        <input type="checkbox" name="images.applyActorImg" {{#if config.images.applyActorImg}}checked{{/if}}>
+        <span>Менять портрет синтетического актёра</span>
+      </label>
+    </div>
+
+    <div class="fallout-maw-pg-image-list">
+      {{#each config.images.paths}}
+      <div class="fallout-maw-pg-image-thumb" data-pg-image-thumb data-index="{{@index}}">
+        <img src="{{this}}" alt="">
+        <input type="hidden" data-pg-image-path value="{{this}}">
+        <button type="button" data-action="removeImage" title="Удалить изображение"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">Пока нет добавленных изображений.</p>
+      {{/each}}
+    </div>
+
+    <div class="fallout-maw-pg-add-image-row">
+      <button type="button" data-action="browseImage"><i class="fa-solid fa-image"></i> Добавить изображение</button>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel fallout-maw-pg-items-section">
+    <header class="fallout-maw-panel-header">
+      <h2>Предметы</h2>
+      <label class="fallout-maw-inline-check">
+        <input type="checkbox" name="items.enabled" {{#if config.items.enabled}}checked{{/if}}>
+        <span>Включить</span>
+      </label>
+    </header>
+
+    <div class="fallout-maw-pg-block-list">
+      {{#each config.itemBlocks}}
+      <section class="fallout-maw-pg-block" data-pg-block data-pg-block-drop data-index="{{@index}}" data-block-id="{{id}}">
+        <header class="fallout-maw-pg-block-title">
+          <input type="text" data-field="name" value="{{name}}" placeholder="Название блока">
+          <button type="button" data-action="deleteItemBlock" title="Удалить блок"><i class="fa-solid fa-trash"></i></button>
+        </header>
+
+        <div class="fallout-maw-pg-block-options">
+          <label>
+            <span>Режим выбора</span>
+            <select data-field="pickMode">
+              {{#each pickModeChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          <label>
+            <span>Значение</span>
+            <input type="text" data-field="pick" value="{{pick}}" placeholder="1 или 2-5">
+          </label>
+          <label>
+            <span>Валюта ценности</span>
+            <select data-field="pickCurrency">
+              {{#each currencyChoices}}
+              <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+        </div>
+
+        <label class="fallout-maw-pg-exclusions">
+          <span>Взаимоисключения</span>
+          <input type="text" data-field="exclusions" value="{{exclusionsText}}" placeholder="id блоков через запятую">
+        </label>
+
+        <div class="fallout-maw-pg-dropzone" data-pg-block-drop>
+          <div class="fallout-maw-pg-dropzone-header">
+            <span>Предметы блока</span>
+            <button type="button" data-action="createItemEntry" title="Добавить строку"><i class="fa-solid fa-plus"></i></button>
+          </div>
+
+          <div class="fallout-maw-pg-entry-list">
+            {{#each entries}}
+            <article class="fallout-maw-pg-entry" data-pg-entry data-index="{{@index}}">
+              <input type="hidden" data-field="uuid" value="{{uuid}}">
+              <input type="hidden" data-field="img" value="{{img}}">
+
+              <div class="fallout-maw-pg-entry-main">
+                <img src="{{img}}" alt="">
+                <input type="text" data-field="name" value="{{name}}" placeholder="Перетащите предмет">
+                <button type="button" data-action="deleteItemEntry" title="Удалить строку"><i class="fa-solid fa-trash"></i></button>
+              </div>
+
+              <div class="fallout-maw-pg-entry-fields">
+                <label>
+                  <span>Кол-во</span>
+                  <span class="fallout-maw-pg-range">
+                    <input type="number" data-field="min" value="{{min}}" min="0" step="1">
+                    <input type="number" data-field="max" value="{{max}}" min="0" step="1">
+                  </span>
+                </label>
+                <label>
+                  <span>Состояние</span>
+                  <span class="fallout-maw-pg-range">
+                    <input type="number" data-field="condMin" value="{{condMin}}" min="0" max="100" step="1">
+                    <input type="number" data-field="condMax" value="{{condMax}}" min="0" max="100" step="1">
+                  </span>
+                </label>
+                <label>
+                  <span>Вес</span>
+                  <input type="number" data-field="weight" value="{{weight}}" min="1" step="1">
+                </label>
+                <label>
+                  <span>Цепь</span>
+                  <input type="text" data-field="chain" value="{{chain}}">
+                </label>
+              </div>
+
+              <div class="fallout-maw-pg-entry-flags">
+                <label title="Экипировать"><input type="checkbox" data-field="equip" {{#if equip}}checked{{/if}}> <i class="fa-solid fa-shirt"></i><span>Экип.</span></label>
+                <label title="Случайное состояние"><input type="checkbox" data-field="hasCondition" {{#if hasCondition}}checked{{/if}}> <i class="fa-solid fa-screwdriver-wrench"></i><span>Сост.</span></label>
+                <label title="Скрыть из обыска"><input type="checkbox" data-field="itemTradeLocked" {{#if itemTradeLocked}}checked{{/if}}> <i class="fa-solid fa-lock"></i><span>Скрыть</span></label>
+              </div>
+            </article>
+            {{else}}
+            <p class="fallout-maw-empty-list">Перетащите предметы в этот блок или добавьте пустую строку.</p>
+            {{/each}}
+          </div>
+        </div>
+      </section>
+      {{else}}
+      <p class="fallout-maw-empty-list">Блоков пока нет. Нажмите «Добавить блок».</p>
+      {{/each}}
+    </div>
+
+    <div class="fallout-maw-pg-add-block-row">
+      <button type="button" data-action="createItemBlock"><i class="fa-solid fa-plus"></i> Добавить блок</button>
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-save"></i> Сохранить изменения</button>
+  </footer>
+</div>

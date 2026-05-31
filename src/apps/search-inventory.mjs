@@ -404,7 +404,6 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#renderRefresh = foundry.utils.debounce(() => {
       if (!this.rendered) return;
       this.#captureScrollPositions();
-      this.#clearInventoryTooltip({ force: true });
       void this.#renderPreservingWindowStack();
     }, 60);
     this.#hookIds = [
@@ -427,6 +426,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#activateWeaponSlotAspectSizing();
     this.#restoreScrollPositions();
     this.#syncRenderedTradeOfferColumns();
+    this.#restoreInventoryTooltipAfterRender();
   }
 
   #renderPreservingWindowStack(options = {}) {
@@ -1914,6 +1914,13 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const targetActor = this.#getActorForTradeSide(side);
     const entry = findTradeOfferEntry(this.#tradeOffers?.[side], kind, key);
     if (!TRADE_OFFER_SIDES.includes(side) || kind !== "item" || !key || !targetActor || !this.#canClaimCompletedTradeSide(side)) return;
+    const itemData = getTradeOfferEntryItemData(entry, null);
+    const quantity = Math.max(1, toInteger(entry?.quantity));
+    const target = getCompletedTradeClaimTarget(targetActor, itemData, entry?.containedItems ?? [], { quantity });
+    if (!target) {
+      ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+      return;
+    }
     const payload = this.#prepareTradeSessionActionPayload({
       offers: this.#tradeOffers,
       side,
@@ -1922,7 +1929,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       targetActorUuid: targetActor.uuid,
       targetMode: "inventory",
       targetParentId: ROOT_CONTAINER_ID,
-      quantity: Math.max(1, toInteger(entry?.quantity))
+      targetX: null,
+      targetY: null,
+      autoTargetParent: true,
+      quantity
     });
     if (this.#tradeSessionSnapshot) {
       const result = await requestTradeSessionAction("claimCompletedTradeEntry", payload);
@@ -1979,7 +1989,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       ...(this.#tradeOffers?.[side]?.items ?? []).map(entry => ({
         kind: "item",
         key: getTradeOfferEntryKey(entry, "item"),
-        quantity: Math.max(1, toInteger(entry.quantity))
+        quantity: Math.max(1, toInteger(entry.quantity)),
+        itemData: getTradeOfferEntryItemData(entry, null),
+        containedItems: entry.containedItems ?? []
       })),
       ...(this.#tradeOffers?.[side]?.currencies ?? []).map(entry => ({
         kind: "currency",
@@ -1988,6 +2000,13 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       }))
     ];
     for (const entry of entries) {
+      const target = entry.kind === "item"
+        ? getCompletedTradeClaimTarget(targetActor, entry.itemData, entry.containedItems, { quantity: entry.quantity })
+        : null;
+      if (entry.kind === "item" && !target) {
+        ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+        break;
+      }
       const payload = this.#prepareTradeSessionActionPayload({
         offers: this.#tradeOffers,
         side,
@@ -1996,6 +2015,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         targetActorUuid: targetActor.uuid,
         targetMode: "inventory",
         targetParentId: ROOT_CONTAINER_ID,
+        targetX: null,
+        targetY: null,
+        autoTargetParent: entry.kind === "item",
         quantity: entry.quantity
       });
       try {
@@ -2559,14 +2581,16 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     });
     if (refresh && ((this.#tooltipActorUuid !== actor.uuid) || (this.#tooltipItemId !== item.id))) return;
 
-    if (refresh && this.#tooltipElement && !this.#tooltipPinned && !pinned) {
+    if (refresh && this.#tooltipElement) {
+      const keepPinned = this.#tooltipPinned || Boolean(pinned);
       this.#tooltipElement.innerHTML = tooltipHTML;
-      this.#tooltipElement.classList.remove("pinned");
-      this.#tooltipElement.style.pointerEvents = "none";
-      this.#tooltipPinned = false;
+      this.#tooltipElement.classList.toggle("pinned", keepPinned);
+      this.#tooltipElement.style.pointerEvents = keepPinned ? "auto" : "none";
+      this.#tooltipPinned = keepPinned;
       this.#tooltipAnchorElement = anchor;
       this.#tooltipActorUuid = actor.uuid;
       this.#tooltipItemId = item.id;
+      if (keepPinned) this.#bindInventoryTooltipDocumentClose();
       this.#positionInventoryTooltip();
       requestAnimationFrame(() => {
         const description = this.#tooltipElement?.querySelector(".description");
@@ -2612,6 +2636,37 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
       this.#positionInventoryTooltip();
     });
+  }
+
+  #restoreInventoryTooltipAfterRender() {
+    if (!this.#tooltipActorUuid || !this.#tooltipItemId) return;
+    if (!this.#tooltipElement && !this.#tooltipTimer) return;
+    const anchor = this.#findInventoryTooltipAnchor(this.#tooltipActorUuid, this.#tooltipItemId);
+    if (!anchor) {
+      this.#clearInventoryTooltip({ force: true });
+      return;
+    }
+
+    this.#tooltipAnchorElement = anchor;
+    this.#cancelInventoryTooltipClose();
+    if (this.#tooltipTimer) {
+      const view = this.element?.ownerDocument?.defaultView ?? window;
+      view.clearTimeout(this.#tooltipTimer);
+      this.#tooltipTimer = null;
+      this.#scheduleInventoryTooltip(anchor);
+      return;
+    }
+    if (this.#tooltipElement) void this.#showInventoryTooltip(anchor, { refresh: true });
+  }
+
+  #findInventoryTooltipAnchor(actorUuid = "", itemId = "") {
+    if (!this.element || !actorUuid || !itemId) return null;
+    const escapedActorUuid = CSS.escape(actorUuid);
+    const escapedItemId = CSS.escape(itemId);
+    return this.element.querySelector(
+      `[data-tooltip-item="${escapedItemId}"][data-search-actor-uuid="${escapedActorUuid}"],`
+      + `[data-tooltip-item][data-item-id="${escapedItemId}"][data-search-actor-uuid="${escapedActorUuid}"]`
+    );
   }
 
   #onTooltipClick(event) {
@@ -2996,14 +3051,20 @@ async function performCompletedTradeEntryClaim(payload = {}, requesterUserId = "
   const quantity = Math.max(1, Math.min(Math.max(0, toInteger(entry?.quantity)), toInteger(payload.quantity)));
   if (!entry || !itemData || !quantity) throw new Error("Trade item not found.");
   foundry.utils.setProperty(itemData, "system.quantity", quantity);
+  const autoTarget = payload.autoTargetParent && String(payload.targetMode ?? "inventory") === "inventory"
+    ? getCompletedTradeClaimTarget(targetActor, itemData, entry.containedItems ?? [], { quantity })
+    : null;
+  if (payload.autoTargetParent && String(payload.targetMode ?? "inventory") === "inventory" && !autoTarget) {
+    throwInventoryNoSpace();
+  }
   await createCompletedTradeItem(targetActor, itemData, entry.containedItems ?? [], {
     targetMode: String(payload.targetMode ?? "inventory"),
-    targetParentId: String(payload.targetParentId ?? ROOT_CONTAINER_ID),
+    targetParentId: String(autoTarget?.parentId ?? payload.targetParentId ?? ROOT_CONTAINER_ID),
     targetEquipmentSlot: String(payload.targetEquipmentSlot ?? ""),
     targetWeaponSet: String(payload.targetWeaponSet ?? ""),
     targetWeaponSlot: String(payload.targetWeaponSlot ?? ""),
-    targetX: payload.targetX,
-    targetY: payload.targetY,
+    targetX: autoTarget?.placement?.x ?? payload.targetX,
+    targetY: autoTarget?.placement?.y ?? payload.targetY,
     targetItemId: String(payload.targetItemId ?? "")
   });
   const reduced = reduceTradeOfferEntryQuantity(offers, side, "item", key, quantity);
@@ -4233,7 +4294,14 @@ function getCompatibleStackTarget(actor, itemData, preferredTarget = null, exclu
     && preferredTarget.system?.placement?.mode === "inventory"
     && areStackable(itemData, preferredTarget)
     && getItemQuantity(preferredTarget) < getItemMaxStack(preferredTarget);
-  return canUsePreferredTarget ? [preferredTarget] : [];
+  const targets = canUsePreferredTarget ? [preferredTarget] : [];
+  for (const item of getContextInventoryItems(parentId, actor.items)) {
+    if (!item || excluded.has(item.id) || targets.some(target => target.id === item.id)) continue;
+    if (item.system?.placement?.mode !== "inventory") continue;
+    if (!areStackable(itemData, item) || getItemQuantity(item) >= getItemMaxStack(item)) continue;
+    targets.push(item);
+  }
+  return targets;
 }
 
 function getSourcePlacement(actor, sourceItem, itemData, preferredPlacement = null, targetItem = null, parentId = ROOT_CONTAINER_ID, reservedPlacements = []) {
@@ -4481,6 +4549,72 @@ function getQuickTransferTargetParentId({ sourceActor, targetActor, sourceItem }
     return parentId;
   }
   return null;
+}
+
+function getCompletedTradeClaimTarget(targetActor, itemData = null, containedItems = [], { quantity = 0 } = {}) {
+  if (!targetActor || !itemData) return null;
+  const transferQuantity = Math.max(1, toInteger(quantity) || getItemQuantity(itemData));
+  const candidateParentIds = getActorInventoryPlacementParentCandidates(targetActor, itemData, []);
+
+  for (const parentId of candidateParentIds) {
+    if (!canCompletedTradeClaimFitParent(targetActor, itemData, containedItems, parentId, { quantity: transferQuantity })) continue;
+
+    const placement = getFirstAvailableActorInventoryPlacement(targetActor, parentId, itemData, [], []);
+    if (!placement) {
+      if (!isContainerItem(itemData) && getCompletedTradeClaimStackRoom(targetActor, itemData, parentId) >= transferQuantity) {
+        return { parentId, placement: null };
+      }
+      continue;
+    }
+
+    if (!validateCompletedTradeClaimTarget(targetActor, itemData, containedItems, parentId, placement, { quantity: transferQuantity })) continue;
+    return { parentId, placement };
+  }
+
+  return null;
+}
+
+function getCompletedTradeClaimStackRoom(targetActor, itemData = null, parentId = ROOT_CONTAINER_ID) {
+  if (isContainerItem(itemData)) return 0;
+  return findCompatibleStackTargets(targetActor, itemData, null, [], parentId).reduce((total, target) => (
+    total + Math.max(0, getItemMaxStack(target) - getItemQuantity(target))
+  ), 0);
+}
+
+function canCompletedTradeClaimFitParent(targetActor, itemData = null, containedItems = [], parentId = ROOT_CONTAINER_ID, { quantity = 0 } = {}) {
+  if (!parentId) return true;
+  const container = targetActor.items?.get(parentId);
+  if (!container) return false;
+  const quantityData = foundry.utils.deepClone(itemData);
+  foundry.utils.setProperty(quantityData, "system.quantity", Math.max(1, toInteger(quantity) || getItemQuantity(itemData)));
+  const currentLoad = getContainerContentsWeight(container, targetActor.items);
+  const addedLoad = getCompletedTradeClaimItemWeight(quantityData, containedItems);
+  return currentLoad + addedLoad <= getContainerMaxLoad(container) + 0.0001;
+}
+
+function getCompletedTradeClaimItemWeight(itemData = null, containedItems = []) {
+  const ownWeight = Math.max(1, getItemQuantity(itemData)) * (Math.max(0, Number(itemData?.system?.weight) || 0));
+  if (!isContainerItem(itemData)) return ownWeight;
+  const rootId = String(itemData?._id ?? itemData?.id ?? "");
+  const contentsWeight = containedItems
+    .filter(contained => getItemContainerParentId(contained) === rootId)
+    .reduce((total, contained) => total + getItemTotalWeight(contained, containedItems), 0);
+  return ownWeight + contentsWeight;
+}
+
+function validateCompletedTradeClaimTarget(targetActor, itemData = null, containedItems = [], parentId = ROOT_CONTAINER_ID, placement = null, { quantity = 0 } = {}) {
+  if (!placement) return false;
+  const quantityData = foundry.utils.deepClone(itemData);
+  foundry.utils.setProperty(quantityData, "system.quantity", Math.max(1, toInteger(quantity) || getItemQuantity(itemData)));
+  const createData = createInventoryStackData(quantityData, getItemQuantity(quantityData), parentId, placement);
+  const creates = isContainerItem(quantityData)
+    ? buildCompletedContainerTreeValidationCreates(createData, quantityData, containedItems)
+    : [createData];
+  try {
+    return validateActorProjectedInventoryState(targetActor, { creates });
+  } catch (_error) {
+    return false;
+  }
 }
 
 function getQuickTransferParentCandidates(actor) {
