@@ -238,6 +238,13 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
   #dragDrop = null;
   #autosaveTimeout = null;
   #saveChain = Promise.resolve();
+  #chainSource = null;
+  #chainOverlay = null;
+  #chainLine = null;
+  #chainMoveHandler = null;
+  #chainMouseDownHandler = null;
+  #chainKeyHandler = null;
+  #modifierKeyHandler = null;
 
   static DEFAULT_OPTIONS = {
     id: "fallout-maw-personal-generator",
@@ -258,7 +265,10 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
       browseImage: this.#onBrowseImage,
       removeImage: this.#onRemoveImage,
       previewNames: this.#onPreviewNames,
-      togglePrototypeTokenLink: this.#onTogglePrototypeTokenLink
+      togglePrototypeTokenLink: this.#onTogglePrototypeTokenLink,
+      openItemEntry: this.#onOpenItemEntry,
+      toggleItemLock: this.#onToggleItemLock,
+      chainItemEntry: this.#onChainItemEntry
     }
   };
 
@@ -310,9 +320,29 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     this._dragDrop.bind(this.element);
     this.element.addEventListener("input", event => this.#queueAutosaveFromEvent(event, 350));
     this.element.addEventListener("change", event => this.#queueAutosaveFromEvent(event, 0));
+    this.element.addEventListener("click", event => this.#onEntryClick(event));
+    this.element.addEventListener("dragstart", event => this.#onEntryDragStart(event));
+    this.element.addEventListener("dragend", event => this.#onEntryDragEnd(event));
+    this.element.addEventListener("dragenter", event => this.#onDropzoneDragEnter(event));
+    this.element.addEventListener("dragleave", event => this.#onDropzoneDragLeave(event));
+    this.element.addEventListener("dragover", event => this.#onDropzoneDragOver(event));
+    if (this.#modifierKeyHandler) {
+      document.removeEventListener("keydown", this.#modifierKeyHandler, true);
+      document.removeEventListener("keyup", this.#modifierKeyHandler, true);
+    }
+    this.#modifierKeyHandler = event => this.#onModifierKeyChange(event);
+    document.addEventListener("keydown", this.#modifierKeyHandler, true);
+    document.addEventListener("keyup", this.#modifierKeyHandler, true);
+    this.#syncChainLinkDisplay();
   }
 
   async close(options) {
+    this.#cancelChainLink();
+    if (this.#modifierKeyHandler) {
+      document.removeEventListener("keydown", this.#modifierKeyHandler, true);
+      document.removeEventListener("keyup", this.#modifierKeyHandler, true);
+      this.#modifierKeyHandler = null;
+    }
     if (this.#autosaveTimeout) {
       window.clearTimeout(this.#autosaveTimeout);
       this.#autosaveTimeout = null;
@@ -415,7 +445,55 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     return this.render({ force: true });
   }
 
+  static async #onOpenItemEntry(event, target) {
+    event.preventDefault();
+    const uuid = target.closest("[data-pg-entry]")?.querySelector("[data-field='uuid']")?.value ?? "";
+    const document = uuid ? await fromUuid(uuid) : null;
+    return document?.sheet?.render?.(true);
+  }
+
+  static async #onToggleItemLock(event, target) {
+    event.preventDefault();
+    const entry = target.closest("[data-pg-entry]");
+    const input = entry?.querySelector("[data-field='itemTradeLocked']");
+    if (!entry || !input) return undefined;
+    const locked = input.value !== "1";
+    input.value = locked ? "1" : "0";
+    target.classList.toggle("is-locked", locked);
+    target.title = locked ? "Скрыт из обыска" : "Участвует в обыске";
+    await this.#saveCurrentConfig({ fromForm: true });
+    return undefined;
+  }
+
+  static async #onChainItemEntry(event, target) {
+    event.preventDefault();
+    const entry = target.closest("[data-pg-entry]");
+    const block = target.closest("[data-pg-block]");
+    const blockIndex = getRowIndex(block, "[data-pg-block]");
+    const entryIndex = getRowIndex(entry, "[data-pg-entry]");
+    if (!entry || blockIndex < 0 || entryIndex < 0) return undefined;
+
+    this.#config = this.#readConfigFromForm();
+    const currentEntry = this.#config.items.blocks[blockIndex]?.entries[entryIndex];
+    if (!currentEntry) return undefined;
+
+    if ((event.shiftKey || event.altKey) && currentEntry.chain) {
+      currentEntry.chain = "";
+      normalizeChainsInBlock(this.#config.items.blocks[blockIndex]);
+      this.#cancelChainLink();
+      await this.#saveCurrentConfig();
+      return this.render({ force: true });
+    }
+
+    this.#startChainLink({ blockIndex, entryIndex, entryElement: entry, buttonElement: target });
+    return undefined;
+  }
+
   async #onDropItem(event) {
+    this.#clearDropzoneHighlight(event.target?.closest?.("[data-pg-block-drop]"));
+    const internalDrop = this.#getInternalEntryDropData(event);
+    if (internalDrop) return this.#moveInternalEntryDrop(event, internalDrop);
+
     const blockElement = event.target?.closest?.("[data-pg-block]");
     const blockIndex = getRowIndex(blockElement, "[data-pg-block]");
     if (blockIndex < 0) return undefined;
@@ -436,9 +514,128 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     return this.render({ force: true });
   }
 
+  #onDropzoneDragEnter(event) {
+    const dropzone = event.target?.closest?.("[data-pg-block-drop]");
+    if (!dropzone || !this.element?.contains(dropzone)) return;
+    dropzone.dataset.dragDepth = String((toInteger(dropzone.dataset.dragDepth) || 0) + 1);
+    dropzone.classList.add("drag-over");
+  }
+
+  #onDropzoneDragLeave(event) {
+    const dropzone = event.target?.closest?.("[data-pg-block-drop]");
+    if (!dropzone || !this.element?.contains(dropzone)) return;
+    const depth = Math.max(0, (toInteger(dropzone.dataset.dragDepth) || 0) - 1);
+    dropzone.dataset.dragDepth = String(depth);
+    if (!depth) dropzone.classList.remove("drag-over");
+  }
+
+  #onDropzoneDragOver(event) {
+    const dropzone = event.target?.closest?.("[data-pg-block-drop]");
+    if (!dropzone || !this.element?.contains(dropzone)) return;
+    event.preventDefault();
+    dropzone.classList.add("drag-over");
+  }
+
+  #clearDropzoneHighlight(dropzone) {
+    if (!dropzone) return;
+    dropzone.dataset.dragDepth = "0";
+    dropzone.classList.remove("drag-over");
+  }
+
+  #onEntryDragStart(event) {
+    const entry = event.target?.closest?.("[data-pg-entry]");
+    if (!entry || event.target.closest("button") || event.target.matches("input, select, textarea")) return;
+    const block = entry.closest("[data-pg-block]");
+    const blockIndex = getRowIndex(block, "[data-pg-block]");
+    const entryIndex = getRowIndex(entry, "[data-pg-entry]");
+    if (blockIndex < 0 || entryIndex < 0) return;
+    entry.classList.add("pg-chip-dragging");
+    event.dataTransfer?.setData("text/plain", JSON.stringify({
+      type: "fallout-maw-personal-generator-entry",
+      blockIndex,
+      entryIndex,
+      copy: event.shiftKey === true
+    }));
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = event.shiftKey ? "copy" : "move";
+  }
+
+  #onEntryDragEnd(event) {
+    event.target?.closest?.("[data-pg-entry]")?.classList.remove("pg-chip-dragging");
+  }
+
+  #getInternalEntryDropData(event) {
+    try {
+      const data = JSON.parse(event.dataTransfer?.getData("text/plain") || "{}");
+      return data?.type === "fallout-maw-personal-generator-entry" ? data : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  async #moveInternalEntryDrop(event, data) {
+    event.preventDefault();
+    const targetBlock = event.target?.closest?.("[data-pg-block]");
+    const targetBlockIndex = getRowIndex(targetBlock, "[data-pg-block]");
+    const sourceBlockIndex = toInteger(data.blockIndex);
+    const sourceEntryIndex = toInteger(data.entryIndex);
+    if (targetBlockIndex < 0 || sourceBlockIndex < 0 || sourceEntryIndex < 0) return undefined;
+
+    this.#config = this.#readConfigFromForm();
+    const sourceBlock = this.#config.items.blocks[sourceBlockIndex];
+    const target = this.#config.items.blocks[targetBlockIndex];
+    const source = sourceBlock?.entries?.[sourceEntryIndex];
+    if (!sourceBlock || !target || !source) return undefined;
+
+    const chain = String(source.chain ?? "").trim();
+    const moving = chain
+      ? sourceBlock.entries.filter(entry => String(entry.chain ?? "").trim() === chain)
+      : [source];
+    if (!moving.length) return undefined;
+
+    const copied = data.copy === true || event.shiftKey === true;
+    const movedEntries = moving.map(entry => copied ? { ...entry } : entry);
+    if (copied && chain) {
+      const newChain = foundry.utils.randomID();
+      for (const entry of movedEntries) entry.chain = newChain;
+    }
+
+    if (!copied) {
+      const movingSet = new Set(moving);
+      sourceBlock.entries = sourceBlock.entries.filter(entry => !movingSet.has(entry));
+      normalizeChainsInBlock(sourceBlock);
+    }
+    target.entries.push(...movedEntries);
+    normalizeChainsInBlock(target);
+    await this.#saveCurrentConfig();
+    return this.render({ force: true });
+  }
+
   #queueAutosaveFromEvent(event, delay) {
     if (!event.target?.matches?.("input, select, textarea")) return;
     this.#queueAutosave(delay);
+  }
+
+  async #onEntryClick(event) {
+    const entry = event.target?.closest?.("[data-pg-entry]");
+    if (!entry || !this.element?.contains(entry)) return;
+
+    const block = entry.closest("[data-pg-block]");
+    const blockIndex = getRowIndex(block, "[data-pg-block]");
+    const entryIndex = getRowIndex(entry, "[data-pg-entry]");
+    if (blockIndex < 0 || entryIndex < 0) return;
+
+    if (this.#chainSource) {
+      return;
+    }
+
+    if (event.target.closest("button") || event.target.matches("input, select, textarea")) return;
+
+    const input = entry.querySelector("[data-field='equip']");
+    if (!input) return;
+    const equipped = input.value !== "1";
+    input.value = equipped ? "1" : "0";
+    entry.classList.toggle("pg-equip-on", equipped);
+    await this.#saveCurrentConfig({ fromForm: true });
   }
 
   #queueAutosave(delay = 350) {
@@ -458,6 +655,136 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
       .catch(error => console.error(error))
       .then(() => actor.setFlag(SYSTEM_ID, "personalGenerator", config));
     return this.#saveChain;
+  }
+
+  #startChainLink({ blockIndex, entryIndex, entryElement, buttonElement }) {
+    this.#cancelChainLink();
+    this.#chainSource = { blockIndex, entryIndex };
+    this.#createChainOverlay(entryElement, buttonElement);
+    this.#syncChainLinkDisplay();
+  }
+
+  #createChainOverlay(entryElement, buttonElement) {
+    const overlay = document.createElement("div");
+    overlay.className = "fallout-maw-pg-chain-overlay";
+    overlay.innerHTML = `
+      <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="falloutMawPgChainGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2.5" result="blur"/>
+            <feMerge>
+              <feMergeNode in="blur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+        </defs>
+        <line x1="0" y1="0" x2="0" y2="0" filter="url(#falloutMawPgChainGlow)"/>
+      </svg>`;
+    document.body.appendChild(overlay);
+    this.#chainOverlay = overlay;
+    this.#chainLine = overlay.querySelector("line");
+
+    const getStartPoint = () => {
+      const source = buttonElement ?? entryElement;
+      const rect = source.getBoundingClientRect();
+      return { x: rect.left + (rect.width / 2), y: rect.top + (rect.height / 2) };
+    };
+    const updateLine = (x, y) => {
+      const start = getStartPoint();
+      this.#chainLine?.setAttribute("x1", String(start.x));
+      this.#chainLine?.setAttribute("y1", String(start.y));
+      this.#chainLine?.setAttribute("x2", String(x));
+      this.#chainLine?.setAttribute("y2", String(y));
+    };
+
+    this.#chainMoveHandler = event => updateLine(event.clientX, event.clientY);
+    this.#chainMouseDownHandler = event => this.#onChainMouseDown(event);
+    this.#chainKeyHandler = event => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.#cancelChainLink();
+      }
+    };
+    document.addEventListener("mousemove", this.#chainMoveHandler, true);
+    document.addEventListener("mousedown", this.#chainMouseDownHandler, true);
+    document.addEventListener("keydown", this.#chainKeyHandler, true);
+    const start = getStartPoint();
+    updateLine(start.x, start.y);
+  }
+
+  async #onChainMouseDown(event) {
+    if (!this.#chainSource) return;
+    const preventFollowupClick = clickEvent => {
+      clickEvent.preventDefault();
+      clickEvent.stopPropagation();
+      clickEvent.stopImmediatePropagation();
+    };
+    document.addEventListener("click", preventFollowupClick, true);
+    window.setTimeout(() => document.removeEventListener("click", preventFollowupClick, true), 0);
+
+    const entry = event.target?.closest?.("[data-pg-entry]");
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
+    if (!entry || !this.element?.contains(entry)) {
+      this.#cancelChainLink();
+      return;
+    }
+
+    const block = entry.closest("[data-pg-block]");
+    const blockIndex = getRowIndex(block, "[data-pg-block]");
+    const entryIndex = getRowIndex(entry, "[data-pg-entry]");
+    const source = this.#chainSource;
+    if (blockIndex !== source.blockIndex || entryIndex === source.entryIndex) {
+      this.#cancelChainLink();
+      return;
+    }
+
+    this.#config = this.#readConfigFromForm();
+    linkItemEntriesInBlock(this.#config.items.blocks[blockIndex], source.entryIndex, entryIndex);
+    this.#cancelChainLink();
+    await this.#saveCurrentConfig();
+    return this.render({ force: true });
+  }
+
+  #cancelChainLink() {
+    this.#chainSource = null;
+    if (this.#chainMoveHandler) document.removeEventListener("mousemove", this.#chainMoveHandler, true);
+    if (this.#chainMouseDownHandler) document.removeEventListener("mousedown", this.#chainMouseDownHandler, true);
+    if (this.#chainKeyHandler) document.removeEventListener("keydown", this.#chainKeyHandler, true);
+    this.#chainMoveHandler = null;
+    this.#chainMouseDownHandler = null;
+    this.#chainKeyHandler = null;
+    this.#chainOverlay?.remove();
+    this.#chainOverlay = null;
+    this.#chainLine = null;
+    this.#syncChainLinkDisplay();
+  }
+
+  #onModifierKeyChange(event) {
+    if (event.key !== "Shift" && event.key !== "Alt") return;
+    const removeMode = event.shiftKey || event.altKey;
+    this.#syncChainRemoveMode(removeMode);
+  }
+
+  #syncChainRemoveMode(removeMode) {
+    for (const button of this.element?.querySelectorAll(".fallout-maw-pg-chain-button.is-on") ?? []) {
+      button.classList.toggle("pg-chain-remove-mode", removeMode);
+    }
+  }
+
+  #syncChainLinkDisplay() {
+    const source = this.#chainSource;
+    for (const entry of this.element?.querySelectorAll("[data-pg-entry]") ?? []) {
+      const block = entry.closest("[data-pg-block]");
+      const blockIndex = getRowIndex(block, "[data-pg-block]");
+      const entryIndex = getRowIndex(entry, "[data-pg-entry]");
+      const active = !!source && source.blockIndex === blockIndex && source.entryIndex === entryIndex;
+      const target = !!source && source.blockIndex === blockIndex && source.entryIndex !== entryIndex;
+      entry.classList.toggle("pg-chain-link-source", active);
+      entry.classList.toggle("pg-chain-link-target", target);
+    }
   }
 
   #readConfigFromForm() {
@@ -1127,6 +1454,37 @@ function createItemEntryFromItem(item) {
   };
 }
 
+function linkItemEntriesInBlock(block, sourceIndex, targetIndex) {
+  const entries = block?.entries ?? [];
+  const source = entries[sourceIndex];
+  const target = entries[targetIndex];
+  if (!source || !target || source === target) return;
+  const sourceChain = String(source.chain ?? "").trim();
+  const targetChain = String(target.chain ?? "").trim();
+  const chain = sourceChain || targetChain || foundry.utils.randomID();
+  for (const entry of entries) {
+    const current = String(entry.chain ?? "").trim();
+    if (current && (current === sourceChain || current === targetChain)) entry.chain = chain;
+  }
+  source.chain = chain;
+  target.chain = chain;
+  normalizeChainsInBlock(block);
+}
+
+function normalizeChainsInBlock(block) {
+  const entries = block?.entries ?? [];
+  const counts = new Map();
+  for (const entry of entries) {
+    const chain = String(entry.chain ?? "").trim();
+    entry.chain = chain;
+    if (!chain) continue;
+    counts.set(chain, (counts.get(chain) ?? 0) + 1);
+  }
+  for (const entry of entries) {
+    if (entry.chain && (counts.get(entry.chain) ?? 0) < 2) entry.chain = "";
+  }
+}
+
 function getPrototypeTokenLinkContext(actor) {
   const linked = actor?.prototypeToken?.actorLink === true;
   return {
@@ -1151,12 +1509,43 @@ function preparePersonalGeneratorContext(config) {
         ...currency,
         selected: currency.key === block.pickCurrency
       })),
-      entries: (block.entries ?? []).map(entry => ({
+      entries: (block.entries ?? []).map((entry, index) => ({
         ...entry,
+        index,
         img: normalizeImagePath(entry.img)
-      }))
+      })),
+      itemGroups: createItemEntryGroups(block.entries ?? [])
     }))
   };
+}
+
+function createItemEntryGroups(entries = []) {
+  const normalized = (Array.isArray(entries) ? entries : []).map((entry, index) => ({
+    ...entry,
+    index,
+    img: normalizeImagePath(entry.img),
+    chain: String(entry.chain ?? "").trim()
+  }));
+  const chainMap = new Map();
+  for (const entry of normalized) {
+    if (!entry.chain) continue;
+    if (!chainMap.has(entry.chain)) chainMap.set(entry.chain, []);
+    chainMap.get(entry.chain).push(entry);
+  }
+
+  const groups = [];
+  const seen = new Set();
+  for (const entry of normalized) {
+    const list = entry.chain ? (chainMap.get(entry.chain) ?? []) : [];
+    if (entry.chain && list.length >= 2) {
+      if (seen.has(entry.chain)) continue;
+      seen.add(entry.chain);
+      groups.push({ chain: entry.chain, entries: list });
+      continue;
+    }
+    groups.push({ chain: "", entries: [{ ...entry, chain: "" }] });
+  }
+  return groups;
 }
 
 function getNameBlockChoices(config = {}) {
@@ -1548,17 +1937,23 @@ function readItemBlocks(form) {
       uuid: String(entry.querySelector("[data-field='uuid']")?.value ?? "").trim(),
       name: String(entry.querySelector("[data-field='name']")?.value ?? "").trim(),
       img: String(entry.querySelector("[data-field='img']")?.value ?? "").trim(),
-      equip: entry.querySelector("[data-field='equip']")?.checked === true,
-      hasCondition: entry.querySelector("[data-field='hasCondition']")?.checked === true,
+      equip: getFieldBoolean(entry.querySelector("[data-field='equip']")),
+      hasCondition: getFieldBoolean(entry.querySelector("[data-field='hasCondition']")),
       chain: String(entry.querySelector("[data-field='chain']")?.value ?? "").trim(),
       min: toInteger(entry.querySelector("[data-field='min']")?.value),
       max: toInteger(entry.querySelector("[data-field='max']")?.value),
       condMin: toInteger(entry.querySelector("[data-field='condMin']")?.value),
       condMax: toInteger(entry.querySelector("[data-field='condMax']")?.value),
       weight: toInteger(entry.querySelector("[data-field='weight']")?.value),
-      itemTradeLocked: entry.querySelector("[data-field='itemTradeLocked']")?.checked === true
+      itemTradeLocked: getFieldBoolean(entry.querySelector("[data-field='itemTradeLocked']"))
     }))
   }));
+}
+
+function getFieldBoolean(input) {
+  if (!input) return false;
+  if (input.type === "checkbox") return input.checked === true;
+  return input.value === "1" || input.value === "true";
 }
 
 function getChecked(root, name) {

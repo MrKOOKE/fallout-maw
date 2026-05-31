@@ -137,7 +137,7 @@
 
     <div class="fallout-maw-pg-block-list">
       {{#each config.itemBlocks}}
-      <section class="fallout-maw-pg-block" data-pg-block data-pg-block-drop data-index="{{@index}}" data-block-id="{{id}}">
+      <section class="fallout-maw-pg-block" data-pg-block data-index="{{@index}}" data-block-id="{{id}}">
         <header class="fallout-maw-pg-block-title">
           <input type="text" data-field="name" value="{{name}}" placeholder="Название блока">
           <button type="button" data-action="deleteItemBlock" title="Удалить блок"><i class="fa-solid fa-trash"></i></button>
@@ -178,50 +178,78 @@
           </div>
 
           <div class="fallout-maw-pg-entry-list">
+            {{#each itemGroups}}
+            {{#if chain}}
+            <div class="fallout-maw-pg-chain" data-pg-chain="{{chain}}">
+              {{#each entries}}
+              <article class="fallout-maw-pg-entry {{#if equip}}pg-equip-on{{/if}} {{#if chain}}pg-chain-on{{/if}}" data-pg-entry data-index="{{index}}" data-chain="{{chain}}" draggable="true">
+                <input type="hidden" data-field="uuid" value="{{uuid}}">
+                <input type="hidden" data-field="img" value="{{img}}">
+                <input type="hidden" data-field="equip" value="{{#if equip}}1{{else}}0{{/if}}">
+                <input type="hidden" data-field="hasCondition" value="{{#if hasCondition}}1{{else}}0{{/if}}">
+                <input type="hidden" data-field="chain" value="{{chain}}">
+                <input type="hidden" data-field="itemTradeLocked" value="{{#if itemTradeLocked}}1{{else}}0{{/if}}">
+
+                <img class="fallout-maw-pg-entry-img" src="{{img}}" alt="">
+                <div class="fallout-maw-pg-entry-content">
+                  <input class="fallout-maw-pg-entry-name" type="text" data-field="name" value="{{name}}" placeholder="Перетащите предмет">
+                  <div class="fallout-maw-pg-entry-fields">
+                    <label><span>Кол-во:</span><input type="number" data-field="min" value="{{min}}" min="0" step="1"></label>
+                    <span class="fallout-maw-pg-dash">-</span>
+                    <input type="number" data-field="max" value="{{max}}" min="0" step="1">
+                    {{#if hasCondition}}
+                    <label><span>Сост.:</span><input type="number" data-field="condMin" value="{{condMin}}" min="0" max="100" step="1"></label>
+                    <span class="fallout-maw-pg-dash">-</span>
+                    <input type="number" data-field="condMax" value="{{condMax}}" min="0" max="100" step="1">
+                    {{/if}}
+                    <label><span>Вес вероятности:</span><input type="number" data-field="weight" value="{{weight}}" min="1" step="1"></label>
+                  </div>
+                </div>
+                <div class="fallout-maw-pg-entry-actions">
+                  <button type="button" data-action="openItemEntry" title="Открыть предмет"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
+                  <button type="button" class="fallout-maw-pg-lock-button {{#if itemTradeLocked}}is-locked{{/if}}" data-action="toggleItemLock" title="{{#if itemTradeLocked}}Скрыт из обыска{{else}}Участвует в обыске{{/if}}"><i class="fa-solid fa-lock"></i></button>
+                  <button type="button" class="fallout-maw-pg-chain-button {{#if chain}}is-on{{/if}}" data-action="chainItemEntry" title="Связать предметы"><i class="fa-solid fa-link"></i></button>
+                  <button type="button" data-action="deleteItemEntry" title="Удалить предмет"><i class="fa-solid fa-trash"></i></button>
+                </div>
+              </article>
+              {{/each}}
+            </div>
+            {{else}}
             {{#each entries}}
-            <article class="fallout-maw-pg-entry" data-pg-entry data-index="{{@index}}">
+            <article class="fallout-maw-pg-entry {{#if equip}}pg-equip-on{{/if}} {{#if chain}}pg-chain-on{{/if}}" data-pg-entry data-index="{{index}}" data-chain="{{chain}}" draggable="true">
               <input type="hidden" data-field="uuid" value="{{uuid}}">
               <input type="hidden" data-field="img" value="{{img}}">
+              <input type="hidden" data-field="equip" value="{{#if equip}}1{{else}}0{{/if}}">
+              <input type="hidden" data-field="hasCondition" value="{{#if hasCondition}}1{{else}}0{{/if}}">
+              <input type="hidden" data-field="chain" value="{{chain}}">
+              <input type="hidden" data-field="itemTradeLocked" value="{{#if itemTradeLocked}}1{{else}}0{{/if}}">
 
-              <div class="fallout-maw-pg-entry-main">
-                <img src="{{img}}" alt="">
-                <input type="text" data-field="name" value="{{name}}" placeholder="Перетащите предмет">
-                <button type="button" data-action="deleteItemEntry" title="Удалить строку"><i class="fa-solid fa-trash"></i></button>
+              <img class="fallout-maw-pg-entry-img" src="{{img}}" alt="">
+              <div class="fallout-maw-pg-entry-content">
+                <input class="fallout-maw-pg-entry-name" type="text" data-field="name" value="{{name}}" placeholder="Перетащите предмет">
+                <div class="fallout-maw-pg-entry-fields">
+                  <label><span>Кол-во:</span><input type="number" data-field="min" value="{{min}}" min="0" step="1"></label>
+                  <span class="fallout-maw-pg-dash">-</span>
+                  <input type="number" data-field="max" value="{{max}}" min="0" step="1">
+                  {{#if hasCondition}}
+                  <label><span>Сост.:</span><input type="number" data-field="condMin" value="{{condMin}}" min="0" max="100" step="1"></label>
+                  <span class="fallout-maw-pg-dash">-</span>
+                  <input type="number" data-field="condMax" value="{{condMax}}" min="0" max="100" step="1">
+                  {{/if}}
+                  <label><span>Вес вероятности:</span><input type="number" data-field="weight" value="{{weight}}" min="1" step="1"></label>
+                </div>
               </div>
-
-              <div class="fallout-maw-pg-entry-fields">
-                <label>
-                  <span>Кол-во</span>
-                  <span class="fallout-maw-pg-range">
-                    <input type="number" data-field="min" value="{{min}}" min="0" step="1">
-                    <input type="number" data-field="max" value="{{max}}" min="0" step="1">
-                  </span>
-                </label>
-                <label>
-                  <span>Состояние</span>
-                  <span class="fallout-maw-pg-range">
-                    <input type="number" data-field="condMin" value="{{condMin}}" min="0" max="100" step="1">
-                    <input type="number" data-field="condMax" value="{{condMax}}" min="0" max="100" step="1">
-                  </span>
-                </label>
-                <label>
-                  <span>Вес</span>
-                  <input type="number" data-field="weight" value="{{weight}}" min="1" step="1">
-                </label>
-                <label>
-                  <span>Цепь</span>
-                  <input type="text" data-field="chain" value="{{chain}}">
-                </label>
-              </div>
-
-              <div class="fallout-maw-pg-entry-flags">
-                <label title="Экипировать"><input type="checkbox" data-field="equip" {{#if equip}}checked{{/if}}> <i class="fa-solid fa-shirt"></i><span>Экип.</span></label>
-                <label title="Случайное состояние"><input type="checkbox" data-field="hasCondition" {{#if hasCondition}}checked{{/if}}> <i class="fa-solid fa-screwdriver-wrench"></i><span>Сост.</span></label>
-                <label title="Скрыть из обыска"><input type="checkbox" data-field="itemTradeLocked" {{#if itemTradeLocked}}checked{{/if}}> <i class="fa-solid fa-lock"></i><span>Скрыть</span></label>
+              <div class="fallout-maw-pg-entry-actions">
+                <button type="button" data-action="openItemEntry" title="Открыть предмет"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
+                <button type="button" class="fallout-maw-pg-lock-button {{#if itemTradeLocked}}is-locked{{/if}}" data-action="toggleItemLock" title="{{#if itemTradeLocked}}Скрыт из обыска{{else}}Участвует в обыске{{/if}}"><i class="fa-solid fa-lock"></i></button>
+                <button type="button" class="fallout-maw-pg-chain-button {{#if chain}}is-on{{/if}}" data-action="chainItemEntry" title="Связать предметы"><i class="fa-solid fa-link"></i></button>
+                <button type="button" data-action="deleteItemEntry" title="Удалить предмет"><i class="fa-solid fa-trash"></i></button>
               </div>
             </article>
+            {{/each}}
+            {{/if}}
             {{else}}
-            <p class="fallout-maw-empty-list">Перетащите предметы в этот блок или добавьте пустую строку.</p>
+            <p class="fallout-maw-empty-list">Перетащите предметы сюда.</p>
             {{/each}}
           </div>
         </div>

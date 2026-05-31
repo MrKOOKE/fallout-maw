@@ -222,6 +222,12 @@
   background: rgba(0, 0, 0, 0.14);
 }
 
+.fallout-maw-pg-dropzone.drag-over {
+  border-color: rgba(232, 212, 136, 0.95);
+  background: rgba(232, 212, 136, 0.1);
+  box-shadow: inset 0 0 0 2px rgba(232, 212, 136, 0.24), 0 0 12px rgba(232, 212, 136, 0.18);
+}
+
 .fallout-maw-pg-dropzone-header {
   display: flex;
   align-items: center;
@@ -231,71 +237,179 @@
 }
 
 .fallout-maw-pg-entry {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
   padding: 0.5rem;
   border: 1px solid rgba(166, 151, 96, 0.32);
   border-radius: 6px;
   background: rgba(166, 151, 96, 0.08);
-}
-
-.fallout-maw-pg-entry-main {
-  display: grid;
-  grid-template-columns: 2.5rem minmax(0, 1fr) 2.25rem;
-  gap: 0.5rem;
-  align-items: center;
+  cursor: pointer;
   min-width: 0;
 }
 
-.fallout-maw-pg-entry-main img {
-  width: 2.5rem;
-  height: 2.5rem;
+.fallout-maw-pg-entry.pg-equip-on {
+  border-color: rgba(76, 175, 117, 0.95);
+  box-shadow: 0 0 0 2px rgba(76, 175, 117, 0.22);
+  background: rgba(76, 175, 117, 0.1);
+}
+
+.fallout-maw-pg-entry.pg-chain-link-source {
+  border-color: rgba(232, 212, 136, 0.95);
+  box-shadow: 0 0 0 2px rgba(232, 212, 136, 0.35);
+}
+
+.fallout-maw-pg-entry.pg-chain-link-target {
+  outline: 1px dashed rgba(232, 212, 136, 0.55);
+  outline-offset: 2px;
+}
+
+.fallout-maw-pg-entry.pg-chip-dragging {
+  opacity: 0.55;
+  outline: 2px solid rgba(232, 212, 136, 0.85);
+}
+
+.fallout-maw-pg-entry-img {
+  width: 3rem;
+  height: 3rem;
   object-fit: cover;
   border: 1px solid rgba(166, 151, 96, 0.4);
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.2);
 }
 
-.fallout-maw-pg-entry-fields {
-  display: grid;
-  grid-template-columns: 8rem 8rem 5rem minmax(6rem, 1fr);
-  gap: 0.5rem;
-  align-items: end;
-}
-
-.fallout-maw-pg-range {
+.fallout-maw-pg-entry-content {
   display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.fallout-maw-pg-range input {
+  flex-direction: column;
+  gap: 0.4rem;
   min-width: 0;
 }
 
-.fallout-maw-pg-entry-flags {
+.fallout-maw-pg-entry-name {
+  font-weight: 700;
+}
+
+.fallout-maw-pg-entry-fields {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.35rem;
   align-items: center;
 }
 
-.fallout-maw-pg-entry-flags label {
+.fallout-maw-pg-entry-fields label {
   display: inline-flex;
-  align-items: center;
+  flex-direction: row;
   gap: 0.25rem;
+  align-items: center;
   width: auto;
 }
 
-.fallout-maw-pg-entry-flags input[type="checkbox"] {
-  width: auto;
+.fallout-maw-pg-entry-fields label > span:first-child {
+  font-size: 0.78rem;
+  font-weight: 700;
+  opacity: 0.78;
+}
+
+.fallout-maw-pg-entry-fields input {
+  width: 3.2rem;
+  min-width: 0;
+}
+
+.fallout-maw-pg-entry-fields label:last-child input {
+  width: 3.5rem;
+}
+
+.fallout-maw-pg-dash {
+  color: rgba(214, 210, 199, 0.65);
+}
+
+.fallout-maw-pg-entry-actions {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.fallout-maw-pg-entry-actions button {
+  width: 2.15rem;
+  height: 2.15rem;
+  min-height: 0;
+  padding: 0;
+}
+
+.fallout-maw-pg-lock-button {
+  color: #8fd68f;
+}
+
+.fallout-maw-pg-lock-button.is-locked {
+  color: #ff9a8d;
+  border-color: rgba(255, 154, 141, 0.65);
+  background: rgba(160, 45, 34, 0.18);
+}
+
+.fallout-maw-pg-chain-button.is-on {
+  border-color: rgba(232, 212, 136, 0.95);
+  box-shadow: 0 0 0 2px rgba(232, 212, 136, 0.18);
+}
+
+.fallout-maw-pg-chain-button.pg-chain-remove-mode::after {
+  content: "x";
+  position: absolute;
+  top: -0.45rem;
+  right: -0.45rem;
+  width: 1rem;
+  height: 1rem;
+  line-height: 1rem;
+  border-radius: 999px;
+  color: #fff;
+  background: #b33a32;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.fallout-maw-pg-chain-button {
+  position: relative;
+}
+
+.fallout-maw-pg-chain {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem;
+  border: 2px solid rgba(232, 212, 136, 0.95);
+  border-radius: 8px;
+  background: rgba(232, 212, 136, 0.07);
+  box-shadow: 0 0 0 2px rgba(232, 212, 136, 0.18);
+}
+
+.fallout-maw-pg-chain-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 1000000;
+}
+
+.fallout-maw-pg-chain-overlay line {
+  stroke: rgba(232, 212, 136, 0.95);
+  stroke-width: 3;
+  stroke-linecap: round;
 }
 
 @media (max-width: 760px) {
   .fallout-maw-pg-block-options,
   .fallout-maw-pg-entry-fields {
     grid-template-columns: 1fr;
+  }
+
+  .fallout-maw-pg-entry {
+    grid-template-columns: 3rem minmax(0, 1fr);
+  }
+
+  .fallout-maw-pg-entry-actions {
+    grid-column: 1 / -1;
   }
 }
 
