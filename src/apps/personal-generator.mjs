@@ -1199,6 +1199,7 @@ function planPersonalGeneratorItems(actor, itemsData) {
   const creates = [];
   const reservedPlacements = new Map();
   const projected = createProjectedItemMap(actor);
+  const { occupiedEquipmentSlots, occupiedWeaponSlots } = getOccupiedGeneratedEquipSlots(actor);
 
   for (const itemData of itemsData) {
     const maxStack = getItemMaxStack(itemData);
@@ -1227,6 +1228,24 @@ function planPersonalGeneratorItems(actor, itemsData) {
       const quantity = Math.min(remainingQuantity, maxStack);
       const stackData = foundry.utils.deepClone(itemData);
       foundry.utils.setProperty(stackData, "system.quantity", quantity);
+      const equipPlacement = getGeneratedEquipRequest(stackData)
+        ? findGeneratedEquipPlacement(actor, stackData, occupiedEquipmentSlots, occupiedWeaponSlots)
+        : null;
+      if (equipPlacement) {
+        const createData = createInventoryItemDataForPlacement(stackData, {
+          parentId: ROOT_CONTAINER_ID,
+          placement: equipPlacement
+        });
+        creates.push(createData);
+        const syntheticId = `personal-generator-${creates.length}`;
+        const projectedCreate = foundry.utils.deepClone(createData);
+        projectedCreate._id = syntheticId;
+        projectedCreate.id = syntheticId;
+        projected.set(syntheticId, projectedCreate);
+        remainingQuantity -= quantity;
+        continue;
+      }
+
       const target = findFirstGeneratedItemPlacement(actor, projected, stackData, reservedPlacements);
       if (!target) break;
       const createData = createInventoryItemDataForPlacement(stackData, target);
@@ -1275,20 +1294,11 @@ function findFirstGeneratedItemPlacement(actor, projectedMap, itemData, reserved
 
 async function applyGeneratedEquipment(actor, createdItems = []) {
   const updates = [];
-  const occupiedEquipmentSlots = new Set();
-  const occupiedWeaponSlots = new Set();
-  for (const item of actor.items ?? []) {
-    const placement = item.system?.placement ?? {};
-    if (placement.mode === "equipment") {
-      for (const key of getSelectedEquipmentSlotKeys(item)) occupiedEquipmentSlots.add(key);
-    }
-    if (placement.mode === "weapon") {
-      for (const key of getPlacedWeaponSlotKeys(actor, item, placement)) occupiedWeaponSlots.add(key);
-    }
-  }
+  const { occupiedEquipmentSlots, occupiedWeaponSlots } = getOccupiedGeneratedEquipSlots(actor);
 
   for (const item of createdItems) {
     if (!item?.getFlag?.(SYSTEM_ID, "personalGeneratorEquip")) continue;
+    if (["equipment", "weapon"].includes(String(item.system?.placement?.mode ?? ""))) continue;
     const placement = findGeneratedEquipPlacement(actor, item, occupiedEquipmentSlots, occupiedWeaponSlots);
     if (!placement) continue;
     const storedPlacement = createStoredPlacement(placement, item);
@@ -1307,6 +1317,25 @@ async function applyGeneratedEquipment(actor, createdItems = []) {
     });
   }
   if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
+}
+
+function getOccupiedGeneratedEquipSlots(actor) {
+  const occupiedEquipmentSlots = new Set();
+  const occupiedWeaponSlots = new Set();
+  for (const item of actor.items ?? []) {
+    const placement = item.system?.placement ?? {};
+    if (placement.mode === "equipment") {
+      for (const key of getSelectedEquipmentSlotKeys(item)) occupiedEquipmentSlots.add(key);
+    }
+    if (placement.mode === "weapon") {
+      for (const key of getPlacedWeaponSlotKeys(actor, item, placement)) occupiedWeaponSlots.add(key);
+    }
+  }
+  return { occupiedEquipmentSlots, occupiedWeaponSlots };
+}
+
+function getGeneratedEquipRequest(itemData) {
+  return foundry.utils.getProperty(itemData, `flags.${SYSTEM_ID}.personalGeneratorEquip`) === true;
 }
 
 function findGeneratedEquipPlacement(actor, item, occupiedEquipmentSlots, occupiedWeaponSlots) {
@@ -1722,7 +1751,7 @@ function createInventoryItemDataForPlacement(itemData, target) {
   const storedPlacement = createStoredPlacement(target.placement, itemData);
   foundry.utils.mergeObject(data, {
     system: {
-      equipped: false,
+      equipped: storedPlacement.mode === "equipment",
       container: { parentId: target.parentId },
       placement: {
         mode: storedPlacement.mode,
