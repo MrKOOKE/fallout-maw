@@ -105,6 +105,7 @@ const ACTOR_SHEET_REFERENCE_WIDTH = 2560;
 const ACTOR_SHEET_REFERENCE_HEIGHT = 1440;
 const ACTOR_SHEET_FALLBACK_VIEWPORT_WIDTH = 1280;
 const ACTOR_SHEET_FALLBACK_VIEWPORT_HEIGHT = 720;
+const ACTOR_SHEET_WORLD_SIDEBAR_PEEK_WIDTH = 420;
 
 export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
   #freeEdit = false;
@@ -132,6 +133,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #uiScale = 1;
   #viewportResizeHandler = null;
   #tabScrollPositions = new Map();
+  #worldSidebarPeek = false;
 
   static DEFAULT_OPTIONS = {
     classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-actor-sheet", "sheet", "actor"],
@@ -403,6 +405,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#activateTabScrollPersistence();
     this.#restoreActiveTabScroll();
     this.#syncFreeEditHeaderButton();
+    this.#syncWorldSidebarPeekToggle();
   }
 
   _onClose(options) {
@@ -591,6 +594,46 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!icon) return;
     icon.classList.toggle("fa-lock", !this.#freeEdit);
     icon.classList.toggle("fa-lock-open", this.#freeEdit);
+  }
+
+  #syncWorldSidebarPeekToggle() {
+    const root = this.element;
+    if (!root) return;
+
+    root.classList.toggle("fallout-maw-world-sidebar-peek", Boolean(this.#worldSidebarPeek && game.user?.isGM));
+    let button = root.querySelector(":scope > .fallout-maw-world-sidebar-peek-toggle");
+    if (!game.user?.isGM) {
+      button?.remove();
+      return;
+    }
+
+    if (!button) {
+      button = document.createElement("button");
+      button.type = "button";
+      button.className = "fallout-maw-world-sidebar-peek-toggle";
+      button.innerHTML = `<i class="fa-solid fa-chevron-left" inert></i>`;
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.#worldSidebarPeek = !this.#worldSidebarPeek;
+        this.setPosition();
+        this.#syncWorldSidebarPeekToggle();
+      });
+      root.append(button);
+    }
+
+    const label = this.#worldSidebarPeek
+      ? "Закрыть обзор боковой панели"
+      : "Открыть обзор боковой панели";
+    button.classList.toggle("active", this.#worldSidebarPeek);
+    button.setAttribute("aria-pressed", this.#worldSidebarPeek ? "true" : "false");
+    button.setAttribute("aria-label", label);
+    button.setAttribute("title", label);
+    button.dataset.tooltip = label;
+
+    const icon = button.querySelector("i");
+    icon?.classList.toggle("fa-chevron-left", !this.#worldSidebarPeek);
+    icon?.classList.toggle("fa-chevron-right", this.#worldSidebarPeek);
   }
 
   #onLimbControlKeyDown(event) {
@@ -2828,10 +2871,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         viewportHeight / ACTOR_SHEET_REFERENCE_HEIGHT
       ) || 1
     );
-    const width = ACTOR_SHEET_REFERENCE_WIDTH;
+    const peekWidth = this.#getWorldSidebarPeekWidth(viewportWidth);
+    const width = ACTOR_SHEET_REFERENCE_WIDTH - (peekWidth / scale);
     const height = ACTOR_SHEET_REFERENCE_HEIGHT;
     const resolvedPosition = {
-      left: Math.max(0, (viewportWidth - (width * scale)) / 2),
+      left: peekWidth > 0 ? 0 : Math.max(0, (viewportWidth - (width * scale)) / 2),
       top: Math.max(0, (viewportHeight - (height * scale)) / 2),
       width,
       height,
@@ -2839,6 +2883,17 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     };
 
     return resolvedPosition;
+  }
+
+  #getWorldSidebarPeekWidth(viewportWidth = 0) {
+    if (!game.user?.isGM || !this.#worldSidebarPeek) return 0;
+    const safeViewportWidth = Math.max(0, Number(viewportWidth) || 0);
+    if (safeViewportWidth < 900) return 0;
+    return Math.min(
+      ACTOR_SHEET_WORLD_SIDEBAR_PEEK_WIDTH,
+      Math.max(300, safeViewportWidth * 0.28),
+      Math.max(0, safeViewportWidth - 720)
+    );
   }
 
   #getViewportMetrics() {

@@ -8814,6 +8814,61 @@ label.fallout-maw-mitigation-cell {
   max-width: none;
 }
 
+.application.fallout-maw-actor-sheet .fallout-maw-world-sidebar-peek-toggle {
+  align-items: center;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.58), rgba(34, 36, 29, 0.7), rgba(8, 10, 7, 0.78)),
+    radial-gradient(circle at 50% 50%, rgba(220, 197, 110, 0.1), transparent 5rem),
+    repeating-linear-gradient(180deg, rgba(220, 197, 110, 0.12) 0 1px, transparent 1px 8px);
+  border: 0;
+  border-left: 1px solid rgba(164, 146, 85, 0.32);
+  border-right: 1px solid rgba(0, 0, 0, 0.82);
+  border-radius: 0;
+  box-shadow:
+    inset 1px 0 0 rgba(255, 239, 168, 0.08),
+    inset -2px 0 0 rgba(0, 0, 0, 0.78),
+    -5px 0 12px rgba(0, 0, 0, 0.24);
+  bottom: 0;
+  color: var(--fallout-maw-actor-text-strong);
+  cursor: pointer;
+  display: grid;
+  font-size: 1.25rem;
+  height: auto !important;
+  justify-content: center;
+  line-height: 1;
+  max-height: none;
+  min-height: 0 !important;
+  opacity: 0.78;
+  padding: 0;
+  place-items: center;
+  position: absolute;
+  right: 0;
+  top: 1.9rem;
+  transform: none !important;
+  width: 1.8rem;
+  z-index: 60;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-world-sidebar-peek-toggle:hover,
+.application.fallout-maw-actor-sheet .fallout-maw-world-sidebar-peek-toggle:focus-visible,
+.application.fallout-maw-actor-sheet .fallout-maw-world-sidebar-peek-toggle.active {
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.52), rgba(47, 50, 38, 0.84), rgba(9, 11, 8, 0.84)),
+    radial-gradient(circle at 50% 50%, rgba(247, 232, 166, 0.18), transparent 5rem),
+    repeating-linear-gradient(180deg, rgba(247, 232, 166, 0.17) 0 1px, transparent 1px 8px);
+  border-left-color: rgba(247, 232, 166, 0.54);
+  box-shadow:
+    inset 1px 0 0 rgba(255, 239, 168, 0.16),
+    inset -2px 0 0 rgba(0, 0, 0, 0.82),
+    -6px 0 16px rgba(220, 197, 110, 0.12);
+  opacity: 1;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-world-sidebar-peek-toggle i {
+  filter: drop-shadow(0 0 4px rgba(220, 197, 110, 0.45));
+  pointer-events: none;
+}
+
 .application.fallout-maw-actor-sheet .window-header {
   border-bottom: 1px solid var(--fallout-maw-actor-border);
   background:
@@ -9700,6 +9755,10 @@ label.fallout-maw-mitigation-cell {
   align-items: stretch;
   min-height: 0;
   overflow: hidden;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-world-sidebar-peek .fallout-maw-inventory-layout {
+  grid-template-columns: 38rem minmax(0, 1fr);
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-equipment-pane {
