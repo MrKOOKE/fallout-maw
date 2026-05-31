@@ -48,6 +48,42 @@
   width: 100%;
 }
 
+.fallout-maw-settings-baseline {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 0.75rem;
+  height: 100%;
+  min-height: 0;
+}
+
+.fallout-maw-settings-baseline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.fallout-maw-settings-baseline-actions button {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.4rem;
+  min-height: 2rem;
+}
+
+.fallout-maw-settings-baseline-meta {
+  color: rgba(232, 221, 184, 0.78);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  gap: 0.75rem;
+}
+
+.fallout-maw-settings-baseline-output {
+  font-family: var(--font-monospace);
+  min-height: 24rem;
+  resize: none;
+  white-space: pre;
+}
+
 .fallout-maw-sheet textarea,
 .fallout-maw-config-form textarea {
   width: 100%;

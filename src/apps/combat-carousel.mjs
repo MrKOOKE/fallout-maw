@@ -1,5 +1,6 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { COMBAT_CAROUSEL_ENABLED_SETTING } from "../settings/constants.mjs";
+import { getBaselineDefault } from "../settings/baseline.mjs";
 import { CombatDock } from "./combat-carousel/combat-dock.mjs";
 import { CombatantPortrait } from "./combat-carousel/combatant-portrait.mjs";
 import {
@@ -83,44 +84,44 @@ function registerCombatCarouselSettings() {
   registerSetting("attributes", {
     scope: "world",
     type: Array,
-    default: defaultAttributesConfig()[game.system.id] ?? [],
+    default: getBaselineDefault("attributes", defaultAttributesConfig()[game.system.id] ?? []),
     onChange: refreshCombatCarousel
   });
-  registerSetting("events", { scope: "world", type: Array, default: [] });
-  registerSetting("direction", { scope: "world", type: String, default: "rowDocked", onChange: restartCombatCarousel });
-  registerSetting("portraitSize", { scope: "client", type: String, default: "70px", onChange: refreshCombatCarousel });
-  registerSetting("lessButtons", { scope: "client", type: Boolean, default: false, onChange: rerenderCombatCarousel });
-  registerSetting("overflowStyle", { scope: "client", type: String, default: "autofit", onChange: refreshCombatCarousel });
-  registerSetting("carouselStyle", { scope: "world", type: Number, default: 0, onChange: refreshCombatCarousel });
-  registerSetting("alignment", { scope: "world", type: String, default: "center", onChange: refreshCombatCarousel });
-  registerSetting("floatingSize", { scope: "world", type: Number, default: 60, onChange: refreshCombatCarousel });
-  registerSetting("portraitAspect", { scope: "world", type: Number, default: 1.5, onChange: refreshCombatCarousel });
-  registerSetting("roundness", { scope: "world", type: String, default: "0%", onChange: refreshCombatCarousel });
-  registerSetting("attributeColor", { scope: "world", type: String, default: "#41AA7D", onChange: refreshCombatCarousel });
-  registerSetting("attributeColor2", { scope: "world", type: String, default: "#ffcd00", onChange: refreshCombatCarousel });
-  registerSetting("attributeColorPortrait", { scope: "world", type: String, default: "#e62121", onChange: refreshCombatCarousel });
-  registerSetting("barsPlacement", { scope: "world", type: String, default: "left", onChange: refreshCombatCarousel });
-  registerSetting("attributeVisibility", { scope: "world", type: String, default: "both", onChange: refreshCombatCarousel });
-  registerSetting("displayDescriptions", { scope: "world", type: String, default: "owner", onChange: refreshCombatCarousel });
-  registerSetting("hideDefeated", { scope: "world", type: Boolean, default: false, onChange: refreshCombatCarousel });
-  registerSetting("showDispositionColor", { scope: "world", type: Boolean, default: true, onChange: refreshCombatCarousel });
-  registerSetting("showInitiativeOnPortrait", { scope: "world", type: Boolean, default: true, onChange: refreshCombatCarousel });
-  registerSetting("portraitImage", { scope: "world", type: String, default: "actor", onChange: refreshCombatCarousel });
-  registerSetting("displayName", { scope: "world", type: String, default: "default", onChange: refreshCombatCarousel });
-  registerSetting("playerPlayerPermission", { scope: "world", type: Boolean, default: false, onChange: refreshCombatCarousel });
-  registerSetting("hideFirstRound", { scope: "world", type: Boolean, default: false, onChange: refreshCombatCarousel });
-  registerSetting("hideEnemyInitiative", { scope: "world", type: Boolean, default: false, onChange: refreshCombatCarousel });
+  registerSetting("events", { scope: "world", type: Array, default: getBaselineDefault("events", []) });
+  registerSetting("direction", { scope: "world", type: String, default: getBaselineDefault("direction", "rowDocked"), onChange: restartCombatCarousel });
+  registerSetting("portraitSize", { scope: "client", type: String, default: getBaselineDefault("portraitSize", "70px"), onChange: refreshCombatCarousel });
+  registerSetting("lessButtons", { scope: "client", type: Boolean, default: getBaselineDefault("lessButtons", false), onChange: rerenderCombatCarousel });
+  registerSetting("overflowStyle", { scope: "client", type: String, default: getBaselineDefault("overflowStyle", "autofit"), onChange: refreshCombatCarousel });
+  registerSetting("carouselStyle", { scope: "world", type: Number, default: getBaselineDefault("carouselStyle", 0), onChange: refreshCombatCarousel });
+  registerSetting("alignment", { scope: "world", type: String, default: getBaselineDefault("alignment", "center"), onChange: refreshCombatCarousel });
+  registerSetting("floatingSize", { scope: "world", type: Number, default: getBaselineDefault("floatingSize", 60), onChange: refreshCombatCarousel });
+  registerSetting("portraitAspect", { scope: "world", type: Number, default: getBaselineDefault("portraitAspect", 1.5), onChange: refreshCombatCarousel });
+  registerSetting("roundness", { scope: "world", type: String, default: getBaselineDefault("roundness", "0%"), onChange: refreshCombatCarousel });
+  registerSetting("attributeColor", { scope: "world", type: String, default: getBaselineDefault("attributeColor", "#41AA7D"), onChange: refreshCombatCarousel });
+  registerSetting("attributeColor2", { scope: "world", type: String, default: getBaselineDefault("attributeColor2", "#ffcd00"), onChange: refreshCombatCarousel });
+  registerSetting("attributeColorPortrait", { scope: "world", type: String, default: getBaselineDefault("attributeColorPortrait", "#e62121"), onChange: refreshCombatCarousel });
+  registerSetting("barsPlacement", { scope: "world", type: String, default: getBaselineDefault("barsPlacement", "left"), onChange: refreshCombatCarousel });
+  registerSetting("attributeVisibility", { scope: "world", type: String, default: getBaselineDefault("attributeVisibility", "both"), onChange: refreshCombatCarousel });
+  registerSetting("displayDescriptions", { scope: "world", type: String, default: getBaselineDefault("displayDescriptions", "owner"), onChange: refreshCombatCarousel });
+  registerSetting("hideDefeated", { scope: "world", type: Boolean, default: getBaselineDefault("hideDefeated", false), onChange: refreshCombatCarousel });
+  registerSetting("showDispositionColor", { scope: "world", type: Boolean, default: getBaselineDefault("showDispositionColor", true), onChange: refreshCombatCarousel });
+  registerSetting("showInitiativeOnPortrait", { scope: "world", type: Boolean, default: getBaselineDefault("showInitiativeOnPortrait", true), onChange: refreshCombatCarousel });
+  registerSetting("portraitImage", { scope: "world", type: String, default: getBaselineDefault("portraitImage", "actor"), onChange: refreshCombatCarousel });
+  registerSetting("displayName", { scope: "world", type: String, default: getBaselineDefault("displayName", "default"), onChange: refreshCombatCarousel });
+  registerSetting("playerPlayerPermission", { scope: "world", type: Boolean, default: getBaselineDefault("playerPlayerPermission", false), onChange: refreshCombatCarousel });
+  registerSetting("hideFirstRound", { scope: "world", type: Boolean, default: getBaselineDefault("hideFirstRound", false), onChange: refreshCombatCarousel });
+  registerSetting("hideEnemyInitiative", { scope: "world", type: Boolean, default: getBaselineDefault("hideEnemyInitiative", false), onChange: refreshCombatCarousel });
   registerSetting("portraitImageBorder", {
     scope: "world",
     type: String,
-    default: `systems/${MODULE_ID}/assets/combat-carousel/border.png`,
+    default: getBaselineDefault("portraitImageBorder", `systems/${MODULE_ID}/assets/combat-carousel/border.png`),
     onChange: refreshCombatCarousel
   });
-  registerSetting("portraitImageBackground", { scope: "world", type: String, default: "ui/denim075.png", onChange: refreshCombatCarousel });
-  registerSetting("showSystemIcons", { scope: "world", type: Number, default: 0, onChange: refreshCombatCarousel });
-  registerSetting("hideConflictingUIs", { scope: "world", type: Boolean, default: true, onChange: applyCombatCarouselSettings });
-  registerSetting("resource", { scope: "world", type: String, default: "", onChange: refreshCombatCarousel });
-  registerSetting("portraitResource", { scope: "world", type: String, default: "", onChange: refreshCombatCarousel });
+  registerSetting("portraitImageBackground", { scope: "world", type: String, default: getBaselineDefault("portraitImageBackground", "ui/denim075.png"), onChange: refreshCombatCarousel });
+  registerSetting("showSystemIcons", { scope: "world", type: Number, default: getBaselineDefault("showSystemIcons", 0), onChange: refreshCombatCarousel });
+  registerSetting("hideConflictingUIs", { scope: "world", type: Boolean, default: getBaselineDefault("hideConflictingUIs", true), onChange: applyCombatCarouselSettings });
+  registerSetting("resource", { scope: "world", type: String, default: getBaselineDefault("resource", ""), onChange: refreshCombatCarousel });
+  registerSetting("portraitResource", { scope: "world", type: String, default: getBaselineDefault("portraitResource", ""), onChange: refreshCombatCarousel });
 }
 
 function registerSetting(key, data) {

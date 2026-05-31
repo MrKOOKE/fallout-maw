@@ -71,6 +71,7 @@ export const TEMPLATES = Object.freeze({
     combat: `systems/${SYSTEM_ID}/templates/settings/combat-settings-config.hbs`,
     personalNameRandomizer: `systems/${SYSTEM_ID}/templates/settings/personal-name-randomizer-config.hbs`,
     traumaSettings: `systems/${SYSTEM_ID}/templates/settings/trauma-settings-config.hbs`,
-    traumaGroupSettings: `systems/${SYSTEM_ID}/templates/settings/trauma-group-settings-config.hbs`
+    traumaGroupSettings: `systems/${SYSTEM_ID}/templates/settings/trauma-group-settings-config.hbs`,
+    baseline: `systems/${SYSTEM_ID}/templates/settings/settings-baseline-config.hbs`
   })
 });

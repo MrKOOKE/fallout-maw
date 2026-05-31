@@ -4,6 +4,7 @@ import {
   PERSONAL_GENERATOR_PRESETS_SETTING,
   PERSONAL_NAME_RANDOMIZER_SETTING
 } from "../settings/constants.mjs";
+import { getBaselineDefault } from "../settings/baseline.mjs";
 import {
   canUseWeaponSlotForItem,
   getRaceEquipmentSlotsForItem,
@@ -87,7 +88,7 @@ export function registerPersonalGeneratorSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: { blocks: DEFAULT_NAME_BLOCKS.map(block => ({ ...block })) }
+    default: getBaselineDefault(PERSONAL_NAME_RANDOMIZER_SETTING, { blocks: DEFAULT_NAME_BLOCKS.map(block => ({ ...block })) })
   });
 
   game.settings.register(SYSTEM_ID, PERSONAL_GENERATOR_PRESETS_SETTING, {
@@ -95,7 +96,7 @@ export function registerPersonalGeneratorSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: {}
+    default: getBaselineDefault(PERSONAL_GENERATOR_PRESETS_SETTING, {})
   });
 }
 
@@ -326,6 +327,9 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     this.element.addEventListener("dragenter", event => this.#onDropzoneDragEnter(event));
     this.element.addEventListener("dragleave", event => this.#onDropzoneDragLeave(event));
     this.element.addEventListener("dragover", event => this.#onDropzoneDragOver(event));
+    this.element.addEventListener("pointerdown", event => this.#onEntryPointerDown(event), true);
+    this.element.addEventListener("pointerup", () => this.#restoreEntryDragging(), true);
+    this.element.addEventListener("pointercancel", () => this.#restoreEntryDragging(), true);
     if (this.#modifierKeyHandler) {
       document.removeEventListener("keydown", this.#modifierKeyHandler, true);
       document.removeEventListener("keyup", this.#modifierKeyHandler, true);
@@ -544,7 +548,12 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
 
   #onEntryDragStart(event) {
     const entry = event.target?.closest?.("[data-pg-entry]");
-    if (!entry || event.target.closest("button") || event.target.matches("input, select, textarea")) return;
+    if (!entry) return;
+    if (event.target.closest("button") || event.target.matches("input, select, textarea") || entry.draggable === false) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     const block = entry.closest("[data-pg-block]");
     const blockIndex = getRowIndex(block, "[data-pg-block]");
     const entryIndex = getRowIndex(entry, "[data-pg-entry]");
@@ -561,6 +570,20 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
 
   #onEntryDragEnd(event) {
     event.target?.closest?.("[data-pg-entry]")?.classList.remove("pg-chip-dragging");
+    this.#restoreEntryDragging();
+  }
+
+  #onEntryPointerDown(event) {
+    if (!event.target?.closest?.("button, input, select, textarea")) return;
+    const entry = event.target.closest("[data-pg-entry]");
+    if (!entry) return;
+    entry.draggable = false;
+  }
+
+  #restoreEntryDragging() {
+    for (const entry of this.element?.querySelectorAll("[data-pg-entry]") ?? []) {
+      entry.draggable = true;
+    }
   }
 
   #getInternalEntryDropData(event) {
