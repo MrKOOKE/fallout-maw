@@ -3898,8 +3898,6 @@ function mergeWeaponDataWithDamageSource(data = {}, source = {}) {
     damageTypeKey: source.damageTypeKey,
     damageTypes: source.damageTypes,
     attackAnimationKey: String(source.attackAnimationKey ?? ""),
-    attackSoundPath: String(source.attackSoundPath ?? ""),
-    attackAnimationDelayMs: Math.max(0, toInteger(source.attackAnimationDelayMs)),
     accuracyBonus: toInteger(data.accuracyBonus) + toInteger(source.accuracyBonus),
     criticalChanceModifier: toInteger(data.criticalChanceModifier) + toInteger(source.criticalChanceModifier),
     criticalDamagePercent: Math.max(0, toInteger(data.criticalDamagePercent) + toInteger(source.criticalDamagePercent)),
@@ -3924,8 +3922,7 @@ function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
     regionDurationSeconds: Math.max(0, toInteger(sourceVolley?.regionDurationSeconds)),
     regionDelaySeconds: Math.max(0, toInteger(sourceVolley?.regionDelaySeconds)),
     regionRadiusDeltaMeters: Number(sourceVolley?.regionRadiusDeltaMeters) || 0,
-    explosionAnimationKey: String(sourceVolley?.explosionAnimationKey ?? ""),
-    explosionSoundPath: String(sourceVolley?.explosionSoundPath ?? "")
+    explosionAnimationKey: String(sourceVolley?.explosionAnimationKey ?? "")
   };
 }
 

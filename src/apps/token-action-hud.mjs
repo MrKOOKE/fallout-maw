@@ -2146,17 +2146,11 @@ function updateReloadDialogState(dialog, actor, weaponId, weaponFunctionId) {
   if (label) label.textContent = state.sourceLabel;
   updateReloadDialogMagazineReadout(dialog, actor, weaponId, weaponFunctionId);
 
-  const select = dialog.element.querySelector("[data-reload-source-select]");
-  if (!select) return;
-  const currentValue = String(select.value ?? "").trim();
-  const selectedAvailable = state.availableSources.some(entry => entry.uuid === currentValue);
-  select.innerHTML = state.availableSources.map(entry => `
-    <option value="${escapeAttribute(entry.uuid)}" ${entry.selected || (!selectedAvailable && entry.uuid === state.sourceItem?.uuid) ? "selected" : ""}>
-      ${escapeHTML(entry.name)} (${entry.quantity})
-    </option>
-  `).join("");
-  select.disabled = !state.availableSources.length;
-  if (selectedAvailable) select.value = currentValue;
+  const activeInput = dialog.element.querySelector("[data-reload-active-source]");
+  if (activeInput) activeInput.value = state.sourceItem?.uuid ?? "";
+
+  const sourceList = dialog.element.querySelector("[data-reload-source-list]");
+  if (sourceList) sourceList.innerHTML = renderReloadSourceCards(state);
 }
 
 function buildWeaponReloadDialogState(actor, weaponData = {}) {
@@ -2168,16 +2162,30 @@ function buildWeaponReloadDialogState(actor, weaponData = {}) {
     : game.i18n.localize("FALLOUTMAW.Item.WeaponMagazineSourceEmpty");
   const current = Math.max(0, toInteger(weaponData.magazine?.value));
   const max = Math.max(0, toInteger(weaponData.magazine?.max));
-  const availableSources = sourceItems
+  const sourceEntries = sourceItems
     .map(item => ({
       uuid: item.uuid,
       name: String(getDamageSourceFunction(item)?.name ?? "").trim() || item.name,
+      img: normalizeImagePath(item.img, FALLBACK_ICON),
       quantity: getActorMagazineSourceQuantity(actor, item),
       selected: item.uuid === sourceItem?.uuid
-    }))
-    .filter(entry => entry.quantity > 0);
+    }));
 
-  return { sourceItems, sourceItem, sourceLabel, current, max, availableSources };
+  return { sourceItems, sourceItem, sourceLabel, current, max, sourceEntries };
+}
+
+function renderReloadSourceCards(state = {}) {
+  return (state.sourceEntries ?? []).map(entry => `
+    <button type="button"
+      class="fallout-maw-reload-source-card ${entry.selected ? "active" : ""}"
+      data-reload-source-card
+      data-reload-source-uuid="${escapeAttribute(entry.uuid)}"
+      title="${escapeAttribute(entry.name)}">
+      <img src="${escapeAttribute(entry.img)}" alt="">
+      <span>${escapeHTML(entry.name)}</span>
+      <strong>${escapeHTML(entry.quantity)}</strong>
+    </button>
+  `).join("");
 }
 
 async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunctionId = "", application = null } = {}) {
@@ -2223,6 +2231,47 @@ async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunct
     await application?.render({ force: true });
   };
 
+  const switchReloadSource = async (dialog, sourceUuid) => {
+    const nextSourceUuid = String(sourceUuid ?? "").trim();
+    if (!nextSourceUuid) return;
+    const freshWeapon = actor.items.get(weaponId);
+    if (!freshWeapon) return;
+    const weaponData = getWeaponFunctionById(freshWeapon, weaponFunctionId) ?? {};
+    const loadedUuid = String(weaponData?.magazine?.sourceItemUuid ?? "").trim();
+    const configuredSources = getWeaponMagazineSourceItems(weaponData);
+    const loadedSource = (loadedUuid ? configuredSources.find(item => item.uuid === loadedUuid) : null)
+      ?? getActiveWeaponMagazineSourceItem(weaponData, configuredSources);
+    const currentSourceUuid = String(loadedSource?.uuid ?? loadedUuid).trim();
+    const rounds = Math.max(0, toInteger(weaponData?.magazine?.value));
+    try {
+      if (rounds > 0 && currentSourceUuid && nextSourceUuid !== currentSourceUuid) {
+        if (!hasRequiredWeaponReloadActionPoints(actor, freshWeapon, weaponFunctionId)) return;
+        await requestWeaponReloadOperation({
+          actor,
+          weapon: freshWeapon,
+          weaponFunctionId,
+          action: "extract",
+          sourceUuid: currentSourceUuid
+        });
+        await spendWeaponReloadActionPoints(actor, freshWeapon, weaponFunctionId);
+      }
+      const currentWeapon = actor.items.get(weaponId);
+      if (!currentWeapon) return;
+      await requestWeaponReloadOperation({
+        actor,
+        weapon: currentWeapon,
+        weaponFunctionId,
+        action: "select",
+        sourceUuid: nextSourceUuid
+      });
+    } catch (error) {
+      ui.notifications.warn(error.message);
+      return;
+    }
+    updateReloadDialogState(dialog, actor, weaponId, weaponFunctionId);
+    await application?.render({ force: true });
+  };
+
   const dialog = new DialogV2({
     window: {
       title: game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload")
@@ -2230,18 +2279,17 @@ async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunct
     content: `
       <form class="fallout-maw-reload-dialog-form">
       <div class="fallout-maw-reload-dialog">
-        <p><strong data-reload-source-label>${escapeHTML(state.sourceLabel)}</strong></p>
-        <p data-reload-magazine-readout>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"))}: ${state.current} / ${state.max}</p>
-        <label>
-          <span>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.WeaponMagazineSource"))}</span>
-          <select name="sourceUuid" data-reload-source-select ${state.availableSources.length ? "" : "disabled"}>
-            ${state.availableSources.map(entry => `
-              <option value="${escapeAttribute(entry.uuid)}" ${entry.selected ? "selected" : ""}>
-                ${escapeHTML(entry.name)} (${entry.quantity})
-              </option>
-            `).join("")}
-          </select>
-        </label>
+        <div class="fallout-maw-reload-main">
+          <p><strong data-reload-source-label>${escapeHTML(state.sourceLabel)}</strong></p>
+          <p data-reload-magazine-readout>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"))}: ${state.current} / ${state.max}</p>
+          <input type="hidden" name="sourceUuid" value="${escapeAttribute(sourceItem.uuid)}" data-reload-active-source>
+          <div class="fallout-maw-reload-source-pane">
+            <span>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.WeaponMagazineSource"))}</span>
+            <div class="fallout-maw-reload-source-list" data-reload-source-list>
+              ${renderReloadSourceCards(state)}
+            </div>
+          </div>
+        </div>
       </div>
       </form>
     `,
@@ -2268,7 +2316,7 @@ async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunct
       },
       {
         action: "cancel",
-        label: game.i18n.localize("FALLOUTMAW.Common.Cancel"),
+        label: game.i18n.localize("FALLOUTMAW.Item.WeaponReloadFinish"),
         icon: "fa-solid fa-xmark",
         type: "button",
         callback: (event, button, dlg) => {
@@ -2277,28 +2325,23 @@ async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunct
       }
     ],
     position: {
-      width: 360
+      width: 520
     }
   });
 
   dialog.addEventListener("render", () => {
-    const select = dialog.element?.querySelector?.("[data-reload-source-select]");
-    if (!select || select.dataset.reloadAmmoWatcher) return;
-    select.dataset.reloadAmmoWatcher = "1";
-    select.addEventListener("change", async () => {
-      const freshWeapon = actor.items.get(weaponId);
-      if (!freshWeapon) return;
-      const wd = getWeaponFunctionById(freshWeapon, weaponFunctionId) ?? {};
-      const newUuid = String(select.value ?? "").trim();
-      const loadedUuid = String(wd?.magazine?.sourceItemUuid ?? "").trim();
-      const rounds = Math.max(0, toInteger(wd?.magazine?.value));
-      if (!rounds) return;
-      if (newUuid === loadedUuid) return;
-      const configuredSources = getWeaponMagazineSourceItems(wd);
-      const loadedSource = configuredSources.find(item => item.uuid === loadedUuid);
-      if (!loadedSource) return;
-      await runReloadStep(dialog, "extract", loadedSource.uuid);
-    });
+    const sourceList = dialog.element?.querySelector?.("[data-reload-source-list]");
+    if (!sourceList || sourceList.dataset.reloadAmmoWatcher) return;
+    sourceList.dataset.reloadAmmoWatcher = "1";
+    const selectSource = async event => {
+      const card = event.target?.closest?.("[data-reload-source-card]");
+      if (!card) return;
+      event.preventDefault();
+      event.stopPropagation();
+      await switchReloadSource(dialog, card.dataset.reloadSourceUuid);
+    };
+    sourceList.addEventListener("click", selectSource);
+    sourceList.addEventListener("contextmenu", selectSource);
   }, { once: true });
 
   bindReloadDialogLiveUpdates(dialog, actor, weaponId, weaponFunctionId);
@@ -2324,8 +2367,13 @@ function bindReloadDialogLiveUpdates(dialog, actor, weaponId, weaponFunctionId) 
     }, 25);
   };
   const actorMatches = candidate => candidate?.uuid === actor?.uuid;
-  const itemMatches = item => item?.parent?.uuid === actor?.uuid
-    || (item?.id === weaponId && item?.parent?.uuid === actor?.uuid);
+  const itemMatches = item => {
+    if (!item) return false;
+    if (item.parent?.uuid === actor?.uuid) return true;
+    const weapon = actor?.items?.get(weaponId);
+    const weaponData = weapon ? getWeaponFunctionById(weapon, weaponFunctionId) : null;
+    return getWeaponMagazineSourceUuids(weaponData).includes(item.uuid);
+  };
 
   const hooks = [
     ["updateActor", Hooks.on("updateActor", updatedActor => {
@@ -2374,6 +2422,17 @@ async function performWeaponReloadOperation({ actorUuid = "", weaponId = "", wea
   if (!hasWeaponResourceCostData(weaponData, "magazine")) return undefined;
   const configuredSources = getWeaponMagazineSourceItems(weaponData);
   const loadedUuid = String(weaponData?.magazine?.sourceItemUuid ?? "").trim();
+
+  if (String(action) === "select") {
+    const selectedSource = configuredSources.find(item => item.uuid === sourceUuid);
+    if (!selectedSource || selectedSource.actor || !hasItemFunction(selectedSource, ITEM_FUNCTIONS.damageSource)) {
+      throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadNoSource"));
+    }
+    return actor.updateEmbeddedDocuments("Item", [{
+      _id: weapon.id,
+      [`${getWeaponFunctionPath(weapon, weaponFunctionId)}.magazine.sourceItemUuid`]: selectedSource.uuid
+    }]);
+  }
 
   if (String(action) === "extract") {
     const extractSource = (loadedUuid ? configuredSources.find(item => item.uuid === loadedUuid) : null)
@@ -2509,8 +2568,6 @@ function areDamageSourcesEqual(left = {}, right = {}) {
   if (toInteger(left?.pellets) !== toInteger(right?.pellets)) return false;
   if (String(left?.damageTypeKey ?? "") !== String(right?.damageTypeKey ?? "")) return false;
   if (String(left?.attackAnimationKey ?? "") !== String(right?.attackAnimationKey ?? "")) return false;
-  if (String(left?.attackSoundPath ?? "") !== String(right?.attackSoundPath ?? "")) return false;
-  if (toInteger(left?.attackAnimationDelayMs) !== toInteger(right?.attackAnimationDelayMs)) return false;
   if (toInteger(left?.accuracyBonus) !== toInteger(right?.accuracyBonus)) return false;
   if (toInteger(left?.criticalChanceModifier) !== toInteger(right?.criticalChanceModifier)) return false;
   if (toInteger(left?.criticalDamagePercent) !== toInteger(right?.criticalDamagePercent)) return false;
@@ -2543,8 +2600,7 @@ function normalizeDamageSourceVolleySignature(volley = {}) {
     toInteger(volley?.regionDurationSeconds),
     toInteger(volley?.regionDelaySeconds),
     Number(volley?.regionRadiusDeltaMeters || 0),
-    String(volley?.explosionAnimationKey ?? ""),
-    String(volley?.explosionSoundPath ?? "")
+    String(volley?.explosionAnimationKey ?? "")
   ].join(";");
 }
 

@@ -257,6 +257,7 @@
       "WeaponMagazineSourceClear": "Clear Source",
       "WeaponReloadInsert": "Insert",
       "WeaponReloadExtract": "Extract",
+      "WeaponReloadFinish": "Finish",
       "WeaponReloadNoSource": "No magazine source assigned.",
       "WeaponReloadSourceMissing": "Magazine source not found.",
       "WeaponReloadSourceWorldOnly": "Magazine source must be a world item with the Damage Source function.",

@@ -256,6 +256,7 @@
       "WeaponMagazineSourceClear": "Убрать источник",
       "WeaponReloadInsert": "Вставить",
       "WeaponReloadExtract": "Извлечь",
+      "WeaponReloadFinish": "Завершить",
       "WeaponReloadNoSource": "Источник магазина не назначен.",
       "WeaponReloadSourceMissing": "Источник магазина не найден.",
       "WeaponReloadSourceWorldOnly": "Источник магазина должен быть мировым предметом с функцией Источник урона.",

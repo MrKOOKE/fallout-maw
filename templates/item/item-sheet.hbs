@@ -957,13 +957,6 @@
         <span>{{localize "FALLOUTMAW.Item.WeaponExplosionAnimation"}}</span>
         <input type="text" name="system.functions.damageSource.volley.explosionAnimationKey" value="{{system.functions.damageSource.volley.explosionAnimationKey}}">
       </label>
-      <label>
-        <span>{{localize "FALLOUTMAW.Item.WeaponExplosionSound"}}</span>
-        <div class="fallout-maw-image-picker-field">
-          <input type="text" name="system.functions.damageSource.volley.explosionSoundPath" value="{{system.functions.damageSource.volley.explosionSoundPath}}" data-damage-source-explosion-sound-input>
-          <button type="button" data-browse-damage-source-explosion-sound title="{{localize 'FILES.Browse'}}"><i class="fa-solid fa-music"></i></button>
-        </div>
-      </label>
     </div>
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.WeaponVolleyRegion"}}</h3>
@@ -1036,17 +1029,6 @@
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponAttackAnimation"}}</span>
         <input type="text" name="system.functions.damageSource.attackAnimationKey" value="{{system.functions.damageSource.attackAnimationKey}}">
-      </label>
-      <label>
-        <span>{{localize "FALLOUTMAW.Item.WeaponAttackSound"}}</span>
-        <div class="fallout-maw-image-picker-field">
-          <input type="text" name="system.functions.damageSource.attackSoundPath" value="{{system.functions.damageSource.attackSoundPath}}" data-damage-source-attack-sound-input>
-          <button type="button" data-browse-damage-source-attack-sound title="{{localize 'FILES.Browse'}}"><i class="fa-solid fa-music"></i></button>
-        </div>
-      </label>
-      <label>
-        <span>{{localize "FALLOUTMAW.Item.WeaponAttackDelay"}}</span>
-        <input type="number" name="system.functions.damageSource.attackAnimationDelayMs" value="{{system.functions.damageSource.attackAnimationDelayMs}}" min="0" step="1">
       </label>
     </div>
     <input type="hidden" name="system.functions.damageSource.damageTypeKey" value="{{system.functions.damageSource.damageTypeKey}}">
@@ -1599,8 +1581,8 @@
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponAttackSound"}}</span>
         <div class="fallout-maw-image-picker-field">
-          <input type="text" name="{{path}}.attackSoundPath" value="{{weaponData.attackSoundPath}}" data-weapon-attack-sound-input {{#if usesDamageSource}}disabled{{/if}}>
-          <button type="button" data-browse-weapon-attack-sound title="{{localize 'FILES.Browse'}}" {{#if usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-music"></i></button>
+          <input type="text" name="{{path}}.attackSoundPath" value="{{weaponData.attackSoundPath}}" data-weapon-attack-sound-input>
+          <button type="button" data-browse-weapon-attack-sound title="{{localize 'FILES.Browse'}}"><i class="fa-solid fa-music"></i></button>
         </div>
       </label>
       {{#if hasVolleyAction}}
@@ -1611,14 +1593,14 @@
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponExplosionSound"}}</span>
         <div class="fallout-maw-image-picker-field">
-          <input type="text" name="{{path}}.volley.explosionSoundPath" value="{{weaponData.volley.explosionSoundPath}}" data-weapon-explosion-sound-input {{#if usesDamageSource}}disabled{{/if}}>
-          <button type="button" data-browse-weapon-explosion-sound title="{{localize 'FILES.Browse'}}" {{#if usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-music"></i></button>
+          <input type="text" name="{{path}}.volley.explosionSoundPath" value="{{weaponData.volley.explosionSoundPath}}" data-weapon-explosion-sound-input>
+          <button type="button" data-browse-weapon-explosion-sound title="{{localize 'FILES.Browse'}}"><i class="fa-solid fa-music"></i></button>
         </div>
       </label>
       {{/if}}
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponAttackDelay"}}</span>
-        <input type="number" name="{{path}}.attackAnimationDelayMs" value="{{weaponData.attackAnimationDelayMs}}" min="0" step="1" {{#if usesDamageSource}}disabled{{/if}}>
+        <input type="number" name="{{path}}.attackAnimationDelayMs" value="{{weaponData.attackAnimationDelayMs}}" min="0" step="1">
       </label>
     </div>
   </section>

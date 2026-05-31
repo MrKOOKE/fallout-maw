@@ -63,6 +63,7 @@ const CRAFT_MODE_CREATE = "craft";
 const CRAFT_MODE_DISASSEMBLY = "disassembly";
 const CRAFT_LEGACY_BEND_PIXEL_THRESHOLD = 80;
 let itemSheetSourceSyncHooksRegistered = false;
+let activeWeaponSoundPickerPreview = null;
 const activeCraftModes = new WeakMap();
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
@@ -372,12 +373,6 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-damage-source-volley-region-damage]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteDamageSourceVolleyRegionDamage(event));
-    });
-    this.element?.querySelectorAll("[data-browse-damage-source-attack-sound]").forEach(button => {
-      button.addEventListener("click", event => this.#onBrowseDamageSourceAttackSound(event));
-    });
-    this.element?.querySelectorAll("[data-browse-damage-source-explosion-sound]").forEach(button => {
-      button.addEventListener("click", event => this.#onBrowseDamageSourceExplosionSound(event));
     });
     this.element?.querySelectorAll("[data-weapon-damage-mode]").forEach(select => {
       select.addEventListener("change", event => this.#onWeaponDamageModeChange(event));
@@ -2664,6 +2659,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         input.dispatchEvent(new Event("change", { bubbles: true }));
       }
     });
+    activateWeaponSoundPickerPreview(picker);
     await picker.browse(undefined, { render: false });
     return picker.render({ force: true });
   }
@@ -2681,38 +2677,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         input.dispatchEvent(new Event("change", { bubbles: true }));
       }
     });
-    await picker.browse(undefined, { render: false });
-    return picker.render({ force: true });
-  }
-
-  async #onBrowseDamageSourceAttackSound(event) {
-    event.preventDefault();
-    const input = this.element?.querySelector("[data-damage-source-attack-sound-input]");
-    if (!input) return undefined;
-    const picker = new foundry.applications.apps.FilePicker.implementation({
-      type: "audio",
-      current: input.value ?? "",
-      callback: path => {
-        input.value = path;
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-    });
-    await picker.browse(undefined, { render: false });
-    return picker.render({ force: true });
-  }
-
-  async #onBrowseDamageSourceExplosionSound(event) {
-    event.preventDefault();
-    const input = this.element?.querySelector("[data-damage-source-explosion-sound-input]");
-    if (!input) return undefined;
-    const picker = new foundry.applications.apps.FilePicker.implementation({
-      type: "audio",
-      current: input.value ?? "",
-      callback: path => {
-        input.value = path;
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-    });
+    activateWeaponSoundPickerPreview(picker);
     await picker.browse(undefined, { render: false });
     return picker.render({ force: true });
   }
@@ -2897,6 +2862,46 @@ export function registerItemSheetSourceSyncHooks() {
     if (!item || item.actor || !hasItemFunction(item, ITEM_FUNCTIONS.damageSource)) return;
     refreshWeaponSheetsForDamageSource(item.uuid);
   });
+}
+
+function activateWeaponSoundPickerPreview(picker) {
+  const bindPreview = () => {
+    const files = picker.element?.querySelector?.("[data-files]");
+    if (!files || files.dataset.falloutMawWeaponSoundPreview) return;
+    files.dataset.falloutMawWeaponSoundPreview = "1";
+    files.addEventListener("click", event => {
+      const row = event.target?.closest?.("[data-file][data-path]");
+      if (!row || !files.contains(row)) return;
+      previewWeaponSoundPickerPath(row.dataset.path);
+    });
+  };
+  picker.addEventListener?.("render", bindPreview);
+  picker.addEventListener?.("close", stopActiveWeaponSoundPickerPreview, { once: true });
+}
+
+async function previewWeaponSoundPickerPath(path = "") {
+  const src = String(path ?? "").trim();
+  if (!src) return;
+  await stopActiveWeaponSoundPickerPreview();
+  try {
+    activeWeaponSoundPickerPreview = await game.audio?.play?.(src, {
+      context: game.audio?.interface,
+      loop: false,
+      volume: 0.8
+    }) ?? null;
+  } catch (error) {
+    console.warn(`Fallout MaW | Failed to preview weapon sound "${src}".`, error);
+  }
+}
+
+async function stopActiveWeaponSoundPickerPreview() {
+  const sound = activeWeaponSoundPickerPreview;
+  activeWeaponSoundPickerPreview = null;
+  try {
+    await sound?.stop?.();
+  } catch (error) {
+    console.warn("Fallout MaW | Failed to stop weapon sound preview.", error);
+  }
 }
 
 function getHealingSkillLabel(item) {
@@ -3516,8 +3521,6 @@ function getWeaponDisplayData(weaponData = {}) {
     damageTypeKey: source.damageTypeKey,
     damageTypes: source.damageTypes,
     attackAnimationKey: String(source.attackAnimationKey ?? ""),
-    attackSoundPath: String(source.attackSoundPath ?? ""),
-    attackAnimationDelayMs: Math.max(0, toInteger(source.attackAnimationDelayMs)),
     volley: mergeDamageSourceVolleyData(weaponData.volley, source.volley)
   };
 }
@@ -3533,8 +3536,7 @@ function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
     regionDurationSeconds: Math.max(0, toInteger(sourceVolley?.regionDurationSeconds)),
     regionDelaySeconds: Math.max(0, toInteger(sourceVolley?.regionDelaySeconds)),
     regionRadiusDeltaMeters: Number(sourceVolley?.regionRadiusDeltaMeters) || 0,
-    explosionAnimationKey: String(sourceVolley?.explosionAnimationKey ?? ""),
-    explosionSoundPath: String(sourceVolley?.explosionSoundPath ?? "")
+    explosionAnimationKey: String(sourceVolley?.explosionAnimationKey ?? "")
   };
 }
 
