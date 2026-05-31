@@ -23,6 +23,7 @@ import {
 import { getItemActorLoadWeight, getItemContainerParentId } from "../utils/inventory-containers.mjs";
 import { handleActorDamageUpdate, prepareActorDamageUpdate, requestDamageApplication } from "../combat/damage-hub.mjs";
 import { migrateActorData } from "../migrations/documents.mjs";
+import { prepareEffectChangeForApplication } from "../utils/effect-change-values.mjs";
 
 export class FalloutMaWActor extends Actor {
   static migrateData(source) {
@@ -152,7 +153,7 @@ export class FalloutMaWActor extends Actor {
     const overrides = {};
     const replacementData = this.getRollData();
     for (const change of changes) {
-      const result = ActiveEffect.applyChange(this, change, { replacementData });
+      const result = ActiveEffect.applyChange(this, prepareEffectChangeForApplication(this, change), { replacementData });
       if (foundry.utils.isPlainObject(result)) Object.assign(overrides, result);
     }
 

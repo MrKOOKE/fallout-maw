@@ -21,6 +21,8 @@ import { buildAbilityAcquisitionChangeKeyTokens } from "../utils/ability-acquisi
 import { getEquipmentSlotSelectionKey } from "../utils/equipment-slots.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { activateEffectKeyAutocomplete } from "./effect-key-autocomplete.mjs";
+import { activateDescriptionFormulaAutocomplete } from "./description-formula-autocomplete.mjs";
+import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
@@ -140,6 +142,11 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       select.addEventListener("change", event => this.#onAcquisitionRequirementTypeChange(event));
     });
     activateAbilityFunctionKeyAutocomplete(this.element);
+    activateFormulaAutocomplete(this.element, {
+      characteristics: getCharacteristicSettings(),
+      skills: getSkillSettings()
+    });
+    activateDescriptionFormulaAutocomplete(this.element);
   }
 
   async _processFormData(_event, _form, _formData) {

@@ -173,7 +173,7 @@
             <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
             {{/each}}
           </select>
-          <input type="text" data-field="changeValue" value="{{value}}">
+          <input type="text" data-field="changeValue" value="{{value}}" data-formula-autocomplete="all">
           <input type="number" data-field="changePriority" value="{{priority}}" step="1">
           <div class="fallout-maw-inline-controls">
             <button type="button" class="fallout-maw-icon-button" data-action="deleteFunctionChange" title="Удалить строку"><i class="fa-solid fa-trash"></i></button>
@@ -332,7 +332,7 @@
               <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
               {{/each}}
             </select>
-            <input type="text" data-field="changeValue" value="{{value}}">
+            <input type="text" data-field="changeValue" value="{{value}}" data-formula-autocomplete="all">
             <input type="number" data-field="changePriority" value="{{priority}}" step="1">
             <button type="button" class="fallout-maw-icon-button" data-action="deleteFunctionPenalty" title="Удалить строку"><i class="fa-solid fa-trash"></i></button>
           </div>

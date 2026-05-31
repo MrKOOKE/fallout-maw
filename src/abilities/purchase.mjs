@@ -9,6 +9,7 @@ import {
   prepareAbilityItemData
 } from "../settings/abilities.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
+import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { getAbilityAcquisitionChanges } from "./evaluation.mjs";
@@ -266,7 +267,7 @@ async function applyAbilityAcquisitionChanges(actor, item) {
     if (!key.startsWith("system.")) continue;
 
     const current = Number(foundry.utils.getProperty(updates, key) ?? foundry.utils.getProperty(actor, key)) || 0;
-    const value = Number(change?.value) || 0;
+    const value = evaluateEffectChangeNumber(actor, change?.value, { fallback: 0 });
     let next = value;
     if (change.type === "add") next = current + value;
     else if (change.type === "multiply") next = current * value;

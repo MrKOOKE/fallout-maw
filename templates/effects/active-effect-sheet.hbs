@@ -95,7 +95,7 @@
             {{/each}}
           </select>
           <input type="hidden" name="{{paths.phase}}" value="{{phase}}">
-          <input type="text" name="{{paths.value}}" value="{{value}}">
+          <input type="text" name="{{paths.value}}" value="{{value}}" data-formula-autocomplete="all">
           <input type="number" name="{{paths.priority}}" value="{{priority}}" placeholder="{{priorityPlaceholder}}" step="1">
           <button type="button" data-action="deleteChange" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
         </div>

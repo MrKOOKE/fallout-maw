@@ -9,6 +9,7 @@ import {
 } from "../settings/abilities.mjs";
 import { getEquipmentSlotSelectionKey, getSelectedEquipmentSlotKeys } from "../utils/equipment-slots.mjs";
 import { isAbilityAcquisitionChangeKey } from "../utils/ability-acquisition-change-keys.mjs";
+import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { hasAbilityFunctionCooldown } from "./runtime-state.mjs";
 
@@ -34,7 +35,7 @@ export function getAbilitySkillAdvancementBaseBonuses(actor, skillSettings = [])
       const key = String(change?.key ?? "");
       if (!key.startsWith("system.skillAdvancementBase.")) continue;
       const target = key.slice("system.skillAdvancementBase.".length);
-      const value = Number(change.value) || 0;
+      const value = evaluateEffectChangeNumber(actor, change.value, { fallback: 0 });
       if (target === "all") {
         for (const skill of skillSettings ?? []) bonuses[skill.key] = (Number(bonuses[skill.key]) || 0) + value;
       } else if (Object.hasOwn(bonuses, target)) {

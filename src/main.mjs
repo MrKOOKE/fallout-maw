@@ -32,6 +32,7 @@ import { canStackItems, registerSearchInventorySocket } from "./apps/search-inve
 import { registerFirstAidSocket } from "./items/first-aid.mjs";
 import { registerAbilityEffectHooks, syncLoadedActorAbilityEffects } from "./abilities/effects.mjs";
 import { registerAbilityCooldownHooks } from "./abilities/cooldowns.mjs";
+import { registerDescriptionFormulaEnrichment } from "./formulas/description-formulas.mjs";
 import { registerNeedThresholdHooks } from "./needs/need-thresholds.mjs";
 import { registerRegenerationHooks } from "./needs/regeneration.mjs";
 import { registerStealthHooks } from "./stealth/index.mjs";
@@ -68,6 +69,7 @@ Hooks.once("init", () => {
   CONFIG.ux.DragDrop = FalloutMaWDragDrop;
 
   registerSystemSettings();
+  registerDescriptionFormulaEnrichment();
   registerDataModels();
   registerSystemSheets();
   registerTrackableAttributes();

@@ -8,6 +8,7 @@ import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageSourceFunction, get
 import { getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings } from "../settings/accessors.mjs";
 import { ACTION_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
 import { getRequiredWeaponSlotsForItem, getWeaponSlotRequirement, isContainerWeaponSetKey } from "../utils/equipment-slots.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
@@ -3280,7 +3281,7 @@ function collectActionPenetrationModifier(actor, actionKey = "") {
     if (effect.disabled) continue;
     for (const change of effect.system?.changes ?? effect.changes ?? []) {
       if (String(change?.key ?? "").trim() !== key) continue;
-      const value = Number(change.value);
+      const value = evaluateEffectChangeNumber(actor, change.value);
       if (!Number.isFinite(value)) continue;
       if (change.type === "override") modifier.override = value;
       else if (change.type === "multiply") modifier.multiplier *= value;

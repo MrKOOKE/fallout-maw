@@ -1,5 +1,8 @@
 import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.mjs";
+import { activateDescriptionFormulaAutocomplete } from "../apps/description-formula-autocomplete.mjs";
+import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
 import { TEMPLATES } from "../constants.mjs";
+import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 
 const { ActiveEffectConfig } = foundry.applications.sheets;
@@ -61,6 +64,11 @@ export class FalloutMaWActiveEffectSheet extends ActiveEffectConfig {
   async _onRender(context, options) {
     await super._onRender(context, options);
     activateEffectKeyAutocomplete(this.element, buildEffectKeyTokens());
+    activateFormulaAutocomplete(this.element, {
+      characteristics: getCharacteristicSettings(),
+      skills: getSkillSettings()
+    });
+    activateDescriptionFormulaAutocomplete(this.element);
   }
 
   static async #onAddChange() {

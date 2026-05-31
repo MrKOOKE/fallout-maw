@@ -27,13 +27,16 @@ import { escapeHtml } from "../utils/dom.mjs";
 import { FalloutMaWFormApplicationV2 } from "../apps/base-form-application-v2.mjs";
 
 const { DialogV2 } = foundry.applications.api;
+const TextEditor = foundry.applications.ux.TextEditor.implementation;
 const ADVANCEMENT_COMMIT_FLAG = "advancementCommit";
 
 export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #activeEffectHooks = [];
   #actorUpdateHookId = null;
   #abilityTooltipAnchor = null;
+  #abilityTooltipDocumentAbortController = null;
   #abilityTooltipElement = null;
+  #abilityTooltipPinned = false;
   #abilityTooltipTimer = null;
   #draft = null;
   #experienceSyncTimer = null;
@@ -122,7 +125,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       ? 100
       : Math.max(0, Math.min(100, ((currentExperience - currentThreshold) / experienceRange) * 100));
     const canLevelUp = (this.#draft.level < maxLevel) && (currentExperience >= nextThreshold);
-    const abilityCategories = this.#prepareAbilityCategories(remaining, skillSettings);
+    const abilityCategories = await this.#prepareAbilityCategories(remaining, skillSettings);
     const selectedAbility = this.#prepareSelectedAbility(abilityCategories);
     const pointDisplays = this.#preparePointDisplays(remaining);
 
@@ -207,6 +210,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#isClosing = true;
     window.clearTimeout(this.#experienceSyncTimer);
     this.#clearAbilityDescriptionTooltip();
+    this.#abilityTooltipDocumentAbortController?.abort();
+    this.#abilityTooltipDocumentAbortController = null;
     this.#stopRepeat();
     if (this.#actorUpdateHookId !== null) {
       Hooks.off("updateActor", this.#actorUpdateHookId);
@@ -402,9 +407,18 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     root.dataset.abilityDescriptionTooltipsBound = "true";
     root.addEventListener("pointerover", event => this.#onAbilityDescriptionPointerOver(event));
     root.addEventListener("pointerout", event => this.#onAbilityDescriptionPointerOut(event));
+    root.addEventListener("auxclick", event => this.#onAbilityDescriptionAuxClick(event));
+
+    this.#abilityTooltipDocumentAbortController?.abort();
+    this.#abilityTooltipDocumentAbortController = new AbortController();
+    document.addEventListener("pointerdown", event => this.#onAbilityDescriptionDocumentPointerDown(event), {
+      capture: true,
+      signal: this.#abilityTooltipDocumentAbortController.signal
+    });
   }
 
   #onAbilityDescriptionPointerOver(event) {
+    if (this.#abilityTooltipPinned) return;
     const anchor = event.target?.closest?.("[data-ability-description-tooltip]");
     if (!anchor || anchor.contains(event.relatedTarget)) return;
     const html = String(anchor.dataset.abilityDescriptionTooltip ?? "").trim();
@@ -418,11 +432,39 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #onAbilityDescriptionPointerOut(event) {
     const anchor = event.target?.closest?.("[data-ability-description-tooltip]");
     if (!anchor || anchor.contains(event.relatedTarget)) return;
+    if (this.#abilityTooltipPinned) return;
     if (this.#abilityTooltipElement?.contains(event.relatedTarget)) return;
     this.#clearAbilityDescriptionTooltip();
   }
 
-  #showAbilityDescriptionTooltip(anchor, html) {
+  #onAbilityDescriptionAuxClick(event) {
+    if (event.button !== 1) return;
+    const anchor = event.target?.closest?.("[data-ability-description-tooltip]");
+    if (!anchor) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const html = String(anchor.dataset.abilityDescriptionTooltip ?? "").trim();
+    if (!html) return;
+
+    if (this.#abilityTooltipPinned && this.#abilityTooltipAnchor === anchor) {
+      this.#clearAbilityDescriptionTooltip();
+      return;
+    }
+
+    this.#clearAbilityDescriptionTooltip();
+    this.#abilityTooltipAnchor = anchor;
+    this.#showAbilityDescriptionTooltip(anchor, html, { pinned: true });
+  }
+
+  #onAbilityDescriptionDocumentPointerDown(event) {
+    if (!this.#abilityTooltipElement) return;
+    if (event.target?.closest?.("[data-ability-description-tooltip]")) return;
+    if (this.#abilityTooltipElement.contains(event.target)) return;
+    this.#clearAbilityDescriptionTooltip();
+  }
+
+  #showAbilityDescriptionTooltip(anchor, html, { pinned = false } = {}) {
     if (this.#abilityTooltipTimer) {
       window.clearTimeout(this.#abilityTooltipTimer);
       this.#abilityTooltipTimer = null;
@@ -431,10 +473,16 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
     const tooltip = document.createElement("aside");
     tooltip.className = "fallout-maw-inventory-tooltip fallout-maw-ability-description-tooltip";
-    tooltip.style.pointerEvents = "none";
+    tooltip.classList.toggle("pinned", pinned);
+    tooltip.style.pointerEvents = "auto";
     tooltip.innerHTML = `<div class="content">${html}</div>`;
+    tooltip.addEventListener("pointerleave", event => {
+      if (this.#abilityTooltipAnchor?.contains(event.relatedTarget)) return;
+      this.#clearAbilityDescriptionTooltip();
+    });
     document.body.append(tooltip);
     this.#abilityTooltipElement = tooltip;
+    this.#abilityTooltipPinned = pinned;
     positionAbilityDescriptionTooltip(tooltip, anchor);
     requestAnimationFrame(() => positionAbilityDescriptionTooltip(tooltip, anchor));
   }
@@ -447,6 +495,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#abilityTooltipElement?.remove();
     this.#abilityTooltipElement = null;
     this.#abilityTooltipAnchor = null;
+    this.#abilityTooltipPinned = false;
   }
 
   #syncDraftFromForm() {
@@ -660,23 +709,23 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       .reduce((total, [key, selected]) => total + (selected && !floorTraits[key] ? 1 : 0), 0);
   }
 
-  #prepareAbilityCategories(remaining = {}, skillSettings = []) {
+  async #prepareAbilityCategories(remaining = {}, skillSettings = []) {
     const catalog = getAbilityCatalog();
-    return (catalog.categories ?? []).map(category => {
+    return Promise.all((catalog.categories ?? []).map(async category => {
       const isFeatures = category.id === LOCKED_FEATURES_CATEGORY_ID;
       const traitTotal = isFeatures ? this.#getTraitSessionTotal(remaining.traits) : 0;
       const traitRemaining = Math.max(0, toInteger(remaining.traits));
+      const abilities = await Promise.all((category.abilities ?? [])
+        .filter(ability => !actorHasAbility(this.actor, String(ability?.id ?? "")))
+        .map(ability => this.#prepareAbilityEntry(category, ability, remaining, skillSettings)));
       return {
         ...category,
         displayName: isFeatures ? `Особенности (Доступно ${traitRemaining}/${traitTotal})` : category.name,
         traitAvailabilityClass: isFeatures ? (traitRemaining > 0 ? "trait-available" : "trait-empty") : "",
         expanded: this.#expandedAbilityCategories.has(String(category.id ?? "")),
-        abilities: (category.abilities ?? [])
-          .filter(ability => !actorHasAbility(this.actor, String(ability?.id ?? "")))
-          .map(ability => this.#prepareAbilityEntry(category, ability, remaining, skillSettings))
-          .sort(compareAbilityAvailability)
+        abilities: abilities.sort(compareAbilityAvailability)
       };
-    });
+    }));
   }
 
   #prepareSelectedAbility(categories = []) {
@@ -693,7 +742,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     return Math.max(0, toInteger(traitRemaining)) + this.#getTraitSessionSpent();
   }
 
-  #prepareAbilityEntry(category, ability, remaining = {}, skillSettings = []) {
+  async #prepareAbilityEntry(category, ability, remaining = {}, skillSettings = []) {
     const sourceId = String(ability?.id ?? "");
     const isFeature = category.id === LOCKED_FEATURES_CATEGORY_ID;
     const cost = Math.max(0, toInteger(ability?.system?.cost));
@@ -709,7 +758,10 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const requirementRows = getAbilityAcquisitionRequirementRows(this.actor, ability);
     const acquisitionAvailable = requirementRows.every(requirement => requirement.met);
     const requirementLabel = getAbilityAcquisitionRequirementLabel(requirementRows);
-    const descriptionTooltipHTML = renderAbilityDescriptionTooltipHTML(ability, { requirementRows });
+    const descriptionTooltipHTML = await renderAbilityDescriptionTooltipHTML(ability, {
+      actor: this.actor,
+      requirementRows
+    });
     return {
       ...ability,
       sourceId,
@@ -1024,8 +1076,15 @@ function evaluateProgressionFormula(formula, characteristics, characteristicSett
   }
 }
 
-function renderAbilityDescriptionTooltipHTML(ability = {}, { requirementRows = [] } = {}) {
-  const descriptionHTML = String(ability?.description ?? "").trim();
+async function renderAbilityDescriptionTooltipHTML(ability = {}, { actor = null, requirementRows = [] } = {}) {
+  const descriptionSource = String(ability?.description ?? "").trim();
+  const descriptionHTML = descriptionSource
+    ? await TextEditor.enrichHTML(descriptionSource, {
+      secrets: actor?.isOwner ?? true,
+      relativeTo: actor,
+      rollData: actor?.getRollData?.() ?? {}
+    })
+    : "";
   const titleSection = `
     <section class="function-section single-value fallout-maw-ability-tooltip-title">
       <h4>Название</h4>

@@ -1,4 +1,5 @@
 import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.mjs";
+import { activateDescriptionFormulaAutocomplete } from "../apps/description-formula-autocomplete.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getNeedSettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { getEquipmentSlotSelectionKey, groupRaceEquipmentSlotsBySet, groupRaceWeaponSlotsBySet } from "../utils/equipment-slots.mjs";
@@ -496,6 +497,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       input.addEventListener("change", event => this.#onFirstAidChargeInputChange(event));
     });
     activateItemEffectKeyAutocompletes(this.element);
+    activateDescriptionFormulaAutocomplete(this.element);
     this.element?.querySelectorAll("[data-add-weapon-special-property]").forEach(button => {
       button.addEventListener("click", event => this.#onAddWeaponSpecialProperty(event));
     });

@@ -353,7 +353,12 @@ export class CombatantPortrait {
             for (const effect of combatant.actor.temporaryEffects) {
                 if (effect.statuses.has(CONFIG.specialStatusEffects.DEFEATED)) turn.defeated = true;
                 else if (effect.img) {
-                    const description = effect.description ? await foundry.applications.ux.TextEditor.implementation.enrichHTML(effect.description) : "";
+                    const description = effect.description
+                        ? await foundry.applications.ux.TextEditor.implementation.enrichHTML(effect.description, {
+                            relativeTo: effect,
+                            rollData: effect.parent?.getRollData?.() ?? {}
+                        })
+                        : "";
                     const duration = parseInt(effect.duration?.label ?? "");
                     const percent = effect.duration?.remaining / effect.duration?.duration;
                     const uuid = effect.uuid;

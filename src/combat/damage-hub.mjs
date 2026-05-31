@@ -20,6 +20,7 @@ import {
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
+import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const DAMAGE_SOCKET = `system.${SYSTEM_ID}`;
@@ -1400,7 +1401,7 @@ function collectCostModifier(actor, key = "") {
     if (effect.disabled) continue;
     for (const change of effect.system?.changes ?? effect.changes ?? []) {
       if (String(change.key ?? "").trim() !== key) continue;
-      const value = Number(change.value);
+      const value = evaluateEffectChangeNumber(actor, change.value);
       if (!Number.isFinite(value)) continue;
       if (change.type === "override") modifier.override = value;
       else if (change.type === "multiply") modifier.multiplier *= value;
