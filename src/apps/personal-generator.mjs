@@ -35,6 +35,7 @@ import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { canStackItems } from "./search-inventory.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const BaseFilePicker = foundry.applications.apps.FilePicker.implementation;
 
 const DEFAULT_NAME_BLOCK_IDS = Object.freeze({
   male: "default-male-names",
@@ -100,12 +101,20 @@ export function registerPersonalGeneratorSettings() {
 
 export function registerPersonalGeneratorHooks() {
   Hooks.on("getActorContextOptions", (app, entryOptions) => {
-    entryOptions.unshift({
-      label: "Перс. генератор",
-      icon: "fa-solid fa-user-gear",
-      visible: li => getActorFromDirectoryEntry(app, li)?.isOwner === true,
-      onClick: (_event, li) => openPersonalGenerator(getActorFromDirectoryEntry(app, li))
-    });
+    entryOptions.unshift(
+      {
+        label: "Перс. генератор",
+        icon: "fa-solid fa-user-gear",
+        visible: li => getActorFromDirectoryEntry(app, li)?.isOwner === true,
+        onClick: (_event, li) => openPersonalGenerator(getActorFromDirectoryEntry(app, li))
+      },
+      {
+        label: "Прототип токена",
+        icon: "fa-solid fa-circle-user",
+        visible: li => canConfigurePrototypeToken(getActorFromDirectoryEntry(app, li)),
+        onClick: (_event, li) => openPrototypeTokenConfig(getActorFromDirectoryEntry(app, li))
+      }
+    );
   });
 
   Hooks.on("preCreateToken", (document, data, _options, userId) => {
@@ -124,6 +133,18 @@ export function openPersonalGenerator(actor) {
   personalGeneratorWindow ??= new PersonalGeneratorApplication();
   personalGeneratorWindow.setActor(actor);
   return personalGeneratorWindow.render({ force: true });
+}
+
+function openPrototypeTokenConfig(actor, renderOptions = {}) {
+  if (!actor || !canConfigurePrototypeToken(actor)) return undefined;
+  return new CONFIG.Token.prototypeSheetClass({ prototype: actor.prototypeToken }).render({
+    force: true,
+    ...renderOptions
+  });
+}
+
+function canConfigurePrototypeToken(actor) {
+  return !!actor && ((game.user?.isGM === true) || ((actor.isOwner === true) && (game.user?.can("TOKEN_CONFIGURE") === true)));
 }
 
 function getActorFromDirectoryEntry(app, li) {
@@ -215,12 +236,14 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
   #actor = null;
   #config = createPersonalGeneratorConfig();
   #dragDrop = null;
+  #autosaveTimeout = null;
+  #saveChain = Promise.resolve();
 
   static DEFAULT_OPTIONS = {
     id: "fallout-maw-personal-generator",
     classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-personal-generator"],
     tag: "form",
-    position: { width: 920, height: 780 },
+    position: { width: 920 },
     window: { resizable: true },
     form: {
       handler: PersonalGeneratorApplication.#handleFormSubmit,
@@ -234,7 +257,8 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
       deleteItemEntry: this.#onDeleteItemEntry,
       browseImage: this.#onBrowseImage,
       removeImage: this.#onRemoveImage,
-      previewNames: this.#onPreviewNames
+      previewNames: this.#onPreviewNames,
+      togglePrototypeTokenLink: this.#onTogglePrototypeTokenLink
     }
   };
 
@@ -247,6 +271,7 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
   }
 
   setActor(actor) {
+    if (this.rendered && this.#actor && this.#actor.uuid !== actor?.uuid) void this.#saveCurrentConfig({ fromForm: true });
     this.#actorUuid = actor?.uuid ?? "";
     this.#actor = actor ?? null;
     this.#config = getPersonalGeneratorConfig(actor);
@@ -272,6 +297,7 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
       ...(await super._prepareContext(options)),
       actor: this.#actor,
       config: preparePersonalGeneratorContext(this.#config),
+      prototypeTokenLink: getPrototypeTokenLinkContext(this.#actor),
       currencyChoices: getCurrencyChoices(this.#config),
       nameBlockChoices: getNameBlockChoices(this.#config),
       pickModeChoices: getPickModeChoices(),
@@ -282,56 +308,68 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
   async _onRender(context, options) {
     await super._onRender(context, options);
     this._dragDrop.bind(this.element);
+    this.element.addEventListener("input", event => this.#queueAutosaveFromEvent(event, 350));
+    this.element.addEventListener("change", event => this.#queueAutosaveFromEvent(event, 0));
+  }
+
+  async close(options) {
+    if (this.#autosaveTimeout) {
+      window.clearTimeout(this.#autosaveTimeout);
+      this.#autosaveTimeout = null;
+      await this.#saveCurrentConfig({ fromForm: true });
+    }
+    await this.#saveChain.catch(error => console.error(error));
+    return super.close(options);
   }
 
   static async #handleFormSubmit(event, form) {
     event.preventDefault();
-    if (!this.#actor) return undefined;
-    const config = this.#readConfigFromForm();
-    await this.#actor.setFlag(SYSTEM_ID, "personalGenerator", config);
-    this.#config = getPersonalGeneratorConfig(this.#actor);
-    ui.notifications.info("Персональный генератор сохранен.");
-    return this.render({ force: true });
+    return this.#saveCurrentConfig({ fromForm: true });
   }
 
-  static #onCreateItemBlock(event) {
+  static async #onCreateItemBlock(event) {
     event.preventDefault();
     this.#config = this.#readConfigFromForm();
     this.#config.items.blocks.push(createItemBlock());
+    await this.#saveCurrentConfig();
     return this.render({ force: true });
   }
 
-  static #onDeleteItemBlock(event, target) {
+  static async #onDeleteItemBlock(event, target) {
     event.preventDefault();
     const blockIndex = getRowIndex(target, "[data-pg-block]");
     if (blockIndex < 0) return undefined;
     this.#config = this.#readConfigFromForm();
     this.#config.items.blocks.splice(blockIndex, 1);
+    await this.#saveCurrentConfig();
     return this.render({ force: true });
   }
 
-  static #onCreateItemEntry(event, target) {
+  static async #onCreateItemEntry(event, target) {
     event.preventDefault();
     const blockIndex = getRowIndex(target, "[data-pg-block]");
     if (blockIndex < 0) return undefined;
     this.#config = this.#readConfigFromForm();
     this.#config.items.blocks[blockIndex]?.entries.push(createItemEntry());
+    await this.#saveCurrentConfig();
     return this.render({ force: true });
   }
 
-  static #onDeleteItemEntry(event, target) {
+  static async #onDeleteItemEntry(event, target) {
     event.preventDefault();
     const blockIndex = getRowIndex(target, "[data-pg-block]");
     const entryIndex = getRowIndex(target, "[data-pg-entry]");
     if (blockIndex < 0 || entryIndex < 0) return undefined;
     this.#config = this.#readConfigFromForm();
     this.#config.items.blocks[blockIndex]?.entries.splice(entryIndex, 1);
+    await this.#saveCurrentConfig();
     return this.render({ force: true });
   }
 
-  static #onPreviewNames(event) {
+  static async #onPreviewNames(event) {
     event.preventDefault();
     this.#config = this.#readConfigFromForm();
+    await this.#saveCurrentConfig();
     return this.render({ force: true });
   }
 
@@ -339,13 +377,17 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     event.preventDefault();
     this.#config = this.#readConfigFromForm();
     const current = this.#config.images.paths.at(-1) ?? this.#actor?.img ?? "";
-    const picker = new foundry.applications.apps.FilePicker.implementation({
+    const picker = new PersonalGeneratorImageFilePicker({
       type: "image",
       current,
-      callback: path => {
-        const imagePath = String(path ?? "").trim();
-        if (!imagePath || this.#config.images.paths.includes(imagePath)) return;
-        this.#config.images.paths.push(imagePath);
+      callback: paths => {
+        const existing = new Set(this.#config.images.paths);
+        const selected = (Array.isArray(paths) ? paths : [paths])
+          .map(path => String(path ?? "").trim())
+          .filter(path => path && !existing.has(path));
+        if (!selected.length) return;
+        this.#config.images.paths.push(...selected);
+        this.#saveCurrentConfig();
         this.render({ force: true });
       }
     });
@@ -354,13 +396,22 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     return picker.render({ force: true });
   }
 
-  static #onRemoveImage(event, target) {
+  static async #onRemoveImage(event, target) {
     event.preventDefault();
     const thumbs = Array.from(this.element?.querySelectorAll("[data-pg-image-thumb]") ?? []);
     const index = thumbs.indexOf(target.closest("[data-pg-image-thumb]"));
     if (index < 0) return undefined;
     this.#config = this.#readConfigFromForm();
     this.#config.images.paths.splice(index, 1);
+    await this.#saveCurrentConfig();
+    return this.render({ force: true });
+  }
+
+  static async #onTogglePrototypeTokenLink(event) {
+    event.preventDefault();
+    if (!this.#actor || !canConfigurePrototypeToken(this.#actor)) return undefined;
+    await this.#actor.update({ "prototypeToken.actorLink": !this.#actor.prototypeToken?.actorLink });
+    this.#actor = await fromUuid(this.#actorUuid);
     return this.render({ force: true });
   }
 
@@ -381,7 +432,32 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
 
     this.#config = this.#readConfigFromForm();
     this.#config.items.blocks[blockIndex]?.entries.push(createItemEntryFromItem(item));
+    await this.#saveCurrentConfig();
     return this.render({ force: true });
+  }
+
+  #queueAutosaveFromEvent(event, delay) {
+    if (!event.target?.matches?.("input, select, textarea")) return;
+    this.#queueAutosave(delay);
+  }
+
+  #queueAutosave(delay = 350) {
+    if (this.#autosaveTimeout) window.clearTimeout(this.#autosaveTimeout);
+    this.#autosaveTimeout = window.setTimeout(() => {
+      this.#autosaveTimeout = null;
+      this.#saveCurrentConfig({ fromForm: true });
+    }, delay);
+  }
+
+  #saveCurrentConfig({ fromForm = false } = {}) {
+    if (!this.#actor) return Promise.resolve();
+    const actor = this.#actor;
+    const config = fromForm ? this.#readConfigFromForm() : createPersonalGeneratorConfig(this.#config);
+    this.#config = config;
+    this.#saveChain = this.#saveChain
+      .catch(error => console.error(error))
+      .then(() => actor.setFlag(SYSTEM_ID, "personalGenerator", config));
+    return this.#saveChain;
   }
 
   #readConfigFromForm() {
@@ -414,6 +490,125 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
       }
     });
     return config;
+  }
+}
+
+class PersonalGeneratorImageFilePicker extends BaseFilePicker {
+  #selectedPaths = new Set();
+  #selectionAnchorPath = "";
+
+  constructor(options = {}) {
+    super({
+      ...options,
+      type: "image"
+    });
+    this.#selectedPaths = new Set((Array.isArray(options.selected) ? options.selected : [])
+      .map(path => String(path ?? "").trim())
+      .filter(Boolean));
+    this.#selectionAnchorPath = String(options.current ?? "").trim();
+  }
+
+  static get LAST_DISPLAY_MODE() {
+    return BaseFilePicker.LAST_DISPLAY_MODE;
+  }
+
+  static set LAST_DISPLAY_MODE(value) {
+    BaseFilePicker.LAST_DISPLAY_MODE = value;
+  }
+
+  static DEFAULT_OPTIONS = {
+    id: "file-picker",
+    classes: ["fallout-maw-pg-image-picker"],
+    actions: {
+      pickFile: this.#onPickFile
+    },
+    form: {
+      handler: this.#onSubmit
+    }
+  };
+
+  get title() {
+    return "Добавить изображения";
+  }
+
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    this.#syncSelectionDisplay();
+  }
+
+  static #onPickFile(event, pickedRow) {
+    event.preventDefault();
+    const path = String(pickedRow?.dataset?.path ?? "").trim();
+    if (!path) return undefined;
+
+    const additive = event.ctrlKey || event.metaKey;
+    const rows = this.#getVisibleFileRows(pickedRow);
+    const anchorPath = this.#selectionAnchorPath || this.#getFirstSelectedVisiblePath(rows) || path;
+    const range = event.shiftKey
+      ? this.#getSelectionRange(rows, anchorPath, path)
+      : [];
+
+    if (range.length) {
+      if (!additive) this.#selectedPaths.clear();
+      for (const row of range) this.#selectedPaths.add(row.dataset.path);
+    } else if (additive) {
+      if (this.#selectedPaths.has(path)) this.#selectedPaths.delete(path);
+      else this.#selectedPaths.add(path);
+    } else {
+      this.#selectedPaths.clear();
+      this.#selectedPaths.add(path);
+    }
+
+    if (!event.shiftKey) this.#selectionAnchorPath = path;
+    this.#syncSelectionDisplay();
+    return undefined;
+  }
+
+  static async #onSubmit(event) {
+    if (this.options.tileSize) return undefined;
+    event.preventDefault();
+
+    const paths = Array.from(this.#selectedPaths);
+    if (!paths.length) {
+      ui.notifications.error("Выберите хотя бы одно изображение.");
+      return undefined;
+    }
+
+    if (this.callback) this.callback(paths, this);
+    return this.close();
+  }
+
+  #getVisibleFileRows(row) {
+    return Array.from(row?.closest?.("ul")?.querySelectorAll("li.file[data-path]") ?? [])
+      .filter(entry => entry.style.display !== "none");
+  }
+
+  #getSelectionRange(rows, startPath, endPath) {
+    const start = rows.findIndex(row => row.dataset.path === startPath);
+    const end = rows.findIndex(row => row.dataset.path === endPath);
+    if ((start < 0) || (end < 0)) return [];
+    const [from, to] = start < end ? [start, end] : [end, start];
+    return rows.slice(from, to + 1);
+  }
+
+  #getFirstSelectedVisiblePath(rows) {
+    return rows.find(row => this.#selectedPaths.has(row.dataset.path))?.dataset.path ?? "";
+  }
+
+  #syncSelectionDisplay() {
+    const form = this.element;
+    if (!form) return;
+
+    for (const row of form.querySelectorAll("li.file[data-path]")) {
+      row.classList.toggle("picked", this.#selectedPaths.has(row.dataset.path));
+    }
+
+    if (form.elements.file) {
+      const paths = Array.from(this.#selectedPaths);
+      form.elements.file.value = paths.length === 1
+        ? paths[0]
+        : (paths.length ? `Выбрано: ${paths.length}` : "");
+    }
   }
 }
 
@@ -538,7 +733,7 @@ async function rollPersonalItemBlocks(itemsConfig = {}) {
 
   const selectedBlocks = selectBlocksFromExclusionGroups(blocks, buildExclusionGroups(blocks));
   for (const block of selectedBlocks) {
-    const entries = normalizeItemEntries(block.entries);
+    const entries = normalizeItemEntries(block.entries).filter(entry => entry.uuid);
     if (!entries.length) continue;
 
     const pickMode = normalizePickMode(block.pickMode);
@@ -902,7 +1097,7 @@ function normalizeItemEntries(entries = []) {
       weight: Math.max(1, toInteger(entry.weight ?? 100) || 100),
       itemTradeLocked: entry.itemTradeLocked === true
     };
-  }).filter(entry => entry.uuid);
+  });
 }
 
 function createItemBlock() {
@@ -929,6 +1124,16 @@ function createItemEntryFromItem(item) {
     name: item.name,
     img: normalizeImagePath(item.img),
     hasCondition: hasItemFunction(item, ITEM_FUNCTIONS.condition)
+  };
+}
+
+function getPrototypeTokenLinkContext(actor) {
+  const linked = actor?.prototypeToken?.actorLink === true;
+  return {
+    linked,
+    status: linked ? "привязанный" : "отвязанный",
+    toggleLabel: linked ? "Сделать отвязанным" : "Сделать привязанным",
+    canConfigure: canConfigurePrototypeToken(actor)
   };
 }
 

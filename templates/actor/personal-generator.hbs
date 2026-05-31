@@ -4,9 +4,15 @@
       <h2>Персональный генератор</h2>
       <label class="fallout-maw-inline-check">
         <input type="checkbox" name="enabled" {{#if config.enabled}}checked{{/if}}>
-        <span>Включить для отвязанных токенов</span>
+        <span>Включить</span>
       </label>
     </header>
+    <div class="fallout-maw-pg-token-link-row">
+      <span>Статус прототипа токена: <strong>{{prototypeTokenLink.status}}</strong></span>
+      {{#if prototypeTokenLink.canConfigure}}
+      <button type="button" data-action="togglePrototypeTokenLink">{{prototypeTokenLink.toggleLabel}}</button>
+      {{/if}}
+    </div>
   </section>
 
   <section class="fallout-maw-panel">
@@ -229,8 +235,4 @@
       <button type="button" data-action="createItemBlock"><i class="fa-solid fa-plus"></i> Добавить блок</button>
     </div>
   </section>
-
-  <footer class="sheet-footer flexrow">
-    <button type="submit"><i class="fa-solid fa-save"></i> Сохранить изменения</button>
-  </footer>
 </div>
