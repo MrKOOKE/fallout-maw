@@ -215,16 +215,35 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     );
     if (!grid || !this.element?.contains(grid)) return null;
 
-    for (const cell of grid.querySelectorAll("[data-inventory-cell]")) {
-      const rect = cell.getBoundingClientRect();
-      if (
-        clientX >= rect.left
-        && clientX <= rect.right
-        && clientY >= rect.top
-        && clientY <= rect.bottom
-      ) return cell;
-    }
-    return null;
+    const pointer = this.#getInventoryGridPointerPosition(eventOrTarget, grid);
+    if (!pointer) return null;
+    return grid.querySelector(`[data-inventory-cell][data-x="${pointer.x}"][data-y="${pointer.y}"]`) ?? null;
+  }
+
+  #getInventoryGridPointerPosition(event, grid) {
+    const clientX = Number(event?.clientX);
+    const clientY = Number(event?.clientY);
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+
+    const firstCell = grid.querySelector("[data-inventory-cell]");
+    if (!firstCell) return null;
+    const gridRect = grid.getBoundingClientRect();
+    const cellRect = firstCell.getBoundingClientRect();
+    const cellWidth = cellRect.width;
+    const cellHeight = cellRect.height;
+    if (cellWidth <= 0 || cellHeight <= 0) return null;
+
+    const columns = Math.max(1, toInteger(grid.style.getPropertyValue("--fallout-maw-inventory-columns")) || 1);
+    const gapX = columns > 1
+      ? Math.max(0, (gridRect.width - (cellWidth * columns)) / (columns - 1))
+      : 0;
+    const stepX = cellWidth + gapX;
+    const stepY = cellHeight + gapX;
+    const x = Math.floor((clientX - gridRect.left) / stepX) + 1;
+    const y = Math.floor((clientY - gridRect.top) / stepY) + 1;
+    if (x < 1 || y < 1) return null;
+
+    return { x, y };
   }
 
   async #getDroppedItemFromData(data) {

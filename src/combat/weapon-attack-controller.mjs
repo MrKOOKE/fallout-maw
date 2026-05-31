@@ -1849,7 +1849,7 @@ async function requestCreateVolleyDamageRegions(regions = []) {
     return await promise;
   } catch (error) {
     console.error("Fallout MaW | Volley region socket request failed", error);
-    ui.notifications.warn("РќРµС‚ РѕС‚РІРµС‚Р° GM РЅР° СЃРѕР·РґР°РЅРёРµ РѕР±Р»Р°СЃС‚РµР№ СѓСЂРѕРЅР°.");
+    ui.notifications.warn("Нет ответа GM на создание областей урона.");
     return [];
   }
 }
@@ -1863,7 +1863,7 @@ async function requestApplyDamageAndCreateVolleyDamageRegions(damageRequests = [
 
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("РќРµС‚ Р°РєС‚РёРІРЅРѕРіРѕ GM РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё СѓСЂРѕРЅР° Рё РѕР±Р»Р°СЃС‚РµР№.");
+    ui.notifications.warn("Нет активного GM для обработки урона и областей.");
     return { damage: [], regions: [] };
   }
 
@@ -1891,7 +1891,7 @@ async function requestApplyDamageAndCreateVolleyDamageRegions(damageRequests = [
     return { damage: [], regions: results };
   } catch (error) {
     console.error("Fallout MaW | Volley damage and region socket request failed", error);
-    ui.notifications.warn("РќРµС‚ РѕС‚РІРµС‚Р° GM РЅР° РѕР±СЂР°Р±РѕС‚РєСѓ СѓСЂРѕРЅР° Рё РѕР±Р»Р°СЃС‚РµР№.");
+    ui.notifications.warn("Нет ответа GM на обработку урона и областей.");
     return { damage: [], regions: [] };
   }
 }

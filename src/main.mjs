@@ -27,7 +27,7 @@ import { registerAttackAnimationSocket } from "./combat/attack-animations.mjs";
 import { registerWeaponAttackSocket } from "./combat/weapon-attack-controller.mjs";
 import { registerMedicineSocket } from "./apps/medicine-dialog.mjs";
 import { registerRepairSocket } from "./apps/repair-dialog.mjs";
-import { registerSearchInventorySocket } from "./apps/search-inventory.mjs";
+import { canStackItems, registerSearchInventorySocket } from "./apps/search-inventory.mjs";
 import { registerFirstAidSocket } from "./items/first-aid.mjs";
 import { registerAbilityEffectHooks, syncLoadedActorAbilityEffects } from "./abilities/effects.mjs";
 import { registerAbilityCooldownHooks } from "./abilities/cooldowns.mjs";
@@ -43,10 +43,16 @@ import {
   getContainerDimensions,
   getContextInventoryItems,
   getItemContainerParentId,
+  getItemMaxStack,
+  getItemQuantity,
   isContainerItem,
   validateInventoryTree
 } from "./utils/inventory-containers.mjs";
-import { getActorInventoryGridDimensions } from "./utils/actor-display-data.mjs";
+import { escapeHTML, getActorInventoryGridDimensions } from "./utils/actor-display-data.mjs";
+import { toInteger } from "./utils/numbers.mjs";
+
+const { DialogV2 } = foundry.applications.api;
+const { FormDataExtended } = foundry.applications.ux;
 
 Hooks.once("init", () => {
   console.log(`${FALLOUT_MAW.title} | Initializing system`);
@@ -113,15 +119,102 @@ Hooks.on("dropCanvasData", async (canvas, data, event) => {
   const droppedItem = await foundry.utils.getDocumentClass("Item").fromDropData(data);
   if (!droppedItem) return false;
 
-  const targetPlacement = findFirstActorDropPlacement(actor, droppedItem);
-  if (!targetPlacement) {
+  const itemData = droppedItem.toObject();
+  if (getItemMaxStack(itemData) > 1) {
+    const quantity = await promptActorDropItemQuantity(itemData);
+    if (!quantity) return false;
+    foundry.utils.setProperty(itemData, "system.quantity", quantity);
+  }
+
+  const dropPlan = planActorDropItem(actor, itemData);
+  if (!dropPlan) {
     ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
     return false;
   }
 
-  const createData = droppedItem.toObject();
-  const storedPlacement = createStoredPlacement(targetPlacement.placement, droppedItem);
+  if (dropPlan.updates.length) await actor.updateEmbeddedDocuments("Item", dropPlan.updates);
+  if (dropPlan.creates.length) await actor.createEmbeddedDocuments("Item", dropPlan.creates);
+  return false;
+});
+
+async function promptActorDropItemQuantity(itemData) {
+  const initial = Math.max(1, getItemQuantity(itemData));
+  const formData = await DialogV2.input({
+    window: { title: game.i18n.localize("FALLOUTMAW.Item.Quantity") },
+    content: `
+      <p><strong>${escapeHTML(itemData?.name ?? "")}</strong></p>
+      <label class="fallout-maw-stacked-field">
+        <span>${game.i18n.localize("FALLOUTMAW.Item.Quantity")}: 1+</span>
+        <input type="number" name="quantity" value="${initial}" min="1" step="1" autofocus>
+      </label>
+    `,
+    ok: {
+      label: game.i18n.localize("FALLOUTMAW.Common.Create"),
+      icon: "fa-solid fa-check",
+      callback: (_event, button) => new FormDataExtended(button.form).object
+    },
+    buttons: [{
+      action: "cancel",
+      label: game.i18n.localize("FALLOUTMAW.Common.Cancel")
+    }],
+    position: { width: 420 },
+    rejectClose: false
+  });
+  if (!formData || formData === "cancel") return 0;
+  return Math.max(1, toInteger(formData.quantity));
+}
+
+function planActorDropItem(actor, itemData) {
+  const maxStack = getItemMaxStack(itemData);
+  let remainingQuantity = Math.max(1, getItemQuantity(itemData));
+  const updates = [];
+  const creates = [];
+  const reservedPlacements = new Map();
+
+  if (maxStack > 1) {
+    for (const target of getActorDropStackTargets(actor, itemData)) {
+      if (remainingQuantity <= 0) break;
+      const availableSpace = Math.max(0, getItemMaxStack(target) - getItemQuantity(target));
+      const transferredQuantity = Math.min(remainingQuantity, availableSpace);
+      if (!transferredQuantity) continue;
+      updates.push({
+        _id: target.id,
+        "system.quantity": getItemQuantity(target) + transferredQuantity
+      });
+      remainingQuantity -= transferredQuantity;
+    }
+  }
+
+  while (remainingQuantity > 0) {
+    const stackQuantity = Math.min(remainingQuantity, maxStack);
+    const stackData = foundry.utils.deepClone(itemData);
+    foundry.utils.setProperty(stackData, "system.quantity", stackQuantity);
+    const targetPlacement = findFirstActorDropPlacement(actor, stackData, reservedPlacements);
+    if (!targetPlacement) return null;
+    const createData = createActorDropItemData(stackData, targetPlacement);
+    creates.push(createData);
+    if (!reservedPlacements.has(targetPlacement.parentId)) reservedPlacements.set(targetPlacement.parentId, []);
+    reservedPlacements.get(targetPlacement.parentId).push(targetPlacement.placement);
+    remainingQuantity -= stackQuantity;
+  }
+
+  const rootDimensions = getActorRootInventoryDimensions(actor);
+  const projectedItems = projectActorDropItems(actor, { updates, creates });
+  if (!validateInventoryTree(projectedItems, rootDimensions).valid) return null;
+  return { updates, creates };
+}
+
+function getActorDropStackTargets(actor, itemData) {
+  return getActorDropInventoryContexts(actor).flatMap(context => (
+    context.items.filter(item => canStackItems(itemData, item))
+  ));
+}
+
+function createActorDropItemData(itemData, targetPlacement) {
+  const createData = foundry.utils.deepClone(itemData);
+  const storedPlacement = createStoredPlacement(targetPlacement.placement, itemData);
   delete createData._id;
+  delete createData.id;
   foundry.utils.mergeObject(createData, {
     system: {
       equipped: false,
@@ -140,10 +233,30 @@ Hooks.on("dropCanvasData", async (canvas, data, event) => {
       }
     }
   });
+  return createData;
+}
 
-  await actor.createEmbeddedDocuments("Item", [createData]);
-  return false;
-});
+function projectActorDropItems(actor, { updates = [], creates = [] } = {}) {
+  const itemMap = new Map(actor.items.contents.map(item => [item.id, item.toObject()]));
+  for (const update of updates) {
+    if (!update?._id || !itemMap.has(update._id)) continue;
+    const nextData = foundry.utils.deepClone(itemMap.get(update._id));
+    for (const [key, value] of Object.entries(update)) {
+      if (key === "_id") continue;
+      foundry.utils.setProperty(nextData, key, value);
+    }
+    itemMap.set(update._id, nextData);
+  }
+  let syntheticIndex = 0;
+  for (const createData of creates) {
+    const syntheticId = `drop-item-${syntheticIndex += 1}`;
+    const nextData = foundry.utils.deepClone(createData);
+    nextData._id = syntheticId;
+    nextData.id = syntheticId;
+    itemMap.set(syntheticId, nextData);
+  }
+  return Array.from(itemMap.values());
+}
 
 function getDropTargetToken(canvas, data) {
   const collisionTest = ({ t: token }) => token.visible
@@ -163,10 +276,10 @@ function getActorRootInventoryDimensions(actor) {
   return getActorInventoryGridDimensions(actor, race);
 }
 
-function findFirstActorDropPlacement(actor, item) {
-  const allItems = actor.items.contents;
+function getActorDropInventoryContexts(actor) {
   const rootDimensions = getActorRootInventoryDimensions(actor);
-  const contexts = [
+  const allItems = actor.items.contents;
+  return [
     {
       parentId: ROOT_CONTAINER_ID,
       items: getContextInventoryItems(ROOT_CONTAINER_ID, allItems),
@@ -180,45 +293,27 @@ function findFirstActorDropPlacement(actor, item) {
         dimensions: getContainerDimensions(container)
       }))
   ];
+}
 
-  for (const context of contexts) {
+function findFirstActorDropPlacement(actor, itemData, reservedPlacements = new Map()) {
+  const allItems = actor.items.contents;
+  const rootDimensions = getActorRootInventoryDimensions(actor);
+
+  for (const context of getActorDropInventoryContexts(actor)) {
     const placement = findFirstAvailableInventoryPlacement(
       context.items,
       context.dimensions.columns,
       context.dimensions.rows,
-      item,
+      itemData,
       allItems,
       [],
-      []
+      reservedPlacements.get(context.parentId) ?? []
     );
     if (!placement) continue;
 
-    const storedPlacement = createStoredPlacement(placement, item);
-    const createData = item.toObject();
-    delete createData._id;
-    foundry.utils.mergeObject(createData, {
-      system: {
-        equipped: false,
-        container: {
-          parentId: context.parentId
-        },
-        placement: {
-          mode: storedPlacement.mode,
-          equipmentSlot: storedPlacement.equipmentSlot,
-          weaponSet: storedPlacement.weaponSet,
-          weaponSlot: storedPlacement.weaponSlot,
-          x: storedPlacement.x,
-          y: storedPlacement.y,
-          width: storedPlacement.width,
-          height: storedPlacement.height
-        }
-      }
+    const projectedItems = projectActorDropItems(actor, {
+      creates: [createActorDropItemData(itemData, { parentId: context.parentId, placement })]
     });
-
-    const projectedItems = [
-      ...allItems.map(existingItem => existingItem.toObject()),
-      createData
-    ];
     if (validateInventoryTree(projectedItems, rootDimensions).valid) {
       return { parentId: context.parentId, placement };
     }

@@ -906,8 +906,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (event?.shiftKey || sourceQuantity <= 1 || isContainerItem(sourceItem)) return sourceQuantity;
     return promptSearchItemStackQuantity({
       item: sourceItem,
-      title: "РџРµСЂРµРЅРµСЃС‚Рё РїСЂРµРґРјРµС‚С‹",
-      actionLabel: "РџРµСЂРµРЅРµСЃС‚Рё",
+      title: "Перенести предметы",
+      actionLabel: "Перенести",
       max: sourceQuantity,
       value: sourceQuantity,
       trade: this.#getTradeQuantityPromptData(sourceActor, targetActor)

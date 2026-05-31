@@ -1514,7 +1514,7 @@ function buildBleedingDamageEffectData(actor, entries = []) {
   const names = new Set(bleedingEntries.map(entry => entry.effectName).filter(Boolean));
   const limbs = new Set(bleedingEntries.map(entry => entry.limbKey));
   const scopes = new Set(bleedingEntries.map(entry => entry.scope));
-  const effectName = names.size === 1 ? bleedingEntries[0].effectName : "РљСЂРѕРІРѕС‚РµС‡РµРЅРёРµ";
+  const effectName = names.size === 1 ? bleedingEntries[0].effectName : "Кровотечение";
   const img = bleedingEntries.find(entry => entry.img)?.img || "icons/skills/wounds/blood-drip-droplet-red.webp";
 
   return {

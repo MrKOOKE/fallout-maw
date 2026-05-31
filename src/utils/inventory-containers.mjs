@@ -382,6 +382,7 @@ export function buildInventoryCellStyle(x, y, placement = null) {
 export function prepareInventoryGridContext(contextItems, columns, rows, allItems, mapItem) {
   const resolved = resolveInventoryGridPlacements(contextItems, columns, rows, allItems);
   const reservedPlacements = resolved.placements;
+  const occupiedCells = createOccupiedInventoryCellSet(reservedPlacements);
   const placedItems = [];
 
   for (const entry of resolved.items) {
@@ -399,7 +400,7 @@ export function prepareInventoryGridContext(contextItems, columns, rows, allItem
         x,
         y,
         phantom,
-        occupied: reservedPlacements.some(placement => placementContainsInventoryCell(placement, x, y)),
+        occupied: occupiedCells.has(getInventoryCellKey(x, y)),
         style: buildInventoryCellStyle(x, y)
       });
     }
@@ -414,6 +415,23 @@ export function prepareInventoryGridContext(contextItems, columns, rows, allItem
     cells,
     items: placedItems
   };
+}
+
+function createOccupiedInventoryCellSet(placements = []) {
+  const cells = new Set();
+  for (const placement of placements) {
+    if (!placement) continue;
+    for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
+      for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
+        cells.add(getInventoryCellKey(x, y));
+      }
+    }
+  }
+  return cells;
+}
+
+function getInventoryCellKey(x, y) {
+  return `${x}:${y}`;
 }
 
 export function validateInventoryTree(items, rootDimensions) {

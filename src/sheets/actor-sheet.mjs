@@ -423,21 +423,28 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     const zone = this.#getDropZone(event);
     const parentId = this.#getInventoryContextParentId(zone);
-    const targetItem = this.#getTargetStackItem(zone, dropped.item?.id ?? "", parentId);
-    if (this.#canStackDroppedItem(dropped.itemData, targetItem)) {
+    const sourceOwned = dropped.item?.parent === this.actor;
+    let itemData = dropped.itemData;
+    const targetItem = this.#getTargetStackItem(zone, sourceOwned ? dropped.item?.id ?? "" : "", parentId);
+    if (sourceOwned && this.#canStackDroppedItem(itemData, targetItem)) {
       const quantity = await this.#getDroppedStackQuantity(dropped, targetItem, event);
       if (!quantity) return null;
-      return this.#stackDroppedItemQuantity(dropped.item, dropped.itemData, targetItem, quantity);
+      return this.#stackDroppedItemQuantity(dropped.item, itemData, targetItem, quantity);
     }
 
-    const placement = this.#getPlacementForDropZone(zone, dropped.itemData, [dropped.item?.id ?? ""], parentId, event);
+    const placement = this.#getPlacementForDropZone(zone, itemData, [sourceOwned ? dropped.item?.id ?? "" : ""], parentId, event);
     if (!placement) return null;
 
-    if (dropped.item?.parent === this.actor) {
+    if (!sourceOwned && placement.mode === "inventory") {
+      itemData = await this.#getExternalDroppedInventoryItemData(itemData);
+      if (!itemData) return null;
+    }
+
+    if (sourceOwned) {
       return this.#moveOwnedItem(dropped.item, placement, targetItem, parentId);
     }
 
-    return this.#createOrStackDroppedItem(dropped.itemData, placement, targetItem, parentId);
+    return this.#createOrStackDroppedItem(itemData, placement, targetItem, parentId);
   }
 
   _onDragOver(event) {
@@ -947,17 +954,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     );
     if (!grid || !this.element?.contains(grid)) return null;
 
-    for (const cell of grid.querySelectorAll("[data-inventory-cell]")) {
-      const rect = cell.getBoundingClientRect();
-      if (
-        clientX >= rect.left
-        && clientX <= rect.right
-        && clientY >= rect.top
-        && clientY <= rect.bottom
-      ) return cell;
-    }
+    const pointer = this.#getInventoryGridPointerPosition(eventOrTarget, grid);
+    if (!pointer) return null;
 
-    return null;
+    const parentId = CSS.escape(String(grid.dataset.inventoryParentId ?? ROOT_CONTAINER_ID));
+    return grid.querySelector(
+      `[data-inventory-cell][data-inventory-parent-id="${parentId}"][data-x="${pointer.x}"][data-y="${pointer.y}"]`
+    ) ?? null;
   }
 
   #getInventoryContextParentId(zone = null) {
@@ -1026,7 +1029,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }
 
     const excludeItemIds = sourceItemId ? [sourceItemId] : [];
-    const placement = this.#getInventoryPointerPlacement(zone, this.#draggedItemData, excludeItemIds, parentId, event)
+    const placement = this.#getInventoryPointerPlacement(zone, this.#draggedItemData, excludeItemIds, parentId, event, {
+      findNearest: false
+    })
       ?? createInventoryPlacement(
         toInteger(zone.dataset.x),
         toInteger(zone.dataset.y),
@@ -1143,7 +1148,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return this.#getFirstAvailableInventoryPlacement(itemData, excludeItemIds, [], parentId);
   }
 
-  #getInventoryPointerPlacement(zone, itemData = null, excludeItemIds = [], parentId = ROOT_CONTAINER_ID, event = null) {
+  #getInventoryPointerPlacement(
+    zone,
+    itemData = null,
+    excludeItemIds = [],
+    parentId = ROOT_CONTAINER_ID,
+    event = null,
+    { findNearest = true } = {}
+  ) {
     if (!event) return null;
     const grid = zone?.closest?.("[data-inventory-grid]");
     if (!grid || !this.element?.contains(grid)) return null;
@@ -1162,6 +1174,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const originY = Math.max(minY, Math.min(maxY, centeredY));
     const preferred = createInventoryPlacement(originX, originY, itemData, this.actor.items);
     if (this.#isInventoryPlacementAvailable(preferred, excludeItemIds, [], parentId)) return preferred;
+    if (!findNearest) return null;
 
     return this.#getNearestInventoryCellInGrid(originX, originY, itemData, excludeItemIds, parentId, columns, rows);
   }
@@ -1185,10 +1198,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       : 0;
     const stepX = cellWidth + gapX;
     const stepY = cellHeight + gapX;
+    const x = Math.floor((clientX - gridRect.left) / stepX) + 1;
+    const y = Math.floor((clientY - gridRect.top) / stepY) + 1;
+    if (x < 1 || y < 1) return null;
 
     return {
-      x: Math.floor((clientX - gridRect.left) / stepX) + 1,
-      y: Math.floor((clientY - gridRect.top) / stepY) + 1
+      x,
+      y
     };
   }
 
@@ -1421,6 +1437,22 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return this.actor.items.get(targetItem.id) ?? null;
   }
 
+  async #getExternalDroppedInventoryItemData(itemData) {
+    if (getItemMaxStack(itemData) <= 1) return itemData;
+    const quantity = await promptItemStackQuantity({
+      item: itemData,
+      title: game.i18n.localize("FALLOUTMAW.Item.Quantity"),
+      actionLabel: game.i18n.localize("FALLOUTMAW.Common.Create"),
+      max: null,
+      value: Math.max(1, getItemQuantity(itemData))
+    });
+    if (!quantity) return null;
+
+    const createData = foundry.utils.deepClone(itemData);
+    foundry.utils.setProperty(createData, "system.quantity", quantity);
+    return createData;
+  }
+
   async #createOrStackDroppedItem(itemData, placement, targetItem = null, parentId = ROOT_CONTAINER_ID) {
     if (!itemData) return null;
     if (placement.mode === "inventory") {
@@ -1563,7 +1595,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       && preferredTarget.system?.placement?.mode === "inventory"
       && this.#areStackable(itemData, preferredTarget)
       && (getItemQuantity(preferredTarget) < getItemMaxStack(preferredTarget));
-    return canUsePreferredTarget ? [preferredTarget] : [];
+    const targets = canUsePreferredTarget ? [preferredTarget] : [];
+    for (const item of this.#getContextInventoryItems(parentId)) {
+      if (!item?.id || excluded.has(item.id) || item.id === preferredTarget?.id) continue;
+      if (item.system?.placement?.mode !== "inventory") continue;
+      if (!this.#areStackable(itemData, item)) continue;
+      if (getItemQuantity(item) >= getItemMaxStack(item)) continue;
+      targets.push(item);
+    }
+    return targets;
   }
 
   #getSourceInventoryPlacement(
@@ -4148,20 +4188,26 @@ function getItemMaxStack(itemOrSystem) {
   return getItemMaxStackHelper(itemOrSystem);
 }
 
-function getItemFootprint(itemOrSystem) {
-  return getItemFootprintHelper(itemOrSystem);
+function getItemFootprint(itemOrSystem, items = null) {
+  return getItemFootprintHelper(itemOrSystem, items);
 }
 
 async function promptItemStackQuantity({ item, title = "Количество", actionLabel = "Ок", max = 1, value = 1 } = {}) {
-  const limit = Math.max(1, toInteger(max));
-  const initial = Math.max(1, Math.min(limit, toInteger(value) || limit));
+  const numericMax = Number(max);
+  const hasLimit = Number.isFinite(numericMax) && numericMax > 0;
+  const limit = hasLimit ? Math.max(1, toInteger(numericMax)) : null;
+  const initial = hasLimit
+    ? Math.max(1, Math.min(limit, toInteger(value) || limit))
+    : Math.max(1, toInteger(value) || 1);
+  const rangeLabel = hasLimit ? `1 / ${limit}` : "1+";
+  const maxAttribute = hasLimit ? ` max="${limit}"` : "";
   const formData = await DialogV2.input({
     window: { title },
     content: `
       <p><strong>${escapeHTML(item?.name ?? "")}</strong></p>
       <label class="fallout-maw-stacked-field">
-        <span>${game.i18n.localize("FALLOUTMAW.Item.Quantity")}: 1 / ${limit}</span>
-        <input type="number" name="quantity" value="${initial}" min="1" max="${limit}" step="1" autofocus>
+        <span>${game.i18n.localize("FALLOUTMAW.Item.Quantity")}: ${rangeLabel}</span>
+        <input type="number" name="quantity" value="${initial}" min="1"${maxAttribute} step="1" autofocus>
       </label>
     `,
     ok: {
@@ -4177,7 +4223,8 @@ async function promptItemStackQuantity({ item, title = "Количество", a
     rejectClose: false
   });
   if (!formData || formData === "cancel") return 0;
-  return Math.max(1, Math.min(limit, toInteger(formData.quantity)));
+  const quantity = Math.max(1, toInteger(formData.quantity));
+  return hasLimit ? Math.min(limit, quantity) : quantity;
 }
 
 function createInventoryPlacement(x = 1, y = 1, itemOrSystem = null, items = null) {
