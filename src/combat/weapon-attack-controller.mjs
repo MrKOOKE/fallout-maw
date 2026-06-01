@@ -23,6 +23,7 @@ const PREVIEW_ANGLE_EPSILON = 0.002;
 const BURST_PREVIEW_STABILIZE_MS = 120;
 const BURST_PREVIEW_FORCE_ANGLE_DELTA = 0.012;
 const BURST_PREVIEW_FORCE_DISTANCE_DELTA = 24;
+const BURST_FULL_INTERSECTION_EPSILON = 0.01;
 const AIMED_TARGET_BLOCKER_BONUS_STEP = 20;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
@@ -34,8 +35,6 @@ const DEFAULT_REGION_DAMAGE_INTERVAL_SECONDS = 6;
 const REGION_SOCKET_REQUEST_TIMEOUT_MS = 60000;
 const WEAPON_SPECIAL_HIT_ALL_CONE_TARGETS = "hitAllConeTargets";
 const MELEE_ACTION_KEYS = new Set(["meleeAttack", "aimedMeleeAttack"]);
-const BURST_CENTER_WIDTH_RATIO = 0.2;
-const BURST_TARGET_EPSILON = 0.000001;
 const MELEE_DIRECTIONS = Object.freeze([
   { key: "thrust", label: "Укол", mode: "thrust" },
   { key: "rightToLeft", label: "Справа налево", mode: "swing" },
@@ -407,7 +406,7 @@ class WeaponAttackController {
         const target = assignments[projectileIndex] ?? null;
         const primaryTrajectory = primaryShots[projectileIndex]?.trajectory ?? buildRandomTrajectory(this.token, getRandomBurstMissGeometry(this.token, this.geometry));
         const trajectory = target
-          ? buildTrajectoryThroughPoint(this.token, this.geometry, getTokenAimPoint(target))
+          ? buildAttackTrajectory(this.token, getRandomBurstMissGeometry(this.token, this.geometry), [target])
           : primaryTrajectory;
         attempted = true;
         if (!target) {
@@ -1333,7 +1332,8 @@ class WeaponAttackController {
     clearTargetMarkerLayer(this.focusedTargetMarker);
     const focusedTarget = this.getFocusedTarget();
     if (!focusedTarget) return;
-    drawFocusedTargetMarker(this.focusedTargetMarker, getTargetCenterMarkerPosition(focusedTarget), time);
+    const marker = getTargetCenterMarkerPosition(focusedTarget);
+    if (marker) drawFocusedTargetMarker(this.focusedTargetMarker, marker, time);
   }
 
   getBurstTargetRanges(targets = this.targets) {
@@ -1525,8 +1525,10 @@ class WeaponAttackController {
 
   positionLimbMenu(target) {
     if (!this.limbMenu) return;
-    const topLeft = canvas.clientCoordinatesFromCanvas({ x: target.x, y: target.y });
-    const bottomRight = canvas.clientCoordinatesFromCanvas({ x: target.x + target.w, y: target.y + target.h });
+    const bounds = getTokenShapeBounds(target);
+    if (!bounds) return;
+    const topLeft = canvas.clientCoordinatesFromCanvas({ x: bounds.left, y: bounds.top });
+    const bottomRight = canvas.clientCoordinatesFromCanvas({ x: bounds.right, y: bounds.bottom });
     const rect = this.limbMenu.getBoundingClientRect();
     const margin = 8;
     const left = Math.max(margin, Math.min(window.innerWidth - rect.width - margin, topLeft.x - rect.width - 10));
@@ -1580,7 +1582,7 @@ class WeaponAttackController {
     markerPreview ??= this.getTargetMarkerPreview(force);
     const previewState = {
       geometry: serializeGeometry(this.geometry),
-      targetMarkers: markerPreview.targets.map(target => getTargetMarkerPreviewData(target, markerPreview.burstRanges)),
+      targetMarkers: markerPreview.targets.map(target => getTargetMarkerPreviewData(target, markerPreview.burstRanges)).filter(Boolean),
       focusedTargetMarker: this.getFocusedTarget() ? getTargetCenterMarkerPosition(this.getFocusedTarget()) : null,
       processing: this.processing
     };
@@ -2090,7 +2092,7 @@ function isMajorBurstPreviewGeometryShift(previous, current) {
 
 function getTargetMarkerRenderState(targets = [], focusedTarget = null, burstRanges = new Map()) {
   return {
-    markers: targets.map(target => getTargetMarkerPreviewData(target, burstRanges)),
+    markers: targets.map(target => getTargetMarkerPreviewData(target, burstRanges)).filter(Boolean),
     focusedMarker: focusedTarget ? getTargetCenterMarkerPosition(focusedTarget) : null
   };
 }
@@ -2342,6 +2344,7 @@ function getAttackLandingPoint(trajectories = [], fallback = null) {
 }
 
 function getAttackGeometry(weapon, actionKey, attackerToken, origin, pointer, weaponFunctionId = "") {
+  if (!origin || !pointer) return null;
   if (isVolleyAttackAction(weapon, actionKey, weaponFunctionId)) return getVolleyAttackGeometry(weapon, attackerToken, origin, pointer, weaponFunctionId);
 
   const maxDistancePixels = metersToPixels(Number(getWeaponAttackData(weapon, weaponFunctionId)?.maxRangeMeters) || 0);
@@ -2540,15 +2543,18 @@ function drawTargetMarkers(graphics, targets, focusedTarget = null, time = perfo
   graphics.lineStyle(1, 0x350000, 0.9);
   for (const target of targets) {
     const marker = getTargetMarkerPosition(target);
+    if (!marker) continue;
     graphics.drawCircle(marker.x, marker.y, 7);
   }
   graphics.endFill();
   for (const target of targets) {
     const range = burstRanges.get(target);
     if (!range?.label) continue;
-    drawBurstAllocationLabel(graphics, getTargetBurstLabelPosition(target), range.label);
+    const marker = getTargetBurstLabelPosition(target);
+    if (marker) drawBurstAllocationLabel(graphics, marker, range.label);
   }
-  if (focusedTarget) drawFocusedTargetMarker(graphics, getTargetCenterMarkerPosition(focusedTarget), time);
+  const focusedMarker = focusedTarget ? getTargetCenterMarkerPosition(focusedTarget) : null;
+  if (focusedMarker) drawFocusedTargetMarker(graphics, focusedMarker, time);
 }
 
 function drawTargetMarkerPositions(graphics, markers = [], focusedMarker = null) {
@@ -2568,14 +2574,17 @@ function drawTargetMarkerPositions(graphics, markers = [], focusedMarker = null)
 
 function getTargetMarkerPosition(target) {
   const center = getTokenCenter(target);
+  const bounds = getTokenShapeBounds(target);
+  if (!center || !bounds) return null;
   return {
     x: center.x,
-    y: target.y + target.h + 8
+    y: bounds.bottom + 8
   };
 }
 
 function getTargetMarkerPreviewData(target, burstRanges = new Map()) {
   const marker = getTargetMarkerPosition(target);
+  if (!marker) return null;
   const range = burstRanges.get(target);
   if (range?.label) {
     marker.burstLabel = range.label;
@@ -2589,7 +2598,8 @@ function getTargetCenterMarkerPosition(target) {
 }
 
 function getTargetBurstLabelPosition(target) {
-  const bounds = getTokenBounds(target);
+  const bounds = getTokenShapeBounds(target);
+  if (!bounds) return null;
   return {
     x: bounds.right - 4,
     y: bounds.top + 12,
@@ -2801,7 +2811,8 @@ function selectMissPointNearTarget(attackerToken, target, trajectory) {
     [-1, 1], [0, 1], [1, 1]
   ];
   const offset = offsets[Math.floor(Math.random() * offsets.length)];
-  const center = getTokenAimPoint(target);
+  const center = getTokenCenter(target);
+  if (!center) return trajectory.end ?? getPointOnTrajectory(trajectory, trajectory.distance);
   const missPoint = {
     x: center.x + (offset[0] * gridSize) + ((Math.random() - 0.5) * gridSize * 0.8),
     y: center.y + (offset[1] * gridSize) + ((Math.random() - 0.5) * gridSize * 0.8),
@@ -2813,12 +2824,11 @@ function selectMissPointNearTarget(attackerToken, target, trajectory) {
 }
 
 function selectPointOnTrajectoryPastTarget(target, trajectory) {
-  const hit = getTokenTrajectoryHit(target, trajectory);
+  const range = getTokenTrajectoryIntersectionRange(target, trajectory);
   const gridSize = Math.max(1, Number(canvas.grid?.size) || 100);
-  const targetDepth = Math.max(target.w ?? 0, target.h ?? 0, gridSize * 0.35);
-  const distance = hit
-    ? Math.min(trajectory.distance, hit.distance + targetDepth)
-    : Math.min(trajectory.distance, getProjectedDistanceOnTrajectory(getTokenAimPoint(target), trajectory));
+  const distance = range
+    ? Math.min(trajectory.distance, range.exit + (gridSize * 0.1))
+    : trajectory.distance;
   return getPointOnTrajectory(trajectory, distance);
 }
 
@@ -2905,7 +2915,8 @@ function getVolleyRegionColor(damageEntries = []) {
 }
 
 function computeVolleyBlastCenter({ attackerToken = null, intendedCenter = null, radiusPixels = 0, outcome = null } = {}) {
-  const origin = getTokenCenter(attackerToken);
+  const origin = getTokenAimPoint(attackerToken);
+  if (!origin) return serializePoint(intendedCenter);
   const target = serializePoint(intendedCenter);
   const radius = Math.max(1, Number(radiusPixels) || 1);
   const resultKey = String(outcome?.result?.key ?? "");
@@ -3001,7 +3012,7 @@ function getVolleyDamageFalloff(target, geometry) {
 
 function getTokenVolleyDistanceToHitboxEdge(token, geometry) {
   const closest = getClosestPointOnTokenVolume(token, geometry?.end);
-  if (!closest) return 0;
+  if (!closest) return Infinity;
   return getSphericalDistancePixels(geometry.end, closest);
 }
 
@@ -3159,8 +3170,9 @@ function getEffectiveRangeDifficultyBonusForDistance(weaponData = {}, distanceMe
 }
 
 function getTokenDistanceMeters(leftToken, rightToken) {
-  const left = getTokenCenter(leftToken);
-  const right = getTokenCenter(rightToken);
+  const left = getTokenAimPoint(leftToken);
+  const right = getTokenAimPoint(rightToken);
+  if (!left || !right) return Infinity;
   return pixelsToMeters(Math.hypot(right.x - left.x, right.y - left.y));
 }
 
@@ -3305,19 +3317,18 @@ function getPenetratedDamageAmount(baseDamage, penetrationsUsed) {
 function getTargetDistance(target, geometry) {
   if (geometry.type === VOLLEY_ACTION_KEY) {
     const center = getTokenCenter(target);
-    return Math.hypot(center.x - geometry.end.x, center.y - geometry.end.y);
+    return center ? Math.hypot(center.x - geometry.end.x, center.y - geometry.end.y) : Infinity;
   }
   const distances = getTokenAttackContactPoints(target, geometry)
     .map(point => Math.hypot(point.x - geometry.origin.x, point.y - geometry.origin.y));
   if (distances.length) return Math.min(...distances);
-  const center = getTokenCenter(target);
-  return Math.hypot(center.x - geometry.origin.x, center.y - geometry.origin.y);
+  return Infinity;
 }
 
 function getNearestAttackChanceTarget(attackerToken, geometry, targets = []) {
   if (!geometry || !targets.length) return null;
   const trajectory = buildAttackTrajectory(attackerToken, geometry, targets);
-  return getTrajectoryTargetEntries(attackerToken, trajectory).at(0)?.target ?? targets.at(0) ?? null;
+  return getTrajectoryTargetEntries(attackerToken, trajectory).at(0)?.target ?? null;
 }
 
 function buildBurstTargetRanges(attackerToken, geometry, targets = [], attackCount = 1, { primaryShots = null } = {}) {
@@ -3327,158 +3338,39 @@ function buildBurstTargetRanges(attackerToken, geometry, targets = [], attackCou
 
 function buildBurstBulletAssignments(attackerToken, geometry, targets = [], attackCount = 1, { primaryShots = null } = {}) {
   const amount = Math.max(1, toInteger(attackCount) || 1);
-  const entries = buildBurstTargetEntries(attackerToken, geometry, targets, amount, { primaryShots });
-  if (!entries.length) return Array(amount).fill(null);
-
-  const assignments = [];
-  const counts = new Map(entries.map(entry => [entry.target, 0]));
-  const totalScore = entries.reduce((sum, entry) => sum + entry.score, 0);
-  const missWeight = Math.max(0, 1 - totalScore);
-  const prioritizedEntries = [...entries].sort((left, right) => right.expected - left.expected || getTargetDistance(left.target, geometry) - getTargetDistance(right.target, geometry));
-
-  for (const entry of prioritizedEntries) {
-    while (assignments.length < amount && (counts.get(entry.target) ?? 0) < entry.range.min) {
-      assignments.push(entry.target);
-      counts.set(entry.target, (counts.get(entry.target) ?? 0) + 1);
-    }
+  const assignments = Array(amount).fill(null);
+  let index = 0;
+  for (const entry of buildBurstTargetEntries(attackerToken, geometry, targets, amount, { primaryShots })) {
+    const count = clamp(toInteger(entry.range?.max), 0, amount - index);
+    for (let step = 0; step < count; step += 1) assignments[index + step] = entry.target;
+    index += count;
+    if (index >= amount) break;
   }
-
-  while (assignments.length < amount) {
-    const availableEntries = entries.filter(entry => (counts.get(entry.target) ?? 0) < entry.range.max);
-    const selected = selectWeightedBurstTarget(availableEntries, counts, missWeight);
-    if (!selected) {
-      assignments.push(null);
-      continue;
-    }
-    assignments.push(selected.target);
-    counts.set(selected.target, (counts.get(selected.target) ?? 0) + 1);
-  }
-
-  return shuffleArray(assignments).slice(0, amount);
+  return assignments;
 }
 
 function buildBurstTargetEntries(attackerToken, geometry, targets = [], attackCount = 1, { primaryShots = null } = {}) {
   const amount = Math.max(1, toInteger(attackCount) || 1);
   if (!geometry || geometry.type === VOLLEY_ACTION_KEY || !targets.length) return [];
-  const primaryTargets = getBurstPrimaryTargets(attackerToken, geometry, targets, amount, { primaryShots });
-  if (!primaryTargets.size) return [];
-
-  const entries = Array.from(new Set(targets))
-    .filter(target => target?.actor && target.visible && !isDeadTarget(target))
-    .filter(target => primaryTargets.has(target))
-    .map(target => {
-      const offset = getBurstTargetConeOffset(attackerToken, geometry, target);
-      const score = getBurstTargetScore(offset, amount);
-      return { target, offset, score };
-    })
-    .filter(entry => entry.score > BURST_TARGET_EPSILON);
-
-  const totalScore = entries.reduce((sum, entry) => sum + entry.score, 0);
-  const denominator = Math.max(1, totalScore);
-  return entries.map(entry => {
-    const expected = (amount * entry.score) / denominator;
-    const range = getBurstBulletRange(expected, amount, totalScore > entry.score + BURST_TARGET_EPSILON);
-    return {
-      ...entry,
-      expected,
-      range: {
-        ...range,
-        label: formatBurstBulletRange(range)
-      }
-    };
-  });
-}
-
-function getBurstPrimaryTargets(attackerToken, geometry, targets = [], attackCount = 1, { primaryShots = null } = {}) {
-  const allowedTargets = new Set(targets);
-  const shotTargets = getBurstPrimaryShotTargets(primaryShots, allowedTargets);
-  if (shotTargets) return shotTargets;
-
-  const coveredIntervals = [];
-  const primaryTargets = new Set();
-  const candidates = Array.from(new Set(targets))
-    .filter(target => allowedTargets.has(target) && target?.actor && target.visible && !isDeadTarget(target))
+  return Array.from(new Set(targets ?? []))
     .map(target => ({
       target,
-      interval: getBurstTargetAngularInterval(target, geometry),
+      intersection: getTokenBurstIntersectionRatio(attackerToken, target, geometry),
       distance: getTargetDistance(target, geometry)
     }))
-    .filter(entry => entry.interval)
-    .sort((left, right) => left.distance - right.distance);
-
-  for (const entry of candidates) {
-    if (hasUncoveredAngularInterval(entry.interval, coveredIntervals)) primaryTargets.add(entry.target);
-    addCoveredAngularInterval(coveredIntervals, entry.interval);
-  }
-
-  return primaryTargets;
-}
-
-function getBurstPrimaryShotTargets(primaryShots = null, allowedTargets = new Set()) {
-  if (!Array.isArray(primaryShots)) return null;
-  const targets = new Set();
-  for (const shot of primaryShots) {
-    const target = shot?.target ?? null;
-    if (target && allowedTargets.has(target)) targets.add(target);
-  }
-  return targets;
-}
-
-function getBurstTargetAngularInterval(target, geometry) {
-  const span = getTokenSwingArcSpan(target, geometry);
-  if (!span) return null;
-  const halfAngle = Math.max(0, Number(geometry?.halfAngle) || 0);
-  if (halfAngle <= 0) return { min: 0, max: 0 };
-  const min = clamp(span.min, -halfAngle, halfAngle);
-  const max = clamp(span.max, -halfAngle, halfAngle);
-  if (max < min) return null;
-  return { min, max };
-}
-
-function hasUncoveredAngularInterval(interval, coveredIntervals = []) {
-  let cursor = interval.min;
-  const sorted = [...coveredIntervals]
-    .filter(covered => covered.max >= interval.min && covered.min <= interval.max)
-    .sort((left, right) => left.min - right.min);
-  for (const covered of sorted) {
-    if (covered.min > cursor + BURST_TARGET_EPSILON) return true;
-    cursor = Math.max(cursor, covered.max);
-    if (cursor >= interval.max - BURST_TARGET_EPSILON) return false;
-  }
-  return cursor < interval.max - BURST_TARGET_EPSILON;
-}
-
-function addCoveredAngularInterval(coveredIntervals, interval) {
-  coveredIntervals.push(interval);
-  coveredIntervals.sort((left, right) => left.min - right.min);
-  for (let index = 0; index < coveredIntervals.length - 1; index += 1) {
-    const current = coveredIntervals[index];
-    const next = coveredIntervals[index + 1];
-    if (current.max + BURST_TARGET_EPSILON < next.min) continue;
-    current.max = Math.max(current.max, next.max);
-    coveredIntervals.splice(index + 1, 1);
-    index -= 1;
-  }
-}
-
-function getBurstTargetConeOffset(attackerToken, geometry, target) {
-  if (!geometry || geometry.halfAngle <= 0) return 0;
-  const points = getVisibleTokenAttackPoints(attackerToken, target, geometry);
-  if (!points.length) return 1;
-  const offsets = points.map(point => {
-    const angle = Math.atan2(point.y - geometry.origin.y, point.x - geometry.origin.x);
-    return clamp(Math.abs(normalizeAngle(angle - geometry.angle)) / Math.max(geometry.halfAngle, BURST_TARGET_EPSILON), 0, 1);
-  });
-  return Math.min(...offsets);
-}
-
-function getBurstTargetScore(offset, attackCount = 1) {
-  const amount = Math.max(1, toInteger(attackCount) || 1);
-  const normalizedOffset = clamp(offset, 0, 1);
-  if (normalizedOffset <= BURST_CENTER_WIDTH_RATIO) return 1;
-  const edgeScore = 0.5 / amount;
-  const falloff = clamp((1 - normalizedOffset) / Math.max(BURST_TARGET_EPSILON, 1 - BURST_CENTER_WIDTH_RATIO), 0, 1);
-  return edgeScore + ((1 - edgeScore) * falloff * falloff);
+    .filter(entry => entry.intersection > GEOMETRY_EPSILON && entry.target?.actor && entry.target.visible && !isDeadTarget(entry.target))
+    .sort((left, right) => left.distance - right.distance || right.intersection - left.intersection)
+    .map(({ target, intersection }) => {
+      const range = getBurstBulletRange(amount, intersection);
+      return {
+        target,
+        expected: range.max,
+        range: {
+          ...range,
+          label: formatBurstBulletRange(range)
+        }
+      };
+    });
 }
 
 function buildBurstPrimaryShots(attackerToken, geometry, attackCount = 1) {
@@ -3504,54 +3396,45 @@ function getBurstPrimaryOffsets(count = 1) {
   return offsets.sort((left, right) => Math.abs(left) - Math.abs(right) || left - right);
 }
 
-function getBurstBulletRange(expected, attackCount = 1, hasCompetition = false) {
-  const amount = Math.max(1, toInteger(attackCount) || 1);
-  const value = clamp(expected, 0, amount);
-  if (value >= amount - BURST_TARGET_EPSILON) return { min: amount, max: amount };
-  if (value <= BURST_TARGET_EPSILON) return { min: 0, max: 0 };
-  const rounded = Math.round(value);
-  if (hasCompetition && Math.abs(value - rounded) <= BURST_TARGET_EPSILON && rounded > 0 && rounded < amount) {
-    return {
-      min: Math.max(0, rounded - 1),
-      max: Math.min(amount, rounded + 1)
-    };
-  }
-  return {
-    min: Math.max(0, Math.floor(value)),
-    max: Math.min(amount, Math.max(1, Math.ceil(value)))
-  };
+function getTokenBurstIntersectionRatio(attackerToken, token, geometry) {
+  if (!geometry || geometry.type === VOLLEY_ACTION_KEY) return 0;
+  const visiblePoints = getVisibleTokenAttackPoints(attackerToken, token, geometry);
+  if (!visiblePoints.length) return 0;
+  if (geometry.halfAngle <= 0) return 1;
+
+  const centerTrajectory = buildTrajectoryByAngle(
+    attackerToken,
+    geometry,
+    Number(geometry.angle) || 0,
+    Number(geometry.elevationSlope) || 0
+  );
+  const centerHit = getTokenTrajectoryHit(token, centerTrajectory);
+  if (centerHit && hasLineOfSight(attackerToken, centerHit.point, centerTrajectory.origin)) return 1;
+
+  const halfAngle = Math.max(GEOMETRY_EPSILON, Number(geometry.halfAngle) || 0);
+  const closestOffset = visiblePoints.reduce((closest, point) => {
+    const offset = Math.abs(normalizeAngle(Math.atan2(point.y - geometry.origin.y, point.x - geometry.origin.x) - geometry.angle));
+    return Number.isFinite(offset) ? Math.min(closest, offset) : closest;
+  }, Infinity);
+  if (!Number.isFinite(closestOffset) || closestOffset > halfAngle + GEOMETRY_EPSILON) return 0;
+  return clamp(1 - (closestOffset / halfAngle), 0, 1);
+}
+
+function getBurstBulletRange(count = 1, intersectionRatio = 0) {
+  const amount = Math.max(1, toInteger(count) || 1);
+  const ratio = clamp(Number(intersectionRatio) || 0, 0, 1);
+  if (ratio >= 1 - BURST_FULL_INTERSECTION_EPSILON) return { min: amount, max: amount };
+  if (ratio <= GEOMETRY_EPSILON) return { min: 0, max: 0 };
+  const scaled = amount * ratio;
+  const min = clamp(Math.floor(scaled), 1, amount);
+  const max = clamp(Math.ceil(scaled), min, amount);
+  return { min, max };
 }
 
 function formatBurstBulletRange(range = {}) {
   const min = Math.max(0, toInteger(range.min));
   const max = Math.max(min, toInteger(range.max));
   return min === max ? String(max) : `${min}-${max}`;
-}
-
-function selectWeightedBurstTarget(entries = [], counts = new Map(), missWeight = 0) {
-  const choices = entries
-    .map(entry => ({
-      entry,
-      weight: Math.max(0, entry.score) * Math.max(0, entry.range.max - (counts.get(entry.target) ?? 0))
-    }))
-    .filter(choice => choice.weight > BURST_TARGET_EPSILON);
-  const totalWeight = choices.reduce((sum, choice) => sum + choice.weight, 0) + Math.max(0, missWeight);
-  if (totalWeight <= BURST_TARGET_EPSILON) return null;
-  let roll = Math.random() * totalWeight;
-  for (const choice of choices) {
-    roll -= choice.weight;
-    if (roll <= 0) return choice.entry;
-  }
-  return null;
-}
-
-function shuffleArray(values = []) {
-  const result = [...values];
-  for (let index = result.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
-  }
-  return result;
 }
 
 function getSwingTargetSequence(selectedTarget, directionKey, targets = [], geometry = null) {
@@ -3609,8 +3492,9 @@ function getSwingLateralOffset(point, geometry) {
 }
 
 function buildSwingAnimationTrajectory(attackerToken, targets = [], directionKey = "rightToLeft", geometry = null) {
-  const centers = targets.map(getTokenCenter);
-  const first = geometry?.origin ?? (attackerToken ? getTokenCenter(attackerToken) : null) ?? centers.at(0) ?? { x: 0, y: 0 };
+  const centers = targets.map(getTokenCenter).filter(Boolean);
+  const first = geometry?.origin ?? (attackerToken ? getTokenAimPoint(attackerToken) : null) ?? centers.at(0);
+  if (!first) return null;
   const last = centers.at(-1) ?? null;
   const fallbackOffset = Math.max(24, (Number(canvas.grid?.size) || 100) * 0.7);
   const end = last
@@ -3689,8 +3573,9 @@ function getProjectedDistanceOnSegment(origin, end, point) {
 }
 
 function getTokenWorldPolygon(token) {
-  const shape = token?.shape ?? token?.getShape?.();
+  const shape = token?.shape;
   const offset = getTokenShapeOffset(token);
+  if (!shape || !offset) return null;
   if (shape instanceof PIXI.Polygon) return translatePolygon(shape, offset);
   if (shape instanceof PIXI.Rectangle) {
     return new PIXI.Rectangle(
@@ -3704,15 +3589,16 @@ function getTokenWorldPolygon(token) {
     return new PIXI.Circle(offset.x + shape.x, offset.y + shape.y, shape.radius).toPolygon?.({ density: 48 }) ?? null;
   }
   if (shape instanceof PIXI.Ellipse) return ellipseToPolygon(shape, offset);
-
-  const bounds = getTokenBoundsRectangle(token);
-  return bounds?.toPolygon?.() ?? null;
+  return null;
 }
 
 function getTokenShapeOffset(token) {
+  const x = Number(token?.position?.x);
+  const y = Number(token?.position?.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
   return {
-    x: Number(token?.position?.x ?? token?.x ?? token?.document?.x) || 0,
-    y: Number(token?.position?.y ?? token?.y ?? token?.document?.y) || 0
+    x,
+    y
   };
 }
 
@@ -3765,15 +3651,12 @@ function getTokenAttackContactPoints(token, geometry) {
     return sortContactPoints(points, geometry.origin);
   }
 
-  const attackPolygon = getAttackPolygon(geometry);
-  if (attackPolygon) {
-    const intersection = attackPolygon.intersectPolygon?.(tokenPolygon, { scalingFactor: 100 });
-    const intersectionPoints = getPolygonPointObjects(intersection);
-    if (getPolygonArea(intersectionPoints) > GEOMETRY_EPSILON) {
-      addUniquePoint(points, getPointCentroid(intersectionPoints));
-      for (const point of intersectionPoints) addUniquePoint(points, point);
-    }
+  const tokenPoints = getPolygonPointObjects(tokenPolygon);
+  for (const point of tokenPoints) {
+    if (isPointInsideAttackCone(point, geometry)) addUniquePoint(points, point);
   }
+  addAttackBoundaryIntersections(points, tokenPoints, geometry, -geometry.halfAngle);
+  addAttackBoundaryIntersections(points, tokenPoints, geometry, geometry.halfAngle);
 
   return sortContactPoints(points, geometry.origin);
 }
@@ -3793,21 +3676,52 @@ function getTokenVolleyContactPoints(token, geometry) {
   return sortContactPoints(points, geometry.end);
 }
 
-function getTokenBounds(token) {
-  const bounds = getTokenBoundsRectangle(token);
-  if (bounds) {
-    return {
-      left: bounds.left,
-      right: bounds.right,
-      top: bounds.top,
-      bottom: bounds.bottom
-    };
+function addAttackBoundaryIntersections(points, tokenPoints, geometry, offset) {
+  if (tokenPoints.length < 3) return;
+  const angle = geometry.angle + offset;
+  const end = {
+    x: geometry.origin.x + (Math.cos(angle) * geometry.distance),
+    y: geometry.origin.y + (Math.sin(angle) * geometry.distance)
+  };
+  for (let index = 0; index < tokenPoints.length; index += 1) {
+    const a = tokenPoints[index];
+    const b = tokenPoints[(index + 1) % tokenPoints.length];
+    const intersection = foundry.utils.lineSegmentIntersection?.(geometry.origin, end, a, b);
+    if (intersection) addUniquePoint(points, intersection);
   }
+}
+
+function isPointInsideAttackCone(point, geometry) {
+  if (!point || !geometry?.origin) return false;
+  const dx = point.x - geometry.origin.x;
+  const dy = point.y - geometry.origin.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance > (Number(geometry.distance) || 0) + GEOMETRY_EPSILON) return false;
+  const offset = normalizeAngle(Math.atan2(dy, dx) - geometry.angle);
+  return offset >= -geometry.halfAngle - GEOMETRY_EPSILON
+    && offset <= geometry.halfAngle + GEOMETRY_EPSILON;
+}
+
+function getTokenShapeBounds(token) {
+  const points = getPolygonPointObjects(getTokenWorldPolygon(token));
+  if (!points.length) return null;
+  const xs = points.map(point => point.x);
+  const ys = points.map(point => point.y);
   return {
-    left: token.x,
-    right: token.x + token.w,
-    top: token.y,
-    bottom: token.y + token.h
+    left: Math.min(...xs),
+    right: Math.max(...xs),
+    top: Math.min(...ys),
+    bottom: Math.max(...ys)
+  };
+}
+
+function getTokenShapeCenter(token) {
+  const bounds = getTokenShapeBounds(token);
+  if (!bounds) return null;
+  return {
+    x: (bounds.left + bounds.right) / 2,
+    y: (bounds.top + bounds.bottom) / 2,
+    elevation: getTokenAimElevation(token)
   };
 }
 
@@ -3821,14 +3735,56 @@ function getTokenElevationRange(token) {
 }
 
 function getClosestPointOnTokenVolume(token, point) {
-  const bounds = getTokenBoundsRectangle(token);
-  if (!bounds || !point) return null;
+  if (!point) return null;
+  const polygon = getTokenWorldPolygon(token);
+  const points = getPolygonPointObjects(polygon);
+  if (points.length < 3) return null;
+  const closest = getClosestPointOnPolygon(points, point, polygon);
+  if (!closest) return null;
   const elevationRange = getTokenElevationRange(token);
   const pointElevation = Number.isFinite(Number(point.elevation)) ? Number(point.elevation) : getTokenAimElevation(token);
   return {
-    x: Math.max(bounds.left, Math.min(Number(point.x) || 0, bounds.right)),
-    y: Math.max(bounds.top, Math.min(Number(point.y) || 0, bounds.bottom)),
+    x: closest.x,
+    y: closest.y,
     elevation: Math.max(elevationRange.bottom, Math.min(pointElevation, elevationRange.top))
+  };
+}
+
+function getClosestPointOnPolygon(points, point, polygon = null) {
+  const target = {
+    x: Number(point?.x),
+    y: Number(point?.y)
+  };
+  if (!Number.isFinite(target.x) || !Number.isFinite(target.y) || points.length < 3) return null;
+  if (polygon?.contains?.(target.x, target.y)) return target;
+
+  let best = null;
+  let bestDistance = Infinity;
+  for (let index = 0; index < points.length; index += 1) {
+    const a = points[index];
+    const b = points[(index + 1) % points.length];
+    const candidate = getClosestPointOnSegment(target, a, b);
+    const distance = Math.hypot(candidate.x - target.x, candidate.y - target.y);
+    if (distance >= bestDistance) continue;
+    best = candidate;
+    bestDistance = distance;
+  }
+  return best;
+}
+
+function getClosestPointOnSegment(point, a, b) {
+  const ax = Number(a?.x) || 0;
+  const ay = Number(a?.y) || 0;
+  const bx = Number(b?.x) || 0;
+  const by = Number(b?.y) || 0;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lengthSquared = (dx * dx) + (dy * dy);
+  if (lengthSquared <= GEOMETRY_EPSILON) return { x: ax, y: ay };
+  const t = clamp((((point.x - ax) * dx) + ((point.y - ay) * dy)) / lengthSquared, 0, 1);
+  return {
+    x: ax + (dx * t),
+    y: ay + (dy * t)
   };
 }
 
@@ -3848,19 +3804,14 @@ function getTokenAimElevation(token) {
 
 function getTokenAimPoint(token) {
   const origin = token?.document?.getMovementOrigin?.();
-  if (origin) {
+  if (Number.isFinite(Number(origin?.x)) && Number.isFinite(Number(origin?.y))) {
     return {
       x: Number(origin.x) || 0,
       y: Number(origin.y) || 0,
       elevation: Number(origin.elevation) || 0
     };
   }
-  const center = getTokenCenter(token);
-  return {
-    x: center.x,
-    y: center.y,
-    elevation: getTokenAimElevation(token)
-  };
+  return null;
 }
 
 function getTrajectoryTokenElevationHitDistance(trajectory, range, elevationRange) {
@@ -3883,34 +3834,6 @@ function getTrajectoryTokenElevationHitDistance(trajectory, range, elevationRang
   const verticalExit = Math.max(first, second);
   const hit = Math.max(entry, verticalEntry);
   return hit <= Math.min(exit, verticalExit) + GEOMETRY_EPSILON ? hit : Number.NaN;
-}
-
-function getTokenBoundsRectangle(token) {
-  const left = Number(token?.x);
-  const top = Number(token?.y);
-  const width = Number(token?.w);
-  const height = Number(token?.h);
-  if ([left, top, width, height].every(Number.isFinite)) return new PIXI.Rectangle(left, top, width, height).normalize();
-
-  const bounds = token?.bounds;
-  if (bounds) {
-    const boundsLeft = Number(bounds.left ?? bounds.x);
-    const boundsTop = Number(bounds.top ?? bounds.y);
-    const boundsWidth = Number(bounds.width);
-    const boundsHeight = Number(bounds.height);
-    const boundsRight = Number(bounds.right ?? (boundsLeft + boundsWidth));
-    const boundsBottom = Number(bounds.bottom ?? (boundsTop + boundsHeight));
-    if ([boundsLeft, boundsRight, boundsTop, boundsBottom].every(Number.isFinite)) {
-      return new PIXI.Rectangle(boundsLeft, boundsTop, boundsRight - boundsLeft, boundsBottom - boundsTop).normalize();
-    }
-  }
-  return null;
-}
-
-function getAttackPolygon(geometry) {
-  const points = getAttackPolygonPoints(geometry);
-  if (points.length < 3) return null;
-  return new PIXI.Polygon(points.flatMap(point => [point.x, point.y]));
 }
 
 function getAttackPolygonPoints(geometry) {
@@ -3937,26 +3860,6 @@ function getPolygonPointObjects(polygon) {
     if (Number.isFinite(x) && Number.isFinite(y)) points.push({ x, y });
   }
   return points;
-}
-
-function getPolygonArea(points = []) {
-  if (points.length < 3) return 0;
-  let area = 0;
-  for (let index = 0; index < points.length; index += 1) {
-    const current = points[index];
-    const next = points[(index + 1) % points.length];
-    area += ((Number(current.x) || 0) * (Number(next.y) || 0))
-      - ((Number(next.x) || 0) * (Number(current.y) || 0));
-  }
-  return Math.abs(area) / 2;
-}
-
-function getPointCentroid(points = []) {
-  const count = Math.max(1, points.length);
-  return {
-    x: points.reduce((sum, point) => sum + point.x, 0) / count,
-    y: points.reduce((sum, point) => sum + point.y, 0) / count
-  };
 }
 
 function sortContactPoints(points, origin) {
@@ -4005,15 +3908,7 @@ function serializeWeaponDamageRequests(requests = []) {
 }
 
 function getTokenCenter(token) {
-  const center = token?.document?.getCenterPoint?.(token.document._source) ?? token.center ?? {
-    x: token.x + (token.w / 2),
-    y: token.y + (token.h / 2)
-  };
-  return {
-    x: Number(center.x) || 0,
-    y: Number(center.y) || 0,
-    elevation: Number.isFinite(Number(center.elevation)) ? Number(center.elevation) : getTokenAimElevation(token)
-  };
+  return getTokenShapeCenter(token);
 }
 
 function selectRandomLimbKey(actor, { includeDestroyed = false } = {}) {
