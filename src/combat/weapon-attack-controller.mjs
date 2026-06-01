@@ -3356,21 +3356,13 @@ function buildBurstBulletAssignments(attackerToken, geometry, targets = [], atta
 function buildBurstTargetEntries(attackerToken, geometry, targets = [], attackCount = 1, { primaryShots = null } = {}) {
   const amount = Math.max(1, toInteger(attackCount) || 1);
   if (!geometry || geometry.type === VOLLEY_ACTION_KEY || !targets.length) return [];
-  const allowedTargets = new Set(targets);
-  const counts = new Map();
-  const distances = new Map();
-  for (const shot of buildBurstDistributionShots(attackerToken, geometry, amount)) {
-    const target = shot?.target ?? null;
-    if (!target || !allowedTargets.has(target)) continue;
-    counts.set(target, (counts.get(target) ?? 0) + 1);
-    distances.set(target, Math.min(distances.get(target) ?? Infinity, Number(shot.hit?.distance) || getTargetDistance(target, geometry)));
-  }
-  const sampleCount = Math.max(BURST_DISTRIBUTION_SAMPLE_MIN, amount * BURST_DISTRIBUTION_SAMPLE_MULTIPLIER);
-  return Array.from(counts.entries())
-    .filter(([target, count]) => count > 0 && target?.actor && target.visible && !isDeadTarget(target))
+  const { buckets, denominator, distances, weights } = getBurstTargetHitDistribution(attackerToken, geometry, targets, amount);
+  if (denominator <= 0) return [];
+  return Array.from(buckets.entries())
+    .filter(([target, shots]) => ((weights.get(target) ?? shots.length) > 0) && target?.actor && target.visible && !isDeadTarget(target))
     .sort((left, right) => (distances.get(left[0]) ?? Infinity) - (distances.get(right[0]) ?? Infinity))
-    .map(([target, count]) => {
-      const expected = (count / sampleCount) * amount;
+    .map(([target, shots]) => {
+      const expected = ((weights.get(target) ?? shots.length) / denominator) * amount;
       const range = getBurstDistributionRange(amount, expected);
       return {
         target,
@@ -3400,6 +3392,66 @@ function buildBurstDistributionShots(attackerToken, geometry, attackCount = 1) {
   });
 }
 
+function getBurstTargetHitDistribution(attackerToken, geometry, targets = [], attackCount = 1) {
+  const allowedTargets = new Set(targets);
+  const aimShots = new Map();
+  const buckets = new Map();
+  const distances = new Map();
+  const distributionShots = buildBurstDistributionShots(attackerToken, geometry, attackCount);
+  for (const shot of distributionShots) {
+    const target = shot?.target ?? null;
+    if (!target || !allowedTargets.has(target) || !target.actor || !target.visible || isDeadTarget(target)) continue;
+    if (!buckets.has(target)) buckets.set(target, []);
+    buckets.get(target).push(shot);
+    distances.set(target, Math.min(distances.get(target) ?? Infinity, Number(shot.hit?.distance) || getTargetDistance(target, geometry)));
+  }
+
+  const sampleCount = Math.max(1, distributionShots.length);
+  const weights = new Map(Array.from(buckets.entries()).map(([target, shots]) => [target, shots.length]));
+  for (const target of allowedTargets) {
+    if (!target?.actor || !target.visible || isDeadTarget(target)) continue;
+    const aimWeight = getBurstTargetAimWeight(target, geometry, sampleCount);
+    if (aimWeight <= 0) continue;
+    const aimShot = buildBurstTargetAimShot(attackerToken, geometry, target);
+    if (!aimShot) continue;
+    if (!buckets.has(target)) buckets.set(target, []);
+    aimShots.set(target, aimShot);
+    weights.set(target, Math.max(weights.get(target) ?? 0, aimWeight));
+    distances.set(target, Math.min(distances.get(target) ?? Infinity, Number(aimShot.hit?.distance) || getTargetDistance(target, geometry)));
+  }
+
+  const targetWeight = Array.from(weights.values()).reduce((sum, weight) => sum + weight, 0);
+  const denominator = Math.max(sampleCount, targetWeight);
+  const missWeight = Math.max(0, denominator - targetWeight);
+  return { aimShots, buckets, denominator, distances, missWeight, weights };
+}
+
+function getBurstTargetAimWeight(target, geometry, sampleCount = 1) {
+  if (!geometry?.origin || geometry.type === VOLLEY_ACTION_KEY || !target) return 0;
+  const halfAngle = Math.max(0, Number(geometry.halfAngle) || 0);
+  if (halfAngle <= GEOMETRY_EPSILON) return 0;
+  const center = getTokenCenter(target);
+  if (!center) return 0;
+  const offset = Math.abs(normalizeAngle(Math.atan2(center.y - geometry.origin.y, center.x - geometry.origin.x) - geometry.angle));
+  const normalizedOffset = clamp(offset / halfAngle, 0, 1);
+  const centrality = 1 - (normalizedOffset * normalizedOffset);
+  return centrality * Math.max(1, sampleCount);
+}
+
+function buildBurstTargetAimShot(attackerToken, geometry, target) {
+  const point = getTokenCenter(target);
+  if (!point) return null;
+  const trajectory = buildTrajectoryThroughPoint(attackerToken, geometry, point);
+  const hit = getTrajectoryTargetEntries(attackerToken, trajectory).at(0);
+  if (hit?.target !== target) return null;
+  if (!hit) return null;
+  return {
+    trajectory,
+    target,
+    hit: hit.hit
+  };
+}
+
 function getBurstDistributionRange(amount = 1, expected = 0) {
   const count = Math.max(1, toInteger(amount) || 1);
   const value = clamp(Number(expected) || 0, 0, count);
@@ -3425,6 +3477,8 @@ function buildBurstPrimaryShots(attackerToken, geometry, attackCount = 1) {
 
 function buildBurstPrimaryShotsForRanges(attackerToken, geometry, attackCount = 1, targets = [], burstRanges = new Map()) {
   const amount = Math.max(1, toInteger(attackCount) || 1);
+  const distributedShots = buildBurstPrimaryShotsFromTargetDistribution(attackerToken, geometry, amount, targets);
+  if (distributedShots.length === amount) return distributedShots;
   if (!burstRanges?.size) return buildBurstPrimaryShots(attackerToken, geometry, amount);
   const allowedTargets = new Set(targets);
   let bestShots = null;
@@ -3441,6 +3495,75 @@ function buildBurstPrimaryShotsForRanges(attackerToken, geometry, attackCount = 
   }
 
   return bestShots ?? buildBurstPrimaryShots(attackerToken, geometry, amount);
+}
+
+function buildBurstPrimaryShotsFromTargetDistribution(attackerToken, geometry, attackCount = 1, targets = []) {
+  const amount = Math.max(1, toInteger(attackCount) || 1);
+  const distribution = getBurstTargetHitDistribution(attackerToken, geometry, targets, amount);
+  const { aimShots, buckets, denominator, distances, missWeight, weights } = distribution;
+  if (denominator <= 0) return [];
+
+  const allocations = Array.from(buckets.entries())
+    .filter(([target, shots]) => (weights.get(target) ?? shots.length) > 0)
+    .map(([target, shots]) => {
+      const exact = ((weights.get(target) ?? shots.length) / denominator) * amount;
+      return {
+        target,
+        shots,
+        count: Math.floor(exact),
+        remainder: exact - Math.floor(exact),
+        distance: distances.get(target) ?? Infinity
+      };
+    });
+  if (missWeight > 0) {
+    const exact = (missWeight / denominator) * amount;
+    allocations.push({
+      target: null,
+      shots: [],
+      count: Math.floor(exact),
+      remainder: exact - Math.floor(exact),
+      distance: Infinity
+    });
+  }
+
+  let remaining = Math.max(0, amount - allocations.reduce((sum, entry) => sum + entry.count, 0));
+  [...allocations]
+    .sort((left, right) => (right.remainder - left.remainder) || (left.distance - right.distance))
+    .slice(0, remaining)
+    .forEach(entry => { entry.count += 1; });
+
+  const shots = [];
+  for (const entry of allocations) {
+    for (let index = 0; index < entry.count; index += 1) {
+      const shot = selectBurstDistributedShot(attackerToken, geometry, entry, aimShots);
+      if (shot) shots.push(shot);
+    }
+  }
+  return shuffleBurstShots(shots).slice(0, amount);
+}
+
+function selectBurstDistributedShot(attackerToken, geometry, entry, aimShots = new Map()) {
+  if (!entry?.target) {
+    return {
+      trajectory: buildRandomTrajectory(attackerToken, getRandomBurstMissGeometry(attackerToken, geometry)),
+      target: null,
+      hit: null
+    };
+  }
+  const aimShot = aimShots.get(entry.target) ?? null;
+  if (aimShot && Math.random() < 0.5) return aimShot;
+  if (entry.shots.length) return entry.shots[Math.floor(Math.random() * entry.shots.length)];
+  if (aimShot) return aimShot;
+  return null;
+}
+
+function shuffleBurstShots(shots = []) {
+  const values = [...shots];
+  for (let index = values.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [values[index], values[swapIndex]] = [values[swapIndex], values[index]];
+  }
+  return values;
 }
 
 function getBurstShotRangeMismatchScore(shots = [], allowedTargets = new Set(), burstRanges = new Map()) {
