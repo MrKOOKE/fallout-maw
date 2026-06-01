@@ -3157,9 +3157,23 @@ function getEffectiveRangeDifficultyBonus(weapon, attackerToken, target, weaponF
 }
 
 function getEffectiveRangeDifficultyBonusForDistance(weaponData = {}, distanceMeters = 0) {
-  const effective = Number(weaponData?.effectiveRange?.value) || 0;
-  if (effective <= 0) return 0;
-  return Math.max(0, Math.round(Math.abs(distanceMeters - effective))) * 10;
+  const range = getEffectiveRangeBounds(weaponData?.effectiveRange);
+  if (!range) return 0;
+  const distance = Math.max(0, Number(distanceMeters) || 0);
+  if (distance >= range.min && distance <= range.max) return 0;
+  const overrun = distance < range.min ? range.min - distance : distance - range.max;
+  return Math.max(0, Math.round(overrun)) * 10;
+}
+
+function getEffectiveRangeBounds(effectiveRange = {}) {
+  const first = Math.max(0, Number(effectiveRange?.value) || 0);
+  const second = Math.max(0, Number(effectiveRange?.max) || 0);
+  if (first <= 0 && second <= 0) return null;
+  if (second <= 0) return { min: 0, max: first };
+  return {
+    min: Math.min(first, second),
+    max: Math.max(first, second)
+  };
 }
 
 function getTokenDistanceMeters(leftToken, rightToken) {
