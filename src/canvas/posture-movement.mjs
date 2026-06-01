@@ -58,16 +58,12 @@ const POSTURE_ACTION_CONFIGS = Object.freeze({
 });
 
 const SELECTABLE_MOVEMENT_ACTIONS = new Set([...Object.keys(POSTURE_ACTION_CONFIGS), "displace"]);
-const INCAPACITATING_STATUSES = new Set(["dead", "unconscious", "incapacitated"]);
 
 export function registerPostureMovementHooks() {
   configureTokenMovementActions();
   Hooks.on("preUpdateToken", onPreUpdateTokenPostureMovement);
   Hooks.on("updateToken", onUpdateTokenPostureMovement);
   Hooks.on("renderTokenHUD", decorateTokenHudPosturePalette);
-  Hooks.on("createActiveEffect", scheduleActorKnockdownFromEffect);
-  Hooks.on("updateActiveEffect", scheduleActorKnockdownFromEffect);
-  Hooks.on("updateActor", scheduleActorKnockdown);
   Hooks.on("canvasReady", () => void syncScenePostureMovement());
 }
 
@@ -92,6 +88,14 @@ export function getActorPostureWeaponActionPointCostBonus(actor) {
 
 export function getActorPostureAction(actor) {
   return normalizeMovementAction(getActorPostureEffectData(actor)?.action);
+}
+
+export async function setActorTokensPosture(actor, action = "walk") {
+  const nextAction = POSTURE_ACTION_CONFIGS[normalizeMovementAction(action)] ? normalizeMovementAction(action) : "walk";
+  for (const tokenDocument of getActorTokenDocuments(actor)) {
+    if (normalizeMovementAction(tokenDocument?._source?.movementAction) === nextAction) continue;
+    await tokenDocument.update({ movementAction: nextAction }, { [AUTOMATIC_POSTURE_OPTION]: true });
+  }
 }
 
 function configureTokenMovementActions() {
@@ -150,13 +154,13 @@ function onPreUpdateTokenPostureMovement(tokenDocument, changes, options, userId
 }
 
 function onUpdateTokenPostureMovement(tokenDocument, changes, options, userId) {
-  if (game.user?.id && userId && game.user.id !== userId && !game.user?.isActiveGM) return;
+  const isRequestingUser = !game.user?.id || !userId || game.user.id === userId;
+  if (!isRequestingUser) return;
   if (!foundry.utils.hasProperty(changes, "movementAction")) return;
   void syncTokenPostureEffect(tokenDocument);
-  const isRequestingUser = !game.user?.id || !userId || game.user.id === userId;
   if (options?.isUndo) {
-    if (isRequestingUser) void restoreLastPostureChangeResources(tokenDocument);
-  } else if (isRequestingUser) {
+    void restoreLastPostureChangeResources(tokenDocument);
+  } else {
     void spendPendingPostureChangeCost(tokenDocument);
   }
 }
@@ -166,7 +170,6 @@ async function syncScenePostureMovement() {
   for (const token of canvas?.tokens?.placeables ?? []) {
     await syncTokenPostureDocument(token.document);
     await syncTokenPostureEffect(token.document);
-    await knockdownTokenIfActorIncapacitated(token.document);
   }
 }
 
@@ -193,23 +196,42 @@ async function syncTokenPostureEffect(tokenDocument) {
   const existing = actor.effects.filter(effect => effect.getFlag(SYSTEM_ID, POSTURE_MOVEMENT_FLAG));
 
   if (!posture) {
-    if (existing.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existing.map(effect => effect.id));
+    await deleteExistingPostureEffects(actor, existing.map(effect => effect.id));
     return;
   }
 
   const signature = JSON.stringify({ action, tokenUuid: tokenDocument.uuid });
   const current = existing.find(effect => effect.getFlag(SYSTEM_ID, POSTURE_MOVEMENT_FLAG)?.signature === signature);
   const obsolete = existing.filter(effect => effect.id !== current?.id).map(effect => effect.id);
-  if (obsolete.length) await actor.deleteEmbeddedDocuments("ActiveEffect", obsolete);
+  await deleteExistingPostureEffects(actor, obsolete);
 
   const data = buildPostureEffectData(tokenDocument, action, posture, signature);
-  if (current) {
+  if (current && hasActorEffect(actor, current.id)) {
     const update = getEffectUpdateData(current, data);
-    if (Object.keys(update).length) await current.update(update);
+    if (Object.keys(update).length) await updatePostureEffect(current, update);
     return;
   }
 
   await actor.createEmbeddedDocuments("ActiveEffect", [data]);
+}
+
+async function deleteExistingPostureEffects(actor, ids = []) {
+  const existingIds = ids.filter(id => hasActorEffect(actor, id));
+  if (!existingIds.length) return;
+
+  try {
+    await actor.deleteEmbeddedDocuments("ActiveEffect", existingIds);
+  } catch (error) {
+    if (!isMissingDocumentError(error)) throw error;
+  }
+}
+
+async function updatePostureEffect(effect, update = {}) {
+  try {
+    await effect.update(update);
+  } catch (error) {
+    if (!isMissingDocumentError(error)) throw error;
+  }
 }
 
 function buildPostureEffectData(tokenDocument, action, posture, signature) {
@@ -470,28 +492,13 @@ function getPostureChangeResourcePreviewResources(actor, amount) {
   };
 }
 
-function scheduleActorKnockdownFromEffect(effect) {
-  scheduleActorKnockdown(effect?.parent);
-}
-
-function scheduleActorKnockdown(actor) {
-  if (!game.user?.isActiveGM || !actor?.id) return;
-  window.setTimeout(() => void knockdownActorIfIncapacitated(actor), 0);
-}
-
-async function knockdownActorIfIncapacitated(actor) {
-  if (!isActorIncapacitated(actor)) return;
+function getActorTokenDocuments(actor) {
+  const documents = [];
   for (const token of canvas?.tokens?.placeables ?? []) {
-    const tokenDocument = token.document;
-    if (!isTokenForActor(tokenDocument, actor)) continue;
-    await knockdownTokenIfActorIncapacitated(tokenDocument);
+    const tokenDocument = token?.document;
+    if (isTokenForActor(tokenDocument, actor)) documents.push(tokenDocument);
   }
-}
-
-async function knockdownTokenIfActorIncapacitated(tokenDocument) {
-  if (!isActorIncapacitated(tokenDocument?.actor)) return;
-  if (normalizeMovementAction(tokenDocument._source?.movementAction) === "knocked") return;
-  await tokenDocument.update({ movementAction: "knocked" }, { [AUTOMATIC_POSTURE_OPTION]: true });
+  return documents;
 }
 
 function isTokenForActor(tokenDocument, actor) {
@@ -501,16 +508,16 @@ function isTokenForActor(tokenDocument, actor) {
   return tokenDocument.actor.id === actor.id;
 }
 
-function isActorIncapacitated(actor) {
-  const statuses = actor?.statuses;
-  if (!statuses) return false;
+function hasActorEffect(actor, effectId) {
+  const id = String(effectId ?? "");
+  if (!id) return false;
+  if (actor?.effects?.has?.(id)) return true;
+  if (actor?.effects?.get?.(id)) return true;
+  return Boolean(actor?.effects?.some?.(effect => effect.id === id));
+}
 
-  const defeated = CONFIG.specialStatusEffects?.DEFEATED;
-  if (defeated && statuses.has(defeated)) return true;
-  for (const status of INCAPACITATING_STATUSES) {
-    if (statuses.has(status)) return true;
-  }
-  return false;
+function isMissingDocumentError(error) {
+  return /does not exist/i.test(String(error?.message ?? error ?? ""));
 }
 
 function getActorPostureEffectData(actor) {

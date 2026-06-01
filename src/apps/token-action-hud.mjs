@@ -17,7 +17,7 @@ import {
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { applyDamageCostModifier, fullyRestoreActorDamageState, getDamageCostModifierState, getLimbHealingCap, getResourceLimitState, isLimbDestroyed } from "../combat/damage-hub.mjs";
 import { MOVEMENT_RESOURCE_PREVIEW_HOOK } from "../combat/movement-resources.mjs";
-import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
+import { getActorPostureWeaponActionPointCostBonus, setActorTokensPosture } from "../canvas/posture-movement.mjs";
 import {
   cancelWeaponAttack,
   hasRequiredWeaponReloadActionPoints,
@@ -2834,6 +2834,7 @@ function addLimitedResourceDisplay(entry, limit = null) {
 
 async function fullyRestoreActor(actor, { repairItems = false } = {}) {
   await fullyRestoreActorDamageState(actor);
+  await setActorTokensPosture(actor, "walk");
   if (repairItems) await fullyRepairActorItems(actor);
 }
 

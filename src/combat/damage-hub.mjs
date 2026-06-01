@@ -11,6 +11,7 @@ import {
 import { getTraumaGroupForActor } from "../settings/traumas.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
+import { setActorTokensPosture } from "../canvas/posture-movement.mjs";
 import {
   DAMAGE_MITIGATION_MODES,
   ITEM_FUNCTIONS,
@@ -1370,6 +1371,7 @@ async function synchronizeActorVitalStatuses(actor) {
   if (!actor?.toggleStatusEffect) return;
   const dead = hasDestroyedCriticalLimb(actor);
   if (dead) {
+    if (!actor.statuses?.has?.(STATUS_EFFECTS.dead)) await setActorTokensPosture(actor, "knocked");
     if (hasShockUnconscious(actor)) await actor.unsetFlag(SYSTEM_ID, SHOCK_UNCONSCIOUS_FLAG_KEY);
     await setActorStatus(actor, STATUS_EFFECTS.unconscious, false, { animate: false });
     await setActorStatus(actor, STATUS_EFFECTS.dead, true);
@@ -1378,6 +1380,7 @@ async function synchronizeActorVitalStatuses(actor) {
 
   const health = actor.health;
   const unconscious = hasShockUnconscious(actor) || (health && toInteger(health.value) <= toInteger(health.min));
+  if (unconscious && !actor.statuses?.has?.(STATUS_EFFECTS.unconscious)) await setActorTokensPosture(actor, "knocked");
   await setActorStatus(actor, STATUS_EFFECTS.dead, false);
   await setActorStatus(actor, STATUS_EFFECTS.unconscious, Boolean(unconscious));
 }
