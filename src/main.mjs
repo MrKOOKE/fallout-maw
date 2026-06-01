@@ -1,6 +1,7 @@
 import { FALLOUT_MAW, syncSystemConfig } from "./config/system-config.mjs";
 import { FalloutMaWToken } from "./canvas/token.mjs";
 import { FalloutMaWTokenRuler } from "./canvas/token-ruler.mjs";
+import { registerPostureMovementHooks } from "./canvas/posture-movement.mjs";
 import { registerThrownItemHooks } from "./canvas/thrown-items.mjs";
 import { registerCombatDodgeHooks, registerCombatDodgeSocket } from "./combat/dodge-resource.mjs";
 import { registerCombatMovementHooks } from "./combat/movement-resources.mjs";
@@ -76,6 +77,7 @@ Hooks.once("init", () => {
   registerDataModels();
   registerSystemSheets();
   registerTrackableAttributes();
+  registerPostureMovementHooks();
   registerCombatDodgeHooks();
   registerCombatMovementHooks();
   registerAbilityEffectHooks();

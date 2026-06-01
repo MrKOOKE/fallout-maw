@@ -29,6 +29,11 @@
       "InventoryEquipment": "Инвентарь/Снаряжение",
       "Research": "Исследования"
     },
+    "Movement": {
+      "Walk": "\u0425\u043e\u0434\u044c\u0431\u0430",
+      "Crouch": "\u041f\u0440\u0438\u0441\u0435\u0434",
+      "Prone": "\u041b\u0435\u0436\u0430"
+    },
     "Common": {
       "Color": "\u0426\u0432\u0435\u0442",
       "ActionPoints": "Очки действия",

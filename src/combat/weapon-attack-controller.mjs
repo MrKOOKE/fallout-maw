@@ -1180,7 +1180,7 @@ class WeaponAttackController {
     });
     this.targets = potentialTargets;
     this.geometry.aimPoint = null;
-    this.trajectoryAimTarget = this.getUntargetedTrajectoryAimTarget(potentialTargets);
+    this.trajectoryAimTarget = this.getTrajectoryAimTarget(potentialTargets);
     this.geometry.aimPoint = this.trajectoryAimTarget ? getTokenAimPoint(this.trajectoryAimTarget) : null;
     if (this.geometry.aimPoint) this.targets = getAimedElevationTargets(this.token, this.geometry, potentialTargets);
     this.hoveredTarget = this.targetedAction && this.aimedMode === "aim"
@@ -1205,10 +1205,12 @@ class WeaponAttackController {
     this.broadcastPreview(forceBroadcast, markerPreview);
   }
 
-  getUntargetedTrajectoryAimTarget(potentialTargets = []) {
-    if (this.targetedAction || this.volleyAction) return null;
+  getTrajectoryAimTarget(potentialTargets = []) {
+    if (this.volleyAction) return null;
+    if (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)) return this.selectedTarget;
     const hoveredTarget = getAimedTargetUnderPointer(this.pointer, potentialTargets);
     if (hoveredTarget) return hoveredTarget;
+    if (this.targetedAction) return null;
     return potentialTargets.at(0) ?? null;
   }
 
@@ -4097,7 +4099,7 @@ function getSphericalDistancePixels(left, right) {
 
 function getTokenAimElevation(token) {
   const range = getTokenElevationRange(token);
-  return (range.bottom + range.top) / 2;
+  return range.bottom + ((range.top - range.bottom) * 0.7);
 }
 
 function getTokenAimPoint(token) {
@@ -4106,7 +4108,7 @@ function getTokenAimPoint(token) {
     return {
       x: Number(origin.x) || 0,
       y: Number(origin.y) || 0,
-      elevation: Number(origin.elevation) || 0
+      elevation: getTokenAimElevation(token)
     };
   }
   return null;

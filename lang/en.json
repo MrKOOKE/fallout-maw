@@ -30,6 +30,11 @@
       "InventoryEquipment": "Inventory/Equipment",
       "Research": "Research"
     },
+    "Movement": {
+      "Walk": "Walk",
+      "Crouch": "Crouch",
+      "Prone": "Prone"
+    },
     "Common": {
       "ActionPoints": "Action Points",
       "ActionPointsShort": "AP",
