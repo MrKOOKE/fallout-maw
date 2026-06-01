@@ -88,6 +88,12 @@ export const DEFAULT_TOKEN_ACTION_HUD_ICONS = Object.freeze({
     aimedMeleeAttack: "icons/svg/target.svg",
     reload: "icons/svg/upgrade.svg"
   }),
+  postures: Object.freeze({
+    walk: "icons/svg/walk.svg",
+    crawl: "icons/svg/leg.svg",
+    burrow: "icons/svg/down.svg",
+    knocked: "icons/svg/falling.svg"
+  }),
   skillIcons: Object.freeze(Object.fromEntries(
     createDefaultSkillSettings().map(skill => [skill.key, normalizeImageSettingPath(skill.img, "icons/svg/d20-grey.svg")])
   )),
@@ -128,6 +134,7 @@ export function normalizeTokenActionHudIcons(value = {}) {
     damageBlockedIcon: normalizeImageSettingPath(source.damageBlockedIcon, defaults.damageBlockedIcon),
     mainActions: normalizeImageSettingMap(source.mainActions, defaults.mainActions),
     weaponActions: normalizeImageSettingMap(source.weaponActions, defaults.weaponActions),
+    postures: normalizeImageSettingMap(source.postures, defaults.postures),
     skillIcons: normalizeImageSettingMap(source.skillIcons, defaults.skillIcons),
     emptyWeaponSlotIcon: normalizeImageSettingPath(source.emptyWeaponSlotIcon, defaults.emptyWeaponSlotIcon)
   };

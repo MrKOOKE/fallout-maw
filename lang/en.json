@@ -33,7 +33,8 @@
     "Movement": {
       "Walk": "Walk",
       "Crouch": "Crouch",
-      "Prone": "Prone"
+      "Prone": "Prone",
+      "Knocked": "Knocked Down"
     },
     "Common": {
       "ActionPoints": "Action Points",

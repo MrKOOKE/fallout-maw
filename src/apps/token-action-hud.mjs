@@ -17,6 +17,7 @@ import {
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { applyDamageCostModifier, fullyRestoreActorDamageState, getDamageCostModifierState, getLimbHealingCap, getResourceLimitState, isLimbDestroyed } from "../combat/damage-hub.mjs";
 import { MOVEMENT_RESOURCE_PREVIEW_HOOK } from "../combat/movement-resources.mjs";
+import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
 import {
   cancelWeaponAttack,
   hasRequiredWeaponReloadActionPoints,
@@ -2124,7 +2125,10 @@ function getWeaponActionPointCostStateForHud(actor, weaponData = {}, actionKey =
   const value = Number(weaponData?.[actionKey]?.actionPointCost);
   const fallback = actionKey === "reload" ? 2 : 5;
   const baseCost = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
-  const cost = applyDamageCostModifier(baseCost, getDamageCostModifierState(actor, { actionKey }).action);
+  const cost = Math.max(0, Math.ceil(
+    applyDamageCostModifier(baseCost, getDamageCostModifierState(actor, { actionKey }).action)
+    + getActorPostureWeaponActionPointCostBonus(actor)
+  ));
   const tone = cost < baseCost ? "cheaper" : (cost > baseCost ? "dearer" : "");
   return { baseCost, cost, tone };
 }

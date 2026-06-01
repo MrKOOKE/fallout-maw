@@ -90,6 +90,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
       group: "Стоимость"
     }),
     ...buildActionCostEffectKeyTokens(),
+    ...buildPostureEffectKeyTokens(),
     ...buildActionBlockEffectKeyTokens(),
     ...buildActionPenetrationEffectKeyTokens(),
     ...buildCombatEffectKeyTokens()
@@ -116,6 +117,26 @@ export function buildActionCostEffectKeyTokens() {
     path: `system.costs.actions.${entry.key}`,
     group: "Стоимость"
   })).filter(Boolean);
+}
+
+export function buildPostureEffectKeyTokens() {
+  const group = "Положения";
+  return getPostureEffectKeyEntries().flatMap(posture => [
+    createEffectKeyToken({
+      code: `${posture.code}MoveMultiplier`,
+      key: `${posture.key}.movementMultiplier`,
+      label: `${posture.label}: множитель передвижения`,
+      path: `system.postures.${posture.key}.movementMultiplier`,
+      group
+    }),
+    createEffectKeyToken({
+      code: `${posture.code}WeaponActionCost`,
+      key: `${posture.key}.weaponActionCost`,
+      label: `${posture.label}: стоимость оружейных действий`,
+      path: `system.postures.${posture.key}.weaponActionCost`,
+      group
+    })
+  ]).filter(Boolean);
 }
 
 export function buildActionBlockEffectKeyTokens() {
@@ -153,6 +174,15 @@ export function getWeaponActionCostEntries() {
     { key: "meleeAttack", code: "meleeAttackCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionMeleeAttack", "Неприцельная атака")}: стоимость` },
     { key: "aimedMeleeAttack", code: "aimedMeleeAttackCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack", "Прицельная атака")}: стоимость` },
     { key: "reload", code: "reloadCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionReload", "Перезарядка")}: стоимость` }
+  ];
+}
+
+function getPostureEffectKeyEntries() {
+  return [
+    { key: "walk", code: "walkPosture", label: localizeOrFallback("FALLOUTMAW.Movement.Walk", "Ходьба") },
+    { key: "crawl", code: "crouchPosture", label: localizeOrFallback("FALLOUTMAW.Movement.Crouch", "Присед") },
+    { key: "burrow", code: "pronePosture", label: localizeOrFallback("FALLOUTMAW.Movement.Prone", "Лежа") },
+    { key: "knocked", code: "knockedPosture", label: localizeOrFallback("FALLOUTMAW.Movement.Knocked", "Опрокинутый") }
   ];
 }
 

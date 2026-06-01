@@ -30,6 +30,7 @@ import {
   isContainerWeaponSetKey
 } from "../utils/equipment-slots.mjs";
 import { buildDamageMitigationTables, buildDamageTypeIconStyle } from "../utils/damage-mitigation-display.mjs";
+import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
   import {
     completeResearch,
     deleteResearchWithConfirm,
@@ -3999,7 +4000,12 @@ function getWeaponActionLabels(data = {}, baseData = {}, { actor = null, baseMod
     .map(([key, label]) => {
       const name = String(data[key]?.name ?? "").trim() || label;
       const configuredCost = getWeaponActionPointCost(data, key);
-      const cost = baseMode ? configuredCost : applyDamageCostModifier(configuredCost, getDamageCostModifierState(actor, { actionKey: key }).action);
+      const cost = baseMode
+        ? configuredCost
+        : Math.max(0, Math.ceil(
+          applyDamageCostModifier(configuredCost, getDamageCostModifierState(actor, { actionKey: key }).action)
+          + getActorPostureWeaponActionPointCostBonus(actor)
+        ));
       const baseCost = getWeaponActionPointCost(baseData, key);
       const costText = `${cost} ОД`;
       const costHtml = baseMode || cost === baseCost

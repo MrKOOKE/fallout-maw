@@ -70,13 +70,15 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
     icon.eventMode = "static";
     icon.interactive = true;
     icon.cursor = "help";
-    icon.on("pointerover", () => this._scheduleEffectTooltip(icon, effect));
+    icon.on("pointerover", event => this._scheduleEffectTooltip(event, icon, effect));
     icon.on("pointerout", () => scheduleEffectTooltipDeactivation());
     icon.on("pointerupoutside", () => scheduleEffectTooltipDeactivation());
   }
 
-  _scheduleEffectTooltip(icon, effect) {
+  _scheduleEffectTooltip(event, icon, effect) {
     if (!game.tooltip || !effect) return;
+    const point = getClientPoint(event);
+    if (!isCanvasTopmostAtPoint(point)) return;
     registerMiddleClickGuard();
     window.clearTimeout(deactivateTooltipTimeout);
     window.clearTimeout(activateTooltipTimeout);
@@ -93,6 +95,7 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
     }
 
     activateTooltipTimeout = window.setTimeout(() => {
+      if (!isCanvasTopmostAtPoint(point)) return;
       positionEffectTooltipAnchor(anchor, icon);
       game.tooltip.activate(anchor, {
         html,
@@ -316,6 +319,21 @@ function getIconClientRect(icon) {
   }
 
   return { left: window.innerWidth / 2, top: window.innerHeight / 2, width: 1, height: 1 };
+}
+
+function getClientPoint(event) {
+  const nativeEvent = event?.nativeEvent ?? event?.originalEvent ?? event;
+  if (Number.isFinite(nativeEvent?.clientX) && Number.isFinite(nativeEvent?.clientY)) {
+    return { x: nativeEvent.clientX, y: nativeEvent.clientY };
+  }
+  return null;
+}
+
+function isCanvasTopmostAtPoint(point) {
+  const view = canvas?.app?.view;
+  if (!view || !point) return false;
+  const element = document.elementFromPoint(point.x, point.y);
+  return element === view;
 }
 
 function localizeDocumentName(value) {

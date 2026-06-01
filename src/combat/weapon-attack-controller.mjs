@@ -4,6 +4,7 @@ import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./atta
 import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplication, getDamageCostModifierState, getLimbHealingCap, isLimbDestroyed, requestDamageApplications, runDamageHubOperation } from "./damage-hub.mjs";
 import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier } from "./dodge-resource.mjs";
 import { createThrownItemTile } from "../canvas/thrown-items.mjs";
+import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
 import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageSourceFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction } from "../utils/item-functions.mjs";
 import { getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings } from "../settings/accessors.mjs";
 import { ACTION_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
@@ -2235,7 +2236,8 @@ function isCombatActionPointSpendingActive() {
 function getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId = "") {
   const value = Number(getWeaponAttackData(weapon, weaponFunctionId)?.[actionKey]?.actionPointCost);
   const baseCost = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : DEFAULT_WEAPON_ACTION_POINT_COST;
-  return applyDamageCostModifier(baseCost, getDamageCostModifierState(actor, { actionKey }).action);
+  const modifiedCost = applyDamageCostModifier(baseCost, getDamageCostModifierState(actor, { actionKey }).action);
+  return Math.max(0, Math.ceil(modifiedCost + getActorPostureWeaponActionPointCostBonus(actor)));
 }
 
 function hasRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "") {

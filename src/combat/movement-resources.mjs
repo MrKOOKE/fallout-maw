@@ -1,4 +1,5 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
+import { getActorPostureMovementCostMultiplier } from "../canvas/posture-movement.mjs";
 import { applyDamageCostModifier, getDamageCostModifierState, getResourceLimitState } from "./damage-hub.mjs";
 
 export const MOVEMENT_RESOURCE_KEY = "movementPoints";
@@ -110,7 +111,8 @@ export function getCombatMovementAffordabilityCost(movement, actor = null) {
 }
 
 export function applyCombatMovementCostModifier(actor, cost = 0) {
-  return applyDamageCostModifier(cost, getDamageCostModifierState(actor).movement);
+  const postureCost = Math.ceil(Math.max(0, cost) * getActorPostureMovementCostMultiplier(actor));
+  return applyDamageCostModifier(postureCost, getDamageCostModifierState(actor).movement);
 }
 
 export function isCombatMovementTracked(tokenDocument) {

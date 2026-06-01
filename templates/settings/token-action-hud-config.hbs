@@ -45,6 +45,19 @@
       </section>
 
       <section>
+        <h3>Положения</h3>
+        <div class="fallout-maw-settings-table fallout-maw-token-action-hud-icon-table">
+          {{#each postureIconRows}}
+          <div class="fallout-maw-settings-row" data-hud-icon-section="{{section}}" data-hud-icon-key="{{key}}">
+            <span>{{label}}</span>
+            <input type="text" data-hud-icon-input value="{{img}}">
+            <button type="button" data-action="browseHudImage" title="{{localize 'FALLOUTMAW.Common.Image'}}"><i class="fa-solid fa-image"></i></button>
+          </div>
+          {{/each}}
+        </div>
+      </section>
+
+      <section>
         <h3>Кнопки испытаний навыков</h3>
         <div class="fallout-maw-settings-table fallout-maw-token-action-hud-icon-table">
           {{#each skillIconRows}}

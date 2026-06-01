@@ -1,4 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
+import { getPostureIconRows } from "../canvas/posture-movement.mjs";
 import { getSkillSettings, getTokenActionHudIcons, setTokenActionHudIcons } from "../settings/accessors.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 
@@ -72,6 +73,7 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
         ...row,
         label: game.i18n.localize(row.labelKey)
       }))),
+      postureIconRows: this.#prepareIconRows("postures", getPostureIconRows()),
       skillIconRows: this.#prepareIconRows("skillIcons", getSkillSettings().map(skill => ({
         key: skill.key,
         label: skill.label
