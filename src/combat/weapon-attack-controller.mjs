@@ -23,7 +23,8 @@ const PREVIEW_ANGLE_EPSILON = 0.002;
 const BURST_PREVIEW_STABILIZE_MS = 120;
 const BURST_PREVIEW_FORCE_ANGLE_DELTA = 0.012;
 const BURST_PREVIEW_FORCE_DISTANCE_DELTA = 24;
-const BURST_FULL_INTERSECTION_EPSILON = 0.01;
+const BURST_DISTRIBUTION_SAMPLE_MIN = 64;
+const BURST_DISTRIBUTION_SAMPLE_MULTIPLIER = 12;
 const AIMED_TARGET_BLOCKER_BONUS_STEP = 20;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
@@ -392,7 +393,8 @@ class WeaponAttackController {
       })
       : null;
     const projectileCount = getBurstProjectileCount(attackCount, pelletCount);
-    const primaryShots = buildBurstPrimaryShots(this.token, this.geometry, projectileCount);
+    const burstRanges = this.getBurstTargetRanges(this.targets);
+    const primaryShots = buildBurstPrimaryShotsForRanges(this.token, this.geometry, projectileCount, this.targets, burstRanges);
     const assignments = buildBurstBulletAssignments(this.token, this.geometry, this.targets, projectileCount, { primaryShots });
     let attempted = false;
 
@@ -405,9 +407,7 @@ class WeaponAttackController {
         const projectileIndex = (attackIndex * pelletDamages.length) + pelletIndex;
         const target = assignments[projectileIndex] ?? null;
         const primaryTrajectory = primaryShots[projectileIndex]?.trajectory ?? buildRandomTrajectory(this.token, getRandomBurstMissGeometry(this.token, this.geometry));
-        const trajectory = target
-          ? buildAttackTrajectory(this.token, getRandomBurstMissGeometry(this.token, this.geometry), [target])
-          : primaryTrajectory;
+        const trajectory = primaryTrajectory;
         attempted = true;
         if (!target) {
           trajectories.push({ ...trajectory, delayGroup: attackIndex });
@@ -1345,9 +1345,7 @@ class WeaponAttackController {
     ) return new Map();
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     const projectileCount = getBurstProjectileCount(attackCount, getWeaponPelletCount(this.weapon, this.weaponFunctionId));
-    return buildBurstTargetRanges(this.token, this.geometry, targets, projectileCount, {
-      primaryShots: buildBurstPrimaryShots(this.token, this.geometry, projectileCount)
-    });
+    return buildBurstTargetRanges(this.token, this.geometry, targets, projectileCount);
   }
 
   updatePointerFromClientEvent(event) {
@@ -3338,33 +3336,36 @@ function buildBurstTargetRanges(attackerToken, geometry, targets = [], attackCou
 
 function buildBurstBulletAssignments(attackerToken, geometry, targets = [], attackCount = 1, { primaryShots = null } = {}) {
   const amount = Math.max(1, toInteger(attackCount) || 1);
-  const assignments = Array(amount).fill(null);
-  let index = 0;
-  for (const entry of buildBurstTargetEntries(attackerToken, geometry, targets, amount, { primaryShots })) {
-    const count = clamp(toInteger(entry.range?.max), 0, amount - index);
-    for (let step = 0; step < count; step += 1) assignments[index + step] = entry.target;
-    index += count;
-    if (index >= amount) break;
-  }
-  return assignments;
+  const allowedTargets = new Set(targets);
+  const shots = getBurstPrimaryShots(attackerToken, geometry, amount, primaryShots);
+  return Array.from({ length: amount }, (_value, index) => {
+    const target = shots[index]?.target ?? null;
+    return target && allowedTargets.has(target) ? target : null;
+  });
 }
 
 function buildBurstTargetEntries(attackerToken, geometry, targets = [], attackCount = 1, { primaryShots = null } = {}) {
   const amount = Math.max(1, toInteger(attackCount) || 1);
   if (!geometry || geometry.type === VOLLEY_ACTION_KEY || !targets.length) return [];
-  return Array.from(new Set(targets ?? []))
-    .map(target => ({
-      target,
-      intersection: getTokenBurstIntersectionRatio(attackerToken, target, geometry),
-      distance: getTargetDistance(target, geometry)
-    }))
-    .filter(entry => entry.intersection > GEOMETRY_EPSILON && entry.target?.actor && entry.target.visible && !isDeadTarget(entry.target))
-    .sort((left, right) => left.distance - right.distance || right.intersection - left.intersection)
-    .map(({ target, intersection }) => {
-      const range = getBurstBulletRange(amount, intersection);
+  const allowedTargets = new Set(targets);
+  const counts = new Map();
+  const distances = new Map();
+  for (const shot of buildBurstDistributionShots(attackerToken, geometry, amount)) {
+    const target = shot?.target ?? null;
+    if (!target || !allowedTargets.has(target)) continue;
+    counts.set(target, (counts.get(target) ?? 0) + 1);
+    distances.set(target, Math.min(distances.get(target) ?? Infinity, Number(shot.hit?.distance) || getTargetDistance(target, geometry)));
+  }
+  const sampleCount = Math.max(BURST_DISTRIBUTION_SAMPLE_MIN, amount * BURST_DISTRIBUTION_SAMPLE_MULTIPLIER);
+  return Array.from(counts.entries())
+    .filter(([target, count]) => count > 0 && target?.actor && target.visible && !isDeadTarget(target))
+    .sort((left, right) => (distances.get(left[0]) ?? Infinity) - (distances.get(right[0]) ?? Infinity))
+    .map(([target, count]) => {
+      const expected = (count / sampleCount) * amount;
+      const range = getBurstDistributionRange(amount, expected);
       return {
         target,
-        expected: range.max,
+        expected,
         range: {
           ...range,
           label: formatBurstBulletRange(range)
@@ -3373,62 +3374,88 @@ function buildBurstTargetEntries(attackerToken, geometry, targets = [], attackCo
     });
 }
 
-function buildBurstPrimaryShots(attackerToken, geometry, attackCount = 1) {
+function buildBurstDistributionShots(attackerToken, geometry, attackCount = 1) {
   const amount = Math.max(1, toInteger(attackCount) || 1);
+  const sampleCount = Math.max(BURST_DISTRIBUTION_SAMPLE_MIN, amount * BURST_DISTRIBUTION_SAMPLE_MULTIPLIER);
   const shotGeometry = getRandomBurstMissGeometry(attackerToken, geometry);
-  return getBurstPrimaryOffsets(amount).map(offset => {
+  return Array.from({ length: sampleCount }, (_value, index) => {
+    const offset = sampleCount <= 1 ? 0 : -1 + ((2 * index) / (sampleCount - 1));
     const angle = (Number(geometry?.angle) || 0) + ((Number(geometry?.halfAngle) || 0) * offset);
     const trajectory = buildTrajectoryByAngle(attackerToken, shotGeometry, angle, Number(shotGeometry?.elevationSlope) || 0);
+    const hit = getTrajectoryTargetEntries(attackerToken, trajectory).at(0) ?? null;
     return {
       trajectory,
-      target: getTrajectoryTargetEntries(attackerToken, trajectory).at(0)?.target ?? null
+      target: hit?.target ?? null,
+      hit: hit?.hit ?? null
     };
   });
 }
 
-function getBurstPrimaryOffsets(count = 1) {
-  const amount = Math.max(1, toInteger(count) || 1);
-  if (amount <= 1) return [0];
-
-  const offsets = Array.from({ length: amount }, (_value, index) => amount === 1
-    ? 0
-    : -1 + ((2 * index) / (amount - 1)));
-  return offsets.sort((left, right) => Math.abs(left) - Math.abs(right) || left - right);
-}
-
-function getTokenBurstIntersectionRatio(attackerToken, token, geometry) {
-  if (!geometry || geometry.type === VOLLEY_ACTION_KEY) return 0;
-  const visiblePoints = getVisibleTokenAttackPoints(attackerToken, token, geometry);
-  if (!visiblePoints.length) return 0;
-  if (geometry.halfAngle <= 0) return 1;
-
-  const centerTrajectory = buildTrajectoryByAngle(
-    attackerToken,
-    geometry,
-    Number(geometry.angle) || 0,
-    Number(geometry.elevationSlope) || 0
-  );
-  const centerHit = getTokenTrajectoryHit(token, centerTrajectory);
-  if (centerHit && hasLineOfSight(attackerToken, centerHit.point, centerTrajectory.origin)) return 1;
-
-  const halfAngle = Math.max(GEOMETRY_EPSILON, Number(geometry.halfAngle) || 0);
-  const closestOffset = visiblePoints.reduce((closest, point) => {
-    const offset = Math.abs(normalizeAngle(Math.atan2(point.y - geometry.origin.y, point.x - geometry.origin.x) - geometry.angle));
-    return Number.isFinite(offset) ? Math.min(closest, offset) : closest;
-  }, Infinity);
-  if (!Number.isFinite(closestOffset) || closestOffset > halfAngle + GEOMETRY_EPSILON) return 0;
-  return clamp(1 - (closestOffset / halfAngle), 0, 1);
-}
-
-function getBurstBulletRange(count = 1, intersectionRatio = 0) {
-  const amount = Math.max(1, toInteger(count) || 1);
-  const ratio = clamp(Number(intersectionRatio) || 0, 0, 1);
-  if (ratio >= 1 - BURST_FULL_INTERSECTION_EPSILON) return { min: amount, max: amount };
-  if (ratio <= GEOMETRY_EPSILON) return { min: 0, max: 0 };
-  const scaled = amount * ratio;
-  const min = clamp(Math.floor(scaled), 1, amount);
-  const max = clamp(Math.ceil(scaled), min, amount);
+function getBurstDistributionRange(amount = 1, expected = 0) {
+  const count = Math.max(1, toInteger(amount) || 1);
+  const value = clamp(Number(expected) || 0, 0, count);
+  if (value <= GEOMETRY_EPSILON) return { min: 0, max: 0 };
+  const min = clamp(Math.floor(value), 1, count);
+  const max = clamp(Math.ceil(value), min, count);
   return { min, max };
+}
+
+function buildBurstPrimaryShots(attackerToken, geometry, attackCount = 1) {
+  const amount = Math.max(1, toInteger(attackCount) || 1);
+  const shotGeometry = getRandomBurstMissGeometry(attackerToken, geometry);
+  return Array.from({ length: amount }, () => {
+    const trajectory = buildRandomTrajectory(attackerToken, shotGeometry);
+    const hit = getTrajectoryTargetEntries(attackerToken, trajectory).at(0) ?? null;
+    return {
+      trajectory,
+      target: hit?.target ?? null,
+      hit: hit?.hit ?? null
+    };
+  });
+}
+
+function buildBurstPrimaryShotsForRanges(attackerToken, geometry, attackCount = 1, targets = [], burstRanges = new Map()) {
+  const amount = Math.max(1, toInteger(attackCount) || 1);
+  if (!burstRanges?.size) return buildBurstPrimaryShots(attackerToken, geometry, amount);
+  const allowedTargets = new Set(targets);
+  let bestShots = null;
+  let bestScore = Infinity;
+  const attempts = Math.max(120, amount * 30);
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const shots = buildBurstPrimaryShots(attackerToken, geometry, amount);
+    const score = getBurstShotRangeMismatchScore(shots, allowedTargets, burstRanges);
+    if (score <= 0) return shots;
+    if (score >= bestScore) continue;
+    bestScore = score;
+    bestShots = shots;
+  }
+
+  return bestShots ?? buildBurstPrimaryShots(attackerToken, geometry, amount);
+}
+
+function getBurstShotRangeMismatchScore(shots = [], allowedTargets = new Set(), burstRanges = new Map()) {
+  const counts = new Map();
+  for (const shot of shots) {
+    const target = shot?.target ?? null;
+    if (!target || !allowedTargets.has(target)) continue;
+    counts.set(target, (counts.get(target) ?? 0) + 1);
+  }
+
+  let score = 0;
+  for (const [target, range] of burstRanges.entries()) {
+    if (!allowedTargets.has(target)) continue;
+    const count = counts.get(target) ?? 0;
+    const min = Math.max(0, toInteger(range?.min));
+    const max = Math.max(min, toInteger(range?.max));
+    if (count < min) score += min - count;
+    else if (count > max) score += count - max;
+  }
+  return score;
+}
+
+function getBurstPrimaryShots(attackerToken, geometry, attackCount = 1, primaryShots = null) {
+  return Array.isArray(primaryShots) ? primaryShots : buildBurstPrimaryShots(attackerToken, geometry, attackCount);
 }
 
 function formatBurstBulletRange(range = {}) {
