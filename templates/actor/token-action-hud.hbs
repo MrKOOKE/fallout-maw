@@ -185,10 +185,10 @@
         <div class="fallout-maw-token-hud-action-row-title">{{label}}</div>
         <div class="fallout-maw-token-hud-action-row-buttons">
           {{#each actions}}
-          <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="useWeaponAction" data-item-id="{{itemId}}" data-weapon-function-id="{{weaponFunctionId}}" data-weapon-action-key="{{key}}" title="{{label}}" {{#if disabled}}disabled{{/if}}>
+          <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="useWeaponAction" data-item-id="{{itemId}}" data-weapon-function-id="{{weaponFunctionId}}" data-weapon-action-key="{{key}}" aria-label="{{label}}" {{#if disabled}}disabled{{/if}}>
             <img src="{{img}}" alt="{{label}}" onerror="this.src='{{../../fallbackIcon}}'">
             <span>{{label}}</span>
-            {{#if actionPointCostLabel}}<strong class="{{actionPointCostClass}}">{{actionPointCostLabel}}</strong>{{/if}}
+            {{#if actionPointCostLabel}}<strong class="{{actionPointCostClass}}" {{#if actionPointCostTooltipHtml}}data-action-point-cost-tooltip data-action-point-cost-tooltip-html="{{actionPointCostTooltipHtml}}"{{/if}} aria-label="{{actionPointCostTooltipLabel}}">{{actionPointCostLabel}}</strong>{{/if}}
           </button>
           {{/each}}
         </div>

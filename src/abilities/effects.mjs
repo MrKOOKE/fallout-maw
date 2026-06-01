@@ -154,7 +154,9 @@ function hasActiveRuntimeAbilityState(actor, item) {
 
 function hasRuntimeConditions(conditions = []) {
   return conditions.some(condition => (
-    condition?.type && condition.type !== ABILITY_CONDITION_TYPES.limitedChanges
+    condition?.type
+    && condition.type !== ABILITY_CONDITION_TYPES.limitedChanges
+    && condition.type !== ABILITY_CONDITION_TYPES.cooldown
   ));
 }
 

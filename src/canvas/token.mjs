@@ -7,6 +7,8 @@ const TOOLTIP_DIRECTION = "LEFT";
 const TOOLTIP_ACTIVATION_MS = 200;
 const TOOLTIP_DEACTIVATION_MS = 90;
 const DAMAGE_EFFECT_CHANGE_ROOT = "system.damageEffects";
+const POSTURE_EFFECT_CHANGE_ROOT = "system.postures";
+const POSTURE_WEAPON_ACTION_COST_SUFFIX = ".weaponActionCost";
 const BLEEDING_DAMAGE_TYPE_KEY = "bleeding";
 
 let activeEffectTooltipAnchor = null;
@@ -210,7 +212,10 @@ function formatEffectChange(change) {
   const path = getChangeKeyLabel(key);
   const value = stringifyChangeValue(change?.value);
   if (key.startsWith("system.costs.actions.")) {
-    return `<strong>${escapeHTML(stripEffectPathSuffix(path))}:</strong><span>${escapeHTML(formatActionPointDelta(value))}</span>`;
+    return `<strong>${escapeHTML(stripEffectPathSuffix(path))}:</strong><span>${escapeHTML(formatActionPointDelta(value, change?.type))}</span>`;
+  }
+  if (isPostureWeaponActionCostChange(key)) {
+    return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatActionPointDelta(value, change?.type))}</span>`;
   }
   return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(value)}</span>`;
 }
@@ -293,9 +298,14 @@ function stripEffectPathSuffix(label) {
   return String(label ?? "").replace(/:\s*[^:]+$/, "");
 }
 
-function formatActionPointDelta(value) {
+function isPostureWeaponActionCostChange(key) {
+  return key.startsWith(`${POSTURE_EFFECT_CHANGE_ROOT}.`) && key.endsWith(POSTURE_WEAPON_ACTION_COST_SUFFIX);
+}
+
+function formatActionPointDelta(value, type = "") {
   const number = Number(value);
-  const text = Number.isFinite(number) ? String(number) : String(value ?? "");
+  const sign = String(type ?? "") === "add" && number > 0 ? "+" : "";
+  const text = Number.isFinite(number) ? `${sign}${number}` : String(value ?? "");
   return `${text} ${localize("FALLOUTMAW.Common.ActionPointsShort")}`;
 }
 

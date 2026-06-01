@@ -76,14 +76,12 @@ export function getPostureIconRows() {
 
 export function getActorPostureMovementCostMultiplier(actor) {
   const action = getActorPostureAction(actor);
-  const base = Number(POSTURE_ACTION_CONFIGS[action]?.movementCostMultiplier) || 1;
-  return Math.max(0, applyPostureNumberModifier(base, collectPostureNumberModifier(actor, action, "movementMultiplier")));
+  return Math.max(0, applyPostureNumberModifier(1, collectPostureNumberModifier(actor, action, "movementMultiplier")));
 }
 
 export function getActorPostureWeaponActionPointCostBonus(actor) {
   const action = getActorPostureAction(actor);
-  const base = Number(POSTURE_ACTION_CONFIGS[action]?.weaponActionPointCostBonus) || 0;
-  return applyPostureNumberModifier(base, collectPostureNumberModifier(actor, action, "weaponActionCost"));
+  return applyPostureNumberModifier(0, collectPostureNumberModifier(actor, action, "weaponActionCost"));
 }
 
 export function getActorPostureAction(actor) {
@@ -243,7 +241,9 @@ function buildPostureEffectData(tokenDocument, action, posture, signature) {
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-    system: { changes: [] },
+    system: {
+      changes: buildPostureEffectChanges(action, posture)
+    },
     flags: {
       core: {
         overlay: true
@@ -260,11 +260,38 @@ function buildPostureEffectData(tokenDocument, action, posture, signature) {
   };
 }
 
+function buildPostureEffectChanges(action, posture) {
+  const changes = [];
+  const movementCostMultiplier = Number(posture?.movementCostMultiplier);
+  if (Number.isFinite(movementCostMultiplier) && Math.abs(movementCostMultiplier - 1) > 0.0001) {
+    changes.push(buildPostureEffectChange(action, "movementMultiplier", movementCostMultiplier, "override"));
+  }
+
+  const weaponActionPointCostBonus = Number(posture?.weaponActionPointCostBonus);
+  if (Number.isFinite(weaponActionPointCostBonus) && Math.abs(weaponActionPointCostBonus) > 0.0001) {
+    changes.push(buildPostureEffectChange(action, "weaponActionCost", weaponActionPointCostBonus));
+  }
+  return changes;
+}
+
+function buildPostureEffectChange(action, key, value, type = "add") {
+  return {
+    key: `${POSTURE_EFFECT_CHANGE_ROOT}.${action}.${key}`,
+    type,
+    value: String(roundChangeValue(value)),
+    phase: "initial",
+    priority: 0
+  };
+}
+
 function getEffectUpdateData(effect, data) {
   const update = {};
   for (const key of ["name", "img", "origin", "transfer", "disabled", "showIcon"]) {
     if (effect[key] !== data[key]) update[key] = data[key];
   }
+  const currentChanges = effect.system?.changes ?? [];
+  const nextChanges = data.system?.changes ?? [];
+  if (JSON.stringify(currentChanges) !== JSON.stringify(nextChanges)) update["system.changes"] = nextChanges;
   const currentData = effect.getFlag(SYSTEM_ID, POSTURE_MOVEMENT_FLAG) ?? {};
   const nextData = data.flags[SYSTEM_ID][POSTURE_MOVEMENT_FLAG];
   if (JSON.stringify(currentData) !== JSON.stringify(nextData)) {
@@ -589,6 +616,10 @@ function getConfiguredPostureIcon(action) {
 }
 
 function roundDepth(value) {
+  return Math.round((Number(value) || 0) * 1000) / 1000;
+}
+
+function roundChangeValue(value) {
   return Math.round((Number(value) || 0) * 1000) / 1000;
 }
 

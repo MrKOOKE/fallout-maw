@@ -17,7 +17,8 @@ import {
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { applyDamageCostModifier, fullyRestoreActorDamageState, getDamageCostModifierState, getLimbHealingCap, getResourceLimitState, isLimbDestroyed } from "../combat/damage-hub.mjs";
 import { MOVEMENT_RESOURCE_PREVIEW_HOOK } from "../combat/movement-resources.mjs";
-import { getActorPostureWeaponActionPointCostBonus, setActorTokensPosture } from "../canvas/posture-movement.mjs";
+import { POSTURE_EFFECT_CHANGE_ROOT, getActorPostureAction, getActorPostureWeaponActionPointCostBonus, setActorTokensPosture } from "../canvas/posture-movement.mjs";
+import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
 import {
   cancelWeaponAttack,
   hasRequiredWeaponReloadActionPoints,
@@ -47,13 +48,14 @@ import {
   getContextInventoryItems,
   getItemQuantity
 } from "../utils/inventory-containers.mjs";
-import { ITEM_FUNCTIONS, getConditionFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getFirstAidChargesData, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction, isActiveItem } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, getConditionFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getFirstAidChargesData, getModuleFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction, isActiveItem } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
 import { AdvancementApplication } from "../advancement/application.mjs";
 import {
   applyWeaponModuleModifiers,
+  getWeaponModuleDisplayName,
   getWeaponModuleSlots,
   getWeaponModuleSlotItemData,
   getWeaponModuleTechnicalName,
@@ -66,6 +68,7 @@ const FormDataExtended = foundry.applications.ux.FormDataExtended;
 const TOKEN_ACTION_HUD_SOCKET = `system.${SYSTEM_ID}`;
 const TOKEN_ACTION_HUD_SOCKET_SCOPE = "fallout-maw.tokenActionHud";
 const TOKEN_ACTION_HUD_SOCKET_TIMEOUT = 10000;
+const ACTION_POINT_COST_TOOLTIP_DELAY_MS = 200;
 const SELECTED_HUD_WEAPON_FLAG = "selectedHudWeaponItemId";
 const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
 const TOKEN_ACTION_HUD_SCALE_DEFAULT = 50;
@@ -355,6 +358,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #itemTooltipKeyHandler = null;
   #itemTooltipSuppressHudActivation = false;
   #itemTooltipSuppressHudActivationTimer = null;
+  #actionPointCostTooltipTimer = null;
+  #actionPointCostTooltipElement = null;
   #editableMeterSections = {
     resources: false,
     needs: false
@@ -487,6 +492,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   _attachFrameListeners() {
     super._attachFrameListeners();
     this.element.addEventListener("pointerdown", event => this.#onHudItemMiddlePointerDown(event));
+    this.element.addEventListener("pointerover", event => this.#onActionPointCostTooltipPointerOver(event));
+    this.element.addEventListener("pointerout", event => this.#onActionPointCostTooltipPointerOut(event));
     this.element.addEventListener("mouseover", event => this.#onHudItemTooltipMouseOver(event));
     this.element.addEventListener("mouseout", event => this.#onHudItemTooltipMouseOut(event));
     this.element.addEventListener("click", event => this.#onHudItemTooltipHudActivation(event), { capture: true });
@@ -522,6 +529,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#layoutFrame = null;
     this.#clearHudItemTooltip();
     this.#clearHudItemTooltipActivationSuppression();
+    this.#clearActionPointCostTooltip();
     this.#destroyLimbPopover();
   }
 
@@ -859,6 +867,41 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
   }
 
+  #onActionPointCostTooltipPointerOver(event) {
+    const target = this.#getActionPointCostTooltipElement(event.target);
+    if (!target || target.contains(event.relatedTarget)) return;
+    const html = String(target.dataset.actionPointCostTooltipHtml ?? "").trim();
+    if (!html) return;
+    this.#clearActionPointCostTooltip();
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#actionPointCostTooltipElement = target;
+    this.#actionPointCostTooltipTimer = view.setTimeout(() => {
+      this.#actionPointCostTooltipTimer = null;
+      if (!target.isConnected || this.#actionPointCostTooltipElement !== target) return;
+      game.tooltip?.activate(target, {
+        html,
+        cssClass: "fallout-maw-effect-tooltip fallout-maw-action-cost-tooltip",
+        direction: "UP"
+      });
+    }, ACTION_POINT_COST_TOOLTIP_DELAY_MS);
+  }
+
+  #onActionPointCostTooltipPointerOut(event) {
+    const target = this.#getActionPointCostTooltipElement(event.target);
+    if (!target || target.contains(event.relatedTarget)) return;
+    this.#clearActionPointCostTooltip();
+  }
+
+  #clearActionPointCostTooltip() {
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    if (this.#actionPointCostTooltipTimer) {
+      view.clearTimeout(this.#actionPointCostTooltipTimer);
+      this.#actionPointCostTooltipTimer = null;
+    }
+    if (game.tooltip?.element === this.#actionPointCostTooltipElement) game.tooltip.deactivate();
+    this.#actionPointCostTooltipElement = null;
+  }
+
   #onHudItemTooltipHudActivation(event) {
     if (!this.#itemTooltipSuppressHudActivation) return;
     if (this.#itemTooltipElement?.contains(event.target)) return;
@@ -954,6 +997,12 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!(target instanceof Element)) return null;
     const button = target.closest("[data-hud-tooltip-item]");
     return button && this.element?.contains(button) ? button : null;
+  }
+
+  #getActionPointCostTooltipElement(target) {
+    if (!(target instanceof Element)) return null;
+    const element = target.closest("[data-action-point-cost-tooltip]");
+    return element && this.element?.contains(element) ? element : null;
   }
 
   #onLimbControlKeyDown(event) {
@@ -2085,8 +2134,9 @@ function prepareWeaponActionRows(actor, selectedWeapon, forceDisabled = false, h
 }
 
 function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunction, forceDisabled = false, hudIcons = {}) {
+  const moduleSlots = getWeaponFunctionModuleSlots(selectedWeapon, weaponFunction?.id);
   const weaponData = applyWeaponModuleModifiers(weaponFunction?.data ?? {}, {
-    moduleSlots: getWeaponFunctionModuleSlots(selectedWeapon, weaponFunction?.id)
+    moduleSlots
   });
   const actions = weaponData?.availableActions ?? {};
   const hasMagazineCost = hasWeaponResourceCostData(weaponData, "magazine");
@@ -2101,7 +2151,7 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
   ];
   return buttons.filter(action => action.visible !== false && action.configured).map(action => {
     const blockState = getWeaponActionBlockState(actor, action.key);
-    const actionPointCostState = getWeaponActionPointCostStateForHud(actor, weaponData, action.key);
+    const actionPointCostState = getWeaponActionPointCostStateForHud(actor, weaponData, action.key, weaponFunction?.data ?? {}, { moduleSlots });
     const actionPointCost = actionPointCostState.cost;
     return {
       ...action,
@@ -2112,7 +2162,11 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
       img: normalizeImagePath(hudIcons.weaponActions?.[action.key], "icons/svg/combat.svg"),
       actionPointCost,
       actionPointCostClass: actionPointCostState.tone ? `cost-${actionPointCostState.tone}` : "",
-      actionPointCostLabel: `${actionPointCost} ОД`
+      actionPointCostLabel: `${actionPointCost} ОД`,
+      actionPointCostTooltipHtml: buildActionPointCostTooltipHTML({
+        sources: actionPointCostState.sources
+      }),
+      actionPointCostTooltipLabel: `${actionPointCost} ОД`
     };
   });
 }
@@ -2121,16 +2175,181 @@ function getWeaponActionPointCostForHud(actor, weaponData = {}, actionKey = "") 
   return getWeaponActionPointCostStateForHud(actor, weaponData, actionKey).cost;
 }
 
-function getWeaponActionPointCostStateForHud(actor, weaponData = {}, actionKey = "") {
-  const value = Number(weaponData?.[actionKey]?.actionPointCost);
-  const fallback = actionKey === "reload" ? 2 : 5;
-  const baseCost = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
+function getWeaponActionPointCostStateForHud(actor, weaponData = {}, actionKey = "", sourceWeaponData = weaponData, { moduleSlots = [] } = {}) {
+  const baseCost = getWeaponActionPointBaseCost(sourceWeaponData, actionKey);
+  const configuredCost = getWeaponActionPointBaseCost(weaponData, actionKey);
   const cost = Math.max(0, Math.ceil(
-    applyDamageCostModifier(baseCost, getDamageCostModifierState(actor, { actionKey }).action)
+    applyDamageCostModifier(configuredCost, getDamageCostModifierState(actor, { actionKey }).action)
     + getActorPostureWeaponActionPointCostBonus(actor)
   ));
   const tone = cost < baseCost ? "cheaper" : (cost > baseCost ? "dearer" : "");
-  return { baseCost, cost, tone };
+  const sources = collectActionPointCostSources(actor, {
+    actionKey,
+    baseCost,
+    configuredCost,
+    moduleSlots
+  });
+  return { baseCost, cost, tone, sources };
+}
+
+function getWeaponActionPointBaseCost(weaponData = {}, actionKey = "") {
+  const value = Number(weaponData?.[actionKey]?.actionPointCost);
+  const fallback = actionKey === "reload" ? 2 : 5;
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
+}
+
+function collectActionPointCostSources(actor, { actionKey = "", baseCost = 0, configuredCost = 0, moduleSlots = [] } = {}) {
+  let runningCost = Math.max(0, toInteger(baseCost));
+  const sources = [];
+  for (const source of collectModuleActionPointCostSources(moduleSlots, actionKey, runningCost)) {
+    sources.push(source);
+    runningCost = Math.max(0, runningCost + source.delta);
+  }
+
+  runningCost = Math.max(0, toInteger(configuredCost));
+  for (const source of collectEffectActionPointCostSources(actor, actionKey, runningCost)) {
+    sources.push(source);
+    runningCost = Math.max(0, runningCost + source.delta);
+  }
+
+  for (const source of collectPostureActionPointCostSources(actor, runningCost)) {
+    sources.push(source);
+    runningCost = Math.max(0, runningCost + source.delta);
+  }
+
+  return combineActionPointCostSources(sources);
+}
+
+function collectModuleActionPointCostSources(moduleSlots = [], actionKey = "", initialCost = 0) {
+  const sources = [];
+  let runningCost = Math.max(0, toInteger(initialCost));
+  for (const slot of getWeaponModuleSlots({ moduleSlots })) {
+    const itemData = getWeaponModuleSlotItemData(slot);
+    const module = getModuleFunction(itemData);
+    const delta = toInteger(module?.weapon?.actionPointCosts?.[actionKey]);
+    if (!delta) continue;
+    const nextCost = Math.max(0, runningCost + delta);
+    const actualDelta = nextCost - runningCost;
+    runningCost = nextCost;
+    if (!actualDelta) continue;
+    sources.push({
+      key: `module:${slot.id}:${String(itemData?.uuid ?? itemData?._id ?? itemData?.name ?? "")}`,
+      name: getWeaponModuleDisplayName(itemData),
+      img: normalizeImagePath(itemData?.img, FALLBACK_ICON),
+      delta: actualDelta
+    });
+  }
+  return sources;
+}
+
+function collectEffectActionPointCostSources(actor, actionKey = "", initialCost = 0) {
+  const sources = [];
+  let runningCost = Math.max(0, Number(initialCost) || 0);
+  const keys = [
+    "system.costs.action",
+    `system.costs.actions.${String(actionKey ?? "").trim()}`
+  ];
+  for (const key of keys) {
+    for (const source of collectActiveEffectCostChangeSources(actor, key, runningCost)) {
+      sources.push(source);
+      runningCost = Math.max(0, runningCost + source.delta);
+    }
+  }
+  return sources;
+}
+
+function collectPostureActionPointCostSources(actor, initialCost = 0) {
+  const postureAction = getActorPostureAction(actor);
+  if (!postureAction) return [];
+  return collectActiveEffectCostChangeSources(
+    actor,
+    `${POSTURE_EFFECT_CHANGE_ROOT}.${postureAction}.weaponActionCost`,
+    Math.max(0, Number(initialCost) || 0)
+  );
+}
+
+function collectActiveEffectCostChangeSources(actor, key = "", initialCost = 0) {
+  const sources = [];
+  let runningCost = Math.max(0, Number(initialCost) || 0);
+  for (const effect of getActorApplicableEffectsForHud(actor)) {
+    if (effect.disabled) continue;
+    for (const change of effect.system?.changes ?? effect.changes ?? []) {
+      if (String(change?.key ?? "").trim() !== key) continue;
+      const value = evaluateEffectChangeNumber(actor, change.value);
+      if (!Number.isFinite(value)) continue;
+      const nextCost = applyActionPointCostChangeStep(runningCost, value, change.type);
+      const actualDelta = Math.ceil(nextCost) - Math.ceil(runningCost);
+      runningCost = nextCost;
+      if (!actualDelta) continue;
+      sources.push({
+        key: effect.uuid || effect.id || `${effect.name}:${key}`,
+        name: localizeDocumentName(effect.name),
+        img: normalizeImagePath(effect.img, FALLBACK_ICON),
+        delta: actualDelta
+      });
+    }
+  }
+  return sources;
+}
+
+function applyActionPointCostChangeStep(cost = 0, value = 0, type = "") {
+  let next = Math.max(0, Number(cost) || 0);
+  if (String(type ?? "") === "override") next = Number(value);
+  else if (String(type ?? "") === "multiply") next *= Number(value);
+  else next += Number(value);
+  return Math.max(0, Number.isFinite(next) ? next : cost);
+}
+
+function getActorApplicableEffectsForHud(actor) {
+  if (typeof actor?.allApplicableEffects === "function") return Array.from(actor.allApplicableEffects());
+  return Array.from(actor?.effects ?? []);
+}
+
+function combineActionPointCostSources(sources = []) {
+  const combined = new Map();
+  for (const source of sources) {
+    const key = String(source?.key ?? "");
+    if (!key) continue;
+    const existing = combined.get(key);
+    if (existing) existing.delta += toInteger(source.delta);
+    else combined.set(key, { ...source, delta: toInteger(source.delta) });
+  }
+  return Array.from(combined.values()).filter(source => source.delta);
+}
+
+function buildActionPointCostTooltipHTML({ sources = [] } = {}) {
+  const rows = (sources ?? []).filter(source => toInteger(source.delta));
+  if (!rows.length) return "";
+
+  return `
+    <article class="fallout-maw-effect-tooltip-content fallout-maw-action-cost-tooltip-content">
+      ${rows.map(renderActionPointCostTooltipSource).join("")}
+    </article>
+  `;
+}
+
+function renderActionPointCostTooltipSource(source = {}) {
+  const delta = toInteger(source.delta);
+  const deltaClass = delta < 0 ? "negative" : "positive";
+  return `
+    <section class="fallout-maw-action-cost-tooltip-source">
+      <img src="${escapeAttribute(source.img)}" alt="">
+      <div>
+        <strong>${escapeHTML(source.name)}</strong>
+        <span>${escapeHTML("Изменения")}: <b class="${deltaClass}">${escapeHTML(formatActionPointCostDelta(delta))}</b></span>
+      </div>
+    </section>
+  `;
+}
+
+function formatActionPointCostDelta(value) {
+  const number = toInteger(value);
+  return `${formatSignedNumber(number)} ОД`;
+}
+
+function localizeDocumentName(value) {
+  const text = String(value ?? "");
+  return game.i18n.has(text) ? game.i18n.localize(text) : text;
 }
 
 function hasWeaponResourceCostData(weaponData = {}, type = "") {
