@@ -32,6 +32,11 @@ const LIMB_LOSS_EFFECT_KIND = "limbLoss";
 const SHOCK_UNCONSCIOUS_FLAG_KEY = "shockUnconscious";
 const FIRST_AID_TEMPORARY_EFFECT_KIND = "firstAidTemporary";
 const BLEEDING_DAMAGE_EFFECT_KIND = "bleedingDamage";
+const PERIODIC_DAMAGE_EFFECT_KIND = "periodicDamage";
+const DAMAGE_EFFECT_CHANGE_ROOT = "system.damageEffects";
+const DAMAGE_EFFECT_CHANGE_TYPE = "custom";
+const MANAGED_TIMED_DAMAGE_FLAG_KEY = "managedTimedDamage";
+const MANAGED_TIMED_DAMAGE_EXPIRY = "fallout-maw.managedTimedDamage";
 const REGION_DAMAGE_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
 const REGION_DAMAGE_FLAG_KEY = "periodicDamage";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
@@ -95,7 +100,12 @@ const actorDamageMutationQueue = new Map();
 const pendingDamageSocketRequests = new Map();
 let damageHubOperationQueue = Promise.resolve();
 
+export function registerDamageHubConfig() {
+  CONFIG.ActiveEffect.expiryEvents[MANAGED_TIMED_DAMAGE_EXPIRY] = "FALLOUTMAW.Effects.ManagedTimedDamageExpiry";
+}
+
 export function registerDamageSocket() {
+  registerDamageHubConfig();
   game.socket.on(DAMAGE_SOCKET, handleDamageSocketMessage);
   registerDamageTimeHooks();
 }
@@ -624,7 +634,7 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
     : undefined;
   await applyEquipmentConditionDamage(actor, getEquipmentConditionDamageStateEntries(equipmentConditionDamageState));
   await applyResistanceOverheats(actor, resistanceOverheats);
-  for (const entry of pendingPeriodicDamageEffects) {
+  for (const entry of combinePendingPeriodicDamageEffects(pendingPeriodicDamageEffects)) {
     await createPeriodicDamageEffect(actor, entry);
   }
   if (batchResult?.resourceLimitEntries?.length) {
@@ -1018,8 +1028,7 @@ async function deleteLimbTraumas(actor, limbKey = "") {
 async function deleteLimbLossEffects(actor, limbKey = "") {
   const ids = Array.from(actor?.effects ?? [])
     .filter(effect => {
-      const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
-      return data?.kind === LIMB_LOSS_EFFECT_KIND && data?.limbKey === limbKey;
+      return getDamageEffectChanges(effect).some(data => data.kind === LIMB_LOSS_EFFECT_KIND && data.limbKey === limbKey);
     })
     .map(effect => effect.id)
     .filter(Boolean);
@@ -1029,14 +1038,7 @@ async function deleteLimbLossEffects(actor, limbKey = "") {
 async function deleteLimbTimedDamageEffects(actor, limbKey = "") {
   const key = String(limbKey ?? "").trim();
   if (!key) return [];
-  const ids = Array.from(actor?.effects ?? [])
-    .filter(effect => {
-      const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
-      return isLimbTimedDamageEffect(data) && data.limbKey === key;
-    })
-    .map(effect => effect.id)
-    .filter(Boolean);
-  return deleteActorActiveEffects(actor, ids);
+  return removeDamageEffectChanges(actor, data => isLimbTimedDamageEffect(data) && data.limbKey === key);
 }
 
 async function deleteDamageStateItems(actor) {
@@ -1065,17 +1067,122 @@ async function deleteActorActiveEffects(actor, effectIds = []) {
   const ids = Array.from(new Set(effectIds)).filter(id => actor?.effects?.has(id));
   if (!ids.length) return [];
   try {
-    return await actor.deleteEmbeddedDocuments("ActiveEffect", ids.filter(id => actor.effects?.has(id)), { animate: false });
+    return await actor.deleteEmbeddedDocuments("ActiveEffect", ids.filter(id => actor.effects?.has(id)), {
+      animate: false,
+      falloutMawAllowManagedTimedDamageExpiration: true
+    });
   } catch (error) {
     if (!isMissingDocumentError(error)) throw error;
     return [];
   }
 }
 
+async function removeDamageEffectChanges(actor, predicate) {
+  const deleteIds = [];
+  const updates = [];
+  const results = [];
+
+  for (const effect of Array.from(actor?.effects ?? [])) {
+    const changes = getEffectChangeSource(effect);
+    const damageChanges = getDamageEffectChanges(effect);
+    if (!changes.length || !damageChanges.length) continue;
+
+    const removeIndexes = new Set(
+      damageChanges
+        .filter(data => predicate(data, effect))
+        .map(data => data.changeIndex)
+    );
+    if (!removeIndexes.size) continue;
+
+    const remainingChanges = changes.filter((_change, index) => !removeIndexes.has(index));
+    const remainingDamageChanges = remainingChanges
+      .map((change, index) => parseDamageEffectChange(change, index))
+      .filter(Boolean);
+
+    results.push({ effectId: effect.id, removed: removeIndexes.size });
+    if (!remainingDamageChanges.length && changes.every((change, index) => removeIndexes.has(index) || parseDamageEffectChange(change, index))) {
+      deleteIds.push(effect.id);
+    } else {
+      updates.push({ effect, changes: remainingChanges });
+    }
+  }
+
+  for (const update of updates) await updatePeriodicEffect(update.effect, { "system.changes": update.changes });
+  await deleteActorActiveEffects(actor, deleteIds);
+  return results;
+}
+
 function isDamageSystemEffect(effect) {
   if (!effect) return false;
   const flags = effect.flags?.[SYSTEM_ID] ?? effect.flags?.[TRAUMA_FLAG_SCOPE] ?? {};
-  return Boolean(flags[DAMAGE_EFFECT_FLAG_KEY] || flags.traumaItem || flags.diseaseItem);
+  const flagKind = flags[DAMAGE_EFFECT_FLAG_KEY]?.kind;
+  const flagManaged = Boolean(flagKind
+    && flagKind !== PERIODIC_DAMAGE_EFFECT_KIND
+    && flagKind !== BLEEDING_DAMAGE_EFFECT_KIND
+    && flagKind !== LIMB_LOSS_EFFECT_KIND);
+  return Boolean(getDamageEffectChanges(effect).length || flagManaged || flags.traumaItem || flags.diseaseItem);
+}
+
+function getEffectChangeSource(effect) {
+  const changes = effect?.system?.changes ?? effect?.changes ?? [];
+  return Array.isArray(changes) ? changes : [];
+}
+
+function getDamageEffectChanges(effect) {
+  return getEffectChangeSource(effect)
+    .map((change, index) => parseDamageEffectChange(change, index))
+    .filter(Boolean);
+}
+
+function parseDamageEffectChange(change, index = 0) {
+  const key = String(change?.key ?? "").trim();
+  if (!key.startsWith(`${DAMAGE_EFFECT_CHANGE_ROOT}.`)) return null;
+  const data = parseDamageEffectChangeValue(change?.value);
+  if (!data) return null;
+  return {
+    ...data,
+    key,
+    changeIndex: index
+  };
+}
+
+function parseDamageEffectChangeValue(value) {
+  if (foundry.utils.isPlainObject(value)) return foundry.utils.deepClone(value);
+  if (typeof value !== "string") return null;
+  try {
+    const data = JSON.parse(value);
+    return foundry.utils.isPlainObject(data) ? data : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function createDamageEffectChange(key, data = {}) {
+  return {
+    key,
+    type: DAMAGE_EFFECT_CHANGE_TYPE,
+    value: JSON.stringify(data),
+    phase: "initial",
+    priority: 0
+  };
+}
+
+function buildDamageEffectChangeKey(kind, ...segments) {
+  const path = [DAMAGE_EFFECT_CHANGE_ROOT, normalizeDamageEffectKeySegment(kind, "effect")];
+  for (const segment of segments) path.push(normalizeDamageEffectKeySegment(segment, "any"));
+  return path.join(".");
+}
+
+function normalizeDamageEffectKeySegment(value, fallback = "any") {
+  const text = String(value ?? "").trim();
+  return (text || fallback).replace(/[^A-Za-z0-9_-]/g, "_");
+}
+
+function serializeDamageEffectChangeData(data = {}) {
+  const copy = foundry.utils.deepClone(data);
+  delete copy.key;
+  delete copy.changeIndex;
+  return JSON.stringify(copy);
 }
 
 function buildFullDamageRestoreUpdate(actor) {
@@ -1107,6 +1214,10 @@ async function createLimbLossEffect(actor, limbKey = "") {
   if (!changes.length && !statuses.length) return [];
 
   const label = String(limb?.label ?? limbKey);
+  changes.unshift(createDamageEffectChange(
+    buildDamageEffectChangeKey("limbLoss", limbKey),
+    { kind: LIMB_LOSS_EFFECT_KIND, limbKey }
+  ));
   return actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
     name: `${label}: отсутствует`,
@@ -1116,11 +1227,7 @@ async function createLimbLossEffect(actor, limbKey = "") {
     statuses,
     flags: {
       [TRAUMA_FLAG_SCOPE]: {
-        kind: "active",
-        [DAMAGE_EFFECT_FLAG_KEY]: {
-          kind: LIMB_LOSS_EFFECT_KIND,
-          limbKey
-        }
+        kind: "active"
       }
     },
     system: { changes }
@@ -1456,46 +1563,57 @@ async function createPeriodicDamageEffect(actor, { damageType = {}, limbKey = ""
   const startTime = Number.isFinite(Number(worldTime)) ? Number(worldTime) : (Number(game.time?.worldTime) || 0);
   const endTime = startTime + (intervalSeconds * tickCount);
   const effectName = String(settings.effectName || damageType.label || damageType.key || "Урон").trim();
+  const changeData = {
+    kind: PERIODIC_DAMAGE_EFFECT_KIND,
+    damageTypeKey: damageType.key ?? "",
+    limbKey,
+    scope,
+    amountPerTick: tickAmount,
+    totalTicks: tickCount,
+    remainingTicks: tickCount,
+    intervalSeconds,
+    startTime,
+    endTime,
+    nextTickTime: startTime + intervalSeconds,
+    source
+  };
   const effectData = {
     type: "base",
     name: effectName,
     img: String(settings.img || "icons/svg/hazard.svg"),
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    duration: {
+      startTime,
+      seconds: intervalSeconds * tickCount,
+      expiry: MANAGED_TIMED_DAMAGE_EXPIRY
+    },
     flags: {
       [TRAUMA_FLAG_SCOPE]: {
         kind: "active",
-        [DAMAGE_EFFECT_FLAG_KEY]: {
-          kind: "periodicDamage",
-          damageTypeKey: damageType.key ?? "",
-          limbKey,
-          scope,
-          amountPerTick: tickAmount,
-          totalTicks: tickCount,
-          remainingTicks: tickCount,
-          intervalSeconds,
-          startTime,
-          endTime,
-          nextTickTime: startTime + intervalSeconds,
-          source
-        }
+        [MANAGED_TIMED_DAMAGE_FLAG_KEY]: true
       }
     },
-    system: { changes: [] }
+    system: {
+      changes: [createDamageEffectChange(
+        buildDamageEffectChangeKey("periodic", damageType.key || "damage", limbKey || scope || "health"),
+        changeData
+      )]
+    }
   };
-  return actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+  return upsertManagedTimedDamageEffect(actor, effectData, [PERIODIC_DAMAGE_EFFECT_KIND]);
 }
 
 async function createBleedingDamageEffect(actor, { damageType = {}, limbKey = "", scope = SCOPE_HEALTH, healthDelta = 0, source = {}, worldTime = null } = {}) {
   const effectData = buildBleedingDamageEffectData(actor, [{ damageType, limbKey, scope, healthDelta, source, worldTime }]);
   if (!effectData) return [];
-  return actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+  return upsertManagedTimedDamageEffect(actor, effectData, [BLEEDING_DAMAGE_EFFECT_KIND]);
 }
 
 async function createCombinedBleedingDamageEffect(actor, entries = []) {
   const effectData = buildBleedingDamageEffectData(actor, entries);
   if (!effectData) return [];
-  return actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+  return upsertManagedTimedDamageEffect(actor, effectData, [BLEEDING_DAMAGE_EFFECT_KIND]);
 }
 
 function buildBleedingDamageEffectData(actor, entries = []) {
@@ -1507,16 +1625,34 @@ function buildBleedingDamageEffectData(actor, entries = []) {
   const totalTicks = Math.max(...bleedingEntries.map(entry => entry.tickAmounts.length));
   const startTime = Math.min(...bleedingEntries.map(entry => entry.startTime));
   const endTime = startTime + (ROUND_SECONDS * totalTicks);
-  const tickAmounts = Array.from({ length: totalTicks }, (_value, index) => (
-    bleedingEntries.reduce((sum, entry) => sum + Math.max(0, toInteger(entry.tickAmounts[index])), 0)
-  ));
-  if (!tickAmounts.some(amount => amount > 0)) return null;
+  if (!bleedingEntries.some(entry => entry.tickAmounts.some(amount => amount > 0))) return null;
 
   const names = new Set(bleedingEntries.map(entry => entry.effectName).filter(Boolean));
-  const limbs = new Set(bleedingEntries.map(entry => entry.limbKey));
-  const scopes = new Set(bleedingEntries.map(entry => entry.scope));
   const effectName = names.size === 1 ? bleedingEntries[0].effectName : "Кровотечение";
   const img = bleedingEntries.find(entry => entry.img)?.img || "icons/skills/wounds/blood-drip-droplet-red.webp";
+  const changes = combineBleedingDamageEffectEntries(bleedingEntries).map(entry => {
+    const entryTotalTicks = Math.max(0, entry.tickAmounts.length);
+    const entryStartTime = Number(entry.startTime) || startTime;
+    const entryEndTime = entryStartTime + (ROUND_SECONDS * entryTotalTicks);
+    return createDamageEffectChange(
+      buildDamageEffectChangeKey("bleeding", entry.limbKey || entry.scope || "health"),
+      {
+        kind: BLEEDING_DAMAGE_EFFECT_KIND,
+        damageTypeKey: BLEEDING_DAMAGE_TYPE_KEY,
+        sourceDamageTypeKey: entry.sourceDamageTypeKey,
+        limbKey: entry.limbKey,
+        scope: entry.scope,
+        tickAmounts: entry.tickAmounts,
+        totalTicks: entryTotalTicks,
+        remainingTicks: entryTotalTicks,
+        intervalSeconds: ROUND_SECONDS,
+        startTime: entryStartTime,
+        endTime: entryEndTime,
+        nextTickTime: entryStartTime + ROUND_SECONDS,
+        source: entry.source
+      }
+    );
+  });
 
   return {
     type: "base",
@@ -1524,35 +1660,54 @@ function buildBleedingDamageEffectData(actor, entries = []) {
     img,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    duration: {
+      startTime,
+      seconds: Math.max(0, endTime - startTime),
+      expiry: MANAGED_TIMED_DAMAGE_EXPIRY
+    },
     flags: {
       [TRAUMA_FLAG_SCOPE]: {
         kind: "temporary",
-        [DAMAGE_EFFECT_FLAG_KEY]: {
-          kind: BLEEDING_DAMAGE_EFFECT_KIND,
-          damageTypeKey: BLEEDING_DAMAGE_TYPE_KEY,
-          sourceDamageTypeKey: bleedingEntries.length === 1 ? bleedingEntries[0].sourceDamageTypeKey : "",
-          limbKey: limbs.size === 1 ? bleedingEntries[0].limbKey : "",
-          scope: scopes.size === 1 ? bleedingEntries[0].scope : SCOPE_HEALTH_AND_LIMB,
-          tickAmounts,
-          entries: bleedingEntries.map(entry => ({
-            sourceDamageTypeKey: entry.sourceDamageTypeKey,
-            limbKey: entry.limbKey,
-            scope: entry.scope,
-            tickAmounts: entry.tickAmounts,
-            source: entry.source
-          })),
-          totalTicks,
-          remainingTicks: totalTicks,
-          intervalSeconds: ROUND_SECONDS,
-          startTime,
-          endTime,
-          nextTickTime: startTime + ROUND_SECONDS,
-          source: bleedingEntries.length === 1 ? bleedingEntries[0].source : { combined: true }
-        }
+        [MANAGED_TIMED_DAMAGE_FLAG_KEY]: true
       }
     },
-    system: { changes: [] }
+    system: { changes }
   };
+}
+
+function combineBleedingDamageEffectEntries(entries = []) {
+  const combined = new Map();
+  for (const entry of entries ?? []) {
+    const limbKey = String(entry.limbKey ?? "").trim();
+    const scope = String(entry.scope ?? SCOPE_HEALTH);
+    const sourceDamageTypeKey = String(entry.sourceDamageTypeKey ?? "").trim();
+    const key = buildDamageEffectChangeKey("bleeding", limbKey || scope || "health");
+    const current = combined.get(key);
+    if (!current) {
+      combined.set(key, {
+        ...entry,
+        sourceDamageTypeKey,
+        limbKey,
+        scope,
+        tickAmounts: [...entry.tickAmounts],
+        source: entry.source && typeof entry.source === "object" ? foundry.utils.deepClone(entry.source) : {}
+      });
+      continue;
+    }
+
+    current.sourceDamageTypeKey = current.sourceDamageTypeKey === sourceDamageTypeKey ? current.sourceDamageTypeKey : "";
+    current.startTime = Math.min(Number(current.startTime) || 0, Number(entry.startTime) || Number(current.startTime) || 0);
+    current.tickAmounts = sumTickAmounts(current.tickAmounts, entry.tickAmounts);
+    current.source = combineDamageEffectSources(current.source, entry.source);
+  }
+  return Array.from(combined.values());
+}
+
+function sumTickAmounts(left = [], right = []) {
+  const length = Math.max(left.length, right.length);
+  return Array.from({ length }, (_value, index) => (
+    Math.max(0, toInteger(left[index])) + Math.max(0, toInteger(right[index]))
+  ));
 }
 
 function buildBleedingDamageEffectEntry(actor, { damageType = {}, limbKey = "", scope = SCOPE_HEALTH, healthDelta = 0, source = {}, worldTime = null } = {}) {
@@ -1578,28 +1733,7 @@ function buildBleedingDamageEffectEntry(actor, { damageType = {}, limbKey = "", 
     startTime,
     effectName,
     img: String(settings.img || "icons/skills/wounds/blood-drip-droplet-red.webp"),
-    source,
-    flags: {
-      [TRAUMA_FLAG_SCOPE]: {
-        kind: "temporary",
-        [DAMAGE_EFFECT_FLAG_KEY]: {
-          kind: BLEEDING_DAMAGE_EFFECT_KIND,
-          damageTypeKey: BLEEDING_DAMAGE_TYPE_KEY,
-          sourceDamageTypeKey: damageType?.key ?? "",
-          limbKey,
-          scope,
-          tickAmounts,
-          totalTicks: tickCount,
-          remainingTicks: tickCount,
-          intervalSeconds: ROUND_SECONDS,
-          startTime,
-          endTime: startTime + (ROUND_SECONDS * tickCount),
-          nextTickTime: startTime + ROUND_SECONDS,
-          source
-        }
-      }
-    },
-    system: { changes: [] }
+    source
   };
 }
 
@@ -1778,19 +1912,24 @@ async function applyFirstAidRemoveEffects(actor, request = {}) {
   const updateResults = [];
   for (const effect of Array.from(actor.effects ?? [])) {
     if (effect.disabled) continue;
-    const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
-    if (!isFirstAidRemovablePeriodicEffect(data, damageTypeKeys)) continue;
-    if (data.kind === BLEEDING_DAMAGE_EFFECT_KIND) {
-      const result = buildFirstAidBleedingEffectRemovalUpdate(effect, data, limbKeys, damageTypeKeys);
-      if (result.deleteEffectId) deleteIds.push(result.deleteEffectId);
-      if (result.updateData) {
-        await updatePeriodicEffect(effect, result.updateData);
-        updateResults.push({ effectId: effect.id, kind: data.kind, removed: result.removed });
-      }
-      continue;
+    const changes = getEffectChangeSource(effect);
+    const removableChanges = getDamageEffectChanges(effect).filter(data => (
+      isFirstAidRemovablePeriodicEffect(data, damageTypeKeys)
+      && limbKeys.has(String(data.limbKey ?? "").trim())
+    ));
+    if (!removableChanges.length) continue;
+
+    const removeIndexes = new Set(removableChanges.map(data => data.changeIndex));
+    const remainingChanges = changes.filter((_change, index) => !removeIndexes.has(index));
+    const remainingDamageChanges = remainingChanges
+      .map((change, index) => parseDamageEffectChange(change, index))
+      .filter(Boolean);
+    updateResults.push({ effectId: effect.id, kind: "damageEffect", removed: removeIndexes.size });
+    if (!remainingDamageChanges.length && changes.every((change, index) => removeIndexes.has(index) || parseDamageEffectChange(change, index))) {
+      deleteIds.push(effect.id);
+    } else {
+      await updatePeriodicEffect(effect, { "system.changes": remainingChanges });
     }
-    if (!limbKeys.has(String(data.limbKey ?? "").trim())) continue;
-    deleteIds.push(effect.id);
   }
 
   const deleted = await deleteActorActiveEffects(actor, deleteIds);
@@ -1801,76 +1940,9 @@ async function applyFirstAidRemoveEffects(actor, request = {}) {
 }
 
 function isFirstAidRemovablePeriodicEffect(data = {}, damageTypeKeys = new Set()) {
-  if (data?.kind === "periodicDamage") return damageTypeKeys.has(String(data.damageTypeKey ?? "").trim());
+  if (data?.kind === PERIODIC_DAMAGE_EFFECT_KIND) return damageTypeKeys.has(String(data.damageTypeKey ?? "").trim());
   if (data?.kind === BLEEDING_DAMAGE_EFFECT_KIND) return damageTypeKeys.has(BLEEDING_DAMAGE_TYPE_KEY);
   return false;
-}
-
-function buildFirstAidBleedingEffectRemovalUpdate(effect, data = {}, limbKeys = new Set(), damageTypeKeys = new Set()) {
-  if (!damageTypeKeys.has(BLEEDING_DAMAGE_TYPE_KEY)) return { removed: 0 };
-  const entries = getBleedingDamageEffectEntries(data);
-  const remainingEntries = entries.filter(entry => !limbKeys.has(String(entry.limbKey ?? "").trim()));
-  const removed = entries.length - remainingEntries.length;
-  if (!removed) return { removed: 0 };
-  if (!remainingEntries.length) return { deleteEffectId: effect.id, removed };
-  return {
-    removed,
-    updateData: {
-      [`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}`]: rebuildBleedingDamageEffectData(data, remainingEntries)
-    }
-  };
-}
-
-function getBleedingDamageEffectEntries(data = {}) {
-  const source = Array.isArray(data.entries) && data.entries.length
-    ? data.entries
-    : [{
-      sourceDamageTypeKey: data.sourceDamageTypeKey,
-      limbKey: data.limbKey,
-      scope: data.scope,
-      tickAmounts: data.tickAmounts,
-      source: data.source
-    }];
-  return source
-    .map(entry => ({
-      sourceDamageTypeKey: String(entry?.sourceDamageTypeKey ?? "").trim(),
-      limbKey: String(entry?.limbKey ?? "").trim(),
-      scope: String(entry?.scope ?? SCOPE_HEALTH),
-      tickAmounts: Array.isArray(entry?.tickAmounts)
-        ? entry.tickAmounts.map(amount => Math.max(0, toInteger(amount)))
-        : [],
-      source: entry?.source && typeof entry.source === "object" ? foundry.utils.deepClone(entry.source) : {}
-    }))
-    .filter(entry => entry.limbKey || entry.tickAmounts.some(amount => amount > 0));
-}
-
-function rebuildBleedingDamageEffectData(data = {}, entries = []) {
-  const oldTotalTicks = Math.max(0, toInteger(data.totalTicks), Array.isArray(data.tickAmounts) ? data.tickAmounts.length : 0);
-  const totalTicks = Math.max(oldTotalTicks, ...entries.map(entry => entry.tickAmounts.length));
-  const tickAmounts = Array.from({ length: totalTicks }, (_value, index) => (
-    entries.reduce((sum, entry) => sum + Math.max(0, toInteger(entry.tickAmounts[index])), 0)
-  ));
-  const limbs = new Set(entries.map(entry => entry.limbKey).filter(Boolean));
-  const scopes = new Set(entries.map(entry => entry.scope).filter(Boolean));
-  const sourceDamageTypeKeys = new Set(entries.map(entry => entry.sourceDamageTypeKey).filter(Boolean));
-  return {
-    ...foundry.utils.deepClone(data),
-    damageTypeKey: BLEEDING_DAMAGE_TYPE_KEY,
-    sourceDamageTypeKey: sourceDamageTypeKeys.size === 1 ? Array.from(sourceDamageTypeKeys)[0] : "",
-    limbKey: limbs.size === 1 ? Array.from(limbs)[0] : "",
-    scope: scopes.size === 1 ? Array.from(scopes)[0] : SCOPE_HEALTH_AND_LIMB,
-    tickAmounts,
-    entries: entries.map(entry => ({
-      sourceDamageTypeKey: entry.sourceDamageTypeKey,
-      limbKey: entry.limbKey,
-      scope: entry.scope,
-      tickAmounts: entry.tickAmounts,
-      source: entry.source
-    })),
-    totalTicks,
-    remainingTicks: Math.min(Math.max(0, toInteger(data.remainingTicks)), totalTicks),
-    source: entries.length === 1 ? entries[0].source : { combined: true }
-  };
 }
 
 function normalizeEffectChanges(changes = []) {
@@ -2030,6 +2102,7 @@ function registerDamageTimeHooks() {
   Hooks.on("combatTurnChange", advanceWorldTimeForCombatRound);
   registerQueuedWorldTimeProcessor(processTimedDamageEffects, { priority: 100 });
   Hooks.on("preDeleteActiveEffect", preventIgnoredTimedDamageEffectDeletion);
+  Hooks.on("preUpdateActiveEffect", preventManagedTimedDamageEffectExpiration);
   damageTimeHooksRegistered = true;
 }
 
@@ -2087,10 +2160,14 @@ async function processTimedDamageEffectsNow(worldTime, deltaTime) {
       const lockedEffectUuids = new Set();
 
       for (const effect of Array.from(freshActor.effects ?? [])) {
-        const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
-        if (effect.disabled || !isDamageHubManagedTimedEffect(data)) continue;
+        const damageChanges = getDamageEffectChanges(effect).filter(isDamageHubManagedTimedEffect);
+        const flagData = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
+        const flagManaged = isFlagManagedTimedEffect(flagData);
+        if (effect.disabled || (!damageChanges.length && !flagManaged)) continue;
         if (!effect.uuid || processingPeriodicEffectUuids.has(effect.uuid)) continue;
-        const tickResult = collectDamageHubManagedTimedEffectTicks(effect, data, now);
+        const tickResult = damageChanges.length
+          ? collectDamageHubManagedTimedEffectTicks(effect, damageChanges, now)
+          : collectFlagManagedTimedEffectTicks(effect, flagData, now);
         if (!tickResult.entries.length && !tickResult.update && !tickResult.deleteEffectId) continue;
         processingPeriodicEffectUuids.add(effect.uuid);
         lockedEffectUuids.add(effect.uuid);
@@ -2355,17 +2432,42 @@ async function preserveTimedDamageEffects(deltaTime) {
   for (const actor of getLoadedActors()) {
     if (!actor?.isOwner) continue;
     for (const effect of Array.from(actor.effects ?? [])) {
-      const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
-      if (!data || effect.disabled) continue;
-      const updateData = buildIgnoredTimedDamageEffectUpdate(effect, data, elapsed);
+      if (effect.disabled) continue;
+      const damageChanges = getDamageEffectChanges(effect).filter(isDamageHubManagedTimedEffect);
+      const flagData = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
+      const updateData = damageChanges.length
+        ? buildIgnoredDamageEffectChangesUpdate(effect, damageChanges, elapsed)
+        : buildIgnoredTimedDamageEffectUpdate(effect, flagData, elapsed);
       if (!Object.keys(updateData).length) continue;
       await updatePeriodicEffect(effect, updateData);
     }
   }
 }
 
+function buildIgnoredDamageEffectChangesUpdate(effect, damageChanges = [], elapsed = 0) {
+  const changes = getEffectChangeSource(effect);
+  const nextChanges = [...changes];
+  let changed = false;
+  for (const data of damageChanges) {
+    if (data.kind !== PERIODIC_DAMAGE_EFFECT_KIND && data.kind !== BLEEDING_DAMAGE_EFFECT_KIND) continue;
+    const nextData = { ...data };
+    for (const key of ["startTime", "endTime", "nextTickTime"]) {
+      const value = Number(nextData[key]);
+      if (Number.isFinite(value)) {
+        nextData[key] = value + elapsed;
+        changed = true;
+      }
+    }
+    nextChanges[data.changeIndex] = {
+      ...changes[data.changeIndex],
+      value: serializeDamageEffectChangeData(nextData)
+    };
+  }
+  return changed ? { "system.changes": nextChanges } : {};
+}
+
 function buildIgnoredTimedDamageEffectUpdate(effect, data, elapsed) {
-  if (data.kind === "periodicDamage" || data.kind === BLEEDING_DAMAGE_EFFECT_KIND) {
+  if (data?.kind === "periodicHealing" || data?.kind === FIRST_AID_TEMPORARY_EFFECT_KIND) {
     const updateData = {};
     const startTime = Number(data.startTime);
     const endTime = Number(data.endTime);
@@ -2376,18 +2478,7 @@ function buildIgnoredTimedDamageEffectUpdate(effect, data, elapsed) {
     return updateData;
   }
 
-  if (data.kind === "periodicHealing" || data.kind === FIRST_AID_TEMPORARY_EFFECT_KIND) {
-    const updateData = {};
-    const startTime = Number(data.startTime);
-    const endTime = Number(data.endTime);
-    const nextTickTime = Number(data.nextTickTime);
-    if (Number.isFinite(startTime)) updateData[`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.startTime`] = startTime + elapsed;
-    if (Number.isFinite(endTime)) updateData[`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.endTime`] = endTime + elapsed;
-    if (Number.isFinite(nextTickTime)) updateData[`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.nextTickTime`] = nextTickTime + elapsed;
-    return updateData;
-  }
-
-  if (data.kind === "resourceLimit" || data.kind === "resourceBlock") {
+  if (data?.kind === "resourceLimit" || data?.kind === "resourceBlock") {
     const startTime = Number(effect.duration?.startTime);
     if (Number.isFinite(startTime)) return { "duration.startTime": startTime + elapsed };
   }
@@ -2395,7 +2486,9 @@ function buildIgnoredTimedDamageEffectUpdate(effect, data, elapsed) {
   return {};
 }
 
-function preventIgnoredTimedDamageEffectDeletion(effect, _options, _userId) {
+function preventIgnoredTimedDamageEffectDeletion(effect, options = {}, _userId) {
+  if (options?.falloutMawAllowManagedTimedDamageExpiration) return undefined;
+  if (isManagedTimedDamageEffect(effect) && (Number(effect.duration?.remaining) <= 0 || effect.duration?.expired)) return false;
   if (!getTimeMechanicsIgnored()) return undefined;
   const data = effect.getFlag?.(TRAUMA_FLAG_SCOPE, DAMAGE_EFFECT_FLAG_KEY);
   if (data?.kind !== "resourceLimit" && data?.kind !== "resourceBlock") return undefined;
@@ -2405,29 +2498,81 @@ function preventIgnoredTimedDamageEffectDeletion(effect, _options, _userId) {
   return undefined;
 }
 
+function preventManagedTimedDamageEffectExpiration(effect, changes = {}, options = {}, _userId) {
+  if (options?.falloutMawAllowManagedTimedDamageExpiration) return undefined;
+  if (!isManagedTimedDamageEffect(effect)) return undefined;
+  const expired = foundry.utils.getProperty(changes, "duration.expired");
+  return expired === true ? false : undefined;
+}
+
+function isManagedTimedDamageEffect(effect) {
+  return Boolean(effect?.getFlag?.(TRAUMA_FLAG_SCOPE, MANAGED_TIMED_DAMAGE_FLAG_KEY));
+}
+
 function isDamageHubManagedTimedEffect(data) {
-  return data?.kind === "periodicDamage"
-    || data?.kind === BLEEDING_DAMAGE_EFFECT_KIND
-    || data?.kind === "periodicHealing"
+  return data?.kind === PERIODIC_DAMAGE_EFFECT_KIND
+    || data?.kind === BLEEDING_DAMAGE_EFFECT_KIND;
+}
+
+function isFlagManagedTimedEffect(data) {
+  return data?.kind === "periodicHealing"
     || data?.kind === FIRST_AID_TEMPORARY_EFFECT_KIND;
 }
 
 function isLimbTimedDamageEffect(data) {
-  return data?.kind === "periodicDamage" || data?.kind === BLEEDING_DAMAGE_EFFECT_KIND;
+  return data?.kind === PERIODIC_DAMAGE_EFFECT_KIND || data?.kind === BLEEDING_DAMAGE_EFFECT_KIND;
 }
 
-function collectDamageHubManagedTimedEffectTicks(effect, data, now) {
+function collectDamageHubManagedTimedEffectTicks(effect, damageChanges, now) {
+  const changes = getEffectChangeSource(effect);
+  const nextChanges = [...changes];
+  const deleteIndexes = new Set();
+  const entries = [];
+  let changed = false;
+
+  for (const data of damageChanges) {
+    if (isLimbTimedDamageEffect(data) && data.limbKey && isLimbDestroyed(effect?.parent, data.limbKey)) {
+      deleteIndexes.add(data.changeIndex);
+      changed = true;
+      continue;
+    }
+
+    const result = data.kind === BLEEDING_DAMAGE_EFFECT_KIND
+      ? collectBleedingDamageEffectTicks(effect, data, now)
+      : collectPeriodicDamageEffectTicks(effect, data, now);
+    entries.push(...result.entries);
+    if (result.deleteEffectId) {
+      deleteIndexes.add(data.changeIndex);
+      changed = true;
+    } else if (result.data) {
+      nextChanges[data.changeIndex] = {
+        ...changes[data.changeIndex],
+        value: serializeDamageEffectChangeData(result.data)
+      };
+      changed = true;
+    }
+  }
+
+  const remainingChanges = nextChanges.filter((_change, index) => !deleteIndexes.has(index));
+  const remainingDamageChanges = remainingChanges
+    .map((change, index) => parseDamageEffectChange(change, index))
+    .filter(isDamageHubManagedTimedEffect);
+  const deleteEffectId = !remainingDamageChanges.length
+    && changes.every((change, index) => deleteIndexes.has(index) || parseDamageEffectChange(change, index))
+    ? effect.id
+    : "";
+
+  return {
+    entries,
+    update: changed && !deleteEffectId ? { effectId: effect.id, data: { "system.changes": remainingChanges } } : null,
+    deleteEffectId
+  };
+}
+
+function collectFlagManagedTimedEffectTicks(effect, data, now) {
   if (data.kind === "periodicHealing") return collectPeriodicHealingEffectTicks(effect, data, now);
   if (data.kind === FIRST_AID_TEMPORARY_EFFECT_KIND) return collectFirstAidTemporaryEffectTicks(effect, data, now);
-  if (isLimbTimedDamageEffect(data) && data.limbKey && isLimbDestroyed(effect?.parent, data.limbKey)) {
-    return {
-      entries: [],
-      update: null,
-      deleteEffectId: effect.id ?? ""
-    };
-  }
-  if (data.kind === BLEEDING_DAMAGE_EFFECT_KIND) return collectBleedingDamageEffectTicks(effect, data, now);
-  return collectPeriodicDamageEffectTicks(effect, data, now);
+  return { entries: [], update: null, deleteEffectId: "" };
 }
 
 function collectPeriodicDamageEffectTicks(effect, data, now) {
@@ -2459,15 +2604,7 @@ function collectPeriodicDamageEffectTicks(effect, data, now) {
   const shouldDelete = remainingTicks <= 0 || (Number(data.endTime) && now >= Number(data.endTime) && dueTicks === 0);
   return {
     entries: entries.filter(entry => entry.amount > 0),
-    update: !shouldDelete && dueTicks > 0
-      ? {
-        effectId: effect.id,
-        data: {
-          [`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.remainingTicks`]: remainingTicks,
-          [`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.nextTickTime`]: nextTickTime
-        }
-      }
-      : null,
+    data: !shouldDelete && dueTicks > 0 ? { ...data, remainingTicks, nextTickTime } : null,
     deleteEffectId: shouldDelete ? effect.id : ""
   };
 }
@@ -2493,50 +2630,30 @@ function collectBleedingDamageEffectTicks(effect, data, now) {
   const shouldDelete = remainingTicks <= 0 || (Number(data.endTime) && now >= Number(data.endTime) && dueTicks === 0);
   return {
     entries: entries.filter(entry => entry.amount > 0),
-    update: !shouldDelete && dueTicks > 0
-      ? {
-        effectId: effect.id,
-        data: {
-          [`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.remainingTicks`]: remainingTicks,
-          [`flags.${TRAUMA_FLAG_SCOPE}.${DAMAGE_EFFECT_FLAG_KEY}.nextTickTime`]: nextTickTime
-        }
-      }
-      : null,
+    data: !shouldDelete && dueTicks > 0 ? { ...data, remainingTicks, nextTickTime } : null,
     deleteEffectId: shouldDelete ? effect.id : ""
   };
 }
 
 function buildBleedingDamageTickRequests(effect, data = {}, startIndex = 0, dueTicks = 0, now = null) {
   const worldTime = Number.isFinite(Number(now)) ? Number(now) : (Number(game.time?.worldTime) || 0);
-  const sources = Array.isArray(data.entries) && data.entries.length
-    ? data.entries
-    : [{
-      limbKey: data.limbKey,
-      scope: data.scope,
-      tickAmounts: Array.isArray(data.tickAmounts) ? data.tickAmounts : [],
-      source: data.source
-    }];
-
-  return sources
-    .filter(entry => !entry.limbKey || !isLimbDestroyed(effect?.parent, entry.limbKey))
-    .map(entry => {
-      const amounts = Array.isArray(entry.tickAmounts) ? entry.tickAmounts : [];
-      const amount = amounts.slice(startIndex, startIndex + dueTicks)
-        .reduce((sum, value) => sum + Math.max(0, toInteger(value)), 0);
-      return {
-        limbKey: entry.limbKey,
-        amount,
-        damageTypeKey: BLEEDING_DAMAGE_TYPE_KEY,
-        scope: entry.scope,
-        source: markBleedingDamageTickSource({
-          ...(entry.source ?? {}),
-          bleedingDamageEffectUuid: effect.uuid,
-          dueTicks,
-          worldTime
-        })
-      };
+  if (data.limbKey && isLimbDestroyed(effect?.parent, data.limbKey)) return [];
+  const amounts = Array.isArray(data.tickAmounts) ? data.tickAmounts : [];
+  const amount = amounts.slice(startIndex, startIndex + dueTicks)
+    .reduce((sum, value) => sum + Math.max(0, toInteger(value)), 0);
+  if (amount <= 0) return [];
+  return [{
+    limbKey: data.limbKey,
+    amount,
+    damageTypeKey: BLEEDING_DAMAGE_TYPE_KEY,
+    scope: data.scope,
+    source: markBleedingDamageTickSource({
+      ...(data.source ?? {}),
+      bleedingDamageEffectUuid: effect.uuid,
+      dueTicks,
+      worldTime
     })
-    .filter(entry => entry.amount > 0);
+  }];
 }
 
 function collectPeriodicHealingEffectTicks(effect, data, now) {
@@ -2773,6 +2890,54 @@ function combinePeriodicDamageEntries(entries = []) {
     });
   }
   return Array.from(combined.values());
+}
+
+function combinePendingPeriodicDamageEffects(entries = []) {
+  const combined = new Map();
+  for (const entry of entries ?? []) {
+    const damageTypeKey = String(entry.damageType?.key ?? "").trim();
+    const limbKey = String(entry.limbKey ?? "").trim();
+    const scope = String(entry.scope ?? SCOPE_HEALTH);
+    const settings = entry.settings ?? {};
+    const key = [
+      damageTypeKey,
+      limbKey,
+      scope,
+      toInteger(settings.tickCount),
+      toInteger(settings.intervalSeconds || ROUND_SECONDS),
+      String(settings.effectName ?? ""),
+      String(settings.img ?? "")
+    ].join("\u0000");
+    const current = combined.get(key);
+    if (current) {
+      current.amount += Math.max(0, Number(entry.amount) || 0);
+      current.source = combineDamageEffectSources(current.source, entry.source);
+      current.worldTime = Math.min(Number(current.worldTime) || 0, Number(entry.worldTime) || Number(current.worldTime) || 0);
+    } else {
+      combined.set(key, {
+        ...entry,
+        damageType: entry.damageType,
+        limbKey,
+        scope,
+        amount: Math.max(0, Number(entry.amount) || 0),
+        settings,
+        source: entry.source && typeof entry.source === "object" ? foundry.utils.deepClone(entry.source) : {},
+        worldTime: Number(entry.worldTime) || 0
+      });
+    }
+  }
+  return Array.from(combined.values()).filter(entry => entry.amount > 0);
+}
+
+function combineDamageEffectSources(left = {}, right = {}) {
+  const sources = [];
+  for (const source of [left, right]) {
+    if (source?.combinedSources && Array.isArray(source.combinedSources)) sources.push(...source.combinedSources);
+    else if (source && typeof source === "object" && Object.keys(source).length) sources.push(foundry.utils.deepClone(source));
+  }
+  if (!sources.length) return {};
+  if (sources.length === 1) return sources[0];
+  return { combined: true, combinedSources: sources };
 }
 
 function buildBatchDamageNumberEntries(entries = [], actualHealthDelta = 0, requestedHealthDamage = 0) {

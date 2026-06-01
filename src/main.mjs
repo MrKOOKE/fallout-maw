@@ -1,4 +1,5 @@
 import { FALLOUT_MAW, syncSystemConfig } from "./config/system-config.mjs";
+import { FalloutMaWToken } from "./canvas/token.mjs";
 import { FalloutMaWTokenRuler } from "./canvas/token-ruler.mjs";
 import { registerThrownItemHooks } from "./canvas/thrown-items.mjs";
 import { registerCombatDodgeHooks, registerCombatDodgeSocket } from "./combat/dodge-resource.mjs";
@@ -23,7 +24,7 @@ import { registerAnimationLibraryBrowserHooks } from "./apps/animation-library-b
 import { registerWorldTimeControlHooks } from "./apps/world-time-control.mjs";
 import { registerPersonalGeneratorHooks } from "./apps/personal-generator.mjs";
 import { registerSkillCheckSocket } from "./rolls/skill-check.mjs";
-import { registerDamageSocket } from "./combat/damage-hub.mjs";
+import { registerDamageHubConfig, registerDamageSocket } from "./combat/damage-hub.mjs";
 import { registerAttackAnimationSocket } from "./combat/attack-animations.mjs";
 import { registerWeaponAttackSocket } from "./combat/weapon-attack-controller.mjs";
 import { registerMedicineSocket } from "./apps/medicine-dialog.mjs";
@@ -62,10 +63,12 @@ Hooks.once("init", () => {
   CONFIG.FalloutMaW = syncSystemConfig();
   CONFIG.Actor.documentClass = FalloutMaWActor;
   CONFIG.Item.documentClass = FalloutMaWItem;
+  CONFIG.Token.objectClass = FalloutMaWToken;
   CONFIG.Token.rulerClass = FalloutMaWTokenRuler;
   CONFIG.time.roundTime = 6;
   CONFIG.time.turnTime = 0;
   CONFIG.ActiveEffect.expiryAction = "delete";
+  registerDamageHubConfig();
   CONFIG.ux.DragDrop = FalloutMaWDragDrop;
 
   registerSystemSettings();
