@@ -1185,6 +1185,106 @@ function serializeDamageEffectChangeData(data = {}) {
   return JSON.stringify(copy);
 }
 
+async function upsertManagedTimedDamageEffect(actor, effectData = {}, kinds = []) {
+  const newChanges = getDamageEffectChanges(effectData).filter(data => kinds.includes(data.kind));
+  if (!newChanges.length) return actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+
+  const existing = findStackableManagedTimedDamageEffect(actor, effectData, newChanges, kinds);
+  if (!existing) return actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+
+  const mergedChanges = mergeManagedTimedDamageEffectChanges(
+    getEffectChangeSource(existing),
+    getEffectChangeSource(effectData),
+    kinds
+  );
+  await updatePeriodicEffect(existing, { "system.changes": mergedChanges });
+  return [existing];
+}
+
+function findStackableManagedTimedDamageEffect(actor, effectData = {}, newChanges = [], kinds = []) {
+  const newDuration = getManagedTimedDamageEffectDuration(newChanges);
+  if (!newDuration) return null;
+  const newName = String(effectData.name ?? "");
+  const newImg = String(effectData.img ?? "");
+
+  return Array.from(actor?.effects ?? []).find(effect => {
+    if (effect.disabled || !effect.getFlag?.(TRAUMA_FLAG_SCOPE, MANAGED_TIMED_DAMAGE_FLAG_KEY)) return false;
+    if (String(effect.name ?? "") !== newName || String(effect.img ?? "") !== newImg) return false;
+    const existingChanges = getDamageEffectChanges(effect).filter(data => kinds.includes(data.kind));
+    if (!existingChanges.length) return false;
+    if (!isManagedTimedDamageEffectAtFullDuration(existingChanges)) return false;
+    return getManagedTimedDamageEffectDuration(existingChanges) === newDuration;
+  }) ?? null;
+}
+
+function getManagedTimedDamageEffectDuration(changes = []) {
+  const durations = new Set(changes.map(getManagedTimedDamageChangeDuration).filter(Boolean));
+  return durations.size === 1 ? Array.from(durations)[0] : 0;
+}
+
+function getManagedTimedDamageChangeDuration(data = {}) {
+  const intervalSeconds = Math.max(1, toInteger(data.intervalSeconds || ROUND_SECONDS));
+  const totalTicks = Math.max(0, toInteger(data.totalTicks));
+  if (totalTicks > 0) return intervalSeconds * totalTicks;
+  const startTime = Number(data.startTime);
+  const endTime = Number(data.endTime);
+  return Number.isFinite(startTime) && Number.isFinite(endTime) && endTime > startTime
+    ? Math.round(endTime - startTime)
+    : 0;
+}
+
+function isManagedTimedDamageEffectAtFullDuration(changes = []) {
+  return changes.every(data => Math.max(0, toInteger(data.remainingTicks)) === Math.max(0, toInteger(data.totalTicks)));
+}
+
+function mergeManagedTimedDamageEffectChanges(existingChanges = [], newChanges = [], kinds = []) {
+  const mergedChanges = [...existingChanges];
+  const existingDamageChanges = getDamageChangesFromChangeSource(existingChanges).filter(data => kinds.includes(data.kind));
+
+  for (const newChange of getDamageChangesFromChangeSource(newChanges).filter(data => kinds.includes(data.kind))) {
+    const existing = existingDamageChanges.find(data => data.key === newChange.key && data.kind === newChange.kind);
+    if (!existing) {
+      mergedChanges.push(newChanges[newChange.changeIndex]);
+      existingDamageChanges.push({ ...newChange, changeIndex: mergedChanges.length - 1 });
+      continue;
+    }
+
+    const mergedData = mergeManagedTimedDamageChangeData(existing, newChange);
+    mergedChanges[existing.changeIndex] = {
+      ...mergedChanges[existing.changeIndex],
+      value: serializeDamageEffectChangeData(mergedData)
+    };
+    Object.assign(existing, mergedData);
+  }
+
+  return mergedChanges;
+}
+
+function getDamageChangesFromChangeSource(changes = []) {
+  return (Array.isArray(changes) ? changes : [])
+    .map((change, index) => parseDamageEffectChange(change, index))
+    .filter(Boolean);
+}
+
+function mergeManagedTimedDamageChangeData(existing = {}, incoming = {}) {
+  if (existing.kind === BLEEDING_DAMAGE_EFFECT_KIND) {
+    return {
+      ...existing,
+      sourceDamageTypeKey: existing.sourceDamageTypeKey === incoming.sourceDamageTypeKey ? existing.sourceDamageTypeKey : "",
+      tickAmounts: sumTickAmounts(existing.tickAmounts, incoming.tickAmounts),
+      totalTicks: Math.max(toInteger(existing.totalTicks), toInteger(incoming.totalTicks)),
+      remainingTicks: Math.max(toInteger(existing.remainingTicks), toInteger(incoming.remainingTicks)),
+      source: combineDamageEffectSources(existing.source, incoming.source)
+    };
+  }
+
+  return {
+    ...existing,
+    amountPerTick: roundDamageAmount((Number(existing.amountPerTick) || 0) + (Number(incoming.amountPerTick) || 0)),
+    source: combineDamageEffectSources(existing.source, incoming.source)
+  };
+}
+
 function buildFullDamageRestoreUpdate(actor) {
   const updates = {};
   for (const [key, limb] of Object.entries(actor?.system?.limbs ?? {})) {

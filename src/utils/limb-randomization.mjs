@@ -1,7 +1,7 @@
 import { toInteger } from "./numbers.mjs";
 
-const RANDOM_LIMB_BASE_EXPONENT = 4.5;
-const RANDOM_LIMB_DIFFICULTY_EXPONENT_STEP = 40;
+const RANDOM_LIMB_BASE_EXPONENT = 2.4;
+const RANDOM_LIMB_DIFFICULTY_EXPONENT_STEP = 50;
 
 export function selectRandomWeightedLimbKey(actor, { includeDestroyed = false } = {}) {
   const entries = Object.entries(actor?.system?.limbs ?? {})
