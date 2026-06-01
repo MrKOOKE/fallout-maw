@@ -2469,13 +2469,8 @@ function getAimedElevationTargets(attackerToken, geometry, targets = []) {
 }
 
 function isTokenInAimedElevationSlice(attackerToken, target, geometry, aimTrajectory) {
-  const elevationRange = getTokenElevationRange(target);
-  return getTokenAttackContactPoints(target, geometry).some(point => {
-    const distance = Math.hypot(point.x - geometry.origin.x, point.y - geometry.origin.y);
-    const elevation = getTrajectoryElevationAtDistance(aimTrajectory, distance);
-    if (elevation < elevationRange.bottom - GEOMETRY_EPSILON || elevation > elevationRange.top + GEOMETRY_EPSILON) return false;
-    return hasLineOfSight(attackerToken, { ...point, elevation }, geometry.origin);
-  });
+  const hit = getTokenAimedElevationIntersection(target, geometry, aimTrajectory);
+  return Boolean(hit?.point && hasLineOfSight(attackerToken, hit.point, geometry.origin));
 }
 
 function getVisibleTokenAttackPoint(attackerToken, target, geometry) {
@@ -3667,25 +3662,82 @@ function getTokenTrajectoryHit(token, trajectory) {
 }
 
 function getTokenAttackContactPoints(token, geometry) {
-  const tokenPolygon = getTokenWorldPolygon(token);
-  if (!tokenPolygon) return [];
   if (geometry.type === VOLLEY_ACTION_KEY) return getTokenVolleyContactPoints(token, geometry);
-  const points = [];
 
   if (geometry.halfAngle <= 0) {
+    const points = [];
     const hit = getTokenTrajectoryHit(token, geometry);
     if (hit?.point) addUniquePoint(points, hit.point);
     return sortContactPoints(points, geometry.origin);
   }
 
-  const tokenPoints = getPolygonPointObjects(tokenPolygon);
-  for (const point of tokenPoints) {
-    if (isPointInsideAttackCone(point, geometry)) addUniquePoint(points, point);
-  }
-  addAttackBoundaryIntersections(points, tokenPoints, geometry, -geometry.halfAngle);
-  addAttackBoundaryIntersections(points, tokenPoints, geometry, geometry.halfAngle);
+  return getAttackIntersectionTestPoints(getTokenAttackIntersectionPolygon(token, geometry), geometry.origin);
+}
 
-  return sortContactPoints(points, geometry.origin);
+function getTokenAttackIntersectionPolygon(token, geometry) {
+  const tokenPolygon = getTokenWorldPolygon(token);
+  const attackPolygon = getAttackAreaPolygon(geometry);
+  if (!tokenPolygon || !attackPolygon) return null;
+  const intersection = tokenPolygon.intersectPolygon?.(attackPolygon);
+  return getPolygonPointObjects(intersection).length >= 3 ? intersection : null;
+}
+
+function getAttackAreaPolygon(geometry) {
+  const points = getAttackPolygonPoints(geometry);
+  if (!Array.isArray(points) || points.length < 3) return null;
+  const values = [];
+  for (const point of points) {
+    if (!Number.isFinite(Number(point?.x)) || !Number.isFinite(Number(point?.y))) continue;
+    values.push(Number(point.x), Number(point.y));
+  }
+  return values.length >= 6 ? new PIXI.Polygon(values) : null;
+}
+
+function getAttackIntersectionTestPoints(polygon, origin) {
+  if (!polygon || !origin) return [];
+  const points = getPolygonPointObjects(polygon);
+  addUniquePoint(points, getPolygonCentroidPoint(polygon));
+  addPolygonClosestEdgePoints(points, polygon, origin);
+  return sortContactPoints(points, origin);
+}
+
+function getTokenAimedElevationIntersection(token, geometry, trajectory) {
+  const polygon = getTokenAttackIntersectionPolygon(token, geometry);
+  if (!polygon) return null;
+  const distanceRange = getPolygonDistanceRangeFromOrigin(polygon, geometry.origin);
+  if (!distanceRange) return null;
+
+  const elevationRange = getTokenElevationRange(token);
+  const originElevation = Number(trajectory?.origin?.elevation) || 0;
+  const slope = Number(trajectory?.elevationSlope) || 0;
+
+  if (Math.abs(slope) <= GEOMETRY_EPSILON) {
+    if (originElevation < elevationRange.bottom - GEOMETRY_EPSILON || originElevation > elevationRange.top + GEOMETRY_EPSILON) return null;
+    const point = getPolygonCentroidPoint(polygon) ?? distanceRange.closestPoint;
+    return point ? { point: { ...point, elevation: originElevation }, distance: Math.hypot(point.x - geometry.origin.x, point.y - geometry.origin.y) } : null;
+  }
+
+  const first = (elevationRange.bottom - originElevation) / slope;
+  const second = (elevationRange.top - originElevation) / slope;
+  const elevationDistanceMin = Math.min(first, second);
+  const elevationDistanceMax = Math.max(first, second);
+  const distanceMin = Math.max(distanceRange.min, elevationDistanceMin);
+  const distanceMax = Math.min(distanceRange.max, elevationDistanceMax);
+  if (distanceMin > distanceMax + GEOMETRY_EPSILON) return null;
+
+  const aimPoint = getTokenAimPoint(token);
+  const aimDistance = aimPoint ? getProjectedDistanceOnTrajectory(aimPoint, trajectory) : Number.NaN;
+  const distance = clamp(Number.isFinite(aimDistance) ? aimDistance : ((distanceMin + distanceMax) / 2), distanceMin, distanceMax);
+  const point = getPolygonPointAtDistanceFromOrigin(polygon, geometry.origin, distance);
+  if (!point) return null;
+  return {
+    distance,
+    point: {
+      x: point.x,
+      y: point.y,
+      elevation: getTrajectoryElevationAtDistance(trajectory, distance)
+    }
+  };
 }
 
 function withTokenAimElevation(token, point) {
@@ -3701,21 +3753,6 @@ function getTokenVolleyContactPoints(token, geometry) {
   const points = [];
   if (closest && getSphericalDistancePixels(geometry.end, closest) <= radius) addUniquePoint(points, closest);
   return sortContactPoints(points, geometry.end);
-}
-
-function addAttackBoundaryIntersections(points, tokenPoints, geometry, offset) {
-  if (tokenPoints.length < 3) return;
-  const angle = geometry.angle + offset;
-  const end = {
-    x: geometry.origin.x + (Math.cos(angle) * geometry.distance),
-    y: geometry.origin.y + (Math.sin(angle) * geometry.distance)
-  };
-  for (let index = 0; index < tokenPoints.length; index += 1) {
-    const a = tokenPoints[index];
-    const b = tokenPoints[(index + 1) % tokenPoints.length];
-    const intersection = foundry.utils.lineSegmentIntersection?.(geometry.origin, end, a, b);
-    if (intersection) addUniquePoint(points, intersection);
-  }
 }
 
 function isPointInsideAttackCone(point, geometry) {
@@ -3813,6 +3850,103 @@ function getClosestPointOnSegment(point, a, b) {
     x: ax + (dx * t),
     y: ay + (dy * t)
   };
+}
+
+function addPolygonClosestEdgePoints(points, polygon, origin) {
+  const polygonPoints = getPolygonPointObjects(polygon);
+  if (polygonPoints.length < 3) return;
+  for (let index = 0; index < polygonPoints.length; index += 1) {
+    const a = polygonPoints[index];
+    const b = polygonPoints[(index + 1) % polygonPoints.length];
+    addUniquePoint(points, getClosestPointOnSegment(origin, a, b));
+  }
+}
+
+function getPolygonDistanceRangeFromOrigin(polygon, origin) {
+  if (!polygon || !origin) return null;
+  const candidates = getAttackIntersectionTestPoints(polygon, origin);
+  if (!candidates.length) return null;
+  let closestPoint = null;
+  let farthestPoint = null;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const point of candidates) {
+    const distance = Math.hypot(point.x - origin.x, point.y - origin.y);
+    if (distance < min) {
+      min = distance;
+      closestPoint = point;
+    }
+    if (distance > max) {
+      max = distance;
+      farthestPoint = point;
+    }
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
+  return { min, max, closestPoint, farthestPoint };
+}
+
+function getPolygonPointAtDistanceFromOrigin(polygon, origin, distance) {
+  const radius = Math.max(0, Number(distance) || 0);
+  const points = getPolygonPointObjects(polygon);
+  if (!origin || points.length < 3) return null;
+
+  for (const point of points) {
+    if (Math.abs(Math.hypot(point.x - origin.x, point.y - origin.y) - radius) <= GEOMETRY_EPSILON) return point;
+  }
+
+  const radiusSquared = radius * radius;
+  for (let index = 0; index < points.length; index += 1) {
+    const a = points[index];
+    const b = points[(index + 1) % points.length];
+    const ax = a.x - origin.x;
+    const ay = a.y - origin.y;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const qa = (dx * dx) + (dy * dy);
+    const qb = 2 * ((ax * dx) + (ay * dy));
+    const qc = (ax * ax) + (ay * ay) - radiusSquared;
+    if (qa <= GEOMETRY_EPSILON) continue;
+    const discriminant = (qb * qb) - (4 * qa * qc);
+    if (discriminant < -GEOMETRY_EPSILON) continue;
+    const root = Math.sqrt(Math.max(0, discriminant));
+    for (const t of [(-qb - root) / (2 * qa), (-qb + root) / (2 * qa)]) {
+      if (t < -GEOMETRY_EPSILON || t > 1 + GEOMETRY_EPSILON) continue;
+      return {
+        x: a.x + (dx * clamp(t, 0, 1)),
+        y: a.y + (dy * clamp(t, 0, 1))
+      };
+    }
+  }
+
+  const centroid = getPolygonCentroidPoint(polygon);
+  if (centroid && Math.abs(Math.hypot(centroid.x - origin.x, centroid.y - origin.y) - radius) <= GEOMETRY_EPSILON) return centroid;
+  return null;
+}
+
+function getPolygonCentroidPoint(polygon) {
+  const points = getPolygonPointObjects(polygon);
+  if (points.length < 3) return null;
+  if (typeof foundry.utils.polygonCentroid === "function") return foundry.utils.polygonCentroid(polygon.points);
+
+  let area = 0;
+  let x = 0;
+  let y = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    const cross = (current.x * next.y) - (next.x * current.y);
+    area += cross;
+    x += (current.x + next.x) * cross;
+    y += (current.y + next.y) * cross;
+  }
+  if (Math.abs(area) <= GEOMETRY_EPSILON) {
+    return {
+      x: points.reduce((total, point) => total + point.x, 0) / points.length,
+      y: points.reduce((total, point) => total + point.y, 0) / points.length
+    };
+  }
+  const factor = 1 / (3 * area);
+  return { x: x * factor, y: y * factor };
 }
 
 function getSphericalDistancePixels(left, right) {
