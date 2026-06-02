@@ -45,6 +45,7 @@ import {
 } from "../utils/equipment-slots.mjs";
 import { getInventoryTooltipCompareActor, renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
 import { FalloutMaWContainerSheet } from "../sheets/container-sheet.mjs";
+import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import { getConditionFunction, getEnabledToolFunctions, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
@@ -3095,6 +3096,7 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
 
   const item = sourceActor.items?.get(String(payload.itemId ?? ""));
   if (!item) throw new Error("Item not found.");
+  assertSearchTransferableItem(item);
   const quantity = getTransferItemQuantity(item, payload.quantity);
   const targetParentId = String(payload.targetParentId ?? ROOT_CONTAINER_ID);
   validateTargetParent(targetActor, targetParentId);
@@ -3141,6 +3143,7 @@ async function performSearchInventorySplit(payload = {}, requesterUserId = "") {
 
   const item = actor.items?.get(String(payload.itemId ?? ""));
   if (!item) throw new Error("Item not found.");
+  assertSearchTransferableItem(item);
   return splitActorInventoryItem(actor, item, toInteger(payload.amount));
 }
 
@@ -3161,6 +3164,8 @@ async function performSearchInventoryStack(payload = {}, requesterUserId = "") {
   const sourceItem = sourceActor.items?.get(String(payload.itemId ?? ""));
   const targetItem = targetActor.items?.get(String(payload.targetItemId ?? ""));
   if (!sourceItem || !targetItem) throw new Error("Item not found.");
+  assertSearchTransferableItem(sourceItem);
+  assertSearchTransferableItem(targetItem);
   const quantity = toInteger(payload.quantity);
   const tradePayment = getTradePaymentRequest({
     payload,
@@ -3301,6 +3306,7 @@ async function performCompletedTradeHubDeposit(payload = {}, requesterUserId = "
   if (!sourceActor) throw new Error("Actor not found.");
   const item = sourceActor.items?.get(String(payload.itemId ?? ""));
   if (!item) throw new Error("Item not found.");
+  assertSearchTransferableItem(item);
 
   const session = getActiveTradeSession(payload.sessionId);
   if (session) {
@@ -3364,6 +3370,7 @@ function validateTradeOfferSide(actor, offer = {}) {
     if (!sourceActor) throw new Error("Trade item source actor not found.");
     const item = sourceActor?.items?.get(String(entry.itemId ?? ""));
     if (!item) throw new Error("Item not found.");
+    assertSearchTransferableItem(item);
     const requested = Math.max(1, toInteger(entry.quantity));
     if (!isContainerItem(item) && requested > Math.max(1, getItemQuantity(item))) throw new Error("Not enough item quantity.");
   }
@@ -3398,6 +3405,7 @@ async function applyTradeOfferSide({ sourceActor, targetActor = null, offer } = 
     if (!entrySourceActor) throw new Error("Trade item source actor not found.");
     const item = entrySourceActor.items?.get(String(entry.itemId ?? ""));
     if (!item) throw new Error("Item not found.");
+    assertSearchTransferableItem(item);
     const quantity = getTransferItemQuantity(item, entry.quantity);
     const itemData = item.toObject();
     foundry.utils.setProperty(itemData, "system.quantity", quantity);
@@ -3464,6 +3472,7 @@ async function applyTradeOfferSide({ sourceActor, targetActor = null, offer } = 
 }
 
 async function transferTradeOfferItemToActor({ sourceActor, targetActor, sourceItem, quantity = 0 } = {}) {
+  assertSearchTransferableItem(sourceItem);
   const transferQuantity = getTransferItemQuantity(sourceItem, quantity);
   const itemData = sourceItem.toObject();
   foundry.utils.setProperty(itemData, "system.quantity", transferQuantity);
@@ -4359,6 +4368,7 @@ export async function transferItemBetweenActors({
   targetItemId = "",
   quantity = 0
 } = {}) {
+  assertSearchTransferableItem(sourceItem);
   const itemData = sourceItem.toObject();
   const transferQuantity = getTransferItemQuantity(sourceItem, quantity);
   foundry.utils.setProperty(itemData, "system.quantity", transferQuantity);
@@ -5023,12 +5033,20 @@ function getQuickTransferParentCandidates(actor) {
 }
 
 function getBulkTransferSourceItemIds(actor) {
-  const items = (actor?.items?.contents ?? []).filter(item => item && item.type !== "trauma" && item.type !== "disease");
+  const items = (actor?.items?.contents ?? []).filter(item => isSearchTransferableItem(item));
   const itemMap = new Map(items.map(item => [item.id, item]));
   const selectedIds = new Set(items.map(item => item.id));
   return items
     .filter(item => !hasBulkTransferSelectedAncestor(item, itemMap, selectedIds))
     .map(item => item.id);
+}
+
+function isSearchTransferableItem(item) {
+  return Boolean(item && item.type !== "trauma" && item.type !== "disease" && !isNaturalRaceItem(item));
+}
+
+function assertSearchTransferableItem(item) {
+  if (!isSearchTransferableItem(item)) throw new Error("This item cannot be moved through search or trade.");
 }
 
 function hasBulkTransferSelectedAncestor(item, itemMap, selectedIds) {
@@ -5218,6 +5236,7 @@ function createInventoryStackData(itemData, quantity, parentId, placement, { equ
 }
 
 export async function copyActorInventoryItem(actor, item) {
+  assertSearchTransferableItem(item);
   const data = item.toObject();
   delete data._id;
   delete data.id;
@@ -5231,6 +5250,7 @@ export async function copyActorInventoryItem(actor, item) {
 }
 
 export async function splitActorInventoryItem(actor, item, amount) {
+  assertSearchTransferableItem(item);
   const quantity = getItemQuantity(item);
   const splitQuantity = Math.max(1, Math.min(quantity - 1, toInteger(amount)));
   if (quantity <= 1 || !splitQuantity) throw new Error("No quantity to split.");
@@ -5261,6 +5281,8 @@ async function stackActorInventoryItem({
   targetParentId = ROOT_CONTAINER_ID,
   quantity = 0
 } = {}) {
+  assertSearchTransferableItem(sourceItem);
+  assertSearchTransferableItem(targetItem);
   if (!canStackItems(sourceItem?.toObject?.(), targetItem)) throw new Error("Items cannot be stacked.");
   if (getItemContainerParentId(targetItem) !== targetParentId) throw new Error("Invalid stack target.");
 
@@ -5302,6 +5324,8 @@ async function stackActorInventoryItem({
 export function canStackItems(sourceData, targetItem = null) {
   return Boolean(
     targetItem
+    && !isNaturalRaceItem(sourceData)
+    && !isNaturalRaceItem(targetItem)
     && areStackable(sourceData, targetItem)
     && getItemQuantity(targetItem) < getItemMaxStack(targetItem)
   );
@@ -5913,6 +5937,7 @@ async function performTradeSessionAction(action = "", payload = {}, requesterUse
     const actor = await resolveActor(payload.sourceActorUuid);
     const item = actor?.items?.get(String(payload.itemId ?? ""));
     if (!actor || !item) throw new Error("Item not found.");
+    assertSearchTransferableItem(item);
     ensureTradeSessionActorOfferMutation(session, actor.uuid, requesterUserId);
     if (getTradeSessionActorSide(session, actor.uuid) !== payload.side) throw new Error("Trade offer side mismatch.");
     session.offers = addTradeOfferItem(session.offers, payload.side, item, payload.quantity, payload.placement, actor.uuid);

@@ -1954,6 +1954,29 @@
   padding: 0.25rem 0.35rem;
 }
 
+.fallout-maw-natural-item-settings {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.fallout-maw-natural-item-row {
+  grid-template-columns: 38px minmax(0, 1fr) auto auto;
+}
+
+.fallout-maw-natural-item-row img {
+  border-radius: 4px;
+  height: 38px;
+  object-fit: contain;
+  width: 38px;
+}
+
+.fallout-maw-natural-item-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .fallout-maw-trauma-profile-list {
   display: flex;
   flex-direction: column;
@@ -9485,6 +9508,10 @@ label.fallout-maw-mitigation-cell {
   display: grid;
   gap: 0.75rem;
   grid-template-columns: minmax(220px, 0.85fr) minmax(0, 1.15fr);
+}
+
+.fallout-maw-natural-race-config-grid {
+  grid-template-columns: 1fr;
 }
 
 .fallout-maw-settings-block {

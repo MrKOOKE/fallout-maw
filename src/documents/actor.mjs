@@ -21,6 +21,7 @@ import {
   DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
 } from "../config/defaults.mjs";
 import { getItemActorLoadWeight, getItemContainerParentId } from "../utils/inventory-containers.mjs";
+import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import { handleActorDamageUpdate, prepareActorDamageUpdate, requestDamageApplication } from "../combat/damage-hub.mjs";
 import { migrateActorData } from "../migrations/documents.mjs";
 import { prepareEffectChangeForApplication } from "../utils/effect-change-values.mjs";
@@ -343,7 +344,7 @@ function prepareActorLoadData(actor) {
     : 0;
   const value = Number(
     actor.items.reduce((total, item) => (
-      getItemContainerParentId(item)
+      isNaturalRaceItem(item) || getItemContainerParentId(item)
         ? total
         : total + (Number(getItemActorLoadWeight(item, actor.items)) || 0)
     ), 0).toFixed(1)

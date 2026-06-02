@@ -13,6 +13,7 @@ import { localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createDefaultNeedSettings, normalizeFormulaMap, normalizeNeedSettings } from "../formulas/index.mjs";
 import { normalizeLimbSilhouette } from "../utils/limb-silhouette.mjs";
+import { normalizeNaturalRaceItemEntries, NATURAL_RACE_ITEM_KINDS } from "../races/natural-items.mjs";
 
 export const DEFAULT_BLEEDING_RESISTANCE_FORMULA = "0";
 export const DEFAULT_REGENERATION_FORMULA = "10 + con * 5";
@@ -29,6 +30,8 @@ export function createRaceDefaults(characteristics = [], damageTypes = []) {
     limbSilhouette: null,
     equipmentSlots: createDefaultEquipmentSlots(),
     weaponSets: createDefaultWeaponSets(),
+    naturalWeapons: [],
+    naturalFeatures: [],
     inventorySize: createDefaultInventorySize(),
     regeneration: createDefaultRegeneration(),
     bleedingResistanceFormula: DEFAULT_BLEEDING_RESISTANCE_FORMULA,
@@ -102,6 +105,8 @@ export function normalizeCreatureOptions(options = {}, characteristics = [], dam
         limbSilhouette,
         equipmentSlots: normalizeEquipmentSlots(race.equipmentSlots),
         weaponSets: normalizeWeaponSets(race.weaponSets, limbs),
+        naturalWeapons: normalizeNaturalRaceItemEntries(race.naturalWeapons, NATURAL_RACE_ITEM_KINDS.weapon),
+        naturalFeatures: normalizeNaturalRaceItemEntries(race.naturalFeatures, NATURAL_RACE_ITEM_KINDS.feature),
         inventorySize: normalizeInventorySize(race.inventorySize),
         regeneration: normalizeRegeneration(race.regeneration),
         bleedingResistanceFormula: normalizeBleedingResistanceFormula(race.bleedingResistanceFormula),

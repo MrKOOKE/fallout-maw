@@ -24,6 +24,7 @@ import {
   prepareInventoryGridContext
 } from "./inventory-containers.mjs";
 import { getFirstAidChargesData, hasItemFunction, ITEM_FUNCTIONS } from "./item-functions.mjs";
+import { getNaturalWeaponSetContext, isNaturalRaceItem } from "../races/natural-items.mjs";
 import { toInteger } from "./numbers.mjs";
 
 export const FALLBACK_ICON = "icons/svg/d20-grey.svg";
@@ -128,8 +129,9 @@ export function getActorRootInventoryGridOptions(actor, parentId = "") {
 export function prepareInventoryContext(actor, race) {
   const currencies = getCurrencySettings();
   const { columns, rows } = getActorInventoryGridDimensions(actor, race);
-  const allItems = actor.items.contents.filter(item => !["ability", "trauma", "disease"].includes(item.type));
+  const allItems = actor.items.contents.filter(item => !["ability", "trauma", "disease"].includes(item.type) && !isNaturalRaceItem(item));
   const allItemData = allItems.map(item => createInventoryItemData(item, allItems, currencies));
+  const naturalWeaponSet = getNaturalWeaponSetContext(actor, race, currencies);
   const assignedItemIds = new Set();
   const topLevelItems = allItemData.filter(item => !item.parentId);
 
@@ -183,6 +185,7 @@ export function prepareInventoryContext(actor, race) {
   return {
     equipmentSlots,
     weaponSets,
+    naturalWeaponSet,
     containers,
     grid
   };

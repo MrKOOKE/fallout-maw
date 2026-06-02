@@ -30,6 +30,7 @@ import {
 } from "../utils/actor-display-data.mjs";
 import { getInventoryTooltipCompareActor, renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
 import { FalloutMaWContainerSheet } from "../sheets/container-sheet.mjs";
+import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import {
   ROOT_CONTAINER_ID,
   createStoredPlacement,
@@ -1728,7 +1729,7 @@ function createCraftRequirementSpendPlan(actor, requirements = []) {
   for (const requirement of requirements) {
     let remaining = Math.max(0, toInteger(requirement.quantity));
     if (!remaining) continue;
-    const candidates = actor.items.contents.filter(item => craftItemMatchesRequirement(item, requirement));
+    const candidates = actor.items.contents.filter(item => !isNaturalRaceItem(item) && craftItemMatchesRequirement(item, requirement));
 
     for (const item of candidates) {
       if (remaining <= 0) break;
@@ -1809,6 +1810,7 @@ function getActorCraftToolCandidates(actor, requirement = {}, supplyByItemTool =
   const requiredClass = normalizeToolClass(requirement.toolClass);
   const toolKey = String(requirement.toolKey ?? "").trim();
   return (actor?.items?.contents ?? [])
+    .filter(item => !isNaturalRaceItem(item))
     .flatMap(item => getEnabledToolFunctions(item)
       .filter(tool => String(tool.toolKey ?? "") === toolKey && isToolClassAccepted(tool.toolClass, requiredClass))
       .map(tool => {
@@ -2364,6 +2366,7 @@ function getActorOwnedCraftRequirements(actor, requirements = []) {
   for (const requirement of requirements) {
     let quantity = 0;
     for (const item of actor?.items?.contents ?? []) {
+      if (isNaturalRaceItem(item)) continue;
       if (!craftItemMatchesRequirement(item, requirement)) continue;
       quantity += getItemQuantity(item);
     }

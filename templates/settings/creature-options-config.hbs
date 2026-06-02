@@ -236,6 +236,54 @@
         </div>
       </section>
 
+      <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.natural.cssClass}}" data-creature-section="natural">
+        <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
+          <button type="button" data-creature-section-toggle aria-expanded="{{sections.natural.ariaExpanded}}"><i class="fa-solid {{sections.natural.iconClass}}"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.NaturalWeaponsFeatures"}}</span></button>
+        </header>
+
+        <div class="fallout-maw-equipment-config-grid fallout-maw-natural-race-config-grid">
+          <div class="fallout-maw-settings-block">
+            <header class="fallout-maw-panel-header">
+              <h3>{{localize "FALLOUTMAW.Settings.CreatureOptions.NaturalWeapons"}}</h3>
+              <button type="button" data-action="createNaturalWeapon"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Settings.CreatureOptions.CreateNaturalWeapon"}}</button>
+            </header>
+
+            <div class="fallout-maw-settings-table fallout-maw-natural-item-settings">
+              {{#each naturalWeapons}}
+              <div class="fallout-maw-settings-row fallout-maw-natural-item-row" data-natural-weapon-row data-natural-item-id="{{id}}">
+                <img src="{{img}}" alt="">
+                <span>{{name}}</span>
+                <button type="button" class="fallout-maw-icon-button" data-action="editNaturalWeapon" title="{{localize 'FALLOUTMAW.Common.Edit'}}"><i class="fa-solid fa-pen"></i></button>
+                <button type="button" class="fallout-maw-icon-button" data-action="deleteNaturalWeapon" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+              </div>
+              {{else}}
+              <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoNaturalWeapons"}}</p>
+              {{/each}}
+            </div>
+          </div>
+
+          <div class="fallout-maw-settings-block">
+            <header class="fallout-maw-panel-header">
+              <h3>{{localize "FALLOUTMAW.Settings.CreatureOptions.NaturalFeatures"}}</h3>
+              <button type="button" data-action="addNaturalFeature"><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Settings.CreatureOptions.AddNaturalFeature"}}</button>
+            </header>
+
+            <div class="fallout-maw-settings-table fallout-maw-natural-item-settings">
+              {{#each naturalFeatures}}
+              <div class="fallout-maw-settings-row fallout-maw-natural-item-row" data-natural-feature-row data-natural-item-id="{{id}}">
+                <img src="{{img}}" alt="">
+                <span>{{name}}</span>
+                <button type="button" class="fallout-maw-icon-button" data-action="editNaturalFeature" title="{{localize 'FALLOUTMAW.Common.Edit'}}"><i class="fa-solid fa-pen"></i></button>
+                <button type="button" class="fallout-maw-icon-button" data-action="deleteNaturalFeature" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+              </div>
+              {{else}}
+              <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoNaturalFeatures"}}</p>
+              {{/each}}
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="fallout-maw-panel fallout-maw-collapsible-panel {{sections.inventory.cssClass}}" data-creature-section="inventory">
         <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
           <button type="button" data-creature-section-toggle aria-expanded="{{sections.inventory.ariaExpanded}}"><i class="fa-solid {{sections.inventory.iconClass}}"></i><span>{{localize "FALLOUTMAW.Settings.CreatureOptions.InventorySize"}}</span></button>

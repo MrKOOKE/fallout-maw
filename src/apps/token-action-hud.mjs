@@ -440,11 +440,12 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const actor = this.actor;
     const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
     const inventory = prepareInventoryContext(actor, race);
-    const activeWeaponSetKey = getActiveHudWeaponSetKey(actor, inventory.weaponSets);
-    const selectedWeapon = getSelectedHudWeapon(actor, inventory.weaponSets, activeWeaponSetKey);
+    const hudWeaponSets = getHudWeaponSets(inventory);
+    const activeWeaponSetKey = getActiveHudWeaponSetKey(actor, hudWeaponSets);
+    const selectedWeapon = getSelectedHudWeapon(actor, hudWeaponSets, activeWeaponSetKey);
     const hudIcons = getTokenActionHudIcons();
-    const weaponSet = prepareHudWeaponSet(actor, inventory.weaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons);
-    const weaponSets = prepareHudWeaponSets(actor, inventory.weaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons);
+    const weaponSet = prepareHudWeaponSet(actor, hudWeaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons);
+    const weaponSets = prepareHudWeaponSets(actor, hudWeaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons);
     const selectedWeaponSlot = getSelectedHudWeaponSlot(weaponSet, selectedWeapon?.id ?? "");
     const selectedWeaponDisabled = Boolean(selectedWeaponSlot?.useDisabled);
     const weaponActionRows = prepareWeaponActionRows(actor, selectedWeapon, selectedWeaponDisabled, hudIcons);
@@ -578,7 +579,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
     const inventory = prepareInventoryContext(actor, race);
-    const set = inventory.weaponSets.find(entry => entry.key === weaponSetKey);
+    const set = getHudWeaponSets(inventory).find(entry => entry.key === weaponSetKey);
     const firstWeaponId = getUniqueHudWeaponSlots(set?.slots ?? []).at(0)?.item?.id ?? "";
     if (firstWeaponId) await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, firstWeaponId);
     this.#activeTray = "";
@@ -2129,7 +2130,7 @@ function isHudWeaponDisabled(actor, weapon) {
   const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId);
   const inventory = actor ? prepareInventoryContext(actor, race) : { weaponSets: [] };
   const placement = weapon?.system?.placement ?? {};
-  const set = (inventory.weaponSets ?? []).find(entry => entry.key === placement.weaponSet);
+  const set = getHudWeaponSets(inventory).find(entry => entry.key === placement.weaponSet);
   const slot = (set?.slots ?? []).find(entry => entry.item?.id === weapon?.id && !entry.phantom);
   return Boolean(slot?.useDisabled);
 }
@@ -2954,6 +2955,13 @@ function getFirstAvailableRootInventoryPlacement(actor, itemData) {
   const rootItems = getContextInventoryItems(ROOT_CONTAINER_ID, allItems);
   const { columns, rows } = getActorRootInventoryDimensions(actor);
   return findFirstAvailableInventoryPlacement(rootItems, columns, rows, itemData, allItems, [], [], getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID));
+}
+
+function getHudWeaponSets(inventory = {}) {
+  return [
+    ...(inventory.naturalWeaponSet ? [inventory.naturalWeaponSet] : []),
+    ...(inventory.weaponSets ?? [])
+  ];
 }
 
 function getActorRootInventoryDimensions(actor) {

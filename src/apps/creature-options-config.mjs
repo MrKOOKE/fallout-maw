@@ -1,6 +1,7 @@
 import { TEMPLATES } from "../constants.mjs";
 import { IDENTIFIER_PATTERN, validateFormula } from "../formulas/index.mjs";
 import {
+  getAbilityCatalog,
   getCharacteristicSettings,
   getCreatureOptions,
   getDamageTypeSettings,
@@ -19,6 +20,15 @@ import {
   DEFAULT_REGENERATION_FORMULA
 } from "../settings/creature-options.mjs";
 import { format, localize } from "../utils/i18n.mjs";
+import { LOCKED_FEATURES_CATEGORY_ID } from "../settings/abilities.mjs";
+import {
+  createDefaultNaturalFeatureEntry,
+  createDefaultNaturalWeaponEntry,
+  createNaturalFeatureEntryFromCatalogAbility,
+  normalizeNaturalRaceItemData,
+  syncLoadedActorsNaturalRaceItems,
+  NATURAL_RACE_ITEM_KINDS
+} from "../races/natural-items.mjs";
 import { buildActionCostEffectKeyTokens, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
@@ -29,7 +39,7 @@ import { NeedAdvancedSettingsConfig } from "./need-settings-config.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
-const CREATURE_SECTION_KEYS = Object.freeze(["type", "race", "base", "development", "regeneration", "limbs", "equipment", "inventory", "resistances", "needs"]);
+const CREATURE_SECTION_KEYS = Object.freeze(["type", "race", "base", "development", "regeneration", "limbs", "equipment", "natural", "inventory", "resistances", "needs"]);
 
 export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
   #editorMode = "type";
@@ -68,6 +78,12 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       deleteWeaponSet: this.#onDeleteWeaponSet,
       createWeaponSlot: this.#onCreateWeaponSlot,
       deleteWeaponSlot: this.#onDeleteWeaponSlot,
+      createNaturalWeapon: this.#onCreateNaturalWeapon,
+      editNaturalWeapon: this.#onEditNaturalWeapon,
+      deleteNaturalWeapon: this.#onDeleteNaturalWeapon,
+      addNaturalFeature: this.#onAddNaturalFeature,
+      editNaturalFeature: this.#onEditNaturalFeature,
+      deleteNaturalFeature: this.#onDeleteNaturalFeature,
       createRaceNeed: this.#onCreateRaceNeed,
       deleteRaceNeed: this.#onDeleteRaceNeed,
       openRaceNeedSettings: this.#onOpenRaceNeedSettings,
@@ -92,7 +108,9 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     const configurableDamageTypes = getConfigurableDamageTypes(damageTypes);
     const selectedType = this.creatureOptions.types.find(type => type.id === this.activeTypeId) ?? this.creatureOptions.types[0] ?? null;
     const racesForType = selectedType ? this.creatureOptions.races.filter(race => race.typeId === selectedType.id) : [];
-    const selectedRace = racesForType.find(race => race.id === this.activeRaceId) ?? racesForType[0] ?? null;
+    const selectedRace = this.#editorMode === "race"
+      ? (racesForType.find(race => race.id === this.activeRaceId) ?? racesForType[0] ?? null)
+      : null;
 
     this.activeTypeId = selectedType?.id ?? "";
     this.activeRaceId = selectedRace?.id ?? "";
@@ -133,6 +151,8 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
           }))
         }))
       })),
+      naturalWeapons: (selectedRace?.naturalWeapons ?? []).map(entry => prepareNaturalItemRow(entry)),
+      naturalFeatures: (selectedRace?.naturalFeatures ?? []).map(entry => prepareNaturalItemRow(entry)),
       inventorySize: selectedRace?.inventorySize ?? createDefaultInventorySize(),
       regeneration: selectedRace?.regeneration ?? createDefaultRegeneration(),
       resistanceDamageTypes: configurableDamageTypes.map(damageType => ({
@@ -155,8 +175,8 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
 
   async _processFormData(_event, _form, formData) {
     const expanded = getExpandedFormData(formData);
-    this.#updateActiveType(expanded);
-    this.#updateActiveRace(expanded);
+    if (this.#editorMode === "type") this.#updateActiveType(expanded);
+    if (this.#editorMode === "race") this.#updateActiveRace(expanded);
     this.#validateRaceFormulas();
     return this.#saveAndRender(localize("FALLOUTMAW.Messages.CreatureOptionsSaved"));
   }
@@ -165,7 +185,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     this.#updateFromCurrentForm();
     this.activeTypeId = target.dataset.id ?? "";
-    this.activeRaceId = this.creatureOptions.races.find(race => race.typeId === this.activeTypeId)?.id ?? "";
+    this.activeRaceId = "";
     this.#editorMode = "type";
     return this.forceRender();
   }
@@ -410,6 +430,66 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
+  static async #onCreateNaturalWeapon(event) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    if (!race) return undefined;
+    race.naturalWeapons ??= [];
+    const entry = createDefaultNaturalWeaponEntry();
+    race.naturalWeapons.push(entry);
+    await this.forceRender();
+    return this.#openNaturalItemEditor(entry, NATURAL_RACE_ITEM_KINDS.weapon);
+  }
+
+  static #onEditNaturalWeapon(event, target) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const entry = this.#getNaturalItemEntryFromTarget(target, "naturalWeapons", "[data-natural-weapon-row]");
+    if (!entry) return undefined;
+    return this.#openNaturalItemEditor(entry, NATURAL_RACE_ITEM_KINDS.weapon);
+  }
+
+  static #onDeleteNaturalWeapon(event, target) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    if (!race) return undefined;
+    const id = target.closest("[data-natural-weapon-row]")?.dataset.naturalItemId ?? "";
+    race.naturalWeapons = (race.naturalWeapons ?? []).filter(entry => entry.id !== id);
+    return this.forceRender();
+  }
+
+  static async #onAddNaturalFeature(event) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    if (!race) return undefined;
+    race.naturalFeatures ??= [];
+    const entry = await this.#chooseNaturalFeatureEntry();
+    if (!entry) return undefined;
+    race.naturalFeatures.push(entry);
+    return this.forceRender();
+  }
+
+  static #onEditNaturalFeature(event, target) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const entry = this.#getNaturalItemEntryFromTarget(target, "naturalFeatures", "[data-natural-feature-row]");
+    if (!entry) return undefined;
+    return this.#openNaturalItemEditor(entry, NATURAL_RACE_ITEM_KINDS.feature);
+  }
+
+  static #onDeleteNaturalFeature(event, target) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    if (!race) return undefined;
+    const id = target.closest("[data-natural-feature-row]")?.dataset.naturalItemId ?? "";
+    race.naturalFeatures = (race.naturalFeatures ?? []).filter(entry => entry.id !== id);
+    return this.forceRender();
+  }
+
   static #onCreateRaceNeed(event) {
     event.preventDefault();
     this.#updateFromCurrentForm();
@@ -463,6 +543,81 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     }).render({ force: true });
   }
 
+  #getNaturalItemEntryFromTarget(target, property, selector) {
+    const race = this.#activeRace;
+    const id = target.closest(selector)?.dataset.naturalItemId ?? "";
+    return (race?.[property] ?? []).find(entry => entry.id === id) ?? null;
+  }
+
+  async #chooseNaturalFeatureEntry() {
+    const catalog = getAbilityCatalog();
+    const features = catalog.categories
+      .find(category => category.id === LOCKED_FEATURES_CATEGORY_ID)
+      ?.abilities ?? [];
+    if (!features.length) return createDefaultNaturalFeatureEntry();
+
+    const options = features
+      .map(feature => `<option value="${escapeAttribute(feature.id)}">${escapeHTML(feature.name)}</option>`)
+      .join("");
+    const result = await DialogV2.input({
+      window: { title: localize("FALLOUTMAW.Settings.CreatureOptions.AddNaturalFeature") },
+      content: `
+        <label class="fallout-maw-stacked-field">
+          <span>${localize("FALLOUTMAW.Settings.CreatureOptions.NaturalFeatures")}</span>
+          <select name="featureId">${options}</select>
+        </label>
+      `,
+      ok: {
+        label: localize("FALLOUTMAW.Common.Add"),
+        icon: "fa-solid fa-plus",
+        callback: (_event, button) => new FormDataExtended(button.form).object
+      },
+      buttons: [{
+        action: "new",
+        label: localize("FALLOUTMAW.Common.Create"),
+        icon: "fa-solid fa-file-circle-plus"
+      }, {
+        action: "cancel",
+        label: localize("FALLOUTMAW.Common.Cancel")
+      }],
+      rejectClose: false,
+      position: { width: 420 }
+    });
+
+    if (!result || result === "cancel") return null;
+    if (result === "new") return createDefaultNaturalFeatureEntry();
+    const feature = features.find(entry => entry.id === String(result.featureId ?? ""));
+    return feature ? createNaturalFeatureEntryFromCatalogAbility(feature) : null;
+  }
+
+  #openNaturalItemEditor(entry, kind) {
+    if (!entry) return undefined;
+    const ItemClass = getDocumentClass("Item");
+    const itemData = normalizeNaturalRaceItemData(entry.item, kind, entry.id);
+    itemData._id = entry.id;
+    const item = new ItemClass(itemData);
+    const persist = () => {
+      entry.item = normalizeNaturalRaceItemData(item.toObject(), kind, entry.id);
+    };
+    item.update = async changes => {
+      item.updateSource(changes ?? {});
+      persist();
+      item.sheet?.render({ force: true });
+      return item;
+    };
+    const sheet = item.sheet;
+    if (sheet) {
+      sheet._processSubmitData = async (_event, _form, submitData) => {
+        item.updateSource(submitData ?? {});
+        persist();
+        await sheet.render({ force: true });
+      };
+    }
+    sheet?.render(true);
+    persist();
+    return sheet;
+  }
+
   get #activeRace() {
     return this.creatureOptions.races.find(entry => entry.id === this.activeRaceId);
   }
@@ -471,8 +626,8 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     if (!this.form) return;
     const formData = new FormDataExtended(this.form).object;
     const expanded = foundry.utils.expandObject(formData);
-    this.#updateActiveType(expanded);
-    this.#updateActiveRace(expanded);
+    if (this.#editorMode === "type") this.#updateActiveType(expanded);
+    if (this.#editorMode === "race") this.#updateActiveRace(expanded);
   }
 
   #updateActiveType(formData) {
@@ -510,6 +665,8 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     race.limbs = this.#readLimbsFromForm();
     race.equipmentSlots = this.#readEquipmentSlotsFromForm();
     race.weaponSets = this.#readWeaponSetsFromForm();
+    race.naturalWeapons = this.#readNaturalRaceItemsFromForm("naturalWeapons", "[data-natural-weapon-row]", NATURAL_RACE_ITEM_KINDS.weapon);
+    race.naturalFeatures = this.#readNaturalRaceItemsFromForm("naturalFeatures", "[data-natural-feature-row]", NATURAL_RACE_ITEM_KINDS.feature);
     race.inventorySize = {
       columns: Math.max(1, toInteger(formData.race?.inventorySize?.columns ?? createDefaultInventorySize().columns)),
       rows: Math.max(1, toInteger(formData.race?.inventorySize?.rows ?? createDefaultInventorySize().rows))
@@ -574,6 +731,22 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         slots
       };
     }).filter(set => set.key);
+  }
+
+  #readNaturalRaceItemsFromForm(property, selector, kind) {
+    const rows = Array.from(this.form?.querySelectorAll(selector) ?? []);
+    const current = this.#activeRace?.[property] ?? [];
+    return rows
+      .map(row => {
+        const id = String(row.dataset.naturalItemId ?? "").trim();
+        const existing = current.find(entry => entry.id === id);
+        if (!existing) return null;
+        return {
+          id,
+          item: normalizeNaturalRaceItemData(existing.item, kind, id)
+        };
+      })
+      .filter(Boolean);
   }
 
   #readRaceNeedsFromForm() {
@@ -683,6 +856,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
   async #saveAndRender(message) {
     await setCreatureOptions(this.creatureOptions);
     this.creatureOptions = getCreatureOptions();
+    await syncLoadedActorsNaturalRaceItems();
     ui.notifications.info(message);
     return this.forceRender();
   }
@@ -887,6 +1061,28 @@ function getUniqueId(baseId, existingIds) {
   let index = 2;
   while (used.has(`${baseId}${index}`)) index += 1;
   return `${baseId}${index}`;
+}
+
+function prepareNaturalItemRow(entry = {}) {
+  return {
+    ...entry,
+    name: entry.item?.name || localize("FALLOUTMAW.Common.Untitled"),
+    img: entry.item?.img || "icons/svg/item-bag.svg"
+  };
+}
+
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  })[char]);
+}
+
+function escapeAttribute(value) {
+  return escapeHTML(value);
 }
 
 function toDecimal(value, fallback = 0) {

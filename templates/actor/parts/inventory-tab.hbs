@@ -46,6 +46,25 @@
 
         <h2>{{localize "FALLOUTMAW.Common.Weapon"}}</h2>
         <div class="fallout-maw-weapon-set-list">
+          {{#if inventory.naturalWeaponSet}}
+          <section class="fallout-maw-weapon-set fallout-maw-natural-weapon-set">
+            <h3>{{inventory.naturalWeaponSet.label}}</h3>
+            <div class="fallout-maw-weapon-slot-list">
+              {{#each inventory.naturalWeaponSet.slots}}
+              <div class="fallout-maw-slot-card">
+                <div class="fallout-maw-slot-card-label">{{label}}</div>
+                <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-weapon-slot fallout-maw-natural-weapon-slot" data-natural-weapon-slot="{{key}}">
+                  {{#if item}}
+                  <article class="fallout-maw-inventory-item fallout-maw-draggable-item equipped" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+                    <img src="{{item.img}}" alt="{{item.name}}">
+                  </article>
+                  {{/if}}
+                </div>
+              </div>
+              {{/each}}
+            </div>
+          </section>
+          {{/if}}
           {{#each inventory.weaponSets}}
           <section class="fallout-maw-weapon-set">
             <h3>{{label}}</h3>

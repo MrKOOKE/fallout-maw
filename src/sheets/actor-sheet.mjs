@@ -90,6 +90,7 @@ import {
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { getNaturalWeaponSetContext, isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import {
   applyWeaponModuleModifiers,
   WEAPON_MODULE_ACTION_KEYS,
@@ -2100,6 +2101,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#clearInventoryTooltip({ force: true });
     this.#closeInventoryContextMenu();
     this.#inventoryContextMenuOpen = true;
+    if (isNaturalRaceWeapon(item)) return this.#showNaturalWeaponContextMenu(item, event);
     const isAbility = item.type === "ability";
     const placementMode = String(item.system?.placement?.mode ?? "");
     const isSlottedEquipment = placementMode === "equipment";
@@ -2174,6 +2176,28 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       if (action === "copy" && game.user?.isGM) return this.#copyInventoryItem(item);
       if (action === "delete" && game.user?.isGM) return item.delete();
       return undefined;
+    });
+  }
+
+  #showNaturalWeaponContextMenu(item, event) {
+    if (!game.user?.isGM) {
+      this.#inventoryContextMenuOpen = false;
+      return;
+    }
+    const menu = document.createElement("nav");
+    menu.className = "fallout-maw-inventory-context-menu";
+    menu.dataset.pointerX = String(event.clientX);
+    menu.dataset.pointerY = String(event.clientY);
+    this.#applyOverlayUiScale(menu);
+    menu.innerHTML = `<button type="button" data-action="edit"><i class="fa-solid fa-pen-to-square"></i>${game.i18n.localize("FALLOUTMAW.Common.Edit")}</button>`;
+    document.body.append(menu);
+    this.#positionOverlayAtPointer(menu, { x: event.clientX, y: event.clientY }, 8);
+    menu.addEventListener("click", clickEvent => {
+      const action = clickEvent.target.closest("button")?.dataset.action;
+      if (action !== "edit") return;
+      clickEvent.preventDefault();
+      this.#closeInventoryContextMenu();
+      return item.sheet?.render(true);
     });
   }
 
@@ -4574,7 +4598,7 @@ function getActorLoadLimit(actor) {
 function calculateActorLoad(items = []) {
   const itemList = Array.isArray(items) ? items : Array.from(items ?? []);
   return Number(itemList.reduce((total, item) => (
-    getItemContainerParentId(item)
+    isNaturalRaceItem(item) || getItemContainerParentId(item)
       ? total
       : total + (Number(getItemActorLoadWeight(item, itemList)) || 0)
   ), 0).toFixed(1));
@@ -4589,8 +4613,9 @@ function getActorLoadLimitExceededMessage() {
 function prepareInventoryContext(actor, race) {
   const currencies = getCurrencySettings();
   const { columns, rows } = getInventoryGridDimensions(race, actor);
-  const allItems = actor.items.contents.filter(item => !["ability", "trauma", "disease"].includes(item.type));
+  const allItems = actor.items.contents.filter(item => !["ability", "trauma", "disease"].includes(item.type) && !isNaturalRaceItem(item));
   const allItemData = allItems.map(item => createInventoryItemData(item, allItems, currencies));
+  const naturalWeaponSet = getNaturalWeaponSetContext(actor, race, currencies);
   const assignedItemIds = new Set();
   const topLevelItems = allItemData.filter(item => !item.parentId);
 
@@ -4657,6 +4682,7 @@ function prepareInventoryContext(actor, race) {
   return {
     equipmentSlots,
     weaponSets,
+    naturalWeaponSet,
     containers,
     grid
   };
