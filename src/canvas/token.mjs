@@ -169,6 +169,7 @@ function registerMiddleClickGuard() {
 function buildEffectTooltipHTML(effect) {
   const name = localizeDocumentName(effect.name);
   const changes = getEffectChanges(effect).map(formatEffectChange).filter(Boolean);
+  const duration = getEffectDurationLabel(effect);
 
   return `
     <article class="fallout-maw-effect-tooltip-content">
@@ -179,12 +180,12 @@ function buildEffectTooltipHTML(effect) {
           ${effect.disabled ? `<span>${escapeHTML(localize("FALLOUTMAW.Effects.Disabled"))}</span>` : ""}
         </div>
       </header>
-      <dl>
+      ${duration ? `<dl>
         <div>
           <dt>${escapeHTML(localize("FALLOUTMAW.Effects.Duration"))}</dt>
-          <dd>${escapeHTML(getEffectDurationLabel(effect))}</dd>
+          <dd>${escapeHTML(duration)}</dd>
         </div>
-      </dl>
+      </dl>` : ""}
       ${changes.length ? `<section class="changes">
         <h4>${escapeHTML(localize("FALLOUTMAW.Effects.Changes"))}</h4>
         <ol>${changes.map(change => `<li>${change}</li>`).join("")}</ol>
@@ -195,7 +196,8 @@ function buildEffectTooltipHTML(effect) {
 
 function getEffectDurationLabel(effect) {
   const label = String(effect.duration?.label ?? "").trim();
-  return label || localize("FALLOUTMAW.Common.None");
+  if (!label || label === localize("FALLOUTMAW.Common.None") || label === localize("COMMON.None")) return "";
+  return label;
 }
 
 function getEffectChanges(effect) {
@@ -217,7 +219,7 @@ function formatEffectChange(change) {
   if (isPostureWeaponActionCostChange(key)) {
     return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatActionPointDelta(value, change?.type))}</span>`;
   }
-  return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(value)}</span>`;
+  return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatSignedValue(value, change?.type))}</span>`;
 }
 
 function formatDamageEffectChange(change) {
@@ -303,10 +305,15 @@ function isPostureWeaponActionCostChange(key) {
 }
 
 function formatActionPointDelta(value, type = "") {
-  const number = Number(value);
-  const sign = String(type ?? "") === "add" && number > 0 ? "+" : "";
-  const text = Number.isFinite(number) ? `${sign}${number}` : String(value ?? "");
+  const text = formatSignedValue(value, type);
   return `${text} ${localize("FALLOUTMAW.Common.ActionPointsShort")}`;
+}
+
+function formatSignedValue(value, type = "") {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(value ?? "");
+  const sign = String(type ?? "add") === "add" && number > 0 ? "+" : "";
+  return `${sign}${number}`;
 }
 
 function stringifyChangeValue(value) {

@@ -3414,9 +3414,10 @@ function getBurstTargetHitDistribution(attackerToken, geometry, targets = [], at
   const weights = new Map(Array.from(buckets.entries()).map(([target, shots]) => [target, shots.length]));
   for (const target of allowedTargets) {
     if (!target?.actor || !target.visible || isDeadTarget(target)) continue;
-    const aimWeight = getBurstTargetAimWeight(target, geometry, sampleCount);
-    if (aimWeight <= 0) continue;
-    const aimShot = buildBurstTargetAimShot(attackerToken, geometry, target);
+    const axisProfile = getBurstTargetAxisProfile(target, geometry, sampleCount);
+    const aimWeight = axisProfile?.weight ?? 0;
+    if (aimWeight <= 0 || !axisProfile?.point) continue;
+    const aimShot = buildBurstTargetAimShot(attackerToken, geometry, target, axisProfile.point);
     if (!aimShot) continue;
     if (!buckets.has(target)) buckets.set(target, []);
     aimShots.set(target, aimShot);
@@ -3430,20 +3431,82 @@ function getBurstTargetHitDistribution(attackerToken, geometry, targets = [], at
   return { aimShots, buckets, denominator, distances, missWeight, weights };
 }
 
-function getBurstTargetAimWeight(target, geometry, sampleCount = 1) {
+function getBurstTargetAxisProfile(target, geometry, sampleCount = 1) {
   if (!geometry?.origin || geometry.type === VOLLEY_ACTION_KEY || !target) return 0;
   const halfAngle = Math.max(0, Number(geometry.halfAngle) || 0);
-  if (halfAngle <= GEOMETRY_EPSILON) return 0;
-  const center = getTokenCenter(target);
-  if (!center) return 0;
-  const offset = Math.abs(normalizeAngle(Math.atan2(center.y - geometry.origin.y, center.x - geometry.origin.x) - geometry.angle));
-  const normalizedOffset = clamp(offset / halfAngle, 0, 1);
+  if (halfAngle <= GEOMETRY_EPSILON) return null;
+  const polygon = getTokenWorldPolygon(target);
+  const points = getPolygonPointObjects(polygon);
+  if (points.length < 3) return null;
+
+  const axis = getBurstAxisSegment(geometry);
+  const intersection = getSegmentPolygonIntersectionRange(axis.origin, axis.end, polygon, axis.distance);
+  if (intersection) {
+    return {
+      point: withTokenAimElevation(target, getPointOnBurstAxis(axis, intersection.entry)),
+      weight: Math.max(1, sampleCount)
+    };
+  }
+
+  const closest = getClosestBurstAxisPolygonPoint(axis, points);
+  if (!closest) return null;
+  const projectedDistance = clamp(getProjectedDistanceOnSegment(axis.origin, axis.end, closest.axisPoint), 1, axis.distance);
+  const halfWidth = Math.tan(halfAngle) * projectedDistance;
+  if (halfWidth <= GEOMETRY_EPSILON) return null;
+  const normalizedOffset = clamp(closest.distance / halfWidth, 0, 1);
   const centrality = 1 - (normalizedOffset * normalizedOffset);
-  return centrality * Math.max(1, sampleCount);
+  return {
+    point: withTokenAimElevation(target, closest.tokenPoint),
+    weight: centrality * Math.max(1, sampleCount)
+  };
 }
 
-function buildBurstTargetAimShot(attackerToken, geometry, target) {
-  const point = getTokenCenter(target);
+function getBurstAxisSegment(geometry) {
+  const origin = geometry.origin;
+  const angle = Number(geometry.angle) || 0;
+  const distance = Math.max(1, Number(geometry.distance) || 1);
+  return {
+    origin,
+    end: {
+      x: origin.x + (Math.cos(angle) * distance),
+      y: origin.y + (Math.sin(angle) * distance)
+    },
+    angle,
+    distance
+  };
+}
+
+function getPointOnBurstAxis(axis, distance) {
+  const range = Math.max(0, Number(distance) || 0);
+  return {
+    x: axis.origin.x + (Math.cos(axis.angle) * range),
+    y: axis.origin.y + (Math.sin(axis.angle) * range)
+  };
+}
+
+function getClosestBurstAxisPolygonPoint(axis, points = []) {
+  let best = null;
+  const consider = (axisPoint, tokenPoint) => {
+    if (!axisPoint || !tokenPoint) return;
+    const distance = Math.hypot(axisPoint.x - tokenPoint.x, axisPoint.y - tokenPoint.y);
+    if (best && distance >= best.distance) return;
+    best = { axisPoint, tokenPoint, distance };
+  };
+
+  for (let index = 0; index < points.length; index += 1) {
+    const a = points[index];
+    const b = points[(index + 1) % points.length];
+    consider(getClosestPointOnSegment(a, axis.origin, axis.end), a);
+    consider(getClosestPointOnSegment(b, axis.origin, axis.end), b);
+    consider(axis.origin, getClosestPointOnSegment(axis.origin, a, b));
+    consider(axis.end, getClosestPointOnSegment(axis.end, a, b));
+  }
+
+  return best;
+}
+
+function buildBurstTargetAimShot(attackerToken, geometry, target, point = null) {
+  point ??= getTokenCenter(target);
   if (!point) return null;
   const trajectory = buildTrajectoryThroughPoint(attackerToken, geometry, point);
   const hit = getTrajectoryTargetEntries(attackerToken, trajectory).at(0);
