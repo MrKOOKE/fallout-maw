@@ -436,8 +436,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const activeWeaponSetKey = getActiveHudWeaponSetKey(actor, inventory.weaponSets);
     const selectedWeapon = getSelectedHudWeapon(actor, inventory.weaponSets, activeWeaponSetKey);
     const hudIcons = getTokenActionHudIcons();
-    const weaponSet = prepareHudWeaponSet(inventory.weaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons);
-    const weaponSets = prepareHudWeaponSets(inventory.weaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons);
+    const weaponSet = prepareHudWeaponSet(actor, inventory.weaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons);
+    const weaponSets = prepareHudWeaponSets(actor, inventory.weaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons);
     const selectedWeaponSlot = getSelectedHudWeaponSlot(weaponSet, selectedWeapon?.id ?? "");
     const selectedWeaponDisabled = Boolean(selectedWeaponSlot?.useDisabled);
     const weaponActionRows = prepareWeaponActionRows(actor, selectedWeapon, selectedWeaponDisabled, hudIcons);
@@ -2021,12 +2021,12 @@ function prepareActions(activeTray, selectedWeapon, items, abilities, systemActi
   });
 }
 
-function prepareHudWeaponSet(weaponSets = [], activeSetKey = "", selectedWeaponId = "", hudIcons = {}) {
-  return prepareHudWeaponSets(weaponSets, activeSetKey, selectedWeaponId, hudIcons)
+function prepareHudWeaponSet(actor, weaponSets = [], activeSetKey = "", selectedWeaponId = "", hudIcons = {}) {
+  return prepareHudWeaponSets(actor, weaponSets, activeSetKey, selectedWeaponId, hudIcons)
     .find(entry => entry.key === activeSetKey) ?? null;
 }
 
-function prepareHudWeaponSets(weaponSets = [], activeSetKey = "", selectedWeaponId = "", hudIcons = {}) {
+function prepareHudWeaponSets(actor, weaponSets = [], activeSetKey = "", selectedWeaponId = "", hudIcons = {}) {
   return weaponSets.map(set => ({
     ...set,
     active: set.key === activeSetKey,
@@ -2040,10 +2040,46 @@ function prepareHudWeaponSets(weaponSets = [], activeSetKey = "", selectedWeapon
     weapons: getUniqueHudWeaponSlots(set.slots ?? []).map(slot => ({
       ...slot,
       hudAspectStyle: getHudItemAspectStyle(slot.item),
+      hudStatusBadges: prepareHudWeaponStatusBadges(actor?.items?.get(slot.item?.id ?? "")),
       weaponSetKey: set.key,
       selected: Boolean(slot.item?.id && slot.item.id === selectedWeaponId)
     }))
   }));
+}
+
+function prepareHudWeaponStatusBadges(item = null) {
+  if (!item) return {};
+  const weaponData = hasItemFunction(item, ITEM_FUNCTIONS.weapon)
+    ? applyWeaponModuleModifiers(getWeaponFunctionById(item, ITEM_FUNCTIONS.weapon) ?? {}, {
+      moduleSlots: getWeaponFunctionModuleSlots(item, ITEM_FUNCTIONS.weapon)
+    })
+    : null;
+  const magazine = prepareHudWeaponMagazineBadge(weaponData);
+  const condition = prepareHudWeaponConditionBadge(item);
+  return { magazine, condition };
+}
+
+function prepareHudWeaponMagazineBadge(weaponData = null) {
+  if (!weaponData || !hasWeaponResourceCostData(weaponData, "magazine")) return null;
+  const max = Math.max(0, toInteger(weaponData?.magazine?.max));
+  if (!max) return null;
+  const value = Math.max(0, Math.min(max, toInteger(weaponData?.magazine?.value)));
+  return {
+    label: `${value}/${max}`
+  };
+}
+
+function prepareHudWeaponConditionBadge(item = null) {
+  if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) return null;
+  const condition = getConditionFunction(item);
+  const max = Math.max(0, toInteger(condition.max));
+  if (!max) return null;
+  const value = Math.max(0, Math.min(max, toInteger(condition.value)));
+  const percent = Math.max(0, Math.min(100, Math.round((value / max) * 100)));
+  return {
+    label: `${percent}%`,
+    tone: percent >= 67 ? "high" : (percent >= 34 ? "medium" : "low")
+  };
 }
 
 function getHudItemAspectStyle(item = null) {

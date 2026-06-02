@@ -8635,7 +8635,8 @@ label.fallout-maw-mitigation-cell {
   z-index: 1;
 }
 
-.fallout-maw-token-hud-action-tile strong {
+.fallout-maw-token-hud-action-tile strong,
+.fallout-maw-token-hud-weapon-badge {
   align-items: center;
   background: rgba(4, 5, 4, 0.72);
   border: 1px solid rgba(237, 209, 129, 0.28);
@@ -8651,6 +8652,37 @@ label.fallout-maw-mitigation-cell {
   right: 4px;
   top: 4px;
   z-index: 1;
+}
+
+.fallout-maw-token-hud-weapon-badge {
+  pointer-events: none;
+}
+
+.fallout-maw-token-hud-weapon-badge.magazine {
+  left: 4px;
+  right: auto;
+}
+
+.fallout-maw-token-hud-weapon-badge.condition {
+  min-width: 2.6rem;
+}
+
+.fallout-maw-token-hud-weapon-badge.condition.high {
+  border-color: rgba(78, 214, 96, 0.72);
+  color: #7dff8d;
+  text-shadow: 0 0 5px rgba(78, 214, 96, 0.45);
+}
+
+.fallout-maw-token-hud-weapon-badge.condition.medium {
+  border-color: rgba(226, 196, 82, 0.74);
+  color: #ffe27a;
+  text-shadow: 0 0 5px rgba(226, 196, 82, 0.4);
+}
+
+.fallout-maw-token-hud-weapon-badge.condition.low {
+  border-color: rgba(225, 73, 66, 0.78);
+  color: #ff6f66;
+  text-shadow: 0 0 5px rgba(225, 73, 66, 0.45);
 }
 
 .fallout-maw-token-hud-action-tile strong.cost-cheaper {
