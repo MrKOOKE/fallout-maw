@@ -28,7 +28,7 @@ import {
   getActorRootInventoryGridOptions,
   normalizeImagePath
 } from "../utils/actor-display-data.mjs";
-import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
+import { getInventoryTooltipCompareActor, renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
 import { FalloutMaWContainerSheet } from "../sheets/container-sheet.mjs";
 import {
   ROOT_CONTAINER_ID,
@@ -111,6 +111,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #tooltipAnchorElement = null;
   #tooltipActorUuid = "";
   #tooltipCloseTimer = null;
+  #tooltipCompareMode = false;
+  #tooltipDocumentKeyHandler = null;
   #tooltipDocumentPointerDownHandler = null;
   #tooltipDocumentUuid = "";
   #tooltipElement = null;
@@ -870,8 +872,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const anchor = event.target?.closest?.("[data-tooltip-item][data-search-actor-uuid], [data-tooltip-uuid]");
     if (!anchor || !this.element?.contains(anchor)) return;
     this.#cancelInventoryTooltipClose();
+    this.#tooltipCompareMode = Boolean(event.ctrlKey);
     if (this.#tooltipAnchorElement === anchor && this.#tooltipElement) return;
-    this.#scheduleInventoryTooltip(anchor);
+    this.#scheduleInventoryTooltip(anchor, { compareMode: event.ctrlKey });
   }
 
   #onInventoryTooltipPointerOut(event) {
@@ -896,11 +899,13 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     event.stopPropagation();
     this.#clearInventoryTooltip({ force: true });
+    this.#tooltipCompareMode = Boolean(event.ctrlKey);
     void this.#showInventoryTooltip(anchor, { pinned: true });
   }
 
-  #scheduleInventoryTooltip(anchor) {
+  #scheduleInventoryTooltip(anchor, { compareMode = this.#tooltipCompareMode } = {}) {
     if (this.#tooltipPinned) return;
+    this.#tooltipCompareMode = Boolean(compareMode);
     const view = this.element?.ownerDocument?.defaultView ?? window;
     if (this.#tooltipElement && !this.#tooltipPinned) {
       if (this.#tooltipTimer) {
@@ -917,6 +922,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     this.#clearInventoryTooltip();
+    this.#tooltipCompareMode = Boolean(compareMode);
     this.#tooltipAnchorElement = anchor;
     this.#tooltipActorUuid = String(anchor.dataset.searchActorUuid ?? "");
     this.#tooltipDocumentUuid = String(anchor.dataset.tooltipUuid ?? "");
@@ -935,7 +941,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const tooltipHTML = await renderInventoryItemTooltipHTML(item, actor, {
       activeWeaponIndex: this.#tooltipWeaponTabIndex,
-      baseMode: false
+      baseMode: false,
+      compareActor: getInventoryTooltipCompareActor(),
+      compareMode: this.#tooltipCompareMode
     });
     const documentUuid = String(item.uuid ?? "");
     if (refresh && (
@@ -953,6 +961,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#tooltipActorUuid = String(actor?.uuid ?? "");
       this.#tooltipDocumentUuid = documentUuid;
       this.#tooltipItemId = item.id;
+      this.#bindInventoryTooltipKeyMode();
       this.#positionInventoryTooltip();
       requestAnimationFrame(() => {
         const description = this.#tooltipElement?.querySelector(".description");
@@ -993,6 +1002,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#tooltipDocumentUuid = documentUuid;
     this.#tooltipItemId = item.id;
     if (pinned) this.#bindInventoryTooltipDocumentClose();
+    this.#bindInventoryTooltipKeyMode();
     this.#positionInventoryTooltip();
     requestAnimationFrame(() => {
       const description = tooltip.querySelector(".description");
@@ -1008,6 +1018,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     event.stopPropagation();
     const index = Math.max(0, toInteger(button.dataset.tooltipWeaponTab));
     this.#tooltipWeaponTabIndex = index;
+    if (this.#tooltipElement?.querySelector(".fallout-maw-tooltip-comparison")) {
+      void this.#showInventoryTooltip(this.#tooltipAnchorElement, { refresh: true });
+      return;
+    }
     this.#tooltipElement.querySelectorAll("[data-tooltip-weapon-tab]").forEach(entry => {
       const active = toInteger(entry.dataset.tooltipWeaponTab) === index;
       entry.classList.toggle("active", active);
@@ -1092,6 +1106,28 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#tooltipDocumentPointerDownHandler = null;
   }
 
+  #bindInventoryTooltipKeyMode() {
+    if (this.#tooltipDocumentKeyHandler) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    this.#tooltipDocumentKeyHandler = event => {
+      if (event.key !== "Control") return;
+      const compareMode = event.type === "keydown";
+      if (this.#tooltipCompareMode === compareMode) return;
+      this.#tooltipCompareMode = compareMode;
+      if (this.#tooltipAnchorElement) void this.#showInventoryTooltip(this.#tooltipAnchorElement, { refresh: true });
+    };
+    view.document.addEventListener("keydown", this.#tooltipDocumentKeyHandler, { capture: true });
+    view.document.addEventListener("keyup", this.#tooltipDocumentKeyHandler, { capture: true });
+  }
+
+  #unbindInventoryTooltipKeyMode() {
+    if (!this.#tooltipDocumentKeyHandler) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    view.document.removeEventListener("keydown", this.#tooltipDocumentKeyHandler, { capture: true });
+    view.document.removeEventListener("keyup", this.#tooltipDocumentKeyHandler, { capture: true });
+    this.#tooltipDocumentKeyHandler = null;
+  }
+
   #clearInventoryTooltip({ force = false, keepAnchor = false } = {}) {
     if (this.#tooltipTimer) {
       const view = this.element?.ownerDocument?.defaultView ?? window;
@@ -1101,9 +1137,11 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#cancelInventoryTooltipClose();
     if (this.#tooltipPinned && !force) return;
     this.#unbindInventoryTooltipDocumentClose();
+    this.#unbindInventoryTooltipKeyMode();
     this.#tooltipElement?.remove();
     this.#tooltipElement = null;
     this.#tooltipPinned = false;
+    if (!keepAnchor) this.#tooltipCompareMode = false;
     if (!keepAnchor) {
       this.#tooltipAnchorElement = null;
       this.#tooltipActorUuid = "";

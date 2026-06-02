@@ -110,6 +110,8 @@ const ACTOR_SHEET_REFERENCE_HEIGHT = 1440;
 const ACTOR_SHEET_FALLBACK_VIEWPORT_WIDTH = 1280;
 const ACTOR_SHEET_FALLBACK_VIEWPORT_HEIGHT = 720;
 const ACTOR_SHEET_WORLD_SIDEBAR_PEEK_WIDTH = 420;
+const SELECTED_HUD_WEAPON_FLAG = "selectedHudWeaponItemId";
+const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
 
 export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
   #freeEdit = false;
@@ -134,6 +136,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #tooltipDocumentPointerDownHandler = null;
   #tooltipDocumentKeyHandler = null;
   #tooltipBaseMode = false;
+  #tooltipCompareMode = false;
   #inventoryContextMenuOpen = false;
   #uiScale = 1;
   #viewportResizeHandler = null;
@@ -903,6 +906,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const item = this.actor.items.get(itemElement.dataset.tooltipItem);
     if (!item) return;
     this.#tooltipBaseMode = Boolean(event.altKey);
+    this.#tooltipCompareMode = Boolean(event.ctrlKey);
     this.#tooltipPointer = { x: event.clientX, y: event.clientY };
     this.#cancelInventoryTooltipClose();
     if (this.#tooltipElement && !this.#tooltipPinned) {
@@ -919,6 +923,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }
 
     this.#clearInventoryTooltip();
+    this.#tooltipBaseMode = Boolean(event.altKey);
+    this.#tooltipCompareMode = Boolean(event.ctrlKey);
     this.#tooltipAnchorElement = itemElement;
     this.#tooltipItemId = item.id;
     this.#tooltipWeaponTabIndex = 0;
@@ -976,6 +982,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     this.#tooltipPinned = true;
     this.#tooltipBaseMode = Boolean(event.altKey);
+    this.#tooltipCompareMode = Boolean(event.ctrlKey);
     this.#tooltipPointer = { x: event.clientX, y: event.clientY };
     this.#tooltipAnchorElement = itemElement;
     this.#tooltipWeaponTabIndex = 0;
@@ -2393,7 +2400,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   async #showInventoryTooltip(item, { pinned = false, refresh = false } = {}) {
     const tooltipHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
       activeWeaponIndex: this.#tooltipWeaponTabIndex,
-      baseMode: this.#tooltipBaseMode
+      baseMode: this.#tooltipBaseMode,
+      compareActor: getInventoryTooltipCompareActor(),
+      compareMode: this.#tooltipCompareMode
     });
     if (refresh && this.#tooltipItemId !== item.id) return;
     if (!this.#tooltipTimer && !pinned && !refresh) return;
@@ -2409,7 +2418,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       this.#tooltipElement.style.pointerEvents = "none";
       this.#tooltipPinned = false;
       this.#tooltipItemId = item.id;
-      this.#bindInventoryTooltipAltMode();
+      this.#bindInventoryTooltipKeyMode();
       this.#positionInventoryTooltip();
       requestAnimationFrame(() => {
         if (!this.#tooltipElement) return;
@@ -2446,7 +2455,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#tooltipPinned = Boolean(pinned);
     this.#tooltipItemId = item.id;
     if (pinned) this.#bindInventoryTooltipDocumentClose();
-    this.#bindInventoryTooltipAltMode();
+    this.#bindInventoryTooltipKeyMode();
     this.#positionInventoryTooltip();
     requestAnimationFrame(() => {
       const description = tooltip.querySelector(".description");
@@ -2499,6 +2508,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const index = Math.max(0, toInteger(button.dataset.tooltipWeaponTab));
     if (index === this.#tooltipWeaponTabIndex) return;
     this.#tooltipWeaponTabIndex = index;
+    if (this.#tooltipCompareMode || this.#tooltipElement?.querySelector(".fallout-maw-tooltip-comparison")) {
+      void this.#refreshInventoryTooltip();
+      return;
+    }
     this.#activateInventoryTooltipWeaponTab(index);
   }
 
@@ -2564,7 +2577,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#clearNestedInventoryTooltip({ force: true });
     this.#tooltipElement.innerHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
       activeWeaponIndex: this.#tooltipWeaponTabIndex,
-      baseMode: this.#tooltipBaseMode
+      baseMode: this.#tooltipBaseMode,
+      compareActor: getInventoryTooltipCompareActor(),
+      compareMode: this.#tooltipCompareMode
     });
     this.#tooltipElement.classList.toggle("pinned", this.#tooltipPinned);
     this.#tooltipElement.style.pointerEvents = this.#tooltipPinned ? "auto" : "none";
@@ -2903,21 +2918,29 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#tooltipDocumentPointerDownHandler = null;
   }
 
-  #bindInventoryTooltipAltMode() {
+  #bindInventoryTooltipKeyMode() {
     if (this.#tooltipDocumentKeyHandler) return;
     const view = this.element?.ownerDocument?.defaultView ?? window;
     this.#tooltipDocumentKeyHandler = event => {
-      if (event.key !== "Alt") return;
-      const baseMode = event.type === "keydown";
-      if (this.#tooltipBaseMode === baseMode) return;
-      this.#tooltipBaseMode = baseMode;
+      if (!["Alt", "Control"].includes(event.key)) return;
+      const active = event.type === "keydown";
+      let changed = false;
+      if (event.key === "Alt" && this.#tooltipBaseMode !== active) {
+        this.#tooltipBaseMode = active;
+        changed = true;
+      }
+      if (event.key === "Control" && this.#tooltipCompareMode !== active) {
+        this.#tooltipCompareMode = active;
+        changed = true;
+      }
+      if (!changed) return;
       void this.#refreshInventoryTooltip();
     };
     view.document.addEventListener("keydown", this.#tooltipDocumentKeyHandler, { capture: true });
     view.document.addEventListener("keyup", this.#tooltipDocumentKeyHandler, { capture: true });
   }
 
-  #unbindInventoryTooltipAltMode() {
+  #unbindInventoryTooltipKeyMode() {
     if (!this.#tooltipDocumentKeyHandler) return;
     const view = this.element?.ownerDocument?.defaultView ?? window;
     view.document.removeEventListener("keydown", this.#tooltipDocumentKeyHandler, { capture: true });
@@ -2933,7 +2956,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#cancelInventoryTooltipClose();
     if (this.#tooltipPinned && !force) return;
     this.#unbindInventoryTooltipDocumentClose();
-    this.#unbindInventoryTooltipAltMode();
+    this.#unbindInventoryTooltipKeyMode();
     this.#clearNestedInventoryTooltip({ force: true });
     this.#tooltipElement?.remove();
     this.#tooltipElement = null;
@@ -2942,6 +2965,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#tooltipItemId = "";
     this.#tooltipWeaponTabIndex = 0;
     this.#tooltipBaseMode = false;
+    this.#tooltipCompareMode = false;
   }
 
   #getFullscreenSheetPosition(position = {}) {
@@ -3054,17 +3078,146 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 }
 
-export async function renderInventoryItemTooltipHTML(item, actor, { activeWeaponIndex = 0, baseMode = false } = {}) {
-  const descriptionSource = String(item.system?.description ?? "").trim();
-  const descriptionHTML = descriptionSource
-    ? await TextEditor.enrichHTML(descriptionSource, {
-      async: true,
-      secrets: item.isOwner,
-      relativeTo: item
-    })
-    : "";
+export function getInventoryTooltipCompareActor() {
+  const token = (globalThis.canvas?.tokens?.controlled ?? []).find(entry => (
+    entry?.actor?.testUserPermission?.(game.user, "LIMITED")
+  )) ?? null;
+  return token?.actor ?? null;
+}
+
+export async function renderInventoryItemTooltipHTML(item, actor, { activeWeaponIndex = 0, baseMode = false, compareActor = null, compareMode = false } = {}) {
+  const descriptionHTML = await renderInventoryItemDescriptionHTML(item);
   if (item.type === "ability") return renderAbilityItemTooltipContentHTML(item, { descriptionHTML });
-  return renderInventoryItemTooltipContentHTML(item, actor, { activeWeaponIndex, baseMode, descriptionHTML });
+  const itemHTML = renderInventoryItemTooltipContentHTML(item, actor, { activeWeaponIndex, baseMode, descriptionHTML });
+  if (!compareMode) return itemHTML;
+  if (!compareActor) return itemHTML;
+
+  const equippedItems = findComparableEquippedItems(item, compareActor);
+  if (!equippedItems.length) return itemHTML;
+
+  const equippedHTMLs = [];
+  for (const equippedItem of equippedItems) {
+    const equippedDescriptionHTML = await renderInventoryItemDescriptionHTML(equippedItem);
+    equippedHTMLs.push(renderInventoryItemTooltipContentHTML(equippedItem, compareActor, {
+      activeWeaponIndex: 0,
+      baseMode,
+      descriptionHTML: equippedDescriptionHTML
+    }));
+  }
+  return renderInventoryTooltipComparisonHTML(itemHTML, equippedHTMLs);
+}
+
+async function renderInventoryItemDescriptionHTML(item) {
+  const descriptionSource = String(item?.system?.description ?? "").trim();
+  if (!descriptionSource) return "";
+  return TextEditor.enrichHTML(descriptionSource, {
+    async: true,
+    secrets: item?.isOwner,
+    relativeTo: item
+  });
+}
+
+function renderInventoryTooltipComparisonHTML(itemHTML = "", equippedHTMLs = []) {
+  const hoveredLabel = game.i18n.localize("FALLOUTMAW.Common.Inventory");
+  const equippedLabel = game.i18n.localize("FALLOUTMAW.Common.Equipped");
+  const columns = [
+    { label: hoveredLabel, html: itemHTML, className: "" },
+    ...equippedHTMLs.map((html, index) => ({
+      label: equippedHTMLs.length > 1 ? `${equippedLabel} ${index + 1}` : equippedLabel,
+      html,
+      className: "equipped"
+    }))
+  ];
+  const manyClass = columns.length > 2 ? " many" : "";
+  return `
+    <section class="fallout-maw-tooltip-comparison${manyClass}" style="--fallout-maw-tooltip-comparison-columns: ${columns.length};">
+      ${columns.map(column => `
+        <article class="fallout-maw-tooltip-comparison-column ${column.className}">
+          <div class="fallout-maw-tooltip-comparison-label">${escapeHTML(column.label)}</div>
+          <div class="fallout-maw-tooltip-comparison-stack">${column.html}</div>
+        </article>
+      `).join("")}
+    </section>
+  `;
+}
+
+function findComparableEquippedItems(item, actor) {
+  if (!item || !actor?.items) return [];
+  const equipmentItems = findComparableEquippedEquipmentItems(item, actor);
+  if (equipmentItems.length) return equipmentItems;
+  return findComparableEquippedWeaponItems(item, actor);
+}
+
+function findComparableEquippedEquipmentItems(item, actor) {
+  const hoveredSlotKeys = getSelectedEquipmentSlotKeys(item);
+  if (!hoveredSlotKeys.size) return [];
+  return getTooltipActorItems(actor).filter(candidate => {
+    if (!isComparableEquippedCandidate(candidate, item, "equipment")) return false;
+    return hasSetOverlap(hoveredSlotKeys, getSelectedEquipmentSlotKeys(candidate));
+  });
+}
+
+function findComparableEquippedWeaponItems(item, actor) {
+  if (!getWeaponSlotRequirement(item).selectedKeys.size && !hasItemFunction(item, ITEM_FUNCTIONS.weapon)) return [];
+  const race = getTooltipActorRace(actor);
+  const inventory = prepareDisplayInventoryContext(actor, race);
+  const activeSetKey = getActiveTooltipHudWeaponSetKey(actor, inventory.weaponSets);
+  const activeSet = (inventory.weaponSets ?? []).find(set => set.key === activeSetKey) ?? null;
+  if (!activeSet) return [];
+
+  const matchingSlots = (activeSet.slots ?? []).filter(slot => (
+    canUseWeaponSlotForItem(race, item, activeSet.key, slot.key)
+  ));
+  if (!matchingSlots.length) return [];
+
+  const seenItemIds = new Set();
+  const items = [];
+  for (const slot of matchingSlots) {
+    const candidate = actor.items.get(slot.item?.id ?? "");
+    if (!isComparableEquippedCandidate(candidate, item, "weapon")) continue;
+    if (seenItemIds.has(candidate.id)) continue;
+    seenItemIds.add(candidate.id);
+    items.push(candidate);
+  }
+  return items;
+}
+
+function getActiveTooltipHudWeaponSetKey(actor, weaponSets = []) {
+  if (!weaponSets.length) return "";
+  const selectedSetKey = String(actor?.getFlag?.(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG) ?? "");
+  if (weaponSets.some(set => set.key === selectedSetKey)) return selectedSetKey;
+
+  const selectedId = String(actor?.getFlag?.(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG) ?? "");
+  const selectedSet = selectedId
+    ? weaponSets.find(set => (set.slots ?? []).some(slot => slot.item?.id === selectedId && !slot.phantom))
+    : null;
+  return selectedSet?.key ?? weaponSets[0].key;
+}
+
+function getTooltipActorItems(actor) {
+  if (Array.isArray(actor?.items?.contents)) return actor.items.contents;
+  if (typeof actor?.items?.values === "function") return Array.from(actor.items.values());
+  return [];
+}
+
+function isComparableEquippedCandidate(candidate, sourceItem, placementMode = "") {
+  if (!candidate || candidate.id === sourceItem?.id) return false;
+  if (getItemContainerParentId(candidate)) return false;
+  const mode = String(candidate.system?.placement?.mode ?? "");
+  if (mode !== placementMode) return false;
+  return placementMode === "weapon" || Boolean(candidate.system?.equipped);
+}
+
+function hasSetOverlap(left, right) {
+  for (const value of left ?? []) {
+    if (right?.has(value)) return true;
+  }
+  return false;
+}
+
+function getTooltipActorRace(actor) {
+  const raceId = actor?.system?.creature?.raceId;
+  return getCreatureOptions().races.find(entry => entry.id === raceId) ?? null;
 }
 
 function renderAbilityItemTooltipContentHTML(item, { descriptionHTML = "" } = {}) {

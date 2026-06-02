@@ -4071,6 +4071,17 @@ label.fallout-maw-mitigation-cell {
   width: 660px;
 }
 
+.fallout-maw-inventory-tooltip:has(.fallout-maw-tooltip-comparison) {
+  max-width: calc(100vw - 24px);
+  min-width: min(1120px, calc(100vw - 24px));
+  width: min(1240px, calc(100vw - 24px));
+}
+
+.fallout-maw-inventory-tooltip:has(.fallout-maw-tooltip-comparison.many) {
+  min-width: calc(100vw - 24px);
+  width: calc(100vw - 24px);
+}
+
 .fallout-maw-inventory-tooltip.pinned {
   box-shadow:
     inset 3px 3px 0 var(--fallout-maw-tooltip-edge-light),
@@ -4116,6 +4127,72 @@ label.fallout-maw-mitigation-cell {
   padding: 1.38rem;
   position: relative;
   z-index: 2;
+}
+
+.fallout-maw-inventory-tooltip .fallout-maw-tooltip-comparison {
+  display: grid;
+  gap: 0;
+  grid-template-columns: repeat(var(--fallout-maw-tooltip-comparison-columns, 2), minmax(0, 1fr));
+  max-height: calc(var(--fallout-maw-tooltip-max-height, 100vh) - 1.16rem);
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  z-index: 2;
+}
+
+.fallout-maw-inventory-tooltip .fallout-maw-tooltip-comparison-column {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  min-width: 0;
+}
+
+.fallout-maw-inventory-tooltip .fallout-maw-tooltip-comparison-column.equipped {
+  border-left: 1px solid rgba(120, 124, 94, 0.42);
+}
+
+.fallout-maw-inventory-tooltip .fallout-maw-tooltip-comparison-label {
+  background: rgba(0, 0, 0, 0.28);
+  border-bottom: 1px solid rgba(120, 124, 94, 0.42);
+  color: var(--fallout-maw-tooltip-text-soft);
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  padding: 0.62rem 1.38rem 0.5rem;
+  position: relative;
+  text-transform: uppercase;
+  z-index: 2;
+}
+
+.fallout-maw-inventory-tooltip .fallout-maw-tooltip-comparison .content {
+  max-height: none;
+  min-height: 0;
+}
+
+.fallout-maw-inventory-tooltip .fallout-maw-tooltip-comparison-stack {
+  display: grid;
+  gap: 0.75rem;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.fallout-maw-inventory-tooltip .fallout-maw-tooltip-comparison.many .content {
+  gap: 0.72rem;
+  padding: 0.92rem;
+}
+
+.fallout-maw-inventory-tooltip .fallout-maw-tooltip-comparison.many .fallout-maw-tooltip-comparison-label {
+  font-size: 0.82rem;
+  padding: 0.48rem 0.92rem 0.42rem;
+}
+
+.fallout-maw-inventory-tooltip .fallout-maw-tooltip-comparison-column.equipped [data-tooltip-module-remove],
+.fallout-maw-inventory-tooltip .fallout-maw-tooltip-comparison-column.equipped [data-tooltip-module-slot],
+.fallout-maw-inventory-tooltip .fallout-maw-tooltip-comparison-column.equipped [data-tooltip-module-choice],
+.fallout-maw-inventory-tooltip .fallout-maw-tooltip-comparison-column.equipped [data-tooltip-weapon-tab] {
+  pointer-events: none;
 }
 
 .fallout-maw-inventory-tooltip .header {
