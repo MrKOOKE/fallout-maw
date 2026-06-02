@@ -3304,6 +3304,7 @@ async function depositItemIntoCompletedTradeHub(offersState = {}, side = "", sou
     entryId: foundry.utils.randomID(),
     itemId: item.id,
     sourceActorUuid: sourceActor.uuid,
+    returnActorUuid: sourceActor.uuid,
     quantity: amount,
     itemData,
     containedItems,
@@ -3346,7 +3347,7 @@ function validateTradeOfferSide(actor, offer = {}) {
   }
 }
 
-async function applyTradeOfferSide({ sourceActor, offer } = {}) {
+async function applyTradeOfferSide({ sourceActor, targetActor = null, offer } = {}) {
   const received = {
     items: [],
     currencies: [],
@@ -3369,6 +3370,7 @@ async function applyTradeOfferSide({ sourceActor, offer } = {}) {
       entryId: foundry.utils.randomID(),
       itemId: item.id,
       sourceActorUuid: entrySourceActor.uuid,
+      returnActorUuid: String(targetActor?.uuid ?? ""),
       quantity,
       itemData,
       containedItems,
@@ -3401,6 +3403,7 @@ async function applyTradeOfferSide({ sourceActor, offer } = {}) {
         currencyKey,
         amount,
         contributions: [],
+        returnActorUuid: String(targetActor?.uuid ?? ""),
         placement: normalizeTradeOfferPlacement(entry.placement, { width: 1, height: 1 })
       });
       continue;
@@ -3414,6 +3417,7 @@ async function applyTradeOfferSide({ sourceActor, offer } = {}) {
       currencyKey,
       amount,
       contributions: [],
+      returnActorUuid: String(targetActor?.uuid ?? ""),
       placement: normalizeTradeOfferPlacement(entry.placement, { width: 1, height: 1 })
     });
   }
@@ -3617,6 +3621,7 @@ function normalizeTradeOffersState(state = {}) {
         entryId: String(entry?.entryId ?? entry?.offerKey ?? entry?.itemId ?? foundry.utils.randomID()),
         itemId: String(entry?.itemId ?? ""),
         sourceActorUuid: String(entry?.sourceActorUuid ?? ""),
+        returnActorUuid: String(entry?.returnActorUuid ?? ""),
         quantity: Math.max(1, toInteger(entry?.quantity)),
         itemData: normalizeTradeOfferItemData(entry?.itemData),
         containedItems: normalizeTradeOfferContainedItems(entry?.containedItems),
@@ -3655,6 +3660,7 @@ function normalizeTradeCurrencyOfferEntry(entry = {}) {
     currencyKey,
     amount,
     contributions,
+    returnActorUuid: String(entry?.returnActorUuid ?? ""),
     placement: normalizeTradeOfferPlacement(entry?.placement)
   };
 }
@@ -5922,6 +5928,7 @@ async function performTradeSessionAction(action = "", payload = {}, requesterUse
       return { closed: true };
     }
     if (!tradeSessionHasConnectedClients(session)) {
+      if (session.offers?.completed) await reclaimCompletedTradeSessionRemainders(session);
       activeSearchInventoryTradeSessions.delete(session.sessionId);
       const snapshot = createTradeSessionSnapshot(session);
       broadcastTradeSessionSnapshot(snapshot);
@@ -6130,6 +6137,47 @@ async function completeTradeSession(session = {}, requesterUserId = "") {
     searcher: searcherReceived,
     searched: searchedReceived
   });
+}
+
+async function reclaimCompletedTradeSessionRemainders(session = {}) {
+  let offers = normalizeTradeOffersState(session.offers);
+  if (!offers.completed) return offers;
+  for (const side of TRADE_OFFER_SIDES) {
+    for (const entry of [...offers[side].items]) {
+      const targetActor = getCompletedTradeRemainderReturnActor(session, side, entry);
+      if (!targetActor) throw new Error("Completed trade return actor not found.");
+      const itemData = getTradeOfferEntryItemData(entry, null);
+      const quantity = Math.max(1, toInteger(entry.quantity));
+      if (!itemData || !quantity) continue;
+      foundry.utils.setProperty(itemData, "system.quantity", quantity);
+      const target = getCompletedTradeClaimTarget(targetActor, itemData, entry.containedItems ?? [], { quantity });
+      if (!target) throwInventoryNoSpace();
+      await createCompletedTradeItem(targetActor, itemData, entry.containedItems ?? [], {
+        targetMode: "inventory",
+        targetParentId: target.parentId,
+        targetX: target.placement.x,
+        targetY: target.placement.y,
+        targetItemId: ""
+      });
+      offers = reduceTradeOfferEntryQuantity(offers, side, "item", getTradeOfferEntryKey(entry, "item"), quantity);
+    }
+    for (const entry of [...offers[side].currencies]) {
+      const targetActor = getCompletedTradeRemainderReturnActor(session, side, entry);
+      if (!targetActor) throw new Error("Completed trade return actor not found.");
+      const amount = Math.max(0, toInteger(entry.amount));
+      if (!entry.currencyKey || !amount) continue;
+      await targetActor.update({ [`system.currencies.${entry.currencyKey}`]: getActorCurrencyAmount(targetActor, entry.currencyKey) + amount });
+      offers = reduceTradeOfferEntryQuantity(offers, side, "currency", getTradeOfferEntryKey(entry, "currency"), amount);
+    }
+  }
+  session.offers = offers;
+  return offers;
+}
+
+function getCompletedTradeRemainderReturnActor(session = {}, side = "", entry = {}) {
+  const returnActorUuid = String(entry?.returnActorUuid ?? "");
+  if (returnActorUuid) return getCachedActorByUuid(returnActorUuid);
+  return getTradeSessionFirstActor(session, side);
 }
 
 function leaveTradeSession(session = {}, userId = "") {
