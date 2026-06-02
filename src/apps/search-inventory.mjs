@@ -729,6 +729,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       const tradeOfferActorUuid = String(zone?.dataset?.tradeOfferActorUuid ?? zone?.closest?.("[data-trade-offer-actor-uuid]")?.dataset?.tradeOfferActorUuid ?? "");
       if (this.#isTradeMode() && tradeOfferActorUuid) {
         if (data.falloutMawTradeOffer) return await this.#moveTradeOfferEntry({ data, item, zone, event });
+        if (this.#tradeOffers.completed) return await this.#addItemToCompletedTradeHub({ sourceActor, item, offerActorUuid: tradeOfferActorUuid, event, zone });
         return await this.#addItemToTradeOffer({ sourceActor, item, offerActorUuid: tradeOfferActorUuid, event, zone });
       }
       const targetActorUuid = String(zone?.dataset?.searchActorUuid ?? zone?.closest?.("[data-search-actor-uuid]")?.dataset?.searchActorUuid ?? "");
@@ -1055,6 +1056,54 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     return this.#renderPreservingWindowStack();
   }
 
+  async #addItemToCompletedTradeHub({ sourceActor = null, item = null, offerActorUuid = "", event = null, zone = null } = {}) {
+    if (!this.#isTradeMode() || !this.#tradeOffers.completed || !sourceActor || !item) return null;
+    const side = this.#getTradeSideForActor(offerActorUuid);
+    if (!this.#canDepositCompletedTradeHub(side, sourceActor)) return null;
+    const sourceQuantity = getTransferItemQuantity(item, getItemQuantity(item));
+    const quantity = event?.shiftKey || sourceQuantity <= 1 || isContainerItem(item)
+      ? sourceQuantity
+      : await promptSearchItemStackQuantity({
+        item,
+        title: "Положить в купленное",
+        actionLabel: "Положить",
+        max: sourceQuantity,
+        value: sourceQuantity
+      });
+    if (!quantity) return null;
+
+    const placement = this.#getTradeOfferDropPlacement({ side, zone, event, item, entryKind: "item", entryKey: item.id });
+    if (zone && !placement) return null;
+    if (this.#tradeSessionSnapshot) {
+      this.#captureScrollPositions();
+      const result = await requestTradeSessionAction("depositCompletedTradeItem", this.#prepareTradeSessionActionPayload({
+        side,
+        sourceActorUuid: sourceActor.uuid,
+        itemId: item.id,
+        quantity,
+        placement
+      }));
+      if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: true });
+      return result;
+    }
+
+    const result = await enqueueSearchInventoryOperation(() => performCompletedTradeHubDeposit({
+      ...this.#prepareSearchOperationPayload({
+        offers: this.#tradeOffers,
+        side,
+        sourceActorUuid: sourceActor.uuid,
+        itemId: item.id,
+        quantity,
+        placement
+      }),
+      mode: SEARCH_INVENTORY_MODE_TRADE
+    }, game.user?.id ?? ""));
+    this.#tradeOffers = normalizeTradeOffersState(result?.offers ?? this.#tradeOffers);
+    this.#broadcastTradeOffers();
+    this.#captureScrollPositions();
+    return this.#renderPreservingWindowStack();
+  }
+
   async #moveTradeOfferEntry({ data = {}, item = null, zone = null, event = null } = {}) {
     const side = String(data.tradeOfferSide ?? "");
     const kind = String(data.tradeOfferKind ?? "");
@@ -1258,6 +1307,16 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (!this.#isTradeMode() || this.#tradeRole === TRADE_ROLE_OBSERVER) return false;
     if (game.user?.isGM) return TRADE_OFFER_SIDES.includes(side);
     return this.#canControlTradeSide(side);
+  }
+
+  #canDepositCompletedTradeHub(side = "", sourceActor = null) {
+    if (!this.#isTradeMode() || !this.#tradeOffers.completed || this.#tradeRole === TRADE_ROLE_OBSERVER) return false;
+    if (!TRADE_OFFER_SIDES.includes(side) || !sourceActor) return false;
+    if (game.user?.isGM) return true;
+    const sourceSide = this.#getTradeSideForActor(sourceActor.uuid);
+    if (!sourceSide) return false;
+    if (this.#tradeSessionSnapshot) return canUserControlTradeSessionSide(this.#tradeSessionSnapshot, sourceSide, game.user?.id ?? "");
+    return Boolean(sourceActor.testUserPermission?.(game.user, "OWNER"));
   }
 
   #prepareTradeSessionActionPayload(payload = {}) {
@@ -1832,6 +1891,10 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       const actor = this.#getActorByUuid(String(itemElement.dataset.searchActorUuid ?? ""));
       const item = actor?.items?.get(String(itemElement.dataset.itemId ?? ""));
       if (!actor || !item) return;
+      if (this.#tradeOffers.completed) {
+        await this.#addItemToCompletedTradeHub({ sourceActor: actor, item, offerActorUuid: actor.uuid, event });
+        return;
+      }
       await this.#addItemToTradeOffer({ sourceActor: actor, item, offerActorUuid: actor.uuid, event });
       return;
     }
@@ -3193,6 +3256,67 @@ async function performCompletedTradeEntryClaim(payload = {}, requesterUserId = "
   const reduced = reduceTradeOfferEntryQuantity(offers, side, "item", key, quantity);
   if (session) session.offers = reduced;
   return { ok: true, offers: reduced };
+}
+
+async function performCompletedTradeHubDeposit(payload = {}, requesterUserId = "") {
+  const sourceActor = await resolveActor(payload.sourceActorUuid);
+  if (!sourceActor) throw new Error("Actor not found.");
+  const item = sourceActor.items?.get(String(payload.itemId ?? ""));
+  if (!item) throw new Error("Item not found.");
+
+  const session = getActiveTradeSession(payload.sessionId);
+  if (session) {
+    if (!session.offers?.completed) throw new Error("Trade is not completed.");
+    if (!getTradeSessionActorSide(session, sourceActor.uuid)) throw new Error("Trade source actor mismatch.");
+    ensureTradeSessionActorControl(session, sourceActor.uuid, requesterUserId);
+  } else {
+    const searcherActor = await resolveActor(payload.searcherActorUuid);
+    const searchedActor = await resolveActor(payload.searchedActorUuid);
+    if (!searcherActor || !searchedActor) throw new Error("Actor not found.");
+    validateSearchOrTradeRequester({ ...payload, mode: SEARCH_INVENTORY_MODE_TRADE }, requesterUserId, searcherActor, searchedActor);
+    const allowedActorUuids = getSearchOrTradeAllowedActorUuids({ ...payload, mode: SEARCH_INVENTORY_MODE_TRADE }, searcherActor, searchedActor, requesterUserId);
+    if (!allowedActorUuids.has(sourceActor.uuid)) throw new Error("Trade source actor mismatch.");
+    const requester = requesterUserId ? game.users?.get(requesterUserId) : game.user;
+    if (!requester?.isGM && !sourceActor.testUserPermission?.(requester, "OWNER")) throw new Error("No trade actor owner permission.");
+  }
+
+  const offers = normalizeTradeOffersState(session?.offers ?? payload.offers);
+  if (!offers.completed) throw new Error("Trade is not completed.");
+  const side = String(payload.side ?? "");
+  if (!TRADE_OFFER_SIDES.includes(side)) throw new Error("Invalid trade side.");
+  const quantity = getTransferItemQuantity(item, payload.quantity);
+  const deposited = await depositItemIntoCompletedTradeHub(offers, side, sourceActor, item, quantity, payload.placement);
+  if (session) session.offers = deposited;
+  return { ok: true, offers: deposited };
+}
+
+async function depositItemIntoCompletedTradeHub(offersState = {}, side = "", sourceActor = null, item = null, quantity = 0, placement = null) {
+  const offers = normalizeTradeOffersState(offersState);
+  if (!offers.completed) throw new Error("Trade is not completed.");
+  if (!TRADE_OFFER_SIDES.includes(side) || !sourceActor || !item) throw new Error("Invalid completed trade deposit.");
+  const amount = getTransferItemQuantity(item, quantity);
+  const itemData = item.toObject();
+  foundry.utils.setProperty(itemData, "system.quantity", amount);
+  const containedItems = isContainerItem(item)
+    ? getAllContainedItems(item.id, sourceActor.items).map(contained => contained.toObject())
+    : [];
+  offers[side].items.push({
+    entryId: foundry.utils.randomID(),
+    itemId: item.id,
+    sourceActorUuid: sourceActor.uuid,
+    quantity: amount,
+    itemData,
+    containedItems,
+    placement: normalizeTradeOfferPlacement(placement, getItemFootprint(item, sourceActor.items))
+  });
+  if (placement?.columns) offers[side].columns = Math.max(1, toInteger(placement.columns));
+  if (isContainerItem(item)) {
+    const deleteIds = [item.id, ...containedItems.map(contained => String(contained._id ?? contained.id ?? "")).filter(Boolean)];
+    await sourceActor.deleteEmbeddedDocuments("Item", deleteIds);
+  } else {
+    await removeTransferredItemQuantity(sourceActor, item, amount);
+  }
+  return offers;
 }
 
 function validateTradeOfferSide(actor, offer = {}) {
@@ -5647,6 +5771,7 @@ async function handleSearchInventorySocketMessage(message = {}) {
       "selectTradeActor",
       "addTradeOfferItem",
       "moveTradeOfferEntry",
+      "depositCompletedTradeItem",
       "addTradeOfferCurrency",
       "removeTradeOfferEntry",
       "claimCompletedTradeEntry",
@@ -5752,6 +5877,13 @@ async function performTradeSessionAction(action = "", payload = {}, requesterUse
     ensureTradeSessionParticipant(session, requesterUserId);
     session.offers = updateTradeOfferEntryPlacement(session.offers, payload.side, payload.kind, payload.key, payload.placement, payload.columns);
     resetTradeSessionReady(session);
+  } else if (action === "depositCompletedTradeItem") {
+    if (!session.offers?.completed) throw new Error("Trade is not completed.");
+    const actor = await resolveActor(payload.sourceActorUuid);
+    if (!actor) throw new Error("Actor not found.");
+    if (!getTradeSessionActorSide(session, actor.uuid)) throw new Error("Trade source actor mismatch.");
+    ensureTradeSessionActorControl(session, actor.uuid, requesterUserId);
+    await performCompletedTradeHubDeposit(payload, requesterUserId);
   } else if (action === "addTradeOfferCurrency") {
     const actor = await resolveActor(payload.sourceActorUuid);
     if (!actor) throw new Error("Actor not found.");
