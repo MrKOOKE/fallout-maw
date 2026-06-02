@@ -43,11 +43,13 @@ import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { applyDamageCostModifier, getActorTraumas, getDamageCostModifierState, getLimbHealingCap, isLimbDestroyed } from "../combat/damage-hub.mjs";
 import { openLimbDamageDialog } from "../apps/limb-damage-dialog.mjs";
 import {
+  getActorRootInventoryGridOptions,
   prepareIndicatorEntry as prepareDisplayIndicatorEntry,
   prepareInventoryContext as prepareDisplayInventoryContext
 } from "../utils/actor-display-data.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { openPersonalGenerator } from "../apps/personal-generator.mjs";
+import { ActorTradeSettingsConfig } from "../apps/actor-trade-settings-config.mjs";
 import {
   DAMAGE_MITIGATION_MODES,
   ITEM_FUNCTIONS,
@@ -152,6 +154,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     },
     actions: {
         openPersonalGenerator: this.#onOpenPersonalGenerator,
+        openTradeSettings: this.#onOpenTradeSettings,
         openDevelopment: this.#onOpenDevelopment,
         toggleFreeEdit: this.#onToggleFreeEdit,
         selectLimb: this.#onSelectLimb,
@@ -219,6 +222,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   _getHeaderControls() {
     const controls = super._getHeaderControls();
+    controls.unshift({
+      action: "openTradeSettings",
+      icon: "fa-solid fa-cash-register",
+      label: "Торговля",
+      ownership: "OWNER"
+    });
     controls.unshift({
       action: "openPersonalGenerator",
       icon: "fa-solid fa-user-gear",
@@ -511,6 +520,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   static #onOpenPersonalGenerator(event) {
     event.preventDefault();
     return openPersonalGenerator(this.actor);
+  }
+
+  static #onOpenTradeSettings(event) {
+    event.preventDefault();
+    return new ActorTradeSettingsConfig(this.actor).render(true);
   }
 
   static #onSelectLimb(event, target) {
@@ -1259,11 +1273,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const minX = 1;
     const minY = 1;
     const maxX = Math.max(1, columns - footprint.width + 1);
-    const maxY = Math.max(1, rows - footprint.height + 1);
+    const allowOverflowRows = this.#getInventoryGridOptions(parentId).allowOverflowRows;
+    const maxY = allowOverflowRows
+      ? Math.max(1, rows - footprint.height + 1, Math.ceil(pointer.y) + 64)
+      : Math.max(1, rows - footprint.height + 1);
     const centeredX = Math.round(pointer.x - ((footprint.width - 1) / 2));
     const centeredY = Math.round(pointer.y - ((footprint.height - 1) / 2));
     const originX = Math.max(minX, Math.min(maxX, centeredX));
-    const originY = Math.max(minY, Math.min(maxY, centeredY));
+    const originY = allowOverflowRows ? Math.max(minY, centeredY) : Math.max(minY, Math.min(maxY, centeredY));
     const preferred = createInventoryPlacement(originX, originY, itemData, this.actor.items);
     if (this.#isInventoryPlacementAvailable(preferred, excludeItemIds, [], parentId)) return preferred;
     if (!findNearest) return null;
@@ -1303,7 +1320,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #getNearestInventoryCellInGrid(originX, originY, itemData = null, excludeItemIds = [], parentId = ROOT_CONTAINER_ID, columns = 1, rows = 1) {
     const footprint = getItemFootprint(itemData, this.actor.items);
     const maxX = Math.max(1, columns - footprint.width + 1);
-    const maxY = Math.max(1, rows - footprint.height + 1);
+    const allowOverflowRows = this.#getInventoryGridOptions(parentId).allowOverflowRows;
+    const maxY = allowOverflowRows
+      ? Math.max(1, rows - footprint.height + 1, originY + 64)
+      : Math.max(1, rows - footprint.height + 1);
     let best = null;
     let bestDistance = Number.POSITIVE_INFINITY;
 
@@ -1328,6 +1348,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return getInventoryGridDimensions(this.#getCurrentRace(), this.actor);
   }
 
+  #getInventoryGridOptions(parentId = ROOT_CONTAINER_ID) {
+    return getActorRootInventoryGridOptions(this.actor, parentId);
+  }
+
   #getFirstAvailableInventoryPlacement(itemData = null, excludeItemIds = [], reservedPlacements = [], parentId = ROOT_CONTAINER_ID) {
     const { columns, rows } = this.#getInventoryGridDimensions(parentId);
     return findFirstAvailableInventoryPlacement(
@@ -1337,7 +1361,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       itemData,
       this.actor.items,
       excludeItemIds,
-      reservedPlacements
+      reservedPlacements,
+      this.#getInventoryGridOptions(parentId)
     );
   }
 
@@ -1350,7 +1375,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       rows,
       this.actor.items,
       excludeItemIds,
-      reservedPlacements
+      reservedPlacements,
+      this.#getInventoryGridOptions(parentId)
     );
   }
 
@@ -1755,7 +1781,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #validateProjectedInventoryState({ updates = [], deletes = [], creates = [] } = {}) {
     const projectedItems = this.#projectInventoryState({ updates, deletes, creates });
-    const validation = validateInventoryTree(projectedItems, getInventoryGridDimensions(this.#getCurrentRace(), this.actor));
+    const validation = validateInventoryTree(projectedItems, getInventoryGridDimensions(this.#getCurrentRace(), this.actor), {
+      rootOptions: this.#getInventoryGridOptions(ROOT_CONTAINER_ID)
+    });
     if (validation.valid) {
       const loadValidation = validateActorLoadLimit(this.actor, projectedItems);
       if (loadValidation.valid) return true;
@@ -4351,12 +4379,12 @@ function placementContainsInventoryCell(placement, x, y) {
   return placementContainsInventoryCellHelper(placement, x, y);
 }
 
-function isInventoryPlacementAvailable(placement, items, columns, rows, allItems = items, excludeItemIds = [], reservedPlacements = []) {
-  return isInventoryPlacementAvailableHelper(placement, items, columns, rows, allItems, excludeItemIds, reservedPlacements);
+function isInventoryPlacementAvailable(placement, items, columns, rows, allItems = items, excludeItemIds = [], reservedPlacements = [], options = {}) {
+  return isInventoryPlacementAvailableHelper(placement, items, columns, rows, allItems, excludeItemIds, reservedPlacements, options);
 }
 
-function findFirstAvailableInventoryPlacement(items, columns, rows, itemOrSystem = null, allItems = items, excludeItemIds = [], reservedPlacements = []) {
-  return findFirstAvailableInventoryPlacementHelper(items, columns, rows, itemOrSystem, allItems, excludeItemIds, reservedPlacements);
+function findFirstAvailableInventoryPlacement(items, columns, rows, itemOrSystem = null, allItems = items, excludeItemIds = [], reservedPlacements = [], options = {}) {
+  return findFirstAvailableInventoryPlacementHelper(items, columns, rows, itemOrSystem, allItems, excludeItemIds, reservedPlacements, options);
 }
 
 function buildInventoryCellStyle(x, y, placement = null) {
@@ -4447,7 +4475,7 @@ function prepareInventoryContext(actor, race) {
   const grid = prepareInventoryGridContext(inventoryItems, columns, rows, allItems, (item, placement) => ({
     ...createInventoryItemData(item, allItems, currencies, placement),
     gridStyle: buildInventoryCellStyle(placement.x, placement.y, placement)
-  }));
+  }), getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID));
   const containers = topLevelItems
     .filter(item => item.isContainer && item.equipped)
     .map(item => {

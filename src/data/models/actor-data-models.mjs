@@ -68,6 +68,10 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         incomingPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         outgoingPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
       }),
+      trade: new SchemaField({
+        infiniteInventory: new BooleanField({ required: true, initial: false }),
+        markupPercent: new NumberField({ required: true, integer: true, initial: 0 })
+      }),
       creature: new SchemaField({
         typeId: new StringField({ required: true, blank: true, initial: "" }),
         raceId: new StringField({ required: true, blank: true, initial: "" })
@@ -139,6 +143,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.currencies ??= {};
     this.combat ??= {};
     this.healing ??= {};
+    this.trade ??= {};
     this.damageDefenses ??= {};
     this.damageDefenseBonuses ??= {};
     this.damageResistances ??= {};

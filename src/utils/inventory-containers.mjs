@@ -3,6 +3,7 @@ import { ITEM_FUNCTIONS, hasItemFunction } from "./item-functions.mjs";
 
 export const CONTAINER_FUNCTION = ITEM_FUNCTIONS.container;
 export const ROOT_CONTAINER_ID = "";
+export const INFINITE_ROOT_INVENTORY_EMPTY_ROWS = 4;
 
 export function getItemsArray(items) {
   if (Array.isArray(items)) return items;
@@ -256,13 +257,13 @@ export function createStoredPlacement(placement = {}, itemOrSystem = null) {
   };
 }
 
-export function isInventoryPlacementWithinBounds(placement, columns, rows) {
+export function isInventoryPlacementWithinBounds(placement, columns, rows, { allowOverflowRows = false } = {}) {
   if (!placement) return false;
   return (
     placement.x >= 1
     && placement.y >= 1
     && (placement.x + placement.width - 1) <= columns
-    && (placement.y + placement.height - 1) <= rows
+    && (allowOverflowRows || (placement.y + placement.height - 1) <= rows)
   );
 }
 
@@ -302,9 +303,10 @@ export function isInventoryPlacementAvailable(
   rows,
   allItems = contextItems,
   excludeItemIds = [],
-  reservedPlacements = []
+  reservedPlacements = [],
+  options = {}
 ) {
-  if (!isInventoryPlacementWithinBounds(placement, columns, rows)) return false;
+  if (!isInventoryPlacementWithinBounds(placement, columns, rows, options)) return false;
   const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
   if (reservedPlacements.some(existing => inventoryPlacementsOverlap(placement, existing))) return false;
 
@@ -322,12 +324,14 @@ export function findFirstAvailableInventoryPlacement(
   itemOrSystem = null,
   allItems = contextItems,
   excludeItemIds = [],
-  reservedPlacements = []
+  reservedPlacements = [],
+  options = {}
 ) {
-  for (let y = 1; y <= rows; y += 1) {
+  const searchRows = getInventoryPlacementSearchRows(rows, itemOrSystem, allItems, contextItems, reservedPlacements, options);
+  for (let y = 1; y <= searchRows; y += 1) {
     for (let x = 1; x <= columns; x += 1) {
       const candidate = createInventoryPlacement(x, y, itemOrSystem, allItems);
-      if (isInventoryPlacementAvailable(candidate, contextItems, columns, rows, allItems, excludeItemIds, reservedPlacements)) {
+      if (isInventoryPlacementAvailable(candidate, contextItems, columns, rows, allItems, excludeItemIds, reservedPlacements, options)) {
         return candidate;
       }
     }
@@ -342,24 +346,26 @@ export function findFirstAvailableResolvedInventoryPlacement(
   itemOrSystem = null,
   allItems = contextItems,
   excludeItemIds = [],
-  reservedPlacements = []
+  reservedPlacements = [],
+  options = {}
 ) {
   columns = Math.max(1, toInteger(columns) || 1);
   rows = Math.max(1, toInteger(rows) || 1);
 
   const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
   const visibleContextItems = getItemsArray(contextItems).filter(item => !excluded.has(getItemId(item)));
-  const resolved = resolveInventoryGridPlacements(visibleContextItems, columns, rows, allItems);
+  const resolved = resolveInventoryGridPlacements(visibleContextItems, columns, rows, allItems, options);
   if (!resolved) return null;
 
   const occupiedPlacements = resolved.items
     .filter(entry => !entry.phantom)
     .map(entry => entry.placement);
 
-  for (let y = 1; y <= rows; y += 1) {
+  const searchRows = getInventoryPlacementSearchRows(rows, itemOrSystem, allItems, contextItems, reservedPlacements, options);
+  for (let y = 1; y <= searchRows; y += 1) {
     for (let x = 1; x <= columns; x += 1) {
       const candidate = createInventoryPlacement(x, y, itemOrSystem, allItems);
-      if (!isInventoryPlacementWithinBounds(candidate, columns, rows)) continue;
+      if (!isInventoryPlacementWithinBounds(candidate, columns, rows, options)) continue;
       if (reservedPlacements.some(existing => inventoryPlacementsOverlap(candidate, existing))) continue;
       if (occupiedPlacements.some(existing => inventoryPlacementsOverlap(candidate, existing))) continue;
       return candidate;
@@ -379,8 +385,8 @@ export function buildInventoryCellStyle(x, y, placement = null) {
   return `grid-column: ${x}; grid-row: ${y};`;
 }
 
-export function prepareInventoryGridContext(contextItems, columns, rows, allItems, mapItem) {
-  const resolved = resolveInventoryGridPlacements(contextItems, columns, rows, allItems);
+export function prepareInventoryGridContext(contextItems, columns, rows, allItems, mapItem, options = {}) {
+  const resolved = resolveInventoryGridPlacements(contextItems, columns, rows, allItems, options);
   const reservedPlacements = resolved.placements;
   const occupiedCells = createOccupiedInventoryCellSet(reservedPlacements);
   const placedItems = [];
@@ -395,7 +401,7 @@ export function prepareInventoryGridContext(contextItems, columns, rows, allItem
   const cells = [];
   for (let y = 1; y <= resolved.rows; y += 1) {
     for (let x = 1; x <= resolved.columns; x += 1) {
-      const phantom = y > rows || x > columns;
+      const phantom = !options.allowOverflowRows && (y > rows || x > columns);
       cells.push({
         x,
         y,
@@ -434,7 +440,7 @@ function getInventoryCellKey(x, y) {
   return `${x}:${y}`;
 }
 
-export function validateInventoryTree(items, rootDimensions) {
+export function validateInventoryTree(items, rootDimensions, options = {}) {
   const itemsArray = getItemsArray(items).filter(isInventoryManagedItem);
   const itemMap = new Map(itemsArray.map(item => [getItemId(item), item]));
 
@@ -458,7 +464,11 @@ export function validateInventoryTree(items, rootDimensions) {
   }
 
   const rootItems = getContextInventoryItems(ROOT_CONTAINER_ID, itemsArray);
-  if (!validateContextPlacements(rootItems, rootDimensions.columns, rootDimensions.rows, itemsArray)) {
+  const rootOptions = options.rootOptions ?? {
+    allowOverflowRows: Boolean(rootDimensions?.allowOverflowRows),
+    extraRows: 0
+  };
+  if (!validateContextPlacements(rootItems, rootDimensions.columns, rootDimensions.rows, itemsArray, rootOptions)) {
     return { valid: false, reason: "no-space", parentId: ROOT_CONTAINER_ID };
   }
 
@@ -482,11 +492,11 @@ function isInventoryManagedItem(itemOrSystem = null) {
   return !["ability", "trauma", "disease"].includes(type);
 }
 
-function validateContextPlacements(contextItems, columns, rows, allItems) {
-  return Boolean(resolveInventoryGridPlacements(contextItems, columns, rows, allItems));
+function validateContextPlacements(contextItems, columns, rows, allItems, options = {}) {
+  return Boolean(resolveInventoryGridPlacements(contextItems, columns, rows, allItems, options));
 }
 
-function resolveInventoryGridPlacements(contextItems, columns, rows, allItems) {
+function resolveInventoryGridPlacements(contextItems, columns, rows, allItems, options = {}) {
   columns = Math.max(1, toInteger(columns) || 1);
   rows = Math.max(1, toInteger(rows) || 1);
 
@@ -515,7 +525,7 @@ function resolveInventoryGridPlacements(contextItems, columns, rows, allItems) {
 
   for (const item of preferredItems) {
     const preferredPlacement = normalizeInventoryPlacement(item.system?.placement ?? {}, item, allItems);
-    if (isInventoryPlacementAvailable(preferredPlacement, [], columns, rows, allItems, [], reservedPlacements)) {
+    if (isInventoryPlacementAvailable(preferredPlacement, [], columns, rows, allItems, [], reservedPlacements, options)) {
       reservePlacement(item, preferredPlacement, false);
       continue;
     }
@@ -524,7 +534,7 @@ function resolveInventoryGridPlacements(contextItems, columns, rows, allItems) {
 
   for (const item of [...unresolvedItems, ...deferredItems]) {
     let phantom = false;
-    let placement = findFirstAvailableInventoryPlacement([], columns, rows, item, allItems, [], reservedPlacements);
+    let placement = findFirstAvailableInventoryPlacement([], columns, rows, item, allItems, [], reservedPlacements, options);
     if (!placement) {
       placement = findFirstPhantomInventoryPlacement(item, allItems, columns, rows, reservedPlacements);
       phantom = true;
@@ -533,12 +543,25 @@ function resolveInventoryGridPlacements(contextItems, columns, rows, allItems) {
     reservePlacement(item, placement, phantom);
   }
 
+  const extraRows = options.allowOverflowRows ? Math.max(0, toInteger(options.extraRows)) : 0;
   return {
     columns: visualColumns,
-    rows: visualRows,
+    rows: options.allowOverflowRows ? Math.max(rows, visualRows) + extraRows : visualRows,
     placements: reservedPlacements,
     items: resolvedItems
   };
+}
+
+function getInventoryPlacementSearchRows(rows, itemOrSystem, allItems, contextItems = [], reservedPlacements = [], options = {}) {
+  rows = Math.max(1, toInteger(rows) || 1);
+  if (!options.allowOverflowRows) return rows;
+  const footprint = getItemFootprint(itemOrSystem, allItems);
+  const existingRows = [
+    ...getItemsArray(contextItems).map(item => normalizeInventoryPlacement(item.system?.placement ?? item.placement ?? {}, item, allItems)),
+    ...reservedPlacements
+  ].reduce((max, placement) => Math.max(max, toInteger(placement?.y) + Math.max(1, toInteger(placement?.height)) - 1), rows);
+  const growthRows = Math.max(64, (getItemsArray(contextItems).length + reservedPlacements.length + 1) * Math.max(1, footprint.height + 1));
+  return Math.max(rows, existingRows) + growthRows;
 }
 
 function findFirstPhantomInventoryPlacement(itemOrSystem, allItems, columns, rows, reservedPlacements = []) {

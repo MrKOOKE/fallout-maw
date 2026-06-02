@@ -26,6 +26,7 @@ export const TEMPLATES = Object.freeze({
   searchInventory: `systems/${SYSTEM_ID}/templates/actor/search-inventory.hbs`,
   craftWindow: `systems/${SYSTEM_ID}/templates/actor/craft-window.hbs`,
   personalGenerator: `systems/${SYSTEM_ID}/templates/actor/personal-generator.hbs`,
+  actorTradeSettings: `systems/${SYSTEM_ID}/templates/actor/trade-settings.hbs`,
   skillCheckChatCard: `systems/${SYSTEM_ID}/templates/chat/skill-check-card.hbs`,
   skillCheckBatchChatCard: `systems/${SYSTEM_ID}/templates/chat/skill-check-batch-card.hbs`,
   damageSummaryChatCard: `systems/${SYSTEM_ID}/templates/chat/damage-summary-card.hbs`,

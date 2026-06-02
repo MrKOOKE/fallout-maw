@@ -52,7 +52,7 @@ import {
   isContainerItem,
   validateInventoryTree
 } from "./utils/inventory-containers.mjs";
-import { escapeHTML, getActorInventoryGridDimensions } from "./utils/actor-display-data.mjs";
+import { escapeHTML, getActorInventoryGridDimensions, getActorRootInventoryGridOptions } from "./utils/actor-display-data.mjs";
 import { toInteger } from "./utils/numbers.mjs";
 
 const { DialogV2 } = foundry.applications.api;
@@ -209,7 +209,9 @@ function planActorDropItem(actor, itemData) {
 
   const rootDimensions = getActorRootInventoryDimensions(actor);
   const projectedItems = projectActorDropItems(actor, { updates, creates });
-  if (!validateInventoryTree(projectedItems, rootDimensions).valid) return null;
+  if (!validateInventoryTree(projectedItems, rootDimensions, {
+    rootOptions: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
+  }).valid) return null;
   return { updates, creates };
 }
 
@@ -316,14 +318,17 @@ function findFirstActorDropPlacement(actor, itemData, reservedPlacements = new M
       itemData,
       allItems,
       [],
-      reservedPlacements.get(context.parentId) ?? []
+      reservedPlacements.get(context.parentId) ?? [],
+      getActorRootInventoryGridOptions(actor, context.parentId)
     );
     if (!placement) continue;
 
     const projectedItems = projectActorDropItems(actor, {
       creates: [createActorDropItemData(itemData, { parentId: context.parentId, placement })]
     });
-    if (validateInventoryTree(projectedItems, rootDimensions).valid) {
+    if (validateInventoryTree(projectedItems, rootDimensions, {
+      rootOptions: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
+    }).valid) {
       return { parentId: context.parentId, placement };
     }
   }

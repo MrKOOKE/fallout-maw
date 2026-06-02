@@ -1,6 +1,6 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { getCreatureOptions } from "../settings/accessors.mjs";
-import { createDefaultInventorySize } from "../settings/creature-options.mjs";
+import { getActorInventoryGridDimensions, getActorRootInventoryGridOptions } from "../utils/actor-display-data.mjs";
 import {
   ROOT_CONTAINER_ID,
   createStoredPlacement,
@@ -432,7 +432,8 @@ function findFirstActorDropPlacement(actor, itemData) {
       item,
       allItems,
       [],
-      []
+      [],
+      getActorRootInventoryGridOptions(actor, context.parentId)
     );
     if (!placement) continue;
 
@@ -461,7 +462,9 @@ function findFirstActorDropPlacement(actor, itemData) {
       ...allItems.map(existingItem => existingItem.toObject()),
       projectedItem
     ];
-    if (validateInventoryTree(projectedItems, rootDimensions).valid) {
+    if (validateInventoryTree(projectedItems, rootDimensions, {
+      rootOptions: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
+    }).valid) {
       return { parentId: context.parentId, placement };
     }
   }
@@ -471,11 +474,7 @@ function findFirstActorDropPlacement(actor, itemData) {
 
 function getActorRootInventoryDimensions(actor) {
   const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
-  const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
-  return {
-    columns: Math.max(1, toInteger(inventorySize.columns) || createDefaultInventorySize().columns),
-    rows: Math.max(1, toInteger(inventorySize.rows) || createDefaultInventorySize().rows)
-  };
+  return getActorInventoryGridDimensions(actor, race);
 }
 
 function normalizeDroppedItemData(itemData) {

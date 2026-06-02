@@ -24,6 +24,8 @@ import {
 } from "./search-inventory.mjs";
 import {
   FALLBACK_ICON,
+  getActorInventoryGridDimensions,
+  getActorRootInventoryGridOptions,
   normalizeImagePath
 } from "../utils/actor-display-data.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
@@ -2002,7 +2004,8 @@ function findCraftOutputTarget(actor, itemData, planningItems = []) {
       itemData,
       planningItems,
       [],
-      []
+      [],
+      getActorRootInventoryGridOptions(actor, context.parentId)
     );
     if (placement) return { parentId: context.parentId, placement };
   }
@@ -2011,12 +2014,12 @@ function findCraftOutputTarget(actor, itemData, planningItems = []) {
 
 function getCraftOutputContexts(actor, planningItems = []) {
   const race = getActorRace(actor);
-  const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
+  const inventorySize = getActorInventoryGridDimensions(actor, race);
   const contexts = [{
     parentId: ROOT_CONTAINER_ID,
     dimensions: {
-      columns: Math.max(1, toInteger(inventorySize.columns) || createDefaultInventorySize().columns),
-      rows: Math.max(1, toInteger(inventorySize.rows) || createDefaultInventorySize().rows)
+      columns: Math.max(1, toInteger(inventorySize.columns)),
+      rows: Math.max(1, toInteger(inventorySize.rows))
     }
   }];
 

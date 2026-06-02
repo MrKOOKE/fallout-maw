@@ -1,0 +1,21 @@
+<div class="fallout-maw-sheet-body fallout-maw-actor-trade-settings-body">
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-list-grid two-columns">
+      <label class="fallout-maw-stacked-field">
+        <span>Бесконечный инвентарь</span>
+        <input type="checkbox" name="trade.infiniteInventory" {{checked settings.infiniteInventory}}>
+      </label>
+      <label class="fallout-maw-stacked-field">
+        <span>Наценка торговца, %</span>
+        <input type="number" name="trade.markupPercent" value="{{settings.markupPercent}}" step="1">
+      </label>
+    </div>
+  </section>
+
+  <footer class="fallout-maw-settings-actions">
+    <button type="submit">
+      <i class="fa-solid fa-floppy-disk"></i>
+      Сохранить
+    </button>
+  </footer>
+</div>

@@ -18,6 +18,7 @@ import {
   getItemMaxStack,
   getItemQuantity,
   getItemTotalWeight,
+  INFINITE_ROOT_INVENTORY_EMPTY_ROWS,
   isContainerItem,
   normalizeInventoryPlacement,
   prepareInventoryGridContext
@@ -113,6 +114,17 @@ export function getActorInventoryGridDimensions(actor, race) {
   return getInventoryGridDimensions(race);
 }
 
+export function actorHasInfiniteRootInventory(actor) {
+  return Boolean(actor?.system?.trade?.infiniteInventory);
+}
+
+export function getActorRootInventoryGridOptions(actor, parentId = "") {
+  return {
+    allowOverflowRows: !parentId && actorHasInfiniteRootInventory(actor),
+    extraRows: !parentId && actorHasInfiniteRootInventory(actor) ? INFINITE_ROOT_INVENTORY_EMPTY_ROWS : 0
+  };
+}
+
 export function prepareInventoryContext(actor, race) {
   const currencies = getCurrencySettings();
   const { columns, rows } = getActorInventoryGridDimensions(actor, race);
@@ -142,7 +154,7 @@ export function prepareInventoryContext(actor, race) {
   const grid = prepareInventoryGridContext(inventoryItems, columns, rows, allItems, (item, placement) => ({
     ...createInventoryItemData(item, allItems, currencies, placement),
     gridStyle: buildInventoryCellStyle(placement.x, placement.y, placement)
-  }));
+  }), getActorRootInventoryGridOptions(actor, ""));
   const containers = topLevelItems
     .filter(item => item.isContainer && item.equipped)
     .map(item => {

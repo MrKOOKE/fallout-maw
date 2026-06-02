@@ -29,7 +29,7 @@ import {
   isContainerItem,
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
-import { getActorInventoryGridDimensions, normalizeImagePath } from "../utils/actor-display-data.mjs";
+import { getActorInventoryGridDimensions, getActorRootInventoryGridOptions, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
@@ -1294,7 +1294,8 @@ function findFirstGeneratedItemPlacement(actor, projectedMap, itemData, reserved
       itemData,
       projectedItems,
       [],
-      reservedPlacements.get(parentId) ?? []
+      reservedPlacements.get(parentId) ?? [],
+      getActorRootInventoryGridOptions(actor, parentId)
     );
     if (!placement) continue;
     const createData = createInventoryItemDataForPlacement(itemData, { parentId, placement });
@@ -1755,7 +1756,9 @@ function cloneProjectedMap(projectedMap) {
 }
 
 function validateProjectedItems(actor, projectedMap) {
-  return validateInventoryTree(Array.from(projectedMap.values()), getActorRootDimensions(actor)).valid;
+  return validateInventoryTree(Array.from(projectedMap.values()), getActorRootDimensions(actor), {
+    rootOptions: getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID)
+  }).valid;
 }
 
 function createInventoryItemDataForPlacement(itemData, target) {

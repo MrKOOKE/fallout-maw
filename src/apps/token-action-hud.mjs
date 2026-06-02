@@ -42,6 +42,7 @@ import { getWeaponActionBlockState } from "../abilities/runtime-state.mjs";
 import {
   FALLBACK_ICON,
   getActorInventoryGridDimensions,
+  getActorRootInventoryGridOptions,
   normalizeImagePath,
   prepareIndicatorEntry,
   prepareInventoryContext
@@ -2952,7 +2953,7 @@ function getFirstAvailableRootInventoryPlacement(actor, itemData) {
   const allItems = actor?.items?.contents ?? [];
   const rootItems = getContextInventoryItems(ROOT_CONTAINER_ID, allItems);
   const { columns, rows } = getActorRootInventoryDimensions(actor);
-  return findFirstAvailableInventoryPlacement(rootItems, columns, rows, itemData, allItems);
+  return findFirstAvailableInventoryPlacement(rootItems, columns, rows, itemData, allItems, [], [], getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID));
 }
 
 function getActorRootInventoryDimensions(actor) {
