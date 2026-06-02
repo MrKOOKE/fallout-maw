@@ -1936,7 +1936,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   async _processSubmitData(event, form, submitData, options = {}) {
-    syncActorPortraitTokenImage(this.actor, submitData);
+    syncActorTokenIdentity(this.actor, submitData);
     return super._processSubmitData(event, form, submitData, options);
   }
 
@@ -4775,13 +4775,24 @@ function localizeOrFallback(key, fallback) {
   return localized === key ? fallback : localized;
 }
 
-function syncActorPortraitTokenImage(actor, submitData = {}) {
-  if (!actor || !foundry.utils.hasProperty(submitData, "img")) return;
-  const img = String(foundry.utils.getProperty(submitData, "img") ?? "").trim();
-  if (!img) return;
+function syncActorTokenIdentity(actor, submitData = {}) {
+  if (!actor) return;
 
-  const tokenImagePath = actor.isToken ? "token.texture.src" : "prototypeToken.texture.src";
-  foundry.utils.setProperty(submitData, tokenImagePath, img);
+  if (foundry.utils.hasProperty(submitData, "name")) {
+    const name = String(foundry.utils.getProperty(submitData, "name") ?? "").trim();
+    if (name) {
+      const tokenNamePath = actor.isToken ? "token.name" : "prototypeToken.name";
+      foundry.utils.setProperty(submitData, tokenNamePath, name);
+    }
+  }
+
+  if (foundry.utils.hasProperty(submitData, "img")) {
+    const img = String(foundry.utils.getProperty(submitData, "img") ?? "").trim();
+    if (img) {
+      const tokenImagePath = actor.isToken ? "token.texture.src" : "prototypeToken.texture.src";
+      foundry.utils.setProperty(submitData, tokenImagePath, img);
+    }
+  }
 }
 
 function prepareSheetLimbSilhouette(silhouette, limbs = {}, activeLimbKey = "") {
