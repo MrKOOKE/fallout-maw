@@ -71,7 +71,6 @@ const PERSONAL_GENERATOR_DEFAULTS = Object.freeze({
   images: {
     enabled: false,
     includeCurrent: true,
-    applyActorImg: true,
     paths: []
   },
   items: {
@@ -125,7 +124,7 @@ export function registerPersonalGeneratorHooks() {
 
   Hooks.on("createToken", (document, _options, userId) => {
     if (game.user?.id && userId && game.user.id !== userId) return undefined;
-    return applyPersonalGeneratorTokenItems(document);
+    return finalizePersonalGeneratorToken(document);
   });
 }
 
@@ -831,7 +830,6 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
       images: {
         enabled: getChecked(form, "images.enabled"),
         includeCurrent: getChecked(form, "images.includeCurrent"),
-        applyActorImg: getChecked(form, "images.applyActorImg"),
         paths: readImagePaths(form)
       },
       items: {
@@ -1023,12 +1021,9 @@ async function preparePersonalGeneratorToken(document, data = {}) {
     const picked = pickRandom(pool);
     if (picked) {
       foundry.utils.setProperty(updates, "texture.src", picked);
-      foundry.utils.setProperty(updates, "img", picked);
-      if (config.images.applyActorImg) {
-        const deltaPatch = {};
-        foundry.utils.setProperty(deltaPatch, "img", picked);
-        mergeDelta(deltaPatch);
-      }
+      const deltaPatch = {};
+      foundry.utils.setProperty(deltaPatch, "img", picked);
+      mergeDelta(deltaPatch);
     }
   }
 
@@ -1073,6 +1068,27 @@ async function applyPersonalGeneratorTokenItems(document) {
 
   await new Promise(resolve => setTimeout(resolve, 50));
   await restoreHealthIfAlive(actor);
+  return undefined;
+}
+
+async function finalizePersonalGeneratorToken(document) {
+  await syncPersonalGeneratorTokenActorPortrait(document);
+  return applyPersonalGeneratorTokenItems(document);
+}
+
+async function syncPersonalGeneratorTokenActorPortrait(document) {
+  if (!document || document.actorLink) return undefined;
+
+  const baseActor = document.actorId ? game.actors?.get(document.actorId) : null;
+  if (!baseActor) return undefined;
+
+  const config = getPersonalGeneratorConfig(baseActor);
+  if (!config.enabled || !config.images.enabled) return undefined;
+
+  const img = String(document.texture?.src ?? "").trim();
+  if (!img || String(document.actor?.img ?? "").trim() === img) return undefined;
+
+  await document.update({ "delta.img": img }, { animate: false });
   return undefined;
 }
 
@@ -1430,7 +1446,6 @@ function createPersonalGeneratorConfig(config = {}) {
 
   output.images.enabled = output.images.enabled === true;
   output.images.includeCurrent = output.images.includeCurrent !== false;
-  output.images.applyActorImg = output.images.applyActorImg !== false;
   output.images.paths = Array.from(new Set((Array.isArray(output.images.paths) ? output.images.paths : [])
     .map(path => String(path ?? "").trim())
     .filter(Boolean)));

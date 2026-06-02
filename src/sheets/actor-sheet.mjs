@@ -1935,6 +1935,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     });
   }
 
+  async _processSubmitData(event, form, submitData, options = {}) {
+    syncActorPortraitTokenImage(this.actor, submitData);
+    return super._processSubmitData(event, form, submitData, options);
+  }
+
   #getWeaponConflictingItems(itemData, placement = {}, excludeItemIds = []) {
     const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
     const conflicts = new Map();
@@ -4768,6 +4773,15 @@ function formatEffectChangeValue(type, value) {
 function localizeOrFallback(key, fallback) {
   const localized = game.i18n.localize(key);
   return localized === key ? fallback : localized;
+}
+
+function syncActorPortraitTokenImage(actor, submitData = {}) {
+  if (!actor || !foundry.utils.hasProperty(submitData, "img")) return;
+  const img = String(foundry.utils.getProperty(submitData, "img") ?? "").trim();
+  if (!img) return;
+
+  const tokenImagePath = actor.isToken ? "token.texture.src" : "prototypeToken.texture.src";
+  foundry.utils.setProperty(submitData, tokenImagePath, img);
 }
 
 function prepareSheetLimbSilhouette(silhouette, limbs = {}, activeLimbKey = "") {
