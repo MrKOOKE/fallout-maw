@@ -3463,7 +3463,7 @@ function calculateTargetedLimbDamage(actor, limbKey = "", amount = 0, { damageTy
     });
     const state = limbStates.get(limbKey);
     const appliedLimbDamage = Math.max(0, roundDamageAmount((state?.totalDelta ?? 0) - previousTotalDelta));
-    const shockCheck = createLimbShockCheck(actor, limbKey, appliedLimbDamage, state?.nextValue);
+    const shockCheck = createLimbShockCheck(actor, limbKey, appliedLimbDamage, state?.nextValue, currentValue);
     const spreadResult = calculateEvenLimbDamage(actor, damage, {
       damageType,
       damageTypeKey,
@@ -3505,23 +3505,38 @@ function calculateTargetedLimbDamage(actor, limbKey = "", amount = 0, { damageTy
     healthDelta: result.healthDelta + spreadResult.healthDelta,
     limbDelta: Array.from(limbStates.values()).reduce((sum, entry) => sum + entry.totalDelta, 0)
   });
-  finalResult.shockCheck = createLimbShockCheck(actor, limbKey, appliedLimbDamage, state?.nextValue);
+  finalResult.shockCheck = createLimbShockCheck(actor, limbKey, appliedLimbDamage, state?.nextValue, currentValue);
   return finalResult;
 }
 
-function createLimbShockCheck(actor, limbKey = "", damage = 0, nextValue = null) {
+function createLimbShockCheck(actor, limbKey = "", damage = 0, nextValue = null, previousValue = null) {
   const shockDamage = Math.max(0, roundDamageAmount(damage));
   if (shockDamage <= 0) return null;
   return {
     limbKey,
     damage: shockDamage,
-    difficulty: calculateLimbShockDifficulty(actor, limbKey, shockDamage, nextValue)
+    difficulty: calculateLimbShockDifficulty(actor, limbKey, shockDamage, nextValue, previousValue)
   };
 }
 
-function calculateLimbShockDifficulty(actor, limbKey = "", damage = 0, nextValue = null) {
-  const base = Math.max(0, roundDamageAmount(damage * (isCriticalLimb(actor, limbKey) ? 2 : 1)));
+function calculateLimbShockDifficulty(actor, limbKey = "", damage = 0, nextValue = null, previousValue = null) {
+  const difficultyDamage = calculateLimbShockDifficultyDamage(damage, previousValue, nextValue);
+  const base = Math.max(0, roundDamageAmount(difficultyDamage * (isCriticalLimb(actor, limbKey) ? 2 : 1)));
   return Math.max(0, roundDamageAmount(base * getLimbShockStateMultiplier(actor, limbKey, nextValue)));
+}
+
+function calculateLimbShockDifficultyDamage(damage = 0, previousValue = null, nextValue = null) {
+  const amount = Math.max(0, roundDamageAmount(damage));
+  if (amount <= 0) return 0;
+  const previous = Number.isFinite(Number(previousValue))
+    ? toInteger(previousValue)
+    : Number.isFinite(Number(nextValue))
+      ? toInteger(nextValue) + amount
+      : null;
+  if (!Number.isFinite(Number(previous))) return amount;
+  const normalStateDamage = Math.min(amount, Math.max(0, previous));
+  const negativeStateDamage = Math.max(0, amount - normalStateDamage);
+  return roundDamageAmount((normalStateDamage * 0.5) + negativeStateDamage);
 }
 
 function getLimbShockStateMultiplier(actor, limbKey = "", nextValue = null) {
