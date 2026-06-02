@@ -17,7 +17,13 @@ import {
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { applyDamageCostModifier, fullyRestoreActorDamageState, getDamageCostModifierState, getLimbHealingCap, getResourceLimitState, isLimbDestroyed } from "../combat/damage-hub.mjs";
 import { MOVEMENT_RESOURCE_PREVIEW_HOOK } from "../combat/movement-resources.mjs";
-import { POSTURE_EFFECT_CHANGE_ROOT, getActorPostureAction, getActorPostureWeaponActionPointCostBonus, setActorTokensPosture } from "../canvas/posture-movement.mjs";
+import {
+  POSTURE_EFFECT_CHANGE_ROOT,
+  getActorPostureAction,
+  getActorPostureWeaponActionPointCostBonus,
+  isPostureEffectApplicableToActor,
+  setActorTokensPosture
+} from "../canvas/posture-movement.mjs";
 import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
 import {
   cancelWeaponAttack,
@@ -2309,6 +2315,7 @@ function collectActiveEffectCostChangeSources(actor, key = "", initialCost = 0) 
   let runningCost = Math.max(0, Number(initialCost) || 0);
   for (const effect of getActorApplicableEffectsForHud(actor)) {
     if (effect.disabled) continue;
+    if (!isPostureEffectApplicableToActor(effect, actor)) continue;
     for (const change of effect.system?.changes ?? effect.changes ?? []) {
       if (String(change?.key ?? "").trim() !== key) continue;
       const value = evaluateEffectChangeNumber(actor, change.value);

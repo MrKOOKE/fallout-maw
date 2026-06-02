@@ -520,6 +520,11 @@ function getPostureChangeResourcePreviewResources(actor, amount) {
 }
 
 function getActorTokenDocuments(actor) {
+  if (typeof actor?.getActiveTokens === "function") {
+    const tokens = actor.getActiveTokens(false, true);
+    if (tokens.length) return tokens;
+  }
+
   const documents = [];
   for (const token of canvas?.tokens?.placeables ?? []) {
     const tokenDocument = token?.document;
@@ -531,8 +536,7 @@ function getActorTokenDocuments(actor) {
 function isTokenForActor(tokenDocument, actor) {
   if (!tokenDocument?.actor || !actor) return false;
   if (tokenDocument.actor.uuid === actor.uuid) return true;
-  if (tokenDocument.actor.baseActor?.uuid === actor.uuid) return true;
-  return tokenDocument.actor.id === actor.id;
+  return Boolean(tokenDocument.actor.isToken && tokenDocument.actor.token === actor.token);
 }
 
 function hasActorEffect(actor, effectId) {
@@ -550,6 +554,7 @@ function isMissingDocumentError(error) {
 function getActorPostureEffectData(actor) {
   for (const effect of actor?.effects ?? []) {
     const data = effect.getFlag?.(SYSTEM_ID, POSTURE_MOVEMENT_FLAG);
+    if (!isPostureEffectApplicableToActor(effect, actor)) continue;
     if (data?.action) return data;
   }
   return null;
@@ -562,6 +567,7 @@ function collectPostureNumberModifier(actor, action = "", key = "") {
 
   for (const effect of getActorApplicableEffects(actor)) {
     if (effect.disabled) continue;
+    if (!isPostureEffectApplicableToActor(effect, actor)) continue;
     for (const change of effect.system?.changes ?? effect.changes ?? []) {
       if (String(change.key ?? "").trim() !== changeKey) continue;
       const value = evaluatePostureEffectChangeNumber(actor, change.value);
@@ -572,6 +578,14 @@ function collectPostureNumberModifier(actor, action = "", key = "") {
     }
   }
   return modifier;
+}
+
+export function isPostureEffectApplicableToActor(effect, actor) {
+  const data = effect?.getFlag?.(SYSTEM_ID, POSTURE_MOVEMENT_FLAG);
+  if (!data) return true;
+
+  const tokenUuid = actor?.isToken ? actor.token?.uuid : "";
+  return !tokenUuid || data.tokenUuid === tokenUuid;
 }
 
 function applyPostureNumberModifier(baseValue = 0, modifier = {}) {

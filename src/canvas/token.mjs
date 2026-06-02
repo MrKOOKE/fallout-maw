@@ -1,5 +1,6 @@
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { getDamageTypeSettings } from "../settings/accessors.mjs";
+import { isPostureEffectApplicableToActor } from "./posture-movement.mjs";
 
 const TOOLTIP_ANCHOR_CLASS = "fallout-maw-token-effect-tooltip-anchor";
 const TOOLTIP_CLASS = "fallout-maw-effect-tooltip";
@@ -33,8 +34,11 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
 
     const SHOW_ICON = CONST.ACTIVE_EFFECT_SHOW_ICON;
     const activeEffects = this.actor?.appliedEffects.filter(effect => (
-      (effect.showIcon === SHOW_ICON.ALWAYS)
-      || ((effect.showIcon === SHOW_ICON.CONDITIONAL) && effect.isTemporary)
+      isPostureEffectApplicableToActor(effect, this.actor)
+      && (
+        (effect.showIcon === SHOW_ICON.ALWAYS)
+        || ((effect.showIcon === SHOW_ICON.CONDITIONAL) && effect.isTemporary)
+      )
     )) ?? [];
     const overlayEffect = activeEffects.findLast(effect => effect.flags.core?.overlay);
 

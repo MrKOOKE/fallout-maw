@@ -31,6 +31,7 @@ const TRAUMA_FLAG_KEY = "trauma";
 const DAMAGE_EFFECT_FLAG_KEY = "damageEffect";
 const LIMB_LOSS_EFFECT_KIND = "limbLoss";
 const SHOCK_UNCONSCIOUS_FLAG_KEY = "shockUnconscious";
+const POSTURE_KNOCKDOWN_FLAG_KEY = "postureKnockdown";
 const FIRST_AID_TEMPORARY_EFFECT_KIND = "firstAidTemporary";
 const BLEEDING_DAMAGE_EFFECT_KIND = "bleedingDamage";
 const PERIODIC_DAMAGE_EFFECT_KIND = "periodicDamage";
@@ -1371,7 +1372,7 @@ async function synchronizeActorVitalStatuses(actor) {
   if (!actor?.toggleStatusEffect) return;
   const dead = hasDestroyedCriticalLimb(actor);
   if (dead) {
-    if (!actor.statuses?.has?.(STATUS_EFFECTS.dead)) await setActorTokensPosture(actor, "knocked");
+    await knockdownActorForIncapacitation(actor, STATUS_EFFECTS.dead);
     if (hasShockUnconscious(actor)) await actor.unsetFlag(SYSTEM_ID, SHOCK_UNCONSCIOUS_FLAG_KEY);
     await setActorStatus(actor, STATUS_EFFECTS.unconscious, false, { animate: false });
     await setActorStatus(actor, STATUS_EFFECTS.dead, true);
@@ -1380,9 +1381,34 @@ async function synchronizeActorVitalStatuses(actor) {
 
   const health = actor.health;
   const unconscious = hasShockUnconscious(actor) || (health && toInteger(health.value) <= toInteger(health.min));
-  if (unconscious && !actor.statuses?.has?.(STATUS_EFFECTS.unconscious)) await setActorTokensPosture(actor, "knocked");
+  if (unconscious) await knockdownActorForIncapacitation(actor, STATUS_EFFECTS.unconscious);
+  else await clearActorPostureKnockdownState(actor);
   await setActorStatus(actor, STATUS_EFFECTS.dead, false);
   await setActorStatus(actor, STATUS_EFFECTS.unconscious, Boolean(unconscious));
+}
+
+async function knockdownActorForIncapacitation(actor, state = "") {
+  if (!actor || !state) return;
+  const current = getActorPostureKnockdownState(actor);
+  if (current === state) return;
+  await setActorTokensPosture(actor, "knocked");
+  await actor.setFlag(SYSTEM_ID, POSTURE_KNOCKDOWN_FLAG_KEY, {
+    state,
+    createdAt: Number(game.time?.worldTime) || 0
+  });
+}
+
+async function clearActorPostureKnockdownState(actor) {
+  if (!actor?.getFlag?.(SYSTEM_ID, POSTURE_KNOCKDOWN_FLAG_KEY)) return;
+  await actor.unsetFlag(SYSTEM_ID, POSTURE_KNOCKDOWN_FLAG_KEY);
+}
+
+function getActorPostureKnockdownState(actor) {
+  const data = actor?.getFlag?.(SYSTEM_ID, POSTURE_KNOCKDOWN_FLAG_KEY)
+    ?? actor?.flags?.[SYSTEM_ID]?.[POSTURE_KNOCKDOWN_FLAG_KEY];
+  if (typeof data === "string") return data;
+  if (data && typeof data === "object") return String(data.state ?? "");
+  return "";
 }
 
 async function performNegativeLimbShockCheck(actor, shockCheck = null) {
@@ -1447,6 +1473,7 @@ function getNegativeLimbShockRequester(actor, shockCheck = {}) {
 async function createShockUnconsciousState(actor) {
   if (!actor || isActorDead(actor)) return false;
   const target = calculateShockRecoveryTarget(actor);
+  await knockdownActorForIncapacitation(actor, STATUS_EFFECTS.unconscious);
   await actor.setFlag(SYSTEM_ID, SHOCK_UNCONSCIOUS_FLAG_KEY, {
     target,
     progress: 0,
