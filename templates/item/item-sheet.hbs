@@ -1745,6 +1745,11 @@
           <i class="fa-solid fa-up-right-from-square"></i> Извлечь
         </button>
         {{/if}}
+        {{#unless craft.selectedNode.root}}
+        <button type="button" data-craft-delete-node="{{craft.selectedNode.id}}">
+          <i class="fa-solid fa-trash"></i> Удалить
+        </button>
+        {{/unless}}
       </section>
       {{else if craft.selectedLink}}
       <section class="fallout-maw-craft-popover-section">
@@ -1752,7 +1757,7 @@
         <p>{{craft.selectedLink.title}}</p>
         <label>
           <span>Навык</span>
-          <select name="{{craft.linkFieldPrefix}}.{{craft.selectedLink.index}}.skillKey">
+          <select data-craft-link-skill="{{craft.selectedLink.id}}">
             {{#each craft.selectedLink.skillChoices}}
             <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
             {{/each}}
@@ -1760,7 +1765,7 @@
         </label>
         <label>
           <span>Сложность</span>
-          <input type="number" name="{{craft.linkFieldPrefix}}.{{craft.selectedLink.index}}.difficulty" value="{{craft.selectedLink.difficulty}}" min="0" step="1">
+          <input type="number" value="{{craft.selectedLink.difficulty}}" min="0" step="1" data-craft-link-difficulty="{{craft.selectedLink.id}}">
         </label>
         <label class="fallout-maw-inline-checkbox">
           <span>Без проверок</span>

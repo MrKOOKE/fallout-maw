@@ -578,6 +578,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     workspace.querySelector("[data-craft-delete-node]")?.addEventListener("click", event => this.#onCraftDeleteNode(event));
     workspace.querySelector("[data-craft-cancel-attach]")?.addEventListener("click", event => this.#onCraftCancelAttach(event));
     workspace.querySelector("[data-craft-node-quantity]")?.addEventListener("change", event => this.#onCraftNodeQuantityChange(event));
+    workspace.querySelector("[data-craft-link-skill]")?.addEventListener("change", event => this.#onCraftLinkSkillChange(event));
+    workspace.querySelector("[data-craft-link-difficulty]")?.addEventListener("change", event => this.#onCraftLinkDifficultyChange(event));
     workspace.querySelector("[data-craft-link-no-check]")?.addEventListener("change", event => this.#onCraftLinkNoCheckChange(event));
     this.element?.querySelectorAll("[data-craft-mode]").forEach(button => {
       button.addEventListener("click", event => this.#onCraftModeChange(event));
@@ -729,14 +731,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         target,
         preferredPoint: coords
       });
-      this.#craftSelection = { type: "node", id: newNode.id };
+      this.#craftSelection = null;
       this.#craftAttachSourceNodeId = "";
       return this.#updateCraftRecipe(result);
     }
 
     nodes.push(newNode);
     const placedNodes = placeExtractedCraftNode(nodes, newNode.id);
-    this.#craftSelection = { type: "node", id: newNode.id };
+    this.#craftSelection = null;
     this.#craftAttachSourceNodeId = "";
     return this.#updateCraftRecipe({ nodes: placedNodes });
   }
@@ -1035,7 +1037,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
           height: drag.previewHeight
         })
       });
-      this.#craftSelection = drag.nodeId ? { type: "node", id: drag.nodeId } : null;
+      this.#craftSelection = null;
       this.#craftAttachSourceNodeId = "";
       return this.#updateCraftRecipe(result);
     }
@@ -1163,7 +1165,6 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const nodes = getCraftNodesWithRoot(this.item).map(node => (
       node.id === nodeId ? { ...node, quantity } : node
     ));
-    this.#craftSelection = { type: "node", id: nodeId };
     return this.#updateCraftRecipe({ nodes });
   }
 
@@ -1174,7 +1175,27 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const links = getCraftLinks(this.item).map(link => (
       link.id === linkId ? { ...link, noCheck } : link
     ));
-    this.#craftSelection = { type: "link", id: linkId };
+    return this.#updateCraftRecipe({ links });
+  }
+
+  #onCraftLinkSkillChange(event) {
+    const linkId = String(event.currentTarget.dataset.craftLinkSkill ?? "");
+    if (!linkId) return undefined;
+    const skillKey = String(event.currentTarget.value ?? "");
+    const links = getCraftLinks(this.item).map(link => (
+      link.id === linkId ? { ...link, skillKey } : link
+    ));
+    return this.#updateCraftRecipe({ links });
+  }
+
+  #onCraftLinkDifficultyChange(event) {
+    const linkId = String(event.currentTarget.dataset.craftLinkDifficulty ?? "");
+    if (!linkId) return undefined;
+    const difficulty = normalizeCraftLinkDifficulty(event.currentTarget.value);
+    event.currentTarget.value = String(difficulty);
+    const links = getCraftLinks(this.item).map(link => (
+      link.id === linkId ? { ...link, difficulty } : link
+    ));
     return this.#updateCraftRecipe({ links });
   }
 
@@ -4154,7 +4175,7 @@ function prepareCraftLinkForDisplay(link, index, nodes, skillSettings = []) {
     ...link,
     index,
     title: `${from?.name ?? "?"} -> ${to?.name ?? "?"}`,
-    difficulty: Math.max(0, toInteger(link.difficulty) || 60),
+    difficulty: normalizeCraftLinkDifficulty(link.difficulty),
     noCheck: Boolean(link.noCheck),
     skillChoices: skillSettings.map((skill, skillIndex) => ({
       key: skill.key,
@@ -4309,7 +4330,7 @@ function normalizeCraftLink(link = {}) {
     fromNodeId: String(link.fromNodeId ?? ""),
     toNodeId: String(link.toNodeId ?? ""),
     skillKey: String(link.skillKey ?? "repair"),
-    difficulty: Math.max(0, toInteger(link.difficulty) || 60),
+    difficulty: normalizeCraftLinkDifficulty(link.difficulty),
     noCheck: Boolean(link.noCheck),
     bendX,
     bendY,
@@ -4318,6 +4339,11 @@ function normalizeCraftLink(link = {}) {
     toAnchorSide: normalizeCraftAnchorSide(link.toAnchorSide),
     toAnchorOffset: Number.isFinite(toAnchorOffset) ? clampNumber(toAnchorOffset, 0, 1) : null
   };
+}
+
+function normalizeCraftLinkDifficulty(value, fallback = 60) {
+  const number = Number(value);
+  return Math.max(0, Number.isFinite(number) ? Math.trunc(number) : fallback);
 }
 
 function getCraftFallbackLinkId(link = {}) {

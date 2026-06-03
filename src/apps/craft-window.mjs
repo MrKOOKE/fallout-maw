@@ -1687,7 +1687,7 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
       index,
       noCheck: isCraftLinkNoCheck(link),
       skillKey: String(link.skillKey ?? "repair") || "repair",
-      difficulty: Math.max(0, toInteger(link.difficulty) || 60)
+      difficulty: normalizeCraftLinkDifficulty(link.difficulty)
     }))
   };
 }
@@ -2167,7 +2167,7 @@ function getCraftCheckSummaries(links = []) {
     if (isCraftLinkNoCheck(link)) continue;
     const skillKey = String(link.skillKey ?? "repair") || "repair";
     const skillLabel = skillLabels.get(skillKey) ?? skillKey;
-    const difficulty = Math.max(0, toInteger(link.difficulty) || 60);
+    const difficulty = normalizeCraftLinkDifficulty(link.difficulty);
     const key = `${skillKey}:${difficulty}`;
     const existing = byCheck.get(key);
     if (existing) {
@@ -2620,7 +2620,7 @@ function normalizeCraftLink(link = {}) {
     fromNodeId: String(link.fromNodeId ?? ""),
     toNodeId: String(link.toNodeId ?? ""),
     skillKey: String(link.skillKey ?? "repair"),
-    difficulty: Math.max(0, toInteger(link.difficulty) || 60),
+    difficulty: normalizeCraftLinkDifficulty(link.difficulty),
     noCheck: isCraftLinkNoCheck(link),
     bendX,
     bendY,
@@ -2629,6 +2629,11 @@ function normalizeCraftLink(link = {}) {
     toAnchorSide: normalizeCraftAnchorSide(link.toAnchorSide),
     toAnchorOffset: Number.isFinite(toAnchorOffset) ? clampNumber(toAnchorOffset, 0, 1) : null
   };
+}
+
+function normalizeCraftLinkDifficulty(value, fallback = 60) {
+  const number = Number(value);
+  return Math.max(0, Number.isFinite(number) ? Math.trunc(number) : fallback);
 }
 
 function isCraftLinkNoCheck(link = {}) {
@@ -3330,8 +3335,10 @@ async function animateCraftLinks(element, operation) {
 async function animateCraftLinkRoute(route = []) {
   if (!route.length) return;
   const duration = Math.max(1, CRAFT_FLOW_DURATION_MS / route.length);
+  let inheritedFailure = false;
   for (const group of route) {
-    await animateCraftLinkGroup(group, { duration });
+    await animateCraftLinkGroup(group, { duration, inheritedFailure });
+    inheritedFailure = inheritedFailure || isCraftFlowGroupFailure(group);
   }
 }
 
@@ -3402,23 +3409,24 @@ function createCraftLinkResultMap(results = []) {
   return map;
 }
 
-function animateCraftLinkGroup(group, { duration = CRAFT_FLOW_DURATION_MS } = {}) {
+function animateCraftLinkGroup(group, { duration = CRAFT_FLOW_DURATION_MS, inheritedFailure = false } = {}) {
   const gold = group.querySelector(".fallout-maw-craft-link-fluid-gold");
   const startSocket = group.querySelector(".fallout-maw-craft-link-fluid-socket.start");
   const endSocket = group.querySelector(".fallout-maw-craft-link-fluid-socket.end");
   duration = Math.max(1, Number(duration) || CRAFT_FLOW_DURATION_MS);
   if (!gold) return delay(duration);
   const total = Math.max(1, gold.getTotalLength?.() ?? 1);
-  const success = group.dataset.craftFlowResult !== "failure";
+  const success = !inheritedFailure && !isCraftFlowGroupFailure(group);
   const breakFraction = Math.max(0.3, Math.min(0.7, Number(group.dataset.craftFlowBreak) || 0.5));
+  const initialTone = inheritedFailure ? 1 : 0;
 
   initializeCraftFlowPath(gold, total);
   setCraftFlowOpacity(gold, 1);
-  setCraftFlowTone(gold, 0);
+  setCraftFlowTone(gold, initialTone);
   setCraftFlowSocketOpacity(startSocket, 0);
   setCraftFlowSocketOpacity(endSocket, 0);
-  setCraftFlowSocketTone(startSocket, 0);
-  setCraftFlowSocketTone(endSocket, 0);
+  setCraftFlowSocketTone(startSocket, initialTone);
+  setCraftFlowSocketTone(endSocket, initialTone);
 
   return new Promise(resolve => {
     const startedAt = performance.now();
@@ -3427,7 +3435,7 @@ function animateCraftLinkGroup(group, { duration = CRAFT_FLOW_DURATION_MS } = {}
       const progress = Math.min(1, elapsed / duration);
       const goldPhases = getCraftFlowPhaseProgress(progress);
       const goldFilledLength = total * goldPhases.pipe;
-      const redTone = success ? 0 : clampNumber((progress - breakFraction) / CRAFT_FLOW_FAILURE_BLEND_FRACTION, 0, 1);
+      const redTone = inheritedFailure ? 1 : (success ? 0 : clampNumber((progress - breakFraction) / CRAFT_FLOW_FAILURE_BLEND_FRACTION, 0, 1));
       drawCraftFlowFill(gold, total, goldFilledLength);
       setCraftFlowTone(gold, redTone);
       setCraftFlowSocketOpacity(startSocket, goldPhases.startSocket);
@@ -3449,6 +3457,10 @@ function animateCraftLinkGroup(group, { duration = CRAFT_FLOW_DURATION_MS } = {}
     };
     requestAnimationFrame(step);
   });
+}
+
+function isCraftFlowGroupFailure(group) {
+  return group?.dataset?.craftFlowResult === "failure";
 }
 
 function initializeCraftFlowPath(path, total) {
