@@ -4,6 +4,7 @@ export const SKILL_SETTINGS_SETTING = "skillSettings";
 export const PROFICIENCY_SETTINGS_SETTING = "proficiencySettings";
 export const DAMAGE_TYPES_SETTING = "damageTypes";
 export const CURRENCY_SETTINGS_SETTING = "currencySettings";
+export const ITEM_CATEGORIES_SETTING = "itemCategories";
 export const RESOURCE_SETTINGS_SETTING = "resourceSettings";
 export const DISEASE_SETTINGS_SETTING = "diseaseSettings";
 export const ABILITIES_CATALOG_SETTING = "abilitiesCatalog";

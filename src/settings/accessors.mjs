@@ -25,6 +25,7 @@ import {
   CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
   DISEASE_SETTINGS_SETTING,
+  ITEM_CATEGORIES_SETTING,
   LEVELS_SETTING,
   PROFICIENCY_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
@@ -42,6 +43,7 @@ import { createDefaultCombatSettings, normalizeCombatSettings } from "./combat.m
 import { createDefaultAbilityCatalog, normalizeAbilityCatalog } from "./abilities.mjs";
 import { createEmptyCreatureOptions, normalizeCreatureOptions } from "./creature-options.mjs";
 import { createDefaultDiseaseSettings, normalizeDiseaseSettings } from "./diseases.mjs";
+import { createDefaultItemCategorySettings, normalizeItemCategorySettings } from "./item-categories.mjs";
 import { createDefaultLevelSettings, normalizeLevelSettings } from "./levels.mjs";
 import { createDefaultTraumaSettings, normalizeTraumaSettings } from "./traumas.mjs";
 import {
@@ -299,6 +301,24 @@ export async function setCurrencySettings(settings) {
 
 export async function resetCurrencySettings() {
   return setCurrencySettings(createDefaultCurrencySettings());
+}
+
+export function getItemCategorySettings() {
+  try {
+    return normalizeItemCategorySettings(game.settings.get(FALLOUT_MAW.id, ITEM_CATEGORIES_SETTING)).categories;
+  } catch (_error) {
+    return createDefaultItemCategorySettings().categories;
+  }
+}
+
+export async function setItemCategorySettings(settings) {
+  const normalized = normalizeItemCategorySettings(settings);
+  await game.settings.set(FALLOUT_MAW.id, ITEM_CATEGORIES_SETTING, normalized);
+  return normalized.categories;
+}
+
+export async function resetItemCategorySettings() {
+  return setItemCategorySettings(createDefaultItemCategorySettings());
 }
 
 export function getCreatureOptions(characteristics = getCharacteristicSettings(), damageTypes = getDamageTypeSettings()) {

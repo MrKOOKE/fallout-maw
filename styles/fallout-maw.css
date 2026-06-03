@@ -9559,6 +9559,10 @@ label.fallout-maw-mitigation-cell {
   grid-template-columns: minmax(0, 1fr) 2.5rem;
 }
 
+.item-category-settings .fallout-maw-settings-row {
+  grid-template-columns: 2rem minmax(180px, 1fr) 2.5rem;
+}
+
 .fallout-maw-weapon-set-config {
   border: 1px solid rgba(120, 120, 120, 0.16);
   border-radius: 5px;
@@ -12503,6 +12507,7 @@ label.fallout-maw-mitigation-cell {
   .proficiency-settings .fallout-maw-settings-row,
   .resource-settings .fallout-maw-settings-row,
   .need-settings .fallout-maw-settings-row,
+  .item-category-settings .fallout-maw-settings-row,
   .equipment-slot-settings .fallout-maw-settings-row,
   .weapon-slot-settings .fallout-maw-settings-row,
   .fallout-maw-weapon-set-header,

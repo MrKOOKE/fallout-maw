@@ -44,7 +44,11 @@
       </label>
       <label>
         <span>Категория предмета</span>
-        <input type="text" name="system.itemCategory" value="{{system.itemCategory}}">
+        <select name="system.itemCategory">
+          {{#each itemCategoryChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.Weight"}}</span>
@@ -466,7 +470,11 @@
       </label>
       <label>
         <span>Категория предмета</span>
-        <input type="text" name="system.itemCategory" value="{{system.itemCategory}}">
+        <select name="system.itemCategory">
+          {{#each itemCategoryChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.Weight"}}</span>

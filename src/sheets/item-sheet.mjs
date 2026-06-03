@@ -1,7 +1,7 @@
 import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.mjs";
 import { activateDescriptionFormulaAutocomplete } from "../apps/description-formula-autocomplete.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, TEMPLATES } from "../constants.mjs";
-import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getNeedSettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
+import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getItemCategorySettings, getNeedSettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { getEquipmentSlotSelectionKey, groupRaceEquipmentSlotsBySet, groupRaceWeaponSlotsBySet } from "../utils/equipment-slots.mjs";
 import {
   buildDamageMitigationLimbSetChoices,
@@ -138,6 +138,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const item = this.item;
     const type = item.type;
     const priceCurrency = item.system?.priceCurrency ?? "";
+    const itemCategory = item.system?.itemCategory ?? "";
     const occupiedSlots = item.system?.occupiedSlots ?? {};
     const weaponSlotRequirement = item.system?.weaponSlotRequirement ?? {};
     const occupiedWeaponSlots = weaponSlotRequirement.slots ?? {};
@@ -318,6 +319,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         ...currency,
         selected: currency.key === priceCurrency
       })),
+      itemCategoryChoices: buildItemCategoryChoices(itemCategory),
       equipmentSlotSelections: Array.from(equipmentSlotSelections.values()),
       equipmentSlotGroups: equipmentSlotGroups.map(group => ({
         raceNames: group.races.join(", "),
@@ -5383,6 +5385,23 @@ function buildToolFunctionEntries(item, toolSettings, skillSettings) {
       skillKey
     };
   });
+}
+
+function buildItemCategoryChoices(selectedCategory = "") {
+  const selected = String(selectedCategory ?? "").trim();
+  const categories = getItemCategorySettings()
+    .map(category => String(category?.label ?? category ?? "").trim())
+    .filter(Boolean);
+  if (selected && !categories.includes(selected)) categories.push(selected);
+
+  return [
+    { value: "", label: "", selected: !selected },
+    ...categories.map(label => ({
+      value: label,
+      label,
+      selected: label === selected
+    }))
+  ];
 }
 
 function buildConditionRecoveryMethodRows(item, toolSettings = []) {
