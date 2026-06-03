@@ -2,6 +2,7 @@ export const ITEM_FUNCTIONS = {
   container: "container",
   damageMitigation: "damageMitigation",
   damageSource: "damageSource",
+  freeSettings: "freeSettings",
   condition: "condition",
   firstAid: "firstAid",
   weapon: "weapon",

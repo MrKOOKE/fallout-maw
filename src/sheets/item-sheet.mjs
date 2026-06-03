@@ -155,6 +155,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const hasContainerFunction = hasItemFunction(item, ITEM_FUNCTIONS.container);
     const hasDamageMitigationFunction = hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation);
     const hasDamageSourceFunction = hasItemFunction(item, ITEM_FUNCTIONS.damageSource);
+    const hasFreeSettingsFunction = hasItemFunction(item, ITEM_FUNCTIONS.freeSettings);
     const hasModuleFunction = hasItemFunction(item, ITEM_FUNCTIONS.module);
     const hasConditionFunction = hasItemFunction(item, ITEM_FUNCTIONS.condition);
     const hasFirstAidFunction = hasItemFunction(item, ITEM_FUNCTIONS.firstAid);
@@ -187,6 +188,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         value: ITEM_FUNCTIONS.damageSource,
         label: game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource"),
         disabled: hasDamageSourceFunction
+      },
+      {
+        value: ITEM_FUNCTIONS.freeSettings,
+        label: "Свободная настройка",
+        disabled: hasFreeSettingsFunction
       },
       {
         value: ITEM_FUNCTIONS.condition,
@@ -277,6 +283,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       isContainerFunction: hasContainerFunction,
       hasDamageMitigationFunction,
       hasDamageSourceFunction,
+      hasFreeSettingsFunction,
+      itemFreeSettingsFunctionPath: "system.functions.freeSettings.entries",
+      itemFreeSettingsFunctions: normalizeAbilityFunctions(item.system?.functions?.freeSettings?.entries ?? [])
+        .map((entry, index) => prepareAbilityFunctionRowsForDisplay(entry, index, "system.functions.freeSettings.entries")),
       hasModuleFunction,
       weaponModuleTargetChoices: buildWeaponModuleTargetChoices(item.system?.functions?.module?.targetFunction),
       damageSourceDamageTypeRows: buildDamageSourceDamageTypeRows(item, damageTypeSettings),
@@ -313,7 +323,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         selected: skill.key === item.system?.acquisition?.skillKey || (!item.system?.acquisition?.skillKey && index === 0)
       })),
       abilityFunctions: normalizeAbilityFunctions(item.system?.functions ?? [])
-        .map((entry, index) => prepareAbilityFunctionRowsForDisplay(entry, index)),
+        .map((entry, index) => prepareAbilityFunctionRowsForDisplay(entry, index, "system.functions")),
       itemFunctionChoices: availableFunctionChoices,
       currencies: getCurrencySettings().map(currency => ({
         ...currency,
@@ -412,7 +422,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onBrowseWeaponExplosionSound(event));
     });
     this.element?.querySelector("[data-add-item-function]")?.addEventListener("click", event => this.#onAddItemFunction(event));
-    this.element?.querySelector("[data-add-ability-function]")?.addEventListener("click", event => this.#onAddAbilityFunction(event));
+    this.element?.querySelectorAll("[data-add-ability-function]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityFunction(event));
+    });
     this.element?.querySelector("[data-add-additional-weapon-function]")?.addEventListener("click", event => this.#onAddAdditionalWeaponFunction(event));
     this.element?.querySelector("[data-add-module-weapon-function]")?.addEventListener("click", event => this.#onAddModuleWeaponFunction(event));
     this.element?.querySelectorAll("[data-delete-additional-weapon-function]").forEach(button => {
@@ -1755,6 +1767,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   async #onAddAbilityFunction(event) {
     event.preventDefault();
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functionType = String(event.currentTarget?.dataset?.abilityFunctionType ?? "");
+    if (Object.values(ABILITY_FUNCTION_TYPES).includes(functionType)) {
+      const functions = this.#getSubmittedAbilityFunctions(functionPath);
+      functions.push(createAbilityFunction(functionType));
+      return this.#submitCurrentForm({ [functionPath]: functions });
+    }
     this.#functionPickerActive = true;
     await this.#submitCurrentForm();
     return this.render();
@@ -1764,10 +1783,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.preventDefault();
     const functionType = String(event.currentTarget?.value ?? "");
     if (!Object.values(ABILITY_FUNCTION_TYPES).includes(functionType)) return undefined;
-    const functions = this.#getSubmittedAbilityFunctions();
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
     functions.push(createAbilityFunction(functionType));
     this.#functionPickerActive = false;
-    return this.#submitCurrentForm({ "system.functions": functions });
+    return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
   #onDeleteAbilityFunction(event) {
@@ -1776,22 +1796,24 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const row = event.currentTarget?.closest?.("[data-ability-function-row]");
     const functionId = String(row?.dataset.functionId ?? "");
     const rowIndex = Number(row?.dataset.functionIndex ?? -1);
-    const functions = this.#getSubmittedAbilityFunctions();
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
     const index = functionId
       ? functions.findIndex(entry => entry.id === functionId)
       : rowIndex;
     if (index < 0) return undefined;
     functions.splice(index, 1);
-    return this.#submitCurrentForm({ "system.functions": functions });
+    return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
   #onAddAbilityChange(event) {
     event.preventDefault();
     const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
-    const functions = this.#getSubmittedAbilityFunctions();
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
     if (!functions[functionIndex]) return undefined;
     functions[functionIndex].changes.push(createAbilityChange());
-    return this.#submitCurrentForm({ "system.functions": functions });
+    return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
   #onDeleteAbilityChange(event) {
@@ -1799,26 +1821,29 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.stopPropagation();
     const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
     const changeIndex = Number(event.currentTarget?.closest?.("[data-ability-change-row]")?.dataset.changeIndex ?? -1);
-    const functions = this.#getSubmittedAbilityFunctions();
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
     if (!functions[functionIndex]?.changes?.[changeIndex]) return undefined;
     functions[functionIndex].changes.splice(changeIndex, 1);
-    return this.#submitCurrentForm({ "system.functions": functions });
+    return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
   #onAddAbilityCondition(event) {
     event.preventDefault();
     const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
-    const functions = this.#getSubmittedAbilityFunctions();
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
     if (!functions[functionIndex]) return undefined;
     functions[functionIndex].conditions.push(createAbilityCondition(""));
-    return this.#submitCurrentForm({ "system.functions": functions });
+    return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
   #onAddAbilityConditionAlternative(event) {
     event.preventDefault();
     const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
     const conditionIndex = Number(event.currentTarget?.closest?.("[data-ability-condition-row]")?.dataset.conditionIndex ?? -1);
-    const functions = this.#getSubmittedAbilityFunctions();
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
     const conditions = functions[functionIndex]?.conditions;
     const condition = conditions?.[conditionIndex];
     if (!condition) return undefined;
@@ -1826,7 +1851,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const groupId = String(condition.groupId ?? "").trim() || foundry.utils.randomID();
     condition.groupId = groupId;
     conditions.splice(conditionIndex + 1, 0, createAbilityCondition({ type: "", groupId }));
-    return this.#submitCurrentForm({ "system.functions": functions });
+    return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
   #onDeleteAbilityCondition(event) {
@@ -1834,19 +1859,21 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.stopPropagation();
     const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
     const conditionIndex = Number(event.currentTarget?.closest?.("[data-ability-condition-row]")?.dataset.conditionIndex ?? -1);
-    const functions = this.#getSubmittedAbilityFunctions();
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
     if (!functions[functionIndex]?.conditions?.[conditionIndex]) return undefined;
     functions[functionIndex].conditions.splice(conditionIndex, 1);
-    return this.#submitCurrentForm({ "system.functions": functions });
+    return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
   #onAddAbilityPenalty(event) {
     event.preventDefault();
     const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
-    const functions = this.#getSubmittedAbilityFunctions();
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
     if (!functions[functionIndex]?.conditions?.some(condition => isAbilityRuntimeCondition(condition?.type))) return undefined;
     functions[functionIndex].penalties.push(createAbilityChange());
-    return this.#submitCurrentForm({ "system.functions": functions });
+    return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
   #onDeleteAbilityPenalty(event) {
@@ -1854,10 +1881,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     event.stopPropagation();
     const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
     const penaltyIndex = Number(event.currentTarget?.closest?.("[data-ability-penalty-row]")?.dataset.penaltyIndex ?? -1);
-    const functions = this.#getSubmittedAbilityFunctions();
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
     if (!functions[functionIndex]?.penalties?.[penaltyIndex]) return undefined;
     functions[functionIndex].penalties.splice(penaltyIndex, 1);
-    return this.#submitCurrentForm({ "system.functions": functions });
+    return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
   async #onAbilityConditionTypeChange(event) {
@@ -1890,11 +1918,19 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
   }
 
-  #getSubmittedAbilityFunctions() {
-    if (!this.form) return normalizeAbilityFunctions(this.item.system?.functions ?? []);
+  #getSubmittedAbilityFunctions(functionPath = "system.functions") {
+    if (!this.form) return normalizeAbilityFunctions(foundry.utils.getProperty(this.item, functionPath) ?? []);
     const formData = new FormDataExtended(this.form);
     const submitData = this._processFormData(null, this.form, formData);
-    return normalizeAbilityFunctions(submitData.system?.functions ?? this.item.system?.functions ?? []);
+    return normalizeAbilityFunctions(foundry.utils.getProperty(submitData, functionPath) ?? foundry.utils.getProperty(this.item, functionPath) ?? []);
+  }
+
+  #getAbilityFunctionPathForEvent(event) {
+    return String(
+      event.currentTarget?.dataset?.functionPath
+      ?? event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset?.functionPath
+      ?? "system.functions"
+    );
   }
 
   #submitCurrentForm(updateData = {}) {
@@ -1938,6 +1974,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       this.#functionPickerActive = false;
       return this.item.update({
         "system.functions.damageSource": createDefaultDamageSourceFunctionData({ enabled: true })
+      });
+    }
+
+    if (functionKey === ITEM_FUNCTIONS.freeSettings) {
+      this.#functionPickerActive = false;
+      const entries = normalizeAbilityFunctions(this.item.system?.functions?.freeSettings?.entries ?? []);
+      if (!entries.length) entries.push(createAbilityFunction(ABILITY_FUNCTION_TYPES.effectChanges));
+      return this.item.update({
+        "system.functions.freeSettings.enabled": true,
+        "system.functions.freeSettings.entries": entries
       });
     }
 
@@ -2045,6 +2091,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (functionKey === ITEM_FUNCTIONS.damageSource) {
       return this.item.update({
         "system.functions.damageSource": createDefaultDamageSourceFunctionData({ enabled: false })
+      });
+    }
+    if (functionKey === ITEM_FUNCTIONS.freeSettings) {
+      return this.item.update({
+        "system.functions.freeSettings.enabled": false,
+        "system.functions.freeSettings.entries": []
       });
     }
     if (functionKey === ITEM_FUNCTIONS.condition) {
@@ -2956,7 +3008,8 @@ function getHealingSkillLabel(item) {
 function getItemFunctionLabel(functionKey = "") {
   if (functionKey === ITEM_FUNCTIONS.container) return game.i18n.localize("FALLOUTMAW.Item.FunctionContainer");
   if (functionKey === ITEM_FUNCTIONS.damageMitigation) return game.i18n.localize("FALLOUTMAW.Item.FunctionDamageMitigation");
-  if (functionKey === ITEM_FUNCTIONS.damageSource) return game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource");
+    if (functionKey === ITEM_FUNCTIONS.damageSource) return game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource");
+  if (functionKey === ITEM_FUNCTIONS.freeSettings) return "Свободная настройка";
   if (functionKey === ITEM_FUNCTIONS.condition) return game.i18n.localize("FALLOUTMAW.Item.FunctionCondition");
   if (functionKey === ITEM_FUNCTIONS.firstAid) return game.i18n.localize("FALLOUTMAW.Item.FunctionFirstAid");
   if (functionKey === ITEM_FUNCTIONS.weapon) return game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon");
@@ -2976,34 +3029,37 @@ function activateItemEffectKeyAutocompletes(root) {
   });
 }
 
-function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0) {
+function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, functionPath = "system.functions") {
   const type = String(entry?.type ?? ABILITY_FUNCTION_TYPES.effectChanges);
   const isAcquisitionChanges = type === ABILITY_FUNCTION_TYPES.acquisitionChanges;
   const isEffectChanges = type === ABILITY_FUNCTION_TYPES.effectChanges;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
-    allowLimitedChanges: isEffectChanges
+    allowLimitedChanges: isEffectChanges,
+    functionPath
   }));
   const hasRuntimeConditions = (entry?.conditions ?? []).some(condition => isAbilityRuntimeCondition(condition?.type));
   return {
     ...entry,
     functionIndex,
+    functionPath,
     isAcquisitionChanges,
     isEffectChanges,
     typeLabel: isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка",
-    changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index)),
+    changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
     conditionGroups: buildAbilityConditionDisplayGroups(conditions),
-    penalties: (entry?.penalties ?? []).map((change, index) => prepareAbilityPenaltyForDisplay(change, functionIndex, index)),
+    penalties: (entry?.penalties ?? []).map((change, index) => prepareAbilityPenaltyForDisplay(change, functionIndex, index, functionPath)),
     hasConditions: Boolean(entry?.conditions?.length),
     hasPenalties: Boolean(entry?.penalties?.length),
     canAddPenalty: hasRuntimeConditions
   };
 }
 
-function prepareAbilityChangeForDisplay(change, functionIndex, index) {
+function prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath = "system.functions") {
   return {
     ...change,
+    functionPath,
     functionIndex,
     index,
     priority: change?.priority ?? "",
@@ -3011,14 +3067,14 @@ function prepareAbilityChangeForDisplay(change, functionIndex, index) {
   };
 }
 
-function prepareAbilityPenaltyForDisplay(change, functionIndex, index) {
+function prepareAbilityPenaltyForDisplay(change, functionIndex, index, functionPath = "system.functions") {
   return {
-    ...prepareAbilityChangeForDisplay(change, functionIndex, index),
+    ...prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath),
     penaltyIndex: index
   };
 }
 
-function prepareAbilityConditionForDisplay(condition, functionIndex, index, { changeCount = 0, allowLimitedChanges = false } = {}) {
+function prepareAbilityConditionForDisplay(condition, functionIndex, index, { changeCount = 0, allowLimitedChanges = false, functionPath = "system.functions" } = {}) {
   const type = String(condition?.type ?? "");
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
@@ -3032,6 +3088,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
   const isHealthCriticalLimb = healthTarget === ABILITY_HEALTH_TARGETS.criticalLimb;
   return {
     ...condition,
+    functionPath,
     functionIndex,
     index,
     healthTarget,

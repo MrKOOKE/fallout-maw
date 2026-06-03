@@ -127,11 +127,15 @@ class EffectKeyAutocomplete {
 
   #findMatches(query) {
     return this.tokens
-      .filter(token => token.matches.some(value => value.startsWith(query)))
+      .map(token => ({ token, score: getTokenSearchScore(token, query) }))
+      .filter(entry => Number.isFinite(entry.score))
       .sort((left, right) => (
-        getTokenSuggestionRank(left) - getTokenSuggestionRank(right)
-        || left.code.localeCompare(right.code)
-      ));
+        left.score - right.score
+        || getTokenSuggestionRank(left.token) - getTokenSuggestionRank(right.token)
+        || getTokenSearchLabelLength(left.token) - getTokenSearchLabelLength(right.token)
+        || left.token.code.localeCompare(right.token.code)
+      ))
+      .map(entry => entry.token);
   }
 
   #render() {
@@ -221,6 +225,32 @@ function buildSearchValues(...values) {
     }
   }
   return Array.from(matches);
+}
+
+function getTokenSearchScore(token, query) {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return Number.POSITIVE_INFINITY;
+
+  const code = normalizeSearchText(token?.code ?? "");
+  const key = normalizeSearchText(token?.key ?? "");
+  const label = normalizeSearchText(token?.label ?? "");
+  const path = normalizeSearchText(token?.path ?? "");
+
+  if ([code, key, path].includes(normalizedQuery)) return 0;
+  if (label === normalizedQuery) return 1;
+  if ([code, key, path].some(value => value.startsWith(normalizedQuery))) return 2;
+  if (label.startsWith(normalizedQuery)) return 3;
+  if (getSearchWords(label).some(word => word === normalizedQuery)) return 4;
+  if (token.matches.some(value => value.startsWith(normalizedQuery))) return 5;
+  return Number.POSITIVE_INFINITY;
+}
+
+function getTokenSearchLabelLength(token) {
+  return normalizeSearchText(token?.label || token?.code || token?.key || token?.path).length;
+}
+
+function getSearchWords(value) {
+  return normalizeSearchText(value).split(/[^\p{L}\p{N}_]+/u).filter(Boolean);
 }
 
 function getTokenSuggestionRank(token) {

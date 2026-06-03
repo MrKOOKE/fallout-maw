@@ -56,6 +56,7 @@ export class GearDataModel extends BaseItemDataModel {
         container: containerFunctionField(),
         condition: conditionFunctionField(),
         damageSource: damageSourceFunctionField(),
+        freeSettings: itemFreeSettingsFunctionField(),
         module: moduleFunctionField(),
         weapon: weaponFunctionField(),
         additionalWeapons: new TypedObjectField(weaponFunctionField({ named: true }), { required: true, initial: {} }),
@@ -178,6 +179,13 @@ function abilityAcquisitionRequirementField() {
     characteristicKey: new StringField({ required: true, blank: true, initial: "" }),
     skillKey: new StringField({ required: true, blank: true, initial: "" }),
     value: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+  });
+}
+
+function itemFreeSettingsFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    entries: new ArrayField(abilityFunctionField(), { required: true, initial: [] })
   });
 }
 

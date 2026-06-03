@@ -14,9 +14,13 @@ import { toInteger } from "../utils/numbers.mjs";
 import { hasAbilityFunctionCooldown } from "./runtime-state.mjs";
 
 export function getAbilityEffectChanges(actor, item) {
-  return normalizeAbilityFunctions(item?.system?.functions ?? [])
+  return getAbilityEffectChangesFromFunctions(actor, item?.system?.functions ?? [], { abilityItemId: item?.id ?? "" });
+}
+
+export function getAbilityEffectChangesFromFunctions(actor, functions = [], context = {}) {
+  return normalizeAbilityFunctions(functions)
     .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
-    .flatMap(entry => getConditionalFunctionChanges(actor, entry, { abilityItemId: item?.id ?? "" }))
+    .flatMap(entry => getConditionalFunctionChanges(actor, entry, context))
     .filter(change => change.key && change.value !== "");
 }
 
