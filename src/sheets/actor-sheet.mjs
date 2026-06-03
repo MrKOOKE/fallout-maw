@@ -29,7 +29,7 @@ import {
   getWeaponSlotRequirementSize,
   isContainerWeaponSetKey
 } from "../utils/equipment-slots.mjs";
-import { buildDamageMitigationTables, buildDamageTypeIconStyle } from "../utils/damage-mitigation-display.mjs";
+import { buildDamageMitigationTables, buildDamageTypeIconClass, buildDamageTypeIconStyle } from "../utils/damage-mitigation-display.mjs";
 import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
   import {
     completeResearch,
@@ -3546,9 +3546,10 @@ function renderDamageMitigationTooltipTables(tables = []) {
 function renderDamageTypeIcon(damageType = {}) {
   const img = String(damageType.damageTypeImg ?? "").trim() || "icons/svg/d20-grey.svg";
   const label = String(damageType.damageTypeLabel ?? "");
+  const iconClass = String(damageType.damageTypeIconClass ?? "").trim() || buildDamageTypeIconClass(damageType);
   const style = String(damageType.damageTypeIconStyle ?? "").trim() || buildDamageTypeIconStyle(damageType);
   return `
-    <span class="fallout-maw-damage-type-icon" style="${escapeAttribute(style)}">
+    <span class="${escapeAttribute(iconClass)}" style="${escapeAttribute(style)}">
       <img src="${escapeAttribute(img)}" alt="${escapeAttribute(label)}">
     </span>
   `;

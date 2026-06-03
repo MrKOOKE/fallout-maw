@@ -445,7 +445,9 @@ function onPreUpdateTokenGrapple(tokenDocument, changes, options) {
 
   const targetGrapplerId = getGrapplerId(tokenDocument);
   if (targetGrapplerId) {
-    if (getFollowMovementGrapplerId(options, tokenDocument.id) === targetGrapplerId) return true;
+    if (getFollowMovementGrapplerId(options, tokenDocument.id) === targetGrapplerId) {
+      return hasPassedMovement(options?._movement?.[targetGrapplerId]) ? true : false;
+    }
     void promptGrappleEscapeOnMoveAttempt(tokenDocument, targetGrapplerId);
     return false;
   }
@@ -1049,6 +1051,10 @@ function isSameMovementWaypoint(left, right) {
 
 function getFollowMovementGrapplerId(options, tokenId) {
   return String(options?.[GRAPPLE_FOLLOW_MOVEMENT_OPTION]?.[tokenId] ?? "");
+}
+
+function hasPassedMovement(movement) {
+  return Array.isArray(movement?.passed?.waypoints) && movement.passed.waypoints.length > 0;
 }
 
 function hasMovementCollision(tokenDocument, destination) {

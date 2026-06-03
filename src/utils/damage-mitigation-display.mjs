@@ -70,6 +70,7 @@ function buildDamageMitigationTableForGroup(group, entries = {}, damageTypeSetti
       damageTypeLabel: damageType.label || damageType.key,
       damageTypeImg: String(damageType.img ?? "").trim() || FALLBACK_DAMAGE_TYPE_ICON,
       damageTypeColor: String(damageType.color ?? "").trim() || "#f0d48a",
+      damageTypeIconClass: buildDamageTypeIconClass(damageType),
       damageTypeIconStyle: buildDamageTypeIconStyle(damageType),
       cells: limbs.map((limb, columnIndex) => {
         const value = Number(entries?.[limb.key]?.[damageType.key]?.value) || 0;
@@ -90,6 +91,18 @@ export function buildDamageTypeIconStyle(damageType = {}) {
   const color = String(damageType.color ?? damageType.damageTypeColor ?? "").trim() || "#f0d48a";
   const img = getCssUrlPath(String(damageType.img ?? damageType.damageTypeImg ?? "").trim() || FALLBACK_DAMAGE_TYPE_ICON);
   return `--fallout-maw-damage-type-color: ${color}; --fallout-maw-damage-type-image: url("${escapeCssUrl(img)}");`;
+}
+
+export function buildDamageTypeIconClass(damageType = {}) {
+  const img = String(damageType.img ?? damageType.damageTypeImg ?? "").trim() || FALLBACK_DAMAGE_TYPE_ICON;
+  return isSvgImagePath(img)
+    ? "fallout-maw-damage-type-icon fallout-maw-damage-type-icon--svg"
+    : "fallout-maw-damage-type-icon";
+}
+
+function isSvgImagePath(value = "") {
+  const path = String(value ?? "").trim().replace(/\\/g, "/");
+  return /^data:image\/svg\+xml(?:[;,]|$)/i.test(path) || /\.svg(?:[?#].*)?$/i.test(path);
 }
 
 function getCssUrlPath(value = "") {
