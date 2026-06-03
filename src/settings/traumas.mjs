@@ -1,12 +1,12 @@
 import { toInteger } from "../utils/numbers.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY } from "../constants.mjs";
 
-const DEFAULT_TRAUMA_ICON = "icons/svg/blood.svg";
 const DEFAULT_HEALING_DIFFICULTY = 60;
 const DEFAULT_HEALING_TOOL_CLASS = "D";
 const DEFAULT_HEALING_PROGRESS = 100;
 const DEFAULT_HEALING_SKILL = "doctor";
 const HEALING_TOOL_CLASSES = new Set(["D", "C", "B", "A", "S"]);
+const DEFAULT_TRAUMA_THRESHOLDS = [60, 0];
 
 export function createDefaultTraumaSettings() {
   return { groups: {} };
@@ -106,12 +106,14 @@ function mergeTraumaGroupSources(sources = []) {
 export function normalizeTraumaGroup(value = {}, limbSet = { limbs: [] }, damageTypes = []) {
   const sourceLimbs = value && typeof value === "object" ? value.limbs ?? {} : {};
   const legacyStages = Array.isArray(value?.stages) ? value.stages : [];
+  const thresholds = normalizeTraumaThresholds(value, sourceLimbs, legacyStages);
   return {
     races: Array.isArray(value?.races) ? value.races : [],
+    thresholds,
     limbs: Object.fromEntries(
       (limbSet?.limbs ?? []).map(limb => [
         limb.key,
-        normalizeTraumaLimb(sourceLimbs?.[limb.key], limb, damageTypes, legacyStages)
+        normalizeTraumaLimb(sourceLimbs?.[limb.key], limb, damageTypes, legacyStages, thresholds)
       ])
     )
   };
@@ -131,8 +133,8 @@ export function createDefaultTraumaStage(index = 0, damageTypes = []) {
 
 export function createDefaultTraumaProfile(damageType = {}, thresholdPercent = 0) {
   return {
-    name: `Травма ${damageType.label ?? damageType.key ?? ""}`.trim(),
-    img: DEFAULT_TRAUMA_ICON,
+    name: "",
+    img: "",
     healingDifficulty: DEFAULT_HEALING_DIFFICULTY,
     healingToolClass: DEFAULT_HEALING_TOOL_CLASS,
     healingProgress: DEFAULT_HEALING_PROGRESS,
@@ -142,7 +144,7 @@ export function createDefaultTraumaProfile(damageType = {}, thresholdPercent = 0
   };
 }
 
-function normalizeTraumaLimb(value = {}, limb = {}, damageTypes = [], legacyStages = []) {
+function normalizeTraumaLimb(value = {}, limb = {}, damageTypes = [], legacyStages = [], thresholds = []) {
   const stagesSource = Array.isArray(value?.stages) && value.stages.length
     ? value.stages
     : legacyStages;
@@ -150,11 +152,11 @@ function normalizeTraumaLimb(value = {}, limb = {}, damageTypes = [], legacyStag
   return {
     label: String(limb?.label ?? limb?.name ?? limb?.key ?? ""),
     stateMax: String(limb?.stateMax ?? "0").trim() || "0",
-    stages: normalizeTraumaStages(stagesSource, damageTypes)
+    stages: normalizeTraumaStages(stagesSource, damageTypes, thresholds)
   };
 }
 
-function normalizeTraumaStages(stages = [], damageTypes = []) {
+function normalizeTraumaStages(stages = [], damageTypes = [], thresholds = []) {
   const merged = new Map();
   for (const [index, sourceStage] of stages.entries()) {
     const stage = normalizeTraumaStage(sourceStage, index, damageTypes);
@@ -171,7 +173,21 @@ function normalizeTraumaStages(stages = [], damageTypes = []) {
     }
   }
 
-  return Array.from(merged.values())
+  const sourceStages = Array.from(merged.values());
+  const normalizedThresholds = Array.isArray(thresholds) ? thresholds : [];
+  if (!normalizedThresholds.length) return [];
+
+  return normalizedThresholds
+    .map((threshold, index) => {
+      const source = sourceStages.find(stage => stage.id === threshold.id)
+        ?? sourceStages.find(stage => stage.thresholdPercent === threshold.thresholdPercent)
+        ?? {};
+      return normalizeTraumaStage({
+        ...source,
+        id: threshold.id,
+        thresholdPercent: threshold.thresholdPercent
+      }, index, damageTypes);
+    })
     .sort((left, right) => right.thresholdPercent - left.thresholdPercent);
 }
 
@@ -203,6 +219,44 @@ function normalizeTraumaProfile(value = {}, damageType = {}, thresholdPercent = 
     effects: normalizeTraumaEffects(hasContent ? value.effects : []),
     thresholdPercent
   };
+}
+
+function normalizeTraumaThresholds(value = {}, sourceLimbs = {}, legacyStages = []) {
+  if (value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "thresholds")) {
+    return normalizeTraumaThresholdList(value.thresholds);
+  }
+
+  const sourceStages = [
+    ...(Array.isArray(legacyStages) ? legacyStages : []),
+    ...Object.values(sourceLimbs ?? {}).flatMap(limb => Array.isArray(limb?.stages) ? limb.stages : [])
+  ];
+  const thresholds = normalizeTraumaThresholdList(sourceStages);
+  return thresholds.length ? thresholds : createDefaultTraumaThresholds();
+}
+
+function createDefaultTraumaThresholds() {
+  return DEFAULT_TRAUMA_THRESHOLDS.map(percent => ({
+    id: `threshold-${percent}`,
+    thresholdPercent: percent
+  }));
+}
+
+function normalizeTraumaThresholdList(value = []) {
+  const entries = Array.isArray(value) ? value : Object.values(value ?? {});
+  const merged = new Map();
+
+  for (const [index, entry] of entries.entries()) {
+    const thresholdPercent = Math.max(0, Math.min(100, toInteger(entry?.thresholdPercent ?? entry?.percent ?? entry?.threshold ?? (index === 0 ? 60 : 0))));
+    const key = String(thresholdPercent);
+    if (merged.has(key)) continue;
+    merged.set(key, {
+      id: String(entry?.id || `threshold-${thresholdPercent}`),
+      thresholdPercent
+    });
+  }
+
+  return Array.from(merged.values())
+    .sort((left, right) => right.thresholdPercent - left.thresholdPercent);
 }
 
 function isConfiguredTraumaProfile(profile) {

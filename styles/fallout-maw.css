@@ -2034,6 +2034,25 @@
   margin: 0;
 }
 
+.fallout-maw-trauma-threshold-list {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.fallout-maw-trauma-threshold-row {
+  align-items: end;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.fallout-maw-trauma-profile .fallout-maw-panel-header h4 {
+  border: 0;
+  font-size: 1rem;
+  margin: 0;
+}
+
 .fallout-maw-limb-trauma-layout {
   display: grid;
   gap: 0.9rem;

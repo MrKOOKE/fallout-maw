@@ -1,6 +1,27 @@
 <div class="fallout-maw-config-body fallout-maw-trauma-config-body">
   {{#if group}}
   <section class="fallout-maw-trauma-group" data-trauma-group="{{group.id}}">
+    <section class="fallout-maw-panel fallout-maw-trauma-thresholds">
+      <header class="fallout-maw-panel-header">
+        <h2>Пороги травм</h2>
+        <button type="button" data-action="addThreshold"><i class="fa-solid fa-plus"></i> Добавить порог</button>
+      </header>
+
+      <div class="fallout-maw-trauma-threshold-list">
+        {{#each group.thresholds}}
+        <div class="fallout-maw-trauma-threshold-row" data-trauma-threshold-row data-trauma-stage="{{id}}">
+          <label class="fallout-maw-inline-stat">
+            <span>Порог, %</span>
+            <input type="number" data-trauma-threshold-percent value="{{thresholdPercent}}" min="0" max="100" step="1">
+          </label>
+          <button type="button" data-action="deleteThreshold" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        </div>
+        {{else}}
+        <p class="fallout-maw-empty-list">Пороги не настроены.</p>
+        {{/each}}
+      </div>
+    </section>
+
     {{#each group.limbs}}
     <section class="fallout-maw-panel fallout-maw-trauma-limb fallout-maw-collapsible-panel {{collapse.cssClass}}" data-trauma-limb="{{key}}" data-trauma-limb-state-max="{{stateMax}}" data-trauma-collapse-section="limb:{{key}}">
       <header class="fallout-maw-panel-header fallout-maw-collapsible-header">
@@ -18,18 +39,13 @@
         <section class="fallout-maw-panel fallout-maw-trauma-damage-type" data-trauma-damage-type="{{key}}">
           <header class="fallout-maw-panel-header">
             <h3>{{label}}</h3>
-            <button type="button" data-action="createStage"><i class="fa-solid fa-plus"></i> Добавить травму</button>
           </header>
 
           <div class="fallout-maw-trauma-profile-list">
             {{#each traumaProfiles}}
             <section class="fallout-maw-trauma-profile" data-trauma-stage="{{id}}" data-trauma-profile="{{damageTypeKey}}">
               <header class="fallout-maw-panel-header">
-                <label class="fallout-maw-inline-stat">
-                  <span>Порог, %</span>
-                  <input type="number" data-trauma-stage-threshold value="{{thresholdPercent}}" min="0" max="100" step="1">
-                </label>
-                <button type="button" data-action="deleteStage" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+                <h4>Порог {{thresholdPercent}}%</h4>
               </header>
 
               <div class="fallout-maw-list-grid two-columns">

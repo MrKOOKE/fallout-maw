@@ -109,8 +109,8 @@ export class TraumaGroupSettingsConfig extends FalloutMaWFormApplicationV2 {
       resizable: true
     },
     actions: {
-      createStage: this.#onCreateStage,
-      deleteStage: this.#onDeleteStage,
+      addThreshold: this.#onAddThreshold,
+      deleteThreshold: this.#onDeleteThreshold,
       browseTraumaImage: this.#onBrowseTraumaImage,
       addEffect: this.#onAddEffect,
       deleteEffect: this.#onDeleteEffect
@@ -131,13 +131,15 @@ export class TraumaGroupSettingsConfig extends FalloutMaWFormApplicationV2 {
   async _prepareContext(options) {
     const group = this.#getGroup();
     const skillSettings = getSkillSettings();
+    const groupConfig = group ? this.settings.groups?.[group.id] : null;
     return {
       ...(await super._prepareContext(options)),
       group: group ? {
         ...group,
         limbsLabel: group.limbs.map(limb => limb.label).join(", "),
+        thresholds: prepareTraumaThresholds(groupConfig?.thresholds ?? []),
         limbs: group.limbs.map(limb => {
-          const config = this.settings.groups?.[group.id]?.limbs?.[limb.key] ?? createEmptyLimbConfig(limb);
+          const config = groupConfig?.limbs?.[limb.key] ?? createEmptyLimbConfig(limb);
           return {
             ...limb,
             collapse: this.#getCollapseState(`limb:${limb.key}`),
@@ -167,37 +169,38 @@ export class TraumaGroupSettingsConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
-  static #onCreateStage(event, target) {
+  static #onAddThreshold(event, target) {
     event.preventDefault();
     this.#syncCurrentGroupFromForm();
-    const ids = getLimbIds(target);
-    const limb = this.settings.groups?.[ids.groupId]?.limbs?.[ids.limbKey];
-    const damageType = this.damageTypes.find(entry => entry.key === ids.damageTypeKey);
-    if (!limb || !damageType) return undefined;
-    const thresholdPercent = limb.stages.length ? 0 : 60;
-    limb.stages.push({
+    const groupId = target.closest("[data-trauma-group]")?.dataset.traumaGroup ?? this.groupId;
+    const group = this.settings.groups?.[groupId];
+    if (!group) return undefined;
+
+    const thresholdPercent = getAvailableThresholdPercent(group.thresholds ?? []);
+    const threshold = {
       id: foundry.utils.randomID(),
-      thresholdPercent,
-      profiles: {
-        [damageType.key]: createDefaultTraumaProfile(damageType, thresholdPercent)
-      }
-    });
+      thresholdPercent
+    };
+    group.thresholds ??= [];
+    group.thresholds.push(threshold);
+    for (const limb of Object.values(group.limbs ?? {})) {
+      limb.stages ??= [];
+      limb.stages.push(createStageForThreshold(threshold, this.damageTypes));
+    }
     return this.forceRender();
   }
 
-  static #onDeleteStage(event, target) {
+  static #onDeleteThreshold(event, target) {
     event.preventDefault();
     this.#syncCurrentGroupFromForm();
-    const ids = getLimbIds(target);
-    const limb = this.settings.groups?.[ids.groupId]?.limbs?.[ids.limbKey];
-    if (!limb || !ids.stageId) return undefined;
-    const stage = limb.stages.find(entry => entry.id === ids.stageId);
-    if (!stage) return undefined;
-    delete stage.profiles?.[ids.damageTypeKey];
-    limb.stages = limb.stages.filter(entry => (
-      entry.id !== ids.stageId
-      || Object.values(entry.profiles ?? {}).some(profile => isConfiguredTraumaProfile(profile))
-    ));
+    const groupId = target.closest("[data-trauma-group]")?.dataset.traumaGroup ?? this.groupId;
+    const thresholdId = target.closest("[data-trauma-threshold-row]")?.dataset.traumaStage ?? "";
+    const group = this.settings.groups?.[groupId];
+    if (!group || !thresholdId) return undefined;
+    group.thresholds = (group.thresholds ?? []).filter(threshold => threshold.id !== thresholdId);
+    for (const limb of Object.values(group.limbs ?? {})) {
+      limb.stages = (limb.stages ?? []).filter(stage => stage.id !== thresholdId);
+    }
     return this.forceRender();
   }
 
@@ -253,42 +256,47 @@ export class TraumaGroupSettingsConfig extends FalloutMaWFormApplicationV2 {
   #readGroupFromForm() {
     const groupElement = this.form?.querySelector("[data-trauma-group]");
     const groupId = groupElement?.dataset.traumaGroup ?? this.groupId;
+    const thresholds = readThresholdsFromForm(groupElement);
     const limbs = {};
     for (const limbElement of groupElement?.querySelectorAll(".fallout-maw-trauma-limb") ?? []) {
       const limbKey = limbElement.dataset.traumaLimb ?? "";
       if (!limbKey) continue;
+      const stages = thresholds.map(threshold => ({
+        id: threshold.id,
+        thresholdPercent: threshold.thresholdPercent,
+        profiles: {}
+      }));
+      const stagesById = new Map(stages.map(stage => [stage.id, stage]));
+
+      for (const stageElement of limbElement.querySelectorAll(".fallout-maw-trauma-profile")) {
+        const stageId = stageElement.dataset.traumaStage || "";
+        const damageTypeKey = stageElement.dataset.traumaProfile ?? "";
+        const stage = stagesById.get(stageId);
+        if (!stage || !damageTypeKey) continue;
+        stage.profiles[damageTypeKey] = {
+          name: stageElement.querySelector("[data-trauma-profile-name]")?.value ?? "",
+          img: stageElement.querySelector("[data-trauma-profile-img]")?.value ?? "",
+          healingDifficulty: stageElement.querySelector("[data-trauma-profile-healing-difficulty]")?.value ?? "60",
+          healingToolClass: stageElement.querySelector("[data-trauma-profile-healing-tool-class]")?.value ?? "D",
+          healingProgress: stageElement.querySelector("[data-trauma-profile-healing-progress]")?.value ?? "100",
+          healingSkillKey: stageElement.querySelector("[data-trauma-profile-healing-skill]")?.value ?? "doctor",
+          effects: Array.from(stageElement.querySelectorAll("[data-trauma-effect]")).map(effectElement => ({
+            key: effectElement.querySelector("[data-trauma-effect-key]")?.value ?? "",
+            type: effectElement.querySelector("[data-trauma-effect-type]")?.value ?? "add",
+            value: effectElement.querySelector("[data-trauma-effect-value]")?.value ?? "0",
+            priority: effectElement.querySelector("[data-trauma-effect-priority]")?.value ?? "",
+            phase: "initial"
+          }))
+        };
+      }
+
       limbs[limbKey] = {
         label: limbElement.querySelector("[data-trauma-limb-label]")?.textContent?.trim() ?? "",
         stateMax: String(limbElement.dataset.traumaLimbStateMax ?? "0").trim() || "0",
-        stages: Array.from(limbElement.querySelectorAll(".fallout-maw-trauma-profile")).map(stageElement => {
-          const stageId = stageElement.dataset.traumaStage || foundry.utils.randomID();
-          const thresholdPercent = Number(stageElement.querySelector("[data-trauma-stage-threshold]")?.value) || 0;
-          const damageTypeKey = stageElement.dataset.traumaProfile ?? "";
-          return {
-            id: stageId,
-            thresholdPercent,
-            profiles: {
-              [damageTypeKey]: {
-                name: stageElement.querySelector("[data-trauma-profile-name]")?.value ?? "",
-                img: stageElement.querySelector("[data-trauma-profile-img]")?.value ?? "",
-                healingDifficulty: stageElement.querySelector("[data-trauma-profile-healing-difficulty]")?.value ?? "60",
-                healingToolClass: stageElement.querySelector("[data-trauma-profile-healing-tool-class]")?.value ?? "D",
-                healingProgress: stageElement.querySelector("[data-trauma-profile-healing-progress]")?.value ?? "100",
-                healingSkillKey: stageElement.querySelector("[data-trauma-profile-healing-skill]")?.value ?? "doctor",
-                effects: Array.from(stageElement.querySelectorAll("[data-trauma-effect]")).map(effectElement => ({
-                  key: effectElement.querySelector("[data-trauma-effect-key]")?.value ?? "",
-                  type: effectElement.querySelector("[data-trauma-effect-type]")?.value ?? "add",
-                  value: effectElement.querySelector("[data-trauma-effect-value]")?.value ?? "0",
-                  priority: effectElement.querySelector("[data-trauma-effect-priority]")?.value ?? "",
-                  phase: "initial"
-                }))
-              }
-            }
-          };
-        }).filter(stage => Object.keys(stage.profiles).some(Boolean))
+        stages
       };
     }
-    return { id: groupId, config: { limbs } };
+    return { id: groupId, config: { thresholds, limbs } };
   }
 
   #getGroup() {
@@ -336,6 +344,46 @@ function getLimbIds(target) {
   };
 }
 
+function readThresholdsFromForm(groupElement) {
+  return Array.from(groupElement?.querySelectorAll("[data-trauma-threshold-row]") ?? [])
+    .map((row, index) => ({
+      id: String(row.dataset.traumaStage || `threshold-${index + 1}`),
+      thresholdPercent: Math.max(0, Math.min(100, Number(row.querySelector("[data-trauma-threshold-percent]")?.value) || 0))
+    }))
+    .sort((left, right) => right.thresholdPercent - left.thresholdPercent);
+}
+
+function prepareTraumaThresholds(thresholds = []) {
+  return (thresholds ?? [])
+    .map(threshold => ({
+      id: threshold.id,
+      thresholdPercent: threshold.thresholdPercent
+    }))
+    .sort((left, right) => right.thresholdPercent - left.thresholdPercent);
+}
+
+function createStageForThreshold(threshold = {}, damageTypes = []) {
+  return {
+    id: threshold.id || foundry.utils.randomID(),
+    thresholdPercent: Math.max(0, Math.min(100, Number(threshold.thresholdPercent) || 0)),
+    profiles: Object.fromEntries(damageTypes.map(damageType => [
+      damageType.key,
+      createDefaultTraumaProfile(damageType, threshold.thresholdPercent)
+    ]))
+  };
+}
+
+function getAvailableThresholdPercent(thresholds = []) {
+  const used = new Set((thresholds ?? []).map(threshold => Number(threshold.thresholdPercent) || 0));
+  for (const candidate of [50, 40, 30, 20, 10, 75, 25, 100]) {
+    if (!used.has(candidate)) return candidate;
+  }
+  for (let candidate = 99; candidate >= 0; candidate -= 1) {
+    if (!used.has(candidate)) return candidate;
+  }
+  return 0;
+}
+
 function createEmptyLimbConfig(limb) {
   return {
     label: limb.label,
@@ -358,8 +406,10 @@ function prepareEffectRow(effect, index) {
 function prepareDamageTypeTraumaProfiles(stages = [], damageType = {}, skillSettings = []) {
   return stages
     .map(stage => {
-      const profile = stage.profiles?.[damageType.key];
-      if (!isConfiguredTraumaProfile(profile)) return null;
+      const profile = stage.profiles?.[damageType.key] ?? createDefaultTraumaProfile(damageType, stage.thresholdPercent);
+      const effects = profile?.effects?.length
+        ? profile.effects
+        : [{ key: "", type: "add", value: "0", phase: "initial", priority: null }];
       return {
         ...createDefaultTraumaProfile(damageType, stage.thresholdPercent),
         ...profile,
@@ -369,20 +419,10 @@ function prepareDamageTypeTraumaProfiles(stages = [], damageType = {}, skillSett
         damageTypeLabel: damageType.label,
         healingToolClassChoices: buildHealingToolClassChoices(profile?.healingToolClass ?? "D"),
         healingSkillChoices: buildHealingSkillChoices(profile?.healingSkillKey ?? "doctor", skillSettings),
-        effects: (profile?.effects ?? []).map((effect, index) => prepareEffectRow(effect, index))
+        effects: effects.map((effect, index) => prepareEffectRow(effect, index))
       };
     })
-    .filter(Boolean)
     .sort((left, right) => right.thresholdPercent - left.thresholdPercent);
-}
-
-function isConfiguredTraumaProfile(profile) {
-  if (!profile) return false;
-  return Boolean(
-    String(profile.name ?? "").trim()
-    || String(profile.img ?? "").trim()
-    || (profile.effects ?? []).length
-  );
 }
 
 function buildHealingToolClassChoices(selected = "D") {
@@ -404,7 +444,7 @@ function buildHealingSkillChoices(selected = "doctor", skills = []) {
 }
 
 function countTraumaStages(group = {}) {
-  return Object.values(group?.limbs ?? {}).reduce((total, limb) => total + (limb?.stages?.length ?? 0), 0);
+  return group?.thresholds?.length ?? 0;
 }
 
 function buildEffectKeyTokens() {
