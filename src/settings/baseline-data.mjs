@@ -23633,6 +23633,7 @@ export const SETTINGS_BASELINE = Object.freeze({
       "value": {
         "damageReductionIcon": "systems/fallout-maw/assets/HUD/ac-badge__-no-bg-preview_carve.photos.png",
         "damageBlockedIcon": "systems/fallout-maw/assets/HUD/ac-gold-shield-badge-Picsart-BackgroundRemover.png",
+        "levelUpIcon": "icons/svg/upgrade.svg",
         "mainActions": {
           "weapon": "icons/svg/combat.svg",
           "items": "icons/svg/item-bag.svg",

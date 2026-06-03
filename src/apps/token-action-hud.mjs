@@ -460,7 +460,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const skills = prepareSkillButtons(actor, hudIcons);
     const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg", { activeOnly: true });
     const abilities = prepareOwnedAbilityButtons(actor, "icons/svg/aura.svg");
-    const systemActions = prepareSystemActionButtons();
+    const systemActions = prepareSystemActionButtons(hudIcons);
     const activeActions = prepareActiveActionButtons(this.#token, actor, weaponSet, selectedWeapon, selectedWeaponDisabled, hudIcons);
     const actionGroups = prepareActionGroups(activeActions, systemActions);
     const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, actionGroups, hudIcons);
@@ -2002,11 +2002,11 @@ function isActiveAbility(item) {
   return Boolean(system.active || system.activation?.enabled || system.use?.enabled);
 }
 
-function prepareSystemActionButtons() {
+function prepareSystemActionButtons(hudIcons = {}) {
   const advancementAction = {
     key: "advancement",
     label: "Повышение уровня",
-    img: normalizeImagePath("icons/svg/upgrade.svg", "icons/svg/aura.svg")
+    img: normalizeImagePath(hudIcons.levelUpIcon, "icons/svg/upgrade.svg")
   };
   const configuredActions = getSystemActionSettings().map(action => ({
     ...action,

@@ -1134,7 +1134,17 @@
 }
 
 .fallout-maw-token-action-hud-icon-table .fallout-maw-settings-row {
-  grid-template-columns: minmax(11rem, 0.8fr) minmax(18rem, 1.6fr) 2.5rem;
+  grid-template-columns: minmax(11rem, 0.8fr) 2.25rem minmax(18rem, 1.6fr) 2.5rem;
+}
+
+.fallout-maw-token-action-hud-icon-preview {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--fallout-maw-border);
+  border-radius: 4px;
+  height: 2rem;
+  object-fit: contain;
+  padding: 0.15rem;
+  width: 2rem;
 }
 
 .fallout-maw-inline-controls select {

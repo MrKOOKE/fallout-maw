@@ -6,6 +6,7 @@ import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 const DAMAGE_ICON_ROWS = Object.freeze([
   { section: "root", key: "damageReductionIcon", label: "Иконка снижения урона" },
   { section: "root", key: "damageBlockedIcon", label: "Иконка полного блокирования урона" },
+  { section: "root", key: "levelUpIcon", label: "Иконка повышения уровня" },
   { section: "root", key: "emptyWeaponSlotIcon", label: "Иконка пустого слота оружия" }
 ]);
 
@@ -82,6 +83,13 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
     };
   }
 
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    for (const input of this.element?.querySelectorAll("[data-hud-icon-input]") ?? []) {
+      input.addEventListener("input", event => this.#previewIconInput(event.currentTarget));
+    }
+  }
+
   async _processFormData(_event, _form, _formData) {
     this.icons = this.#readIconsFromForm();
     await setTokenActionHudIcons(this.icons);
@@ -147,5 +155,12 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
     }
     target[section] ??= {};
     target[section][key] = value;
+  }
+
+  #previewIconInput(input) {
+    const row = input?.closest("[data-hud-icon-section][data-hud-icon-key]");
+    const preview = row?.querySelector("[data-hud-icon-preview]");
+    if (!preview) return;
+    preview.src = input.value?.trim() || "icons/svg/hazard.svg";
   }
 }
