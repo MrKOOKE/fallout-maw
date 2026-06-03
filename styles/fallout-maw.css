@@ -9576,6 +9576,32 @@ label.fallout-maw-mitigation-cell {
   grid-template-columns: 2rem minmax(180px, 1fr) 2.5rem;
 }
 
+.level-settings-config .fallout-maw-panel-header {
+  align-items: start;
+  gap: 0.75rem;
+}
+
+.level-settings-config .fallout-maw-panel-header h2 {
+  line-height: 1.1;
+  margin-top: 0.25rem;
+}
+
+.level-settings-config .fallout-maw-button-row {
+  justify-content: end;
+}
+
+.level-settings .fallout-maw-settings-row {
+  grid-template-columns: 2rem minmax(70px, 0.45fr) minmax(150px, 1fr) 2.5rem;
+}
+
+.level-settings .fallout-maw-settings-row > input {
+  width: 100%;
+}
+
+.level-settings .fallout-maw-grid-header > span {
+  white-space: nowrap;
+}
+
 .fallout-maw-weapon-set-config {
   border: 1px solid rgba(120, 120, 120, 0.16);
   border-radius: 5px;
