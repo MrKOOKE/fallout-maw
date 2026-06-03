@@ -76,7 +76,7 @@ export async function startGrappleReposition(token) {
     return undefined;
   }
 
-  const destination = await chooseTokenDestination(candidates);
+  const destination = await chooseTokenDestination(candidates, targetDocument);
   if (!destination) return undefined;
 
   const cost = getGrappleDragCost(grapplerDocument, targetDocument, destination);
@@ -598,8 +598,10 @@ async function spendMovementThenAction(actor, amount = 0) {
 }
 
 function getGrappleDragCost(grapplerDocument, targetDocument, destination) {
-  const gridSize = Math.max(1, Number(canvas.grid?.size) || 100);
-  const distanceCells = Math.max(1, Math.ceil(Math.hypot(destination.x - targetDocument.x, destination.y - targetDocument.y) / gridSize));
+  const step = getTokenGridStep(targetDocument);
+  const dx = Math.abs(Number(destination.x) - Number(targetDocument.x));
+  const dy = Math.abs(Number(destination.y) - Number(targetDocument.y));
+  const distanceCells = Math.max(1, Math.ceil(Math.hypot(dx / step.x, dy / step.y)));
   return Math.ceil(distanceCells * getGrappleDragSizeMultiplier(grapplerDocument, targetDocument));
 }
 
@@ -645,49 +647,158 @@ function isSuccessfulCheck(outcome) {
 }
 
 function getAdjacentTokenPositions(grapplerDocument, targetDocument) {
-  const gridSize = Math.max(1, Number(canvas.grid?.size) || 100);
+  const step = getTokenGridStep(targetDocument);
   const targetSize = getTokenPixelSize(targetDocument);
-  const grapplerSize = getTokenPixelSize(grapplerDocument);
-  const center = getTokenTopLeftFromCenter(grapplerDocument, getTokenCenter(grapplerDocument));
-  const offsets = [
-    { x: -targetSize.width, y: 0 },
-    { x: grapplerSize.width, y: 0 },
-    { x: 0, y: -targetSize.height },
-    { x: 0, y: grapplerSize.height },
-    { x: -targetSize.width, y: -targetSize.height },
-    { x: grapplerSize.width, y: -targetSize.height },
-    { x: -targetSize.width, y: grapplerSize.height },
-    { x: grapplerSize.width, y: grapplerSize.height }
-  ];
-  return offsets.map(offset => snapTokenPosition(targetDocument, {
-    x: center.x + offset.x,
-    y: center.y + offset.y
-  })).filter(position => Math.hypot(position.x - targetDocument.x, position.y - targetDocument.y) > gridSize * 0.25);
+  const grapplerRect = getTokenRect(grapplerDocument);
+  const minX = grapplerRect.x - targetSize.width;
+  const maxX = grapplerRect.x + grapplerRect.width;
+  const minY = grapplerRect.y - targetSize.height;
+  const maxY = grapplerRect.y + grapplerRect.height;
+  const positions = [];
+
+  for (const x of getSteppedRange(minX, maxX, step.x)) {
+    positions.push({ x, y: minY }, { x, y: maxY });
+  }
+  for (const y of getSteppedRange(minY, maxY, step.y)) {
+    positions.push({ x: minX, y }, { x: maxX, y });
+  }
+
+  const seen = new Set();
+  const candidates = [];
+  for (const position of positions) {
+    const snapped = snapTokenPosition(targetDocument, position);
+    const key = getPositionKey(snapped);
+    if (seen.has(key) || isSameTokenPosition(snapped, targetDocument, Math.min(step.x, step.y) * 0.25)) continue;
+    seen.add(key);
+
+    const rect = getTokenRect(targetDocument, snapped);
+    if (rectsOverlap(rect, grapplerRect)) continue;
+    if (!areRectsAdjacent(grapplerRect, rect)) continue;
+    candidates.push(snapped);
+  }
+
+  const grapplerCenter = getTokenCenter(grapplerDocument);
+  return candidates.sort((left, right) => {
+    const leftCenter = getTokenPositionCenter(left, targetDocument);
+    const rightCenter = getTokenPositionCenter(right, targetDocument);
+    const leftAngle = Math.atan2(leftCenter.y - grapplerCenter.y, leftCenter.x - grapplerCenter.x);
+    const rightAngle = Math.atan2(rightCenter.y - grapplerCenter.y, rightCenter.x - grapplerCenter.x);
+    if (leftAngle !== rightAngle) return leftAngle - rightAngle;
+    return Math.hypot(leftCenter.x - grapplerCenter.x, leftCenter.y - grapplerCenter.y)
+      - Math.hypot(rightCenter.x - grapplerCenter.x, rightCenter.y - grapplerCenter.y);
+  });
 }
 
-function chooseTokenDestination(candidates = []) {
+function chooseTokenDestination(candidates = [], tokenDocument = null) {
   const layer = getDragPreviewLayer();
   const graphics = new PIXI.Graphics();
   graphics.name = GRAPPLE_DRAG_PREVIEW_NAME;
-  for (const candidate of candidates) {
-    const center = getTokenPositionCenter(candidate);
-    graphics.lineStyle(3, 0x43c96b, 0.9);
-    graphics.beginFill(0x43c96b, 0.18);
-    graphics.drawCircle(center.x, center.y, Math.max(12, Number(canvas.grid?.size) * 0.2));
-    graphics.endFill();
-  }
+  if (tokenDocument) drawDestinationGridPreview(graphics, candidates, tokenDocument);
+  else drawDestinationPointPreview(graphics, candidates);
   layer.addChild(graphics);
   return chooseCanvasPoint({
     preview: graphics,
     resolvePoint: point => {
-      const destination = candidates
-        .map(candidate => ({ candidate, distance: Math.hypot(getTokenPositionCenter(candidate).x - point.x, getTokenPositionCenter(candidate).y - point.y) }))
-        .sort((left, right) => left.distance - right.distance)
-        .at(0);
-      if (!destination || destination.distance > Math.max(24, Number(canvas.grid?.size) * 0.5)) return undefined;
+      if (tokenDocument) {
+        const byRect = getNearestTokenDestination(candidates.filter(candidate => isPointInRect(point, getTokenRect(tokenDocument, candidate))), point, tokenDocument);
+        if (byRect) return byRect;
+      }
+      const destination = getNearestTokenDestination(candidates, point, tokenDocument, { includeDistance: true });
+      const step = getTokenGridStep(tokenDocument);
+      if (!destination || destination.distance > Math.max(24, Math.min(step.x, step.y) * 0.5)) return undefined;
       return destination.candidate;
     }
   });
+}
+
+function getNearestTokenDestination(candidates = [], point, tokenDocument = null, { includeDistance = false } = {}) {
+  const destination = candidates
+    .map(candidate => {
+      const center = getTokenPositionCenter(candidate, tokenDocument);
+      return { candidate, distance: Math.hypot(center.x - point.x, center.y - point.y) };
+    })
+    .sort((left, right) => left.distance - right.distance)
+    .at(0);
+  if (!destination) return null;
+  return includeDistance ? destination : destination.candidate;
+}
+
+function drawDestinationPointPreview(graphics, candidates = []) {
+  const step = getTokenGridStep();
+  for (const candidate of candidates) {
+    const center = getTokenPositionCenter(candidate);
+    graphics.lineStyle(3, 0x43c96b, 0.9);
+    graphics.beginFill(0x43c96b, 0.18);
+    graphics.drawCircle(center.x, center.y, Math.max(12, Math.min(step.x, step.y) * 0.2));
+    graphics.endFill();
+  }
+}
+
+function drawDestinationGridPreview(graphics, candidates = [], tokenDocument) {
+  const cells = getDestinationPreviewCells(candidates, tokenDocument);
+  const step = getTokenGridStep(tokenDocument);
+  const pointRadius = Math.max(8, Math.min(step.x, step.y) * 0.12);
+
+  graphics.lineStyle(0);
+  graphics.beginFill(0x43c96b, 0.12);
+  for (const cell of cells.values()) graphics.drawRect(cell.x, cell.y, cell.width, cell.height);
+  graphics.endFill();
+
+  graphics.lineStyle(1, 0x43c96b, 0.35);
+  for (const cell of cells.values()) {
+    graphics.moveTo(cell.x, cell.y);
+    graphics.lineTo(cell.x + cell.width, cell.y);
+    graphics.moveTo(cell.x, cell.y);
+    graphics.lineTo(cell.x, cell.y + cell.height);
+  }
+
+  graphics.lineStyle(4, 0x43c96b, 0.95);
+  for (const cell of cells.values()) {
+    if (!cells.has(getCellKey(cell.x, cell.y - step.y))) {
+      graphics.moveTo(cell.x, cell.y);
+      graphics.lineTo(cell.x + cell.width, cell.y);
+    }
+    if (!cells.has(getCellKey(cell.x + step.x, cell.y))) {
+      graphics.moveTo(cell.x + cell.width, cell.y);
+      graphics.lineTo(cell.x + cell.width, cell.y + cell.height);
+    }
+    if (!cells.has(getCellKey(cell.x, cell.y + step.y))) {
+      graphics.moveTo(cell.x + cell.width, cell.y + cell.height);
+      graphics.lineTo(cell.x, cell.y + cell.height);
+    }
+    if (!cells.has(getCellKey(cell.x - step.x, cell.y))) {
+      graphics.moveTo(cell.x, cell.y + cell.height);
+      graphics.lineTo(cell.x, cell.y);
+    }
+  }
+
+  graphics.lineStyle(4, 0x43c96b, 0.9);
+  graphics.beginFill(0x43c96b, 0.22);
+  for (const candidate of candidates) {
+    const center = getTokenPositionCenter(candidate, tokenDocument);
+    graphics.drawCircle(center.x, center.y, pointRadius);
+  }
+  graphics.endFill();
+}
+
+function getDestinationPreviewCells(candidates = [], tokenDocument) {
+  const step = getTokenGridStep(tokenDocument);
+  const cells = new Map();
+  for (const candidate of candidates) {
+    const rect = getTokenRect(tokenDocument, candidate);
+    for (const x of getCoveredCellStarts(rect.x, rect.width, step.x)) {
+      for (const y of getCoveredCellStarts(rect.y, rect.height, step.y)) {
+        const cell = {
+          x,
+          y,
+          width: Math.min(step.x, rect.x + rect.width - x),
+          height: Math.min(step.y, rect.y + rect.height - y)
+        };
+        cells.set(getCellKey(cell.x, cell.y), cell);
+      }
+    }
+  }
+  return cells;
 }
 
 function chooseGrappleTarget(candidates = [], { restoreControlledToken = null } = {}) {
@@ -840,9 +951,13 @@ function isDestinationOccupied(tokenDocument, destination, { ignoreIds = [] } = 
 }
 
 function areTokensAdjacent(left, right) {
-  const gap = getRectGap(getTokenRect(left), getTokenRect(right));
-  const gridSize = Math.max(1, Number(canvas.grid?.size) || 100);
-  return gap <= gridSize * 0.25;
+  return areRectsAdjacent(getTokenRect(left), getTokenRect(right));
+}
+
+function areRectsAdjacent(left, right) {
+  const gap = getRectGap(left, right);
+  const step = getTokenGridStep();
+  return gap <= Math.min(step.x, step.y) * 0.25;
 }
 
 function getRectGap(left, right) {
@@ -877,10 +992,11 @@ function getTokenRect(tokenDocument, position = null) {
 }
 
 function getTokenPixelSize(tokenDocument) {
-  const gridSize = Math.max(1, Number(canvas.grid?.size) || 100);
+  const fallback = getTokenGridSize(tokenDocument);
+  const size = getTokenDocumentSize(tokenDocument);
   return {
-    width: Math.max(gridSize, Number(tokenDocument?.width ?? 1) * gridSize),
-    height: Math.max(gridSize, Number(tokenDocument?.height ?? 1) * gridSize)
+    width: Math.max(fallback.x * 0.5, Number(size?.width) || Number(tokenDocument?.width ?? 1) * fallback.x || fallback.x),
+    height: Math.max(fallback.y * 0.5, Number(size?.height) || Number(tokenDocument?.height ?? 1) * fallback.y || fallback.y)
   };
 }
 
@@ -889,6 +1005,8 @@ function getTokenSizeRank(tokenDocument) {
 }
 
 function getTokenCenter(tokenDocument) {
+  const center = getTokenDocumentCenter(tokenDocument);
+  if (center) return center;
   return getTokenPositionCenter({ x: tokenDocument.x, y: tokenDocument.y }, tokenDocument);
 }
 
@@ -900,17 +1018,85 @@ function getTokenPositionCenter(position, tokenDocument = null) {
   };
 }
 
-function getTokenTopLeftFromCenter(tokenDocument, center) {
-  const size = getTokenPixelSize(tokenDocument);
-  return { x: center.x - size.width / 2, y: center.y - size.height / 2 };
-}
-
 function snapTokenPosition(tokenDocument, position) {
   const snapped = tokenDocument?.getSnappedPosition?.(position) ?? canvas.grid?.getSnappedPosition?.(position.x, position.y) ?? position;
   return {
     x: Number(snapped.x ?? position.x) || 0,
     y: Number(snapped.y ?? position.y) || 0
   };
+}
+
+function getTokenDocumentSize(tokenDocument) {
+  try {
+    return tokenDocument?.getSize?.() ?? null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function getTokenDocumentCenter(tokenDocument) {
+  try {
+    const center = tokenDocument?.getCenterPoint?.();
+    if (!center) return null;
+    return {
+      x: Number(center.x) || 0,
+      y: Number(center.y) || 0
+    };
+  } catch (_error) {
+    return null;
+  }
+}
+
+function getTokenGridStep(tokenDocument = null) {
+  const gridSize = getTokenGridSize(tokenDocument);
+  const grid = tokenDocument?.parent?.grid ?? tokenDocument?.scene?.grid ?? canvas.grid ?? canvas.scene?.grid;
+  if (!grid?.isSquare) return { x: gridSize.x / 2, y: gridSize.y / 2 };
+  const width = Math.max(0.5, Math.round(Number(tokenDocument?.width ?? 1) * 2) / 2);
+  const height = Math.max(0.5, Math.round(Number(tokenDocument?.height ?? 1) * 2) / 2);
+  return {
+    x: width < 1 || !Number.isInteger(width) ? gridSize.x / 4 : gridSize.x,
+    y: height < 1 || !Number.isInteger(height) ? gridSize.y / 4 : gridSize.y
+  };
+}
+
+function getTokenGridSize(tokenDocument = null) {
+  const grid = tokenDocument?.parent?.grid ?? tokenDocument?.scene?.grid ?? canvas.grid ?? canvas.scene?.grid;
+  const sizeX = Math.max(1, Number(grid?.sizeX ?? grid?.size) || 100);
+  const sizeY = Math.max(1, Number(grid?.sizeY ?? grid?.size) || sizeX);
+  return { x: sizeX, y: sizeY };
+}
+
+function getSteppedRange(start, end, step) {
+  const min = Math.min(Number(start) || 0, Number(end) || 0);
+  const max = Math.max(Number(start) || 0, Number(end) || 0);
+  const distance = Math.max(0, max - min);
+  const increment = Math.max(1, Number(step) || 1);
+  const count = Math.ceil(distance / increment);
+  const values = [];
+  for (let i = 0; i <= count; i += 1) values.push(Math.min(max, min + (i * increment)));
+  if (values.at(-1) !== max) values.push(max);
+  return values;
+}
+
+function getCoveredCellStarts(start, size, step) {
+  const origin = Number(start) || 0;
+  const increment = Math.max(1, Number(step) || 1);
+  const count = Math.max(1, Math.ceil((Math.max(0, Number(size) || 0) / increment) - 1e-6));
+  const values = [];
+  for (let i = 0; i < count; i += 1) values.push(origin + (i * increment));
+  return values;
+}
+
+function getPositionKey(position) {
+  return `${Math.round(Number(position?.x) || 0)},${Math.round(Number(position?.y) || 0)}`;
+}
+
+function getCellKey(x, y) {
+  return `${Math.round(Number(x) || 0)},${Math.round(Number(y) || 0)}`;
+}
+
+function isSameTokenPosition(position, tokenDocument, tolerance = 0.25) {
+  return Math.hypot((Number(position?.x) || 0) - (Number(tokenDocument?.x) || 0), (Number(position?.y) || 0) - (Number(tokenDocument?.y) || 0)) <= tolerance;
 }
 
 function getSceneToken(tokenDocument, tokenId = "") {
