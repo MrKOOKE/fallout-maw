@@ -3956,6 +3956,7 @@ function getModuleActionPointRows(actionPointCosts = {}) {
     ["volley", game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley")],
     ["meleeAttack", game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack")],
     ["aimedMeleeAttack", game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack")],
+    ["push", game.i18n.localize("FALLOUTMAW.Item.WeaponActionPush")],
     ["reload", game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload")]
   ]);
   return WEAPON_MODULE_ACTION_KEYS
@@ -4230,6 +4231,7 @@ function getWeaponActionLabels(data = {}, baseData = {}, { actor = null, baseMod
     ["volley", game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley")],
     ["meleeAttack", game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack")],
     ["aimedMeleeAttack", game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack")],
+    ["push", game.i18n.localize("FALLOUTMAW.Item.WeaponActionPush")],
     ["reload", game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload")]
   ];
   return definitions
@@ -4930,6 +4932,7 @@ function buildEffectPathLabelMap({
   map.set("system.costs.actions.volley", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley")}: стоимость`);
   map.set("system.costs.actions.meleeAttack", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack")}: стоимость`);
   map.set("system.costs.actions.aimedMeleeAttack", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack")}: стоимость`);
+  map.set("system.costs.actions.push", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionPush")}: стоимость`);
   map.set("system.costs.actions.reload", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload")}: стоимость`);
   const firstAidHealingLabel = game.i18n.localize("FALLOUTMAW.Item.FirstAidHealingPerTick");
   map.set("fallout-maw.healing", firstAidHealingLabel);

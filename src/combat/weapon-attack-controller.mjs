@@ -6,7 +6,7 @@ import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier } from
 import { createThrownItemTile } from "../canvas/thrown-items.mjs";
 import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
 import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageSourceFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction } from "../utils/item-functions.mjs";
-import { getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings } from "../settings/accessors.mjs";
+import { getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import { ACTION_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
@@ -15,6 +15,7 @@ import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
 import { getStealthAttackModifiers, revealActorFromStealth } from "../stealth/index.mjs";
 import { getWeaponActionBlockState } from "../abilities/runtime-state.mjs";
+import { requestPushKnockback } from "./active-actions.mjs";
 
 const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
 const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
@@ -29,8 +30,14 @@ const BURST_DISTRIBUTION_SAMPLE_MULTIPLIER = 12;
 const AIMED_TARGET_BLOCKER_BONUS_STEP = 20;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
+const DEFAULT_WEAPON_PUSH_MAX_RANGE_METERS = 1;
 const BASE_VOLLEY_DIFFICULTY = 60;
 const VOLLEY_ACTION_KEY = "volley";
+const PUSH_ACTION_KEY = "push";
+const SKILL_ALIASES = Object.freeze({
+  ath: "athletics",
+  prc: "resilience"
+});
 const ACTION_PENETRATION_KEY_PREFIX = "system.penetration.actions.";
 const PERIODIC_DAMAGE_REGION_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
 const DEFAULT_REGION_DAMAGE_INTERVAL_SECONDS = 6;
@@ -246,6 +253,7 @@ class WeaponAttackController {
     this.updatePointerFromClientEvent(event);
     if (this.targetedAction) return this.onAimedConfirm();
     if (!this.pointer) return;
+    if (this.actionKey === PUSH_ACTION_KEY) return this.performPushAttack();
     if (this.volleyAction) return this.performVolleyAttack();
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     const pelletCount = getWeaponPelletCount(this.weapon, this.weaponFunctionId);
@@ -376,6 +384,112 @@ class WeaponAttackController {
 
     this.processing = false;
     this.refresh(true);
+  }
+
+  async performPushAttack() {
+    if (this.processing || !this.geometry) return;
+    if (!hasRequiredWeaponResources(this.weapon, 1, this.weaponFunctionId)) return;
+    if (!hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
+
+    this.processing = true;
+    this.pendingCriticalFailureResourceCosts = [];
+    this.refresh(true);
+
+    const targets = getPotentialTargets(this.token, this.geometry);
+    if (!targets.length) {
+      ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Settings.HUD.NoPushTargets"));
+      this.processing = false;
+      this.refresh(true);
+      return;
+    }
+    const trajectories = buildAttackTrajectories(this.token, this.geometry, targets, Math.max(1, targets.length))
+      .map(trajectory => ({ ...trajectory, delayGroup: 0 }));
+    const forceBatchCheckMessage = targets.length > 1;
+    const checkBatch = createSkillCheckBatchCollector({
+      requester: "weaponPush",
+      title: this.weapon.name
+    });
+    let attempted = false;
+    const hitTargets = [];
+
+    this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
+    for (const target of targets) {
+      const hit = await this.resolvePushHit(target, { checkBatch });
+      attempted ||= Boolean(hit?.attempted);
+      if (!hit?.success) continue;
+      hitTargets.push(target);
+    }
+    await this.dodgeExposure.flush();
+    await checkBatch.publish({ forceBatch: forceBatchCheckMessage });
+
+    for (const target of hitTargets) {
+      const resisted = await this.resolvePushResistance(target);
+      if (!resisted) await requestPushKnockback({ attackerToken: this.token, targetToken: target, reason: this.weapon.name });
+    }
+
+    if (attempted) {
+      const spentQuantityItemData = getSpentQuantityItemData(this.weapon, 1, this.weaponFunctionId);
+      await spendWeaponResources(this.weapon, 1, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
+      await spendWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId);
+      await createSpentQuantityItemTile({
+        itemData: spentQuantityItemData,
+        point: getAttackLandingPoint(trajectories, this.pointer),
+        token: this.token,
+        sourceItemUuid: this.weapon.uuid
+      });
+    }
+    if (attempted) {
+      await playWeaponAttackAnimations({
+        weapon: this.weapon,
+        weaponFunctionId: this.weaponFunctionId,
+        weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
+        trajectories,
+        delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
+      });
+    }
+
+    this.processing = false;
+    this.refresh(true);
+  }
+
+  async resolvePushHit(target, { checkBatch = null } = {}) {
+    if (isDeadTarget(target)) return { attempted: false, success: false };
+    this.dodgeExposure.record(target.actor);
+    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
+    const outcome = await requestSkillCheck({
+      actor: this.token.actor,
+      skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
+      data: {
+        difficulty: getDodgeDifficulty(target.actor) + requirementDifficultyBonus,
+        situationalModifier: getWeaponPushAccuracyModifier(this.weapon, this.weaponFunctionId),
+        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId)
+      },
+      animate: false,
+      createMessage: !checkBatch,
+      prompt: false,
+      requester: "weaponPush"
+    });
+    checkBatch?.add(outcome);
+    this.recordCriticalFailureConsequences(outcome);
+    return {
+      attempted: true,
+      success: isSuccessfulAttack(outcome)
+    };
+  }
+
+  async resolvePushResistance(target) {
+    const outcome = await requestSkillCheck({
+      actor: target.actor,
+      skillKey: resolveSkillKey(target.actor, "prc"),
+      data: {
+        difficulty: 50 + getActorSkillValue(this.token.actor, "ath") + getWeaponPushDifficultyModifier(this.weapon, this.weaponFunctionId)
+      },
+      animate: false,
+      createMessage: true,
+      prompt: false,
+      requester: "weaponPushResistance"
+    });
+    return isSuccessfulAttack(outcome);
   }
 
   async performBurstAttack({ attackCount = 1, pelletCount = 1 } = {}) {
@@ -2349,7 +2463,7 @@ function getAttackGeometry(weapon, actionKey, attackerToken, origin, pointer, we
   if (!origin || !pointer) return null;
   if (isVolleyAttackAction(weapon, actionKey, weaponFunctionId)) return getVolleyAttackGeometry(weapon, attackerToken, origin, pointer, weaponFunctionId);
 
-  const maxDistancePixels = metersToPixels(Number(getWeaponAttackData(weapon, weaponFunctionId)?.maxRangeMeters) || 0);
+  const maxDistancePixels = metersToPixels(getActionMaxRangeMeters(weapon, actionKey, weaponFunctionId));
   const dx = pointer.x - origin.x;
   const dy = pointer.y - origin.y;
   const angle = Math.atan2(dy, dx);
@@ -2392,6 +2506,17 @@ function getActionAttackConeRadians(weapon, actionKey, weaponFunctionId = "") {
     ? actionCone
     : (Number.isFinite(fallbackCone) && fallbackCone > 0 ? fallbackCone : DEFAULT_WEAPON_ATTACK_CONE_DEGREES);
   return Math.max(0, (Number(degrees) || 0) * (Math.PI / 180));
+}
+
+function getActionMaxRangeMeters(weapon, actionKey, weaponFunctionId = "") {
+  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  if (actionKey === PUSH_ACTION_KEY) {
+    const actionData = weaponData?.push ?? {};
+    const hasValue = Object.hasOwn(actionData, "maxRangeMeters");
+    const value = Number(actionData.maxRangeMeters);
+    return Number.isFinite(value) ? Math.max(0, value) : (hasValue ? 0 : DEFAULT_WEAPON_PUSH_MAX_RANGE_METERS);
+  }
+  return Math.max(0, Number(weaponData?.maxRangeMeters) || 0);
 }
 
 function metersToPixels(meters) {
@@ -3214,6 +3339,28 @@ function getWeaponAccuracyModifier(weapon, weaponFunctionId = "") {
   return toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.accuracyBonus)
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "accuracy")
     - getWeaponConditionAccuracyPenalty(weapon);
+}
+
+function getWeaponPushAccuracyModifier(weapon, weaponFunctionId = "") {
+  return getWeaponAccuracyModifier(weapon, weaponFunctionId)
+    + toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.push?.accuracyModifier);
+}
+
+function getWeaponPushDifficultyModifier(weapon, weaponFunctionId = "") {
+  return toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.push?.pushDifficultyModifier);
+}
+
+function getActorSkillValue(actor, skillKey = "") {
+  return toInteger(actor?.system?.skills?.[resolveSkillKey(actor, skillKey)]?.value);
+}
+
+function resolveSkillKey(actor, skillKey = "") {
+  const requested = String(skillKey ?? "");
+  if (actor?.system?.skills?.[requested]) return requested;
+  const alias = SKILL_ALIASES[requested] ?? requested;
+  if (actor?.system?.skills?.[alias]) return alias;
+  const setting = getSkillSettings().find(skill => skill.key === requested || skill.abbr === requested || skill.key === alias || skill.abbr === alias);
+  return setting?.key ?? alias;
 }
 
 function getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId = "", influenceKey = "") {

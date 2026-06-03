@@ -173,6 +173,7 @@ export function getWeaponActionCostEntries() {
     { key: "volley", code: "volleyCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionVolley", "Залп")}: стоимость` },
     { key: "meleeAttack", code: "meleeAttackCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionMeleeAttack", "Неприцельная атака")}: стоимость` },
     { key: "aimedMeleeAttack", code: "aimedMeleeAttackCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack", "Прицельная атака")}: стоимость` },
+    { key: "push", code: "pushCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionPush", "Толчок")}: стоимость` },
     { key: "reload", code: "reloadCost", label: `${localizeOrFallback("FALLOUTMAW.Item.WeaponActionReload", "Перезарядка")}: стоимость` }
   ];
 }

@@ -18,6 +18,12 @@ import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { applyDamageCostModifier, fullyRestoreActorDamageState, getDamageCostModifierState, getLimbHealingCap, getResourceLimitState, isLimbDestroyed } from "../combat/damage-hub.mjs";
 import { MOVEMENT_RESOURCE_PREVIEW_HOOK } from "../combat/movement-resources.mjs";
 import {
+  getGrappleTargetId,
+  getGrapplerId,
+  startGrappleReposition,
+  useGrappleAction
+} from "../combat/active-actions.mjs";
+import {
   POSTURE_EFFECT_CHANGE_ROOT,
   getActorPostureAction,
   getActorPostureWeaponActionPointCostBonus,
@@ -402,6 +408,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       rollSkill: TokenActionHud.#onRollSkill,
       openItem: { handler: TokenActionHud.#onOpenItem, buttons: [1] },
       useItem: { handler: TokenActionHud.#onUseItem, buttons: [0, 1] },
+      useActiveAction: TokenActionHud.#onUseActiveAction,
+      dragGrappledTarget: TokenActionHud.#onDragGrappledTarget,
       useSystemAction: TokenActionHud.#onUseSystemAction
     }
   };
@@ -453,8 +461,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg", { activeOnly: true });
     const abilities = prepareOwnedAbilityButtons(actor, "icons/svg/aura.svg");
     const systemActions = prepareSystemActionButtons();
-    const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, systemActions, hudIcons);
-    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, systemActions, weaponActionRows, weaponSet, weaponSets);
+    const activeActions = prepareActiveActionButtons(this.#token, actor, weaponSet, selectedWeapon, selectedWeaponDisabled, hudIcons);
+    const actionGroups = prepareActionGroups(activeActions, systemActions);
+    const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, actionGroups, hudIcons);
+    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet, weaponSets);
     const meterSections = prepareMeterSectionStates(this.#editableMeterSections);
     const displayLimbs = prepareDisplayLimbs(actor, this.#limbDisplayLayer);
     const limbSilhouette = createLimbSilhouetteHud(race?.limbSilhouette, displayLimbs);
@@ -802,6 +812,36 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       return this.render({ force: true });
     }
     return undefined;
+  }
+
+  static async #onUseActiveAction(event, target) {
+    event.preventDefault();
+    const key = String(target.dataset.activeActionKey ?? "");
+    if (!this.token?.actor?.isOwner) return undefined;
+    if (key === "grapple") {
+      await useGrappleAction(this.token);
+      return this.render({ force: true });
+    }
+    if (key === "push") {
+      const push = resolveHudPushAction(this.actor);
+      if (!push) {
+        ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Settings.HUD.NoPushWeapon"));
+        return undefined;
+      }
+      return startWeaponAttack({
+        token: this.token,
+        weapon: push.weapon,
+        actionKey: "push",
+        weaponFunctionId: push.weaponFunctionId
+      });
+    }
+    return undefined;
+  }
+
+  static async #onDragGrappledTarget(event) {
+    event.preventDefault();
+    await startGrappleReposition(this.token);
+    return this.render({ force: true });
   }
 
   static #onUseSystemAction(event, target) {
@@ -1975,7 +2015,56 @@ function prepareSystemActionButtons() {
   return [advancementAction, ...configuredActions];
 }
 
-function prepareTrayContext(activeTray, skills, items, abilities, systemActions, weaponActionRows, weaponSet = null, weaponSets = []) {
+function prepareActiveActionButtons(token, actor, weaponSet = null, selectedWeapon = null, selectedWeaponDisabled = false, hudIcons = {}) {
+  const grappleTargetId = getGrappleTargetId(token);
+  const grapplerId = getGrapplerId(token);
+  const grappleLabel = grappleTargetId
+    ? game.i18n.localize("FALLOUTMAW.Settings.HUD.ReleaseGrapple")
+    : (grapplerId ? game.i18n.localize("FALLOUTMAW.Settings.HUD.EscapeGrapple") : game.i18n.localize("FALLOUTMAW.Settings.HUD.Grapple"));
+  const push = resolveHudPushAction(actor, weaponSet, selectedWeapon, selectedWeaponDisabled);
+  return [
+    {
+      key: "grapple",
+      label: grappleLabel,
+      img: normalizeImagePath(hudIcons.weaponActions?.meleeAttack, "icons/svg/net.svg"),
+      action: "useActiveAction",
+      datasetKey: "activeActionKey",
+      disabled: !actor?.isOwner
+    },
+    {
+      key: "dragGrappled",
+      label: game.i18n.localize("FALLOUTMAW.Settings.HUD.DragGrappled"),
+      img: normalizeImagePath("icons/svg/wingfoot.svg", "icons/svg/walk.svg"),
+      action: "dragGrappledTarget",
+      disabled: !grappleTargetId || !actor?.isOwner
+    },
+    {
+      key: "push",
+      label: game.i18n.localize("FALLOUTMAW.Settings.HUD.Push"),
+      img: normalizeImagePath(hudIcons.weaponActions?.push, "icons/svg/impact.svg"),
+      action: "useActiveAction",
+      datasetKey: "activeActionKey",
+      disabled: !push || !actor?.isOwner
+    }
+  ];
+}
+
+function prepareActionGroups(activeActions = [], systemActions = []) {
+  return [
+    {
+      key: "active",
+      label: game.i18n.localize("FALLOUTMAW.Settings.HUD.ActionsActive"),
+      actions: activeActions
+    },
+    {
+      key: "service",
+      label: game.i18n.localize("FALLOUTMAW.Settings.HUD.ActionsService"),
+      actions: systemActions
+    }
+  ];
+}
+
+function prepareTrayContext(activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet = null, weaponSets = []) {
   const trayItems = activeTray === "skills"
     ? skills
     : activeTray === "items"
@@ -1983,7 +2072,7 @@ function prepareTrayContext(activeTray, skills, items, abilities, systemActions,
       : activeTray === "abilities"
         ? abilities
         : activeTray === "actions"
-          ? systemActions
+          ? [...activeActions, ...systemActions]
           : activeTray === "weaponActions"
             ? weaponActionRows.flatMap(row => row.actions)
             : activeTray === "weaponSets"
@@ -1994,7 +2083,9 @@ function prepareTrayContext(activeTray, skills, items, abilities, systemActions,
     items,
     abilities,
     abilityGroups: prepareAbilityGroups(abilities),
+    activeActions,
     systemActions,
+    actionGroups,
     weaponActionRows,
     weaponSet,
     weaponSets,
@@ -2009,14 +2100,14 @@ function prepareTrayMetrics(_items) {
   };
 }
 
-function prepareActions(activeTray, selectedWeapon, items, abilities, systemActions, hudIcons = {}) {
+function prepareActions(activeTray, selectedWeapon, items, abilities, actionGroups, hudIcons = {}) {
   return HUD_ACTIONS.filter(action => action.key !== "weapon").map(action => {
     const count = action.key === "items"
       ? items.length
       : action.key === "abilities"
         ? abilities.length
         : action.key === "actions"
-          ? systemActions.length
+          ? actionGroups.reduce((total, group) => total + (group.actions?.length ?? 0), 0)
           : 0;
     return {
       ...action,
@@ -2156,6 +2247,56 @@ function getSelectedHudWeapon(actor, weaponSets = [], activeSetKey = "") {
   return resolvedId ? actor.items.get(resolvedId) ?? null : null;
 }
 
+function resolveHudPushAction(actor, weaponSet = null, selectedWeapon = null, selectedWeaponDisabled = false) {
+  if (!actor) return null;
+  const selected = selectedWeapon ?? resolveSelectedHudWeapon(actor);
+  const selectedDisabled = selectedWeapon ? selectedWeaponDisabled : isHudWeaponDisabled(actor, selected);
+  const selectedPush = selectedDisabled ? null : getFirstWeaponPushFunction(actor, selected);
+  if (selectedPush) return selectedPush;
+
+  const set = weaponSet ?? resolveActivePreparedHudWeaponSet(actor);
+  for (const slot of getUniqueHudWeaponSlots(set?.slots ?? [])) {
+    const weapon = actor.items.get(slot.item?.id ?? "");
+    if (!weapon || slot.useDisabled || isHudWeaponDisabled(actor, weapon)) continue;
+    const push = getFirstWeaponPushFunction(actor, weapon);
+    if (push) return push;
+  }
+  return null;
+}
+
+function resolveSelectedHudWeapon(actor) {
+  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId);
+  const inventory = actor ? prepareInventoryContext(actor, race) : { weaponSets: [] };
+  const hudWeaponSets = getHudWeaponSets(inventory);
+  const activeWeaponSetKey = getActiveHudWeaponSetKey(actor, hudWeaponSets);
+  return getSelectedHudWeapon(actor, hudWeaponSets, activeWeaponSetKey);
+}
+
+function resolveActivePreparedHudWeaponSet(actor) {
+  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId);
+  const inventory = actor ? prepareInventoryContext(actor, race) : { weaponSets: [] };
+  const hudWeaponSets = getHudWeaponSets(inventory);
+  const activeWeaponSetKey = getActiveHudWeaponSetKey(actor, hudWeaponSets);
+  const selectedWeapon = getSelectedHudWeapon(actor, hudWeaponSets, activeWeaponSetKey);
+  return prepareHudWeaponSet(actor, hudWeaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", getTokenActionHudIcons());
+}
+
+function getFirstWeaponPushFunction(actor, weapon) {
+  if (!weapon || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) return null;
+  for (const weaponFunction of getEnabledWeaponFunctions(weapon)) {
+    const weaponData = applyWeaponModuleModifiers(weaponFunction?.data ?? {}, {
+      moduleSlots: getWeaponFunctionModuleSlots(weapon, weaponFunction?.id)
+    });
+    if (!weaponData?.availableActions?.push) continue;
+    if (getWeaponActionBlockState(actor, "push").blocked) continue;
+    return {
+      weapon,
+      weaponFunctionId: weaponFunction.id
+    };
+  }
+  return null;
+}
+
 function isMiddleMouseClick(event) {
   return event?.button === 1;
 }
@@ -2191,6 +2332,7 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
     { key: "volley", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley"), configured: Boolean(actions.volley), visible: Boolean(actions.volley) },
     { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack"), configured: Boolean(actions.meleeAttack) },
     { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), configured: Boolean(actions.aimedMeleeAttack) },
+    { key: "push", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionPush"), configured: Boolean(actions.push), visible: Boolean(actions.push) },
     { key: "reload", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload"), configured: hasMagazineCost, visible: hasMagazineCost }
   ];
   return buttons.filter(action => action.visible !== false && action.configured).map(action => {

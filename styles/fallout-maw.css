@@ -7709,6 +7709,7 @@ label.fallout-maw-mitigation-cell {
   width: max-content;
 }
 
+.fallout-maw-token-hud-popup.actions,
 .fallout-maw-token-hud-popup.weapon-actions {
   align-content: stretch;
   align-items: stretch;

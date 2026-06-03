@@ -48,6 +48,7 @@ const TextEditor = foundry.applications.ux.TextEditor.implementation;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
+const DEFAULT_WEAPON_PUSH_MAX_RANGE_METERS = 1;
 const DEFAULT_RELOAD_ACTION_POINT_COST = 2;
 const DEFAULT_ATTACK_ANIMATION_DELAY_MS = 200;
 const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 20;
@@ -3777,6 +3778,7 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {},
     { key: "volley", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley"), isVolley: true },
     { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack"), isMelee: true },
     { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), isMelee: true },
+    { key: "push", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionPush"), isPush: true },
     { key: "reload", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload"), isReload: true, autoSelected: hasMagazineCost }
   ].map(action => {
     const actionData = weaponData?.[action.key] ?? {};
@@ -3797,8 +3799,12 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {},
       isBurst: action.key === "burst",
       isVolley: action.key === "volley",
       isMelee: Boolean(action.isMelee),
+      isPush: Boolean(action.isPush),
       actionPointCost: getWeaponActionPointCostForData(weaponData, action.key),
       attackConeDegrees: Number(hasActionCone ? actionData.attackConeDegrees : fallbackCone) || DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
+      maxRangeMeters: getWeaponPushMaxRangeForData(actionData, action.isPush),
+      accuracyModifier: Number(actionData?.accuracyModifier) || 0,
+      pushDifficultyModifier: Number(actionData?.pushDifficultyModifier) || 0,
       burstCount: Math.max(1, Number(weaponData?.burst?.count) || 3),
       burstDifficultyPerShot: getWeaponBurstDifficultyPerShotForData(weaponData),
       volleyDamageRadius: Math.max(0, Number(weaponData?.volley?.damageRadius) || 0),
@@ -3823,6 +3829,13 @@ function getWeaponActionPointCostForData(weaponData = {}, actionKey = "") {
   const value = Number(weaponData?.[actionKey]?.actionPointCost);
   const fallback = actionKey === "reload" ? DEFAULT_RELOAD_ACTION_POINT_COST : DEFAULT_WEAPON_ACTION_POINT_COST;
   return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : fallback;
+}
+
+function getWeaponPushMaxRangeForData(actionData = {}, isPush = false) {
+  if (!isPush) return 0;
+  const hasValue = Object.hasOwn(actionData ?? {}, "maxRangeMeters");
+  const value = Number(actionData?.maxRangeMeters);
+  return Number.isFinite(value) ? Math.max(0, value) : (hasValue ? 0 : DEFAULT_WEAPON_PUSH_MAX_RANGE_METERS);
 }
 
 function prepareWeaponAttackModeSettings(modeData = {}) {
@@ -3911,6 +3924,7 @@ function createDefaultWeaponFunctionData(source = {}) {
       volley: false,
       meleeAttack: false,
       aimedMeleeAttack: false,
+      push: false,
       reload: false
     },
     aimedShot: {
@@ -3948,6 +3962,7 @@ function createDefaultWeaponFunctionData(source = {}) {
     },
     meleeAttack: createDefaultWeaponMeleeActionData(),
     aimedMeleeAttack: createDefaultWeaponMeleeActionData(),
+    push: createDefaultWeaponPushActionData(),
     reload: {
       name: "",
       actionPointCost: DEFAULT_RELOAD_ACTION_POINT_COST
@@ -4080,6 +4095,18 @@ function prepareCraftNodeForDisplay(node, index, links) {
     toolRequirementLabel: formatCraftToolRequirementLabel(toolRequirements),
     quantity,
     hasQuantityBadge: quantity > 1
+  };
+}
+
+function createDefaultWeaponPushActionData() {
+  return {
+    name: "",
+    actionPointCost: DEFAULT_WEAPON_ACTION_POINT_COST,
+    attackConeDegrees: DEFAULT_WEAPON_ATTACK_CONE_DEGREES,
+    maxRangeMeters: DEFAULT_WEAPON_PUSH_MAX_RANGE_METERS,
+    accuracyModifier: 0,
+    pushDifficultyModifier: 0,
+    criticalFailureConsequences: []
   };
 }
 

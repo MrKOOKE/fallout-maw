@@ -1,6 +1,7 @@
 const { ArrayField, BooleanField, HTMLField, NumberField, ObjectField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
+const DEFAULT_WEAPON_PUSH_MAX_RANGE_METERS = 1;
 const DEFAULT_RELOAD_ACTION_POINT_COST = 2;
 const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 20;
 const WEAPON_SPECIAL_PROPERTIES = Object.freeze({
@@ -289,6 +290,7 @@ function weaponFunctionField({ named = false } = {}) {
       volley: new BooleanField({ required: true, initial: false }),
       meleeAttack: new BooleanField({ required: true, initial: false }),
       aimedMeleeAttack: new BooleanField({ required: true, initial: false }),
+      push: new BooleanField({ required: true, initial: false }),
       reload: new BooleanField({ required: true, initial: false })
     }),
     aimedShot: weaponActionSettingsField(),
@@ -316,6 +318,7 @@ function weaponFunctionField({ named = false } = {}) {
     }),
     meleeAttack: weaponMeleeActionSettingsField(),
     aimedMeleeAttack: weaponMeleeActionSettingsField(),
+    push: weaponPushActionSettingsField(),
     reload: weaponSimpleActionSettingsField(DEFAULT_RELOAD_ACTION_POINT_COST)
   };
   if (named) {
@@ -356,6 +359,7 @@ function weaponModuleModifiersField() {
       volley: new NumberField({ required: true, integer: true, initial: 0 }),
       meleeAttack: new NumberField({ required: true, integer: true, initial: 0 }),
       aimedMeleeAttack: new NumberField({ required: true, integer: true, initial: 0 }),
+      push: new NumberField({ required: true, integer: true, initial: 0 }),
       reload: new NumberField({ required: true, integer: true, initial: 0 })
     })
   });
@@ -401,6 +405,18 @@ function weaponMeleeActionSettingsField() {
     criticalFailureConsequences: new ArrayField(weaponCriticalFailureConsequenceField(), { required: true, initial: [] }),
     thrust: weaponAttackModeSettingsField(),
     swing: weaponAttackModeSettingsField()
+  });
+}
+
+function weaponPushActionSettingsField() {
+  return new SchemaField({
+    name: new StringField({ required: true, blank: true, initial: "" }),
+    actionPointCost: new NumberField({ required: true, integer: true, min: 0, initial: DEFAULT_WEAPON_ACTION_POINT_COST }),
+    attackConeDegrees: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES }),
+    maxRangeMeters: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_PUSH_MAX_RANGE_METERS }),
+    accuracyModifier: new NumberField({ required: true, integer: true, initial: 0 }),
+    pushDifficultyModifier: new NumberField({ required: true, integer: true, initial: 0 }),
+    criticalFailureConsequences: new ArrayField(weaponCriticalFailureConsequenceField(), { required: true, initial: [] })
   });
 }
 

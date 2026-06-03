@@ -126,7 +126,7 @@
 
   <section class="fallout-maw-token-hud-actions-wrap">
     {{#if tray.visible}}
-    <div class="fallout-maw-token-hud-popup {{#if (eq activeTray "abilities")}}abilities{{/if}} {{#if (eq activeTray "weaponActions")}}weapon-actions{{/if}} {{#if (eq activeTray "weaponSets")}}weapon-sets{{/if}}" data-token-action-hud-popup style="{{tray.metrics.style}}">
+    <div class="fallout-maw-token-hud-popup {{#if (eq activeTray "actions")}}actions{{/if}} {{#if (eq activeTray "abilities")}}abilities{{/if}} {{#if (eq activeTray "weaponActions")}}weapon-actions{{/if}} {{#if (eq activeTray "weaponSets")}}weapon-sets{{/if}}" data-token-action-hud-popup style="{{tray.metrics.style}}">
       {{#if (eq activeTray "skills")}}
       {{#each tray.skills}}
       <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="rollSkill" data-skill-key="{{key}}" title="{{label}}">
@@ -169,11 +169,34 @@
       {{/if}}
 
       {{#if (eq activeTray "actions")}}
-      {{#each tray.systemActions}}
-      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="useSystemAction" data-system-action-key="{{key}}" title="{{label}}">
-        <img src="{{img}}" alt="{{label}}" onerror="this.src='{{../fallbackIcon}}'">
-        <span>{{label}}</span>
-      </button>
+      {{#each tray.actionGroups}}
+      <div class="fallout-maw-token-hud-action-row">
+        <div class="fallout-maw-token-hud-action-row-title">{{label}}</div>
+        <div class="fallout-maw-token-hud-action-row-buttons">
+          {{#each actions}}
+          {{#if (eq action "useActiveAction")}}
+          <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="useActiveAction" data-active-action-key="{{key}}" title="{{label}}" {{#if disabled}}disabled{{/if}}>
+            <img src="{{img}}" alt="{{label}}" onerror="this.src='{{../../fallbackIcon}}'">
+            <span>{{label}}</span>
+          </button>
+          {{else}}
+          {{#if (eq action "dragGrappledTarget")}}
+          <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="dragGrappledTarget" title="{{label}}" {{#if disabled}}disabled{{/if}}>
+            <img src="{{img}}" alt="{{label}}" onerror="this.src='{{../../fallbackIcon}}'">
+            <span>{{label}}</span>
+          </button>
+          {{else}}
+          <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="useSystemAction" data-system-action-key="{{key}}" title="{{label}}">
+            <img src="{{img}}" alt="{{label}}" onerror="this.src='{{../../fallbackIcon}}'">
+            <span>{{label}}</span>
+          </button>
+          {{/if}}
+          {{/if}}
+          {{else}}
+          <div class="fallout-maw-token-hud-empty">{{localize "FALLOUTMAW.Settings.HUD.NoActions"}}</div>
+          {{/each}}
+        </div>
+      </div>
       {{else}}
       <div class="fallout-maw-token-hud-empty">Действий нет</div>
       {{/each}}

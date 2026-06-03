@@ -25,6 +25,7 @@ const WEAPON_ACTION_ICON_ROWS = Object.freeze([
   { key: "volley", labelKey: "FALLOUTMAW.Item.WeaponActionVolley" },
   { key: "meleeAttack", labelKey: "FALLOUTMAW.Item.WeaponActionMeleeAttack" },
   { key: "aimedMeleeAttack", labelKey: "FALLOUTMAW.Item.WeaponActionAimedMeleeAttack" },
+  { key: "push", labelKey: "FALLOUTMAW.Item.WeaponActionPush" },
   { key: "reload", labelKey: "FALLOUTMAW.Item.WeaponActionReload" }
 ]);
 

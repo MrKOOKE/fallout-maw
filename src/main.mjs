@@ -5,6 +5,7 @@ import { registerPostureMovementHooks } from "./canvas/posture-movement.mjs";
 import { registerThrownItemHooks } from "./canvas/thrown-items.mjs";
 import { registerCombatDodgeHooks, registerCombatDodgeSocket } from "./combat/dodge-resource.mjs";
 import { registerCombatMovementHooks } from "./combat/movement-resources.mjs";
+import { registerActiveActionHooks, registerActiveActionSocket } from "./combat/active-actions.mjs";
 import { registerDataModels, registerTrackableAttributes } from "./data/index.mjs";
 import { FalloutMaWActor, FalloutMaWItem } from "./documents/index.mjs";
 import { getCreatureOptions } from "./settings/accessors.mjs";
@@ -81,6 +82,7 @@ Hooks.once("init", () => {
   registerPostureMovementHooks();
   registerCombatDodgeHooks();
   registerCombatMovementHooks();
+  registerActiveActionHooks();
   registerAbilityEffectHooks();
   registerAbilityCooldownHooks();
   registerNeedThresholdHooks();
@@ -103,6 +105,7 @@ Hooks.once("ready", async () => {
   registerDamageSocket();
   registerAttackAnimationSocket();
   registerCombatDodgeSocket();
+  registerActiveActionSocket();
   registerWeaponAttackSocket();
   registerThrownItemHooks();
   registerMedicineSocket();

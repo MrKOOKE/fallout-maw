@@ -8,6 +8,7 @@ export const WEAPON_MODULE_ACTION_KEYS = Object.freeze([
   "volley",
   "meleeAttack",
   "aimedMeleeAttack",
+  "push",
   "reload"
 ]);
 

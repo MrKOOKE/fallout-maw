@@ -78,6 +78,7 @@ const COST_EFFECT_KEYS = Object.freeze({
     volley: "system.costs.actions.volley",
     meleeAttack: "system.costs.actions.meleeAttack",
     aimedMeleeAttack: "system.costs.actions.aimedMeleeAttack",
+    push: "system.costs.actions.push",
     reload: "system.costs.actions.reload"
   })
 });
