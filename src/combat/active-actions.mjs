@@ -26,6 +26,7 @@ const SKILL_ALIASES = Object.freeze({
 });
 const pendingActiveActionSocketRequests = new Map();
 const pendingGrappleFollowMoves = new Map();
+const activeGrappleEscapePromptTokenIds = new Set();
 
 export function registerActiveActionHooks() {
   Hooks.on("preUpdateToken", onPreUpdateTokenGrapple);
@@ -151,11 +152,13 @@ async function escapeGrapple(targetDocument, grapplerDocument) {
   if (!canSpendActionPoints(targetDocument.actor, POSTURE_CHANGE_ACTION_POINT_COST)) return undefined;
   await spendActionPoints(targetDocument.actor, POSTURE_CHANGE_ACTION_POINT_COST);
 
+  const size = getGrappleEscapeSizeModifiers(grapplerDocument, targetDocument);
   const outcome = await requestSkillCheck({
     actor: targetDocument.actor,
     skillKey: resolveSkillKey(targetDocument.actor, "ath"),
     data: {
-      difficulty: 50 + getActorSkillValue(grapplerDocument.actor, "ath")
+      difficulty: 50 + getActorSkillValue(grapplerDocument.actor, "ath") + size.difficultyModifier,
+      situationalModifier: size.escapeModifier
     },
     animate: true,
     createMessage: true,
@@ -299,17 +302,13 @@ async function linkGrappleDocuments({ sceneId = "", grapplerTokenId = "", target
   if (!scene || !grappler || !target || grappler.id === target.id) return false;
 
   const updates = [];
-  for (const document of scene.tokens.contents ?? []) {
-    if (getGrappleTargetId(document) === target.id || getGrappleTargetId(document) === grappler.id) {
-      updates.push({ _id: document.id, [`flags.${SYSTEM_ID}.-=${GRAPPLE_TARGET_FLAG}`]: null });
-    }
-    if (getGrapplerId(document) === target.id || getGrapplerId(document) === grappler.id) {
-      updates.push({ _id: document.id, [`flags.${SYSTEM_ID}.-=${GRAPPLE_GRAPPLER_FLAG}`]: null });
-    }
-  }
+  const clearedEffectActors = new Set();
+  queueBreakGrappleRelationsForToken(scene, grappler.id, updates, clearedEffectActors);
+  queueBreakGrappleRelationsForToken(scene, target.id, updates, clearedEffectActors);
   updates.push({ _id: grappler.id, [`flags.${SYSTEM_ID}.${GRAPPLE_TARGET_FLAG}`]: target.id });
   updates.push({ _id: target.id, [`flags.${SYSTEM_ID}.${GRAPPLE_GRAPPLER_FLAG}`]: grappler.id });
   await scene.updateEmbeddedDocuments("Token", mergeTokenUpdates(updates), { [GRAPPLE_SYNC_OPTION]: true });
+  for (const actor of clearedEffectActors) await syncGrappleEffect(actor, false);
   await syncGrappleEffect(target.actor, true, grappler);
   return true;
 }
@@ -317,26 +316,64 @@ async function linkGrappleDocuments({ sceneId = "", grapplerTokenId = "", target
 async function unlinkGrappleDocuments({ sceneId = "", grapplerTokenId = "", targetTokenId = "" } = {}) {
   const scene = getScene(sceneId);
   if (!scene) return false;
-  const ids = new Set([grapplerTokenId, targetTokenId].filter(Boolean));
-  if (!ids.size) return false;
-  for (const id of [...ids]) {
-    const document = scene.tokens.get(id);
-    const targetId = getGrappleTargetId(document);
-    const grapplerId = getGrapplerId(document);
-    if (targetId) ids.add(targetId);
-    if (grapplerId) ids.add(grapplerId);
+  const updates = [];
+  const clearedEffectActors = new Set();
+  if (grapplerTokenId && targetTokenId && grapplerTokenId !== targetTokenId) {
+    queueUnlinkGrapplePair(scene, grapplerTokenId, targetTokenId, updates, clearedEffectActors);
+  } else {
+    const tokenId = grapplerTokenId || targetTokenId;
+    queueBreakGrappleRelationsForToken(scene, tokenId, updates, clearedEffectActors);
   }
-  const updates = [...ids].map(id => ({
-    _id: id,
-    [`flags.${SYSTEM_ID}.-=${GRAPPLE_TARGET_FLAG}`]: null,
-    [`flags.${SYSTEM_ID}.-=${GRAPPLE_GRAPPLER_FLAG}`]: null
-  })).filter(update => scene.tokens.get(update._id));
-  if (!updates.length) return false;
-  const targetActors = updates
-    .map(update => scene.tokens.get(update._id)?.actor)
-    .filter(Boolean);
-  await scene.updateEmbeddedDocuments("Token", updates, { [GRAPPLE_SYNC_OPTION]: true });
-  for (const actor of new Set(targetActors)) await syncGrappleEffect(actor, false);
+  return commitGrappleUnlinks(scene, updates, clearedEffectActors);
+}
+
+async function breakGrappleRelationsForToken(scene, tokenId = "") {
+  const updates = [];
+  const clearedEffectActors = new Set();
+  queueBreakGrappleRelationsForToken(scene, tokenId, updates, clearedEffectActors);
+  return commitGrappleUnlinks(scene, updates, clearedEffectActors);
+}
+
+function queueBreakGrappleRelationsForToken(scene, tokenId = "", updates = [], clearedEffectActors = new Set()) {
+  if (!scene || !tokenId) return;
+  const document = scene.tokens?.get(tokenId);
+
+  const targetId = getGrappleTargetId(document);
+  if (targetId) queueUnlinkGrapplePair(scene, tokenId, targetId, updates, clearedEffectActors);
+
+  const grapplerId = getGrapplerId(document);
+  if (grapplerId) queueUnlinkGrapplePair(scene, grapplerId, tokenId, updates, clearedEffectActors);
+
+  for (const other of scene.tokens?.contents ?? []) {
+    if (!other || other.id === tokenId) continue;
+    if (getGrappleTargetId(other) === tokenId) queueUnlinkGrapplePair(scene, other.id, tokenId, updates, clearedEffectActors);
+    if (getGrapplerId(other) === tokenId) queueUnlinkGrapplePair(scene, tokenId, other.id, updates, clearedEffectActors);
+  }
+}
+
+function queueUnlinkGrapplePair(scene, grapplerTokenId = "", targetTokenId = "", updates = [], clearedEffectActors = new Set()) {
+  if (!scene || !grapplerTokenId || !targetTokenId || grapplerTokenId === targetTokenId) return;
+  const grappler = scene.tokens?.get(grapplerTokenId);
+  const target = scene.tokens?.get(targetTokenId);
+  let linked = false;
+
+  if (grappler && getGrappleTargetId(grappler) === targetTokenId) {
+    updates.push({ _id: grappler.id, [`flags.${SYSTEM_ID}.-=${GRAPPLE_TARGET_FLAG}`]: null });
+    linked = true;
+  }
+  if (target && getGrapplerId(target) === grapplerTokenId) {
+    updates.push({ _id: target.id, [`flags.${SYSTEM_ID}.-=${GRAPPLE_GRAPPLER_FLAG}`]: null });
+    if (target.actor) clearedEffectActors.add(target.actor);
+    linked = true;
+  }
+  if (linked && target?.actor) clearedEffectActors.add(target.actor);
+}
+
+async function commitGrappleUnlinks(scene, updates = [], clearedEffectActors = new Set()) {
+  const merged = mergeTokenUpdates(updates).filter(update => scene?.tokens?.get(update._id));
+  if (!merged.length && !clearedEffectActors.size) return false;
+  if (merged.length) await scene.updateEmbeddedDocuments("Token", merged, { [GRAPPLE_SYNC_OPTION]: true });
+  for (const actor of clearedEffectActors) await syncGrappleEffect(actor, false);
   return true;
 }
 
@@ -358,6 +395,7 @@ async function pushKnockbackDocument({ sceneId = "", attackerTokenId = "", targe
   const destination = getPushDestination(attacker, target);
   if (!destination) return false;
   if (!validateTokenDestination(target, destination, { ignoreIds: [attacker.id, target.id] })) return false;
+  await breakGrappleRelationsForToken(scene, target.id);
   await target.update(destination, { [GRAPPLE_SYNC_OPTION]: true });
   await createActionMessage(formatHud("PushKnockback", { target: target.name, attacker: attacker.name }), target.actor, reason);
   return true;
@@ -370,7 +408,7 @@ function onPreUpdateTokenGrapple(tokenDocument, changes, options) {
 
   const targetGrapplerId = getGrapplerId(tokenDocument);
   if (targetGrapplerId) {
-    ui.notifications.warn(formatHud("GrappledMovementBlocked", { target: tokenDocument.name }));
+    void promptGrappleEscapeOnMoveAttempt(tokenDocument, targetGrapplerId);
     return false;
   }
 
@@ -464,6 +502,38 @@ async function promptGrappleConsent(targetDocument) {
   });
 }
 
+async function promptGrappleEscapeOnMoveAttempt(targetDocument, grapplerId = "") {
+  const tokenDocument = getTokenDocument(targetDocument);
+  const grapplerDocument = getSceneToken(tokenDocument, grapplerId);
+  if (!tokenDocument?.actor || !grapplerDocument?.actor) return;
+  if (activeGrappleEscapePromptTokenIds.has(tokenDocument.id)) return;
+  if (!canSpendActionPoints(tokenDocument.actor, POSTURE_CHANGE_ACTION_POINT_COST)) return;
+
+  activeGrappleEscapePromptTokenIds.add(tokenDocument.id);
+  try {
+    const confirmed = await DialogV2.confirm({
+      window: { title: localizeHud("GrappleEscapeMoveTitle") },
+      content: `<p>${escapeHtml(formatHud("GrappleEscapeMovePrompt", {
+        target: tokenDocument.name,
+        grappler: grapplerDocument.name,
+        cost: POSTURE_CHANGE_ACTION_POINT_COST
+      }))}</p>`,
+      yes: {
+        icon: "fa-solid fa-person-running",
+        label: localizeHud("EscapeGrapple")
+      },
+      no: {
+        label: game.i18n.localize("Cancel")
+      },
+      rejectClose: false,
+      modal: true
+    });
+    if (confirmed) await escapeGrapple(tokenDocument, grapplerDocument);
+  } finally {
+    activeGrappleEscapePromptTokenIds.delete(tokenDocument.id);
+  }
+}
+
 function isUnableToResist(tokenDocument) {
   const defeatedStatus = CONFIG.specialStatusEffects.DEFEATED;
   return Boolean(
@@ -547,6 +617,14 @@ function getGrappleSizeModifiers(grapplerDocument, targetDocument) {
   if (diff === 1) return { difficultyModifier: 0, resistanceModifier: 100 };
   if (diff >= 2) return { difficultyModifier: 0, resistanceModifier: 200 };
   return { difficultyModifier: 0, resistanceModifier: 0 };
+}
+
+function getGrappleEscapeSizeModifiers(grapplerDocument, targetDocument) {
+  const diff = getTokenSizeRank(targetDocument) - getTokenSizeRank(grapplerDocument);
+  if (diff <= -1) return { difficultyModifier: 50, escapeModifier: 0 };
+  if (diff === 1) return { difficultyModifier: 0, escapeModifier: 50 };
+  if (diff >= 2) return { difficultyModifier: 0, escapeModifier: 100 };
+  return { difficultyModifier: 0, escapeModifier: 0 };
 }
 
 function getActorSkillValue(actor, skillKey = "") {

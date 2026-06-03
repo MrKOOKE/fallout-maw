@@ -553,6 +553,8 @@
         "GrappleStarted": "{grappler} захватывает {target}.",
         "PushKnockback": "{target} оттолкнут {attacker}.",
         "GrappledMovementBlocked": "{target}: движение заблокировано захватом.",
+        "GrappleEscapeMoveTitle": "Захват",
+        "GrappleEscapeMovePrompt": "{target} находится в захвате {grappler}. Попытаться вырваться за {cost} ОД?",
         "GrappledTargetCannotMove": "Захваченную цель некуда передвинуть.",
         "ChooseGrappleTarget": "Выберите одну цель для захвата.",
         "NoAdjacentGrappleTarget": "Нет соседней цели для захвата.",

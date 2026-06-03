@@ -422,9 +422,10 @@ class WeaponAttackController {
     await this.dodgeExposure.flush();
     await checkBatch.publish({ forceBatch: forceBatchCheckMessage });
 
+    const knockbackTargets = [];
     for (const target of hitTargets) {
       const resisted = await this.resolvePushResistance(target);
-      if (!resisted) await requestPushKnockback({ attackerToken: this.token, targetToken: target, reason: this.weapon.name });
+      if (!resisted) knockbackTargets.push(target);
     }
 
     if (attempted) {
@@ -446,6 +447,9 @@ class WeaponAttackController {
         trajectories,
         delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
       });
+    }
+    for (const target of knockbackTargets) {
+      await requestPushKnockback({ attackerToken: this.token, targetToken: target, reason: this.weapon.name });
     }
 
     this.processing = false;

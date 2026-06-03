@@ -554,6 +554,8 @@
         "GrappleStarted": "{grappler} grapples {target}.",
         "PushKnockback": "{target} is pushed by {attacker}.",
         "GrappledMovementBlocked": "{target}: movement is blocked by grapple.",
+        "GrappleEscapeMoveTitle": "Grapple",
+        "GrappleEscapeMovePrompt": "{target} is grappled by {grappler}. Try to escape for {cost} AP?",
         "GrappledTargetCannotMove": "The grappled target cannot be moved there.",
         "ChooseGrappleTarget": "Choose one grapple target.",
         "NoAdjacentGrappleTarget": "No adjacent grapple target.",
