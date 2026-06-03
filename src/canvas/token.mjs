@@ -1,6 +1,7 @@
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { getDamageTypeSettings } from "../settings/accessors.mjs";
 import { isPostureEffectApplicableToActor } from "./posture-movement.mjs";
+import { appendGrappleFollowMovement } from "../combat/active-actions.mjs";
 
 const TOOLTIP_ANCHOR_CLASS = "fallout-maw-token-effect-tooltip-anchor";
 const TOOLTIP_CLASS = "fallout-maw-effect-tooltip";
@@ -22,6 +23,25 @@ let middleClickGuardRegistered = false;
  * System token implementation with readable Active Effect icon tooltips.
  */
 export class FalloutMaWToken extends foundry.canvas.placeables.Token {
+  /** @override */
+  _prepareDragLeftDropUpdates(event) {
+    const result = super._prepareDragLeftDropUpdates(event);
+    if (!result) return result;
+    const [updates, options = {}] = result;
+    const movement = options.movement;
+    if (!Array.isArray(updates) || !movement || typeof movement !== "object") return result;
+
+    for (const [tokenId, instruction] of Object.entries(movement)) {
+      if (!instruction?.waypoints?.length) continue;
+      const context = getDragInteractionContext(event, tokenId);
+      const path = context?.foundPath;
+      if (!Array.isArray(path) || path.length <= 1) continue;
+      const token = context?.token ?? getCanvasToken(tokenId) ?? this;
+      if (!appendGrappleFollowMovement(updates, movement, token, path, options)) return null;
+    }
+    return [updates, options];
+  }
+
   /** @override */
   async _drawEffects() {
     if (activeEffectTooltipToken === this) deactivateEffectTooltip();
@@ -116,6 +136,18 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
     if (activeEffectTooltipToken === this) deactivateEffectTooltip();
     return super.destroy(options);
   }
+}
+
+function getDragInteractionContext(event, tokenId) {
+  const contexts = event?.interactionData?.contexts;
+  if (!contexts) return null;
+  if (contexts instanceof Map) return contexts.get(tokenId) ?? null;
+  return contexts[tokenId] ?? null;
+}
+
+function getCanvasToken(tokenId) {
+  if (typeof canvas?.tokens?.get === "function") return canvas.tokens.get(tokenId);
+  return (canvas?.tokens?.placeables ?? []).find(token => token?.id === tokenId) ?? null;
 }
 
 function getEffectTooltipAnchor() {

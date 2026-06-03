@@ -6,6 +6,7 @@ export const ITEM_TYPES = Object.freeze(["gear", "ability", "trauma", "disease"]
 export const TRAUMA_CREATE_OPTION = "falloutMawAllowTraumaCreate";
 export const DISEASE_CREATE_OPTION = "falloutMawAllowDiseaseCreate";
 export const BLEEDING_DAMAGE_TYPE_KEY = "bleeding";
+export const GRAPPLE_FOLLOW_MOVEMENT_OPTION = "falloutMawGrappleFollowMovement";
 
 export const TEMPLATES = Object.freeze({
   actorCreateDialog: `systems/${SYSTEM_ID}/templates/actor/actor-create-dialog.hbs`,

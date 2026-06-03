@@ -1,5 +1,6 @@
 import { FALLOUT_MAW, syncSystemConfig } from "./config/system-config.mjs";
 import { FalloutMaWToken } from "./canvas/token.mjs";
+import { FalloutMaWTokenLayer } from "./canvas/token-layer.mjs";
 import { FalloutMaWTokenRuler } from "./canvas/token-ruler.mjs";
 import { registerPostureMovementHooks } from "./canvas/posture-movement.mjs";
 import { registerThrownItemHooks } from "./canvas/thrown-items.mjs";
@@ -67,6 +68,7 @@ Hooks.once("init", () => {
   CONFIG.Actor.documentClass = FalloutMaWActor;
   CONFIG.Item.documentClass = FalloutMaWItem;
   CONFIG.Token.objectClass = FalloutMaWToken;
+  CONFIG.Canvas.layers.tokens.layerClass = FalloutMaWTokenLayer;
   CONFIG.Token.rulerClass = FalloutMaWTokenRuler;
   CONFIG.time.roundTime = 6;
   CONFIG.time.turnTime = 0;

@@ -1,3 +1,4 @@
+import { GRAPPLE_FOLLOW_MOVEMENT_OPTION } from "../constants.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { getActorPostureMovementCostMultiplier } from "../canvas/posture-movement.mjs";
 import { applyDamageCostModifier, getDamageCostModifierState, getResourceLimitState } from "./damage-hub.mjs";
@@ -124,7 +125,8 @@ export function isGMDebugMovementBypassActive() {
   return Boolean(game.user?.isGM && game.keyboard?.downKeys?.has("AltLeft"));
 }
 
-function preventUnaffordableCombatMovement(tokenDocument, movement) {
+function preventUnaffordableCombatMovement(tokenDocument, movement, operation) {
+  if (isGrappleFollowMovement(tokenDocument, operation)) return true;
   if (!isCombatMovementTracked(tokenDocument)) return true;
   if (movement?.method === "undo") return true;
   if (isGMDebugMovementBypassActive()) return true;
@@ -142,8 +144,9 @@ function preventUnaffordableCombatMovement(tokenDocument, movement) {
   return false;
 }
 
-async function spendCombatMovementResources(tokenDocument, movement, _operation, user) {
+async function spendCombatMovementResources(tokenDocument, movement, operation, user) {
   if (!user?.isSelf) return;
+  if (isGrappleFollowMovement(tokenDocument, operation)) return;
   if (!isCombatMovementTracked(tokenDocument)) return;
   if (movement?.method === "undo") return restoreLastMovementResourceSpending(tokenDocument);
   if (isGMDebugMovementBypassActive()) return;
@@ -300,6 +303,10 @@ function getMovementSectionCost(section) {
   const cost = Number(section?.cost ?? 0);
   if (!Number.isFinite(cost) || cost <= 0) return 0;
   return cost;
+}
+
+function isGrappleFollowMovement(tokenDocument, operation) {
+  return Boolean(operation?.[GRAPPLE_FOLLOW_MOVEMENT_OPTION]?.[tokenDocument?.id]);
 }
 
 function toInteger(value) {

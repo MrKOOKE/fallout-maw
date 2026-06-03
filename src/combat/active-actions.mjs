@@ -1,4 +1,4 @@
-import { SYSTEM_ID } from "../constants.mjs";
+import { GRAPPLE_FOLLOW_MOVEMENT_OPTION, SYSTEM_ID } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getSkillSettings } from "../settings/accessors.mjs";
 import { ACTION_RESOURCE_KEY, MOVEMENT_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
@@ -44,6 +44,43 @@ export function getGrappleTargetId(tokenOrDocument) {
 
 export function getGrapplerId(tokenOrDocument) {
   return String(getTokenDocument(tokenOrDocument)?.getFlag?.(SYSTEM_ID, GRAPPLE_GRAPPLER_FLAG) ?? "");
+}
+
+export function appendGrappleFollowMovement(updates, movement, grapplerTokenOrDocument, grapplerPath = [], options = {}) {
+  const grapplerDocument = getTokenDocument(grapplerTokenOrDocument);
+  const targetDocument = getSceneToken(grapplerDocument, getGrappleTargetId(grapplerDocument));
+  if (!grapplerDocument || !targetDocument) return true;
+  if (!Array.isArray(updates) || !movement || typeof movement !== "object") return true;
+
+  if (movement[targetDocument.id] || updates.some(update => update?._id === targetDocument.id)) {
+    ui.notifications.warn(localizeHud("GrappledTargetCannotMove"));
+    return false;
+  }
+
+  const path = normalizeGrappleFollowPath(grapplerDocument, grapplerPath);
+  if (path.length <= 1) return true;
+
+  const waypoints = buildGrappleFollowWaypoints(grapplerDocument, targetDocument, path);
+  if (!waypoints.length) return true;
+
+  const destination = waypoints.at(-1);
+  if (!validateTokenDestination(targetDocument, destination, { ignoreIds: [grapplerDocument.id, targetDocument.id] })) {
+    ui.notifications.warn(localizeHud("GrappledTargetCannotMove"));
+    return false;
+  }
+
+  const sourceMovement = movement[grapplerDocument.id] ?? {};
+  updates.push({ _id: targetDocument.id });
+  movement[targetDocument.id] = {
+    waypoints,
+    method: sourceMovement.method ?? options.method ?? "api",
+    autoRotate: false,
+    showRuler: false,
+    constrainOptions: { ignoreCost: true }
+  };
+  options[GRAPPLE_FOLLOW_MOVEMENT_OPTION] ??= {};
+  options[GRAPPLE_FOLLOW_MOVEMENT_OPTION][targetDocument.id] = grapplerDocument.id;
+  return true;
 }
 
 export async function useGrappleAction(token) {
@@ -408,6 +445,7 @@ function onPreUpdateTokenGrapple(tokenDocument, changes, options) {
 
   const targetGrapplerId = getGrapplerId(tokenDocument);
   if (targetGrapplerId) {
+    if (getFollowMovementGrapplerId(options, tokenDocument.id) === targetGrapplerId) return true;
     void promptGrappleEscapeOnMoveAttempt(tokenDocument, targetGrapplerId);
     return false;
   }
@@ -415,6 +453,10 @@ function onPreUpdateTokenGrapple(tokenDocument, changes, options) {
   const grappleTargetId = getGrappleTargetId(tokenDocument);
   const targetDocument = getSceneToken(tokenDocument, grappleTargetId);
   if (!targetDocument) return true;
+  if (getFollowMovementGrapplerId(options, targetDocument.id) === tokenDocument.id) {
+    pendingGrappleFollowMoves.delete(tokenDocument.id);
+    return true;
+  }
 
   const nextX = Number(foundry.utils.getProperty(changes, "x") ?? tokenDocument.x);
   const nextY = Number(foundry.utils.getProperty(changes, "y") ?? tokenDocument.y);
@@ -438,6 +480,10 @@ function onPreUpdateTokenGrapple(tokenDocument, changes, options) {
 
 function onUpdateTokenGrapple(tokenDocument, changes, options) {
   if (options?.[GRAPPLE_SYNC_OPTION]) return;
+  if (options?.[GRAPPLE_FOLLOW_MOVEMENT_OPTION]) {
+    pendingGrappleFollowMoves.delete(tokenDocument.id);
+    return;
+  }
   if (!foundry.utils.hasProperty(changes, "x") && !foundry.utils.hasProperty(changes, "y")) return;
   const pending = pendingGrappleFollowMoves.get(tokenDocument.id);
   if (!pending) return;
@@ -930,6 +976,79 @@ function validateTokenDestination(tokenDocument, destination, { ignoreIds = [] }
   if (hasMovementCollision(tokenDocument, normalized)) return false;
   if (isDestinationOccupied(tokenDocument, normalized, { ignoreIds })) return false;
   return true;
+}
+
+function normalizeGrappleFollowPath(grapplerDocument, path = []) {
+  const origin = getTokenMovementOrigin(grapplerDocument);
+  const waypoints = Array.isArray(path)
+    ? path.map(normalizeMovementWaypoint).filter(Boolean)
+    : [];
+  if (!waypoints.length) return [origin];
+  if (!isSameMovementWaypoint(waypoints[0], origin)) waypoints.unshift(origin);
+  else waypoints[0] = { ...waypoints[0], ...origin };
+  return waypoints;
+}
+
+function buildGrappleFollowWaypoints(grapplerDocument, targetDocument, grapplerPath) {
+  const origin = grapplerPath[0];
+  const targetOrigin = getTokenMovementOrigin(targetDocument);
+  const waypoints = [];
+  for (const waypoint of grapplerPath.slice(1)) {
+    const shifted = {
+      x: targetOrigin.x + (waypoint.x - origin.x),
+      y: targetOrigin.y + (waypoint.y - origin.y)
+    };
+    const snapped = snapTokenPosition(targetDocument, shifted);
+    const targetWaypoint = {
+      ...waypoint,
+      x: snapped.x,
+      y: snapped.y,
+      width: targetOrigin.width,
+      height: targetOrigin.height,
+      depth: targetOrigin.depth,
+      shape: targetOrigin.shape,
+      level: targetOrigin.level,
+      action: waypoint.action ?? "displace",
+      snapped: true,
+      explicit: waypoint.explicit ?? false,
+      checkpoint: waypoint.checkpoint ?? true
+    };
+    if (Number.isFinite(Number(targetOrigin.elevation)) || Number.isFinite(Number(waypoint.elevation))) {
+      const originElevation = Number(origin.elevation) || 0;
+      targetWaypoint.elevation = (Number(targetOrigin.elevation) || 0) + ((Number(waypoint.elevation) || originElevation) - originElevation);
+    }
+    waypoints.push(targetWaypoint);
+  }
+  return waypoints;
+}
+
+function normalizeMovementWaypoint(waypoint) {
+  const x = Number(waypoint?.x);
+  const y = Number(waypoint?.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return { ...waypoint, x, y };
+}
+
+function getTokenMovementOrigin(tokenDocument) {
+  return {
+    x: Number(tokenDocument?._source?.x ?? tokenDocument?.x) || 0,
+    y: Number(tokenDocument?._source?.y ?? tokenDocument?.y) || 0,
+    elevation: Number(tokenDocument?._source?.elevation ?? tokenDocument?.elevation) || 0,
+    width: tokenDocument?._source?.width ?? tokenDocument?.width,
+    height: tokenDocument?._source?.height ?? tokenDocument?.height,
+    depth: tokenDocument?._source?.depth ?? tokenDocument?.depth,
+    shape: tokenDocument?._source?.shape ?? tokenDocument?.shape,
+    level: tokenDocument?._source?.level ?? tokenDocument?.level
+  };
+}
+
+function isSameMovementWaypoint(left, right) {
+  return Math.abs((Number(left?.x) || 0) - (Number(right?.x) || 0)) <= 0.5
+    && Math.abs((Number(left?.y) || 0) - (Number(right?.y) || 0)) <= 0.5;
+}
+
+function getFollowMovementGrapplerId(options, tokenId) {
+  return String(options?.[GRAPPLE_FOLLOW_MOVEMENT_OPTION]?.[tokenId] ?? "");
 }
 
 function hasMovementCollision(tokenDocument, destination) {
