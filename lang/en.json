@@ -558,6 +558,8 @@
         "CreateWeaponSet": "Create Weapon Set",
         "CreateWeaponSlot": "Create Weapon Slot",
         "DeleteEquipmentSlot": "Delete Slot",
+        "DeleteNaturalSet": "Delete Set",
+        "DeleteNaturalSetConfirm": "Delete natural set \"{name}\"?",
         "DeleteWeaponSet": "Delete Weapon Set",
         "DeleteWeaponSlot": "Delete Weapon Slot",
         "EquipmentSlots": "Equipment",

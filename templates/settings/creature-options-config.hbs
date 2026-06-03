@@ -245,10 +245,13 @@
         <div class="fallout-maw-natural-set-list">
           {{#each naturalItemSets}}
           <div class="fallout-maw-natural-set" data-natural-set-row data-natural-set-id="{{id}}">
-            <label class="fallout-maw-stacked-field fallout-maw-natural-set-label">
-              <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.NaturalSetName"}}</span>
-              <input type="text" data-field="label" value="{{label}}">
-            </label>
+            <div class="fallout-maw-natural-set-header">
+              <label class="fallout-maw-stacked-field fallout-maw-natural-set-label">
+                <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.NaturalSetName"}}</span>
+                <input type="text" data-field="label" value="{{label}}">
+              </label>
+              <button type="button" data-action="deleteNaturalSet" title="{{localize 'FALLOUTMAW.Settings.CreatureOptions.DeleteNaturalSet'}}"><i class="fa-solid fa-trash"></i></button>
+            </div>
 
             <div class="fallout-maw-equipment-config-grid fallout-maw-natural-race-config-grid">
               <div class="fallout-maw-settings-block">

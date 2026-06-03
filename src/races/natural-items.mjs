@@ -84,7 +84,7 @@ export function normalizeNaturalRaceItemEntries(entries, kind) {
 }
 
 export function normalizeNaturalItemSetEntries(entries, legacyWeapons = [], legacyFeatures = []) {
-  const source = Array.isArray(entries) && entries.length
+  const source = Array.isArray(entries)
     ? entries
     : [{
       id: "naturalSet",

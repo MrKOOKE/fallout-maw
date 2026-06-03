@@ -1976,8 +1976,16 @@
   padding-top: 0;
 }
 
+.fallout-maw-natural-set-header {
+  align-items: end;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 24rem) auto;
+  justify-content: start;
+}
+
 .fallout-maw-natural-set-label {
-  max-width: 24rem;
+  min-width: 0;
 }
 
 .fallout-maw-natural-item-row {

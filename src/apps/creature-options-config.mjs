@@ -79,6 +79,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       createWeaponSlot: this.#onCreateWeaponSlot,
       deleteWeaponSlot: this.#onDeleteWeaponSlot,
       createNaturalSet: this.#onCreateNaturalSet,
+      deleteNaturalSet: this.#onDeleteNaturalSet,
       createNaturalWeapon: this.#onCreateNaturalWeapon,
       editNaturalWeapon: this.#onEditNaturalWeapon,
       deleteNaturalWeapon: this.#onDeleteNaturalWeapon,
@@ -437,6 +438,28 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     if (!race) return undefined;
     race.naturalItemSets ??= [];
     race.naturalItemSets.push(createDefaultNaturalItemSetEntry(race.naturalItemSets.map(set => set.id)));
+    return this.forceRender();
+  }
+
+  static async #onDeleteNaturalSet(event, target) {
+    event.preventDefault();
+    const setId = target.closest("[data-natural-set-row]")?.dataset.naturalSetId ?? "";
+    if (!setId) return undefined;
+
+    this.#updateFromCurrentForm();
+    const race = this.#activeRace;
+    if (!race) return undefined;
+
+    const naturalSet = race.naturalItemSets.find(set => set.id === setId);
+    const confirmed = await DialogV2.confirm({
+      window: { title: localize("FALLOUTMAW.Settings.CreatureOptions.DeleteNaturalSet") },
+      content: `<p>${format("FALLOUTMAW.Settings.CreatureOptions.DeleteNaturalSetConfirm", { name: naturalSet?.label || setId })}</p>`,
+      rejectClose: false,
+      modal: true
+    });
+    if (!confirmed) return undefined;
+
+    race.naturalItemSets = race.naturalItemSets.filter(set => set.id !== setId);
     return this.forceRender();
   }
 

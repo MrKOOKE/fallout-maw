@@ -557,6 +557,8 @@
         "CreateWeaponSet": "Создать набор",
         "CreateWeaponSlot": "Создать слот оружия",
         "DeleteEquipmentSlot": "Удалить слот",
+        "DeleteNaturalSet": "Удалить набор",
+        "DeleteNaturalSetConfirm": "Удалить набор \"{name}\"?",
         "DeleteWeaponSet": "Удалить набор",
         "DeleteWeaponSlot": "Удалить слот оружия",
         "EquipmentSlots": "Снаряжение",
