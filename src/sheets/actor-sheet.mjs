@@ -272,7 +272,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const levelSettings = getLevelSettings();
     const typeId = actor.system?.creature?.typeId;
     const raceId = actor.system?.creature?.raceId;
+    const subtypeId = actor.system?.creature?.subtypeId;
     const race = creatureOptions.races.find(entry => entry.id === raceId);
+    const subtype = (race?.naturalItemSets ?? []).find(entry => entry.id === subtypeId) ?? null;
     const needSettings = getRaceNeedSettings(race);
     const sourceSystem = actor.system?._source ?? actor.system;
     const limbEntries = Object.entries(actor.system?.limbs ?? {});
@@ -333,8 +335,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       })),
       creatureTypeName: creatureOptions.types.find(type => type.id === typeId)?.name || "",
       creatureRaceName: race?.name || "",
+      creatureSubtypeName: subtype?.label || game.i18n.localize("FALLOUTMAW.Actor.NoSubtype"),
       creatureTypes: creatureOptions.types.map(type => ({ ...type, selected: type.id === typeId })),
       creatureRaces: creatureOptions.races.map(race => ({ ...race, selected: race.id === raceId })),
+      creatureSubtypes: buildCreatureSubtypeOptions(creatureOptions.races, raceId, subtypeId),
       progressionExperienceDisplay: `${currentExperience} / ${nextThreshold}`,
       progressionExperienceNext: nextThreshold,
       progressionExperiencePercent: Number(progressionPercent.toFixed(2)),
@@ -790,9 +794,29 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const root = this.element;
     const typeSelect = root?.querySelector("[data-creature-type-select]");
     const raceSelect = root?.querySelector("[data-creature-race-select]");
+    const subtypeSelect = root?.querySelector("[data-creature-subtype-select]");
     if (!typeSelect || !raceSelect) return;
 
-    const updateRaceOptions = () => {
+    const selectFirstVisible = select => {
+      const option = Array.from(select.options).find(entry => entry.value && !entry.hidden && !entry.disabled);
+      select.value = option?.value ?? "";
+    };
+
+    const updateSubtypeOptions = () => {
+      if (!subtypeSelect) return;
+      const raceId = raceSelect.value;
+      let selectedAvailable = false;
+      for (const option of subtypeSelect.options) {
+        const optionRaceId = option.dataset.raceId;
+        const visible = !option.value || (raceId && optionRaceId === raceId);
+        option.hidden = !visible;
+        option.disabled = !visible;
+        if (visible && option.selected && option.value) selectedAvailable = true;
+      }
+      if (!selectedAvailable) selectFirstVisible(subtypeSelect);
+    };
+
+    const updateRaceOptions = ({ selectDefault = false } = {}) => {
       const typeId = typeSelect.value;
       let selectedAvailable = false;
 
@@ -801,19 +825,22 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         const visible = !option.value || (typeId && optionTypeId === typeId);
         option.hidden = !visible;
         option.disabled = !visible;
-        if (visible && option.selected) selectedAvailable = true;
+        if (visible && option.selected && option.value) selectedAvailable = true;
       }
 
-      if (!selectedAvailable) raceSelect.value = "";
+      if (selectDefault || !selectedAvailable) selectFirstVisible(raceSelect);
+      updateSubtypeOptions();
     };
 
     raceSelect.addEventListener("change", event => {
       const selected = event.currentTarget.selectedOptions[0];
       if (selected?.dataset.typeId) typeSelect.value = selected.dataset.typeId;
       updateRaceOptions();
+      updateSubtypeOptions();
     });
-    typeSelect.addEventListener("change", updateRaceOptions);
+    typeSelect.addEventListener("change", () => updateRaceOptions({ selectDefault: true }));
     updateRaceOptions();
+    updateSubtypeOptions();
   }
 
   #activateInventoryInteractions() {
@@ -5116,4 +5143,13 @@ function getEffectCategoryKey(effect) {
 function getEffectDurationLabel(effect) {
   if (!effect.duration?.remaining) return "";
   return effect.duration.label ?? "";
+}
+
+function buildCreatureSubtypeOptions(races = [], selectedRaceId = "", selectedSubtypeId = "") {
+  return races.flatMap(race => (race.naturalItemSets ?? []).map(set => ({
+    id: set.id,
+    raceId: race.id,
+    label: set.label,
+    selected: race.id === selectedRaceId && set.id === selectedSubtypeId
+  })));
 }

@@ -74,7 +74,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       }),
       creature: new SchemaField({
         typeId: new StringField({ required: true, blank: true, initial: "" }),
-        raceId: new StringField({ required: true, blank: true, initial: "" })
+        raceId: new StringField({ required: true, blank: true, initial: "" }),
+        subtypeId: new StringField({ required: true, blank: true, initial: "" })
       }),
       characteristics: new TypedObjectField(
         new NumberField({ required: true, integer: true, initial: 0 }),

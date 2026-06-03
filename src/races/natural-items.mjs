@@ -12,7 +12,18 @@ export const NATURAL_RACE_ITEM_KINDS = Object.freeze({
 
 const DEFAULT_NATURAL_WEAPON_NAME = "Natural Weapon";
 const DEFAULT_NATURAL_FEATURE_NAME = "Natural Feature";
+const DEFAULT_NATURAL_SET_LABEL = "Основной";
 const naturalItemSyncActors = new Set();
+
+export function createDefaultNaturalItemSetEntry(existingIds = []) {
+  const id = getUniqueNaturalSetId("naturalSet", existingIds);
+  return normalizeNaturalItemSetEntry({
+    id,
+    label: getDefaultNaturalSetLabel(),
+    naturalWeapons: [],
+    naturalFeatures: []
+  });
+}
 
 export function createDefaultNaturalWeaponEntry() {
   const id = foundry.utils.randomID();
@@ -72,6 +83,34 @@ export function normalizeNaturalRaceItemEntries(entries, kind) {
     .filter(entry => entry.id && entry.item);
 }
 
+export function normalizeNaturalItemSetEntries(entries, legacyWeapons = [], legacyFeatures = []) {
+  const source = Array.isArray(entries) && entries.length
+    ? entries
+    : [{
+      id: "naturalSet",
+      label: getDefaultNaturalSetLabel(),
+      naturalWeapons: legacyWeapons,
+      naturalFeatures: legacyFeatures
+    }];
+  const usedIds = new Set();
+  return source.map((entry, index) => {
+    const normalized = normalizeNaturalItemSetEntry(entry, index);
+    const baseId = normalized.id || `naturalSet${index + 1}`;
+    normalized.id = getUniqueNaturalSetId(baseId, usedIds);
+    usedIds.add(normalized.id);
+    return normalized;
+  });
+}
+
+export function normalizeNaturalItemSetEntry(entry = {}, index = 0) {
+  return {
+    id: String(entry?.id ?? "").trim() || `naturalSet${index + 1}`,
+    label: String(entry?.label ?? "").trim() || getDefaultNaturalSetLabel(),
+    naturalWeapons: normalizeNaturalRaceItemEntries(entry?.naturalWeapons, NATURAL_RACE_ITEM_KINDS.weapon),
+    naturalFeatures: normalizeNaturalRaceItemEntries(entry?.naturalFeatures, NATURAL_RACE_ITEM_KINDS.feature)
+  };
+}
+
 export function normalizeNaturalRaceItemEntry(entry = {}, kind = NATURAL_RACE_ITEM_KINDS.weapon) {
   const id = String(entry?.id ?? "").trim() || foundry.utils.randomID();
   const item = normalizeNaturalRaceItemData(entry?.item ?? entry, kind, id);
@@ -109,21 +148,15 @@ export function registerNaturalRaceItemHooks() {
   Hooks.on("createActor", actor => void syncActorNaturalRaceItems(actor));
   Hooks.on("updateActor", (actor, changes) => {
     const paths = Object.keys(foundry.utils.flattenObject(changes ?? {}));
-    if (paths.some(path => path === "system.creature.raceId" || path === "system.creature.typeId")) {
+    if (paths.some(path => path === "system.creature.raceId" || path === "system.creature.subtypeId")) {
       void syncActorNaturalRaceItems(actor);
     }
-  });
-  Hooks.on("updateSetting", setting => {
-    if (setting?.key === `${SYSTEM_ID}.creatureOptions`) void syncLoadedActorsNaturalRaceItems();
   });
   Hooks.on("preDeleteItem", (item, options) => {
     if (!isNaturalRaceWeapon(item)) return undefined;
     if (options?.allowNaturalRaceItemDelete) return undefined;
     ui.notifications?.warn?.("Natural race weapons cannot be deleted from an actor.");
     return false;
-  });
-  Hooks.on("deleteItem", item => {
-    if (isNaturalRaceItem(item)) void syncActorNaturalRaceItems(item.parent);
   });
   Hooks.on("preUpdateItem", (item, changes, options) => {
     if (!isNaturalRaceWeapon(item) || options?.allowNaturalRaceItemUpdate) return undefined;
@@ -139,16 +172,6 @@ export function registerNaturalRaceItemHooks() {
   });
 }
 
-export async function syncLoadedActorsNaturalRaceItems() {
-  if (!game.user?.isActiveGM) return;
-  const actors = new Map();
-  for (const actor of game.actors ?? []) actors.set(actor.uuid, actor);
-  for (const token of canvas?.tokens?.placeables ?? []) {
-    if (token.actor) actors.set(token.actor.uuid, token.actor);
-  }
-  for (const actor of actors.values()) await syncActorNaturalRaceItems(actor);
-}
-
 export async function syncActorNaturalRaceItems(actor) {
   if (!actor || !game.user?.isActiveGM) return;
   if (!["character", "npc"].includes(actor.type)) return;
@@ -157,36 +180,12 @@ export async function syncActorNaturalRaceItems(actor) {
   naturalItemSyncActors.add(actor.uuid);
   try {
     const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId) ?? null;
-    const desired = buildDesiredNaturalItems(race);
-    const desiredKeys = new Set(desired.map(entry => getDesiredNaturalItemKey(entry.kind, entry.sourceId)));
+    const naturalSet = getActorNaturalItemSet(actor, race);
+    const desired = buildDesiredNaturalItems(race, naturalSet);
     const naturalItems = actor.items?.filter(item => isNaturalRaceItem(item)) ?? [];
-    const deletes = naturalItems
-      .filter(item => !desiredKeys.has(getDesiredNaturalItemKey(getNaturalRaceItemFlag(item)?.kind, getNaturalRaceItemFlag(item)?.sourceId)))
-      .map(item => item.id);
+    const deletes = naturalItems.map(item => item.id);
     if (deletes.length) await actor.deleteEmbeddedDocuments("Item", deletes, { allowNaturalRaceItemDelete: true });
-
-    const remaining = actor.items?.filter(item => isNaturalRaceItem(item)) ?? [];
-    const byKey = new Map(remaining.map(item => [
-      getDesiredNaturalItemKey(getNaturalRaceItemFlag(item)?.kind, getNaturalRaceItemFlag(item)?.sourceId),
-      item
-    ]));
-    const creates = [];
-    const updates = [];
-
-    for (const entry of desired) {
-      const key = getDesiredNaturalItemKey(entry.kind, entry.sourceId);
-      const existing = byKey.get(key);
-      if (!existing) {
-        creates.push(entry.data);
-        continue;
-      }
-
-      const update = buildNaturalItemUpdate(existing, entry);
-      if (update) updates.push(update);
-    }
-
-    if (updates.length) await actor.updateEmbeddedDocuments("Item", updates, { allowNaturalRaceItemUpdate: true });
-    if (creates.length) await actor.createEmbeddedDocuments("Item", creates);
+    if (desired.length) await actor.createEmbeddedDocuments("Item", desired.map(entry => entry.data));
   } finally {
     naturalItemSyncActors.delete(actor.uuid);
   }
@@ -214,7 +213,8 @@ export function getNaturalRaceItemFlag(itemOrData) {
 }
 
 export function getNaturalWeaponSetContext(actor, race, currencies = []) {
-  const slots = (race?.naturalWeapons ?? []).map(entry => {
+  const naturalSet = getActorNaturalItemSet(actor, race);
+  const slots = (naturalSet?.naturalWeapons ?? []).map(entry => {
     const item = actor?.items?.contents?.find(candidate => {
       const flag = getNaturalRaceItemFlag(candidate);
       return flag?.kind === NATURAL_RACE_ITEM_KINDS.weapon && flag.sourceId === entry.id;
@@ -228,9 +228,16 @@ export function getNaturalWeaponSetContext(actor, race, currencies = []) {
   if (!slots.length) return null;
   return {
     key: NATURAL_RACE_WEAPON_SET_KEY,
-    label: game.i18n.localize("FALLOUTMAW.Settings.CreatureOptions.NaturalWeapons"),
+    label: naturalSet?.label || game.i18n.localize("FALLOUTMAW.Settings.CreatureOptions.NaturalWeapons"),
     slots
   };
+}
+
+export function getActorNaturalItemSet(actor, race) {
+  const sets = race?.naturalItemSets ?? [];
+  if (!sets.length) return null;
+  const subtypeId = String(actor?.system?.creature?.subtypeId ?? "");
+  return sets.find(entry => entry.id === subtypeId) ?? sets[0] ?? null;
 }
 
 export function createNaturalWeaponPlacement(sourceId = "") {
@@ -246,56 +253,33 @@ export function createNaturalWeaponPlacement(sourceId = "") {
   });
 }
 
-function buildDesiredNaturalItems(race) {
-  if (!race) return [];
+function buildDesiredNaturalItems(race, naturalSet) {
+  if (!race || !naturalSet) return [];
   return [
-    ...(race.naturalWeapons ?? []).map(entry => buildDesiredNaturalItem(race, entry, NATURAL_RACE_ITEM_KINDS.weapon)),
-    ...(race.naturalFeatures ?? []).map(entry => buildDesiredNaturalItem(race, entry, NATURAL_RACE_ITEM_KINDS.feature))
+    ...(naturalSet.naturalWeapons ?? []).map(entry => buildDesiredNaturalItem(race, naturalSet, entry, NATURAL_RACE_ITEM_KINDS.weapon)),
+    ...(naturalSet.naturalFeatures ?? []).map(entry => buildDesiredNaturalItem(race, naturalSet, entry, NATURAL_RACE_ITEM_KINDS.feature))
   ].filter(Boolean);
 }
 
-function buildDesiredNaturalItem(race, entry, kind) {
+function buildDesiredNaturalItem(race, naturalSet, entry, kind) {
   if (!entry?.id || !entry?.item) return null;
   const templateSignature = getNaturalRaceItemTemplateSignature(entry.item, kind, entry.id);
   const data = normalizeNaturalRaceItemData(entry.item, kind, entry.id);
   foundry.utils.setProperty(data, `flags.${SYSTEM_ID}.${NATURAL_RACE_ITEM_FLAG}`, {
     kind,
     raceId: race.id,
+    subtypeId: naturalSet.id,
     sourceId: entry.id,
     templateSignature
   });
   return {
     kind,
     raceId: race.id,
+    subtypeId: naturalSet.id,
     sourceId: entry.id,
     templateSignature,
     data
   };
-}
-
-function buildNaturalItemUpdate(existing, desired) {
-  const flag = getNaturalRaceItemFlag(existing);
-  const updateData = foundry.utils.deepClone(desired.data);
-  updateData._id = existing.id;
-  const comparableSignature = getNaturalRaceItemTemplateSignature(existing.toObject(), desired.kind, desired.sourceId);
-  if (flag?.templateSignature === comparableSignature) return updateData;
-
-  const update = {
-    _id: existing.id,
-    [`flags.${SYSTEM_ID}.${NATURAL_RACE_ITEM_FLAG}`]: {
-      kind: desired.kind,
-      raceId: desired.raceId,
-      sourceId: desired.sourceId,
-      templateSignature: flag?.templateSignature || comparableSignature
-    }
-  };
-  if (desired.kind === NATURAL_RACE_ITEM_KINDS.weapon) {
-    const placement = createNaturalWeaponPlacement(desired.sourceId);
-    update["system.equipped"] = false;
-    update["system.container.parentId"] = ROOT_CONTAINER_ID;
-    for (const [key, value] of Object.entries(placement)) update[`system.placement.${key}`] = value;
-  }
-  return update;
 }
 
 function getNaturalRaceItemTemplateSignature(itemData, kind, sourceId = "") {
@@ -303,8 +287,17 @@ function getNaturalRaceItemTemplateSignature(itemData, kind, sourceId = "") {
   return JSON.stringify(sortObjectKeys(data));
 }
 
-function getDesiredNaturalItemKey(kind = "", sourceId = "") {
-  return `${kind}:${sourceId}`;
+function getUniqueNaturalSetId(baseId = "naturalSet", existingIds = []) {
+  const existing = existingIds instanceof Set ? existingIds : new Set(existingIds);
+  const base = String(baseId ?? "").trim() || "naturalSet";
+  if (!existing.has(base)) return base;
+  let index = 2;
+  while (existing.has(`${base}${index}`)) index += 1;
+  return `${base}${index}`;
+}
+
+function getDefaultNaturalSetLabel() {
+  return globalThis.game?.i18n?.localize?.("FALLOUTMAW.Settings.CreatureOptions.DefaultNaturalSet") || DEFAULT_NATURAL_SET_LABEL;
 }
 
 function createNaturalWeaponDisplayItem(item, currencies = []) {

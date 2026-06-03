@@ -1959,6 +1959,27 @@
   gap: 0.4rem;
 }
 
+.fallout-maw-natural-set-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.fallout-maw-natural-set {
+  border-top: 1px solid rgba(131, 119, 74, 0.35);
+  display: grid;
+  gap: 0.65rem;
+  padding-top: 0.75rem;
+}
+
+.fallout-maw-natural-set:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.fallout-maw-natural-set-label {
+  max-width: 24rem;
+}
+
 .fallout-maw-natural-item-row {
   grid-template-columns: 38px minmax(0, 1fr) auto auto;
 }
@@ -2579,7 +2600,7 @@
   display: grid;
   flex: 1 1 auto;
   gap: 0.35rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   min-width: 0;
 }
 

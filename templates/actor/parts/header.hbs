@@ -10,7 +10,7 @@
       <div class="fallout-maw-header-meta">
         <div class="fallout-maw-header-meta-row">
           <label class="fallout-maw-header-stat fallout-maw-header-creature-field">
-            <span>{{localize "FALLOUTMAW.Actor.CreatureType"}} / {{localize "FALLOUTMAW.Actor.Race"}}:</span>
+            <span>{{localize "FALLOUTMAW.Actor.CreatureType"}} / {{localize "FALLOUTMAW.Actor.Race"}} / {{localize "FALLOUTMAW.Actor.Subtype"}}:</span>
             {{#if freeEdit}}
             <span class="fallout-maw-header-creature-selects">
             <select name="system.creature.typeId" data-creature-type-select>
@@ -25,9 +25,15 @@
               <option value="{{id}}" data-type-id="{{typeId}}" {{#if selected}}selected{{/if}}>{{name}}</option>
               {{/each}}
             </select>
+            <select name="system.creature.subtypeId" data-creature-subtype-select>
+              <option value="">{{localize "FALLOUTMAW.Actor.NoSubtype"}}</option>
+              {{#each creatureSubtypes}}
+              <option value="{{id}}" data-race-id="{{raceId}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
             </span>
             {{else}}
-            <strong>{{creatureTypeName}} / {{creatureRaceName}}</strong>
+            <strong>{{creatureTypeName}} / {{creatureRaceName}} / {{creatureSubtypeName}}</strong>
             {{/if}}
           </label>
           <label class="fallout-maw-header-stat fallout-maw-level-field">

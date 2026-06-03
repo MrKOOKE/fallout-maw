@@ -37,7 +37,7 @@ import { registerAbilityCooldownHooks } from "./abilities/cooldowns.mjs";
 import { registerDescriptionFormulaEnrichment } from "./formulas/description-formulas.mjs";
 import { registerNeedThresholdHooks } from "./needs/need-thresholds.mjs";
 import { registerRegenerationHooks } from "./needs/regeneration.mjs";
-import { registerNaturalRaceItemHooks, syncLoadedActorsNaturalRaceItems } from "./races/natural-items.mjs";
+import { registerNaturalRaceItemHooks } from "./races/natural-items.mjs";
 import { registerStealthHooks } from "./stealth/index.mjs";
 import { registerSystemSheets } from "./sheets/index.mjs";
 import { FalloutMaWDragDrop } from "./utils/drag-drop.mjs";
@@ -114,7 +114,6 @@ Hooks.once("ready", async () => {
   syncTokenActionHud();
   initializeCombatCarousel();
   await syncLoadedActorAbilityEffects();
-  await syncLoadedActorsNaturalRaceItems();
 });
 
 Hooks.on("dropCanvasData", async (canvas, data, event) => {

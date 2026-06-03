@@ -31,7 +31,7 @@
       <select name="system.creature.typeId" data-creature-type-select>
         <option value="">{{localize "FALLOUTMAW.Actor.NoCreatureType"}}</option>
         {{#each creatureTypes}}
-        <option value="{{value}}">{{label}}</option>
+        <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
         {{/each}}
       </select>
     </div>
@@ -45,6 +45,16 @@
         {{/each}}
       </select>
       <p class="hint">{{localize "FALLOUTMAW.Creation.RaceFilterHint"}}</p>
+    </div>
+
+    <div class="form-group">
+      <label>{{localize "FALLOUTMAW.Actor.Subtype"}}</label>
+      <select name="system.creature.subtypeId" data-creature-subtype-select>
+        <option value="">{{localize "FALLOUTMAW.Actor.NoSubtype"}}</option>
+        {{#each creatureSubtypes}}
+        <option value="{{id}}" data-race-id="{{raceId}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+        {{/each}}
+      </select>
     </div>
   </fieldset>
 

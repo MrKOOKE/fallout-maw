@@ -22,11 +22,11 @@ import {
 import { format, localize } from "../utils/i18n.mjs";
 import { LOCKED_FEATURES_CATEGORY_ID } from "../settings/abilities.mjs";
 import {
+  createDefaultNaturalItemSetEntry,
   createDefaultNaturalFeatureEntry,
   createDefaultNaturalWeaponEntry,
   createNaturalFeatureEntryFromCatalogAbility,
   normalizeNaturalRaceItemData,
-  syncLoadedActorsNaturalRaceItems,
   NATURAL_RACE_ITEM_KINDS
 } from "../races/natural-items.mjs";
 import { buildActionCostEffectKeyTokens, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
@@ -78,6 +78,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       deleteWeaponSet: this.#onDeleteWeaponSet,
       createWeaponSlot: this.#onCreateWeaponSlot,
       deleteWeaponSlot: this.#onDeleteWeaponSlot,
+      createNaturalSet: this.#onCreateNaturalSet,
       createNaturalWeapon: this.#onCreateNaturalWeapon,
       editNaturalWeapon: this.#onEditNaturalWeapon,
       deleteNaturalWeapon: this.#onDeleteNaturalWeapon,
@@ -151,8 +152,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
           }))
         }))
       })),
-      naturalWeapons: (selectedRace?.naturalWeapons ?? []).map(entry => prepareNaturalItemRow(entry)),
-      naturalFeatures: (selectedRace?.naturalFeatures ?? []).map(entry => prepareNaturalItemRow(entry)),
+      naturalItemSets: (selectedRace?.naturalItemSets ?? []).map(set => prepareNaturalItemSetRow(set)),
       inventorySize: selectedRace?.inventorySize ?? createDefaultInventorySize(),
       regeneration: selectedRace?.regeneration ?? createDefaultRegeneration(),
       resistanceDamageTypes: configurableDamageTypes.map(damageType => ({
@@ -430,14 +430,24 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
-  static async #onCreateNaturalWeapon(event) {
+  static #onCreateNaturalSet(event) {
     event.preventDefault();
     this.#updateFromCurrentForm();
     const race = this.#activeRace;
     if (!race) return undefined;
-    race.naturalWeapons ??= [];
+    race.naturalItemSets ??= [];
+    race.naturalItemSets.push(createDefaultNaturalItemSetEntry(race.naturalItemSets.map(set => set.id)));
+    return this.forceRender();
+  }
+
+  static async #onCreateNaturalWeapon(event, target) {
+    event.preventDefault();
+    this.#updateFromCurrentForm();
+    const naturalSet = this.#getNaturalSetFromTarget(target);
+    if (!naturalSet) return undefined;
+    naturalSet.naturalWeapons ??= [];
     const entry = createDefaultNaturalWeaponEntry();
-    race.naturalWeapons.push(entry);
+    naturalSet.naturalWeapons.push(entry);
     await this.forceRender();
     return this.#openNaturalItemEditor(entry, NATURAL_RACE_ITEM_KINDS.weapon);
   }
@@ -453,22 +463,22 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
   static #onDeleteNaturalWeapon(event, target) {
     event.preventDefault();
     this.#updateFromCurrentForm();
-    const race = this.#activeRace;
-    if (!race) return undefined;
+    const naturalSet = this.#getNaturalSetFromTarget(target);
+    if (!naturalSet) return undefined;
     const id = target.closest("[data-natural-weapon-row]")?.dataset.naturalItemId ?? "";
-    race.naturalWeapons = (race.naturalWeapons ?? []).filter(entry => entry.id !== id);
+    naturalSet.naturalWeapons = (naturalSet.naturalWeapons ?? []).filter(entry => entry.id !== id);
     return this.forceRender();
   }
 
-  static async #onAddNaturalFeature(event) {
+  static async #onAddNaturalFeature(event, target) {
     event.preventDefault();
     this.#updateFromCurrentForm();
-    const race = this.#activeRace;
-    if (!race) return undefined;
-    race.naturalFeatures ??= [];
+    const naturalSet = this.#getNaturalSetFromTarget(target);
+    if (!naturalSet) return undefined;
+    naturalSet.naturalFeatures ??= [];
     const entry = await this.#chooseNaturalFeatureEntry();
     if (!entry) return undefined;
-    race.naturalFeatures.push(entry);
+    naturalSet.naturalFeatures.push(entry);
     return this.forceRender();
   }
 
@@ -483,10 +493,10 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
   static #onDeleteNaturalFeature(event, target) {
     event.preventDefault();
     this.#updateFromCurrentForm();
-    const race = this.#activeRace;
-    if (!race) return undefined;
+    const naturalSet = this.#getNaturalSetFromTarget(target);
+    if (!naturalSet) return undefined;
     const id = target.closest("[data-natural-feature-row]")?.dataset.naturalItemId ?? "";
-    race.naturalFeatures = (race.naturalFeatures ?? []).filter(entry => entry.id !== id);
+    naturalSet.naturalFeatures = (naturalSet.naturalFeatures ?? []).filter(entry => entry.id !== id);
     return this.forceRender();
   }
 
@@ -544,9 +554,15 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
   }
 
   #getNaturalItemEntryFromTarget(target, property, selector) {
-    const race = this.#activeRace;
+    const naturalSet = this.#getNaturalSetFromTarget(target);
     const id = target.closest(selector)?.dataset.naturalItemId ?? "";
-    return (race?.[property] ?? []).find(entry => entry.id === id) ?? null;
+    return (naturalSet?.[property] ?? []).find(entry => entry.id === id) ?? null;
+  }
+
+  #getNaturalSetFromTarget(target) {
+    const setId = target.closest("[data-natural-set-row]")?.dataset.naturalSetId ?? "";
+    const race = this.#activeRace;
+    return (race?.naturalItemSets ?? []).find(set => set.id === setId) ?? null;
   }
 
   async #chooseNaturalFeatureEntry() {
@@ -665,8 +681,9 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     race.limbs = this.#readLimbsFromForm();
     race.equipmentSlots = this.#readEquipmentSlotsFromForm();
     race.weaponSets = this.#readWeaponSetsFromForm();
-    race.naturalWeapons = this.#readNaturalRaceItemsFromForm("naturalWeapons", "[data-natural-weapon-row]", NATURAL_RACE_ITEM_KINDS.weapon);
-    race.naturalFeatures = this.#readNaturalRaceItemsFromForm("naturalFeatures", "[data-natural-feature-row]", NATURAL_RACE_ITEM_KINDS.feature);
+    race.naturalItemSets = this.#readNaturalItemSetsFromForm();
+    delete race.naturalWeapons;
+    delete race.naturalFeatures;
     race.inventorySize = {
       columns: Math.max(1, toInteger(formData.race?.inventorySize?.columns ?? createDefaultInventorySize().columns)),
       rows: Math.max(1, toInteger(formData.race?.inventorySize?.rows ?? createDefaultInventorySize().rows))
@@ -733,9 +750,27 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     }).filter(set => set.key);
   }
 
-  #readNaturalRaceItemsFromForm(property, selector, kind) {
-    const rows = Array.from(this.form?.querySelectorAll(selector) ?? []);
-    const current = this.#activeRace?.[property] ?? [];
+  #readNaturalItemSetsFromForm() {
+    const rows = Array.from(this.form?.querySelectorAll("[data-natural-set-row]") ?? []);
+    const current = this.#activeRace?.naturalItemSets ?? [];
+    return rows
+      .map((row, index) => {
+        const id = String(row.dataset.naturalSetId ?? "").trim();
+        const existing = current.find(set => set.id === id) ?? current[index] ?? {};
+        if (!id || !existing) return null;
+        return {
+          id,
+          label: row.querySelector("[data-field='label']")?.value?.trim() || localize("FALLOUTMAW.Settings.CreatureOptions.DefaultNaturalSet"),
+          naturalWeapons: this.#readNaturalRaceItemsFromSet(row, existing, "naturalWeapons", "[data-natural-weapon-row]", NATURAL_RACE_ITEM_KINDS.weapon),
+          naturalFeatures: this.#readNaturalRaceItemsFromSet(row, existing, "naturalFeatures", "[data-natural-feature-row]", NATURAL_RACE_ITEM_KINDS.feature)
+        };
+      })
+      .filter(Boolean);
+  }
+
+  #readNaturalRaceItemsFromSet(setRow, naturalSet, property, selector, kind) {
+    const rows = Array.from(setRow?.querySelectorAll(selector) ?? []);
+    const current = naturalSet?.[property] ?? [];
     return rows
       .map(row => {
         const id = String(row.dataset.naturalItemId ?? "").trim();
@@ -856,7 +891,6 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
   async #saveAndRender(message) {
     await setCreatureOptions(this.creatureOptions);
     this.creatureOptions = getCreatureOptions();
-    await syncLoadedActorsNaturalRaceItems();
     ui.notifications.info(message);
     return this.forceRender();
   }
@@ -1061,6 +1095,14 @@ function getUniqueId(baseId, existingIds) {
   let index = 2;
   while (used.has(`${baseId}${index}`)) index += 1;
   return `${baseId}${index}`;
+}
+
+function prepareNaturalItemSetRow(set = {}) {
+  return {
+    ...set,
+    naturalWeapons: (set.naturalWeapons ?? []).map(entry => prepareNaturalItemRow(entry)),
+    naturalFeatures: (set.naturalFeatures ?? []).map(entry => prepareNaturalItemRow(entry))
+  };
 }
 
 function prepareNaturalItemRow(entry = {}) {

@@ -34,8 +34,12 @@ export class FalloutMaWActor extends Actor {
 
   static async createDialog(data = {}, createOptions = {}, dialogOptions = {}, renderOptions = {}) {
     const creatureOptions = getCreatureOptions();
-    const selectedCreatureType = foundry.utils.getProperty(data, "system.creature.typeId") || "";
-    const selectedCreatureRace = foundry.utils.getProperty(data, "system.creature.raceId") || "";
+    const creatureSelection = resolveCreatureSelection(
+      creatureOptions,
+      foundry.utils.getProperty(data, "system.creature.typeId") || "",
+      foundry.utils.getProperty(data, "system.creature.raceId") || "",
+      foundry.utils.getProperty(data, "system.creature.subtypeId") || ""
+    );
     const priorRender = dialogOptions.render;
 
     return super.createDialog(
@@ -47,9 +51,12 @@ export class FalloutMaWActor extends Actor {
         position: foundry.utils.mergeObject({ width: 430 }, dialogOptions.position ?? {}, { inplace: false }),
         context: {
           ...(dialogOptions.context ?? {}),
-          selectedCreatureType,
-          creatureTypes: creatureOptions.types.map(type => ({ value: type.id, label: type.name })),
-          creatureRaces: creatureOptions.races.map(race => ({ ...race, selected: race.id === selectedCreatureRace }))
+          selectedCreatureType: creatureSelection.typeId,
+          selectedCreatureRace: creatureSelection.raceId,
+          selectedCreatureSubtype: creatureSelection.subtypeId,
+          creatureTypes: creatureOptions.types.map(type => ({ value: type.id, label: type.name, selected: type.id === creatureSelection.typeId })),
+          creatureRaces: creatureOptions.races.map(race => ({ ...race, selected: race.id === creatureSelection.raceId })),
+          creatureSubtypes: buildCreatureSubtypeOptions(creatureOptions.races, creatureSelection.raceId, creatureSelection.subtypeId)
         },
         render: (event, dialog) => {
           priorRender?.(event, dialog);
@@ -295,12 +302,13 @@ export class FalloutMaWActor extends Actor {
 function applyCreatureRaceDefaults(actor) {
   const creatureOptions = getCreatureOptions();
   const creature = actor.system?.creature;
-  const race = creatureOptions.races.find(entry => entry.id === creature?.raceId);
-  const typeId = race?.typeId || creature?.typeId || "";
+  const selection = resolveCreatureSelection(creatureOptions, creature?.typeId, creature?.raceId, creature?.subtypeId);
+  const race = creatureOptions.races.find(entry => entry.id === selection.raceId);
+  const typeId = selection.typeId;
 
   if (!race && !typeId) return;
 
-  const system = { creature: { typeId, raceId: race?.id || "" } };
+  const system = { creature: { typeId, raceId: race?.id || "", subtypeId: selection.subtypeId } };
   if (race) {
     system.characteristics = { ...race.characteristics };
     system.progression = { ...race.progression };
@@ -368,9 +376,29 @@ function activateCreatureCreateDialog(dialog) {
   const root = dialog.element instanceof HTMLElement ? dialog.element : dialog.element?.[0] ?? dialog.element;
   const typeSelect = root?.querySelector("[data-creature-type-select]");
   const raceSelect = root?.querySelector("[data-creature-race-select]");
+  const subtypeSelect = root?.querySelector("[data-creature-subtype-select]");
   if (!typeSelect || !raceSelect) return;
 
-  const updateRaceOptions = () => {
+  const selectFirstVisible = select => {
+    const option = Array.from(select.options).find(entry => entry.value && !entry.hidden && !entry.disabled);
+    select.value = option?.value ?? "";
+  };
+
+  const updateSubtypeOptions = () => {
+    if (!subtypeSelect) return;
+    const raceId = raceSelect.value;
+    let selectedAvailable = false;
+    for (const option of subtypeSelect.options) {
+      const optionRaceId = option.dataset.raceId;
+      const visible = !option.value || (raceId && optionRaceId === raceId);
+      option.hidden = !visible;
+      option.disabled = !visible;
+      if (visible && option.selected && option.value) selectedAvailable = true;
+    }
+    if (!selectedAvailable) selectFirstVisible(subtypeSelect);
+  };
+
+  const updateRaceOptions = ({ selectDefault = false } = {}) => {
     const typeId = typeSelect.value;
     let selectedAvailable = false;
 
@@ -379,19 +407,53 @@ function activateCreatureCreateDialog(dialog) {
       const visible = !option.value || (typeId && optionTypeId === typeId);
       option.hidden = !visible;
       option.disabled = !visible;
-      if (visible && option.selected) selectedAvailable = true;
+      if (visible && option.selected && option.value) selectedAvailable = true;
     }
 
-    if (!selectedAvailable) raceSelect.value = "";
+    if (selectDefault || !selectedAvailable) selectFirstVisible(raceSelect);
+    updateSubtypeOptions();
   };
 
   raceSelect.addEventListener("change", event => {
     const selected = event.currentTarget.selectedOptions[0];
     if (selected?.dataset.typeId) typeSelect.value = selected.dataset.typeId;
     updateRaceOptions();
+    updateSubtypeOptions();
   });
-  typeSelect.addEventListener("change", updateRaceOptions);
+  typeSelect.addEventListener("change", () => updateRaceOptions({ selectDefault: true }));
   updateRaceOptions();
+  updateSubtypeOptions();
+}
+
+function resolveCreatureSelection(creatureOptions, typeId = "", raceId = "", subtypeId = "") {
+  const types = creatureOptions?.types ?? [];
+  const races = creatureOptions?.races ?? [];
+  const requestedTypeId = String(typeId ?? "");
+  const requestedRaceId = String(raceId ?? "");
+  const requestedTypeValid = types.some(type => type.id === requestedTypeId);
+  const requestedRace = races.find(entry => entry.id === requestedRaceId) ?? null;
+  const initialTypeId = requestedTypeValid ? requestedTypeId : (requestedRace?.typeId ?? types[0]?.id ?? "");
+  const race = (requestedRace && (!requestedTypeValid || requestedRace.typeId === initialTypeId) ? requestedRace : null)
+    ?? races.find(entry => !initialTypeId || entry.typeId === initialTypeId)
+    ?? races[0]
+    ?? null;
+  const resolvedTypeId = race?.typeId || initialTypeId;
+  const subtypes = race?.naturalItemSets ?? [];
+  const resolvedSubtypeId = subtypes.some(entry => entry.id === subtypeId) ? String(subtypeId) : (subtypes[0]?.id ?? "");
+  return {
+    typeId: resolvedTypeId,
+    raceId: race?.id ?? "",
+    subtypeId: resolvedSubtypeId
+  };
+}
+
+function buildCreatureSubtypeOptions(races = [], selectedRaceId = "", selectedSubtypeId = "") {
+  return races.flatMap(race => (race.naturalItemSets ?? []).map(set => ({
+    id: set.id,
+    raceId: race.id,
+    label: set.label,
+    selected: race.id === selectedRaceId && set.id === selectedSubtypeId
+  })));
 }
 
 function maximizeResourceMap(resources = {}) {
