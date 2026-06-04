@@ -188,6 +188,7 @@
       "FunctionFirstAid": "Первая помощь",
       "FunctionWeapon": "Оружие",
       "FunctionModule": "Модуль",
+      "FunctionTool": "Инструмент",
       "FunctionChoose": "Выберите функцию",
       "DeleteFunction": "Удаление функции",
       "DeleteFunctionConfirm": "Удалить функцию \"{function}\"?",

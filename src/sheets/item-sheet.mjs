@@ -11,9 +11,9 @@ import {
 import {
   DAMAGE_MITIGATION_MODES,
   ITEM_FUNCTIONS,
-  createToolFunctionKey,
   getDamageSourceFunction,
   getEnabledToolFunctions,
+  getSelectedToolFunctionKey,
   getToolKeyFromFunctionKey,
   hasItemFunction
 } from "../utils/item-functions.mjs";
@@ -160,6 +160,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const hasConditionFunction = hasItemFunction(item, ITEM_FUNCTIONS.condition);
     const hasFirstAidFunction = hasItemFunction(item, ITEM_FUNCTIONS.firstAid);
     const hasWeaponFunction = hasItemFunction(item, ITEM_FUNCTIONS.weapon);
+    const hasToolFunction = hasItemFunction(item, ITEM_FUNCTIONS.tool);
     const containerLoadReduction = Math.max(0, Math.min(100, Number(item.system?.functions?.container?.loadReduction) || 0));
     const descriptionHTML = await TextEditor.enrichHTML(item.system?.description ?? "", {
       secrets: item.isOwner,
@@ -214,11 +215,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         label: game.i18n.localize("FALLOUTMAW.Item.FunctionModule"),
         disabled: hasModuleFunction
       },
-      ...toolFunctions.map(tool => ({
-        value: createToolFunctionKey(tool.key),
-        label: tool.label,
-        disabled: tool.enabled
-      }))
+      {
+        value: ITEM_FUNCTIONS.tool,
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionTool"),
+        disabled: hasToolFunction || !toolSettings.length
+      }
     ];
     const abilityFunctionChoices = [
       {
@@ -299,6 +300,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       conditionRecoveryMethodRows: buildConditionRecoveryMethodRows(item, toolSettings),
       hasWeaponFunction,
       hasWeaponMagazineCost: hasWeaponResourceCost(item, "magazine"),
+      hasToolFunction,
       toolFunctions,
       weaponModuleChoices: buildWeaponModuleChoices(item),
       weaponFunctionSections,
@@ -515,6 +517,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-first-aid-charge-input]").forEach(input => {
       input.addEventListener("change", event => this.#onFirstAidChargeInputChange(event));
     });
+    this.element?.querySelector("[data-tool-function-key]")?.addEventListener("change", event => this.#onToolFunctionKeyChange(event));
     activateItemEffectKeyAutocompletes(this.element);
     activateDescriptionFormulaAutocomplete(this.element);
     this.element?.querySelectorAll("[data-add-weapon-special-property]").forEach(button => {
@@ -592,6 +595,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     workspace.querySelector("[data-craft-delete-node]")?.addEventListener("click", event => this.#onCraftDeleteNode(event));
     workspace.querySelector("[data-craft-cancel-attach]")?.addEventListener("click", event => this.#onCraftCancelAttach(event));
     workspace.querySelector("[data-craft-node-quantity]")?.addEventListener("change", event => this.#onCraftNodeQuantityChange(event));
+    workspace.querySelector("[data-craft-node-tool-use-as-item]")?.addEventListener("change", event => this.#onCraftNodeToolUseAsItemChange(event));
     workspace.querySelector("[data-craft-link-skill]")?.addEventListener("change", event => this.#onCraftLinkSkillChange(event));
     workspace.querySelector("[data-craft-link-difficulty]")?.addEventListener("change", event => this.#onCraftLinkDifficultyChange(event));
     workspace.querySelector("[data-craft-link-no-check]")?.addEventListener("change", event => this.#onCraftLinkNoCheckChange(event));
@@ -1180,6 +1184,20 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       node.id === nodeId ? { ...node, quantity } : node
     ));
     return this.#updateCraftRecipe({ nodes });
+  }
+
+  async #onCraftNodeToolUseAsItemChange(event) {
+    event.stopPropagation();
+    const nodeId = String(event.currentTarget.dataset.craftNodeToolUseAsItem ?? "");
+    if (!nodeId) return undefined;
+    const node = getCraftNodesWithRoot(this.item).find(entry => entry.id === nodeId);
+    const source = resolveCraftNodeSourceItem(node);
+    const toolKey = getSelectedToolFunctionKey(source);
+    if (!source || !toolKey) return undefined;
+    await source.update({
+      [`system.functions.tools.${toolKey}.useAsItem`]: Boolean(event.currentTarget.checked)
+    });
+    return this.render();
   }
 
   #onCraftLinkNoCheckChange(event) {
@@ -2039,18 +2057,17 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       });
     }
 
+    if (functionKey === ITEM_FUNCTIONS.tool) {
+      const toolKey = getSelectedToolFunctionKey(this.item) || getToolSettings()[0]?.key || "";
+      if (!toolKey) return undefined;
+      this.#functionPickerActive = false;
+      return this.item.update(createToolFunctionSelectionUpdate(this.item, toolKey, { enabled: true }));
+    }
+
     const toolKey = getToolKeyFromFunctionKey(functionKey);
     if (toolKey) {
       this.#functionPickerActive = false;
-      return this.item.update({
-        [`system.functions.tools.${toolKey}.enabled`]: true,
-        [`system.functions.tools.${toolKey}.useAsItem`]: false,
-        [`system.functions.tools.${toolKey}.toolClass`]: "D",
-        [`system.functions.tools.${toolKey}.supply.value`]: 0,
-        [`system.functions.tools.${toolKey}.supply.max`]: 0,
-        [`system.functions.tools.${toolKey}.skillValue`]: 0,
-        [`system.functions.tools.${toolKey}.skillKey`]: ""
-      });
+      return this.item.update(createToolFunctionSelectionUpdate(this.item, toolKey, { enabled: true }));
     }
 
     return undefined;
@@ -2155,11 +2172,29 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.module.additionalWeapons": {}
       });
     }
+    if (functionKey === ITEM_FUNCTIONS.tool) {
+      const update = { "system.functions.tool.enabled": false };
+      for (const existingKey of Object.keys(this.item.system?.functions?.tools ?? {})) {
+        update[`system.functions.tools.${existingKey}.enabled`] = false;
+      }
+      return this.item.update(update);
+    }
     const toolKey = getToolKeyFromFunctionKey(functionKey);
     if (toolKey) {
       return this.item.update({ [`system.functions.tools.${toolKey}.enabled`]: false });
     }
     return undefined;
+  }
+
+  #onToolFunctionKeyChange(event) {
+    event.preventDefault();
+    const nextToolKey = String(event.currentTarget?.value ?? "").trim();
+    if (!nextToolKey) return undefined;
+    const previousToolKey = String(event.currentTarget?.dataset?.toolFunctionKey ?? getSelectedToolFunctionKey(this.item)).trim();
+    return this.item.update(createToolFunctionSelectionUpdate(this.item, nextToolKey, {
+      enabled: true,
+      sourceToolKey: previousToolKey
+    }));
   }
 
   #onAddAdditionalWeaponFunction(event) {
@@ -3014,6 +3049,7 @@ function getItemFunctionLabel(functionKey = "") {
   if (functionKey === ITEM_FUNCTIONS.firstAid) return game.i18n.localize("FALLOUTMAW.Item.FunctionFirstAid");
   if (functionKey === ITEM_FUNCTIONS.weapon) return game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon");
   if (functionKey === ITEM_FUNCTIONS.module) return game.i18n.localize("FALLOUTMAW.Item.FunctionModule");
+  if (functionKey === ITEM_FUNCTIONS.tool) return game.i18n.localize("FALLOUTMAW.Item.FunctionTool");
   const toolKey = getToolKeyFromFunctionKey(functionKey);
   if (toolKey) return getToolSettings().find(tool => tool.key === toolKey)?.label ?? toolKey;
   return game.i18n.localize("FALLOUTMAW.Item.Function");
@@ -4166,13 +4202,16 @@ function hasCraftRecipeData(craft = {}) {
 function prepareCraftNodeForDisplay(node, index, links) {
   const quantity = Math.max(1, toInteger(node.quantity) || 1);
   const linked = links.some(link => link.fromNodeId === node.id || link.toNodeId === node.id);
+  const toolFunction = getCraftNodeToolFunction(node);
   const toolRequirements = getCraftNodeToolRequirements(node);
   return {
     ...node,
     index,
     linked,
+    hasToolFunction: Boolean(toolFunction?.toolKey),
     isToolRequirement: toolRequirements.length > 0,
     toolRequirementLabel: formatCraftToolRequirementLabel(toolRequirements),
+    toolUseAsItem: Boolean(toolFunction?.useAsItem),
     quantity,
     hasQuantityBadge: quantity > 1
   };
@@ -4191,15 +4230,18 @@ function createDefaultWeaponPushActionData() {
 }
 
 function getCraftNodeToolRequirements(node = {}) {
+  const toolFunction = getCraftNodeToolFunction(node);
+  if (!toolFunction || toolFunction.useAsItem) return [];
+  return [{
+    toolKey: String(toolFunction.toolKey ?? ""),
+    toolClass: String(toolFunction.toolClass ?? "D")
+  }].filter(tool => tool.toolKey);
+}
+
+function getCraftNodeToolFunction(node = {}) {
   const source = resolveCraftNodeSourceItem(node);
-  if (!source) return [];
-  return getEnabledToolFunctions(source)
-    .filter(tool => !tool.useAsItem)
-    .map(tool => ({
-      toolKey: String(tool.toolKey ?? ""),
-      toolClass: String(tool.toolClass ?? "D")
-    }))
-    .filter(tool => tool.toolKey);
+  if (!source) return null;
+  return getEnabledToolFunctions(source)[0] ?? null;
 }
 
 function resolveCraftNodeSourceItem(node = {}) {
@@ -5416,17 +5458,25 @@ function buildToolFunctionEntries(item, toolSettings, skillSettings) {
   ];
   const classChoices = ["D", "C", "B", "A", "S"];
   const functions = item.system?.functions?.tools ?? {};
+  const selectedToolKey = getSelectedToolFunctionKey(item) || toolSettings[0]?.key || "";
+  const selectedTool = toolSettings.find(tool => tool.key === selectedToolKey) ?? toolSettings[0];
+  if (!selectedTool) return [];
+  const data = functions?.[selectedTool.key] ?? {};
+  const skillKey = String(data.skillKey ?? "");
+  const toolClass = String(data.toolClass ?? "D");
 
-  return toolSettings.map(tool => {
-    const data = functions?.[tool.key] ?? {};
-    const skillKey = String(data.skillKey ?? "");
-    const toolClass = String(data.toolClass ?? "D");
+  return [selectedTool].map(tool => {
     return {
       ...tool,
-      functionKey: createToolFunctionKey(tool.key),
-      enabled: Boolean(data.enabled),
+      functionKey: ITEM_FUNCTIONS.tool,
+      enabled: hasItemFunction(item, ITEM_FUNCTIONS.tool),
       useAsItem: Boolean(data.useAsItem),
       toolClass,
+      toolChoices: toolSettings.map(choice => ({
+        value: choice.key,
+        label: choice.label,
+        selected: choice.key === tool.key
+      })),
       classChoices: classChoices.map(value => ({
         value,
         label: value,
@@ -5442,6 +5492,31 @@ function buildToolFunctionEntries(item, toolSettings, skillSettings) {
       skillKey
     };
   });
+}
+
+function createToolFunctionSelectionUpdate(item, toolKey = "", { enabled = true, sourceToolKey = "" } = {}) {
+  const key = String(toolKey ?? "").trim();
+  if (!key) return {};
+
+  const sourceKey = String(sourceToolKey || getSelectedToolFunctionKey(item) || key).trim();
+  const sourceData = foundry.utils.deepClone(item.system?.functions?.tools?.[sourceKey] ?? item.system?.functions?.tools?.[key] ?? {});
+  const update = {
+    "system.functions.tool.enabled": Boolean(enabled),
+    "system.functions.tool.toolKey": key,
+    [`system.functions.tools.${key}.enabled`]: Boolean(enabled),
+    [`system.functions.tools.${key}.useAsItem`]: Boolean(item.system?.functions?.tools?.[key]?.useAsItem),
+    [`system.functions.tools.${key}.toolClass`]: String(sourceData.toolClass ?? "D") || "D",
+    [`system.functions.tools.${key}.supply.value`]: Math.max(0, toInteger(sourceData.supply?.value)),
+    [`system.functions.tools.${key}.supply.max`]: Math.max(0, toInteger(sourceData.supply?.max)),
+    [`system.functions.tools.${key}.skillValue`]: Math.max(0, toInteger(sourceData.skillValue)),
+    [`system.functions.tools.${key}.skillKey`]: String(sourceData.skillKey ?? "")
+  };
+
+  for (const existingKey of Object.keys(item.system?.functions?.tools ?? {})) {
+    if (existingKey !== key) update[`system.functions.tools.${existingKey}.enabled`] = false;
+  }
+
+  return update;
 }
 
 function buildItemCategoryChoices(selectedCategory = "") {

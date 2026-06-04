@@ -1856,11 +1856,16 @@
   {{/if}}
   {{/each}}
 
+  {{#if hasToolFunction}}
   {{#each toolFunctions}}
-  {{#if enabled}}
   <section class="fallout-maw-panel">
     <div class="fallout-maw-panel-header">
-      <h2>{{label}}</h2>
+      <h2>{{localize "FALLOUTMAW.Item.FunctionTool"}}</h2>
+      <select data-tool-function-key="{{key}}">
+        {{#each toolChoices}}
+        <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+        {{/each}}
+      </select>
       <button type="button" data-remove-item-function="{{functionKey}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
     </div>
     <div class="fallout-maw-list-grid three-columns">
@@ -1892,14 +1897,10 @@
           {{/each}}
         </select>
       </label>
-      <label class="fallout-maw-inline-checkbox">
-        <span>Использовать как предмет</span>
-        <input type="checkbox" name="system.functions.tools.{{key}}.useAsItem" {{checked useAsItem}}>
-      </label>
     </div>
   </section>
-  {{/if}}
   {{/each}}
+  {{/if}}
 </section>
 
 <section class="tab {{tabs.craft.cssClass}}" data-group="{{tabs.craft.group}}" data-tab="{{tabs.craft.id}}">
@@ -1946,6 +1947,12 @@
           <span>{{#if craft.selectedNode.isToolRequirement}}Расход инструмента{{else}}Количество{{/if}}</span>
           <input type="number" value="{{craft.selectedNode.quantity}}" min="1" step="1" data-craft-node-quantity="{{craft.selectedNode.id}}">
         </label>
+        {{#if craft.selectedNode.hasToolFunction}}
+        <label class="fallout-maw-inline-checkbox">
+          <span>Использовать как предмет</span>
+          <input type="checkbox" data-craft-node-tool-use-as-item="{{craft.selectedNode.id}}" {{checked craft.selectedNode.toolUseAsItem}}>
+        </label>
+        {{/if}}
         {{#if craft.selectedNode.isToolRequirement}}
         <p>{{craft.selectedNode.toolRequirementLabel}}</p>
         {{/if}}

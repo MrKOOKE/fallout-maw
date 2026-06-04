@@ -189,6 +189,7 @@
       "FunctionFirstAid": "First Aid",
       "FunctionWeapon": "Weapon",
       "FunctionModule": "Module",
+      "FunctionTool": "Tool",
       "FunctionChoose": "Choose Function",
       "DeleteFunction": "Delete Function",
       "DeleteFunctionConfirm": "Delete function \"{function}\"?",

@@ -7,6 +7,7 @@ export const ITEM_FUNCTIONS = {
   firstAid: "firstAid",
   weapon: "weapon",
   module: "module",
+  tool: "tool",
   toolPrefix: "tool:"
 };
 export const MODULE_WEAPON_FUNCTION_ID_PREFIX = "module:";
@@ -25,6 +26,7 @@ export function hasItemFunction(itemOrSystem = null, functionKey = "") {
   if (functionKey === ITEM_FUNCTIONS.container && String(system.itemFunction ?? "") === ITEM_FUNCTIONS.container) {
     return true;
   }
+  if (functionKey === ITEM_FUNCTIONS.tool) return hasUnifiedToolFunction(system) || hasLegacyToolFunction(system);
   const toolKey = getToolKeyFromFunctionKey(functionKey);
   if (toolKey) return hasToolFunction(system, toolKey);
   return Boolean(system.functions?.[functionKey]?.enabled);
@@ -185,6 +187,8 @@ export function getToolKeyFromFunctionKey(functionKey = "") {
 
 export function hasToolFunction(itemOrSystem = null, toolKey = "") {
   const system = getItemSystem(itemOrSystem);
+  const selectedKey = getSelectedToolFunctionKey(system);
+  if (hasUnifiedToolFunction(system)) return selectedKey === String(toolKey ?? "");
   return Boolean(system.functions?.tools?.[toolKey]?.enabled);
 }
 
@@ -193,11 +197,35 @@ export function getToolFunction(itemOrSystem = null, toolKey = "") {
 }
 
 export function getEnabledToolFunctions(itemOrSystem = null) {
-  const tools = getItemSystem(itemOrSystem).functions?.tools;
+  const system = getItemSystem(itemOrSystem);
+  const tools = system.functions?.tools;
   if (!tools || typeof tools !== "object") return [];
+
+  const selectedKey = getSelectedToolFunctionKey(system);
+  if ((hasUnifiedToolFunction(system) || hasLegacyToolFunction(system)) && selectedKey) {
+    return [{ ...(tools[selectedKey] ?? {}), enabled: true, toolKey: selectedKey }];
+  }
+
   return Object.entries(tools)
     .filter(([, data]) => data?.enabled)
     .map(([toolKey, data]) => ({ ...data, toolKey }));
+}
+
+export function getSelectedToolFunctionKey(itemOrSystem = null) {
+  const system = getItemSystem(itemOrSystem);
+  const configured = String(system.functions?.tool?.toolKey ?? "").trim();
+  if (configured) return configured;
+  const legacyEnabled = Object.entries(system.functions?.tools ?? {})
+    .find(([, data]) => data?.enabled)?.[0];
+  return String(legacyEnabled ?? "");
+}
+
+function hasUnifiedToolFunction(system = {}) {
+  return Boolean(system.functions?.tool?.enabled);
+}
+
+function hasLegacyToolFunction(system = {}) {
+  return Object.values(system.functions?.tools ?? {}).some(data => data?.enabled);
 }
 
 function getInstalledModuleWeaponFunctions(itemOrSystem = null) {
