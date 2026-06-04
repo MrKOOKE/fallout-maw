@@ -363,7 +363,7 @@ function normalizeProficiencyInfluenceRange(range = {}, defaults = { min: 0, max
 
 export function normalizeResourceSettings(settings) {
   const normalized = normalizeFormulaSettings(settings, createDefaultResourceSettings(), "Ресурс");
-  return migrateResourceSettings(normalized);
+  return migrateResourceSettings(removeInternalResourceSettings(normalized));
 }
 
 export function normalizeNeedSettings(settings) {
@@ -457,6 +457,10 @@ function migrateResourceSettings(settings = []) {
     ) return setting;
     return { ...setting, formula: defaultHealthFormula ?? setting.formula };
   });
+}
+
+function removeInternalResourceSettings(settings = []) {
+  return settings.filter(setting => setting.key !== "reactionPoints");
 }
 
 function normalizeFormulaText(value = "") {

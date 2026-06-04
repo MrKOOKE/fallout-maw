@@ -1,4 +1,4 @@
-import { TEMPLATES } from "../constants.mjs";
+﻿import { TEMPLATES } from "../constants.mjs";
 import { getPostureIconRows } from "../canvas/posture-movement.mjs";
 import { getSkillSettings, getTokenActionHudIcons, setTokenActionHudIcons } from "../settings/accessors.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
@@ -7,6 +7,7 @@ const DAMAGE_ICON_ROWS = Object.freeze([
   { section: "root", key: "damageReductionIcon", label: "Иконка снижения урона" },
   { section: "root", key: "damageBlockedIcon", label: "Иконка полного блокирования урона" },
   { section: "root", key: "levelUpIcon", label: "Иконка повышения уровня" },
+  { section: "root", key: "dodgeConversionIcon", label: "Иконка уклонения от конвертации ОД" },
   { section: "root", key: "emptyWeaponSlotIcon", label: "Иконка пустого слота оружия" }
 ]);
 

@@ -18,6 +18,11 @@ import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { applyDamageCostModifier, fullyRestoreActorDamageState, getDamageCostModifierState, getLimbHealingCap, getResourceLimitState, isLimbDestroyed } from "../combat/damage-hub.mjs";
 import { MOVEMENT_RESOURCE_PREVIEW_HOOK } from "../combat/movement-resources.mjs";
 import {
+  REACTION_RESOURCE_KEY,
+  decorateActionPointHudEntry,
+  promptEndTurnConversion
+} from "../combat/reaction-resources.mjs";
+import {
   getGrappleTargetId,
   getGrapplerId,
   startGrappleReposition,
@@ -634,7 +639,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const combat = game.combat;
     if (!isTokenCombatTurn(this.token, combat) || !canUserAdvanceCombatTurn(combat)) return undefined;
     this.#activeTray = "";
-    await combat.nextTurn();
+    const conversionMode = await promptEndTurnConversion(this.actor);
+    if (!conversionMode) return this.render({ force: true });
+    await combat.nextTurn({ falloutMawConversionMode: conversionMode });
     return this.render({ force: true });
   }
 
@@ -1964,10 +1971,14 @@ function prepareLimbEntries(limbs = {}) {
 
 function prepareResourceEntries(actor) {
   const limited = getResourceLimitState(actor).resources;
-  return getResourceSettings().map(resource => prepareIndicatorEntry({
-    ...resource,
-    data: actor.system.resources?.[resource.key]
-  })).map(entry => addLimitedResourceDisplay(entry, limited[entry.key]));
+  return getResourceSettings()
+    .filter(resource => resource.key !== REACTION_RESOURCE_KEY)
+    .map(resource => prepareIndicatorEntry({
+      ...resource,
+      data: actor.system.resources?.[resource.key]
+    }))
+    .map(entry => decorateActionPointHudEntry(actor, entry))
+    .map(entry => addLimitedResourceDisplay(entry, limited[entry.key]));
 }
 
 function prepareNeedEntries(actor) {

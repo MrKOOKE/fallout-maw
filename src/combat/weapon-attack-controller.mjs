@@ -1,4 +1,4 @@
-import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
+﻿import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./attack-animations.mjs";
 import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplication, getDamageCostModifierState, getLimbHealingCap, isLimbDestroyed, requestDamageApplications, runDamageHubOperation } from "./damage-hub.mjs";
@@ -7,7 +7,7 @@ import { createThrownItemTile } from "../canvas/thrown-items.mjs";
 import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
 import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageSourceFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction } from "../utils/item-functions.mjs";
 import { getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
-import { ACTION_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
+import { canSpendCombatActionPoints, getCombatActionPointState, spendCombatActionPoints } from "./reaction-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
 import { getRequiredWeaponSlotsForItem, getWeaponSlotRequirement, isContainerWeaponSetKey } from "../utils/equipment-slots.mjs";
@@ -2376,13 +2376,7 @@ function hasRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
   if (!isCombatActionPointSpendingActive()) return true;
   const cost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId);
   if (cost <= 0) return true;
-
-  const state = getCombatMovementResourceState(actor);
-  if (!state) return true;
-  if (cost <= state.action.value) return true;
-
-  ui.notifications.warn(`${actor?.name ?? ""}: не хватает ${state.action.label} для действия (${cost} > ${state.action.value}).`);
-  return false;
+  return canSpendCombatActionPoints(actor, cost, { label: "действия" });
 }
 
 async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "") {
@@ -2390,12 +2384,8 @@ async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
   if (isCombatActionPointSpendingActive()) {
     const cost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId);
     if (cost > 0) {
-      const state = getCombatMovementResourceState(actor);
-      if (state && cost <= state.action.value) {
-        await actor.update({
-          [`system.resources.${ACTION_RESOURCE_KEY}.value`]: Math.max(0, state.action.current - cost)
-        });
-      }
+      const state = getCombatActionPointState(actor);
+      if (state && cost <= state.value) await spendCombatActionPoints(actor, cost);
     }
   }
   if (actionKey !== "reload") {

@@ -40,6 +40,8 @@ import {
 } from "../../utils/item-functions.mjs";
 import { normalizeResearchCollection } from "../../research/storage.mjs";
 import { getAbilitySkillAdvancementBaseBonuses } from "../../abilities/evaluation.mjs";
+
+const REACTION_RESOURCE_KEY = "reactionPoints";
 import { toInteger } from "../../utils/numbers.mjs";
 
 const { ArrayField, BooleanField, HTMLField, NumberField, ObjectField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
@@ -118,6 +120,11 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       }),
       development: developmentField()
     };
+  }
+
+  prepareBaseData() {
+    this.resources ??= {};
+    ensureReactionResourceBase(this.resources);
   }
 
   prepareDerivedData() {
@@ -205,9 +212,14 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       skillValues,
       buildLimbResourceFormulaVariables(limbMaximums)
     );
+    const reactionResource = {
+      ...(this.parent?._source?.system?.resources?.[REACTION_RESOURCE_KEY] ?? {}),
+      bonus: this.resources?.[REACTION_RESOURCE_KEY]?.bonus
+    };
     replaceObjectContents(this.resources, normalizeResourceMap(this.resources, resourceSettings, resourceMaximums, {
       trackSpent: true
     }));
+    ensureReactionResource(this.resources, reactionResource);
     synchronizeAggregateHealthResource(this.resources, this.limbs);
 
     const needMaximums = evaluateNeedSettings(
@@ -446,6 +458,37 @@ function normalizeResourceMap(currentResources = {}, settings = [], maximums = {
       return [setting.key, { min, spent, bonus, value, max }];
     })
   );
+}
+
+function ensureReactionResourceBase(resources = {}) {
+  const current = resources[REACTION_RESOURCE_KEY];
+  if (current && typeof current === "object") {
+    resources[REACTION_RESOURCE_KEY] = {
+      min: 0,
+      spent: Math.max(0, toInteger(current.spent)),
+      bonus: toInteger(current.bonus),
+      value: Math.max(0, toInteger(current.value)),
+      max: Math.max(0, toInteger(current.max))
+    };
+    return;
+  }
+  resources[REACTION_RESOURCE_KEY] = { min: 0, spent: 0, bonus: 0, value: 0, max: 0 };
+}
+
+function ensureReactionResource(resources = {}, currentResource = resources[REACTION_RESOURCE_KEY]) {
+  const current = currentResource;
+  const min = 0;
+  const bonus = current && typeof current === "object" ? toInteger(current.bonus) : 0;
+  const max = Math.max(min, bonus);
+  const spent = getTrackedResourceSpent(current, min, max);
+  const value = Math.min(Math.max(max - spent, min), max);
+  resources[REACTION_RESOURCE_KEY] = {
+    min,
+    spent,
+    bonus,
+    value,
+    max
+  };
 }
 
 function normalizeLimbMap(currentLimbs = {}, settings = [], maximums = {}, sourceLimbs = {}) {

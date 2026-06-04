@@ -15,14 +15,6 @@ export function registerCombatDodgeHooks() {
     return restoreCombatDodgeResources(combat, { mode: "full" });
   });
 
-  Hooks.on("combatTurnChange", (combat, previous, current) => {
-    if (!game.user.isActiveGM) return undefined;
-    if (!combat?.started) return undefined;
-    if (toInteger(current?.round) <= 1) return undefined;
-    if (toInteger(current?.round) <= toInteger(previous?.round)) return undefined;
-    return restoreCombatDodgeResources(combat, { mode: "round" });
-  });
-
   Hooks.on("deleteCombat", combat => {
     if (!getDodgeSettings().restoreOnCombatEnd) return undefined;
     return restoreCombatDodgeResources(combat, { mode: "full" });
@@ -100,7 +92,7 @@ class DodgeAttackExposureTracker {
   }
 }
 
-async function restoreCombatDodgeResources(combat, { mode = "full" } = {}) {
+export async function restoreCombatDodgeResources(combat, { mode = "full" } = {}) {
   if (!game.user.isActiveGM) return;
   const actors = getCombatDodgeActors(combat);
   for (const actor of actors.values()) {
@@ -108,7 +100,7 @@ async function restoreCombatDodgeResources(combat, { mode = "full" } = {}) {
   }
 }
 
-async function restoreActorDodgeResource(actor, { mode = "full" } = {}) {
+export async function restoreActorDodgeResource(actor, { mode = "full" } = {}) {
   const resource = getDodgeResource(actor);
   if (!resource) return;
 

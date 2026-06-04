@@ -1,5 +1,10 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { getTokenActionHudIcons } from "../settings/accessors.mjs";
+import {
+  REACTION_RESOURCE_KEY,
+  getCombatActionPointState,
+  spendCombatActionPoints
+} from "../combat/reaction-resources.mjs";
 
 export const POSTURE_CHANGE_ACTION_POINT_COST = 3;
 export const POSTURE_EFFECT_CHANGE_ROOT = "system.postures";
@@ -355,15 +360,15 @@ async function spendPostureChangeResources(tokenDocument, amount, pending = {}) 
 
   const updates = {};
   if (movementSpend) updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = Math.max(0, state.movement.current - movementSpend);
-  if (actionSpend) updates[`system.resources.${ACTION_RESOURCE_KEY}.value`] = Math.max(0, state.action.current - actionSpend);
   updates[`flags.${SYSTEM_ID}.${POSTURE_RESOURCE_SPENDING_FLAG}`] = [
     ...getPostureResourceSpendingStack(actor),
     createPostureResourceSpendingEntry(tokenDocument, pending, {
       [MOVEMENT_RESOURCE_KEY]: movementSpend,
-      [ACTION_RESOURCE_KEY]: actionSpend
+      [state.action.key]: actionSpend
     })
   ].slice(-POSTURE_RESOURCE_SPENDING_LIMIT);
   await actor.update(updates);
+  if (actionSpend) await spendCombatActionPoints(actor, actionSpend);
 }
 
 async function restoreLastPostureChangeResources(tokenDocument) {
@@ -381,7 +386,7 @@ async function restoreLastPostureChangeResources(tokenDocument) {
     [`flags.${SYSTEM_ID}.${POSTURE_RESOURCE_SPENDING_FLAG}`]: nextStack
   };
 
-  for (const key of [MOVEMENT_RESOURCE_KEY, ACTION_RESOURCE_KEY]) {
+  for (const key of [MOVEMENT_RESOURCE_KEY, ACTION_RESOURCE_KEY, REACTION_RESOURCE_KEY]) {
     const resource = actor.system?.resources?.[key];
     if (!resource) continue;
 
@@ -429,21 +434,22 @@ function findLastPostureResourceSpendingIndex(stack, tokenDocument) {
 
 function getPostureChangeResourceState(actor) {
   const movement = actor?.system?.resources?.[MOVEMENT_RESOURCE_KEY];
-  const action = actor?.system?.resources?.[ACTION_RESOURCE_KEY];
+  const action = getCombatActionPointState(actor);
   if (!movement || !action) return null;
 
   const movementValue = Math.max(0, toInteger(movement.value));
-  const actionValue = Math.max(0, toInteger(action.value));
+  const movementAvailable = action.ownTurn ? movementValue : 0;
   return {
     movement: {
       current: movementValue,
-      value: movementValue
+      value: movementAvailable
     },
     action: {
-      current: actionValue,
-      value: actionValue
+      key: action.key,
+      current: action.current,
+      value: action.value
     },
-    total: movementValue + actionValue
+    total: movementAvailable + action.value
   };
 }
 
@@ -515,7 +521,7 @@ function getPostureChangeResourcePreviewResources(actor, amount) {
   const actionSpend = Math.min(Math.max(0, cost - movementSpend), state.action.value);
   return {
     [MOVEMENT_RESOURCE_KEY]: movementSpend,
-    [ACTION_RESOURCE_KEY]: actionSpend
+    [state.action.key]: actionSpend
   };
 }
 

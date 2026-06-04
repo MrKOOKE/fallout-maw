@@ -32,6 +32,13 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
       path: `system.resources.${entry.key}.bonus`,
       group: game.i18n.localize("FALLOUTMAW.Common.Resources")
     })),
+    createEffectKeyToken({
+      code: "rea",
+      key: "reactionPoints",
+      label: "Очки реакции",
+      path: "system.resources.reactionPoints.bonus",
+      group: game.i18n.localize("FALLOUTMAW.Common.Resources")
+    }),
     ...getNeedSettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
       key: entry.key,

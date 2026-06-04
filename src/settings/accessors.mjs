@@ -69,6 +69,7 @@ export const DEFAULT_SKILL_CHECK_CONTROL = Object.freeze({
 export const DEFAULT_TOKEN_ACTION_HUD_DAMAGE_ICONS = Object.freeze({
   damageReductionIcon: `systems/${FALLOUT_MAW.id}/assets/HUD/ac-badge__-no-bg-preview_carve.photos.png`,
   damageBlockedIcon: `systems/${FALLOUT_MAW.id}/assets/HUD/ac-gold-shield-badge-Picsart-BackgroundRemover.png`,
+  dodgeConversionIcon: "icons/svg/shield.svg",
   levelUpIcon: "icons/svg/upgrade.svg"
 });
 
@@ -136,6 +137,7 @@ export function normalizeTokenActionHudIcons(value = {}) {
   return {
     damageReductionIcon: normalizeImageSettingPath(source.damageReductionIcon, defaults.damageReductionIcon),
     damageBlockedIcon: normalizeImageSettingPath(source.damageBlockedIcon, defaults.damageBlockedIcon),
+    dodgeConversionIcon: normalizeImageSettingPath(source.dodgeConversionIcon, defaults.dodgeConversionIcon),
     levelUpIcon: normalizeImageSettingPath(source.levelUpIcon, defaults.levelUpIcon),
     mainActions: normalizeImageSettingMap(source.mainActions, defaults.mainActions),
     weaponActions: normalizeImageSettingMap(source.weaponActions, defaults.weaponActions),

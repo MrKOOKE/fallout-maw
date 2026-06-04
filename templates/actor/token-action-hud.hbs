@@ -73,7 +73,7 @@
                 <b>/ {{max}}</b>
               </label>
               {{else}}
-              <strong>{{value}} / {{max}}</strong>
+              <strong>{{valueLabel}}{{#if maxLabel}} / {{maxLabel}}{{/if}}</strong>
               {{/if}}
             </div>
             <div class="fallout-maw-resource-meter" style="{{meterStyle}}" role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}" data-token-hud-resource-meter data-resource-key="{{key}}" data-resource-min="{{min}}" data-resource-value="{{value}}" data-resource-max="{{max}}" data-resource-limited="{{blockedAmount}}">

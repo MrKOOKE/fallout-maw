@@ -6,9 +6,10 @@ import { registerPostureMovementHooks } from "./canvas/posture-movement.mjs";
 import { registerThrownItemHooks } from "./canvas/thrown-items.mjs";
 import { registerCombatDodgeHooks, registerCombatDodgeSocket } from "./combat/dodge-resource.mjs";
 import { registerCombatMovementHooks } from "./combat/movement-resources.mjs";
+import { registerReactionResourceHooks } from "./combat/reaction-resources.mjs";
 import { registerActiveActionHooks, registerActiveActionSocket } from "./combat/active-actions.mjs";
 import { registerDataModels, registerTrackableAttributes } from "./data/index.mjs";
-import { FalloutMaWActor, FalloutMaWItem } from "./documents/index.mjs";
+import { FalloutMaWActor, FalloutMaWCombat, FalloutMaWItem } from "./documents/index.mjs";
 import { getCreatureOptions } from "./settings/accessors.mjs";
 import { registerSystemSettings, finalizeSystemSettings } from "./settings/index.mjs";
 import {
@@ -66,6 +67,7 @@ Hooks.once("init", () => {
 
   CONFIG.FalloutMaW = syncSystemConfig();
   CONFIG.Actor.documentClass = FalloutMaWActor;
+  CONFIG.Combat.documentClass = FalloutMaWCombat;
   CONFIG.Item.documentClass = FalloutMaWItem;
   CONFIG.Token.objectClass = FalloutMaWToken;
   CONFIG.Canvas.layers.tokens.layerClass = FalloutMaWTokenLayer;
@@ -84,6 +86,7 @@ Hooks.once("init", () => {
   registerPostureMovementHooks();
   registerCombatDodgeHooks();
   registerCombatMovementHooks();
+  registerReactionResourceHooks();
   registerActiveActionHooks();
   registerAbilityEffectHooks();
   registerAbilityCooldownHooks();

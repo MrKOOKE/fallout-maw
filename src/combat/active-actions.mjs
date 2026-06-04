@@ -1,7 +1,8 @@
 import { GRAPPLE_FOLLOW_MOVEMENT_OPTION, SYSTEM_ID } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getSkillSettings } from "../settings/accessors.mjs";
-import { ACTION_RESOURCE_KEY, MOVEMENT_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
+import { MOVEMENT_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
+import { canSpendCombatActionPoints, spendCombatActionPoints } from "./reaction-resources.mjs";
 import { POSTURE_CHANGE_ACTION_POINT_COST, setActorTokensPosture } from "../canvas/posture-movement.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
@@ -594,27 +595,11 @@ function isUnableToResist(tokenDocument) {
 }
 
 function canSpendActionPoints(actor, amount = 0) {
-  if (!game.combat) return true;
-  const cost = Math.max(0, toInteger(amount));
-  const state = getCombatMovementResourceState(actor);
-  if (!state || cost <= state.action.value) return true;
-  ui.notifications.warn(formatHud("InsufficientActionPoints", {
-    actor: actor?.name ?? "",
-    resource: state.action.label,
-    cost,
-    available: state.action.value
-  }));
-  return false;
+  return canSpendCombatActionPoints(actor, amount);
 }
 
 async function spendActionPoints(actor, amount = 0) {
-  if (!game.combat) return;
-  const cost = Math.max(0, toInteger(amount));
-  const state = getCombatMovementResourceState(actor);
-  if (!state || cost <= 0) return;
-  await actor.update({
-    [`system.resources.${ACTION_RESOURCE_KEY}.value`]: Math.max(0, state.action.current - cost)
-  });
+  await spendCombatActionPoints(actor, amount);
 }
 
 function canSpendMovementThenAction(actor, amount = 0) {
@@ -641,8 +626,8 @@ async function spendMovementThenAction(actor, amount = 0) {
   const actionSpend = Math.min(cost - movementSpend, state.action.value);
   const update = {};
   if (movementSpend) update[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = Math.max(0, state.movement.current - movementSpend);
-  if (actionSpend) update[`system.resources.${ACTION_RESOURCE_KEY}.value`] = Math.max(0, state.action.current - actionSpend);
   if (Object.keys(update).length) await actor.update(update);
+  if (actionSpend) await spendCombatActionPoints(actor, actionSpend);
 }
 
 function getGrappleDragCost(grapplerDocument, targetDocument, destination) {

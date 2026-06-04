@@ -2,6 +2,7 @@ import { GRAPPLE_FOLLOW_MOVEMENT_OPTION } from "../constants.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { getActorPostureMovementCostMultiplier } from "../canvas/posture-movement.mjs";
 import { getDamageCostModifierState, getResourceLimitState } from "./damage-hub.mjs";
+import { REACTION_RESOURCE_KEY, getCombatActionPointState, spendCombatActionPoints } from "./reaction-resources.mjs";
 
 export const MOVEMENT_RESOURCE_KEY = "movementPoints";
 export const ACTION_RESOURCE_KEY = "actionPoints";
@@ -21,13 +22,6 @@ export function registerCombatMovementHooks() {
   Hooks.on("preMoveToken", preventUnaffordableCombatMovement);
   Hooks.on("moveToken", spendCombatMovementResources);
   Hooks.on("combatStart", combat => restoreCombatMovementResources(combat));
-  Hooks.on("combatTurnChange", (combat, previous, current) => {
-    if (!game.user.isActiveGM) return;
-    if (!combat?.started) return;
-    if (toInteger(current?.round) <= 1) return;
-    if (toInteger(current?.round) <= toInteger(previous?.round)) return;
-    return restoreCombatMovementResources(combat);
-  });
   Hooks.on("deleteCombat", combat => restoreCombatMovementResources(combat));
   Hooks.on("createCombatant", combatant => {
     const combat = combatant?.combat;
@@ -39,32 +33,34 @@ export function registerCombatMovementHooks() {
 export function getCombatMovementResourceState(actor) {
   const resources = actor?.system?.resources;
   const movement = resources?.[MOVEMENT_RESOURCE_KEY];
-  const action = resources?.[ACTION_RESOURCE_KEY];
+  const action = getCombatActionPointState(actor);
   if (!movement || !action) return null;
 
   const movementValue = Math.max(0, toInteger(movement.value));
-  const actionValue = Math.max(0, toInteger(action.value));
   const limited = getResourceLimitState(actor).resources;
-  const limitedMovement = Math.min(movementValue, Math.max(0, toInteger(limited[MOVEMENT_RESOURCE_KEY]?.amount)));
-  const limitedAction = Math.min(actionValue, Math.max(0, toInteger(limited[ACTION_RESOURCE_KEY]?.amount)));
+  const movementAvailable = action.ownTurn ? movementValue : 0;
+  const limitedMovement = Math.min(movementAvailable, Math.max(0, toInteger(limited[MOVEMENT_RESOURCE_KEY]?.amount)));
+  const limitedAction = action.ownTurn
+    ? Math.min(action.value, Math.max(0, toInteger(limited[ACTION_RESOURCE_KEY]?.amount)))
+    : 0;
   return {
     movement: {
       key: MOVEMENT_RESOURCE_KEY,
       label: MOVEMENT_RESOURCE_LABEL,
       current: movementValue,
       limited: limitedMovement,
-      value: Math.max(0, movementValue - limitedMovement),
+      value: Math.max(0, movementAvailable - limitedMovement),
       max: Math.max(0, toInteger(movement.max))
     },
     action: {
-      key: ACTION_RESOURCE_KEY,
-      label: ACTION_RESOURCE_LABEL,
-      current: actionValue,
+      key: action.key,
+      label: action.label,
+      current: action.current,
       limited: limitedAction,
-      value: Math.max(0, actionValue - limitedAction),
-      max: Math.max(0, toInteger(action.max))
+      value: Math.max(0, action.value - limitedAction),
+      max: action.max
     },
-    total: Math.max(0, movementValue - limitedMovement) + Math.max(0, actionValue - limitedAction)
+    total: Math.max(0, movementAvailable - limitedMovement) + Math.max(0, action.value - limitedAction)
   };
 }
 
@@ -94,7 +90,7 @@ export function createCombatMovementResourcePreview(tokenDocument, cost = 0) {
     cost: normalizedCost,
     resources: {
       [MOVEMENT_RESOURCE_KEY]: movementSpend,
-      [ACTION_RESOURCE_KEY]: actionSpend
+      [state?.action?.key ?? ACTION_RESOURCE_KEY]: actionSpend
     }
   };
 }
@@ -173,15 +169,15 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
 
   const updates = {};
   if (movementSpend) updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = Math.max(0, state.movement.current - movementSpend);
-  if (actionSpend) updates[`system.resources.${ACTION_RESOURCE_KEY}.value`] = Math.max(0, state.action.current - actionSpend);
   updates[`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`] = [
     ...getMovementResourceSpendingStack(actor),
     createMovementResourceSpendingEntry(tokenDocument, movement, {
       [MOVEMENT_RESOURCE_KEY]: movementSpend,
-      [ACTION_RESOURCE_KEY]: actionSpend
+      [state.action.key]: actionSpend
     })
   ].slice(-MOVEMENT_RESOURCE_SPENDING_LIMIT);
   await actor.update(updates);
+  if (actionSpend) await spendCombatActionPoints(actor, actionSpend);
 }
 
 async function restoreLastMovementResourceSpending(tokenDocument) {
@@ -197,7 +193,7 @@ async function restoreLastMovementResourceSpending(tokenDocument) {
     [`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`]: nextStack
   };
 
-  for (const key of [MOVEMENT_RESOURCE_KEY, ACTION_RESOURCE_KEY]) {
+  for (const key of [MOVEMENT_RESOURCE_KEY, ACTION_RESOURCE_KEY, REACTION_RESOURCE_KEY]) {
     const resource = actor.system?.resources?.[key];
     if (!resource) continue;
 
@@ -212,7 +208,7 @@ async function restoreLastMovementResourceSpending(tokenDocument) {
   await actor.update(updates);
 }
 
-async function restoreCombatMovementResources(combat) {
+export async function restoreCombatMovementResources(combat) {
   if (!game.user.isActiveGM) return;
   const actors = getCombatMovementRestoreActors(combat);
 
@@ -253,7 +249,7 @@ function getCombatMovementRestoreScenes(combat) {
   return scenes.values();
 }
 
-async function restoreActorMovementResources(actor) {
+export async function restoreActorMovementResources(actor) {
   if (!actor?.isOwner) return;
 
   const updates = {

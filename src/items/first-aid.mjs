@@ -1,11 +1,11 @@
-import {
+﻿import {
   getActorHealingModifierPercent,
   requestDamageApplication,
   requestFirstAidEffect,
   requestFirstAidNeedChanges,
   requestFirstAidRemoveEffects
 } from "../combat/damage-hub.mjs";
-import { ACTION_RESOURCE_KEY } from "../combat/movement-resources.mjs";
+import { canSpendCombatActionPoints, spendCombatActionPoints } from "../combat/reaction-resources.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
@@ -590,13 +590,8 @@ function getResponsibleGM() {
 async function spendActionPointsIfNeeded(actor, firstAid = {}) {
   const cost = Math.max(0, toInteger(firstAid.actionPointCost));
   if (!cost || !isActorInCombat(actor)) return true;
-  const resource = actor.system?.resources?.[ACTION_RESOURCE_KEY];
-  const current = Math.max(0, toInteger(resource?.value));
-  if (current < cost) {
-    ui.notifications.warn(`Недостаточно ОД: требуется ${cost}.`);
-    return false;
-  }
-  await actor.update({ [`system.resources.${ACTION_RESOURCE_KEY}.value`]: current - cost });
+  if (!canSpendCombatActionPoints(actor, cost, { label: "первой помощи" })) return false;
+  await spendCombatActionPoints(actor, cost);
   return true;
 }
 

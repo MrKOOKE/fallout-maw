@@ -5008,6 +5008,9 @@ function buildEffectPathLabelMap({
     max: maximumLabel,
     bonus: bonusLabel
   });
+  map.set("system.resources.reactionPoints.value", `Очки реакции: ${valueLabel}`);
+  map.set("system.resources.reactionPoints.max", `Очки реакции: ${maximumLabel}`);
+  map.set("system.resources.reactionPoints.bonus", `Очки реакции: ${bonusLabel}`);
   addEffectPathLabels(map, "system.needs", needSettings, {
     value: valueLabel,
     max: maximumLabel,
