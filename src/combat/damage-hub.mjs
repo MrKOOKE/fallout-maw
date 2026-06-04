@@ -1069,11 +1069,11 @@ export async function runDamageHubOperation(operation) {
   }
 }
 
-export async function applyDestroyedLimbConsequences(actor, limbKeys = []) {
-  return applyDestroyedLimbConsequencesNow(actor, limbKeys);
+export async function applyDestroyedLimbConsequences(actor, limbKeys = [], options = {}) {
+  return applyDestroyedLimbConsequencesNow(actor, limbKeys, options);
 }
 
-async function applyDestroyedLimbConsequencesNow(actor, limbKeys = []) {
+async function applyDestroyedLimbConsequencesNow(actor, limbKeys = [], { ignoreInstalledProsthesis = false } = {}) {
   const destroyed = new Set();
   for (const limbKey of Array.from(new Set(limbKeys.filter(Boolean)))) {
     const limb = actor?.system?.limbs?.[limbKey];
@@ -1088,7 +1088,7 @@ async function applyDestroyedLimbConsequencesNow(actor, limbKeys = []) {
     await deleteLimbTraumas(actor, limbKey);
     await deleteLimbLossEffects(actor, limbKey);
     await deleteLimbTimedDamageEffects(actor, limbKey);
-    if (hasInstalledProsthesis(actor, limbKey)) continue;
+    if (!ignoreInstalledProsthesis && hasInstalledProsthesis(actor, limbKey)) continue;
     if (!isCriticalLimb(actor, limbKey)) await createLimbLossEffect(actor, limbKey);
   }
   return destroyed;
@@ -4821,12 +4821,17 @@ async function applyEquipmentConditionDamage(actor, entries = []) {
   if (!totals.size) return;
 
   const updates = [];
+  const brokenProstheses = [];
   for (const [itemId, amount] of totals) {
     const item = actor.items?.get?.(itemId);
     if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
     const current = Math.max(0, toInteger(getConditionFunction(item).value));
     const next = Math.max(0, current - amount);
     if (next === current) continue;
+    if (next <= 0 && isInstalledProsthesisItem(item)) {
+      brokenProstheses.push(item);
+      continue;
+    }
     updates.push({
       _id: item.id,
       "system.functions.condition.value": next
@@ -4834,6 +4839,9 @@ async function applyEquipmentConditionDamage(actor, entries = []) {
   }
 
   if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
+  for (const item of brokenProstheses) {
+    await breakInstalledProsthesis(actor, actor.items?.get?.(item.id) ?? item);
+  }
 }
 
 async function applyProsthesisConditionDamage(actor, prosthesis, amount = 0) {
@@ -4854,13 +4862,29 @@ async function applyProsthesisConditionDamage(actor, prosthesis, amount = 0) {
     return actor.items?.get(prosthesis.id) ?? prosthesis;
   }
 
-  await returnBrokenProsthesisToInventory(actor, prosthesis);
+  return breakInstalledProsthesis(actor, prosthesis);
+}
+
+async function breakInstalledProsthesis(actor, prosthesis) {
+  if (!actor || !prosthesis) return undefined;
   const limbKey = String(prosthesis.system?.placement?.limbKey ?? "");
+  await returnBrokenProsthesisToInventory(actor, prosthesis);
   if (limbKey) {
     await setLimbMissingState(actor, limbKey);
-    await applyDestroyedLimbConsequences(actor, [limbKey]);
+    await applyDestroyedLimbConsequences(actor, [limbKey], { ignoreInstalledProsthesis: true });
+    await queueActorDamageStatusSync(actor);
   }
   return actor.items?.get(prosthesis.id) ?? prosthesis;
+}
+
+function isInstalledProsthesisItem(item) {
+  return Boolean(
+    item?.type === "gear"
+    && item.system?.equipped
+    && hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)
+    && String(item.system?.placement?.mode ?? "") === "prosthesis"
+    && String(item.system?.placement?.limbKey ?? "").trim()
+  );
 }
 
 async function returnBrokenProsthesisToInventory(actor, prosthesis) {

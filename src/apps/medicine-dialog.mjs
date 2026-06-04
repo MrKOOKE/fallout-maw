@@ -736,7 +736,7 @@ async function applyProsthesisRemovalLocally({ sourceActor, targetActor, limbKey
     await targetActor.updateEmbeddedDocuments("Item", [createReturnProsthesisUpdate(item)]);
   }
   await setLimbMissingState(targetActor, limbKey);
-  await applyDestroyedLimbConsequences(targetActor, [limbKey]);
+  await applyDestroyedLimbConsequences(targetActor, [limbKey], { ignoreInstalledProsthesis: true });
   return buildTargetContext(targetActor);
 }
 
