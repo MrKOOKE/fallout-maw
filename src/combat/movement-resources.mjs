@@ -1,7 +1,7 @@
 import { GRAPPLE_FOLLOW_MOVEMENT_OPTION } from "../constants.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { getActorPostureMovementCostMultiplier } from "../canvas/posture-movement.mjs";
-import { applyDamageCostModifier, getDamageCostModifierState, getResourceLimitState } from "./damage-hub.mjs";
+import { getDamageCostModifierState, getResourceLimitState } from "./damage-hub.mjs";
 
 export const MOVEMENT_RESOURCE_KEY = "movementPoints";
 export const ACTION_RESOURCE_KEY = "actionPoints";
@@ -113,7 +113,14 @@ export function getCombatMovementAffordabilityCost(movement, actor = null) {
 
 export function applyCombatMovementCostModifier(actor, cost = 0) {
   const postureCost = Math.ceil(Math.max(0, cost) * getActorPostureMovementCostMultiplier(actor));
-  return applyDamageCostModifier(postureCost, getDamageCostModifierState(actor).movement);
+  const modifier = getDamageCostModifierState(actor).movement;
+  const hasOverride = modifier?.override !== null && modifier?.override !== undefined && modifier?.override !== "";
+  const override = hasOverride ? Number(modifier.override) : NaN;
+  const multiplier = Number(modifier?.multiplier);
+  const perUnitCost = Number.isFinite(override)
+    ? override
+    : (Number.isFinite(multiplier) ? multiplier : 1) + (Number(modifier?.add) || 0);
+  return Math.max(0, Math.ceil(postureCost * Math.max(0, perUnitCost)));
 }
 
 export function isCombatMovementTracked(tokenDocument) {
