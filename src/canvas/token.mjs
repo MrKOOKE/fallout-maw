@@ -12,6 +12,7 @@ const DAMAGE_EFFECT_CHANGE_ROOT = "system.damageEffects";
 const POSTURE_EFFECT_CHANGE_ROOT = "system.postures";
 const POSTURE_WEAPON_ACTION_COST_SUFFIX = ".weaponActionCost";
 const BLEEDING_DAMAGE_TYPE_KEY = "bleeding";
+const HEALTH_BAR_ATTRIBUTES = new Set(["resources.health", "system.resources.health"]);
 
 let activeEffectTooltipAnchor = null;
 let activeEffectTooltipToken = null;
@@ -23,6 +24,45 @@ let middleClickGuardRegistered = false;
  * System token implementation with readable Active Effect icon tooltips.
  */
 export class FalloutMaWToken extends foundry.canvas.placeables.Token {
+  /** @override */
+  _drawBar(index, bar, data) {
+    if (HEALTH_BAR_ATTRIBUTES.has(String(data?.attribute ?? ""))) return this._drawHealthBar(index, bar, data);
+    return super._drawBar(index, bar, data);
+  }
+
+  _drawHealthBar(index, bar, data) {
+    const actor = this.actor;
+    const maxInfo = calculateHealthBarMaximums(actor, data);
+    if (maxInfo.totalMax <= 0) return super._drawBar(index, bar, data);
+
+    const value = Math.max(0, Number(data?.value) || 0);
+    const availableValuePct = maxInfo.availableMax > 0
+      ? Math.clamp(value, 0, maxInfo.availableMax) / maxInfo.availableMax
+      : 0;
+    const valuePct = Math.clamp(value, 0, maxInfo.totalMax) / maxInfo.totalMax;
+    const blockedPct = Math.clamp(maxInfo.blockedMax, 0, maxInfo.totalMax) / maxInfo.totalMax;
+    const availablePct = Math.clamp(maxInfo.availableMax, 0, maxInfo.totalMax) / maxInfo.totalMax;
+    const color = Color.fromRGB([1 - (availableValuePct / 2), availableValuePct, 0]);
+
+    const { width, height } = this.document.getSize();
+    const s = canvas.dimensions.uiScale;
+    const bw = width;
+    const bh = 8 * (this.document.height >= 2 ? 1.5 : 1) * s;
+
+    bar.clear();
+    bar.lineStyle(s, 0x000000, 1.0);
+    bar.beginFill(0x000000, 0.5).drawRoundedRect(0, 0, bw, bh, 3 * s);
+    if (maxInfo.blockedMax > 0) {
+      const x = availablePct * bw;
+      const w = blockedPct * bw;
+      bar.beginFill(0x550000, 1.0).lineStyle(1, 0x000000, 1.0).drawRoundedRect(x, 0, w, bh, 2 * s);
+    }
+    bar.beginFill(color, 1.0).lineStyle(s, 0x000000, 1.0).drawRoundedRect(0, 0, valuePct * bw, bh, 2 * s);
+
+    const posY = index === 0 ? height - bh : 0;
+    bar.position.set(0, posY);
+  }
+
   /** @override */
   _prepareDragLeftDropUpdates(event) {
     const result = super._prepareDragLeftDropUpdates(event);
@@ -387,6 +427,40 @@ function isCanvasTopmostAtPoint(point) {
   if (!view || !point) return false;
   const element = document.elementFromPoint(point.x, point.y);
   return element === view;
+}
+
+function calculateHealthBarMaximums(actor, data = {}) {
+  const fallbackMax = Math.max(0, Number(data?.max) || 0);
+  if (!actor) return { availableMax: fallbackMax, blockedMax: 0, totalMax: fallbackMax };
+
+  let availableMax = 0;
+  let blockedMax = 0;
+  for (const [limbKey, limb] of Object.entries(actor.system?.limbs ?? {})) {
+    const limbMax = Math.max(0, toInteger(limb?.max));
+    if (Boolean(limb?.missing)) {
+      blockedMax += limbMax;
+      continue;
+    }
+
+    const cap = getLimbTraumaCap(actor, limbKey, limbMax);
+    availableMax += cap;
+    blockedMax += Math.max(0, limbMax - cap);
+  }
+
+  if (availableMax <= 0 && blockedMax <= 0) availableMax = fallbackMax;
+  const totalMax = Math.max(availableMax + blockedMax, fallbackMax);
+  return { availableMax, blockedMax: Math.max(0, totalMax - availableMax), totalMax };
+}
+
+function getLimbTraumaCap(actor, limbKey = "", limbMax = 0) {
+  return (actor.items ?? [])
+    .filter(item => item?.type === "trauma" && String(item.system?.limbKey ?? "") === limbKey)
+    .reduce((cap, item) => Math.min(cap, Math.max(0, toInteger(item.system?.thresholdValue))), limbMax);
+}
+
+function toInteger(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.trunc(number) : 0;
 }
 
 function localizeDocumentName(value) {
