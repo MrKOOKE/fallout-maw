@@ -611,7 +611,8 @@ class WeaponAttackController {
 
     const target = this.selectedTarget;
     const geometry = deserializeGeometry(this.lockedGeometry) ?? this.geometry;
-    const centerTrajectory = buildTrajectoryThroughPoint(this.token, geometry, getTokenAimPoint(target));
+    const aimPoint = selectTargetTrajectoryAimPoint(this.token, target, geometry) ?? getTokenAimPoint(target);
+    const centerTrajectory = buildTrajectoryThroughPoint(this.token, geometry, aimPoint);
     const pelletCount = getWeaponPelletCount(this.weapon, this.weaponFunctionId);
     const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), Array(pelletCount).fill(1));
     const trajectories = buildAimedAttackTrajectories(this.token, geometry, centerTrajectory, pelletCount);
@@ -702,7 +703,8 @@ class WeaponAttackController {
 
     if (direction.mode === "thrust") {
       this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
-      const trajectory = buildTrajectoryThroughPoint(this.token, geometry, getTokenAimPoint(target));
+      const aimPoint = selectTargetTrajectoryAimPoint(this.token, target, geometry) ?? getTokenAimPoint(target);
+      const trajectory = buildTrajectoryThroughPoint(this.token, geometry, aimPoint);
       const result = await this.resolveDirectedThrustTrajectory(target, trajectory, {
         limbKey: this.selectedLimbKey,
         checkBatch
@@ -1312,7 +1314,9 @@ class WeaponAttackController {
     this.targets = potentialTargets;
     this.geometry.aimPoint = null;
     this.trajectoryAimTarget = this.getTrajectoryAimTarget(potentialTargets);
-    this.geometry.aimPoint = this.trajectoryAimTarget ? getTokenAimPoint(this.trajectoryAimTarget) : null;
+    this.geometry.aimPoint = this.trajectoryAimTarget
+      ? selectTargetTrajectoryAimPoint(this.token, this.trajectoryAimTarget, this.geometry)
+      : null;
     if (this.geometry.aimPoint) this.targets = getAimedElevationTargets(this.token, this.geometry, potentialTargets);
     this.syncAttackAutoCover();
     this.hoveredTarget = this.targetedAction && this.aimedMode === "aim"
@@ -1682,7 +1686,8 @@ class WeaponAttackController {
 
   prepareAimedLimbRows(target) {
     if (!this.requiresLimbSelection) return [];
-    const trajectory = this.geometry ? buildTrajectoryThroughPoint(this.token, this.geometry, getTokenAimPoint(target)) : null;
+    const aimPoint = this.geometry ? (selectTargetTrajectoryAimPoint(this.token, target, this.geometry) ?? getTokenAimPoint(target)) : null;
+    const trajectory = this.geometry && aimPoint ? buildTrajectoryThroughPoint(this.token, this.geometry, aimPoint) : null;
     const blockerCount = trajectory ? getAimedTargetBlockers(this.token, target, trajectory).length : 0;
     const blockerBonus = getAimedTargetBlockerBonus(blockerCount)
       + getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
@@ -2627,7 +2632,9 @@ function getPotentialTargets(attackerToken, geometry, { includeAttacker = false,
   return (canvas.tokens?.placeables ?? []).filter(target => {
     if ((!includeAttacker && target === attackerToken) || !target.actor || !target.visible) return false;
     if (!includeDead && isDeadTarget(target)) return false;
-    return Boolean(getVisibleTokenAttackPoint(attackerToken, target, geometry));
+    return geometry.type === VOLLEY_ACTION_KEY
+      ? Boolean(getVisibleTokenAttackPoint(attackerToken, target, geometry))
+      : Boolean(selectTargetTrajectoryAimPoint(attackerToken, target, geometry));
   }).sort((left, right) => getTargetDistance(left, geometry) - getTargetDistance(right, geometry));
 }
 
@@ -2722,6 +2729,40 @@ function isTokenInAimedElevationSlice(attackerToken, target, geometry, aimTrajec
 
 function getVisibleTokenAttackPoint(attackerToken, target, geometry) {
   return getVisibleTokenAttackPoints(attackerToken, target, geometry).at(0) ?? null;
+}
+
+function selectTargetTrajectoryAimPoint(attackerToken, target, geometry) {
+  if (!attackerToken || !target || !geometry || geometry.type === VOLLEY_ACTION_KEY) return null;
+  const center = getTokenAimPoint(target);
+  if (isTargetTrajectoryAimPointValid(attackerToken, target, geometry, center)) return center;
+
+  const targetCenter = center ?? getTokenCenter(target);
+  return getVisibleTokenAttackPoints(attackerToken, target, geometry)
+    .filter(point => isTargetTrajectoryAimPointValid(attackerToken, target, geometry, point))
+    .sort((left, right) => compareTargetTrajectoryAimPoints(left, right, targetCenter, geometry))
+    .at(0) ?? null;
+}
+
+function isTargetTrajectoryAimPointValid(attackerToken, target, geometry, point) {
+  if (!point || !isPointInsideAttackCone(point, geometry)) return false;
+  if (!hasLineOfSight(attackerToken, point, geometry.origin)) return false;
+  const trajectory = buildTrajectoryThroughPoint(attackerToken, geometry, point);
+  const hit = getTokenTrajectoryHit(target, trajectory);
+  return Boolean(hit?.point && hit.distance <= trajectory.distance + 0.5 && hasLineOfSight(attackerToken, hit.point, geometry.origin));
+}
+
+function compareTargetTrajectoryAimPoints(left, right, targetCenter, geometry) {
+  const centerDistance = getPointDistance(left, targetCenter) - getPointDistance(right, targetCenter);
+  if (Math.abs(centerDistance) > GEOMETRY_EPSILON) return centerDistance;
+  const leftOffset = Math.abs(normalizeAngle(Math.atan2(left.y - geometry.origin.y, left.x - geometry.origin.x) - geometry.angle));
+  const rightOffset = Math.abs(normalizeAngle(Math.atan2(right.y - geometry.origin.y, right.x - geometry.origin.x) - geometry.angle));
+  if (Math.abs(leftOffset - rightOffset) > GEOMETRY_EPSILON) return leftOffset - rightOffset;
+  return getPointDistance(left, geometry.origin) - getPointDistance(right, geometry.origin);
+}
+
+function getPointDistance(left, right) {
+  if (!left || !right) return Infinity;
+  return Math.hypot((Number(left.x) || 0) - (Number(right.x) || 0), (Number(left.y) || 0) - (Number(right.y) || 0));
 }
 
 function getVisibleTokenAttackPoints(attackerToken, target, geometry) {
@@ -2956,15 +2997,9 @@ function reservePelletPoint(point, reserved, spacing, force = false) {
 
 function selectTrajectoryAimPoint(attackerToken, geometry, targets = []) {
   if (geometry?.aimPoint) return geometry.aimPoint;
-  const candidates = (targets ?? [])
-    .map(target => ({
-      target,
-      points: getVisibleTokenAttackPoints(attackerToken, target, geometry)
-    }))
-    .filter(candidate => candidate.points.length > 0);
-  if (!candidates.length) return null;
-  const candidate = candidates[Math.floor(Math.random() * candidates.length)];
-  return candidate.points[Math.floor(Math.random() * candidate.points.length)];
+  return (targets ?? [])
+    .map(target => selectTargetTrajectoryAimPoint(attackerToken, target, geometry))
+    .find(point => point) ?? null;
 }
 
 function buildTrajectoryThroughPoint(attackerToken, geometry, point) {
@@ -3837,9 +3872,11 @@ function getClosestBurstAxisPolygonPoint(axis, points = []) {
 }
 
 function buildBurstTargetAimShot(attackerToken, geometry, target, point = null) {
-  point ??= getTokenCenter(target);
-  if (!point) return null;
-  const trajectory = buildTrajectoryThroughPoint(attackerToken, geometry, point);
+  const aimPoint = isTargetTrajectoryAimPointValid(attackerToken, target, geometry, point)
+    ? point
+    : selectTargetTrajectoryAimPoint(attackerToken, target, geometry);
+  if (!aimPoint) return null;
+  const trajectory = buildTrajectoryThroughPoint(attackerToken, geometry, aimPoint);
   const hit = getTrajectoryTargetEntries(attackerToken, trajectory).at(0);
   if (hit?.target !== target) return null;
   if (!hit) return null;
