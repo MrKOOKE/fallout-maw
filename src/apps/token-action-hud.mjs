@@ -179,6 +179,10 @@ export function syncTokenActionHud() {
   void tokenActionHud.render({ force: true });
 }
 
+export function refreshTokenActionHudForActor(actor) {
+  scheduleTokenActionHudRefreshForActor(actor);
+}
+
 function scheduleTokenActionHudRefresh() {
   tokenActionHudRefresh?.();
 }
@@ -2074,7 +2078,7 @@ function prepareActiveActionButtons(token, actor, weaponSet = null, selectedWeap
     {
       key: "grapple",
       label: grappleLabel,
-      img: normalizeImagePath(hudIcons.weaponActions?.meleeAttack, "icons/svg/net.svg"),
+      img: normalizeImagePath(hudIcons.activeActions?.grapple, normalizeImagePath(hudIcons.weaponActions?.meleeAttack, "icons/svg/net.svg")),
       action: "useActiveAction",
       datasetKey: "activeActionKey",
       disabled: !actor?.isOwner
@@ -2082,14 +2086,14 @@ function prepareActiveActionButtons(token, actor, weaponSet = null, selectedWeap
     {
       key: "dragGrappled",
       label: game.i18n.localize("FALLOUTMAW.Settings.HUD.DragGrappled"),
-      img: normalizeImagePath("icons/svg/wingfoot.svg", "icons/svg/walk.svg"),
+      img: normalizeImagePath(hudIcons.activeActions?.dragGrappled, "icons/svg/wingfoot.svg"),
       action: "dragGrappledTarget",
       disabled: !grappleTargetId || !actor?.isOwner
     },
     {
       key: "push",
       label: game.i18n.localize("FALLOUTMAW.Settings.HUD.Push"),
-      img: normalizeImagePath(hudIcons.weaponActions?.push, "icons/svg/impact.svg"),
+      img: normalizeImagePath(hudIcons.activeActions?.push, normalizeImagePath(hudIcons.weaponActions?.push, "icons/svg/impact.svg")),
       action: "useActiveAction",
       datasetKey: "activeActionKey",
       disabled: !push || !actor?.isOwner

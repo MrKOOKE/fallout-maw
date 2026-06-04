@@ -1,0 +1,54 @@
+<div class="fallout-maw-config-body fallout-maw-cover-settings-config">
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>Укрытия</h2>
+      <div class="fallout-maw-button-row">
+        <button type="button" data-action="addCoverEntry"><i class="fa-solid fa-plus"></i> Добавить</button>
+        <button type="button" data-action="resetDefaults"><i class="fa-solid fa-rotate-left"></i> {{localize "FALLOUTMAW.Common.ResetDefaults"}}</button>
+      </div>
+    </header>
+
+    <div class="fallout-maw-settings-table fallout-maw-cover-settings-table">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>Ключ</span>
+        <span>Название</span>
+        <span>Иконка</span>
+        <span>Перекрытие</span>
+        <span>Ключ эффекта</span>
+        <span>Тип</span>
+        <span>Значение</span>
+        <span>Приоритет</span>
+        <span></span>
+      </div>
+
+      {{#each entries}}
+      <div class="fallout-maw-settings-row" data-cover-entry-index="{{index}}">
+        <input type="text" name="settings.entries.{{index}}.key" value="{{key}}">
+        <input type="text" name="settings.entries.{{index}}.label" value="{{label}}">
+        <span class="fallout-maw-cover-image-field">
+          <img class="fallout-maw-token-action-hud-icon-preview" src="{{img}}" alt="" data-cover-img-preview>
+          <input type="text" name="settings.entries.{{index}}.img" value="{{img}}" data-cover-img-input>
+          <button type="button" data-action="browseCoverImage" title="{{localize 'FALLOUTMAW.Common.Image'}}"><i class="fa-solid fa-image"></i></button>
+        </span>
+        <input type="number" name="settings.entries.{{index}}.overlapPercent" value="{{overlapPercent}}" min="0" max="100" step="1">
+        <input type="text" name="settings.entries.{{index}}.change.key" value="{{change.key}}" data-effect-key-autocomplete>
+        <select name="settings.entries.{{index}}.change.type">
+          {{#each change.typeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="text" name="settings.entries.{{index}}.change.value" value="{{change.value}}" data-formula-autocomplete="all">
+        <input type="number" name="settings.entries.{{index}}.change.priority" value="{{change.priority}}" step="1">
+        <button type="button" data-action="deleteCoverEntry" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        <input type="hidden" name="settings.entries.{{index}}.change.phase" value="{{change.phase}}">
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">Укрытия не заданы.</p>
+      {{/each}}
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  </footer>
+</div>

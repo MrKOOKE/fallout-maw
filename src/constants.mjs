@@ -72,6 +72,7 @@ export const TEMPLATES = Object.freeze({
     systemActions: `systems/${SYSTEM_ID}/templates/settings/system-action-settings-config.hbs`,
     stealth: `systems/${SYSTEM_ID}/templates/settings/stealth-settings-config.hbs`,
     combat: `systems/${SYSTEM_ID}/templates/settings/combat-settings-config.hbs`,
+    cover: `systems/${SYSTEM_ID}/templates/settings/cover-settings-config.hbs`,
     personalNameRandomizer: `systems/${SYSTEM_ID}/templates/settings/personal-name-randomizer-config.hbs`,
     traumaSettings: `systems/${SYSTEM_ID}/templates/settings/trauma-settings-config.hbs`,
     traumaGroupSettings: `systems/${SYSTEM_ID}/templates/settings/trauma-group-settings-config.hbs`,

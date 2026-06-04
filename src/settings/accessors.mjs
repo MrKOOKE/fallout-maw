@@ -21,6 +21,7 @@ import {
   ABILITIES_CATALOG_SETTING,
   CHARACTERISTICS_SETTING,
   COMBAT_SETTINGS_SETTING,
+  COVER_SETTINGS_SETTING,
   CREATURE_OPTIONS_SETTING,
   CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
@@ -40,6 +41,7 @@ import {
   TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING
 } from "./constants.mjs";
 import { createDefaultCombatSettings, normalizeCombatSettings } from "./combat.mjs";
+import { createDefaultCoverSettings, normalizeCoverSettings } from "./cover.mjs";
 import { createDefaultAbilityCatalog, normalizeAbilityCatalog } from "./abilities.mjs";
 import { createEmptyCreatureOptions, normalizeCreatureOptions } from "./creature-options.mjs";
 import { createDefaultDiseaseSettings, normalizeDiseaseSettings } from "./diseases.mjs";
@@ -82,6 +84,11 @@ export const DEFAULT_TOKEN_ACTION_HUD_ICONS = Object.freeze({
     skills: "icons/svg/dice-target.svg",
     actions: "icons/svg/aura.svg",
     settings: "icons/svg/lever.svg"
+  }),
+  activeActions: Object.freeze({
+    grapple: "icons/svg/sword.svg",
+    dragGrappled: "icons/svg/wingfoot.svg",
+    push: "icons/svg/impact.svg"
   }),
   weaponActions: Object.freeze({
     aimedShot: "icons/svg/target.svg",
@@ -140,6 +147,7 @@ export function normalizeTokenActionHudIcons(value = {}) {
     dodgeConversionIcon: normalizeImageSettingPath(source.dodgeConversionIcon, defaults.dodgeConversionIcon),
     levelUpIcon: normalizeImageSettingPath(source.levelUpIcon, defaults.levelUpIcon),
     mainActions: normalizeImageSettingMap(source.mainActions, defaults.mainActions),
+    activeActions: normalizeImageSettingMap(source.activeActions, defaults.activeActions),
     weaponActions: normalizeImageSettingMap(source.weaponActions, defaults.weaponActions),
     postures: normalizeImageSettingMap(source.postures, defaults.postures),
     skillIcons: normalizeImageSettingMap(source.skillIcons, defaults.skillIcons),
@@ -525,6 +533,24 @@ export async function setCombatSettings(settings) {
 
 export async function resetCombatSettings() {
   return setCombatSettings(createDefaultCombatSettings());
+}
+
+export function getCoverSettings() {
+  try {
+    return normalizeCoverSettings(game.settings.get(FALLOUT_MAW.id, COVER_SETTINGS_SETTING));
+  } catch (_error) {
+    return createDefaultCoverSettings();
+  }
+}
+
+export async function setCoverSettings(settings) {
+  const normalized = normalizeCoverSettings(settings);
+  await game.settings.set(FALLOUT_MAW.id, COVER_SETTINGS_SETTING, normalized);
+  return normalized;
+}
+
+export async function resetCoverSettings() {
+  return setCoverSettings(createDefaultCoverSettings());
 }
 
 export function getSkillCheckControl() {

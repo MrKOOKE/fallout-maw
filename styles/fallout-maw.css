@@ -7899,6 +7899,17 @@ label.fallout-maw-mitigation-cell {
   grid-template-columns: minmax(8rem, 1fr) minmax(5rem, 0.6fr) minmax(8rem, 0.8fr) minmax(5rem, 0.6fr);
 }
 
+.fallout-maw-cover-settings-table .fallout-maw-settings-row {
+  grid-template-columns: minmax(5.5rem, 0.55fr) minmax(7rem, 0.75fr) minmax(12rem, 1.1fr) minmax(5.5rem, 0.45fr) minmax(13rem, 1.25fr) minmax(6.5rem, 0.6fr) minmax(5rem, 0.5fr) minmax(5rem, 0.45fr) 2rem;
+}
+
+.fallout-maw-cover-image-field {
+  align-items: center;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: 2rem minmax(0, 1fr) 2rem;
+}
+
 .fallout-maw-stealth-window-content {
   display: grid;
   gap: 0.65rem;

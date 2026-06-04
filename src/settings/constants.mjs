@@ -14,6 +14,7 @@ export const TOOL_SETTINGS_SETTING = "toolSettings";
 export const SYSTEM_ACTION_SETTINGS_SETTING = "systemActionSettings";
 export const STEALTH_SETTINGS_SETTING = "stealthSettings";
 export const COMBAT_SETTINGS_SETTING = "combatSettings";
+export const COVER_SETTINGS_SETTING = "coverSettings";
 export const PERSONAL_NAME_RANDOMIZER_SETTING = "personalNameRandomizer";
 export const PERSONAL_GENERATOR_PRESETS_SETTING = "personalGeneratorPresets";
 export const SKILL_CHECK_CONTROL_SETTING = "skillCheckControl";
