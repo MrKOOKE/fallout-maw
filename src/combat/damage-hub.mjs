@@ -863,18 +863,24 @@ export function getLimbHealingCap(actor, limbKey = "") {
   const limb = actor?.system?.limbs?.[limbKey];
   if (!limb) return 0;
   if (hasInstalledProsthesis(actor, limbKey)) return 0;
-  if (isLimbDestroyed(actor, limbKey)) return 0;
+  if (isLimbPhysicallyMissing(actor, limbKey)) return 0;
   const max = toInteger(limb.max);
   return getActorTraumas(actor)
     .filter(item => item.system?.limbKey === limbKey)
     .reduce((cap, item) => Math.min(cap, toInteger(item.system?.thresholdValue)), max);
 }
 
+export function isLimbPhysicallyMissing(actor, limbKey = "") {
+  const limb = actor?.system?.limbs?.[limbKey];
+  if (!limb) return false;
+  return Boolean(limb.missing);
+}
+
 export function isLimbDestroyed(actor, limbKey = "") {
   const limb = actor?.system?.limbs?.[limbKey];
   if (!limb) return false;
   if (hasInstalledProsthesis(actor, limbKey)) return false;
-  return toInteger(limb.value) <= toInteger(limb.min);
+  return isLimbPhysicallyMissing(actor, limbKey);
 }
 
 export async function restoreDestroyedLimb(actor, limbKey = "") {
@@ -887,6 +893,7 @@ export async function restoreDestroyedLimb(actor, limbKey = "") {
     await deleteLimbTraumas(freshActor, limbKey);
     await deleteLimbLossEffects(freshActor, limbKey);
     await freshActor.update({
+      [`system.limbs.${limbKey}.missing`]: false,
       [`system.limbs.${limbKey}.value`]: max,
       [`system.limbs.${limbKey}.spent`]: 0,
       [`system.limbs.${limbKey}.damageAccumulation`]: {}
@@ -905,6 +912,18 @@ export async function clearLimbLossState(actor, limbKey = "") {
   });
 }
 
+export async function setLimbMissingState(actor, limbKey = "", { syncStatus = false } = {}) {
+  if (!actor || !limbKey) return undefined;
+  const limb = actor.system?.limbs?.[limbKey];
+  if (!limb) return undefined;
+  await actor.update({
+    [`system.limbs.${limbKey}.missing`]: true,
+    [`system.limbs.${limbKey}.damageAccumulation`]: {}
+  }, { falloutMawSkipDamageStatusSync: !syncStatus });
+  if (syncStatus) await queueActorDamageStatusSync(actor);
+  return actor;
+}
+
 export async function fullyRestoreActorDamageState(actor) {
   if (!actor?.isOwner) return undefined;
   return queueActorDamageMutation(actor.uuid, async freshActor => {
@@ -916,6 +935,8 @@ export async function fullyRestoreActorDamageState(actor) {
 
     const updates = buildFullDamageRestoreUpdate(freshActor);
     if (Object.keys(updates).length) await freshActor.update(updates, { falloutMawSkipDamageStatusSync: true });
+    const prosthesisUpdates = buildFullProsthesisRestoreUpdates(freshActor);
+    if (prosthesisUpdates.length) await freshActor.updateEmbeddedDocuments("Item", prosthesisUpdates);
     await queueActorDamageStatusSync(freshActor);
     return freshActor;
   });
@@ -983,7 +1004,10 @@ function hasDestroyedCriticalLimbAfterUpdate(actor, changes = {}) {
   for (const [key, limb] of Object.entries(actor?.system?.limbs ?? {})) {
     const critical = Boolean(getUpdatePath(changes, `system.limbs.${key}.critical`) ?? limb?.critical);
     if (!critical) continue;
+    if (hasInstalledProsthesis(actor, key)) continue;
 
+    const missing = Boolean(getUpdatePath(changes, `system.limbs.${key}.missing`) ?? limb?.missing);
+    if (missing) return true;
     const min = toInteger(getUpdatePath(changes, `system.limbs.${key}.min`) ?? limb?.min);
     const value = toInteger(getUpdatePath(changes, `system.limbs.${key}.value`) ?? limb?.value);
     if (value <= min) return true;
@@ -1052,11 +1076,19 @@ export async function applyDestroyedLimbConsequences(actor, limbKeys = []) {
 async function applyDestroyedLimbConsequencesNow(actor, limbKeys = []) {
   const destroyed = new Set();
   for (const limbKey of Array.from(new Set(limbKeys.filter(Boolean)))) {
-    if (!isLimbDestroyed(actor, limbKey)) continue;
+    const limb = actor?.system?.limbs?.[limbKey];
+    if (!limb) continue;
+    const missing = isLimbPhysicallyMissing(actor, limbKey);
+    const reachedDestruction = toInteger(limb.value) <= toInteger(limb.min);
+    if (!missing && !reachedDestruction) continue;
     destroyed.add(limbKey);
+    if (!missing) {
+      await actor.update({ [`system.limbs.${limbKey}.missing`]: true }, { falloutMawSkipDamageStatusSync: true });
+    }
     await deleteLimbTraumas(actor, limbKey);
     await deleteLimbLossEffects(actor, limbKey);
     await deleteLimbTimedDamageEffects(actor, limbKey);
+    if (hasInstalledProsthesis(actor, limbKey)) continue;
     if (!isCriticalLimb(actor, limbKey)) await createLimbLossEffect(actor, limbKey);
   }
   return destroyed;
@@ -1333,7 +1365,14 @@ function mergeManagedTimedDamageChangeData(existing = {}, incoming = {}) {
 function buildFullDamageRestoreUpdate(actor) {
   const updates = {};
   for (const [key, limb] of Object.entries(actor?.system?.limbs ?? {})) {
+    const missing = isLimbPhysicallyMissing(actor, key);
+    if (missing) {
+      updates[`system.limbs.${key}.missing`] = true;
+      updates[`system.limbs.${key}.damageAccumulation`] = {};
+      continue;
+    }
     const max = Math.max(0, toInteger(limb?.max));
+    updates[`system.limbs.${key}.missing`] = false;
     updates[`system.limbs.${key}.value`] = max;
     updates[`system.limbs.${key}.spent`] = 0;
     updates[`system.limbs.${key}.damageAccumulation`] = {};
@@ -1348,6 +1387,29 @@ function buildFullDamageRestoreUpdate(actor) {
     const min = Math.max(0, toInteger(need?.min));
     updates[`system.needs.${key}.value`] = min;
     updates[`system.needs.${key}.spent`] = 0;
+  }
+  return updates;
+}
+
+function buildFullProsthesisRestoreUpdates(actor) {
+  const updates = [];
+  for (const item of actor?.items ?? []) {
+    if (
+      item?.type !== "gear"
+      || !item.system?.equipped
+      || !hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)
+      || String(item.system?.placement?.mode ?? "") !== "prosthesis"
+      || !String(item.system?.placement?.limbKey ?? "").trim()
+    ) continue;
+    if (!hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
+    const condition = getConditionFunction(item);
+    const max = Math.max(0, toInteger(condition.max));
+    const current = Math.max(0, toInteger(condition.value));
+    if (current >= max) continue;
+    updates.push({
+      _id: item.id,
+      "system.functions.condition.value": max
+    });
   }
   return updates;
 }
@@ -2948,7 +3010,7 @@ function distributeManualHealthValueUpdate(actor, changes = {}, options = {}) {
   const healthValuePath = "system.resources.health.value";
   if (!hasUpdatePath(changes, healthValuePath)) return false;
 
-  const currentHealth = calculateAggregateHealth(actor?.system?.limbs);
+  const currentHealth = calculateAggregateHealth(actor);
   const requested = Math.min(
     Math.max(toInteger(getUpdatePath(changes, healthValuePath)), currentHealth.min),
     currentHealth.max
@@ -3450,11 +3512,33 @@ function getLimbLabel(actor, limbKey = "") {
   return String(actor?.system?.limbs?.[limbKey]?.label ?? limbKey);
 }
 
-function calculateAggregateHealth(limbs = {}) {
-  const entries = Object.values(limbs ?? {}).filter(limb => limb && typeof limb === "object");
-  const max = entries.reduce((sum, limb) => sum + Math.max(0, toInteger(limb?.max)), 0);
-  const value = entries.reduce((sum, limb) => sum + Math.max(0, toInteger(limb?.value)), 0);
-  return { min: 0, value, max };
+function calculateAggregateHealth(actor) {
+  const entries = Object.entries(actor?.system?.limbs ?? {}).filter(([_key, limb]) => limb && typeof limb === "object");
+  return entries.reduce((result, [limbKey, limb]) => {
+    if (isLimbPhysicallyMissing(actor, limbKey)) {
+      const prosthesis = getInstalledProsthesis(actor, limbKey);
+      if (!prosthesis) return result;
+      const replacement = getProsthesisHealthForAggregate(prosthesis, limb);
+      result.value += replacement.value;
+      result.max += replacement.max;
+      return result;
+    }
+    result.value += Math.max(0, toInteger(limb?.value));
+    result.max += Math.max(0, toInteger(limb?.max));
+    return result;
+  }, { min: 0, value: 0, max: 0 });
+}
+
+function getProsthesisHealthForAggregate(prosthesis, limb = {}) {
+  if (!prosthesis) return { value: 0, max: 0 };
+  if (!hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition)) {
+    const max = Math.max(0, toInteger(limb?.max));
+    return { value: max, max };
+  }
+  const condition = getConditionFunction(prosthesis);
+  const max = Math.max(0, toInteger(condition.max));
+  const value = Math.min(Math.max(0, toInteger(condition.value)), max);
+  return { value, max };
 }
 
 function calculateManualAggregateHealthAdjustment(actor, amount = 0, mode = MODE_DAMAGE) {
@@ -3495,6 +3579,7 @@ function calculateManualAggregateHealthAdjustment(actor, amount = 0, mode = MODE
 
 function getManualHealthDamageTargets(actor) {
   return Object.entries(actor?.system?.limbs ?? {})
+    .filter(([key]) => !isLimbPhysicallyMissing(actor, key))
     .map(([key, limb]) => ({
       key,
       capacity: Math.max(0, toInteger(limb?.value))
@@ -3504,7 +3589,7 @@ function getManualHealthDamageTargets(actor) {
 
 function getManualHealthHealingTargets(actor) {
   return Object.entries(actor?.system?.limbs ?? {})
-    .filter(([key]) => !isLimbDestroyed(actor, key))
+    .filter(([key]) => !isLimbPhysicallyMissing(actor, key))
     .map(([key, limb]) => {
       const currentPositive = Math.max(0, toInteger(limb?.value));
       const cap = Math.min(Math.max(0, toInteger(limb?.max)), getLimbHealingCap(actor, key));
@@ -3575,6 +3660,7 @@ function calculateTargetedLimbDamage(actor, limbKey = "", amount = 0, { damageTy
   const limb = actor?.system?.limbs?.[limbKey];
   const damage = roundDamageAmount(amount);
   if (!limb || damage <= 0) return createLimbMutationResult(limbStates, damageAccumulation);
+  if (isLimbPhysicallyMissing(actor, limbKey)) return createLimbMutationResult(limbStates, damageAccumulation);
 
   const currentValue = getLimbStateValue(actor, limbKey, limbStates);
   if (currentValue <= toInteger(limb.min)) return createLimbMutationResult(limbStates, damageAccumulation);
@@ -3688,7 +3774,7 @@ function calculateTargetedLimbHealing(actor, limbKey = "", amount = 0, { limbSta
   const limb = actor?.system?.limbs?.[limbKey];
   const healing = roundDamageAmount(amount);
   if (!limb || healing <= 0) return createLimbMutationResult(limbStates);
-  if (isLimbDestroyed(actor, limbKey)) return createLimbMutationResult(limbStates);
+  if (isLimbPhysicallyMissing(actor, limbKey)) return createLimbMutationResult(limbStates);
 
   const currentValue = getLimbStateValue(actor, limbKey, limbStates);
   const cap = Math.min(Math.max(0, toInteger(limb.max)), getLimbHealingCap(actor, limbKey));
@@ -3782,6 +3868,7 @@ function getPositiveLimbTargets(actor, limbStates = new Map(), excludeLimbKeys =
   const excluded = new Set(Array.from(excludeLimbKeys ?? []).map(key => String(key)));
   return Object.entries(actor?.system?.limbs ?? {})
     .filter(([key]) => !excluded.has(String(key)))
+    .filter(([key]) => !isLimbPhysicallyMissing(actor, key))
     .map(([key, limb]) => ({
       key,
       value: getLimbStateValue(actor, key, limbStates),
@@ -3792,7 +3879,7 @@ function getPositiveLimbTargets(actor, limbStates = new Map(), excludeLimbKeys =
 
 function getHealingLimbTargets(actor, limbStates = new Map()) {
   return Object.entries(actor?.system?.limbs ?? {})
-    .filter(([key]) => !isLimbDestroyed(actor, key))
+    .filter(([key]) => !isLimbPhysicallyMissing(actor, key))
     .map(([key, limb]) => ({
       key,
       value: getLimbStateValue(actor, key, limbStates),
@@ -4769,7 +4856,10 @@ async function applyProsthesisConditionDamage(actor, prosthesis, amount = 0) {
 
   await returnBrokenProsthesisToInventory(actor, prosthesis);
   const limbKey = String(prosthesis.system?.placement?.limbKey ?? "");
-  if (limbKey) await applyDestroyedLimbConsequences(actor, [limbKey]);
+  if (limbKey) {
+    await setLimbMissingState(actor, limbKey);
+    await applyDestroyedLimbConsequences(actor, [limbKey]);
+  }
   return actor.items?.get(prosthesis.id) ?? prosthesis;
 }
 

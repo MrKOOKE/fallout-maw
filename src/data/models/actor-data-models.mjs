@@ -34,6 +34,7 @@ import { resourceField } from "./resources.mjs";
 import {
   DAMAGE_MITIGATION_MODES,
   ITEM_FUNCTIONS,
+  getConditionFunction,
   getConditionWeakeningData,
   getDamageMitigationFunction,
   hasItemFunction
@@ -208,7 +209,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     replaceObjectContents(this.resources, normalizeResourceMap(this.resources, resourceSettings, resourceMaximums, {
       trackSpent: true
     }));
-    synchronizeAggregateHealthResource(this.resources, this.limbs);
+    synchronizeAggregateHealthResource(this.resources, this.limbs, this.parent?.items);
 
     const needMaximums = evaluateNeedSettings(
       needSettings,
@@ -329,6 +330,7 @@ function limbField() {
     damageMultiplier: new NumberField({ required: true, initial: 1, persisted: false }),
     aimedDifficultyPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
     critical: new BooleanField({ required: true, initial: false, persisted: false }),
+    missing: new BooleanField({ required: true, initial: false }),
     min: new NumberField({ required: true, integer: true, initial: -100, persisted: false }),
     spent: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     value: new NumberField({ required: true, integer: true, initial: 0 }),
@@ -456,11 +458,13 @@ function normalizeLimbMap(currentLimbs = {}, settings = [], maximums = {}, sourc
       const min = -max;
       const spent = normalizeLimbSpent(current, source, min, max);
       const value = Math.min(Math.max(max - spent, min), max);
+      const missing = Boolean(source?.missing ?? current?.missing);
       return [setting.key, {
         label: String(setting?.label ?? setting?.name ?? setting?.key ?? ""),
         damageMultiplier: toDecimal(setting?.damageMultiplier, 1),
         aimedDifficultyPercent: toInteger(setting?.aimedDifficultyPercent),
         critical: Boolean(setting?.critical),
+        missing,
         min,
         spent,
         value,
@@ -629,20 +633,48 @@ function isAllSelector(value) {
   return String(value ?? "").trim() === "all";
 }
 
-function synchronizeAggregateHealthResource(resources = {}, limbs = {}) {
+function synchronizeAggregateHealthResource(resources = {}, limbs = {}, items = null) {
   const health = resources?.health;
   if (!health) return;
 
-  const entries = Object.values(limbs ?? {}).filter(limb => limb && typeof limb === "object");
+  const entries = Object.entries(limbs ?? {}).filter(([_key, limb]) => limb && typeof limb === "object");
   const min = 0;
-  const max = entries.reduce((sum, limb) => sum + Math.max(0, toInteger(limb?.max)), 0);
-  const value = entries.reduce((sum, limb) => sum + Math.max(0, toInteger(limb?.value)), 0);
+  const aggregate = entries.reduce((result, [limbKey, limb]) => {
+    if (Boolean(limb?.missing)) {
+      const replacement = getInstalledProsthesisHealth(items, limbKey, limb);
+      result.max += replacement.max;
+      result.value += replacement.value;
+      return result;
+    }
+    result.max += Math.max(0, toInteger(limb?.max));
+    result.value += Math.max(0, toInteger(limb?.value));
+    return result;
+  }, { value: 0, max: 0 });
 
   health.min = min;
   health.bonus = 0;
-  health.max = max;
-  health.value = Math.min(Math.max(value, min), max);
-  health.spent = Math.max(0, max - health.value);
+  health.max = aggregate.max;
+  health.value = Math.min(Math.max(aggregate.value, min), aggregate.max);
+  health.spent = Math.max(0, aggregate.max - health.value);
+}
+
+function getInstalledProsthesisHealth(items, limbKey = "", limb = {}) {
+  const prosthesis = Array.from(items ?? []).find(item => (
+    item?.type === "gear"
+    && item.system?.equipped
+    && hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)
+    && String(item.system?.placement?.mode ?? "") === "prosthesis"
+    && String(item.system?.placement?.limbKey ?? "") === limbKey
+  ));
+  if (!prosthesis) return { value: 0, max: 0 };
+  if (!hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition)) {
+    const max = Math.max(0, toInteger(limb?.max));
+    return { value: max, max };
+  }
+  const condition = getConditionFunction(prosthesis);
+  const max = Math.max(0, toInteger(condition.max));
+  const value = Math.min(Math.max(0, toInteger(condition.value)), max);
+  return { value, max };
 }
 
 function getTrackedResourceSpent(resource, min, max) {

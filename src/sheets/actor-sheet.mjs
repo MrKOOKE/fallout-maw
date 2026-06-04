@@ -5217,7 +5217,8 @@ function prepareLimbDisplayData(actor, limbKey, limb = {}) {
       ...limb,
       displayValue: "Отсутствует",
       displayMax: "",
-      stateLabel: "Отсутствует"
+      stateLabel: "Отсутствует",
+      fill: "rgba(6, 8, 8, 0.96)"
     };
   }
   const max = getLimbHealingCap(actor, limbKey);

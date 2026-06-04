@@ -9426,19 +9426,21 @@ label.fallout-maw-mitigation-cell {
   align-items: start;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: minmax(18rem, 0.72fr) minmax(0, 1fr);
+  grid-template-columns: minmax(13rem, 16rem) minmax(0, 1fr);
 }
 
 .fallout-maw-prosthesis-silhouette {
-  min-height: 25rem;
+  min-height: 22rem;
   padding: 0;
+  width: 16rem;
 }
 
 .fallout-maw-prosthesis-silhouette svg {
   display: block;
-  height: min(25rem, calc(74vh / var(--fallout-maw-token-action-hud-scale, 1)));
+  height: min(22rem, calc(68vh / var(--fallout-maw-token-action-hud-scale, 1)));
+  margin-inline: auto;
   max-width: 100%;
-  width: 100%;
+  width: auto;
 }
 
 .fallout-maw-prosthesis-outline {
@@ -9466,9 +9468,9 @@ label.fallout-maw-mitigation-cell {
 
 .fallout-maw-prosthesis-part.inactive {
   cursor: default;
-  opacity: 0.26;
+  opacity: 0.62;
   pointer-events: none;
-  stroke: rgba(220, 197, 110, 0.18);
+  stroke: rgba(220, 197, 110, 0.28);
 }
 
 .fallout-maw-prosthesis-limb-list {

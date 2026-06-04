@@ -1,5 +1,5 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
-import { applyDestroyedLimbConsequences, clearLimbLossState, getActorHealingModifierPercent, requestDamageApplication } from "../combat/damage-hub.mjs";
+import { applyDestroyedLimbConsequences, clearLimbLossState, getActorHealingModifierPercent, requestDamageApplication, setLimbMissingState } from "../combat/damage-hub.mjs";
 import { createDiseaseImmunityEffect } from "../needs/need-thresholds.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getCreatureOptions, getSkillSettings, getSystemActionSettings, getToolSettings } from "../settings/accessors.mjs";
@@ -413,7 +413,7 @@ function prepareProsthesisMedicineContext(sourceActor, targetContext, activeLimb
       conditionLabel: limb.prosthesis?.conditionLabel ?? "",
       displayValue: limb.prosthesis ? (limb.prosthesis.hasCondition ? limb.prosthesis.conditionValue : "∞") : "Отсутствует",
       displayMax: limb.prosthesis?.hasCondition ? limb.prosthesis.conditionMax : "",
-      fill: limb.prosthesis ? mixRgb([22, 81, 122], [143, 216, 255], conditionRatio) : "rgba(25, 25, 25, 0.75)"
+      fill: limb.prosthesis ? mixRgb([22, 81, 122], [143, 216, 255], conditionRatio) : "rgba(6, 8, 8, 0.96)"
     };
   });
   const activeLimb = limbs.find(limb => limb.key === active) ?? null;
@@ -422,9 +422,8 @@ function prepareProsthesisMedicineContext(sourceActor, targetContext, activeLimb
     const interactive = interactiveLimbs.get(limb.key);
     return [limb.key, interactive ?? {
       ...limb,
-      fill: "rgba(143, 216, 255, 0.08)",
-      displayValue: "",
-      displayMax: "",
+      displayValue: limb.value,
+      displayMax: limb.max,
       popoverRows: []
     }];
   }));
@@ -720,6 +719,7 @@ async function applyProsthesisInstallLocally({ sourceActor, targetActor, limbKey
   }
 
   await clearLimbLossState(targetActor, limbKey);
+  await setLimbMissingState(targetActor, limbKey);
   return buildTargetContext(targetActor);
 }
 
@@ -735,6 +735,7 @@ async function applyProsthesisRemovalLocally({ sourceActor, targetActor, limbKey
   } else {
     await targetActor.updateEmbeddedDocuments("Item", [createReturnProsthesisUpdate(item)]);
   }
+  await setLimbMissingState(targetActor, limbKey);
   await applyDestroyedLimbConsequences(targetActor, [limbKey]);
   return buildTargetContext(targetActor);
 }
@@ -1074,7 +1075,7 @@ function snapshotActorLimbs(actor) {
   const installed = getInstalledProsthesesByLimb(actor);
   return Object.entries(actor.system?.limbs ?? {}).map(([key, limb]) => {
     const prosthesis = installed.get(key) ?? null;
-    const missing = toInteger(limb?.value) <= toInteger(limb?.min);
+    const missing = Boolean(limb?.missing);
     return {
       key,
       label: String(limb?.label ?? key),

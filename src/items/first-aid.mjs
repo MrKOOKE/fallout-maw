@@ -292,6 +292,7 @@ async function getFirstAidTargetContext(targetToken, fallbackActor = null) {
 }
 
 function buildFirstAidTargetContext(actor, token = null) {
+  const installedProstheses = getInstalledProsthesesByLimb(actor);
   return {
     actorUuid: actor?.uuid ?? "",
     name: token?.name ?? actor?.name ?? "",
@@ -300,13 +301,19 @@ function buildFirstAidTargetContext(actor, token = null) {
     healthMax: Math.max(0, toInteger(actor?.system?.resources?.health?.max)),
     isConstruct: isConstructActor(actor),
     limbs: Object.entries(actor?.system?.limbs ?? {})
-      .map(([key, limb]) => ({
-        key,
-        label: String(limb?.label ?? key),
-        value: toInteger(limb?.value),
-        min: toInteger(limb?.min),
-        max: toInteger(limb?.max)
-      }))
+      .map(([key, limb]) => {
+        const value = toInteger(limb?.value);
+        const prosthesis = installedProstheses.get(key) ?? null;
+        return {
+          key,
+          label: String(limb?.label ?? key),
+          value,
+          min: toInteger(limb?.min),
+          max: toInteger(limb?.max),
+          missing: Boolean(limb?.missing),
+          prosthesis: prosthesis ? { id: prosthesis.id, name: prosthesis.name } : null
+        };
+      })
       .filter(limb => limb.key)
   };
 }
@@ -323,7 +330,9 @@ async function requestLimbSelection(actor, firstAid = {}, targetContext = null) 
       label: String(limb?.label ?? key),
       value: toInteger(limb?.value),
       min: toInteger(limb?.min),
-      max: toInteger(limb?.max)
+      max: toInteger(limb?.max),
+      missing: Boolean(limb?.missing),
+      prosthesis: null
     })))
     .filter(limb => limb.key);
   if (!limbs.length) return [];
@@ -332,17 +341,23 @@ async function requestLimbSelection(actor, firstAid = {}, targetContext = null) 
   const currentColumnLabel = game.i18n.localize("FALLOUTMAW.Item.FirstAidSelectLimbsCurrent");
   const resultColumnLabel = game.i18n.localize("FALLOUTMAW.Item.FirstAidSelectLimbsResult");
   const rows = limbs.map(limb => {
-    const disabled = value > 0
+    const unavailable = Boolean(limb.missing || limb.prosthesis);
+    const disabled = unavailable || (value > 0
       ? limb.value >= limb.max
       : value < 0
         ? limb.value <= limb.min
-        : false;
+        : false);
     const result = calculateLimbSelectionPreview(limb.value, value, 0, limb.min, limb.max);
+    const currentLabel = limb.prosthesis
+      ? "Протез"
+      : limb.missing
+        ? "Отсутствует"
+        : `${limb.value} / ${limb.max}`;
     return `
     <button type="button" class="fallout-maw-first-aid-limb-choice${disabled ? " disabled" : ""}" data-limb-key="${escapeHtml(limb.key)}" data-count="0" data-current="${limb.value}" data-min="${limb.min}" data-max="${limb.max}" data-disabled="${disabled ? "true" : "false"}">
       <span class="fallout-maw-first-aid-limb-count">${disabled ? "-" : "0"}</span>
       <span>${escapeHtml(limb.label)}</span>
-      <small>${limb.value} / ${limb.max}</small>
+      <small>${currentLabel}</small>
       <strong data-limb-result>${disabled ? "-" : result}</strong>
     </button>
   `;
@@ -456,6 +471,17 @@ function activateFirstAidLimbSelection(dialog, { count = 0, value = 0 } = {}) {
 function calculateLimbSelectionPreview(current, value, count, min, max) {
   const next = toInteger(current) + (toInteger(value) * Math.max(0, toInteger(count)));
   return Math.min(Math.max(toInteger(min), next), toInteger(max));
+}
+
+function getInstalledProsthesesByLimb(actor) {
+  const entries = new Map();
+  for (const item of actor?.items ?? []) {
+    if (item?.type !== "gear" || !hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)) continue;
+    if (!item.system?.equipped || String(item.system?.placement?.mode ?? "") !== "prosthesis") continue;
+    const limbKey = String(item.system?.placement?.limbKey ?? "").trim();
+    if (limbKey) entries.set(limbKey, item);
+  }
+  return entries;
 }
 
 function formatSignedInteger(value) {
