@@ -1,5 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
-import { IDENTIFIER_PATTERN, validateFormula } from "../formulas/index.mjs";
+import { IDENTIFIER_PATTERN, isFixedResourceKey, validateFormula } from "../formulas/index.mjs";
 import {
   getCharacteristicSettings,
   getResourceSettings,
@@ -52,7 +52,10 @@ export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
   async _prepareContext(options) {
     return {
       ...(await super._prepareContext(options)),
-      resources: this.resources
+      resources: this.resources.map(resource => ({
+        ...resource,
+        locked: isFixedResourceKey(resource.key)
+      }))
     };
   }
 
@@ -96,6 +99,7 @@ export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
     if (index < 0) return undefined;
 
     this.resources = this.#readResourcesFromForm();
+    if (isFixedResourceKey(this.resources[index]?.key)) return undefined;
     this.resources.splice(index, 1);
     return this.forceRender();
   }

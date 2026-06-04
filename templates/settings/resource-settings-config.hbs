@@ -21,14 +21,18 @@
         <span></span>
       </div>
       {{#each resources}}
-      <div class="fallout-maw-settings-row" data-resource-row>
+      <div class="fallout-maw-settings-row" data-resource-row {{#if locked}}data-locked-resource="true"{{/if}}>
         <button type="button" class="fallout-maw-drag-handle" data-drag-handle title="{{localize 'FALLOUTMAW.Common.Reorder'}}"><i class="fa-solid fa-grip-lines"></i></button>
-        <input type="text" data-field="abbr" value="{{abbr}}">
-        <input type="text" data-field="key" value="{{key}}">
+        <input type="text" data-field="abbr" value="{{abbr}}" {{#if locked}}disabled{{/if}}>
+        <input type="text" data-field="key" value="{{key}}" {{#if locked}}disabled{{/if}}>
         <input type="text" data-field="label" value="{{label}}">
         <input type="color" data-field="color" value="{{color}}">
         <input type="text" data-field="formula" value="{{formula}}" data-formula-autocomplete="all">
+        {{#if locked}}
+        <span class="fallout-maw-locked-resource-indicator" title="{{localize 'FALLOUTMAW.Common.Locked'}}"><i class="fa-solid fa-lock"></i></span>
+        {{else}}
         <button type="button" data-action="deleteResource" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        {{/if}}
       </div>
       {{else}}
       <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.Resources.Empty"}}</p>

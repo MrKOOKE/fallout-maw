@@ -156,9 +156,10 @@ export const DEFAULT_INVENTORY_SIZE = Object.freeze({
   rows: 2
 });
 
+export const FIXED_RESOURCE_KEYS = Object.freeze(["health", "dodge", "actionPoints", "movementPoints"]);
+
 export const DEFAULT_RESOURCES = Object.freeze([
   { key: "health", abbr: "hea", label: "Здоровье", formula: "limbs" },
-  { key: "energy", abbr: "ene", label: "Энергия", formula: "100 + ene", img: "icons/svg/lightning.svg" },
   { key: "dodge", abbr: "dod", label: "Уклонение", formula: "60 + ath/3" },
   { key: "actionPoints", abbr: "act", label: "Очки действия", formula: "5 + (dex/3 + str/5)" },
   { key: "movementPoints", abbr: "mov", label: "Очки передвижения", formula: "2 + ath/50" }

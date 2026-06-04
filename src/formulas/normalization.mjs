@@ -1,6 +1,7 @@
 import {
   DEFAULT_CHARACTERISTICS,
   DEFAULT_DAMAGE_TYPES,
+  FIXED_RESOURCE_KEYS,
   DEFAULT_NEEDS,
   DEFAULT_PROFICIENCIES,
   DEFAULT_PROFICIENCY_INFLUENCE,
@@ -363,7 +364,11 @@ function normalizeProficiencyInfluenceRange(range = {}, defaults = { min: 0, max
 
 export function normalizeResourceSettings(settings) {
   const normalized = normalizeFormulaSettings(settings, createDefaultResourceSettings(), "Ресурс");
-  return migrateResourceSettings(removeInternalResourceSettings(normalized));
+  return ensureFixedResourceSettings(migrateResourceSettings(removeInternalResourceSettings(normalized)));
+}
+
+export function isFixedResourceKey(key = "") {
+  return FIXED_RESOURCE_KEYS.includes(String(key ?? "").trim());
 }
 
 export function normalizeNeedSettings(settings) {
@@ -457,6 +462,44 @@ function migrateResourceSettings(settings = []) {
     ) return setting;
     return { ...setting, formula: defaultHealthFormula ?? setting.formula };
   });
+}
+
+function ensureFixedResourceSettings(settings = []) {
+  const byKey = new Map(settings.map(setting => [setting.key, setting]));
+  const fixedByKey = new Map(DEFAULT_RESOURCES.map(defaultResource => [
+    defaultResource.key,
+    normalizeFixedResourceSetting(defaultResource, byKey.get(defaultResource.key))
+  ]));
+  const usedFixedKeys = new Set();
+  const ordered = [];
+
+  for (const setting of settings) {
+    if (!isFixedResourceKey(setting.key)) {
+      ordered.push(setting);
+      continue;
+    }
+
+    const fixedResource = fixedByKey.get(setting.key);
+    if (!fixedResource || usedFixedKeys.has(setting.key)) continue;
+    usedFixedKeys.add(setting.key);
+    ordered.push(fixedResource);
+  }
+
+  for (const defaultResource of DEFAULT_RESOURCES) {
+    if (!usedFixedKeys.has(defaultResource.key)) ordered.push(fixedByKey.get(defaultResource.key));
+  }
+
+  return ordered;
+}
+
+function normalizeFixedResourceSetting(defaultResource, source = {}) {
+  return {
+    key: defaultResource.key,
+    abbr: defaultResource.abbr,
+    label: source.label || defaultResource.label,
+    formula: source.formula || defaultResource.formula,
+    color: normalizeHexColor(source.color, getDefaultColorForKey(defaultResource.key))
+  };
 }
 
 function removeInternalResourceSettings(settings = []) {

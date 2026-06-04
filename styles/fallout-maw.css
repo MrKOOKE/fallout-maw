@@ -9896,6 +9896,14 @@ label.fallout-maw-mitigation-cell {
   user-select: none;
 }
 
+.fallout-maw-locked-resource-indicator {
+  align-items: center;
+  color: rgba(214, 210, 199, 0.72);
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+}
+
 .fallout-maw-settings-row.dragging {
   cursor: grabbing;
   opacity: 0.45;

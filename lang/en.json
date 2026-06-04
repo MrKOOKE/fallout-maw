@@ -65,6 +65,7 @@
       "Key": "Key",
       "Label": "Name",
       "Limbs": "Limbs",
+      "Locked": "Locked",
       "Load": "Load",
       "Maximum": "Maximum",
       "MovementPoints": "Movement Points",
