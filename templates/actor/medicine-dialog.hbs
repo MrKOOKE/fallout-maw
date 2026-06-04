@@ -7,6 +7,7 @@
   <nav class="fallout-maw-medicine-tabs">
     <button type="button" class="{{tabs.trauma.cssClass}}" data-action="setMedicineTab" data-medicine-tab="trauma">Травмы</button>
     <button type="button" class="{{tabs.disease.cssClass}}" data-action="setMedicineTab" data-medicine-tab="disease">Болезни</button>
+    <button type="button" class="{{tabs.prosthesis.cssClass}}" data-action="setMedicineTab" data-medicine-tab="prosthesis">Протезы</button>
   </nav>
 
   {{#if tabs.trauma.active}}
@@ -146,6 +147,115 @@
     {{else}}
     <p class="fallout-maw-empty-list">У цели нет болезней.</p>
     {{/each}}
+  </div>
+  {{/if}}
+
+  {{#if tabs.prosthesis.active}}
+  <div class="fallout-maw-prosthesis-medicine">
+    {{#if prostheses.hasLimbs}}
+    <div class="fallout-maw-prosthesis-target">
+      {{#if prostheses.silhouette.visible}}
+      <div class="fallout-maw-prosthesis-silhouette">
+        <svg viewBox="{{prostheses.silhouette.viewBox}}" role="img" aria-label="Протезы">
+          {{#each prostheses.silhouette.outline}}
+          <path class="fallout-maw-prosthesis-outline" d="{{d}}"></path>
+          {{/each}}
+          {{#each prostheses.silhouette.parts}}
+          <path
+            class="fallout-maw-prosthesis-part {{#if active}}active{{/if}} {{#unless interactive}}inactive{{/unless}}"
+            d="{{d}}"
+            fill="{{fill}}"
+            {{#if interactive}}
+            data-action="setProsthesisLimb"
+            data-limb-key="{{limbKey}}"
+            {{/if}}
+          >
+            <title>{{title}}</title>
+          </path>
+          {{/each}}
+        </svg>
+      </div>
+      {{else}}
+      <div class="fallout-maw-prosthesis-limb-list">
+        {{#each prostheses.limbs}}
+        <button type="button" class="{{cssClass}}" data-action="setProsthesisLimb" data-limb-key="{{key}}">
+          <strong>{{label}}</strong>
+          <small>{{statusLabel}}</small>
+        </button>
+        {{/each}}
+      </div>
+      {{/if}}
+
+      {{#if prostheses.activeLimb}}
+      <section class="fallout-maw-prosthesis-details">
+        <header>
+          <h3>{{prostheses.activeLimb.label}}</h3>
+          <span>{{prostheses.activeLimb.statusLabel}}</span>
+        </header>
+        {{#if prostheses.activeLimb.prosthesis}}
+        <div class="fallout-maw-prosthesis-installed">
+          <img src="{{prostheses.activeLimb.prosthesis.img}}" alt="{{prostheses.activeLimb.prosthesis.name}}" onerror="this.src='{{fallbackIcon}}'">
+          <div>
+            <strong>{{prostheses.activeLimb.prosthesis.name}}</strong>
+            <small>Состояние: {{prostheses.activeLimb.conditionLabel}}</small>
+            <small>Интеграция: {{prostheses.activeLimb.prosthesis.integrationPercent}}%</small>
+          </div>
+          <button
+            type="button"
+            data-action="removeProsthesis"
+            data-limb-key="{{prostheses.activeLimb.key}}"
+            data-prosthesis-item-id="{{prostheses.activeLimb.prosthesis.id}}"
+          >
+            Снять
+          </button>
+        </div>
+        {{else}}
+        <div class="fallout-maw-action-table fallout-maw-action-table--prosthesis">
+          <div class="fallout-maw-action-row fallout-maw-action-row--prosthesis fallout-maw-action-row--head">
+            <div class="fallout-maw-action-cell fallout-maw-action-cell--image">Избр</div>
+            <div class="fallout-maw-action-cell fallout-maw-action-cell--name">Название</div>
+            <div class="fallout-maw-action-cell">Состояние</div>
+            <div class="fallout-maw-action-cell">Интеграция</div>
+            <div class="fallout-maw-action-cell">Навык</div>
+            <div class="fallout-maw-action-cell">Сл</div>
+            <div class="fallout-maw-action-cell fallout-maw-action-cell--button">Действие</div>
+          </div>
+          {{#each prostheses.activeLimb.candidates}}
+          <div class="fallout-maw-action-row fallout-maw-action-row--prosthesis {{#unless usable}}is-disabled{{/unless}}">
+            <div class="fallout-maw-action-cell fallout-maw-action-cell--image">
+              <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../fallbackIcon}}'">
+            </div>
+            <div class="fallout-maw-action-cell fallout-maw-action-cell--name">
+              <strong>{{name}}</strong>
+            </div>
+            <div class="fallout-maw-action-cell"><strong>{{conditionLabel}}</strong></div>
+            <div class="fallout-maw-action-cell"><strong>{{integrationPercent}}%</strong></div>
+            <div class="fallout-maw-action-cell"><strong>{{skillLabel}}</strong></div>
+            <div class="fallout-maw-action-cell"><strong>{{difficulty}}</strong></div>
+            <div class="fallout-maw-action-cell fallout-maw-action-cell--button">
+              <button
+                type="button"
+                data-action="installProsthesis"
+                data-limb-key="{{../prostheses.activeLimb.key}}"
+                data-prosthesis-source="{{source}}"
+                data-prosthesis-item-id="{{id}}"
+                {{#unless usable}}disabled{{/unless}}
+              >
+                Установить
+              </button>
+            </div>
+          </div>
+          {{else}}
+          <p class="fallout-maw-empty-list">Подходящих протезов нет.</p>
+          {{/each}}
+        </div>
+        {{/if}}
+      </section>
+      {{/if}}
+    </div>
+    {{else}}
+    <p class="fallout-maw-empty-list">У цели нет отсутствующих или протезированных частей тела.</p>
+    {{/if}}
   </div>
   {{/if}}
 </div>

@@ -61,7 +61,7 @@ import {
   getContextInventoryItems,
   getItemQuantity
 } from "../utils/inventory-containers.mjs";
-import { ITEM_FUNCTIONS, getConditionFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getFirstAidChargesData, getModuleFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction, isActiveItem } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, getConditionFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getFirstAidChargesData, getModuleFunction, getProsthesisFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction, isActiveItem } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
@@ -1899,6 +1899,30 @@ function parseLimbPopoverRows(target) {
 }
 
 function prepareLimbDisplayData(actor, limbKey, limb = {}) {
+  const prosthesis = getInstalledActorProsthesis(actor, limbKey);
+  if (prosthesis) {
+    const hasCondition = hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition);
+    const condition = hasCondition ? getConditionFunction(prosthesis) : {};
+    const conditionMax = Math.max(0, toInteger(condition.max));
+    const conditionValue = Math.max(0, toInteger(condition.value));
+    const ratio = hasCondition && conditionMax > 0 ? Math.max(0, Math.min(1, conditionValue / conditionMax)) : 1;
+    return {
+      ...limb,
+      value: hasCondition ? conditionValue : toInteger(limb?.max),
+      max: hasCondition ? conditionMax : toInteger(limb?.max),
+      min: 0,
+      scaleMax: hasCondition ? conditionMax : toInteger(limb?.max),
+      displayValue: hasCondition ? conditionValue : "∞",
+      displayMax: hasCondition ? conditionMax : "",
+      stateLabel: prosthesis.name,
+      fill: mixColor([22, 81, 122], [143, 216, 255], ratio),
+      popoverRows: [
+        { label: "Протез", value: prosthesis.name },
+        { label: "Состояние", value: hasCondition ? `${conditionValue} / ${conditionMax}` : "∞" },
+        { label: "Интеграция", value: `${Math.max(0, Math.min(100, toInteger(getProsthesisFunction(prosthesis).integrationPercent)))}%` }
+      ]
+    };
+  }
   if (isLimbDestroyed(actor, limbKey)) {
     return {
       ...limb,
@@ -1914,6 +1938,18 @@ function prepareLimbDisplayData(actor, limbKey, limb = {}) {
     max,
     scaleMax: limb.max
   };
+}
+
+function getInstalledActorProsthesis(actor, limbKey = "") {
+  const key = String(limbKey ?? "").trim();
+  if (!key) return null;
+  return actor?.items?.find(item => (
+    item.type === "gear"
+    && item.system?.equipped
+    && hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)
+    && String(item.system?.placement?.mode ?? "") === "prosthesis"
+    && String(item.system?.placement?.limbKey ?? "") === key
+  )) ?? null;
 }
 
 function prepareLimbEntries(limbs = {}) {

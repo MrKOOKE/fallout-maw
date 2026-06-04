@@ -1,5 +1,5 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
-import { TEMPLATES } from "../constants.mjs";
+import { BLEEDING_DAMAGE_TYPE_KEY, TEMPLATES } from "../constants.mjs";
 import { AdvancementApplication } from "../advancement/application.mjs";
 import {
   getCharacteristicSettings,
@@ -62,6 +62,7 @@ import {
   getEnabledWeaponFunctions,
   getWeaponFunctionModuleSlots,
   getModuleFunction,
+  getProsthesisFunction,
   getToolFunction,
   hasItemFunction
 } from "../utils/item-functions.mjs";
@@ -1526,6 +1527,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       "system.placement.equipmentSlot": storedPlacement.equipmentSlot,
       "system.placement.weaponSet": storedPlacement.weaponSet,
       "system.placement.weaponSlot": storedPlacement.weaponSlot,
+      "system.placement.limbKey": storedPlacement.limbKey,
       "system.placement.x": storedPlacement.x,
       "system.placement.y": storedPlacement.y,
       "system.placement.width": storedPlacement.width,
@@ -1631,6 +1633,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           equipmentSlot: storedPlacement.equipmentSlot,
           weaponSet: storedPlacement.weaponSet,
           weaponSlot: storedPlacement.weaponSlot,
+          limbKey: storedPlacement.limbKey,
           x: storedPlacement.x,
           y: storedPlacement.y,
           width: storedPlacement.width,
@@ -1700,6 +1703,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         "system.placement.equipmentSlot": storedPlacement.equipmentSlot,
         "system.placement.weaponSet": storedPlacement.weaponSet,
         "system.placement.weaponSlot": storedPlacement.weaponSlot,
+        "system.placement.limbKey": storedPlacement.limbKey,
         "system.placement.x": storedPlacement.x,
         "system.placement.y": storedPlacement.y,
         "system.placement.width": storedPlacement.width,
@@ -1804,6 +1808,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           equipmentSlot: storedPlacement.equipmentSlot,
           weaponSet: storedPlacement.weaponSet,
           weaponSlot: storedPlacement.weaponSlot,
+          limbKey: storedPlacement.limbKey,
           x: storedPlacement.x,
           y: storedPlacement.y,
           width: storedPlacement.width,
@@ -2316,6 +2321,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       "system.placement.equipmentSlot": storedPlacement.equipmentSlot,
       "system.placement.weaponSet": storedPlacement.weaponSet,
       "system.placement.weaponSlot": storedPlacement.weaponSlot,
+      "system.placement.limbKey": storedPlacement.limbKey,
       "system.placement.x": storedPlacement.x,
       "system.placement.y": storedPlacement.y,
       "system.placement.width": storedPlacement.width,
@@ -2433,6 +2439,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       "system.placement.equipmentSlot": storedPlacement.equipmentSlot,
       "system.placement.weaponSet": storedPlacement.weaponSet,
       "system.placement.weaponSlot": storedPlacement.weaponSlot,
+      "system.placement.limbKey": storedPlacement.limbKey,
       "system.placement.x": storedPlacement.x,
       "system.placement.y": storedPlacement.y,
       "system.placement.width": storedPlacement.width,
@@ -3369,6 +3376,7 @@ function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex 
     buildDamageMitigationTooltipSection(item, actor),
     buildDamageSourceTooltipSection(item),
     buildModuleTooltipSection(item),
+    buildProsthesisTooltipSection(item, actor),
     ...buildWeaponTooltipSections(item, activeWeaponIndex, { actor, baseMode }),
     ...buildToolTooltipSections(item)
   ].filter(Boolean);
@@ -3586,6 +3594,52 @@ function buildDamageSourceTooltipSection(item) {
 function buildModuleTooltipSection(item) {
   if (!isWeaponModuleItem(item)) return "";
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionModule"), getModuleTooltipRows(item));
+}
+
+function buildProsthesisTooltipSection(item, actor = null) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)) return "";
+  const prosthesis = getProsthesisFunction(item);
+  const limbLabels = getProsthesisLimbLabels(prosthesis.limbKeys, actor);
+  const blockedLabels = getProsthesisBlockedEffectLabels(prosthesis.blockedPeriodicEffects);
+  const rows = [
+    [game.i18n.localize("FALLOUTMAW.Item.ProsthesisLimbs"), limbLabels.join(", ")],
+    [game.i18n.localize("FALLOUTMAW.Item.ProsthesisIntegration"), `${Math.max(0, Math.min(100, toInteger(prosthesis.integrationPercent)))}%`],
+    [game.i18n.localize("FALLOUTMAW.Item.ProsthesisDifficulty"), Math.max(0, toInteger(prosthesis.difficulty ?? 60))],
+    [game.i18n.localize("FALLOUTMAW.Item.ProsthesisSkill"), getSkillLabel(prosthesis.skillKey ?? "doctor")],
+    [game.i18n.localize("FALLOUTMAW.Item.ProsthesisBlockedEffects"), blockedLabels.join(", ")]
+  ];
+  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionProsthesis"), rows);
+}
+
+function getProsthesisBlockedEffectLabels(effectKeys = []) {
+  const keys = Array.from(new Set((effectKeys ?? []).map(key => String(key ?? "").trim()).filter(Boolean)));
+  if (!keys.length) return [game.i18n.localize("FALLOUTMAW.Item.ProsthesisNoBlockedEffects")];
+  const damageTypes = new Map(getDamageTypeSettings().map(damageType => {
+    const key = String(damageType.key ?? "");
+    const periodicLabel = String(damageType?.settings?.periodic?.effectName ?? "").trim();
+    const fallbackLabel = String(damageType.label ?? damageType.key ?? "");
+    return [key, periodicLabel || fallbackLabel];
+  }));
+  return keys.map(key => {
+    if (key === BLEEDING_DAMAGE_TYPE_KEY) return game.i18n.localize("FALLOUTMAW.Item.ProsthesisBleedingEffect");
+    return damageTypes.get(key) ?? key;
+  });
+}
+
+function getProsthesisLimbLabels(limbKeys = [], actor = null) {
+  const keys = Array.from(new Set((limbKeys ?? []).map(key => String(key ?? "").trim()).filter(Boolean)));
+  const actorLabels = new Map(Object.entries(actor?.system?.limbs ?? {}).map(([key, limb]) => [key, String(limb?.label ?? key)]));
+  if (!keys.length) return [game.i18n.localize("FALLOUTMAW.Item.ProsthesisNoLimbs")];
+  return keys.map(key => actorLabels.get(key) ?? getConfiguredLimbLabel(key));
+}
+
+function getConfiguredLimbLabel(limbKey = "") {
+  const key = String(limbKey ?? "").trim();
+  for (const race of getCreatureOptions().races ?? []) {
+    const limb = (race.limbs ?? []).find(entry => entry.key === key);
+    if (limb) return String(limb.label ?? key);
+  }
+  return key;
 }
 
 function getModuleTooltipRows(item) {
@@ -4658,6 +4712,19 @@ function prepareInventoryContext(actor, race) {
     return { ...slot, item };
   });
 
+  const prosthesisSlots = Object.entries(actor.system?.limbs ?? {}).map(([key, limb]) => {
+    const item = topLevelItems.find(candidate => (
+      candidate.placement?.mode === "prosthesis"
+      && candidate.placement?.limbKey === key
+    ));
+    if (item) assignedItemIds.add(item.id);
+    return {
+      key,
+      label: limb?.label ?? key,
+      item
+    };
+  });
+
   const weaponSets = (race?.weaponSets ?? []).map(set => ({
     ...set,
     slots: (set.slots ?? []).map(slot => {
@@ -4711,6 +4778,7 @@ function prepareInventoryContext(actor, race) {
 
   return {
     equipmentSlots,
+    prosthesisSlots,
     weaponSets,
     naturalWeaponSet,
     containers,
@@ -5120,6 +5188,30 @@ function prepareDevelopmentPointEntries(development = {}) {
 }
 
 function prepareLimbDisplayData(actor, limbKey, limb = {}) {
+  const prosthesis = getInstalledActorProsthesis(actor, limbKey);
+  if (prosthesis) {
+    const hasCondition = hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition);
+    const condition = hasCondition ? getConditionFunction(prosthesis) : {};
+    const conditionMax = Math.max(0, toInteger(condition.max));
+    const conditionValue = Math.max(0, toInteger(condition.value));
+    const ratio = hasCondition && conditionMax > 0 ? Math.max(0, Math.min(1, conditionValue / conditionMax)) : 1;
+    return {
+      ...limb,
+      value: hasCondition ? conditionValue : toInteger(limb?.max),
+      max: hasCondition ? conditionMax : toInteger(limb?.max),
+      min: 0,
+      scaleMax: hasCondition ? conditionMax : toInteger(limb?.max),
+      displayValue: hasCondition ? conditionValue : "∞",
+      displayMax: hasCondition ? conditionMax : "",
+      stateLabel: prosthesis.name,
+      fill: mixHexColor("#16517a", "#8fd8ff", ratio),
+      popoverRows: [
+        ["Протез", prosthesis.name],
+        ["Состояние", hasCondition ? `${conditionValue} / ${conditionMax}` : "∞"],
+        ["Интеграция", `${Math.max(0, Math.min(100, toInteger(getProsthesisFunction(prosthesis).integrationPercent)))}%`]
+      ]
+    };
+  }
   if (isLimbDestroyed(actor, limbKey)) {
     return {
       ...limb,
@@ -5135,6 +5227,18 @@ function prepareLimbDisplayData(actor, limbKey, limb = {}) {
     max,
     scaleMax: limb.max
   };
+}
+
+function getInstalledActorProsthesis(actor, limbKey = "") {
+  const key = String(limbKey ?? "").trim();
+  if (!key) return null;
+  return actor?.items?.find(item => (
+    item.type === "gear"
+    && item.system?.equipped
+    && hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)
+    && String(item.system?.placement?.mode ?? "") === "prosthesis"
+    && String(item.system?.placement?.limbKey ?? "") === key
+  )) ?? null;
 }
 
 function getEffectCategoryKey(effect) {

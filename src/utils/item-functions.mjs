@@ -7,6 +7,7 @@ export const ITEM_FUNCTIONS = {
   firstAid: "firstAid",
   weapon: "weapon",
   module: "module",
+  prosthesis: "prosthesis",
   tool: "tool",
   toolPrefix: "tool:"
 };
@@ -60,6 +61,32 @@ export function getFirstAidChargesData(itemOrSystem = null) {
 
 export function getModuleFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.module] ?? {};
+}
+
+export function getProsthesisFunction(itemOrSystem = null) {
+  return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.prosthesis] ?? {};
+}
+
+export function getProsthesisLimbKeys(itemOrSystem = null) {
+  return new Set(
+    (getProsthesisFunction(itemOrSystem).limbKeys ?? [])
+      .map(key => String(key ?? "").trim())
+      .filter(Boolean)
+  );
+}
+
+export function isProsthesisForLimb(itemOrSystem = null, limbKey = "") {
+  const key = String(limbKey ?? "").trim();
+  if (!key || !hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.prosthesis)) return false;
+  return getProsthesisLimbKeys(itemOrSystem).has(key);
+}
+
+export function isInstalledProsthesis(itemOrSystem = null, limbKey = "") {
+  const system = getItemSystem(itemOrSystem);
+  if (!hasItemFunction(system, ITEM_FUNCTIONS.prosthesis)) return false;
+  if (String(system.placement?.mode ?? "") !== "prosthesis") return false;
+  const key = String(limbKey ?? "").trim();
+  return !key || String(system.placement?.limbKey ?? "").trim() === key;
 }
 
 export function isActiveItem(itemOrSystem = null) {

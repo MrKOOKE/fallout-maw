@@ -80,7 +80,8 @@ export class FalloutMaWItem extends Item {
             mode: "inventory",
             equipmentSlot: "",
             weaponSet: "",
-            weaponSlot: ""
+            weaponSlot: "",
+            limbKey: ""
           }
         }
       });
@@ -111,6 +112,7 @@ export class FalloutMaWItem extends Item {
       foundry.utils.setProperty(changes, "system.placement.equipmentSlot", "");
       foundry.utils.setProperty(changes, "system.placement.weaponSet", "");
       foundry.utils.setProperty(changes, "system.placement.weaponSlot", "");
+      foundry.utils.setProperty(changes, "system.placement.limbKey", "");
     }
 
     return undefined;

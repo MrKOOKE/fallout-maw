@@ -38,6 +38,7 @@ export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
         equipmentSlot: new StringField({ required: true, blank: true, initial: "" }),
         weaponSet: new StringField({ required: true, blank: true, initial: "" }),
         weaponSlot: new StringField({ required: true, blank: true, initial: "" }),
+        limbKey: new StringField({ required: true, blank: true, initial: "" }),
         x: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
         y: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
         width: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
@@ -58,6 +59,7 @@ export class GearDataModel extends BaseItemDataModel {
         damageSource: damageSourceFunctionField(),
         freeSettings: itemFreeSettingsFunctionField(),
         module: moduleFunctionField(),
+        prosthesis: prosthesisFunctionField(),
         weapon: weaponFunctionField(),
         additionalWeapons: new TypedObjectField(weaponFunctionField({ named: true }), { required: true, initial: {} }),
         damageMitigation: new SchemaField({
@@ -343,6 +345,23 @@ function moduleFunctionField() {
     targetFunction: new StringField({ required: true, blank: false, choices: ["weapon"], initial: "weapon" }),
     weapon: weaponModuleModifiersField(),
     additionalWeapons: new TypedObjectField(weaponFunctionField({ named: true }), { required: true, initial: {} })
+  });
+}
+
+function prosthesisFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    limbKeys: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
+      required: true,
+      initial: []
+    }),
+    blockedPeriodicEffects: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
+      required: true,
+      initial: []
+    }),
+    integrationPercent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 0 }),
+    difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
+    skillKey: new StringField({ required: true, blank: false, initial: "doctor" })
   });
 }
 

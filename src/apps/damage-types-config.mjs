@@ -363,6 +363,11 @@ function getDefaultResourceKey() {
 }
 
 function toBoolean(value, fallback = false) {
+  if (Array.isArray(value)) {
+    if (value.some(entry => toBoolean(entry, false))) return true;
+    if (value.some(entry => entry === false || entry === "false" || entry === "0" || entry === "")) return false;
+    return fallback;
+  }
   if (value === true || value === "true" || value === "on" || value === "1") return true;
   if (value === false || value === "false" || value === "0" || value === "") return false;
   return fallback;

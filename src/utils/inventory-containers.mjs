@@ -209,6 +209,7 @@ export function createInventoryPlacement(x = 1, y = 1, itemOrSystem = null, item
     equipmentSlot: "",
     weaponSet: "",
     weaponSlot: "",
+    limbKey: "",
     x: Math.max(1, toInteger(x)),
     y: Math.max(1, toInteger(y)),
     width,
@@ -234,6 +235,7 @@ export function normalizeInventoryPlacement(
     equipmentSlot: String(placement?.equipmentSlot ?? ""),
     weaponSet: String(placement?.weaponSet ?? ""),
     weaponSlot: String(placement?.weaponSlot ?? ""),
+    limbKey: String(placement?.limbKey ?? ""),
     width: isContainerItem(itemOrSystem)
       ? effectiveFootprint.width
       : Math.max(1, toInteger(placement?.width) || effectiveFootprint.width),
@@ -250,6 +252,7 @@ export function createStoredPlacement(placement = {}, itemOrSystem = null) {
     equipmentSlot: String(placement?.equipmentSlot ?? ""),
     weaponSet: String(placement?.weaponSet ?? ""),
     weaponSlot: String(placement?.weaponSlot ?? ""),
+    limbKey: String(placement?.limbKey ?? ""),
     x: Math.max(1, toInteger(placement?.x)),
     y: Math.max(1, toInteger(placement?.y)),
     width: baseFootprint.width,
@@ -576,6 +579,7 @@ function findFirstPhantomInventoryPlacement(itemOrSystem, allItems, columns, row
         equipmentSlot: "",
         weaponSet: "",
         weaponSlot: "",
+        limbKey: "",
         x,
         y,
         width: footprint.width,

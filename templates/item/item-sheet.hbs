@@ -1310,6 +1310,69 @@
   </section>
   {{/if}}
 
+  {{#if hasProsthesisFunction}}
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Item.FunctionProsthesis"}}</h2>
+      <button type="button" data-remove-item-function="prosthesis" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.ProsthesisIntegration"}}</span>
+        <input type="number" name="system.functions.prosthesis.integrationPercent" value="{{system.functions.prosthesis.integrationPercent}}" min="0" max="100" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.ProsthesisDifficulty"}}</span>
+        <input type="number" name="system.functions.prosthesis.difficulty" value="{{system.functions.prosthesis.difficulty}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.ProsthesisSkill"}}</span>
+        <select name="system.functions.prosthesis.skillKey">
+          {{#each prosthesisSkillChoices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.ProsthesisLimbs"}}</h3>
+      <button type="button" data-add-prosthesis-limb {{#unless canAddProsthesisLimb}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Common.Add"}}</button>
+    </div>
+    <div class="fallout-maw-prosthesis-limb-row-list" data-prosthesis-limb-key-list>
+      {{#each prosthesisLimbRows}}
+      <div class="fallout-maw-prosthesis-limb-row">
+        <select name="system.functions.prosthesis.limbKeys.{{@index}}">
+          {{#each choices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <button type="button" data-delete-prosthesis-limb="{{@index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.ProsthesisNoLimbs"}}</p>
+      {{/each}}
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.ProsthesisBlockedEffects"}}</h3>
+      <button type="button" data-add-prosthesis-blocked-effect {{#unless canAddProsthesisBlockedEffect}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Common.Add"}}</button>
+    </div>
+    <div class="fallout-maw-prosthesis-blocked-effect-row-list" data-prosthesis-blocked-effect-list>
+      {{#each prosthesisBlockedEffectRows}}
+      <div class="fallout-maw-prosthesis-blocked-effect-row">
+        <select name="system.functions.prosthesis.blockedPeriodicEffects.{{@index}}">
+          {{#each choices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <button type="button" data-delete-prosthesis-blocked-effect="{{@index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.ProsthesisNoBlockedEffects"}}</p>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+
   {{#if weaponFunctionTabs}}
   <section class="fallout-maw-panel fallout-maw-weapon-function-tabs-panel">
     <div class="fallout-maw-panel-header">

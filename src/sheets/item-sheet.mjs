@@ -13,6 +13,7 @@ import {
   ITEM_FUNCTIONS,
   getDamageSourceFunction,
   getEnabledToolFunctions,
+  getProsthesisFunction,
   getSelectedToolFunctionKey,
   getToolKeyFromFunctionKey,
   hasItemFunction
@@ -157,6 +158,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const hasDamageSourceFunction = hasItemFunction(item, ITEM_FUNCTIONS.damageSource);
     const hasFreeSettingsFunction = hasItemFunction(item, ITEM_FUNCTIONS.freeSettings);
     const hasModuleFunction = hasItemFunction(item, ITEM_FUNCTIONS.module);
+    const hasProsthesisFunction = hasItemFunction(item, ITEM_FUNCTIONS.prosthesis);
     const hasConditionFunction = hasItemFunction(item, ITEM_FUNCTIONS.condition);
     const hasFirstAidFunction = hasItemFunction(item, ITEM_FUNCTIONS.firstAid);
     const hasWeaponFunction = hasItemFunction(item, ITEM_FUNCTIONS.weapon);
@@ -214,6 +216,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         value: ITEM_FUNCTIONS.module,
         label: game.i18n.localize("FALLOUTMAW.Item.FunctionModule"),
         disabled: hasModuleFunction
+      },
+      {
+        value: ITEM_FUNCTIONS.prosthesis,
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionProsthesis"),
+        disabled: hasProsthesisFunction
       },
       {
         value: ITEM_FUNCTIONS.tool,
@@ -290,6 +297,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         .map((entry, index) => prepareAbilityFunctionRowsForDisplay(entry, index, "system.functions.freeSettings.entries")),
       hasModuleFunction,
       weaponModuleTargetChoices: buildWeaponModuleTargetChoices(item.system?.functions?.module?.targetFunction),
+      hasProsthesisFunction,
+      prosthesisLimbRows: buildProsthesisLimbRows(item, creatureOptions),
+      canAddProsthesisLimb: canAddProsthesisLimb(item, creatureOptions),
+      prosthesisBlockedEffectRows: buildProsthesisBlockedEffectRows(item, damageTypeSettings),
+      canAddProsthesisBlockedEffect: canAddProsthesisBlockedEffect(item, damageTypeSettings),
+      prosthesisSkillChoices: buildSkillChoices(item.system?.functions?.prosthesis?.skillKey, skillSettings),
       damageSourceDamageTypeRows: buildDamageSourceDamageTypeRows(item, damageTypeSettings),
       damageSourceVolleyRegionDamageRows: buildDamageSourceVolleyRegionDamageRows(item, damageTypeSettings),
       hasConditionFunction,
@@ -355,6 +368,22 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       craft,
       totalWeight: item.totalWeight
     }, { inplace: false });
+  }
+
+  async _processSubmitData(event, form, submitData, options = {}) {
+    if (form?.querySelector?.("[data-prosthesis-limb-key-list]")) {
+      const limbKeys = Array.from(form.querySelectorAll("[data-prosthesis-limb-key-list] select"))
+        .map(input => String(input.value ?? "").trim())
+        .filter(Boolean);
+      foundry.utils.setProperty(submitData, "system.functions.prosthesis.limbKeys", Array.from(new Set(limbKeys)));
+    }
+    if (form?.querySelector?.("[data-prosthesis-blocked-effect-list]")) {
+      const blocked = Array.from(form.querySelectorAll("[data-prosthesis-blocked-effect-list] select"))
+        .map(input => String(input.value ?? "").trim())
+        .filter(Boolean);
+      foundry.utils.setProperty(submitData, "system.functions.prosthesis.blockedPeriodicEffects", Array.from(new Set(blocked)));
+    }
+    return super._processSubmitData(event, form, submitData, options);
   }
 
   async _onRender(context, options) {
@@ -424,6 +453,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       button.addEventListener("click", event => this.#onBrowseWeaponExplosionSound(event));
     });
     this.element?.querySelector("[data-add-item-function]")?.addEventListener("click", event => this.#onAddItemFunction(event));
+    this.element?.querySelector("[data-add-prosthesis-limb]")?.addEventListener("click", event => this.#onAddProsthesisLimb(event));
+    this.element?.querySelectorAll("[data-delete-prosthesis-limb]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteProsthesisLimb(event));
+    });
+    this.element?.querySelector("[data-add-prosthesis-blocked-effect]")?.addEventListener("click", event => this.#onAddProsthesisBlockedEffect(event));
+    this.element?.querySelectorAll("[data-delete-prosthesis-blocked-effect]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteProsthesisBlockedEffect(event));
+    });
     this.element?.querySelectorAll("[data-add-ability-function]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityFunction(event));
     });
@@ -2057,6 +2094,18 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       });
     }
 
+    if (functionKey === ITEM_FUNCTIONS.prosthesis) {
+      this.#functionPickerActive = false;
+      return this.item.update({
+        "system.functions.prosthesis.enabled": true,
+        "system.functions.prosthesis.limbKeys": [],
+        "system.functions.prosthesis.blockedPeriodicEffects": [],
+        "system.functions.prosthesis.integrationPercent": 0,
+        "system.functions.prosthesis.difficulty": 60,
+        "system.functions.prosthesis.skillKey": "doctor"
+      });
+    }
+
     if (functionKey === ITEM_FUNCTIONS.tool) {
       const toolKey = getSelectedToolFunctionKey(this.item) || getToolSettings()[0]?.key || "";
       if (!toolKey) return undefined;
@@ -2071,6 +2120,62 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     }
 
     return undefined;
+  }
+
+  #onAddProsthesisLimb(event) {
+    event.preventDefault();
+    const current = this.#getSubmittedProsthesisLimbKeys();
+    const choices = buildProsthesisLimbChoiceEntries(getCreatureOptions(), current);
+    const nextKey = choices.find(choice => !current.includes(choice.key))?.key ?? "";
+    if (!nextKey) return undefined;
+    return this.item.update({ "system.functions.prosthesis.limbKeys": [...current, nextKey] });
+  }
+
+  #onDeleteProsthesisLimb(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteProsthesisLimb);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const current = this.#getSubmittedProsthesisLimbKeys();
+    current.splice(index, 1);
+    return this.item.update({ "system.functions.prosthesis.limbKeys": current });
+  }
+
+  #onAddProsthesisBlockedEffect(event) {
+    event.preventDefault();
+    const current = this.#getSubmittedProsthesisBlockedEffects();
+    const choices = buildProsthesisBlockedEffectChoiceEntries(getDamageTypeSettings(), current);
+    const nextKey = choices.find(choice => !current.includes(choice.key))?.key ?? "";
+    if (!nextKey) return undefined;
+    return this.item.update({ "system.functions.prosthesis.blockedPeriodicEffects": [...current, nextKey] });
+  }
+
+  #onDeleteProsthesisBlockedEffect(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteProsthesisBlockedEffect);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const current = this.#getSubmittedProsthesisBlockedEffects();
+    current.splice(index, 1);
+    return this.item.update({ "system.functions.prosthesis.blockedPeriodicEffects": current });
+  }
+
+  #getSubmittedProsthesisLimbKeys() {
+    if (!this.form) return normalizeProsthesisLimbKeys(this.item.system?.functions?.prosthesis?.limbKeys);
+    const formData = new FormDataExtended(this.form);
+    const submitData = this._processFormData(null, this.form, formData);
+    return normalizeProsthesisLimbKeys(
+      foundry.utils.getProperty(submitData, "system.functions.prosthesis.limbKeys")
+        ?? this.item.system?.functions?.prosthesis?.limbKeys
+    );
+  }
+
+  #getSubmittedProsthesisBlockedEffects() {
+    if (!this.form) return normalizeProsthesisBlockedEffects(this.item.system?.functions?.prosthesis?.blockedPeriodicEffects);
+    const formData = new FormDataExtended(this.form);
+    const submitData = this._processFormData(null, this.form, formData);
+    return normalizeProsthesisBlockedEffects(
+      foundry.utils.getProperty(submitData, "system.functions.prosthesis.blockedPeriodicEffects")
+        ?? this.item.system?.functions?.prosthesis?.blockedPeriodicEffects
+    );
   }
 
   async #onRemoveItemFunction(event) {
@@ -2170,6 +2275,17 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.module.name": "",
         "system.functions.module.targetFunction": "weapon",
         "system.functions.module.additionalWeapons": {}
+      });
+    }
+    if (functionKey === ITEM_FUNCTIONS.prosthesis) {
+      return this.item.update({
+        "system.functions.prosthesis.enabled": false,
+        "system.functions.prosthesis.limbKeys": [],
+        "system.functions.prosthesis.blockedPeriodicEffects": [],
+        "system.functions.prosthesis.integrationPercent": 0,
+        "system.functions.prosthesis.difficulty": 60,
+        "system.functions.prosthesis.skillKey": "doctor",
+        "system.placement.limbKey": ""
       });
     }
     if (functionKey === ITEM_FUNCTIONS.tool) {
@@ -3049,6 +3165,7 @@ function getItemFunctionLabel(functionKey = "") {
   if (functionKey === ITEM_FUNCTIONS.firstAid) return game.i18n.localize("FALLOUTMAW.Item.FunctionFirstAid");
   if (functionKey === ITEM_FUNCTIONS.weapon) return game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon");
   if (functionKey === ITEM_FUNCTIONS.module) return game.i18n.localize("FALLOUTMAW.Item.FunctionModule");
+  if (functionKey === ITEM_FUNCTIONS.prosthesis) return game.i18n.localize("FALLOUTMAW.Item.FunctionProsthesis");
   if (functionKey === ITEM_FUNCTIONS.tool) return game.i18n.localize("FALLOUTMAW.Item.FunctionTool");
   const toolKey = getToolKeyFromFunctionKey(functionKey);
   if (toolKey) return getToolSettings().find(tool => tool.key === toolKey)?.label ?? toolKey;
@@ -5494,6 +5611,104 @@ function buildToolFunctionEntries(item, toolSettings, skillSettings) {
   });
 }
 
+function buildSkillChoices(selectedKey = "", skillSettings = []) {
+  const selected = String(selectedKey ?? "");
+  return skillSettings.map(skill => ({
+    key: skill.key,
+    label: skill.label,
+    selected: skill.key === selected
+  }));
+}
+
+function buildProsthesisLimbRows(item, creatureOptions) {
+  const selected = normalizeProsthesisLimbKeys(item.system?.functions?.prosthesis?.limbKeys);
+  const choices = buildProsthesisLimbChoiceEntries(creatureOptions, selected);
+  return selected.map((selectedKey, index) => {
+    const usedByOtherRows = new Set(selected.filter((_, usedIndex) => usedIndex !== index));
+    return {
+      key: selectedKey,
+      choices: choices
+        .filter(choice => choice.key === selectedKey || !usedByOtherRows.has(choice.key))
+        .map(choice => ({
+          ...choice,
+          selected: choice.key === selectedKey
+        }))
+    };
+  });
+}
+
+function buildProsthesisBlockedEffectRows(item, damageTypeSettings = []) {
+  const selected = normalizeProsthesisBlockedEffects(item.system?.functions?.prosthesis?.blockedPeriodicEffects);
+  const choices = buildProsthesisBlockedEffectChoiceEntries(damageTypeSettings, selected);
+  return selected.map((selectedKey, index) => {
+    const usedByOtherRows = new Set(selected.filter((_, usedIndex) => usedIndex !== index));
+    return {
+      key: selectedKey,
+      choices: choices
+        .filter(choice => choice.key === selectedKey || !usedByOtherRows.has(choice.key))
+        .map(choice => ({
+          ...choice,
+          selected: choice.key === selectedKey
+        }))
+    };
+  });
+}
+
+function canAddProsthesisBlockedEffect(item, damageTypeSettings = []) {
+  const selected = normalizeProsthesisBlockedEffects(item.system?.functions?.prosthesis?.blockedPeriodicEffects);
+  return buildProsthesisBlockedEffectChoiceEntries(damageTypeSettings, selected).some(choice => !selected.includes(choice.key));
+}
+
+function buildProsthesisBlockedEffectChoiceEntries(damageTypeSettings = [], extraKeys = []) {
+  const choices = new Map();
+  choices.set(BLEEDING_DAMAGE_TYPE_KEY, game.i18n.localize("FALLOUTMAW.Item.ProsthesisBleedingEffect"));
+  for (const damageType of getFirstAidRemovablePeriodicDamageTypes(damageTypeSettings)) {
+    choices.set(damageType.key, damageType.periodicLabel || damageType.label || damageType.key);
+  }
+  for (const key of normalizeProsthesisBlockedEffects(extraKeys)) {
+    if (!choices.has(key)) choices.set(key, key);
+  }
+  return Array.from(choices, ([key, label]) => ({ key, label }));
+}
+
+function normalizeProsthesisBlockedEffects(value) {
+  const source = Array.isArray(value)
+    ? value
+    : value && typeof value === "object" ? Object.values(value) : [];
+  return Array.from(new Set(source
+    .map(key => String(key ?? "").trim())
+    .filter(Boolean)));
+}
+
+function canAddProsthesisLimb(item, creatureOptions) {
+  const selected = normalizeProsthesisLimbKeys(item.system?.functions?.prosthesis?.limbKeys);
+  return buildProsthesisLimbChoiceEntries(creatureOptions, selected).some(choice => !selected.includes(choice.key));
+}
+
+function buildProsthesisLimbChoiceEntries(creatureOptions, extraKeys = []) {
+  const limbs = new Map();
+  for (const race of creatureOptions?.races ?? []) {
+    for (const limb of race.limbs ?? []) {
+      const key = String(limb?.key ?? "").trim();
+      if (!key || limbs.has(key)) continue;
+      limbs.set(key, String(limb?.label ?? key));
+    }
+  }
+  for (const key of normalizeProsthesisLimbKeys(extraKeys)) {
+    if (!limbs.has(key)) limbs.set(key, key);
+  }
+  return Array.from(limbs, ([key, label]) => ({ key, label }));
+}
+
+function normalizeProsthesisLimbKeys(value) {
+  const source = Array.isArray(value)
+    ? value
+    : value && typeof value === "object" ? Object.values(value) : [];
+  return Array.from(new Set(source
+    .map(key => String(key ?? "").trim())
+    .filter(Boolean)));
+}
+
 function createToolFunctionSelectionUpdate(item, toolKey = "", { enabled = true, sourceToolKey = "" } = {}) {
   const key = String(toolKey ?? "").trim();
   if (!key) return {};
@@ -5629,7 +5844,8 @@ function getFirstAidRemovablePeriodicDamageTypes(damageTypeSettings = []) {
     })
     .map(damageType => ({
       key: String(damageType.key ?? "").trim(),
-      label: String(damageType.label ?? damageType.key ?? "").trim()
+      label: String(damageType.label ?? damageType.key ?? "").trim(),
+      periodicLabel: String(damageType?.settings?.periodic?.effectName ?? "").trim()
     }))
     .filter(damageType => damageType.key);
 }

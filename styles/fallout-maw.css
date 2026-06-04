@@ -4924,6 +4924,48 @@ label.fallout-maw-mitigation-cell {
   grid-template-columns: minmax(120px, 0.8fr) minmax(140px, 1fr) minmax(70px, 0.45fr) minmax(90px, 0.6fr) 2.5rem;
 }
 
+.fallout-maw-limb-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.4rem 0.75rem;
+}
+
+.fallout-maw-limb-checkbox-grid label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.fallout-maw-prosthesis-limb-row-list,
+.fallout-maw-prosthesis-blocked-effect-row-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.fallout-maw-prosthesis-limb-row,
+.fallout-maw-prosthesis-blocked-effect-row {
+  align-items: center;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: minmax(12rem, 1fr) 2.25rem;
+}
+
+.fallout-maw-prosthesis-limb-row select,
+.fallout-maw-prosthesis-blocked-effect-row select {
+  min-width: 0;
+  width: 100%;
+}
+
+.fallout-maw-prosthesis-limb-row button,
+.fallout-maw-prosthesis-blocked-effect-row button {
+  align-items: center;
+  display: inline-flex;
+  height: 2.1rem;
+  justify-content: center;
+  padding: 0;
+  width: 2.1rem;
+}
+
 .fallout-maw-inventory-tooltip .description {
   border-top: 1px solid rgba(120, 124, 94, 0.42);
   color: var(--fallout-maw-tooltip-text);
@@ -8010,7 +8052,7 @@ label.fallout-maw-mitigation-cell {
   --fallout-maw-actor-plastic-text: #2b2a21;
   --fallout-maw-actor-edge-dark: rgba(0, 0, 0, 0.88);
   --fallout-maw-actor-edge-light: rgba(219, 219, 186, 0.26);
-  min-width: 1120px;
+  min-width: 900px;
   background:
     linear-gradient(180deg, rgba(53, 56, 47, 0.98), rgba(14, 16, 13, 0.98));
   border: 3px solid #171912;
@@ -9373,6 +9415,168 @@ label.fallout-maw-mitigation-cell {
 
 .fallout-maw-medicine-tabs button.active {
   background: rgba(214, 183, 111, 0.16);
+}
+
+.fallout-maw-prosthesis-medicine {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.fallout-maw-prosthesis-target {
+  align-items: start;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(18rem, 0.72fr) minmax(0, 1fr);
+}
+
+.fallout-maw-prosthesis-silhouette {
+  min-height: 25rem;
+  padding: 0;
+}
+
+.fallout-maw-prosthesis-silhouette svg {
+  display: block;
+  height: min(25rem, calc(74vh / var(--fallout-maw-token-action-hud-scale, 1)));
+  max-width: 100%;
+  width: 100%;
+}
+
+.fallout-maw-prosthesis-outline {
+  fill: rgba(220, 197, 110, 0.04);
+  pointer-events: none;
+  stroke: rgba(220, 197, 110, 0.3);
+  stroke-width: 1.2;
+}
+
+.fallout-maw-prosthesis-part {
+  cursor: pointer;
+  opacity: 0.88;
+  stroke: rgba(180, 235, 255, 0.34);
+  stroke-width: 1.35;
+  transition: opacity 120ms ease, stroke 120ms ease, stroke-width 120ms ease;
+}
+
+.fallout-maw-prosthesis-part.active,
+.fallout-maw-prosthesis-part:hover,
+.fallout-maw-prosthesis-part:focus-visible {
+  opacity: 1;
+  stroke: rgba(217, 247, 255, 0.92);
+  stroke-width: 2.4;
+}
+
+.fallout-maw-prosthesis-part.inactive {
+  cursor: default;
+  opacity: 0.26;
+  pointer-events: none;
+  stroke: rgba(220, 197, 110, 0.18);
+}
+
+.fallout-maw-prosthesis-limb-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.fallout-maw-prosthesis-limb-list button {
+  align-items: center;
+  background: rgba(6, 8, 6, 0.68);
+  border: 1px solid var(--fallout-maw-actor-border-soft);
+  border-radius: 0;
+  color: var(--fallout-maw-actor-text);
+  display: grid;
+  gap: 0.15rem;
+  justify-items: start;
+  min-height: 3.2rem;
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+}
+
+.fallout-maw-prosthesis-limb-list button.active,
+.fallout-maw-prosthesis-limb-list button:hover,
+.fallout-maw-prosthesis-limb-list button:focus-visible {
+  background: rgba(143, 216, 255, 0.12);
+  border-color: rgba(143, 216, 255, 0.5);
+}
+
+.fallout-maw-prosthesis-limb-list strong,
+.fallout-maw-prosthesis-details h3 {
+  color: var(--fallout-maw-actor-text-strong);
+}
+
+.fallout-maw-prosthesis-limb-list small {
+  color: var(--fallout-maw-actor-text);
+  font-weight: 700;
+}
+
+.fallout-maw-prosthesis-details {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.fallout-maw-prosthesis-details > header {
+  align-items: center;
+  border-bottom: 1px solid var(--fallout-maw-actor-border-soft);
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding-bottom: 0.45rem;
+}
+
+.fallout-maw-prosthesis-details h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.fallout-maw-prosthesis-details > header span {
+  color: #aee8ff;
+  font-weight: 800;
+}
+
+.fallout-maw-prosthesis-installed {
+  align-items: center;
+  background: rgba(6, 8, 6, 0.68);
+  border: 1px solid rgba(143, 216, 255, 0.34);
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 4rem minmax(0, 1fr) auto;
+  padding: 0.65rem;
+}
+
+.fallout-maw-prosthesis-installed img {
+  height: 3.35rem;
+  object-fit: contain;
+  width: 3.35rem;
+}
+
+.fallout-maw-prosthesis-installed div {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.fallout-maw-prosthesis-installed strong,
+.fallout-maw-prosthesis-installed small {
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-prosthesis-installed button {
+  background: rgba(8, 9, 8, 0.88);
+  border: 1px solid rgba(143, 216, 255, 0.46);
+  border-radius: 0;
+  color: var(--fallout-maw-actor-text-strong);
+  min-height: 2.15rem;
+  padding: 0.3rem 0.75rem;
+}
+
+.fallout-maw-action-row--prosthesis {
+  grid-template-columns:
+    4.25rem
+    minmax(13rem, 1.25fr)
+    minmax(6rem, 0.55fr)
+    minmax(6.5rem, 0.55fr)
+    minmax(7rem, 0.65fr)
+    minmax(3.5rem, 0.3fr)
+    minmax(7rem, 0.5fr);
 }
 
 .fallout-maw-disease-stage-header {
