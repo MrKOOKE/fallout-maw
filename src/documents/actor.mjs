@@ -21,6 +21,7 @@ import {
   DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
 } from "../config/defaults.mjs";
 import { getItemActorLoadWeight, getItemContainerParentId } from "../utils/inventory-containers.mjs";
+import { getConditionFunction, getProsthesisFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import { handleActorDamageUpdate, prepareActorDamageUpdate, requestDamageApplication } from "../combat/damage-hub.mjs";
 import { migrateActorData } from "../migrations/documents.mjs";
@@ -116,6 +117,7 @@ export class FalloutMaWActor extends Actor {
       for (const limb of Object.values(limbs)) clampPreparedResource(limb);
     }
 
+    prepareIntegratedProsthesisHealth(this);
     prepareActorLoadData(this);
   }
 
@@ -526,6 +528,62 @@ function syncTrackedResourceValueUpdates(actor, changes) {
 
     foundry.utils.setProperty(changes, `system.resources.${resourceKey}.spent`, Math.max(0, max - nextValue));
   }
+}
+
+function prepareIntegratedProsthesisHealth(actor) {
+  const health = actor?.system?.resources?.health;
+  if (!health) return;
+
+  let value = 0;
+  let max = 0;
+  for (const [limbKey, limb] of Object.entries(actor.system?.limbs ?? {})) {
+    if (!Boolean(limb?.missing)) continue;
+    const prosthesis = getInstalledActorProsthesis(actor, limbKey);
+    const contribution = getIntegratedProsthesisHealth(prosthesis, limb);
+    value += contribution.value;
+    max += contribution.max;
+  }
+  if (max <= 0) return;
+
+  const min = Math.max(0, toInteger(health.min));
+  health.max = Math.max(min, toInteger(health.max) + max);
+  health.value = Math.min(Math.max(toInteger(health.value) + value, min), health.max);
+  health.spent = Math.max(0, health.max - health.value);
+}
+
+function getIntegratedProsthesisHealth(prosthesis, limb = {}) {
+  if (!prosthesis) return { value: 0, max: 0 };
+  const integration = Math.max(0, Math.min(100, toInteger(getProsthesisFunction(prosthesis).integrationPercent)));
+  if (integration <= 0) return { value: 0, max: 0 };
+
+  if (!hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition)) {
+    const max = toIntegratedHealthValue(Math.max(0, toInteger(limb?.max)), integration);
+    return { value: max, max };
+  }
+
+  const condition = getConditionFunction(prosthesis);
+  const conditionMax = Math.max(0, toInteger(condition.max));
+  const conditionValue = Math.min(Math.max(0, toInteger(condition.value)), conditionMax);
+  return {
+    value: toIntegratedHealthValue(conditionValue, integration),
+    max: toIntegratedHealthValue(conditionMax, integration)
+  };
+}
+
+function toIntegratedHealthValue(value = 0, integration = 0) {
+  return Math.max(0, Math.round((Math.max(0, toInteger(value)) * Math.max(0, Math.min(100, toInteger(integration)))) / 100));
+}
+
+function getInstalledActorProsthesis(actor, limbKey = "") {
+  const key = String(limbKey ?? "").trim();
+  if (!key) return null;
+  return Array.from(actor?.items ?? []).find(item => (
+    item?.type === "gear"
+    && item.system?.equipped
+    && hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)
+    && String(item.system?.placement?.mode ?? "") === "prosthesis"
+    && String(item.system?.placement?.limbKey ?? "") === key
+  )) ?? null;
 }
 
 function getUpdatedResourceBound(changes, resourceKey, field, fallback) {

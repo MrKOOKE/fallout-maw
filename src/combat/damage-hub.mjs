@@ -1365,8 +1365,8 @@ function mergeManagedTimedDamageChangeData(existing = {}, incoming = {}) {
 function buildFullDamageRestoreUpdate(actor) {
   const updates = {};
   for (const [key, limb] of Object.entries(actor?.system?.limbs ?? {})) {
-    const missing = isLimbPhysicallyMissing(actor, key);
-    if (missing) {
+    const keepMissing = isLimbPhysicallyMissing(actor, key) && hasInstalledProsthesis(actor, key);
+    if (keepMissing) {
       updates[`system.limbs.${key}.missing`] = true;
       updates[`system.limbs.${key}.damageAccumulation`] = {};
       continue;
@@ -1461,11 +1461,11 @@ function hasInstalledProsthesis(actor, limbKey = "") {
 function isProsthesisTimedDamageBlocked(actor, limbKey = "", damageType = {}, kind = "") {
   const prosthesis = getInstalledProsthesis(actor, limbKey);
   if (!prosthesis) return false;
+  if (kind === "bleeding") return true;
   const blocked = new Set((getProsthesisFunction(prosthesis).blockedPeriodicEffects ?? [])
     .map(key => String(key ?? "").trim())
     .filter(Boolean));
   if (!blocked.size) return false;
-  if (kind === "bleeding" && blocked.has(BLEEDING_DAMAGE_TYPE_KEY)) return true;
   if (kind === "periodic" && blocked.has(String(damageType?.key ?? "").trim())) return true;
   return false;
 }
@@ -3531,14 +3531,28 @@ function calculateAggregateHealth(actor) {
 
 function getProsthesisHealthForAggregate(prosthesis, limb = {}) {
   if (!prosthesis) return { value: 0, max: 0 };
+  const integration = getProsthesisIntegrationPercent(prosthesis);
+  if (integration <= 0) return { value: 0, max: 0 };
+
   if (!hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition)) {
-    const max = Math.max(0, toInteger(limb?.max));
+    const max = toIntegratedProsthesisHealthValue(Math.max(0, toInteger(limb?.max)), integration);
     return { value: max, max };
   }
   const condition = getConditionFunction(prosthesis);
   const max = Math.max(0, toInteger(condition.max));
   const value = Math.min(Math.max(0, toInteger(condition.value)), max);
-  return { value, max };
+  return {
+    value: toIntegratedProsthesisHealthValue(value, integration),
+    max: toIntegratedProsthesisHealthValue(max, integration)
+  };
+}
+
+function getProsthesisIntegrationPercent(prosthesis) {
+  return Math.max(0, Math.min(100, toInteger(getProsthesisFunction(prosthesis).integrationPercent)));
+}
+
+function toIntegratedProsthesisHealthValue(value = 0, integration = 0) {
+  return roundDamageAmount((Math.max(0, toInteger(value)) * Math.max(0, Math.min(100, toInteger(integration)))) / 100);
 }
 
 function calculateManualAggregateHealthAdjustment(actor, amount = 0, mode = MODE_DAMAGE) {
@@ -3621,21 +3635,13 @@ async function calculateProsthesisLimbDamage(actor, limbKey = "", amount = 0, { 
   const damage = roundDamageAmount(amount);
   if (!prosthesis || damage <= 0) return createLimbMutationResult(limbStates, damageAccumulation);
 
-  const integration = Math.max(0, Math.min(100, toInteger(getProsthesisFunction(prosthesis).integrationPercent)));
-  const backlashDamage = roundDamageAmount((damage * integration) / 100);
-  const spreadResult = backlashDamage > 0
-    ? calculateEvenLimbDamage(actor, backlashDamage, {
-      damageType,
-      damageTypeKey,
-      traumaDamageTypeKey,
-      limbStates,
-      damageAccumulation,
-      excludeLimbKeys: new Set([limbKey])
-    })
-    : createLimbMutationResult(limbStates, damageAccumulation);
-
-  await applyProsthesisConditionDamage(actor, prosthesis, damage);
-  return spreadResult;
+  const result = await applyProsthesisConditionDamage(actor, prosthesis, damage);
+  const mutationResult = createLimbMutationResult(limbStates, damageAccumulation, {
+    healthDelta: result?.healthDelta ?? 0,
+    limbDelta: result?.conditionDelta ?? 0
+  });
+  if (result?.broken) mutationResult.shockCheck = createProsthesisBreakShockCheck(actor, prosthesis, limbKey);
+  return mutationResult;
 }
 
 function estimateProsthesisLimbDamage(actor, limbKey = "", amount = 0, { prosthesis = null, damageType = null, damageTypeKey = "", traumaDamageTypeKey = getTraumaDamageTypeKey(damageTypeKey) } = {}) {
@@ -3643,16 +3649,10 @@ function estimateProsthesisLimbDamage(actor, limbKey = "", amount = 0, { prosthe
   const limbStates = new Map();
   const damageAccumulation = new Map();
   if (!prosthesis || damage <= 0) return createLimbMutationResult(limbStates, damageAccumulation);
-  const integration = Math.max(0, Math.min(100, toInteger(getProsthesisFunction(prosthesis).integrationPercent)));
-  const backlashDamage = roundDamageAmount((damage * integration) / 100);
-  if (backlashDamage <= 0) return createLimbMutationResult(limbStates, damageAccumulation);
-  return calculateEvenLimbDamage(actor, backlashDamage, {
-    damageType,
-    damageTypeKey,
-    traumaDamageTypeKey,
-    limbStates,
-    damageAccumulation,
-    excludeLimbKeys: new Set([limbKey])
+  const result = estimateProsthesisConditionDamage(prosthesis, damage);
+  return createLimbMutationResult(limbStates, damageAccumulation, {
+    healthDelta: result.healthDelta,
+    limbDelta: result.conditionDelta
   });
 }
 
@@ -4822,6 +4822,7 @@ async function applyEquipmentConditionDamage(actor, entries = []) {
 
   const updates = [];
   const brokenProstheses = [];
+  let prosthesisHealthChanged = false;
   for (const [itemId, amount] of totals) {
     const item = actor.items?.get?.(itemId);
     if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
@@ -4832,6 +4833,7 @@ async function applyEquipmentConditionDamage(actor, entries = []) {
       brokenProstheses.push(item);
       continue;
     }
+    if (isInstalledProsthesisItem(item)) prosthesisHealthChanged = true;
     updates.push({
       _id: item.id,
       "system.functions.condition.value": next
@@ -4839,30 +4841,77 @@ async function applyEquipmentConditionDamage(actor, entries = []) {
   }
 
   if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
+  if (prosthesisHealthChanged) await queueActorDamageStatusSync(actor);
   for (const item of brokenProstheses) {
-    await breakInstalledProsthesis(actor, actor.items?.get?.(item.id) ?? item);
+    const prosthesis = actor.items?.get?.(item.id) ?? item;
+    const shockCheck = createProsthesisBreakShockCheck(actor, prosthesis);
+    await breakInstalledProsthesis(actor, prosthesis);
+    if (shockCheck) await performNegativeLimbShockCheck(actor, shockCheck);
   }
 }
 
 async function applyProsthesisConditionDamage(actor, prosthesis, amount = 0) {
-  if (!actor || !prosthesis || !hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition)) return undefined;
+  if (!actor || !prosthesis || !hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition)) {
+    return { item: prosthesis, conditionDelta: 0, healthDelta: 0, broken: false };
+  }
   const damage = roundDamageAmount(amount);
-  if (damage <= 0) return undefined;
+  if (damage <= 0) return { item: prosthesis, conditionDelta: 0, healthDelta: 0, broken: false };
 
-  const condition = getConditionFunction(prosthesis);
-  const current = Math.max(0, toInteger(condition.value));
-  const next = Math.max(0, current - damage);
-  if (next === current) return undefined;
-
-  if (next > 0) {
-    await actor.updateEmbeddedDocuments("Item", [{
-      _id: prosthesis.id,
-      "system.functions.condition.value": next
-    }]);
-    return actor.items?.get(prosthesis.id) ?? prosthesis;
+  const result = estimateProsthesisConditionDamage(prosthesis, damage);
+  if (result.next === result.current) {
+    return { item: prosthesis, conditionDelta: 0, healthDelta: 0, broken: false };
   }
 
-  return breakInstalledProsthesis(actor, prosthesis);
+  if (result.next > 0) {
+    await actor.updateEmbeddedDocuments("Item", [{
+      _id: prosthesis.id,
+      "system.functions.condition.value": result.next
+    }]);
+    await queueActorDamageStatusSync(actor);
+    return {
+      item: actor.items?.get(prosthesis.id) ?? prosthesis,
+      conditionDelta: result.conditionDelta,
+      healthDelta: result.healthDelta,
+      broken: false
+    };
+  }
+
+  const item = await breakInstalledProsthesis(actor, prosthesis);
+  return {
+    item,
+    conditionDelta: result.conditionDelta,
+    healthDelta: result.healthDelta,
+    broken: true
+  };
+}
+
+function estimateProsthesisConditionDamage(prosthesis, amount = 0) {
+  if (!prosthesis || !hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition)) {
+    return { current: 0, next: 0, conditionDelta: 0, healthDelta: 0 };
+  }
+
+  const condition = getConditionFunction(prosthesis);
+  const max = Math.max(0, toInteger(condition.max));
+  const current = Math.min(Math.max(0, toInteger(condition.value)), max);
+  const next = Math.max(0, current - roundDamageAmount(amount));
+  const integration = getProsthesisIntegrationPercent(prosthesis);
+  return {
+    current,
+    next,
+    conditionDelta: Math.max(0, current - next),
+    healthDelta: Math.max(
+      0,
+      toIntegratedProsthesisHealthValue(current, integration) - toIntegratedProsthesisHealthValue(next, integration)
+    )
+  };
+}
+
+function createProsthesisBreakShockCheck(actor, prosthesis, limbKey = "") {
+  const key = String(limbKey || prosthesis?.system?.placement?.limbKey || "").trim();
+  if (!key) return null;
+  const data = getProsthesisFunction(prosthesis);
+  if (getProsthesisIntegrationPercent(prosthesis) <= 0 || data.breakShockResistant) return null;
+  return buildDestroyedLimbShockChecks(actor, [key]).at(0) ?? null;
 }
 
 async function breakInstalledProsthesis(actor, prosthesis) {
@@ -5254,12 +5303,9 @@ function selectTraumaProfile(stage, snapshot = {}, latestDamageTypeKey = "", lat
 
   for (const [damageTypeKey] of weighted) {
     const profile = stage.profiles?.[damageTypeKey];
-    if (isConfiguredProfile(profile)) return { damageTypeKey, profile };
+    if (profile) return { damageTypeKey, profile };
   }
-  return null;
-}
-
-function isConfiguredProfile(profile) {
-  if (!profile) return false;
-  return Boolean(String(profile.name ?? "").trim() || String(profile.img ?? "").trim() || profile.effects?.length);
+  return Object.entries(stage.profiles ?? {})
+    .map(([damageTypeKey, profile]) => profile ? { damageTypeKey, profile } : null)
+    .find(Boolean) ?? null;
 }

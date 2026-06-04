@@ -360,6 +360,7 @@ function prosthesisFunctionField() {
       initial: []
     }),
     integrationPercent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 0 }),
+    breakShockResistant: new BooleanField({ required: true, initial: false }),
     difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
     skillKey: new StringField({ required: true, blank: false, initial: "doctor" })
   });

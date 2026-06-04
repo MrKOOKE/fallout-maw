@@ -3604,6 +3604,7 @@ function buildProsthesisTooltipSection(item, actor = null) {
   const rows = [
     [game.i18n.localize("FALLOUTMAW.Item.ProsthesisLimbs"), limbLabels.join(", ")],
     [game.i18n.localize("FALLOUTMAW.Item.ProsthesisIntegration"), `${Math.max(0, Math.min(100, toInteger(prosthesis.integrationPercent)))}%`],
+    [game.i18n.localize("FALLOUTMAW.Item.ProsthesisBreakShockResistant"), game.i18n.localize(prosthesis.breakShockResistant ? "FALLOUTMAW.Common.Yes" : "FALLOUTMAW.Common.No")],
     [game.i18n.localize("FALLOUTMAW.Item.ProsthesisDifficulty"), Math.max(0, toInteger(prosthesis.difficulty ?? 60))],
     [game.i18n.localize("FALLOUTMAW.Item.ProsthesisSkill"), getSkillLabel(prosthesis.skillKey ?? "doctor")],
     [game.i18n.localize("FALLOUTMAW.Item.ProsthesisBlockedEffects"), blockedLabels.join(", ")]

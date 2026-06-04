@@ -2101,6 +2101,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.prosthesis.limbKeys": [],
         "system.functions.prosthesis.blockedPeriodicEffects": [],
         "system.functions.prosthesis.integrationPercent": 0,
+        "system.functions.prosthesis.breakShockResistant": false,
         "system.functions.prosthesis.difficulty": 60,
         "system.functions.prosthesis.skillKey": "doctor"
       });
@@ -2283,6 +2284,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.prosthesis.limbKeys": [],
         "system.functions.prosthesis.blockedPeriodicEffects": [],
         "system.functions.prosthesis.integrationPercent": 0,
+        "system.functions.prosthesis.breakShockResistant": false,
         "system.functions.prosthesis.difficulty": 60,
         "system.functions.prosthesis.skillKey": "doctor",
         "system.placement.limbKey": ""

@@ -133,7 +133,7 @@ export function createDefaultTraumaStage(index = 0, damageTypes = []) {
 
 export function createDefaultTraumaProfile(damageType = {}, thresholdPercent = 0) {
   return {
-    name: "",
+    name: getDefaultTraumaProfileName(damageType),
     img: "",
     healingDifficulty: DEFAULT_HEALING_DIFFICULTY,
     healingToolClass: DEFAULT_HEALING_TOOL_CLASS,
@@ -142,6 +142,11 @@ export function createDefaultTraumaProfile(damageType = {}, thresholdPercent = 0
     effects: [],
     thresholdPercent
   };
+}
+
+export function getDefaultTraumaProfileName(damageType = {}) {
+  const label = String(damageType?.label ?? damageType?.key ?? "").trim();
+  return label ? `Травма ${label}` : "Травма";
 }
 
 function normalizeTraumaLimb(value = {}, limb = {}, damageTypes = [], legacyStages = [], thresholds = []) {
@@ -169,7 +174,7 @@ function normalizeTraumaStages(stages = [], damageTypes = [], thresholds = []) {
 
     for (const damageType of damageTypes) {
       const profile = stage.profiles?.[damageType.key];
-      if (isConfiguredTraumaProfile(profile)) existing.profiles[damageType.key] = profile;
+      if (isConfiguredTraumaProfile(profile, damageType)) existing.profiles[damageType.key] = profile;
     }
   }
 
@@ -209,8 +214,9 @@ function normalizeTraumaProfiles(value = {}, damageTypes = [], thresholdPercent 
 
 function normalizeTraumaProfile(value = {}, damageType = {}, thresholdPercent = 0) {
   const hasContent = value && typeof value === "object";
+  const name = String(hasContent ? value.name ?? "" : "").trim() || getDefaultTraumaProfileName(damageType);
   return {
-    name: String(hasContent ? value.name ?? "" : "").trim(),
+    name,
     img: String(hasContent ? value.img ?? "" : "").trim(),
     healingDifficulty: Math.max(0, toInteger(hasContent ? value.healingDifficulty ?? DEFAULT_HEALING_DIFFICULTY : DEFAULT_HEALING_DIFFICULTY)),
     healingToolClass: normalizeHealingToolClass(hasContent ? value.healingToolClass : DEFAULT_HEALING_TOOL_CLASS),
@@ -259,10 +265,12 @@ function normalizeTraumaThresholdList(value = []) {
     .sort((left, right) => right.thresholdPercent - left.thresholdPercent);
 }
 
-function isConfiguredTraumaProfile(profile) {
+function isConfiguredTraumaProfile(profile, damageType = {}) {
   if (!profile) return false;
+  const name = String(profile.name ?? "").trim();
+  const defaultName = getDefaultTraumaProfileName(damageType);
   return Boolean(
-    String(profile.name ?? "").trim()
+    (name && name !== defaultName)
     || String(profile.img ?? "").trim()
     || (profile.effects ?? []).length
   );

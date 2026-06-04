@@ -2,6 +2,7 @@ import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { getDamageTypeSettings } from "../settings/accessors.mjs";
 import { isPostureEffectApplicableToActor } from "./posture-movement.mjs";
 import { appendGrappleFollowMovement } from "../combat/active-actions.mjs";
+import { getConditionFunction, getProsthesisFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 
 const TOOLTIP_ANCHOR_CLASS = "fallout-maw-token-effect-tooltip-anchor";
 const TOOLTIP_CLASS = "fallout-maw-effect-tooltip";
@@ -438,6 +439,12 @@ function calculateHealthBarMaximums(actor, data = {}) {
   for (const [limbKey, limb] of Object.entries(actor.system?.limbs ?? {})) {
     const limbMax = Math.max(0, toInteger(limb?.max));
     if (Boolean(limb?.missing)) {
+      const prosthesis = getInstalledProsthesis(actor, limbKey);
+      const contribution = getIntegratedProsthesisHealth(prosthesis, limb);
+      if (contribution.max > 0) {
+        availableMax += contribution.max;
+        continue;
+      }
       blockedMax += limbMax;
       continue;
     }
@@ -456,6 +463,41 @@ function getLimbTraumaCap(actor, limbKey = "", limbMax = 0) {
   return (actor.items ?? [])
     .filter(item => item?.type === "trauma" && String(item.system?.limbKey ?? "") === limbKey)
     .reduce((cap, item) => Math.min(cap, Math.max(0, toInteger(item.system?.thresholdValue))), limbMax);
+}
+
+function getIntegratedProsthesisHealth(prosthesis, limb = {}) {
+  if (!prosthesis) return { value: 0, max: 0 };
+  const integration = Math.max(0, Math.min(100, toInteger(getProsthesisFunction(prosthesis).integrationPercent)));
+  if (integration <= 0) return { value: 0, max: 0 };
+
+  if (!hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition)) {
+    const max = toIntegratedHealthValue(Math.max(0, toInteger(limb?.max)), integration);
+    return { value: max, max };
+  }
+
+  const condition = getConditionFunction(prosthesis);
+  const conditionMax = Math.max(0, toInteger(condition.max));
+  const conditionValue = Math.min(Math.max(0, toInteger(condition.value)), conditionMax);
+  return {
+    value: toIntegratedHealthValue(conditionValue, integration),
+    max: toIntegratedHealthValue(conditionMax, integration)
+  };
+}
+
+function toIntegratedHealthValue(value = 0, integration = 0) {
+  return Math.max(0, Math.round((Math.max(0, toInteger(value)) * Math.max(0, Math.min(100, toInteger(integration)))) / 100));
+}
+
+function getInstalledProsthesis(actor, limbKey = "") {
+  const key = String(limbKey ?? "").trim();
+  if (!key) return null;
+  return Array.from(actor?.items ?? []).find(item => (
+    item?.type === "gear"
+    && item.system?.equipped
+    && hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)
+    && String(item.system?.placement?.mode ?? "") === "prosthesis"
+    && String(item.system?.placement?.limbKey ?? "") === key
+  )) ?? null;
 }
 
 function toInteger(value) {
