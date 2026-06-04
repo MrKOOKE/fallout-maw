@@ -23,6 +23,7 @@ import {
 } from "../utils/item-functions.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
+import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const DAMAGE_SOCKET = `system.${SYSTEM_ID}`;
@@ -227,7 +228,10 @@ export async function requestRegionPeriodicDamage({ token = null, actor = null, 
     .map(entry => ({
       actor: resolvedActor,
       limbKey,
-      amount: Math.max(0, toInteger(entry?.amount)),
+      amount: evaluateActorFormula(entry?.amount, resolvedActor, {
+        minimum: 0,
+        context: "requested region periodic damage"
+      }),
       damageTypeKey: String(entry?.damageTypeKey ?? "").trim(),
       scope: SCOPE_HEALTH_AND_LIMB,
       source
@@ -2576,7 +2580,7 @@ async function getRegionPeriodicDamageState(behavior, { now = 0, previousTime = 
 function buildRegionPeriodicDamageRequests(region, behavior, entries = [], tickTimes = []) {
   const damageEntries = entries.map(entry => ({
     ...entry,
-    amount: Math.max(0, toInteger(entry.amount))
+    amount: String(entry.amount ?? "0").trim() || "0"
   }));
   const times = (Array.isArray(tickTimes) ? tickTimes : [])
     .map(time => Number(time))
@@ -2597,7 +2601,10 @@ function buildRegionPeriodicDamageRequests(region, behavior, entries = [], tickT
       };
       for (const entry of damageEntries) {
         const damageTypeKey = String(entry?.damageTypeKey ?? "").trim();
-        const amount = Math.max(0, toInteger(entry?.amount));
+        const amount = evaluateActorFormula(entry?.amount, token.actor, {
+          minimum: 0,
+          context: "region periodic damage"
+        });
         if (!damageTypeKey || amount <= 0) continue;
         requests.push({
           actor: token.actor,
@@ -2618,9 +2625,9 @@ function getRegionPeriodicDamageEntries(system = {}) {
     ? system.damageEntries
       .map(entry => ({
         damageTypeKey: String(entry?.damageTypeKey ?? "").trim(),
-        amount: Math.max(0, toInteger(entry?.amount))
+        amount: String(entry?.amount ?? "0").trim() || "0"
       }))
-      .filter(entry => entry.damageTypeKey && entry.amount > 0)
+      .filter(entry => entry.damageTypeKey && isFormulaTextConfigured(entry.amount))
     : [];
 }
 

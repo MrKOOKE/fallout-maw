@@ -48,6 +48,7 @@ import {
   prepareInventoryContext as prepareDisplayInventoryContext
 } from "../utils/actor-display-data.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
+import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { openPersonalGenerator } from "../apps/personal-generator.mjs";
 import { ActorTradeSettingsConfig } from "../apps/actor-trade-settings-config.mjs";
 import {
@@ -3374,7 +3375,7 @@ function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex 
     buildConditionTooltipSection(item),
     buildFirstAidTooltipSection(item, actor),
     buildDamageMitigationTooltipSection(item, actor),
-    buildDamageSourceTooltipSection(item),
+    buildDamageSourceTooltipSection(item, actor),
     buildModuleTooltipSection(item),
     buildProsthesisTooltipSection(item, actor),
     ...buildWeaponTooltipSections(item, activeWeaponIndex, { actor, baseMode }),
@@ -3563,31 +3564,31 @@ function renderDamageTypeIcon(damageType = {}) {
   `;
 }
 
-function buildDamageSourceTooltipSection(item) {
+function buildDamageSourceTooltipSection(item, actor = null) {
   if (!hasItemFunction(item, ITEM_FUNCTIONS.damageSource)) return "";
   const source = getDamageSourceFunction(item);
   const sourceName = String(source?.name ?? "").trim();
   const rows = [
     [game.i18n.localize("FALLOUTMAW.Item.DamageSourceName"), sourceName || item.name],
-    [game.i18n.localize("FALLOUTMAW.Item.DamageSourceDamage"), toInteger(source?.damage)],
+    [game.i18n.localize("FALLOUTMAW.Item.DamageSourceDamage"), formatFormulaDamageValue(source?.damage, actor)],
     ["Распределение урона", getWeaponDamageTypeLabels(source).join(", ")]
   ];
-  const pellets = Math.max(1, toInteger(source?.pellets) || 1);
+  const pellets = Math.max(1, evaluateTooltipFormula(source?.pellets, actor, { fallback: 1, minimum: 1 }) || 1);
   if (pellets > 1) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPellets"), pellets]);
-  const accuracyBonus = toInteger(source?.accuracyBonus);
+  const accuracyBonus = evaluateTooltipFormula(source?.accuracyBonus, actor);
   if (accuracyBonus) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), formatSignedNumber(accuracyBonus)]);
-  const criticalChanceModifier = toInteger(source?.criticalChanceModifier);
+  const criticalChanceModifier = evaluateTooltipFormula(source?.criticalChanceModifier, actor);
   if (criticalChanceModifier) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), `${formatSignedNumber(criticalChanceModifier)}%`]);
-  const criticalDamagePercent = toInteger(source?.criticalDamagePercent);
+  const criticalDamagePercent = evaluateTooltipFormula(source?.criticalDamagePercent, actor);
   if (criticalDamagePercent) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), `${formatSignedNumber(criticalDamagePercent)}%`]);
-  const maxRangeMeters = Number(source?.maxRangeMeters) || 0;
+  const maxRangeMeters = evaluateTooltipFormula(source?.maxRangeMeters, actor);
   if (maxRangeMeters) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), `${formatNumber(maxRangeMeters)} м`]);
-  const effectiveValue = Number(source?.effectiveRange?.value) || 0;
-  const effectiveMax = Number(source?.effectiveRange?.max) || 0;
+  const effectiveValue = evaluateTooltipFormula(source?.effectiveRange?.value, actor);
+  const effectiveMax = evaluateTooltipFormula(source?.effectiveRange?.max, actor);
   if (effectiveValue || effectiveMax) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), `${formatNumber(effectiveValue)} / ${formatNumber(effectiveMax)} м`]);
-  const penetration = toInteger(source?.penetration);
+  const penetration = evaluateTooltipFormula(source?.penetration, actor);
   if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), penetration]);
-  rows.push(...getWeaponVolleyRows(source));
+  rows.push(...getWeaponVolleyRows(source, { actor }));
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource"), rows);
 }
 
@@ -3889,6 +3890,7 @@ function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = fal
   const baseData = getEffectiveWeaponTooltipData(entry.data ?? {}, { applyModules: false });
   const stats = getWeaponTooltipCalculatedStats(item, data, { actor, baseMode });
   const baseStats = baseMode ? stats : getWeaponTooltipCalculatedStats(item, baseData, { actor, baseMode: true });
+  data._evaluatedPellets = Math.max(1, evaluateTooltipFormula(data.pellets, actor, { fallback: 1, minimum: 1 }));
   const rows = [
     [game.i18n.localize("FALLOUTMAW.Item.WeaponDamage"), renderChangedWeaponDamageValue(data, stats.damage, baseStats.damage, { baseMode })],
     ["Распределение урона", getWeaponDamageDistributionLabel(item, data)]
@@ -3901,10 +3903,10 @@ function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = fal
     rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMagazine"), renderTooltipMeterValue(toInteger(data.magazine?.value), magazineMax)]);
   }
   rows.push(
-    [game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), renderChangedDistanceValue(data.maxRangeMeters, baseData.maxRangeMeters, { baseMode })],
-    [game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), renderChangedEffectiveRangeValue(data.effectiveRange, baseData.effectiveRange, { baseMode })]
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), renderChangedDistanceValue(evaluateTooltipFormula(data.maxRangeMeters, actor), evaluateTooltipFormula(baseData.maxRangeMeters, actor), { baseMode })],
+    [game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), renderChangedEffectiveRangeValue(data.effectiveRange, baseData.effectiveRange, { actor, baseMode })]
   );
-  rows.push(...getWeaponActionDetailRows(data));
+  rows.push(...getWeaponActionDetailRows(data, { actor }));
   rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponSkill"), getSkillLabel(data.skillKey)]);
   const accuracyBonus = stats.accuracyBonus;
   if (accuracyBonus || (!baseMode && accuracyBonus !== baseStats.accuracyBonus)) {
@@ -3978,11 +3980,11 @@ function renderChangedDistanceValue(value = 0, baseValue = 0, options = {}) {
   return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === (options.higherIsBetter !== false));
 }
 
-function renderChangedEffectiveRangeValue(range = {}, baseRange = {}, { baseMode = false } = {}) {
-  const value = Number(range?.value) || 0;
-  const max = Number(range?.max) || 0;
-  const baseValue = Number(baseRange?.value) || 0;
-  const baseMax = Number(baseRange?.max) || 0;
+function renderChangedEffectiveRangeValue(range = {}, baseRange = {}, { actor = null, baseMode = false } = {}) {
+  const value = evaluateTooltipFormula(range?.value, actor);
+  const max = evaluateTooltipFormula(range?.max, actor);
+  const baseValue = evaluateTooltipFormula(baseRange?.value, actor);
+  const baseMax = evaluateTooltipFormula(baseRange?.max, actor);
   if (baseMode || (value === baseValue && max === baseMax)) return `${formatNumber(value)} / ${formatNumber(max)} м`;
   const valueHtml = value === baseValue ? escapeHTML(formatNumber(value)) : renderChangedTooltipSpan(formatNumber(value), value < baseValue);
   const maxHtml = max === baseMax ? escapeHTML(formatNumber(max)) : renderChangedTooltipSpan(formatNumber(max), max > baseMax);
@@ -4038,7 +4040,13 @@ function renderChangedTooltipSpan(text, positive) {
 
 function getWeaponTooltipCalculatedStats(item, data = {}, { actor = null, baseMode = false } = {}) {
   const proficiencyDamage = baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "damage");
-  const baseDamage = Math.max(0, toInteger(getEffectiveWeaponDamageData(item, data).damage));
+  const baseDamageFormula = getEffectiveWeaponDamageData(item, data).damage;
+  const baseDamage = actor
+    ? evaluateActorFormula(baseDamageFormula, actor, {
+      minimum: 0,
+      context: `${item?.name ?? "weapon"} tooltip damage`
+    })
+    : Math.max(0, toInteger(baseDamageFormula));
   const modifiedDamage = Math.round(baseDamage * Math.max(0, 100 + proficiencyDamage) / 100);
   const weakening = baseMode ? { active: false, ratio: 1, steps: 0 } : getConditionWeakeningData(item, { minimumRatio: 0.1 });
   const conditionAccuracyPenalty = weakening.active ? weakening.steps * 10 : 0;
@@ -4046,15 +4054,15 @@ function getWeaponTooltipCalculatedStats(item, data = {}, { actor = null, baseMo
 
   return {
     damage: Math.max(0, Math.floor(modifiedDamage * (weakening.active ? weakening.ratio : 1))),
-    accuracyBonus: toInteger(data.accuracyBonus)
+    accuracyBonus: evaluateTooltipFormula(data.accuracyBonus, actor)
       + (baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "accuracy"))
       - conditionAccuracyPenalty,
-    criticalChanceModifier: toInteger(data.criticalChanceModifier)
+    criticalChanceModifier: evaluateTooltipFormula(data.criticalChanceModifier, actor)
       + (baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "criticalChance"))
       - conditionCritPenalty,
-    criticalDamagePercent: Math.max(0, toInteger(data.criticalDamagePercent)
+    criticalDamagePercent: Math.max(0, evaluateTooltipFormula(data.criticalDamagePercent, actor, { fallback: 150 })
       + (baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "criticalDamage"))),
-    penetration: Math.max(0, toInteger(data.penetration))
+    penetration: Math.max(0, evaluateTooltipFormula(data.penetration, actor))
   };
 }
 
@@ -4080,25 +4088,40 @@ function getWeaponProficiencySetting(data = {}) {
 
 function formatWeaponDamageValue(data = {}, damage = 0) {
   const effectiveDamage = Math.max(0, toInteger(damage));
-  const pellets = Math.max(1, toInteger(data.pellets));
+  const pellets = Math.max(1, toInteger(data._evaluatedPellets ?? data.pellets));
   return pellets > 1 ? `${effectiveDamage} / ${pellets}` : String(effectiveDamage);
+}
+
+function formatFormulaDamageValue(formula, actor = null) {
+  const text = String(formula ?? "0").trim() || "0";
+  if (!actor) return text;
+  const value = evaluateActorFormula(text, actor, {
+    minimum: 0,
+    context: "damage source tooltip"
+  });
+  return text === String(value) ? String(value) : `${value} (${text})`;
+}
+
+function evaluateTooltipFormula(formula, actor = null, options = {}) {
+  if (!actor) return Number(formula) || Number(options.fallback) || 0;
+  return evaluateActorFormula(formula, actor, options);
 }
 
 function getWeaponDamageDistributionLabel(item, data = {}) {
   return getWeaponDamageTypeLabels(getEffectiveWeaponDamageData(item, data)).join(", ");
 }
 
-function getWeaponVolleyRows(data = {}) {
+function getWeaponVolleyRows(data = {}, { actor = null } = {}) {
   const volley = data.volley ?? {};
   const rows = [];
-  const damageRadius = Number(volley.damageRadius) || 0;
+  const damageRadius = evaluateTooltipFormula(volley.damageRadius, actor);
   if (damageRadius > 0) rows.push(["Радиус взрыва", `${formatNumber(damageRadius)} м`]);
 
-  const regionDamage = getWeaponDamageEntryLabels(volley.regionDamageEntries);
-  const regionRadius = Number(volley.regionRadius) || 0;
-  const regionDuration = Number(volley.regionDurationSeconds) || 0;
-  const regionDelay = Number(volley.regionDelaySeconds) || 0;
-  const regionDelta = Number(volley.regionRadiusDeltaMeters) || 0;
+  const regionDamage = getWeaponDamageEntryLabels(volley.regionDamageEntries, actor);
+  const regionRadius = evaluateTooltipFormula(volley.regionRadius, actor);
+  const regionDuration = evaluateTooltipFormula(volley.regionDurationSeconds, actor);
+  const regionDelay = evaluateTooltipFormula(volley.regionDelaySeconds, actor);
+  const regionDelta = evaluateTooltipFormula(volley.regionRadiusDeltaMeters, actor);
   if (regionRadius > 0) rows.push(["Радиус области", `${formatNumber(regionRadius)} м`]);
   if (regionDamage) rows.push(["Урон области", regionDamage]);
   if (regionDuration > 0) rows.push(["Длительность области", `${formatNumber(regionDuration)} с`]);
@@ -4107,9 +4130,9 @@ function getWeaponVolleyRows(data = {}) {
   return rows;
 }
 
-function getWeaponActionDetailRows(data = {}) {
+function getWeaponActionDetailRows(data = {}, { actor = null } = {}) {
   const rows = [];
-  if (isWeaponActionEnabled(data, "volley")) rows.push(...getWeaponVolleyRows(data));
+  if (isWeaponActionEnabled(data, "volley")) rows.push(...getWeaponVolleyRows(data, { actor }));
   return rows;
 }
 
@@ -4118,15 +4141,21 @@ function isWeaponActionEnabled(data = {}, actionKey = "") {
   return Boolean(data?.availableActions?.[actionKey]);
 }
 
-function getWeaponDamageEntryLabels(entries = []) {
+function getWeaponDamageEntryLabels(entries = [], actor = null) {
   const damageTypes = getDamageTypeSettings();
   const labels = new Map(damageTypes.map(type => [type.key, type.label ?? type.key]));
   return (entries ?? [])
     .map(entry => {
       const key = String(entry?.damageTypeKey ?? "").trim();
-      const amount = toInteger(entry?.amount);
-      if (!key || !amount) return "";
-      return `${labels.get(key) ?? key}: ${amount}`;
+      const formula = String(entry?.amount ?? "0").trim() || "0";
+      const amount = actor
+        ? evaluateActorFormula(formula, actor, {
+          minimum: 0,
+          context: "tooltip damage entry"
+        })
+        : 0;
+      if (!key || (actor ? amount <= 0 : !isFormulaTextConfigured(formula))) return "";
+      return `${labels.get(key) ?? key}: ${actor ? amount : formula}`;
     })
     .filter(Boolean)
     .join(", ");
@@ -4189,19 +4218,19 @@ function mergeWeaponDataWithDamageSource(data = {}, source = {}) {
     ...data,
     source: "damageSource",
     damage: source.damage,
-    pellets: Math.max(1, toInteger(source.pellets) || 1),
+    pellets: source.pellets,
     damageTypeKey: source.damageTypeKey,
     damageTypes: source.damageTypes,
     attackAnimationKey: String(source.attackAnimationKey ?? ""),
-    accuracyBonus: toInteger(data.accuracyBonus) + toInteger(source.accuracyBonus),
-    criticalChanceModifier: toInteger(data.criticalChanceModifier) + toInteger(source.criticalChanceModifier),
-    criticalDamagePercent: Math.max(0, toInteger(data.criticalDamagePercent) + toInteger(source.criticalDamagePercent)),
-    maxRangeMeters: Math.max(0, Number(data.maxRangeMeters) + Number(source.maxRangeMeters || 0)),
+    accuracyBonus: addFormulaTexts(data.accuracyBonus, source.accuracyBonus),
+    criticalChanceModifier: addFormulaTexts(data.criticalChanceModifier, source.criticalChanceModifier),
+    criticalDamagePercent: addFormulaTexts(data.criticalDamagePercent, source.criticalDamagePercent),
+    maxRangeMeters: addFormulaTexts(data.maxRangeMeters, source.maxRangeMeters),
     effectiveRange: {
-      value: Math.max(0, Number(data.effectiveRange?.value) + Number(source.effectiveRange?.value || 0)),
-      max: Math.max(0, Number(data.effectiveRange?.max) + Number(source.effectiveRange?.max || 0))
+      value: addFormulaTexts(data.effectiveRange?.value, source.effectiveRange?.value),
+      max: addFormulaTexts(data.effectiveRange?.max, source.effectiveRange?.max)
     },
-    penetration: Math.max(0, toInteger(data.penetration) + toInteger(source.penetration)),
+    penetration: addFormulaTexts(data.penetration, source.penetration),
     volley: mergeDamageSourceVolleyData(data.volley, source.volley)
   };
 }
@@ -4209,14 +4238,14 @@ function mergeWeaponDataWithDamageSource(data = {}, source = {}) {
 function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
   return {
     ...(weaponVolley ?? {}),
-    damageRadius: Math.max(0, Number(sourceVolley?.damageRadius) || 0),
-    regionRadius: Math.max(0, Number(sourceVolley?.regionRadius) || 0),
+    damageRadius: normalizeFormulaText(sourceVolley?.damageRadius),
+    regionRadius: normalizeFormulaText(sourceVolley?.regionRadius),
     regionDamageEntries: Array.isArray(sourceVolley?.regionDamageEntries)
       ? foundry.utils.deepClone(sourceVolley.regionDamageEntries)
       : [],
-    regionDurationSeconds: Math.max(0, toInteger(sourceVolley?.regionDurationSeconds)),
-    regionDelaySeconds: Math.max(0, toInteger(sourceVolley?.regionDelaySeconds)),
-    regionRadiusDeltaMeters: Number(sourceVolley?.regionRadiusDeltaMeters) || 0,
+    regionDurationSeconds: normalizeFormulaText(sourceVolley?.regionDurationSeconds),
+    regionDelaySeconds: normalizeFormulaText(sourceVolley?.regionDelaySeconds),
+    regionRadiusDeltaMeters: normalizeFormulaText(sourceVolley?.regionRadiusDeltaMeters),
     explosionAnimationKey: String(sourceVolley?.explosionAnimationKey ?? "")
   };
 }
@@ -5229,6 +5258,18 @@ function prepareLimbDisplayData(actor, limbKey, limb = {}) {
     max,
     scaleMax: limb.max
   };
+}
+
+function normalizeFormulaText(value, fallback = "0") {
+  return String(value ?? fallback).trim() || fallback;
+}
+
+function addFormulaTexts(left, right) {
+  const leftText = normalizeFormulaText(left);
+  const rightText = normalizeFormulaText(right);
+  if (leftText === "0") return rightText;
+  if (rightText === "0") return leftText;
+  return `(${leftText}) + (${rightText})`;
 }
 
 function getInstalledActorProsthesis(actor, limbKey = "") {

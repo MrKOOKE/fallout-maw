@@ -1,4 +1,7 @@
 import { getDamageTypeSettings } from "../settings/accessors.mjs";
+import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
+import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
+import { isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.sheets.RegionBehaviorConfig {
@@ -42,6 +45,14 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
     };
   }
 
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    activateFormulaAutocomplete(this.element, {
+      characteristics: getCharacteristicSettings(),
+      skills: getSkillSettings()
+    });
+  }
+
   _processFormData(_event, _form, formData) {
     const data = foundry.utils.expandObject(formData.object ?? {});
     const system = data.system ?? {};
@@ -62,7 +73,7 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
     const entries = this.#getFormDamageEntries();
     entries.push({
       damageTypeKey: damageTypes[0]?.key ?? "",
-      amount: 0
+      amount: "0"
     });
     this.#renderDamageEntries(entries);
   }
@@ -89,6 +100,10 @@ export class PeriodicDamageRegionBehaviorConfig extends foundry.applications.she
     container.innerHTML = entries.length
       ? entries.map((entry, index) => renderDamageEntryRow(entry, index, damageTypes)).join("")
       : `<p class="fallout-maw-empty-list">${escapeHtml(game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.NoDamageEntries"))}</p>`;
+    activateFormulaAutocomplete(container, {
+      characteristics: getCharacteristicSettings(),
+      skills: getSkillSettings()
+    });
   }
 }
 
@@ -109,9 +124,9 @@ function normalizeDamageEntries(entries = []) {
   return values
     .map(entry => ({
       damageTypeKey: String(entry?.damageTypeKey ?? "").trim(),
-      amount: Math.max(0, toInteger(entry?.amount))
+      amount: normalizeDamageFormula(entry?.amount)
     }))
-    .filter(entry => entry.damageTypeKey || entry.amount > 0);
+    .filter(entry => entry.damageTypeKey || isFormulaTextConfigured(entry.amount));
 }
 
 function renderDamageEntryRow(entry, index, damageTypes = []) {
@@ -124,10 +139,14 @@ function renderDamageEntryRow(entry, index, damageTypes = []) {
   return `
     <div class="fallout-maw-settings-row" data-damage-entry-index="${index}">
       <select name="system.damageEntries.${index}.damageTypeKey">${options}</select>
-      <input type="number" name="system.damageEntries.${index}.amount" value="${Math.max(0, toInteger(entry?.amount))}" min="0" step="1">
+      <input type="text" name="system.damageEntries.${index}.amount" value="${escapeHtml(normalizeDamageFormula(entry?.amount))}" data-formula-autocomplete="all">
       <button type="button" class="fallout-maw-icon-delete-button" data-action="deleteDamageEntry" title="${escapeHtml(game.i18n.localize("FALLOUTMAW.Common.Delete"))}"><i class="fa-solid fa-trash"></i></button>
     </div>
   `;
+}
+
+function normalizeDamageFormula(value) {
+  return String(value ?? "0").trim() || "0";
 }
 
 function escapeHtml(value) {

@@ -1128,39 +1128,39 @@
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.DamageSourceDamage"}}</span>
-        <input type="number" name="system.functions.damageSource.damage" value="{{system.functions.damageSource.damage}}" min="0" step="1">
+        <input type="text" name="system.functions.damageSource.damage" value="{{system.functions.damageSource.damage}}" data-formula-autocomplete="all">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponPellets"}}</span>
-        <input type="number" name="system.functions.damageSource.pellets" value="{{system.functions.damageSource.pellets}}" min="1" step="1">
+        <input type="text" name="system.functions.damageSource.pellets" value="{{system.functions.damageSource.pellets}}" data-formula-autocomplete="all">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponAccuracyBonus"}}</span>
-        <input type="number" name="system.functions.damageSource.accuracyBonus" value="{{system.functions.damageSource.accuracyBonus}}" step="1">
+        <input type="text" name="system.functions.damageSource.accuracyBonus" value="{{system.functions.damageSource.accuracyBonus}}" data-formula-autocomplete="all">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponCriticalChanceModifier"}}</span>
-        <input type="number" name="system.functions.damageSource.criticalChanceModifier" value="{{system.functions.damageSource.criticalChanceModifier}}" step="1">
+        <input type="text" name="system.functions.damageSource.criticalChanceModifier" value="{{system.functions.damageSource.criticalChanceModifier}}" data-formula-autocomplete="all">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponCriticalDamagePercent"}}</span>
-        <input type="number" name="system.functions.damageSource.criticalDamagePercent" value="{{system.functions.damageSource.criticalDamagePercent}}" step="1">
+        <input type="text" name="system.functions.damageSource.criticalDamagePercent" value="{{system.functions.damageSource.criticalDamagePercent}}" data-formula-autocomplete="all">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponMaxRange"}}</span>
-        <input type="number" name="system.functions.damageSource.maxRangeMeters" value="{{system.functions.damageSource.maxRangeMeters}}" min="0" step="1">
+        <input type="text" name="system.functions.damageSource.maxRangeMeters" value="{{system.functions.damageSource.maxRangeMeters}}" data-formula-autocomplete="all">
       </label>
       <label class="fallout-maw-split-number-field">
         <span>{{localize "FALLOUTMAW.Item.WeaponEffectiveRange"}}</span>
         <div>
-          <input type="number" name="system.functions.damageSource.effectiveRange.value" value="{{system.functions.damageSource.effectiveRange.value}}" min="0" step="1">
+          <input type="text" name="system.functions.damageSource.effectiveRange.value" value="{{system.functions.damageSource.effectiveRange.value}}" data-formula-autocomplete="all">
           <strong>/</strong>
-          <input type="number" name="system.functions.damageSource.effectiveRange.max" value="{{system.functions.damageSource.effectiveRange.max}}" min="0" step="1">
+          <input type="text" name="system.functions.damageSource.effectiveRange.max" value="{{system.functions.damageSource.effectiveRange.max}}" data-formula-autocomplete="all">
         </div>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponPenetration"}}</span>
-        <input type="number" name="system.functions.damageSource.penetration" value="{{system.functions.damageSource.penetration}}" min="0" step="1">
+        <input type="text" name="system.functions.damageSource.penetration" value="{{system.functions.damageSource.penetration}}" data-formula-autocomplete="all">
       </label>
     </div>
     <div class="fallout-maw-panel-header">
@@ -1169,7 +1169,7 @@
     <div class="fallout-maw-list-grid three-columns">
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponVolleyDamageRadius"}}</span>
-        <input type="number" name="system.functions.damageSource.volley.damageRadius" value="{{system.functions.damageSource.volley.damageRadius}}" min="0" step="1">
+        <input type="text" name="system.functions.damageSource.volley.damageRadius" value="{{system.functions.damageSource.volley.damageRadius}}" data-formula-autocomplete="all">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponExplosionAnimation"}}</span>
@@ -1193,7 +1193,7 @@
           <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
           {{/each}}
         </select>
-        <input type="number" name="system.functions.damageSource.volley.regionDamageEntries.{{index}}.amount" value="{{amount}}" min="0" step="1" data-damage-source-volley-region-damage-amount>
+        <input type="text" name="system.functions.damageSource.volley.regionDamageEntries.{{index}}.amount" value="{{amount}}" data-formula-autocomplete="all" data-damage-source-volley-region-damage-amount>
         <button type="button" class="fallout-maw-icon-delete-button" data-delete-damage-source-volley-region-damage="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
       </div>
       {{else}}
@@ -1203,19 +1203,19 @@
     <div class="fallout-maw-list-grid three-columns">
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadius"}}</span>
-        <input type="number" name="system.functions.damageSource.volley.regionRadius" value="{{system.functions.damageSource.volley.regionRadius}}" min="0" step="1">
+        <input type="text" name="system.functions.damageSource.volley.regionRadius" value="{{system.functions.damageSource.volley.regionRadius}}" data-formula-autocomplete="all">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDuration"}}</span>
-        <input type="number" name="system.functions.damageSource.volley.regionDurationSeconds" value="{{system.functions.damageSource.volley.regionDurationSeconds}}" min="0" step="1">
+        <input type="text" name="system.functions.damageSource.volley.regionDurationSeconds" value="{{system.functions.damageSource.volley.regionDurationSeconds}}" data-formula-autocomplete="all">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDelay"}}</span>
-        <input type="number" name="system.functions.damageSource.volley.regionDelaySeconds" value="{{system.functions.damageSource.volley.regionDelaySeconds}}" min="0" step="1">
+        <input type="text" name="system.functions.damageSource.volley.regionDelaySeconds" value="{{system.functions.damageSource.volley.regionDelaySeconds}}" data-formula-autocomplete="all">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadiusDelta"}}</span>
-        <input type="number" name="system.functions.damageSource.volley.regionRadiusDeltaMeters" value="{{system.functions.damageSource.volley.regionRadiusDeltaMeters}}" step="1">
+        <input type="text" name="system.functions.damageSource.volley.regionRadiusDeltaMeters" value="{{system.functions.damageSource.volley.regionRadiusDeltaMeters}}" data-formula-autocomplete="all">
       </label>
     </div>
     <div class="fallout-maw-panel-header">
@@ -1443,11 +1443,11 @@
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponDamage"}}</span>
-        <input type="number" name="{{path}}.damage" value="{{weaponData.damage}}" min="0" step="1" {{#if usesDamageSource}}disabled{{/if}}>
+        <input type="text" name="{{path}}.damage" value="{{weaponData.damage}}" data-formula-autocomplete="all" {{#if usesDamageSource}}disabled{{/if}}>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponPellets"}}</span>
-        <input type="number" name="{{path}}.pellets" value="{{weaponData.pellets}}" min="1" step="1" {{#if usesDamageSource}}disabled{{/if}}>
+        <input type="text" name="{{path}}.pellets" value="{{weaponData.pellets}}" data-formula-autocomplete="all" {{#if usesDamageSource}}disabled{{/if}}>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponSkill"}}</span>
@@ -1459,31 +1459,31 @@
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponAccuracyBonus"}}</span>
-        <input type="number" name="{{path}}.accuracyBonus" value="{{weaponData.accuracyBonus}}" step="1">
+        <input type="text" name="{{path}}.accuracyBonus" value="{{weaponData.accuracyBonus}}" data-formula-autocomplete="all">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponCriticalChanceModifier"}}</span>
-        <input type="number" name="{{path}}.criticalChanceModifier" value="{{weaponData.criticalChanceModifier}}" step="1">
+        <input type="text" name="{{path}}.criticalChanceModifier" value="{{weaponData.criticalChanceModifier}}" data-formula-autocomplete="all">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponCriticalDamagePercent"}}</span>
-        <input type="number" name="{{path}}.criticalDamagePercent" value="{{weaponData.criticalDamagePercent}}" min="0" step="1">
+        <input type="text" name="{{path}}.criticalDamagePercent" value="{{weaponData.criticalDamagePercent}}" data-formula-autocomplete="all">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponMaxRange"}}</span>
-        <input type="number" name="{{path}}.maxRangeMeters" value="{{weaponData.maxRangeMeters}}" min="0" step="1">
+        <input type="text" name="{{path}}.maxRangeMeters" value="{{weaponData.maxRangeMeters}}" data-formula-autocomplete="all">
       </label>
       <label class="fallout-maw-split-number-field">
         <span>{{localize "FALLOUTMAW.Item.WeaponEffectiveRange"}}</span>
         <div>
-          <input type="number" name="{{path}}.effectiveRange.value" value="{{weaponData.effectiveRange.value}}" min="0" step="1">
+          <input type="text" name="{{path}}.effectiveRange.value" value="{{weaponData.effectiveRange.value}}" data-formula-autocomplete="all">
           <strong>/</strong>
-          <input type="number" name="{{path}}.effectiveRange.max" value="{{weaponData.effectiveRange.max}}" min="0" step="1">
+          <input type="text" name="{{path}}.effectiveRange.max" value="{{weaponData.effectiveRange.max}}" data-formula-autocomplete="all">
         </div>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponPenetration"}}</span>
-        <input type="number" name="{{path}}.penetration" value="{{weaponData.penetration}}" min="0" step="1">
+        <input type="text" name="{{path}}.penetration" value="{{weaponData.penetration}}" data-formula-autocomplete="all">
       </label>
       {{#if hasMagazineCost}}
         <label class="fallout-maw-split-number-field">
@@ -1720,7 +1720,7 @@
         <div class="fallout-maw-list-grid three-columns">
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyDamageRadius"}}</span>
-            <input type="number" name="{{../path}}.volley.damageRadius" value="{{volleyDamageRadius}}" min="0" step="1" {{#if ../usesDamageSource}}disabled{{/if}}>
+            <input type="text" name="{{../path}}.volley.damageRadius" value="{{volleyDamageRadius}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
           </label>
         </div>
         <div class="fallout-maw-panel-header">
@@ -1740,7 +1740,7 @@
               <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
               {{/each}}
             </select>
-            <input type="number" name="{{../../path}}.volley.regionDamageEntries.{{index}}.amount" value="{{amount}}" min="0" step="1" data-volley-region-damage-amount {{#if ../../usesDamageSource}}disabled{{/if}}>
+            <input type="text" name="{{../../path}}.volley.regionDamageEntries.{{index}}.amount" value="{{amount}}" data-formula-autocomplete="all" data-volley-region-damage-amount {{#if ../../usesDamageSource}}disabled{{/if}}>
             <button type="button" class="fallout-maw-icon-delete-button" data-delete-volley-region-damage="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}" {{#if ../../usesDamageSource}}disabled{{/if}}><i class="fa-solid fa-trash"></i></button>
           </div>
           {{else}}
@@ -1750,19 +1750,19 @@
         <div class="fallout-maw-list-grid three-columns">
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadius"}}</span>
-            <input type="number" name="{{../path}}.volley.regionRadius" value="{{volleyRegionRadius}}" min="0" step="1" {{#if ../usesDamageSource}}disabled{{/if}}>
+            <input type="text" name="{{../path}}.volley.regionRadius" value="{{volleyRegionRadius}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
           </label>
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDuration"}}</span>
-            <input type="number" name="{{../path}}.volley.regionDurationSeconds" value="{{volleyRegionDurationSeconds}}" min="0" step="1" {{#if ../usesDamageSource}}disabled{{/if}}>
+            <input type="text" name="{{../path}}.volley.regionDurationSeconds" value="{{volleyRegionDurationSeconds}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
           </label>
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDelay"}}</span>
-            <input type="number" name="{{../path}}.volley.regionDelaySeconds" value="{{volleyRegionDelaySeconds}}" min="0" step="1" {{#if ../usesDamageSource}}disabled{{/if}}>
+            <input type="text" name="{{../path}}.volley.regionDelaySeconds" value="{{volleyRegionDelaySeconds}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
           </label>
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadiusDelta"}}</span>
-            <input type="number" name="{{../path}}.volley.regionRadiusDeltaMeters" value="{{volleyRegionRadiusDeltaMeters}}" step="1" {{#if ../usesDamageSource}}disabled{{/if}}>
+            <input type="text" name="{{../path}}.volley.regionRadiusDeltaMeters" value="{{volleyRegionRadiusDeltaMeters}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
           </label>
         </div>
         {{else}}

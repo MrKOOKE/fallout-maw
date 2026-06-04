@@ -16,6 +16,7 @@ import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
 import { getStealthAttackModifiers, revealActorFromStealth } from "../stealth/index.mjs";
 import { getWeaponActionBlockState } from "../abilities/runtime-state.mjs";
 import { requestPushKnockback } from "./active-actions.mjs";
+import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 
 const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
 const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
@@ -1732,19 +1733,19 @@ function applyDamageSourceWeaponModifiers(weaponData = {}) {
   return {
     ...weaponData,
     damage: source.damage,
-    pellets: Math.max(1, toInteger(source.pellets) || 1),
+    pellets: source.pellets,
     damageTypeKey: source.damageTypeKey,
     damageTypes: source.damageTypes,
     attackAnimationKey: String(source.attackAnimationKey ?? ""),
-    accuracyBonus: toInteger(weaponData.accuracyBonus) + toInteger(source.accuracyBonus),
-    criticalChanceModifier: toInteger(weaponData.criticalChanceModifier) + toInteger(source.criticalChanceModifier),
-    criticalDamagePercent: Math.max(0, toInteger(weaponData.criticalDamagePercent) + toInteger(source.criticalDamagePercent)),
-    maxRangeMeters: Math.max(0, Number(weaponData.maxRangeMeters) + Number(source.maxRangeMeters || 0)),
+    accuracyBonus: addFormulaTexts(weaponData.accuracyBonus, source.accuracyBonus),
+    criticalChanceModifier: addFormulaTexts(weaponData.criticalChanceModifier, source.criticalChanceModifier),
+    criticalDamagePercent: addFormulaTexts(weaponData.criticalDamagePercent, source.criticalDamagePercent),
+    maxRangeMeters: addFormulaTexts(weaponData.maxRangeMeters, source.maxRangeMeters),
     effectiveRange: {
-      value: Math.max(0, Number(weaponData.effectiveRange?.value) + Number(source.effectiveRange?.value || 0)),
-      max: Math.max(0, Number(weaponData.effectiveRange?.max) + Number(source.effectiveRange?.max || 0))
+      value: addFormulaTexts(weaponData.effectiveRange?.value, source.effectiveRange?.value),
+      max: addFormulaTexts(weaponData.effectiveRange?.max, source.effectiveRange?.max)
     },
-    penetration: Math.max(0, toInteger(weaponData.penetration) + toInteger(source.penetration)),
+    penetration: addFormulaTexts(weaponData.penetration, source.penetration),
     volley: mergeDamageSourceVolleyData(weaponData.volley, source.volley)
   };
 }
@@ -1752,14 +1753,14 @@ function applyDamageSourceWeaponModifiers(weaponData = {}) {
 function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
   return {
     ...(weaponVolley ?? {}),
-    damageRadius: Math.max(0, Number(sourceVolley?.damageRadius) || 0),
-    regionRadius: Math.max(0, Number(sourceVolley?.regionRadius) || 0),
+    damageRadius: normalizeFormulaText(sourceVolley?.damageRadius),
+    regionRadius: normalizeFormulaText(sourceVolley?.regionRadius),
     regionDamageEntries: Array.isArray(sourceVolley?.regionDamageEntries)
       ? foundry.utils.deepClone(sourceVolley.regionDamageEntries)
       : [],
-    regionDurationSeconds: Math.max(0, toInteger(sourceVolley?.regionDurationSeconds)),
-    regionDelaySeconds: Math.max(0, toInteger(sourceVolley?.regionDelaySeconds)),
-    regionRadiusDeltaMeters: Number(sourceVolley?.regionRadiusDeltaMeters) || 0,
+    regionDurationSeconds: normalizeFormulaText(sourceVolley?.regionDurationSeconds),
+    regionDelaySeconds: normalizeFormulaText(sourceVolley?.regionDelaySeconds),
+    regionRadiusDeltaMeters: normalizeFormulaText(sourceVolley?.regionRadiusDeltaMeters),
     explosionAnimationKey: String(sourceVolley?.explosionAnimationKey ?? "")
   };
 }
@@ -2059,9 +2060,9 @@ async function createVolleyDamageRegionNow(regionData = {}) {
   const damageEntries = (Array.isArray(regionData.damageEntries) ? regionData.damageEntries : [])
     .map(entry => ({
       damageTypeKey: String(entry?.damageTypeKey ?? "").trim(),
-      amount: Math.max(0, toInteger(entry?.amount))
+      amount: String(entry?.amount ?? "0").trim() || "0"
     }))
-    .filter(entry => entry.damageTypeKey && entry.amount > 0);
+    .filter(entry => entry.damageTypeKey && isFormulaTextConfigured(entry.amount));
   if (!radiusPixels || !damageEntries.length) return null;
 
   const durationSeconds = Math.max(0, toInteger(regionData.durationSeconds));
@@ -2276,12 +2277,18 @@ function isSameOptionalPoint(current, previous) {
 
 function getActionAttackCount(weapon, actionKey, weaponFunctionId = "") {
   if (actionKey !== "burst") return 1;
-  return Math.max(1, toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.burst?.count));
+  return Math.max(1, evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.burst?.count, {
+    minimum: 1,
+    context: "burst count"
+  }) || 1);
 }
 
 function getWeaponBurstDifficultyPerShot(weapon, weaponFunctionId = "") {
-  const value = Number(getWeaponAttackData(weapon, weaponFunctionId)?.burst?.difficultyPerShot);
-  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 10;
+  return evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.burst?.difficultyPerShot, {
+    fallback: 10,
+    minimum: 0,
+    context: "burst difficulty"
+  });
 }
 
 function getEffectiveWeaponBurstDifficultyPerShot(weapon, weaponFunctionId = "", actor = null) {
@@ -2296,7 +2303,11 @@ function getBurstShotDifficultyBonus(weapon, actionKey, attackIndex = 0, weaponF
 }
 
 function getWeaponPelletCount(weapon, weaponFunctionId = "") {
-  return Math.max(1, toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.pellets) || 1);
+  return Math.max(1, evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.pellets, {
+    fallback: 1,
+    minimum: 1,
+    context: "pellets"
+  }) || 1);
 }
 
 function getBurstProjectileCount(attackCount = 1, pelletCount = 1) {
@@ -2352,8 +2363,11 @@ function isCombatActionPointSpendingActive() {
 }
 
 function getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId = "") {
-  const value = Number(getWeaponAttackData(weapon, weaponFunctionId)?.[actionKey]?.actionPointCost);
-  const baseCost = Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : DEFAULT_WEAPON_ACTION_POINT_COST;
+  const baseCost = evaluateActorFormula(getWeaponAttackData(weapon, weaponFunctionId)?.[actionKey]?.actionPointCost, actor, {
+    fallback: DEFAULT_WEAPON_ACTION_POINT_COST,
+    minimum: 0,
+    context: "weapon action point cost"
+  });
   const modifiedCost = applyDamageCostModifier(baseCost, getDamageCostModifierState(actor, { actionKey }).action);
   return Math.max(0, Math.ceil(modifiedCost + getActorPostureWeaponActionPointCostBonus(actor)));
 }
@@ -2479,7 +2493,10 @@ function getAttackGeometry(weapon, actionKey, attackerToken, origin, pointer, we
 }
 
 function getVolleyAttackGeometry(weapon, attackerToken, origin, pointer, weaponFunctionId = "") {
-  const maxDistancePixels = metersToPixels(Number(getWeaponAttackData(weapon, weaponFunctionId)?.maxRangeMeters) || 0);
+  const maxDistancePixels = metersToPixels(evaluateActorFormula(getWeaponAttackData(weapon, weaponFunctionId)?.maxRangeMeters, attackerToken?.actor, {
+    minimum: 0,
+    context: "volley max range"
+  }));
   const radiusPixels = metersToPixels(getVolleyDamageRadius(weapon, weaponFunctionId));
   const dx = pointer.x - origin.x;
   const dy = pointer.y - origin.y;
@@ -2517,10 +2534,16 @@ function getActionMaxRangeMeters(weapon, actionKey, weaponFunctionId = "") {
   if (actionKey === PUSH_ACTION_KEY) {
     const actionData = weaponData?.push ?? {};
     const hasValue = Object.hasOwn(actionData, "maxRangeMeters");
-    const value = Number(actionData.maxRangeMeters);
-    return Number.isFinite(value) ? Math.max(0, value) : (hasValue ? 0 : DEFAULT_WEAPON_PUSH_MAX_RANGE_METERS);
+    return evaluateWeaponFormula(weapon, actionData.maxRangeMeters, {
+      fallback: hasValue ? 0 : DEFAULT_WEAPON_PUSH_MAX_RANGE_METERS,
+      minimum: 0,
+      context: "push max range"
+    });
   }
-  return Math.max(0, Number(weaponData?.maxRangeMeters) || 0);
+  return evaluateWeaponFormula(weapon, weaponData?.maxRangeMeters, {
+    minimum: 0,
+    context: "weapon max range"
+  });
 }
 
 function metersToPixels(meters) {
@@ -2984,7 +3007,11 @@ function getPointElevationAtDistance(originElevation, targetElevation, distance,
 }
 
 function getWeaponDamage(weapon, weaponFunctionId = "") {
-  const baseDamage = Math.max(0, toInteger(getEffectiveWeaponDamageData(weapon, weaponFunctionId)?.damage));
+  const actor = getWeaponOwnerActor(weapon);
+  const baseDamage = evaluateActorFormula(getEffectiveWeaponDamageData(weapon, weaponFunctionId)?.damage, actor, {
+    minimum: 0,
+    context: `${weapon?.name ?? "weapon"} damage`
+  });
   const proficiencyModifier = getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "damage");
   const modifiedDamage = Math.round(baseDamage * Math.max(0, 100 + proficiencyModifier) / 100);
   return Math.max(0, Math.floor(modifiedDamage * getWeaponConditionWeakeningRatio(weapon)));
@@ -3002,16 +3029,30 @@ function getWeaponResourceCosts(weaponData = {}) {
 }
 
 function getVolleyDamageRadius(weapon, weaponFunctionId = "") {
-  return Math.max(0, Number(getWeaponAttackData(weapon, weaponFunctionId)?.volley?.damageRadius) || 0);
+  return evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.volley?.damageRadius, {
+    minimum: 0,
+    context: "volley damage radius"
+  });
 }
 
 function getVolleyRegionSettings(weapon, weaponFunctionId = "") {
   const volley = getWeaponAttackData(weapon, weaponFunctionId)?.volley ?? {};
-  const radiusMeters = Math.max(0, Number(volley.regionRadius) || 0);
-  const damageEntries = getVolleyRegionDamageEntries(volley);
-  const durationSeconds = Math.max(0, toInteger(volley.regionDurationSeconds));
-  const delaySeconds = Math.max(0, toInteger(volley.regionDelaySeconds));
-  const radiusDeltaMeters = Number(volley.regionRadiusDeltaMeters) || 0;
+  const radiusMeters = evaluateWeaponFormula(weapon, volley.regionRadius, {
+    minimum: 0,
+    context: "volley region radius"
+  });
+  const damageEntries = getVolleyRegionDamageEntries(volley, weapon);
+  const durationSeconds = evaluateWeaponFormula(weapon, volley.regionDurationSeconds, {
+    minimum: 0,
+    context: "volley region duration"
+  });
+  const delaySeconds = evaluateWeaponFormula(weapon, volley.regionDelaySeconds, {
+    minimum: 0,
+    context: "volley region delay"
+  });
+  const radiusDeltaMeters = evaluateWeaponFormula(weapon, volley.regionRadiusDeltaMeters, {
+    context: "volley region radius delta"
+  });
   return {
     enabled: radiusMeters > 0 && damageEntries.length > 0 && (durationSeconds > 0 || delaySeconds > 0),
     radiusMeters,
@@ -3022,12 +3063,16 @@ function getVolleyRegionSettings(weapon, weaponFunctionId = "") {
   };
 }
 
-function getVolleyRegionDamageEntries(volley = {}) {
+function getVolleyRegionDamageEntries(volley = {}, weapon = null) {
   const entries = Array.isArray(volley.regionDamageEntries) ? volley.regionDamageEntries : [];
+  const actor = getWeaponOwnerActor(weapon);
   return entries
     .map(entry => ({
       damageTypeKey: String(entry?.damageTypeKey ?? "").trim(),
-      amount: Math.max(0, toInteger(entry?.amount))
+      amount: evaluateActorFormula(entry?.amount, actor, {
+        minimum: 0,
+        context: "volley region damage"
+      })
     }))
     .filter(entry => entry.damageTypeKey && entry.amount > 0);
 }
@@ -3248,7 +3293,9 @@ function estimateDamageRequestGroup(requests = []) {
 function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "") {
   const actor = getWeaponOwnerActor(weapon);
   const stealth = getStealthAttackModifiers(actor);
-  const modifier = toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier)
+  const modifier = evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier, {
+    context: "critical chance"
+  })
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance")
     + stealth.criticalChanceBonus
     - getWeaponConditionCritChancePenalty(weapon);
@@ -3264,8 +3311,12 @@ function getCriticalDamageAmount(weapon, amount, outcome, weaponFunctionId = "")
   const stealthDamage = Math.floor(baseAmount * Math.max(0, toInteger(stealth.damageBonusPercent)) / 100);
   const modifiedBaseAmount = baseAmount + stealthDamage;
   if (!isCriticalSuccessAttack(outcome)) return modifiedBaseAmount;
-  const rawPercent = Number(getWeaponAttackData(weapon, weaponFunctionId)?.criticalDamagePercent);
-  const percent = Math.max(0, (Number.isFinite(rawPercent) ? Math.max(0, rawPercent) : 150)
+  const rawPercent = evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.criticalDamagePercent, {
+    fallback: 150,
+    minimum: 0,
+    context: "critical damage percent"
+  });
+  const percent = Math.max(0, rawPercent
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalDamage"));
   return Math.round(modifiedBaseAmount * percent / 100);
 }
@@ -3299,8 +3350,15 @@ function getEffectiveRangeDifficultyBonusForDistance(weaponData = {}, distanceMe
 }
 
 function getEffectiveRangeBounds(effectiveRange = {}) {
-  const first = Math.max(0, Number(effectiveRange?.value) || 0);
-  const second = Math.max(0, Number(effectiveRange?.max) || 0);
+  const actor = activeAttack?.token?.actor ?? null;
+  const first = evaluateActorFormula(effectiveRange?.value, actor, {
+    minimum: 0,
+    context: "effective range"
+  });
+  const second = evaluateActorFormula(effectiveRange?.max, actor, {
+    minimum: 0,
+    context: "effective range max"
+  });
   if (first <= 0 && second <= 0) return null;
   if (second <= 0) return { min: 0, max: first };
   return {
@@ -3340,18 +3398,24 @@ function getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId
 }
 
 function getWeaponAccuracyModifier(weapon, weaponFunctionId = "") {
-  return toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.accuracyBonus)
+  return evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.accuracyBonus, {
+    context: "weapon accuracy"
+  })
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "accuracy")
     - getWeaponConditionAccuracyPenalty(weapon);
 }
 
 function getWeaponPushAccuracyModifier(weapon, weaponFunctionId = "") {
   return getWeaponAccuracyModifier(weapon, weaponFunctionId)
-    + toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.push?.accuracyModifier);
+    + evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.push?.accuracyModifier, {
+      context: "push accuracy"
+    });
 }
 
 function getWeaponPushDifficultyModifier(weapon, weaponFunctionId = "") {
-  return toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.push?.pushDifficultyModifier);
+  return evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.push?.pushDifficultyModifier, {
+    context: "push difficulty"
+  });
 }
 
 function getActorSkillValue(actor, skillKey = "") {
@@ -3395,12 +3459,32 @@ function getWeaponOwnerActor(weapon) {
   return parent?.documentName === "Actor" ? parent : null;
 }
 
+function evaluateWeaponFormula(weapon, formula, options = {}) {
+  return evaluateActorFormula(formula, getWeaponOwnerActor(weapon), options);
+}
+
+function normalizeFormulaText(value, fallback = "0") {
+  return String(value ?? fallback).trim() || fallback;
+}
+
+function addFormulaTexts(left, right) {
+  const leftText = normalizeFormulaText(left);
+  const rightText = normalizeFormulaText(right);
+  if (leftText === "0") return rightText;
+  if (rightText === "0") return leftText;
+  return `(${leftText}) + (${rightText})`;
+}
+
 function getAttackModeCriticalCheckModifiers(weapon, actionKey, mode, weaponFunctionId = "") {
   const actor = getWeaponOwnerActor(weapon);
   const stealth = getStealthAttackModifiers(actor);
-  const modifier = toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier)
+  const modifier = evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier, {
+    context: "critical chance"
+  })
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance")
-    + toInteger(getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.criticalChanceModifier)
+    + evaluateWeaponFormula(weapon, getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.criticalChanceModifier, {
+      context: "attack mode critical chance"
+    })
     + stealth.criticalChanceBonus
     - getWeaponConditionCritChancePenalty(weapon);
   return {
@@ -3410,7 +3494,9 @@ function getAttackModeCriticalCheckModifiers(weapon, actionKey, mode, weaponFunc
 }
 
 function getAttackModeDamage(weapon, actionKey, mode, baseDamage, weaponFunctionId = "") {
-  const modifier = toInteger(getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.damagePercentModifier);
+  const modifier = evaluateWeaponFormula(weapon, getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.damagePercentModifier, {
+    context: "attack mode damage percent"
+  });
   return Math.max(0, Math.round(Math.max(0, Number(baseDamage) || 0) * Math.max(0, 100 + modifier) / 100));
 }
 
@@ -3434,7 +3520,10 @@ function getWeaponConditionCritChancePenalty(weapon) {
 }
 
 function getWeaponPenetrationPower(weapon, weaponFunctionId = "", { actor = null, actionKey = "" } = {}) {
-  const base = Math.max(0, toInteger(getWeaponAttackData(weapon, weaponFunctionId)?.penetration));
+  const base = evaluateActorFormula(getWeaponAttackData(weapon, weaponFunctionId)?.penetration, actor ?? getWeaponOwnerActor(weapon), {
+    minimum: 0,
+    context: "weapon penetration"
+  });
   const modifier = collectActionPenetrationModifier(actor, actionKey);
   let value = base;
   if (modifier.override !== null && modifier.override !== undefined && modifier.override !== "") value = Number(modifier.override);

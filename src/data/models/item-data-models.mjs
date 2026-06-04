@@ -222,34 +222,34 @@ function damageSourceFunctionField() {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
     name: new StringField({ required: true, blank: true, initial: "" }),
-    damage: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-    pellets: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+    damage: new StringField({ required: true, blank: true, initial: "0" }),
+    pellets: new StringField({ required: true, blank: true, initial: "1" }),
     damageTypeKey: new StringField({ required: true, blank: false, initial: "firearm" }),
     damageTypes: new ArrayField(weaponDamageTypeField(), { required: true, initial: [{ key: "firearm", percent: 100 }] }),
     attackAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
     attackSoundPath: new StringField({ required: true, blank: true, initial: "" }),
     attackAnimationDelayMs: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-    accuracyBonus: new NumberField({ required: true, integer: true, initial: 0 }),
-    criticalChanceModifier: new NumberField({ required: true, integer: true, initial: 0 }),
-    criticalDamagePercent: new NumberField({ required: true, integer: true, initial: 0 }),
-    maxRangeMeters: new NumberField({ required: true, min: 0, initial: 0 }),
+    accuracyBonus: new StringField({ required: true, blank: true, initial: "0" }),
+    criticalChanceModifier: new StringField({ required: true, blank: true, initial: "0" }),
+    criticalDamagePercent: new StringField({ required: true, blank: true, initial: "0" }),
+    maxRangeMeters: new StringField({ required: true, blank: true, initial: "0" }),
     effectiveRange: new SchemaField({
-      value: new NumberField({ required: true, min: 0, initial: 0 }),
-      max: new NumberField({ required: true, min: 0, initial: 0 })
+      value: new StringField({ required: true, blank: true, initial: "0" }),
+      max: new StringField({ required: true, blank: true, initial: "0" })
     }),
-    penetration: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    penetration: new StringField({ required: true, blank: true, initial: "0" }),
     volley: damageSourceVolleyField()
   });
 }
 
 function damageSourceVolleyField() {
   return new SchemaField({
-    damageRadius: new NumberField({ required: true, min: 0, initial: 0 }),
-    regionRadius: new NumberField({ required: true, min: 0, initial: 0 }),
+    damageRadius: new StringField({ required: true, blank: true, initial: "0" }),
+    regionRadius: new StringField({ required: true, blank: true, initial: "0" }),
     regionDamageEntries: new ArrayField(weaponDamageEntryField(), { required: true, initial: [] }),
-    regionDurationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-    regionDelaySeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-    regionRadiusDeltaMeters: new NumberField({ required: true, initial: 0 }),
+    regionDurationSeconds: new StringField({ required: true, blank: true, initial: "0" }),
+    regionDelaySeconds: new StringField({ required: true, blank: true, initial: "0" }),
+    regionRadiusDeltaMeters: new StringField({ required: true, blank: true, initial: "0" }),
     explosionAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
     explosionSoundPath: new StringField({ required: true, blank: true, initial: "" })
   });
@@ -259,8 +259,8 @@ function weaponFunctionField({ named = false } = {}) {
   const schema = {
     enabled: new BooleanField({ required: true, initial: false }),
     damageMode: new StringField({ required: true, blank: false, choices: ["manual", "source"], initial: "manual" }),
-    damage: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-    pellets: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+    damage: new StringField({ required: true, blank: true, initial: "0" }),
+    pellets: new StringField({ required: true, blank: true, initial: "1" }),
     damageTypeKey: new StringField({ required: true, blank: false, initial: "firearm" }),
     damageTypes: new ArrayField(weaponDamageTypeField(), { required: true, initial: [{ key: "firearm", percent: 100 }] }),
     attackAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
@@ -268,16 +268,16 @@ function weaponFunctionField({ named = false } = {}) {
     attackAnimationDelayMs: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     proficiencyKey: new StringField({ required: true, blank: true, initial: "pistol" }),
     skillKey: new StringField({ required: true, blank: false, initial: "rangedCombat" }),
-    accuracyBonus: new NumberField({ required: true, integer: true, initial: 0 }),
-    criticalChanceModifier: new NumberField({ required: true, integer: true, initial: 0 }),
-    criticalDamagePercent: new NumberField({ required: true, integer: true, min: 0, initial: 150 }),
+    accuracyBonus: new StringField({ required: true, blank: true, initial: "0" }),
+    criticalChanceModifier: new StringField({ required: true, blank: true, initial: "0" }),
+    criticalDamagePercent: new StringField({ required: true, blank: true, initial: "150" }),
     attackConeDegrees: new NumberField({ required: true, min: 0, initial: DEFAULT_WEAPON_ATTACK_CONE_DEGREES }),
-    maxRangeMeters: new NumberField({ required: true, min: 0, initial: 0 }),
+    maxRangeMeters: new StringField({ required: true, blank: true, initial: "0" }),
     effectiveRange: new SchemaField({
-      value: new NumberField({ required: true, min: 0, initial: 0 }),
-      max: new NumberField({ required: true, min: 0, initial: 0 })
+      value: new StringField({ required: true, blank: true, initial: "0" }),
+      max: new StringField({ required: true, blank: true, initial: "0" })
     }),
-    penetration: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    penetration: new StringField({ required: true, blank: true, initial: "0" }),
     magazine: new SchemaField({
       value: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
       max: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
@@ -316,12 +316,12 @@ function weaponFunctionField({ named = false } = {}) {
     volley: new SchemaField({
       name: new StringField({ required: true, blank: true, initial: "" }),
       actionPointCost: new NumberField({ required: true, integer: true, min: 0, initial: DEFAULT_WEAPON_ACTION_POINT_COST }),
-      damageRadius: new NumberField({ required: true, min: 0, initial: 0 }),
-      regionRadius: new NumberField({ required: true, min: 0, initial: 0 }),
+      damageRadius: new StringField({ required: true, blank: true, initial: "0" }),
+      regionRadius: new StringField({ required: true, blank: true, initial: "0" }),
       regionDamageEntries: new ArrayField(weaponDamageEntryField(), { required: true, initial: [] }),
-      regionDurationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-      regionDelaySeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
-      regionRadiusDeltaMeters: new NumberField({ required: true, initial: 0 }),
+      regionDurationSeconds: new StringField({ required: true, blank: true, initial: "0" }),
+      regionDelaySeconds: new StringField({ required: true, blank: true, initial: "0" }),
+      regionRadiusDeltaMeters: new StringField({ required: true, blank: true, initial: "0" }),
       explosionAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
       explosionSoundPath: new StringField({ required: true, blank: true, initial: "" }),
       criticalFailureConsequences: new ArrayField(weaponCriticalFailureConsequenceField(), { required: true, initial: [] })
@@ -405,7 +405,7 @@ function weaponModuleSlotField() {
 function weaponDamageEntryField() {
   return new SchemaField({
     damageTypeKey: new StringField({ required: true, blank: true, initial: "firearm" }),
-    amount: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+    amount: new StringField({ required: true, blank: true, initial: "0" })
   });
 }
 

@@ -1,5 +1,6 @@
 import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.mjs";
 import { activateDescriptionFormulaAutocomplete } from "../apps/description-formula-autocomplete.mjs";
+import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getItemCategorySettings, getNeedSettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { getEquipmentSlotSelectionKey, groupRaceEquipmentSlotsBySet, groupRaceWeaponSlotsBySet } from "../utils/equipment-slots.mjs";
@@ -34,6 +35,7 @@ import {
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { buildAbilityAcquisitionChangeKeyTokens } from "../utils/ability-acquisition-change-keys.mjs";
 import { captureApplicationScrollPositions, restoreApplicationScrollPositions } from "../utils/application-scroll.mjs";
+import { isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
   getWeaponModuleSlots,
@@ -556,6 +558,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelector("[data-tool-function-key]")?.addEventListener("change", event => this.#onToolFunctionKeyChange(event));
     activateItemEffectKeyAutocompletes(this.element);
+    activateFormulaAutocomplete(this.element, {
+      characteristics: getCharacteristicSettings(),
+      skills: getSkillSettings()
+    });
     activateDescriptionFormulaAutocomplete(this.element);
     this.element?.querySelectorAll("[data-add-weapon-special-property]").forEach(button => {
       button.addEventListener("click", event => this.#onAddWeaponSpecialProperty(event));
@@ -2785,7 +2791,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const damageTypeKey = damageTypes.find(type => !existingKeys.has(type.key))?.key
       ?? damageTypes.at(0)?.key
       ?? "firearm";
-    entries.push({ damageTypeKey, amount: 0 });
+    entries.push({ damageTypeKey, amount: "0" });
     return this.item.update({ "system.functions.damageSource.volley.regionDamageEntries": entries });
   }
 
@@ -2879,7 +2885,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const damageTypeKey = damageTypes.find(type => !existingKeys.has(type.key))?.key
       ?? damageTypes.at(0)?.key
       ?? "firearm";
-    entries.push({ damageTypeKey, amount: 0 });
+    entries.push({ damageTypeKey, amount: "0" });
     return this.item.update({ [`${path}.volley.regionDamageEntries`]: entries });
   }
 
@@ -3802,10 +3808,19 @@ function getWeaponDisplayData(weaponData = {}) {
   return {
     ...weaponData,
     damage: source.damage,
-    pellets: Math.max(1, toInteger(source.pellets) || 1),
+    pellets: normalizeDamageFormula(source.pellets || "1"),
     damageTypeKey: source.damageTypeKey,
     damageTypes: source.damageTypes,
     attackAnimationKey: String(source.attackAnimationKey ?? ""),
+    accuracyBonus: addFormulaTexts(weaponData.accuracyBonus, source.accuracyBonus),
+    criticalChanceModifier: addFormulaTexts(weaponData.criticalChanceModifier, source.criticalChanceModifier),
+    criticalDamagePercent: addFormulaTexts(weaponData.criticalDamagePercent, source.criticalDamagePercent),
+    maxRangeMeters: addFormulaTexts(weaponData.maxRangeMeters, source.maxRangeMeters),
+    effectiveRange: {
+      value: addFormulaTexts(weaponData.effectiveRange?.value, source.effectiveRange?.value),
+      max: addFormulaTexts(weaponData.effectiveRange?.max, source.effectiveRange?.max)
+    },
+    penetration: addFormulaTexts(weaponData.penetration, source.penetration),
     volley: mergeDamageSourceVolleyData(weaponData.volley, source.volley)
   };
 }
@@ -3813,16 +3828,24 @@ function getWeaponDisplayData(weaponData = {}) {
 function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
   return {
     ...(weaponVolley ?? {}),
-    damageRadius: Math.max(0, Number(sourceVolley?.damageRadius) || 0),
-    regionRadius: Math.max(0, Number(sourceVolley?.regionRadius) || 0),
+    damageRadius: normalizeDamageFormula(sourceVolley?.damageRadius),
+    regionRadius: normalizeDamageFormula(sourceVolley?.regionRadius),
     regionDamageEntries: Array.isArray(sourceVolley?.regionDamageEntries)
       ? foundry.utils.deepClone(sourceVolley.regionDamageEntries)
       : [],
-    regionDurationSeconds: Math.max(0, toInteger(sourceVolley?.regionDurationSeconds)),
-    regionDelaySeconds: Math.max(0, toInteger(sourceVolley?.regionDelaySeconds)),
-    regionRadiusDeltaMeters: Number(sourceVolley?.regionRadiusDeltaMeters) || 0,
+    regionDurationSeconds: normalizeDamageFormula(sourceVolley?.regionDurationSeconds),
+    regionDelaySeconds: normalizeDamageFormula(sourceVolley?.regionDelaySeconds),
+    regionRadiusDeltaMeters: normalizeDamageFormula(sourceVolley?.regionRadiusDeltaMeters),
     explosionAnimationKey: String(sourceVolley?.explosionAnimationKey ?? "")
   };
+}
+
+function addFormulaTexts(left, right) {
+  const leftText = normalizeDamageFormula(left);
+  const rightText = normalizeDamageFormula(right);
+  if (leftText === "0") return rightText;
+  if (rightText === "0") return leftText;
+  return `(${leftText}) + (${rightText})`;
 }
 
 function buildWeaponMagazineSourceItems(weaponData = {}) {
@@ -3926,7 +3949,7 @@ function buildVolleyRegionDamageRowsForData(entries = [], damageTypeSettings = [
   return normalizeVolleyRegionDamageEntries(entries).map((entry, index) => ({
     index,
     damageTypeKey: entry.damageTypeKey,
-    amount: Math.max(0, toInteger(entry.amount)),
+    amount: normalizeDamageFormula(entry.amount),
     choices: choices.map(damageType => ({
       value: damageType.key,
       label: damageType.label,
@@ -4042,12 +4065,12 @@ function buildWeaponActionChoicesForData(weaponData = {}, sourceWeaponData = {},
       pushDifficultyModifier: Number(actionData?.pushDifficultyModifier) || 0,
       burstCount: Math.max(1, Number(weaponData?.burst?.count) || 3),
       burstDifficultyPerShot: getWeaponBurstDifficultyPerShotForData(weaponData),
-      volleyDamageRadius: Math.max(0, Number(weaponData?.volley?.damageRadius) || 0),
-      volleyRegionRadius: Math.max(0, Number(weaponData?.volley?.regionRadius) || 0),
+      volleyDamageRadius: normalizeDamageFormula(weaponData?.volley?.damageRadius),
+      volleyRegionRadius: normalizeDamageFormula(weaponData?.volley?.regionRadius),
       volleyRegionDamageRows: buildVolleyRegionDamageRowsForData(weaponData?.volley?.regionDamageEntries, damageTypeSettings),
-      volleyRegionDurationSeconds: Math.max(0, Math.trunc(Number(weaponData?.volley?.regionDurationSeconds) || 0)),
-      volleyRegionDelaySeconds: Math.max(0, Math.trunc(Number(weaponData?.volley?.regionDelaySeconds) || 0)),
-      volleyRegionRadiusDeltaMeters: Number(weaponData?.volley?.regionRadiusDeltaMeters) || 0,
+      volleyRegionDurationSeconds: normalizeDamageFormula(weaponData?.volley?.regionDurationSeconds),
+      volleyRegionDelaySeconds: normalizeDamageFormula(weaponData?.volley?.regionDelaySeconds),
+      volleyRegionRadiusDeltaMeters: normalizeDamageFormula(weaponData?.volley?.regionRadiusDeltaMeters),
       criticalFailureConsequences: action.isReload ? [] : buildWeaponCriticalFailureConsequenceRows(actionData, weaponData),
       thrust,
       swing
@@ -5904,7 +5927,7 @@ function readVolleyRegionDamageRows(root) {
   const rows = Array.from(root?.querySelectorAll("[data-volley-region-damage-row]") ?? []);
   return normalizeVolleyRegionDamageEntries(rows.map(row => ({
     damageTypeKey: String(row.querySelector("[data-volley-region-damage-type]")?.value ?? "").trim(),
-    amount: Math.max(0, toInteger(row.querySelector("[data-volley-region-damage-amount]")?.value))
+    amount: normalizeDamageFormula(row.querySelector("[data-volley-region-damage-amount]")?.value)
   })));
 }
 
@@ -5916,7 +5939,7 @@ function readDamageSourceVolleyRegionDamageRows(root) {
   const rows = Array.from(root?.querySelectorAll("[data-damage-source-volley-region-damage-row]") ?? []);
   return normalizeVolleyRegionDamageEntries(rows.map(row => ({
     damageTypeKey: String(row.querySelector("[data-damage-source-volley-region-damage-type]")?.value ?? "").trim(),
-    amount: Math.max(0, toInteger(row.querySelector("[data-damage-source-volley-region-damage-amount]")?.value))
+    amount: normalizeDamageFormula(row.querySelector("[data-damage-source-volley-region-damage-amount]")?.value)
   })));
 }
 
@@ -5925,9 +5948,13 @@ function normalizeVolleyRegionDamageEntries(entries = []) {
   return values
     .map(entry => ({
       damageTypeKey: String(entry?.damageTypeKey ?? "").trim(),
-      amount: Math.max(0, toInteger(entry?.amount))
+      amount: normalizeDamageFormula(entry?.amount)
     }))
-    .filter(entry => entry.damageTypeKey || entry.amount > 0);
+    .filter(entry => entry.damageTypeKey || isFormulaTextConfigured(entry.amount));
+}
+
+function normalizeDamageFormula(value) {
+  return String(value ?? "0").trim() || "0";
 }
 
 function normalizeWeaponDamageTypeOverflow(entries = [], changedIndex = -1) {

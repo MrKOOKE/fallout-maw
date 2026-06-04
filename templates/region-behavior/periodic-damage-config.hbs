@@ -35,7 +35,7 @@
             <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
             {{/each}}
           </select>
-          <input type="number" name="system.damageEntries.{{index}}.amount" value="{{amount}}" min="0" step="1">
+          <input type="text" name="system.damageEntries.{{index}}.amount" value="{{amount}}" data-formula-autocomplete="all">
           <button type="button" class="fallout-maw-icon-delete-button" data-action="deleteDamageEntry" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
         </div>
         {{else}}
