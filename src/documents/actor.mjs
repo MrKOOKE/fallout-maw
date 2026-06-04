@@ -80,7 +80,7 @@ export class FalloutMaWActor extends Actor {
   async _preUpdate(changes, options, user) {
     if ((await super._preUpdate(changes, options, user)) === false) return false;
     if (!["character", "npc"].includes(this.type)) return undefined;
-    prepareActorDamageUpdate(this, changes, options);
+    await prepareActorDamageUpdate(this, changes, options);
     syncTrackedResourceValueUpdates(this, changes);
     return undefined;
   }
