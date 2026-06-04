@@ -6,7 +6,7 @@ import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier } from
 import { createThrownItemTile } from "../canvas/thrown-items.mjs";
 import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
 import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageSourceFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction } from "../utils/item-functions.mjs";
-import { getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
+import { getCoverSettings, getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import { canSpendCombatActionPoints, getCombatActionPointState, spendCombatActionPoints } from "./reaction-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
@@ -17,6 +17,11 @@ import { getStealthAttackModifiers, revealActorFromStealth } from "../stealth/in
 import { getWeaponActionBlockState } from "../abilities/runtime-state.mjs";
 import { requestPushKnockback } from "./active-actions.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
+import {
+  clearAttackAutoCoverSync,
+  getActorForcedCoverData,
+  queueAttackAutoCoverSync
+} from "../canvas/cover.mjs";
 
 const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
 const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
@@ -52,6 +57,7 @@ const MELEE_DIRECTIONS = Object.freeze([
 ]);
 const SWING_ARC_EPSILON = 0.0001;
 const GEOMETRY_EPSILON = 0.0001;
+const AUTO_COVER_GRID_STEPS = 4;
 const remoteAttackPreviews = new Map();
 const pendingRegionSocketRequests = new Map();
 let activeAttack = null;
@@ -122,6 +128,8 @@ class WeaponAttackController {
     this.chanceMenu = null;
     this.suppressNextContextMenu = false;
     this.attackId = foundry.utils.randomID();
+    this.autoCoverActorUuids = new Set();
+    this.lastAutoCoverSignature = "";
     this.pendingCriticalFailureResourceCosts = [];
     this.lastPreviewBroadcastAt = 0;
     this.lastBroadcastPreviewState = null;
@@ -149,6 +157,8 @@ class WeaponAttackController {
   }
 
   destroy() {
+    clearAttackAutoCoverSync(this.attackId);
+    this.autoCoverActorUuids.clear();
     canvas.stage.off("mousemove", this.events.move);
     document.removeEventListener("pointerdown", this.events.pointerDown, { capture: true });
     canvas.app?.ticker?.remove?.(this.events.tick);
@@ -1284,6 +1294,7 @@ class WeaponAttackController {
   refresh(forceBroadcast = false) {
     this.shape.clear();
     if (!this.pointer && !this.lockedGeometry) {
+      this.syncAttackAutoCover([]);
       this.clearTargetMarkers();
       this.resetBurstTargetPreview();
       return;
@@ -1303,6 +1314,7 @@ class WeaponAttackController {
     this.trajectoryAimTarget = this.getTrajectoryAimTarget(potentialTargets);
     this.geometry.aimPoint = this.trajectoryAimTarget ? getTokenAimPoint(this.trajectoryAimTarget) : null;
     if (this.geometry.aimPoint) this.targets = getAimedElevationTargets(this.token, this.geometry, potentialTargets);
+    this.syncAttackAutoCover();
     this.hoveredTarget = this.targetedAction && this.aimedMode === "aim"
       ? getAimedTargetUnderPointer(this.pointer, this.targets)
       : this.selectedTarget;
@@ -1332,6 +1344,17 @@ class WeaponAttackController {
     if (hoveredTarget) return hoveredTarget;
     if (this.targetedAction) return null;
     return potentialTargets.at(0) ?? null;
+  }
+
+  syncAttackAutoCover(states = null) {
+    const nextStates = Array.isArray(states)
+      ? states
+      : getAttackAutoCoverStates(this.token, this.geometry, this.targets);
+    const signature = getAttackAutoCoverSignature(nextStates);
+    if (signature === this.lastAutoCoverSignature) return;
+    this.lastAutoCoverSignature = signature;
+    this.autoCoverActorUuids = new Set(nextStates.map(state => state.actorUuid).filter(Boolean));
+    queueAttackAutoCoverSync(this.attackId, nextStates);
   }
 
   getFocusedTarget() {
@@ -2612,6 +2635,84 @@ function getAimedElevationTargets(attackerToken, geometry, targets = []) {
   if (!geometry?.aimPoint || geometry.type === VOLLEY_ACTION_KEY) return targets;
   const aimTrajectory = buildTrajectoryThroughPoint(attackerToken, geometry, geometry.aimPoint);
   return targets.filter(target => isTokenInAimedElevationSlice(attackerToken, target, geometry, aimTrajectory));
+}
+
+function getAttackAutoCoverStates(attackerToken, geometry, targets = []) {
+  if (!attackerToken || !geometry || geometry.type === VOLLEY_ACTION_KEY) return [];
+  const settings = getCoverSettings().entries
+    .filter(entry => Math.max(0, toInteger(entry.overlapPercent)) > 0)
+    .sort((left, right) => Math.max(0, toInteger(right.overlapPercent)) - Math.max(0, toInteger(left.overlapPercent)));
+  if (!settings.length) return [];
+
+  const states = [];
+  for (const target of targets ?? []) {
+    if (!target?.actor || target === attackerToken || isDeadTarget(target)) continue;
+    if (getActorForcedCoverData(target.actor)?.key) continue;
+    const obstructionPercent = getTokenAttackObstructionPercent(attackerToken, target, geometry);
+    const cover = settings.find(entry => obstructionPercent >= Math.max(0, toInteger(entry.overlapPercent)));
+    states.push({
+      actorUuid: target.actor.uuid,
+      targetTokenUuid: target.document?.uuid ?? "",
+      attackerTokenUuid: attackerToken.document?.uuid ?? "",
+      coverKey: cover?.key ?? "",
+      obstructionPercent
+    });
+  }
+  return states;
+}
+
+function getAttackAutoCoverSignature(states = []) {
+  return states
+    .map(state => [
+      String(state.actorUuid ?? ""),
+      String(state.targetTokenUuid ?? ""),
+      String(state.coverKey ?? "")
+    ].join(":"))
+    .sort()
+    .join("|");
+}
+
+function getTokenAttackObstructionPercent(attackerToken, target, geometry) {
+  const samples = getTokenActorCoverSamplePoints(target, geometry.origin);
+  if (!samples.length) return 0;
+  const blocked = samples.reduce((total, point) => (
+    total + (isAttackCoverSampleBlocked(attackerToken, target, point, geometry.origin) ? 1 : 0)
+  ), 0);
+  return Math.round((blocked / samples.length) * 100);
+}
+
+function getTokenActorCoverSamplePoints(target, origin) {
+  const polygon = getTokenWorldPolygon(target);
+  const points = [];
+  for (const point of getAttackIntersectionTestPoints(polygon, origin)) {
+    addUniquePoint(points, withTokenAimElevation(target, point));
+  }
+  addTokenCoverGridSamplePoints(points, target, polygon);
+  return sortContactPoints(points, origin);
+}
+
+function addTokenCoverGridSamplePoints(points, target, polygon) {
+  const bounds = getPolygonBounds(polygon);
+  if (!bounds) return;
+  const stepCount = AUTO_COVER_GRID_STEPS;
+  const stepX = (bounds.right - bounds.left) / stepCount;
+  const stepY = (bounds.bottom - bounds.top) / stepCount;
+  if (stepX <= GEOMETRY_EPSILON || stepY <= GEOMETRY_EPSILON) return;
+
+  for (let xIndex = 0; xIndex < stepCount; xIndex += 1) {
+    for (let yIndex = 0; yIndex < stepCount; yIndex += 1) {
+      const point = {
+        x: bounds.left + (stepX * (xIndex + 0.5)),
+        y: bounds.top + (stepY * (yIndex + 0.5))
+      };
+      if (!polygon?.contains?.(point.x, point.y)) continue;
+      addUniquePoint(points, withTokenAimElevation(target, point));
+    }
+  }
+}
+
+function isAttackCoverSampleBlocked(attackerToken, target, point, origin) {
+  return !hasLineOfSight(attackerToken, point, origin);
 }
 
 function isTokenInAimedElevationSlice(attackerToken, target, geometry, aimTrajectory) {
@@ -4455,6 +4556,17 @@ function getPolygonPointObjects(polygon) {
     if (Number.isFinite(x) && Number.isFinite(y)) points.push({ x, y });
   }
   return points;
+}
+
+function getPolygonBounds(polygon) {
+  const points = getPolygonPointObjects(polygon);
+  if (!points.length) return null;
+  return {
+    left: Math.min(...points.map(point => point.x)),
+    right: Math.max(...points.map(point => point.x)),
+    top: Math.min(...points.map(point => point.y)),
+    bottom: Math.max(...points.map(point => point.y))
+  };
 }
 
 function sortContactPoints(points, origin) {
