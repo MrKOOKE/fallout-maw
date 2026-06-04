@@ -3748,7 +3748,9 @@ function buildWeaponTooltipSections(item, activeWeaponIndex = 0, { actor = null,
   if (!entries.length) return [];
 
   const moduleTabIndex = entries.length;
-  const activeIndex = Math.max(0, Math.min(moduleTabIndex, toInteger(activeWeaponIndex)));
+  const hasModuleSlots = entries.some((entry) => entry?.canHaveModuleSlots && getWeaponModuleSlots(entry.data ?? {}).length);
+  const maxTabIndex = hasModuleSlots ? moduleTabIndex : entries.length - 1;
+  const activeIndex = Math.max(0, Math.min(maxTabIndex, toInteger(activeWeaponIndex)));
   const tabs = [
     ...entries.map((entry, index) => {
       const active = index === activeIndex;
@@ -3758,14 +3760,14 @@ function buildWeaponTooltipSections(item, activeWeaponIndex = 0, { actor = null,
         </button>
       `;
     }),
-    (() => {
+    hasModuleSlots ? (() => {
       const active = activeIndex === moduleTabIndex;
       return `
         <button type="button" class="${active ? "active" : ""}" data-tooltip-weapon-tab="${moduleTabIndex}" aria-selected="${active ? "true" : "false"}">
           ${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.WeaponModuleSlots"))}
         </button>
       `;
-    })()
+    })() : ""
   ].join("");
   const panels = [
     ...entries.map((entry, index) => `
@@ -3773,11 +3775,11 @@ function buildWeaponTooltipSections(item, activeWeaponIndex = 0, { actor = null,
         ${renderTooltipFunctionGrid(buildWeaponTooltipRows(item, entry, { actor, baseMode }))}
       </div>
     `),
-    `
+    hasModuleSlots ? `
       <div class="weapon-tab-panel ${moduleTabIndex === activeIndex ? "active" : ""}" data-tooltip-weapon-panel="${moduleTabIndex}">
         ${renderWeaponTooltipModuleSlots(item, entries, actor)}
       </div>
-    `
+    ` : ""
   ].join("");
 
   return [`
