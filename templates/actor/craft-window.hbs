@@ -32,6 +32,25 @@
               {{/each}}
             </div>
 
+            {{#if inventory.prosthesisSlots.length}}
+            <h2>Протезы</h2>
+            <div class="fallout-maw-equipment-slot-list fallout-maw-prosthesis-slot-list">
+              {{#each inventory.prosthesisSlots}}
+              <div class="fallout-maw-slot-card">
+                <div class="fallout-maw-slot-card-label">{{label}}</div>
+                <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-prosthesis-slot" data-prosthesis-limb="{{key}}">
+                  {{#if item}}
+                  <article class="{{item.draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item equipped" data-search-actor-uuid="{{item.actorUuid}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+                    <img src="{{item.img}}" alt="{{item.name}}">
+                    {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
+                  </article>
+                  {{/if}}
+                </div>
+              </div>
+              {{/each}}
+            </div>
+            {{/if}}
+
             <h2>{{localize "FALLOUTMAW.Common.Weapon"}}</h2>
             <div class="fallout-maw-weapon-set-list">
               {{#each inventory.weaponSets}}

@@ -140,14 +140,35 @@ export function prepareInventoryContext(actor, race) {
     if (item.placement?.mode === ITEM_FUNCTIONS.constructPart) assignedItemIds.add(item.id);
   }
 
-  const equipmentSlots = (race?.equipmentSlots ?? []).map(slot => {
-    const item = topLevelItems.find(candidate => (
-      candidate.placement?.mode === "equipment"
-      && getSelectedEquipmentSlotKeys(candidate).has(getEquipmentSlotSelectionKey(slot.label))
-    ));
-    if (item) assignedItemIds.add(item.id);
-    return { ...slot, item };
-  });
+  const equipmentSlots = [
+    ...(race?.equipmentSlots ?? []).map(slot => {
+      const item = topLevelItems.find(candidate => (
+        candidate.placement?.mode === "equipment"
+        && getSelectedEquipmentSlotKeys(candidate).has(getEquipmentSlotSelectionKey(slot.label))
+      ));
+      if (item) assignedItemIds.add(item.id);
+      return { ...slot, item };
+    }),
+    ...prepareConstructPartEquipmentSlots(actor, topLevelItems, assignedItemIds)
+  ];
+
+  const prosthesisSlots = actor?.type === "construct"
+    ? []
+    : Object.entries(actor.system?.limbs ?? {})
+      .map(([key, limb]) => {
+        const item = topLevelItems.find(candidate => (
+          candidate.placement?.mode === "prosthesis"
+          && candidate.placement?.limbKey === key
+        ));
+        if (!item) return null;
+        assignedItemIds.add(item.id);
+        return {
+          key,
+          label: String(limb?.label ?? key),
+          item
+        };
+      })
+      .filter(Boolean);
 
   const weaponSets = [
     ...(race?.weaponSets ?? []).map(set => prepareWeaponSetContext(set, race, topLevelItems, assignedItemIds, actor)),
@@ -189,7 +210,9 @@ export function prepareInventoryContext(actor, race) {
     });
 
   return {
+    equipmentHeading: actor?.type === "construct" ? "Строение" : game.i18n.localize("FALLOUTMAW.Common.Equipment"),
     equipmentSlots,
+    prosthesisSlots,
     weaponSets,
     naturalWeaponSet,
     containers,
@@ -234,6 +257,30 @@ function getConstructNaturalWeaponSetContext(actor, allItemData = []) {
     label: "Оружие",
     slots
   };
+}
+
+function prepareConstructPartEquipmentSlots(actor, topLevelItems, assignedItemIds) {
+  if (actor?.type !== "construct") return [];
+  return topLevelItems
+    .filter(item => isInstalledConstructPart(actor, item) && !isInstalledConstructPartWeapon(actor, item))
+    .sort(compareConstructPartDisplayItems)
+    .map(item => {
+      assignedItemIds?.add(item.id);
+      const document = actor.items.get(item.id);
+      const part = getConstructPartFunction(document);
+      const label = String(part.partType ?? "").trim() || item.name;
+      return {
+        key: `constructPart:${item.id}`,
+        label: abbreviateConstructPartSlotLabel(label),
+        fullLabel: label,
+        locked: true,
+        item: {
+          ...item,
+          equipped: true,
+          locked: true
+        }
+      };
+    });
 }
 
 function prepareConstructPartWeaponSets(actor, topLevelItems, assignedItemIds) {
@@ -303,6 +350,17 @@ function compareConstructPartDisplayItems(left, right) {
   const rightOrder = toInteger(right?.placement?.constructPartOrder);
   if (leftOrder !== rightOrder) return leftOrder - rightOrder;
   return String(left?.id ?? "").localeCompare(String(right?.id ?? ""));
+}
+
+function abbreviateConstructPartSlotLabel(label = "") {
+  const words = String(label ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!words.length) return "";
+  return words
+    .map((word, index) => Array.from(word).slice(0, index === 0 ? 3 : 2).join(""))
+    .join("");
 }
 
 function prepareContainerWeaponSets(actor, topLevelItems, assignedItemIds) {

@@ -136,17 +136,17 @@
               <h2 {{#if ../isTrade}}class="fallout-maw-trade-equipment-toggle" data-trade-equipment-toggle{{/if}}>
                 {{#if ../isTrade}}
                 <i class="fa-solid {{#if equipmentCollapsed}}fa-chevron-right{{else}}fa-chevron-down{{/if}}"></i>
-                <span>{{localize "FALLOUTMAW.Common.Equipment"}}</span>
-                {{else}}{{localize "FALLOUTMAW.Common.Equipment"}}{{/if}}
+                <span>{{inventory.equipmentHeading}}</span>
+                {{else}}{{inventory.equipmentHeading}}{{/if}}
               </h2>
               <div class="fallout-maw-pane-scroll fallout-maw-equipment-scroll" data-trade-equipment-body>
                 <div class="fallout-maw-equipment-slot-list">
                   {{#each inventory.equipmentSlots}}
                   <div class="fallout-maw-slot-card">
-                    <div class="fallout-maw-slot-card-label">{{label}}</div>
-                    <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large" data-search-drop-zone data-search-actor-uuid="{{../uuid}}" data-equipment-slot="{{key}}">
+                    <div class="fallout-maw-slot-card-label" {{#if fullLabel}}title="{{fullLabel}}"{{/if}}>{{label}}</div>
+                    <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large {{#if locked}}locked{{/if}}" {{#unless locked}}data-search-drop-zone{{/unless}} data-search-actor-uuid="{{../uuid}}" data-equipment-slot="{{key}}">
                       {{#if item}}
-                      <article class="{{item.draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}}" data-search-actor-uuid="{{item.actorUuid}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}" {{#if item.tradePrice}}data-trade-price="{{item.tradePrice}}"{{/if}}>
+                      <article class="{{item.draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}} {{#if item.locked}}locked{{/if}}" data-search-actor-uuid="{{item.actorUuid}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}" {{#if item.tradePrice}}data-trade-price="{{item.tradePrice}}"{{/if}}>
                         <img src="{{item.img}}" alt="{{item.name}}">
                         {{#if item.tradePrice}}<span class="fallout-maw-trade-price">{{item.tradePrice}}</span>{{/if}}
                         {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
@@ -158,6 +158,26 @@
                   <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.CreatureOptions.NoEquipmentSlots"}}</p>
                   {{/each}}
                 </div>
+
+                {{#if inventory.prosthesisSlots.length}}
+                <h2>Протезы</h2>
+                <div class="fallout-maw-equipment-slot-list fallout-maw-prosthesis-slot-list">
+                  {{#each inventory.prosthesisSlots}}
+                  <div class="fallout-maw-slot-card">
+                    <div class="fallout-maw-slot-card-label">{{label}}</div>
+                    <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-prosthesis-slot" data-prosthesis-limb="{{key}}">
+                      {{#if item}}
+                      <article class="{{item.draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item equipped" data-search-actor-uuid="{{item.actorUuid}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}" {{#if item.tradePrice}}data-trade-price="{{item.tradePrice}}"{{/if}}>
+                        <img src="{{item.img}}" alt="{{item.name}}">
+                        {{#if item.tradePrice}}<span class="fallout-maw-trade-price">{{item.tradePrice}}</span>{{/if}}
+                        {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
+                      </article>
+                      {{/if}}
+                    </div>
+                  </div>
+                  {{/each}}
+                </div>
+                {{/if}}
 
                 <h2>{{localize "FALLOUTMAW.Common.Weapon"}}</h2>
                 <div class="fallout-maw-weapon-set-list">

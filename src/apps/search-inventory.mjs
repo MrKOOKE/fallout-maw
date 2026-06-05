@@ -3069,7 +3069,7 @@ function decorateInventoryForSearch(inventory, actor, canInteract, { isTrade = f
     return {
       ...item,
       actorUuid,
-      draggableClass: canInteract ? `draggable${isTradeItemFullyOffered(item, tradeOffer) ? " trade-offered-source" : ""}` : "",
+      draggableClass: canInteract && !item.locked ? `draggable${isTradeItemFullyOffered(item, tradeOffer) ? " trade-offered-source" : ""}` : "",
       tradePrice: isTrade && liveItem ? formatItemTradePrice(liveItem, tradeCurrencyKey, actor, { barterAdjustmentPercent }) : ""
     };
   };
@@ -3077,6 +3077,10 @@ function decorateInventoryForSearch(inventory, actor, canInteract, { isTrade = f
   return {
     ...inventory,
     equipmentSlots: (inventory.equipmentSlots ?? []).map(slot => ({
+      ...slot,
+      item: decorateItem(slot.item)
+    })),
+    prosthesisSlots: (inventory.prosthesisSlots ?? []).map(slot => ({
       ...slot,
       item: decorateItem(slot.item)
     })),

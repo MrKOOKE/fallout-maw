@@ -3714,6 +3714,10 @@ function prepareCraftInventoryContext(inventory, actor) {
       ...slot,
       item: mapItem(slot.item)
     })),
+    prosthesisSlots: (inventory.prosthesisSlots ?? []).map(slot => ({
+      ...slot,
+      item: mapItem(slot.item)
+    })),
     weaponSets: (inventory.weaponSets ?? []).map(set => ({
       ...set,
       slots: (set.slots ?? []).map(slot => ({
