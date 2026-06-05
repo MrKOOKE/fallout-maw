@@ -3925,6 +3925,10 @@ function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = fal
   const penetration = stats.penetration;
   if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), renderChangedNumber(penetration, baseStats.penetration, { baseMode })]);
   rows.push(...getWeaponResourceCostRows(data, baseData, { baseMode }));
+  const requirements = getWeaponRequirementLabels(data, actor);
+  if (requirements.length) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponUseRequirements"), {
+    html: renderTooltipValueTokens(requirements)
+  }]);
   const actions = getWeaponActionLabels(data, baseData, { actor, baseMode });
   if (actions.length) rows.push(["Действия", {
     html: renderTooltipValueTokens(actions)
@@ -4271,6 +4275,12 @@ function getSkillLabel(skillKey = "") {
   return getSkillSettings().find(skill => skill.key === key)?.label ?? key;
 }
 
+function getCharacteristicLabel(characteristicKey = "") {
+  const key = String(characteristicKey ?? "");
+  if (!key) return "";
+  return getCharacteristicSettings().find(characteristic => characteristic.key === key)?.label ?? key;
+}
+
 function getToolLabel(toolKey = "") {
   const key = String(toolKey ?? "");
   if (!key) return "—";
@@ -4308,6 +4318,31 @@ function getWeaponResourceTypeLabel(type = "") {
   if (type === "condition") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostCondition");
   if (type === "quantity") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostQuantity");
   return String(type || "—");
+}
+
+function getWeaponRequirementLabels(data = {}, actor = null) {
+  return (data.requirements ?? [])
+    .map(requirement => getWeaponRequirementLabel(requirement, actor))
+    .filter(label => hasTooltipRowValue(label));
+}
+
+function getWeaponRequirementLabel(requirement = {}, actor = null) {
+  const type = String(requirement?.type ?? "") === "skill" ? "skill" : "characteristic";
+  const key = String(requirement?.key ?? "").trim();
+  const required = Math.max(0, toInteger(requirement?.value));
+  if (!key || !required) return "";
+  const label = type === "skill" ? getSkillLabel(key) : getCharacteristicLabel(key);
+  if (!actor) return `${label} ${required}`;
+  const current = getActorWeaponRequirementValue(actor, { type, key });
+  const text = `${label} ${current}/${required}`;
+  return { html: renderChangedTooltipSpan(text, current >= required) };
+}
+
+function getActorWeaponRequirementValue(actor, requirement = {}) {
+  const key = String(requirement?.key ?? "").trim();
+  if (!key) return 0;
+  if (String(requirement?.type ?? "") === "skill") return toInteger(actor?.system?.skills?.[key]?.value);
+  return toInteger(actor?.system?.characteristics?.[key]);
 }
 
 function getWeaponActionLabels(data = {}, baseData = {}, { actor = null, baseMode = false } = {}) {
