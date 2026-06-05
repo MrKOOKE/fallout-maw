@@ -1307,17 +1307,31 @@ class WeaponAttackController {
       ? deserializeGeometry(this.lockedGeometry)
       : getAttackGeometry(this.weapon, this.actionKey, this.token, origin, this.pointer, this.weaponFunctionId);
     if (!this.geometry) return;
-    const potentialTargets = getPotentialTargets(this.token, this.geometry, {
+    let potentialTargets = getPotentialTargets(this.token, this.geometry, {
       includeAttacker: this.volleyAction,
       includeDead: this.volleyAction
     });
     this.targets = potentialTargets;
     this.geometry.aimPoint = null;
-    this.trajectoryAimTarget = this.getTrajectoryAimTarget(potentialTargets);
+    this.trajectoryAimTarget = this.volleyAction
+      ? getVolleyTrajectoryAimTarget(this.token, this.geometry, {
+        includeAttacker: true,
+        includeDead: true
+      })
+      : this.getTrajectoryAimTarget(potentialTargets);
     this.geometry.aimPoint = this.trajectoryAimTarget
-      ? selectTargetTrajectoryAimPoint(this.token, this.trajectoryAimTarget, this.geometry)
+      ? selectAttackGeometryAimPoint(this.token, this.trajectoryAimTarget, this.geometry)
       : null;
-    if (this.geometry.aimPoint) this.targets = getAimedElevationTargets(this.token, this.geometry, potentialTargets);
+    if (this.volleyAction && this.geometry.aimPoint) {
+      this.geometry = aimVolleyGeometryAtPoint(this.token, this.geometry, this.geometry.aimPoint);
+      potentialTargets = getPotentialTargets(this.token, this.geometry, {
+        includeAttacker: true,
+        includeDead: true
+      });
+      this.targets = potentialTargets;
+    } else if (this.geometry.aimPoint) {
+      this.targets = getAimedElevationTargets(this.token, this.geometry, potentialTargets);
+    }
     this.syncAttackAutoCover();
     this.hoveredTarget = this.targetedAction && this.aimedMode === "aim"
       ? getAimedTargetUnderPointer(this.pointer, this.targets)
@@ -1342,7 +1356,7 @@ class WeaponAttackController {
   }
 
   getTrajectoryAimTarget(potentialTargets = []) {
-    if (this.volleyAction) return null;
+    if (this.volleyAction) return potentialTargets.at(0) ?? null;
     if (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)) return this.selectedTarget;
     const hoveredTarget = getAimedTargetUnderPointer(this.pointer, potentialTargets);
     if (hoveredTarget) return hoveredTarget;
@@ -2638,6 +2652,18 @@ function getPotentialTargets(attackerToken, geometry, { includeAttacker = false,
   }).sort((left, right) => getTargetDistance(left, geometry) - getTargetDistance(right, geometry));
 }
 
+function getVolleyTrajectoryAimTarget(attackerToken, geometry, { includeAttacker = false, includeDead = false } = {}) {
+  if (!geometry || geometry.type !== VOLLEY_ACTION_KEY) return null;
+  return (canvas.tokens?.placeables ?? [])
+    .filter(target => {
+      if ((!includeAttacker && target === attackerToken) || !target.actor || !target.visible) return false;
+      if (!includeDead && isDeadTarget(target)) return false;
+      return isTokenInVolleyPlanarRadius(target, geometry);
+    })
+    .sort((left, right) => getTokenVolleyPlanarCenterDistance(left, geometry) - getTokenVolleyPlanarCenterDistance(right, geometry))
+    .at(0) ?? null;
+}
+
 function getAimedElevationTargets(attackerToken, geometry, targets = []) {
   if (!geometry?.aimPoint || geometry.type === VOLLEY_ACTION_KEY) return targets;
   const aimTrajectory = buildTrajectoryThroughPoint(attackerToken, geometry, geometry.aimPoint);
@@ -2741,6 +2767,33 @@ function selectTargetTrajectoryAimPoint(attackerToken, target, geometry) {
     .filter(point => isTargetTrajectoryAimPointValid(attackerToken, target, geometry, point))
     .sort((left, right) => compareTargetTrajectoryAimPoints(left, right, targetCenter, geometry))
     .at(0) ?? null;
+}
+
+function selectAttackGeometryAimPoint(attackerToken, target, geometry) {
+  if (geometry?.type === VOLLEY_ACTION_KEY) return selectVolleyTrajectoryAimPoint(target, geometry);
+  return selectTargetTrajectoryAimPoint(attackerToken, target, geometry);
+}
+
+function selectVolleyTrajectoryAimPoint(target, geometry) {
+  if (!target || !geometry?.end) return null;
+  return getClosestPointOnTokenVolume(target, geometry.end) ?? getTokenAimPoint(target);
+}
+
+function aimVolleyGeometryAtPoint(attackerToken, geometry, point) {
+  if (!geometry || geometry.type !== VOLLEY_ACTION_KEY || !point) return geometry;
+  const clipped = getWallClippedEndpoint(
+    attackerToken,
+    geometry.origin,
+    Number(geometry.angle) || 0,
+    Math.max(1, Number(geometry.distance) || 1),
+    point.elevation
+  );
+  return {
+    ...geometry,
+    distance: clipped.distance,
+    end: clipped.point,
+    aimPoint: point
+  };
 }
 
 function isTargetTrajectoryAimPointValid(attackerToken, target, geometry, point) {
@@ -3313,6 +3366,27 @@ function getTokenVolleyDistanceToHitboxEdge(token, geometry) {
   return getSphericalDistancePixels(geometry.end, closest);
 }
 
+function isTokenInVolleyPlanarRadius(token, geometry) {
+  const radius = Math.max(0, Number(geometry?.radiusPixels) || 0);
+  if (radius <= 0) return false;
+  return getTokenVolleyPlanarDistanceToHitboxEdge(token, geometry) <= radius + GEOMETRY_EPSILON;
+}
+
+function getTokenVolleyPlanarCenterDistance(token, geometry) {
+  const center = getTokenCenter(token);
+  if (!center || !geometry?.end) return Infinity;
+  return Math.hypot(center.x - geometry.end.x, center.y - geometry.end.y);
+}
+
+function getTokenVolleyPlanarDistanceToHitboxEdge(token, geometry) {
+  if (!geometry?.end) return Infinity;
+  const polygon = getTokenWorldPolygon(token);
+  const points = getPolygonPointObjects(polygon);
+  if (points.length < 3) return Infinity;
+  const closest = getClosestPointOnPolygon(points, geometry.end, polygon);
+  return closest ? Math.hypot(closest.x - geometry.end.x, closest.y - geometry.end.y) : Infinity;
+}
+
 function getWeaponDamageTypeEntries(weapon, weaponFunctionId = "") {
   const effectiveDamageData = getEffectiveWeaponDamageData(weapon, weaponFunctionId);
   if (effectiveDamageData?.source === "damageSource") {
@@ -3693,8 +3767,7 @@ function getPenetratedDamageAmount(baseDamage, penetrationsUsed) {
 
 function getTargetDistance(target, geometry) {
   if (geometry.type === VOLLEY_ACTION_KEY) {
-    const center = getTokenCenter(target);
-    return center ? Math.hypot(center.x - geometry.end.x, center.y - geometry.end.y) : Infinity;
+    return getTokenVolleyDistanceToHitboxEdge(target, geometry);
   }
   const distances = getTokenAttackContactPoints(target, geometry)
     .map(point => Math.hypot(point.x - geometry.origin.x, point.y - geometry.origin.y));
@@ -4364,10 +4437,26 @@ function getTokenShapeCenter(token) {
 function getTokenElevationRange(token) {
   const document = token?.document;
   const gridDistance = Math.max(0.0001, Number(token?.scene?.grid?.distance ?? canvas.scene?.grid?.distance ?? canvas.dimensions?.distance) || 1);
-  const bottom = Number(document?.elevation ?? token?.elevation ?? 0) || 0;
-  const depth = Math.max(0, Number(document?.depth ?? 1) || 0) * gridDistance;
+  const bottom = getTokenAbsoluteElevation(token, document?._source?.elevation ?? document?.elevation ?? token?.elevation ?? 0);
+  const depth = Math.max(0, Number(document?._source?.depth ?? document?.depth ?? 1) || 0) * gridDistance;
   const top = bottom + (depth > 0 ? depth : gridDistance);
   return { bottom: Math.min(bottom, top), top: Math.max(bottom, top) };
+}
+
+function getTokenAbsoluteElevation(token, elevation = null) {
+  const localElevation = Number.isFinite(Number(elevation))
+    ? Number(elevation)
+    : Number(token?.document?._source?.elevation ?? token?.document?.elevation ?? token?.elevation ?? 0) || 0;
+  return localElevation + getTokenLevelBaseElevation(token);
+}
+
+function getTokenLevelBaseElevation(token) {
+  const document = token?.document;
+  const scene = document?.parent ?? token?.scene ?? canvas.scene;
+  const levelId = document?._source?.level ?? document?.level ?? token?.level?.id ?? "";
+  const level = levelId ? scene?.levels?.get?.(levelId) : null;
+  const base = Number(level?.elevation?.base ?? level?.elevation?.bottom);
+  return Number.isFinite(base) ? base : 0;
 }
 
 function getClosestPointOnTokenVolume(token, point) {
