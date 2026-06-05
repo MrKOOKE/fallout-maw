@@ -14,6 +14,16 @@
   scrollbar-gutter: stable;
 }
 
+.application.fallout-maw-search-inventory.minimized .header-control[data-action="toggleMinimize"],
+.application.fallout-maw-search-inventory.minimizing .header-control[data-action="toggleMinimize"] {
+  display: initial;
+}
+
+.application.fallout-maw-search-inventory.minimized .header-control[data-action="toggleControls"],
+.application.fallout-maw-search-inventory.minimizing .header-control[data-action="toggleControls"] {
+  display: none;
+}
+
 .application.fallout-maw-active-effect-sheet .window-content {
   display: flex;
   flex-direction: column;

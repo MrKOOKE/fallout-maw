@@ -223,6 +223,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #viewportResizeHandler = null;
 
   static DEFAULT_OPTIONS = {
+    actions: {
+      toggleMinimize: SearchInventoryApplication.#onToggleMinimize
+    },
     id: "fallout-maw-search-inventory",
     classes: ["fallout-maw", "fallout-maw-sheet", "fallout-maw-actor-sheet", "fallout-maw-search-inventory", "sheet", "actor"],
     position: {
@@ -244,6 +247,24 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const searchedName = this.#searchedActor?.name ?? "";
     if (this.#isTradeMode()) return searchedName ? `Торговля: ${searchedName}` : "Торговля";
     return searchedName ? `Обыск: ${searchedName}` : "Обыск";
+  }
+
+  _getFrameButtons(options) {
+    const buttons = super._getFrameButtons(options);
+    buttons.push({
+      action: "toggleMinimize",
+      icon: "fa-solid fa-window-minimize",
+      label: "APPLICATION.ACTIONS.Collapse"
+    });
+    return buttons;
+  }
+
+  static #onToggleMinimize(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.button !== 0) return;
+    if (this.minimized) return this.maximize();
+    return this.minimize();
   }
 
   setPosition(position = {}) {
@@ -427,7 +448,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     await super._onRender(context, options);
     this.#hoverPreviewInputKey = "";
     this.#hoverPreviewKey = "";
-    this.setPosition();
+    if (!this.minimized) this.setPosition();
     this.#bindViewportResize();
     this._dragDrop.bind(this.element);
     this.#bindInventoryTooltipListeners();
@@ -509,7 +530,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #bindViewportResize() {
     if (this.#viewportResizeHandler) return;
     const { view } = this.#getViewportMetrics();
-    this.#viewportResizeHandler = () => this.setPosition();
+    this.#viewportResizeHandler = () => {
+      if (!this.minimized) this.setPosition();
+    };
     view.addEventListener("resize", this.#viewportResizeHandler);
   }
 

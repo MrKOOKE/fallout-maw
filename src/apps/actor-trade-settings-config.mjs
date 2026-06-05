@@ -1,4 +1,4 @@
-﻿import { TEMPLATES } from "../constants.mjs";
+import { TEMPLATES } from "../constants.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 
@@ -28,7 +28,7 @@ export class ActorTradeSettingsConfig extends FalloutMaWFormApplicationV2 {
   };
 
   get title() {
-    return `РўРѕСЂРіРѕРІР»СЏ: ${this.actor.name}`;
+    return `Торговля: ${this.actor.name}`;
   }
 
   async _prepareContext(options) {
@@ -49,7 +49,7 @@ export class ActorTradeSettingsConfig extends FalloutMaWFormApplicationV2 {
       "system.trade.infiniteInventory": Boolean(trade.infiniteInventory),
       "system.trade.markupPercent": toInteger(trade.markupPercent)
     });
-    ui.notifications.info("РќР°СЃС‚СЂРѕР№РєРё С‚РѕСЂРіРѕРІР»Рё СЃРѕС…СЂР°РЅРµРЅС‹.");
+    ui.notifications.info("Настройки торговли сохранены.");
     return this.close();
   }
 }
