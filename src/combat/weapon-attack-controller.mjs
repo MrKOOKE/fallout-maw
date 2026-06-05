@@ -5,7 +5,7 @@ import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, esti
 import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier } from "./dodge-resource.mjs";
 import { createThrownItemTile } from "../canvas/thrown-items.mjs";
 import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
-import { ITEM_FUNCTIONS, getConditionWeakeningData, getDamageSourceFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, createWeaponFunctionUpdateData, getConditionWeakeningData, getDamageSourceFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, hasItemFunction } from "../utils/item-functions.mjs";
 import { getCoverSettings, getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import { canSpendCombatActionPoints, getCombatActionPointState, spendCombatActionPoints } from "./reaction-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -1817,10 +1817,6 @@ function getWeaponAttackSourceData(weapon, weaponFunctionId = "") {
   return sourceAdditionalWeapons?.[id] ?? {};
 }
 
-function getWeaponAttackPath(weapon, weaponFunctionId = "") {
-  return getWeaponFunctionUpdatePath(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) || "system.functions.weapon";
-}
-
 function hasWeaponAction(weapon, actionKey, weaponFunctionId = "") {
   return Boolean(getWeaponAttackData(weapon, weaponFunctionId)?.availableActions?.[actionKey]);
 }
@@ -2437,9 +2433,9 @@ async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
 
 async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "", extraCosts = []) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
-  const weaponPath = getWeaponAttackPath(weapon, weaponFunctionId);
   const updateData = {};
   let deleteWeapon = false;
+  let magazineValue = Math.max(0, toInteger(weaponData?.magazine?.value));
   const costs = [
     ...getWeaponResourceCosts(weaponData).map(cost => ({
       type: cost.type,
@@ -2454,10 +2450,10 @@ async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "
     const amount = Math.max(0, toInteger(cost.amount));
     if (!amount) continue;
     if (cost.type === "magazine") {
-      const current = Object.hasOwn(updateData, `${weaponPath}.magazine.value`)
-        ? toInteger(updateData[`${weaponPath}.magazine.value`])
-        : toInteger(weaponData?.magazine?.value);
-      updateData[`${weaponPath}.magazine.value`] = Math.max(0, current - amount);
+      magazineValue = Math.max(0, magazineValue - amount);
+      Object.assign(updateData, createWeaponFunctionUpdateData(weapon, weaponFunctionId, {
+        "magazine.value": magazineValue
+      }));
     } else if (cost.type === "condition") {
       const current = Object.hasOwn(updateData, "system.functions.condition.value")
         ? toInteger(updateData["system.functions.condition.value"])

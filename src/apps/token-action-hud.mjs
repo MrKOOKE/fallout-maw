@@ -66,7 +66,7 @@ import {
   getContextInventoryItems,
   getItemQuantity
 } from "../utils/inventory-containers.mjs";
-import { ITEM_FUNCTIONS, getConditionFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getFirstAidChargesData, getModuleFunction, getProsthesisFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction, isActiveItem } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, createWeaponFunctionUpdateData, getConditionFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getFirstAidChargesData, getModuleFunction, getProsthesisFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction, isActiveItem } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
@@ -1360,6 +1360,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async #installHudWeaponModule(weapon, entry, slotIndex, moduleItem) {
     const path = getWeaponFunctionPath(weapon, entry?.isPrimary ? ITEM_FUNCTIONS.weapon : entry?.id);
+    if (!path) return undefined;
     const slots = getWeaponModuleSlots(entry?.data ?? {});
     const slot = slots[slotIndex];
     if (!slot || !isModuleItemCompatibleWithSlot(moduleItem, slot)) return undefined;
@@ -1380,6 +1381,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async #uninstallHudWeaponModule(weapon, entry, slotIndex, itemData) {
     const path = getWeaponFunctionPath(weapon, entry?.isPrimary ? ITEM_FUNCTIONS.weapon : entry?.id);
+    if (!path) return undefined;
     const slots = getWeaponModuleSlots(entry?.data ?? {});
     const slot = slots[slotIndex];
     if (!slot) return undefined;
@@ -2901,7 +2903,9 @@ async function performWeaponReloadOperation({ actorUuid = "", weaponId = "", wea
     }
     return actor.updateEmbeddedDocuments("Item", [{
       _id: weapon.id,
-      [`${getWeaponFunctionPath(weapon, weaponFunctionId)}.magazine.sourceItemUuid`]: selectedSource.uuid
+      ...createWeaponFunctionUpdateData(weapon, weaponFunctionId, {
+        "magazine.sourceItemUuid": selectedSource.uuid
+      })
     }]);
   }
 
@@ -2940,8 +2944,10 @@ async function insertWeaponMagazineSource(actor, weapon, weaponFunctionId, weapo
   if (!amount) return;
   const updates = [{
     _id: weapon.id,
-    [`${getWeaponFunctionPath(weapon, weaponFunctionId)}.magazine.sourceItemUuid`]: sourceItem.uuid,
-    [`${getWeaponFunctionPath(weapon, weaponFunctionId)}.magazine.value`]: current + amount
+    ...createWeaponFunctionUpdateData(weapon, weaponFunctionId, {
+      "magazine.sourceItemUuid": sourceItem.uuid,
+      "magazine.value": current + amount
+    })
   }];
   const deletes = [];
   let remaining = amount;
@@ -2967,8 +2973,10 @@ async function extractWeaponMagazineSource(actor, weapon, weaponFunctionId, weap
   const sourceStacks = getActorMagazineSourceStacks(actor, sourceItem);
   const updates = [{
     _id: weapon.id,
-    [`${getWeaponFunctionPath(weapon, weaponFunctionId)}.magazine.sourceItemUuid`]: sourceItem.uuid,
-    [`${getWeaponFunctionPath(weapon, weaponFunctionId)}.magazine.value`]: 0
+    ...createWeaponFunctionUpdateData(weapon, weaponFunctionId, {
+      "magazine.sourceItemUuid": sourceItem.uuid,
+      "magazine.value": 0
+    })
   }];
   const targetStack = sourceStacks.at(0);
   if (targetStack) {
@@ -2983,7 +2991,7 @@ async function extractWeaponMagazineSource(actor, weapon, weaponFunctionId, weap
 }
 
 function getWeaponFunctionPath(weapon, weaponFunctionId = "") {
-  return getWeaponFunctionUpdatePath(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) || "system.functions.weapon";
+  return getWeaponFunctionUpdatePath(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon);
 }
 
 function getWeaponMagazineSourceItem(weaponData = {}) {

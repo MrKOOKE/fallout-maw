@@ -198,13 +198,35 @@ export function getWeaponFunctionModuleSlots(itemOrSystem = null, functionId = "
 export function getWeaponFunctionUpdatePath(itemOrSystem = null, functionId = "") {
   const id = String(functionId || ITEM_FUNCTIONS.weapon);
   if (!id || id === ITEM_FUNCTIONS.weapon) return "system.functions.weapon";
-  const moduleId = parseModuleWeaponFunctionId(id);
-  if (moduleId) {
-    const slotIndex = findWeaponModuleSlotIndex(itemOrSystem, moduleId.slotId);
-    if (slotIndex < 0) return "";
-    return `system.functions.weapon.moduleSlots.${slotIndex}.itemData.system.functions.module.additionalWeapons.${moduleId.actionId}`;
-  }
+  if (parseModuleWeaponFunctionId(id)) return "";
   return `system.functions.additionalWeapons.${id}`;
+}
+
+export function createWeaponFunctionUpdateData(itemOrSystem = null, functionId = "", relativeUpdates = {}) {
+  const id = String(functionId || ITEM_FUNCTIONS.weapon);
+  const moduleId = parseModuleWeaponFunctionId(id);
+  if (!moduleId) {
+    const path = getWeaponFunctionUpdatePath(itemOrSystem, id);
+    if (!path) return {};
+    return Object.fromEntries(
+      Object.entries(relativeUpdates ?? {}).map(([key, value]) => [`${path}.${key}`, value])
+    );
+  }
+
+  const slotIndex = findWeaponModuleSlotIndex(itemOrSystem, moduleId.slotId);
+  if (slotIndex < 0) return {};
+  const primary = getWeaponFunction(itemOrSystem);
+  const slots = foundry.utils.deepClone(Array.isArray(primary?.moduleSlots) ? primary.moduleSlots : []);
+  const slot = slots[slotIndex];
+  const sourceItemData = slot?.itemData?.system ? slot.itemData : getWeaponModuleSlotItemData(slot);
+  if (!sourceItemData?.system) return {};
+  const itemData = foundry.utils.deepClone(sourceItemData);
+
+  if (!applyModuleWeaponFunctionRelativeUpdates(itemData, moduleId.actionId, relativeUpdates)) return {};
+  slots[slotIndex] = { ...slot, itemData };
+  return {
+    "system.functions.weapon.moduleSlots": slots
+  };
 }
 
 export function createToolFunctionKey(toolKey = "") {
@@ -317,6 +339,33 @@ function findWeaponModuleSlotIndex(itemOrSystem = null, slotId = "") {
     ? getWeaponFunction(itemOrSystem).moduleSlots
     : [];
   return slots.findIndex((slot, index) => (String(slot?.id ?? "") || `slot-${index + 1}`) === id);
+}
+
+function applyModuleWeaponFunctionRelativeUpdates(itemData = {}, actionId = "", relativeUpdates = {}) {
+  const id = String(actionId ?? "").trim();
+  if (!id) return false;
+  const containerPath = "system.functions.module.additionalWeapons";
+  const additionalWeapons = foundry.utils.getProperty(itemData, containerPath);
+  if (Array.isArray(additionalWeapons)) {
+    const entries = foundry.utils.deepClone(additionalWeapons);
+    const index = entries.findIndex((entry, entryIndex) => String(entry?.id || `legacy${entryIndex}`) === id);
+    if (index < 0) return false;
+    applyRelativeUpdates(entries[index], relativeUpdates);
+    foundry.utils.setProperty(itemData, containerPath, entries);
+    return true;
+  }
+  if (!additionalWeapons || typeof additionalWeapons !== "object") return false;
+  const actionData = foundry.utils.deepClone(additionalWeapons[id] ?? {});
+  if (!actionData || typeof actionData !== "object") return false;
+  applyRelativeUpdates(actionData, relativeUpdates);
+  foundry.utils.setProperty(itemData, `${containerPath}.${id}`, actionData);
+  return true;
+}
+
+function applyRelativeUpdates(target = {}, relativeUpdates = {}) {
+  for (const [path, value] of Object.entries(relativeUpdates ?? {})) {
+    foundry.utils.setProperty(target, path, foundry.utils.deepClone(value));
+  }
 }
 
 function getWeaponModuleSlotItemData(slot = {}) {
