@@ -40,7 +40,7 @@ import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-mov
   prepareResearchesForDisplay
 } from "../research/index.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { applyDamageCostModifier, getActorTraumas, getDamageCostModifierState, getLimbHealingCap, isLimbDestroyed } from "../combat/damage-hub.mjs";
+import { applyDamageCostModifier, getActorTraumas, getDamageCostModifierState, getDestroyedLimbStateLabel, getLimbHealingCap, isLimbDestroyed } from "../combat/damage-hub.mjs";
 import { openLimbDamageDialog } from "../apps/limb-damage-dialog.mjs";
 import {
   getActorRootInventoryGridOptions,
@@ -50,11 +50,13 @@ import {
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { openPersonalGenerator } from "../apps/personal-generator.mjs";
+import { openConstructStructure } from "../apps/construct-structure.mjs";
 import { ActorTradeSettingsConfig } from "../apps/actor-trade-settings-config.mjs";
 import {
   DAMAGE_MITIGATION_MODES,
   ITEM_FUNCTIONS,
   getConditionFunction,
+  getConstructPartFunction,
   getConditionWeakeningData,
   getDamageMitigationFunction,
   getDamageSourceFunction,
@@ -160,6 +162,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     },
     actions: {
         openPersonalGenerator: this.#onOpenPersonalGenerator,
+        openConstructStructure: this.#onOpenConstructStructure,
         openTradeSettings: this.#onOpenTradeSettings,
         openDevelopment: this.#onOpenDevelopment,
         toggleFreeEdit: this.#onToggleFreeEdit,
@@ -234,12 +237,19 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       label: "Торговля",
       ownership: "OWNER"
     });
-    controls.unshift({
-      action: "openPersonalGenerator",
-      icon: "fa-solid fa-user-gear",
-      label: "Перс. генератор",
-      ownership: "OWNER"
-    });
+    controls.unshift(this.actor.type === "construct"
+      ? {
+        action: "openConstructStructure",
+        icon: "fa-solid fa-sitemap",
+        label: "Строение конструкта",
+        ownership: "OWNER"
+      }
+      : {
+        action: "openPersonalGenerator",
+        icon: "fa-solid fa-user-gear",
+        label: game.i18n.localize("FALLOUTMAW.Actor.PersonalGenerator"),
+        ownership: "OWNER"
+      });
     return controls;
   }
 
@@ -262,6 +272,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
     const actor = this.actor;
+    const isConstruct = actor.type === "construct";
     const creatureOptions = getCreatureOptions();
     const characteristicSettings = getCharacteristicSettings();
     const currencySettings = getCurrencySettings();
@@ -320,6 +331,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       sourceSystem,
       config: FALLOUT_MAW,
       owner: actor.isOwner,
+      isConstruct,
       editable: this.isEditable,
       freeEdit: this.#freeEdit,
       editLockAttribute: this.#freeEdit ? "" : "disabled",
@@ -530,6 +542,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   static #onOpenPersonalGenerator(event) {
     event.preventDefault();
     return openPersonalGenerator(this.actor);
+  }
+
+  static #onOpenConstructStructure(event) {
+    event.preventDefault();
+    return openConstructStructure(this.actor);
   }
 
   static #onOpenTradeSettings(event) {
@@ -4749,7 +4766,7 @@ function getActorLoadLimit(actor) {
 function calculateActorLoad(items = []) {
   const itemList = Array.isArray(items) ? items : Array.from(items ?? []);
   return Number(itemList.reduce((total, item) => (
-    isNaturalRaceItem(item) || getItemContainerParentId(item)
+    isNaturalRaceItem(item) || getItemContainerParentId(item) || String(item.system?.placement?.mode ?? "") === ITEM_FUNCTIONS.constructPart
       ? total
       : total + (Number(getItemActorLoadWeight(item, itemList)) || 0)
   ), 0).toFixed(1));
@@ -5258,6 +5275,33 @@ function prepareDevelopmentPointEntries(development = {}) {
 }
 
 function prepareLimbDisplayData(actor, limbKey, limb = {}) {
+  const constructPart = getInstalledConstructPart(actor, limbKey);
+  if (constructPart) {
+    const hasCondition = hasItemFunction(constructPart, ITEM_FUNCTIONS.condition);
+    const condition = hasCondition ? getConditionFunction(constructPart) : {};
+    const conditionMax = Math.max(0, toInteger(condition.max));
+    const conditionValue = Math.max(0, Math.min(conditionMax, toInteger(condition.value)));
+    const ratio = hasCondition && conditionMax > 0 ? Math.max(0, Math.min(1, conditionValue / conditionMax)) : 1;
+    const part = getConstructPartFunction(constructPart);
+    const partType = String(part.partType ?? "").trim() || constructPart.name;
+    return {
+      ...limb,
+      label: partType,
+      value: hasCondition ? conditionValue : 1,
+      max: hasCondition ? conditionMax : 1,
+      min: 0,
+      scaleMax: hasCondition ? conditionMax : 1,
+      displayValue: hasCondition ? conditionValue : "∞",
+      displayMax: hasCondition ? conditionMax : "",
+      stateLabel: constructPart.name,
+      fill: mixHexColor("#5a6f7a", "#d9eef5", ratio),
+      popoverRows: [
+        ["Деталь конструкта", partType],
+        ["Предмет", constructPart.name],
+        ["Состояние", hasCondition ? `${conditionValue} / ${conditionMax}` : "∞"]
+      ]
+    };
+  }
   const prosthesis = getInstalledActorProsthesis(actor, limbKey);
   if (prosthesis) {
     const hasCondition = hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition);
@@ -5283,11 +5327,12 @@ function prepareLimbDisplayData(actor, limbKey, limb = {}) {
     };
   }
   if (isLimbDestroyed(actor, limbKey)) {
+    const stateLabel = getDestroyedLimbStateLabel(actor, limbKey);
     return {
       ...limb,
-      displayValue: "Отсутствует",
+      displayValue: stateLabel,
       displayMax: "",
-      stateLabel: "Отсутствует",
+      stateLabel,
       fill: "rgba(6, 8, 8, 0.96)"
     };
   }
@@ -5322,6 +5367,20 @@ function getInstalledActorProsthesis(actor, limbKey = "") {
     && String(item.system?.placement?.mode ?? "") === "prosthesis"
     && String(item.system?.placement?.limbKey ?? "") === key
   )) ?? null;
+}
+
+function getInstalledConstructPart(actor, limbKey = "") {
+  if (actor?.type !== "construct") return null;
+  const key = String(limbKey ?? "").trim();
+  const itemId = key.startsWith("constructPart:")
+    ? key.slice("constructPart:".length)
+    : key.startsWith("constructPart.") ? key.slice("constructPart.".length) : "";
+  if (!itemId) return null;
+  const item = actor.items?.get(itemId);
+  if (!item || item.type !== "gear") return null;
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.constructPart)) return null;
+  if (String(item.system?.placement?.mode ?? "") !== ITEM_FUNCTIONS.constructPart) return null;
+  return item;
 }
 
 function getEffectCategoryKey(effect) {

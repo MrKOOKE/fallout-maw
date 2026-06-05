@@ -1,5 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
-import { isLimbDestroyed, requestDamageApplication, restoreDestroyedLimb } from "../combat/damage-hub.mjs";
+import { getDestroyedLimbStateLabel, isLimbDestroyed, requestDamageApplication, restoreDestroyedLimb } from "../combat/damage-hub.mjs";
 import { getDamageTypeSettings } from "../settings/accessors.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
@@ -57,11 +57,13 @@ export async function openLimbDamageDialog(actor, limbKey = "") {
 
 async function openLimbRestoreDialog(actor, limbKey = "", limb = {}) {
   const label = String(limb?.label ?? limbKey);
+  const stateLabel = getDestroyedLimbStateLabel(actor, limbKey).toLocaleLowerCase(game.i18n?.lang ?? "ru");
+  const actionLabel = actor?.type === "construct" ? "деталь и вернуть ее функции" : "часть тела и вернуть ее функции";
   const confirmed = await DialogV2.confirm({
     window: {
       title: `${label}: восстановление`
     },
-    content: `<p>${label} отсутствует. Восстановить часть тела и вернуть ее функции?</p>`,
+    content: `<p>${label} ${stateLabel}. Восстановить ${actionLabel}?</p>`,
     yes: {
       label: "Восстановить",
       icon: "fa-solid fa-kit-medical"

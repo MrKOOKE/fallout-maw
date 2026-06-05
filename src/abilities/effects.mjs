@@ -55,7 +55,7 @@ export async function syncLoadedActorAbilityEffects() {
 
 export async function syncActorAbilityEffects(actor) {
   if (!actor || !game.user?.isActiveGM) return;
-  if (!["character", "npc"].includes(actor.type)) return;
+  if (!["character", "construct"].includes(actor.type)) return;
   if (processingActors.has(actor.uuid)) return;
 
   processingActors.add(actor.uuid);
@@ -313,7 +313,8 @@ function isActiveItemFreeSettingsItem(item) {
   if (!hasItemFreeSettingsFunction(item)) return false;
   return Boolean(item.system?.equipped)
     || item.system?.placement?.mode === "equipment"
-    || item.system?.placement?.mode === "weapon";
+    || item.system?.placement?.mode === "weapon"
+    || item.system?.placement?.mode === "constructPart";
 }
 
 function isItemFreeSettingsUpdate(item, changes = {}) {
@@ -324,5 +325,7 @@ function isItemFreeSettingsUpdate(item, changes = {}) {
       || path.startsWith("system.functions.freeSettings.")
       || path === "system.equipped"
       || path === "system.placement"
-      || path.startsWith("system.placement."));
+      || path.startsWith("system.placement.")
+      || path === "system.functions.constructPart"
+      || path.startsWith("system.functions.constructPart."));
 }

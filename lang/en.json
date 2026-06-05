@@ -2,9 +2,7 @@
   "TYPES": {
     "Actor": {
       "character": "Character",
-      "npc": "NPC",
-      "vehicle": "Vehicle",
-      "hazard": "Hazard"
+      "construct": "Construct"
     },
     "Item": {
       "gear": "Item",

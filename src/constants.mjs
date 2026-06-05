@@ -1,7 +1,7 @@
 export const SYSTEM_ID = "fallout-maw";
 export const SYSTEM_TITLE = "Fallout-MaW";
 
-export const ACTOR_TYPES = Object.freeze(["character", "npc", "vehicle", "hazard"]);
+export const ACTOR_TYPES = Object.freeze(["character", "construct"]);
 export const ITEM_TYPES = Object.freeze(["gear", "ability", "trauma", "disease"]);
 export const TRAUMA_CREATE_OPTION = "falloutMawAllowTraumaCreate";
 export const DISEASE_CREATE_OPTION = "falloutMawAllowDiseaseCreate";
@@ -17,6 +17,7 @@ export const TEMPLATES = Object.freeze({
   limbDamageDialog: `systems/${SYSTEM_ID}/templates/actor/limb-damage-dialog.hbs`,
   medicineDialog: `systems/${SYSTEM_ID}/templates/actor/medicine-dialog.hbs`,
   repairDialog: `systems/${SYSTEM_ID}/templates/actor/repair-dialog.hbs`,
+  constructStructure: `systems/${SYSTEM_ID}/templates/actor/construct-structure.hbs`,
   animationLibraryBrowser: `systems/${SYSTEM_ID}/templates/actor/animation-library-browser.hbs`,
   skillCheckControl: `systems/${SYSTEM_ID}/templates/actor/skill-check-control.hbs`,
   worldTimeControl: `systems/${SYSTEM_ID}/templates/actor/world-time-control.hbs`,

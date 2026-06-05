@@ -6,6 +6,7 @@ import {
 } from "../utils/inventory-containers.mjs";
 import { DISEASE_CREATE_OPTION, TRAUMA_CREATE_OPTION } from "../constants.mjs";
 import { migrateItemData } from "../migrations/documents.mjs";
+import { handleItemDamageUpdate } from "../combat/damage-hub.mjs";
 
 const MANUALLY_CREATABLE_ITEM_TYPES = Object.freeze(["gear", "ability"]);
 
@@ -116,6 +117,11 @@ export class FalloutMaWItem extends Item {
     }
 
     return undefined;
+  }
+
+  _onUpdate(changes, options, userId) {
+    super._onUpdate(changes, options, userId);
+    handleItemDamageUpdate(this, changes, options);
   }
 
   get isEquipped() {

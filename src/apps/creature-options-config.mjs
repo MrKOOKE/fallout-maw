@@ -992,7 +992,7 @@ class LimbSettingsConfig extends FalloutMaWFormApplicationV2 {
       ...(await super._prepareContext(options)),
       limb: {
         ...this.limb,
-        lossEffects: normalizeLimbLossEffects(this.limb.lossEffects).map((effect, index) => prepareLimbLossEffectRow(effect, index))
+        lossEffects: normalizeLimbLossEffects(this.limb.lossEffects, { keepEmpty: true }).map((effect, index) => prepareLimbLossEffectRow(effect, index))
       }
     };
   }
@@ -1038,11 +1038,13 @@ class LimbSettingsConfig extends FalloutMaWFormApplicationV2 {
     this.limb = normalizeLimbSettings({
       ...this.limb,
       ...(data.limb ?? {}),
-      lossEffects: this.#readLossEffectsFromForm()
+      lossEffects: this.#readLossEffectsFromForm({ keepEmpty: true })
+    }, {
+      keepEmptyLossEffects: true
     });
   }
 
-  #readLossEffectsFromForm() {
+  #readLossEffectsFromForm({ keepEmpty = false } = {}) {
     return Array.from(this.form?.querySelectorAll("[data-limb-loss-effect]") ?? [])
       .map(row => ({
         key: row.querySelector("[data-limb-loss-effect-key]")?.value?.trim() ?? "",
@@ -1051,11 +1053,11 @@ class LimbSettingsConfig extends FalloutMaWFormApplicationV2 {
         phase: "initial",
         priority: row.querySelector("[data-limb-loss-effect-priority]")?.value ?? null
       }))
-      .filter(effect => effect.key);
+      .filter(effect => keepEmpty || effect.key);
   }
 }
 
-function normalizeLimbSettings(limb = {}) {
+function normalizeLimbSettings(limb = {}, { keepEmptyLossEffects = false } = {}) {
   const critical = parseBoolean(limb?.critical);
   return {
     key: String(limb?.key ?? "").trim(),
@@ -1064,11 +1066,11 @@ function normalizeLimbSettings(limb = {}) {
     damageMultiplier: toDecimal(limb?.damageMultiplier, 1),
     aimedDifficultyPercent: toInteger(limb?.aimedDifficultyPercent),
     critical,
-    lossEffects: critical ? [] : normalizeLimbLossEffects(limb?.lossEffects)
+    lossEffects: critical ? [] : normalizeLimbLossEffects(limb?.lossEffects, { keepEmpty: keepEmptyLossEffects })
   };
 }
 
-function normalizeLimbLossEffects(value = []) {
+function normalizeLimbLossEffects(value = [], { keepEmpty = false } = {}) {
   const effects = Array.isArray(value) ? value : Object.values(value ?? {});
   return effects
     .map(effect => ({
@@ -1080,7 +1082,7 @@ function normalizeLimbLossEffects(value = []) {
         ? null
         : toInteger(effect.priority)
     }))
-    .filter(effect => effect.key);
+    .filter(effect => keepEmpty || effect.key);
 }
 
 function prepareLimbLossEffectRow(effect = {}, index = 0) {

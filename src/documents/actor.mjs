@@ -70,16 +70,17 @@ export class FalloutMaWActor extends Actor {
 
   async _preCreate(data, options, user) {
     if ((await super._preCreate(data, options, user)) === false) return false;
-    if (!["character", "npc"].includes(this.type)) return undefined;
+    if (!["character", "construct"].includes(this.type)) return undefined;
 
-    applyCreatureRaceDefaults(this);
+    if (this.type === "character") applyCreatureRaceDefaults(this);
+    else clearCreatureSelection(this);
     applyNewActorResourceDefaults(this);
     return undefined;
   }
 
   async _preUpdate(changes, options, user) {
     if ((await super._preUpdate(changes, options, user)) === false) return false;
-    if (!["character", "npc"].includes(this.type)) return undefined;
+    if (!["character", "construct"].includes(this.type)) return undefined;
     await prepareActorDamageUpdate(this, changes, options);
     syncTrackedResourceValueUpdates(this, changes);
     return undefined;
@@ -87,7 +88,8 @@ export class FalloutMaWActor extends Actor {
 
   _onUpdate(changes, options, userId) {
     super._onUpdate(changes, options, userId);
-    if (!["character", "npc"].includes(this.type)) return;
+    if (!["character", "construct"].includes(this.type)) return;
+    if (this.type === "construct") void syncConstructPartConditionDamage(this, changes);
     handleActorDamageUpdate(this, changes, options);
   }
 
@@ -354,12 +356,24 @@ function prepareActorLoadData(actor) {
     : 0;
   const value = Number(
     actor.items.reduce((total, item) => (
-      isNaturalRaceItem(item) || getItemContainerParentId(item)
+      isNaturalRaceItem(item) || getItemContainerParentId(item) || String(item.system?.placement?.mode ?? "") === ITEM_FUNCTIONS.constructPart
         ? total
         : total + (Number(getItemActorLoadWeight(item, actor.items)) || 0)
     ), 0).toFixed(1)
   );
   actor.system.load = { min: 0, spent: 0, bonus, value, max, limit, limitPercent };
+}
+
+function clearCreatureSelection(actor) {
+  actor.updateSource({
+    system: {
+      creature: {
+        typeId: "",
+        raceId: "",
+        subtypeId: ""
+      }
+    }
+  });
 }
 
 function evaluateProgressionFormula(formula, characteristics, characteristicSettings, fallback = "0") {
@@ -376,9 +390,22 @@ function evaluateProgressionFormula(formula, characteristics, characteristicSett
 
 function activateCreatureCreateDialog(dialog) {
   const root = dialog.element instanceof HTMLElement ? dialog.element : dialog.element?.[0] ?? dialog.element;
+  const actorTypeSelect = root?.querySelector('select[name="type"]');
+  const baseFieldset = root?.querySelector("[data-character-base-fieldset]");
   const typeSelect = root?.querySelector("[data-creature-type-select]");
   const raceSelect = root?.querySelector("[data-creature-race-select]");
   const subtypeSelect = root?.querySelector("[data-creature-subtype-select]");
+  const syncCharacterBaseVisibility = () => {
+    const isCharacter = String(actorTypeSelect?.value ?? "character") === "character";
+    if (baseFieldset) baseFieldset.hidden = !isCharacter;
+    if (!isCharacter) {
+      if (typeSelect) typeSelect.value = "";
+      if (raceSelect) raceSelect.value = "";
+      if (subtypeSelect) subtypeSelect.value = "";
+    }
+  };
+  actorTypeSelect?.addEventListener("change", syncCharacterBaseVisibility);
+  syncCharacterBaseVisibility();
   if (!typeSelect || !raceSelect) return;
 
   const selectFirstVisible = select => {
@@ -549,6 +576,26 @@ function prepareIntegratedProsthesisHealth(actor) {
   health.max = Math.max(min, toInteger(health.max) + max);
   health.value = Math.min(Math.max(toInteger(health.value) + value, min), health.max);
   health.spent = Math.max(0, health.max - health.value);
+}
+
+async function syncConstructPartConditionDamage(actor, changes = {}) {
+  const updates = [];
+  for (const [path, value] of Object.entries(foundry.utils.flattenObject(changes ?? {}))) {
+    const match = path.match(/^system\.limbs\.constructPart[:.]([^.]+)\.value$/);
+    if (!match) continue;
+    const item = actor.items?.get(match[1]);
+    if (!item || item.type !== "gear") continue;
+    if (!hasItemFunction(item, ITEM_FUNCTIONS.constructPart) || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
+    const condition = getConditionFunction(item);
+    const max = Math.max(0, toInteger(condition.max));
+    const nextValue = Math.max(0, Math.min(max, toInteger(value)));
+    if (nextValue === toInteger(condition.value)) continue;
+    updates.push({
+      _id: item.id,
+      "system.functions.condition.value": nextValue
+    });
+  }
+  if (updates.length) await actor.updateEmbeddedDocuments("Item", updates, { falloutMawConstructPartConditionSync: true });
 }
 
 function getIntegratedProsthesisHealth(prosthesis, limb = {}) {

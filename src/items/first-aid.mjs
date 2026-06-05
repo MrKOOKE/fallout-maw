@@ -75,10 +75,12 @@ export async function useFirstAidItem({ sourceActor = null, targetActor = null, 
   const healing = calculateHealingAmount(targetActor, firstAid, healingMultiplier, targetContext);
   const durationSeconds = Math.max(0, toInteger(firstAid.durationSeconds));
   const normalizedChanges = normalizeFirstAidChanges(firstAid.changes, effectMultiplier, healingMultiplier);
-  const healingPerTick = Math.max(0, normalizedChanges.healingPerTick);
+  const healingPerTick = targetContext.isConstruct ? 0 : Math.max(0, normalizedChanges.healingPerTick);
   const changes = normalizedChanges.changes;
   const needs = normalizeFirstAidNeeds(firstAid.needs, effectMultiplier);
-  const limbs = normalizeFirstAidLimbs(selectedLimbs, firstAid, effectMultiplier, healingMultiplier);
+  const limbs = targetContext.isConstruct
+    ? []
+    : normalizeFirstAidLimbs(selectedLimbs, firstAid, effectMultiplier, healingMultiplier);
   const hasImmediateHealing = healing > 0;
   const hasTimedEffect = durationSeconds > 0 && (healingPerTick > 0 || changes.length);
   if (!hasImmediateHealing && !hasTimedEffect && !needs.length && !limbs.length && !hasEffectRemoval) return false;
@@ -138,6 +140,7 @@ export async function useFirstAidItem({ sourceActor = null, targetActor = null, 
 }
 
 function calculateHealingAmount(actor, firstAid = {}, multiplier = 1, targetContext = null) {
+  if (targetContext?.isConstruct || actor?.type === "construct") return 0;
   const base = Math.max(0, toInteger(firstAid.healing));
   if (!base) return 0;
   if (firstAid.healingIsPercentage) {
@@ -322,6 +325,7 @@ async function requestLimbSelection(actor, firstAid = {}, targetContext = null) 
   const count = Math.max(0, toInteger(firstAid.limbSelection?.count));
   const value = toInteger(firstAid.limbSelection?.value);
   const hasEffectRemoval = getFirstAidRemoveEffectDamageTypeKeys(firstAid).length > 0;
+  if (targetContext?.isConstruct && value > 0 && !hasEffectRemoval) return [];
   if (!count || (!value && !hasEffectRemoval)) return [];
   const limbs = (Array.isArray(targetContext?.limbs) && targetContext.limbs.length
     ? targetContext.limbs

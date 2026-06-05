@@ -39,17 +39,7 @@
           "description"
         ]
       },
-      "npc": {
-        "htmlFields": [
-          "description"
-        ]
-      },
-      "vehicle": {
-        "htmlFields": [
-          "description"
-        ]
-      },
-      "hazard": {
+      "construct": {
         "htmlFields": [
           "description"
         ]

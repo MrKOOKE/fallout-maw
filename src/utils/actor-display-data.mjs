@@ -23,7 +23,7 @@ import {
   normalizeInventoryPlacement,
   prepareInventoryGridContext
 } from "./inventory-containers.mjs";
-import { getFirstAidChargesData, hasItemFunction, ITEM_FUNCTIONS } from "./item-functions.mjs";
+import { getConstructPartFunction, getFirstAidChargesData, hasItemFunction, ITEM_FUNCTIONS } from "./item-functions.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem } from "../races/natural-items.mjs";
 import { toInteger } from "./numbers.mjs";
 
@@ -131,9 +131,14 @@ export function prepareInventoryContext(actor, race) {
   const { columns, rows } = getActorInventoryGridDimensions(actor, race);
   const allItems = actor.items.contents.filter(item => !["ability", "trauma", "disease"].includes(item.type) && !isNaturalRaceItem(item));
   const allItemData = allItems.map(item => createInventoryItemData(item, allItems, currencies));
-  const naturalWeaponSet = getNaturalWeaponSetContext(actor, race, currencies);
+  const naturalWeaponSet = actor?.type === "construct"
+    ? getConstructNaturalWeaponSetContext(actor, allItemData)
+    : getNaturalWeaponSetContext(actor, race, currencies);
   const assignedItemIds = new Set();
   const topLevelItems = allItemData.filter(item => !item.parentId);
+  for (const item of topLevelItems) {
+    if (item.placement?.mode === ITEM_FUNCTIONS.constructPart) assignedItemIds.add(item.id);
+  }
 
   const equipmentSlots = (race?.equipmentSlots ?? []).map(slot => {
     const item = topLevelItems.find(candidate => (
@@ -146,6 +151,7 @@ export function prepareInventoryContext(actor, race) {
 
   const weaponSets = [
     ...(race?.weaponSets ?? []).map(set => prepareWeaponSetContext(set, race, topLevelItems, assignedItemIds, actor)),
+    ...prepareConstructPartWeaponSets(actor, topLevelItems, assignedItemIds),
     ...prepareContainerWeaponSets(actor, topLevelItems, assignedItemIds)
   ];
 
@@ -206,6 +212,97 @@ function prepareWeaponSetContext(set, race, topLevelItems, assignedItemIds, acto
       actor
     }))
   };
+}
+
+function getConstructNaturalWeaponSetContext(actor, allItemData = []) {
+  const slots = allItemData
+    .filter(item => isInstalledConstructPartWeapon(actor, item))
+    .sort(compareConstructPartDisplayItems)
+    .map(item => {
+      const document = actor.items.get(item.id);
+      const part = getConstructPartFunction(document);
+      const label = String(part.partType ?? "").trim() || item.name;
+      return {
+        key: `constructPartWeapon.${item.id}`,
+        label,
+        item
+      };
+    });
+  if (!slots.length) return null;
+  return {
+    key: "constructPartWeapons",
+    label: "Оружие",
+    slots
+  };
+}
+
+function prepareConstructPartWeaponSets(actor, topLevelItems, assignedItemIds) {
+  if (actor?.type !== "construct") return [];
+  return topLevelItems
+    .filter(item => isInstalledConstructPart(actor, item))
+    .sort(compareConstructPartDisplayItems)
+    .flatMap(item => {
+      const document = actor.items.get(item.id);
+      const part = getConstructPartFunction(document);
+      const partType = String(part.partType ?? "").trim() || item.name;
+      return normalizeConstructPartWeaponSets(part.weaponSets).map(set => {
+        const setKey = getConstructPartWeaponSetKey(item.id, set.id);
+        const label = set.label || `${partType}: оружие`;
+        const slots = Array.from({ length: set.quantity }, (_value, index) => {
+          const slotKey = getConstructPartWeaponSlotKey(index);
+          return {
+            key: slotKey,
+            label: `${label} ${index + 1}`
+          };
+        });
+        return {
+          key: setKey,
+          label,
+          constructPartId: item.id,
+          slots: slots.map((slot, index) => prepareWeaponSlotContext({
+            setKey,
+            slot,
+            slotIndex: index,
+            setSlots: slots,
+            label: slot.label,
+            topLevelItems,
+            assignedItemIds,
+            actor
+          }))
+        };
+      });
+    });
+}
+
+function isInstalledConstructPartWeapon(actor, item) {
+  const document = actor?.items?.get(item?.id ?? "");
+  return Boolean(isInstalledConstructPart(actor, item) && hasItemFunction(document, ITEM_FUNCTIONS.weapon));
+}
+
+function isInstalledConstructPart(actor, item) {
+  const document = actor?.items?.get(item?.id ?? "");
+  return Boolean(
+    document?.type === "gear"
+    && item?.placement?.mode === ITEM_FUNCTIONS.constructPart
+    && hasItemFunction(document, ITEM_FUNCTIONS.constructPart)
+  );
+}
+
+function normalizeConstructPartWeaponSets(sets) {
+  return (Array.isArray(sets) ? sets : [])
+    .map(entry => ({
+      id: String(entry?.id ?? "").trim(),
+      label: String(entry?.label ?? "").trim(),
+      quantity: Math.max(0, toInteger(entry?.quantity))
+    }))
+    .filter(entry => entry.id && entry.quantity > 0);
+}
+
+function compareConstructPartDisplayItems(left, right) {
+  const leftOrder = toInteger(left?.placement?.constructPartOrder);
+  const rightOrder = toInteger(right?.placement?.constructPartOrder);
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+  return String(left?.id ?? "").localeCompare(String(right?.id ?? ""));
 }
 
 function prepareContainerWeaponSets(actor, topLevelItems, assignedItemIds) {
@@ -324,6 +421,14 @@ function isWeaponSlotOccupantDisabled(actor, race, item = null) {
   const requiredSlots = getRequiredWeaponSlotsForItem(race, item, item.placement?.weaponSet, item.placement?.weaponSlot);
   if (getWeaponSlotRequirement(item).selectedKeys.size && !requiredSlots.length) return true;
   return requiredSlots.some(slot => slot.limbKey && getLimbHealingCap(actor, slot.limbKey) <= 0);
+}
+
+function getConstructPartWeaponSetKey(itemId = "", setId = "") {
+  return `container:constructPart:${itemId}:${setId}`;
+}
+
+function getConstructPartWeaponSlotKey(index = 0) {
+  return `constructPartWeaponSlot${Math.max(1, toInteger(index) + 1)}`;
 }
 
 function getContainerExtraWeaponSlots(container) {

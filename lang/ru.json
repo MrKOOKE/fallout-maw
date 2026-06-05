@@ -2,9 +2,7 @@
   "TYPES": {
     "Actor": {
       "character": "Персонаж",
-      "npc": "НПС",
-      "vehicle": "Транспорт",
-      "hazard": "Опасность"
+      "construct": "Конструкт"
     },
     "Item": {
       "gear": "Предмет",

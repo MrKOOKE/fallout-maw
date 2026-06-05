@@ -1,0 +1,45 @@
+<section class="fallout-maw-construct-structure-body">
+  <section class="fallout-maw-panel fallout-maw-construct-drop-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>Строение конструкта</h2>
+    </div>
+    <div class="fallout-maw-construct-drop-zone" data-construct-part-drop-zone>
+      <i class="fa-solid fa-plus"></i>
+      <strong>Перетащите деталь конструкта</strong>
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel fallout-maw-construct-part-list-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>Детали</h2>
+      <button type="submit"><i class="fa-solid fa-check"></i> Сохранить</button>
+    </div>
+    <div class="fallout-maw-construct-part-list" data-construct-part-list>
+      {{#each entries}}
+      <article class="fallout-maw-construct-part-card" draggable="true" data-construct-part-entry-id="{{id}}">
+        <button class="fallout-maw-construct-part-drag" type="button" title="Переместить">
+          <i class="fa-solid fa-grip-vertical"></i>
+        </button>
+        <img src="{{img}}" alt="{{name}}">
+        <div class="fallout-maw-construct-part-main">
+          <div class="fallout-maw-resource-card-header">
+            <span class="fallout-maw-resource-name" title="{{name}}">{{order}}. {{typeLabel}}</span>
+            <span class="fallout-maw-resource-value" title="{{stateTitle}}">
+              <strong>{{valueLabel}}</strong>
+              {{#if maxLabel}}<span class="fallout-maw-resource-max">/ {{maxLabel}}</span>{{/if}}
+            </span>
+          </div>
+          <div class="fallout-maw-resource-meter fallout-maw-construct-part-meter" style="{{meterStyle}}" role="meter" aria-valuemin="0" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
+            <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
+          </div>
+        </div>
+        <button class="fallout-maw-construct-part-remove" type="button" title="Убрать" data-construct-part-remove="{{id}}">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </article>
+      {{else}}
+      <p class="fallout-maw-empty-list">Детали не добавлены.</p>
+      {{/each}}
+    </div>
+  </section>
+</section>

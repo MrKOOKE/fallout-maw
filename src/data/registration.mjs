@@ -4,12 +4,10 @@ import * as regionBehaviorData from "./region-behavior/_module.mjs";
 import {
   AbilityDataModel,
   CharacterDataModel,
+  ConstructDataModel,
   DiseaseDataModel,
   GearDataModel,
-  HazardDataModel,
-  NpcDataModel,
   TraumaDataModel,
-  VehicleDataModel
 } from "./models/index.mjs";
 
 const ACTOR_VALUE_ATTRIBUTES = ["attributes.level", "attributes.initiative"];
@@ -17,9 +15,7 @@ const ACTOR_VALUE_ATTRIBUTES = ["attributes.level", "attributes.initiative"];
 export function registerDataModels() {
   Object.assign(CONFIG.Actor.dataModels, {
     character: CharacterDataModel,
-    npc: NpcDataModel,
-    vehicle: VehicleDataModel,
-    hazard: HazardDataModel
+    construct: ConstructDataModel
   });
 
   Object.assign(CONFIG.Item.dataModels, {

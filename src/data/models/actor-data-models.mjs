@@ -34,6 +34,8 @@ import { resourceField } from "./resources.mjs";
 import {
   DAMAGE_MITIGATION_MODES,
   ITEM_FUNCTIONS,
+  getConditionFunction,
+  getConstructPartFunction,
   getConditionWeakeningData,
   getDamageMitigationFunction,
   hasItemFunction
@@ -168,7 +170,10 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.attributes.initiative = toInteger(this.characteristics.perception);
     replaceObjectContents(this.currencies, normalizeNumberMap(this.currencies, currencySettings));
 
-    const race = getCreatureOptions(characteristicSettings, damageTypeSettings).races.find(entry => entry.id === this.creature?.raceId);
+    const isConstruct = this.parent?.type === "construct";
+    const race = isConstruct
+      ? null
+      : getCreatureOptions(characteristicSettings, damageTypeSettings).races.find(entry => entry.id === this.creature?.raceId);
     const needSettings = getRaceNeedSettings(race);
     prepareActorInventorySize(this.inventory, race);
     if (race?.progression) {
@@ -192,8 +197,11 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     replaceObjectContents(this.proficiencies, normalizeProficiencyMap(this.proficiencies, proficiencySettings));
 
     const skillValues = getSkillValues(this.skills);
+    const constructLimbData = isConstruct ? getConstructPartLimbData(this.parent?.items) : null;
+    const limbSettings = constructLimbData?.settings ?? race?.limbs ?? [];
+    const limbSource = constructLimbData?.source ?? this.parent?._source?.system?.limbs ?? {};
     const limbMaximums = evaluateLimbMaximums(
-      race?.limbs ?? [],
+      limbSettings,
       characteristicSettings,
       skillSettings,
       this.characteristics,
@@ -201,7 +209,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     );
     replaceObjectContents(
       this.limbs,
-      normalizeLimbMap(this.limbs, race?.limbs ?? [], limbMaximums, this.parent?._source?.system?.limbs ?? {})
+      normalizeLimbMap(constructLimbData?.source ?? this.limbs, limbSettings, limbMaximums, limbSource)
     );
 
     const resourceMaximums = evaluateResourceSettings(
@@ -260,25 +268,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
 }
 
 export class CharacterDataModel extends BaseActorDataModel {}
-export class NpcDataModel extends BaseActorDataModel {}
-
-export class VehicleDataModel extends BaseActorDataModel {
-  static defineSchema() {
-    return {
-      ...super.defineSchema(),
-      crew: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
-    };
-  }
-}
-
-export class HazardDataModel extends BaseActorDataModel {
-  static defineSchema() {
-    return {
-      ...super.defineSchema(),
-      difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
-    };
-  }
-}
+export class ConstructDataModel extends BaseActorDataModel {}
 
 function getRaceDamageResistanceFormulas(race, damageTypeSettings) {
   return normalizeFormulaMap(race?.damageResistances, damageTypeSettings);
@@ -497,7 +487,8 @@ function normalizeLimbMap(currentLimbs = {}, settings = [], maximums = {}, sourc
       const current = currentLimbs?.[setting.key];
       const source = sourceLimbs?.[setting.key];
       const max = Math.max(0, toInteger(maximums?.[setting.key] ?? setting?.stateMax));
-      const min = -max;
+      const configuredMin = Number(setting?.min);
+      const min = Number.isFinite(configuredMin) ? Math.trunc(configuredMin) : -max;
       const spent = normalizeLimbSpent(current, source, min, max);
       const value = Math.min(Math.max(max - spent, min), max);
       const missing = Boolean(source?.missing ?? current?.missing);
@@ -640,6 +631,54 @@ function mergeLimbDamageMaps(base = {}, ...bonuses) {
       )
     ])
   );
+}
+
+function getConstructPartLimbData(items) {
+  const settings = [];
+  const source = {};
+  const constructParts = (items?.contents ?? Array.from(items ?? []))
+    .filter(item => (
+      item?.type === "gear"
+      && hasItemFunction(item, ITEM_FUNCTIONS.constructPart)
+      && String(item.system?.placement?.mode ?? "") === ITEM_FUNCTIONS.constructPart
+    ))
+    .sort(compareConstructPartItems);
+
+  for (const item of constructParts) {
+    const key = `constructPart:${item.id}`;
+    const part = getConstructPartFunction(item);
+    const label = String(part.partType ?? "").trim() || item.name || key;
+    const hasCondition = hasItemFunction(item, ITEM_FUNCTIONS.condition);
+    const condition = hasCondition ? getConditionFunction(item) : {};
+    const max = hasCondition ? Math.max(0, toInteger(condition.max)) : 0;
+    const value = hasCondition ? Math.max(0, Math.min(max, toInteger(condition.value))) : 0;
+    const missing = hasCondition && max > 0 && value <= 0;
+    settings.push({
+      key,
+      label,
+      stateMax: String(max),
+      min: 0,
+      damageMultiplier: 1,
+      aimedDifficultyPercent: 0,
+      critical: Boolean(part.critical)
+    });
+    source[key] = {
+      label,
+      value,
+      max,
+      spent: Math.max(0, max - value),
+      missing,
+      damageAccumulation: {}
+    };
+  }
+  return { settings, source };
+}
+
+function compareConstructPartItems(left, right) {
+  const leftOrder = toInteger(left.system?.placement?.constructPartOrder);
+  const rightOrder = toInteger(right.system?.placement?.constructPartOrder);
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+  return String(left.id).localeCompare(String(right.id));
 }
 
 function expandLimbDamageMapSelectors(source = {}, limbs = {}, damageTypeSettings = []) {

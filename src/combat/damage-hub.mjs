@@ -17,6 +17,7 @@ import {
   ITEM_FUNCTIONS,
   getConditionFunction,
   getConditionWeakeningData,
+  getConstructPartFunction,
   getDamageMitigationFunction,
   getProsthesisFunction,
   hasItemFunction
@@ -763,6 +764,19 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
   const mode = data.mode === MODE_HEALING ? MODE_HEALING : MODE_DAMAGE;
   const scope = normalizeScope(data.scope, data.limbKey);
   const effectiveAmount = Math.max(0, roundDamageAmount(data.amount));
+  if (mode === MODE_HEALING && actor?.type === "construct") {
+    return {
+      actor,
+      amount: 0,
+      healthDelta: 0,
+      limbDelta: 0,
+      mode,
+      scope,
+      limbKey: data.limbKey,
+      damageTypeKey: damageType?.key ?? data.damageTypeKey,
+      createdTraumas: []
+    };
+  }
 
   const updateData = {};
   const limb = data.limbKey ? actor.system?.limbs?.[data.limbKey] : null;
@@ -813,12 +827,15 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
 
   for (const [limbKey, state] of limbStates) {
     if (!state.totalDelta) continue;
+    if (isConstructPartLimb(actor, limbKey)) continue;
     setLimbValueUpdate(updateData, actor, limbKey, state.nextValue);
   }
   for (const [limbKey, accumulation] of damageAccumulation) {
+    if (isConstructPartLimb(actor, limbKey)) continue;
     updateData[`system.limbs.${limbKey}.damageAccumulation`] = normalizeDamageAccumulation(accumulation);
   }
   if (Object.keys(updateData).length) await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
+  if (actor?.type === "construct" && limbStates.size) await syncConstructPartConditionValues(actor, limbStates);
 
   if (mode === MODE_HEALING && actualHealthDelta > 0) await advanceShockUnconsciousRecovery(actor, actualHealthDelta);
   const destroyedLimbKeys = mode === MODE_DAMAGE && actualLimbDelta > 0
@@ -883,12 +900,22 @@ export function isLimbPhysicallyMissing(actor, limbKey = "") {
 export function isLimbDestroyed(actor, limbKey = "") {
   const limb = actor?.system?.limbs?.[limbKey];
   if (!limb) return false;
+  const constructPart = getConstructPartItemForLimb(actor, limbKey);
+  if (constructPart) return isConstructPartDestroyed(constructPart);
   if (hasInstalledProsthesis(actor, limbKey)) return false;
   return isLimbPhysicallyMissing(actor, limbKey);
 }
 
+export function getDestroyedLimbStateLabel(actor, limbKey = "") {
+  return getConstructPartItemForLimb(actor, limbKey) ? "Разрушен" : "Отсутствует";
+}
+
 export async function restoreDestroyedLimb(actor, limbKey = "") {
   if (!actor || !game.user?.isGM) return undefined;
+  if (getConstructPartItemForLimb(actor, limbKey)) {
+    ui.notifications?.warn?.("Детали конструкта восстанавливаются через ремонт самой детали.");
+    return undefined;
+  }
   return queueActorDamageMutation(actor.uuid, async freshActor => {
     const limb = freshActor?.system?.limbs?.[limbKey];
     if (!freshActor || !limb) return undefined;
@@ -969,6 +996,30 @@ export function handleActorDamageUpdate(actor, changes = {}, options = {}) {
   return queueActorDamageStatusSync(actor);
 }
 
+export function handleItemDamageUpdate(item, changes = {}, options = {}) {
+  if (options?.falloutMawConstructPartConditionSync) return undefined;
+  if (!isConstructPartConditionUpdateRelevant(item, changes)) return undefined;
+  const actor = item?.parent;
+  const actorUuid = actor?.uuid;
+  const itemId = item?.id;
+  if (!actorUuid || !itemId) return undefined;
+
+  return queueActorDamageMutation(actorUuid, async freshActor => {
+    const freshItem = freshActor?.items?.get?.(itemId);
+    if (!freshItem) return undefined;
+    const limbKey = `constructPart:${itemId}`;
+    if (isConstructPartDestroyed(freshItem)) {
+      await applyDestroyedLimbConsequencesNow(freshActor, [limbKey]);
+    } else {
+      await deleteLimbTraumas(freshActor, limbKey);
+      await deleteLimbLossEffects(freshActor, limbKey);
+      await deleteLimbTimedDamageEffects(freshActor, limbKey);
+    }
+    await queueActorDamageStatusSync(freshActor);
+    return freshActor;
+  });
+}
+
 export function applyDamageCostModifier(baseCost = 0, modifier = {}) {
   let cost = Math.max(0, Number(baseCost) || 0);
   const hasOverride = modifier?.override !== null && modifier?.override !== undefined && modifier?.override !== "";
@@ -1006,7 +1057,7 @@ function preventCriticalLimbHealthRecovery(actor, changes = {}) {
 
 function hasDestroyedCriticalLimbAfterUpdate(actor, changes = {}) {
   for (const [key, limb] of Object.entries(actor?.system?.limbs ?? {})) {
-    const critical = Boolean(getUpdatePath(changes, `system.limbs.${key}.critical`) ?? limb?.critical);
+    const critical = isCriticalLimb(actor, key) || Boolean(getUpdatePath(changes, `system.limbs.${key}.critical`) ?? limb?.critical);
     if (!critical) continue;
     if (hasInstalledProsthesis(actor, key)) continue;
 
@@ -1082,8 +1133,9 @@ async function applyDestroyedLimbConsequencesNow(actor, limbKeys = [], { ignoreI
   for (const limbKey of Array.from(new Set(limbKeys.filter(Boolean)))) {
     const limb = actor?.system?.limbs?.[limbKey];
     if (!limb) continue;
-    const missing = isLimbPhysicallyMissing(actor, limbKey);
-    const reachedDestruction = toInteger(limb.value) <= toInteger(limb.min);
+    const constructPart = getConstructPartItemForLimb(actor, limbKey);
+    const missing = constructPart ? isConstructPartDestroyed(constructPart) : isLimbPhysicallyMissing(actor, limbKey);
+    const reachedDestruction = constructPart ? missing : toInteger(limb.value) <= toInteger(limb.min);
     if (!missing && !reachedDestruction) continue;
     destroyed.add(limbKey);
     if (!missing) {
@@ -1369,6 +1421,7 @@ function mergeManagedTimedDamageChangeData(existing = {}, incoming = {}) {
 function buildFullDamageRestoreUpdate(actor) {
   const updates = {};
   for (const [key, limb] of Object.entries(actor?.system?.limbs ?? {})) {
+    if (getConstructPartItemForLimb(actor, key)) continue;
     const keepMissing = isLimbPhysicallyMissing(actor, key) && hasInstalledProsthesis(actor, key);
     if (keepMissing) {
       updates[`system.limbs.${key}.missing`] = true;
@@ -1398,13 +1451,7 @@ function buildFullDamageRestoreUpdate(actor) {
 function buildFullProsthesisRestoreUpdates(actor) {
   const updates = [];
   for (const item of actor?.items ?? []) {
-    if (
-      item?.type !== "gear"
-      || !item.system?.equipped
-      || !hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)
-      || String(item.system?.placement?.mode ?? "") !== "prosthesis"
-      || !String(item.system?.placement?.limbKey ?? "").trim()
-    ) continue;
+    if (!isFullRestoreConditionBypassItem(item)) continue;
     if (!hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
     const condition = getConditionFunction(item);
     const max = Math.max(0, toInteger(condition.max));
@@ -1416,6 +1463,21 @@ function buildFullProsthesisRestoreUpdates(actor) {
     });
   }
   return updates;
+}
+
+function isFullRestoreConditionBypassItem(item) {
+  if (item?.type !== "gear") return false;
+  const placementMode = String(item.system?.placement?.mode ?? "");
+  if (
+    item.system?.equipped
+    && hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)
+    && placementMode === "prosthesis"
+    && String(item.system?.placement?.limbKey ?? "").trim()
+  ) return true;
+  return Boolean(
+    hasItemFunction(item, ITEM_FUNCTIONS.constructPart)
+    && placementMode === ITEM_FUNCTIONS.constructPart
+  );
 }
 
 async function createLimbLossEffect(actor, limbKey = "") {
@@ -1431,7 +1493,7 @@ async function createLimbLossEffect(actor, limbKey = "") {
   ));
   return actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
-    name: `${label}: отсутствует`,
+    name: `${label}: ${getDestroyedLimbStateLabel(actor, limbKey).toLocaleLowerCase(game.i18n?.lang ?? "ru")}`,
     img: "icons/svg/blood.svg",
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
@@ -1454,8 +1516,90 @@ function getLimbLossEffects(actor, limbKey = "") {
 }
 
 function getActorLimbSettings(actor, limbKey = "") {
+  const constructPart = getConstructPartItemForLimb(actor, limbKey);
+  if (constructPart) {
+    const part = getConstructPartFunction(constructPart);
+    return {
+      key: limbKey,
+      label: String(part.partType ?? "").trim() || constructPart.name || limbKey,
+      stateMax: String(constructPart.system?.functions?.condition?.max ?? actor?.system?.limbs?.[limbKey]?.max ?? "0"),
+      damageMultiplier: 1,
+      aimedDifficultyPercent: 0,
+      critical: Boolean(part.critical),
+      lossEffects: normalizeLimbLossEffects(part.lossEffects)
+    };
+  }
   const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId);
   return race?.limbs?.find(limb => limb.key === limbKey) ?? actor?.system?.limbs?.[limbKey] ?? null;
+}
+
+async function syncConstructPartConditionValues(actor, limbStates = new Map()) {
+  const updates = [];
+  for (const [limbKey, state] of limbStates) {
+    if (!state?.totalDelta) continue;
+    const item = getConstructPartItemForLimb(actor, limbKey);
+    if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) continue;
+    const condition = getConditionFunction(item);
+    const max = Math.max(0, toInteger(condition.max));
+    const nextValue = Math.max(0, Math.min(max, toInteger(state.nextValue)));
+    if (nextValue === toInteger(condition.value)) continue;
+    updates.push({
+      _id: item.id,
+      "system.functions.condition.value": nextValue
+    });
+  }
+  if (updates.length) await actor.updateEmbeddedDocuments("Item", updates, { falloutMawConstructPartConditionSync: true });
+}
+
+function getConstructPartItemForLimb(actor, limbKey = "") {
+  const key = String(limbKey ?? "").trim();
+  if (!key.startsWith("constructPart:") && !key.startsWith("constructPart.")) return null;
+  const itemId = key.slice(key.indexOf(":") >= 0 ? "constructPart:".length : "constructPart.".length);
+  const item = actor?.items?.get?.(itemId);
+  if (!item || item.type !== "gear") return null;
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.constructPart)) return null;
+  if (String(item.system?.placement?.mode ?? "") !== ITEM_FUNCTIONS.constructPart) return null;
+  return item;
+}
+
+function isConstructPartLimb(actor, limbKey = "") {
+  return Boolean(getConstructPartItemForLimb(actor, limbKey));
+}
+
+function isConstructPartConditionUpdateRelevant(item, changes = {}) {
+  if (
+    item?.type !== "gear"
+    || item.parent?.type !== "construct"
+    || !hasItemFunction(item, ITEM_FUNCTIONS.constructPart)
+    || String(item.system?.placement?.mode ?? "") !== ITEM_FUNCTIONS.constructPart
+  ) return false;
+
+  return updateTouchesPath(changes, "system.functions.condition")
+    || updateTouchesPath(changes, "system.functions.constructPart.critical");
+}
+
+function isConstructPartDestroyed(item) {
+  if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) return false;
+  const condition = getConditionFunction(item);
+  const max = Math.max(0, toInteger(condition.max));
+  if (max <= 0) return false;
+  const value = Math.max(0, Math.min(max, toInteger(condition.value)));
+  return value <= 0;
+}
+
+function normalizeLimbLossEffects(value = []) {
+  const effects = Array.isArray(value) ? value : Object.values(value ?? {});
+  return effects
+    .map(effect => ({
+      key: String(effect?.key ?? "").trim(),
+      type: ["add", "multiply", "override"].includes(String(effect?.type ?? "")) ? String(effect.type) : "add",
+      value: String(effect?.value ?? "0"),
+      phase: String(effect?.phase || "initial"),
+      priority: effect?.priority === "" || effect?.priority === null || effect?.priority === undefined
+        ? null
+        : toInteger(effect.priority)
+    }))
+    .filter(effect => effect.key);
 }
 
 function hasInstalledProsthesis(actor, limbKey = "") {
@@ -1488,6 +1632,8 @@ function getInstalledProsthesis(actor, limbKey = "") {
 }
 
 function isCriticalLimb(actor, limbKey = "") {
+  const constructPart = getConstructPartItemForLimb(actor, limbKey);
+  if (constructPart) return Boolean(getConstructPartFunction(constructPart).critical);
   const actorLimb = actor?.system?.limbs?.[limbKey];
   if (actorLimb && "critical" in actorLimb) return Boolean(actorLimb.critical);
   return Boolean(getActorLimbSettings(actor, limbKey)?.critical);
@@ -3097,13 +3243,16 @@ async function applyDamageEntriesBatch(actor, entries = []) {
 
   for (const [limbKey, state] of limbStates) {
     if (!state.totalDelta) continue;
+    if (isConstructPartLimb(actor, limbKey)) continue;
     setLimbValueUpdate(updateData, actor, limbKey, state.nextValue);
   }
   for (const [limbKey, accumulation] of damageAccumulation) {
+    if (isConstructPartLimb(actor, limbKey)) continue;
     updateData[`system.limbs.${limbKey}.damageAccumulation`] = normalizeDamageAccumulation(accumulation);
   }
 
   if (Object.keys(updateData).length) await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
+  if (actor?.type === "construct" && limbStates.size) await syncConstructPartConditionValues(actor, limbStates);
   const destroyedLimbKeys = await applyDestroyedLimbConsequences(actor, Array.from(limbStates.keys()));
   const shockCheck = aggregateNegativeLimbShockChecks(actor, shockChecks);
   if (shockCheck) await performNegativeLimbShockCheck(actor, shockCheck);

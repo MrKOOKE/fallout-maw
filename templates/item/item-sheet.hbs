@@ -965,6 +965,79 @@
   </section>
   {{/if}}
 
+  {{#if hasConstructPartFunction}}
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>Деталь конструкта</h2>
+      <button type="button" data-remove-item-function="constructPart" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <div class="fallout-maw-list-grid">
+      <label>
+        <span>Тип детали</span>
+        <input type="text" name="system.functions.constructPart.partType" value="{{system.functions.constructPart.partType}}">
+      </label>
+      <label class="fallout-maw-inline-checkbox">
+        <span>Критическая деталь</span>
+        <input type="hidden" name="system.functions.constructPart.critical" value="false">
+        <input type="checkbox" name="system.functions.constructPart.critical" value="true" data-construct-part-critical {{checked system.functions.constructPart.critical}}>
+      </label>
+    </div>
+    {{#unless system.functions.constructPart.critical}}
+    <div class="fallout-maw-panel-header subsection">
+      <h3>Эффекты утраты</h3>
+      <button type="button" data-add-construct-part-loss-effect><i class="fa-solid fa-plus"></i> Добавить эффект</button>
+    </div>
+    <div class="fallout-maw-trauma-effect-table" data-construct-part-loss-effect-list>
+      <div class="fallout-maw-trauma-effect-row fallout-maw-grid-header">
+        <span>Ключ</span>
+        <span>Тип</span>
+        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span>Приоритет</span>
+        <span></span>
+      </div>
+      {{#each constructPartLossEffectRows}}
+      <div class="fallout-maw-trauma-effect-row" data-construct-part-loss-effect-row>
+        <input type="text" name="system.functions.constructPart.lossEffects.{{index}}.key" data-construct-part-loss-effect-key data-effect-key-autocomplete value="{{key}}">
+        <select name="system.functions.constructPart.lossEffects.{{index}}.type" data-construct-part-loss-effect-type>
+          {{#each typeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="text" name="system.functions.constructPart.lossEffects.{{index}}.value" data-construct-part-loss-effect-value value="{{value}}">
+        <input type="hidden" name="system.functions.constructPart.lossEffects.{{index}}.phase" value="initial">
+        <input type="number" name="system.functions.constructPart.lossEffects.{{index}}.priority" data-construct-part-loss-effect-priority value="{{priority}}" step="1">
+        <button type="button" data-delete-construct-part-loss-effect="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Effects.NoChanges"}}</p>
+      {{/each}}
+    </div>
+    {{/unless}}
+    <div class="fallout-maw-panel-header subsection">
+      <h3>Оружейные наборы</h3>
+      <button type="button" data-add-construct-part-weapon-set><i class="fa-solid fa-plus"></i> Добавить</button>
+    </div>
+    <div class="fallout-maw-settings-list">
+      {{#each constructPartWeaponSetRows}}
+      <div class="fallout-maw-settings-row">
+        <input type="hidden" name="system.functions.constructPart.weaponSets.{{index}}.id" value="{{id}}">
+        <label>
+          <span>Название набора</span>
+          <input type="text" name="system.functions.constructPart.weaponSets.{{index}}.label" value="{{label}}">
+        </label>
+        <label>
+          <span>Количество</span>
+          <input type="number" name="system.functions.constructPart.weaponSets.{{index}}.quantity" value="{{quantity}}" min="0" step="1">
+        </label>
+        <button type="button" data-delete-construct-part-weapon-set="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">Дополнительные наборы не добавлены.</p>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+
   {{#if hasFirstAidFunction}}
   <section class="fallout-maw-panel">
     <div class="fallout-maw-panel-header">

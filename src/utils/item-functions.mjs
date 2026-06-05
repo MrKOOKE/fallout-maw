@@ -4,6 +4,7 @@ export const ITEM_FUNCTIONS = {
   damageSource: "damageSource",
   freeSettings: "freeSettings",
   condition: "condition",
+  constructPart: "constructPart",
   firstAid: "firstAid",
   weapon: "weapon",
   module: "module",
@@ -39,6 +40,10 @@ export function getDamageMitigationFunction(itemOrSystem = null) {
 
 export function getConditionFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.condition] ?? {};
+}
+
+export function getConstructPartFunction(itemOrSystem = null) {
+  return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.constructPart] ?? {};
 }
 
 export function getDamageSourceFunction(itemOrSystem = null) {

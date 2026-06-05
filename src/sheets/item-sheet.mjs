@@ -162,6 +162,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const hasModuleFunction = hasItemFunction(item, ITEM_FUNCTIONS.module);
     const hasProsthesisFunction = hasItemFunction(item, ITEM_FUNCTIONS.prosthesis);
     const hasConditionFunction = hasItemFunction(item, ITEM_FUNCTIONS.condition);
+    const hasConstructPartFunction = hasItemFunction(item, ITEM_FUNCTIONS.constructPart);
     const hasFirstAidFunction = hasItemFunction(item, ITEM_FUNCTIONS.firstAid);
     const hasWeaponFunction = hasItemFunction(item, ITEM_FUNCTIONS.weapon);
     const hasToolFunction = hasItemFunction(item, ITEM_FUNCTIONS.tool);
@@ -203,6 +204,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         value: ITEM_FUNCTIONS.condition,
         label: game.i18n.localize("FALLOUTMAW.Item.FunctionCondition"),
         disabled: hasConditionFunction
+      },
+      {
+        value: ITEM_FUNCTIONS.constructPart,
+        label: "Деталь конструкта",
+        disabled: hasConstructPartFunction
       },
       {
         value: ITEM_FUNCTIONS.firstAid,
@@ -308,11 +314,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       damageSourceDamageTypeRows: buildDamageSourceDamageTypeRows(item, damageTypeSettings),
       damageSourceVolleyRegionDamageRows: buildDamageSourceVolleyRegionDamageRows(item, damageTypeSettings),
       hasConditionFunction,
+      hasConstructPartFunction,
       hasFirstAidFunction,
       firstAidEffectRows: buildFirstAidEffectRows(item),
       firstAidNeedRows: buildFirstAidNeedRows(item),
       firstAidRemoveEffectRows: buildFirstAidRemoveEffectRows(item, damageTypeSettings),
       conditionRecoveryMethodRows: buildConditionRecoveryMethodRows(item, toolSettings),
+      constructPartWeaponSetRows: buildConstructPartWeaponSetRows(item),
+      constructPartLossEffectRows: buildConstructPartLossEffectRows(item),
       hasWeaponFunction,
       hasWeaponMagazineCost: hasWeaponResourceCost(item, "magazine"),
       hasToolFunction,
@@ -384,6 +393,18 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         .map(input => String(input.value ?? "").trim())
         .filter(Boolean);
       foundry.utils.setProperty(submitData, "system.functions.prosthesis.blockedPeriodicEffects", Array.from(new Set(blocked)));
+    }
+    const constructPartCriticalInput = form?.querySelector?.("[data-construct-part-critical]");
+    if (constructPartCriticalInput) {
+      const critical = Boolean(constructPartCriticalInput.checked);
+      foundry.utils.setProperty(submitData, "system.functions.constructPart.critical", critical);
+      foundry.utils.setProperty(
+        submitData,
+        "system.functions.constructPart.lossEffects",
+        critical
+          ? []
+          : readConstructPartLossEffectsFromForm(form)
+      );
     }
     return super._processSubmitData(event, form, submitData, options);
   }
@@ -463,6 +484,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-delete-prosthesis-blocked-effect]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteProsthesisBlockedEffect(event));
     });
+    this.element?.querySelector("[data-add-construct-part-weapon-set]")?.addEventListener("click", event => this.#onAddConstructPartWeaponSet(event));
+    this.element?.querySelectorAll("[data-delete-construct-part-weapon-set]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteConstructPartWeaponSet(event));
+    });
+    this.element?.querySelector("[data-add-construct-part-loss-effect]")?.addEventListener("click", event => this.#onAddConstructPartLossEffect(event));
+    this.element?.querySelectorAll("[data-delete-construct-part-loss-effect]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteConstructPartLossEffect(event));
+    });
+    this.element?.querySelector("[data-construct-part-critical]")?.addEventListener("change", event => this.#onConstructPartCriticalChange(event));
     this.element?.querySelectorAll("[data-add-ability-function]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityFunction(event));
     });
@@ -2059,6 +2089,17 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       });
     }
 
+    if (functionKey === ITEM_FUNCTIONS.constructPart) {
+      this.#functionPickerActive = false;
+      return this.item.update({
+        "system.functions.constructPart.enabled": true,
+        "system.functions.constructPart.partType": "",
+        "system.functions.constructPart.critical": false,
+        "system.functions.constructPart.lossEffects": [],
+        "system.functions.constructPart.weaponSets": []
+      });
+    }
+
     if (functionKey === ITEM_FUNCTIONS.firstAid) {
       this.#functionPickerActive = false;
       return this.item.update({
@@ -2246,6 +2287,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.additionalWeapons": additionalWeapons
       });
     }
+    if (functionKey === ITEM_FUNCTIONS.constructPart) {
+      return this.item.update({
+        "system.functions.constructPart.enabled": false,
+        "system.functions.constructPart.partType": "",
+        "system.functions.constructPart.critical": false,
+        "system.functions.constructPart.lossEffects": [],
+        "system.functions.constructPart.weaponSets": [],
+        "system.placement.limbKey": ""
+      });
+    }
     if (functionKey === ITEM_FUNCTIONS.firstAid) {
       return this.item.update({
         "system.functions.firstAid.enabled": false,
@@ -2319,6 +2370,61 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       enabled: true,
       sourceToolKey: previousToolKey
     }));
+  }
+
+  #onAddConstructPartWeaponSet(event) {
+    event.preventDefault();
+    const weaponSets = getConstructPartWeaponSets(this.item);
+    weaponSets.push(createConstructPartWeaponSetData());
+    return this.item.update({ "system.functions.constructPart.weaponSets": weaponSets });
+  }
+
+  #onDeleteConstructPartWeaponSet(event) {
+    event.preventDefault();
+    const index = toInteger(event.currentTarget?.dataset?.deleteConstructPartWeaponSet);
+    const weaponSets = getConstructPartWeaponSets(this.item);
+    if (index < 0 || index >= weaponSets.length) return undefined;
+    weaponSets.splice(index, 1);
+    return this.item.update({ "system.functions.constructPart.weaponSets": weaponSets });
+  }
+
+  #onAddConstructPartLossEffect(event) {
+    event.preventDefault();
+    const lossEffects = this.#getSubmittedConstructPartLossEffects({ keepEmpty: true });
+    lossEffects.push({ key: "", type: "add", value: "0", phase: "initial", priority: null });
+    return this.item.update({ "system.functions.constructPart.lossEffects": lossEffects });
+  }
+
+  #onDeleteConstructPartLossEffect(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteConstructPartLossEffect);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const lossEffects = this.#getSubmittedConstructPartLossEffects({ keepEmpty: true });
+    lossEffects.splice(index, 1);
+    return this.item.update({ "system.functions.constructPart.lossEffects": lossEffects });
+  }
+
+  async #onConstructPartCriticalChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const critical = Boolean(event.currentTarget?.checked);
+    const update = {
+      "system.functions.constructPart.critical": critical
+    };
+    if (critical) update["system.functions.constructPart.lossEffects"] = [];
+    await this.item.update(update);
+    return this.render({ force: true });
+  }
+
+  #getSubmittedConstructPartLossEffects({ keepEmpty = false } = {}) {
+    if (!this.form) return normalizeConstructPartLossEffects(this.item.system?.functions?.constructPart?.lossEffects, { keepEmpty });
+    const formData = new FormDataExtended(this.form);
+    const submitData = this._processFormData(null, this.form, formData);
+    return normalizeConstructPartLossEffects(
+      foundry.utils.getProperty(submitData, "system.functions.constructPart.lossEffects")
+        ?? this.item.system?.functions?.constructPart?.lossEffects,
+      { keepEmpty }
+    );
   }
 
   #onAddAdditionalWeaponFunction(event) {
@@ -3170,6 +3276,7 @@ function getItemFunctionLabel(functionKey = "") {
     if (functionKey === ITEM_FUNCTIONS.damageSource) return game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource");
   if (functionKey === ITEM_FUNCTIONS.freeSettings) return "Свободная настройка";
   if (functionKey === ITEM_FUNCTIONS.condition) return game.i18n.localize("FALLOUTMAW.Item.FunctionCondition");
+  if (functionKey === ITEM_FUNCTIONS.constructPart) return "Деталь конструкта";
   if (functionKey === ITEM_FUNCTIONS.firstAid) return game.i18n.localize("FALLOUTMAW.Item.FunctionFirstAid");
   if (functionKey === ITEM_FUNCTIONS.weapon) return game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon");
   if (functionKey === ITEM_FUNCTIONS.module) return game.i18n.localize("FALLOUTMAW.Item.FunctionModule");
@@ -3178,6 +3285,84 @@ function getItemFunctionLabel(functionKey = "") {
   const toolKey = getToolKeyFromFunctionKey(functionKey);
   if (toolKey) return getToolSettings().find(tool => tool.key === toolKey)?.label ?? toolKey;
   return game.i18n.localize("FALLOUTMAW.Item.Function");
+}
+
+function buildConstructPartWeaponSetRows(item) {
+  return getConstructPartWeaponSets(item).map((entry, index) => ({
+    ...entry,
+    index,
+    label: entry.label,
+    quantity: entry.quantity
+  }));
+}
+
+function getConstructPartWeaponSets(itemOrData) {
+  return (Array.isArray(itemOrData?.system?.functions?.constructPart?.weaponSets)
+    ? itemOrData.system.functions.constructPart.weaponSets
+    : [])
+    .map(entry => normalizeConstructPartWeaponSetData(entry));
+}
+
+function createConstructPartWeaponSetData() {
+  return normalizeConstructPartWeaponSetData({
+    id: foundry.utils.randomID(),
+    label: "",
+    quantity: 1
+  });
+}
+
+function normalizeConstructPartWeaponSetData(entry = {}) {
+  return {
+    id: String(entry?.id ?? "").trim() || foundry.utils.randomID(),
+    label: String(entry?.label ?? "").trim(),
+    quantity: Math.max(0, toInteger(entry?.quantity ?? 1))
+  };
+}
+
+function buildConstructPartLossEffectRows(item) {
+  return normalizeConstructPartLossEffects(item.system?.functions?.constructPart?.lossEffects, { keepEmpty: true })
+    .map((effect, index) => prepareConstructPartLossEffectRow(effect, index));
+}
+
+function readConstructPartLossEffectsFromForm(form, { keepEmpty = false } = {}) {
+  return Array.from(form?.querySelectorAll("[data-construct-part-loss-effect-row]") ?? [])
+    .map(row => ({
+      key: row.querySelector("[data-construct-part-loss-effect-key]")?.value?.trim() ?? "",
+      type: row.querySelector("[data-construct-part-loss-effect-type]")?.value ?? "add",
+      value: row.querySelector("[data-construct-part-loss-effect-value]")?.value ?? "0",
+      phase: "initial",
+      priority: row.querySelector("[data-construct-part-loss-effect-priority]")?.value ?? null
+    }))
+    .filter(effect => keepEmpty || effect.key);
+}
+
+function normalizeConstructPartLossEffects(value = [], { keepEmpty = false } = {}) {
+  const effects = Array.isArray(value) ? value : Object.values(value ?? {});
+  return effects
+    .map(effect => ({
+      key: String(effect?.key ?? "").trim(),
+      type: ["add", "multiply", "override"].includes(String(effect?.type ?? "")) ? String(effect.type) : "add",
+      value: String(effect?.value ?? "0"),
+      phase: String(effect?.phase || "initial"),
+      priority: effect?.priority === "" || effect?.priority === null || effect?.priority === undefined
+        ? null
+        : toInteger(effect.priority)
+    }))
+    .filter(effect => keepEmpty || effect.key);
+}
+
+function prepareConstructPartLossEffectRow(effect = {}, index = 0) {
+  const type = String(effect?.type ?? "add");
+  return {
+    ...effect,
+    index,
+    priority: effect?.priority ?? "",
+    typeChoices: [
+      { value: "add", label: game.i18n.localize("FALLOUTMAW.Effects.ChangeAdd"), selected: type === "add" },
+      { value: "multiply", label: game.i18n.localize("FALLOUTMAW.Effects.ChangeMultiply"), selected: type === "multiply" },
+      { value: "override", label: game.i18n.localize("FALLOUTMAW.Effects.ChangeOverride"), selected: type === "override" }
+    ]
+  };
 }
 
 function activateItemEffectKeyAutocompletes(root) {
@@ -3820,7 +4005,7 @@ function getWeaponDisplayData(weaponData = {}) {
       value: addFormulaTexts(weaponData.effectiveRange?.value, source.effectiveRange?.value),
       max: addFormulaTexts(weaponData.effectiveRange?.max, source.effectiveRange?.max)
     },
-    penetration: addFormulaTexts(weaponData.penetration, source.penetration),
+    penetration: weaponData.penetration,
     volley: mergeDamageSourceVolleyData(weaponData.volley, source.volley)
   };
 }

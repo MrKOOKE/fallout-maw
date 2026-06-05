@@ -39,6 +39,7 @@ export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
         weaponSet: new StringField({ required: true, blank: true, initial: "" }),
         weaponSlot: new StringField({ required: true, blank: true, initial: "" }),
         limbKey: new StringField({ required: true, blank: true, initial: "" }),
+        constructPartOrder: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
         x: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
         y: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
         width: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
@@ -56,6 +57,7 @@ export class GearDataModel extends BaseItemDataModel {
       functions: new SchemaField({
         container: containerFunctionField(),
         condition: conditionFunctionField(),
+        constructPart: constructPartFunctionField(),
         damageSource: damageSourceFunctionField(),
         freeSettings: itemFreeSettingsFunctionField(),
         module: moduleFunctionField(),
@@ -345,6 +347,39 @@ function moduleFunctionField() {
     targetFunction: new StringField({ required: true, blank: false, choices: ["weapon"], initial: "weapon" }),
     weapon: weaponModuleModifiersField(),
     additionalWeapons: new TypedObjectField(weaponFunctionField({ named: true }), { required: true, initial: {} })
+  });
+}
+
+function constructPartFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    partType: new StringField({ required: true, blank: true, initial: "" }),
+    critical: new BooleanField({ required: true, initial: false }),
+    lossEffects: new ArrayField(limbLossEffectField(), { required: true, initial: [] }),
+    weaponSets: new ArrayField(constructPartWeaponSetField(), { required: true, initial: [] })
+  });
+}
+
+function limbLossEffectField() {
+  return new SchemaField({
+    key: new StringField({ required: true, blank: true, initial: "" }),
+    type: new StringField({
+      required: true,
+      blank: false,
+      choices: ["add", "multiply", "override"],
+      initial: "add"
+    }),
+    value: new StringField({ required: true, blank: true, initial: "0" }),
+    phase: new StringField({ required: true, blank: false, initial: "initial" }),
+    priority: new NumberField({ required: false, nullable: true, integer: true, initial: null })
+  });
+}
+
+function constructPartWeaponSetField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+    label: new StringField({ required: true, blank: true, initial: "" }),
+    quantity: new NumberField({ required: true, integer: true, min: 0, initial: 1 })
   });
 }
 

@@ -14,6 +14,94 @@
   scrollbar-gutter: stable;
 }
 
+.fallout-maw-construct-structure-body {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.85fr) minmax(320px, 1.15fr);
+  gap: 12px;
+}
+
+.fallout-maw-construct-drop-zone {
+  min-height: 180px;
+  border: 1px dashed rgba(219, 202, 151, 0.55);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--color-text-light-highlight);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.fallout-maw-construct-drop-zone i {
+  font-size: 22px;
+}
+
+.fallout-maw-construct-part-list {
+  display: grid;
+  gap: 8px;
+}
+
+.fallout-maw-construct-part-card {
+  display: grid;
+  grid-template-columns: 18px 44px minmax(0, 1fr) 30px;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid rgba(219, 202, 151, 0.22);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.fallout-maw-construct-part-card.dragging {
+  opacity: 0.55;
+}
+
+.fallout-maw-construct-part-drag,
+.fallout-maw-construct-part-remove {
+  align-items: center;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  min-width: 0;
+  padding: 0;
+  width: 28px;
+}
+
+.fallout-maw-construct-part-drag {
+  cursor: grab;
+}
+
+.fallout-maw-construct-part-drag:active {
+  cursor: grabbing;
+}
+
+.fallout-maw-construct-part-remove {
+  color: #d9b8a8;
+}
+
+.fallout-maw-construct-part-card img {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border: 1px solid rgba(219, 202, 151, 0.35);
+}
+
+.fallout-maw-construct-part-main {
+  min-width: 0;
+}
+
+.fallout-maw-construct-part-meter .fallout-maw-resource-meter-fill {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(0, 0, 0, 0.16)),
+    var(--construct-part-meter-color, #d9eef5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 0 10px rgba(217, 238, 245, 0.28);
+}
+
+@media (max-width: 720px) {
+  .fallout-maw-construct-structure-body {
+    grid-template-columns: 1fr;
+  }
+}
+
 .application.fallout-maw-search-inventory.minimized .header-control[data-action="toggleMinimize"],
 .application.fallout-maw-search-inventory.minimizing .header-control[data-action="toggleMinimize"] {
   display: initial;
@@ -7522,12 +7610,12 @@ label.fallout-maw-mitigation-cell {
   font-weight: 800;
   line-height: 1.1;
   min-width: 0;
-  overflow: hidden;
+  overflow-wrap: anywhere;
   padding-left: 1px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
-  text-overflow: ellipsis;
   text-transform: uppercase;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: normal;
 }
 
 .fallout-maw-token-hud-weapon-set-row-slots {
@@ -8490,9 +8578,12 @@ label.fallout-maw-mitigation-cell {
   margin: 0 4px 4px;
   max-width: calc(100% - 8px);
   overflow: hidden;
+  overflow-wrap: anywhere;
   padding: 2px 4px;
   position: relative;
   text-overflow: ellipsis;
+  white-space: normal;
+  word-break: normal;
   z-index: 1;
 }
 
@@ -8853,6 +8944,10 @@ label.fallout-maw-mitigation-cell {
   justify-content: center;
   text-overflow: unset;
   white-space: normal;
+}
+
+.fallout-maw-token-hud-set-slot-preview > span {
+  text-overflow: unset;
 }
 
 .fallout-maw-token-hud-main-action i {

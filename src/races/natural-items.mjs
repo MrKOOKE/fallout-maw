@@ -174,7 +174,7 @@ export function registerNaturalRaceItemHooks() {
 
 export async function syncActorNaturalRaceItems(actor) {
   if (!actor || !game.user?.isActiveGM) return;
-  if (!["character", "npc"].includes(actor.type)) return;
+  if (actor.type !== "character") return;
   if (naturalItemSyncActors.has(actor.uuid)) return;
 
   naturalItemSyncActors.add(actor.uuid);

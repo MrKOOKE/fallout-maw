@@ -15,7 +15,7 @@ import {
   TOKEN_ACTION_HUD_SCALE_SETTING
 } from "../settings/constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { applyDamageCostModifier, fullyRestoreActorDamageState, getDamageCostModifierState, getLimbHealingCap, getResourceLimitState, isLimbDestroyed } from "../combat/damage-hub.mjs";
+import { applyDamageCostModifier, fullyRestoreActorDamageState, getDamageCostModifierState, getDestroyedLimbStateLabel, getLimbHealingCap, getResourceLimitState, isLimbDestroyed } from "../combat/damage-hub.mjs";
 import { MOVEMENT_RESOURCE_PREVIEW_HOOK } from "../combat/movement-resources.mjs";
 import {
   REACTION_RESOURCE_KEY,
@@ -1935,11 +1935,12 @@ function prepareLimbDisplayData(actor, limbKey, limb = {}) {
     };
   }
   if (isLimbDestroyed(actor, limbKey)) {
+    const stateLabel = getDestroyedLimbStateLabel(actor, limbKey);
     return {
       ...limb,
-      displayValue: "Отсутствует",
+      displayValue: stateLabel,
       displayMax: "",
-      stateLabel: "Отсутствует",
+      stateLabel,
       fill: "rgba(6, 8, 8, 0.96)"
     };
   }
