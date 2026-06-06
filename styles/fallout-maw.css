@@ -9025,6 +9025,59 @@ label.fallout-maw-mitigation-cell {
   width: 100%;
 }
 
+.fallout-maw-attack-power-preview-grid {
+  display: grid;
+  gap: 0.45rem 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0.35rem;
+}
+
+.fallout-maw-attack-power-preview-row {
+  align-items: center;
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.fallout-maw-attack-power-preview-row > span {
+  color: rgba(240, 232, 198, 0.78);
+  font-size: 0.82rem;
+  line-height: 1.1;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.fallout-maw-attack-power-preview-row > strong {
+  align-items: center;
+  display: flex;
+  gap: 0.35rem;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.fallout-maw-attack-power-preview-row > strong span {
+  color: rgba(248, 239, 202, 0.92);
+  font-size: 0.95rem;
+  line-height: 1.1;
+}
+
+.fallout-maw-attack-power-preview-row > strong i {
+  color: rgba(248, 239, 202, 0.45);
+  font-size: 0.7rem;
+}
+
+.fallout-maw-attack-power-preview-row > strong .positive {
+  color: #8fd26d;
+}
+
+.fallout-maw-attack-power-preview-row > strong .negative {
+  color: #e36d62;
+}
+
+.fallout-maw-attack-power-preview-row > strong .neutral {
+  color: rgba(248, 239, 202, 0.92);
+}
+
 .fallout-maw-token-hud-main-action span {
   align-items: center;
   display: flex;

@@ -4,6 +4,8 @@ import {
   getCreatureOptions,
   getActorNeedSettings,
   getDamageTypeSettings,
+  getProficiencyInfluenceSettings,
+  getProficiencySettings,
   getResourceSettings,
   getSkillSettings,
   getSystemActionSettings,
@@ -36,6 +38,7 @@ import {
   setActorTokensPosture
 } from "../canvas/posture-movement.mjs";
 import { evaluateActorEffectChangeNumber } from "../utils/active-effect-changes.mjs";
+import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import {
   cancelWeaponAttack,
   hasRequiredWeaponReloadActionPoints,
@@ -66,7 +69,7 @@ import {
   getContextInventoryItems,
   getItemQuantity
 } from "../utils/inventory-containers.mjs";
-import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getConditionFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getFirstAidChargesData, getModuleFunction, getProsthesisFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, getWeaponSpecialPropertyType, hasItemFunction, hasWeaponSpecialPropertyData, isActiveItem, normalizeWeaponSpecialProperties } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getEnabledWeaponFunctions, getFirstAidChargesData, getModuleFunction, getProsthesisFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, getWeaponSpecialPropertyType, hasItemFunction, hasWeaponSpecialPropertyData, isActiveItem, normalizeWeaponSpecialProperties } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
@@ -2649,6 +2652,7 @@ async function openWeaponAttackPowerDialog({ actor = null, weapon = null, weapon
   const min = 1;
   const max = Math.max(min, toInteger(state.max) || min);
   const value = Math.max(min, Math.min(max, toInteger(state.value) || min));
+  const previewContext = buildWeaponAttackPowerPreviewContext({ actor, weapon, weaponData, functionId, propertyIndex, startLevel: value });
   const formData = await DialogV2.input({
     window: {
       title: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialAttackPower")
@@ -2658,6 +2662,9 @@ async function openWeaponAttackPowerDialog({ actor = null, weapon = null, weapon
         <span>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.WeaponAttackPowerLevels"))}</span>
         <strong data-attack-power-dialog-output>${value}/${max}</strong>
         <input type="range" name="level" value="${value}" min="${min}" max="${max}" step="1" data-attack-power-dialog-range>
+        <div class="fallout-maw-attack-power-preview-grid" data-attack-power-dialog-preview>
+          ${renderWeaponAttackPowerPreviewRows(previewContext, value)}
+        </div>
       </label>
     `,
     ok: {
@@ -2674,8 +2681,11 @@ async function openWeaponAttackPowerDialog({ actor = null, weapon = null, weapon
     render: (_event, dialog) => {
       const range = dialog.element?.querySelector?.("[data-attack-power-dialog-range]");
       const output = dialog.element?.querySelector?.("[data-attack-power-dialog-output]");
+      const preview = dialog.element?.querySelector?.("[data-attack-power-dialog-preview]");
       const sync = () => {
-        if (output) output.textContent = `${Math.max(min, Math.min(max, toInteger(range?.value) || min))}/${max}`;
+        const nextLevel = Math.max(min, Math.min(max, toInteger(range?.value) || min));
+        if (output) output.textContent = `${nextLevel}/${max}`;
+        if (preview) preview.innerHTML = renderWeaponAttackPowerPreviewRows(previewContext, nextLevel);
       };
       range?.addEventListener("input", sync);
       sync();
@@ -2695,6 +2705,304 @@ async function openWeaponAttackPowerDialog({ actor = null, weapon = null, weapon
   await weapon.update(updateData);
   await application?.render({ force: true });
   return true;
+}
+
+function buildWeaponAttackPowerPreviewContext({ actor = null, weapon = null, weaponData = {}, functionId = "", propertyIndex = -1, startLevel = 1 } = {}) {
+  const currentData = getWeaponAttackPowerDialogDataForLevel({ weapon, weaponData, functionId, propertyIndex, level: startLevel });
+  return {
+    actor,
+    weapon,
+    weaponData,
+    functionId,
+    propertyIndex,
+    startLevel,
+    current: getWeaponAttackPowerPreviewStats(actor, weapon, currentData),
+    changedKeys: getWeaponAttackPowerChangedKeys(weaponData)
+  };
+}
+
+function renderWeaponAttackPowerPreviewRows(context = {}, nextLevel = 1) {
+  const rows = buildWeaponAttackPowerPreviewRows(context, nextLevel);
+  if (!rows.length) return "";
+  return rows.map(row => `
+    <div class="fallout-maw-attack-power-preview-row">
+      <span>${escapeHTML(row.label)}</span>
+      <strong>
+        <span>${escapeHTML(row.from)}</span>
+        <i class="fa-solid fa-arrow-right-long" aria-hidden="true"></i>
+        <span class="${escapeAttribute(row.tone)}">${escapeHTML(row.to)}</span>
+      </strong>
+    </div>
+  `).join("");
+}
+
+function buildWeaponAttackPowerPreviewRows(context = {}, nextLevel = 1) {
+  const data = getWeaponAttackPowerDialogDataForLevel({
+    weapon: context.weapon,
+    weaponData: context.weaponData,
+    functionId: context.functionId,
+    propertyIndex: context.propertyIndex,
+    level: nextLevel
+  });
+  const next = getWeaponAttackPowerPreviewStats(context.actor, context.weapon, data);
+  const current = context.current ?? {};
+  const changedKeys = context.changedKeys ?? new Set();
+  const rows = [];
+  const push = (key, label, from, to, { higherIsBetter = true, formatter = formatAttackPowerPreviewNumber } = {}) => {
+    if (!changedKeys.has(key)) return;
+    rows.push({
+      label,
+      from: formatter(from),
+      to: formatter(to),
+      tone: getAttackPowerPreviewTone(from, to, { higherIsBetter })
+    });
+  };
+
+  push("damage", game.i18n.localize("FALLOUTMAW.Item.WeaponDamage"), current.damage, next.damage);
+  push("accuracyBonus", game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), current.accuracyBonus, next.accuracyBonus, { formatter: formatAttackPowerPreviewSignedNumber });
+  push("criticalChanceModifier", game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), current.criticalChanceModifier, next.criticalChanceModifier, { formatter: value => `${formatAttackPowerPreviewSignedNumber(value)}%` });
+  push("criticalDamagePercent", game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), current.criticalDamagePercent, next.criticalDamagePercent, { formatter: value => `${formatAttackPowerPreviewNumber(value)}%` });
+  push("attackConeDegrees", game.i18n.localize("FALLOUTMAW.Item.WeaponAttackCone"), current.attackConeDegrees, next.attackConeDegrees, { formatter: value => `${formatAttackPowerPreviewNumber(value)}°` });
+  push("maxRangeMeters", game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), current.maxRangeMeters, next.maxRangeMeters, { formatter: value => `${formatAttackPowerPreviewNumber(value)} м` });
+  push("effectiveRange.value", game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRange"), current.effectiveRangeValue, next.effectiveRangeValue, { formatter: value => `${formatAttackPowerPreviewNumber(value)} м` });
+  push("effectiveRange.max", game.i18n.localize("FALLOUTMAW.Item.WeaponEffectiveRangeMax"), current.effectiveRangeMax, next.effectiveRangeMax, { formatter: value => `${formatAttackPowerPreviewNumber(value)} м` });
+  push("penetration", game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), current.penetration, next.penetration);
+
+  for (const type of changedKeys) {
+    if (!type.startsWith("resourceCost:")) continue;
+    const resourceType = type.slice("resourceCost:".length);
+    push(
+      type,
+      getWeaponAttackPowerResourceCostPreviewLabel(resourceType),
+      current.resourceCosts?.[resourceType] ?? 0,
+      next.resourceCosts?.[resourceType] ?? 0,
+      { higherIsBetter: false }
+    );
+  }
+  return rows;
+}
+
+function getWeaponAttackPowerDialogDataForLevel({ weapon = null, weaponData = {}, functionId = "", propertyIndex = -1, level = 1 } = {}) {
+  const rawData = foundry.utils.deepClone(weaponData ?? {});
+  const properties = normalizeWeaponSpecialProperties(rawData.specialProperties);
+  if (properties[propertyIndex]) foundry.utils.setProperty(properties[propertyIndex], "attackPower.level.value", level);
+  rawData.specialProperties = properties;
+  return applyWeaponAttackPowerDialogModifiers(applyWeaponModuleModifiers(
+    applyDamageSourceWeaponDialogModifiers(rawData),
+    { moduleSlots: getWeaponFunctionModuleSlots(weapon, functionId) }
+  ));
+}
+
+function applyDamageSourceWeaponDialogModifiers(weaponData = {}) {
+  if (String(weaponData?.damageMode ?? "manual") !== "source") return weaponData;
+  const sourceItem = getWeaponMagazineSourceItem(weaponData);
+  if (!sourceItem || !hasItemFunction(sourceItem, ITEM_FUNCTIONS.damageSource)) {
+    return {
+      ...weaponData,
+      damage: "0",
+      damageTypeKey: "firearm",
+      damageTypes: [{ key: "firearm", percent: 100 }]
+    };
+  }
+  const source = getDamageSourceFunction(sourceItem);
+  return {
+    ...weaponData,
+    source: "damageSource",
+    damage: source.damage,
+    pellets: source.pellets,
+    damageTypeKey: source.damageTypeKey,
+    damageTypes: source.damageTypes,
+    accuracyBonus: addFormulaTexts(weaponData.accuracyBonus, source.accuracyBonus),
+    criticalChanceModifier: addFormulaTexts(weaponData.criticalChanceModifier, source.criticalChanceModifier),
+    criticalDamagePercent: addFormulaTexts(weaponData.criticalDamagePercent, source.criticalDamagePercent),
+    maxRangeMeters: addFormulaTexts(weaponData.maxRangeMeters, source.maxRangeMeters),
+    effectiveRange: {
+      value: addFormulaTexts(weaponData.effectiveRange?.value, source.effectiveRange?.value),
+      max: addFormulaTexts(weaponData.effectiveRange?.max, source.effectiveRange?.max)
+    },
+    penetration: addFormulaTexts(weaponData.penetration, source.penetration)
+  };
+}
+
+function applyWeaponAttackPowerDialogModifiers(weaponData = {}) {
+  const state = getWeaponAttackPowerState(weaponData);
+  if (!state.active || state.increments <= 0) return weaponData;
+  const result = foundry.utils.deepClone(weaponData);
+  const multiplier = Math.max(0, toInteger(state.increments));
+  const perLevel = state.perLevel ?? {};
+
+  result.attackPowerDamagePercent = toInteger(perLevel.damagePercent) * multiplier;
+  addDialogFormulaNumber(result, "accuracyBonus", perLevel.accuracyBonus, multiplier);
+  addDialogFormulaNumber(result, "criticalChanceModifier", perLevel.criticalChanceModifier, multiplier);
+  addDialogFormulaNumber(result, "criticalDamagePercent", perLevel.criticalDamagePercent, multiplier, { min: 0 });
+  addDialogNumber(result, "attackConeDegrees", perLevel.attackConeDegrees, multiplier, { min: 0 });
+  addDialogFormulaNumber(result, "maxRangeMeters", perLevel.maxRangeMeters, multiplier, { min: 0 });
+  addDialogFormulaNumber(result, "effectiveRange.value", perLevel.effectiveRange?.value, multiplier, { min: 0 });
+  addDialogFormulaNumber(result, "effectiveRange.max", perLevel.effectiveRange?.max, multiplier, { min: 0 });
+  addDialogFormulaNumber(result, "penetration", perLevel.penetration, multiplier, { min: 0, integer: true });
+  applyWeaponAttackPowerDialogResourceCosts(result, state.resourceCosts, multiplier);
+  return result;
+}
+
+function applyWeaponAttackPowerDialogResourceCosts(weaponData = {}, resourceCosts = [], multiplier = 0) {
+  const costs = Array.isArray(weaponData.resourceCosts) ? foundry.utils.deepClone(weaponData.resourceCosts) : [];
+  if (String(weaponData?.damageMode ?? "manual") === "source"
+    && !costs.some(cost => String(cost?.type ?? "") === "magazine")) {
+    costs.push({ type: "magazine", amount: 1 });
+  }
+  for (const cost of resourceCosts ?? []) {
+    const type = String(cost?.type ?? "").trim();
+    const delta = toInteger(cost?.amount) * Math.max(0, toInteger(multiplier));
+    if (!type || !delta) continue;
+    let target = costs.find(entry => String(entry?.type ?? "") === type);
+    if (!target) {
+      target = { type, amount: 0 };
+      costs.push(target);
+    }
+    target.amount = Math.max(0, toInteger(target.amount) + delta);
+  }
+  weaponData.resourceCosts = costs;
+}
+
+function getWeaponAttackPowerPreviewStats(actor = null, weapon = null, weaponData = {}) {
+  const baseDamage = evaluateDialogFormula(weaponData.damage, actor, { minimum: 0, context: `${weapon?.name ?? "weapon"} attack power preview damage` });
+  const attackPowerDamagePercent = toInteger(weaponData.attackPowerDamagePercent);
+  const poweredDamage = Math.round(baseDamage * Math.max(0, 100 + attackPowerDamagePercent) / 100);
+  const proficiencyDamage = getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "damage");
+  const modifiedDamage = Math.round(poweredDamage * Math.max(0, 100 + proficiencyDamage) / 100);
+  const weakening = getConditionWeakeningData(weapon, { minimumRatio: 0.1 });
+  const conditionAccuracyPenalty = weakening.active ? weakening.steps * 10 : 0;
+  const conditionCritPenalty = weakening.active ? weakening.steps * 3 : 0;
+  const resourceCosts = Object.fromEntries(getWeaponAttackPowerPreviewResourceCosts(weaponData).map(cost => [
+    String(cost?.type ?? "").trim(),
+    Math.max(0, toInteger(cost?.amount))
+  ]).filter(([type]) => type));
+
+  return {
+    damage: Math.max(0, Math.floor(modifiedDamage * (weakening.active ? weakening.ratio : 1))),
+    accuracyBonus: evaluateDialogFormula(weaponData.accuracyBonus, actor) + getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "accuracy") - conditionAccuracyPenalty,
+    criticalChanceModifier: evaluateDialogFormula(weaponData.criticalChanceModifier, actor) + getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "criticalChance") - conditionCritPenalty,
+    criticalDamagePercent: Math.max(0, evaluateDialogFormula(weaponData.criticalDamagePercent, actor, { fallback: 150 }) + getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "criticalDamage")),
+    attackConeDegrees: Math.max(0, Number(weaponData.attackConeDegrees) || 0),
+    maxRangeMeters: evaluateDialogFormula(weaponData.maxRangeMeters, actor, { minimum: 0 }),
+    effectiveRangeValue: evaluateDialogFormula(weaponData.effectiveRange?.value, actor, { minimum: 0 }),
+    effectiveRangeMax: evaluateDialogFormula(weaponData.effectiveRange?.max, actor, { minimum: 0 }),
+    penetration: Math.max(0, evaluateDialogFormula(weaponData.penetration, actor)),
+    resourceCosts
+  };
+}
+
+function getWeaponAttackPowerPreviewResourceCosts(weaponData = {}) {
+  const costs = Array.isArray(weaponData.resourceCosts) ? foundry.utils.deepClone(weaponData.resourceCosts) : [];
+  if (String(weaponData?.damageMode ?? "manual") === "source"
+    && !costs.some(cost => String(cost?.type ?? "") === "magazine")) {
+    costs.push({ type: "magazine", amount: 1 });
+  }
+  return costs;
+}
+
+function getWeaponAttackPowerChangedKeys(weaponData = {}) {
+  const state = getWeaponAttackPowerState(weaponData);
+  const perLevel = state.perLevel ?? {};
+  const keys = new Set();
+  if (toInteger(perLevel.damagePercent)) keys.add("damage");
+  if (toInteger(perLevel.accuracyBonus)) keys.add("accuracyBonus");
+  if (toInteger(perLevel.criticalChanceModifier)) keys.add("criticalChanceModifier");
+  if (toInteger(perLevel.criticalDamagePercent)) keys.add("criticalDamagePercent");
+  if (Number(perLevel.attackConeDegrees)) keys.add("attackConeDegrees");
+  if (Number(perLevel.maxRangeMeters)) keys.add("maxRangeMeters");
+  if (Number(perLevel.effectiveRange?.value)) keys.add("effectiveRange.value");
+  if (Number(perLevel.effectiveRange?.max)) keys.add("effectiveRange.max");
+  if (toInteger(perLevel.penetration)) keys.add("penetration");
+  for (const cost of state.resourceCosts ?? []) {
+    const type = String(cost?.type ?? "").trim();
+    if (type && toInteger(cost?.amount)) keys.add(`resourceCost:${type}`);
+  }
+  return keys;
+}
+
+function getDialogWeaponProficiencyInfluenceBonus(actor = null, weaponData = {}, influenceKey = "") {
+  if (!actor) return 0;
+  const proficiency = getProficiencySettings().find(entry => entry.key === String(weaponData?.proficiencyKey ?? ""))
+    ?? getProficiencySettings().at(0)
+    ?? null;
+  if (!proficiency) return 0;
+  const range = getProficiencyInfluenceSettings()?.[influenceKey] ?? { min: 0, max: 0 };
+  const settingMax = Math.max(0, toInteger(proficiency.max));
+  const actorValue = toInteger(actor.system?.proficiencies?.[proficiency.key]?.value);
+  const ratio = settingMax > 0 ? Math.max(0, Math.min(1, actorValue / settingMax)) : 0;
+  return Math.round(toInteger(range.min) + ((toInteger(range.max) - toInteger(range.min)) * ratio));
+}
+
+function getWeaponAttackPowerResourceCostPreviewLabel(type = "") {
+  if (type === "magazine") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostMagazine");
+  if (type === "condition") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostCondition");
+  if (type === "quantity") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostQuantity");
+  return String(type || "-");
+}
+
+function evaluateDialogFormula(formula, actor = null, options = {}) {
+  if (actor) return evaluateActorFormula(formula, actor, options);
+  const value = Number(formula);
+  if (Number.isFinite(value)) return Math.max(Number(options.minimum ?? -Infinity), value);
+  return Number(options.fallback ?? 0) || 0;
+}
+
+function addDialogFormulaNumber(target, path, delta, multiplier = 1, { min = null, integer = false } = {}) {
+  const change = (integer ? toInteger(delta) : Number(delta)) * Math.max(0, toInteger(multiplier));
+  if (!Number.isFinite(change) || change === 0) return;
+  const currentRaw = foundry.utils.getProperty(target, path);
+  const current = Number(currentRaw);
+  if (Number.isFinite(current)) {
+    const next = Number.isFinite(Number(min)) ? Math.max(Number(min), current + change) : current + change;
+    foundry.utils.setProperty(target, path, integer ? Math.trunc(next) : next);
+    return;
+  }
+  foundry.utils.setProperty(target, path, addFormulaTexts(currentRaw, integer ? Math.trunc(change) : change));
+}
+
+function addDialogNumber(target, path, delta, multiplier = 1, { min = null, integer = false } = {}) {
+  const change = (integer ? toInteger(delta) : Number(delta)) * Math.max(0, toInteger(multiplier));
+  if (!Number.isFinite(change) || change === 0) return;
+  const currentRaw = foundry.utils.getProperty(target, path);
+  const current = integer ? toInteger(currentRaw) : Number(currentRaw);
+  const fallback = Number.isFinite(current) ? current : 0;
+  let next = fallback + change;
+  if (Number.isFinite(Number(min))) next = Math.max(Number(min), next);
+  foundry.utils.setProperty(target, path, integer ? Math.trunc(next) : next);
+}
+
+function normalizeFormulaText(value, fallback = "0") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function addFormulaTexts(left, right) {
+  const leftText = normalizeFormulaText(left);
+  const rightText = normalizeFormulaText(right);
+  if (leftText === "0") return rightText;
+  if (rightText === "0") return leftText;
+  return `(${leftText}) + (${rightText})`;
+}
+
+function formatAttackPowerPreviewNumber(value = 0) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "0";
+  return Number.isInteger(number) ? String(number) : String(Math.round(number * 10) / 10);
+}
+
+function formatAttackPowerPreviewSignedNumber(value = 0) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "0";
+  return number > 0 ? `+${formatAttackPowerPreviewNumber(number)}` : formatAttackPowerPreviewNumber(number);
+}
+
+function getAttackPowerPreviewTone(from = 0, to = 0, { higherIsBetter = true } = {}) {
+  const left = Number(from) || 0;
+  const right = Number(to) || 0;
+  if (left === right) return "neutral";
+  const positive = right > left ? higherIsBetter : !higherIsBetter;
+  return positive ? "positive" : "negative";
 }
 
 function updateReloadDialogMagazineReadout(dialog, actor, weaponId, weaponFunctionId) {

@@ -1639,15 +1639,6 @@
       </div>
       {{#each resourceCosts}}
       <div class="fallout-maw-settings-row">
-        {{#if synthetic}}
-        <select disabled>
-          {{#each typeChoices}}
-          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-          {{/each}}
-        </select>
-        <input type="number" value="{{amount}}" min="0" step="1" disabled>
-        <button type="button" title="{{localize 'FALLOUTMAW.Common.Delete'}}" disabled><i class="fa-solid fa-trash"></i></button>
-        {{else}}
         {{#if locked}}
         <select disabled>
           {{#each typeChoices}}
@@ -1664,7 +1655,6 @@
         {{/if}}
         <input type="number" name="{{../path}}.resourceCosts.{{index}}.amount" value="{{amount}}" min="0" step="1">
         <button type="button" data-delete-weapon-resource-cost="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}" {{#if locked}}disabled{{/if}}><i class="fa-solid fa-trash"></i></button>
-        {{/if}}
       </div>
       {{else}}
       <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoResourceCosts"}}</p>

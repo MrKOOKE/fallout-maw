@@ -310,6 +310,7 @@
       "WeaponAttackCone": "Конус атаки, градусы",
       "WeaponMaxRange": "Максимальная дистанция",
       "WeaponEffectiveRange": "Эффективная дистанция",
+      "WeaponEffectiveRangeMax": "Макс. эффективная дистанция",
       "WeaponPenetration": "Пробивная сила",
       "WeaponMagazine": "Магазин",
       "WeaponResourceCosts": "Расход ресурсов на атаку",

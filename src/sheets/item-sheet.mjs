@@ -3879,17 +3879,15 @@ function buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction) {
       index,
       amount: Number(cost.amount) || 0,
       locked,
-      synthetic: false,
       type,
       typeChoices: buildWeaponResourceTypeChoices(type, hasConditionFunction)
     };
   });
   if (isSourceDamageMode(weaponData) && !lockedMagazineUsed) {
     rows.push({
-      index: "source-magazine",
+      index: costs.length,
       amount: 1,
       locked: true,
-      synthetic: true,
       type: "magazine",
       typeChoices: buildWeaponResourceTypeChoices("magazine", hasConditionFunction)
     });

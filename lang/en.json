@@ -311,6 +311,7 @@
       "WeaponAttackCone": "Attack Cone, degrees",
       "WeaponMaxRange": "Maximum Range",
       "WeaponEffectiveRange": "Effective Range",
+      "WeaponEffectiveRangeMax": "Max Effective Range",
       "WeaponPenetration": "Penetration",
       "WeaponMagazine": "Magazine",
       "WeaponResourceCosts": "Attack Resource Costs",
