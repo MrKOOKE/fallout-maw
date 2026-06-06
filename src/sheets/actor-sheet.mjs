@@ -3423,7 +3423,7 @@ function buildConditionTooltipSection(item) {
   const value = Math.max(0, toInteger(condition.value));
   const rows = [
     [game.i18n.localize("FALLOUTMAW.Item.ConditionValue"), renderTooltipMeterValue(value, max)],
-    [game.i18n.localize("FALLOUTMAW.Item.ConditionWeakeningThreshold"), Math.max(1, toInteger(condition.weakeningThreshold) || 20)]
+    [game.i18n.localize("FALLOUTMAW.Item.ConditionWeakeningThreshold"), Math.max(1, toInteger(condition.weakeningThreshold) || 10)]
   ];
   rows.push(...getConditionRecoveryMethodRows(condition));
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionCondition"), rows);

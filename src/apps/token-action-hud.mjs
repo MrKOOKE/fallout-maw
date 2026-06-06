@@ -35,7 +35,7 @@ import {
   isPostureEffectApplicableToActor,
   setActorTokensPosture
 } from "../canvas/posture-movement.mjs";
-import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
+import { evaluateActorEffectChangeNumber } from "../utils/active-effect-changes.mjs";
 import {
   cancelWeaponAttack,
   hasRequiredWeaponReloadActionPoints,
@@ -2517,7 +2517,7 @@ function collectActiveEffectCostChangeSources(actor, key = "", initialCost = 0) 
     if (!isPostureEffectApplicableToActor(effect, actor)) continue;
     for (const change of effect.system?.changes ?? effect.changes ?? []) {
       if (String(change?.key ?? "").trim() !== key) continue;
-      const value = evaluateEffectChangeNumber(actor, change.value);
+      const value = evaluateActorEffectChangeNumber(actor, { ...change, effect });
       if (!Number.isFinite(value)) continue;
       const nextCost = applyActionPointCostChangeStep(runningCost, value, change.type);
       const actualDelta = Math.ceil(nextCost) - Math.ceil(runningCost);

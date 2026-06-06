@@ -21,11 +21,16 @@ import {
   DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
 } from "../config/defaults.mjs";
 import { getItemActorLoadWeight, getItemContainerParentId } from "../utils/inventory-containers.mjs";
-import { getConditionFunction, getProsthesisFunction, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
+import {
+  getConditionFunction,
+  getProsthesisFunction,
+  hasItemFunction,
+  ITEM_FUNCTIONS
+} from "../utils/item-functions.mjs";
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import { handleActorDamageUpdate, prepareActorDamageUpdate, requestDamageApplication } from "../combat/damage-hub.mjs";
 import { migrateActorData } from "../migrations/documents.mjs";
-import { prepareEffectChangeForApplication } from "../utils/effect-change-values.mjs";
+import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 
 export class FalloutMaWActor extends Actor {
   static migrateData(source) {
@@ -165,7 +170,9 @@ export class FalloutMaWActor extends Actor {
     const overrides = {};
     const replacementData = this.getRollData();
     for (const change of changes) {
-      const result = ActiveEffect.applyChange(this, prepareEffectChangeForApplication(this, change), { replacementData });
+      const preparedChange = prepareActorEffectChangeForApplication(this, change);
+      if (!preparedChange) continue;
+      const result = ActiveEffect.applyChange(this, preparedChange, { replacementData });
       if (foundry.utils.isPlainObject(result)) Object.assign(overrides, result);
     }
 

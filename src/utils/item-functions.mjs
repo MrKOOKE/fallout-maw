@@ -14,6 +14,12 @@ export const ITEM_FUNCTIONS = {
 };
 export const MODULE_WEAPON_FUNCTION_ID_PREFIX = "module:";
 
+const BROKEN_ITEM_FUNCTION_EXCEPTIONS = new Set([
+  ITEM_FUNCTIONS.condition,
+  ITEM_FUNCTIONS.constructPart,
+  ITEM_FUNCTIONS.prosthesis
+]);
+
 export const DAMAGE_MITIGATION_MODES = {
   defense: "defense",
   resistance: "resistance"
@@ -23,8 +29,9 @@ export function getItemSystem(itemOrSystem = null) {
   return itemOrSystem?.system ?? itemOrSystem ?? {};
 }
 
-export function hasItemFunction(itemOrSystem = null, functionKey = "") {
+export function hasItemFunction(itemOrSystem = null, functionKey = "", { ignoreBroken = false } = {}) {
   const system = getItemSystem(itemOrSystem);
+  if (!ignoreBroken && isItemFunctionSuppressedByBrokenCondition(system, functionKey)) return false;
   if (functionKey === ITEM_FUNCTIONS.container && String(system.itemFunction ?? "") === ITEM_FUNCTIONS.container) {
     return true;
   }
@@ -32,6 +39,22 @@ export function hasItemFunction(itemOrSystem = null, functionKey = "") {
   const toolKey = getToolKeyFromFunctionKey(functionKey);
   if (toolKey) return hasToolFunction(system, toolKey);
   return Boolean(system.functions?.[functionKey]?.enabled);
+}
+
+export function isItemBrokenByCondition(itemOrSystem = null) {
+  const system = getItemSystem(itemOrSystem);
+  const condition = system.functions?.[ITEM_FUNCTIONS.condition];
+  if (!condition?.enabled) return false;
+  const max = Math.max(0, Math.trunc(Number(condition.max) || 0));
+  if (max <= 0) return false;
+  const current = Math.max(0, Math.trunc(Number(condition.value) || 0));
+  return current <= 0;
+}
+
+function isItemFunctionSuppressedByBrokenCondition(itemOrSystem = null, functionKey = "") {
+  const key = String(functionKey ?? "");
+  if (BROKEN_ITEM_FUNCTION_EXCEPTIONS.has(key)) return false;
+  return isItemBrokenByCondition(itemOrSystem);
 }
 
 export function getDamageMitigationFunction(itemOrSystem = null) {
@@ -100,12 +123,12 @@ export function isActiveItem(itemOrSystem = null) {
 
 export function getConditionWeakeningData(itemOrSystem = null, { minimumRatio = 0 } = {}) {
   if (!hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.condition)) {
-    return { current: 0, max: 0, threshold: 20, steps: 0, ratio: 1, active: false };
+    return { current: 0, max: 0, threshold: 10, steps: 0, ratio: 1, active: false };
   }
   const condition = getConditionFunction(itemOrSystem);
   const current = Math.max(0, Math.trunc(Number(condition.value) || 0));
   const max = Math.max(0, Math.trunc(Number(condition.max) || 0));
-  const threshold = Math.max(1, Math.trunc(Number(condition.weakeningThreshold) || 20));
+  const threshold = Math.max(1, Math.trunc(Number(condition.weakeningThreshold) || 10));
   if (max <= 0) return { current, max, threshold, steps: 0, ratio: 1, active: true };
 
   const lostPercent = Math.max(0, (1 - (current / max)) * 100);
@@ -125,6 +148,7 @@ export function getAdditionalWeaponFunctions(itemOrSystem = null) {
 }
 
 export function getWeaponFunctionById(itemOrSystem = null, functionId = "") {
+  if (isItemBrokenByCondition(itemOrSystem)) return null;
   const id = String(functionId ?? "");
   if (!id || id === ITEM_FUNCTIONS.weapon) return getWeaponFunction(itemOrSystem);
   const additional = getAdditionalWeaponFunctions(itemOrSystem).find(entry => String(entry?.id ?? "") === id);
@@ -133,6 +157,7 @@ export function getWeaponFunctionById(itemOrSystem = null, functionId = "") {
 }
 
 export function getEnabledWeaponFunctions(itemOrSystem = null) {
+  if (isItemBrokenByCondition(itemOrSystem)) return [];
   const primary = getWeaponFunction(itemOrSystem);
   if (!primary?.enabled) return [];
   const additional = getAdditionalWeaponFunctions(itemOrSystem)
@@ -252,6 +277,7 @@ export function getToolFunction(itemOrSystem = null, toolKey = "") {
 
 export function getEnabledToolFunctions(itemOrSystem = null) {
   const system = getItemSystem(itemOrSystem);
+  if (isItemBrokenByCondition(system)) return [];
   const tools = system.functions?.tools;
   if (!tools || typeof tools !== "object") return [];
 

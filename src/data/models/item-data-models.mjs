@@ -3,7 +3,7 @@ const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
 const DEFAULT_WEAPON_PUSH_MAX_RANGE_METERS = 1;
 const DEFAULT_RELOAD_ACTION_POINT_COST = 2;
-const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 20;
+const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 10;
 const WEAPON_SPECIAL_PROPERTIES = Object.freeze({
   hitAllConeTargets: "hitAllConeTargets"
 });
@@ -189,6 +189,7 @@ function abilityAcquisitionRequirementField() {
 function itemFreeSettingsFunctionField() {
   return new SchemaField({
     enabled: new BooleanField({ required: true, initial: false }),
+    useConditionWeakening: new BooleanField({ required: true, initial: false }),
     entries: new ArrayField(abilityFunctionField(), { required: true, initial: [] })
   });
 }

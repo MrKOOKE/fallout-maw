@@ -5,6 +5,7 @@ import {
   getCombatActionPointState,
   spendCombatActionPoints
 } from "../combat/reaction-resources.mjs";
+import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 
 export const POSTURE_CHANGE_ACTION_POINT_COST = 3;
 export const POSTURE_EFFECT_CHANGE_ROOT = "system.postures";
@@ -576,7 +577,9 @@ function collectPostureNumberModifier(actor, action = "", key = "") {
     if (!isPostureEffectApplicableToActor(effect, actor)) continue;
     for (const change of effect.system?.changes ?? effect.changes ?? []) {
       if (String(change.key ?? "").trim() !== changeKey) continue;
-      const value = evaluatePostureEffectChangeNumber(actor, change.value);
+      const prepared = prepareActorEffectChangeForApplication(actor, { ...change, effect });
+      if (!prepared) continue;
+      const value = evaluatePostureEffectChangeNumber(actor, prepared.value);
       if (!Number.isFinite(value)) continue;
       if (change.type === "override") modifier.override = value;
       else if (change.type === "multiply") modifier.multiplier *= value;

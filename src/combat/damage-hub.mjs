@@ -23,7 +23,7 @@ import {
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
-import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
+import { evaluateActorEffectChangeNumber } from "../utils/active-effect-changes.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
@@ -1922,7 +1922,7 @@ function collectCostModifier(actor, key = "") {
     if (effect.disabled) continue;
     for (const change of effect.system?.changes ?? effect.changes ?? []) {
       if (String(change.key ?? "").trim() !== key) continue;
-      const value = evaluateEffectChangeNumber(actor, change.value);
+      const value = evaluateActorEffectChangeNumber(actor, { ...change, effect });
       if (!Number.isFinite(value)) continue;
       if (change.type === "override") modifier.override = value;
       else if (change.type === "multiply") modifier.multiplier *= value;

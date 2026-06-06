@@ -21,6 +21,7 @@ import {
   prepareInventoryGridContext,
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
+import { isItemBrokenByCondition } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
@@ -914,6 +915,7 @@ function createInventoryItemData(item, allItems, placement = null) {
     showQuantity: getItemMaxStack(item) > 1,
     totalWeight: Number(getItemTotalWeight(item, allItems).toFixed(1)),
     equipped: Boolean(item.system?.equipped),
+    brokenCondition: isItemBrokenByCondition(item),
     isContainer: isContainerItem(item),
     parentId: getItemContainerParentId(item),
     placement: resolvedPlacement

@@ -54,7 +54,7 @@ const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
 const DEFAULT_WEAPON_PUSH_MAX_RANGE_METERS = 1;
 const DEFAULT_RELOAD_ACTION_POINT_COST = 2;
 const DEFAULT_ATTACK_ANIMATION_DELAY_MS = 200;
-const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 20;
+const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 10;
 const CRAFT_ROOT_NODE_ID = "root";
 const CRAFT_GRID_FALLBACK_STEP = 56;
 const CRAFT_DRAG_THRESHOLD_PX = 4;
@@ -155,17 +155,18 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const weaponSlotGroups = groupRaceWeaponSlotsBySet(creatureOptions);
     const equipmentSlotSelections = new Map();
     const weaponSlotSelections = new Map();
-    const hasContainerFunction = hasItemFunction(item, ITEM_FUNCTIONS.container);
-    const hasDamageMitigationFunction = hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation);
-    const hasDamageSourceFunction = hasItemFunction(item, ITEM_FUNCTIONS.damageSource);
-    const hasFreeSettingsFunction = hasItemFunction(item, ITEM_FUNCTIONS.freeSettings);
-    const hasModuleFunction = hasItemFunction(item, ITEM_FUNCTIONS.module);
-    const hasProsthesisFunction = hasItemFunction(item, ITEM_FUNCTIONS.prosthesis);
-    const hasConditionFunction = hasItemFunction(item, ITEM_FUNCTIONS.condition);
-    const hasConstructPartFunction = hasItemFunction(item, ITEM_FUNCTIONS.constructPart);
-    const hasFirstAidFunction = hasItemFunction(item, ITEM_FUNCTIONS.firstAid);
-    const hasWeaponFunction = hasItemFunction(item, ITEM_FUNCTIONS.weapon);
-    const hasToolFunction = hasItemFunction(item, ITEM_FUNCTIONS.tool);
+    const sheetHasItemFunction = functionKey => hasItemFunction(item, functionKey, { ignoreBroken: true });
+    const hasContainerFunction = sheetHasItemFunction(ITEM_FUNCTIONS.container);
+    const hasDamageMitigationFunction = sheetHasItemFunction(ITEM_FUNCTIONS.damageMitigation);
+    const hasDamageSourceFunction = sheetHasItemFunction(ITEM_FUNCTIONS.damageSource);
+    const hasFreeSettingsFunction = sheetHasItemFunction(ITEM_FUNCTIONS.freeSettings);
+    const hasModuleFunction = sheetHasItemFunction(ITEM_FUNCTIONS.module);
+    const hasProsthesisFunction = sheetHasItemFunction(ITEM_FUNCTIONS.prosthesis);
+    const hasConditionFunction = sheetHasItemFunction(ITEM_FUNCTIONS.condition);
+    const hasConstructPartFunction = sheetHasItemFunction(ITEM_FUNCTIONS.constructPart);
+    const hasFirstAidFunction = sheetHasItemFunction(ITEM_FUNCTIONS.firstAid);
+    const hasWeaponFunction = sheetHasItemFunction(ITEM_FUNCTIONS.weapon);
+    const hasToolFunction = sheetHasItemFunction(ITEM_FUNCTIONS.tool);
     const containerLoadReduction = Math.max(0, Math.min(100, Number(item.system?.functions?.container?.loadReduction) || 0));
     const descriptionHTML = await TextEditor.enrichHTML(item.system?.description ?? "", {
       secrets: item.isOwner,
@@ -405,6 +406,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
           ? []
           : readConstructPartLossEffectsFromForm(form)
       );
+    }
+    const freeSettingsConditionWeakeningInput = form?.querySelector?.("[data-free-settings-condition-weakening]");
+    if (freeSettingsConditionWeakeningInput) {
+      foundry.utils.setProperty(
+        submitData,
+        "system.functions.freeSettings.useConditionWeakening",
+        Boolean(freeSettingsConditionWeakeningInput.checked)
+      );
+    } else if (form?.querySelector?.("[data-free-settings-panel]")) {
+      foundry.utils.setProperty(submitData, "system.functions.freeSettings.useConditionWeakening", false);
     }
     return super._processSubmitData(event, form, submitData, options);
   }
@@ -2074,6 +2085,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       if (!entries.length) entries.push(createAbilityFunction(ABILITY_FUNCTION_TYPES.effectChanges));
       return this.item.update({
         "system.functions.freeSettings.enabled": true,
+        "system.functions.freeSettings.useConditionWeakening": Boolean(this.item.system?.functions?.freeSettings?.useConditionWeakening),
         "system.functions.freeSettings.entries": entries
       });
     }
@@ -2266,6 +2278,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (functionKey === ITEM_FUNCTIONS.freeSettings) {
       return this.item.update({
         "system.functions.freeSettings.enabled": false,
+        "system.functions.freeSettings.useConditionWeakening": false,
         "system.functions.freeSettings.entries": []
       });
     }
@@ -2282,6 +2295,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.condition.enabled": false,
         "system.functions.condition.value": 0,
         "system.functions.condition.max": 0,
+        "system.functions.freeSettings.useConditionWeakening": false,
         "system.functions.weapon.resourceCosts": (this.item.system?.functions?.weapon?.resourceCosts ?? [])
           .filter(cost => cost.type !== "condition"),
         "system.functions.additionalWeapons": additionalWeapons
@@ -2488,7 +2502,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
     const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
     const costs = [...(weaponData?.resourceCosts ?? [])];
-    const type = getDefaultNewWeaponResourceCostType(weaponData, hasItemFunction(this.item, ITEM_FUNCTIONS.condition));
+    const type = getDefaultNewWeaponResourceCostType(weaponData, hasItemFunction(this.item, ITEM_FUNCTIONS.condition, { ignoreBroken: true }));
     costs.push({ type, amount: 0 });
     return this.item.update({ [`${path}.resourceCosts`]: costs });
   }
@@ -3595,7 +3609,7 @@ function prepareAbilityFunctionForDisplay(entry, characteristics, skills) {
 
 function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, proficiencySettings, characteristicSettings, hasConditionFunction) {
   const sections = [];
-  if (hasItemFunction(item, ITEM_FUNCTIONS.weapon)) {
+  if (hasItemFunction(item, ITEM_FUNCTIONS.weapon, { ignoreBroken: true })) {
     const primaryWeapon = item.system?.functions?.weapon ?? {};
     const sourcePrimaryWeapon = item.system?._source?.functions?.weapon ?? {};
     const additionalWeapons = getAdditionalWeaponFunctionEntries(item);
@@ -3632,7 +3646,7 @@ function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, pr
       index
     })));
   }
-  if (hasItemFunction(item, ITEM_FUNCTIONS.module)) {
+  if (hasItemFunction(item, ITEM_FUNCTIONS.module, { ignoreBroken: true })) {
     const moduleWeapons = getModuleWeaponFunctionEntries(item);
     const sourceModuleWeapons = getModuleWeaponFunctionEntries({ system: item.system?._source ?? {} });
     sections.push(...moduleWeapons.map(({ id, data: weaponData }, index) => buildWeaponFunctionSection({
@@ -4093,7 +4107,7 @@ function getAllWorldAndActorItems() {
 }
 
 function itemReferencesDamageSource(item, sourceUuid = "") {
-  if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.weapon)) return false;
+  if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.weapon, { ignoreBroken: true })) return false;
   return getWeaponFunctionDataList(item).some(weaponData => (
     getWeaponMagazineSourceUuids(weaponData).includes(sourceUuid)
   ));
@@ -5796,7 +5810,7 @@ function buildToolFunctionEntries(item, toolSettings, skillSettings) {
     return {
       ...tool,
       functionKey: ITEM_FUNCTIONS.tool,
-      enabled: hasItemFunction(item, ITEM_FUNCTIONS.tool),
+      enabled: hasItemFunction(item, ITEM_FUNCTIONS.tool, { ignoreBroken: true }),
       useAsItem: Boolean(data.useAsItem),
       toolClass,
       toolChoices: toolSettings.map(choice => ({

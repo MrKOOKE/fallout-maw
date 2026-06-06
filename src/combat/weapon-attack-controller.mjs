@@ -9,7 +9,7 @@ import { ITEM_FUNCTIONS, createWeaponFunctionUpdateData, getConditionWeakeningDa
 import { getCoverSettings, getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import { canSpendCombatActionPoints, getCombatActionPointState, spendCombatActionPoints } from "./reaction-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
+import { evaluateActorEffectChangeNumber } from "../utils/active-effect-changes.mjs";
 import { getRequiredWeaponSlotsForItem, getWeaponSlotRequirement, isContainerWeaponSetKey } from "../utils/equipment-slots.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
@@ -3737,7 +3737,7 @@ function collectActionPenetrationModifier(actor, actionKey = "") {
     if (effect.disabled) continue;
     for (const change of effect.system?.changes ?? effect.changes ?? []) {
       if (String(change?.key ?? "").trim() !== key) continue;
-      const value = evaluateEffectChangeNumber(actor, change.value);
+      const value = evaluateActorEffectChangeNumber(actor, { ...change, effect });
       if (!Number.isFinite(value)) continue;
       if (change.type === "override") modifier.override = value;
       else if (change.type === "multiply") modifier.multiplier *= value;

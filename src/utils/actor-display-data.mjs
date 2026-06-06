@@ -23,7 +23,7 @@ import {
   normalizeInventoryPlacement,
   prepareInventoryGridContext
 } from "./inventory-containers.mjs";
-import { getConstructPartFunction, getFirstAidChargesData, hasItemFunction, ITEM_FUNCTIONS } from "./item-functions.mjs";
+import { getConstructPartFunction, getFirstAidChargesData, hasItemFunction, isItemBrokenByCondition, ITEM_FUNCTIONS } from "./item-functions.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem } from "../races/natural-items.mjs";
 import { toInteger } from "./numbers.mjs";
 
@@ -524,6 +524,7 @@ export function createInventoryItemData(item, allItems, currencies = [], placeme
     priceCurrency: item.system?.priceCurrency ?? "",
     priceCurrencyLabel: currencies.find(currency => currency.key === item.system?.priceCurrency)?.label ?? "",
     equipped: Boolean(item.system?.equipped),
+    brokenCondition: isItemBrokenByCondition(item),
     occupiedSlots: item.system?.occupiedSlots ?? {},
     weaponSlotRequirement: item.system?.weaponSlotRequirement ?? { mode: "oneOf", slots: {} },
     itemFunction: item.system?.itemFunction ?? "",

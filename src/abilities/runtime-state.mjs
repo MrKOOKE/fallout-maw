@@ -1,4 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 export const ABILITY_FUNCTION_COOLDOWN_FLAG_KEY = "abilityFunctionCooldown";
@@ -19,7 +20,8 @@ export function getWeaponActionBlockState(actor, actionKey = "") {
     if (effect.disabled) continue;
     for (const change of effect.system?.changes ?? effect.changes ?? []) {
       if (String(change?.key ?? "").trim() !== key) continue;
-      if (!isTruthyEffectValue(change?.value)) continue;
+      const prepared = prepareActorEffectChangeForApplication(actor, { ...change, effect });
+      if (!prepared || !isTruthyEffectValue(prepared.value)) continue;
       return { blocked: true, effect };
     }
   }

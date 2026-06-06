@@ -212,19 +212,23 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       normalizeLimbMap(constructLimbData?.source ?? this.limbs, limbSettings, limbMaximums, limbSource)
     );
 
-    const resourceMaximums = evaluateResourceSettings(
-      resourceSettings,
-      characteristicSettings,
-      skillSettings,
-      this.characteristics,
-      skillValues,
-      buildLimbResourceFormulaVariables(limbMaximums)
-    );
-    const reactionResource = {
-      ...(this.parent?._source?.system?.resources?.[REACTION_RESOURCE_KEY] ?? {}),
-      bonus: this.resources?.[REACTION_RESOURCE_KEY]?.bonus
-    };
-    replaceObjectContents(this.resources, normalizeResourceMap(this.resources, resourceSettings, resourceMaximums, {
+    const resourceMaximums = isConstruct
+      ? buildZeroResourceMaximums(resourceSettings)
+      : evaluateResourceSettings(
+        resourceSettings,
+        characteristicSettings,
+        skillSettings,
+        this.characteristics,
+        skillValues,
+        buildLimbResourceFormulaVariables(limbMaximums)
+      );
+    const reactionResource = isConstruct
+      ? { min: 0, spent: 0, bonus: 0, value: 0, max: 0 }
+      : {
+        ...(this.parent?._source?.system?.resources?.[REACTION_RESOURCE_KEY] ?? {}),
+        bonus: this.resources?.[REACTION_RESOURCE_KEY]?.bonus
+      };
+    replaceObjectContents(this.resources, normalizeResourceMap(isConstruct ? {} : this.resources, resourceSettings, resourceMaximums, {
       trackSpent: true
     }));
     ensureReactionResource(this.resources, reactionResource);
@@ -448,6 +452,10 @@ function normalizeResourceMap(currentResources = {}, settings = [], maximums = {
       return [setting.key, { min, spent, bonus, value, max }];
     })
   );
+}
+
+function buildZeroResourceMaximums(settings = []) {
+  return Object.fromEntries((settings ?? []).map(setting => [setting.key, 0]));
 }
 
 function ensureReactionResourceBase(resources = {}) {

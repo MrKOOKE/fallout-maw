@@ -602,7 +602,7 @@
   </section>
 
   {{#if hasFreeSettingsFunction}}
-  <section class="fallout-maw-panel">
+  <section class="fallout-maw-panel" data-free-settings-panel>
     <div class="fallout-maw-panel-header">
       <h2>Свободная настройка</h2>
       <div class="fallout-maw-inline-controls">
@@ -610,6 +610,12 @@
         <button type="button" data-remove-item-function="freeSettings" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
       </div>
     </div>
+    {{#if hasConditionFunction}}
+    <label class="fallout-maw-checkbox-row">
+      <span>Использовать порог ослабления?</span>
+      <input type="checkbox" name="system.functions.freeSettings.useConditionWeakening" data-free-settings-condition-weakening {{checked system.functions.freeSettings.useConditionWeakening}}>
+    </label>
+    {{/if}}
   </section>
 
   {{#each itemFreeSettingsFunctions}}
