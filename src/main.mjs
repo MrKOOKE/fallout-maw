@@ -45,6 +45,7 @@ import { registerNaturalRaceItemHooks } from "./races/natural-items.mjs";
 import { registerStealthHooks } from "./stealth/index.mjs";
 import { registerSystemSheets } from "./sheets/index.mjs";
 import { FalloutMaWDragDrop } from "./utils/drag-drop.mjs";
+import { registerFormFocusDragGuard } from "./utils/form-focus-drag-guard.mjs";
 import {
   ROOT_CONTAINER_ID,
   createStoredPlacement,
@@ -83,6 +84,7 @@ Hooks.once("init", () => {
   registerDescriptionFormulaEnrichment();
   registerDataModels();
   registerSystemSheets();
+  registerFormFocusDragGuard();
   registerTrackableAttributes();
   registerPostureMovementHooks();
   registerCoverHooks();
@@ -102,6 +104,10 @@ Hooks.once("init", () => {
   registerPersonalGeneratorHooks();
   registerAnimationLibraryBrowserHooks();
   registerStealthHooks();
+});
+
+Hooks.on("openDetachedWindow", (_id, win) => {
+  registerFormFocusDragGuard(win?.document);
 });
 
 Hooks.once("ready", async () => {
