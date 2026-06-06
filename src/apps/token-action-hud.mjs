@@ -2627,7 +2627,7 @@ function updateReloadDialogState(dialog, actor, weaponId, weaponFunctionId) {
 }
 
 function buildWeaponReloadDialogState(actor, weaponData = {}) {
-  const sourceItems = getWeaponMagazineSourceItems(weaponData);
+  const sourceItems = getAvailableWeaponMagazineSourceItems(actor, weaponData);
   const sourceItem = getActiveWeaponMagazineSourceItem(weaponData, sourceItems);
   const source = getDamageSourceFunction(sourceItem);
   const sourceLabel = sourceItem
@@ -2712,10 +2712,12 @@ async function openWeaponReloadDialog({ actor = null, weapon = null, weaponFunct
     const weaponData = getWeaponFunctionById(freshWeapon, weaponFunctionId) ?? {};
     const loadedUuid = String(weaponData?.magazine?.sourceItemUuid ?? "").trim();
     const configuredSources = getWeaponMagazineSourceItems(weaponData);
+    const availableSources = getAvailableWeaponMagazineSourceItems(actor, weaponData, configuredSources);
     const loadedSource = (loadedUuid ? configuredSources.find(item => item.uuid === loadedUuid) : null)
-      ?? getActiveWeaponMagazineSourceItem(weaponData, configuredSources);
+      ?? getActiveWeaponMagazineSourceItem(weaponData, availableSources);
     const currentSourceUuid = String(loadedSource?.uuid ?? loadedUuid).trim();
     const rounds = Math.max(0, toInteger(weaponData?.magazine?.value));
+    if (!availableSources.some(item => item.uuid === nextSourceUuid)) return;
     try {
       if (rounds > 0 && currentSourceUuid && nextSourceUuid !== currentSourceUuid) {
         if (!hasRequiredWeaponReloadActionPoints(actor, freshWeapon, weaponFunctionId)) return;
@@ -2894,12 +2896,13 @@ async function performWeaponReloadOperation({ actorUuid = "", weaponId = "", wea
   const weaponData = getWeaponFunctionById(weapon, weaponFunctionId) ?? {};
   if (!hasWeaponResourceCostData(weaponData, "magazine")) return undefined;
   const configuredSources = getWeaponMagazineSourceItems(weaponData);
+  const availableSources = getAvailableWeaponMagazineSourceItems(actor, weaponData, configuredSources);
   const loadedUuid = String(weaponData?.magazine?.sourceItemUuid ?? "").trim();
 
   if (String(action) === "select") {
-    const selectedSource = configuredSources.find(item => item.uuid === sourceUuid);
+    const selectedSource = availableSources.find(item => item.uuid === sourceUuid);
     if (!selectedSource || selectedSource.actor || !hasItemFunction(selectedSource, ITEM_FUNCTIONS.damageSource)) {
-      throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadNoSource"));
+      throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadSourceEmpty"));
     }
     return actor.updateEmbeddedDocuments("Item", [{
       _id: weapon.id,
@@ -2919,10 +2922,10 @@ async function performWeaponReloadOperation({ actorUuid = "", weaponId = "", wea
     return extractWeaponMagazineSource(actor, weapon, weaponFunctionId, weaponData, extractSource);
   }
 
-  const insertSource = configuredSources.find(item => item.uuid === sourceUuid)
-    ?? getActiveWeaponMagazineSourceItem(weaponData, configuredSources);
+  const insertSource = availableSources.find(item => item.uuid === sourceUuid)
+    ?? getActiveWeaponMagazineSourceItem(weaponData, availableSources);
   if (!insertSource || insertSource.actor || !hasItemFunction(insertSource, ITEM_FUNCTIONS.damageSource)) {
-    throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadNoSource"));
+    throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadSourceEmpty"));
   }
   if (String(action) === "insert") return insertWeaponMagazineSource(actor, weapon, weaponFunctionId, weaponData, insertSource);
   return undefined;
@@ -3004,6 +3007,14 @@ function getWeaponMagazineSourceItems(weaponData = {}) {
   return getWeaponMagazineSourceUuids(weaponData)
     .map(uuid => getWeaponMagazineSourceItem({ magazine: { sourceItemUuid: uuid } }))
     .filter(item => item && !item.actor && hasItemFunction(item, ITEM_FUNCTIONS.damageSource));
+}
+
+function getAvailableWeaponMagazineSourceItems(actor, weaponData = {}, sourceItems = getWeaponMagazineSourceItems(weaponData)) {
+  const loadedUuid = String(weaponData?.magazine?.sourceItemUuid ?? "").trim();
+  return sourceItems.filter(item => {
+    if (item.uuid === loadedUuid) return true;
+    return getActorMagazineSourceQuantity(actor, item) > 0;
+  });
 }
 
 function readReloadDialogSourceUuid(button) {
