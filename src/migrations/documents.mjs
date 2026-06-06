@@ -68,6 +68,32 @@ function migrateWeaponSpecialProperties(source) {
 }
 
 function migrateWeaponFunctionSpecialProperties(weaponData) {
-  if (!weaponData || Array.isArray(weaponData.specialProperties)) return;
-  weaponData.specialProperties = [];
+  if (!weaponData) return;
+  if (Array.isArray(weaponData.specialProperties)) {
+    weaponData.specialProperties = weaponData.specialProperties.map(property => migrateWeaponSpecialProperty(property));
+    return;
+  }
+  if (weaponData.specialProperties && typeof weaponData.specialProperties === "object") {
+    weaponData.specialProperties = Object.values(weaponData.specialProperties)
+      .map(property => migrateWeaponSpecialProperty(property));
+    return;
+  }
+  if (weaponData.specialProperties !== undefined) {
+    weaponData.specialProperties = [];
+  }
+}
+
+function migrateWeaponSpecialProperty(property) {
+  if (typeof property === "string") return { type: migrateWeaponSpecialPropertyType(property) };
+  if (!property || typeof property !== "object") return { type: "pending" };
+  const type = migrateWeaponSpecialPropertyType(property.type ?? property.property ?? property.key);
+  if (type === "attackPower") return { ...property, type };
+  return { type };
+}
+
+function migrateWeaponSpecialPropertyType(type) {
+  const key = String(type ?? "").trim();
+  if (key === "hitAllConeTargets") return key;
+  if (key === "attackPower") return key;
+  return "pending";
 }

@@ -63,6 +63,7 @@ import {
   getFirstAidChargesData,
   getFirstAidFunction,
   getEnabledWeaponFunctions,
+  getWeaponAttackPowerState,
   getWeaponFunctionModuleSlots,
   getModuleFunction,
   getProsthesisFunction,
@@ -4070,7 +4071,9 @@ function getWeaponTooltipCalculatedStats(item, data = {}, { actor = null, baseMo
       context: `${item?.name ?? "weapon"} tooltip damage`
     })
     : Math.max(0, toInteger(baseDamageFormula));
-  const modifiedDamage = Math.round(baseDamage * Math.max(0, 100 + proficiencyDamage) / 100);
+  const attackPowerDamagePercent = baseMode ? 0 : toInteger(data.attackPowerDamagePercent);
+  const poweredDamage = Math.round(baseDamage * Math.max(0, 100 + attackPowerDamagePercent) / 100);
+  const modifiedDamage = Math.round(poweredDamage * Math.max(0, 100 + proficiencyDamage) / 100);
   const weakening = baseMode ? { active: false, ratio: 1, steps: 0 } : getConditionWeakeningData(item, { minimumRatio: 0.1 });
   const conditionAccuracyPenalty = weakening.active ? weakening.steps * 10 : 0;
   const conditionCritPenalty = weakening.active ? weakening.steps * 3 : 0;
@@ -4227,13 +4230,18 @@ function getEffectiveWeaponDamageData(_item, data = {}) {
 
 function getEffectiveWeaponTooltipData(data = {}, { applyModules = true, moduleSlots = null } = {}) {
   const moduleOptions = Array.isArray(moduleSlots) ? { moduleSlots } : {};
-  if (!isSourceDamageMode(data)) return applyModules ? applyWeaponModuleModifiers(data, moduleOptions) : data;
+  if (!isSourceDamageMode(data)) {
+    const effective = applyModules ? applyWeaponModuleModifiers(data, moduleOptions) : data;
+    return applyModules ? applyWeaponAttackPowerTooltipModifiers(effective) : effective;
+  }
   const sourceItem = getWeaponDamageSourceItem(data);
   if (!sourceItem || !hasItemFunction(sourceItem, ITEM_FUNCTIONS.damageSource)) {
-    return applyModules ? applyWeaponModuleModifiers(data, moduleOptions) : data;
+    const effective = applyModules ? applyWeaponModuleModifiers(data, moduleOptions) : data;
+    return applyModules ? applyWeaponAttackPowerTooltipModifiers(effective) : effective;
   }
   const merged = mergeWeaponDataWithDamageSource(data, getDamageSourceFunction(sourceItem));
-  return applyModules ? applyWeaponModuleModifiers(merged, moduleOptions) : merged;
+  const effective = applyModules ? applyWeaponModuleModifiers(merged, moduleOptions) : merged;
+  return applyModules ? applyWeaponAttackPowerTooltipModifiers(effective) : effective;
 }
 
 function mergeWeaponDataWithDamageSource(data = {}, source = {}) {
@@ -4256,6 +4264,70 @@ function mergeWeaponDataWithDamageSource(data = {}, source = {}) {
     penetration: addFormulaTexts(data.penetration, source.penetration),
     volley: mergeDamageSourceVolleyData(data.volley, source.volley)
   };
+}
+
+function applyWeaponAttackPowerTooltipModifiers(data = {}) {
+  const state = getWeaponAttackPowerState(data);
+  if (!state.active || state.increments <= 0) return data;
+  const result = foundry.utils.deepClone(data);
+  const multiplier = Math.max(0, toInteger(state.increments));
+  const perLevel = state.perLevel ?? {};
+
+  result.attackPowerDamagePercent = toInteger(perLevel.damagePercent) * multiplier;
+  addTooltipFormulaNumber(result, "accuracyBonus", perLevel.accuracyBonus, multiplier);
+  addTooltipFormulaNumber(result, "criticalChanceModifier", perLevel.criticalChanceModifier, multiplier);
+  addTooltipFormulaNumber(result, "criticalDamagePercent", perLevel.criticalDamagePercent, multiplier, { min: 0 });
+  addTooltipNumber(result, "attackConeDegrees", perLevel.attackConeDegrees, multiplier, { min: 0 });
+  addTooltipFormulaNumber(result, "maxRangeMeters", perLevel.maxRangeMeters, multiplier, { min: 0 });
+  addTooltipFormulaNumber(result, "effectiveRange.value", perLevel.effectiveRange?.value, multiplier, { min: 0 });
+  addTooltipFormulaNumber(result, "effectiveRange.max", perLevel.effectiveRange?.max, multiplier, { min: 0 });
+  addTooltipFormulaNumber(result, "penetration", perLevel.penetration, multiplier, { min: 0, integer: true });
+  applyWeaponAttackPowerTooltipResourceCosts(result, state.resourceCosts, multiplier);
+  return result;
+}
+
+function applyWeaponAttackPowerTooltipResourceCosts(data = {}, resourceCosts = [], multiplier = 0) {
+  const costs = Array.isArray(data.resourceCosts) ? foundry.utils.deepClone(data.resourceCosts) : [];
+  if (isSourceDamageMode(data) && !costs.some(cost => String(cost?.type ?? "") === "magazine")) {
+    costs.push({ type: "magazine", amount: 1 });
+  }
+
+  for (const cost of resourceCosts ?? []) {
+    const type = String(cost?.type ?? "").trim();
+    const delta = toInteger(cost?.amount) * Math.max(0, toInteger(multiplier));
+    if (!type || !delta) continue;
+    let target = costs.find(entry => String(entry?.type ?? "") === type);
+    if (!target) {
+      target = { type, amount: 0 };
+      costs.push(target);
+    }
+    target.amount = Math.max(0, toInteger(target.amount) + delta);
+  }
+  data.resourceCosts = costs;
+}
+
+function addTooltipFormulaNumber(target, path, delta, multiplier = 1, { min = null, integer = false } = {}) {
+  const change = (integer ? toInteger(delta) : Number(delta)) * Math.max(0, toInteger(multiplier));
+  if (!Number.isFinite(change) || change === 0) return;
+  const currentRaw = foundry.utils.getProperty(target, path);
+  const current = Number(currentRaw);
+  if (Number.isFinite(current)) {
+    const next = Number.isFinite(Number(min)) ? Math.max(Number(min), current + change) : current + change;
+    foundry.utils.setProperty(target, path, integer ? Math.trunc(next) : next);
+    return;
+  }
+  foundry.utils.setProperty(target, path, addFormulaTexts(currentRaw, integer ? Math.trunc(change) : change));
+}
+
+function addTooltipNumber(target, path, delta, multiplier = 1, { min = null, integer = false } = {}) {
+  const change = (integer ? toInteger(delta) : Number(delta)) * Math.max(0, toInteger(multiplier));
+  if (!Number.isFinite(change) || change === 0) return;
+  const currentRaw = foundry.utils.getProperty(target, path);
+  const current = integer ? toInteger(currentRaw) : Number(currentRaw);
+  const fallback = Number.isFinite(current) ? current : 0;
+  let next = fallback + change;
+  if (Number.isFinite(Number(min))) next = Math.max(Number(min), next);
+  foundry.utils.setProperty(target, path, integer ? Math.trunc(next) : next);
 }
 
 function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {

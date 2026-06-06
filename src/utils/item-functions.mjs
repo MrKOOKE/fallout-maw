@@ -13,6 +13,11 @@ export const ITEM_FUNCTIONS = {
   toolPrefix: "tool:"
 };
 export const MODULE_WEAPON_FUNCTION_ID_PREFIX = "module:";
+export const WEAPON_SPECIAL_PROPERTIES = Object.freeze({
+  pending: "pending",
+  hitAllConeTargets: "hitAllConeTargets",
+  attackPower: "attackPower"
+});
 
 const BROKEN_ITEM_FUNCTION_EXCEPTIONS = new Set([
   ITEM_FUNCTIONS.condition,
@@ -140,6 +145,118 @@ export function getConditionWeakeningData(itemOrSystem = null, { minimumRatio = 
 
 export function getWeaponFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.weapon] ?? {};
+}
+
+export function createDefaultWeaponSpecialPropertyData(type = "", source = {}) {
+  const propertyType = String(type ?? "").trim();
+  const current = normalizeWeaponSpecialProperty(source);
+  if (propertyType === WEAPON_SPECIAL_PROPERTIES.attackPower) {
+    return {
+      type: propertyType,
+      attackPower: normalizeWeaponAttackPowerData(current.attackPower)
+    };
+  }
+  if (propertyType === WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets) return { type: propertyType };
+  return { type: WEAPON_SPECIAL_PROPERTIES.pending };
+}
+
+export function normalizeWeaponSpecialProperties(entries = []) {
+  const source = Array.isArray(entries) ? entries : Object.values(entries ?? {});
+  return source.map(entry => normalizeWeaponSpecialProperty(entry));
+}
+
+export function normalizeWeaponSpecialProperty(entry = null) {
+  if (typeof entry === "string") return { type: normalizeWeaponSpecialPropertyType(entry) };
+  if (!entry || typeof entry !== "object") return { type: WEAPON_SPECIAL_PROPERTIES.pending };
+  const type = String(entry.type ?? entry.property ?? entry.key ?? "").trim();
+  const normalized = { ...entry, type: normalizeWeaponSpecialPropertyType(type) };
+  if (normalized.type === WEAPON_SPECIAL_PROPERTIES.attackPower) {
+    normalized.attackPower = normalizeWeaponAttackPowerData(entry.attackPower ?? entry.power ?? {});
+  }
+  return normalized;
+}
+
+export function normalizeWeaponSpecialPropertyType(type = "") {
+  const key = String(type ?? "").trim();
+  if (key === WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets) return key;
+  if (key === WEAPON_SPECIAL_PROPERTIES.attackPower) return key;
+  return WEAPON_SPECIAL_PROPERTIES.pending;
+}
+
+export function getWeaponSpecialPropertyType(entry = null) {
+  return normalizeWeaponSpecialProperty(entry).type;
+}
+
+export function hasWeaponSpecialPropertyData(weaponData = {}, propertyType = "") {
+  const type = String(propertyType ?? "").trim();
+  if (!type) return false;
+  return normalizeWeaponSpecialProperties(weaponData?.specialProperties).some(property => property.type === type);
+}
+
+export function getWeaponAttackPowerProperty(weaponData = {}) {
+  return normalizeWeaponSpecialProperties(weaponData?.specialProperties)
+    .find(property => property.type === WEAPON_SPECIAL_PROPERTIES.attackPower) ?? null;
+}
+
+export function getWeaponAttackPowerState(weaponData = {}) {
+  const property = getWeaponAttackPowerProperty(weaponData);
+  if (!property) {
+    return {
+      active: false,
+      value: 1,
+      max: 1,
+      increments: 0,
+      perLevel: normalizeWeaponAttackPowerPerLevelData({}),
+      resourceCosts: []
+    };
+  }
+  const attackPower = normalizeWeaponAttackPowerData(property.attackPower);
+  const value = clampWholeNumber(attackPower.level?.value, 1, attackPower.level.max, 1);
+  const max = clampWholeNumber(attackPower.level?.max, 1, 999, 1);
+  const current = Math.min(value, max);
+  return {
+    active: true,
+    value: current,
+    max,
+    increments: Math.max(0, current - 1),
+    perLevel: attackPower.perLevel,
+    resourceCosts: attackPower.resourceCosts
+  };
+}
+
+export function normalizeWeaponAttackPowerData(source = {}) {
+  const max = clampWholeNumber(source?.level?.max ?? source?.max, 1, 999, 1);
+  const value = clampWholeNumber(source?.level?.value ?? source?.value, 1, max, 1);
+  return {
+    level: { value, max },
+    perLevel: normalizeWeaponAttackPowerPerLevelData(source?.perLevel ?? source),
+    resourceCosts: normalizeWeaponAttackPowerResourceCosts(source?.resourceCosts)
+  };
+}
+
+function normalizeWeaponAttackPowerPerLevelData(source = {}) {
+  return {
+    damagePercent: toWholeNumber(source?.damagePercent, 0),
+    accuracyBonus: toWholeNumber(source?.accuracyBonus, 0),
+    criticalChanceModifier: toWholeNumber(source?.criticalChanceModifier, 0),
+    criticalDamagePercent: toWholeNumber(source?.criticalDamagePercent, 0),
+    attackConeDegrees: toNumber(source?.attackConeDegrees, 0),
+    maxRangeMeters: toNumber(source?.maxRangeMeters, 0),
+    effectiveRange: {
+      value: toNumber(source?.effectiveRange?.value, 0),
+      max: toNumber(source?.effectiveRange?.max, 0)
+    },
+    penetration: toWholeNumber(source?.penetration, 0)
+  };
+}
+
+function normalizeWeaponAttackPowerResourceCosts(source = []) {
+  return (Array.isArray(source) ? source : Object.values(source ?? {}))
+    .map(entry => ({
+      type: String(entry?.type ?? "").trim(),
+      amount: toWholeNumber(entry?.amount, 0)
+    }))
+    .filter(entry => entry.type);
 }
 
 export function getAdditionalWeaponFunctions(itemOrSystem = null) {
@@ -405,4 +522,14 @@ function getWeaponModuleSlotItemData(slot = {}) {
 function toWholeNumber(value, fallback = 0) {
   const number = Math.trunc(Number(value));
   return Number.isFinite(number) ? number : fallback;
+}
+
+function toNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function clampWholeNumber(value, min = 0, max = Infinity, fallback = min) {
+  const number = toWholeNumber(value, fallback);
+  return Math.max(min, Math.min(max, number));
 }

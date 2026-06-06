@@ -12,11 +12,16 @@ import {
 import {
   DAMAGE_MITIGATION_MODES,
   ITEM_FUNCTIONS,
+  WEAPON_SPECIAL_PROPERTIES,
   getDamageSourceFunction,
   getEnabledToolFunctions,
+  createDefaultWeaponSpecialPropertyData,
   getProsthesisFunction,
   getSelectedToolFunctionKey,
   getToolKeyFromFunctionKey,
+  getWeaponSpecialPropertyType,
+  normalizeWeaponSpecialProperties,
+  normalizeWeaponAttackPowerData,
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { FALLBACK_ICON, normalizeImagePath } from "../utils/actor-display-data.mjs";
@@ -420,6 +425,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return super._processSubmitData(event, form, submitData, options);
   }
 
+  _processFormData(event, form, formData) {
+    const submitData = super._processFormData(event, form, formData);
+    normalizeWeaponSpecialPropertiesInSubmitData(submitData);
+    return submitData;
+  }
+
   async _onRender(context, options) {
     await super._onRender(context, options);
     this.#fitAutoHeightToContent();
@@ -606,6 +617,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     activateDescriptionFormulaAutocomplete(this.element);
     this.element?.querySelectorAll("[data-add-weapon-special-property]").forEach(button => {
       button.addEventListener("click", event => this.#onAddWeaponSpecialProperty(event));
+    });
+    this.element?.querySelectorAll("[data-weapon-special-property-type]").forEach(select => {
+      select.addEventListener("change", event => this.#onWeaponSpecialPropertyTypeChange(event));
     });
     this.element?.querySelectorAll("[data-delete-weapon-special-property]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteWeaponSpecialProperty(event));
@@ -2722,8 +2736,22 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   #onAddWeaponSpecialProperty(event) {
     event.preventDefault();
     const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
-    const properties = [...(foundry.utils.getProperty(this.item, path)?.specialProperties ?? [])];
-    properties.push("hitAllConeTargets");
+    const properties = normalizeWeaponSpecialProperties(foundry.utils.getProperty(this.item, path)?.specialProperties ?? []);
+    properties.push(createDefaultWeaponSpecialPropertyData());
+    return this.item.update({ [`${path}.specialProperties`]: properties });
+  }
+
+  #onWeaponSpecialPropertyTypeChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    const index = Number(event.currentTarget?.dataset?.weaponSpecialPropertyType);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const type = String(event.currentTarget?.value ?? "").trim();
+    const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
+    const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
+    const properties = normalizeWeaponSpecialProperties(weaponData?.specialProperties ?? []);
+    properties[index] = createDefaultWeaponSpecialPropertyData(type, properties[index]);
     return this.item.update({ [`${path}.specialProperties`]: properties });
   }
 
@@ -2732,7 +2760,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const index = Number(event.currentTarget?.dataset?.deleteWeaponSpecialProperty);
     if (!Number.isInteger(index) || index < 0) return undefined;
     const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
-    const properties = [...(foundry.utils.getProperty(this.item, path)?.specialProperties ?? [])];
+    const properties = normalizeWeaponSpecialProperties(foundry.utils.getProperty(this.item, path)?.specialProperties ?? []);
     properties.splice(index, 1);
     return this.item.update({ [`${path}.specialProperties`]: properties });
   }
@@ -3607,6 +3635,32 @@ function prepareAbilityFunctionForDisplay(entry, characteristics, skills) {
   };
 }
 
+function normalizeWeaponSpecialPropertiesInSubmitData(submitData = {}) {
+  const functions = submitData?.system?.functions;
+  if (!functions || typeof functions !== "object") return;
+  normalizeSubmittedWeaponFunctionSpecialProperties(functions.weapon);
+
+  const additionalWeapons = functions.additionalWeapons;
+  if (Array.isArray(additionalWeapons)) {
+    additionalWeapons.forEach(weaponData => normalizeSubmittedWeaponFunctionSpecialProperties(weaponData));
+  } else {
+    Object.values(additionalWeapons ?? {}).forEach(weaponData => normalizeSubmittedWeaponFunctionSpecialProperties(weaponData));
+  }
+
+  const moduleAdditionalWeapons = functions.module?.additionalWeapons;
+  if (Array.isArray(moduleAdditionalWeapons)) {
+    moduleAdditionalWeapons.forEach(weaponData => normalizeSubmittedWeaponFunctionSpecialProperties(weaponData));
+  } else {
+    Object.values(moduleAdditionalWeapons ?? {}).forEach(weaponData => normalizeSubmittedWeaponFunctionSpecialProperties(weaponData));
+  }
+}
+
+function normalizeSubmittedWeaponFunctionSpecialProperties(weaponData = null) {
+  if (!weaponData || typeof weaponData !== "object") return;
+  if (!Object.hasOwn(weaponData, "specialProperties")) return;
+  weaponData.specialProperties = normalizeWeaponSpecialProperties(weaponData.specialProperties);
+}
+
 function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, proficiencySettings, characteristicSettings, hasConditionFunction) {
   const sections = [];
   if (hasItemFunction(item, ITEM_FUNCTIONS.weapon, { ignoreBroken: true })) {
@@ -3859,20 +3913,88 @@ function getDefaultNewWeaponResourceCostType(weaponData = {}, hasConditionFuncti
 }
 
 function buildWeaponSpecialPropertyRowsForData(weaponData) {
-  return (weaponData?.specialProperties ?? []).map((property, index) => ({
+  const properties = normalizeWeaponSpecialProperties(weaponData?.specialProperties ?? []);
+  return properties.map((property, index) => ({
     index,
-    choices: buildWeaponSpecialPropertyChoices(property)
+    type: getWeaponSpecialPropertyType(property),
+    choices: buildWeaponSpecialPropertyChoices(property, properties),
+    isAttackPower: getWeaponSpecialPropertyType(property) === WEAPON_SPECIAL_PROPERTIES.attackPower,
+    attackPower: buildWeaponAttackPowerSettingsForData(weaponData, property)
   }));
 }
 
-function buildWeaponSpecialPropertyChoices(selected) {
-  return [{
-    value: "hitAllConeTargets",
-    label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialHitAllConeTargets")
-  }].map(choice => ({
+function buildWeaponSpecialPropertyChoices(selected, properties = []) {
+  const selectedType = getWeaponSpecialPropertyType(selected);
+  const usedTypes = new Set(properties.map(property => getWeaponSpecialPropertyType(property)).filter(Boolean));
+    return [
+      {
+      value: WEAPON_SPECIAL_PROPERTIES.pending,
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialPropertyChoose"),
+      disabled: false
+    },
+    {
+      value: WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets,
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialHitAllConeTargets")
+    },
+    {
+      value: WEAPON_SPECIAL_PROPERTIES.attackPower,
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialAttackPower")
+    }
+  ].map(choice => ({
     ...choice,
-    selected: choice.value === String(selected ?? "")
+    selected: choice.value === selectedType,
+    disabled: Boolean(choice.disabled || (
+      choice.value
+      && choice.value !== WEAPON_SPECIAL_PROPERTIES.pending
+      && choice.value !== selectedType
+      && usedTypes.has(choice.value)
+    ))
   }));
+}
+
+function buildWeaponAttackPowerSettingsForData(weaponData = {}, property = {}) {
+  const attackPower = normalizeWeaponAttackPowerData(property?.attackPower);
+  const perLevel = attackPower.perLevel;
+  return {
+    level: attackPower.level,
+    perLevel,
+    resourceCostRows: buildWeaponAttackPowerResourceCostRows(weaponData, attackPower.resourceCosts)
+  };
+}
+
+function buildWeaponAttackPowerResourceCostRows(weaponData = {}, configuredCosts = []) {
+  const configured = new Map((configuredCosts ?? []).map(cost => [String(cost?.type ?? ""), toInteger(cost?.amount)]));
+  const baseCosts = getWeaponAttackPowerBaseResourceCosts(weaponData);
+  const types = new Set([
+    ...baseCosts.map(cost => cost.type),
+    ...configured.keys()
+  ]);
+  return Array.from(types)
+    .filter(Boolean)
+    .map((type, index) => {
+      const base = baseCosts.find(cost => cost.type === type)?.amount ?? 0;
+      return {
+        index,
+        type,
+        label: getWeaponResourceTypeLabel(type),
+        base,
+        amount: configured.get(type) ?? 0
+      };
+    });
+}
+
+function getWeaponAttackPowerBaseResourceCosts(weaponData = {}) {
+  const costs = Array.isArray(weaponData?.resourceCosts)
+    ? weaponData.resourceCosts
+    : Object.values(weaponData?.resourceCosts ?? {});
+  const totals = new Map();
+  for (const cost of costs) {
+    const type = String(cost?.type ?? "").trim();
+    if (!type) continue;
+    totals.set(type, (totals.get(type) ?? 0) + Math.max(0, toInteger(cost?.amount)));
+  }
+  if (isSourceDamageMode(weaponData) && !totals.has("magazine")) totals.set("magazine", 1);
+  return Array.from(totals, ([type, amount]) => ({ type, amount }));
 }
 
 function buildWeaponRequirementRowsForData(weaponData, characteristicSettings = [], skillSettings = []) {

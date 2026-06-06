@@ -66,7 +66,7 @@ import {
   getContextInventoryItems,
   getItemQuantity
 } from "../utils/inventory-containers.mjs";
-import { ITEM_FUNCTIONS, createWeaponFunctionUpdateData, getConditionFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getFirstAidChargesData, getModuleFunction, getProsthesisFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, hasItemFunction, isActiveItem } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getConditionFunction, getDamageSourceFunction, getEnabledWeaponFunctions, getFirstAidChargesData, getModuleFunction, getProsthesisFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, getWeaponSpecialPropertyType, hasItemFunction, hasWeaponSpecialPropertyData, isActiveItem, normalizeWeaponSpecialProperties } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
@@ -410,6 +410,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       selectHudWeapon: { handler: TokenActionHud.#onSelectHudWeapon, buttons: [0, 1] },
       toggleWeaponActions: { handler: TokenActionHud.#onToggleWeaponActions, buttons: [0, 1] },
       useWeaponAction: { handler: TokenActionHud.#onUseWeaponAction, buttons: [0, 1] },
+      setWeaponAttackPower: { handler: TokenActionHud.#onSetWeaponAttackPower, buttons: [0, 1] },
       gmHealSelected: TokenActionHud.#onGmHealSelected,
       gmAwardExperience: TokenActionHud.#onGmAwardExperience,
       endCombatTurn: TokenActionHud.#onEndCombatTurn,
@@ -780,6 +781,25 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       });
     }
     return startWeaponAttack({ token: this.token, weapon: item, actionKey, weaponFunctionId });
+  }
+
+  static async #onSetWeaponAttackPower(event, target) {
+    event.preventDefault();
+    const weaponFunctionId = String(target.dataset.weaponFunctionId ?? "");
+    const itemId = String(target.dataset.itemId ?? "");
+    const item = this.actor?.items.get(itemId);
+    if (!item) return undefined;
+    if (isMiddleMouseClick(event)) return item.sheet?.render(true);
+    if (event.button !== 0) return undefined;
+    if (isHudWeaponDisabled(this.actor, item)) return undefined;
+    const changed = await openWeaponAttackPowerDialog({
+      actor: this.actor,
+      weapon: item,
+      weaponFunctionId,
+      application: this
+    });
+    if (changed) return this.render({ force: true });
+    return undefined;
   }
 
   static #onRollSkill(event, target) {
@@ -2375,12 +2395,22 @@ function prepareWeaponActionRows(actor, selectedWeapon, forceDisabled = false, h
 
 function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunction, forceDisabled = false, hudIcons = {}) {
   const moduleSlots = getWeaponFunctionModuleSlots(selectedWeapon, weaponFunction?.id);
-  const weaponData = applyWeaponModuleModifiers(weaponFunction?.data ?? {}, {
+  const moduleWeaponData = applyWeaponModuleModifiers(weaponFunction?.data ?? {}, {
     moduleSlots
   });
+  const attackPowerState = getWeaponAttackPowerState(moduleWeaponData);
+  const weaponData = moduleWeaponData;
   const actions = weaponData?.availableActions ?? {};
   const hasMagazineCost = hasWeaponResourceCostData(weaponData, "magazine");
   const buttons = [
+    {
+      key: "attackPower",
+      label: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialAttackPower"),
+      configured: attackPowerState.active,
+      visible: attackPowerState.active,
+      isAttackPowerControl: true,
+      attackPowerLabel: `${attackPowerState.value}/${attackPowerState.max}`
+    },
     { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot"), configured: Boolean(actions.aimedShot) },
     { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot"), configured: Boolean(actions.snapshot) },
     { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst"), configured: Boolean(actions.burst), visible: Boolean(actions.burst) },
@@ -2391,6 +2421,14 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
     { key: "reload", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload"), configured: hasMagazineCost, visible: hasMagazineCost }
   ];
   return buttons.filter(action => action.visible !== false && action.configured).map(action => {
+    if (action.isAttackPowerControl) {
+      return {
+        ...action,
+        disabled: forceDisabled,
+        itemId: selectedWeapon.id,
+        weaponFunctionId: weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id
+      };
+    }
     const blockState = getWeaponActionBlockState(actor, action.key);
     const actionPointCostState = getWeaponActionPointCostStateForHud(actor, weaponData, action.key, weaponFunction?.data ?? {}, { moduleSlots });
     const actionPointCost = actionPointCostState.cost;
@@ -2597,6 +2635,66 @@ function localizeDocumentName(value) {
 function hasWeaponResourceCostData(weaponData = {}, type = "") {
   if (type === "magazine" && String(weaponData?.damageMode ?? "manual") === "source") return true;
   return (weaponData?.resourceCosts ?? []).some(cost => String(cost?.type ?? "") === type);
+}
+
+async function openWeaponAttackPowerDialog({ actor = null, weapon = null, weaponFunctionId = "", application = null } = {}) {
+  if (!actor?.isOwner || !weapon) return false;
+  const functionId = weaponFunctionId || ITEM_FUNCTIONS.weapon;
+  const weaponData = getWeaponFunctionById(weapon, functionId);
+  if (!weaponData || !hasWeaponSpecialPropertyData(weaponData, WEAPON_SPECIAL_PROPERTIES.attackPower)) return false;
+  const properties = Array.isArray(weaponData.specialProperties) ? weaponData.specialProperties : [];
+  const propertyIndex = properties.findIndex(property => getWeaponSpecialPropertyType(property) === WEAPON_SPECIAL_PROPERTIES.attackPower);
+  if (propertyIndex < 0) return false;
+  const state = getWeaponAttackPowerState(weaponData);
+  const min = 1;
+  const max = Math.max(min, toInteger(state.max) || min);
+  const value = Math.max(min, Math.min(max, toInteger(state.value) || min));
+  const formData = await DialogV2.input({
+    window: {
+      title: game.i18n.localize("FALLOUTMAW.Item.WeaponSpecialAttackPower")
+    },
+    content: `
+      <label class="fallout-maw-attack-power-dialog">
+        <span>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.WeaponAttackPowerLevels"))}</span>
+        <strong data-attack-power-dialog-output>${value}/${max}</strong>
+        <input type="range" name="level" value="${value}" min="${min}" max="${max}" step="1" data-attack-power-dialog-range>
+      </label>
+    `,
+    ok: {
+      label: game.i18n.localize("FALLOUTMAW.Common.Apply"),
+      icon: "fa-solid fa-check",
+      callback: (_event, button) => new FormDataExtended(button.form).object
+    },
+    buttons: [{
+      action: "cancel",
+      label: game.i18n.localize("FALLOUTMAW.Common.Cancel")
+    }],
+    position: { width: 360 },
+    rejectClose: false,
+    render: (_event, dialog) => {
+      const range = dialog.element?.querySelector?.("[data-attack-power-dialog-range]");
+      const output = dialog.element?.querySelector?.("[data-attack-power-dialog-output]");
+      const sync = () => {
+        if (output) output.textContent = `${Math.max(min, Math.min(max, toInteger(range?.value) || min))}/${max}`;
+      };
+      range?.addEventListener("input", sync);
+      sync();
+    }
+  });
+  if (!formData || formData === "cancel") return false;
+  const nextLevel = Math.max(min, Math.min(max, toInteger(formData.level) || min));
+  if (nextLevel === value) return false;
+  const nextProperties = normalizeWeaponSpecialProperties(properties);
+  const nextProperty = foundry.utils.deepClone(nextProperties[propertyIndex] ?? {});
+  foundry.utils.setProperty(nextProperty, "attackPower.level.value", nextLevel);
+  nextProperties[propertyIndex] = nextProperty;
+  const updateData = createWeaponFunctionUpdateData(weapon, functionId, {
+    specialProperties: nextProperties
+  });
+  if (!Object.keys(updateData).length) return false;
+  await weapon.update(updateData);
+  await application?.render({ force: true });
+  return true;
 }
 
 function updateReloadDialogMagazineReadout(dialog, actor, weaponId, weaponFunctionId) {

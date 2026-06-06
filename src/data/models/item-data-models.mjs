@@ -1,13 +1,12 @@
-const { ArrayField, BooleanField, HTMLField, NumberField, ObjectField, SchemaField, StringField, TypedObjectField } = foundry.data.fields;
+const { ArrayField, BooleanField, HTMLField, NumberField, ObjectField, SchemaField, StringField, TypedObjectField, TypedSchemaField } = foundry.data.fields;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
 const DEFAULT_WEAPON_PUSH_MAX_RANGE_METERS = 1;
 const DEFAULT_RELOAD_ACTION_POINT_COST = 2;
 const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 10;
-const WEAPON_SPECIAL_PROPERTIES = Object.freeze({
-  hitAllConeTargets: "hitAllConeTargets"
-});
-
+const WEAPON_SPECIAL_PROPERTY_PENDING = "pending";
+const WEAPON_SPECIAL_PROPERTY_HIT_ALL_CONE_TARGETS = "hitAllConeTargets";
+const WEAPON_SPECIAL_PROPERTY_ATTACK_POWER = "attackPower";
 export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
   static defineSchema() {
     return {
@@ -289,12 +288,7 @@ function weaponFunctionField({ named = false } = {}) {
     }),
     resourceCosts: new ArrayField(weaponResourceCostField(), { required: true, initial: [] }),
     moduleSlots: new ArrayField(weaponModuleSlotField(), { required: true, initial: [] }),
-    specialProperties: new ArrayField(new StringField({
-      required: true,
-      blank: false,
-      choices: Object.values(WEAPON_SPECIAL_PROPERTIES),
-      initial: WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets
-    }), { required: true, initial: [] }),
+    specialProperties: new ArrayField(weaponSpecialPropertyField(), { required: true, initial: [] }),
     requirements: new ArrayField(weaponRequirementField(), { required: true, initial: [] }),
     availableActions: new SchemaField({
       aimedShot: new BooleanField({ required: true, initial: false }),
@@ -426,6 +420,50 @@ function weaponModuleModifiersField() {
       push: new NumberField({ required: true, integer: true, initial: 0 }),
       reload: new NumberField({ required: true, integer: true, initial: 0 })
     })
+  });
+}
+
+function weaponSpecialPropertyField() {
+  return new TypedSchemaField({
+    [WEAPON_SPECIAL_PROPERTY_PENDING]: {},
+    [WEAPON_SPECIAL_PROPERTY_HIT_ALL_CONE_TARGETS]: {},
+    [WEAPON_SPECIAL_PROPERTY_ATTACK_POWER]: {
+      attackPower: weaponAttackPowerField()
+    }
+  }, { required: true });
+}
+
+function weaponAttackPowerField() {
+  return new SchemaField({
+    level: new SchemaField({
+      value: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+      max: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
+    }),
+    perLevel: weaponAttackPowerPerLevelField(),
+    resourceCosts: new ArrayField(weaponAttackPowerResourceCostField(), { required: true, initial: [] })
+  });
+}
+
+function weaponAttackPowerPerLevelField() {
+  return new SchemaField({
+    damagePercent: new NumberField({ required: true, integer: true, initial: 0 }),
+    accuracyBonus: new NumberField({ required: true, integer: true, initial: 0 }),
+    criticalChanceModifier: new NumberField({ required: true, integer: true, initial: 0 }),
+    criticalDamagePercent: new NumberField({ required: true, integer: true, initial: 0 }),
+    attackConeDegrees: new NumberField({ required: true, initial: 0 }),
+    maxRangeMeters: new NumberField({ required: true, initial: 0 }),
+    effectiveRange: new SchemaField({
+      value: new NumberField({ required: true, initial: 0 }),
+      max: new NumberField({ required: true, initial: 0 })
+    }),
+    penetration: new NumberField({ required: true, integer: true, initial: 0 })
+  });
+}
+
+function weaponAttackPowerResourceCostField() {
+  return new SchemaField({
+    type: new StringField({ required: true, blank: false, initial: "magazine" }),
+    amount: new NumberField({ required: true, integer: true, initial: 0 })
   });
 }
 

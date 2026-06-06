@@ -3372,6 +3372,29 @@
   grid-template-columns: minmax(180px, 1fr) 2.5rem;
 }
 
+.fallout-maw-weapon-special-property-settings {
+  border: 1px solid rgba(218, 207, 147, 0.22);
+  border-left: 3px solid rgba(235, 190, 80, 0.5);
+  display: grid;
+  gap: 0.6rem;
+  margin: 0.35rem 0 0.6rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.fallout-maw-weapon-special-property-settings .fallout-maw-panel-header.subsection {
+  margin: 0;
+  padding: 0;
+}
+
+.fallout-maw-weapon-special-property-settings .fallout-maw-panel-header.subsection:not(:first-child) {
+  border-top: 1px solid rgba(218, 207, 147, 0.2);
+  padding-top: 0.55rem;
+}
+
+.fallout-maw-weapon-attack-power-costs .fallout-maw-settings-row {
+  grid-template-columns: minmax(150px, 1fr) minmax(70px, 90px) minmax(90px, 120px);
+}
+
 .fallout-maw-weapon-requirements .fallout-maw-settings-row {
   grid-template-columns: minmax(130px, 0.8fr) minmax(160px, 1.2fr) minmax(80px, 110px) 2.5rem;
 }
@@ -8956,6 +8979,50 @@ label.fallout-maw-mitigation-cell {
   overflow: hidden;
   text-overflow: unset;
   white-space: normal;
+}
+
+.fallout-maw-token-hud-attack-power-tile {
+  background:
+    linear-gradient(180deg, rgba(238, 205, 116, 0.12), rgba(11, 12, 10, 0.72)),
+    rgba(0, 0, 0, 0.42);
+}
+
+.fallout-maw-token-hud-action-tile.fallout-maw-token-hud-attack-power-tile .fallout-maw-token-hud-attack-power-readout {
+  border-color: rgba(245, 205, 80, 0.62);
+  color: #ffe18a;
+  font-size: clamp(1.05rem, calc(var(--fallout-maw-token-hud-tile) * 0.2), 1.55rem);
+  left: 50%;
+  min-height: calc(var(--fallout-maw-token-hud-tile) * 0.34);
+  min-width: calc(var(--fallout-maw-token-hud-tile) * 0.58);
+  padding: 0.24rem 0.45rem;
+  right: auto;
+  text-shadow: 0 0 7px rgba(245, 205, 80, 0.38);
+  top: 42%;
+  transform: translate(-50%, -50%);
+}
+
+.fallout-maw-token-hud-attack-power-tile span {
+  align-self: end;
+  min-height: calc(var(--fallout-maw-token-hud-action-label-height) * 2);
+}
+
+.fallout-maw-attack-power-dialog {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+}
+
+.fallout-maw-attack-power-dialog > span {
+  font-weight: 700;
+}
+
+.fallout-maw-attack-power-dialog > strong {
+  font-size: 1.35rem;
+  justify-self: center;
+}
+
+.fallout-maw-attack-power-dialog input[type="range"] {
+  width: 100%;
 }
 
 .fallout-maw-token-hud-main-action span {

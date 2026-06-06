@@ -1721,13 +1721,86 @@
       </div>
       {{#each specialProperties}}
       <div class="fallout-maw-settings-row">
-        <select name="{{../path}}.specialProperties.{{index}}">
+        <select name="{{../path}}.specialProperties.{{index}}.type" data-weapon-special-property-type="{{index}}">
           {{#each choices}}
-          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          <option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>
           {{/each}}
         </select>
         <button type="button" data-delete-weapon-special-property="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
       </div>
+      {{#if isAttackPower}}
+      <section class="fallout-maw-weapon-special-property-settings fallout-maw-weapon-attack-power-settings">
+        <div class="fallout-maw-panel-header subsection">
+          <h4>{{localize "FALLOUTMAW.Item.WeaponSpecialAttackPower"}}</h4>
+        </div>
+        <div class="fallout-maw-list-grid three-columns">
+          <label class="fallout-maw-split-number-field">
+            <span>{{localize "FALLOUTMAW.Item.WeaponAttackPowerLevels"}}</span>
+            <div>
+              <input type="number" name="{{../path}}.specialProperties.{{index}}.attackPower.level.value" value="{{attackPower.level.value}}" min="1" max="{{attackPower.level.max}}" step="1">
+              <strong>/</strong>
+              <input type="number" name="{{../path}}.specialProperties.{{index}}.attackPower.level.max" value="{{attackPower.level.max}}" min="1" step="1">
+            </div>
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponAttackPowerDamagePercent"}}</span>
+            <input type="number" name="{{../path}}.specialProperties.{{index}}.attackPower.perLevel.damagePercent" value="{{attackPower.perLevel.damagePercent}}" step="1">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponAccuracyBonus"}}</span>
+            <input type="number" name="{{../path}}.specialProperties.{{index}}.attackPower.perLevel.accuracyBonus" value="{{attackPower.perLevel.accuracyBonus}}" step="1">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponCriticalChanceModifier"}}</span>
+            <input type="number" name="{{../path}}.specialProperties.{{index}}.attackPower.perLevel.criticalChanceModifier" value="{{attackPower.perLevel.criticalChanceModifier}}" step="1">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponCriticalDamagePercent"}}</span>
+            <input type="number" name="{{../path}}.specialProperties.{{index}}.attackPower.perLevel.criticalDamagePercent" value="{{attackPower.perLevel.criticalDamagePercent}}" step="1">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponAttackCone"}}</span>
+            <input type="number" name="{{../path}}.specialProperties.{{index}}.attackPower.perLevel.attackConeDegrees" value="{{attackPower.perLevel.attackConeDegrees}}" step="1">
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponMaxRange"}}</span>
+            <input type="number" name="{{../path}}.specialProperties.{{index}}.attackPower.perLevel.maxRangeMeters" value="{{attackPower.perLevel.maxRangeMeters}}" step="0.1">
+          </label>
+          <label class="fallout-maw-split-number-field">
+            <span>{{localize "FALLOUTMAW.Item.WeaponEffectiveRange"}}</span>
+            <div>
+              <input type="number" name="{{../path}}.specialProperties.{{index}}.attackPower.perLevel.effectiveRange.value" value="{{attackPower.perLevel.effectiveRange.value}}" step="0.1">
+              <strong>/</strong>
+              <input type="number" name="{{../path}}.specialProperties.{{index}}.attackPower.perLevel.effectiveRange.max" value="{{attackPower.perLevel.effectiveRange.max}}" step="0.1">
+            </div>
+          </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponPenetration"}}</span>
+            <input type="number" name="{{../path}}.specialProperties.{{index}}.attackPower.perLevel.penetration" step="1" value="{{attackPower.perLevel.penetration}}">
+          </label>
+        </div>
+        <div class="fallout-maw-panel-header subsection">
+          <h4>{{localize "FALLOUTMAW.Item.WeaponAttackPowerResourceCosts"}}</h4>
+        </div>
+        <div class="fallout-maw-settings-table fallout-maw-weapon-attack-power-costs">
+          <div class="fallout-maw-settings-row fallout-maw-grid-header">
+            <span>{{localize "FALLOUTMAW.Common.Type"}}</span>
+            <span>{{localize "FALLOUTMAW.Item.WeaponAttackPowerBase"}}</span>
+            <span>{{localize "FALLOUTMAW.Item.WeaponAttackPowerPerLevel"}}</span>
+          </div>
+          {{#each attackPower.resourceCostRows}}
+          <div class="fallout-maw-settings-row">
+            <span>{{label}}</span>
+            <span>{{base}}</span>
+            <input type="hidden" name="{{../../path}}.specialProperties.{{../index}}.attackPower.resourceCosts.{{index}}.type" value="{{type}}">
+            <input type="number" name="{{../../path}}.specialProperties.{{../index}}.attackPower.resourceCosts.{{index}}.amount" value="{{amount}}" step="1">
+          </div>
+          {{else}}
+          <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoResourceCosts"}}</p>
+          {{/each}}
+        </div>
+      </section>
+      {{/if}}
       {{else}}
       <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponNoSpecialProperties"}}</p>
       {{/each}}

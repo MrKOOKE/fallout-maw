@@ -5,7 +5,7 @@ import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, esti
 import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier } from "./dodge-resource.mjs";
 import { createThrownItemTile } from "../canvas/thrown-items.mjs";
 import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
-import { ITEM_FUNCTIONS, createWeaponFunctionUpdateData, getConditionWeakeningData, getDamageSourceFunction, getWeaponFunctionById, getWeaponFunctionModuleSlots, hasItemFunction } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getConditionWeakeningData, getDamageSourceFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, hasItemFunction, hasWeaponSpecialPropertyData } from "../utils/item-functions.mjs";
 import { getCoverSettings, getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import { canSpendCombatActionPoints, getCombatActionPointState, spendCombatActionPoints } from "./reaction-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -48,7 +48,6 @@ const ACTION_PENETRATION_KEY_PREFIX = "system.penetration.actions.";
 const PERIODIC_DAMAGE_REGION_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
 const DEFAULT_REGION_DAMAGE_INTERVAL_SECONDS = 6;
 const REGION_SOCKET_REQUEST_TIMEOUT_MS = 60000;
-const WEAPON_SPECIAL_HIT_ALL_CONE_TARGETS = "hitAllConeTargets";
 const MELEE_ACTION_KEYS = new Set(["meleeAttack", "aimedMeleeAttack"]);
 const MELEE_DIRECTIONS = Object.freeze([
   { key: "thrust", label: "Укол", mode: "thrust" },
@@ -270,7 +269,7 @@ class WeaponAttackController {
     const pelletCount = getWeaponPelletCount(this.weapon, this.weaponFunctionId);
     if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
     if (!hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
-    if (hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_HIT_ALL_CONE_TARGETS, this.weaponFunctionId)) {
+    if (hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, this.weaponFunctionId)) {
       return this.performConeTargetsAttack({ attackCount, pelletCount });
     }
     if (this.actionKey === "burst") return this.performBurstAttack({ attackCount, pelletCount });
@@ -1394,7 +1393,7 @@ class WeaponAttackController {
       && !this.volleyAction
       && !this.processing
       && !this.targetedAction
-      && !hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_HIT_ALL_CONE_TARGETS, this.weaponFunctionId)
+      && !hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, this.weaponFunctionId)
     );
   }
 
@@ -1504,7 +1503,7 @@ class WeaponAttackController {
       this.actionKey !== "burst"
       || this.volleyAction
       || !this.geometry
-      || hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_HIT_ALL_CONE_TARGETS, this.weaponFunctionId)
+      || hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, this.weaponFunctionId)
     ) return new Map();
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     const projectileCount = getBurstProjectileCount(attackCount, getWeaponPelletCount(this.weapon, this.weaponFunctionId));
@@ -1761,10 +1760,11 @@ class WeaponAttackController {
 }
 
 function getWeaponAttackData(weapon, weaponFunctionId = "") {
-  return applyWeaponModuleModifiers(
-    applyDamageSourceWeaponModifiers(getWeaponFunctionById(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) ?? {}),
-    { moduleSlots: getWeaponFunctionModuleSlots(weapon, weaponFunctionId || ITEM_FUNCTIONS.weapon) }
-  );
+  const id = weaponFunctionId || ITEM_FUNCTIONS.weapon;
+  return applyWeaponAttackPowerModifiers(applyWeaponModuleModifiers(
+    applyDamageSourceWeaponModifiers(getWeaponFunctionById(weapon, id) ?? {}),
+    { moduleSlots: getWeaponFunctionModuleSlots(weapon, id) }
+  ));
 }
 
 function applyDamageSourceWeaponModifiers(weaponData = {}) {
@@ -1790,6 +1790,73 @@ function applyDamageSourceWeaponModifiers(weaponData = {}) {
     penetration: addFormulaTexts(weaponData.penetration, source.penetration),
     volley: mergeDamageSourceVolleyData(weaponData.volley, source.volley)
   };
+}
+
+function applyWeaponAttackPowerModifiers(weaponData = {}) {
+  const state = getWeaponAttackPowerState(weaponData);
+  if (!state.active || state.increments <= 0) return weaponData;
+  const result = foundry.utils.deepClone(weaponData);
+  const multiplier = state.increments;
+  const perLevel = state.perLevel ?? {};
+
+  result.attackPowerDamagePercent = toInteger(perLevel.damagePercent) * multiplier;
+  addFormulaNumber(result, "accuracyBonus", perLevel.accuracyBonus, multiplier);
+  addFormulaNumber(result, "criticalChanceModifier", perLevel.criticalChanceModifier, multiplier);
+  addFormulaNumber(result, "criticalDamagePercent", perLevel.criticalDamagePercent, multiplier, { min: 0 });
+  addNumber(result, "attackConeDegrees", perLevel.attackConeDegrees, multiplier, { min: 0 });
+  addFormulaNumber(result, "maxRangeMeters", perLevel.maxRangeMeters, multiplier, { min: 0 });
+  addFormulaNumber(result, "effectiveRange.value", perLevel.effectiveRange?.value, multiplier, { min: 0 });
+  addFormulaNumber(result, "effectiveRange.max", perLevel.effectiveRange?.max, multiplier, { min: 0 });
+  addFormulaNumber(result, "penetration", perLevel.penetration, multiplier, { min: 0, integer: true });
+  applyWeaponAttackPowerResourceCosts(result, state.resourceCosts, multiplier);
+  return result;
+}
+
+function applyWeaponAttackPowerResourceCosts(weaponData = {}, resourceCosts = [], multiplier = 0) {
+  const costs = Array.isArray(weaponData.resourceCosts) ? foundry.utils.deepClone(weaponData.resourceCosts) : [];
+  if (String(weaponData?.damageMode ?? "manual") === "source"
+    && !costs.some(cost => String(cost?.type ?? "") === "magazine")) {
+    costs.push({ type: "magazine", amount: 1 });
+  }
+
+  for (const cost of resourceCosts ?? []) {
+    const type = String(cost?.type ?? "").trim();
+    const delta = toInteger(cost?.amount) * Math.max(0, toInteger(multiplier));
+    if (!type || !delta) continue;
+    let target = costs.find(entry => String(entry?.type ?? "") === type);
+    if (!target) {
+      target = { type, amount: 0 };
+      costs.push(target);
+    }
+    target.amount = Math.max(0, toInteger(target.amount) + delta);
+  }
+  weaponData.resourceCosts = costs;
+}
+
+function addFormulaNumber(target, path, delta, multiplier = 1, { min = null, integer = false } = {}) {
+  const change = (integer ? toInteger(delta) : Number(delta)) * Math.max(0, toInteger(multiplier));
+  if (!Number.isFinite(change) || change === 0) return;
+  const currentRaw = foundry.utils.getProperty(target, path);
+  const current = Number(currentRaw);
+  if (Number.isFinite(current)) {
+    const next = Number.isFinite(Number(min)) ? Math.max(Number(min), current + change) : current + change;
+    foundry.utils.setProperty(target, path, integer ? Math.trunc(next) : next);
+    return;
+  }
+  const currentText = normalizeFormulaText(currentRaw);
+  const deltaText = integer ? String(Math.trunc(change)) : String(change);
+  foundry.utils.setProperty(target, path, addFormulaTexts(currentText, deltaText));
+}
+
+function addNumber(target, path, delta, multiplier = 1, { min = null, integer = false } = {}) {
+  const change = (integer ? toInteger(delta) : Number(delta)) * Math.max(0, toInteger(multiplier));
+  if (!Number.isFinite(change) || change === 0) return;
+  const currentRaw = foundry.utils.getProperty(target, path);
+  const current = integer ? toInteger(currentRaw) : Number(currentRaw);
+  const fallback = Number.isFinite(current) ? current : 0;
+  let next = fallback + change;
+  if (Number.isFinite(Number(min))) next = Math.max(Number(min), next);
+  foundry.utils.setProperty(target, path, integer ? Math.trunc(next) : next);
 }
 
 function mergeDamageSourceVolleyData(weaponVolley = {}, sourceVolley = {}) {
@@ -1829,9 +1896,7 @@ function isWeaponActionBlocked(actor, actionKey = "") {
 }
 
 function hasWeaponSpecialProperty(weapon, property, weaponFunctionId = "") {
-  return (getWeaponAttackData(weapon, weaponFunctionId)?.specialProperties ?? [])
-    .map(value => String(value ?? ""))
-    .includes(String(property ?? ""));
+  return hasWeaponSpecialPropertyData(getWeaponAttackData(weapon, weaponFunctionId), property);
 }
 
 function isVolleyAttackAction(weapon, actionKey, weaponFunctionId = "") {
@@ -3183,12 +3248,15 @@ function getPointElevationAtDistance(originElevation, targetElevation, distance,
 
 function getWeaponDamage(weapon, weaponFunctionId = "") {
   const actor = getWeaponOwnerActor(weapon);
-  const baseDamage = evaluateActorFormula(getEffectiveWeaponDamageData(weapon, weaponFunctionId)?.damage, actor, {
+  const weaponData = getEffectiveWeaponDamageData(weapon, weaponFunctionId);
+  const baseDamage = evaluateActorFormula(weaponData?.damage, actor, {
     minimum: 0,
     context: `${weapon?.name ?? "weapon"} damage`
   });
+  const attackPowerDamagePercent = toInteger(weaponData?.attackPowerDamagePercent);
+  const poweredDamage = Math.round(baseDamage * Math.max(0, 100 + attackPowerDamagePercent) / 100);
   const proficiencyModifier = getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "damage");
-  const modifiedDamage = Math.round(baseDamage * Math.max(0, 100 + proficiencyModifier) / 100);
+  const modifiedDamage = Math.round(poweredDamage * Math.max(0, 100 + proficiencyModifier) / 100);
   return Math.max(0, Math.floor(modifiedDamage * getWeaponConditionWeakeningRatio(weapon)));
 }
 
