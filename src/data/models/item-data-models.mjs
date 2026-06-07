@@ -1,3 +1,5 @@
+import { getPrimaryCurrencyKey } from "../../settings/accessors.mjs";
+
 const { ArrayField, BooleanField, HTMLField, NumberField, ObjectField, SchemaField, StringField, TypedObjectField, TypedSchemaField } = foundry.data.fields;
 const DEFAULT_WEAPON_ATTACK_CONE_DEGREES = 3;
 const DEFAULT_WEAPON_ACTION_POINT_COST = 5;
@@ -16,7 +18,7 @@ export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
       itemCategory: new StringField({ required: true, blank: true, initial: "" }),
       weight: new NumberField({ required: true, min: 0, initial: 0 }),
       price: new NumberField({ required: true, min: 0, initial: 0 }),
-      priceCurrency: new StringField({ required: true, blank: true, initial: "" }),
+      priceCurrency: new StringField({ required: true, blank: true, initial: () => getPrimaryCurrencyKey() }),
       equipped: new BooleanField({ required: true, initial: false }),
       container: new SchemaField({
         parentId: new StringField({ required: true, blank: true, initial: "" })
@@ -45,6 +47,11 @@ export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
         height: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
       })
     };
+  }
+
+  prepareBaseData() {
+    super.prepareBaseData?.();
+    if (!String(this.priceCurrency ?? "")) this.priceCurrency = getPrimaryCurrencyKey();
   }
 }
 

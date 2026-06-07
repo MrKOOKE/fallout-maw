@@ -222,13 +222,11 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         skillValues,
         buildLimbResourceFormulaVariables(limbMaximums)
       );
-    const reactionResource = isConstruct
-      ? { min: 0, spent: 0, bonus: 0, value: 0, max: 0 }
-      : {
-        ...(this.parent?._source?.system?.resources?.[REACTION_RESOURCE_KEY] ?? {}),
-        bonus: this.resources?.[REACTION_RESOURCE_KEY]?.bonus
-      };
-    replaceObjectContents(this.resources, normalizeResourceMap(isConstruct ? {} : this.resources, resourceSettings, resourceMaximums, {
+    const reactionResource = {
+      ...(this.parent?._source?.system?.resources?.[REACTION_RESOURCE_KEY] ?? {}),
+      bonus: this.resources?.[REACTION_RESOURCE_KEY]?.bonus
+    };
+    replaceObjectContents(this.resources, normalizeResourceMap(this.resources, resourceSettings, resourceMaximums, {
       trackSpent: true
     }));
     ensureReactionResource(this.resources, reactionResource);

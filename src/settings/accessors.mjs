@@ -306,6 +306,11 @@ export function getCurrencySettings() {
   }
 }
 
+export function getPrimaryCurrencyKey() {
+  const currencies = getCurrencySettings();
+  return String((currencies.find(currency => currency.primaryTrade) ?? currencies[0])?.key ?? "");
+}
+
 export async function setCurrencySettings(settings) {
   const normalized = normalizeCurrencySettings(settings);
   await game.settings.set(FALLOUT_MAW.id, CURRENCY_SETTINGS_SETTING, normalized);

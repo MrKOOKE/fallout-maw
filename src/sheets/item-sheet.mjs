@@ -146,6 +146,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const item = this.item;
     const type = item.type;
     const priceCurrency = item.system?.priceCurrency ?? "";
+    const currencySettings = getCurrencySettings();
     const itemCategory = item.system?.itemCategory ?? "";
     const occupiedSlots = item.system?.occupiedSlots ?? {};
     const weaponSlotRequirement = item.system?.weaponSlotRequirement ?? {};
@@ -357,7 +358,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       abilityFunctions: normalizeAbilityFunctions(item.system?.functions ?? [])
         .map((entry, index) => prepareAbilityFunctionRowsForDisplay(entry, index, "system.functions")),
       itemFunctionChoices: availableFunctionChoices,
-      currencies: getCurrencySettings().map(currency => ({
+      currencies: currencySettings.map(currency => ({
         ...currency,
         selected: currency.key === priceCurrency
       })),
