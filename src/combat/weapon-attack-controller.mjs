@@ -5,14 +5,16 @@ import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, esti
 import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier } from "./dodge-resource.mjs";
 import { createThrownItemTile } from "../canvas/thrown-items.mjs";
 import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
-import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getConditionWeakeningData, getDamageSourceFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, hasItemFunction, hasWeaponSpecialPropertyData } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, hasItemFunction, hasWeaponSpecialPropertyData } from "../utils/item-functions.mjs";
 import { getCoverSettings, getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
+import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { canSpendCombatActionPoints, getCombatActionPointState, spendCombatActionPoints } from "./reaction-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { evaluateActorEffectChangeNumber } from "../utils/active-effect-changes.mjs";
 import { getRequiredWeaponSlotsForItem, getWeaponSlotRequirement, isContainerWeaponSetKey } from "../utils/equipment-slots.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
+import { NATURAL_RACE_WEAPON_SET_KEY, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import { getStealthAttackModifiers, revealActorFromStealth } from "../stealth/index.mjs";
 import { getWeaponActionBlockState } from "../abilities/runtime-state.mjs";
 import { requestPushKnockback } from "./active-actions.mjs";
@@ -45,6 +47,8 @@ const SKILL_ALIASES = Object.freeze({
   prc: "resilience"
 });
 const ACTION_PENETRATION_KEY_PREFIX = "system.penetration.actions.";
+const SELECTED_HUD_WEAPON_FLAG = "selectedHudWeaponItemId";
+const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
 const PERIODIC_DAMAGE_REGION_BEHAVIOR_TYPE = "fallout-maw.periodicDamage";
 const DEFAULT_REGION_DAMAGE_INTERVAL_SECONDS = 6;
 const REGION_SOCKET_REQUEST_TIMEOUT_MS = 60000;
@@ -602,13 +606,15 @@ class WeaponAttackController {
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
     if (!hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
+    const target = this.selectedTarget;
+    const targetSelection = resolveAimedTargetSelection(target.actor, limbKey);
+    if (!targetSelection) return;
 
     this.processing = true;
     this.pendingCriticalFailureResourceCosts = [];
     this.removeLimbMenu();
     this.refresh(true);
 
-    const target = this.selectedTarget;
     const geometry = deserializeGeometry(this.lockedGeometry) ?? this.geometry;
     const aimPoint = selectTargetTrajectoryAimPoint(this.token, target, geometry) ?? getTokenAimPoint(target);
     const centerTrajectory = buildTrajectoryThroughPoint(this.token, geometry, aimPoint);
@@ -625,7 +631,7 @@ class WeaponAttackController {
 
     this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
     for (const [index, trajectory] of trajectories.entries()) {
-      const result = await this.resolveAimedPelletTrajectory(target, trajectory, limbKey, {
+      const result = await this.resolveAimedPelletTrajectory(target, trajectory, targetSelection, {
         forceAimed: index === 0,
         checkBatch,
         baseDamage: pelletDamages[index] ?? 0
@@ -658,10 +664,10 @@ class WeaponAttackController {
     this.refresh(true);
   }
 
-  async resolveAimedPelletTrajectory(selectedTarget, trajectory, limbKey, { forceAimed = false, baseDamage = null, checkBatch = null } = {}) {
+  async resolveAimedPelletTrajectory(selectedTarget, trajectory, targetSelection, { forceAimed = false, baseDamage = null, checkBatch = null } = {}) {
     if (forceAimed || doesTrajectoryHitTarget(this.token, selectedTarget, trajectory)) {
       const blockerCount = getAimedTargetBlockers(this.token, selectedTarget, trajectory).length;
-      return this.resolveAimedAttackTrajectory(selectedTarget, trajectory, limbKey, {
+      return this.resolveAimedAttackTrajectory(selectedTarget, trajectory, targetSelection, {
         blockerBonus: getAimedTargetBlockerBonus(blockerCount),
         baseDamage,
         checkBatch
@@ -756,7 +762,6 @@ class WeaponAttackController {
     const damageRequests = [];
     const baseDamage = getAttackModeDamage(this.weapon, this.actionKey, "thrust", getWeaponDamage(this.weapon, this.weaponFunctionId), this.weaponFunctionId);
     const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey });
-    const penetrationThreshold = Math.ceil(baseDamage * 0.5);
     const targets = getTrajectoryTargetEntries(this.token, trajectory);
     const selectedEntry = targets.find(entry => entry.target === selectedTarget)
       ?? { target: selectedTarget, hit: getTokenTrajectoryHit(selectedTarget, trajectory) };
@@ -785,8 +790,7 @@ class WeaponAttackController {
     if (firstRequest.length) {
       damageRequests.push(...firstRequest);
       hasSuccessfulHit = true;
-      const estimate = estimateDamageRequestGroup(firstRequest);
-      if (estimate.healthDamage >= penetrationThreshold) penetrationsUsed += 1;
+      if (doesDamageRequestGroupPenetratePart(firstRequest, selectedTarget.actor, { type: "limb", limbKey })) penetrationsUsed += 1;
     }
 
     for (const entry of subsequentTargets) {
@@ -813,8 +817,8 @@ class WeaponAttackController {
       finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, trajectory);
       if (penetrationsUsed >= penetrationPower) break;
 
-      const estimate = estimateDamageRequestGroup(request);
-      if (estimate.healthDamage < penetrationThreshold) break;
+      const resolvedLimbKey = getSingleDamageRequestLimbKey(request);
+      if (!doesDamageRequestGroupPenetratePart(request, entry.target.actor, { type: "limb", limbKey: resolvedLimbKey })) break;
       penetrationsUsed += 1;
     }
 
@@ -894,11 +898,10 @@ class WeaponAttackController {
     }, this.weaponFunctionId);
   }
 
-  async resolveAimedAttackTrajectory(selectedTarget, trajectory, limbKey, { blockerBonus = 0, baseDamage = null, checkBatch = null } = {}) {
+  async resolveAimedAttackTrajectory(selectedTarget, trajectory, targetSelection, { blockerBonus = 0, baseDamage = null, checkBatch = null } = {}) {
     const damageRequests = [];
     baseDamage = Math.max(0, Number(baseDamage ?? getWeaponDamage(this.weapon, this.weaponFunctionId)) || 0);
     const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey });
-    const penetrationThreshold = Math.ceil(baseDamage * 0.5);
     checkBatch ??= penetrationPower > 0
       ? createSkillCheckBatchCollector({
         requester: "weaponAttack",
@@ -917,13 +920,22 @@ class WeaponAttackController {
     let finalAnimationPoint = null;
     let hasSuccessfulHit = false;
 
-    const firstRequest = await this.resolveAimedAttackAgainstTarget(selectedTarget, {
-      limbKey,
-      damageAmount: getPenetratedDamageAmount(baseDamage, 0),
-      difficultyBonus: blockerBonus,
-      penetrationStep: 0,
-      checkBatch
-    });
+    const firstRequest = targetSelection?.type === "weapon"
+      ? await this.resolveAimedWeaponAttackAgainstTarget(selectedTarget, targetSelection, {
+        baseDamage,
+        damageAmount: getPenetratedDamageAmount(baseDamage, 0),
+        difficultyBonus: blockerBonus,
+        penetrationStep: 0,
+        penetrationPower,
+        checkBatch
+      })
+      : await this.resolveAimedAttackAgainstTarget(selectedTarget, {
+        limbKey: targetSelection?.limbKey ?? "",
+        damageAmount: getPenetratedDamageAmount(baseDamage, 0),
+        difficultyBonus: blockerBonus,
+        penetrationStep: 0,
+        checkBatch
+      });
     if (!firstRequest) {
       updateTrajectoryEnd(trajectory, selectMissPointNearTarget(this.token, selectedTarget, trajectory));
       return { damageRequests, trajectory, checkBatch };
@@ -933,8 +945,7 @@ class WeaponAttackController {
     if (firstRequest.length) {
       damageRequests.push(...firstRequest);
       hasSuccessfulHit = true;
-      const estimate = estimateDamageRequestGroup(firstRequest);
-      if (estimate.healthDamage >= penetrationThreshold) penetrationsUsed += 1;
+      if (doesDamageRequestGroupPenetratePart(firstRequest, selectedTarget.actor, targetSelection)) penetrationsUsed += 1;
     }
 
     for (const entry of subsequentTargets) {
@@ -965,8 +976,8 @@ class WeaponAttackController {
       finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, trajectory);
       if (penetrationsUsed >= penetrationPower) break;
 
-      const estimate = estimateDamageRequestGroup(request);
-      if (estimate.healthDamage < penetrationThreshold) break;
+      const resolvedLimbKey = getSingleDamageRequestLimbKey(request);
+      if (!doesDamageRequestGroupPenetratePart(request, entry.target.actor, { type: "limb", limbKey: resolvedLimbKey })) break;
       penetrationsUsed += 1;
     }
 
@@ -1005,7 +1016,6 @@ class WeaponAttackController {
     const targets = getTrajectoryTargetEntries(this.token, trajectory);
     baseDamage = Math.max(0, Number(baseDamage ?? getWeaponDamage(this.weapon, this.weaponFunctionId)) || 0);
     const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey });
-    const penetrationThreshold = Math.ceil(baseDamage * 0.5);
     let penetrationsUsed = 0;
     let attempted = true;
     let finalAnimationPoint = null;
@@ -1036,8 +1046,8 @@ class WeaponAttackController {
       finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, trajectory);
       if (penetrationsUsed >= penetrationPower) break;
 
-      const estimate = estimateDamageRequestGroup(request);
-      if (estimate.healthDamage < penetrationThreshold) break;
+      const resolvedLimbKey = getSingleDamageRequestLimbKey(request);
+      if (!doesDamageRequestGroupPenetratePart(request, entry.target.actor, { type: "limb", limbKey: resolvedLimbKey })) break;
       penetrationsUsed += 1;
     }
 
@@ -1290,6 +1300,75 @@ class WeaponAttackController {
         penetrationStep
       }
     }, this.weaponFunctionId);
+  }
+
+  async resolveAimedWeaponAttackAgainstTarget(target, targetSelection, { baseDamage = 0, damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, penetrationPower = 0, checkBatch = null } = {}) {
+    if (isDeadTarget(target)) return null;
+    const targetWeapon = targetSelection?.item ?? null;
+    const holdingLimbKey = String(targetSelection?.limbKey ?? "").trim();
+    if (!targetWeapon || !holdingLimbKey || isLimbDestroyed(target.actor, holdingLimbKey)) return [];
+    this.dodgeExposure.record(target.actor);
+    const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
+    const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
+    const outcome = await requestSkillCheck({
+      actor: this.token.actor,
+      skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
+      data: {
+        difficulty: getAimedAttackDifficulty(target.actor, holdingLimbKey, difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus),
+        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId),
+        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId)
+      },
+      animate: false,
+      createMessage: !checkBatch,
+      prompt: false,
+      requester: "weaponAttack"
+    });
+    checkBatch?.add(outcome);
+    this.recordCriticalFailureConsequences(outcome);
+    if (!isSuccessfulAttack(outcome)) return null;
+
+    damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
+    const weaponDamageRequests = buildWeaponConditionDamageRequests(this.weapon, {
+      attackerActor: this.token.actor,
+      actor: target.actor,
+      targetItem: targetWeapon,
+      limbKey: holdingLimbKey,
+      amount: damageAmount,
+      source: {
+        weaponUuid: this.weapon.uuid,
+        actionKey: this.actionKey,
+        attackerUuid: this.token.actor.uuid,
+        tokenId: this.token.id,
+        targetItemId: targetWeapon.id,
+        penetrationStep
+      }
+    }, this.weaponFunctionId);
+    if (!weaponDamageRequests.length) return [];
+
+    const requests = [...weaponDamageRequests];
+    const penetratesWeapon = doesDamageRequestGroupPenetratePart(weaponDamageRequests, target.actor, {
+      type: "weapon",
+      item: targetWeapon,
+      limbKey: holdingLimbKey
+    });
+    const limbPenetrationStep = penetrationStep + 1;
+    if (penetratesWeapon && limbPenetrationStep <= penetrationPower) {
+      requests.push(...buildWeaponDamageRequests(this.weapon, {
+        attackerActor: this.token.actor,
+        actor: target.actor,
+        limbKey: holdingLimbKey,
+        amount: getPenetratedDamageAmount(baseDamage, limbPenetrationStep),
+        source: {
+          weaponUuid: this.weapon.uuid,
+          actionKey: this.actionKey,
+          attackerUuid: this.token.actor.uuid,
+          tokenId: this.token.id,
+          aimedThroughItemId: targetWeapon.id,
+          penetrationStep: limbPenetrationStep
+        }
+      }, this.weaponFunctionId));
+    }
+    return requests;
   }
 
   refresh(forceBroadcast = false) {
@@ -1704,7 +1783,7 @@ class WeaponAttackController {
     const blockerCount = trajectory ? getAimedTargetBlockers(this.token, target, trajectory).length : 0;
     const blockerBonus = getAimedTargetBlockerBonus(blockerCount)
       + getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
-    return Object.entries(target.actor?.system?.limbs ?? {})
+    const limbRows = Object.entries(target.actor?.system?.limbs ?? {})
       .filter(([_key, limb]) => limb && typeof limb === "object")
       .map(([key, limb]) => ({
         key,
@@ -1714,6 +1793,17 @@ class WeaponAttackController {
           ? 0
           : getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, key, blockerBonus, this.weaponFunctionId)
       }));
+    if (!this.aimedShot) return limbRows;
+    const weaponRows = getHeldWeaponAimTargets(target.actor)
+      .map(entry => ({
+        key: getAimedWeaponTargetKey(entry.item),
+        label: entry.label,
+        destroyed: entry.destroyed || isLimbDestroyed(target.actor, entry.limbKey),
+        chance: entry.destroyed || isLimbDestroyed(target.actor, entry.limbKey)
+          ? 0
+          : getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, entry.limbKey, blockerBonus, this.weaponFunctionId)
+      }));
+    return [...limbRows, ...weaponRows];
   }
 
   prepareAttackDirectionRows(target) {
@@ -3515,6 +3605,34 @@ function buildWeaponDamageRequests(weapon, { attackerActor = null, actor = null,
     .filter(request => request.amount > 0);
 }
 
+function buildWeaponConditionDamageRequests(weapon, { attackerActor = null, actor = null, targetItem = null, limbKey = "", amount = 0, source = {} } = {}, weaponFunctionId = "") {
+  if (!targetItem?.id || !hasItemFunction(targetItem, ITEM_FUNCTIONS.condition)) return [];
+  const damageTypes = getWeaponDamageTypeEntries(weapon, weaponFunctionId);
+  const amounts = distributeIntegerAmount(amount, damageTypes.map(entry => entry.weight));
+  const penetrationPower = getWeaponPenetrationPower(weapon, weaponFunctionId, {
+    actor: attackerActor,
+    actionKey: source.actionKey
+  });
+  const requestSource = {
+    ...source,
+    penetrationPower,
+    targetItemUuid: targetItem.uuid
+  };
+  return damageTypes
+    .map((entry, index) => ({
+      actor,
+      limbKey,
+      itemId: targetItem.id,
+      amount: amounts[index] ?? 0,
+      damageTypeKey: entry.key,
+      scope: "itemCondition",
+      applyMitigation: false,
+      processDamageTypeSettings: false,
+      source: requestSource
+    }))
+    .filter(request => request.amount > 0);
+}
+
 function distributeIntegerAmount(amount, weights = []) {
   const totalAmount = Math.max(0, Math.round(Number(amount) || 0));
   if (!totalAmount || !weights.length) return weights.map(() => 0);
@@ -3550,8 +3668,52 @@ function estimateDamageRequestGroup(requests = []) {
     const estimate = estimateDamageApplication(request);
     total.amount += estimate.amount ?? 0;
     total.healthDamage += estimate.healthDamage ?? 0;
+    total.limbDamage += estimate.limbDamage ?? 0;
+    total.itemConditionDamage += estimate.itemConditionDamage ?? 0;
+    total.partDamage += estimate.partDamage ?? Math.max(estimate.limbDamage ?? 0, estimate.itemConditionDamage ?? 0);
+    if (Number.isFinite(Number(estimate.penetrationRemainder))) {
+      total.penetrationRemainder = total.penetrationRemainder === null
+        ? Math.max(0, toInteger(estimate.penetrationRemainder))
+        : Math.min(total.penetrationRemainder, Math.max(0, toInteger(estimate.penetrationRemainder)));
+    }
     return total;
-  }, { amount: 0, healthDamage: 0 });
+  }, { amount: 0, healthDamage: 0, limbDamage: 0, itemConditionDamage: 0, partDamage: 0, penetrationRemainder: null });
+}
+
+function doesDamageRequestGroupPenetratePart(requests = [], actor = null, targetSelection = null) {
+  const relevantRequests = (Array.isArray(requests) ? requests : [requests])
+    .filter(request => isDamageRequestForTargetSelection(request, targetSelection));
+  const estimate = estimateDamageRequestGroup(relevantRequests);
+  const max = getTargetSelectionConditionMax(actor, targetSelection);
+  if (max <= 0 || estimate.partDamage <= 0) return false;
+  const remainingPenetration = Math.max(0, toInteger(estimate.penetrationRemainder));
+  const requiredPercent = Math.max(0, 50 - remainingPenetration);
+  const threshold = Math.ceil(max * requiredPercent / 100);
+  return estimate.partDamage >= threshold;
+}
+
+function isDamageRequestForTargetSelection(request = {}, targetSelection = null) {
+  if (targetSelection?.type === "weapon") {
+    const itemId = String(targetSelection.item?.id ?? "").trim();
+    return itemId && String(request.itemId ?? request.targetItemId ?? request.source?.targetItemId ?? "").trim() === itemId;
+  }
+  const limbKey = String(targetSelection?.limbKey ?? "").trim();
+  if (!limbKey) return false;
+  return String(request.limbKey ?? "").trim() === limbKey && String(request.scope ?? "") !== "itemCondition";
+}
+
+function getTargetSelectionConditionMax(actor = null, targetSelection = null) {
+  if (targetSelection?.type === "weapon") {
+    const condition = getConditionFunction(targetSelection.item);
+    return Math.max(0, toInteger(condition.max));
+  }
+  const limbKey = String(targetSelection?.limbKey ?? "").trim();
+  if (!limbKey) return 0;
+  return Math.max(0, toInteger(actor?.system?.limbs?.[limbKey]?.max));
+}
+
+function getSingleDamageRequestLimbKey(requests = []) {
+  return String((Array.isArray(requests) ? requests : [requests]).find(request => request?.limbKey)?.limbKey ?? "").trim();
 }
 
 function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "") {
@@ -4794,9 +4956,12 @@ function serializeWeaponDamageRequests(requests = []) {
     .map(request => ({
       actorUuid: String(request?.actor?.uuid ?? request?.actorUuid ?? "").trim(),
       limbKey: String(request?.limbKey ?? "").trim(),
+      itemId: String(request?.itemId ?? request?.targetItemId ?? request?.source?.targetItemId ?? "").trim(),
       amount: Math.max(0, toInteger(request?.amount)),
       damageTypeKey: String(request?.damageTypeKey ?? "").trim(),
       scope: String(request?.scope ?? "healthAndLimb"),
+      applyMitigation: request?.applyMitigation !== false,
+      processDamageTypeSettings: request?.processDamageTypeSettings !== false,
       source: request?.source && typeof request.source === "object"
         ? foundry.utils.deepClone(request.source)
         : {}
@@ -4826,6 +4991,125 @@ function getAimedAttackDifficulty(targetActor, limbKey = "", blockerBonus = 0) {
   const dodge = getDodgeDifficulty(targetActor);
   const limbPercent = toInteger(targetActor.system?.limbs?.[limbKey]?.aimedDifficultyPercent);
   return dodge + Math.round(dodge * (limbPercent / 100)) + Math.max(0, toInteger(blockerBonus));
+}
+
+function getAimedWeaponTargetKey(item = null) {
+  return `weapon:${String(item?.id ?? "").trim()}`;
+}
+
+function resolveAimedTargetSelection(actor, key = "") {
+  const value = String(key ?? "").trim();
+  if (!value) return null;
+  if (!value.startsWith("weapon:")) {
+    return actor?.system?.limbs?.[value] ? { type: "limb", limbKey: value } : null;
+  }
+
+  const itemId = value.slice("weapon:".length);
+  const entry = getHeldWeaponAimTargets(actor).find(target => target.item?.id === itemId);
+  return entry ? { type: "weapon", item: entry.item, limbKey: entry.limbKey } : null;
+}
+
+function getHeldWeaponAimTargets(actor) {
+  if (!actor) return [];
+  const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
+  const activeSetKey = getActiveAimedTargetWeaponSetKey(actor, race);
+  if (!activeSetKey || activeSetKey === NATURAL_RACE_WEAPON_SET_KEY) return [];
+  const rows = [];
+  for (const item of actor.items?.contents ?? Array.from(actor.items ?? [])) {
+    if (!isHeldWeaponAimTargetItem(actor, item)) continue;
+    if (String(item.system?.placement?.weaponSet ?? "") !== activeSetKey) continue;
+    const limbKey = getHeldWeaponHoldingLimbKey(actor, item, race);
+    if (!limbKey) continue;
+    const condition = getConditionFunction(item);
+    const max = Math.max(0, toInteger(condition.max));
+    if (max <= 0) continue;
+    const current = Math.max(0, Math.min(max, toInteger(condition.value)));
+    rows.push({
+      item,
+      limbKey,
+      label: `${item.name} (${getActorLimbLabel(actor, limbKey)})`,
+      destroyed: current <= 0
+    });
+  }
+  return rows;
+}
+
+function isHeldWeaponAimTargetItem(actor, item = null) {
+  if (item?.type !== "gear") return false;
+  if (isNaturalRaceWeapon(item)) return false;
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.weapon, { ignoreBroken: true })) return false;
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.condition, { ignoreBroken: true })) return false;
+  const placementMode = String(item.system?.placement?.mode ?? "");
+  if (actor?.type === "construct" && placementMode === ITEM_FUNCTIONS.constructPart) return false;
+  return placementMode === "weapon";
+}
+
+function getHeldWeaponHoldingLimbKey(actor, item = null, race = null) {
+  const placement = item?.system?.placement ?? {};
+  const setKey = String(placement.weaponSet ?? "");
+  const slotKey = String(placement.weaponSlot ?? "");
+  const constructPartLimbKey = getConstructPartWeaponSetLimbKey(setKey, actor);
+  if (constructPartLimbKey) return constructPartLimbKey;
+
+  const primarySlot = (race?.weaponSets ?? [])
+    .find(set => set.key === setKey)?.slots
+    ?.find(slot => slot.key === slotKey && String(slot?.limbKey ?? "").trim());
+  if (primarySlot) return String(primarySlot.limbKey ?? "").trim();
+
+  const requiredSlots = getRequiredWeaponSlotsForItem(race, item, setKey, slotKey);
+  const limbSlot = requiredSlots.find(slot => String(slot?.limbKey ?? "").trim());
+  return String(limbSlot?.limbKey ?? "").trim();
+}
+
+function getConstructPartWeaponSetLimbKey(setKey = "", actor = null) {
+  const match = String(setKey ?? "").match(/^container:constructPart:([^:]+):/);
+  if (!match) return "";
+  const limbKey = `constructPart:${match[1]}`;
+  return actor?.system?.limbs?.[limbKey] ? limbKey : "";
+}
+
+function getActorLimbLabel(actor, limbKey = "") {
+  return String(actor?.system?.limbs?.[limbKey]?.label ?? limbKey);
+}
+
+function getActiveAimedTargetWeaponSetKey(actor, race = null) {
+  if (!actor) return "";
+  const availableSetKeys = getActorWeaponSetKeys(actor, race);
+  if (!availableSetKeys.size) return "";
+
+  const selectedSetKey = String(actor.getFlag?.(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG) ?? "");
+  if (selectedSetKey && availableSetKeys.has(selectedSetKey)) return selectedSetKey;
+
+  const selectedWeaponId = String(actor.getFlag?.(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG) ?? "");
+  const selectedWeaponSet = selectedWeaponId
+    ? String(actor.items?.get?.(selectedWeaponId)?.system?.placement?.weaponSet ?? "")
+    : "";
+  if (selectedWeaponSet && availableSetKeys.has(selectedWeaponSet)) return selectedWeaponSet;
+
+  return Array.from(availableSetKeys).at(0) ?? "";
+}
+
+function getActorWeaponSetKeys(actor, race = null) {
+  const keys = new Set((race?.weaponSets ?? []).map(set => String(set.key ?? "")).filter(Boolean));
+  if (actor?.type !== "construct" && Array.from(actor?.items ?? []).some(item => isNaturalRaceWeapon(item))) {
+    keys.add(NATURAL_RACE_WEAPON_SET_KEY);
+  }
+  for (const item of actor?.items ?? []) {
+    if (
+      item?.type !== "gear"
+      || !hasItemFunction(item, ITEM_FUNCTIONS.constructPart)
+      || String(item.system?.placement?.mode ?? "") !== ITEM_FUNCTIONS.constructPart
+    ) continue;
+    for (const set of item.system?.functions?.constructPart?.weaponSets ?? []) {
+      const setId = String(set?.id ?? "").trim();
+      if (setId) keys.add(`container:constructPart:${item.id}:${setId}`);
+    }
+  }
+  for (const item of actor?.items ?? []) {
+    const setKey = String(item?.system?.placement?.weaponSet ?? "");
+    if (setKey) keys.add(setKey);
+  }
+  return keys;
 }
 
 function getDirectedAttackDifficulty(targetActor, limbKey = "", aimed = false, difficultyBonus = 0) {

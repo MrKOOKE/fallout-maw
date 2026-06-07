@@ -51,6 +51,7 @@ const MODE_HEALING = "healing";
 const SCOPE_LIMB = "limb";
 const SCOPE_HEALTH = "health";
 const SCOPE_HEALTH_AND_LIMB = "healthAndLimb";
+const SCOPE_ITEM_CONDITION = "itemCondition";
 const ROUND_SECONDS = 6;
 const DAMAGE_NUMBER_ANIMATION_MS = 900;
 const DAMAGE_MITIGATION_ICON_ANIMATION_MS = 1000;
@@ -446,6 +447,9 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
 
   const mode = data.mode === MODE_HEALING ? MODE_HEALING : MODE_DAMAGE;
   const scope = normalizeScope(data.scope, data.limbKey);
+  if (mode === MODE_DAMAGE && scope === SCOPE_ITEM_CONDITION) {
+    return applyItemConditionDamageApplicationNow(actor, { ...data, scope }, { createSummary });
+  }
   if (mode === MODE_HEALING && isHealingBlocked(actor)) {
     await queueActorDamageStatusSync(actor);
     return { actor, amount: 0, healthDelta: 0, limbDelta: 0, mode, scope, limbKey: data.limbKey };
@@ -542,6 +546,52 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
   return result;
 }
 
+async function applyItemConditionDamageApplicationNow(actor, data = {}, { createSummary = false } = {}) {
+  const item = getDamageRequestConditionItem(actor, data);
+  const requestedAmount = roundDamageAmount(data.amount);
+  if (!item || requestedAmount <= 0) {
+    return {
+      actor,
+      amount: requestedAmount,
+      healthDelta: 0,
+      limbDelta: 0,
+      itemConditionDelta: 0,
+      mode: MODE_DAMAGE,
+      scope: SCOPE_ITEM_CONDITION,
+      itemId: data.itemId,
+      limbKey: data.limbKey,
+      damageTypeKey: data.damageTypeKey
+    };
+  }
+
+  const condition = getConditionFunction(item);
+  const current = Math.max(0, toInteger(condition.value));
+  const next = Math.max(0, current - requestedAmount);
+  const delta = Math.max(0, current - next);
+  if (delta > 0) {
+    await actor.updateEmbeddedDocuments("Item", [{
+      _id: item.id,
+      "system.functions.condition.value": next
+    }]);
+  }
+
+  const result = {
+    actor,
+    amount: requestedAmount,
+    healthDelta: 0,
+    limbDelta: 0,
+    itemConditionDelta: delta,
+    mode: MODE_DAMAGE,
+    scope: SCOPE_ITEM_CONDITION,
+    itemId: item.id,
+    itemName: item.name,
+    limbKey: data.limbKey,
+    damageTypeKey: data.damageTypeKey
+  };
+  if (createSummary) await publishDamageSummaryMessage([result]);
+  return result;
+}
+
 async function applyPeriodicSplitDamageApplicationNow(actor, data = {}, { createSummary = true, damageType = null, periodic = {}, scope = SCOPE_HEALTH } = {}) {
   const { immediateAmount, delayedAmount } = calculatePeriodicDamageSplit(data.amount, periodic);
   const source = markPeriodicDamageSplitSource(data.source);
@@ -577,16 +627,30 @@ export function estimateDamageApplication(request = {}) {
   const data = normalizeDamageRequest(request);
   const actor = request.actor ?? (data.actorUuid ? fromUuidSync(data.actorUuid) : null);
   if (!actor || data.mode !== MODE_DAMAGE) {
-    return { amount: 0, healthDamage: 0, damageTypeKey: data.damageTypeKey };
+    return { amount: 0, healthDamage: 0, limbDamage: 0, partDamage: 0, penetrationRemainder: 0, damageTypeKey: data.damageTypeKey };
+  }
+
+  if (data.scope === SCOPE_ITEM_CONDITION) {
+    const itemConditionDamage = estimateItemConditionDamage(actor, data);
+    return {
+      amount: Math.max(0, roundDamageAmount(data.amount)),
+      healthDamage: 0,
+      limbDamage: 0,
+      itemConditionDamage,
+      partDamage: itemConditionDamage,
+      penetrationRemainder: getDamageMitigationPenetration(data.source),
+      damageTypeKey: data.damageTypeKey
+    };
   }
 
   const damageType = getDamageTypeSettings().find(entry => entry.key === data.damageTypeKey);
-  const mitigatedAmount = data.applyMitigation
-    ? calculateEffectiveDamage(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source, {
+  const mitigationResult = data.applyMitigation
+    ? calculateDamageMitigation(actor, data.amount, damageType?.key ?? "", data.limbKey, data.source, {
       damageType,
       itemOnlyMitigation: hasInstalledProsthesis(actor, data.limbKey)
     })
-    : data.amount;
+    : { amount: data.amount, penetrationRemainder: getDamageMitigationPenetration(data.source) };
+  const mitigatedAmount = mitigationResult.amount;
   let effectiveAmount = data.processDamageTypeSettings
     ? hasInstalledProsthesis(actor, data.limbKey)
       ? mitigatedAmount
@@ -618,6 +682,9 @@ export function estimateDamageApplication(request = {}) {
   return {
     amount: Math.max(0, roundDamageAmount(data.amount)),
     healthDamage: Math.max(0, roundDamageAmount(result.healthDelta)),
+    limbDamage: Math.max(0, roundDamageAmount(result.limbDelta)),
+    partDamage: Math.max(0, roundDamageAmount(result.limbDelta)),
+    penetrationRemainder: Math.max(0, toInteger(mitigationResult.penetrationRemainder)),
     damageTypeKey: damageType?.key ?? data.damageTypeKey
   };
 }
@@ -645,6 +712,10 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
     const data = normalizeDamageRequest({ ...request, actorUuid });
     if (data.mode !== MODE_DAMAGE) {
       singleResults.push(await applyDamageApplicationNow(data, { createSummary: false }));
+      continue;
+    }
+    if (data.scope === SCOPE_ITEM_CONDITION) {
+      singleResults.push(await applyItemConditionDamageApplicationNow(actor, data));
       continue;
     }
 
@@ -4558,18 +4629,35 @@ function normalizeDamageRequest(request = {}) {
   const amount = Math.max(0, Math.floor(Number(request.amount) || 0));
   const limbKey = String(request.limbKey ?? "").trim();
   const mode = request.mode === MODE_HEALING || request.mode === "heal" ? MODE_HEALING : MODE_DAMAGE;
+  const source = request.source && typeof request.source === "object" ? request.source : {};
   return {
     actorUuid: String(request.actorUuid ?? request.actor?.uuid ?? "").trim(),
     limbKey,
+    itemId: String(request.itemId ?? request.targetItemId ?? source.targetItemId ?? "").trim(),
     amount,
     damageTypeKey: mode === MODE_HEALING ? HEALING_DAMAGE_TYPE_KEY : String(request.damageTypeKey ?? "").trim(),
     mode,
-    scope: normalizeScope(request.scope, limbKey),
+    scope: normalizeScope(request.scope, limbKey, request.itemId ?? request.targetItemId ?? source.targetItemId),
     applyMitigation: request.applyMitigation !== false,
     processDamageTypeSettings: request.processDamageTypeSettings !== false,
-    source: request.source && typeof request.source === "object" ? request.source : {},
+    source,
     requesterUserId: String(request.requesterUserId ?? "")
   };
+}
+
+function getDamageRequestConditionItem(actor, data = {}) {
+  const itemId = String(data.itemId ?? data.targetItemId ?? data.source?.targetItemId ?? "").trim();
+  if (!itemId) return null;
+  const item = actor?.items?.get?.(itemId) ?? null;
+  if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) return null;
+  return item;
+}
+
+function estimateItemConditionDamage(actor, data = {}) {
+  const item = getDamageRequestConditionItem(actor, data);
+  if (!item) return 0;
+  const current = Math.max(0, toInteger(getConditionFunction(item).value));
+  return Math.min(current, roundDamageAmount(data.amount));
 }
 
 function getDamageApplicationWorldTime(source = {}) {
@@ -4640,7 +4728,8 @@ function markBleedingDamageTickSource(source = {}) {
   };
 }
 
-function normalizeScope(scope, limbKey = "") {
+function normalizeScope(scope, limbKey = "", itemId = "") {
+  if (scope === SCOPE_ITEM_CONDITION) return String(itemId ?? "").trim() ? SCOPE_ITEM_CONDITION : SCOPE_HEALTH;
   if (scope === SCOPE_HEALTH) return SCOPE_HEALTH;
   if (scope === SCOPE_LIMB) return limbKey ? SCOPE_LIMB : SCOPE_HEALTH;
   return limbKey ? SCOPE_HEALTH_AND_LIMB : SCOPE_HEALTH;
@@ -4714,10 +4803,10 @@ function calculateEffectiveDamage(actor, amount, damageTypeKey = "", limbKey = "
 
 function calculateDamageMitigation(actor, amount, damageTypeKey = "", limbKey = "", source = {}, options = {}) {
   const incomingDamage = Math.max(0, Math.floor(Number(amount) || 0));
-  if (!incomingDamage) return { amount: 0, display: null, equipmentConditionDamage: [], resistanceOverheat: null };
-  if (!damageTypeKey) return { amount: incomingDamage, display: null, equipmentConditionDamage: [], resistanceOverheat: null };
-
   const mitigationPenetration = getDamageMitigationPenetration(source);
+  if (!incomingDamage) return { amount: 0, display: null, equipmentConditionDamage: [], resistanceOverheat: null, penetration: mitigationPenetration, penetrationSpent: 0, penetrationRemainder: mitigationPenetration };
+  if (!damageTypeKey) return { amount: incomingDamage, display: null, equipmentConditionDamage: [], resistanceOverheat: null, penetration: mitigationPenetration, penetrationSpent: 0, penetrationRemainder: mitigationPenetration };
+
   const equipmentSources = options.includeEquipmentConditionDamage
     ? getEquipmentConditionDamageSources(actor, damageTypeKey, limbKey)
     : [];
@@ -4743,6 +4832,7 @@ function calculateDamageMitigation(actor, amount, damageTypeKey = "", limbKey = 
     : Math.max(0, actor.getDamageResistance?.(damageTypeKey, limbKey) ?? 0);
   const resistancePenetration = Math.max(0, mitigationPenetration - defensePenetration);
   const resistance = Math.max(0, rawResistance - resistancePenetration);
+  const spentPenetration = defensePenetration + Math.min(rawResistance, resistancePenetration);
   const resistanceProtected = Math.min(remaining, rawResistance);
   const resistanceBlocked = Math.min(remaining, resistance);
   addEquipmentProtectionWear(itemWear, resistanceSources, {
@@ -4759,6 +4849,9 @@ function calculateDamageMitigation(actor, amount, damageTypeKey = "", limbKey = 
   return {
     amount: finalAmount,
     display: null,
+    penetration: mitigationPenetration,
+    penetrationSpent: spentPenetration,
+    penetrationRemainder: Math.max(0, mitigationPenetration - spentPenetration),
     resistanceOverheat: overheatAmount > 0 ? {
       damageTypeKey,
       amount: overheatAmount,
