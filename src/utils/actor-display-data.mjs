@@ -323,7 +323,7 @@ function prepareConstructPartWeaponSets(actor, topLevelItems, assignedItemIds) {
 
 function isInstalledConstructPartWeapon(actor, item) {
   const document = actor?.items?.get(item?.id ?? "");
-  return Boolean(isInstalledConstructPart(actor, item) && hasItemFunction(document, ITEM_FUNCTIONS.weapon));
+  return Boolean(isInstalledConstructPart(actor, item) && hasItemFunction(document, ITEM_FUNCTIONS.weapon, { ignoreBroken: true }));
 }
 
 function isInstalledConstructPart(actor, item) {
@@ -506,7 +506,7 @@ export function createInventoryItemData(item, allItems, currencies = [], placeme
   const resolvedPlacement = placement ?? normalizeInventoryPlacement(item.system?.placement ?? {}, item, allItems);
   const container = item.system?.container ?? {};
   const firstAidCharges = getFirstAidChargesData(item);
-  const showFirstAidCharges = hasItemFunction(item, ITEM_FUNCTIONS.firstAid) && firstAidCharges.max > 1;
+  const showFirstAidCharges = hasItemFunction(item, ITEM_FUNCTIONS.firstAid, { ignoreBroken: true }) && firstAidCharges.max > 1;
   return {
     id: item.id,
     uuid: item.uuid,

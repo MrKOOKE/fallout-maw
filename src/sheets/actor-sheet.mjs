@@ -103,8 +103,7 @@ import {
   getWeaponModuleSlots,
   getWeaponModuleSlotItemData,
   getWeaponModuleTechnicalName,
-  isModuleItemCompatibleWithSlot,
-  isWeaponModuleItem
+  isModuleItemCompatibleWithSlot
 } from "../utils/weapon-modules.mjs";
 import { FalloutMaWContainerSheet } from "./container-sheet.mjs";
 
@@ -3404,7 +3403,7 @@ function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex 
 }
 
 function buildContainerTooltipSection(item, actor) {
-  if (!hasItemFunction(item, ITEM_FUNCTIONS.container)) return "";
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.container, { ignoreBroken: true })) return "";
   const system = item.system ?? {};
   const rows = [
     ["Размер", `${toInteger(system.container?.columns)} x ${toInteger(system.container?.rows)}`],
@@ -3418,7 +3417,7 @@ function buildContainerTooltipSection(item, actor) {
 }
 
 function buildConditionTooltipSection(item) {
-  if (!hasItemFunction(item, ITEM_FUNCTIONS.condition)) return "";
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.condition, { ignoreBroken: true })) return "";
   const condition = getConditionFunction(item);
   const max = Math.max(0, toInteger(condition.max));
   const value = Math.max(0, toInteger(condition.value));
@@ -3431,7 +3430,7 @@ function buildConditionTooltipSection(item) {
 }
 
 function buildFirstAidTooltipSection(item, actor = null) {
-  if (!hasItemFunction(item, ITEM_FUNCTIONS.firstAid)) return "";
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.firstAid, { ignoreBroken: true })) return "";
   const firstAid = getFirstAidFunction(item);
   const charges = getFirstAidChargesData(item);
   const rows = [
@@ -3523,7 +3522,7 @@ function getFirstAidChangeTooltipRows(firstAid = {}, actor = null) {
 }
 
 function buildDamageMitigationTooltipSection(item, actor) {
-  if (!hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation)) return "";
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation, { ignoreBroken: true })) return "";
   const mitigation = getDamageMitigationFunction(item);
   const mode = String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense);
   const modeLabel = mode === DAMAGE_MITIGATION_MODES.resistance
@@ -3583,7 +3582,7 @@ function renderDamageTypeIcon(damageType = {}) {
 }
 
 function buildDamageSourceTooltipSection(item, actor = null) {
-  if (!hasItemFunction(item, ITEM_FUNCTIONS.damageSource)) return "";
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.damageSource, { ignoreBroken: true })) return "";
   const source = getDamageSourceFunction(item);
   const sourceName = String(source?.name ?? "").trim();
   const rows = [
@@ -3611,12 +3610,13 @@ function buildDamageSourceTooltipSection(item, actor = null) {
 }
 
 function buildModuleTooltipSection(item) {
-  if (!isWeaponModuleItem(item)) return "";
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.module, { ignoreBroken: true })) return "";
+  if (String(getModuleFunction(item).targetFunction ?? "weapon") !== "weapon") return "";
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionModule"), getModuleTooltipRows(item));
 }
 
 function buildProsthesisTooltipSection(item, actor = null) {
-  if (!hasItemFunction(item, ITEM_FUNCTIONS.prosthesis)) return "";
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.prosthesis, { ignoreBroken: true })) return "";
   const prosthesis = getProsthesisFunction(item);
   const limbLabels = getProsthesisLimbLabels(prosthesis.limbKeys, actor);
   const blockedLabels = getProsthesisBlockedEffectLabels(prosthesis.blockedPeriodicEffects);
@@ -3761,8 +3761,8 @@ function summarizeMitigationCoverage(entries = {}) {
 }
 
 function buildWeaponTooltipSections(item, activeWeaponIndex = 0, { actor = null, baseMode = false } = {}) {
-  if (!hasItemFunction(item, ITEM_FUNCTIONS.weapon)) return [];
-  const entries = getEnabledWeaponFunctions(item);
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.weapon, { ignoreBroken: true })) return [];
+  const entries = getEnabledWeaponFunctions(item, { ignoreBroken: true });
   if (!entries.length) return [];
 
   const moduleTabIndex = entries.length;

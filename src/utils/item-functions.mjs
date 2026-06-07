@@ -273,8 +273,8 @@ export function getWeaponFunctionById(itemOrSystem = null, functionId = "") {
   return getInstalledModuleWeaponFunctions(itemOrSystem).find(entry => String(entry?.id ?? "") === id)?.data ?? null;
 }
 
-export function getEnabledWeaponFunctions(itemOrSystem = null) {
-  if (isItemBrokenByCondition(itemOrSystem)) return [];
+export function getEnabledWeaponFunctions(itemOrSystem = null, { ignoreBroken = false } = {}) {
+  if (!ignoreBroken && isItemBrokenByCondition(itemOrSystem)) return [];
   const primary = getWeaponFunction(itemOrSystem);
   if (!primary?.enabled) return [];
   const additional = getAdditionalWeaponFunctions(itemOrSystem)
@@ -288,7 +288,7 @@ export function getEnabledWeaponFunctions(itemOrSystem = null) {
       data: entry
     }))
     .filter(entry => entry.id);
-  const moduleWeapons = getInstalledModuleWeaponFunctions(itemOrSystem)
+  const moduleWeapons = getInstalledModuleWeaponFunctions(itemOrSystem, { ignoreBroken })
     .filter(entry => entry?.data?.enabled)
     .map((entry, index) => ({
       ...entry,
@@ -425,13 +425,14 @@ function hasLegacyToolFunction(system = {}) {
   return Object.values(system.functions?.tools ?? {}).some(data => data?.enabled);
 }
 
-function getInstalledModuleWeaponFunctions(itemOrSystem = null) {
+function getInstalledModuleWeaponFunctions(itemOrSystem = null, { ignoreBroken = false } = {}) {
   const primary = getWeaponFunction(itemOrSystem);
   const slots = Array.isArray(primary?.moduleSlots) ? primary.moduleSlots : [];
   return slots.flatMap((slot, slotIndex) => {
     const itemData = getWeaponModuleSlotItemData(slot);
+    if (!hasItemFunction(itemData, ITEM_FUNCTIONS.module, { ignoreBroken })) return [];
     const module = getModuleFunction(itemData);
-    if (!module?.enabled || String(module.targetFunction ?? "weapon") !== "weapon") return [];
+    if (String(module.targetFunction ?? "weapon") !== "weapon") return [];
     const slotId = String(slot?.id ?? "") || `slot-${slotIndex + 1}`;
     return normalizeWeaponFunctionEntries(module.additionalWeapons)
       .filter(({ id }) => id)
@@ -441,6 +442,7 @@ function getInstalledModuleWeaponFunctions(itemOrSystem = null) {
         moduleSlotId: slotId,
         moduleSlotIndex: slotIndex,
         moduleItemName: String(itemData?.name ?? "").trim(),
+        sourceBroken: isItemBrokenByCondition(itemData),
         index,
         name: String(data?.name ?? "").trim(),
         data: {

@@ -69,7 +69,7 @@ import {
   getContextInventoryItems,
   getItemQuantity
 } from "../utils/inventory-containers.mjs";
-import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getEnabledWeaponFunctions, getFirstAidChargesData, getModuleFunction, getProsthesisFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, getWeaponSpecialPropertyType, hasItemFunction, hasWeaponSpecialPropertyData, isActiveItem, normalizeWeaponSpecialProperties } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getEnabledWeaponFunctions, getFirstAidChargesData, getModuleFunction, getProsthesisFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, getWeaponSpecialPropertyType, hasItemFunction, hasWeaponSpecialPropertyData, isActiveItem, isItemBrokenByCondition, normalizeWeaponSpecialProperties } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
@@ -770,6 +770,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
     if (isHudWeaponDisabled(this.actor, item)) return undefined;
+    if (isWeaponActionBrokenForHud(item, weaponFunctionId)) {
+      ui.notifications.warn("Предмет сломан.");
+      return undefined;
+    }
     const blockState = getWeaponActionBlockState(this.actor, actionKey);
     if (blockState.blocked) {
       ui.notifications.warn(`${this.actor?.name ?? ""}: действие заблокировано (${blockState.effect?.name ?? actionKey}).`);
@@ -795,6 +799,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
     if (isHudWeaponDisabled(this.actor, item)) return undefined;
+    if (isWeaponActionBrokenForHud(item, weaponFunctionId)) {
+      ui.notifications.warn("Предмет сломан.");
+      return undefined;
+    }
     const changed = await openWeaponAttackPowerDialog({
       actor: this.actor,
       weapon: item,
@@ -2379,9 +2387,19 @@ function isMiddleMouseClick(event) {
   return event?.button === 1;
 }
 
+function isWeaponActionBrokenForHud(weapon, weaponFunctionId = "") {
+  if (!weapon) return false;
+  if (isItemBrokenByCondition(weapon)) return true;
+  const id = String(weaponFunctionId || ITEM_FUNCTIONS.weapon);
+  if (!id || id === ITEM_FUNCTIONS.weapon) return false;
+  return getEnabledWeaponFunctions(weapon, { ignoreBroken: true })
+    .some(entry => String(entry.id ?? "") === id && Boolean(entry.sourceBroken));
+}
+
 function prepareWeaponActionRows(actor, selectedWeapon, forceDisabled = false, hudIcons = {}) {
   if (!selectedWeapon) return [];
-  return getEnabledWeaponFunctions(selectedWeapon)
+  const weaponBroken = isItemBrokenByCondition(selectedWeapon);
+  return getEnabledWeaponFunctions(selectedWeapon, { ignoreBroken: true })
     .sort((left, right) => {
       if (left.isPrimary === right.isPrimary) return (left.index ?? 0) - (right.index ?? 0);
       return left.isPrimary ? 1 : -1;
@@ -2391,12 +2409,12 @@ function prepareWeaponActionRows(actor, selectedWeapon, forceDisabled = false, h
       label: weaponFunction.isPrimary
         ? selectedWeapon.name
         : weaponFunction.name || `${game.i18n.localize("FALLOUTMAW.Item.AdditionalWeaponFunction")} ${index + 1}`,
-      actions: prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunction, forceDisabled, hudIcons)
+      actions: prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunction, forceDisabled, hudIcons, { weaponBroken })
     }))
     .filter(row => row.actions.length);
 }
 
-function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunction, forceDisabled = false, hudIcons = {}) {
+function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunction, forceDisabled = false, hudIcons = {}, { weaponBroken = false } = {}) {
   const moduleSlots = getWeaponFunctionModuleSlots(selectedWeapon, weaponFunction?.id);
   const moduleWeaponData = applyWeaponModuleModifiers(weaponFunction?.data ?? {}, {
     moduleSlots
@@ -2424,6 +2442,7 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
     { key: "reload", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload"), configured: hasMagazineCost, visible: hasMagazineCost }
   ];
   return buttons.filter(action => action.visible !== false && action.configured).map(action => {
+    const broken = weaponBroken || Boolean(weaponFunction?.sourceBroken);
     if (action.isAttackPowerControl) {
       return {
         ...action,
