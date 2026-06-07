@@ -31,9 +31,9 @@
         {{/each}}
       </svg>
       {{else}}
-      <div class="fallout-maw-token-hud-meter-list">
+      <div class="fallout-maw-token-hud-meter-list" data-limb-popover-root>
         {{#each limbs}}
-        <div class="fallout-maw-token-hud-meter-card" data-limb-control-card data-limb-key="{{key}}" role="button" tabindex="0">
+        <div class="fallout-maw-token-hud-meter-card" data-limb-control-card data-limb-key="{{key}}" data-limb-popover data-label="{{label}}" data-value="{{valueLabel}}" data-max="{{maxLabel}}" data-popover-rows="{{popoverRowsJson}}" role="button" tabindex="0">
           <div class="fallout-maw-token-hud-meter-header">
             <span>{{label}}</span>
             <strong>{{valueLabel}}{{#if maxLabel}} / {{maxLabel}}{{/if}}</strong>

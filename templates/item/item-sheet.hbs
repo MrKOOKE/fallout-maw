@@ -874,6 +874,7 @@
         </select>
       </label>
     </div>
+    {{#unless damageMitigationUsesConstructPart}}
     <div class="fallout-maw-hidden-controls">
       {{#each damageMitigationLimbSetChoices}}
       {{#if selected}}
@@ -889,6 +890,7 @@
       </button>
       {{/each}}
     </div>
+    {{/unless}}
     <div class="fallout-maw-mitigation-table-list">
       {{#each damageMitigationTables}}
       <section class="fallout-maw-mitigation-table">
@@ -983,7 +985,7 @@
       <h2>Деталь конструкта</h2>
       <button type="button" data-remove-item-function="constructPart" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
     </div>
-    <div class="fallout-maw-list-grid">
+    <div class="fallout-maw-list-grid three-columns">
       <label>
         <span>Тип детали</span>
         <input type="text" name="system.functions.constructPart.partType" value="{{system.functions.constructPart.partType}}">
@@ -991,6 +993,10 @@
       <label>
         <span>Доп. сложность поражения, % от уклонения</span>
         <input type="number" name="system.functions.constructPart.aimedDifficultyPercent" value="{{system.functions.constructPart.aimedDifficultyPercent}}" step="1">
+      </label>
+      <label>
+        <span>Безусловный бонус к сложности</span>
+        <input type="number" name="system.functions.constructPart.aimedDifficultyBonus" value="{{system.functions.constructPart.aimedDifficultyBonus}}" step="1">
       </label>
       <label class="fallout-maw-inline-checkbox">
         <span>Критическая деталь</span>

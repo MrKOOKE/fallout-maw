@@ -1,9 +1,16 @@
 import { getUniqueLimbSets } from "../settings/traumas.mjs";
-import { getDamageMitigationFunction } from "./item-functions.mjs";
+import {
+  CONSTRUCT_PART_MITIGATION_LIMB_KEY,
+  ITEM_FUNCTIONS,
+  getConstructPartFunction,
+  getDamageMitigationFunction,
+  hasItemFunction
+} from "./item-functions.mjs";
 
 const FALLBACK_DAMAGE_TYPE_ICON = "icons/svg/d20-grey.svg";
 
 export function buildDamageMitigationLimbSetChoices(itemOrSystem, creatureOptions = {}) {
+  if (hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.constructPart, { ignoreBroken: true })) return [];
   const limbSets = getUniqueLimbSets(creatureOptions);
   const selectedIds = new Set(getSelectedDamageMitigationLimbSetIds(itemOrSystem, limbSets));
   let selectedIndex = 0;
@@ -20,6 +27,10 @@ export function buildDamageMitigationLimbSetChoices(itemOrSystem, creatureOption
 }
 
 export function buildDamageMitigationTables(itemOrSystem, creatureOptions = {}, damageTypeSettings = [], { actorRaceId = "" } = {}) {
+  if (hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.constructPart, { ignoreBroken: true })) {
+    return [buildConstructPartDamageMitigationTable(itemOrSystem, damageTypeSettings)];
+  }
+
   const limbSets = getUniqueLimbSets(creatureOptions);
   const entries = getDamageMitigationFunction(itemOrSystem)?.entries ?? {};
   if (!limbSets.length) return [];
@@ -85,6 +96,21 @@ function buildDamageMitigationTableForGroup(group, entries = {}, damageTypeSetti
       })
     }))
   };
+}
+
+function buildConstructPartDamageMitigationTable(itemOrSystem, damageTypeSettings = []) {
+  const part = getConstructPartFunction(itemOrSystem);
+  const label = String(part.partType ?? "").trim() || String(itemOrSystem?.name ?? "").trim() || "Деталь";
+  const group = {
+    id: CONSTRUCT_PART_MITIGATION_LIMB_KEY,
+    raceNames: "Деталь конструкта",
+    limbs: [{
+      key: CONSTRUCT_PART_MITIGATION_LIMB_KEY,
+      label,
+      shortLabel: getLimbShortLabel(label)
+    }]
+  };
+  return buildDamageMitigationTableForGroup(group, getDamageMitigationFunction(itemOrSystem)?.entries ?? {}, damageTypeSettings);
 }
 
 export function buildDamageTypeIconStyle(damageType = {}) {

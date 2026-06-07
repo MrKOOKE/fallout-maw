@@ -4989,8 +4989,10 @@ function getAimedTargetUnderPointer(pointer, targets = []) {
 
 function getAimedAttackDifficulty(targetActor, limbKey = "", blockerBonus = 0) {
   const dodge = getDodgeDifficulty(targetActor);
-  const limbPercent = toInteger(targetActor.system?.limbs?.[limbKey]?.aimedDifficultyPercent);
-  return dodge + Math.round(dodge * (limbPercent / 100)) + Math.max(0, toInteger(blockerBonus));
+  const limb = targetActor.system?.limbs?.[limbKey];
+  const limbPercent = toInteger(limb?.aimedDifficultyPercent);
+  const limbBonus = toInteger(limb?.aimedDifficultyBonus);
+  return dodge + Math.round(dodge * (limbPercent / 100)) + Math.max(0, limbBonus) + Math.max(0, toInteger(blockerBonus));
 }
 
 function getAimedWeaponTargetKey(item = null) {

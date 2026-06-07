@@ -2117,12 +2117,16 @@ function getInstalledActorProsthesis(actor, limbKey = "") {
 }
 
 function prepareLimbEntries(limbs = {}) {
-  return Object.entries(limbs ?? {}).map(([key, limb]) => prepareIndicatorEntry({
-    key,
-    label: String(limb?.label ?? key),
-    color: "#8f8456",
-    data: limb
-  }));
+  return Object.entries(limbs ?? {}).map(([key, limb]) => {
+    const popoverRows = Array.isArray(limb?.popoverRows) ? limb.popoverRows : [];
+    return prepareIndicatorEntry({
+      key,
+      label: String(limb?.label ?? key),
+      color: "#8f8456",
+      data: limb,
+      popoverRowsJson: JSON.stringify(popoverRows)
+    });
+  });
 }
 
 function prepareResourceEntries(actor) {
@@ -4241,8 +4245,12 @@ function positionLimbPopover(popover, target) {
   popover.style.top = `${Math.round(top)}px`;
 }
 
-function getHoveredLimbPart(svg, event) {
-  if (!(svg instanceof SVGSVGElement)) return null;
+function getHoveredLimbPart(root, event) {
+  if (!(root instanceof SVGSVGElement)) {
+    const target = event.target?.closest?.("[data-limb-popover]");
+    return target && root?.contains?.(target) ? target : null;
+  }
+  const svg = root;
   const screenPoint = svg.createSVGPoint();
   screenPoint.x = event.clientX;
   screenPoint.y = event.clientY;

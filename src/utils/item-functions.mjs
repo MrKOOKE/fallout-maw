@@ -12,6 +12,7 @@ export const ITEM_FUNCTIONS = {
   tool: "tool",
   toolPrefix: "tool:"
 };
+export const CONSTRUCT_PART_MITIGATION_LIMB_KEY = "constructPart";
 export const MODULE_WEAPON_FUNCTION_ID_PREFIX = "module:";
 export const WEAPON_SPECIAL_PROPERTIES = Object.freeze({
   pending: "pending",

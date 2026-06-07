@@ -32,6 +32,7 @@ import {
 import { createDefaultInventorySize } from "../../settings/creature-options.mjs";
 import { resourceField } from "./resources.mjs";
 import {
+  CONSTRUCT_PART_MITIGATION_LIMB_KEY,
   DAMAGE_MITIGATION_MODES,
   ITEM_FUNCTIONS,
   getConditionFunction,
@@ -332,6 +333,7 @@ function limbField() {
     label: new StringField({ required: true, blank: true, initial: "" }),
     damageMultiplier: new NumberField({ required: true, initial: 1, persisted: false }),
     aimedDifficultyPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+    aimedDifficultyBonus: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
     critical: new BooleanField({ required: true, initial: false, persisted: false }),
     missing: new BooleanField({ required: true, initial: false }),
     min: new NumberField({ required: true, integer: true, initial: -100, persisted: false }),
@@ -502,6 +504,7 @@ function normalizeLimbMap(currentLimbs = {}, settings = [], maximums = {}, sourc
         label: String(setting?.label ?? setting?.name ?? setting?.key ?? ""),
         damageMultiplier: toDecimal(setting?.damageMultiplier, 1),
         aimedDifficultyPercent: toInteger(setting?.aimedDifficultyPercent),
+        aimedDifficultyBonus: toInteger(setting?.aimedDifficultyBonus),
         critical: Boolean(setting?.critical),
         missing,
         min,
@@ -602,13 +605,20 @@ function buildEquippedItemDamageMitigation(items, limbs = {}, damageTypeSettings
   const damageTypeKeys = new Set(damageTypeSettings.map(damageType => damageType.key));
 
   for (const item of items?.contents ?? Array.from(items ?? [])) {
-    if (item.type !== "gear" || !item.system?.equipped || !hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation)) continue;
+    const isConstructPart = item.type === "gear"
+      && hasItemFunction(item, ITEM_FUNCTIONS.constructPart)
+      && String(item.system?.placement?.mode ?? "") === ITEM_FUNCTIONS.constructPart;
+    if (item.type !== "gear" || (!item.system?.equipped && !isConstructPart) || !hasItemFunction(item, ITEM_FUNCTIONS.damageMitigation)) continue;
     const mitigation = getDamageMitigationFunction(item);
     const mode = String(mitigation.mode || DAMAGE_MITIGATION_MODES.defense);
     const weakening = getConditionWeakeningData(item);
     const weakeningRatio = weakening.active ? weakening.ratio : 1;
+    const constructPartLimbKey = isConstructPart ? `constructPart:${item.id}` : "";
 
-    for (const [limbKey, damageEntries] of Object.entries(mitigation.entries ?? {})) {
+    for (const [rawLimbKey, damageEntries] of Object.entries(mitigation.entries ?? {})) {
+      const limbKey = rawLimbKey === CONSTRUCT_PART_MITIGATION_LIMB_KEY && constructPartLimbKey
+        ? constructPartLimbKey
+        : rawLimbKey;
       if (!limbKeys.has(limbKey)) continue;
       for (const [damageTypeKey, entry] of Object.entries(damageEntries ?? {})) {
         if (!damageTypeKeys.has(damageTypeKey)) continue;
@@ -666,6 +676,7 @@ function getConstructPartLimbData(items) {
       min: 0,
       damageMultiplier: 1,
       aimedDifficultyPercent: toInteger(part.aimedDifficultyPercent),
+      aimedDifficultyBonus: toInteger(part.aimedDifficultyBonus),
       critical: Boolean(part.critical)
     });
     source[key] = {
