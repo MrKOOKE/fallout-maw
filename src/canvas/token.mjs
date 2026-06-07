@@ -462,7 +462,13 @@ function calculateHealthBarMaximums(actor, data = {}) {
 function getLimbTraumaCap(actor, limbKey = "", limbMax = 0) {
   return (actor.items ?? [])
     .filter(item => item?.type === "trauma" && String(item.system?.limbKey ?? "") === limbKey)
-    .reduce((cap, item) => Math.min(cap, Math.max(0, toInteger(item.system?.thresholdValue))), limbMax);
+    .reduce((cap, item) => Math.min(cap, getTraumaLimbCap(item, limbMax)), limbMax);
+}
+
+function getTraumaLimbCap(trauma, limbMax = 0) {
+  const max = Math.max(0, toInteger(limbMax));
+  const percent = Math.max(0, Math.min(100, toInteger(trauma?.system?.thresholdPercent)));
+  return Math.floor((max * percent) / 100);
 }
 
 function getIntegratedProsthesisHealth(prosthesis, limb = {}) {

@@ -124,6 +124,11 @@ export class FalloutMaWItem extends Item {
     handleItemDamageUpdate(this, changes, options);
   }
 
+  _onCreate(data, options, userId) {
+    super._onCreate(data, options, userId);
+    handleItemDamageUpdate(this, data, options);
+  }
+
   get isEquipped() {
     return Boolean(this.system?.equipped);
   }

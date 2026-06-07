@@ -28,7 +28,7 @@ import {
   ITEM_FUNCTIONS
 } from "../utils/item-functions.mjs";
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
-import { handleActorDamageUpdate, prepareActorDamageUpdate, requestDamageApplication } from "../combat/damage-hub.mjs";
+import { clampActorLimbValuesToCurrentCaps, handleActorDamageUpdate, prepareActorDamageUpdate, requestDamageApplication } from "../combat/damage-hub.mjs";
 import { migrateActorData } from "../migrations/documents.mjs";
 import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 
@@ -122,6 +122,7 @@ export class FalloutMaWActor extends Actor {
     const limbs = this.system?.limbs;
     if (limbs) {
       for (const limb of Object.values(limbs)) clampPreparedResource(limb);
+      clampActorLimbValuesToCurrentCaps(this);
     }
 
     prepareIntegratedProsthesisHealth(this);

@@ -2089,8 +2089,11 @@ function prepareLimbDisplayData(actor, limbKey, limb = {}) {
   }
   const max = getLimbHealingCap(actor, limbKey);
   if (max >= toInteger(limb?.max)) return limb;
+  const min = toInteger(limb?.min);
+  const value = Math.min(Math.max(toInteger(limb?.value), min), max);
   return {
     ...limb,
+    value,
     max,
     scaleMax: limb.max
   };
