@@ -15,47 +15,58 @@
 }
 
 .fallout-maw-construct-structure-body {
-  display: grid;
-  grid-template-columns: minmax(220px, 0.85fr) minmax(320px, 1.15fr);
-  gap: 12px;
+  display: block;
 }
 
 .fallout-maw-construct-drop-zone {
-  min-height: 180px;
+  min-height: 220px;
   border: 1px dashed rgba(219, 202, 151, 0.55);
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 8px;
-  text-align: center;
   color: var(--color-text-light-highlight);
   background: rgba(0, 0, 0, 0.18);
 }
 
-.fallout-maw-construct-drop-zone i {
+.fallout-maw-construct-drop-placeholder {
+  align-content: center;
+  display: grid;
+  gap: 8px;
+  min-height: 180px;
+  place-items: center;
+  text-align: center;
+}
+
+.fallout-maw-construct-drop-placeholder i {
   font-size: 22px;
 }
 
 .fallout-maw-construct-part-list {
   display: grid;
   gap: 8px;
+  padding: 10px;
+}
+
+.fallout-maw-construct-part-list.drag-preview-active {
+  border-color: rgba(219, 202, 151, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(219, 202, 151, 0.18), 0 0 12px rgba(219, 202, 151, 0.16);
 }
 
 .fallout-maw-construct-part-card {
   display: grid;
-  grid-template-columns: 18px 44px minmax(0, 1fr) 30px;
+  grid-template-columns: 44px minmax(0, 1fr) 30px;
   gap: 10px;
   align-items: center;
   padding: 8px;
   border: 1px solid rgba(219, 202, 151, 0.22);
   background: rgba(0, 0, 0, 0.16);
+  cursor: grab;
+  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
 }
 
 .fallout-maw-construct-part-card.dragging {
-  opacity: 0.55;
+  border-color: rgba(219, 202, 151, 0.78);
+  box-shadow: 0 0 0 1px rgba(219, 202, 151, 0.22), 0 0 14px rgba(219, 202, 151, 0.2);
+  opacity: 0.74;
 }
 
-.fallout-maw-construct-part-drag,
 .fallout-maw-construct-part-remove {
   align-items: center;
   display: inline-flex;
@@ -66,16 +77,13 @@
   width: 28px;
 }
 
-.fallout-maw-construct-part-drag {
-  cursor: grab;
-}
-
-.fallout-maw-construct-part-drag:active {
+.fallout-maw-construct-part-card:active {
   cursor: grabbing;
 }
 
 .fallout-maw-construct-part-remove {
   color: #d9b8a8;
+  cursor: pointer;
 }
 
 .fallout-maw-construct-part-card img {
@@ -94,12 +102,6 @@
     linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(0, 0, 0, 0.16)),
     var(--construct-part-meter-color, #d9eef5);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 0 10px rgba(217, 238, 245, 0.28);
-}
-
-@media (max-width: 720px) {
-  .fallout-maw-construct-structure-body {
-    grid-template-columns: 1fr;
-  }
 }
 
 .application.fallout-maw-search-inventory.minimized .header-control[data-action="toggleMinimize"],

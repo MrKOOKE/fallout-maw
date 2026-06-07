@@ -11,6 +11,8 @@ import { toInteger } from "../utils/numbers.mjs";
 export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
   #entries = [];
   #draggedEntryId = "";
+  #dropCommitted = false;
+  #previewDirty = false;
 
   constructor(actor, options = {}) {
     super(options);
@@ -54,14 +56,9 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
 
   async _onRender(context, options) {
     await super._onRender(context, options);
-    const dropZone = this.element?.querySelector("[data-construct-part-drop-zone]");
-    dropZone?.addEventListener("dragover", event => {
-      event.preventDefault();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-    });
-    dropZone?.addEventListener("drop", event => this.#onDropConstructPart(event));
-
-    this.element?.querySelector("[data-construct-part-list]")?.addEventListener("drop", event => this.#onEntryListDrop(event));
+    const list = this.element?.querySelector("[data-construct-part-list]");
+    list?.addEventListener("dragover", event => this.#onPartListDragOver(event));
+    list?.addEventListener("drop", event => this.#onEntryListDrop(event));
     for (const card of this.element?.querySelectorAll("[data-construct-part-entry-id]") ?? []) {
       card.addEventListener("dragstart", event => this.#onEntryDragStart(event));
       card.addEventListener("dragend", event => this.#onEntryDragEnd(event));
@@ -75,6 +72,13 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
 
   async _processFormData(_event, _form, _formData) {
     return this.#saveStructure();
+  }
+
+  #onPartListDragOver(event) {
+    event.preventDefault();
+    const entryId = this.#readDraggedEntryId(event);
+    if (event.dataTransfer) event.dataTransfer.dropEffect = entryId ? "move" : "copy";
+    if (entryId) this.#previewEntryDrop(event);
   }
 
   async #onDropConstructPart(event) {
@@ -96,9 +100,15 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
   }
 
   #onEntryDragStart(event) {
+    if (event.target?.closest?.("[data-construct-part-remove], button, input, select, textarea, a")) {
+      event.preventDefault();
+      return;
+    }
     const entryId = event.currentTarget?.dataset?.constructPartEntryId ?? "";
     if (!entryId) return;
     this.#draggedEntryId = entryId;
+    this.#dropCommitted = false;
+    this.#previewDirty = false;
     event.currentTarget.classList.add("dragging");
     if (event.dataTransfer) {
       event.dataTransfer.setData("application/x-fallout-maw-construct-entry-id", entryId);
@@ -109,13 +119,19 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
 
   #onEntryDragEnd(event) {
     event.currentTarget?.classList.remove("dragging");
+    this.element?.querySelector("[data-construct-part-list]")?.classList.remove("drag-preview-active");
+    const shouldRestorePreview = this.#previewDirty && !this.#dropCommitted;
     this.#draggedEntryId = "";
+    this.#dropCommitted = false;
+    this.#previewDirty = false;
+    if (shouldRestorePreview) return this.render();
   }
 
   #onEntryDragOver(event) {
     if (!this.#readDraggedEntryId(event)) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    this.#previewEntryDrop(event);
   }
 
   #onEntryDrop(event) {
@@ -123,18 +139,24 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     if (!entryId) return;
     event.preventDefault();
     event.stopPropagation();
-    const targetId = event.currentTarget?.dataset?.constructPartEntryId ?? "";
-    this.#moveEntry(entryId, targetId, event);
+    this.#syncEntriesToPreviewOrder();
+    this.#dropCommitted = true;
+    this.#previewDirty = false;
     return this.render();
   }
 
   #onEntryListDrop(event) {
     const entryId = this.#readDraggedEntryId(event);
-    if (!entryId || event.target?.closest?.("[data-construct-part-entry-id]")) return;
-    event.preventDefault();
-    event.stopPropagation();
-    this.#moveEntryToEnd(entryId);
-    return this.render();
+    if (entryId) {
+      if (event.target?.closest?.("[data-construct-part-entry-id]")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.#syncEntriesToPreviewOrder();
+      this.#dropCommitted = true;
+      this.#previewDirty = false;
+      return this.render();
+    }
+    return this.#onDropConstructPart(event);
   }
 
   #onRemoveEntry(event) {
@@ -149,26 +171,47 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     return event.dataTransfer?.getData("application/x-fallout-maw-construct-entry-id") || this.#draggedEntryId;
   }
 
-  #moveEntry(entryId, targetId, event) {
-    if (!entryId || !targetId || entryId === targetId) return;
-    const fromIndex = this.#entries.findIndex(entry => entry.entryId === entryId);
-    const targetIndex = this.#entries.findIndex(entry => entry.entryId === targetId);
-    if (fromIndex < 0 || targetIndex < 0) return;
+  #previewEntryDrop(event) {
+    const entryId = this.#readDraggedEntryId(event);
+    const list = this.element?.querySelector("[data-construct-part-list]");
+    const draggedCard = Array.from(list?.querySelectorAll("[data-construct-part-entry-id]") ?? [])
+      .find(element => element.dataset.constructPartEntryId === entryId);
+    if (!list || !draggedCard) return;
 
-    const [entry] = this.#entries.splice(fromIndex, 1);
-    const target = event.currentTarget;
-    const rect = target?.getBoundingClientRect?.();
-    const insertAfter = rect ? event.clientY > (rect.top + (rect.height / 2)) : false;
-    let insertIndex = targetIndex + (insertAfter ? 1 : 0);
-    if (fromIndex < insertIndex) insertIndex -= 1;
-    this.#entries.splice(Math.max(0, Math.min(insertIndex, this.#entries.length)), 0, entry);
+    const targetCard = event.target?.closest?.("[data-construct-part-entry-id]");
+    if (!targetCard || !list.contains(targetCard)) {
+      if (draggedCard.nextElementSibling) {
+        list.appendChild(draggedCard);
+        this.#previewDirty = true;
+      }
+      list.classList.add("drag-preview-active");
+      return;
+    }
+
+    if (targetCard === draggedCard) return;
+    const rect = targetCard.getBoundingClientRect();
+    const insertBefore = event.clientY < rect.top + (rect.height / 2);
+    const reference = insertBefore ? targetCard : targetCard.nextElementSibling;
+    if (reference === draggedCard) return;
+    list.insertBefore(draggedCard, reference);
+    list.classList.add("drag-preview-active");
+    this.#previewDirty = true;
   }
 
-  #moveEntryToEnd(entryId) {
-    const fromIndex = this.#entries.findIndex(entry => entry.entryId === entryId);
-    if (fromIndex < 0 || fromIndex === this.#entries.length - 1) return;
-    const [entry] = this.#entries.splice(fromIndex, 1);
-    this.#entries.push(entry);
+  #syncEntriesToPreviewOrder() {
+    const list = this.element?.querySelector("[data-construct-part-list]");
+    const orderedIds = Array.from(list?.querySelectorAll("[data-construct-part-entry-id]") ?? [])
+      .map(element => element.dataset.constructPartEntryId)
+      .filter(Boolean);
+    if (!orderedIds.length) return;
+
+    const entriesById = new Map(this.#entries.map(entry => [entry.entryId, entry]));
+    const orderedEntries = orderedIds.map(id => entriesById.get(id)).filter(Boolean);
+    const orderedIdSet = new Set(orderedIds);
+    for (const entry of this.#entries) {
+      if (!orderedIdSet.has(entry.entryId)) orderedEntries.push(entry);
+    }
+    this.#entries = orderedEntries;
   }
 
   async #saveStructure() {

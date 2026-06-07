@@ -2427,7 +2427,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       const reservedPlacements = reservedPlacementContexts
         .filter(entry => String(entry?.parentId ?? ROOT_CONTAINER_ID) === String(parentId ?? ROOT_CONTAINER_ID))
         .map(entry => entry.placement);
-      if (!this.#canFitItemWeightInParent(itemData, parentId, reservedPlacementContexts)) continue;
+      if (!this.#canFitItemWeightInParent(itemData, parentId, reservedPlacementContexts, excludeItemIds)) continue;
       const placement = this.#getFirstAvailableInventoryPlacement(itemData, excludeItemIds, reservedPlacements, parentId);
       if (placement) return { parentId, placement };
     }
@@ -2447,11 +2447,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return candidates;
   }
 
-  #canFitItemWeightInParent(itemData = null, parentId = ROOT_CONTAINER_ID, reservedPlacementContexts = []) {
+  #canFitItemWeightInParent(itemData = null, parentId = ROOT_CONTAINER_ID, reservedPlacementContexts = [], excludeItemIds = []) {
     if (!parentId) return true;
     const container = this.actor.items.get(parentId);
     if (!container) return false;
-    const currentLoad = getContainerContentsWeight(container, this.actor.items);
+    const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+    const releasedLoad = this.actor.items.contents
+      .filter(item => excluded.has(item.id) && String(item.system?.container?.parentId ?? ROOT_CONTAINER_ID) === String(parentId))
+      .reduce((total, item) => total + getItemTotalWeight(item, this.actor.items), 0);
+    const currentLoad = Math.max(0, getContainerContentsWeight(container, this.actor.items) - releasedLoad);
     const reservedLoad = reservedPlacementContexts
       .filter(entry => String(entry?.parentId ?? ROOT_CONTAINER_ID) === parentId)
       .reduce((total, entry) => total + getItemTotalWeight(entry.itemData, this.actor.items), 0);

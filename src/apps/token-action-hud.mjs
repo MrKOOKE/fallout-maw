@@ -73,8 +73,13 @@ import {
   ROOT_CONTAINER_ID,
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
+  getContainerContentsWeight,
+  getContainerDimensions,
+  getContainerMaxLoad,
   getItemMaxStack,
   getContextInventoryItems,
+  getItemTotalWeight,
+  hasContainerCycle,
   getItemQuantity
 } from "../utils/inventory-containers.mjs";
 import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getEnabledWeaponFunctions, getFirstAidChargesData, getModuleFunction, getProsthesisFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, getWeaponSpecialPropertyType, hasItemFunction, hasWeaponSpecialPropertyData, isActiveItem, isItemBrokenByCondition, normalizeWeaponSpecialProperties } from "../utils/item-functions.mjs";
@@ -2605,35 +2610,21 @@ function createHudWeaponReplacementUpdates(actor, conflicts = [], excludeItemIds
   const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
   for (const item of items) excluded.add(item.id);
 
-  const allItems = actor.items.contents;
-  const contextItems = getContextInventoryItems(ROOT_CONTAINER_ID, allItems)
-    .filter(item => !excluded.has(item.id));
-  const { columns, rows } = getActorRootInventoryDimensions(actor);
-  const options = getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID);
-  const reservedPlacements = [];
+  const reservedPlacementContexts = [];
   const updates = [];
 
   for (const item of items) {
-    const placement = findFirstAvailableInventoryPlacement(
-      contextItems,
-      columns,
-      rows,
-      item,
-      allItems,
-      Array.from(excluded),
-      reservedPlacements,
-      options
-    );
-    if (!placement) {
+    const placementContext = getFirstAvailableHudInventoryPlacementContext(actor, item, Array.from(excluded), reservedPlacementContexts);
+    if (!placementContext) {
       ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
       return null;
     }
-    reservedPlacements.push(placement);
-    const storedPlacement = createStoredPlacement(placement, item);
+    reservedPlacementContexts.push({ ...placementContext, itemData: item });
+    const storedPlacement = createStoredPlacement(placementContext.placement, item);
     updates.push({
       _id: item.id,
       "system.equipped": false,
-      "system.container.parentId": ROOT_CONTAINER_ID,
+      "system.container.parentId": String(placementContext.parentId ?? ROOT_CONTAINER_ID),
       "system.placement.mode": storedPlacement.mode,
       "system.placement.equipmentSlot": storedPlacement.equipmentSlot,
       "system.placement.weaponSet": storedPlacement.weaponSet,
@@ -2646,6 +2637,67 @@ function createHudWeaponReplacementUpdates(actor, conflicts = [], excludeItemIds
     });
   }
   return updates;
+}
+
+function getFirstAvailableHudInventoryPlacementContext(actor, itemData = null, excludeItemIds = [], reservedPlacementContexts = []) {
+  for (const parentId of getHudInventoryPlacementParentCandidates(actor, itemData, excludeItemIds)) {
+    const normalizedParentId = String(parentId ?? ROOT_CONTAINER_ID);
+    const reservedPlacements = reservedPlacementContexts
+      .filter(entry => String(entry?.parentId ?? ROOT_CONTAINER_ID) === normalizedParentId)
+      .map(entry => entry.placement);
+    if (!canFitHudItemWeightInParent(actor, itemData, parentId, reservedPlacementContexts, excludeItemIds)) continue;
+    const placement = getFirstAvailableHudInventoryPlacement(actor, itemData, excludeItemIds, reservedPlacements, parentId);
+    if (placement) return { parentId, placement };
+  }
+  return null;
+}
+
+function getHudInventoryPlacementParentCandidates(actor, itemData = null, excludeItemIds = []) {
+  const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+  const candidates = [ROOT_CONTAINER_ID];
+  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId) ?? null;
+  const inventory = prepareInventoryContext(actor, race);
+  for (const container of inventory.containers ?? []) {
+    const parentId = String(container?.id ?? "");
+    if (!parentId || excluded.has(parentId)) continue;
+    if (hasContainerCycle(itemData, parentId, actor.items)) continue;
+    candidates.push(parentId);
+  }
+  return candidates;
+}
+
+function canFitHudItemWeightInParent(actor, itemData = null, parentId = ROOT_CONTAINER_ID, reservedPlacementContexts = [], excludeItemIds = []) {
+  if (!parentId) return true;
+  const container = actor.items.get(parentId);
+  if (!container) return false;
+  const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+  const releasedLoad = actor.items.contents
+    .filter(item => excluded.has(item.id) && String(item.system?.container?.parentId ?? ROOT_CONTAINER_ID) === String(parentId))
+    .reduce((total, item) => total + getItemTotalWeight(item, actor.items), 0);
+  const currentLoad = Math.max(0, getContainerContentsWeight(container, actor.items) - releasedLoad);
+  const reservedLoad = reservedPlacementContexts
+    .filter(entry => String(entry?.parentId ?? ROOT_CONTAINER_ID) === String(parentId))
+    .reduce((total, entry) => total + getItemTotalWeight(entry.itemData, actor.items), 0);
+  return currentLoad + reservedLoad + getItemTotalWeight(itemData, actor.items) <= getContainerMaxLoad(container) + 0.0001;
+}
+
+function getFirstAvailableHudInventoryPlacement(actor, itemData = null, excludeItemIds = [], reservedPlacements = [], parentId = ROOT_CONTAINER_ID) {
+  const dimensions = getHudInventoryContextDimensions(actor, parentId);
+  return findFirstAvailableInventoryPlacement(
+    getContextInventoryItems(parentId, actor.items),
+    dimensions.columns,
+    dimensions.rows,
+    itemData,
+    actor.items,
+    excludeItemIds,
+    reservedPlacements,
+    getActorRootInventoryGridOptions(actor, parentId)
+  );
+}
+
+function getHudInventoryContextDimensions(actor, parentId = ROOT_CONTAINER_ID) {
+  if (parentId) return getContainerDimensions(actor.items?.get(parentId));
+  return getActorRootInventoryDimensions(actor);
 }
 
 function isHudWeaponDisabled(actor, weapon) {

@@ -5154,7 +5154,7 @@ function getFirstAvailableActorInventoryPlacementContext(actor, itemData = null,
     const reservedPlacements = reservedPlacementContexts
       .filter(entry => String(entry?.parentId ?? ROOT_CONTAINER_ID) === String(parentId ?? ROOT_CONTAINER_ID))
       .map(entry => entry.placement);
-    if (!canFitItemWeightInActorParent(actor, itemData, parentId, reservedPlacementContexts)) continue;
+    if (!canFitItemWeightInActorParent(actor, itemData, parentId, reservedPlacementContexts, excludeItemIds)) continue;
     const placement = getFirstAvailableActorInventoryPlacement(actor, parentId, itemData, excludeItemIds, reservedPlacements);
     if (placement) return { parentId, placement };
   }
@@ -5174,11 +5174,15 @@ function getActorInventoryPlacementParentCandidates(actor, itemData = null, excl
   return candidates;
 }
 
-function canFitItemWeightInActorParent(actor, itemData = null, parentId = ROOT_CONTAINER_ID, reservedPlacementContexts = []) {
+function canFitItemWeightInActorParent(actor, itemData = null, parentId = ROOT_CONTAINER_ID, reservedPlacementContexts = [], excludeItemIds = []) {
   if (!parentId) return true;
   const container = actor.items?.get(parentId);
   if (!container) return false;
-  const currentLoad = getContainerContentsWeight(container, actor.items);
+  const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+  const releasedLoad = actor.items.contents
+    .filter(item => excluded.has(item.id) && String(item.system?.container?.parentId ?? ROOT_CONTAINER_ID) === String(parentId))
+    .reduce((total, item) => total + getItemTotalWeight(item, actor.items), 0);
+  const currentLoad = Math.max(0, getContainerContentsWeight(container, actor.items) - releasedLoad);
   const reservedLoad = reservedPlacementContexts
     .filter(entry => String(entry?.parentId ?? ROOT_CONTAINER_ID) === parentId)
     .reduce((total, entry) => total + getItemTotalWeight(entry.itemData, actor.items), 0);

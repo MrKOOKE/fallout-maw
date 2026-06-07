@@ -1,25 +1,12 @@
 <section class="fallout-maw-construct-structure-body">
-  <section class="fallout-maw-panel fallout-maw-construct-drop-panel">
-    <div class="fallout-maw-panel-header">
-      <h2>Строение конструкта</h2>
-    </div>
-    <div class="fallout-maw-construct-drop-zone" data-construct-part-drop-zone>
-      <i class="fa-solid fa-plus"></i>
-      <strong>Перетащите деталь конструкта</strong>
-    </div>
-  </section>
-
   <section class="fallout-maw-panel fallout-maw-construct-part-list-panel">
     <div class="fallout-maw-panel-header">
-      <h2>Детали</h2>
+      <h2>Строение конструкта</h2>
       <button type="submit"><i class="fa-solid fa-check"></i> Сохранить</button>
     </div>
-    <div class="fallout-maw-construct-part-list" data-construct-part-list>
+    <div class="fallout-maw-construct-part-list fallout-maw-construct-drop-zone" data-construct-part-list data-construct-part-drop-zone>
       {{#each entries}}
       <article class="fallout-maw-construct-part-card" draggable="true" data-construct-part-entry-id="{{id}}">
-        <button class="fallout-maw-construct-part-drag" type="button" title="Переместить">
-          <i class="fa-solid fa-grip-vertical"></i>
-        </button>
         <img src="{{img}}" alt="{{name}}">
         <div class="fallout-maw-construct-part-main">
           <div class="fallout-maw-resource-card-header">
@@ -38,7 +25,10 @@
         </button>
       </article>
       {{else}}
-      <p class="fallout-maw-empty-list">Детали не добавлены.</p>
+      <div class="fallout-maw-construct-drop-placeholder">
+        <i class="fa-solid fa-plus"></i>
+        <strong>Перетащите деталь конструкта</strong>
+      </div>
       {{/each}}
     </div>
   </section>
