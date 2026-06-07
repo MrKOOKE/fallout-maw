@@ -41,6 +41,7 @@ import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-mov
 } from "../research/index.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { applyDamageCostModifier, getActorTraumas, getDamageCostModifierState, getDestroyedLimbStateLabel, getLimbHealingCap, isLimbDestroyed } from "../combat/damage-hub.mjs";
+import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints, WEAPON_SWITCH_COST_KEY } from "../combat/weapon-switching.mjs";
 import { openLimbDamageDialog } from "../apps/limb-damage-dialog.mjs";
 import {
   getActorRootInventoryGridOptions,
@@ -1534,6 +1535,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const placementResolution = this.#resolvePlacementWithReplacements(item.toObject(), placement, [item.id]);
     if (!placementResolution) return null;
     const { placement: resolvedPlacement, conflicts } = placementResolution;
+    const spendsWeaponSwitch = resolvedPlacement.mode === "weapon";
+    if (spendsWeaponSwitch && !canSpendWeaponSwitchActionPoints(this.actor)) return null;
     const storedPlacement = createStoredPlacement(resolvedPlacement, item);
     const wasEquipment = item.system?.placement?.mode === "equipment";
     const isEquipment = resolvedPlacement.mode === "equipment";
@@ -1556,6 +1559,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const updates = [...replacementUpdates, updateData];
     if (!this.#validateProjectedInventoryState({ updates })) return null;
     await this.actor.updateEmbeddedDocuments("Item", updates);
+    if (spendsWeaponSwitch) await spendWeaponSwitchActionPoints(this.actor);
     return this.actor.items.get(item.id) ?? null;
   }
 
@@ -1635,6 +1639,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const placementResolution = this.#resolvePlacementWithReplacements(itemData, placement);
     if (!placementResolution) return null;
     const { placement: resolvedPlacement, conflicts } = placementResolution;
+    const spendsWeaponSwitch = resolvedPlacement.mode === "weapon";
+    if (spendsWeaponSwitch && !canSpendWeaponSwitchActionPoints(this.actor)) return null;
     const storedPlacement = createStoredPlacement(resolvedPlacement, itemData);
 
     const createData = foundry.utils.deepClone(itemData);
@@ -1663,7 +1669,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!replacementUpdates) return null;
     if (!this.#validateProjectedInventoryState({ updates: replacementUpdates, creates: [createData] })) return null;
     if (replacementUpdates.length) await this.actor.updateEmbeddedDocuments("Item", replacementUpdates);
-    return this.actor.createEmbeddedDocuments("Item", [createData]);
+    const created = await this.actor.createEmbeddedDocuments("Item", [createData]);
+    if (spendsWeaponSwitch) await spendWeaponSwitchActionPoints(this.actor);
+    return created;
   }
 
   async #insertItemIntoInventory(itemData, requestedPlacement, { sourceItem = null, targetItem = null, parentId = ROOT_CONTAINER_ID } = {}) {
@@ -2329,6 +2337,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       this.#warnItemHasNoSlots();
       return null;
     }
+    const spendsWeaponSwitch = placementResolution.placement.mode === "weapon";
+    if (spendsWeaponSwitch && !canSpendWeaponSwitchActionPoints(this.actor)) return null;
 
     const storedPlacement = createStoredPlacement(placementResolution.placement, item);
     const updateData = {
@@ -2350,6 +2360,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const updates = [...replacementUpdates, updateData];
     if (!this.#validateProjectedInventoryState({ updates })) return null;
     await this.actor.updateEmbeddedDocuments("Item", updates);
+    if (spendsWeaponSwitch) await spendWeaponSwitchActionPoints(this.actor);
     return this.actor.items.get(item.id) ?? null;
   }
 
@@ -5162,6 +5173,7 @@ function buildEffectPathLabelMap({
   map.set("system.costs.actions.aimedMeleeAttack", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack")}: стоимость`);
   map.set("system.costs.actions.push", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionPush")}: стоимость`);
   map.set("system.costs.actions.reload", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionReload")}: стоимость`);
+  map.set(WEAPON_SWITCH_COST_KEY, "Смена оружия: стоимость");
   const firstAidHealingLabel = game.i18n.localize("FALLOUTMAW.Item.FirstAidHealingPerTick");
   map.set("fallout-maw.healing", firstAidHealingLabel);
   map.set("healing", firstAidHealingLabel);

@@ -7945,6 +7945,17 @@ label.fallout-maw-mitigation-cell {
   width: var(--fallout-maw-token-hud-actions-width);
 }
 
+.fallout-maw-token-hud-popup.weapon-equip {
+  align-content: flex-start;
+  align-items: flex-start;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  max-width: none;
+  width: max-content;
+}
+
 .fallout-maw-token-hud-popup.weapon-sets {
   align-content: stretch;
   align-items: flex-start;
@@ -9163,15 +9174,17 @@ label.fallout-maw-mitigation-cell {
 }
 
 .fallout-maw-token-hud-main-action.variable-width,
+.fallout-maw-token-hud-weapon-pick-tile.variable-width,
 .fallout-maw-token-hud-weapon-slot:not(.empty),
 .fallout-maw-token-hud-set-slot-preview:not(.empty) {
-  flex: 0 0 calc(var(--fallout-maw-token-hud-tile) * var(--fallout-maw-hud-image-aspect, 1));
+  flex: 0 0 calc(var(--fallout-maw-token-hud-tile) * var(--fallout-maw-hud-image-aspect));
   max-width: none;
   min-width: var(--fallout-maw-token-hud-tile);
-  width: calc(var(--fallout-maw-token-hud-tile) * var(--fallout-maw-hud-image-aspect, 1));
+  width: calc(var(--fallout-maw-token-hud-tile) * var(--fallout-maw-hud-image-aspect));
 }
 
 .fallout-maw-token-hud-main-action.variable-width img,
+.fallout-maw-token-hud-weapon-pick-tile.variable-width img,
 .fallout-maw-token-hud-weapon-slot:not(.empty) img,
 .fallout-maw-token-hud-set-slot-preview:not(.empty) img {
   height: 100%;
@@ -9179,6 +9192,10 @@ label.fallout-maw-mitigation-cell {
   object-fit: cover;
   position: absolute;
   width: 100%;
+}
+
+.fallout-maw-token-hud-weapon-pick-tile.variable-width img {
+  object-fit: contain;
 }
 
 .fallout-maw-token-hud-meter-list {

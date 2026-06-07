@@ -1,4 +1,7 @@
 export const DEFAULT_COMBAT_SETTINGS = Object.freeze({
+  weaponSwitch: Object.freeze({
+    actionPointCost: 3
+  }),
   dodge: Object.freeze({
     enabled: true,
     attackCostPercent: 10,
@@ -23,6 +26,9 @@ export function normalizeCombatSettings(value = {}) {
   );
 
   return {
+    weaponSwitch: {
+      actionPointCost: clampInteger(source.weaponSwitch?.actionPointCost, DEFAULT_COMBAT_SETTINGS.weaponSwitch.actionPointCost, 0, 100)
+    },
     dodge: {
       enabled: Boolean(source.dodge?.enabled),
       attackCostPercent: clampInteger(source.dodge?.attackCostPercent, DEFAULT_COMBAT_SETTINGS.dodge.attackCostPercent, 0, 100),

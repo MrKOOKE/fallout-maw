@@ -45,7 +45,8 @@ const WEAPON_ACTION_ICON_ROWS = Object.freeze([
   { key: "meleeAttack", labelKey: "FALLOUTMAW.Item.WeaponActionMeleeAttack" },
   { key: "aimedMeleeAttack", labelKey: "FALLOUTMAW.Item.WeaponActionAimedMeleeAttack" },
   { key: "push", labelKey: "FALLOUTMAW.Item.WeaponActionPush" },
-  { key: "reload", labelKey: "FALLOUTMAW.Item.WeaponActionReload" }
+  { key: "reload", labelKey: "FALLOUTMAW.Item.WeaponActionReload" },
+  { key: "replaceWeapon", label: "Заменить оружие" }
 ]);
 
 export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
@@ -94,7 +95,7 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
       serviceActionIconRows: this.#prepareServiceActionIconRows(),
       weaponActionIconRows: this.#prepareIconRows("weaponActions", WEAPON_ACTION_ICON_ROWS.map(row => ({
         ...row,
-        label: game.i18n.localize(row.labelKey)
+        label: row.label ?? game.i18n.localize(row.labelKey)
       }))),
       postureIconRows: this.#prepareIconRows("postures", getPostureIconRows()),
       skillIconRows: this.#prepareIconRows("skillIcons", getSkillSettings().map(skill => ({

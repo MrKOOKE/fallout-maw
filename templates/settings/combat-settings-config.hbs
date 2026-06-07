@@ -9,6 +9,10 @@
 
     <div class="fallout-maw-settings-grid">
       <label>
+        <span>Стоимость вставки оружия в набор, ОД</span>
+        <input type="number" name="weaponSwitch.actionPointCost" value="{{settings.weaponSwitch.actionPointCost}}" min="0" step="1">
+      </label>
+      <label>
         <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeEnabled"}}</span>
         <input type="checkbox" name="dodge.enabled" {{checked settings.dodge.enabled}}>
       </label>

@@ -48,6 +48,7 @@ import { FalloutMaWContainerSheet } from "../sheets/container-sheet.mjs";
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import { getConditionFunction, getEnabledToolFunctions, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints } from "../combat/weapon-switching.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
@@ -4449,6 +4450,8 @@ async function moveOwnedItemToActorPlacement(actor, item, placement) {
   const placementResolution = resolveActorPlacementWithReplacements(actor, item.toObject(), placement, [item.id]);
   if (!placementResolution) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
   const { placement: resolvedPlacement, conflicts } = placementResolution;
+  const spendsWeaponSwitch = resolvedPlacement.mode === "weapon";
+  if (spendsWeaponSwitch && !canSpendWeaponSwitchActionPoints(actor)) return null;
   const updateData = createPlacementItemUpdate(item.id, getItemQuantity(item), ROOT_CONTAINER_ID, resolvedPlacement, item, {
     equipped: resolvedPlacement.mode === "equipment"
   });
@@ -4458,13 +4461,17 @@ async function moveOwnedItemToActorPlacement(actor, item, placement) {
   if (!validateActorProjectedInventoryState(actor, { updates })) {
     throwInventoryNoSpace();
   }
-  return actor.updateEmbeddedDocuments("Item", updates);
+  const result = await actor.updateEmbeddedDocuments("Item", updates);
+  if (spendsWeaponSwitch) await spendWeaponSwitchActionPoints(actor);
+  return result;
 }
 
 async function createExternalPlacedItem(actor, itemData, placement, { sourceActor, sourceItem } = {}) {
   const placementResolution = resolveActorPlacementWithReplacements(actor, itemData, placement);
   if (!placementResolution) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
   const { placement: resolvedPlacement, conflicts } = placementResolution;
+  const spendsWeaponSwitch = resolvedPlacement.mode === "weapon";
+  if (spendsWeaponSwitch && !canSpendWeaponSwitchActionPoints(actor)) return null;
   const createData = createInventoryStackData(itemData, getItemQuantity(itemData), ROOT_CONTAINER_ID, resolvedPlacement, {
     equipped: resolvedPlacement.mode === "equipment"
   });
@@ -4476,6 +4483,7 @@ async function createExternalPlacedItem(actor, itemData, placement, { sourceActo
   if (replacementUpdates.length) await actor.updateEmbeddedDocuments("Item", replacementUpdates);
   const created = await actor.createEmbeddedDocuments("Item", [createData]);
   await removeTransferredItemQuantity(sourceActor, sourceItem, getItemQuantity(itemData));
+  if (spendsWeaponSwitch) await spendWeaponSwitchActionPoints(actor);
   return created;
 }
 
@@ -4621,6 +4629,8 @@ async function transferContainerTree({ sourceActor, targetActor, sourceItem, tar
       getActorPlacementConflictingItems(targetActor, rootData, preferredPlacement)
     );
   if (!replacementUpdates) throwInventoryNoSpace();
+  const spendsWeaponSwitch = preferredPlacement.mode === "weapon";
+  if (spendsWeaponSwitch && !canSpendWeaponSwitchActionPoints(targetActor)) return null;
   const createData = createInventoryStackData(rootData, 1, targetParentId, preferredPlacement, {
     equipped: preferredPlacement.mode === "equipment"
   });
@@ -4653,6 +4663,7 @@ async function transferContainerTree({ sourceActor, targetActor, sourceItem, tar
   }
 
   await sourceActor.deleteEmbeddedDocuments("Item", [sourceItem.id, ...containedItems.map(item => item.id)]);
+  if (spendsWeaponSwitch) await spendWeaponSwitchActionPoints(targetActor);
   return createdRoot;
 }
 

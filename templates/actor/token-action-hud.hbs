@@ -126,7 +126,7 @@
 
   <section class="fallout-maw-token-hud-actions-wrap">
     {{#if tray.visible}}
-    <div class="fallout-maw-token-hud-popup {{#if (eq activeTray "actions")}}actions{{/if}} {{#if (eq activeTray "abilities")}}abilities{{/if}} {{#if (eq activeTray "weaponActions")}}weapon-actions{{/if}} {{#if (eq activeTray "weaponSets")}}weapon-sets{{/if}}" data-token-action-hud-popup style="{{tray.metrics.style}}">
+    <div class="fallout-maw-token-hud-popup {{#if (eq activeTray "actions")}}actions{{/if}} {{#if (eq activeTray "abilities")}}abilities{{/if}} {{#if (eq activeTray "weaponActions")}}weapon-actions{{/if}} {{#if (eq activeTray "weaponSets")}}weapon-sets{{/if}} {{#if (eq activeTray "weaponEquip")}}weapon-equip{{/if}}" data-token-action-hud-popup style="{{tray.metrics.style}}">
       {{#if (eq activeTray "skills")}}
       {{#each tray.skills}}
       <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="rollSkill" data-skill-key="{{key}}" title="{{label}}">
@@ -208,6 +208,12 @@
         <div class="fallout-maw-token-hud-action-row-title">{{label}}</div>
         <div class="fallout-maw-token-hud-action-row-buttons">
           {{#each actions}}
+          {{#if isWeaponReplaceControl}}
+          <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="replaceHudWeapon" data-item-id="{{itemId}}" data-weapon-set="{{weaponSetKey}}" data-weapon-slot="{{weaponSlotKey}}" aria-label="{{label}}" {{#if disabled}}disabled{{/if}}>
+            <img src="{{img}}" alt="{{label}}" onerror="this.src='{{../../fallbackIcon}}'">
+            <span>{{label}}</span>
+          </button>
+          {{else}}
           {{#if isAttackPowerControl}}
           <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile fallout-maw-token-hud-attack-power-tile" data-action="setWeaponAttackPower" data-item-id="{{itemId}}" data-weapon-function-id="{{weaponFunctionId}}" aria-label="{{label}}" {{#if disabled}}disabled{{/if}}>
             <strong class="fallout-maw-token-hud-attack-power-readout">{{attackPowerLabel}}</strong>
@@ -219,6 +225,7 @@
             <span>{{label}}</span>
             {{#if actionPointCostLabel}}<strong class="{{actionPointCostClass}}" {{#if actionPointCostTooltipHtml}}data-action-point-cost-tooltip data-action-point-cost-tooltip-html="{{actionPointCostTooltipHtml}}"{{/if}} aria-label="{{actionPointCostTooltipLabel}}">{{actionPointCostLabel}}</strong>{{/if}}
           </button>
+          {{/if}}
           {{/if}}
           {{/each}}
         </div>
@@ -248,6 +255,18 @@
       </button>
       {{/each}}
       {{/if}}
+
+      {{#if (eq activeTray "weaponEquip")}}
+      {{#each tray.weaponEquipChoices}}
+      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile fallout-maw-token-hud-weapon-pick-tile variable-width" data-action="equipHudWeapon" data-item-id="{{id}}" data-weapon-set="{{weaponSetKey}}" data-weapon-slot="{{weaponSlotKey}}" data-hud-tooltip-item="{{id}}" aria-label="{{name}}" {{#if hudAspectStyle}}style="{{hudAspectStyle}}"{{/if}} {{#if disabled}}disabled{{/if}}>
+        <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../fallbackIcon}}'">
+        <span>{{name}}</span>
+        {{#if actionPointCostLabel}}<strong>{{actionPointCostLabel}}</strong>{{/if}}
+      </button>
+      {{else}}
+      <div class="fallout-maw-token-hud-empty">Нет подходящего оружия</div>
+      {{/each}}
+      {{/if}}
     </div>
     {{/if}}
 
@@ -263,6 +282,12 @@
         {{#if hudStatusBadges.magazine}}<strong class="fallout-maw-token-hud-weapon-badge magazine">{{hudStatusBadges.magazine.label}}</strong>{{/if}}
         {{#if hudStatusBadges.condition}}<strong class="fallout-maw-token-hud-weapon-badge condition {{hudStatusBadges.condition.tone}}">{{hudStatusBadges.condition.label}}</strong>{{/if}}
         <span>{{item.name}}</span>
+      </button>
+      {{/each}}
+      {{#each weaponSet.emptySlots}}
+      <button type="button" class="fallout-maw-token-hud-main-action fallout-maw-token-hud-weapon-slot empty" data-action="openWeaponSlotPicker" data-weapon-set="{{weaponSetKey}}" data-weapon-slot="{{key}}" title="{{label}}">
+        <img src="{{emptyIcon}}" alt="">
+        <span>{{label}}</span>
       </button>
       {{/each}}
       {{/if}}

@@ -24,6 +24,7 @@ import {
   decorateActionPointHudEntry,
   promptEndTurnConversion
 } from "../combat/reaction-resources.mjs";
+import { canSpendWeaponSwitchActionPoints, getWeaponSwitchActionPointCost, spendWeaponSwitchActionPoints } from "../combat/weapon-switching.mjs";
 import {
   getGrappleTargetId,
   getGrapplerId,
@@ -53,6 +54,13 @@ import { openSearchInventoryWindow, requestTradeInventoryWindow } from "./search
 import { openCraftWindow } from "./craft-window.mjs";
 import { openStealthWindow } from "../stealth/index.mjs";
 import { getWeaponActionBlockState } from "../abilities/runtime-state.mjs";
+import {
+  canUseWeaponSlotForItem,
+  getRequiredWeaponSlotsForItem,
+  getWeaponSlotRequirement,
+  getWeaponSlotRequirementSize,
+  isContainerWeaponSetKey
+} from "../utils/equipment-slots.mjs";
 import {
   FALLBACK_ICON,
   getActorInventoryGridDimensions,
@@ -365,6 +373,7 @@ function canUserAdvanceCombatTurn(combat) {
 class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #token = null;
   #activeTray = "";
+  #weaponEquipTarget = null;
   #limbDisplayLayer = "state";
   #layoutFrame = null;
   #itemTooltipElement = null;
@@ -411,6 +420,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       toggleMeterEdit: TokenActionHud.#onToggleMeterEdit,
       selectHudWeaponSet: TokenActionHud.#onSelectHudWeaponSet,
       selectHudWeapon: { handler: TokenActionHud.#onSelectHudWeapon, buttons: [0, 1] },
+      openWeaponSlotPicker: { handler: TokenActionHud.#onOpenWeaponSlotPicker, buttons: [0, 1] },
+      equipHudWeapon: { handler: TokenActionHud.#onEquipHudWeapon, buttons: [0, 1] },
+      replaceHudWeapon: { handler: TokenActionHud.#onReplaceHudWeapon, buttons: [0, 1] },
       toggleWeaponActions: { handler: TokenActionHud.#onToggleWeaponActions, buttons: [0, 1] },
       useWeaponAction: { handler: TokenActionHud.#onUseWeaponAction, buttons: [0, 1] },
       setWeaponAttackPower: { handler: TokenActionHud.#onSetWeaponAttackPower, buttons: [0, 1] },
@@ -450,6 +462,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (this.#token?.id !== token?.id) {
       cancelWeaponAttack();
       this.#activeTray = "";
+      this.#weaponEquipTarget = null;
       this.#editableMeterSections.resources = false;
       this.#editableMeterSections.needs = false;
     }
@@ -465,11 +478,13 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const activeWeaponSetKey = getActiveHudWeaponSetKey(actor, hudWeaponSets);
     const selectedWeapon = getSelectedHudWeapon(actor, hudWeaponSets, activeWeaponSetKey);
     const hudIcons = getTokenActionHudIcons();
+    await preloadHudImageAspects(collectHudImageAspectSources(actor, hudWeaponSets, this.#weaponEquipTarget));
     const weaponSet = prepareHudWeaponSet(actor, hudWeaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons);
     const weaponSets = prepareHudWeaponSets(actor, hudWeaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons);
     const selectedWeaponSlot = getSelectedHudWeaponSlot(weaponSet, selectedWeapon?.id ?? "");
     const selectedWeaponDisabled = Boolean(selectedWeaponSlot?.useDisabled);
-    const weaponActionRows = prepareWeaponActionRows(actor, selectedWeapon, selectedWeaponDisabled, hudIcons);
+    const weaponActionRows = prepareWeaponActionRows(actor, selectedWeapon, selectedWeaponDisabled, hudIcons, selectedWeaponSlot);
+    const weaponEquipChoices = prepareHudWeaponEquipChoices(actor, this.#weaponEquipTarget, hudIcons);
     const skills = prepareSkillButtons(actor, hudIcons);
     const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg", { activeOnly: true });
     const abilities = prepareOwnedAbilityButtons(actor, "icons/svg/aura.svg");
@@ -477,7 +492,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const activeActions = prepareActiveActionButtons(this.#token, actor, weaponSet, selectedWeapon, selectedWeaponDisabled, hudIcons);
     const actionGroups = prepareActionGroups(activeActions, systemActions);
     const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, actionGroups, hudIcons);
-    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet, weaponSets);
+    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet, weaponSets, weaponEquipChoices);
     const meterSections = prepareMeterSectionStates(this.#editableMeterSections);
     const displayLimbs = prepareDisplayLimbs(actor, this.#limbDisplayLayer);
     const limbSilhouette = createLimbSilhouetteHud(race?.limbSilhouette, displayLimbs);
@@ -508,6 +523,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.#clearDetachedHudTooltips();
     this.#activateLimbControlClicks();
     const silhouette = this.element?.querySelector("[data-limb-popover-root]");
     if (silhouette && silhouette !== this.#limbPopover.boundRoot) {
@@ -516,7 +532,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#limbPopover.boundRoot = silhouette;
     }
     this.applyMovementResourcePreview(tokenActionHudMovementPreview);
-    this.#activateVariableWidthTiles();
     this.#scheduleLayout();
   }
 
@@ -572,23 +587,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     });
   }
 
-  #activateVariableWidthTiles() {
-    const images = this.element?.querySelectorAll(
-      ".fallout-maw-token-hud-main-action.variable-width img, .fallout-maw-token-hud-weapon-slot:not(.empty) > img, .fallout-maw-token-hud-set-slot-preview:not(.empty) > img"
-    ) ?? [];
-    for (const image of images) {
-      const applyAspect = () => {
-        if (setHudTileImageAspect(image)) this.#scheduleLayout();
-      };
-      if (image.complete && image.naturalWidth && image.naturalHeight) applyAspect();
-      else image.addEventListener("load", applyAspect, { once: true });
-    }
-  }
-
   static #onToggleTray(event, target) {
     event.preventDefault();
     const tray = target.dataset.tray ?? "";
     this.#activeTray = this.#activeTray === tray ? "" : tray;
+    if (this.#activeTray !== "weaponEquip") this.#weaponEquipTarget = null;
     return this.render({ force: true });
   }
 
@@ -738,7 +741,57 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, itemId);
     const weaponSetKey = String(target.dataset.weaponSet ?? "");
     if (weaponSetKey) await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
+    this.#weaponEquipTarget = null;
     this.#activeTray = "";
+    return this.render({ force: true });
+  }
+
+  static async #onOpenWeaponSlotPicker(event, target) {
+    event.preventDefault();
+    if (isMiddleMouseClick(event) || event.button !== 0) return undefined;
+    const weaponSetKey = String(target.dataset.weaponSet ?? "");
+    const weaponSlotKey = String(target.dataset.weaponSlot ?? "");
+    if (!weaponSetKey || !weaponSlotKey) return undefined;
+    await this.actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
+    this.#weaponEquipTarget = { weaponSetKey, weaponSlotKey, replaceItemId: "" };
+    this.#activeTray = "weaponEquip";
+    return this.render({ force: true });
+  }
+
+  static async #onReplaceHudWeapon(event, target) {
+    event.preventDefault();
+    const itemId = String(target.dataset.itemId ?? "");
+    if (isMiddleMouseClick(event)) return this.actor?.items.get(itemId)?.sheet?.render(true);
+    if (event.button !== 0) return undefined;
+    const weaponSetKey = String(target.dataset.weaponSet ?? "");
+    const weaponSlotKey = String(target.dataset.weaponSlot ?? "");
+    if (!itemId || !weaponSetKey || !weaponSlotKey) return undefined;
+    await this.actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
+    await this.actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, itemId);
+    this.#weaponEquipTarget = { weaponSetKey, weaponSlotKey, replaceItemId: itemId };
+    this.#activeTray = "weaponEquip";
+    return this.render({ force: true });
+  }
+
+  static async #onEquipHudWeapon(event, target) {
+    event.preventDefault();
+    const actor = this.actor;
+    const itemId = String(target.dataset.itemId ?? "");
+    const item = actor?.items.get(itemId);
+    if (!item) return undefined;
+    if (isMiddleMouseClick(event)) return item.sheet?.render(true);
+    if (event.button !== 0) return undefined;
+
+    const weaponSetKey = String(target.dataset.weaponSet ?? this.#weaponEquipTarget?.weaponSetKey ?? "");
+    const weaponSlotKey = String(target.dataset.weaponSlot ?? this.#weaponEquipTarget?.weaponSlotKey ?? "");
+    const result = await equipHudWeaponInSlot(actor, item, weaponSetKey, weaponSlotKey, {
+      replaceItemId: this.#weaponEquipTarget?.replaceItemId ?? ""
+    });
+    if (!result) return undefined;
+    await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
+    await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, item.id);
+    this.#weaponEquipTarget = null;
+    this.#activeTray = "weaponActions";
     return this.render({ force: true });
   }
 
@@ -756,6 +809,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (itemId) await this.actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, itemId);
     const weaponSetKey = String(target.dataset.weaponSet ?? "");
     if (weaponSetKey) await this.actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
+    this.#weaponEquipTarget = null;
     this.#activeTray = wasOpenForItem ? "" : "weaponActions";
     return this.render({ force: true });
   }
@@ -993,10 +1047,17 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #onHudItemTooltipHudActivation(event) {
-    if (!this.#itemTooltipSuppressHudActivation) return;
     if (this.#itemTooltipElement?.contains(event.target)) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
+    if (this.#itemTooltipSuppressHudActivation) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+
+    const action = event.target instanceof Element ? event.target.closest("[data-action]") : null;
+    if (!action || !this.element?.contains(action)) return;
+    this.#clearActionPointCostTooltip();
+    if (event.type !== "contextmenu") this.#clearHudItemTooltip();
   }
 
   #onHudContextMenu(event) {
@@ -1080,7 +1141,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const button = target.closest("[data-action][data-item-id]");
     if (!button || !this.element?.contains(button)) return null;
     const action = String(button.dataset.action ?? "");
-    return ["openItem", "useItem", "selectHudWeapon", "useWeaponAction", "toggleWeaponActions"].includes(action) ? button : null;
+    return ["openItem", "useItem", "selectHudWeapon", "useWeaponAction", "toggleWeaponActions", "equipHudWeapon", "replaceHudWeapon"].includes(action) ? button : null;
   }
 
   #getHudTooltipItemElement(target) {
@@ -1184,6 +1245,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       activeWeaponIndex: this.#itemTooltipWeaponTabIndex,
       baseMode: this.#itemTooltipBaseMode
     });
+    if (!this.#isLiveHudItemTooltipAnchor(anchor, item?.id)) return;
     if (refresh && this.#itemTooltipItemId !== item.id) return;
 
     if (refresh && this.#itemTooltipElement && !this.#itemTooltipPinned && !pinned) {
@@ -1237,13 +1299,20 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async #refreshHudItemTooltip() {
     if (!this.#itemTooltipElement || !this.#itemTooltipItemId) return;
+    if (!this.#isLiveHudItemTooltipAnchor(this.#itemTooltipAnchorElement, this.#itemTooltipItemId)) {
+      return this.#clearHudItemTooltip();
+    }
     const item = this.actor?.items.get(this.#itemTooltipItemId);
     if (!item) return this.#clearHudItemTooltip();
     this.#clearNestedHudItemTooltip({ force: true });
-    this.#itemTooltipElement.innerHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
+    const tooltipHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
       activeWeaponIndex: this.#itemTooltipWeaponTabIndex,
       baseMode: this.#itemTooltipBaseMode
     });
+    if (!this.#isLiveHudItemTooltipAnchor(this.#itemTooltipAnchorElement, this.#itemTooltipItemId)) {
+      return this.#clearHudItemTooltip();
+    }
+    this.#itemTooltipElement.innerHTML = tooltipHTML;
     this.#itemTooltipElement.style.pointerEvents = this.#itemTooltipPinned ? "auto" : "none";
     this.#clampHudItemTooltipToViewport(this.#itemTooltipElement);
     requestAnimationFrame(() => {
@@ -1480,7 +1549,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #positionNestedHudItemTooltip() {
     const tooltip = this.#itemTooltipNestedElement;
     const anchor = this.#itemTooltipNestedAnchorElement;
-    if (!tooltip || !anchor?.isConnected) return;
+    if (!tooltip) return;
+    if (!anchor?.isConnected || !this.#itemTooltipElement?.contains(anchor)) {
+      this.#clearNestedHudItemTooltip({ force: true });
+      return;
+    }
     const view = this.element?.ownerDocument?.defaultView ?? window;
     const margin = 10;
     const gap = 12;
@@ -1550,7 +1623,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #positionHudItemTooltip() {
     const tooltip = this.#itemTooltipElement;
     const anchor = this.#itemTooltipAnchorElement;
-    if (!tooltip || !anchor?.isConnected) return;
+    if (!tooltip) return;
+    if (!this.#isLiveHudItemTooltipAnchor(anchor, this.#itemTooltipItemId)) {
+      this.#clearHudItemTooltip();
+      return;
+    }
     const view = this.element?.ownerDocument?.defaultView ?? window;
     const anchorRect = anchor.getBoundingClientRect();
     const margin = 10;
@@ -1688,6 +1765,39 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!this.#itemTooltipSuppressHudActivationTimer) return;
     view.clearTimeout(this.#itemTooltipSuppressHudActivationTimer);
     this.#itemTooltipSuppressHudActivationTimer = null;
+  }
+
+  #isLiveHudItemTooltipAnchor(anchor, itemId = "") {
+    if (!(anchor instanceof Element) || !anchor.isConnected || !this.element?.contains(anchor)) return false;
+    const expectedItemId = String(itemId ?? "");
+    if (!expectedItemId) return true;
+    const anchorItemId = String(anchor.dataset.hudTooltipItem ?? anchor.dataset.itemId ?? "");
+    return !anchorItemId || anchorItemId === expectedItemId;
+  }
+
+  #clearDetachedHudTooltips() {
+    if (this.#itemTooltipElement && !this.#isLiveHudItemTooltipAnchor(this.#itemTooltipAnchorElement, this.#itemTooltipItemId)) {
+      this.#clearHudItemTooltip();
+    } else if (this.#itemTooltipNestedElement && (
+      !this.#itemTooltipNestedAnchorElement?.isConnected
+      || !this.#itemTooltipElement?.contains(this.#itemTooltipNestedAnchorElement)
+    )) {
+      this.#clearNestedHudItemTooltip({ force: true });
+    }
+
+    if (this.#actionPointCostTooltipElement && (
+      !this.#actionPointCostTooltipElement.isConnected
+      || !this.element?.contains(this.#actionPointCostTooltipElement)
+    )) {
+      this.#clearActionPointCostTooltip();
+    }
+
+    if (this.#limbPopover.element && (
+      !this.#limbPopover.hoveredPart?.isConnected
+      || !this.element?.contains(this.#limbPopover.hoveredPart)
+    )) {
+      this.#destroyLimbPopover();
+    }
   }
 
   #scheduleLimbPopoverClose() {
@@ -2150,7 +2260,7 @@ function prepareActionGroups(activeActions = [], systemActions = []) {
   ];
 }
 
-function prepareTrayContext(activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet = null, weaponSets = []) {
+function prepareTrayContext(activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet = null, weaponSets = [], weaponEquipChoices = []) {
   const trayItems = activeTray === "skills"
     ? skills
     : activeTray === "items"
@@ -2163,7 +2273,9 @@ function prepareTrayContext(activeTray, skills, items, abilities, activeActions,
             ? weaponActionRows.flatMap(row => row.actions)
             : activeTray === "weaponSets"
               ? weaponSets
-              : [];
+              : activeTray === "weaponEquip"
+                ? weaponEquipChoices
+                : [];
   return {
     skills,
     items,
@@ -2175,6 +2287,7 @@ function prepareTrayContext(activeTray, skills, items, abilities, activeActions,
     weaponActionRows,
     weaponSet,
     weaponSets,
+    weaponEquipChoices,
     metrics: prepareTrayMetrics(trayItems),
     visible: Boolean(activeTray)
   };
@@ -2228,7 +2341,14 @@ function prepareHudWeaponSets(actor, weaponSets = [], activeSetKey = "", selecte
       hudStatusBadges: prepareHudWeaponStatusBadges(actor?.items?.get(slot.item?.id ?? "")),
       weaponSetKey: set.key,
       selected: Boolean(slot.item?.id && slot.item.id === selectedWeaponId)
-    }))
+    })),
+    emptySlots: (set.slots ?? [])
+      .filter(slot => !slot.item && !slot.phantom)
+      .map(slot => ({
+        ...slot,
+        weaponSetKey: set.key,
+        emptyIcon: normalizeImagePath(hudIcons.emptyWeaponSlotIcon, "icons/svg/combat.svg")
+      }))
   }));
 }
 
@@ -2269,12 +2389,7 @@ function prepareHudWeaponConditionBadge(item = null) {
 
 function getHudItemAspectStyle(item = null) {
   const cachedAspect = getCachedHudImageAspect(item?.img);
-  if (cachedAspect) return `--fallout-maw-hud-image-aspect: ${cachedAspect};`;
-
-  const width = Math.max(1, toInteger(item?.placement?.width));
-  const height = Math.max(1, toInteger(item?.placement?.height));
-  const aspect = Math.max(1, width / height);
-  return `--fallout-maw-hud-image-aspect: ${aspect};`;
+  return cachedAspect ? `--fallout-maw-hud-image-aspect: ${cachedAspect};` : "";
 }
 
 function getCachedHudImageAspect(src = "") {
@@ -2284,6 +2399,59 @@ function getCachedHudImageAspect(src = "") {
     if (value) return value;
   }
   return 0;
+}
+
+function collectHudImageAspectSources(actor, weaponSets = [], weaponEquipTarget = null) {
+  const sources = new Set();
+  for (const set of weaponSets ?? []) {
+    for (const slot of set.slots ?? []) {
+      const img = String(slot?.item?.img ?? "").trim();
+      if (img) sources.add(img);
+    }
+  }
+
+  if (weaponEquipTarget?.weaponSetKey && weaponEquipTarget?.weaponSlotKey) {
+    for (const item of actor?.items?.contents ?? []) {
+      if (!isHudWeaponEquipCandidate(item)) continue;
+      if (!canFitHudWeaponInTarget(actor, item, weaponEquipTarget.weaponSetKey, weaponEquipTarget.weaponSlotKey, {
+        replaceItemId: weaponEquipTarget.replaceItemId ?? ""
+      })) continue;
+      const img = String(item.img ?? "").trim();
+      if (img) sources.add(img);
+    }
+  }
+
+  return Array.from(sources);
+}
+
+async function preloadHudImageAspects(sources = []) {
+  const pending = Array.from(new Set(sources.map(src => String(src ?? "").trim()).filter(Boolean)))
+    .filter(src => !getCachedHudImageAspect(src))
+    .map(src => preloadHudImageAspect(src));
+  if (!pending.length) return;
+  await Promise.allSettled(pending);
+}
+
+async function preloadHudImageAspect(src = "") {
+  const normalized = normalizeImagePath(src);
+  if (!normalized || getCachedHudImageAspect(normalized)) return true;
+
+  let texture = null;
+  try {
+    texture = await foundry.canvas.loadTexture(normalized);
+  } catch (error) {
+    console.warn(`${SYSTEM_ID} | HUD weapon image failed to load: ${normalized}`, error);
+    return false;
+  }
+
+  const width = Number(texture?.width ?? texture?.baseTexture?.width);
+  const height = Number(texture?.height ?? texture?.baseTexture?.height);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return false;
+
+  const aspectText = String(Math.max(1, width / height));
+  for (const key of getHudImageAspectCacheKeys(src)) hudImageAspectCache.set(key, aspectText);
+  for (const key of getHudImageAspectCacheKeys(normalized)) hudImageAspectCache.set(key, aspectText);
+  return true;
 }
 
 function getUniqueHudWeaponSlots(slots = []) {
@@ -2301,6 +2469,180 @@ function getUniqueHudWeaponSlots(slots = []) {
 function getSelectedHudWeaponSlot(weaponSet = null, selectedWeaponId = "") {
   if (!weaponSet || !selectedWeaponId) return null;
   return (weaponSet.slots ?? []).find(slot => slot.item?.id === selectedWeaponId && !slot.phantom) ?? null;
+}
+
+function prepareHudWeaponEquipChoices(actor, target = null, hudIcons = {}) {
+  if (!actor || !target?.weaponSetKey || !target?.weaponSlotKey) return [];
+  const cost = getWeaponSwitchActionPointCost(actor);
+  return actor.items.contents
+    .filter(item => isHudWeaponEquipCandidate(item))
+    .filter(item => canFitHudWeaponInTarget(actor, item, target.weaponSetKey, target.weaponSlotKey, {
+      replaceItemId: target.replaceItemId ?? ""
+    }))
+    .map(item => ({
+      id: item.id,
+      name: item.name,
+      img: normalizeImagePath(item.img, normalizeImagePath(hudIcons.emptyWeaponSlotIcon, "icons/svg/combat.svg")),
+      weaponSetKey: target.weaponSetKey,
+      weaponSlotKey: target.weaponSlotKey,
+      hudAspectStyle: getHudItemAspectStyle(item),
+      actionPointCostLabel: cost > 0 ? `${cost} ОД` : "",
+      disabled: false
+    }));
+}
+
+function isHudWeaponEquipCandidate(item) {
+  return Boolean(
+    item
+    && item.type === "gear"
+    && item.system?.placement?.mode === "inventory"
+    && hasItemFunction(item, ITEM_FUNCTIONS.weapon, { ignoreBroken: true })
+    && getWeaponSlotRequirement(item).selectedKeys.size
+  );
+}
+
+async function equipHudWeaponInSlot(actor, item, weaponSetKey = "", weaponSlotKey = "", { replaceItemId = "" } = {}) {
+  if (!actor?.isOwner || !item) return null;
+  if (!canFitHudWeaponInTarget(actor, item, weaponSetKey, weaponSlotKey, { replaceItemId })) {
+    ui.notifications.warn("Оружие не помещается в выбранные слоты.");
+    return null;
+  }
+
+  const conflicts = getHudWeaponPlacementConflicts(actor, item, weaponSetKey, weaponSlotKey, { replaceItemId });
+  const replacementUpdates = createHudWeaponReplacementUpdates(actor, conflicts, [item.id]);
+  if (!replacementUpdates) return null;
+  if (!canSpendWeaponSwitchActionPoints(actor)) return null;
+
+  const storedPlacement = createStoredPlacement({
+    mode: "weapon",
+    equipmentSlot: "",
+    weaponSet: weaponSetKey,
+    weaponSlot: weaponSlotKey,
+    limbKey: "",
+    x: 1,
+    y: 1
+  }, item);
+  const updates = [
+    ...replacementUpdates,
+    {
+      _id: item.id,
+      "system.equipped": false,
+      "system.container.parentId": ROOT_CONTAINER_ID,
+      "system.placement.mode": storedPlacement.mode,
+      "system.placement.equipmentSlot": storedPlacement.equipmentSlot,
+      "system.placement.weaponSet": storedPlacement.weaponSet,
+      "system.placement.weaponSlot": storedPlacement.weaponSlot,
+      "system.placement.limbKey": storedPlacement.limbKey,
+      "system.placement.x": storedPlacement.x,
+      "system.placement.y": storedPlacement.y,
+      "system.placement.width": storedPlacement.width,
+      "system.placement.height": storedPlacement.height
+    }
+  ];
+
+  await actor.updateEmbeddedDocuments("Item", updates);
+  await spendWeaponSwitchActionPoints(actor);
+  return actor.items.get(item.id) ?? item;
+}
+
+function canFitHudWeaponInTarget(actor, item, weaponSetKey = "", weaponSlotKey = "", { replaceItemId = "" } = {}) {
+  const requiredSlotKeys = getHudWeaponPlacementSlotKeys(actor, item, weaponSetKey, weaponSlotKey);
+  if (!requiredSlotKeys.length) return false;
+  const occupiedItemIds = getHudWeaponOccupiedItemIds(actor, weaponSetKey, requiredSlotKeys);
+  for (const itemId of occupiedItemIds) {
+    if (itemId === item.id || itemId === replaceItemId) continue;
+    return false;
+  }
+  return true;
+}
+
+function getHudWeaponPlacementSlotKeys(actor, item, weaponSetKey = "", weaponSlotKey = "") {
+  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId) ?? null;
+  if (!weaponSetKey || !weaponSlotKey) return [];
+
+  if (isContainerWeaponSetKey(weaponSetKey)) {
+    const inventory = prepareInventoryContext(actor, race);
+    const set = getHudWeaponSets(inventory).find(entry => entry.key === weaponSetKey);
+    const slots = set?.slots ?? [];
+    const primaryIndex = slots.findIndex(slot => slot.key === weaponSlotKey);
+    if (primaryIndex < 0) return [];
+    const size = getWeaponSlotRequirementSize(item);
+    const requiredSlots = slots.slice(primaryIndex, primaryIndex + size);
+    return requiredSlots.length === size ? requiredSlots.map(slot => slot.key) : [];
+  }
+
+  if (!canUseWeaponSlotForItem(race, item, weaponSetKey, weaponSlotKey)) return [];
+  return getRequiredWeaponSlotsForItem(race, item, weaponSetKey, weaponSlotKey).map(slot => slot.key);
+}
+
+function getHudWeaponOccupiedItemIds(actor, weaponSetKey = "", slotKeys = []) {
+  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId) ?? null;
+  const inventory = prepareInventoryContext(actor, race);
+  const set = getHudWeaponSets(inventory).find(entry => entry.key === weaponSetKey);
+  const targetKeys = new Set(slotKeys);
+  return Array.from(new Set((set?.slots ?? [])
+    .filter(slot => targetKeys.has(slot.key))
+    .map(slot => String(slot.item?.id ?? ""))
+    .filter(Boolean)));
+}
+
+function getHudWeaponPlacementConflicts(actor, item, weaponSetKey = "", weaponSlotKey = "", { replaceItemId = "" } = {}) {
+  const itemIds = getHudWeaponOccupiedItemIds(actor, weaponSetKey, getHudWeaponPlacementSlotKeys(actor, item, weaponSetKey, weaponSlotKey))
+    .filter(itemId => itemId !== item.id);
+  if (replaceItemId && !itemIds.includes(replaceItemId)) itemIds.push(replaceItemId);
+  return Array.from(new Set(itemIds))
+    .map(itemId => actor.items.get(itemId))
+    .filter(Boolean);
+}
+
+function createHudWeaponReplacementUpdates(actor, conflicts = [], excludeItemIds = []) {
+  const items = Array.from(new Map(conflicts.filter(Boolean).map(item => [item.id, item])).values());
+  if (!items.length) return [];
+
+  const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+  for (const item of items) excluded.add(item.id);
+
+  const allItems = actor.items.contents;
+  const contextItems = getContextInventoryItems(ROOT_CONTAINER_ID, allItems)
+    .filter(item => !excluded.has(item.id));
+  const { columns, rows } = getActorRootInventoryDimensions(actor);
+  const options = getActorRootInventoryGridOptions(actor, ROOT_CONTAINER_ID);
+  const reservedPlacements = [];
+  const updates = [];
+
+  for (const item of items) {
+    const placement = findFirstAvailableInventoryPlacement(
+      contextItems,
+      columns,
+      rows,
+      item,
+      allItems,
+      Array.from(excluded),
+      reservedPlacements,
+      options
+    );
+    if (!placement) {
+      ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+      return null;
+    }
+    reservedPlacements.push(placement);
+    const storedPlacement = createStoredPlacement(placement, item);
+    updates.push({
+      _id: item.id,
+      "system.equipped": false,
+      "system.container.parentId": ROOT_CONTAINER_ID,
+      "system.placement.mode": storedPlacement.mode,
+      "system.placement.equipmentSlot": storedPlacement.equipmentSlot,
+      "system.placement.weaponSet": storedPlacement.weaponSet,
+      "system.placement.weaponSlot": storedPlacement.weaponSlot,
+      "system.placement.limbKey": storedPlacement.limbKey,
+      "system.placement.x": storedPlacement.x,
+      "system.placement.y": storedPlacement.y,
+      "system.placement.width": storedPlacement.width,
+      "system.placement.height": storedPlacement.height
+    });
+  }
+  return updates;
 }
 
 function isHudWeaponDisabled(actor, weapon) {
@@ -2396,10 +2738,10 @@ function isWeaponActionBrokenForHud(weapon, weaponFunctionId = "") {
     .some(entry => String(entry.id ?? "") === id && Boolean(entry.sourceBroken));
 }
 
-function prepareWeaponActionRows(actor, selectedWeapon, forceDisabled = false, hudIcons = {}) {
+function prepareWeaponActionRows(actor, selectedWeapon, forceDisabled = false, hudIcons = {}, selectedWeaponSlot = null) {
   if (!selectedWeapon) return [];
   const weaponBroken = isItemBrokenByCondition(selectedWeapon);
-  return getEnabledWeaponFunctions(selectedWeapon, { ignoreBroken: true })
+  const rows = getEnabledWeaponFunctions(selectedWeapon, { ignoreBroken: true })
     .sort((left, right) => {
       if (left.isPrimary === right.isPrimary) return (left.index ?? 0) - (right.index ?? 0);
       return left.isPrimary ? 1 : -1;
@@ -2412,6 +2754,19 @@ function prepareWeaponActionRows(actor, selectedWeapon, forceDisabled = false, h
       actions: prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunction, forceDisabled, hudIcons, { weaponBroken })
     }))
     .filter(row => row.actions.length);
+  if (rows.length && selectedWeaponSlot?.weaponSetKey && selectedWeaponSlot?.key) {
+    rows.at(-1).actions.push({
+      key: "replaceWeapon",
+      label: "Заменить",
+      isWeaponReplaceControl: true,
+      disabled: forceDisabled,
+      itemId: selectedWeapon.id,
+      weaponSetKey: selectedWeaponSlot.weaponSetKey,
+      weaponSlotKey: selectedWeaponSlot.key,
+      img: normalizeImagePath(hudIcons.weaponActions?.replaceWeapon, "icons/svg/direction.svg")
+    });
+  }
+  return rows;
 }
 
 function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunction, forceDisabled = false, hudIcons = {}, { weaponBroken = false } = {}) {
@@ -3806,22 +4161,6 @@ function balanceTokenActionHudPopup(popup, availableWidth) {
   const rows = Math.max(1, Math.ceil(itemCount / maxColumns));
   const columns = Math.max(1, Math.ceil(itemCount / rows));
   popup.style.setProperty("--fallout-maw-token-hud-balanced-columns", String(columns));
-}
-
-function setHudTileImageAspect(image) {
-  const width = Number(image?.naturalWidth);
-  const height = Number(image?.naturalHeight);
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return false;
-  const tile = image.closest(".fallout-maw-token-hud-main-action, .fallout-maw-token-hud-weapon-slot, .fallout-maw-token-hud-set-slot-preview");
-  if (!tile) return false;
-  const aspect = Math.max(1, width / height);
-  const aspectText = String(aspect);
-  for (const key of getHudImageAspectCacheKeys(image.getAttribute("src") || image.currentSrc || image.src)) {
-    hudImageAspectCache.set(key, aspectText);
-  }
-  if (tile.style.getPropertyValue("--fallout-maw-hud-image-aspect") === aspectText) return false;
-  tile.style.setProperty("--fallout-maw-hud-image-aspect", aspectText);
-  return true;
 }
 
 function getHudImageAspectCacheKeys(src = "") {
