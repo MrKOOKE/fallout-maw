@@ -1640,7 +1640,7 @@ function getActorLimbSettings(actor, limbKey = "") {
       label: String(part.partType ?? "").trim() || constructPart.name || limbKey,
       stateMax: String(constructPart.system?.functions?.condition?.max ?? actor?.system?.limbs?.[limbKey]?.max ?? "0"),
       damageMultiplier: 1,
-      aimedDifficultyPercent: 0,
+      aimedDifficultyPercent: toInteger(part.aimedDifficultyPercent),
       critical: Boolean(part.critical),
       lossEffects: normalizeLimbLossEffects(part.lossEffects)
     };

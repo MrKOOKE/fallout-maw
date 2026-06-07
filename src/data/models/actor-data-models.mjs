@@ -667,7 +667,7 @@ function getConstructPartLimbData(items) {
       stateMax: String(max),
       min: 0,
       damageMultiplier: 1,
-      aimedDifficultyPercent: 0,
+      aimedDifficultyPercent: toInteger(part.aimedDifficultyPercent),
       critical: Boolean(part.critical)
     });
     source[key] = {

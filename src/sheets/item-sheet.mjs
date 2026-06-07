@@ -2120,6 +2120,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return this.item.update({
         "system.functions.constructPart.enabled": true,
         "system.functions.constructPart.partType": "",
+        "system.functions.constructPart.aimedDifficultyPercent": 0,
         "system.functions.constructPart.critical": false,
         "system.functions.constructPart.lossEffects": [],
         "system.functions.constructPart.weaponSets": []
@@ -2319,6 +2320,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return this.item.update({
         "system.functions.constructPart.enabled": false,
         "system.functions.constructPart.partType": "",
+        "system.functions.constructPart.aimedDifficultyPercent": 0,
         "system.functions.constructPart.critical": false,
         "system.functions.constructPart.lossEffects": [],
         "system.functions.constructPart.weaponSets": [],
