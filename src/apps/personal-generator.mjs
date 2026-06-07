@@ -1490,7 +1490,7 @@ function normalizeItemEntries(entries = []) {
       condMin: Math.max(0, Math.min(100, toInteger(entry.condMin ?? 100) || 100)),
       condMax: Math.max(0, Math.min(100, toInteger(entry.condMax ?? 100) || 100)),
       weight: Math.max(1, toInteger(entry.weight ?? 100) || 100),
-      itemTradeLocked: entry.itemTradeLocked === true
+      itemTradeLocked: entry.itemTradeLocked === true || entry.locked === true || entry.system?.locked === true
     };
   });
 }
@@ -1518,7 +1518,8 @@ function createItemEntryFromItem(item) {
     uuid: item.uuid,
     name: item.name,
     img: normalizeImagePath(item.img),
-    hasCondition: hasItemFunction(item, ITEM_FUNCTIONS.condition)
+    hasCondition: hasItemFunction(item, ITEM_FUNCTIONS.condition),
+    itemTradeLocked: Boolean(item.system?.locked || item.getFlag?.(SYSTEM_ID, "itemTradeLocked"))
   };
 }
 
@@ -1704,7 +1705,10 @@ function createEmbeddedItemData(item, quantity, entry = {}) {
   delete data.id;
   delete data.folder;
   foundry.utils.setProperty(data, "system.quantity", count);
-  if (entry.itemTradeLocked) foundry.utils.setProperty(data, `flags.${SYSTEM_ID}.itemTradeLocked`, true);
+  if (entry.itemTradeLocked) {
+    foundry.utils.setProperty(data, "system.locked", true);
+    foundry.utils.setProperty(data, `flags.${SYSTEM_ID}.itemTradeLocked`, true);
+  }
   return data;
 }
 

@@ -20,6 +20,7 @@ export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
       price: new NumberField({ required: true, min: 0, initial: 0 }),
       priceCurrency: new StringField({ required: true, blank: true, initial: () => getPrimaryCurrencyKey() }),
       equipped: new BooleanField({ required: true, initial: false }),
+      locked: new BooleanField({ required: true, initial: false }),
       container: new SchemaField({
         parentId: new StringField({ required: true, blank: true, initial: "" })
       }),

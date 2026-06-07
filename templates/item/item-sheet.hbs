@@ -34,6 +34,10 @@
         <span>{{localize "FALLOUTMAW.Item.Equipped"}}</span>
         <input type="checkbox" name="system.equipped" aria-label="{{localize 'FALLOUTMAW.Item.Equipped'}}" {{checked system.equipped}}>
       </div>
+      <div class="fallout-maw-inline-checkbox fallout-maw-equipped-control">
+        <span>{{localize "FALLOUTMAW.Common.Locked"}}</span>
+        <input type="checkbox" name="system.locked" aria-label="{{localize 'FALLOUTMAW.Common.Locked'}}" {{checked system.locked}}>
+      </div>
     </div>
     {{else if isAbility}}
     {{else}}
@@ -73,6 +77,10 @@
       <div class="fallout-maw-inline-checkbox fallout-maw-equipped-control">
         <span>{{localize "FALLOUTMAW.Item.Equipped"}}</span>
         <input type="checkbox" name="system.equipped" aria-label="{{localize 'FALLOUTMAW.Item.Equipped'}}" {{checked system.equipped}}>
+      </div>
+      <div class="fallout-maw-inline-checkbox fallout-maw-equipped-control">
+        <span>{{localize "FALLOUTMAW.Common.Locked"}}</span>
+        <input type="checkbox" name="system.locked" aria-label="{{localize 'FALLOUTMAW.Common.Locked'}}" {{checked system.locked}}>
       </div>
     </div>
     {{/if}}

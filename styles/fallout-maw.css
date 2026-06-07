@@ -3249,6 +3249,10 @@
   box-shadow: inset 0 0 0 2px rgba(235, 190, 80, 0.82);
 }
 
+.fallout-maw-inventory-item.locked {
+  box-shadow: inset 0 0 0 2px rgba(155, 170, 190, 0.72);
+}
+
 .fallout-maw-inventory-item.phantom {
   cursor: default;
   filter: grayscale(0.35);
@@ -11674,6 +11678,10 @@ label.fallout-maw-mitigation-cell {
     0 4px 0 rgba(0, 0, 0, 0.7);
   margin-top: 1rem;
   padding: 0.88rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-locked-storage-section .fallout-maw-container-overview-name {
+  flex-basis: auto;
 }
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-sheet {

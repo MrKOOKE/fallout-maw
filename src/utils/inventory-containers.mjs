@@ -4,6 +4,8 @@ import { ITEM_FUNCTIONS, hasItemFunction } from "./item-functions.mjs";
 export const CONTAINER_FUNCTION = ITEM_FUNCTIONS.container;
 export const ROOT_CONTAINER_ID = "";
 export const INFINITE_ROOT_INVENTORY_EMPTY_ROWS = 4;
+export const LOCKED_STORAGE_PARENT_ID = "__lockedStorage";
+export const LOCKED_STORAGE_PLACEMENT_MODE = "lockedStorage";
 
 export function getItemsArray(items) {
   if (Array.isArray(items)) return items;
@@ -32,6 +34,18 @@ export function isContainerItem(itemOrSystem = null) {
 
 export function getItemContainerParentId(itemOrSystem = null) {
   return String(getItemSystem(itemOrSystem)?.container?.parentId ?? "");
+}
+
+export function isItemLocked(itemOrSystem = null) {
+  return Boolean(getItemSystem(itemOrSystem)?.locked);
+}
+
+export function isLockedStoragePlacement(placement = null) {
+  return String(placement?.mode ?? "") === LOCKED_STORAGE_PLACEMENT_MODE;
+}
+
+export function isItemInLockedStorage(itemOrSystem = null) {
+  return isLockedStoragePlacement(getItemSystem(itemOrSystem)?.placement ?? {});
 }
 
 export function getItemQuantity(itemOrSystem = null) {
@@ -253,6 +267,7 @@ export function createStoredPlacement(placement = {}, itemOrSystem = null) {
     weaponSet: String(placement?.weaponSet ?? ""),
     weaponSlot: String(placement?.weaponSlot ?? ""),
     limbKey: String(placement?.limbKey ?? ""),
+    constructPartOrder: Math.max(0, toInteger(placement?.constructPartOrder)),
     x: Math.max(1, toInteger(placement?.x)),
     y: Math.max(1, toInteger(placement?.y)),
     width: baseFootprint.width,
@@ -291,6 +306,13 @@ export function inventoryPlacementsOverlap(left, right) {
 }
 
 export function getContextInventoryItems(parentId = ROOT_CONTAINER_ID, items = null) {
+  if (String(parentId ?? ROOT_CONTAINER_ID) === LOCKED_STORAGE_PARENT_ID) {
+    return getItemsArray(items).filter(item => {
+      if (!isInventoryManagedItem(item)) return false;
+      return isItemInLockedStorage(item);
+    });
+  }
+
   return getItemsArray(items).filter(item => {
     if (!isInventoryManagedItem(item)) return false;
     if (getItemContainerParentId(item) !== String(parentId ?? "")) return false;
@@ -313,10 +335,11 @@ export function isInventoryPlacementAvailable(
   const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
   if (reservedPlacements.some(existing => inventoryPlacementsOverlap(placement, existing))) return false;
 
+  const placementMode = String(options.placementMode ?? placement?.mode ?? "inventory");
   return !getItemsArray(contextItems).some(item => {
     if (!item || excluded.has(getItemId(item))) return false;
     const itemPlacement = normalizeInventoryPlacement(item.system?.placement ?? item.placement ?? {}, item, allItems);
-    return itemPlacement.mode === "inventory" && inventoryPlacementsOverlap(placement, itemPlacement);
+    return itemPlacement.mode === placementMode && inventoryPlacementsOverlap(placement, itemPlacement);
   });
 }
 
@@ -514,8 +537,9 @@ function resolveInventoryGridPlacements(contextItems, columns, rows, allItems, o
     visualColumns = Math.max(visualColumns, placement.x + placement.width - 1);
     visualRows = Math.max(visualRows, placement.y + placement.height - 1);
   };
+  const preferredPlacementModes = new Set(options.preferredPlacementModes ?? [String(options.placementMode ?? "inventory")]);
   const preferredItems = items
-    .filter(item => String(item.system?.placement?.mode ?? "inventory") === "inventory")
+    .filter(item => preferredPlacementModes.has(String(item.system?.placement?.mode ?? "inventory")))
     .sort((left, right) => {
       const leftPlacement = left.system?.placement ?? {};
       const rightPlacement = right.system?.placement ?? {};
@@ -546,10 +570,23 @@ function resolveInventoryGridPlacements(contextItems, columns, rows, allItems, o
     reservePlacement(item, placement, phantom);
   }
 
+  if (options.compactVerticalOffset && resolvedItems.length) {
+    const minY = resolvedItems.reduce((min, entry) => Math.min(min, toInteger(entry.placement?.y) || 1), Number.POSITIVE_INFINITY);
+    const offset = Math.max(0, minY - 1);
+    if (offset > 0) {
+      for (const placement of reservedPlacements) placement.y = Math.max(1, placement.y - offset);
+      visualRows = reservedPlacements.reduce(
+        (max, placement) => Math.max(max, placement.y + placement.height - 1),
+        rows
+      );
+    }
+  }
+
   const extraRows = options.allowOverflowRows ? Math.max(0, toInteger(options.extraRows)) : 0;
+  const overflowRows = options.compactRows ? Math.max(1, visualRows) : Math.max(rows, visualRows);
   return {
     columns: visualColumns,
-    rows: options.allowOverflowRows ? Math.max(rows, visualRows) + extraRows : visualRows,
+    rows: options.allowOverflowRows ? overflowRows + extraRows : visualRows,
     placements: reservedPlacements,
     items: resolvedItems
   };

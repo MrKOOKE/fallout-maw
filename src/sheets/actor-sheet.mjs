@@ -73,6 +73,9 @@ import {
 } from "../utils/item-functions.mjs";
 import {
   ROOT_CONTAINER_ID,
+  INFINITE_ROOT_INVENTORY_EMPTY_ROWS,
+  LOCKED_STORAGE_PARENT_ID,
+  LOCKED_STORAGE_PLACEMENT_MODE,
   buildInventoryCellStyle as buildInventoryCellStyleHelper,
   createStoredPlacement,
   createInventoryPlacement as createInventoryPlacementHelper,
@@ -1105,6 +1108,29 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     return getContextInventoryItems(parentId, this.actor.items);
   }
 
+  #isLockedStorageParentId(parentId = ROOT_CONTAINER_ID) {
+    return String(parentId ?? ROOT_CONTAINER_ID) === LOCKED_STORAGE_PARENT_ID;
+  }
+
+  #getStoredInventoryParentId(parentId = ROOT_CONTAINER_ID) {
+    return this.#isLockedStorageParentId(parentId) ? ROOT_CONTAINER_ID : parentId;
+  }
+
+  #getInventoryPlacementModeForParent(parentId = ROOT_CONTAINER_ID) {
+    return this.#isLockedStorageParentId(parentId) ? LOCKED_STORAGE_PLACEMENT_MODE : "inventory";
+  }
+
+  #createContextInventoryPlacement(placement = {}, parentId = ROOT_CONTAINER_ID) {
+    return {
+      ...placement,
+      mode: this.#getInventoryPlacementModeForParent(parentId),
+      equipmentSlot: "",
+      weaponSet: "",
+      weaponSlot: "",
+      limbKey: ""
+    };
+  }
+
   #highlightEquipmentSlotsForItem(itemData) {
     const race = this.#getCurrentRace();
     const selectedSlots = getRaceEquipmentSlotsForItem(race, itemData);
@@ -1260,8 +1286,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #getPlacementForDropZone(zone, itemData = null, excludeItemIds = [], parentId = ROOT_CONTAINER_ID, event = null) {
     if (zone.dataset.inventoryCell !== undefined || zone.dataset.inventoryGridItem !== undefined) {
-      return this.#getInventoryPointerPlacement(zone, itemData, excludeItemIds, parentId, event)
+      const placement = this.#getInventoryPointerPlacement(zone, itemData, excludeItemIds, parentId, event)
         ?? createInventoryPlacement(toInteger(zone.dataset.x), toInteger(zone.dataset.y), itemData, this.actor.items);
+      return this.#createContextInventoryPlacement(placement, parentId);
     }
 
     if (zone.dataset.equipmentSlot) {
@@ -1306,7 +1333,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       };
     }
 
-    return this.#getFirstAvailableInventoryPlacement(itemData, excludeItemIds, [], parentId);
+    const placement = this.#getFirstAvailableInventoryPlacement(itemData, excludeItemIds, [], parentId);
+    return placement ? this.#createContextInventoryPlacement(placement, parentId) : null;
   }
 
   #getInventoryPointerPlacement(
@@ -1397,6 +1425,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #getInventoryGridDimensions(parentId = ROOT_CONTAINER_ID) {
+    if (this.#isLockedStorageParentId(parentId)) {
+      return getInventoryGridDimensions(this.#getCurrentRace(), this.actor);
+    }
     if (parentId && (parentId !== ROOT_CONTAINER_ID)) {
       return getContainerDimensions(this.actor.items.get(parentId));
     }
@@ -1404,6 +1435,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #getInventoryGridOptions(parentId = ROOT_CONTAINER_ID) {
+    if (this.#isLockedStorageParentId(parentId)) {
+      return {
+        allowOverflowRows: true,
+        extraRows: INFINITE_ROOT_INVENTORY_EMPTY_ROWS,
+        placementMode: LOCKED_STORAGE_PLACEMENT_MODE,
+        preferredPlacementModes: [LOCKED_STORAGE_PLACEMENT_MODE]
+      };
+    }
     return getActorRootInventoryGridOptions(this.actor, parentId);
   }
 
@@ -1520,15 +1559,16 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!cell) return null;
     const x = toInteger(cell.dataset.x);
     const y = toInteger(cell.dataset.y);
+    const placementMode = this.#getInventoryPlacementModeForParent(parentId);
     return this.#getContextInventoryItems(parentId).find(item => {
       if (item.id === sourceItemId) return false;
       const placement = normalizeInventoryPlacement(item.system?.placement ?? {}, item, this.actor.items);
-      return placement.mode === "inventory" && placementContainsInventoryCell(placement, x, y);
+      return placement.mode === placementMode && placementContainsInventoryCell(placement, x, y);
     }) ?? null;
   }
 
   async #moveOwnedItem(item, placement, targetItem = null, parentId = ROOT_CONTAINER_ID) {
-    if (placement.mode === "inventory") {
+    if (placement.mode === "inventory" || placement.mode === LOCKED_STORAGE_PLACEMENT_MODE) {
       return this.#insertItemIntoInventory(item.toObject(), placement, { sourceItem: item, targetItem, parentId });
     }
 
@@ -1632,7 +1672,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   async #createOrStackDroppedItem(itemData, placement, targetItem = null, parentId = ROOT_CONTAINER_ID) {
     if (!itemData) return null;
-    if (placement.mode === "inventory") {
+    if (placement.mode === "inventory" || placement.mode === LOCKED_STORAGE_PLACEMENT_MODE) {
       return this.#insertItemIntoInventory(itemData, placement, { targetItem, parentId });
     }
 
@@ -1678,7 +1718,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const maxStack = getItemMaxStack(itemData);
     let remainingQuantity = Math.max(1, getItemQuantity(itemData));
     const excludedIds = [sourceItem?.id ?? ""].filter(Boolean);
-    const preferredPlacement = normalizeInventoryPlacement(requestedPlacement, itemData, this.actor.items);
+    const storedParentId = this.#getStoredInventoryParentId(parentId);
+    const preferredPlacement = this.#createContextInventoryPlacement(
+      normalizeInventoryPlacement(requestedPlacement, itemData, this.actor.items),
+      parentId
+    );
     const stackTargets = this.#getCompatibleStackTarget(itemData, targetItem, excludedIds, parentId);
     const targetUpdates = [];
 
@@ -1724,7 +1768,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         _id: sourceItem.id,
         "system.quantity": sourceQuantity,
         "system.equipped": false,
-        "system.container.parentId": parentId,
+        ...(this.#isLockedStorageParentId(parentId) ? { "system.locked": true } : {}),
+        "system.container.parentId": storedParentId,
         "system.placement.mode": storedPlacement.mode,
         "system.placement.equipmentSlot": storedPlacement.equipmentSlot,
         "system.placement.weaponSet": storedPlacement.weaponSet,
@@ -1772,16 +1817,18 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #getCompatibleStackTarget(itemData, preferredTarget = null, excludeItemIds = [], parentId = ROOT_CONTAINER_ID) {
     const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+    const storedParentId = this.#getStoredInventoryParentId(parentId);
+    const placementMode = this.#getInventoryPlacementModeForParent(parentId);
     const canUsePreferredTarget = preferredTarget
       && !excluded.has(preferredTarget.id)
-      && (getItemContainerParentId(preferredTarget) === parentId)
-      && preferredTarget.system?.placement?.mode === "inventory"
+      && (getItemContainerParentId(preferredTarget) === storedParentId)
+      && preferredTarget.system?.placement?.mode === placementMode
       && this.#areStackable(itemData, preferredTarget)
       && (getItemQuantity(preferredTarget) < getItemMaxStack(preferredTarget));
     const targets = canUsePreferredTarget ? [preferredTarget] : [];
     for (const item of this.#getContextInventoryItems(parentId)) {
       if (!item?.id || excluded.has(item.id) || item.id === preferredTarget?.id) continue;
-      if (item.system?.placement?.mode !== "inventory") continue;
+      if (item.system?.placement?.mode !== placementMode) continue;
       if (!this.#areStackable(itemData, item)) continue;
       if (getItemQuantity(item) >= getItemMaxStack(item)) continue;
       targets.push(item);
@@ -1798,9 +1845,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     reservedPlacements = []
   ) {
     const excludedIds = [sourceItem.id, targetItem?.id ?? ""].filter(Boolean);
+    const storedParentId = this.#getStoredInventoryParentId(parentId);
+    const placementMode = this.#getInventoryPlacementModeForParent(parentId);
     const currentPlacement = (
-      sourceItem.system?.placement?.mode === "inventory"
-      && (getItemContainerParentId(sourceItem) === parentId)
+      sourceItem.system?.placement?.mode === placementMode
+      && (getItemContainerParentId(sourceItem) === storedParentId)
     )
       ? normalizeInventoryPlacement(sourceItem.system?.placement ?? {}, itemData, this.actor.items)
       : null;
@@ -1814,20 +1863,22 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (currentPlacement && this.#isInventoryPlacementAvailable(currentPlacement, excludedIds, reservedPlacements, parentId)) {
       return currentPlacement;
     }
-    return this.#getFirstAvailableInventoryPlacement(itemData, excludedIds, reservedPlacements, parentId);
+    const placement = this.#getFirstAvailableInventoryPlacement(itemData, excludedIds, reservedPlacements, parentId);
+    return placement ? this.#createContextInventoryPlacement(placement, parentId) : null;
   }
 
   #createInventoryStackData(itemData, quantity, placement, parentId = ROOT_CONTAINER_ID) {
     const createData = foundry.utils.deepClone(itemData);
     delete createData._id;
     delete createData.id;
-    const storedPlacement = createStoredPlacement(placement, itemData);
+    const storedPlacement = createStoredPlacement(this.#createContextInventoryPlacement(placement, parentId), itemData);
     foundry.utils.mergeObject(createData, {
       system: {
         quantity,
         equipped: false,
+        ...(this.#isLockedStorageParentId(parentId) ? { locked: true } : {}),
         container: {
-          parentId
+          parentId: this.#getStoredInventoryParentId(parentId)
         },
         placement: {
           mode: storedPlacement.mode,

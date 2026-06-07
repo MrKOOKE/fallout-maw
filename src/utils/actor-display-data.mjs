@@ -19,7 +19,11 @@ import {
   getItemQuantity,
   getItemTotalWeight,
   INFINITE_ROOT_INVENTORY_EMPTY_ROWS,
+  isItemInLockedStorage,
+  isItemLocked,
   isContainerItem,
+  LOCKED_STORAGE_PARENT_ID,
+  LOCKED_STORAGE_PLACEMENT_MODE,
   normalizeInventoryPlacement,
   prepareInventoryGridContext
 } from "./inventory-containers.mjs";
@@ -126,10 +130,14 @@ export function getActorRootInventoryGridOptions(actor, parentId = "") {
   };
 }
 
-export function prepareInventoryContext(actor, race) {
+export function prepareInventoryContext(actor, race, { includeLocked = true } = {}) {
   const currencies = getCurrencySettings();
   const { columns, rows } = getActorInventoryGridDimensions(actor, race);
-  const allItems = actor.items.contents.filter(item => !["ability", "trauma", "disease"].includes(item.type) && !isNaturalRaceItem(item));
+  const allItems = actor.items.contents.filter(item => (
+    !["ability", "trauma", "disease"].includes(item.type)
+    && !isNaturalRaceItem(item)
+    && (includeLocked || !isItemLocked(item))
+  ));
   const allItemData = allItems.map(item => createInventoryItemData(item, allItems, currencies));
   const naturalWeaponSet = actor?.type === "construct"
     ? getConstructNaturalWeaponSetContext(actor, allItemData)
@@ -179,7 +187,31 @@ export function prepareInventoryContext(actor, race) {
   const inventoryItems = allItems.filter(item => (
     !assignedItemIds.has(item.id)
     && !getItemContainerParentId(item)
+    && !isItemInLockedStorage(item)
   ));
+  const lockedStorageItems = allItems.filter(item => isItemInLockedStorage(item));
+  const lockedStorage = {
+    id: LOCKED_STORAGE_PARENT_ID,
+    columns,
+    rows: 1,
+    grid: prepareInventoryGridContext(lockedStorageItems, columns, 1, allItems, (item, placement) => {
+      const normalizedPlacement = {
+        ...placement,
+        mode: LOCKED_STORAGE_PLACEMENT_MODE
+      };
+      return {
+        ...createInventoryItemData(item, allItems, currencies, normalizedPlacement),
+        gridStyle: buildInventoryCellStyle(normalizedPlacement.x, normalizedPlacement.y, normalizedPlacement)
+      };
+    }, {
+      allowOverflowRows: true,
+      compactRows: true,
+      compactVerticalOffset: true,
+      extraRows: 1,
+      placementMode: LOCKED_STORAGE_PLACEMENT_MODE,
+      preferredPlacementModes: [LOCKED_STORAGE_PLACEMENT_MODE]
+    })
+  };
   const grid = prepareInventoryGridContext(inventoryItems, columns, rows, allItems, (item, placement) => ({
     ...createInventoryItemData(item, allItems, currencies, placement),
     gridStyle: buildInventoryCellStyle(placement.x, placement.y, placement)
@@ -216,6 +248,7 @@ export function prepareInventoryContext(actor, race) {
     weaponSets,
     naturalWeaponSet,
     containers,
+    lockedStorage,
     grid
   };
 }
@@ -524,6 +557,7 @@ export function createInventoryItemData(item, allItems, currencies = [], placeme
     priceCurrency: item.system?.priceCurrency ?? "",
     priceCurrencyLabel: currencies.find(currency => currency.key === item.system?.priceCurrency)?.label ?? "",
     equipped: Boolean(item.system?.equipped),
+    locked: Boolean(item.system?.locked),
     brokenCondition: isItemBrokenByCondition(item),
     occupiedSlots: item.system?.occupiedSlots ?? {},
     weaponSlotRequirement: item.system?.weaponSlotRequirement ?? { mode: "oneOf", slots: {} },

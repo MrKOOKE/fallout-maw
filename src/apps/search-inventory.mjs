@@ -11,6 +11,9 @@ import {
 } from "../utils/actor-display-data.mjs";
 import {
   ROOT_CONTAINER_ID,
+  INFINITE_ROOT_INVENTORY_EMPTY_ROWS,
+  LOCKED_STORAGE_PARENT_ID,
+  LOCKED_STORAGE_PLACEMENT_MODE,
   buildInventoryCellStyle,
   createInventoryPlacement,
   createStoredPlacement,
@@ -27,7 +30,9 @@ import {
   getItemQuantity,
   getItemTotalWeight,
   hasContainerCycle,
+  inventoryPlacementsOverlap,
   isContainerItem,
+  isItemLocked,
   isInventoryPlacementAvailable,
   normalizeInventoryPlacement,
   placementContainsInventoryCell,
@@ -3011,13 +3016,14 @@ export function prepareSearchActorContext(actor, {
   equipmentCollapsed = false,
   selector = null,
   canControl = false,
-  canConfirm = false
+  canConfirm = false,
+  showLockedItems = false
 } = {}) {
   if (!actor) return null;
   const isTrade = mode === SEARCH_INVENTORY_MODE_TRADE;
   const selectedTradeCurrencyKey = normalizeTradeCurrencyKey(tradeCurrencyKey);
   const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
-  const inventory = prepareInventoryContext(actor, race);
+  const inventory = prepareInventoryContext(actor, race, { includeLocked: showLockedItems });
   const decoratedInventory = decorateInventoryForSearch(inventory, actor, canInteract, {
     isTrade,
     tradeCurrencyKey: selectedTradeCurrencyKey,
@@ -3070,7 +3076,7 @@ function decorateInventoryForSearch(inventory, actor, canInteract, { isTrade = f
     return {
       ...item,
       actorUuid,
-      draggableClass: canInteract && !item.locked ? `draggable${isTradeItemFullyOffered(item, tradeOffer) ? " trade-offered-source" : ""}` : "",
+      draggableClass: canInteract ? `draggable${isTradeItemFullyOffered(item, tradeOffer) ? " trade-offered-source" : ""}` : "",
       tradePrice: isTrade && liveItem ? formatItemTradePrice(liveItem, tradeCurrencyKey, actor, { barterAdjustmentPercent }) : ""
     };
   };
@@ -3104,7 +3110,16 @@ function decorateInventoryForSearch(inventory, actor, canInteract, { isTrade = f
         ...container.grid,
         items: (container.grid?.items ?? []).map(decorateItem)
       }
-    }))
+    })),
+    lockedStorage: inventory.lockedStorage
+      ? {
+        ...inventory.lockedStorage,
+        grid: {
+          ...inventory.lockedStorage.grid,
+          items: (inventory.lockedStorage.grid?.items ?? []).map(decorateItem)
+        }
+      }
+      : null
   };
 }
 
@@ -3506,7 +3521,7 @@ async function transferTradeOfferItemToActor({ sourceActor, targetActor, sourceI
   foundry.utils.setProperty(itemData, "system.quantity", transferQuantity);
 
   if (isContainerItem(sourceItem)) {
-    const placement = getFirstAvailableActorInventoryPlacement(targetActor, ROOT_CONTAINER_ID, itemData, [], []);
+    const placement = getFirstAvailableActorInventoryPlacement(targetActor, ROOT_CONTAINER_ID, itemData, [], [], { allowLockedDisplacement: true });
     if (!placement) throwInventoryNoSpace();
     const createdRoot = await transferContainerTree({
       sourceActor,
@@ -3522,16 +3537,26 @@ async function transferTradeOfferItemToActor({ sourceActor, targetActor, sourceI
   let remainingQuantity = transferQuantity;
   const reservedPlacements = [];
   const createData = [];
+  const displacementUpdates = [];
+  const addDisplacementUpdates = placement => {
+    const updates = getPlacementDisplacementUpdates(targetActor, itemData, placement, ROOT_CONTAINER_ID, []);
+    if (!updates) throwInventoryNoSpace();
+    for (const update of updates) {
+      if (!displacementUpdates.some(existing => existing._id === update._id)) displacementUpdates.push(update);
+    }
+  };
   while (remainingQuantity > 0) {
     const stackQuantity = Math.min(remainingQuantity, maxStack);
-    const placement = getFirstAvailableActorInventoryPlacement(targetActor, ROOT_CONTAINER_ID, itemData, [], reservedPlacements);
+    const placement = getFirstAvailableActorInventoryPlacement(targetActor, ROOT_CONTAINER_ID, itemData, [], reservedPlacements, { allowLockedDisplacement: true });
     if (!placement) throwInventoryNoSpace();
     createData.push(createInventoryStackData(itemData, stackQuantity, ROOT_CONTAINER_ID, placement));
     reservedPlacements.push(placement);
+    addDisplacementUpdates(placement);
     remainingQuantity -= stackQuantity;
   }
 
-  if (!validateActorProjectedInventoryState(targetActor, { creates: createData })) throwInventoryNoSpace();
+  if (!validateActorProjectedInventoryState(targetActor, { updates: displacementUpdates, creates: createData })) throwInventoryNoSpace();
+  if (displacementUpdates.length) await targetActor.updateEmbeddedDocuments("Item", displacementUpdates);
   const createdItems = await targetActor.createEmbeddedDocuments("Item", createData);
   await removeTransferredItemQuantity(sourceActor, sourceItem, transferQuantity);
   return createdItems;
@@ -4308,20 +4333,31 @@ async function createCompletedTradeItem(targetActor, itemData, containedItems = 
   const createData = createInventoryStackData(itemData, getItemQuantity(itemData), ROOT_CONTAINER_ID, preferredPlacement, {
     equipped: preferredPlacement.mode === "equipment"
   });
-  if (!validateActorProjectedInventoryState(targetActor, { creates: [createData] })) throwInventoryNoSpace();
+  const replacementUpdates = createActorUnequipReplacementUpdates(
+    targetActor,
+    getActorPlacementConflictingItems(targetActor, itemData, preferredPlacement)
+  );
+  if (!replacementUpdates) throwInventoryNoSpace();
+  if (!validateActorProjectedInventoryState(targetActor, { updates: replacementUpdates, creates: [createData] })) throwInventoryNoSpace();
+  if (replacementUpdates.length) await targetActor.updateEmbeddedDocuments("Item", replacementUpdates);
   return targetActor.createEmbeddedDocuments("Item", [createData]);
 }
 
 async function createCompletedTradeContainerTree(targetActor, rootItemData, containedItems = [], targetParentId = ROOT_CONTAINER_ID, preferredPlacement = null) {
-  if (preferredPlacement.mode === "inventory" && !isActorInventoryPlacementAvailable(targetActor, targetParentId, preferredPlacement, [], [])) {
+  if (preferredPlacement.mode === "inventory" && !isActorInventoryPlacementAvailable(targetActor, targetParentId, preferredPlacement, [], [], { allowLockedDisplacement: true })) {
     throwInventoryNoSpace();
   }
   const rootCreateData = createInventoryStackData(rootItemData, 1, targetParentId, preferredPlacement, {
     equipped: preferredPlacement.mode === "equipment"
   });
+  const displacementUpdates = preferredPlacement.mode === "inventory"
+    ? getPlacementDisplacementUpdates(targetActor, rootItemData, preferredPlacement, targetParentId, [])
+    : [];
+  if (!displacementUpdates) throwInventoryNoSpace();
   const validationCreates = buildCompletedContainerTreeValidationCreates(rootCreateData, rootItemData, containedItems);
-  if (!validateActorProjectedInventoryState(targetActor, { creates: validationCreates })) throwInventoryNoSpace();
+  if (!validateActorProjectedInventoryState(targetActor, { updates: displacementUpdates, creates: validationCreates })) throwInventoryNoSpace();
 
+  if (displacementUpdates.length) await targetActor.updateEmbeddedDocuments("Item", displacementUpdates);
   const [createdRoot] = await targetActor.createEmbeddedDocuments("Item", [rootCreateData]);
   const oldRootId = String(rootItemData?._id ?? rootItemData?.id ?? "");
   const idMap = new Map([[oldRootId, createdRoot.id]]);
@@ -4394,14 +4430,15 @@ export async function transferItemBetweenActors({
   targetX = null,
   targetY = null,
   targetItemId = "",
-  quantity = 0
+  quantity = 0,
+  allowLocked = false
 } = {}) {
-  assertSearchTransferableItem(sourceItem);
+  assertSearchTransferableItem(sourceItem, { allowLocked });
   const itemData = sourceItem.toObject();
   const transferQuantity = getTransferItemQuantity(sourceItem, quantity);
   foundry.utils.setProperty(itemData, "system.quantity", transferQuantity);
   const targetItem = targetItemId ? targetActor.items?.get(targetItemId) : null;
-  const targetStackPlacement = targetMode === "inventory" && targetItem && areStackable(itemData, targetItem) && getItemQuantity(targetItem) < getItemMaxStack(targetItem)
+  const targetStackPlacement = isInventoryContextPlacementMode(targetMode) && targetItem && areStackable(itemData, targetItem) && getItemQuantity(targetItem) < getItemMaxStack(targetItem)
     ? normalizeInventoryPlacement(targetItem.system?.placement ?? {}, targetItem, targetActor.items)
     : null;
   const preferredPlacement = getRequestedTargetPlacement({
@@ -4420,7 +4457,7 @@ export async function transferItemBetweenActors({
   }) ?? targetStackPlacement;
   if (!preferredPlacement) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
 
-  if (preferredPlacement.mode !== "inventory") {
+  if (!isInventoryContextPlacementMode(preferredPlacement.mode)) {
     if (sourceActor.uuid === targetActor.uuid) return moveOwnedItemToActorPlacement(targetActor, sourceItem, preferredPlacement);
     if (isContainerItem(sourceItem)) return transferContainerTree({ sourceActor, targetActor, sourceItem, targetParentId: ROOT_CONTAINER_ID, preferredPlacement });
     return createExternalPlacedItem(targetActor, itemData, preferredPlacement, { sourceActor, sourceItem });
@@ -4498,6 +4535,14 @@ async function insertItemIntoActorInventory(actor, itemData, requestedPlacement,
   const usableTargetItem = targetItem && areStackable(itemData, targetItem) ? targetItem : null;
   const stackTargets = getCompatibleStackTarget(actor, itemData, usableTargetItem, excludedIds, parentId);
   const targetUpdates = [];
+  const displacementUpdates = [];
+  const addDisplacementUpdates = placement => {
+    const updates = getPlacementDisplacementUpdates(actor, itemData, placement, parentId, excludedIds);
+    if (!updates) throwInventoryNoSpace();
+    for (const update of updates) {
+      if (!displacementUpdates.some(existing => existing._id === update._id)) displacementUpdates.push(update);
+    }
+  };
 
   for (const stackTarget of stackTargets) {
     const availableSpace = Math.max(0, getItemMaxStack(stackTarget) - getItemQuantity(stackTarget));
@@ -4522,19 +4567,21 @@ async function insertItemIntoActorInventory(actor, itemData, requestedPlacement,
     const sourceQuantity = Math.min(remainingQuantity, maxStack);
     remainingQuantity -= sourceQuantity;
     reservedPlacements.push(sourcePlacement);
+    addDisplacementUpdates(sourcePlacement);
     sourceUpdate = createInventoryItemUpdate(sourceItem.id, sourceQuantity, parentId, sourcePlacement, sourceItem);
     deleteSource = false;
   }
 
-  let nextPlacement = isActorInventoryPlacementAvailable(actor, parentId, preferredPlacement, excludedIds, reservedPlacements)
+  let nextPlacement = isActorInventoryPlacementAvailable(actor, parentId, preferredPlacement, excludedIds, reservedPlacements, { allowLockedDisplacement: true })
     ? preferredPlacement
     : null;
   while (remainingQuantity > 0) {
     const stackQuantity = Math.min(remainingQuantity, maxStack);
-    const placement = nextPlacement ?? getFirstAvailableActorInventoryPlacement(actor, parentId, itemData, excludedIds, reservedPlacements);
+    const placement = nextPlacement ?? getFirstAvailableActorInventoryPlacement(actor, parentId, itemData, excludedIds, reservedPlacements, { allowLockedDisplacement: true });
     if (!placement) throwInventoryNoSpace();
     createData.push(createInventoryStackData(itemData, stackQuantity, parentId, placement));
     reservedPlacements.push(placement);
+    addDisplacementUpdates(placement);
     remainingQuantity -= stackQuantity;
     nextPlacement = null;
   }
@@ -4542,6 +4589,7 @@ async function insertItemIntoActorInventory(actor, itemData, requestedPlacement,
   if (!validateActorProjectedInventoryState(actor, {
     updates: [
       ...targetUpdates,
+      ...displacementUpdates,
       ...(sourceUpdate ? [sourceUpdate] : []),
       ...(partialSourceTransfer ? [{ _id: sourceItem.id, "system.quantity": sourceOriginalQuantity - transferQuantity }] : [])
     ],
@@ -4552,6 +4600,7 @@ async function insertItemIntoActorInventory(actor, itemData, requestedPlacement,
   }
 
   if (targetUpdates.length) await actor.updateEmbeddedDocuments("Item", targetUpdates);
+  if (displacementUpdates.length) await actor.updateEmbeddedDocuments("Item", displacementUpdates);
   if (sourceUpdate) await actor.updateEmbeddedDocuments("Item", [sourceUpdate]);
   else if (partialSourceTransfer) await actor.updateEmbeddedDocuments("Item", [{ _id: sourceItem.id, "system.quantity": sourceOriginalQuantity - transferQuantity }]);
   else if (deleteSource && sourceItem) await actor.deleteEmbeddedDocuments("Item", [sourceItem.id]);
@@ -4570,6 +4619,14 @@ async function insertExternalItemIntoActorInventory(actor, itemData, requestedPl
   const usableTargetItem = targetItem && areStackable(itemData, targetItem) ? targetItem : null;
   const stackTargets = getCompatibleStackTarget(actor, itemData, usableTargetItem, [], parentId);
   const targetUpdates = [];
+  const displacementUpdates = [];
+  const addDisplacementUpdates = placement => {
+    const updates = getPlacementDisplacementUpdates(actor, itemData, placement, parentId, []);
+    if (!updates) throwInventoryNoSpace();
+    for (const update of updates) {
+      if (!displacementUpdates.some(existing => existing._id === update._id)) displacementUpdates.push(update);
+    }
+  };
 
   for (const stackTarget of stackTargets) {
     const availableSpace = Math.max(0, getItemMaxStack(stackTarget) - getItemQuantity(stackTarget));
@@ -4588,31 +4645,33 @@ async function insertExternalItemIntoActorInventory(actor, itemData, requestedPl
   let nextPlacement = usableTargetItem ? null : requestedPlacement;
   while (remainingQuantity > 0) {
     const stackQuantity = Math.min(remainingQuantity, maxStack);
-    const placement = nextPlacement && isActorInventoryPlacementAvailable(actor, parentId, nextPlacement, [], reservedPlacements)
+    const placement = nextPlacement && isActorInventoryPlacementAvailable(actor, parentId, nextPlacement, [], reservedPlacements, { allowLockedDisplacement: true })
       ? nextPlacement
-      : getFirstAvailableActorInventoryPlacement(actor, parentId, itemData, [], reservedPlacements);
+      : getFirstAvailableActorInventoryPlacement(actor, parentId, itemData, [], reservedPlacements, { allowLockedDisplacement: true });
     if (!placement) throwInventoryNoSpace();
     createData.push(createInventoryStackData(itemData, stackQuantity, parentId, placement));
     reservedPlacements.push(placement);
+    addDisplacementUpdates(placement);
     remainingQuantity -= stackQuantity;
     nextPlacement = null;
   }
 
   if (!validateActorProjectedInventoryState(actor, {
-    updates: targetUpdates,
+    updates: [...targetUpdates, ...displacementUpdates],
     creates: createData
   })) {
     throwInventoryNoSpace();
   }
 
   if (targetUpdates.length) await actor.updateEmbeddedDocuments("Item", targetUpdates);
+  if (displacementUpdates.length) await actor.updateEmbeddedDocuments("Item", displacementUpdates);
   if (createData.length) await actor.createEmbeddedDocuments("Item", createData);
   await removeTransferredItemQuantity(sourceActor, sourceItem, getItemQuantity(itemData));
   return null;
 }
 
 async function transferContainerTree({ sourceActor, targetActor, sourceItem, targetParentId, preferredPlacement } = {}) {
-  if (preferredPlacement.mode === "inventory" && !isActorInventoryPlacementAvailable(targetActor, targetParentId, preferredPlacement, [], [])) {
+  if (preferredPlacement.mode === "inventory" && !isActorInventoryPlacementAvailable(targetActor, targetParentId, preferredPlacement, [], [], { allowLockedDisplacement: true })) {
     throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
   }
   if (preferredPlacement.mode === "inventory" && targetParentId) {
@@ -4634,13 +4693,18 @@ async function transferContainerTree({ sourceActor, targetActor, sourceItem, tar
   const createData = createInventoryStackData(rootData, 1, targetParentId, preferredPlacement, {
     equipped: preferredPlacement.mode === "equipment"
   });
+  const displacementUpdates = preferredPlacement.mode === "inventory"
+    ? getPlacementDisplacementUpdates(targetActor, rootData, preferredPlacement, targetParentId, [])
+    : [];
+  if (!displacementUpdates) throwInventoryNoSpace();
   const containedItems = getAllContainedItems(sourceItem.id, sourceActor.items);
   const validationCreates = buildContainerTreeValidationCreates(createData, sourceItem, containedItems);
-  if (!validateActorProjectedInventoryState(targetActor, { updates: replacementUpdates, creates: validationCreates })) {
+  if (!validateActorProjectedInventoryState(targetActor, { updates: [...replacementUpdates, ...displacementUpdates], creates: validationCreates })) {
     throwInventoryNoSpace();
   }
 
   if (replacementUpdates.length) await targetActor.updateEmbeddedDocuments("Item", replacementUpdates);
+  if (displacementUpdates.length) await targetActor.updateEmbeddedDocuments("Item", displacementUpdates);
   const [createdRoot] = await targetActor.createEmbeddedDocuments("Item", [createData]);
   const idMap = new Map([[sourceItem.id, createdRoot.id]]);
   for (const child of containedItems) {
@@ -4722,16 +4786,18 @@ function findCompatibleStackTargets(actor, itemData, preferredTarget = null, exc
 
 function getCompatibleStackTarget(actor, itemData, preferredTarget = null, excludeItemIds = [], parentId = ROOT_CONTAINER_ID) {
   const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+  const storedParentId = getStoredInventoryParentId(parentId);
+  const placementMode = getInventoryPlacementModeForParent(parentId);
   const canUsePreferredTarget = preferredTarget
     && !excluded.has(preferredTarget.id)
-    && getItemContainerParentId(preferredTarget) === parentId
-    && preferredTarget.system?.placement?.mode === "inventory"
+    && getItemContainerParentId(preferredTarget) === storedParentId
+    && preferredTarget.system?.placement?.mode === placementMode
     && areStackable(itemData, preferredTarget)
     && getItemQuantity(preferredTarget) < getItemMaxStack(preferredTarget);
   const targets = canUsePreferredTarget ? [preferredTarget] : [];
   for (const item of getContextInventoryItems(parentId, actor.items)) {
     if (!item || excluded.has(item.id) || targets.some(target => target.id === item.id)) continue;
-    if (item.system?.placement?.mode !== "inventory") continue;
+    if (item.system?.placement?.mode !== placementMode) continue;
     if (!areStackable(itemData, item) || getItemQuantity(item) >= getItemMaxStack(item)) continue;
     targets.push(item);
   }
@@ -4740,17 +4806,20 @@ function getCompatibleStackTarget(actor, itemData, preferredTarget = null, exclu
 
 function getSourcePlacement(actor, sourceItem, itemData, preferredPlacement = null, targetItem = null, parentId = ROOT_CONTAINER_ID, reservedPlacements = []) {
   const excludedIds = [sourceItem.id, targetItem?.id ?? ""].filter(Boolean);
+  const storedParentId = getStoredInventoryParentId(parentId);
+  const placementMode = getInventoryPlacementModeForParent(parentId);
   const currentPlacement = (
-    sourceItem.system?.placement?.mode === "inventory"
-    && getItemContainerParentId(sourceItem) === parentId
+    sourceItem.system?.placement?.mode === placementMode
+    && getItemContainerParentId(sourceItem) === storedParentId
   )
     ? normalizeInventoryPlacement(sourceItem.system?.placement ?? {}, itemData, actor.items)
     : null;
 
-  if (targetItem && currentPlacement && isActorInventoryPlacementAvailable(actor, parentId, currentPlacement, excludedIds, reservedPlacements)) return currentPlacement;
-  if (preferredPlacement && isActorInventoryPlacementAvailable(actor, parentId, preferredPlacement, excludedIds, reservedPlacements)) return preferredPlacement;
-  if (currentPlacement && isActorInventoryPlacementAvailable(actor, parentId, currentPlacement, excludedIds, reservedPlacements)) return currentPlacement;
-  return getFirstAvailableActorInventoryPlacement(actor, parentId, itemData, excludedIds, reservedPlacements);
+  if (targetItem && currentPlacement && isActorInventoryPlacementAvailable(actor, parentId, currentPlacement, excludedIds, reservedPlacements, { allowLockedDisplacement: true })) return currentPlacement;
+  if (preferredPlacement && isActorInventoryPlacementAvailable(actor, parentId, preferredPlacement, excludedIds, reservedPlacements, { allowLockedDisplacement: true })) return preferredPlacement;
+  if (currentPlacement && isActorInventoryPlacementAvailable(actor, parentId, currentPlacement, excludedIds, reservedPlacements, { allowLockedDisplacement: true })) return currentPlacement;
+  const placement = getFirstAvailableActorInventoryPlacement(actor, parentId, itemData, excludedIds, reservedPlacements, { allowLockedDisplacement: true });
+  return placement ? createContextInventoryPlacement(placement, parentId) : null;
 }
 
 function getRequestedTargetPlacement({
@@ -4796,9 +4865,11 @@ function getRequestedTargetPlacement({
       placement.width = footprint.width;
       placement.height = footprint.height;
     }
-    if (isActorInventoryPlacementAvailable(targetActor, targetParentId, placement, excluded, [])) return placement;
+    const contextPlacement = createContextInventoryPlacement(placement, targetParentId);
+    if (isActorInventoryPlacementAvailable(targetActor, targetParentId, contextPlacement, excluded, [], { allowLockedDisplacement: true })) return contextPlacement;
   }
-  return getFirstAvailableActorInventoryPlacement(targetActor, targetParentId, itemData, excluded, []);
+  const placement = getFirstAvailableActorInventoryPlacement(targetActor, targetParentId, itemData, excluded, [], { allowLockedDisplacement: true });
+  return placement ? createContextInventoryPlacement(placement, targetParentId) : null;
 }
 
 export function getSearchDropPlacementForPointer({ actor, itemData, sourceActor, sourceItemId = "", parentId = ROOT_CONTAINER_ID, event = null, zone = null } = {}) {
@@ -4822,7 +4893,7 @@ export function getSearchDropPlacementForPointer({ actor, itemData, sourceActor,
   }
 
   const excludeItemIds = sourceActor?.uuid === actor.uuid && sourceItemId ? [sourceItemId] : [];
-  const allowOverflowRows = getActorRootInventoryGridOptions(actor, parentId).allowOverflowRows;
+  const allowOverflowRows = getActorInventoryContextOptions(actor, parentId).allowOverflowRows;
   const maxX = Math.max(1, dimensions.columns - basePlacement.width + 1);
   const maxY = allowOverflowRows
     ? Math.max(1, dimensions.rows - basePlacement.height + 1, Math.ceil(anchor.y) + 64)
@@ -4832,7 +4903,7 @@ export function getSearchDropPlacementForPointer({ actor, itemData, sourceActor,
     ? Math.max(1, Math.round(anchor.y - ((basePlacement.height - 1) / 2)))
     : Math.max(1, Math.min(maxY, Math.round(anchor.y - ((basePlacement.height - 1) / 2))));
   const preferredPlacement = { ...basePlacement, x: preferredX, y: preferredY };
-  if (isActorInventoryPlacementAvailable(actor, parentId, preferredPlacement, excludeItemIds, [])) return preferredPlacement;
+  if (isActorInventoryPlacementAvailable(actor, parentId, preferredPlacement, excludeItemIds, [], { allowLockedDisplacement: true })) return preferredPlacement;
 
   const candidates = [];
   for (let y = 1; y <= maxY; y += 1) {
@@ -4854,7 +4925,7 @@ export function getSearchDropPlacementForPointer({ actor, itemData, sourceActor,
     || (left.placement.x - right.placement.x)
   ));
   return candidates.find(candidate => (
-    isActorInventoryPlacementAvailable(actor, parentId, candidate.placement, excludeItemIds, [])
+    isActorInventoryPlacementAvailable(actor, parentId, candidate.placement, excludeItemIds, [], { allowLockedDisplacement: true })
   ))?.placement ?? null;
 }
 
@@ -4876,7 +4947,7 @@ export function getSearchInventoryGridPointerPosition(event = null, grid = null,
   const firstCenterX = firstRect.left + (firstRect.width / 2);
   const firstCenterY = firstRect.top + (firstRect.height / 2);
   const dimensions = getActorInventoryContextDimensions(actor, parentId);
-  const allowOverflowRows = getActorRootInventoryGridOptions(actor, parentId).allowOverflowRows;
+  const allowOverflowRows = getActorInventoryContextOptions(actor, parentId).allowOverflowRows;
 
   return {
     x: Math.max(1, Math.min(dimensions.columns, ((clientX - firstCenterX) / pitchX) + 1)),
@@ -5001,7 +5072,7 @@ function getCompletedTradeClaimTarget(targetActor, itemData = null, containedIte
   for (const parentId of candidateParentIds) {
     if (!canCompletedTradeClaimFitParent(targetActor, itemData, containedItems, parentId, { quantity: transferQuantity })) continue;
 
-    const placement = getFirstAvailableActorInventoryPlacement(targetActor, parentId, itemData, [], []);
+    const placement = getFirstAvailableActorInventoryPlacement(targetActor, parentId, itemData, [], [], { allowLockedDisplacement: true });
     if (!placement) {
       if (!isContainerItem(itemData) && getCompletedTradeClaimStackRoom(targetActor, itemData, parentId) >= transferQuantity) {
         return { parentId, placement: null };
@@ -5061,7 +5132,7 @@ function validateCompletedTradeClaimTarget(targetActor, itemData = null, contain
 
 function getQuickTransferParentCandidates(actor) {
   const parentIds = [ROOT_CONTAINER_ID];
-  const inventory = prepareInventoryContext(actor, getActorRace(actor));
+  const inventory = prepareInventoryContext(actor, getActorRace(actor), { includeLocked: false });
   for (const container of inventory.containers ?? []) {
     const id = String(container?.id ?? "");
     if (!id || parentIds.includes(id)) continue;
@@ -5079,12 +5150,12 @@ function getBulkTransferSourceItemIds(actor) {
     .map(item => item.id);
 }
 
-function isSearchTransferableItem(item) {
-  return Boolean(item && item.type !== "trauma" && item.type !== "disease" && !isNaturalRaceItem(item));
+function isSearchTransferableItem(item, { allowLocked = false } = {}) {
+  return Boolean(item && item.type !== "trauma" && item.type !== "disease" && !isNaturalRaceItem(item) && (allowLocked || !isItemLocked(item)));
 }
 
-function assertSearchTransferableItem(item) {
-  if (!isSearchTransferableItem(item)) throw new Error("This item cannot be moved through search or trade.");
+function assertSearchTransferableItem(item, { allowLocked = false } = {}) {
+  if (!isSearchTransferableItem(item, { allowLocked })) throw new Error("This item cannot be moved through search or trade.");
 }
 
 function hasBulkTransferSelectedAncestor(item, itemMap, selectedIds) {
@@ -5141,6 +5212,10 @@ function createActorUnequipReplacementUpdates(actor, items = [], excludeItemIds 
   const reservedPlacementContexts = [];
   const updates = [];
   for (const item of conflicts) {
+    if (isItemLocked(item)) {
+      updates.push(createLockedStorageItemUpdate(item));
+      continue;
+    }
     const placementContext = getFirstAvailableActorInventoryPlacementContext(actor, item, Array.from(excluded), reservedPlacementContexts);
     if (!placementContext) return null;
     reservedPlacementContexts.push({ ...placementContext, itemData: item });
@@ -5164,7 +5239,7 @@ function getFirstAvailableActorInventoryPlacementContext(actor, itemData = null,
 function getActorInventoryPlacementParentCandidates(actor, itemData = null, excludeItemIds = []) {
   const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
   const candidates = [ROOT_CONTAINER_ID];
-  const inventory = prepareInventoryContext(actor, getActorRace(actor));
+  const inventory = prepareInventoryContext(actor, getActorRace(actor), { includeLocked: false });
   for (const container of inventory.containers ?? []) {
     const parentId = String(container?.id ?? "");
     if (!parentId || excluded.has(parentId)) continue;
@@ -5217,7 +5292,7 @@ function canQuickTransferItemIntoParent({ sourceActor, targetActor, sourceItem, 
       total + Math.max(0, getItemMaxStack(target) - getItemQuantity(target))
     ), 0);
   const quantity = Math.max(1, getItemQuantity(sourceItem));
-  const placement = getFirstAvailableActorInventoryPlacement(targetActor, parentId, itemData, excludeItemIds, []);
+  const placement = getFirstAvailableActorInventoryPlacement(targetActor, parentId, itemData, excludeItemIds, [], { allowLockedDisplacement: true });
   if (!placement && stackRoom < quantity) return false;
 
   if (!parentId) return true;
@@ -5250,23 +5325,68 @@ function getActorRace(actor) {
   return getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId) ?? null;
 }
 
+function isLockedStorageParentId(parentId = ROOT_CONTAINER_ID) {
+  return String(parentId ?? ROOT_CONTAINER_ID) === LOCKED_STORAGE_PARENT_ID;
+}
+
+function getStoredInventoryParentId(parentId = ROOT_CONTAINER_ID) {
+  return isLockedStorageParentId(parentId) ? ROOT_CONTAINER_ID : parentId;
+}
+
+function getInventoryPlacementModeForParent(parentId = ROOT_CONTAINER_ID) {
+  return isLockedStorageParentId(parentId) ? LOCKED_STORAGE_PLACEMENT_MODE : "inventory";
+}
+
+function createContextInventoryPlacement(placement = {}, parentId = ROOT_CONTAINER_ID) {
+  return {
+    ...placement,
+    mode: getInventoryPlacementModeForParent(parentId),
+    equipmentSlot: "",
+    weaponSet: "",
+    weaponSlot: "",
+    limbKey: ""
+  };
+}
+
+function isInventoryContextPlacementMode(mode = "") {
+  return mode === "inventory" || mode === LOCKED_STORAGE_PLACEMENT_MODE;
+}
+
+function getActorInventoryContextOptions(actor, parentId = ROOT_CONTAINER_ID) {
+  if (isLockedStorageParentId(parentId)) {
+    return {
+      allowOverflowRows: true,
+      extraRows: INFINITE_ROOT_INVENTORY_EMPTY_ROWS,
+      placementMode: LOCKED_STORAGE_PLACEMENT_MODE,
+      preferredPlacementModes: [LOCKED_STORAGE_PLACEMENT_MODE]
+    };
+  }
+  return getActorRootInventoryGridOptions(actor, parentId);
+}
+
 function createInventoryStackData(itemData, quantity, parentId, placement, { equipped = false } = {}) {
   const createData = foundry.utils.deepClone(itemData);
   delete createData._id;
   delete createData.id;
-  const storedPlacement = createStoredPlacement(placement, itemData);
+  const placementForStorage = (placement?.mode === "inventory" || placement?.mode === LOCKED_STORAGE_PLACEMENT_MODE)
+    ? createContextInventoryPlacement(placement, parentId)
+    : placement;
+  const storedPlacement = createStoredPlacement(placementForStorage, itemData);
   foundry.utils.mergeObject(createData, {
     system: {
       quantity,
       equipped: Boolean(equipped),
+      ...(isLockedStorageParentId(parentId) ? { locked: true } : {}),
       container: {
-        parentId
+        parentId: getStoredInventoryParentId(parentId)
       },
       placement: {
         mode: storedPlacement.mode,
         equipmentSlot: storedPlacement.equipmentSlot,
         weaponSet: storedPlacement.weaponSet,
         weaponSlot: storedPlacement.weaponSlot,
+        limbKey: storedPlacement.limbKey,
+        constructPartOrder: storedPlacement.constructPartOrder,
         x: storedPlacement.x,
         y: storedPlacement.y,
         width: storedPlacement.width,
@@ -5277,22 +5397,24 @@ function createInventoryStackData(itemData, quantity, parentId, placement, { equ
   return createData;
 }
 
-export async function copyActorInventoryItem(actor, item) {
-  assertSearchTransferableItem(item);
+export async function copyActorInventoryItem(actor, item, { allowLocked = false } = {}) {
+  assertSearchTransferableItem(item, { allowLocked });
   const data = item.toObject();
   delete data._id;
   delete data.id;
-  const parentId = getItemContainerParentId(item);
+  const parentId = item.system?.placement?.mode === LOCKED_STORAGE_PLACEMENT_MODE
+    ? LOCKED_STORAGE_PARENT_ID
+    : getItemContainerParentId(item);
   const placement = getFirstAvailableActorInventoryPlacement(actor, parentId, data, [], []);
   if (!placement) throwInventoryNoSpace();
-  foundry.utils.setProperty(data, "system.container.parentId", parentId);
-  foundry.utils.setProperty(data, "system.placement", createStoredPlacement(placement, data));
+  foundry.utils.setProperty(data, "system.container.parentId", getStoredInventoryParentId(parentId));
+  foundry.utils.setProperty(data, "system.placement", createStoredPlacement(createContextInventoryPlacement(placement, parentId), data));
   if (!validateActorProjectedInventoryState(actor, { creates: [data] })) throwInventoryNoSpace();
   return actor.createEmbeddedDocuments("Item", [data]);
 }
 
-export async function splitActorInventoryItem(actor, item, amount) {
-  assertSearchTransferableItem(item);
+export async function splitActorInventoryItem(actor, item, amount, { allowLocked = false } = {}) {
+  assertSearchTransferableItem(item, { allowLocked });
   const quantity = getItemQuantity(item);
   const splitQuantity = Math.max(1, Math.min(quantity - 1, toInteger(amount)));
   if (quantity <= 1 || !splitQuantity) throw new Error("No quantity to split.");
@@ -5301,11 +5423,13 @@ export async function splitActorInventoryItem(actor, item, amount) {
   delete data._id;
   delete data.id;
   foundry.utils.setProperty(data, "system.quantity", splitQuantity);
-  const parentId = getItemContainerParentId(item);
+  const parentId = item.system?.placement?.mode === LOCKED_STORAGE_PLACEMENT_MODE
+    ? LOCKED_STORAGE_PARENT_ID
+    : getItemContainerParentId(item);
   const placement = getFirstAvailableActorInventoryPlacement(actor, parentId, data, [], []);
   if (!placement) throwInventoryNoSpace();
-  foundry.utils.setProperty(data, "system.container.parentId", parentId);
-  foundry.utils.setProperty(data, "system.placement", createStoredPlacement(placement, data));
+  foundry.utils.setProperty(data, "system.container.parentId", getStoredInventoryParentId(parentId));
+  foundry.utils.setProperty(data, "system.placement", createStoredPlacement(createContextInventoryPlacement(placement, parentId), data));
   const updateData = {
     _id: item.id,
     "system.quantity": quantity - splitQuantity
@@ -5428,16 +5552,22 @@ function createInventoryItemUpdate(itemId, quantity, parentId, placement, itemDa
 }
 
 function createPlacementItemUpdate(itemId, quantity, parentId, placement, itemData, { equipped = false } = {}) {
-  const storedPlacement = createStoredPlacement(placement, itemData);
+  const placementForStorage = (placement?.mode === "inventory" || placement?.mode === LOCKED_STORAGE_PLACEMENT_MODE)
+    ? createContextInventoryPlacement(placement, parentId)
+    : placement;
+  const storedPlacement = createStoredPlacement(placementForStorage, itemData);
   return {
     _id: itemId,
     "system.quantity": quantity,
     "system.equipped": Boolean(equipped),
-    "system.container.parentId": parentId,
+    ...(isLockedStorageParentId(parentId) ? { "system.locked": true } : {}),
+    "system.container.parentId": getStoredInventoryParentId(parentId),
     "system.placement.mode": storedPlacement.mode,
     "system.placement.equipmentSlot": storedPlacement.equipmentSlot,
     "system.placement.weaponSet": storedPlacement.weaponSet,
     "system.placement.weaponSlot": storedPlacement.weaponSlot,
+    "system.placement.limbKey": storedPlacement.limbKey,
+    "system.placement.constructPartOrder": storedPlacement.constructPartOrder,
     "system.placement.x": storedPlacement.x,
     "system.placement.y": storedPlacement.y,
     "system.placement.width": storedPlacement.width,
@@ -5445,35 +5575,93 @@ function createPlacementItemUpdate(itemId, quantity, parentId, placement, itemDa
   };
 }
 
-export function getFirstAvailableActorInventoryPlacement(actor, parentId, itemData, excludeItemIds = [], reservedPlacements = []) {
+function createLockedStorageItemUpdate(item) {
+  const storedPlacement = createStoredPlacement({
+    mode: LOCKED_STORAGE_PLACEMENT_MODE,
+    equipmentSlot: "",
+    weaponSet: "",
+    weaponSlot: "",
+    limbKey: "",
+    x: 1,
+    y: 1
+  }, item);
+  return {
+    _id: item.id,
+    "system.equipped": false,
+    "system.container.parentId": ROOT_CONTAINER_ID,
+    "system.placement.mode": storedPlacement.mode,
+    "system.placement.equipmentSlot": "",
+    "system.placement.weaponSet": "",
+    "system.placement.weaponSlot": "",
+    "system.placement.limbKey": "",
+    "system.placement.constructPartOrder": storedPlacement.constructPartOrder,
+    "system.placement.x": storedPlacement.x,
+    "system.placement.y": storedPlacement.y,
+    "system.placement.width": storedPlacement.width,
+    "system.placement.height": storedPlacement.height
+  };
+}
+
+function getLockedInventoryDisplacementUpdates(actor, parentId, placement, excludeItemIds = []) {
+  if (!actor || !placement || placement.mode !== "inventory") return [];
+  const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
+  const conflicts = getContextInventoryItems(parentId, actor.items).filter(item => {
+    if (!item || excluded.has(item.id)) return false;
+    const itemPlacement = normalizeInventoryPlacement(item.system?.placement ?? {}, item, actor.items);
+    return inventoryPlacementsOverlap(placement, itemPlacement);
+  });
+  if (!conflicts.length) return [];
+  if (conflicts.some(item => !isItemLocked(item))) return null;
+  return conflicts.map(createLockedStorageItemUpdate);
+}
+
+function getPlacementDisplacementUpdates(actor, itemData, placement, parentId = ROOT_CONTAINER_ID, excludeItemIds = []) {
+  if (!placement) return [];
+  if (placement.mode === "inventory") return getLockedInventoryDisplacementUpdates(actor, parentId, placement, excludeItemIds);
+  if (placement.mode === LOCKED_STORAGE_PLACEMENT_MODE) return [];
+  const conflicts = getActorPlacementConflictingItems(actor, itemData, placement, excludeItemIds);
+  if (!conflicts.length) return [];
+  if (conflicts.some(item => !isItemLocked(item))) return [];
+  return conflicts.map(createLockedStorageItemUpdate);
+}
+
+export function getFirstAvailableActorInventoryPlacement(actor, parentId, itemData, excludeItemIds = [], reservedPlacements = [], { allowLockedDisplacement = false } = {}) {
   const dimensions = getActorInventoryContextDimensions(actor, parentId);
+  const contextItems = getContextInventoryItems(parentId, actor.items)
+    .filter(item => allowLockedDisplacement && !isLockedStorageParentId(parentId) ? !isItemLocked(item) : true);
   return findFirstAvailableInventoryPlacement(
-    getContextInventoryItems(parentId, actor.items),
+    contextItems,
     dimensions.columns,
     dimensions.rows,
     itemData,
     actor.items,
     excludeItemIds,
     reservedPlacements,
-    getActorRootInventoryGridOptions(actor, parentId)
+    getActorInventoryContextOptions(actor, parentId)
   );
 }
 
-function isActorInventoryPlacementAvailable(actor, parentId, placement, excludeItemIds = [], reservedPlacements = []) {
+function isActorInventoryPlacementAvailable(actor, parentId, placement, excludeItemIds = [], reservedPlacements = [], { allowLockedDisplacement = false } = {}) {
   const dimensions = getActorInventoryContextDimensions(actor, parentId);
+  const contextItems = getContextInventoryItems(parentId, actor.items)
+    .filter(item => allowLockedDisplacement && !isLockedStorageParentId(parentId) ? !isItemLocked(item) : true);
   return isInventoryPlacementAvailable(
     placement,
-    getContextInventoryItems(parentId, actor.items),
+    contextItems,
     dimensions.columns,
     dimensions.rows,
     actor.items,
     excludeItemIds,
     reservedPlacements,
-    getActorRootInventoryGridOptions(actor, parentId)
+    getActorInventoryContextOptions(actor, parentId)
   );
 }
 
 function getActorInventoryContextDimensions(actor, parentId = ROOT_CONTAINER_ID) {
+  if (isLockedStorageParentId(parentId)) {
+    const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
+    return getActorInventoryGridDimensions(actor, race);
+  }
   if (parentId) return getContainerDimensions(actor.items?.get(parentId));
   const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
   return getActorInventoryGridDimensions(actor, race);
@@ -5536,6 +5724,7 @@ function areStackable(sourceData, targetItem) {
     && !isContainerItem(targetItem)
     && sourceData?.name === targetItem?.name
     && sourceData?.img === targetItem?.img
+    && isItemLocked(sourceData) === isItemLocked(targetItem)
     && Number(sourceSystem.weight) === Number(targetSystem.weight)
     && Number(sourceSystem.price) === Number(targetSystem.price)
     && String(sourceSystem.priceCurrency ?? "") === String(targetSystem.priceCurrency ?? "")
@@ -5645,7 +5834,7 @@ export function getDropZonePlacementRequest(zone) {
     };
   }
   return {
-    mode: "inventory",
+    mode: getInventoryPlacementModeForParent(getDropZoneParentId(zone)),
     equipmentSlot: "",
     weaponSet: "",
     weaponSlot: ""

@@ -33,6 +33,8 @@ import { FalloutMaWContainerSheet } from "../sheets/container-sheet.mjs";
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import {
   ROOT_CONTAINER_ID,
+  LOCKED_STORAGE_PARENT_ID,
+  LOCKED_STORAGE_PLACEMENT_MODE,
   createStoredPlacement,
   findFirstAvailableResolvedInventoryPlacement,
   getContainerContentsWeight,
@@ -209,7 +211,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       side: "searcher",
       roleLabel: "",
       canInteract: Boolean(this.#actor?.isOwner && !this.#busy),
-      mode: "search"
+      mode: "search",
+      showLockedItems: true
     }) ?? createEmptyActorContext(this.#actor);
     const craft = selectedRecipe
       ? prepareCraftContext(selectedRecipe, this.#actor, {
@@ -592,7 +595,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       if (!zone) return null;
       this.#captureScrollPositions();
       const placementRequest = getDropZonePlacementRequest(zone);
-      const parentId = placementRequest.mode === "inventory" ? getDropZoneParentId(zone) : ROOT_CONTAINER_ID;
+      const parentId = (placementRequest.mode === "inventory" || placementRequest.mode === LOCKED_STORAGE_PLACEMENT_MODE)
+        ? getDropZoneParentId(zone)
+        : ROOT_CONTAINER_ID;
       const targetItem = this.#getTargetStackItem(zone, item, parentId);
       let quantity;
       if (canStackItems(item.toObject(), targetItem)) {
@@ -601,7 +606,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         quantity = Math.max(1, getItemQuantity(item));
       }
       if (!quantity) return null;
-      const pointerPlacement = placementRequest.mode === "inventory"
+      const pointerPlacement = (placementRequest.mode === "inventory" || placementRequest.mode === LOCKED_STORAGE_PLACEMENT_MODE)
         ? getSearchDropPlacementForPointer({
           actor: this.#actor,
           itemData: item.toObject(),
@@ -621,10 +626,11 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         targetEquipmentSlot: placementRequest.equipmentSlot,
         targetWeaponSet: placementRequest.weaponSet,
         targetWeaponSlot: placementRequest.weaponSlot,
-        targetX: pointerPlacement?.x ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.x) : null),
-        targetY: pointerPlacement?.y ?? (placementRequest.mode === "inventory" && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.y) : null),
+        targetX: pointerPlacement?.x ?? ((placementRequest.mode === "inventory" || placementRequest.mode === LOCKED_STORAGE_PLACEMENT_MODE) && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.x) : null),
+        targetY: pointerPlacement?.y ?? ((placementRequest.mode === "inventory" || placementRequest.mode === LOCKED_STORAGE_PLACEMENT_MODE) && zone?.dataset?.inventoryCell !== undefined ? toInteger(zone.dataset.y) : null),
         targetItemId: targetItem?.id ?? "",
-        quantity
+        quantity,
+        allowLocked: true
       });
       if (this.rendered) await this.#renderPreservingWindowStack();
       return moved;
@@ -1203,7 +1209,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       if (action === "equip") return this.#equipCraftItem(item);
       if (action === "unequip") return this.#unequipCraftItem(item);
       if (action === "split") return this.#splitCraftItem(item);
-      if (action === "copy" && game.user?.isGM) return copyActorInventoryItem(this.#actor, item);
+      if (action === "copy" && game.user?.isGM) return copyActorInventoryItem(this.#actor, item, { allowLocked: true });
       if (action === "delete" && game.user?.isGM) return item.delete();
       return undefined;
     });
@@ -1224,7 +1230,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       sourceItem: item,
       targetMode: "equipment",
       targetParentId: ROOT_CONTAINER_ID,
-      quantity: getItemQuantity(item)
+      quantity: getItemQuantity(item),
+      allowLocked: true
     });
   }
 
@@ -1242,7 +1249,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       targetParentId: ROOT_CONTAINER_ID,
       targetX: placement.x,
       targetY: placement.y,
-      quantity: getItemQuantity(item)
+      quantity: getItemQuantity(item),
+      allowLocked: true
     });
   }
 
@@ -1258,7 +1266,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     });
     if (!amount) return null;
     try {
-      return await splitActorInventoryItem(this.#actor, item, amount);
+      return await splitActorInventoryItem(this.#actor, item, amount, { allowLocked: true });
     } catch (error) {
       console.error(`${SYSTEM_ID} | Craft inventory split failed`, error);
       ui.notifications.warn(error.message || "Не удалось разделить предмет.");
@@ -3692,6 +3700,15 @@ function createEmptyInventoryContext() {
     equipmentSlots: [],
     weaponSets: [],
     containers: [],
+    lockedStorage: {
+      id: LOCKED_STORAGE_PARENT_ID,
+      grid: {
+        columns: 1,
+        rows: 1,
+        cells: [],
+        items: []
+      }
+    },
     grid: {
       columns: 1,
       rows: 1,
@@ -3736,11 +3753,28 @@ function prepareCraftInventoryContext(inventory, actor) {
         ...container.grid,
         items: (container.grid?.items ?? []).map(mapItem)
       }
-    }))
+    })),
+    lockedStorage: inventory.lockedStorage
+      ? {
+        ...inventory.lockedStorage,
+        grid: {
+          ...inventory.lockedStorage.grid,
+          items: (inventory.lockedStorage.grid?.items ?? []).map(mapItem)
+        }
+      }
+      : null
   };
 }
 
 function getCraftInventoryDimensions(actor, parentId = ROOT_CONTAINER_ID) {
+  if (parentId === LOCKED_STORAGE_PARENT_ID) {
+    const race = getActorRace(actor);
+    const inventorySize = race?.inventorySize ?? createDefaultInventorySize();
+    return {
+      columns: Math.max(1, toInteger(inventorySize.columns)),
+      rows: Math.max(1, toInteger(inventorySize.rows))
+    };
+  }
   if (parentId) {
     const container = actor?.items?.get(parentId);
     if (container) return getContainerDimensions(container);
