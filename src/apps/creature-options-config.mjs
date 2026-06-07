@@ -29,7 +29,7 @@ import {
   normalizeNaturalRaceItemData,
   NATURAL_RACE_ITEM_KINDS
 } from "../races/natural-items.mjs";
-import { buildActionCostEffectKeyTokens, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import { buildActionCostEffectKeyTokens, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildWeaponSwitchCostEffectKeyToken } from "../utils/effect-key-tokens.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateEffectKeyAutocomplete, createEffectKeyToken } from "./effect-key-autocomplete.mjs";
@@ -1108,6 +1108,7 @@ function buildEffectKeyTokens() {
     createEffectKeyToken({ code: "blind", key: "blind", label: "Слепота", path: "status.blind", group: "Статусы" }),
     createEffectKeyToken({ code: "moveCost", key: "movement", label: "Стоимость перемещения", path: "system.costs.movement", group: "Стоимость" }),
     createEffectKeyToken({ code: "actionCost", key: "action", label: "Стоимость действий", path: "system.costs.action", group: "Стоимость" }),
+    buildWeaponSwitchCostEffectKeyToken(),
     ...buildActionCostEffectKeyTokens(),
     ...buildCombatEffectKeyTokens()
   ].filter(Boolean);

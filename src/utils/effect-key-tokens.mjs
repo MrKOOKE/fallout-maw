@@ -1,4 +1,5 @@
 import { createEffectKeyToken } from "../apps/effect-key-autocomplete.mjs";
+import { WEAPON_SWITCH_COST_KEY } from "../combat/weapon-switching.mjs";
 import {
   getCharacteristicSettings,
   getCreatureOptions,
@@ -96,6 +97,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
       path: "system.costs.action",
       group: "Стоимость"
     }),
+    buildWeaponSwitchCostEffectKeyToken(),
     ...buildActionCostEffectKeyTokens(),
     ...buildPostureEffectKeyTokens(),
     ...buildActionBlockEffectKeyTokens(),
@@ -124,6 +126,16 @@ export function buildActionCostEffectKeyTokens() {
     path: `system.costs.actions.${entry.key}`,
     group: "Стоимость"
   })).filter(Boolean);
+}
+
+export function buildWeaponSwitchCostEffectKeyToken() {
+  return createEffectKeyToken({
+    code: "weaponSwitchCost",
+    key: "weaponSwitch",
+    label: "Смена оружия: стоимость",
+    path: WEAPON_SWITCH_COST_KEY,
+    group: "Стоимость"
+  });
 }
 
 export function buildPostureEffectKeyTokens() {
