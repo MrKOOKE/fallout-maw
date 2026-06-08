@@ -87,11 +87,10 @@
       "type": "Actor"
     },
     {
-      "name": "fallout-mav-cards",
+      "name": "fallout-mav-scenes",
       "label": "\u041a\u0430\u0440\u0442\u044b",
-      "system": "fallout-maw",
-      "path": "packs/fallout-mav-cards",
-      "type": "Cards"
+      "path": "packs/fallout-mav-scenes",
+      "type": "Scene"
     }
   ],
   "packFolders": [
@@ -102,7 +101,7 @@
       "packs": [
         "fallout-mav-items",
         "fallout-mav-actors",
-        "fallout-mav-cards"
+        "fallout-mav-scenes"
       ]
     }
   ],

@@ -18,7 +18,7 @@
               {{#each inventory.equipmentSlots}}
               <div class="fallout-maw-slot-card">
                 <div class="fallout-maw-slot-card-label">{{label}}</div>
-                <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large" data-search-drop-zone data-search-actor-uuid="{{../actor.uuid}}" data-equipment-slot="{{key}}">
+                <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large {{#if (eq item.occupiedSlotMode "oneOf")}}one-of{{/if}}" data-search-drop-zone data-search-actor-uuid="{{../actor.uuid}}" data-equipment-slot="{{key}}">
                   {{#if item}}
                   <article class="{{item.draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}} {{#if item.locked}}locked{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}" data-search-actor-uuid="{{item.actorUuid}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
                     <img src="{{item.img}}" alt="{{item.name}}">

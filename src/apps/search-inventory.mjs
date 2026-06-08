@@ -40,8 +40,9 @@ import {
 } from "../utils/inventory-containers.mjs";
 import {
   canUseWeaponSlotForItem,
-  getEquipmentSlotSelectionKey,
+  doesItemOccupyEquipmentSlot,
   getRaceEquipmentSlotsForItem,
+  getRequiredEquipmentSlotsForItem,
   getRequiredWeaponSlotsForItem,
   getSelectedEquipmentSlotKeys,
   getWeaponSlotRequirement,
@@ -4994,7 +4995,9 @@ function resolveActorEquipmentPlacement(actor, itemData, placement = {}, exclude
     : selectedSlots[0];
   if (!targetSlot) return null;
 
-  const blocked = selectedSlots.some(slot => Boolean(getEquipmentItemForActorSlot(actor, slot, excludeItemIds)));
+  const requiredSlots = getRequiredEquipmentSlotsForItem(race, itemData, targetSlot.key);
+  if (!requiredSlots.length) return null;
+  const blocked = requiredSlots.some(slot => Boolean(getEquipmentItemForActorSlot(actor, slot, excludeItemIds)));
   if (blocked && !allowReplacement) return null;
 
   const footprint = getItemFootprint(itemData);
@@ -5171,23 +5174,21 @@ function hasBulkTransferSelectedAncestor(item, itemMap, selectedIds) {
 }
 
 function getActorPlacementConflictingItems(actor, itemData, placement = {}, excludeItemIds = []) {
-  if (placement.mode === "equipment") return getActorEquipmentConflictingItems(actor, itemData, excludeItemIds);
+  if (placement.mode === "equipment") return getActorEquipmentConflictingItems(actor, itemData, placement, excludeItemIds);
   if (placement.mode === "weapon") return getActorWeaponConflictingItems(actor, itemData, placement, excludeItemIds);
   return [];
 }
 
-function getActorEquipmentConflictingItems(actor, itemData, excludeItemIds = []) {
+function getActorEquipmentConflictingItems(actor, itemData, placement = {}, excludeItemIds = []) {
   const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
   const race = getActorRace(actor);
-  const selectedSlotKeys = new Set(
-    getRaceEquipmentSlotsForItem(race, itemData).map(slot => getEquipmentSlotSelectionKey(slot.label))
-  );
-  if (!selectedSlotKeys.size) return [];
+  const targetSlots = getRequiredEquipmentSlotsForItem(race, itemData, placement.equipmentSlot);
+  if (!targetSlots.length) return [];
 
   return actor.items?.contents?.filter(item => {
     if (excluded.has(item.id)) return false;
     if (item.system?.placement?.mode !== "equipment") return false;
-    return Array.from(getSelectedEquipmentSlotKeys(item)).some(key => selectedSlotKeys.has(key));
+    return targetSlots.some(slot => doesItemOccupyEquipmentSlot(item, slot));
   }) ?? [];
 }
 
@@ -5304,11 +5305,10 @@ function canQuickTransferItemIntoParent({ sourceActor, targetActor, sourceItem, 
 
 function getEquipmentItemForActorSlot(actor, slot, excludeItemIds = []) {
   const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
-  const slotSelectionKey = getEquipmentSlotSelectionKey(slot.label);
   return actor.items?.contents?.find(item => {
     if (excluded.has(item.id)) return false;
     if (item.system?.placement?.mode !== "equipment") return false;
-    return getSelectedEquipmentSlotKeys(item).has(slotSelectionKey);
+    return doesItemOccupyEquipmentSlot(item, slot);
   }) ?? null;
 }
 

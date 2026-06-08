@@ -516,6 +516,16 @@
 
   <section class="fallout-maw-panel">
     <h2>{{localize "FALLOUTMAW.Item.OccupiedSlots"}}</h2>
+    <div class="fallout-maw-list-grid two-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponSlotMode"}}</span>
+        <select name="system.occupiedSlotMode">
+          {{#each occupiedSlotModeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+    </div>
     <div class="fallout-maw-hidden-controls">
       {{#each equipmentSlotSelections}}
       <input type="checkbox" name="system.occupiedSlots.{{selectionKey}}" data-equipment-slot-input="{{selectionKey}}" {{checked selected}}>

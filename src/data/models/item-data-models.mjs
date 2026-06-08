@@ -28,6 +28,7 @@ export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
         required: true,
         initial: {}
       }),
+      occupiedSlotMode: new StringField({ required: true, blank: false, choices: ["oneOf", "all"], initial: "all" }),
       weaponSlotRequirement: new SchemaField({
         mode: new StringField({ required: true, blank: false, choices: ["oneOf", "all"], initial: "oneOf" }),
         slots: new TypedObjectField(new BooleanField({ required: true, initial: false }), {

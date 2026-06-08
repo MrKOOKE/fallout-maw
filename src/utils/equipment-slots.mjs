@@ -29,6 +29,33 @@ export function getSelectedEquipmentSlotKeys(itemOrSystem) {
   );
 }
 
+export function getEquipmentSlotRequirement(itemOrSystem) {
+  const system = itemOrSystem?.system ?? itemOrSystem ?? {};
+  return {
+    mode: system.occupiedSlotMode === "oneOf" ? "oneOf" : "all",
+    selectedKeys: getSelectedEquipmentSlotKeys(system)
+  };
+}
+
+export function getRequiredEquipmentSlotsForItem(race, itemOrSystem, primarySlotKey = "") {
+  const requirement = getEquipmentSlotRequirement(itemOrSystem);
+  if (!requirement.selectedKeys.size) return [];
+  const slots = (race?.equipmentSlots ?? []).filter(slot => requirement.selectedKeys.has(getEquipmentSlotSelectionKey(slot.label)));
+  if (requirement.mode !== "oneOf") return slots.length === requirement.selectedKeys.size ? slots : [];
+  const key = String(primarySlotKey ?? "");
+  const slot = key ? slots.find(entry => entry.key === key) : slots[0];
+  return slot ? [slot] : [];
+}
+
+export function doesItemOccupyEquipmentSlot(itemOrSystem, slot = {}) {
+  const requirement = getEquipmentSlotRequirement(itemOrSystem);
+  const selectionKey = getEquipmentSlotSelectionKey(slot.label);
+  if (!requirement.selectedKeys.has(selectionKey)) return false;
+  if (requirement.mode !== "oneOf") return true;
+  const placement = (itemOrSystem?.system ?? itemOrSystem ?? {}).placement ?? {};
+  return String(placement.equipmentSlot ?? "") === String(slot.key ?? "");
+}
+
 export function getWeaponSlotRequirement(itemOrSystem) {
   const system = itemOrSystem?.system ?? itemOrSystem ?? {};
   const requirement = system.weaponSlotRequirement ?? {};

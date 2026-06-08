@@ -3155,6 +3155,12 @@
   box-shadow: inset 0 0 0 1px rgba(235, 190, 80, 0.25);
 }
 
+.fallout-maw-equipment-slot.one-of {
+  background: rgba(235, 190, 80, 0.16);
+  border-color: rgba(235, 190, 80, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(235, 190, 80, 0.25);
+}
+
 .fallout-maw-inventory-cell.drop-stack-preview,
 .fallout-maw-inventory-grid-item.drop-stack-preview {
   background: rgba(238, 214, 90, 0.18);
@@ -11608,6 +11614,12 @@ label.fallout-maw-mitigation-cell {
   background: rgba(132, 190, 105, 0.12);
   border-color: rgba(148, 177, 111, 0.82);
   box-shadow: inset 0 0 0 1px rgba(148, 177, 111, 0.14);
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-equipment-slot.one-of {
+  background: rgba(235, 190, 80, 0.16);
+  border-color: rgba(235, 190, 80, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(235, 190, 80, 0.25);
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-inventory-cell.drop-stack-preview,

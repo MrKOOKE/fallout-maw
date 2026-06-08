@@ -3457,8 +3457,8 @@ function getWeaponAttackPowerPreviewStats(actor = null, weapon = null, weaponDat
 
   return {
     damage: Math.max(0, Math.floor(modifiedDamage * (weakening.active ? weakening.ratio : 1))),
-    accuracyBonus: evaluateDialogFormula(weaponData.accuracyBonus, actor) + getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "accuracy") - conditionAccuracyPenalty,
-    criticalChanceModifier: evaluateDialogFormula(weaponData.criticalChanceModifier, actor) + getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "criticalChance") - conditionCritPenalty,
+    accuracyBonus: evaluateDialogFormula(weaponData.accuracyBonus, actor, { minimum: -Infinity }) + getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "accuracy") - conditionAccuracyPenalty,
+    criticalChanceModifier: evaluateDialogFormula(weaponData.criticalChanceModifier, actor, { minimum: -Infinity }) + getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "criticalChance") - conditionCritPenalty,
     criticalDamagePercent: Math.max(0, evaluateDialogFormula(weaponData.criticalDamagePercent, actor, { fallback: 150 }) + getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "criticalDamage")),
     attackConeDegrees: Math.max(0, Number(weaponData.attackConeDegrees) || 0),
     maxRangeMeters: evaluateDialogFormula(weaponData.maxRangeMeters, actor, { minimum: 0 }),

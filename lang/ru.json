@@ -389,6 +389,7 @@
       "WeaponActionAimedMeleeAttack": "Прицельная атака",
       "WeaponBurstCount": "Выстрелов в очереди",
       "WeaponBurstDifficultyPerShot": "Сложность за каждую пулю",
+      "WeaponRecoil": "Отдача",
       "WeaponPushMaxRange": "Максимальная дальность толчка, м",
       "WeaponPushAccuracyModifier": "Изменение точности толчка",
       "WeaponPushDifficultyModifier": "Изменение сложности отталкивания",

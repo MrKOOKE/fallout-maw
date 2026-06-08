@@ -153,6 +153,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const currencySettings = getCurrencySettings();
     const itemCategory = item.system?.itemCategory ?? "";
     const occupiedSlots = item.system?.occupiedSlots ?? {};
+    const occupiedSlotMode = item.system?.occupiedSlotMode ?? "all";
     const weaponSlotRequirement = item.system?.weaponSlotRequirement ?? {};
     const occupiedWeaponSlots = weaponSlotRequirement.slots ?? {};
     const creatureOptions = getCreatureOptions();
@@ -409,6 +410,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
           selected: Boolean(occupiedSlots[slot.selectionKey])
         }))
       })),
+      occupiedSlotModeChoices: buildWeaponSlotRequirementModeChoices(occupiedSlotMode),
       weaponSlotRequirementModeChoices: buildWeaponSlotRequirementModeChoices(weaponSlotRequirement.mode),
       weaponSlotSelections: Array.from(weaponSlotSelections.values()),
       weaponSlotGroups: weaponSlotGroups.map(group => ({

@@ -3720,6 +3720,7 @@ function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "") {
   const actor = getWeaponOwnerActor(weapon);
   const stealth = getStealthAttackModifiers(actor);
   const modifier = evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier, {
+    minimum: -Infinity,
     context: "critical chance"
   })
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance")
@@ -3825,6 +3826,7 @@ function getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId
 
 function getWeaponAccuracyModifier(weapon, weaponFunctionId = "") {
   return evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.accuracyBonus, {
+    minimum: -Infinity,
     context: "weapon accuracy"
   })
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "accuracy")
@@ -3834,12 +3836,14 @@ function getWeaponAccuracyModifier(weapon, weaponFunctionId = "") {
 function getWeaponPushAccuracyModifier(weapon, weaponFunctionId = "") {
   return getWeaponAccuracyModifier(weapon, weaponFunctionId)
     + evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.push?.accuracyModifier, {
+      minimum: -Infinity,
       context: "push accuracy"
     });
 }
 
 function getWeaponPushDifficultyModifier(weapon, weaponFunctionId = "") {
   return evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.push?.pushDifficultyModifier, {
+    minimum: -Infinity,
     context: "push difficulty"
   });
 }
@@ -3905,10 +3909,12 @@ function getAttackModeCriticalCheckModifiers(weapon, actionKey, mode, weaponFunc
   const actor = getWeaponOwnerActor(weapon);
   const stealth = getStealthAttackModifiers(actor);
   const modifier = evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier, {
+    minimum: -Infinity,
     context: "critical chance"
   })
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance")
     + evaluateWeaponFormula(weapon, getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.criticalChanceModifier, {
+      minimum: -Infinity,
       context: "attack mode critical chance"
     })
     + stealth.criticalChanceBonus

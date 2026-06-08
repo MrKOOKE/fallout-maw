@@ -7,9 +7,10 @@ import {
 import { getBaselineDefault } from "../settings/baseline.mjs";
 import {
   canUseWeaponSlotForItem,
+  getEquipmentSlotSelectionKey,
   getRaceEquipmentSlotsForItem,
+  getRequiredEquipmentSlotsForItem,
   getRequiredWeaponSlotsForItem,
-  getSelectedEquipmentSlotKeys,
   getWeaponSlotRequirement,
   getWeaponSlotRequirementSize,
   isContainerWeaponSetKey
@@ -1339,10 +1340,13 @@ async function applyGeneratedEquipment(actor, createdItems = []) {
 function getOccupiedGeneratedEquipSlots(actor) {
   const occupiedEquipmentSlots = new Set();
   const occupiedWeaponSlots = new Set();
+  const race = getActorRace(actor);
   for (const item of actor.items ?? []) {
     const placement = item.system?.placement ?? {};
     if (placement.mode === "equipment") {
-      for (const key of getSelectedEquipmentSlotKeys(item)) occupiedEquipmentSlots.add(key);
+      for (const slot of getRequiredEquipmentSlotsForItem(race, item, placement.equipmentSlot)) {
+        occupiedEquipmentSlots.add(getEquipmentSlotSelectionKey(slot.label));
+      }
     }
     if (placement.mode === "weapon") {
       for (const key of getPlacedWeaponSlotKeys(actor, item, placement)) occupiedWeaponSlots.add(key);
@@ -1359,10 +1363,13 @@ function findGeneratedEquipPlacement(actor, item, occupiedEquipmentSlots, occupi
   const race = getActorRace(actor);
   const equipmentSlots = getRaceEquipmentSlotsForItem(race, item);
   if (equipmentSlots.length) {
-    const selectedKeys = Array.from(getSelectedEquipmentSlotKeys(item));
-    if (selectedKeys.every(key => !occupiedEquipmentSlots.has(key))) {
-      for (const key of selectedKeys) occupiedEquipmentSlots.add(key);
-      return { mode: "equipment", equipmentSlot: equipmentSlots[0].key, weaponSet: "", weaponSlot: "", x: 1, y: 1 };
+    for (const slot of equipmentSlots) {
+      const requiredSlots = getRequiredEquipmentSlotsForItem(race, item, slot.key);
+      if (!requiredSlots.length) continue;
+      const requiredKeys = requiredSlots.map(entry => getEquipmentSlotSelectionKey(entry.label));
+      if (requiredKeys.some(key => occupiedEquipmentSlots.has(key))) continue;
+      for (const key of requiredKeys) occupiedEquipmentSlots.add(key);
+      return { mode: "equipment", equipmentSlot: slot.key, weaponSet: "", weaponSlot: "", x: 1, y: 1 };
     }
   }
 

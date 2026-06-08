@@ -390,6 +390,7 @@
       "WeaponActionAimedMeleeAttack": "Aimed Attack",
       "WeaponBurstCount": "Burst Shots",
       "WeaponBurstDifficultyPerShot": "Difficulty Per Bullet",
+      "WeaponRecoil": "Recoil",
       "WeaponPushMaxRange": "Push Max Range, m",
       "WeaponPushAccuracyModifier": "Push Accuracy Modifier",
       "WeaponPushDifficultyModifier": "Push Difficulty Modifier",

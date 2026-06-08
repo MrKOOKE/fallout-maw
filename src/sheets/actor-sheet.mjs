@@ -21,8 +21,10 @@ import { getLevelThreshold } from "../settings/levels.mjs";
 import { createDefaultInventorySize } from "../settings/creature-options.mjs";
 import {
   canUseWeaponSlotForItem,
+  doesItemOccupyEquipmentSlot,
   getEquipmentSlotSelectionKey,
   getRaceEquipmentSlotsForItem,
+  getRequiredEquipmentSlotsForItem,
   getRequiredWeaponSlotsForItem,
   getSelectedEquipmentSlotKeys,
   getWeaponSlotRequirement,
@@ -2052,7 +2054,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       : selectedSlots[0];
     if (!targetSlot) return null;
 
-    const blocked = selectedSlots.some(slot => Boolean(this.#getEquipmentItemForSlot(slot, excludeItemIds)));
+    const requiredSlots = getRequiredEquipmentSlotsForItem(race, itemData, targetSlot.key);
+    if (!requiredSlots.length) return null;
+    const blocked = requiredSlots.some(slot => Boolean(this.#getEquipmentItemForSlot(slot, excludeItemIds)));
     if (blocked && !allowReplacement) return null;
 
     const footprint = getItemFootprint(itemData);
@@ -2065,23 +2069,21 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #getPlacementConflictingItems(itemData, placement = {}, excludeItemIds = []) {
-    if (placement.mode === "equipment") return this.#getEquipmentConflictingItems(itemData, excludeItemIds);
+    if (placement.mode === "equipment") return this.#getEquipmentConflictingItems(itemData, placement, excludeItemIds);
     if (placement.mode === "weapon") return this.#getWeaponConflictingItems(itemData, placement, excludeItemIds);
     return [];
   }
 
-  #getEquipmentConflictingItems(itemData, excludeItemIds = []) {
+  #getEquipmentConflictingItems(itemData, placement = {}, excludeItemIds = []) {
     const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
     const race = this.#getCurrentRace();
-    const selectedSlotKeys = new Set(
-      getRaceEquipmentSlotsForItem(race, itemData).map(slot => getEquipmentSlotSelectionKey(slot.label))
-    );
-    if (!selectedSlotKeys.size) return [];
+    const targetSlots = getRequiredEquipmentSlotsForItem(race, itemData, placement.equipmentSlot);
+    if (!targetSlots.length) return [];
 
     return this.actor.items.contents.filter(item => {
       if (excluded.has(item.id)) return false;
       if (item.system?.placement?.mode !== "equipment") return false;
-      return Array.from(getSelectedEquipmentSlotKeys(item)).some(key => selectedSlotKeys.has(key));
+      return targetSlots.some(slot => doesItemOccupyEquipmentSlot(item, slot));
     });
   }
 
@@ -2124,11 +2126,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #getEquipmentItemForSlot(slot, excludeItemIds = []) {
     const excluded = new Set(Array.isArray(excludeItemIds) ? excludeItemIds : [excludeItemIds]);
-    const slotSelectionKey = getEquipmentSlotSelectionKey(slot.label);
     return this.actor.items.contents.find(item => {
       if (excluded.has(item.id)) return false;
       if (item.system?.placement?.mode !== "equipment") return false;
-      return getSelectedEquipmentSlotKeys(item).has(slotSelectionKey);
+      return doesItemOccupyEquipmentSlot(item, slot);
     }) ?? null;
   }
 
@@ -3685,12 +3686,12 @@ function buildDamageSourceTooltipSection(item, actor = null) {
   ];
   const pellets = Math.max(1, evaluateTooltipFormula(source?.pellets, actor, { fallback: 1, minimum: 1 }) || 1);
   if (pellets > 1) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPellets"), pellets]);
-  const accuracyBonus = evaluateTooltipFormula(source?.accuracyBonus, actor);
-  if (accuracyBonus) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), formatSignedNumber(accuracyBonus)]);
-  const criticalChanceModifier = evaluateTooltipFormula(source?.criticalChanceModifier, actor);
-  if (criticalChanceModifier) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), `${formatSignedNumber(criticalChanceModifier)}%`]);
+  const accuracyBonus = evaluateTooltipFormula(source?.accuracyBonus, actor, { minimum: -Infinity });
+  if (accuracyBonus) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), renderSignedTooltipModifier(accuracyBonus)]);
+  const criticalChanceModifier = evaluateTooltipFormula(source?.criticalChanceModifier, actor, { minimum: -Infinity });
+  if (criticalChanceModifier) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalChanceModifier"), renderSignedTooltipModifier(criticalChanceModifier, { suffix: "%" })]);
   const criticalDamagePercent = evaluateTooltipFormula(source?.criticalDamagePercent, actor);
-  if (criticalDamagePercent) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), `${formatSignedNumber(criticalDamagePercent)}%`]);
+  if (criticalDamagePercent) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponCriticalDamagePercent"), renderSignedTooltipModifier(criticalDamagePercent, { suffix: "%" })]);
   const maxRangeMeters = evaluateTooltipFormula(source?.maxRangeMeters, actor);
   if (maxRangeMeters) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponMaxRange"), `${formatNumber(maxRangeMeters)} м`]);
   const effectiveValue = evaluateTooltipFormula(source?.effectiveRange?.value, actor);
@@ -4113,6 +4114,11 @@ function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = fal
   );
   rows.push(...getWeaponActionDetailRows(data, { actor }));
   rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponSkill"), getSkillLabel(data.skillKey)]);
+  if (isWeaponActionEnabled(data, "burst")) {
+    const baseRecoil = getWeaponBurstDifficultyPerShot(baseData);
+    const recoil = baseMode ? baseRecoil : getEffectiveWeaponBurstDifficultyPerShot(data, actor);
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponRecoil"), renderChangedSignedNumber(recoil, baseRecoil, { baseMode, higherIsBetter: false })]);
+  }
   const accuracyBonus = stats.accuracyBonus;
   if (accuracyBonus || (!baseMode && accuracyBonus !== baseStats.accuracyBonus)) {
     rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponAccuracyBonus"), renderChangedSignedNumber(accuracyBonus, baseStats.accuracyBonus, { baseMode })]);
@@ -4175,6 +4181,13 @@ function renderChangedSignedPercentValue(value = 0, baseValue = 0, options = {})
   const text = `${formatSignedNumber(value)}%`;
   if (options.baseMode || Number(value) === Number(baseValue)) return text;
   return renderChangedTooltipText(text, (Number(value) > Number(baseValue)) === (options.higherIsBetter !== false));
+}
+
+function renderSignedTooltipModifier(value = 0, { suffix = "", higherIsBetter = true } = {}) {
+  const numeric = Number(value) || 0;
+  const text = `${formatSignedNumber(numeric)}${suffix}`;
+  if (!numeric) return text;
+  return renderChangedTooltipText(text, (numeric > 0) === higherIsBetter);
 }
 
 function renderChangedPercentValue(value = 0, baseValue = 0, options = {}) {
@@ -4265,10 +4278,10 @@ function getWeaponTooltipCalculatedStats(item, data = {}, { actor = null, baseMo
 
   return {
     damage: Math.max(0, Math.floor(modifiedDamage * (weakening.active ? weakening.ratio : 1))),
-    accuracyBonus: evaluateTooltipFormula(data.accuracyBonus, actor)
+    accuracyBonus: evaluateTooltipFormula(data.accuracyBonus, actor, { minimum: -Infinity })
       + (baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "accuracy"))
       - conditionAccuracyPenalty,
-    criticalChanceModifier: evaluateTooltipFormula(data.criticalChanceModifier, actor)
+    criticalChanceModifier: evaluateTooltipFormula(data.criticalChanceModifier, actor, { minimum: -Infinity })
       + (baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "criticalChance"))
       - conditionCritPenalty,
     criticalDamagePercent: Math.max(0, evaluateTooltipFormula(data.criticalDamagePercent, actor, { fallback: 150 })
@@ -4345,6 +4358,16 @@ function getWeaponActionDetailRows(data = {}, { actor = null } = {}) {
   const rows = [];
   if (isWeaponActionEnabled(data, "volley")) rows.push(...getWeaponVolleyRows(data, { actor }));
   return rows;
+}
+
+function getWeaponBurstDifficultyPerShot(data = {}) {
+  return Math.max(0, toInteger(data?.burst?.difficultyPerShot));
+}
+
+function getEffectiveWeaponBurstDifficultyPerShot(data = {}, actor = null) {
+  const base = getWeaponBurstDifficultyPerShot(data);
+  const stabilityPercent = toInteger(actor?.system?.combat?.burstStability);
+  return Math.max(0, Math.round(base * Math.max(0, 1 - (stabilityPercent / 100))));
 }
 
 function isWeaponActionEnabled(data = {}, actionKey = "") {
@@ -5047,7 +5070,7 @@ function prepareInventoryContext(actor, race) {
   const equipmentSlots = (race?.equipmentSlots ?? []).map(slot => {
     const item = topLevelItems.find(candidate => (
       candidate.placement?.mode === "equipment"
-      && getSelectedEquipmentSlotKeys(candidate).has(getEquipmentSlotSelectionKey(slot.label))
+      && doesItemOccupyEquipmentSlot(candidate, slot)
     ));
     if (item) assignedItemIds.add(item.id);
     return { ...slot, item };

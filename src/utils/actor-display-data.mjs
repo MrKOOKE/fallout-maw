@@ -1,9 +1,8 @@
 import { createDefaultInventorySize } from "../settings/creature-options.mjs";
 import { getCurrencySettings } from "../settings/accessors.mjs";
 import {
-  getEquipmentSlotSelectionKey,
+  doesItemOccupyEquipmentSlot,
   getRequiredWeaponSlotsForItem,
-  getSelectedEquipmentSlotKeys,
   getWeaponSlotRequirement,
   getWeaponSlotRequirementSize,
   isContainerWeaponSetKey
@@ -152,7 +151,7 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
     ...(race?.equipmentSlots ?? []).map(slot => {
       const item = topLevelItems.find(candidate => (
         candidate.placement?.mode === "equipment"
-        && getSelectedEquipmentSlotKeys(candidate).has(getEquipmentSlotSelectionKey(slot.label))
+        && doesItemOccupyEquipmentSlot(candidate, slot)
       ));
       if (item) assignedItemIds.add(item.id);
       return { ...slot, item };
@@ -563,6 +562,7 @@ export function createInventoryItemData(item, allItems, currencies = [], placeme
     locked: Boolean(item.system?.locked),
     brokenCondition: isItemBrokenByCondition(item),
     occupiedSlots: item.system?.occupiedSlots ?? {},
+    occupiedSlotMode: item.system?.occupiedSlotMode ?? "all",
     weaponSlotRequirement: item.system?.weaponSlotRequirement ?? { mode: "oneOf", slots: {} },
     itemFunction: item.system?.itemFunction ?? "",
     isContainer: isContainerItem(item),
