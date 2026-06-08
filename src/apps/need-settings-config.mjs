@@ -214,7 +214,7 @@ export class NeedAdvancedSettingsConfig extends FalloutMaWFormApplicationV2 {
     classes: ["fallout-maw", "fallout-maw-config-form", "need-advanced-settings-config"],
     position: {
       width: 920,
-      height: 820
+      height: "auto"
     },
     window: {
       resizable: true

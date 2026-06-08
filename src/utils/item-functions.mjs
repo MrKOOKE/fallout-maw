@@ -6,6 +6,7 @@ export const ITEM_FUNCTIONS = {
   condition: "condition",
   constructPart: "constructPart",
   firstAid: "firstAid",
+  needChange: "needChange",
   weapon: "weapon",
   module: "module",
   prosthesis: "prosthesis",
@@ -84,9 +85,26 @@ export function getFirstAidFunction(itemOrSystem = null) {
 }
 
 export function getFirstAidChargesData(itemOrSystem = null) {
-  const firstAid = getFirstAidFunction(itemOrSystem);
-  const max = Math.max(1, toWholeNumber(firstAid?.charges?.max, 1));
-  const rawValue = firstAid?.charges?.value;
+  return getFunctionChargesData(getFirstAidFunction(itemOrSystem));
+}
+
+export function getNeedChangeFunction(itemOrSystem = null) {
+  return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.needChange] ?? {};
+}
+
+export function getNeedChangeChargesData(itemOrSystem = null) {
+  return getFunctionChargesData(getNeedChangeFunction(itemOrSystem));
+}
+
+export function getActiveItemChargesData(itemOrSystem = null) {
+  if (hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.firstAid, { ignoreBroken: true })) return getFirstAidChargesData(itemOrSystem);
+  if (hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.needChange, { ignoreBroken: true })) return getNeedChangeChargesData(itemOrSystem);
+  return { value: 0, max: 0 };
+}
+
+function getFunctionChargesData(itemFunction = {}) {
+  const max = Math.max(1, toWholeNumber(itemFunction?.charges?.max, 1));
+  const rawValue = itemFunction?.charges?.value;
   const value = rawValue === undefined || rawValue === null || rawValue === ""
     ? max
     : Math.max(0, Math.min(max, toWholeNumber(rawValue, max)));
@@ -124,7 +142,8 @@ export function isInstalledProsthesis(itemOrSystem = null, limbKey = "") {
 }
 
 export function isActiveItem(itemOrSystem = null) {
-  return hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.firstAid);
+  return hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.firstAid)
+    || hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.needChange);
 }
 
 export function getConditionWeakeningData(itemOrSystem = null, { minimumRatio = 0 } = {}) {

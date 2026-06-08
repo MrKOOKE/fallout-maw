@@ -3,6 +3,7 @@ import { BLEEDING_DAMAGE_TYPE_KEY, TEMPLATES } from "../constants.mjs";
 import { AdvancementApplication } from "../advancement/application.mjs";
 import {
   getCharacteristicSettings,
+  getActorNeedSettings,
   getCreatureOptions,
   getCurrencySettings,
   getDamageTypeSettings,
@@ -11,7 +12,6 @@ import {
   getNeedSettings,
   getProficiencyInfluenceSettings,
   getProficiencySettings,
-  getRaceNeedSettings,
   getResourceSettings,
   getSkillAdvancementSettings,
   getSkillSettings,
@@ -56,6 +56,7 @@ import { ActorTradeSettingsConfig } from "../apps/actor-trade-settings-config.mj
 import {
   DAMAGE_MITIGATION_MODES,
   ITEM_FUNCTIONS,
+  getActiveItemChargesData,
   getConditionFunction,
   getConstructPartFunction,
   getConditionWeakeningData,
@@ -63,6 +64,7 @@ import {
   getDamageSourceFunction,
   getFirstAidChargesData,
   getFirstAidFunction,
+  getNeedChangeFunction,
   getEnabledWeaponFunctions,
   getWeaponAttackPowerState,
   getWeaponFunctionModuleSlots,
@@ -292,7 +294,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const subtypeId = actor.system?.creature?.subtypeId;
     const race = creatureOptions.races.find(entry => entry.id === raceId);
     const subtype = (race?.naturalItemSets ?? []).find(entry => entry.id === subtypeId) ?? null;
-    const needSettings = getRaceNeedSettings(race);
+    const needSettings = getActorNeedSettings(actor);
     const sourceSystem = actor.system?._source ?? actor.system;
     const limbEntries = Object.entries(actor.system?.limbs ?? {});
     const activeLimbKey = limbEntries.some(([key]) => key === this.#activeLimbKey)
@@ -3457,6 +3459,7 @@ function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex 
     buildContainerTooltipSection(item, actor),
     buildConditionTooltipSection(item),
     buildFirstAidTooltipSection(item, actor),
+    buildNeedChangeTooltipSection(item, actor),
     buildDamageMitigationTooltipSection(item, actor),
     buildDamageSourceTooltipSection(item, actor),
     buildModuleTooltipSection(item),
@@ -3537,11 +3540,29 @@ function buildFirstAidTooltipSection(item, actor = null) {
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionFirstAid"), rows);
 }
 
+function buildNeedChangeTooltipSection(item, actor = null) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.needChange, { ignoreBroken: true })) return "";
+  const needChange = getNeedChangeFunction(item);
+  const charges = getActiveItemChargesData(item);
+  const rows = [
+    [game.i18n.localize("FALLOUTMAW.Item.FirstAidCharges"), renderTooltipMeterValue(charges.value, charges.max)]
+  ];
+  rows.push(...getConfiguredNeedTooltipRows(needChange.needs, actor));
+  return renderTooltipFunctionSection("Изменение потребностей", rows);
+}
+
 function getFirstAidNeedTooltipRows(firstAid = {}) {
-  const needLabels = new Map(getNeedSettings().map(need => [need.key, need.label ?? need.key]));
-  const source = Array.isArray(firstAid.needs)
-    ? firstAid.needs
-    : Object.entries(firstAid.needs ?? {}).map(([needKey, value]) => ({ needKey, value }));
+  return getConfiguredNeedTooltipRows(firstAid.needs);
+}
+
+function getConfiguredNeedTooltipRows(needs = [], actor = null) {
+  const needLabels = new Map([
+    ...getNeedSettings().map(need => [need.key, need.label ?? need.key]),
+    ...getActorNeedSettings(actor).map(need => [need.key, need.label ?? need.key])
+  ]);
+  const source = Array.isArray(needs)
+    ? needs
+    : Object.entries(needs ?? {}).map(([needKey, value]) => ({ needKey, value }));
   const values = source
     .map(entry => {
       const key = String(entry?.needKey ?? "").trim();
@@ -5011,8 +5032,11 @@ function prepareInventoryContext(actor, race) {
 function createInventoryItemData(item, allItems, currencies = [], placement = null) {
   const resolvedPlacement = placement ?? normalizeInventoryPlacement(item.system?.placement ?? {}, item, allItems);
   const container = item.system?.container ?? {};
-  const firstAidCharges = getFirstAidChargesData(item);
-  const showFirstAidCharges = hasItemFunction(item, ITEM_FUNCTIONS.firstAid) && firstAidCharges.max > 1;
+  const firstAidCharges = getActiveItemChargesData(item);
+  const showFirstAidCharges = (
+    hasItemFunction(item, ITEM_FUNCTIONS.firstAid, { ignoreBroken: true })
+    || hasItemFunction(item, ITEM_FUNCTIONS.needChange, { ignoreBroken: true })
+  ) && firstAidCharges.max > 1;
   return {
     id: item.id,
     uuid: item.uuid,

@@ -1,6 +1,7 @@
 import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.mjs";
 import { activateDescriptionFormulaAutocomplete } from "../apps/description-formula-autocomplete.mjs";
 import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
+import { NeedAdvancedSettingsConfig } from "../apps/need-settings-config.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getItemCategorySettings, getNeedSettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { getEquipmentSlotSelectionKey, groupRaceEquipmentSlotsBySet, groupRaceWeaponSlotsBySet } from "../utils/equipment-slots.mjs";
@@ -171,6 +172,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const hasConditionFunction = sheetHasItemFunction(ITEM_FUNCTIONS.condition);
     const hasConstructPartFunction = sheetHasItemFunction(ITEM_FUNCTIONS.constructPart);
     const hasFirstAidFunction = sheetHasItemFunction(ITEM_FUNCTIONS.firstAid);
+    const hasNeedChangeFunction = sheetHasItemFunction(ITEM_FUNCTIONS.needChange);
     const hasWeaponFunction = sheetHasItemFunction(ITEM_FUNCTIONS.weapon);
     const hasToolFunction = sheetHasItemFunction(ITEM_FUNCTIONS.tool);
     const containerLoadReduction = Math.max(0, Math.min(100, Number(item.system?.functions?.container?.loadReduction) || 0));
@@ -221,6 +223,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         value: ITEM_FUNCTIONS.firstAid,
         label: game.i18n.localize("FALLOUTMAW.Item.FunctionFirstAid"),
         disabled: hasFirstAidFunction
+      },
+      {
+        value: ITEM_FUNCTIONS.needChange,
+        label: "Изменение потребностей",
+        disabled: hasNeedChangeFunction
       },
       {
         value: ITEM_FUNCTIONS.weapon,
@@ -323,12 +330,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       hasConditionFunction,
       hasConstructPartFunction,
       hasFirstAidFunction,
+      hasNeedChangeFunction,
       firstAidEffectRows: buildFirstAidEffectRows(item),
       firstAidNeedRows: buildFirstAidNeedRows(item),
+      needChangeNeedRows: buildNeedChangeNeedRows(item),
       firstAidRemoveEffectRows: buildFirstAidRemoveEffectRows(item, damageTypeSettings),
       conditionRecoveryMethodRows: buildConditionRecoveryMethodRows(item, toolSettings),
       constructPartWeaponSetRows: buildConstructPartWeaponSetRows(item),
       constructPartLossEffectRows: buildConstructPartLossEffectRows(item),
+      constructPartNeedRows: buildConstructPartNeedRows(item),
       hasWeaponFunction,
       hasWeaponMagazineCost: hasWeaponResourceCost(item, "magazine"),
       hasToolFunction,
@@ -412,6 +422,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         critical
           ? []
           : readConstructPartLossEffectsFromForm(form)
+      );
+    }
+    if (form?.querySelector?.("[data-construct-part-need-row]")) {
+      foundry.utils.setProperty(
+        submitData,
+        "system.functions.constructPart.needs",
+        readConstructPartNeedsFromForm(form, this.item.system?.functions?.constructPart?.needs)
       );
     }
     const freeSettingsConditionWeakeningInput = form?.querySelector?.("[data-free-settings-condition-weakening]");
@@ -516,6 +533,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-delete-construct-part-loss-effect]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteConstructPartLossEffect(event));
     });
+    this.element?.querySelector("[data-add-construct-part-need]")?.addEventListener("click", event => this.#onAddConstructPartNeed(event));
+    this.element?.querySelectorAll("[data-delete-construct-part-need]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteConstructPartNeed(event));
+    });
+    this.element?.querySelectorAll("[data-open-construct-part-need-settings]").forEach(button => {
+      button.addEventListener("click", event => this.#onOpenConstructPartNeedSettings(event));
+    });
     this.element?.querySelector("[data-construct-part-critical]")?.addEventListener("change", event => this.#onConstructPartCriticalChange(event));
     this.element?.querySelectorAll("[data-add-ability-function]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityFunction(event));
@@ -602,6 +626,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelector("[data-add-first-aid-need]")?.addEventListener("click", event => this.#onAddFirstAidNeed(event));
     this.element?.querySelectorAll("[data-delete-first-aid-need]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteFirstAidNeed(event));
+    });
+    this.element?.querySelector("[data-add-need-change-need]")?.addEventListener("click", event => this.#onAddNeedChangeNeed(event));
+    this.element?.querySelectorAll("[data-delete-need-change-need]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteNeedChangeNeed(event));
+    });
+    this.element?.querySelectorAll("[data-need-change-charge-input]").forEach(input => {
+      input.addEventListener("change", event => this.#onNeedChangeChargeInputChange(event));
     });
     this.element?.querySelector("[data-add-first-aid-remove-effect]")?.addEventListener("click", event => this.#onAddFirstAidRemoveEffect(event));
     this.element?.querySelectorAll("[data-delete-first-aid-remove-effect]").forEach(button => {
@@ -2126,7 +2157,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.constructPart.aimedDifficultyBonus": 0,
         "system.functions.constructPart.critical": false,
         "system.functions.constructPart.lossEffects": [],
-        "system.functions.constructPart.weaponSets": []
+        "system.functions.constructPart.weaponSets": [],
+        "system.functions.constructPart.needs": []
       });
     }
 
@@ -2151,6 +2183,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.firstAid.limbSelection.value": 0,
         "system.functions.firstAid.removeEffects": [],
         "system.functions.firstAid.changes": []
+      });
+    }
+
+    if (functionKey === ITEM_FUNCTIONS.needChange) {
+      this.#functionPickerActive = false;
+      return this.item.update({
+        "system.functions.needChange.enabled": true,
+        "system.functions.needChange.charges.value": 1,
+        "system.functions.needChange.charges.max": 1,
+        "system.functions.needChange.needs": []
       });
     }
 
@@ -2328,6 +2370,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.constructPart.critical": false,
         "system.functions.constructPart.lossEffects": [],
         "system.functions.constructPart.weaponSets": [],
+        "system.functions.constructPart.needs": [],
         "system.placement.limbKey": ""
       });
     }
@@ -2351,6 +2394,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.firstAid.limbSelection.value": 0,
         "system.functions.firstAid.removeEffects": [],
         "system.functions.firstAid.changes": []
+      });
+    }
+    if (functionKey === ITEM_FUNCTIONS.needChange) {
+      return this.item.update({
+        "system.functions.needChange.enabled": false,
+        "system.functions.needChange.charges.value": 1,
+        "system.functions.needChange.charges.max": 1,
+        "system.functions.needChange.needs": []
       });
     }
     if (functionKey === ITEM_FUNCTIONS.weapon) {
@@ -2436,6 +2487,41 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const lossEffects = this.#getSubmittedConstructPartLossEffects({ keepEmpty: true });
     lossEffects.splice(index, 1);
     return this.item.update({ "system.functions.constructPart.lossEffects": lossEffects });
+  }
+
+  #onAddConstructPartNeed(event) {
+    event.preventDefault();
+    const needs = this.#getSubmittedConstructPartNeeds({ keepEmpty: true });
+    needs.push(createConstructPartNeedData(needs));
+    return this.item.update({ "system.functions.constructPart.needs": needs });
+  }
+
+  #onDeleteConstructPartNeed(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteConstructPartNeed);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const needs = this.#getSubmittedConstructPartNeeds({ keepEmpty: true });
+    needs.splice(index, 1);
+    return this.item.update({ "system.functions.constructPart.needs": needs });
+  }
+
+  #onOpenConstructPartNeedSettings(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.openConstructPartNeedSettings);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const needs = this.#getSubmittedConstructPartNeeds({ keepEmpty: true });
+    const need = needs[index];
+    if (!need) return undefined;
+
+    return new NeedAdvancedSettingsConfig({
+      need,
+      onSave: settings => {
+        const current = this.#getSubmittedConstructPartNeeds({ keepEmpty: true });
+        if (!current[index]) return;
+        current[index].settings = settings;
+        return this.item.update({ "system.functions.constructPart.needs": current });
+      }
+    }).render({ force: true });
   }
 
   async #onConstructPartCriticalChange(event) {
@@ -2702,6 +2788,43 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.item.update({ "system.functions.firstAid.needs": current });
   }
 
+  #onAddNeedChangeNeed(event) {
+    event.preventDefault();
+    const current = getNeedChangeNeeds(this.item);
+    const existing = new Set(current.map(entry => String(entry?.needKey ?? "")));
+    const need = buildNeedChangeChoiceGroups(this.item)
+      .flatMap(group => group.choices)
+      .find(entry => !existing.has(entry.value))
+      ?? buildNeedChangeChoiceGroups(this.item).flatMap(group => group.choices)[0];
+    if (!need) return undefined;
+    current.push({ needKey: need.value, value: 0 });
+    return this.item.update({ "system.functions.needChange.needs": current });
+  }
+
+  #onDeleteNeedChangeNeed(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteNeedChangeNeed);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const current = getNeedChangeNeeds(this.item);
+    current.splice(index, 1);
+    return this.item.update({ "system.functions.needChange.needs": current });
+  }
+
+  #onNeedChangeChargeInputChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const submitData = this.form
+      ? this._processFormData(null, this.form, new FormDataExtended(this.form))
+      : {};
+    const needChange = submitData.system?.functions?.needChange ?? this.item.system?.functions?.needChange ?? {};
+    const max = Math.max(1, toInteger(needChange.charges?.max) || 1);
+    const value = Math.max(0, Math.min(max, toInteger(needChange.charges?.value)));
+    return this.#submitCurrentForm({
+      "system.functions.needChange.charges.max": max,
+      "system.functions.needChange.charges.value": value
+    });
+  }
+
   #onAddFirstAidRemoveEffect(event) {
     event.preventDefault();
     const current = normalizeFirstAidRemoveEffects(this.item.system?.functions?.firstAid?.removeEffects);
@@ -2745,6 +2868,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const properties = normalizeWeaponSpecialProperties(foundry.utils.getProperty(this.item, path)?.specialProperties ?? []);
     properties.push(createDefaultWeaponSpecialPropertyData());
     return this.item.update({ [`${path}.specialProperties`]: properties });
+  }
+
+  #getSubmittedConstructPartNeeds({ keepEmpty = false } = {}) {
+    if (!this.form) return normalizeConstructPartNeeds(this.item.system?.functions?.constructPart?.needs, { keepEmpty });
+    return readConstructPartNeedsFromForm(this.form, this.item.system?.functions?.constructPart?.needs, { keepEmpty });
   }
 
   #onWeaponSpecialPropertyTypeChange(event) {
@@ -3326,6 +3454,7 @@ function getItemFunctionLabel(functionKey = "") {
   if (functionKey === ITEM_FUNCTIONS.condition) return game.i18n.localize("FALLOUTMAW.Item.FunctionCondition");
   if (functionKey === ITEM_FUNCTIONS.constructPart) return "Деталь конструкта";
   if (functionKey === ITEM_FUNCTIONS.firstAid) return game.i18n.localize("FALLOUTMAW.Item.FunctionFirstAid");
+  if (functionKey === ITEM_FUNCTIONS.needChange) return "Изменение потребностей";
   if (functionKey === ITEM_FUNCTIONS.weapon) return game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon");
   if (functionKey === ITEM_FUNCTIONS.module) return game.i18n.localize("FALLOUTMAW.Item.FunctionModule");
   if (functionKey === ITEM_FUNCTIONS.prosthesis) return game.i18n.localize("FALLOUTMAW.Item.FunctionProsthesis");
@@ -3370,6 +3499,29 @@ function normalizeConstructPartWeaponSetData(entry = {}) {
 function buildConstructPartLossEffectRows(item) {
   return normalizeConstructPartLossEffects(item.system?.functions?.constructPart?.lossEffects, { keepEmpty: true })
     .map((effect, index) => prepareConstructPartLossEffectRow(effect, index));
+}
+
+function buildConstructPartNeedRows(item) {
+  return normalizeConstructPartNeeds(item.system?.functions?.constructPart?.needs, { keepEmpty: true })
+    .map((need, index) => ({ ...need, index }));
+}
+
+function readConstructPartNeedsFromForm(form, currentValue = [], { keepEmpty = false } = {}) {
+  const current = normalizeConstructPartNeeds(currentValue, { keepEmpty: true });
+  return Array.from(form?.querySelectorAll("[data-construct-part-need-row]") ?? [])
+    .map((row, index) => {
+      const key = row.querySelector("[data-construct-part-need-key]")?.value?.trim() ?? "";
+      const existing = current.find(need => need.key === key) ?? current[index] ?? {};
+      return {
+        key,
+        abbr: row.querySelector("[data-construct-part-need-abbr]")?.value?.trim() ?? "",
+        label: row.querySelector("[data-construct-part-need-label]")?.value?.trim() ?? "",
+        color: row.querySelector("[data-construct-part-need-color]")?.value?.trim() ?? "#8f8456",
+        formula: row.querySelector("[data-construct-part-need-formula]")?.value?.trim() || "0",
+        settings: foundry.utils.deepClone(existing.settings ?? { accumulation: { perHour: 10 }, thresholds: [], diseases: [] })
+      };
+    })
+    .filter(need => keepEmpty || need.key);
 }
 
 function readConstructPartLossEffectsFromForm(form, { keepEmpty = false } = {}) {
@@ -3639,6 +3791,41 @@ function prepareAbilityFunctionForDisplay(entry, characteristics, skills) {
       selected: setting.key === entry?.target
     }))
   };
+}
+
+function normalizeConstructPartNeeds(value = [], { keepEmpty = false } = {}) {
+  const needs = Array.isArray(value) ? value : Object.values(value ?? {});
+  return needs
+    .map(need => ({
+      key: String(need?.key ?? "").trim(),
+      abbr: String(need?.abbr ?? "").trim(),
+      label: String(need?.label ?? "").trim(),
+      color: String(need?.color ?? "#8f8456").trim() || "#8f8456",
+      formula: String(need?.formula ?? "0").trim() || "0",
+      settings: foundry.utils.deepClone(need?.settings ?? { accumulation: { perHour: 10 }, thresholds: [], diseases: [] })
+    }))
+    .filter(need => keepEmpty || need.key);
+}
+
+function createConstructPartNeedData(existingNeeds = []) {
+  const key = getUniqueConstructPartNeedId("newNeed", existingNeeds.map(need => need.key));
+  const abbr = getUniqueConstructPartNeedId("new", existingNeeds.map(need => need.abbr));
+  return {
+    key,
+    abbr,
+    label: "Новая потребность",
+    color: "#8f8456",
+    formula: "0",
+    settings: { accumulation: { perHour: 10 }, thresholds: [], diseases: [] }
+  };
+}
+
+function getUniqueConstructPartNeedId(baseId = "", existingIds = []) {
+  const used = new Set(existingIds.map(id => String(id ?? "").trim()).filter(Boolean));
+  if (!used.has(baseId)) return baseId;
+  let index = 2;
+  while (used.has(`${baseId}${index}`)) index += 1;
+  return `${baseId}${index}`;
 }
 
 function normalizeWeaponSpecialPropertiesInSubmitData(submitData = {}) {
@@ -6145,7 +6332,7 @@ function buildFirstAidEffectRows(item) {
 }
 
 function buildFirstAidNeedRows(item) {
-  const settings = getNeedSettings();
+  const choiceGroups = buildNeedChangeChoiceGroups(item);
   const source = Array.isArray(item.system?.functions?.firstAid?.needs)
     ? item.system.functions.firstAid.needs
     : Object.entries(item.system?.functions?.firstAid?.needs ?? {}).map(([needKey, value]) => ({ needKey, value }));
@@ -6153,12 +6340,92 @@ function buildFirstAidNeedRows(item) {
     index,
     needKey: String(entry?.needKey ?? ""),
     value: toInteger(entry?.value),
-    choices: settings.map(entry => ({
-      value: entry.key,
-      label: entry.label || entry.key,
-      selected: entry.key === String(source[index]?.needKey ?? "")
+    choiceGroups: selectNeedChoiceGroups(choiceGroups, String(source[index]?.needKey ?? ""))
+  }));
+}
+
+function buildNeedChangeNeedRows(item) {
+  const choiceGroups = buildNeedChangeChoiceGroups(item);
+  const source = getNeedChangeNeeds(item);
+  return source.map((entry, index) => ({
+    index,
+    needKey: String(entry?.needKey ?? ""),
+    value: toInteger(entry?.value),
+    choiceGroups: selectNeedChoiceGroups(choiceGroups, String(entry?.needKey ?? ""))
+  }));
+}
+
+function getNeedChangeNeeds(item) {
+  const source = item.system?.functions?.needChange?.needs ?? [];
+  return (Array.isArray(source)
+    ? source
+    : Object.entries(source).map(([needKey, value]) => ({ needKey, value })))
+    .map(entry => ({
+      needKey: String(entry?.needKey ?? ""),
+      value: toInteger(entry?.value)
+    }));
+}
+
+function buildNeedChangeChoiceGroups(item = null) {
+  const primaryChoices = getNeedSettings().map(need => ({
+    value: need.key,
+    label: need.label || need.key
+  }));
+  const primaryKeys = new Set(primaryChoices.map(choice => choice.value));
+  const additionalChoices = collectConstructPartNeedSettings(item)
+    .filter(need => !primaryKeys.has(need.key))
+    .map(need => ({
+      value: need.key,
+      label: need.label || need.key
+    }));
+
+  return [
+    { label: "Основные", choices: primaryChoices },
+    { label: "Дополнительные", choices: additionalChoices }
+  ].filter(group => group.choices.length);
+}
+
+function selectNeedChoiceGroups(groups = [], selectedKey = "") {
+  const selected = String(selectedKey ?? "");
+  const result = groups.map(group => ({
+    ...group,
+    choices: group.choices.map(choice => ({
+      ...choice,
+      selected: choice.value === selected
     }))
   }));
+  if (selected && !result.some(group => group.choices.some(choice => choice.value === selected))) {
+    const additional = result.find(group => group.label === "Дополнительные");
+    const choice = { value: selected, label: selected, selected: true };
+    if (additional) additional.choices.push(choice);
+    else result.push({ label: "Дополнительные", choices: [choice] });
+  }
+  return result;
+}
+
+function collectConstructPartNeedSettings(item = null) {
+  const byKey = new Map();
+  const addNeeds = needs => {
+    for (const need of normalizeConstructPartNeeds(needs)) {
+      if (!need.key || byKey.has(need.key)) continue;
+      byKey.set(need.key, need);
+    }
+  };
+
+  addNeeds(item?.system?.functions?.constructPart?.needs);
+  for (const worldItem of game.items ?? []) {
+    if (worldItem?.type === "gear" && hasItemFunction(worldItem, ITEM_FUNCTIONS.constructPart, { ignoreBroken: true })) {
+      addNeeds(worldItem.system?.functions?.constructPart?.needs);
+    }
+  }
+  for (const actor of game.actors ?? []) {
+    for (const actorItem of actor.items ?? []) {
+      if (actorItem?.type === "gear" && hasItemFunction(actorItem, ITEM_FUNCTIONS.constructPart, { ignoreBroken: true })) {
+        addNeeds(actorItem.system?.functions?.constructPart?.needs);
+      }
+    }
+  }
+  return Array.from(byKey.values());
 }
 
 function buildFirstAidRemoveEffectRows(item, damageTypeSettings = getDamageTypeSettings()) {

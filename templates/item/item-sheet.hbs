@@ -1004,6 +1004,35 @@
         <input type="checkbox" name="system.functions.constructPart.critical" value="true" data-construct-part-critical {{checked system.functions.constructPart.critical}}>
       </label>
     </div>
+    <div class="fallout-maw-panel-header subsection">
+      <h3>Потребности детали</h3>
+      <button type="button" data-add-construct-part-need><i class="fa-solid fa-plus"></i> Создать потребность</button>
+    </div>
+    <p class="hint">{{localize "FALLOUTMAW.Settings.Needs.FormulaHint"}}</p>
+    <div class="fallout-maw-settings-table fallout-maw-construct-part-needs">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Code"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Key"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Formula"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Color"}}</span>
+        <span></span>
+        <span></span>
+      </div>
+      {{#each constructPartNeedRows}}
+      <div class="fallout-maw-settings-row" data-construct-part-need-row>
+        <input type="text" name="system.functions.constructPart.needs.{{index}}.abbr" value="{{abbr}}" data-construct-part-need-abbr>
+        <input type="text" name="system.functions.constructPart.needs.{{index}}.key" value="{{key}}" data-construct-part-need-key>
+        <input type="text" name="system.functions.constructPart.needs.{{index}}.label" value="{{label}}" data-construct-part-need-label>
+        <input type="text" name="system.functions.constructPart.needs.{{index}}.formula" value="{{formula}}" data-formula-autocomplete="all" data-construct-part-need-formula>
+        <input type="color" name="system.functions.constructPart.needs.{{index}}.color" value="{{color}}" data-construct-part-need-color>
+        <button type="button" class="fallout-maw-icon-button fallout-maw-square-icon-button" data-open-construct-part-need-settings="{{index}}" title="Доп. настройки"><i class="fa-solid fa-gear"></i></button>
+        <button type="button" class="fallout-maw-icon-button fallout-maw-square-icon-button" data-delete-construct-part-need="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">Потребности детали не настроены.</p>
+      {{/each}}
+    </div>
     {{#unless system.functions.constructPart.critical}}
     <div class="fallout-maw-panel-header subsection">
       <h3>Эффекты утраты</h3>
@@ -1114,8 +1143,12 @@
       {{#each firstAidNeedRows}}
       <div class="fallout-maw-first-aid-need-row">
         <select name="system.functions.firstAid.needs.{{index}}.needKey">
-          {{#each choices}}
-          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{#each choiceGroups}}
+          <optgroup label="{{label}}">
+            {{#each choices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </optgroup>
           {{/each}}
         </select>
         <input type="number" name="system.functions.firstAid.needs.{{index}}.value" value="{{value}}" step="1">
@@ -1205,6 +1238,53 @@
       </div>
       {{else}}
       <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Effects.NoChanges"}}</p>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+
+  {{#if hasNeedChangeFunction}}
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>Изменение потребностей</h2>
+      <button type="button" data-remove-item-function="needChange" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label class="fallout-maw-ratio-field">
+        <span>{{localize "FALLOUTMAW.Item.FirstAidCharges"}}</span>
+        <span class="fallout-maw-ratio-control">
+          <input type="number" name="system.functions.needChange.charges.value" value="{{system.functions.needChange.charges.value}}" min="0" max="{{system.functions.needChange.charges.max}}" step="1" data-need-change-charge-input>
+          <b>/</b>
+          <input type="number" name="system.functions.needChange.charges.max" value="{{system.functions.needChange.charges.max}}" min="1" step="1" data-need-change-charge-input>
+        </span>
+      </label>
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>Потребности</h3>
+      <button type="button" data-add-need-change-need><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.ConditionAddRecoveryMethod"}}</button>
+    </div>
+    <div class="fallout-maw-effect-change-list">
+      <div class="fallout-maw-first-aid-need-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span></span>
+      </div>
+      {{#each needChangeNeedRows}}
+      <div class="fallout-maw-first-aid-need-row">
+        <select name="system.functions.needChange.needs.{{index}}.needKey">
+          {{#each choiceGroups}}
+          <optgroup label="{{label}}">
+            {{#each choices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </optgroup>
+          {{/each}}
+        </select>
+        <input type="number" name="system.functions.needChange.needs.{{index}}.value" value="{{value}}" step="1">
+        <button type="button" class="fallout-maw-icon-delete-button" data-delete-need-change-need="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">Изменения потребностей не настроены.</p>
       {{/each}}
     </div>
   </section>

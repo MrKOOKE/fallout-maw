@@ -81,6 +81,7 @@ export class GearDataModel extends BaseItemDataModel {
           )
         }),
         firstAid: firstAidFunctionField(),
+        needChange: needChangeFunctionField(),
         tools: new TypedObjectField(toolFunctionField(), { required: true, initial: {} })
       }),
       container: new SchemaField({
@@ -361,7 +362,8 @@ function constructPartFunctionField() {
     aimedDifficultyBonus: new NumberField({ required: true, integer: true, initial: 0 }),
     critical: new BooleanField({ required: true, initial: false }),
     lossEffects: new ArrayField(limbLossEffectField(), { required: true, initial: [] }),
-    weaponSets: new ArrayField(constructPartWeaponSetField(), { required: true, initial: [] })
+    weaponSets: new ArrayField(constructPartWeaponSetField(), { required: true, initial: [] }),
+    needs: new ArrayField(needDefinitionField(), { required: true, initial: [] })
   });
 }
 
@@ -674,6 +676,35 @@ function firstAidFunctionField() {
       damageTypeKey: new StringField({ required: true, blank: true, initial: "" })
     }), { required: true, initial: [] }),
     changes: new ArrayField(traumaEffectField(), { required: true, initial: [] })
+  });
+}
+
+function needChangeFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    charges: new SchemaField({
+      value: new NumberField({ required: true, integer: true, min: 0, initial: 1 }),
+      max: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
+    }),
+    needs: new ArrayField(needChangeEntryField(), { required: true, initial: [] })
+  });
+}
+
+function needChangeEntryField() {
+  return new SchemaField({
+    needKey: new StringField({ required: true, blank: true, initial: "" }),
+    value: new NumberField({ required: true, integer: true, initial: 0 })
+  });
+}
+
+function needDefinitionField() {
+  return new SchemaField({
+    key: new StringField({ required: true, blank: true, initial: "" }),
+    abbr: new StringField({ required: true, blank: true, initial: "" }),
+    label: new StringField({ required: true, blank: true, initial: "" }),
+    color: new StringField({ required: true, blank: true, initial: "#8f8456" }),
+    formula: new StringField({ required: true, blank: true, initial: "0" }),
+    settings: new ObjectField({ required: true, initial: {} })
   });
 }
 

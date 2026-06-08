@@ -17,6 +17,7 @@ import {
   getCreatureOptions,
   getCurrencySettings,
   getDamageTypeSettings,
+  getConstructPartNeedSettings,
   getProficiencySettings,
   getRaceNeedSettings,
   getResourceSettings,
@@ -175,7 +176,9 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     const race = isConstruct
       ? null
       : getCreatureOptions(characteristicSettings, damageTypeSettings).races.find(entry => entry.id === this.creature?.raceId);
-    const needSettings = getRaceNeedSettings(race);
+    const needSettings = isConstruct
+      ? getConstructPartNeedSettings(this.parent?.items)
+      : getRaceNeedSettings(race);
     prepareActorInventorySize(this.inventory, race);
     if (race?.progression) {
       this.progression.skillPointsPerLevel = String(race.progression.skillPointsPerLevel ?? DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA);

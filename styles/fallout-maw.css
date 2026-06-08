@@ -2479,6 +2479,17 @@
   width: 32px;
 }
 
+.fallout-maw-square-icon-button {
+  align-items: center;
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  min-height: 2rem;
+  min-width: 2rem;
+  padding: 0;
+  width: 2rem;
+}
+
 .fallout-maw-development-points-grid {
   display: grid;
   gap: 0.55rem;
@@ -10141,6 +10152,28 @@ label.fallout-maw-mitigation-cell {
 
 .race-need-settings .fallout-maw-settings-row {
   grid-template-columns: 80px minmax(120px, 1fr) minmax(150px, 1.1fr) 74px minmax(220px, 1.4fr) 2.5rem 2.5rem;
+}
+
+.fallout-maw-construct-part-needs {
+  display: grid;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.fallout-maw-construct-part-needs .fallout-maw-settings-row {
+  grid-template-columns: 4rem minmax(8rem, 0.9fr) minmax(12rem, 1.15fr) minmax(12rem, 1.35fr) 3rem 2rem 2rem;
+}
+
+.fallout-maw-construct-part-needs input[type="color"] {
+  cursor: pointer;
+  height: 2rem;
+  min-height: 2rem;
+  padding: 0.12rem;
+  width: 3rem;
+}
+
+.fallout-maw-construct-part-needs .fallout-maw-square-icon-button {
+  justify-self: stretch;
 }
 
 .proficiency-settings .fallout-maw-settings-row {

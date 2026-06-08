@@ -47,6 +47,7 @@ import {
   startWeaponAttack
 } from "../combat/weapon-attack-controller.mjs";
 import { useFirstAidItem } from "../items/first-aid.mjs";
+import { useNeedChangeItem } from "../items/need-change.mjs";
 import { openLimbDamageDialog } from "./limb-damage-dialog.mjs";
 import { requestMedicineTarget } from "./medicine-dialog.mjs";
 import { requestRepairTarget } from "./repair-dialog.mjs";
@@ -82,7 +83,7 @@ import {
   hasContainerCycle,
   getItemQuantity
 } from "../utils/inventory-containers.mjs";
-import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getEnabledWeaponFunctions, getFirstAidChargesData, getModuleFunction, getProsthesisFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, getWeaponSpecialPropertyType, hasItemFunction, hasWeaponSpecialPropertyData, isActiveItem, isItemBrokenByCondition, normalizeWeaponSpecialProperties } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getActiveItemChargesData, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getEnabledWeaponFunctions, getModuleFunction, getProsthesisFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, getWeaponSpecialPropertyType, hasItemFunction, hasWeaponSpecialPropertyData, isActiveItem, isItemBrokenByCondition, normalizeWeaponSpecialProperties } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
@@ -902,13 +903,18 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const targetData = getFirstHudTarget();
     const targetActor = targetData.actor ?? this.actor;
     if (!targetActor) return undefined;
-    const used = await useFirstAidItem({
-      sourceActor: this.actor,
-      sourceToken: this.token,
-      targetActor,
-      targetToken: targetData.token ?? this.token,
-      item
-    });
+    const used = hasItemFunction(item, ITEM_FUNCTIONS.firstAid)
+      ? await useFirstAidItem({
+        sourceActor: this.actor,
+        sourceToken: this.token,
+        targetActor,
+        targetToken: targetData.token ?? this.token,
+        item
+      })
+      : await useNeedChangeItem({
+        targetActor,
+        item
+      });
     if (used) {
       return this.render({ force: true });
     }
@@ -2164,7 +2170,7 @@ function prepareOwnedItemButtons(actor, type, fallbackIcon, { activeOnly = false
     .filter(item => item.type === type)
     .filter(item => !activeOnly || isActiveItem(item))
     .map(item => {
-      const firstAidCharges = getFirstAidChargesData(item);
+      const firstAidCharges = getActiveItemChargesData(item);
       return {
         id: item.id,
         name: item.name,
@@ -2172,7 +2178,7 @@ function prepareOwnedItemButtons(actor, type, fallbackIcon, { activeOnly = false
         quantity: toInteger(item.system?.quantity),
         showQuantity: toInteger(item.system?.maxStack) > 1,
         firstAidCharges,
-        showFirstAidCharges: hasItemFunction(item, ITEM_FUNCTIONS.firstAid) && firstAidCharges.max > 1
+        showFirstAidCharges: isActiveItem(item) && firstAidCharges.max > 1
       };
     });
 }

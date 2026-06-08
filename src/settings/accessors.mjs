@@ -16,6 +16,7 @@ import {
   normalizeSkillAdvancementSettings,
   normalizeSkillSettings
 } from "../formulas/index.mjs";
+import { ITEM_FUNCTIONS, getConstructPartFunction, hasItemFunction } from "../utils/item-functions.mjs";
 import { createDefaultCurrencySettings, normalizeCurrencySettings } from "./currency-settings.mjs";
 import {
   ABILITIES_CATALOG_SETTING,
@@ -374,6 +375,7 @@ export function getNeedSettings() {
 }
 
 export function getActorNeedSettings(actor) {
+  if (actor?.type === "construct") return getConstructPartNeedSettings(actor?.items);
   const raceId = actor?.system?.creature?.raceId ?? actor?.creature?.raceId ?? "";
   if (!raceId) return [];
   const race = getCreatureOptions().races.find(entry => entry.id === raceId);
@@ -535,6 +537,27 @@ export async function setCombatSettings(settings) {
   const normalized = normalizeCombatSettings(settings);
   await game.settings.set(FALLOUT_MAW.id, COMBAT_SETTINGS_SETTING, normalized);
   return normalized;
+}
+
+export function getConstructPartNeedSettings(items) {
+  const entries = [];
+  const used = new Set();
+  const constructParts = (items?.contents ?? Array.from(items ?? []))
+    .filter(item => (
+      item?.type === "gear"
+      && hasItemFunction(item, ITEM_FUNCTIONS.constructPart, { ignoreBroken: true })
+      && String(item.system?.placement?.mode ?? "") === ITEM_FUNCTIONS.constructPart
+    ));
+
+  for (const item of constructParts) {
+    const part = getConstructPartFunction(item);
+    for (const need of normalizeNeedSettings(part.needs ?? [])) {
+      if (used.has(need.key)) continue;
+      used.add(need.key);
+      entries.push(need);
+    }
+  }
+  return entries;
 }
 
 export async function resetCombatSettings() {

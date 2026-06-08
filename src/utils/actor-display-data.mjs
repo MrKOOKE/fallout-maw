@@ -27,7 +27,7 @@ import {
   normalizeInventoryPlacement,
   prepareInventoryGridContext
 } from "./inventory-containers.mjs";
-import { getConstructPartFunction, getFirstAidChargesData, hasItemFunction, isItemBrokenByCondition, ITEM_FUNCTIONS } from "./item-functions.mjs";
+import { getActiveItemChargesData, getConstructPartFunction, hasItemFunction, isItemBrokenByCondition, ITEM_FUNCTIONS } from "./item-functions.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem } from "../races/natural-items.mjs";
 import { toInteger } from "./numbers.mjs";
 
@@ -538,8 +538,11 @@ function getContainerWeaponSlotKey(index = 0) {
 export function createInventoryItemData(item, allItems, currencies = [], placement = null) {
   const resolvedPlacement = placement ?? normalizeInventoryPlacement(item.system?.placement ?? {}, item, allItems);
   const container = item.system?.container ?? {};
-  const firstAidCharges = getFirstAidChargesData(item);
-  const showFirstAidCharges = hasItemFunction(item, ITEM_FUNCTIONS.firstAid, { ignoreBroken: true }) && firstAidCharges.max > 1;
+  const firstAidCharges = getActiveItemChargesData(item);
+  const showFirstAidCharges = (
+    hasItemFunction(item, ITEM_FUNCTIONS.firstAid, { ignoreBroken: true })
+    || hasItemFunction(item, ITEM_FUNCTIONS.needChange, { ignoreBroken: true })
+  ) && firstAidCharges.max > 1;
   return {
     id: item.id,
     uuid: item.uuid,
