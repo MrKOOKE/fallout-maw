@@ -100,7 +100,10 @@ export const DEFAULT_TOKEN_ACTION_HUD_ICONS = Object.freeze({
     aimedMeleeAttack: "icons/svg/target.svg",
     push: "icons/svg/impact.svg",
     reload: "icons/svg/upgrade.svg",
-    replaceWeapon: "icons/svg/direction.svg"
+    replaceWeapon: "icons/svg/direction.svg",
+    lightOn: "icons/svg/light.svg",
+    lightOff: "icons/svg/light.svg",
+    lightRecharge: "icons/svg/upgrade.svg"
   }),
   postures: Object.freeze({
     walk: "icons/svg/walk.svg",

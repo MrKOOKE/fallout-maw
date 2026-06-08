@@ -36,6 +36,7 @@ import { registerMedicineSocket } from "./apps/medicine-dialog.mjs";
 import { registerRepairSocket } from "./apps/repair-dialog.mjs";
 import { canStackItems, registerSearchInventorySocket } from "./apps/search-inventory.mjs";
 import { registerFirstAidSocket } from "./items/first-aid.mjs";
+import { registerLightSourceHooks } from "./items/light-source.mjs";
 import { registerAbilityEffectHooks, syncLoadedActorAbilityEffects } from "./abilities/effects.mjs";
 import { registerAbilityCooldownHooks } from "./abilities/cooldowns.mjs";
 import { registerDescriptionFormulaEnrichment } from "./formulas/description-formulas.mjs";
@@ -97,6 +98,7 @@ Hooks.once("init", () => {
   registerNeedThresholdHooks();
   registerRegenerationHooks();
   registerNaturalRaceItemHooks();
+  registerLightSourceHooks();
   registerSkillCheckControlHooks();
   registerTokenActionHudHooks();
   registerCombatCarouselHooks();

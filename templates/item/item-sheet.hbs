@@ -1552,6 +1552,150 @@
   </section>
   {{/if}}
 
+  {{#if hasEnergySourceFunction}}
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Item.FunctionEnergySource"}}</h2>
+      <button type="button" data-remove-item-function="energySource" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <input type="hidden" name="system.functions.energySource.enabled" value="true">
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.EnergySourceName"}}</span>
+        <input type="text" name="system.functions.energySource.name" value="{{system.functions.energySource.name}}">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.EnergySourceClass"}}</span>
+        <select name="system.functions.energySource.class">
+          {{#each energyClassChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label class="fallout-maw-split-number-field">
+        <span>{{localize "FALLOUTMAW.Item.EnergySourceReserve"}}</span>
+        <div>
+          <input type="number" name="system.functions.energySource.reserve.value" value="{{system.functions.energySource.reserve.value}}" min="0" step="0.01">
+          <strong>/</strong>
+          <input type="number" name="system.functions.energySource.reserve.max" value="{{system.functions.energySource.reserve.max}}" min="0" step="0.01">
+        </div>
+      </label>
+    </div>
+  </section>
+  {{/if}}
+
+  {{#if hasEnergyConsumerFunction}}
+  <section class="fallout-maw-panel fallout-maw-magazine-source-section">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Item.FunctionEnergyConsumer"}}</h2>
+      <button type="button" data-remove-item-function="energyConsumer" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <input type="hidden" name="system.functions.energyConsumer.enabled" value="true">
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.FunctionEnergySource"}}</h3>
+    </div>
+    <label class="fallout-maw-energy-consumer-reserve fallout-maw-split-number-field">
+      <span>{{localize "FALLOUTMAW.Item.EnergySourceReserve"}}</span>
+      <div>
+        <input type="number" name="system.functions.energyConsumer.installedSource.reserve.value" value="{{#if energyConsumerInstalledSource}}{{energyConsumerInstalledSource.reserve.value}}{{else}}0{{/if}}" min="0" step="0.01" {{#unless energyConsumerInstalledSource}}readonly{{/unless}}>
+        <strong>/</strong>
+        <input type="number" name="system.functions.energyConsumer.installedSource.reserve.max" value="{{#if energyConsumerInstalledSource}}{{energyConsumerInstalledSource.reserve.max}}{{else}}0{{/if}}" min="0" step="0.01" readonly>
+      </div>
+    </label>
+    {{#if energyConsumerInstalledSource}}
+    <input type="hidden" name="system.functions.energyConsumer.installedSource.sourceItemUuid" value="{{energyConsumerInstalledSource.uuid}}">
+    <input type="hidden" name="system.functions.energyConsumer.installedSource.name" value="{{energyConsumerInstalledSource.name}}">
+    <input type="hidden" name="system.functions.energyConsumer.installedSource.class" value="{{energyConsumerInstalledSource.class}}">
+    <input type="hidden" name="system.functions.energyConsumer.installedSource.img" value="{{energyConsumerInstalledSource.img}}">
+    {{else}}
+    <input type="hidden" name="system.functions.energyConsumer.installedSource.sourceItemUuid" value="">
+    <input type="hidden" name="system.functions.energyConsumer.installedSource.name" value="">
+    <input type="hidden" name="system.functions.energyConsumer.installedSource.class" value="">
+    <input type="hidden" name="system.functions.energyConsumer.installedSource.img" value="">
+    {{/if}}
+    <div class="fallout-maw-energy-consumer-source-list fallout-maw-magazine-source-list">
+      {{#each energyConsumerSourceItems}}
+      <div class="fallout-maw-magazine-source-drop {{#if active}}active{{/if}} {{#if empty}}empty{{/if}}"
+        data-energy-consumer-source-drop
+        data-energy-consumer-source-index="{{index}}"
+        {{#unless empty}}data-select-energy-consumer-source="{{uuid}}" role="button" tabindex="0"{{/unless}}>
+        {{#if empty}}
+        <i class="fa-solid fa-arrow-down" aria-hidden="true"></i>
+        <span>{{localize "FALLOUTMAW.Item.EnergyConsumerSourceDrop"}}</span>
+        {{else}}
+        <img src="{{img}}" alt="">
+        <strong>{{name}}</strong>
+        <button type="button" data-delete-energy-consumer-source="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        <input type="hidden" name="system.functions.energyConsumer.sourceItemUuids.{{index}}" value="{{uuid}}">
+        {{/if}}
+      </div>
+      {{/each}}
+    </div>
+    <input type="hidden" name="system.functions.energyConsumer.sourceItemUuid" value="{{system.functions.energyConsumer.sourceItemUuid}}">
+    <input type="hidden" name="system.functions.energyConsumer.activeSourceUuid" value="{{system.functions.energyConsumer.activeSourceUuid}}">
+  </section>
+  {{/if}}
+
+  {{#if hasLightSourceFunction}}
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Item.FunctionLightSource"}}</h2>
+      <button type="button" data-remove-item-function="lightSource" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <input type="hidden" name="system.functions.lightSource.enabled" value="true">
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.LightSourceName"}}</span>
+        <input type="text" name="system.functions.lightSource.name" value="{{system.functions.lightSource.name}}">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.LightSourceDim"}}</span>
+        <input type="number" name="system.functions.lightSource.dim" value="{{system.functions.lightSource.dim}}" min="0" step="0.1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.LightSourceBright"}}</span>
+        <input type="number" name="system.functions.lightSource.bright" value="{{system.functions.lightSource.bright}}" min="0" step="0.1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.LightSourceAngle"}}</span>
+        <input type="number" name="system.functions.lightSource.angle" value="{{system.functions.lightSource.angle}}" min="0" max="360" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.LightSourceRotation"}}</span>
+        <input type="number" name="system.functions.lightSource.rotation" value="{{system.functions.lightSource.rotation}}" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.LightSourceColor"}}</span>
+        <color-picker name="system.functions.lightSource.color" value="{{system.functions.lightSource.color}}"></color-picker>
+      </label>
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.LightSourceResourceCosts"}}</h3>
+      <button type="button" data-add-light-source-resource-cost><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Common.Add"}}</button>
+    </div>
+    <div class="fallout-maw-settings-table fallout-maw-weapon-resource-costs">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Type"}}</span>
+        <span>{{localize "FALLOUTMAW.Item.LightSourceConsumptionPerHour"}}</span>
+        <span></span>
+      </div>
+      {{#each lightSourceResourceCosts}}
+      <div class="fallout-maw-settings-row">
+        <select name="system.functions.lightSource.resourceCosts.{{index}}.type">
+          {{#each typeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="number" name="system.functions.lightSource.resourceCosts.{{index}}.amountPerHour" value="{{amountPerHour}}" min="0" step="0.01">
+        <button type="button" data-delete-light-source-resource-cost="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.LightSourceNoResourceCosts"}}</p>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+
   {{#if weaponFunctionTabs}}
   <section class="fallout-maw-panel fallout-maw-weapon-function-tabs-panel">
     <div class="fallout-maw-panel-header">

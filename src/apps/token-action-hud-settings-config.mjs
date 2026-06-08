@@ -46,7 +46,10 @@ const WEAPON_ACTION_ICON_ROWS = Object.freeze([
   { key: "aimedMeleeAttack", labelKey: "FALLOUTMAW.Item.WeaponActionAimedMeleeAttack" },
   { key: "push", labelKey: "FALLOUTMAW.Item.WeaponActionPush" },
   { key: "reload", labelKey: "FALLOUTMAW.Item.WeaponActionReload" },
-  { key: "replaceWeapon", label: "Заменить оружие" }
+  { key: "replaceWeapon", label: "Заменить оружие" },
+  { key: "lightOn", labelKey: "FALLOUTMAW.Item.LightSourceToggleOn" },
+  { key: "lightOff", labelKey: "FALLOUTMAW.Item.LightSourceToggleOff" },
+  { key: "lightRecharge", labelKey: "FALLOUTMAW.Item.LightSourceRecharge" }
 ]);
 
 export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {

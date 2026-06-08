@@ -62,8 +62,11 @@ import {
   getConditionWeakeningData,
   getDamageMitigationFunction,
   getDamageSourceFunction,
+  getEnergyConsumerFunction,
+  getEnergySourceFunction,
   getFirstAidChargesData,
   getFirstAidFunction,
+  getLightSourceFunction,
   getNeedChangeFunction,
   getEnabledWeaponFunctions,
   getWeaponAttackPowerState,
@@ -3462,6 +3465,9 @@ function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex 
     buildNeedChangeTooltipSection(item, actor),
     buildDamageMitigationTooltipSection(item, actor),
     buildDamageSourceTooltipSection(item, actor),
+    buildEnergySourceTooltipSection(item),
+    buildEnergyConsumerTooltipSection(item),
+    buildLightSourceTooltipSection(item),
     buildModuleTooltipSection(item),
     buildProsthesisTooltipSection(item, actor),
     ...buildWeaponTooltipSections(item, activeWeaponIndex, { actor, baseMode }),
@@ -3694,6 +3700,98 @@ function buildDamageSourceTooltipSection(item, actor = null) {
   if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), penetration]);
   rows.push(...getWeaponVolleyRows(source, { actor }));
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource"), rows);
+}
+
+function buildEnergySourceTooltipSection(item) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.energySource, { ignoreBroken: true })) return "";
+  const source = getEnergySourceFunction(item);
+  const name = String(source?.name ?? "").trim() || item.name;
+  const reserve = source?.reserve ?? {};
+  const rows = [
+    [game.i18n.localize("FALLOUTMAW.Item.EnergySourceName"), name],
+    [game.i18n.localize("FALLOUTMAW.Item.EnergySourceClass"), String(source?.class ?? "").trim()],
+    [game.i18n.localize("FALLOUTMAW.Item.EnergySourceReserve"), formatReserveTooltipValue(reserve)]
+  ];
+  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionEnergySource"), rows);
+}
+
+function buildEnergyConsumerTooltipSection(item) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.energyConsumer, { ignoreBroken: true })) return "";
+  const consumer = getEnergyConsumerFunction(item);
+  const installed = normalizeTooltipInstalledEnergySource(consumer.installedSource);
+  const acceptedLabels = getTooltipAcceptedEnergySourceLabels(consumer);
+  const rows = [
+    [
+      game.i18n.localize("FALLOUTMAW.Item.LightSourceCurrentEnergySource"),
+      installed.sourceItemUuid ? (installed.name || game.i18n.localize("FALLOUTMAW.Item.FunctionEnergySource")) : game.i18n.localize("FALLOUTMAW.Item.LightSourceNoEnergySource")
+    ],
+    [game.i18n.localize("FALLOUTMAW.Item.EnergySourceClass"), installed.class],
+    [game.i18n.localize("FALLOUTMAW.Item.EnergySourceReserve"), installed.sourceItemUuid ? formatReserveTooltipValue(installed.reserve) : ""],
+    [game.i18n.localize("FALLOUTMAW.Item.LightSourceAvailableEnergySources"), acceptedLabels.join(", ")]
+  ];
+  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionEnergyConsumer"), rows);
+}
+
+function buildLightSourceTooltipSection(item) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.lightSource, { ignoreBroken: true })) return "";
+  const light = getLightSourceFunction(item);
+  const name = String(light?.name ?? "").trim() || item.name;
+  const rows = [
+    [game.i18n.localize("FALLOUTMAW.Item.LightSourceName"), name],
+    [game.i18n.localize("FALLOUTMAW.Item.LightSourceDim"), `${formatNumber(Math.max(0, Number(light?.dim) || 0))} м`],
+    [game.i18n.localize("FALLOUTMAW.Item.LightSourceBright"), `${formatNumber(Math.max(0, Number(light?.bright) || 0))} м`],
+    [game.i18n.localize("FALLOUTMAW.Item.LightSourceAngle"), Math.max(0, Math.min(360, Number(light?.angle) || 360))],
+    [game.i18n.localize("FALLOUTMAW.Item.LightSourceRotation"), formatNumber(Number(light?.rotation) || 0)],
+    [game.i18n.localize("FALLOUTMAW.Item.LightSourceColor"), String(light?.color ?? "").trim() || game.i18n.localize("FALLOUTMAW.Common.None")],
+    [game.i18n.localize("FALLOUTMAW.Item.LightSourceResourceCosts"), getLightSourceCostTooltipLabel(light?.resourceCosts)]
+  ];
+  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionLightSource"), rows);
+}
+
+function formatReserveTooltipValue(reserve = {}) {
+  const max = Math.max(0, Number(reserve?.max) || 0);
+  const value = Math.max(0, Math.min(max || Number.POSITIVE_INFINITY, Number(reserve?.value) || 0));
+  return max ? `${formatNumber(value)} / ${formatNumber(max)}` : formatNumber(value);
+}
+
+function normalizeTooltipInstalledEnergySource(source = {}) {
+  const max = Math.max(0, Number(source?.reserve?.max) || 0);
+  const value = Math.max(0, Math.min(max || Number.POSITIVE_INFINITY, Number(source?.reserve?.value) || 0));
+  return {
+    sourceItemUuid: String(source?.sourceItemUuid ?? "").trim(),
+    name: String(source?.name ?? "").trim(),
+    class: String(source?.class ?? "").trim(),
+    reserve: { value, max }
+  };
+}
+
+function getTooltipAcceptedEnergySourceLabels(consumer = {}) {
+  const uuids = Array.from(new Set([
+    ...(Array.isArray(consumer?.sourceItemUuids) ? consumer.sourceItemUuids : []),
+    String(consumer?.sourceItemUuid ?? "")
+  ].map(value => String(value ?? "").trim()).filter(Boolean)));
+  return uuids.map(uuid => {
+    const source = globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
+    const data = getEnergySourceFunction(source);
+    return String(data?.name ?? "").trim() || source?.name || uuid;
+  }).filter(Boolean);
+}
+
+function getLightSourceCostTooltipLabel(costs = []) {
+  const entries = (Array.isArray(costs) ? costs : [])
+    .map(cost => {
+      const amount = Math.max(0, Number(cost?.amountPerHour) || 0);
+      const type = String(cost?.type ?? "").trim();
+      if (!type || amount <= 0) return "";
+      const label = type === "condition"
+        ? game.i18n.localize("FALLOUTMAW.Item.FunctionCondition")
+        : type === "energyConsumer"
+          ? game.i18n.localize("FALLOUTMAW.Item.FunctionEnergyConsumer")
+          : type;
+      return `${label}: ${formatNumber(amount)}/ч`;
+    })
+    .filter(Boolean);
+  return entries.length ? entries.join(", ") : game.i18n.localize("FALLOUTMAW.Item.LightSourceNoResourceCosts");
 }
 
 function buildModuleTooltipSection(item) {

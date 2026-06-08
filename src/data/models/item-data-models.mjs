@@ -66,7 +66,10 @@ export class GearDataModel extends BaseItemDataModel {
         condition: conditionFunctionField(),
         constructPart: constructPartFunctionField(),
         damageSource: damageSourceFunctionField(),
+        energyConsumer: energyConsumerFunctionField(),
+        energySource: energySourceFunctionField(),
         freeSettings: itemFreeSettingsFunctionField(),
+        lightSource: lightSourceFunctionField(),
         module: moduleFunctionField(),
         prosthesis: prosthesisFunctionField(),
         weapon: weaponFunctionField(),
@@ -367,6 +370,55 @@ function constructPartFunctionField() {
   });
 }
 
+function energySourceFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    name: new StringField({ required: true, blank: true, initial: "" }),
+    class: new StringField({ required: true, blank: false, choices: ["D", "C", "B", "A", "S"], initial: "D" }),
+    reserve: new SchemaField({
+      value: new NumberField({ required: true, min: 0, initial: 0 }),
+      max: new NumberField({ required: true, min: 0, initial: 0 })
+    })
+  });
+}
+
+function energyConsumerFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    sourceItemUuid: new StringField({ required: true, blank: true, initial: "" }),
+    sourceItemUuids: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), { required: true, initial: [] }),
+    activeSourceUuid: new StringField({ required: true, blank: true, initial: "" }),
+    installedSource: installedEnergySourceField()
+  });
+}
+
+function lightSourceFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    name: new StringField({ required: true, blank: true, initial: "" }),
+    dim: new NumberField({ required: true, min: 0, initial: 0 }),
+    bright: new NumberField({ required: true, min: 0, initial: 0 }),
+    angle: new NumberField({ required: true, min: 0, initial: 360 }),
+    rotation: new NumberField({ required: true, initial: 0 }),
+    color: new StringField({ required: true, blank: true, initial: "" }),
+    resourceCosts: new ArrayField(lightSourceResourceCostField(), { required: true, initial: [] })
+  });
+}
+
+function installedEnergySourceField() {
+  return new SchemaField({
+      sourceItemUuid: new StringField({ required: true, blank: true, initial: "" }),
+      name: new StringField({ required: true, blank: true, initial: "" }),
+      class: new StringField({ required: true, blank: true, initial: "" }),
+      img: new StringField({ required: true, blank: true, initial: "" }),
+      itemData: new ObjectField({ required: true, initial: {} }),
+      reserve: new SchemaField({
+        value: new NumberField({ required: true, min: 0, initial: 0 }),
+        max: new NumberField({ required: true, min: 0, initial: 0 })
+    })
+  });
+}
+
 function limbLossEffectField() {
   return new SchemaField({
     key: new StringField({ required: true, blank: true, initial: "" }),
@@ -622,6 +674,13 @@ function weaponResourceCostField() {
   return new SchemaField({
     type: new StringField({ required: true, blank: false, initial: "magazine" }),
     amount: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+  });
+}
+
+function lightSourceResourceCostField() {
+  return new SchemaField({
+    type: new StringField({ required: true, blank: false, choices: ["condition", "energyConsumer"], initial: "energyConsumer" }),
+    amountPerHour: new NumberField({ required: true, min: 0, initial: 0 })
   });
 }
 

@@ -2,10 +2,13 @@ export const ITEM_FUNCTIONS = {
   container: "container",
   damageMitigation: "damageMitigation",
   damageSource: "damageSource",
+  energyConsumer: "energyConsumer",
+  energySource: "energySource",
   freeSettings: "freeSettings",
   condition: "condition",
   constructPart: "constructPart",
   firstAid: "firstAid",
+  lightSource: "lightSource",
   needChange: "needChange",
   weapon: "weapon",
   module: "module",
@@ -80,8 +83,20 @@ export function getDamageSourceFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.damageSource] ?? {};
 }
 
+export function getEnergyConsumerFunction(itemOrSystem = null) {
+  return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.energyConsumer] ?? {};
+}
+
+export function getEnergySourceFunction(itemOrSystem = null) {
+  return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.energySource] ?? {};
+}
+
 export function getFirstAidFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.firstAid] ?? {};
+}
+
+export function getLightSourceFunction(itemOrSystem = null) {
+  return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.lightSource] ?? {};
 }
 
 export function getFirstAidChargesData(itemOrSystem = null) {
@@ -143,7 +158,8 @@ export function isInstalledProsthesis(itemOrSystem = null, limbKey = "") {
 
 export function isActiveItem(itemOrSystem = null) {
   return hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.firstAid)
-    || hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.needChange);
+    || hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.needChange)
+    || hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.lightSource);
 }
 
 export function getConditionWeakeningData(itemOrSystem = null, { minimumRatio = 0 } = {}) {

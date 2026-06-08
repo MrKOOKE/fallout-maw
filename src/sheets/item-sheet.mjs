@@ -15,6 +15,7 @@ import {
   ITEM_FUNCTIONS,
   WEAPON_SPECIAL_PROPERTIES,
   getDamageSourceFunction,
+  getEnergySourceFunction,
   getEnabledToolFunctions,
   createDefaultWeaponSpecialPropertyData,
   getProsthesisFunction,
@@ -61,6 +62,8 @@ const DEFAULT_WEAPON_PUSH_MAX_RANGE_METERS = 1;
 const DEFAULT_RELOAD_ACTION_POINT_COST = 2;
 const DEFAULT_ATTACK_ANIMATION_DELAY_MS = 200;
 const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 10;
+const DEFAULT_LIGHT_SOURCE_ANGLE_DEGREES = 360;
+const DEFAULT_LIGHT_SOURCE_COLOR = "";
 const CRAFT_ROOT_NODE_ID = "root";
 const CRAFT_GRID_FALLBACK_STEP = 56;
 const CRAFT_DRAG_THRESHOLD_PX = 4;
@@ -166,12 +169,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const hasContainerFunction = sheetHasItemFunction(ITEM_FUNCTIONS.container);
     const hasDamageMitigationFunction = sheetHasItemFunction(ITEM_FUNCTIONS.damageMitigation);
     const hasDamageSourceFunction = sheetHasItemFunction(ITEM_FUNCTIONS.damageSource);
+    const hasEnergyConsumerFunction = sheetHasItemFunction(ITEM_FUNCTIONS.energyConsumer);
+    const hasEnergySourceFunction = sheetHasItemFunction(ITEM_FUNCTIONS.energySource);
     const hasFreeSettingsFunction = sheetHasItemFunction(ITEM_FUNCTIONS.freeSettings);
     const hasModuleFunction = sheetHasItemFunction(ITEM_FUNCTIONS.module);
     const hasProsthesisFunction = sheetHasItemFunction(ITEM_FUNCTIONS.prosthesis);
     const hasConditionFunction = sheetHasItemFunction(ITEM_FUNCTIONS.condition);
     const hasConstructPartFunction = sheetHasItemFunction(ITEM_FUNCTIONS.constructPart);
     const hasFirstAidFunction = sheetHasItemFunction(ITEM_FUNCTIONS.firstAid);
+    const hasLightSourceFunction = sheetHasItemFunction(ITEM_FUNCTIONS.lightSource);
     const hasNeedChangeFunction = sheetHasItemFunction(ITEM_FUNCTIONS.needChange);
     const hasWeaponFunction = sheetHasItemFunction(ITEM_FUNCTIONS.weapon);
     const hasToolFunction = sheetHasItemFunction(ITEM_FUNCTIONS.tool);
@@ -205,6 +211,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         disabled: hasDamageSourceFunction
       },
       {
+        value: ITEM_FUNCTIONS.energySource,
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionEnergySource"),
+        disabled: hasEnergySourceFunction
+      },
+      {
+        value: ITEM_FUNCTIONS.energyConsumer,
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionEnergyConsumer"),
+        disabled: hasEnergyConsumerFunction
+      },
+      {
         value: ITEM_FUNCTIONS.freeSettings,
         label: "Свободная настройка",
         disabled: hasFreeSettingsFunction
@@ -223,6 +239,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         value: ITEM_FUNCTIONS.firstAid,
         label: game.i18n.localize("FALLOUTMAW.Item.FunctionFirstAid"),
         disabled: hasFirstAidFunction
+      },
+      {
+        value: ITEM_FUNCTIONS.lightSource,
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionLightSource"),
+        disabled: hasLightSourceFunction
       },
       {
         value: ITEM_FUNCTIONS.needChange,
@@ -313,6 +334,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       isContainerFunction: hasContainerFunction,
       hasDamageMitigationFunction,
       hasDamageSourceFunction,
+      hasEnergyConsumerFunction,
+      hasEnergySourceFunction,
       hasFreeSettingsFunction,
       itemFreeSettingsFunctionPath: "system.functions.freeSettings.entries",
       itemFreeSettingsFunctions: normalizeAbilityFunctions(item.system?.functions?.freeSettings?.entries ?? [])
@@ -327,10 +350,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       prosthesisSkillChoices: buildSkillChoices(item.system?.functions?.prosthesis?.skillKey, skillSettings),
       damageSourceDamageTypeRows: buildDamageSourceDamageTypeRows(item, damageTypeSettings),
       damageSourceVolleyRegionDamageRows: buildDamageSourceVolleyRegionDamageRows(item, damageTypeSettings),
+      energyClassChoices: buildEnergyClassChoices(item.system?.functions?.energySource?.class),
+      energyConsumerInstalledSource: getEnergyConsumerInstalledSourceRow(item.system?.functions?.energyConsumer),
+      energyConsumerSourceItems: buildEnergyConsumerSourceItems(item.system?.functions?.energyConsumer),
       hasConditionFunction,
       hasConstructPartFunction,
       hasFirstAidFunction,
+      hasLightSourceFunction,
       hasNeedChangeFunction,
+      lightSourceResourceCosts: buildLightSourceResourceCostRows(item, hasConditionFunction, hasEnergyConsumerFunction),
       firstAidEffectRows: buildFirstAidEffectRows(item),
       firstAidNeedRows: buildFirstAidNeedRows(item),
       needChangeNeedRows: buildNeedChangeNeedRows(item),
@@ -500,6 +528,20 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-weapon-magazine-source]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteWeaponMagazineSource(event));
+    });
+    this.element?.querySelectorAll("[data-energy-consumer-source-drop]").forEach(zone => {
+      zone.addEventListener("dragover", event => this.#onEnergyConsumerSourceDragOver(event));
+      zone.addEventListener("drop", event => this.#onEnergyConsumerSourceDrop(event));
+    });
+    this.element?.querySelectorAll("[data-select-energy-consumer-source]").forEach(source => {
+      source.addEventListener("click", event => this.#onSelectEnergyConsumerSource(event));
+    });
+    this.element?.querySelectorAll("[data-delete-energy-consumer-source]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteEnergyConsumerSource(event));
+    });
+    this.element?.querySelector("[data-add-light-source-resource-cost]")?.addEventListener("click", event => this.#onAddLightSourceResourceCost(event));
+    this.element?.querySelectorAll("[data-delete-light-source-resource-cost]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteLightSourceResourceCost(event));
     });
     this.element?.querySelectorAll("[data-add-volley-region-damage]").forEach(button => {
       button.addEventListener("click", event => this.#onAddVolleyRegionDamage(event));
@@ -2126,6 +2168,20 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       });
     }
 
+    if (functionKey === ITEM_FUNCTIONS.energySource) {
+      this.#functionPickerActive = false;
+      return this.item.update({
+        "system.functions.energySource": createDefaultEnergySourceFunctionData({ enabled: true })
+      });
+    }
+
+    if (functionKey === ITEM_FUNCTIONS.energyConsumer) {
+      this.#functionPickerActive = false;
+      return this.item.update({
+        "system.functions.energyConsumer": createDefaultEnergyConsumerFunctionData({ enabled: true })
+      });
+    }
+
     if (functionKey === ITEM_FUNCTIONS.freeSettings) {
       this.#functionPickerActive = false;
       const entries = normalizeAbilityFunctions(this.item.system?.functions?.freeSettings?.entries ?? []);
@@ -2183,6 +2239,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.firstAid.limbSelection.value": 0,
         "system.functions.firstAid.removeEffects": [],
         "system.functions.firstAid.changes": []
+      });
+    }
+
+    if (functionKey === ITEM_FUNCTIONS.lightSource) {
+      this.#functionPickerActive = false;
+      return this.item.update({
+        "system.functions.lightSource": createDefaultLightSourceFunctionData({ enabled: true })
       });
     }
 
@@ -2335,6 +2398,18 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.damageSource": createDefaultDamageSourceFunctionData({ enabled: false })
       });
     }
+    if (functionKey === ITEM_FUNCTIONS.energySource) {
+      return this.item.update({
+        "system.functions.energySource": createDefaultEnergySourceFunctionData({ enabled: false })
+      });
+    }
+    if (functionKey === ITEM_FUNCTIONS.energyConsumer) {
+      return this.item.update({
+        "system.functions.energyConsumer": createDefaultEnergyConsumerFunctionData({ enabled: false }),
+        "system.functions.lightSource.resourceCosts": (this.item.system?.functions?.lightSource?.resourceCosts ?? [])
+          .filter(cost => cost.type !== "energyConsumer")
+      });
+    }
     if (functionKey === ITEM_FUNCTIONS.freeSettings) {
       return this.item.update({
         "system.functions.freeSettings.enabled": false,
@@ -2402,6 +2477,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.needChange.charges.value": 1,
         "system.functions.needChange.charges.max": 1,
         "system.functions.needChange.needs": []
+      });
+    }
+    if (functionKey === ITEM_FUNCTIONS.lightSource) {
+      return this.item.update({
+        "system.functions.lightSource": createDefaultLightSourceFunctionData({ enabled: false })
       });
     }
     if (functionKey === ITEM_FUNCTIONS.weapon) {
@@ -3157,6 +3237,91 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
   }
 
+  #onEnergyConsumerSourceDragOver(event) {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "link";
+  }
+
+  async #onEnergyConsumerSourceDrop(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const item = await getDroppedItem(event);
+    if (!item) return undefined;
+    if (!isWorldEnergySourceItem(item)) {
+      ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Item.EnergySourceWorldOnly"));
+      return undefined;
+    }
+    const consumerData = this.item.system?.functions?.energyConsumer ?? {};
+    const sources = getEnergyConsumerSourceUuids(consumerData);
+    const index = Number(event.currentTarget?.dataset?.energyConsumerSourceIndex);
+    if (Number.isInteger(index) && index >= 0 && index < sources.length) sources[index] = item.uuid;
+    else sources.push(item.uuid);
+    const uniqueSources = uniqueStrings(sources);
+    return this.item.update({
+      "system.functions.energyConsumer.sourceItemUuid": item.uuid,
+      "system.functions.energyConsumer.sourceItemUuids": uniqueSources,
+      "system.functions.energyConsumer.installedSource": createInstalledEnergySourceData(item)
+    });
+  }
+
+  #onSelectEnergyConsumerSource(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const uuid = String(event.currentTarget?.dataset?.selectEnergyConsumerSource ?? "").trim();
+    if (!uuid) return undefined;
+    const sourceItem = getEnergyConsumerSourceItem({ sourceItemUuid: uuid });
+    return this.item.update({
+      "system.functions.energyConsumer.sourceItemUuid": uuid,
+      "system.functions.energyConsumer.installedSource": sourceItem ? createInstalledEnergySourceData(sourceItem) : createEmptyInstalledEnergySourceData()
+    });
+  }
+
+  #onDeleteEnergyConsumerSource(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const consumerData = this.item.system?.functions?.energyConsumer ?? {};
+    const target = String(event.currentTarget?.dataset?.deleteEnergyConsumerSource ?? "");
+    if (target === "active") {
+      return this.item.update({
+        "system.functions.energyConsumer.sourceItemUuid": "",
+        "system.functions.energyConsumer.installedSource": createEmptyInstalledEnergySourceData()
+      });
+    }
+    const index = Number(target);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const sources = getEnergyConsumerSourceUuids(consumerData);
+    const removed = sources.splice(index, 1).at(0) ?? "";
+    const active = String(consumerData?.sourceItemUuid ?? "");
+    const installedUuid = String(consumerData?.installedSource?.sourceItemUuid ?? "");
+    const removedActive = active === removed || installedUuid === removed;
+    return this.item.update({
+      "system.functions.energyConsumer.sourceItemUuid": removedActive ? "" : active,
+      "system.functions.energyConsumer.sourceItemUuids": sources,
+      "system.functions.energyConsumer.installedSource": removedActive ? createEmptyInstalledEnergySourceData() : consumerData?.installedSource
+    });
+  }
+
+  #onAddLightSourceResourceCost(event) {
+    event.preventDefault();
+    const costs = [...(this.item.system?.functions?.lightSource?.resourceCosts ?? [])];
+    const hasEnergyConsumer = hasItemFunction(this.item, ITEM_FUNCTIONS.energyConsumer, { ignoreBroken: true });
+    const hasCondition = hasItemFunction(this.item, ITEM_FUNCTIONS.condition, { ignoreBroken: true });
+    costs.push({
+      type: hasEnergyConsumer ? "energyConsumer" : (hasCondition ? "condition" : "energyConsumer"),
+      amountPerHour: 0
+    });
+    return this.item.update({ "system.functions.lightSource.resourceCosts": costs });
+  }
+
+  #onDeleteLightSourceResourceCost(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteLightSourceResourceCost);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const costs = [...(this.item.system?.functions?.lightSource?.resourceCosts ?? [])];
+    costs.splice(index, 1);
+    return this.item.update({ "system.functions.lightSource.resourceCosts": costs });
+  }
+
   #onAddVolleyRegionDamage(event) {
     event.preventDefault();
     const section = getWeaponFunctionSection(event.currentTarget);
@@ -3395,8 +3560,9 @@ export function registerItemSheetSourceSyncHooks() {
   if (itemSheetSourceSyncHooksRegistered) return;
   itemSheetSourceSyncHooksRegistered = true;
   Hooks.on("updateItem", item => {
-    if (!item || item.actor || !hasItemFunction(item, ITEM_FUNCTIONS.damageSource)) return;
-    refreshWeaponSheetsForDamageSource(item.uuid);
+    if (!item || item.actor) return;
+    if (hasItemFunction(item, ITEM_FUNCTIONS.damageSource)) refreshWeaponSheetsForDamageSource(item.uuid);
+    if (hasItemFunction(item, ITEM_FUNCTIONS.energySource)) refreshEnergyConsumerSheetsForSource(item.uuid);
   });
 }
 
@@ -3449,11 +3615,14 @@ function getHealingSkillLabel(item) {
 function getItemFunctionLabel(functionKey = "") {
   if (functionKey === ITEM_FUNCTIONS.container) return game.i18n.localize("FALLOUTMAW.Item.FunctionContainer");
   if (functionKey === ITEM_FUNCTIONS.damageMitigation) return game.i18n.localize("FALLOUTMAW.Item.FunctionDamageMitigation");
-    if (functionKey === ITEM_FUNCTIONS.damageSource) return game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource");
+  if (functionKey === ITEM_FUNCTIONS.damageSource) return game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource");
+  if (functionKey === ITEM_FUNCTIONS.energySource) return game.i18n.localize("FALLOUTMAW.Item.FunctionEnergySource");
+  if (functionKey === ITEM_FUNCTIONS.energyConsumer) return game.i18n.localize("FALLOUTMAW.Item.FunctionEnergyConsumer");
   if (functionKey === ITEM_FUNCTIONS.freeSettings) return "Свободная настройка";
   if (functionKey === ITEM_FUNCTIONS.condition) return game.i18n.localize("FALLOUTMAW.Item.FunctionCondition");
   if (functionKey === ITEM_FUNCTIONS.constructPart) return "Деталь конструкта";
   if (functionKey === ITEM_FUNCTIONS.firstAid) return game.i18n.localize("FALLOUTMAW.Item.FunctionFirstAid");
+  if (functionKey === ITEM_FUNCTIONS.lightSource) return game.i18n.localize("FALLOUTMAW.Item.FunctionLightSource");
   if (functionKey === ITEM_FUNCTIONS.needChange) return "Изменение потребностей";
   if (functionKey === ITEM_FUNCTIONS.weapon) return game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon");
   if (functionKey === ITEM_FUNCTIONS.module) return game.i18n.localize("FALLOUTMAW.Item.FunctionModule");
@@ -4384,6 +4553,138 @@ function buildWeaponMagazineSourceItems(weaponData = {}) {
   return rows;
 }
 
+function buildEnergyClassChoices(selected = "D") {
+  const current = String(selected ?? "D") || "D";
+  return ["D", "C", "B", "A", "S"].map(value => ({
+    value,
+    label: value,
+    selected: value === current
+  }));
+}
+
+function buildEnergyConsumerSourceItems(consumerData = {}) {
+  const installed = normalizeInstalledEnergySourceData(consumerData?.installedSource);
+  const activeUuid = installed.sourceItemUuid || String(consumerData?.sourceItemUuid ?? "").trim();
+  const rows = getEnergyConsumerSourceUuids(consumerData).map((uuid, index) => {
+    const item = getEnergyConsumerSourceItem({ sourceItemUuid: uuid });
+    const source = item ? getEnergySourceFunction(item) : null;
+    const active = uuid === activeUuid;
+    return {
+      index,
+      uuid,
+      name: String(source?.name ?? "").trim() || item?.name || uuid,
+      class: String(source?.class ?? "").trim(),
+      img: normalizeImagePath(item?.img, FALLBACK_ICON),
+      active,
+      reserve: active && installed.sourceItemUuid === uuid
+        ? installed.reserve
+        : {
+          value: Math.max(0, Number(source?.reserve?.value) || Number(source?.reserve?.max) || 0),
+          max: Math.max(0, Number(source?.reserve?.max) || 0)
+        },
+      empty: false
+    };
+  });
+  rows.push({
+    index: rows.length,
+    uuid: "",
+    name: "",
+    active: false,
+    empty: true
+  });
+  return rows;
+}
+
+function getEnergyConsumerInstalledSourceRow(consumerData = {}) {
+  const installed = normalizeInstalledEnergySourceData(consumerData?.installedSource);
+  if (!installed.sourceItemUuid) return null;
+  const sourceItem = getEnergyConsumerSourceItem({ sourceItemUuid: installed.sourceItemUuid });
+  return {
+    uuid: installed.sourceItemUuid,
+    name: installed.name || String(getEnergySourceFunction(sourceItem)?.name ?? "").trim() || sourceItem?.name || installed.sourceItemUuid,
+    class: installed.class || String(getEnergySourceFunction(sourceItem)?.class ?? "").trim(),
+    img: normalizeImagePath(installed.img || sourceItem?.img, FALLBACK_ICON),
+    reserve: installed.reserve
+  };
+}
+
+function createInstalledEnergySourceData(item = null) {
+  if (!item) return createEmptyInstalledEnergySourceData();
+  const source = getEnergySourceFunction(item);
+  const max = Math.max(0, Number(source?.reserve?.max) || 0);
+  const value = Math.max(0, Number(source?.reserve?.value) || max);
+  const itemData = typeof item.toObject === "function" ? item.toObject() : {};
+  delete itemData._id;
+  return normalizeInstalledEnergySourceData({
+    sourceItemUuid: item.uuid,
+    name: String(source?.name ?? "").trim() || item.name || "",
+    class: String(source?.class ?? "").trim(),
+    img: String(item.img ?? "").trim(),
+    itemData,
+    reserve: {
+      value,
+      max
+    }
+  });
+}
+
+function createEmptyInstalledEnergySourceData() {
+  return normalizeInstalledEnergySourceData();
+}
+
+function normalizeInstalledEnergySourceData(source = {}) {
+  const max = Math.max(0, Number(source?.reserve?.max) || 0);
+  const value = Math.max(0, Math.min(max || Number.POSITIVE_INFINITY, Number(source?.reserve?.value) || 0));
+  return {
+    sourceItemUuid: String(source?.sourceItemUuid ?? "").trim(),
+    name: String(source?.name ?? "").trim(),
+    class: String(source?.class ?? "").trim(),
+    img: String(source?.img ?? "").trim(),
+    itemData: source?.itemData && typeof source.itemData === "object" ? foundry.utils.deepClone(source.itemData) : {},
+    reserve: {
+      value,
+      max
+    }
+  };
+}
+
+function getEnergyConsumerSourceItem(consumerData = {}) {
+  const uuid = String(consumerData?.sourceItemUuid ?? "").trim();
+  if (!uuid) return null;
+  return globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
+}
+
+function getEnergyConsumerSourceUuids(consumerData = {}) {
+  return uniqueStrings([
+    ...(Array.isArray(consumerData?.sourceItemUuids) ? consumerData.sourceItemUuids : []),
+    String(consumerData?.sourceItemUuid ?? "")
+  ]);
+}
+
+function buildLightSourceResourceCostRows(item, hasConditionFunction = false, hasEnergyConsumerFunction = false) {
+  return (item.system?.functions?.lightSource?.resourceCosts ?? []).map((cost, index) => {
+    const selected = String(cost?.type ?? "energyConsumer");
+    return {
+      index,
+      type: selected,
+      amountPerHour: Number(cost?.amountPerHour) || 0,
+      typeChoices: buildLightSourceResourceTypeChoices(selected, hasConditionFunction, hasEnergyConsumerFunction)
+    };
+  });
+}
+
+function buildLightSourceResourceTypeChoices(selected, hasConditionFunction = false, hasEnergyConsumerFunction = false) {
+  const choices = [];
+  if (hasEnergyConsumerFunction) choices.push({ value: "energyConsumer", label: game.i18n.localize("FALLOUTMAW.Item.FunctionEnergyConsumer") });
+  if (hasConditionFunction) choices.push({ value: "condition", label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostCondition") });
+  if (!choices.length) choices.push({ value: "energyConsumer", label: game.i18n.localize("FALLOUTMAW.Item.FunctionEnergyConsumer") });
+  if (!choices.some(choice => choice.value === selected)) choices.push({ value: selected, label: selected });
+  return choices.map(choice => ({
+    ...choice,
+    selected: choice.value === selected
+  }));
+}
+
 function getWeaponMagazineSourceItem(weaponData = {}) {
   const uuid = String(weaponData?.magazine?.sourceItemUuid ?? "").trim();
   if (!uuid) return null;
@@ -4412,6 +4713,17 @@ function refreshWeaponSheetsForDamageSource(sourceUuid = "") {
   }
 }
 
+function refreshEnergyConsumerSheetsForSource(sourceUuid = "") {
+  const uuid = String(sourceUuid ?? "").trim();
+  if (!uuid) return;
+  for (const item of getAllWorldAndActorItems()) {
+    if (!itemReferencesEnergySource(item, uuid)) continue;
+    for (const app of Object.values(item.apps ?? {})) {
+      app.render?.({ force: true });
+    }
+  }
+}
+
 function getAllWorldAndActorItems() {
   return [
     ...(game.items?.contents ?? []),
@@ -4424,6 +4736,11 @@ function itemReferencesDamageSource(item, sourceUuid = "") {
   return getWeaponFunctionDataList(item).some(weaponData => (
     getWeaponMagazineSourceUuids(weaponData).includes(sourceUuid)
   ));
+}
+
+function itemReferencesEnergySource(item, sourceUuid = "") {
+  if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.energyConsumer, { ignoreBroken: true })) return false;
+  return getEnergyConsumerSourceUuids(item.system?.functions?.energyConsumer).includes(sourceUuid);
 }
 
 function getWeaponFunctionDataList(item) {
@@ -4652,6 +4969,41 @@ function createDefaultDamageSourceVolleyData() {
     explosionAnimationKey: "",
     explosionSoundPath: ""
   };
+}
+
+function createDefaultEnergySourceFunctionData(source = {}) {
+  return foundry.utils.mergeObject({
+    enabled: false,
+    name: "",
+    class: "D",
+    reserve: {
+      value: 0,
+      max: 0
+    }
+  }, foundry.utils.deepClone(source), { inplace: false });
+}
+
+function createDefaultEnergyConsumerFunctionData(source = {}) {
+  return foundry.utils.mergeObject({
+    enabled: false,
+    sourceItemUuid: "",
+    sourceItemUuids: [],
+    activeSourceUuid: "",
+    installedSource: createEmptyInstalledEnergySourceData()
+  }, foundry.utils.deepClone(source), { inplace: false });
+}
+
+function createDefaultLightSourceFunctionData(source = {}) {
+  return foundry.utils.mergeObject({
+    enabled: false,
+    name: "",
+    dim: 0,
+    bright: 0,
+    angle: DEFAULT_LIGHT_SOURCE_ANGLE_DEGREES,
+    rotation: 0,
+    color: DEFAULT_LIGHT_SOURCE_COLOR,
+    resourceCosts: []
+  }, foundry.utils.deepClone(source), { inplace: false });
 }
 
 function createDefaultWeaponFunctionData(source = {}) {
@@ -6633,6 +6985,10 @@ async function getDroppedItem(event) {
 
 function isWorldDamageSourceItem(item) {
   return Boolean(item && !item.actor && hasItemFunction(item, ITEM_FUNCTIONS.damageSource));
+}
+
+function isWorldEnergySourceItem(item) {
+  return Boolean(item && !item.actor && hasItemFunction(item, ITEM_FUNCTIONS.energySource));
 }
 
 function buildDamageMitigationModeChoices(item) {

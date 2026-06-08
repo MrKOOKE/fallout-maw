@@ -3464,6 +3464,13 @@
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
 }
 
+.fallout-maw-energy-consumer-reserve {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0 0 0.65rem;
+  max-width: 360px;
+}
+
 .fallout-maw-magazine-source-drop {
   align-items: center;
   background: rgba(0, 0, 0, 0.18);
@@ -3614,9 +3621,17 @@
   justify-self: end;
 }
 
+.fallout-maw-light-energy-card {
+  grid-template-columns: 2.2rem minmax(0, 1fr) minmax(4rem, auto);
+}
+
 @media (max-width: 560px) {
   .fallout-maw-reload-source-list {
     grid-template-columns: 1fr;
+  }
+
+  .fallout-maw-light-energy-card {
+    grid-template-columns: 2.2rem minmax(0, 1fr) minmax(3.5rem, auto);
   }
 }
 
