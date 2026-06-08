@@ -3,8 +3,11 @@ import { IDENTIFIER_PATTERN, validateFormula } from "../formulas/index.mjs";
 import {
   getSkillAdvancementSettings,
   getCharacteristicSettings,
+  getSkillDevelopmentCostSettings,
   getSkillSettings,
+  resetSkillDevelopmentCostSettings,
   resetSkillSettings,
+  setSkillDevelopmentCostSettings,
   setSkillSettings
 } from "../settings/accessors.mjs";
 import { format, localize } from "../utils/i18n.mjs";
@@ -17,6 +20,7 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
     super(options);
     this.skills = getSkillSettings();
     this.skillAdvancement = getSkillAdvancementSettings();
+    this.skillDevelopmentCosts = getSkillDevelopmentCostSettings();
   }
 
   static DEFAULT_OPTIONS = {
@@ -31,7 +35,9 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
     },
     actions: {
       createSkill: this.#onCreateSkill,
+      createSkillCostThreshold: this.#onCreateSkillCostThreshold,
       deleteSkill: this.#onDeleteSkill,
+      deleteSkillCostThreshold: this.#onDeleteSkillCostThreshold,
       resetDefaults: this.#onResetDefaults
     }
   };
@@ -54,6 +60,7 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
       signatureMultiplier: this.skillAdvancement.signatureMultiplier,
       signatureFlatBonus: this.skillAdvancement.signatureFlatBonus,
       developmentLimit: this.skillAdvancement.developmentLimit,
+      skillCostThresholds: this.skillDevelopmentCosts.thresholds ?? [],
       skills: this.skills.map(skill => ({
         ...skill,
         advancement: this.skillAdvancement.entries?.[skill.key] ?? {
@@ -77,10 +84,13 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
   async _processFormData(_event, _form, _formData) {
     const skills = this.#readSkillsFromForm();
     const advancement = this.#readSkillAdvancementFromForm();
+    const skillDevelopmentCosts = this.#readSkillDevelopmentCostsFromForm();
     this.#validateSkills(skills);
     await setSkillSettings({ entries: skills, advancement });
+    await setSkillDevelopmentCostSettings(skillDevelopmentCosts);
     this.skills = getSkillSettings();
     this.skillAdvancement = getSkillAdvancementSettings();
+    this.skillDevelopmentCosts = getSkillDevelopmentCostSettings();
     ui.notifications.info(localize("FALLOUTMAW.Messages.SkillsSaved"));
     return this.forceRender();
   }
@@ -108,11 +118,37 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
+  static #onCreateSkillCostThreshold(event) {
+    event.preventDefault();
+    this.skillDevelopmentCosts = this.#readSkillDevelopmentCostsFromForm();
+    const thresholds = this.skillDevelopmentCosts.thresholds ?? [];
+    const last = thresholds.at(-1) ?? { threshold: 40, cost: 0 };
+    thresholds.push({
+      threshold: Math.max(0, Number(last.threshold) || 0) + 40,
+      cost: Math.max(0, Number(last.cost) || 0) + 2
+    });
+    this.skillDevelopmentCosts = { thresholds };
+    return this.forceRender();
+  }
+
+  static #onDeleteSkillCostThreshold(event, target) {
+    event.preventDefault();
+    const rows = Array.from(this.form?.querySelectorAll("[data-skill-cost-threshold-row]") ?? []);
+    const index = rows.indexOf(target.closest("[data-skill-cost-threshold-row]"));
+    if (index < 0) return undefined;
+
+    this.skillDevelopmentCosts = this.#readSkillDevelopmentCostsFromForm();
+    this.skillDevelopmentCosts.thresholds.splice(index, 1);
+    return this.forceRender();
+  }
+
   static async #onResetDefaults(event) {
     event.preventDefault();
     await resetSkillSettings();
+    await resetSkillDevelopmentCostSettings();
     this.skills = getSkillSettings();
     this.skillAdvancement = getSkillAdvancementSettings();
+    this.skillDevelopmentCosts = getSkillDevelopmentCostSettings();
     return this.forceRender();
   }
 
@@ -145,6 +181,16 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
           return [key, { base, characteristics }];
         })
       )
+    };
+  }
+
+  #readSkillDevelopmentCostsFromForm() {
+    const rows = Array.from(this.form?.querySelectorAll("[data-skill-cost-threshold-row]") ?? []);
+    return {
+      thresholds: rows.map(row => ({
+        threshold: Number(row.querySelector("[data-field='threshold']")?.value ?? 0),
+        cost: Number(row.querySelector("[data-field='cost']")?.value ?? 1)
+      }))
     };
   }
 

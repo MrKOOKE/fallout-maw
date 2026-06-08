@@ -1,4 +1,5 @@
 import { normalizeActorDevelopment } from "./storage.mjs";
+import { evaluateSkillFormulas } from "../formulas/index.mjs";
 
 export function calculateRemainingDevelopmentPoints(development = {}) {
   const points = development?.points ?? {};
@@ -47,4 +48,25 @@ export function calculateSkillDevelopmentBonuses(
       calculateSkillDevelopmentBonus(skill.key, characteristics, advancementSettings, normalized.skills?.[skill.key], baseBonuses)
     ])
   );
+}
+
+export function calculatePureSkillDevelopmentValue(
+  skillKey,
+  skillSettings = [],
+  characteristicSettings = [],
+  characteristics = {},
+  advancementSettings = {},
+  development = {},
+  baseBonuses = {}
+) {
+  const skillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, characteristics);
+  const normalized = normalizeActorDevelopment(development, [], skillSettings);
+  const developmentBonus = calculateSkillDevelopmentBonus(
+    skillKey,
+    characteristics,
+    advancementSettings,
+    normalized.skills?.[skillKey],
+    baseBonuses
+  );
+  return Math.max(0, Math.trunc((Number(skillBases?.[skillKey]) || 0) + (Number(developmentBonus) || 0)));
 }

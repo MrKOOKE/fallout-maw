@@ -99,7 +99,7 @@
         <div class="fallout-maw-advancement-controls">
           <button type="button" class="fallout-maw-advancement-control-button" data-repeat-action="decreaseSkill" data-skill-key="{{key}}" {{#unless canDecrease}}disabled{{/unless}}><i class="fa-solid fa-minus"></i></button>
           <strong>{{value}}</strong>
-          <button type="button" class="fallout-maw-advancement-control-button" data-repeat-action="increaseSkill" data-skill-key="{{key}}" {{#unless canIncrease}}disabled{{/unless}}><i class="fa-solid fa-plus"></i></button>
+          <button type="button" class="fallout-maw-advancement-control-button" data-repeat-action="increaseSkill" data-skill-key="{{key}}" data-skill-cost-tooltip="{{tooltipHTML}}" aria-disabled="{{#if canIncrease}}false{{else}}true{{/if}}"><i class="fa-solid fa-plus"></i></button>
         </div>
       </div>
       {{/each}}

@@ -3311,8 +3311,8 @@ async function distributeManualHealthValueUpdate(actor, changes = {}, options = 
   for (const [limbKey, accumulation] of result.damageAccumulation ?? new Map()) {
     changes[`system.limbs.${limbKey}.damageAccumulation`] = normalizeDamageAccumulation(accumulation);
   }
-  if (result.prosthesisHealthDamage?.length) {
-    await applyManualProsthesisHealthDamage(actor, result.prosthesisHealthDamage);
+  if (result.prosthesisHealthAdjustments?.length) {
+    await applyManualProsthesisHealthAdjustments(actor, result.prosthesisHealthAdjustments);
   }
   if (mode === MODE_HEALING && result.healthDelta > 0) {
     options.falloutMawShockHealingDelta = (Number(options.falloutMawShockHealingDelta) || 0) + result.healthDelta;
@@ -3870,11 +3870,11 @@ async function calculateManualAggregateHealthAdjustment(actor, amount = 0, mode 
 
   let healthDelta = 0;
   let limbDelta = 0;
-  const prosthesisHealthDamage = [];
+  const prosthesisHealthAdjustments = [];
   for (const [targetKey, allocated] of allocations) {
     const target = targetsByKey.get(targetKey);
     if (target?.type === "prosthesis") {
-      prosthesisHealthDamage.push({ itemId: target.itemId, amount: allocated });
+      prosthesisHealthAdjustments.push({ itemId: target.itemId, amount: allocated, mode });
       healthDelta += allocated;
       continue;
     }
@@ -3900,7 +3900,7 @@ async function calculateManualAggregateHealthAdjustment(actor, amount = 0, mode 
   }
 
   const result = createLimbMutationResult(limbStates, damageAccumulation, { healthDelta, limbDelta });
-  result.prosthesisHealthDamage = prosthesisHealthDamage;
+  result.prosthesisHealthAdjustments = prosthesisHealthAdjustments;
   return result;
 }
 
@@ -3921,7 +3921,7 @@ function getManualHealthDamageTargets(actor) {
 }
 
 function getManualHealthHealingTargets(actor) {
-  return Object.entries(actor?.system?.limbs ?? {})
+  const limbTargets = Object.entries(actor?.system?.limbs ?? {})
     .filter(([key]) => !isLimbPhysicallyMissing(actor, key))
     .map(([key, limb]) => {
       const currentPositive = Math.max(0, getEffectiveLimbStateValue(actor, key));
@@ -3935,6 +3935,10 @@ function getManualHealthHealingTargets(actor) {
       };
     })
     .filter(target => target.capacity > 0);
+  return [
+    ...limbTargets,
+    ...getIntegratedProsthesisHealthHealingTargets(actor)
+  ];
 }
 
 async function calculateEvenLimbDamage(actor, amount = 0, { damageType = null, damageTypeKey = "", traumaDamageTypeKey = getTraumaDamageTypeKey(damageTypeKey), limbStates = new Map(), damageAccumulation = new Map(), excludeLimbKeys = new Set() } = {}) {
@@ -4374,6 +4378,26 @@ function getIntegratedProsthesisHealthDamageTargets(actor, excludeLimbKeys = new
 
 function getProsthesisHealthDamageTargetKey(prosthesis) {
   return `prosthesis:${prosthesis?.id ?? ""}`;
+}
+
+function getIntegratedProsthesisHealthHealingTargets(actor) {
+  const targets = [];
+  for (const [limbKey, limb] of Object.entries(actor?.system?.limbs ?? {})) {
+    if (!isLimbPhysicallyMissing(actor, limbKey)) continue;
+    const prosthesis = getInstalledProsthesis(actor, limbKey);
+    if (!prosthesis || !hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition)) continue;
+    const contribution = getProsthesisHealthForAggregate(prosthesis, limb);
+    if (contribution.value >= contribution.max) continue;
+    targets.push({
+      type: "prosthesis",
+      key: getProsthesisHealthDamageTargetKey(prosthesis),
+      itemId: prosthesis.id,
+      limbKey,
+      prosthesis,
+      capacity: Math.max(0, contribution.max - contribution.value)
+    });
+  }
+  return targets;
 }
 
 function getHealingLimbTargets(actor, limbStates = new Map()) {
@@ -5436,11 +5460,12 @@ async function applyEquipmentConditionDamage(actor, entries = []) {
   }
 }
 
-async function applyManualProsthesisHealthDamage(actor, entries = []) {
+async function applyManualProsthesisHealthAdjustments(actor, entries = []) {
   for (const entry of entries ?? []) {
     const item = actor?.items?.get?.(String(entry?.itemId ?? ""));
     if (!item) continue;
-    await applyProsthesisIntegratedHealthDamage(actor, item, entry.amount);
+    if (entry?.mode === MODE_HEALING) await applyProsthesisIntegratedHealthHealing(actor, item, entry.amount);
+    else await applyProsthesisIntegratedHealthDamage(actor, item, entry.amount);
   }
 }
 
@@ -5466,6 +5491,29 @@ function estimateProsthesisIntegratedHealthDamage(prosthesis, healthAmount = 0) 
   const result = estimateProsthesisConditionDamage(prosthesis, conditionDamage);
   return {
     conditionDamage,
+    conditionDelta: result.conditionDelta,
+    healthDelta: result.healthDelta
+  };
+}
+
+async function applyProsthesisIntegratedHealthHealing(actor, prosthesis, healthAmount = 0) {
+  const estimate = estimateProsthesisIntegratedHealthHealing(prosthesis, healthAmount);
+  if (estimate.conditionHealing <= 0) {
+    return { item: prosthesis, conditionDelta: 0, healthDelta: 0 };
+  }
+  return applyProsthesisConditionHealing(actor, prosthesis, estimate.conditionHealing);
+}
+
+function estimateProsthesisIntegratedHealthHealing(prosthesis, healthAmount = 0) {
+  const integration = getProsthesisIntegrationPercent(prosthesis);
+  const requestedHealth = roundDamageAmount(healthAmount);
+  if (!prosthesis || integration <= 0 || requestedHealth <= 0 || !hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition)) {
+    return { conditionHealing: 0, conditionDelta: 0, healthDelta: 0 };
+  }
+  const conditionHealing = Math.max(1, Math.ceil((requestedHealth * 100) / integration));
+  const result = estimateProsthesisConditionHealing(prosthesis, conditionHealing);
+  return {
+    conditionHealing,
     conditionDelta: result.conditionDelta,
     healthDelta: result.healthDelta
   };
@@ -5523,6 +5571,51 @@ function estimateProsthesisConditionDamage(prosthesis, amount = 0) {
     healthDelta: Math.max(
       0,
       toIntegratedProsthesisHealthValue(current, integration) - toIntegratedProsthesisHealthValue(next, integration)
+    )
+  };
+}
+
+async function applyProsthesisConditionHealing(actor, prosthesis, amount = 0) {
+  if (!actor || !prosthesis || !hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition)) {
+    return { item: prosthesis, conditionDelta: 0, healthDelta: 0 };
+  }
+  const healing = roundDamageAmount(amount);
+  if (healing <= 0) return { item: prosthesis, conditionDelta: 0, healthDelta: 0 };
+
+  const result = estimateProsthesisConditionHealing(prosthesis, healing);
+  if (result.next === result.current) {
+    return { item: prosthesis, conditionDelta: 0, healthDelta: 0 };
+  }
+
+  await actor.updateEmbeddedDocuments("Item", [{
+    _id: prosthesis.id,
+    "system.functions.condition.value": result.next
+  }]);
+  await queueActorDamageStatusSync(actor);
+  return {
+    item: actor.items?.get(prosthesis.id) ?? prosthesis,
+    conditionDelta: result.conditionDelta,
+    healthDelta: result.healthDelta
+  };
+}
+
+function estimateProsthesisConditionHealing(prosthesis, amount = 0) {
+  if (!prosthesis || !hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition)) {
+    return { current: 0, next: 0, conditionDelta: 0, healthDelta: 0 };
+  }
+
+  const condition = getConditionFunction(prosthesis);
+  const max = Math.max(0, toInteger(condition.max));
+  const current = Math.min(Math.max(0, toInteger(condition.value)), max);
+  const next = Math.min(max, current + roundDamageAmount(amount));
+  const integration = getProsthesisIntegrationPercent(prosthesis);
+  return {
+    current,
+    next,
+    conditionDelta: Math.max(0, next - current),
+    healthDelta: Math.max(
+      0,
+      toIntegratedProsthesisHealthValue(next, integration) - toIntegratedProsthesisHealthValue(current, integration)
     )
   };
 }

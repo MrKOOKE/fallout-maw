@@ -1,4 +1,6 @@
 import {
+  calculateSkillPointMultiplier,
+  calculatePureSkillDevelopmentValue,
   calculateRemainingDevelopmentPoints,
   cloneActorDevelopment
 } from "./index.mjs";
@@ -9,6 +11,7 @@ import {
   getAbilityCatalog,
   getLevelSettings,
   getSkillAdvancementSettings,
+  getSkillDevelopmentCostSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
 import { evaluateFormula } from "../formulas/index.mjs";
@@ -17,9 +20,14 @@ import {
   DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
 } from "../config/defaults.mjs";
 import { actorHasAbility, completeAbilityResearch, findCatalogAbility, grantCatalogAbility } from "../abilities/purchase.mjs";
+import { getAbilitySkillAdvancementBaseBonuses } from "../abilities/evaluation.mjs";
 import { formatResearchValue } from "../research/storage.mjs";
 import { ABILITY_ACQUISITION_CONDITION_TYPES, LOCKED_FEATURES_CATEGORY_ID, prepareAbilityItemData } from "../settings/abilities.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
+import {
+  getNextSkillDevelopmentCostThreshold,
+  getSkillDevelopmentCostForValue
+} from "../settings/skill-development-costs.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -47,6 +55,9 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #researchPointSessionSpent = 0;
   #repeatState = null;
   #selectedAbilitySourceId = "";
+  #skillCostTooltipAnchor = null;
+  #skillCostTooltipElement = null;
+  #skillCostTooltipTimer = null;
   #suppressNextRepeatClick = false;
   #snapshot = null;
 
@@ -105,6 +116,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const characteristicSettings = getCharacteristicSettings();
     const skillSettings = getSkillSettings();
     const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
+    const skillAdvancementBaseBonuses = getAbilitySkillAdvancementBaseBonuses(this.actor, skillSettings);
+    const skillDevelopmentCostSettings = getSkillDevelopmentCostSettings();
     const skillDevelopmentLimit = Math.max(0, toInteger(skillAdvancementSettings.developmentLimit));
     const levelSettings = getLevelSettings();
     const creatureOptions = getCreatureOptions();
@@ -112,6 +125,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const remaining = calculateRemainingDevelopmentPoints(this.#draft.development);
     const maxLevel = levelSettings[levelSettings.length - 1]?.level ?? 100;
     const liveCharacteristics = this.actor.system?.characteristics ?? this.#draft.characteristics;
+    const cleanCharacteristics = this.#getCleanCharacteristics(characteristicSettings);
     const liveSkills = this.actor.system?.skills ?? {};
     const currentThreshold = this.#draft.level <= 1
       ? 0
@@ -125,7 +139,14 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       ? 100
       : Math.max(0, Math.min(100, ((currentExperience - currentThreshold) / experienceRange) * 100));
     const canLevelUp = (this.#draft.level < maxLevel) && (currentExperience >= nextThreshold);
-    const abilityCategories = await this.#prepareAbilityCategories(remaining, skillSettings);
+    const abilityRequirementContext = this.#getAbilityRequirementContext({
+      characteristicSettings,
+      skillSettings,
+      skillAdvancementSettings,
+      characteristics: cleanCharacteristics,
+      baseBonuses: skillAdvancementBaseBonuses
+    });
+    const abilityCategories = await this.#prepareAbilityCategories(remaining, skillSettings, abilityRequirementContext);
     const selectedAbility = this.#prepareSelectedAbility(abilityCategories);
     const pointDisplays = this.#preparePointDisplays(remaining);
 
@@ -172,15 +193,54 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         const floorSkill = this.#floor.development.skills?.[skill.key] ?? {};
         const currentSkill = this.#draft.development.skills?.[skill.key] ?? {};
         const canUnsetSignature = currentSkill.signature && !floorSkill.signature;
+        const pureValue = this.#getPureSkillValue(skill.key, {
+          characteristicSettings,
+          skillSettings,
+          skillAdvancementSettings,
+          characteristics: cleanCharacteristics,
+          baseBonuses: skillAdvancementBaseBonuses
+        });
+        const cost = getSkillDevelopmentCostForValue(pureValue, skillDevelopmentCostSettings);
+        const nextThreshold = getNextSkillDevelopmentCostThreshold(pureValue, skillDevelopmentCostSettings);
+        const totalValue = toInteger(liveSkills?.[skill.key]?.value);
+        const signature = Boolean(currentSkill.signature);
+        const skillGain = calculateSkillDevelopmentGain({
+          skill,
+          characteristics: cleanCharacteristics,
+          advancementSettings: skillAdvancementSettings,
+          baseBonuses: skillAdvancementBaseBonuses,
+          signature
+        });
+        const multiplierLabel = formatSkillDevelopmentMultiplier({
+          skill,
+          characteristics: cleanCharacteristics,
+          characteristicSettings,
+          advancementSettings: skillAdvancementSettings,
+          baseBonuses: skillAdvancementBaseBonuses,
+          signature
+        });
         return {
           ...skill,
-          value: toInteger(liveSkills?.[skill.key]?.value),
-          signature: Boolean(currentSkill.signature),
-          canIncrease: remaining.skills > 0 && toInteger(liveSkills?.[skill.key]?.value) < skillDevelopmentLimit,
+          value: totalValue,
+          signature,
+          canIncrease: remaining.skills >= cost && totalValue < skillDevelopmentLimit,
           canDecrease: toInteger(currentSkill.points) > toInteger(floorSkill.points),
           canToggleSignature: Boolean(currentSkill.signature)
             ? canUnsetSignature
-            : (remaining.signatureSkills > 0)
+            : (remaining.signatureSkills > 0),
+          cost,
+          pureValue,
+          tooltipHTML: renderSkillCostTooltipHTML({
+            skill,
+            totalValue,
+            pureValue,
+            investedPoints: toInteger(currentSkill.points),
+            cost,
+            gain: skillGain,
+            multiplierLabel,
+            nextThreshold,
+            remainingSkillPoints: remaining.skills
+          })
         };
       }),
       abilityCategories,
@@ -200,6 +260,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#activateRepeatButtons();
     this.#activateAbilitySearch();
     this.#activateAbilityDescriptionTooltips();
+    this.#activateSkillCostTooltips();
   }
 
   #syncPageClass() {
@@ -210,6 +271,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#isClosing = true;
     window.clearTimeout(this.#experienceSyncTimer);
     this.#clearAbilityDescriptionTooltip();
+    this.#clearSkillCostTooltip();
     this.#abilityTooltipDocumentAbortController?.abort();
     this.#abilityTooltipDocumentAbortController = null;
     this.#stopRepeat();
@@ -498,6 +560,62 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#abilityTooltipPinned = false;
   }
 
+  #activateSkillCostTooltips() {
+    const root = this.element;
+    if (!root || root.dataset.skillCostTooltipsBound === "true") return;
+    root.dataset.skillCostTooltipsBound = "true";
+    root.addEventListener("pointerover", event => this.#onSkillCostPointerOver(event));
+    root.addEventListener("pointerout", event => this.#onSkillCostPointerOut(event));
+  }
+
+  #onSkillCostPointerOver(event) {
+    const anchor = event.target?.closest?.("[data-skill-cost-tooltip]");
+    if (!anchor || anchor.contains(event.relatedTarget)) return;
+    const html = String(anchor.dataset.skillCostTooltip ?? "").trim();
+    if (!html) return;
+
+    this.#clearSkillCostTooltip();
+    this.#skillCostTooltipAnchor = anchor;
+    this.#skillCostTooltipTimer = window.setTimeout(() => this.#showSkillCostTooltip(anchor, html), 250);
+  }
+
+  #onSkillCostPointerOut(event) {
+    const anchor = event.target?.closest?.("[data-skill-cost-tooltip]");
+    if (!anchor || anchor.contains(event.relatedTarget)) return;
+    if (this.#skillCostTooltipElement?.contains(event.relatedTarget)) return;
+    this.#clearSkillCostTooltip();
+  }
+
+  #showSkillCostTooltip(anchor, html) {
+    if (this.#skillCostTooltipTimer) {
+      window.clearTimeout(this.#skillCostTooltipTimer);
+      this.#skillCostTooltipTimer = null;
+    }
+    if (!anchor?.isConnected || this.#skillCostTooltipAnchor !== anchor) return;
+
+    const tooltip = document.createElement("aside");
+    tooltip.className = "fallout-maw-inventory-tooltip fallout-maw-skill-cost-tooltip";
+    tooltip.innerHTML = `<div class="content">${html}</div>`;
+    tooltip.addEventListener("pointerleave", event => {
+      if (this.#skillCostTooltipAnchor?.contains(event.relatedTarget)) return;
+      this.#clearSkillCostTooltip();
+    });
+    document.body.append(tooltip);
+    this.#skillCostTooltipElement = tooltip;
+    positionAbilityDescriptionTooltip(tooltip, anchor);
+    requestAnimationFrame(() => positionAbilityDescriptionTooltip(tooltip, anchor));
+  }
+
+  #clearSkillCostTooltip() {
+    if (this.#skillCostTooltipTimer) {
+      window.clearTimeout(this.#skillCostTooltipTimer);
+      this.#skillCostTooltipTimer = null;
+    }
+    this.#skillCostTooltipElement?.remove();
+    this.#skillCostTooltipElement = null;
+    this.#skillCostTooltipAnchor = null;
+  }
+
   #syncDraftFromForm() {
     return undefined;
   }
@@ -532,11 +650,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
     if (delta > 0) {
       const available = Math.max(0, toInteger(this.#draft.development.points.skills));
-      if (available < 1) return false;
+      const cost = this.#getSkillUpgradeCost(key);
+      if (available < cost) return false;
       if (toInteger(this.actor.system?.skills?.[key]?.value) >= this.#getSkillDevelopmentLimit()) return false;
 
       this.#draft.development.skills[key].points = toInteger(this.#draft.development.skills[key]?.points) + 1;
-      this.#draft.development.points.skills = available - 1;
+      this.#draft.development.points.skills = available - cost;
       await this.#applyDraftToActor();
       return true;
     }
@@ -546,7 +665,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (currentPoints <= minimumPoints) return false;
 
     this.#draft.development.skills[key].points = currentPoints - 1;
-    this.#draft.development.points.skills = Math.max(0, toInteger(this.#draft.development.points.skills)) + 1;
+    this.#draft.development.points.skills = Math.max(0, toInteger(this.#draft.development.points.skills)) + this.#getSkillRefundCost(key, currentPoints - 1);
     await this.#applyDraftToActor();
     return true;
   }
@@ -588,7 +707,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
     const entry = findCatalogAbility(sourceId);
     if (!entry || actorHasAbility(this.actor, sourceId)) return this.forceRender();
-    if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability)) return this.forceRender();
+    if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability, this.#getAbilityRequirementContext())) return this.forceRender();
     if (entry.ability.system?.acquisition?.onlyManual) return this.forceRender();
     const research = this.#getAbilityResearch(sourceId);
     if (!research) return this.forceRender();
@@ -631,7 +750,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
     const entry = findCatalogAbility(sourceId);
     if (!entry || actorHasAbility(this.actor, sourceId)) return this.forceRender();
-    if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability)) return this.forceRender();
+    if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability, this.#getAbilityRequirementContext())) return this.forceRender();
     if (this.#getAbilityResearch(sourceId)) return this.forceRender();
 
     await this.actor.createResearch(this.#createAbilityResearchData(entry));
@@ -646,7 +765,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
     const entry = findCatalogAbility(sourceId);
     if (!entry || entry.category?.id !== LOCKED_FEATURES_CATEGORY_ID || actorHasAbility(this.actor, sourceId)) return this.forceRender();
-    if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability)) return this.forceRender();
+    if (!abilityAcquisitionRequirementsMet(this.actor, entry.ability, this.#getAbilityRequirementContext())) return this.forceRender();
 
     const available = Math.max(0, toInteger(this.#draft.development.points.traits));
     if (available < 1) return this.forceRender();
@@ -692,8 +811,86 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #getSkillSessionSpent() {
     return Object.entries(this.#draft?.development?.skills ?? {}).reduce((total, [key, value]) => {
       const floorValue = toInteger(this.#floor?.development?.skills?.[key]?.points);
-      return total + Math.max(0, toInteger(value?.points) - floorValue);
+      const currentValue = toInteger(value?.points);
+      if (currentValue <= floorValue) return total;
+
+      const development = foundry.utils.deepClone(this.#draft.development);
+      let spent = 0;
+      for (let points = floorValue; points < currentValue; points += 1) {
+        development.skills[key] = {
+          ...(development.skills?.[key] ?? {}),
+          points
+        };
+        spent += this.#getSkillUpgradeCost(key, development);
+      }
+      return total + spent;
     }, 0);
+  }
+
+  #getSkillUpgradeCost(key, development = this.#draft?.development) {
+    return getSkillDevelopmentCostForValue(this.#getPureSkillValue(key, { development }), getSkillDevelopmentCostSettings());
+  }
+
+  #getSkillRefundCost(key, previousPoints) {
+    const development = foundry.utils.deepClone(this.#draft.development);
+    development.skills[key] = {
+      ...(development.skills?.[key] ?? {}),
+      points: previousPoints
+    };
+    return this.#getSkillUpgradeCost(key, development);
+  }
+
+  #getCleanCharacteristics(characteristicSettings = getCharacteristicSettings(), development = this.#draft?.development) {
+    return Object.fromEntries(
+      characteristicSettings.map(characteristic => [
+        characteristic.key,
+        toInteger(this.#draft?.characteristics?.[characteristic.key])
+          + toInteger(development?.characteristics?.[characteristic.key])
+      ])
+    );
+  }
+
+  #getAbilityRequirementContext({
+    characteristicSettings = getCharacteristicSettings(),
+    skillSettings = getSkillSettings(),
+    skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings),
+    development = this.#draft?.development ?? this.actor.system?.development ?? {},
+    characteristics = this.#getCleanCharacteristics(characteristicSettings, development),
+    baseBonuses = getAbilitySkillAdvancementBaseBonuses(this.actor, skillSettings)
+  } = {}) {
+    const skills = Object.fromEntries(
+      skillSettings.map(skill => [
+        skill.key,
+        this.#getPureSkillValue(skill.key, {
+          characteristicSettings,
+          skillSettings,
+          skillAdvancementSettings,
+          development,
+          characteristics,
+          baseBonuses
+        })
+      ])
+    );
+    return { characteristics, skills };
+  }
+
+  #getPureSkillValue(key, {
+    characteristicSettings = getCharacteristicSettings(),
+    skillSettings = getSkillSettings(),
+    skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings),
+    development = this.#draft?.development ?? this.actor.system?.development ?? {},
+    characteristics = this.#getCleanCharacteristics(characteristicSettings, development),
+    baseBonuses = getAbilitySkillAdvancementBaseBonuses(this.actor, skillSettings)
+  } = {}) {
+    return calculatePureSkillDevelopmentValue(
+      key,
+      skillSettings,
+      characteristicSettings,
+      characteristics,
+      skillAdvancementSettings,
+      development,
+      baseBonuses
+    );
   }
 
   #getSignatureSkillSessionSpent() {
@@ -709,7 +906,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       .reduce((total, [key, selected]) => total + (selected && !floorTraits[key] ? 1 : 0), 0);
   }
 
-  async #prepareAbilityCategories(remaining = {}, skillSettings = []) {
+  async #prepareAbilityCategories(remaining = {}, skillSettings = [], requirementContext = {}) {
     const catalog = getAbilityCatalog();
     return Promise.all((catalog.categories ?? []).map(async category => {
       const isFeatures = category.id === LOCKED_FEATURES_CATEGORY_ID;
@@ -717,7 +914,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       const traitRemaining = Math.max(0, toInteger(remaining.traits));
       const abilities = await Promise.all((category.abilities ?? [])
         .filter(ability => !actorHasAbility(this.actor, String(ability?.id ?? "")))
-        .map(ability => this.#prepareAbilityEntry(category, ability, remaining, skillSettings)));
+        .map(ability => this.#prepareAbilityEntry(category, ability, remaining, skillSettings, requirementContext)));
       return {
         ...category,
         displayName: isFeatures ? `Особенности (Доступно ${traitRemaining}/${traitTotal})` : category.name,
@@ -742,7 +939,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     return Math.max(0, toInteger(traitRemaining)) + this.#getTraitSessionSpent();
   }
 
-  async #prepareAbilityEntry(category, ability, remaining = {}, skillSettings = []) {
+  async #prepareAbilityEntry(category, ability, remaining = {}, skillSettings = [], requirementContext = {}) {
     const sourceId = String(ability?.id ?? "");
     const isFeature = category.id === LOCKED_FEATURES_CATEGORY_ID;
     const cost = Math.max(0, toInteger(ability?.system?.cost));
@@ -755,7 +952,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const onlyManual = Boolean(ability?.system?.acquisition?.onlyManual);
     const completed = Boolean(research) && progress >= target;
     const skillLabel = skillSettings.find(skill => skill.key === ability?.system?.acquisition?.skillKey)?.label ?? skillSettings[0]?.label ?? "";
-    const requirementRows = getAbilityAcquisitionRequirementRows(this.actor, ability);
+    const requirementRows = getAbilityAcquisitionRequirementRows(this.actor, ability, requirementContext);
     const acquisitionAvailable = requirementRows.every(requirement => requirement.met);
     const requirementLabel = getAbilityAcquisitionRequirementLabel(requirementRows);
     const descriptionTooltipHTML = await renderAbilityDescriptionTooltipHTML(ability, {
@@ -842,7 +1039,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       return;
     }
     const target = event.currentTarget;
-    if (!(target instanceof HTMLElement) || target.hasAttribute("disabled")) return;
+    if (!(target instanceof HTMLElement) || target.hasAttribute("disabled") || target.getAttribute("aria-disabled") === "true") return;
 
     const action = target.dataset.repeatAction ?? "";
     const key = target.dataset.characteristicKey ?? target.dataset.skillKey ?? "";
@@ -857,7 +1054,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
     event.preventDefault();
     const target = event.currentTarget;
-    if (!(target instanceof HTMLElement) || target.hasAttribute("disabled")) return;
+    if (!(target instanceof HTMLElement) || target.hasAttribute("disabled") || target.getAttribute("aria-disabled") === "true") return;
 
     const action = target.dataset.repeatAction ?? "";
     const key = target.dataset.characteristicKey ?? target.dataset.skillKey ?? "";
@@ -988,15 +1185,17 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   }
 }
 
-function abilityAcquisitionRequirementsMet(actor, ability = {}) {
-  return getAbilityAcquisitionRequirementRows(actor, ability).every(requirement => requirement.met);
+function abilityAcquisitionRequirementsMet(actor, ability = {}, context = {}) {
+  return getAbilityAcquisitionRequirementRows(actor, ability, context).every(requirement => requirement.met);
 }
 
-function getAbilityAcquisitionRequirementRows(actor, ability = {}) {
+function getAbilityAcquisitionRequirementRows(actor, ability = {}, context = {}) {
   const rows = [];
   const races = getCreatureOptions().races ?? [];
   const characteristics = getCharacteristicSettings();
   const skills = getSkillSettings();
+  const requirementCharacteristics = context?.characteristics ?? actor?.system?.characteristics ?? {};
+  const requirementSkills = context?.skills ?? {};
   for (const requirement of ability.system?.acquisitionRequirements ?? []) {
     if (requirement?.type === ABILITY_ACQUISITION_CONDITION_TYPES.race) {
       const raceId = String(requirement.raceId ?? "").trim();
@@ -1022,7 +1221,7 @@ function getAbilityAcquisitionRequirementRows(actor, ability = {}) {
       const required = Math.max(0, toInteger(requirement.value ?? requirement.minimum));
       if (!key || required <= 0) continue;
       const characteristic = characteristics.find(entry => entry.key === key);
-      const current = toInteger(actor?.system?.characteristics?.[key]);
+      const current = toInteger(requirementCharacteristics?.[key]);
       rows.push({
         type: requirement.type,
         label: "Характеристика",
@@ -1040,7 +1239,9 @@ function getAbilityAcquisitionRequirementRows(actor, ability = {}) {
       const required = Math.max(0, toInteger(requirement.value ?? requirement.minimum));
       if (!key || required <= 0) continue;
       const skill = skills.find(entry => entry.key === key);
-      const current = toInteger(actor?.system?.skills?.[key]?.value);
+      const current = Object.prototype.hasOwnProperty.call(requirementSkills, key)
+        ? toInteger(requirementSkills?.[key])
+        : toInteger(actor?.system?.skills?.[key]?.value);
       rows.push({
         type: requirement.type,
         label: "Навык",
@@ -1110,6 +1311,126 @@ async function renderAbilityDescriptionTooltipHTML(ability = {}, { actor = null,
     `
     : "";
   return `${titleSection}${requirementSection}${descriptionSection}`;
+}
+
+function renderSkillCostTooltipHTML({
+  skill = {},
+  totalValue = 0,
+  pureValue = 0,
+  investedPoints = 0,
+  cost = 1,
+  gain = 0,
+  multiplierLabel = "",
+  nextThreshold = null,
+  remainingSkillPoints = 0
+} = {}) {
+  const canPay = toInteger(remainingSkillPoints) >= toInteger(cost);
+  const paymentClass = canPay ? "met" : "unmet";
+  const nextThresholdSection = nextThreshold
+    ? `
+      <div class="function-row">
+        <span>Следующий порог</span>
+        <strong>от ${escapeHtml(nextThreshold.threshold)}: ${escapeHtml(nextThreshold.cost)} очк.</strong>
+      </div>
+      <div class="function-row">
+        <span>До порога</span>
+        <strong>${escapeHtml(nextThreshold.remaining)}</strong>
+      </div>
+    `
+    : `
+      <div class="function-row">
+        <span>Следующий порог</span>
+        <strong>нет</strong>
+      </div>
+    `;
+
+  return `
+    <section class="function-section single-value fallout-maw-skill-cost-tooltip-title">
+      <h4>Навык</h4>
+      <strong>${escapeHtml(skill.label || skill.key || "")}</strong>
+    </section>
+    <section class="function-section fallout-maw-skill-cost-tooltip-values">
+      <h4>Развитие</h4>
+      <div class="function-grid">
+        <div class="function-row fallout-maw-advancement-tooltip-requirement ${paymentClass}">
+          <span>Стоимость</span>
+          <strong>${escapeHtml(cost)} очк.</strong>
+        </div>
+        <div class="function-row">
+          <span>Чистое значение</span>
+          <strong>${escapeHtml(pureValue)}</strong>
+        </div>
+        <div class="function-row">
+          <span>Общее значение</span>
+          <strong>${escapeHtml(totalValue)}</strong>
+        </div>
+        <div class="function-row">
+          <span>Вложено</span>
+          <strong>${escapeHtml(investedPoints)}</strong>
+        </div>
+        <div class="function-row">
+          <span>Прирост</span>
+          <strong>+${escapeHtml(formatFixedDecimal(gain, 1))}</strong>
+        </div>
+        <div class="function-row">
+          <span>Множитель</span>
+          <strong>${escapeHtml(multiplierLabel)}</strong>
+        </div>
+        ${nextThresholdSection}
+      </div>
+    </section>
+  `;
+}
+
+function formatSkillDevelopmentMultiplier({
+  skill = {},
+  characteristics = {},
+  characteristicSettings = [],
+  advancementSettings = {},
+  baseBonuses = {},
+  signature = false
+} = {}) {
+  const entry = advancementSettings?.entries?.[skill.key] ?? {};
+  const base = (Number(entry.base) || 0) + (Number(baseBonuses?.[skill.key]) || 0);
+  const parts = [`База: ${formatCompactDecimal(base)}`];
+
+  for (const [characteristicKey, coefficient] of Object.entries(entry.characteristics ?? {})) {
+    const value = (Number(characteristics?.[characteristicKey]) || 0) * (Number(coefficient) || 0);
+    if (!value) continue;
+    const label = characteristicSettings.find(characteristic => characteristic.key === characteristicKey)?.label ?? characteristicKey;
+    parts.push(`${label}: ${formatCompactDecimal(value)}`);
+  }
+
+  if (!signature) return `(${parts.join(", ")})`;
+
+  const signatureMultiplier = Number(advancementSettings?.signatureMultiplier) || 0;
+  return `(${parts.join(", ")})*${formatCompactDecimal(signatureMultiplier)}`;
+}
+
+function calculateSkillDevelopmentGain({
+  skill = {},
+  characteristics = {},
+  advancementSettings = {},
+  baseBonuses = {},
+  signature = false
+} = {}) {
+  const baseMultiplier = calculateSkillPointMultiplier(skill.key, characteristics, advancementSettings, baseBonuses);
+  if (!signature) return baseMultiplier;
+
+  const signatureMultiplier = Number(advancementSettings?.signatureMultiplier) || 0;
+  return baseMultiplier * signatureMultiplier;
+}
+
+function formatFixedDecimal(value, digits = 1) {
+  const number = Number(value);
+  const safe = Number.isFinite(number) ? number : 0;
+  return safe.toFixed(digits).replace(".", ",");
+}
+
+function formatCompactDecimal(value, digits = 2) {
+  const number = Number(value);
+  const safe = Number.isFinite(number) ? number : 0;
+  return safe.toFixed(digits).replace(".", ",").replace(/0+$/u, "").replace(/,$/u, "");
 }
 
 function renderAbilityRequirementTooltipRow(requirement) {

@@ -52,6 +52,7 @@ import {
   PROFICIENCY_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
   SKILL_CHECK_CONTROL_SETTING,
+  SKILL_DEVELOPMENT_COSTS_SETTING,
   SKILL_SETTINGS_SETTING,
   STEALTH_SETTINGS_SETTING,
   SYSTEM_ACTION_SETTINGS_SETTING,
@@ -73,6 +74,7 @@ import { createDefaultItemCategorySettings } from "./item-categories.mjs";
 import { createDefaultLevelSettings } from "./levels.mjs";
 import { createDefaultSystemActionSettings, createDefaultToolSettings } from "./tools.mjs";
 import { createDefaultStealthSettings } from "../stealth/settings.mjs";
+import { createDefaultSkillDevelopmentCostSettings } from "./skill-development-costs.mjs";
 import { createDefaultTraumaSettings } from "./traumas.mjs";
 import {
   DEFAULT_SKILL_CHECK_CONTROL,
@@ -123,6 +125,14 @@ export function registerSystemSettings() {
       advancement: createDefaultSkillAdvancementSettings()
     }),
     onChange: refreshPreparedActors
+  });
+
+  game.settings.register(FALLOUT_MAW.id, SKILL_DEVELOPMENT_COSTS_SETTING, {
+    name: "Стоимость развития навыков",
+    scope: "world",
+    config: false,
+    type: Object,
+    default: getBaselineDefault(SKILL_DEVELOPMENT_COSTS_SETTING, createDefaultSkillDevelopmentCostSettings())
   });
 
   game.settings.register(FALLOUT_MAW.id, LEVELS_SETTING, {

@@ -5406,10 +5406,15 @@ label.fallout-maw-mitigation-cell {
 
 .fallout-maw-advancement-action-button[disabled],
 .fallout-maw-advancement-save-button[disabled],
-.fallout-maw-advancement-control-button[disabled] {
+.fallout-maw-advancement-control-button[disabled],
+.fallout-maw-advancement-control-button[aria-disabled="true"] {
   background: rgba(231, 198, 120, 0.02);
   border-color: rgba(202, 168, 92, 0.08);
   color: rgba(158, 146, 119, 0.4);
+}
+
+.fallout-maw-advancement-control-button[aria-disabled="true"] {
+  cursor: not-allowed;
 }
 
 .fallout-maw-advancement-hero-layout {
@@ -10155,6 +10160,14 @@ label.fallout-maw-mitigation-cell {
 
 .skill-settings .fallout-maw-settings-row {
   grid-template-columns: 2rem 80px minmax(120px, 0.8fr) minmax(130px, 0.9fr) minmax(220px, 1.25fr) 2.5rem;
+}
+
+.skill-cost-threshold-settings .fallout-maw-settings-row {
+  grid-template-columns: minmax(160px, 1fr) minmax(140px, 1fr) 2.5rem;
+}
+
+.skill-cost-threshold-settings .fallout-maw-settings-row > input {
+  width: 100%;
 }
 
 .resource-settings .fallout-maw-settings-row {

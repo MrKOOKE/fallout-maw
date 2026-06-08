@@ -32,6 +32,7 @@ import {
   PROFICIENCY_SETTINGS_SETTING,
   RESOURCE_SETTINGS_SETTING,
   SKILL_CHECK_CONTROL_SETTING,
+  SKILL_DEVELOPMENT_COSTS_SETTING,
   SKILL_SETTINGS_SETTING,
   STEALTH_SETTINGS_SETTING,
   SYSTEM_ACTION_SETTINGS_SETTING,
@@ -56,6 +57,10 @@ import {
   normalizeToolSettings
 } from "./tools.mjs";
 import { createDefaultStealthSettings, normalizeStealthSettings } from "../stealth/settings.mjs";
+import {
+  createDefaultSkillDevelopmentCostSettings,
+  normalizeSkillDevelopmentCostSettings
+} from "./skill-development-costs.mjs";
 
 export const DEFAULT_SKILL_CHECK_CONTROL = Object.freeze({
   resultMode: "standard",
@@ -228,6 +233,24 @@ export async function resetSkillSettings() {
     entries: createDefaultSkillSettings(),
     advancement: createDefaultSkillAdvancementSettings()
   });
+}
+
+export function getSkillDevelopmentCostSettings() {
+  try {
+    return normalizeSkillDevelopmentCostSettings(game.settings.get(FALLOUT_MAW.id, SKILL_DEVELOPMENT_COSTS_SETTING));
+  } catch (_error) {
+    return createDefaultSkillDevelopmentCostSettings();
+  }
+}
+
+export async function setSkillDevelopmentCostSettings(settings) {
+  const normalized = normalizeSkillDevelopmentCostSettings(settings);
+  await game.settings.set(FALLOUT_MAW.id, SKILL_DEVELOPMENT_COSTS_SETTING, normalized);
+  return normalized;
+}
+
+export async function resetSkillDevelopmentCostSettings() {
+  return setSkillDevelopmentCostSettings(createDefaultSkillDevelopmentCostSettings());
 }
 
 export function getProficiencySettings() {
