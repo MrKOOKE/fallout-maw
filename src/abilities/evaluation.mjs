@@ -70,6 +70,8 @@ export function abilityConditionsApply(actor, conditions = [], context = {}) {
 }
 
 export function abilityConditionApplies(actor, condition = {}, context = {}) {
+  if (condition.type === ABILITY_CONDITION_TYPES.itemUse) return false;
+
   if (condition.type === ABILITY_CONDITION_TYPES.cooldown) {
     const abilityItemId = String(context?.abilityItemId ?? "").trim();
     const functionId = String(context?.functionId ?? "").trim();
@@ -98,9 +100,14 @@ export function abilityConditionApplies(actor, condition = {}, context = {}) {
 function getConditionalFunctionChanges(actor, entry = {}, context = {}) {
   const conditions = entry.conditions ?? [];
   if (!conditions.length) return entry.changes ?? [];
+  if (hasItemUseCondition(conditions)) return [];
   return abilityConditionsApply(actor, conditions, { ...context, functionId: entry.id ?? "" })
     ? entry.changes ?? []
     : entry.penalties ?? [];
+}
+
+function hasItemUseCondition(conditions = []) {
+  return (conditions ?? []).some(condition => condition?.type === ABILITY_CONDITION_TYPES.itemUse);
 }
 
 function isActorEquipmentSlotOccupied(actor, requestedSlotKey = "") {

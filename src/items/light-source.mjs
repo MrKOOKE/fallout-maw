@@ -107,6 +107,14 @@ export async function setLightSourceActive(tokenOrDocument = null, item = null, 
   if (entries.length) await tokenDocument.setFlag(SYSTEM_ID, ACTIVE_LIGHT_SOURCES_FLAG, entries);
   else await tokenDocument.unsetFlag(SYSTEM_ID, ACTIVE_LIGHT_SOURCES_FLAG);
   await syncTokenLightSources(tokenDocument);
+  if (active) {
+    Hooks.callAll("fallout-maw.itemUsed", {
+      actor: tokenDocument.actor,
+      token: tokenDocument,
+      item,
+      action: "lightSource"
+    });
+  }
   return true;
 }
 

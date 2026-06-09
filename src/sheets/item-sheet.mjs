@@ -472,12 +472,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     } else if (form?.querySelector?.("[data-free-settings-panel]")) {
       foundry.utils.setProperty(submitData, "system.functions.freeSettings.useConditionWeakening", false);
     }
+    normalizeSubmittedAbilityItemUseConditions(form, submitData);
     return super._processSubmitData(event, form, submitData, options);
   }
 
   _processFormData(event, form, formData) {
     const submitData = super._processFormData(event, form, formData);
     normalizeWeaponSpecialPropertiesInSubmitData(submitData);
+    normalizeSubmittedAbilityItemUseConditions(form, submitData);
     return submitData;
   }
 
@@ -619,6 +621,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-ability-condition]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAbilityCondition(event));
+    });
+    this.element?.querySelectorAll("[data-add-ability-item-use-category]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityItemUseCategory(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-item-use-category]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityItemUseCategory(event));
+    });
+    this.element?.querySelectorAll("select[data-ability-item-use-category]").forEach(select => {
+      select.addEventListener("change", event => this.#onAbilityItemUseCategoryChange(event));
     });
     this.element?.querySelectorAll("[data-add-ability-penalty]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityPenalty(event));
@@ -2058,6 +2069,51 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (!functions[functionIndex]?.conditions?.[conditionIndex]) return undefined;
     functions[functionIndex].conditions.splice(conditionIndex, 1);
     return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAddAbilityItemUseCategory(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    if (!condition) return undefined;
+
+    const categories = normalizeAbilityItemUseCategoryValues(condition.itemCategories);
+    const nextCategory = getFirstUnusedAbilityItemUseCategory(categories);
+    if (!nextCategory) return undefined;
+
+    condition.itemCategories = [...categories, nextCategory];
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteAbilityItemUseCategory(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    const categoryIndex = Number(event.currentTarget?.closest?.("[data-item-use-category-index]")?.dataset.itemUseCategoryIndex ?? -1);
+    if (!condition || categoryIndex < 0) return undefined;
+
+    const categories = normalizeAbilityItemUseCategoryValues(condition.itemCategories);
+    categories.splice(categoryIndex, 1);
+    condition.itemCategories = categories;
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAbilityItemUseCategoryChange(event) {
+    event.preventDefault();
+    return this.#submitCurrentForm();
+  }
+
+  #getAbilityConditionForEvent(event) {
+    const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
+    const conditionIndex = Number(event.currentTarget?.closest?.("[data-ability-condition-row]")?.dataset.conditionIndex ?? -1);
+    const functionPath = this.#getAbilityFunctionPathForEvent(event);
+    const functions = this.#getSubmittedAbilityFunctions(functionPath);
+    return {
+      functionIndex,
+      conditionIndex,
+      functionPath,
+      functions,
+      condition: functions[functionIndex]?.conditions?.[conditionIndex]
+    };
   }
 
   #onAddAbilityPenalty(event) {
@@ -3795,7 +3851,9 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
   const isLimitedChanges = type === ABILITY_CONDITION_TYPES.limitedChanges;
+  const isItemUse = type === ABILITY_CONDITION_TYPES.itemUse;
   const maxLimit = Math.max(1, changeCount);
+  const duration = splitAbilityDurationSeconds(condition?.durationSeconds);
   const healthTarget = Object.values(ABILITY_HEALTH_TARGETS).includes(condition?.healthTarget)
     ? condition.healthTarget
     : ABILITY_HEALTH_TARGETS.general;
@@ -3808,7 +3866,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
     functionIndex,
     index,
     healthTarget,
-    isPending: !isHealth && !isEquipment && !isLimitedChanges,
+    isPending: !isHealth && !isEquipment && !isLimitedChanges && !isItemUse,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -3816,10 +3874,14 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
     showLimbChoice: isHealth && !isHealthGeneral,
     isEquipment,
     isLimitedChanges,
-    canAddAlternative: !isLimitedChanges,
+    isItemUse,
+    canAddAlternative: !isLimitedChanges && !isItemUse,
     changeLimit: Math.max(1, Math.min(maxLimit, toInteger(condition?.limit ?? 1))),
     changeLimitMax: maxLimit,
     changeLimitTotal: changeCount,
+    requiredCount: Math.max(1, toInteger(condition?.requiredCount ?? 1)),
+    durationAmount: duration.amount,
+    durationUnitChoices: buildAbilityDurationUnitChoices(duration.unit),
     typeLabel: getAbilityConditionTypeLabel(type),
     typeChoices: buildAbilityConditionTypeChoices(type, { allowLimitedChanges }),
     healthTargetChoices: buildAbilityHealthTargetChoices(healthTarget),
@@ -3832,7 +3894,9 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
       { value: ABILITY_EQUIPMENT_OPERATORS.occupied, label: "Занят", selected: condition?.operator !== ABILITY_EQUIPMENT_OPERATORS.empty },
       { value: ABILITY_EQUIPMENT_OPERATORS.empty, label: "Не занят", selected: condition?.operator === ABILITY_EQUIPMENT_OPERATORS.empty }
     ],
-    equipmentSlotChoices: buildAbilityEquipmentSlotChoices(condition?.equipmentSlotKey)
+    equipmentSlotChoices: buildAbilityEquipmentSlotChoices(condition?.equipmentSlotKey),
+    itemCategoryRows: buildAbilityItemUseCategoryRows(condition?.itemCategories),
+    canAddItemCategory: Boolean(getFirstUnusedAbilityItemUseCategory(condition?.itemCategories))
   };
 }
 
@@ -3887,6 +3951,11 @@ function buildAbilityConditionTypeChoices(selected = "", { allowLimitedChanges =
       selected: selected === ABILITY_CONDITION_TYPES.limitedChanges
     });
   }
+  choices.push({
+    value: ABILITY_CONDITION_TYPES.itemUse,
+    label: "Применение предмета",
+    selected: selected === ABILITY_CONDITION_TYPES.itemUse
+  });
   return choices;
 }
 
@@ -3942,6 +4011,69 @@ function buildAbilityEquipmentSlotChoices(selected = "") {
     label,
     selected: value === selected
   }));
+}
+
+function buildAbilityItemUseCategoryRows(selectedCategories = []) {
+  const selected = normalizeAbilityItemUseCategoryValues(selectedCategories);
+  return selected.map((category, index) => ({
+    index,
+    choices: buildAbilityItemUseCategoryChoices(category, selected)
+  }));
+}
+
+function buildAbilityItemUseCategoryChoices(selectedCategory = "", selectedCategories = []) {
+  const selected = String(selectedCategory ?? "").trim();
+  const categories = getAbilityItemUseCategoryLabels(selectedCategories);
+  return categories.map(category => ({
+    value: category,
+    label: category,
+    selected: category === selected
+  }));
+}
+
+function getAbilityItemUseCategoryLabels(extraCategories = []) {
+  const categories = getItemCategorySettings()
+    .map(category => String(category?.label ?? category ?? "").trim())
+    .filter(Boolean);
+  for (const category of normalizeAbilityItemUseCategoryValues(extraCategories)) {
+    if (!categories.includes(category)) categories.push(category);
+  }
+  return categories;
+}
+
+function getFirstUnusedAbilityItemUseCategory(selectedCategories = []) {
+  const selected = new Set(normalizeAbilityItemUseCategoryValues(selectedCategories));
+  return getAbilityItemUseCategoryLabels().find(category => !selected.has(category)) ?? "";
+}
+
+function normalizeAbilityItemUseCategoryValues(value = []) {
+  return Array.from(new Set((Array.isArray(value) ? value : Object.values(value ?? {}))
+    .map(category => String(category ?? "").trim())
+    .filter(Boolean)));
+}
+
+function splitAbilityDurationSeconds(value) {
+  const seconds = Math.max(0, toInteger(value));
+  if (seconds > 0 && seconds % 3600 === 0) return { amount: seconds / 3600, unit: "hours" };
+  if (seconds > 0 && seconds % 60 === 0) return { amount: seconds / 60, unit: "minutes" };
+  return { amount: seconds, unit: "seconds" };
+}
+
+function buildAbilityDurationUnitChoices(selected = "seconds") {
+  return [
+    { value: "seconds", label: "секунды" },
+    { value: "minutes", label: "минуты" },
+    { value: "hours", label: "часы" }
+  ].map(choice => ({
+    ...choice,
+    selected: choice.value === selected
+  }));
+}
+
+function abilityDurationPartsToSeconds(amount, unit) {
+  const multipliers = { seconds: 1, minutes: 60, hours: 3600 };
+  const multiplier = multipliers[String(unit ?? "seconds")] ?? 1;
+  return Math.max(0, toInteger(amount) * multiplier);
 }
 
 function prepareAbilityFunctionForDisplay(entry, characteristics, skills) {
@@ -4015,6 +4147,31 @@ function normalizeWeaponSpecialPropertiesInSubmitData(submitData = {}) {
     moduleAdditionalWeapons.forEach(weaponData => normalizeSubmittedWeaponFunctionSpecialProperties(weaponData));
   } else {
     Object.values(moduleAdditionalWeapons ?? {}).forEach(weaponData => normalizeSubmittedWeaponFunctionSpecialProperties(weaponData));
+  }
+}
+
+function normalizeSubmittedAbilityItemUseConditions(form = null, submitData = {}) {
+  for (const row of form?.querySelectorAll?.("[data-ability-condition-row]") ?? []) {
+    const type = row.querySelector("input[name$='.type'], select[name$='.type']")?.value;
+    if (type !== ABILITY_CONDITION_TYPES.itemUse) continue;
+
+    const functionRow = row.closest("[data-ability-function-row]");
+    const functionPath = String(functionRow?.dataset.functionPath ?? "");
+    const functionIndex = Number(functionRow?.dataset.functionIndex ?? -1);
+    const conditionIndex = Number(row.dataset.conditionIndex ?? -1);
+    if (!functionPath || functionIndex < 0 || conditionIndex < 0) continue;
+
+    const conditionPath = `${functionPath}.${functionIndex}.conditions.${conditionIndex}`;
+    const categories = Array.from(row.querySelectorAll("[data-ability-item-use-category]") ?? [])
+      .map(input => String(input.value ?? "").trim())
+      .filter(Boolean);
+    const durationSeconds = abilityDurationPartsToSeconds(
+      row.querySelector("[data-ability-duration-amount]")?.value,
+      row.querySelector("[data-ability-duration-unit]")?.value
+    );
+
+    foundry.utils.setProperty(submitData, `${conditionPath}.itemCategories`, categories);
+    foundry.utils.setProperty(submitData, `${conditionPath}.durationSeconds`, durationSeconds);
   }
 }
 

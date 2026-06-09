@@ -63,6 +63,13 @@ export async function useFirstAidItem({ sourceActor = null, targetActor = null, 
   if (resultKey === "criticalFailure") {
     await spendFirstAidItem(item, chargeCost);
     await applyCriticalFailureDamage(targetActor, firstAid, source);
+    Hooks.callAll("fallout-maw.itemUsed", {
+      actor: sourceActor,
+      targetActor,
+      item,
+      action: "firstAid",
+      source
+    });
     return true;
   }
   const resultMultiplier = resultKey === "failure" ? 0.5 : 1;
@@ -136,6 +143,13 @@ export async function useFirstAidItem({ sourceActor = null, targetActor = null, 
   }
 
   await spendFirstAidItem(item, chargeCost);
+  Hooks.callAll("fallout-maw.itemUsed", {
+    actor: sourceActor,
+    targetActor,
+    item,
+    action: "firstAid",
+    source
+  });
   return true;
 }
 

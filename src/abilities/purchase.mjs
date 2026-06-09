@@ -146,7 +146,7 @@ async function applyLimitedChangeSelectionsToReward(itemData = {}) {
   return itemData;
 }
 
-async function requestLimitedChangeSelection({ abilityName = "", changes = [], limit = 1 } = {}) {
+export async function requestLimitedChangeSelection({ abilityName = "", changes = [], limit = 1 } = {}) {
   const normalizedLimit = Math.max(1, Math.min(changes.length, toInteger(limit)));
   const rows = changes.map((change, index) => {
     const id = getChangeSelectionId(change, index);

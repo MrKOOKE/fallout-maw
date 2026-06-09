@@ -108,6 +108,7 @@ import {
 import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
+import { getAbilityItemUseProgressEntries } from "../abilities/runtime-state.mjs";
 import {
   applyWeaponModuleModifiers,
   WEAPON_MODULE_ACTION_KEYS,
@@ -3234,7 +3235,7 @@ export function getInventoryTooltipCompareActor() {
 
 export async function renderInventoryItemTooltipHTML(item, actor, { activeWeaponIndex = 0, baseMode = false, compareActor = null, compareMode = false } = {}) {
   const descriptionHTML = await renderInventoryItemDescriptionHTML(item);
-  if (item.type === "ability") return renderAbilityItemTooltipContentHTML(item, { descriptionHTML });
+  if (item.type === "ability") return renderAbilityItemTooltipContentHTML(item, actor, { descriptionHTML });
   const itemHTML = renderInventoryItemTooltipContentHTML(item, actor, { activeWeaponIndex, baseMode, descriptionHTML });
   if (!compareMode) return itemHTML;
   if (!compareActor) return itemHTML;
@@ -3367,12 +3368,24 @@ function getTooltipActorRace(actor) {
   return getCreatureOptions().races.find(entry => entry.id === raceId) ?? null;
 }
 
-function renderAbilityItemTooltipContentHTML(item, { descriptionHTML = "" } = {}) {
+function renderAbilityItemTooltipContentHTML(item, _actor, { descriptionHTML = "" } = {}) {
+  const functionSections = buildAbilityTooltipFunctionSections(item);
   return `
     <section class="content fallout-maw-ability-tooltip-content">
+      ${functionSections}
       <section class="description">${descriptionHTML || "Описание не задано."}</section>
     </section>
   `;
+}
+
+function buildAbilityTooltipFunctionSections(item) {
+  const progressRows = getAbilityItemUseProgressEntries(item)
+    .map(entry => [entry.label, `${entry.current} / ${entry.required}`]);
+  const sections = [
+    renderTooltipFunctionSection("Прогресс условий", progressRows)
+  ].filter(Boolean);
+  if (!sections.length) return "";
+  return `<section class="functions">${sections.join("")}</section>`;
 }
 
 function renderInventoryItemTooltipContentHTML(item, actor, { activeWeaponIndex = 0, baseMode = false, descriptionHTML = "" } = {}) {

@@ -18,7 +18,14 @@ export async function useNeedChangeItem({ targetActor = null, item = null } = {}
 
   const results = await requestFirstAidNeedChanges({ actor: targetActor, needs });
   if (!results.length) return false;
+  const sourceActor = item.actor ?? targetActor;
   await spendNeedChangeItem(item, 1);
+  Hooks.callAll("fallout-maw.itemUsed", {
+    actor: sourceActor,
+    targetActor,
+    item,
+    action: "needChange"
+  });
   return true;
 }
 

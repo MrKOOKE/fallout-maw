@@ -402,6 +402,43 @@
                 <input type="number" value="{{changeLimitTotal}}" disabled>
               </label>
               {{/if}}
+              {{#if isItemUse}}
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header">
+                  <span>Категории предметов</span>
+                  <button type="button" data-add-ability-item-use-category {{#unless canAddItemCategory}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button>
+                </div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each itemCategoryRows}}
+                  <div class="fallout-maw-item-use-category-row" data-item-use-category-index="{{index}}">
+                    <select data-ability-item-use-category>
+                      {{#each choices}}
+                      <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                      {{/each}}
+                    </select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-item-use-category title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}
+                  <span class="fallout-maw-empty-list">Категории не выбраны.</span>
+                  {{/each}}
+                </div>
+              </div>
+              <label>
+                <span>Применений</span>
+                <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.requiredCount" value="{{requiredCount}}" min="1" step="1">
+              </label>
+              <label class="fallout-maw-split-number-field">
+                <span>Длительность</span>
+                <div>
+                  <input type="number" data-ability-duration-amount value="{{durationAmount}}" min="0" step="1">
+                  <select data-ability-duration-unit>
+                    {{#each durationUnitChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </div>
+              </label>
+              {{/if}}
             </div>
           </div>
           {{/if}}
@@ -776,6 +813,43 @@
               <label>
                 <span>Всего изменений</span>
                 <input type="number" value="{{changeLimitTotal}}" disabled>
+              </label>
+              {{/if}}
+              {{#if isItemUse}}
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header">
+                  <span>Категории предметов</span>
+                  <button type="button" data-add-ability-item-use-category {{#unless canAddItemCategory}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button>
+                </div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each itemCategoryRows}}
+                  <div class="fallout-maw-item-use-category-row" data-item-use-category-index="{{index}}">
+                    <select data-ability-item-use-category>
+                      {{#each choices}}
+                      <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                      {{/each}}
+                    </select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-item-use-category title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}
+                  <span class="fallout-maw-empty-list">Категории не выбраны.</span>
+                  {{/each}}
+                </div>
+              </div>
+              <label>
+                <span>Применений</span>
+                <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.requiredCount" value="{{requiredCount}}" min="1" step="1">
+              </label>
+              <label class="fallout-maw-split-number-field">
+                <span>Длительность</span>
+                <div>
+                  <input type="number" data-ability-duration-amount value="{{durationAmount}}" min="0" step="1">
+                  <select data-ability-duration-unit>
+                    {{#each durationUnitChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </div>
               </label>
               {{/if}}
             </div>

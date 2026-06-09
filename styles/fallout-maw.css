@@ -2471,6 +2471,30 @@
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
+.fallout-maw-item-use-category-field {
+  display: grid;
+  gap: 0.35rem;
+  grid-column: 1 / -1;
+}
+
+.fallout-maw-item-use-category-header,
+.fallout-maw-item-use-category-row {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.fallout-maw-item-use-category-header > span {
+  color: var(--color-text-light-highlight);
+  font-weight: 700;
+}
+
+.fallout-maw-item-use-category-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
 .fallout-maw-square-delete-button {
   align-self: end;
   height: 32px;

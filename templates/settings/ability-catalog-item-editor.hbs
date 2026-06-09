@@ -289,6 +289,44 @@
               </label>
               {{/if}}
 
+              {{#if isItemUse}}
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header">
+                  <span>Категории предметов</span>
+                  <button type="button" data-action="addConditionItemCategory" {{#unless canAddItemCategory}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button>
+                </div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each itemCategoryRows}}
+                  <div class="fallout-maw-item-use-category-row" data-item-use-category-index="{{index}}">
+                    <select data-field="conditionItemCategory">
+                      {{#each choices}}
+                      <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                      {{/each}}
+                    </select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteConditionItemCategory" title="Удалить категорию"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}
+                  <span class="fallout-maw-empty-list">Категории не выбраны.</span>
+                  {{/each}}
+                </div>
+              </div>
+              <label>
+                <span>Применений</span>
+                <input type="number" data-field="conditionRequiredCount" value="{{requiredCount}}" min="1" step="1">
+              </label>
+              <label class="fallout-maw-split-number-field">
+                <span>Длительность</span>
+                <div>
+                  <input type="number" data-field="conditionDurationAmount" value="{{durationAmount}}" min="0" step="1">
+                  <select data-field="conditionDurationUnit">
+                    {{#each durationUnitChoices}}
+                    <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                    {{/each}}
+                  </select>
+                </div>
+              </label>
+              {{/if}}
+
               {{#if isCooldown}}
               <label>
                 <span>Длительность, секунд</span>

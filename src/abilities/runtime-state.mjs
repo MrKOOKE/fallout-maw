@@ -1,8 +1,14 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import {
+  ABILITY_CONDITION_TYPES,
+  ABILITY_FUNCTION_TYPES,
+  normalizeAbilityFunctions
+} from "../settings/abilities.mjs";
 import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 export const ABILITY_FUNCTION_COOLDOWN_FLAG_KEY = "abilityFunctionCooldown";
+export const ABILITY_ITEM_USE_COUNTERS_FLAG_KEY = "abilityItemUseCounters";
 export const ACTION_BLOCK_EFFECT_KEY_PREFIX = "system.blocks.actions.";
 
 const TRUTHY_EFFECT_FALSE_VALUES = new Set(["", "0", "false", "no", "off"]);
@@ -67,6 +73,53 @@ export function isAbilityFunctionCooldownEffect(effect) {
   return Boolean(getAbilityFunctionCooldownData(effect));
 }
 
+export function getAbilityItemUseCounterKey({
+  abilityFunction = null,
+  functionId = "",
+  condition = null,
+  conditionId = ""
+} = {}) {
+  const resolvedFunctionId = resolveRuntimeStateId(abilityFunction, functionId);
+  const resolvedConditionId = resolveRuntimeStateId(condition, conditionId);
+  if (!resolvedFunctionId || !resolvedConditionId) return "";
+  return [resolvedFunctionId, resolvedConditionId].join("_");
+}
+
+export function getAbilityItemUseProgressEntries(abilityItem) {
+  if (abilityItem?.type !== "ability") return [];
+  const counters = abilityItem.getFlag(SYSTEM_ID, ABILITY_ITEM_USE_COUNTERS_FLAG_KEY) ?? {};
+  const entries = [];
+
+  for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+    if (abilityFunction.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
+
+    for (const condition of abilityFunction.conditions ?? []) {
+      if (condition?.type !== ABILITY_CONDITION_TYPES.itemUse) continue;
+
+      const required = Math.max(1, toInteger(condition.requiredCount ?? condition.limit ?? 1));
+      if (required <= 1) continue;
+
+      const key = getAbilityItemUseCounterKey({ abilityFunction, condition });
+      if (!key) continue;
+
+      entries.push({
+        key,
+        label: getAbilityItemUseProgressLabel(condition, abilityFunction),
+        current: Math.max(0, Math.min(required, toInteger(counters[key]))),
+        required
+      });
+    }
+  }
+
+  return entries;
+}
+
+export function normalizeAbilityItemUseCategories(value = []) {
+  return Array.from(new Set((Array.isArray(value) ? value : Object.values(value ?? {}))
+    .map(category => String(category ?? "").trim())
+    .filter(Boolean)));
+}
+
 function isTruthyEffectValue(value) {
   return !TRUTHY_EFFECT_FALSE_VALUES.has(String(value ?? "").trim().toLowerCase());
 }
@@ -74,4 +127,16 @@ function isTruthyEffectValue(value) {
 function getActorApplicableEffects(actor) {
   if (typeof actor?.allApplicableEffects === "function") return Array.from(actor.allApplicableEffects());
   return Array.from(actor?.effects ?? []);
+}
+
+function resolveRuntimeStateId(documentOrId = null, explicitId = "") {
+  const id = String(explicitId || documentOrId?.id || (typeof documentOrId === "string" ? documentOrId : "")).trim();
+  return id;
+}
+
+function getAbilityItemUseProgressLabel(condition = {}, abilityFunction = {}) {
+  const categories = normalizeAbilityItemUseCategories(condition.itemCategories);
+  const conditionLabel = categories.length ? categories.join(", ") : "Категория не выбрана";
+  const functionName = String(abilityFunction?.name ?? "").trim();
+  return functionName ? `${functionName}: ${conditionLabel}` : conditionLabel;
 }

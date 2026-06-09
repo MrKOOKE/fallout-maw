@@ -16,7 +16,8 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   healthPercent: "healthPercent",
   equipmentSlotOccupied: "equipmentSlotOccupied",
   limitedChanges: "limitedChanges",
-  cooldown: "cooldown"
+  cooldown: "cooldown",
+  itemUse: "itemUse"
 });
 
 export const ABILITY_HEALTH_TARGETS = Object.freeze({
@@ -350,6 +351,23 @@ function normalizeAbilityCondition(value = {}) {
     };
   }
 
+  if (type === ABILITY_CONDITION_TYPES.itemUse) {
+    return {
+      id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+      groupId,
+      type,
+      operator: "lte",
+      percent: 50,
+      equipmentSlotKey: "",
+      healthTarget: ABILITY_HEALTH_TARGETS.general,
+      limbKey: ABILITY_HEALTH_LIMB_ALL,
+      limit: 1,
+      requiredCount: Math.max(1, toInteger(value?.requiredCount ?? value?.count ?? value?.limit ?? 1)),
+      itemCategories: normalizeItemUseCategories(value?.itemCategories ?? value?.categories ?? value?.category),
+      durationSeconds: Math.max(0, toInteger(value?.durationSeconds ?? value?.duration ?? value?.seconds))
+    };
+  }
+
   if (type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied) {
     return {
       id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
@@ -384,6 +402,15 @@ function normalizeAbilityCondition(value = {}) {
     limit: 1,
     durationSeconds: 0
   };
+}
+
+function normalizeItemUseCategories(value = []) {
+  const source = Array.isArray(value)
+    ? value
+    : value && typeof value === "object" ? Object.values(value) : [value];
+  return Array.from(new Set(source
+    .map(category => String(category ?? "").trim())
+    .filter(Boolean)));
 }
 
 function toNumber(value) {

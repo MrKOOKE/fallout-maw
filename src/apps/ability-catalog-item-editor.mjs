@@ -1,5 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
-import { getCharacteristicSettings, getCreatureOptions, getSkillSettings } from "../settings/accessors.mjs";
+import { getCharacteristicSettings, getCreatureOptions, getItemCategorySettings, getSkillSettings } from "../settings/accessors.mjs";
 import {
   ABILITY_ACQUISITION_CONDITION_TYPES,
   ABILITY_CHANGE_TYPES,
@@ -61,6 +61,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       addFunctionCondition: this.#onAddFunctionCondition,
       addFunctionConditionAlternative: this.#onAddFunctionConditionAlternative,
       deleteFunctionCondition: this.#onDeleteFunctionCondition,
+      addConditionItemCategory: this.#onAddConditionItemCategory,
+      deleteConditionItemCategory: this.#onDeleteConditionItemCategory,
       addFunctionPenalty: this.#onAddFunctionPenalty,
       deleteFunctionPenalty: this.#onDeleteFunctionPenalty,
       addAcquisitionRequirement: this.#onAddAcquisitionRequirement,
@@ -295,6 +297,43 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     return this.#persist({ render: true, sync: false });
   }
 
+  static #onAddConditionItemCategory(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    if (!condition) return this.#persist({ render: true, sync: false });
+
+    const categories = normalizeItemUseCategoryValues(condition.itemCategories);
+    const nextCategory = getFirstUnusedItemUseCategory(categories);
+    if (nextCategory) condition.itemCategories = [...categories, nextCategory];
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteConditionItemCategory(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    const categoryIndex = Number(target.closest("[data-item-use-category-index]")?.dataset.itemUseCategoryIndex ?? -1);
+    if (!condition || categoryIndex < 0) return this.#persist({ render: true, sync: false });
+
+    const categories = normalizeItemUseCategoryValues(condition.itemCategories);
+    categories.splice(categoryIndex, 1);
+    condition.itemCategories = categories;
+    return this.#persist({ render: true, sync: false });
+  }
+
+  #getConditionForTarget(target) {
+    const functionRow = target.closest("[data-ability-function-row]");
+    const conditionRow = target.closest("[data-ability-condition-row]");
+    const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
+    const conditionIndex = getRowIndex(functionRow, "[data-ability-condition-row]", conditionRow);
+    return {
+      functionIndex,
+      conditionIndex,
+      condition: this.ability.system.functions?.[functionIndex]?.conditions?.[conditionIndex]
+    };
+  }
+
   static #onAddFunctionPenalty(event, target) {
     event.preventDefault();
     this.#syncFromForm();
@@ -396,7 +435,9 @@ function readAbilityConditions(root) {
     limbKey: row.querySelector("[data-field='conditionLimbKey']")?.value ?? ABILITY_HEALTH_LIMB_ALL,
     equipmentSlotKey: row.querySelector("[data-field='conditionEquipmentSlotKey']")?.value ?? "",
     limit: row.querySelector("[data-field='conditionLimit']")?.value ?? 1,
-    durationSeconds: row.querySelector("[data-field='conditionDurationSeconds']")?.value ?? 0
+    requiredCount: row.querySelector("[data-field='conditionRequiredCount']")?.value ?? 1,
+    itemCategories: readFieldValues(row, "[data-field='conditionItemCategory']"),
+    durationSeconds: readConditionDurationSeconds(row)
   }));
 }
 
@@ -458,7 +499,9 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
   const isLimitedChanges = type === ABILITY_CONDITION_TYPES.limitedChanges;
   const isCooldown = type === ABILITY_CONDITION_TYPES.cooldown;
+  const isItemUse = type === ABILITY_CONDITION_TYPES.itemUse;
   const maxLimit = Math.max(1, changeCount);
+  const duration = splitDurationSeconds(condition?.durationSeconds);
   const healthTarget = Object.values(ABILITY_HEALTH_TARGETS).includes(condition?.healthTarget)
     ? condition.healthTarget
     : ABILITY_HEALTH_TARGETS.general;
@@ -468,7 +511,7 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
   return {
     ...condition,
     healthTarget,
-    isPending: !isHealth && !isEquipment && !isLimitedChanges && !isCooldown,
+    isPending: !isHealth && !isEquipment && !isLimitedChanges && !isCooldown && !isItemUse,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -477,11 +520,15 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
     isEquipment,
     isLimitedChanges,
     isCooldown,
-    canAddAlternative: !isLimitedChanges && !isCooldown,
+    isItemUse,
+    canAddAlternative: !isLimitedChanges && !isCooldown && !isItemUse,
     changeLimit: Math.max(1, Math.min(maxLimit, toInteger(condition?.limit ?? 1))),
     changeLimitMax: maxLimit,
     changeLimitTotal: changeCount,
+    requiredCount: Math.max(1, toInteger(condition?.requiredCount ?? 1)),
     durationSeconds: Math.max(0, toInteger(condition?.durationSeconds)),
+    durationAmount: duration.amount,
+    durationUnitChoices: buildDurationUnitChoices(duration.unit),
     typeLabel: getConditionTypeLabel(type),
     typeChoices: buildConditionTypeChoices(type, { allowLimitedChanges }),
     healthTargetChoices: buildHealthTargetChoices(healthTarget),
@@ -494,7 +541,9 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
       { value: ABILITY_EQUIPMENT_OPERATORS.occupied, label: "Занят", selected: condition?.operator !== ABILITY_EQUIPMENT_OPERATORS.empty },
       { value: ABILITY_EQUIPMENT_OPERATORS.empty, label: "Не занят", selected: condition?.operator === ABILITY_EQUIPMENT_OPERATORS.empty }
     ],
-    equipmentSlotChoices: buildEquipmentSlotChoices(condition?.equipmentSlotKey)
+    equipmentSlotChoices: buildEquipmentSlotChoices(condition?.equipmentSlotKey),
+    itemCategoryRows: buildItemUseCategoryRows(condition?.itemCategories),
+    canAddItemCategory: Boolean(getFirstUnusedItemUseCategory(condition?.itemCategories))
   };
 }
 
@@ -598,6 +647,11 @@ function buildConditionTypeChoices(selected = "", { allowLimitedChanges = true }
     label: "Перезарядка",
     selected: selected === ABILITY_CONDITION_TYPES.cooldown
   });
+  choices.push({
+    value: ABILITY_CONDITION_TYPES.itemUse,
+    label: "Применение предмета",
+    selected: selected === ABILITY_CONDITION_TYPES.itemUse
+  });
   return choices;
 }
 
@@ -700,6 +754,87 @@ function buildEquipmentSlotChoices(selected = "") {
     label,
     selected: value === selected
   }));
+}
+
+function buildItemUseCategoryRows(selectedCategories = []) {
+  const selected = normalizeItemUseCategoryValues(selectedCategories);
+  return selected.map((category, index) => ({
+    index,
+    choices: buildItemUseCategoryChoices(category, selected)
+  }));
+}
+
+function buildItemUseCategoryChoices(selectedCategory = "", selectedCategories = []) {
+  const selected = String(selectedCategory ?? "").trim();
+  const categories = getItemUseCategoryLabels(selectedCategories);
+  return categories.map(category => ({
+    value: category,
+    label: category,
+    selected: category === selected
+  }));
+}
+
+function getItemUseCategoryLabels(extraCategories = []) {
+  const categories = getItemCategorySettings()
+    .map(category => String(category?.label ?? category ?? "").trim())
+    .filter(Boolean);
+  for (const category of normalizeItemUseCategoryValues(extraCategories)) {
+    if (!categories.includes(category)) categories.push(category);
+  }
+  return categories;
+}
+
+function getFirstUnusedItemUseCategory(selectedCategories = []) {
+  const selected = new Set(normalizeItemUseCategoryValues(selectedCategories));
+  return getItemUseCategoryLabels().find(category => !selected.has(category)) ?? "";
+}
+
+function normalizeItemUseCategoryValues(value = []) {
+  return Array.from(new Set((Array.isArray(value) ? value : Object.values(value ?? {}))
+    .map(category => String(category ?? "").trim())
+    .filter(Boolean)));
+}
+
+function readFieldValues(root, selector) {
+  return Array.from(root?.querySelectorAll(selector) ?? [])
+    .filter(input => input.type !== "checkbox" || input.checked)
+    .map(input => String(input.value ?? "").trim())
+    .filter(Boolean);
+}
+
+function readConditionDurationSeconds(row) {
+  const amountInput = row.querySelector("[data-field='conditionDurationAmount']");
+  if (amountInput) {
+    return durationPartsToSeconds(
+      amountInput.value,
+      row.querySelector("[data-field='conditionDurationUnit']")?.value
+    );
+  }
+  return row.querySelector("[data-field='conditionDurationSeconds']")?.value ?? 0;
+}
+
+function splitDurationSeconds(value) {
+  const seconds = Math.max(0, toInteger(value));
+  if (seconds > 0 && seconds % 3600 === 0) return { amount: seconds / 3600, unit: "hours" };
+  if (seconds > 0 && seconds % 60 === 0) return { amount: seconds / 60, unit: "minutes" };
+  return { amount: seconds, unit: "seconds" };
+}
+
+function buildDurationUnitChoices(selected = "seconds") {
+  return [
+    { value: "seconds", label: "секунды" },
+    { value: "minutes", label: "минуты" },
+    { value: "hours", label: "часы" }
+  ].map(choice => ({
+    ...choice,
+    selected: choice.value === selected
+  }));
+}
+
+function durationPartsToSeconds(amount, unit) {
+  const multipliers = { seconds: 1, minutes: 60, hours: 3600 };
+  const multiplier = multipliers[String(unit ?? "seconds")] ?? 1;
+  return Math.max(0, toInteger(amount) * multiplier);
 }
 
 function getRowIndex(root, selector, row) {
