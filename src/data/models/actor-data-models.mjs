@@ -162,6 +162,11 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.damageResistanceBonuses ??= {};
     this.development ??= {};
 
+    const sourceSystem = this.parent?._source?.system ?? {};
+    const sourceResources = sourceSystem.resources ?? this.resources;
+    const sourceNeeds = sourceSystem.needs ?? this.needs;
+    const sourceProficiencies = sourceSystem.proficiencies ?? this.proficiencies;
+
     const baseCharacteristics = normalizeNumberMap(this.characteristics, characteristicSettings);
     const characteristicBonuses = normalizeNumberMap(this.development?.characteristics, characteristicSettings);
     replaceObjectContents(this.characteristics, normalizeCharacteristicMap(
@@ -198,7 +203,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     );
     replaceObjectContents(this.skills, normalizeSkillMap(this.skills, skillSettings, skillBases, skillBonuses, skillAdvancementSettings, abilityBonuses.skills));
     replaceArrayContents(this.researches, normalizeResearchCollection(this.researches));
-    replaceObjectContents(this.proficiencies, normalizeProficiencyMap(this.proficiencies, proficiencySettings));
+    replaceObjectContents(this.proficiencies, normalizeProficiencyMap(sourceProficiencies, proficiencySettings));
 
     const skillValues = getSkillValues(this.skills);
     const constructLimbData = isConstruct ? getConstructPartLimbData(this.parent?.items) : null;
@@ -227,10 +232,10 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         buildLimbResourceFormulaVariables(limbMaximums)
       );
     const reactionResource = {
-      ...(this.parent?._source?.system?.resources?.[REACTION_RESOURCE_KEY] ?? {}),
-      bonus: this.resources?.[REACTION_RESOURCE_KEY]?.bonus
+      ...(sourceResources?.[REACTION_RESOURCE_KEY] ?? {}),
+      bonus: sourceResources?.[REACTION_RESOURCE_KEY]?.bonus
     };
-    replaceObjectContents(this.resources, normalizeResourceMap(this.resources, resourceSettings, resourceMaximums, {
+    replaceObjectContents(this.resources, normalizeResourceMap(sourceResources, resourceSettings, resourceMaximums, {
       trackSpent: true
     }));
     ensureReactionResource(this.resources, reactionResource);
@@ -243,7 +248,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       this.characteristics,
       skillValues
     );
-    replaceObjectContents(this.needs, normalizeResourceMap(this.needs, needSettings, needMaximums, {
+    replaceObjectContents(this.needs, normalizeResourceMap(sourceNeeds, needSettings, needMaximums, {
       defaultToMin: true
     }));
 
