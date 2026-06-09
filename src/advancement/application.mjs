@@ -913,6 +913,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       const traitTotal = isFeatures ? this.#getTraitSessionTotal(remaining.traits) : 0;
       const traitRemaining = Math.max(0, toInteger(remaining.traits));
       const abilities = await Promise.all((category.abilities ?? [])
+        .filter(ability => ability?.visible !== false)
         .filter(ability => !actorHasAbility(this.actor, String(ability?.id ?? "")))
         .map(ability => this.#prepareAbilityEntry(category, ability, remaining, skillSettings, requirementContext)));
       return {

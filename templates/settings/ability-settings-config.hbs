@@ -14,10 +14,12 @@
         <button type="button" class="fallout-maw-icon-button fallout-maw-drag-handle fallout-maw-ability-category-drag" data-drag-handle title="Сортировать">
           <i class="fa-solid fa-grip-vertical"></i>
         </button>
-      <article class="fallout-maw-panel fallout-maw-ability-category">
+      <article class="fallout-maw-panel fallout-maw-ability-category {{collapse.cssClass}}">
         <header class="fallout-maw-ability-category-header">
-          <label>
-            <span>Каталог</span>
+          <button type="button" class="fallout-maw-icon-button" data-action="toggleCategory" aria-expanded="{{collapse.ariaExpanded}}" title="Свернуть/развернуть каталог">
+            <i class="fa-solid {{collapse.iconClass}}"></i>
+          </button>
+          <label class="fallout-maw-ability-category-name">
             <input type="text" data-field="categoryName" value="{{name}}" {{#if locked}}disabled{{/if}}>
           </label>
           <button type="button" data-action="addAbility"><i class="fa-solid fa-plus"></i> {{createLabel}}</button>
@@ -26,21 +28,22 @@
           </button>
         </header>
 
-        <div class="fallout-maw-ability-compact-list">
+        <div class="fallout-maw-ability-compact-list" data-ability-category-collapse-body>
           {{#each abilities}}
-          <div class="fallout-maw-ability-compact-row{{#if isFeature}} feature{{/if}}" data-ability-row data-ability-id="{{id}}">
+          <div class="fallout-maw-ability-compact-row{{#if isFeature}} feature{{/if}}{{#unless visible}} hidden-from-advancement{{/unless}}" data-ability-row data-ability-id="{{id}}">
             <img src="{{img}}" alt="" width="34" height="34">
             <input type="hidden" data-field="abilityImg" value="{{img}}">
+            <input type="hidden" data-field="abilityVisible" value="{{#if visible}}true{{else}}false{{/if}}">
             <label>
               <span>Название</span>
               <input type="text" data-field="abilityName" value="{{name}}">
             </label>
-            {{#unless isFeature}}
-            <label>
-              <span>Стоимость ОИ</span>
-              <input type="number" data-field="abilityCost" value="{{cost}}" min="0" step="1">
-            </label>
-            {{/unless}}
+            <button type="button" class="fallout-maw-icon-button" data-action="moveAbility" title="Переместить в другой каталог">
+              <i class="fa-solid fa-arrow-right-arrow-left"></i>
+            </button>
+            <button type="button" class="fallout-maw-icon-button fallout-maw-ability-visibility-button" data-action="toggleAbilityVisibility" title="{{visibilityTitle}}">
+              <i class="fa-solid {{visibilityIconClass}}"></i>
+            </button>
             <button type="button" class="fallout-maw-icon-button" data-action="editAbility" title="Редактировать способность">
               <i class="fa-solid fa-pen"></i>
             </button>

@@ -6,7 +6,12 @@ import { AbilityCatalogItemEditor } from "./ability-catalog-item-editor.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { activateSettingsReorder } from "./settings-reorder.mjs";
 
+const { DialogV2 } = foundry.applications.api;
+const { FormDataExtended } = foundry.applications.ux;
+
 export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
+  #expandedCategoryIds = new Set();
+
   constructor(options = {}) {
     super(options);
     this.catalog = getAbilityCatalog();
@@ -25,7 +30,10 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
     actions: {
       addCategory: this.#onAddCategory,
       deleteCategory: this.#onDeleteCategory,
+      toggleCategory: this.#onToggleCategory,
       addAbility: this.#onAddAbility,
+      moveAbility: this.#onMoveAbility,
+      toggleAbilityVisibility: this.#onToggleAbilityVisibility,
       editAbility: this.#onEditAbility,
       deleteAbility: this.#onDeleteAbility,
       resetDefaults: this.#onResetDefaults
@@ -52,10 +60,16 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
           deletable: !category.locked,
           createLabel: category.id === LOCKED_FEATURES_CATEGORY_ID ? "Создать особенность" : "Создать способность",
           emptyLabel: category.id === LOCKED_FEATURES_CATEGORY_ID ? "В каталоге нет особенностей." : "В каталоге нет способностей.",
+          collapse: buildCategoryCollapseState(this.#expandedCategoryIds.has(String(category.id ?? ""))),
           abilities: (category.abilities ?? []).map(ability => ({
             ...ability,
             isFeature: category.id === LOCKED_FEATURES_CATEGORY_ID,
-            cost: toInteger(ability.system?.cost)
+            cost: toInteger(ability.system?.cost),
+            visible: ability.visible !== false,
+            visibilityIconClass: ability.visible === false ? "fa-eye-slash" : "fa-eye",
+            visibilityTitle: ability.visible === false
+              ? "Показать в повышении уровня"
+              : "Скрыть из повышения уровня"
           }))
         }))
       }
@@ -104,6 +118,8 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
     if (imgInput) imgInput.value = ability.img;
     const costInput = abilityRow.querySelector("[data-field='abilityCost']");
     if (costInput) costInput.value = String(toInteger(ability.system?.cost));
+    const visibilityInput = abilityRow.querySelector("[data-field='abilityVisible']");
+    if (visibilityInput) visibilityInput.value = ability.visible === false ? "false" : "true";
     const img = abilityRow.querySelector("img");
     if (img) img.src = ability.img;
   }
@@ -125,6 +141,7 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
             id: abilityId,
             name: abilityRow.querySelector("[data-field='abilityName']")?.value ?? existingAbility.name,
             img: abilityRow.querySelector("[data-field='abilityImg']")?.value ?? existingAbility.img,
+            visible: abilityRow.querySelector("[data-field='abilityVisible']")?.value !== "false",
             description: existingAbility.description,
             system: {
               ...(existingAbility.system ?? {}),
@@ -160,6 +177,16 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
     return this.forceRender();
   }
 
+  static #onToggleCategory(event, target) {
+    event.preventDefault();
+    this.catalog = this.readCatalogFromForm();
+    const categoryId = target.closest("[data-ability-category-row]")?.dataset.categoryId ?? "";
+    if (!categoryId) return undefined;
+    if (this.#expandedCategoryIds.has(categoryId)) this.#expandedCategoryIds.delete(categoryId);
+    else this.#expandedCategoryIds.add(categoryId);
+    return this.forceRender();
+  }
+
   static async #onAddAbility(event, target) {
     event.preventDefault();
     this.catalog = this.readCatalogFromForm();
@@ -186,6 +213,40 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
     category.abilities.push(ability);
     await this.forceRender();
     return new AbilityCatalogItemEditor(this, category.id, ability.id).render(true);
+  }
+
+  static async #onMoveAbility(event, target) {
+    event.preventDefault();
+    this.catalog = this.readCatalogFromForm();
+    const sourceCategoryId = target.closest("[data-ability-category-row]")?.dataset.categoryId ?? "";
+    const abilityId = target.closest("[data-ability-row]")?.dataset.abilityId ?? "";
+    if (!sourceCategoryId || !abilityId) return undefined;
+
+    const sourceCategory = this.catalog.categories.find(category => category.id === sourceCategoryId);
+    const abilityIndex = sourceCategory?.abilities?.findIndex(ability => ability.id === abilityId) ?? -1;
+    if (!sourceCategory || abilityIndex < 0) return undefined;
+
+    const targetCategoryId = await requestAbilityTargetCategory(this.catalog, sourceCategoryId);
+    if (!targetCategoryId || targetCategoryId === sourceCategoryId) return undefined;
+
+    const targetCategory = this.catalog.categories.find(category => category.id === targetCategoryId);
+    if (!targetCategory) return undefined;
+
+    const [ability] = sourceCategory.abilities.splice(abilityIndex, 1);
+    targetCategory.abilities.push(ability);
+    this.#expandedCategoryIds.add(targetCategoryId);
+    return this.forceRender();
+  }
+
+  static #onToggleAbilityVisibility(event, target) {
+    event.preventDefault();
+    this.catalog = this.readCatalogFromForm();
+    const categoryId = target.closest("[data-ability-category-row]")?.dataset.categoryId ?? "";
+    const abilityId = target.closest("[data-ability-row]")?.dataset.abilityId ?? "";
+    const ability = this.getAbility(categoryId, abilityId);
+    if (!ability) return undefined;
+    ability.visible = ability.visible === false;
+    return this.forceRender();
   }
 
   static #onEditAbility(event, target) {
@@ -217,6 +278,48 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
   }
 }
 
+function buildCategoryCollapseState(expanded = false) {
+  return {
+    cssClass: expanded ? "" : "collapsed",
+    ariaExpanded: expanded ? "true" : "false",
+    iconClass: expanded ? "fa-chevron-down" : "fa-chevron-right"
+  };
+}
+
+async function requestAbilityTargetCategory(catalog, sourceCategoryId = "") {
+  const options = (catalog.categories ?? [])
+    .filter(category => category.id !== sourceCategoryId)
+    .map(category => `<option value="${escapeAttribute(category.id)}">${escapeHTML(category.name)}</option>`)
+    .join("");
+  if (!options) {
+    ui.notifications.warn("Нет другого каталога для переноса.");
+    return "";
+  }
+
+  const result = await DialogV2.input({
+    window: { title: "Переместить способность" },
+    content: `
+      <label class="fallout-maw-stacked-field">
+        <span>Новый каталог</span>
+        <select name="categoryId">${options}</select>
+      </label>
+    `,
+    ok: {
+      label: "Переместить",
+      icon: "fa-solid fa-arrow-right-arrow-left",
+      callback: (_event, button) => new FormDataExtended(button.form).object
+    },
+    buttons: [{
+      action: "cancel",
+      label: "Отмена"
+    }],
+    rejectClose: false,
+    position: { width: 420 }
+  });
+
+  return typeof result?.categoryId === "string" ? result.categoryId : "";
+}
+
 function getRowIndex(form, target, selector) {
   const row = target.closest(selector);
   const rows = Array.from(form?.querySelectorAll(selector) ?? []);
@@ -227,4 +330,12 @@ function getScopedRowIndex(scope, target, selector) {
   const row = target.closest(selector);
   const rows = Array.from(scope?.querySelectorAll(selector) ?? []);
   return rows.indexOf(row);
+}
+
+function escapeHTML(value) {
+  return foundry.utils.escapeHTML(String(value ?? ""));
+}
+
+function escapeAttribute(value) {
+  return escapeHTML(value).replace(/"/g, "&quot;");
 }

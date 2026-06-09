@@ -98,6 +98,7 @@ export function normalizeAbilityEntry(value = {}, index = 0) {
     id,
     name: String(value?.name ?? "").trim() || `Новая способность ${index + 1}`,
     img: String(value?.img ?? "").trim() || "icons/svg/aura.svg",
+    visible: value?.visible !== false,
     description: String(value?.description ?? system.description ?? "").trim(),
     system: {
       cost: Math.max(0, toInteger(system.cost ?? value?.cost)),

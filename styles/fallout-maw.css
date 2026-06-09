@@ -9937,25 +9937,45 @@ label.fallout-maw-mitigation-cell {
 }
 
 .ability-settings-config .fallout-maw-ability-category-drag {
-  margin-top: 2.05rem;
+  margin-top: 0.25rem;
 }
 
 .ability-settings-config .fallout-maw-ability-category-header {
-  align-items: end;
+  align-items: center;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: minmax(220px, 1fr) max-content 2.25rem;
+  grid-template-columns: 2.25rem minmax(220px, 1fr) max-content 2.25rem;
+}
+
+.ability-settings-config .fallout-maw-ability-category-name {
+  margin: 0;
+}
+
+.ability-settings-config .fallout-maw-ability-category.collapsed [data-ability-category-collapse-body] {
+  display: none;
 }
 
 .ability-settings-config .fallout-maw-ability-compact-row {
   align-items: end;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: 2.5rem minmax(180px, 1fr) 8rem 2.25rem 2.25rem;
+  grid-template-columns: 2.5rem minmax(180px, 1fr) 2.25rem 2.25rem 2.25rem 2.25rem;
 }
 
 .ability-settings-config .fallout-maw-ability-compact-row.feature {
-  grid-template-columns: 2.5rem minmax(180px, 1fr) 2.25rem 2.25rem;
+  grid-template-columns: 2.5rem minmax(180px, 1fr) 2.25rem 2.25rem 2.25rem 2.25rem;
+}
+
+.ability-settings-config .fallout-maw-ability-compact-row.hidden-from-advancement {
+  opacity: 0.58;
+}
+
+.ability-settings-config .fallout-maw-ability-compact-row.hidden-from-advancement input {
+  text-decoration: line-through;
+}
+
+.ability-settings-config .fallout-maw-ability-visibility-button .fa-eye-slash {
+  color: rgba(210, 185, 145, 0.55);
 }
 
 .ability-settings-config .fallout-maw-ability-compact-row img {
