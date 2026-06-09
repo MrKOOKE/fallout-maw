@@ -109,6 +109,7 @@ import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import { getAbilityItemUseProgressEntries } from "../abilities/runtime-state.mjs";
+import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import {
   applyWeaponModuleModifiers,
   WEAPON_MODULE_ACTION_KEYS,
@@ -2258,6 +2259,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
     }
+    if (canUseActiveItem(item)) {
+      menuOptions.push(["use", "fa-play", "Применить"]);
+    }
     if (isSlottedItem || isEquipped) {
       menuOptions.push(["unequip", "fa-hand", game.i18n.localize("FALLOUTMAW.Item.Unequip")]);
     } else if (canEquip) {
@@ -2285,6 +2289,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       this.#closeInventoryContextMenu();
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openContainerSheet(item);
+      if (action === "use") return useActiveItem({ actor: this.actor, item, application: this });
       if (action === "equip") return this.#equipInventoryItem(item);
       if (action === "unequip") return this.#unequipInventoryItem(item);
       if (action === "split") return this.#splitInventoryItem(item);

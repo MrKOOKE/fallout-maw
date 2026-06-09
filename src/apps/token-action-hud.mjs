@@ -46,22 +46,15 @@ import {
   spendWeaponReloadActionPoints,
   startWeaponAttack
 } from "../combat/weapon-attack-controller.mjs";
-import { useFirstAidItem } from "../items/first-aid.mjs";
+import { useActiveItem } from "../items/active-item-use.mjs";
 import {
   canActivateLightSource,
-  extractEnergyConsumerSource,
-  getActiveEnergySourceItem,
-  getAvailableEnergySourceItems,
-  getEnergySourceDisplayName,
-  getEnergySourceReserveState,
-  installEnergyConsumerSource,
   getLightSourceDisplayName,
   isLightSourceActive,
   lightSourceUsesEnergyConsumer,
-  syncTokenLightSources,
+  openLightSourceEnergyDialog,
   toggleLightSource
 } from "../items/light-source.mjs";
-import { useNeedChangeItem } from "../items/need-change.mjs";
 import { openLimbDamageDialog } from "./limb-damage-dialog.mjs";
 import { requestMedicineTarget } from "./medicine-dialog.mjs";
 import { requestRepairTarget } from "./repair-dialog.mjs";
@@ -97,7 +90,7 @@ import {
   hasContainerCycle,
   getItemQuantity
 } from "../utils/inventory-containers.mjs";
-import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getActiveItemChargesData, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getEnabledWeaponFunctions, getEnergyConsumerFunction, getModuleFunction, getProsthesisFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, getWeaponSpecialPropertyType, hasItemFunction, hasWeaponSpecialPropertyData, isActiveItem, isItemBrokenByCondition, normalizeWeaponSpecialProperties } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getActiveItemChargesData, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getEnabledWeaponFunctions, getModuleFunction, getProsthesisFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, getWeaponSpecialPropertyType, hasItemFunction, hasWeaponSpecialPropertyData, isActiveItem, isItemBrokenByCondition, normalizeWeaponSpecialProperties } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
@@ -946,34 +939,12 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
     if (!isActiveItem(item)) return undefined;
-    if (hasItemFunction(item, ITEM_FUNCTIONS.lightSource)) {
-      return openLightSourceEnergyDialog({
-        actor: this.actor,
-        token: this.token,
-        item,
-        application: this,
-        showToggle: true
-      });
-    }
-    const targetData = getFirstHudTarget();
-    const targetActor = targetData.actor ?? this.actor;
-    if (!targetActor) return undefined;
-    const used = hasItemFunction(item, ITEM_FUNCTIONS.firstAid)
-      ? await useFirstAidItem({
-        sourceActor: this.actor,
-        sourceToken: this.token,
-        targetActor,
-        targetToken: targetData.token ?? this.token,
-        item
-      })
-      : await useNeedChangeItem({
-        targetActor,
-        item
-      });
-    if (used) {
-      return this.render({ force: true });
-    }
-    return undefined;
+    return useActiveItem({
+      actor: this.actor,
+      token: this.token,
+      item,
+      application: this
+    });
   }
 
   static async #onUseActiveAction(event, target) {
@@ -3643,205 +3614,6 @@ function renderReloadSourceCards(state = {}) {
       <strong>${escapeHTML(entry.quantity)}</strong>
     </button>
   `).join("");
-}
-
-async function openLightSourceEnergyDialog({ actor = null, token = null, item = null, application = null, showToggle = false } = {}) {
-  if (!actor?.isOwner || !item || !hasItemFunction(item, ITEM_FUNCTIONS.lightSource, { ignoreBroken: true })) return undefined;
-  const consumer = getEnergyConsumerFunction(item);
-  const usesEnergy = lightSourceUsesEnergyConsumer(item);
-  const sourceItems = usesEnergy ? getAvailableEnergySourceItems(actor, consumer) : [];
-  let selectedSourceUuid = "";
-  const renderContent = () => renderLightSourceEnergyDialogContent({
-    actor,
-    token,
-    item: actor.items.get(item.id) ?? item,
-    showToggle,
-    usesEnergy,
-    selectedSourceUuid
-  });
-  const refreshDialogContent = dialog => {
-    if (selectedSourceUuid) {
-      const freshItem = actor.items.get(item.id);
-      const source = getAvailableEnergySourceItems(actor, getEnergyConsumerFunction(freshItem))
-        .find(candidate => candidate.uuid === selectedSourceUuid);
-      if (!source) selectedSourceUuid = "";
-    }
-    const root = dialog.element?.querySelector?.("[data-light-source-dialog-root]");
-    if (root) root.outerHTML = renderContent();
-  };
-  const switchSource = async (dialog, sourceUuid) => {
-    const freshItem = actor.items.get(item.id);
-    const source = getAvailableEnergySourceItems(actor, getEnergyConsumerFunction(freshItem))
-      .find(candidate => candidate.uuid === sourceUuid);
-    if (!freshItem || !source) {
-      ui.notifications?.warn?.(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoEnergySource"));
-      return;
-    }
-    await installEnergyConsumerSource(actor, freshItem, source);
-    selectedSourceUuid = "";
-    await syncTokenLightSources(token?.document ?? token);
-    refreshDialogContent(dialog);
-    await application?.render({ force: true });
-  };
-  const extractSource = async dialog => {
-    const freshItem = actor.items.get(item.id);
-    if (!freshItem) return;
-    const extracted = await extractEnergyConsumerSource(actor, freshItem);
-    if (!extracted) ui.notifications?.warn?.(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoEnergySource"));
-    await syncTokenLightSources(token?.document ?? token);
-    refreshDialogContent(dialog);
-    await application?.render({ force: true });
-  };
-  const toggleFromDialog = async dialog => {
-    const freshItem = actor.items.get(item.id);
-    if (!freshItem) return;
-    await toggleLightSource(token?.document ?? token, freshItem);
-    refreshDialogContent(dialog);
-    await application?.render({ force: true });
-  };
-
-  if (usesEnergy && !sourceItems.length) {
-    ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoAvailableEnergySources"));
-  }
-
-  const dialog = new DialogV2({
-    window: {
-      title: getLightSourceDisplayName(item)
-    },
-    content: `<form class="fallout-maw-reload-dialog-form">${renderContent()}</form>`,
-    form: {
-      closeOnSubmit: false
-    },
-    buttons: usesEnergy ? [
-      {
-        action: "extract",
-        label: game.i18n.localize("FALLOUTMAW.Item.LightSourceExtract"),
-        type: "button",
-        callback: (event, button, dlg) => extractSource(dlg)
-      },
-      {
-        action: "install",
-        label: game.i18n.localize("FALLOUTMAW.Item.LightSourceInstall"),
-        type: "button",
-        default: true,
-        callback: (event, button, dlg) => switchSource(dlg, selectedSourceUuid)
-      },
-      {
-        action: "close",
-        label: game.i18n.localize("FALLOUTMAW.Item.WeaponReloadFinish"),
-        type: "button",
-        callback: (event, button, dlg) => dlg.close()
-      }
-    ] : [
-      {
-        action: "close",
-        label: game.i18n.localize("FALLOUTMAW.Item.WeaponReloadFinish"),
-        type: "button",
-        callback: (event, button, dlg) => dlg.close()
-      }
-    ],
-    position: {
-      width: 520
-    }
-  });
-
-  dialog.addEventListener("render", () => {
-    const element = dialog.element;
-    if (!element || element.dataset.lightSourceDialogWatcher) return;
-    element.dataset.lightSourceDialogWatcher = "1";
-    element.addEventListener("click", async event => {
-      const toggle = event.target?.closest?.("[data-light-source-dialog-toggle]");
-      if (toggle) {
-        event.preventDefault();
-        await toggleFromDialog(dialog);
-        return;
-      }
-      const card = event.target?.closest?.("[data-light-energy-source-card]");
-      if (!card) return;
-      event.preventDefault();
-      selectedSourceUuid = String(card.dataset.lightEnergySourceUuid ?? "");
-      refreshDialogContent(dialog);
-    });
-  }, { once: true });
-
-  await dialog.render({ force: true });
-  return undefined;
-}
-
-function renderLightSourceEnergyDialogContent({ actor = null, token = null, item = null, showToggle = false, usesEnergy = false, selectedSourceUuid = "" } = {}) {
-  const active = isLightSourceActive(token?.document ?? token, item);
-  const toggleDisabled = !active && !canActivateLightSource(item);
-  const consumer = getEnergyConsumerFunction(item);
-  const sourceItems = usesEnergy ? getAvailableEnergySourceItems(actor, consumer) : [];
-  const activeSource = usesEnergy ? getActiveEnergySourceItem(actor, consumer) : null;
-  return `
-    <div class="fallout-maw-reload-dialog" data-light-source-dialog-root>
-      <div class="fallout-maw-reload-main">
-        ${showToggle ? `
-        <div class="fallout-maw-reload-source-pane">
-          <span>${escapeHTML(getLightSourceDisplayName(item))}</span>
-          <button type="button" class="fallout-maw-reload-source-card active" data-light-source-dialog-toggle ${toggleDisabled ? "disabled" : ""}>
-            <img src="${escapeAttribute(normalizeImagePath("icons/svg/light.svg", FALLBACK_ICON))}" alt="">
-            <span>${escapeHTML(game.i18n.localize(active ? "FALLOUTMAW.Item.LightSourceToggleOff" : "FALLOUTMAW.Item.LightSourceToggleOn"))}</span>
-          </button>
-        </div>
-        ` : ""}
-        ${usesEnergy ? `
-        <div class="fallout-maw-reload-source-pane">
-          <span>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.LightSourceCurrentEnergySource"))}</span>
-          ${renderInstalledLightEnergySourceCard(activeSource)}
-        </div>
-        <div class="fallout-maw-reload-source-pane">
-          <span>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.LightSourceAvailableEnergySources"))}</span>
-          <div class="fallout-maw-reload-source-list" data-light-energy-source-list>
-            ${renderLightEnergySourceCards(sourceItems, selectedSourceUuid)}
-          </div>
-        </div>
-        ` : `
-        <p>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoEnergySource"))}</p>
-        `}
-      </div>
-    </div>
-  `;
-}
-
-function renderInstalledLightEnergySourceCard(activeSource = null) {
-  if (!activeSource) {
-    return `
-      <div class="fallout-maw-token-hud-empty">
-        ${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoEnergySource"))}
-      </div>
-    `;
-  }
-  const reserve = getEnergySourceReserveState(activeSource);
-  const reserveLabel = reserve.max > 0 ? `${formatNumberForHud(reserve.value)} / ${formatNumberForHud(reserve.max)}` : formatNumberForHud(reserve.value);
-  return `
-    <div class="fallout-maw-reload-source-card fallout-maw-light-energy-card" data-light-energy-installed-source>
-      <img src="${escapeAttribute(normalizeImagePath(activeSource.img, FALLBACK_ICON))}" alt="">
-      <span>${escapeHTML(getEnergySourceDisplayName(activeSource))}</span>
-      <strong>${escapeHTML(reserveLabel)}</strong>
-    </div>
-  `;
-}
-
-function renderLightEnergySourceCards(sourceItems = [], selectedSourceUuid = "") {
-  if (!sourceItems.length) return `<div class="fallout-maw-token-hud-empty">${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoAvailableEnergySources"))}</div>`;
-  return sourceItems.map(item => {
-    const reserve = getEnergySourceReserveState(item);
-    const reserveLabel = reserve.max > 0 ? `${formatNumberForHud(reserve.value)} / ${formatNumberForHud(reserve.max)}` : formatNumberForHud(reserve.value);
-    const selected = item.uuid === selectedSourceUuid;
-    return `
-      <div
-        class="fallout-maw-reload-source-card fallout-maw-light-energy-card ${selected ? "active" : ""}"
-        data-light-energy-source-card
-        data-light-energy-source-uuid="${escapeAttribute(item.uuid)}"
-        title="${escapeAttribute(getEnergySourceDisplayName(item))}">
-        <img src="${escapeAttribute(normalizeImagePath(item.img, FALLBACK_ICON))}" alt="">
-        <span>${escapeHTML(getEnergySourceDisplayName(item))}</span>
-        <strong>${escapeHTML(reserveLabel)}</strong>
-      </div>
-    `;
-  }).join("");
 }
 
 function formatNumberForHud(value) {

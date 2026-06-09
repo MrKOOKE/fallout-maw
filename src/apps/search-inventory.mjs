@@ -55,6 +55,7 @@ import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import { getConditionFunction, getEnabledToolFunctions, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints } from "../combat/weapon-switching.mjs";
+import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
@@ -1987,6 +1988,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
     }
+    if (canUseActiveItem(item)) {
+      menuOptions.push(["use", "fa-play", "Применить"]);
+    }
     if (isSlottedItem || isEquipped) {
       menuOptions.push(["unequip", "fa-hand", game.i18n.localize("FALLOUTMAW.Item.Unequip")]);
     } else {
@@ -2018,6 +2022,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       menu.remove();
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openSearchContainerSheet(item);
+      if (action === "use") return useActiveItem({ actor, item, application: this });
       if (action === "equip") return this.#equipSearchItem(actor, item);
       if (action === "unequip") return this.#unequipSearchItem(actor, item);
       if (action === "split") return this.#splitSearchItem(actor, item);

@@ -24,6 +24,7 @@ import {
 import { isItemBrokenByCondition } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
+import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -743,6 +744,9 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     if (isContainerItem(item)) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
     }
+    if (canUseActiveItem(item)) {
+      menuOptions.push(["use", "fa-play", "Применить"]);
+    }
     if (getItemQuantity(item) > 1) {
       menuOptions.push(["split", "fa-code-branch", "Разделить"]);
     }
@@ -769,6 +773,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
         app.bringToFront();
         return app;
       }
+      if (action === "use") return useActiveItem({ actor: this.actor, item, application: this });
       if (action === "split") return this.#splitInventoryItem(item);
       if (action === "copy" && game.user?.isGM) return this.#copyInventoryItem(item);
       if (action === "delete" && game.user?.isGM) return item.delete();

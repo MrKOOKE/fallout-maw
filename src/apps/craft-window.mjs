@@ -53,6 +53,7 @@ import {
 import { toInteger } from "../utils/numbers.mjs";
 import { getEnabledToolFunctions } from "../utils/item-functions.mjs";
 import { isCompendiumUuid, resolveWorldItemSync } from "../utils/world-items.mjs";
+import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -1176,6 +1177,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
     }
+    if (canUseActiveItem(item)) {
+      menuOptions.push(["use", "fa-play", "Применить"]);
+    }
     if (isSlottedItem || isEquipped) {
       menuOptions.push(["unequip", "fa-hand", game.i18n.localize("FALLOUTMAW.Item.Unequip")]);
     } else {
@@ -1207,6 +1211,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       menu.remove();
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openCraftContainerSheet(item);
+      if (action === "use") return useActiveItem({ actor: this.#actor, item, application: this });
       if (action === "equip") return this.#equipCraftItem(item);
       if (action === "unequip") return this.#unequipCraftItem(item);
       if (action === "split") return this.#splitCraftItem(item);

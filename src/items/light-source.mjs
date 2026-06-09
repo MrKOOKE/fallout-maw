@@ -1,5 +1,6 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
+import { FALLBACK_ICON, escapeHTML, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
   ITEM_FUNCTIONS,
   getConditionFunction,
@@ -12,6 +13,7 @@ import {
 import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 
+const { DialogV2 } = foundry.applications.api;
 const ACTIVE_LIGHT_SOURCES_FLAG = "activeLightSources";
 const BASE_LIGHT_FLAG = "lightSourceBaseLight";
 const RESOURCE_REMAINDERS_FLAG = "lightSourceResourceRemainders";
@@ -79,6 +81,129 @@ export function canActivateLightSource(item = null) {
   return true;
 }
 
+export async function openLightSourceEnergyDialog({ actor = null, token = null, item = null, application = null, showToggle = false } = {}) {
+  if (!actor?.isOwner || !item || !hasItemFunction(item, ITEM_FUNCTIONS.lightSource, { ignoreBroken: true })) return undefined;
+  const consumer = getEnergyConsumerFunction(item);
+  const usesEnergy = lightSourceUsesEnergyConsumer(item);
+  const sourceItems = usesEnergy ? getAvailableEnergySourceItems(actor, consumer) : [];
+  let selectedSourceUuid = "";
+  const renderContent = () => renderLightSourceEnergyDialogContent({
+    actor,
+    token,
+    item: actor.items.get(item.id) ?? item,
+    showToggle,
+    usesEnergy,
+    selectedSourceUuid
+  });
+  const refreshDialogContent = dialog => {
+    if (selectedSourceUuid) {
+      const freshItem = actor.items.get(item.id);
+      const source = getAvailableEnergySourceItems(actor, getEnergyConsumerFunction(freshItem))
+        .find(candidate => candidate.uuid === selectedSourceUuid);
+      if (!source) selectedSourceUuid = "";
+    }
+    const root = dialog.element?.querySelector?.("[data-light-source-dialog-root]");
+    if (root) root.outerHTML = renderContent();
+  };
+  const switchSource = async (dialog, sourceUuid) => {
+    const freshItem = actor.items.get(item.id);
+    const source = getAvailableEnergySourceItems(actor, getEnergyConsumerFunction(freshItem))
+      .find(candidate => candidate.uuid === sourceUuid);
+    if (!freshItem || !source) {
+      ui.notifications?.warn?.(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoEnergySource"));
+      return;
+    }
+    await installEnergyConsumerSource(actor, freshItem, source);
+    selectedSourceUuid = "";
+    await syncTokenLightSources(token?.document ?? token);
+    refreshDialogContent(dialog);
+    await application?.render({ force: true });
+  };
+  const extractSource = async dialog => {
+    const freshItem = actor.items.get(item.id);
+    if (!freshItem) return;
+    const extracted = await extractEnergyConsumerSource(actor, freshItem);
+    if (!extracted) ui.notifications?.warn?.(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoEnergySource"));
+    await syncTokenLightSources(token?.document ?? token);
+    refreshDialogContent(dialog);
+    await application?.render({ force: true });
+  };
+  const toggleFromDialog = async dialog => {
+    const freshItem = actor.items.get(item.id);
+    if (!freshItem) return;
+    await toggleLightSource(token?.document ?? token, freshItem);
+    refreshDialogContent(dialog);
+    await application?.render({ force: true });
+  };
+
+  if (usesEnergy && !sourceItems.length) {
+    ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoAvailableEnergySources"));
+  }
+
+  const dialog = new DialogV2({
+    window: {
+      title: getLightSourceDisplayName(item)
+    },
+    content: `<form class="fallout-maw-reload-dialog-form">${renderContent()}</form>`,
+    form: {
+      closeOnSubmit: false
+    },
+    buttons: usesEnergy ? [
+      {
+        action: "extract",
+        label: game.i18n.localize("FALLOUTMAW.Item.LightSourceExtract"),
+        type: "button",
+        callback: (event, button, dlg) => extractSource(dlg)
+      },
+      {
+        action: "install",
+        label: game.i18n.localize("FALLOUTMAW.Item.LightSourceInstall"),
+        type: "button",
+        default: true,
+        callback: (event, button, dlg) => switchSource(dlg, selectedSourceUuid)
+      },
+      {
+        action: "close",
+        label: game.i18n.localize("FALLOUTMAW.Item.WeaponReloadFinish"),
+        type: "button",
+        callback: (event, button, dlg) => dlg.close()
+      }
+    ] : [
+      {
+        action: "close",
+        label: game.i18n.localize("FALLOUTMAW.Item.WeaponReloadFinish"),
+        type: "button",
+        callback: (event, button, dlg) => dlg.close()
+      }
+    ],
+    position: {
+      width: 520
+    }
+  });
+
+  dialog.addEventListener("render", () => {
+    const element = dialog.element;
+    if (!element || element.dataset.lightSourceDialogWatcher) return;
+    element.dataset.lightSourceDialogWatcher = "1";
+    element.addEventListener("click", async event => {
+      const toggle = event.target?.closest?.("[data-light-source-dialog-toggle]");
+      if (toggle) {
+        event.preventDefault();
+        await toggleFromDialog(dialog);
+        return;
+      }
+      const card = event.target?.closest?.("[data-light-energy-source-card]");
+      if (!card) return;
+      event.preventDefault();
+      selectedSourceUuid = String(card.dataset.lightEnergySourceUuid ?? "");
+      refreshDialogContent(dialog);
+    });
+  }, { once: true });
+
+  await dialog.render({ force: true });
+  return undefined;
+}
+
 export function isLightSourceActive(tokenOrDocument = null, item = null) {
   if (!item?.id) return false;
   return getActiveLightSourceEntries(getTokenDocument(tokenOrDocument))
@@ -130,6 +255,92 @@ export function getAvailableEnergySourceItems(actor = null, consumerData = {}) {
     .filter(item => hasItemFunction(item, ITEM_FUNCTIONS.energySource, { ignoreBroken: true }))
     .filter(item => energySourceMatchesConsumer(item, consumerData))
     .sort((left, right) => getEnergySourceDisplayName(left).localeCompare(getEnergySourceDisplayName(right), game.i18n.lang));
+}
+
+function renderLightSourceEnergyDialogContent({ actor = null, token = null, item = null, showToggle = false, usesEnergy = false, selectedSourceUuid = "" } = {}) {
+  const tokenDocument = token?.document ?? token ?? null;
+  const active = isLightSourceActive(tokenDocument, item);
+  const toggleDisabled = !tokenDocument || (!active && !canActivateLightSource(item));
+  const consumer = getEnergyConsumerFunction(item);
+  const sourceItems = usesEnergy ? getAvailableEnergySourceItems(actor, consumer) : [];
+  const activeSource = usesEnergy ? getActiveEnergySourceItem(actor, consumer) : null;
+  return `
+    <div class="fallout-maw-reload-dialog" data-light-source-dialog-root>
+      <div class="fallout-maw-reload-main">
+        ${showToggle ? `
+        <div class="fallout-maw-reload-source-pane">
+          <span>${escapeHTML(getLightSourceDisplayName(item))}</span>
+          <button type="button" class="fallout-maw-reload-source-card active" data-light-source-dialog-toggle ${toggleDisabled ? "disabled" : ""}>
+            <img src="${escapeAttribute(normalizeImagePath("icons/svg/light.svg", FALLBACK_ICON))}" alt="">
+            <span>${escapeHTML(game.i18n.localize(active ? "FALLOUTMAW.Item.LightSourceToggleOff" : "FALLOUTMAW.Item.LightSourceToggleOn"))}</span>
+          </button>
+        </div>
+        ` : ""}
+        ${usesEnergy ? `
+        <div class="fallout-maw-reload-source-pane">
+          <span>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.LightSourceCurrentEnergySource"))}</span>
+          ${renderInstalledLightEnergySourceCard(activeSource)}
+        </div>
+        <div class="fallout-maw-reload-source-pane">
+          <span>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.LightSourceAvailableEnergySources"))}</span>
+          <div class="fallout-maw-reload-source-list" data-light-energy-source-list>
+            ${renderLightEnergySourceCards(sourceItems, selectedSourceUuid)}
+          </div>
+        </div>
+        ` : `
+        <p>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoEnergySource"))}</p>
+        `}
+      </div>
+    </div>
+  `;
+}
+
+function renderInstalledLightEnergySourceCard(activeSource = null) {
+  if (!activeSource) {
+    return `
+      <div class="fallout-maw-token-hud-empty">
+        ${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoEnergySource"))}
+      </div>
+    `;
+  }
+  const reserve = getEnergySourceReserveState(activeSource);
+  const reserveLabel = reserve.max > 0 ? `${formatNumberForDisplay(reserve.value)} / ${formatNumberForDisplay(reserve.max)}` : formatNumberForDisplay(reserve.value);
+  return `
+    <div class="fallout-maw-reload-source-card fallout-maw-light-energy-card" data-light-energy-installed-source>
+      <img src="${escapeAttribute(normalizeImagePath(activeSource.img, FALLBACK_ICON))}" alt="">
+      <span>${escapeHTML(getEnergySourceDisplayName(activeSource))}</span>
+      <strong>${escapeHTML(reserveLabel)}</strong>
+    </div>
+  `;
+}
+
+function renderLightEnergySourceCards(sourceItems = [], selectedSourceUuid = "") {
+  if (!sourceItems.length) return `<div class="fallout-maw-token-hud-empty">${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoAvailableEnergySources"))}</div>`;
+  return sourceItems.map(item => {
+    const reserve = getEnergySourceReserveState(item);
+    const reserveLabel = reserve.max > 0 ? `${formatNumberForDisplay(reserve.value)} / ${formatNumberForDisplay(reserve.max)}` : formatNumberForDisplay(reserve.value);
+    const selected = item.uuid === selectedSourceUuid;
+    return `
+      <div
+        class="fallout-maw-reload-source-card fallout-maw-light-energy-card ${selected ? "active" : ""}"
+        data-light-energy-source-card
+        data-light-energy-source-uuid="${escapeAttribute(item.uuid)}"
+        title="${escapeAttribute(getEnergySourceDisplayName(item))}">
+        <img src="${escapeAttribute(normalizeImagePath(item.img, FALLBACK_ICON))}" alt="">
+        <span>${escapeHTML(getEnergySourceDisplayName(item))}</span>
+        <strong>${escapeHTML(reserveLabel)}</strong>
+      </div>
+    `;
+  }).join("");
+}
+
+function formatNumberForDisplay(value) {
+  const number = Number(value) || 0;
+  return Number.isInteger(number) ? String(number) : number.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function escapeAttribute(value) {
+  return escapeHTML(value).replace(/`/g, "&#096;");
 }
 
 export async function setEnergyConsumerActiveSource(consumerItem = null, sourceItem = null) {
