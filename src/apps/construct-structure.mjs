@@ -7,6 +7,7 @@ import {
   hasItemFunction
 } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { resolveWorldItemSync } from "../utils/world-items.mjs";
 
 export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
   #entries = [];
@@ -85,7 +86,7 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     const data = readDropData(event);
     if (data?.type !== "Item") return;
-    const item = await foundry.utils.getDocumentClass("Item").fromDropData(data);
+    const item = resolveWorldItemSync(data.uuid);
     if (!isConstructPartItem(item)) {
       ui.notifications?.warn?.("Можно добавить только предмет с функцией «Деталь конструкта».");
       return;

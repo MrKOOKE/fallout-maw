@@ -47,6 +47,7 @@ import { registerStealthHooks } from "./stealth/index.mjs";
 import { registerSystemSheets } from "./sheets/index.mjs";
 import { FalloutMaWDragDrop } from "./utils/drag-drop.mjs";
 import { registerFormFocusDragGuard } from "./utils/form-focus-drag-guard.mjs";
+import { rewriteItemReferenceData, rewriteSceneTokenActorReferences } from "./utils/document-references.mjs";
 import {
   ROOT_CONTAINER_ID,
   createStoredPlacement,
@@ -61,9 +62,13 @@ import {
 } from "./utils/inventory-containers.mjs";
 import { escapeHTML, getActorInventoryGridDimensions, getActorRootInventoryGridOptions } from "./utils/actor-display-data.mjs";
 import { toInteger } from "./utils/numbers.mjs";
+import { resolveWorldItemSync } from "./utils/world-items.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
+const WORLD_REFERENCE_REPAIR_DELAY_MS = 250;
+let worldItemReferenceRepairTimeout = 0;
+let worldSceneReferenceRepairTimeout = 0;
 
 Hooks.once("init", () => {
   console.log(`${FALLOUT_MAW.title} | Initializing system`);
@@ -86,6 +91,7 @@ Hooks.once("init", () => {
   registerDataModels();
   registerSystemSheets();
   registerFormFocusDragGuard();
+  registerWorldReferenceRepairHooks();
   registerTrackableAttributes();
   registerPostureMovementHooks();
   registerCoverHooks();
@@ -107,6 +113,65 @@ Hooks.once("init", () => {
   registerAnimationLibraryBrowserHooks();
   registerStealthHooks();
 });
+
+function registerWorldReferenceRepairHooks() {
+  Hooks.on("preCreateScene", (scene, data, options) => {
+    if (options?.pack) return undefined;
+    const updates = rewriteSceneTokenActorReferences(data ?? scene?._source ?? {});
+    if (!foundry.utils.isEmpty(updates)) scene.updateSource(updates);
+    return undefined;
+  });
+  Hooks.on("createItem", (_item, options) => {
+    if (!options?.pack) queueWorldItemReferenceRepair();
+  });
+  Hooks.on("createActor", (_actor, options) => {
+    if (!options?.pack) {
+      queueWorldItemReferenceRepair();
+      queueWorldSceneReferenceRepair();
+    }
+  });
+}
+
+function queueWorldItemReferenceRepair() {
+  window.clearTimeout(worldItemReferenceRepairTimeout);
+  worldItemReferenceRepairTimeout = window.setTimeout(() => {
+    void repairWorldItemReferences();
+  }, WORLD_REFERENCE_REPAIR_DELAY_MS);
+}
+
+function queueWorldSceneReferenceRepair() {
+  window.clearTimeout(worldSceneReferenceRepairTimeout);
+  worldSceneReferenceRepairTimeout = window.setTimeout(() => {
+    void repairWorldSceneReferences();
+  }, WORLD_REFERENCE_REPAIR_DELAY_MS);
+}
+
+async function repairWorldItemReferences() {
+  if (!game.ready || !game.user?.isGM) return;
+  for (const item of game.items?.contents ?? []) {
+    const updates = rewriteItemReferenceData(item.system ?? {});
+    if (foundry.utils.isEmpty(updates)) continue;
+    await item.update(updates, { render: false });
+  }
+  for (const actor of game.actors?.contents ?? []) {
+    const itemUpdates = [];
+    for (const item of actor.items?.contents ?? []) {
+      const updates = rewriteItemReferenceData(item.system ?? {});
+      if (foundry.utils.isEmpty(updates)) continue;
+      itemUpdates.push({ _id: item.id, ...updates });
+    }
+    if (itemUpdates.length) await actor.updateEmbeddedDocuments("Item", itemUpdates, { render: false });
+  }
+}
+
+async function repairWorldSceneReferences() {
+  if (!game.ready || !game.user?.isGM) return;
+  for (const scene of game.scenes?.contents ?? []) {
+    const updates = rewriteSceneTokenActorReferences(scene.toObject());
+    if (foundry.utils.isEmpty(updates)) continue;
+    await scene.update(updates, { render: false });
+  }
+}
 
 Hooks.on("openDetachedWindow", (_id, win) => {
   registerFormFocusDragGuard(win?.document);
@@ -146,7 +211,7 @@ Hooks.on("dropCanvasData", async (canvas, data, event) => {
     return false;
   }
 
-  const droppedItem = await foundry.utils.getDocumentClass("Item").fromDropData(data);
+  const droppedItem = resolveWorldItemSync(data.uuid);
   if (!droppedItem) return false;
 
   const itemData = droppedItem.toObject();

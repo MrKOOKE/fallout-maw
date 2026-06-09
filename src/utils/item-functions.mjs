@@ -1,3 +1,5 @@
+import { resolveWorldItemSync } from "./world-items.mjs";
+
 export const ITEM_FUNCTIONS = {
   container: "container",
   damageMitigation: "damageMitigation",
@@ -553,7 +555,7 @@ function getWeaponModuleSlotItemData(slot = {}) {
   if (slot?.itemData?.system) return slot.itemData;
   const uuid = String(slot?.itemUuid ?? "").trim();
   if (!uuid) return null;
-  const item = globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
+  const item = resolveWorldItemSync(uuid);
   return item?.toObject?.() ?? null;
 }
 

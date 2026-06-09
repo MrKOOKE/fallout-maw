@@ -51,6 +51,7 @@ import {
   isModuleItemCompatibleWithSlot,
   isWeaponModuleItem
 } from "../utils/weapon-modules.mjs";
+import { resolveWorldItemSync } from "../utils/world-items.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -905,7 +906,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.#hideCraftSnapPreview();
     const data = this.#getDragEventData(event);
     if (data?.type !== "Item") return undefined;
-    const droppedItem = await foundry.utils.getDocumentClass("Item").fromDropData(data);
+    const droppedItem = resolveWorldItemSync(data.uuid);
     if (!isValidCraftComponentItem(droppedItem)) {
       ui.notifications.warn("В крафт можно добавлять только предметы из глобального хранилища, кроме болезней, травм и способностей.");
       return undefined;
@@ -2763,9 +2764,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (!Number.isInteger(index) || index < 0) return undefined;
     const data = this.#getDragEventData(event);
     if (data?.type !== "Item") return undefined;
-    const droppedItem = data.uuid
-      ? await foundry.utils.getDocumentClass("Item").fromDropData(data)
-      : null;
+    const droppedItem = data.uuid ? resolveWorldItemSync(data.uuid) : null;
     if (!droppedItem || !isWeaponModuleItem(droppedItem)) return ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Item.WeaponModuleDropInvalid"));
 
     const path = getWeaponFunctionPath(getWeaponFunctionSection(zone));
@@ -4653,7 +4652,7 @@ function normalizeInstalledEnergySourceData(source = {}) {
 function getEnergyConsumerSourceItem(consumerData = {}) {
   const uuid = String(consumerData?.sourceItemUuid ?? "").trim();
   if (!uuid) return null;
-  return globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
+  return resolveWorldItemSync(uuid);
 }
 
 function getEnergyConsumerSourceUuids(consumerData = {}) {
@@ -4690,7 +4689,7 @@ function buildLightSourceResourceTypeChoices(selected, hasConditionFunction = fa
 function getWeaponMagazineSourceItem(weaponData = {}) {
   const uuid = String(weaponData?.magazine?.sourceItemUuid ?? "").trim();
   if (!uuid) return null;
-  return globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
+  return resolveWorldItemSync(uuid);
 }
 
 function getWeaponMagazineSourceUuids(weaponData = {}) {
@@ -5255,11 +5254,7 @@ function getCraftNodeToolFunction(node = {}) {
 function resolveCraftNodeSourceItem(node = {}) {
   const uuid = String(node?.itemUuid ?? "").trim();
   if (!uuid) return null;
-  try {
-    return globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
-  } catch (_error) {
-    return null;
-  }
+  return resolveWorldItemSync(uuid);
 }
 
 function formatCraftToolRequirementLabel(requirements = []) {
@@ -6982,7 +6977,7 @@ async function getDroppedItem(event) {
     data = null;
   }
   if (!data || data.type !== "Item") return null;
-  return foundry.utils.getDocumentClass("Item").fromDropData(data);
+  return resolveWorldItemSync(data.uuid);
 }
 
 function isWorldDamageSourceItem(item) {

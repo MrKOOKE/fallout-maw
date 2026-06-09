@@ -1,5 +1,6 @@
 import { ITEM_FUNCTIONS, getModuleFunction, hasItemFunction } from "./item-functions.mjs";
 import { toInteger } from "./numbers.mjs";
+import { resolveWorldItemSync } from "./world-items.mjs";
 
 export const WEAPON_MODULE_ACTION_KEYS = Object.freeze([
   "aimedShot",
@@ -46,7 +47,7 @@ export function getWeaponModuleSlotItemData(slot = {}) {
 export function getWeaponModuleSlotItem(slot = {}) {
   const uuid = String(slot?.itemUuid ?? "").trim();
   if (!uuid) return null;
-  return globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
+  return resolveWorldItemSync(uuid);
 }
 
 export function isModuleItemCompatibleWithSlot(itemOrData = null, slot = {}) {

@@ -19,6 +19,7 @@ import { getStealthAttackModifiers, revealActorFromStealth } from "../stealth/in
 import { getWeaponActionBlockState } from "../abilities/runtime-state.mjs";
 import { requestPushKnockback } from "./active-actions.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
+import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import {
   clearAttackAutoCoverSync,
   getActorForcedCoverData,
@@ -3579,7 +3580,7 @@ function getEffectiveWeaponDamageData(weapon, weaponFunctionId = "") {
 function getWeaponMagazineSourceItem(weaponData = {}) {
   const uuid = String(weaponData?.magazine?.sourceItemUuid ?? "").trim();
   if (!uuid) return null;
-  return globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
+  return resolveWorldItemSync(uuid);
 }
 
 function buildWeaponDamageRequests(weapon, { attackerActor = null, actor = null, limbKey = "", amount = 0, source = {} } = {}, weaponFunctionId = "") {

@@ -99,6 +99,7 @@ import {
 } from "../utils/inventory-containers.mjs";
 import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getActiveItemChargesData, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getEnabledWeaponFunctions, getEnergyConsumerFunction, getModuleFunction, getProsthesisFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, getWeaponFunctionUpdatePath, getWeaponSpecialPropertyType, hasItemFunction, hasWeaponSpecialPropertyData, isActiveItem, isItemBrokenByCondition, normalizeWeaponSpecialProperties } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { renderInventoryItemTooltipHTML } from "../sheets/actor-sheet.mjs";
 import { AdvancementApplication } from "../advancement/application.mjs";
@@ -4187,7 +4188,7 @@ function getWeaponFunctionPath(weapon, weaponFunctionId = "") {
 function getWeaponMagazineSourceItem(weaponData = {}) {
   const uuid = String(weaponData?.magazine?.sourceItemUuid ?? "").trim();
   if (!uuid) return null;
-  return globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
+  return resolveWorldItemSync(uuid);
 }
 
 function getWeaponMagazineSourceItems(weaponData = {}) {

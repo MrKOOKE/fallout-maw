@@ -52,6 +52,7 @@ import {
 } from "../utils/inventory-containers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { getEnabledToolFunctions } from "../utils/item-functions.mjs";
+import { isCompendiumUuid, resolveWorldItemSync } from "../utils/world-items.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -205,7 +206,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#selectedRecipeUuid = "";
     }
 
-    const selectedRecipe = this.#selectedRecipeUuid ? await resolveDocument(this.#selectedRecipeUuid) : null;
+    const selectedRecipe = this.#selectedRecipeUuid ? resolveWorldItemSync(this.#selectedRecipeUuid) : null;
     this.#selectedRecipe = selectedRecipe;
     const actorContext = prepareSearchActorContext(this.#actor, {
       side: "searcher",
@@ -1064,7 +1065,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   async #resolveTooltipItem(anchor = this.#tooltipAnchorElement) {
     const documentUuid = String(anchor?.dataset?.tooltipUuid ?? this.#tooltipDocumentUuid ?? "").trim();
     if (documentUuid) {
-      const item = await resolveDocument(documentUuid);
+      const item = resolveWorldItemSync(documentUuid);
       if (item) return { item, actor: item.parent?.documentName === "Actor" ? item.parent : null };
     }
     const actorUuid = String(anchor?.dataset?.searchActorUuid ?? this.#tooltipActorUuid ?? "");
@@ -1326,7 +1327,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (this.#busy) return undefined;
 
     const actor = await resolveActor(this.#actorUuid);
-    const recipe = await resolveDocument(this.#selectedRecipeUuid);
+    const recipe = resolveWorldItemSync(this.#selectedRecipeUuid);
     this.#selectedRecipe = recipe;
     const validation = await validateCraftRequest(actor, recipe, this.#craftMode, this.#getCraftToolSelections(recipe?.uuid, this.#craftMode));
     if (!validation.valid) {
@@ -1702,7 +1703,7 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
 
 async function applyCraftOperation(operation) {
   const actor = await resolveActor(operation.actorUuid);
-  const recipe = await resolveDocument(operation.recipeUuid);
+  const recipe = resolveWorldItemSync(operation.recipeUuid);
   if (!actor?.isOwner) throw new Error("Нет прав на крафт этим актером.");
   if (!recipe) throw new Error("Рецепт не найден.");
 
@@ -1897,7 +1898,7 @@ async function getCraftOutputSpecs(recipe, mode = CRAFT_MODE_CREATE, outputs = [
 
   const specs = [];
   for (const output of outputs) {
-    const source = await resolveDocument(output.sourceUuid);
+    const source = resolveWorldItemSync(output.sourceUuid);
     if (!source) throw new Error("Результат разбора не найден.");
     specs.push({
       data: createCraftOutputItemData(source, { mode }),
@@ -1926,11 +1927,11 @@ function createCraftOutputItemData(source, { mode = CRAFT_MODE_CREATE } = {}) {
 
   data._stats ??= {};
   if (normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY) {
-    data._stats.compendiumSource = source.pack ? source.uuid : (source._stats?.compendiumSource ?? null);
-    data._stats.duplicateSource = source.pack ? null : source.uuid;
+    data._stats.compendiumSource = null;
+    data._stats.duplicateSource = source.uuid;
   } else {
-    data._stats.compendiumSource = source.pack ? source.uuid : null;
-    data._stats.duplicateSource = source.pack ? null : source.uuid;
+    data._stats.compendiumSource = null;
+    data._stats.duplicateSource = source.uuid;
   }
   data._stats.exportSource = null;
   return data;
@@ -2295,7 +2296,7 @@ function getCraftRequirements(nodes = [], { includeRoot = false } = {}) {
     if (!node.root && getCraftNodeToolRequirements(node).length) continue;
     const sourceUuid = getCraftNodeSourceUuid(node);
     const quantity = Math.max(1, toInteger(node.quantity) || 1);
-    const sourceItem = resolveDocumentSync(sourceUuid);
+    const sourceItem = resolveWorldItemSync(sourceUuid);
     const sourceKeys = getCraftItemSourceKeys(sourceItem, sourceUuid);
     const fingerprint = getCraftItemFingerprint(sourceItem ?? node);
     const key = getCraftRequirementKey({ sourceKeys, fingerprint, sourceUuid });
@@ -2345,7 +2346,7 @@ function getCraftToolRequirements(nodes = []) {
 }
 
 function getCraftNodeToolRequirements(node = {}) {
-  const sourceItem = resolveDocumentSync(getCraftNodeSourceUuid(node));
+  const sourceItem = resolveWorldItemSync(getCraftNodeSourceUuid(node));
   if (!sourceItem) return [];
   return getEnabledToolFunctions(sourceItem)
     .filter(tool => !tool.useAsItem)
@@ -2414,13 +2415,11 @@ function getCraftItemSourceKeys(itemOrDocument = null, fallbackUuid = "") {
 
 function collectCraftItemSourceKeys(keys, itemOrDocument = null, fallbackUuid = "", depth = 0) {
   if (depth > 4) return;
-  const document = typeof itemOrDocument === "string" ? resolveDocumentSync(itemOrDocument) : itemOrDocument;
+  const document = typeof itemOrDocument === "string" ? resolveWorldItemSync(itemOrDocument) : itemOrDocument;
   for (const key of [
     fallbackUuid,
     document?.uuid,
-    document?._stats?.compendiumSource,
     document?._stats?.duplicateSource,
-    document?._source?._stats?.compendiumSource,
     document?._source?._stats?.duplicateSource,
     foundry.utils.getProperty(document, "flags.core.sourceId"),
     foundry.utils.getProperty(document, "_source.flags.core.sourceId"),
@@ -2428,12 +2427,12 @@ function collectCraftItemSourceKeys(keys, itemOrDocument = null, fallbackUuid = 
     foundry.utils.getProperty(document, "_source.flags.fallout-maw.sourceId")
   ]) {
     const normalized = String(key ?? "").trim();
-    if (normalized) keys.add(normalized);
+    if (normalized && !isCompendiumUuid(normalized)) keys.add(normalized);
   }
 
   for (const key of Array.from(keys)) {
     if (key === fallbackUuid || key === document?.uuid) continue;
-    const sourceDocument = resolveDocumentSync(key);
+    const sourceDocument = resolveWorldItemSync(key);
     if (sourceDocument) collectCraftItemSourceKeys(keys, sourceDocument, "", depth + 1);
   }
 }
@@ -2538,7 +2537,7 @@ function getCraftNodes(item, mode = CRAFT_MODE_CREATE) {
 
 function refreshCraftNodeFromSource(node = {}) {
   if (node.root) return node;
-  const source = resolveDocumentSync(getCraftNodeSourceUuid(node));
+  const source = resolveWorldItemSync(getCraftNodeSourceUuid(node));
   if (!source) return node;
   const footprint = getCraftItemFootprint(source);
   return normalizeCraftNode({
@@ -3627,35 +3626,6 @@ async function getCraftRecipeSummaries() {
     recipes.push(prepareRecipeSummary(item));
   }
 
-  for (const pack of game.packs ?? []) {
-    if (pack.documentName !== "Item") continue;
-    let index;
-    try {
-      index = await pack.getIndex({ fields: ["type", "img", "system.quantity", "system.itemCategory", "system.placement", "system.craft.nodes", "system.craft.links", "system.craft.disassembly.nodes", "system.craft.disassembly.links", "system.craft.disassembly.viewport"] });
-    } catch (_error) {
-      continue;
-    }
-    for (const entry of index) {
-      if (entry.type !== "gear") continue;
-      const craft = entry.system?.craft ?? {};
-      if (!hasCraftRecipeData(craft) || seen.has(entry.uuid)) continue;
-      const uuid = entry.uuid ?? `Compendium.${pack.collection}.Item.${entry._id}`;
-      seen.add(uuid);
-      recipes.push({
-        uuid,
-        name: String(entry.name ?? ""),
-        img: normalizeImagePath(entry.img, FALLBACK_ICON),
-        type: entry.type,
-        system: {
-          quantity: Math.max(1, toInteger(entry.system?.quantity) || 1),
-          itemCategory: String(entry.system?.itemCategory ?? ""),
-          placement: foundry.utils.deepClone(entry.system?.placement ?? {}),
-          craft: foundry.utils.deepClone(craft)
-        }
-      });
-    }
-  }
-
   recipes.sort((left, right) => left.name.localeCompare(right.name));
   craftRecipeCache = recipes;
   craftRecipeCacheTime = now;
@@ -3812,20 +3782,11 @@ function setWeaponSlotImageAspect(image) {
 }
 
 async function resolveActor(uuid) {
-  return resolveDocument(uuid);
-}
-
-async function resolveDocument(uuid) {
-  const normalized = String(uuid ?? "").trim();
-  if (!normalized) return null;
-  return (await globalThis.fromUuid?.(normalized)) ?? resolveDocumentSync(normalized);
-}
-
-function resolveDocumentSync(uuid) {
   const normalized = String(uuid ?? "").trim();
   if (!normalized) return null;
   try {
-    return globalThis.fromUuidSync?.(normalized) ?? foundry.utils.fromUuidSync?.(normalized) ?? null;
+    const document = await globalThis.fromUuid?.(normalized);
+    return document instanceof Actor ? document : null;
   } catch (_error) {
     return null;
   }

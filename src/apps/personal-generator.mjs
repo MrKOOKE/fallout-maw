@@ -33,6 +33,7 @@ import {
 import { getActorInventoryGridDimensions, getActorRootInventoryGridOptions, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 import { canStackItems } from "./search-inventory.mjs";
 
@@ -452,7 +453,7 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
   static async #onOpenItemEntry(event, target) {
     event.preventDefault();
     const uuid = target.closest("[data-pg-entry]")?.querySelector("[data-field='uuid']")?.value ?? "";
-    const document = uuid ? await fromUuid(uuid) : null;
+    const document = resolveWorldItemSync(uuid);
     return document?.sheet?.render?.(true);
   }
 
@@ -506,7 +507,7 @@ class PersonalGeneratorApplication extends HandlebarsApplicationMixin(Applicatio
     try {
       const data = JSON.parse(event.dataTransfer?.getData("text/plain") || "{}");
       if (data?.type !== "Item") return undefined;
-      item = await foundry.utils.getDocumentClass("Item").fromDropData(data);
+      item = resolveWorldItemSync(data.uuid);
     } catch (_error) {
       return undefined;
     }
@@ -1944,14 +1945,7 @@ function pickRandom(values) {
 async function resolveItem(uuid) {
   const value = String(uuid ?? "").trim();
   if (!value) return null;
-  try {
-    const document = await fromUuid(value);
-    if (document) return document;
-  } catch (_error) {
-    // Fallback below.
-  }
-  const match = value.match(/^Item\.(.+)$/);
-  return match ? game.items?.get(match[1]) ?? null : null;
+  return resolveWorldItemSync(value);
 }
 
 function needsUniqueGeneratedItem(item) {

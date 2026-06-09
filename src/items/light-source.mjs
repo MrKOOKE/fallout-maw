@@ -10,6 +10,7 @@ import {
   isItemBrokenByCondition
 } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { resolveWorldItemSync } from "../utils/world-items.mjs";
 
 const ACTIVE_LIGHT_SOURCES_FLAG = "activeLightSources";
 const BASE_LIGHT_FLAG = "lightSourceBaseLight";
@@ -438,7 +439,7 @@ function energySourceMatchesConsumer(sourceItem = null, consumerData = {}) {
   const sourceName = String(sourceData?.name ?? "").trim() || sourceItem?.name || "";
   const sourceClass = String(sourceData?.class ?? "").trim();
   for (const uuid of accepted) {
-    const prototype = globalThis.fromUuidSync?.(uuid) ?? foundry.utils.fromUuidSync?.(uuid) ?? null;
+    const prototype = resolveWorldItemSync(uuid);
     if (!prototype || !hasItemFunction(prototype, ITEM_FUNCTIONS.energySource, { ignoreBroken: true })) continue;
     const prototypeData = getEnergySourceFunction(prototype);
     const prototypeName = String(prototypeData?.name ?? "").trim() || prototype.name || "";

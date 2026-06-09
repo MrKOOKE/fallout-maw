@@ -31,6 +31,7 @@ import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import { clampActorLimbValuesToCurrentCaps, handleActorDamageUpdate, prepareActorDamageUpdate, requestDamageApplication } from "../combat/damage-hub.mjs";
 import { migrateActorData } from "../migrations/documents.mjs";
 import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
+import { stampPrototypeUuid } from "../utils/document-references.mjs";
 
 export class FalloutMaWActor extends Actor {
   static migrateData(source) {
@@ -75,6 +76,7 @@ export class FalloutMaWActor extends Actor {
 
   async _preCreate(data, options, user) {
     if ((await super._preCreate(data, options, user)) === false) return false;
+    if (!options?.pack) stampPrototypeUuid(this, data, "Actor");
     if (!["character", "construct"].includes(this.type)) return undefined;
 
     if (this.type === "character") applyCreatureRaceDefaults(this);

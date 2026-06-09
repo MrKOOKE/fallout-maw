@@ -23,6 +23,7 @@ import {
 } from "../utils/inventory-containers.mjs";
 import { isItemBrokenByCondition } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { resolveWorldItemSync } from "../utils/world-items.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -255,7 +256,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     const ownedItem = data.itemId ? this.actor?.items?.get(data.itemId) : null;
     if (ownedItem) return { item: ownedItem, itemData: ownedItem.toObject() };
 
-    const item = data.uuid ? await foundry.utils.getDocumentClass("Item").fromDropData(data) : null;
+    const item = data.uuid ? resolveWorldItemSync(data.uuid) : null;
     if (!(item instanceof Item)) return null;
     return { item, itemData: item.toObject() };
   }
@@ -271,7 +272,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       return ownedItem.toObject();
     }
 
-    const droppedDocument = data.uuid ? foundry.utils.fromUuidSync(data.uuid) : null;
+    const droppedDocument = data.uuid ? resolveWorldItemSync(data.uuid) : null;
     if (droppedDocument instanceof Item) return droppedDocument.toObject();
     return null;
   }
