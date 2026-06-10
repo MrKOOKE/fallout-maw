@@ -1523,11 +1523,8 @@ function isDamageSystemEffect(effect) {
   if (!effect) return false;
   const flags = effect.flags?.[SYSTEM_ID] ?? effect.flags?.[TRAUMA_FLAG_SCOPE] ?? {};
   const flagKind = flags[DAMAGE_EFFECT_FLAG_KEY]?.kind;
-  const flagManaged = Boolean(flagKind
-    && flagKind !== PERIODIC_DAMAGE_EFFECT_KIND
-    && flagKind !== BLEEDING_DAMAGE_EFFECT_KIND
-    && flagKind !== LIMB_LOSS_EFFECT_KIND);
-  return Boolean(getDamageEffectChanges(effect).length || flagManaged || flags.traumaItem || flags.diseaseItem);
+  const flagManaged = flagKind === "resourceLimit" || flagKind === "resourceBlock";
+  return Boolean(getDamageEffectChanges(effect).length || flagManaged);
 }
 
 function getEffectChangeSource(effect) {

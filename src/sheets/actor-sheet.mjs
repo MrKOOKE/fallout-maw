@@ -5389,6 +5389,9 @@ function buildEffectPathLabelMap({
   addDamageEffectPathLabels(map, "system.damageDefenseBonuses", localizeOrFallback("FALLOUTMAW.Effects.DamageDefenseBonuses", "Бонус защиты от урона"), limbs, damageTypeSettings);
   addDamageEffectPathLabels(map, "system.damageResistanceBonuses", localizeOrFallback("FALLOUTMAW.Effects.DamageResistanceBonuses", "Бонус сопротивлений урону"), limbs, damageTypeSettings);
   map.set("system.combat.burstStability", "Стабильность стрельбы очередью");
+  map.set("system.combat.finishingBlow", "Добивание");
+  map.set("system.combat.finishingBlowChance", "Шанс добивания");
+  map.set("system.combat.unconsciousnessResistance", "Сопротивление к потере сознания");
   map.set("system.healing.incomingPercent", "Входящее лечение, %");
   map.set("system.healing.outgoingPercent", "Исходящее лечение, %");
   map.set("system.costs.actions.aimedShot", `${game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot")}: стоимость`);
