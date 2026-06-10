@@ -15,6 +15,7 @@ import {
   getProficiencySettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
+import { applyTokenPrototypeDefaults } from "../settings/token-prototype-defaults.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
 import {
   DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
@@ -79,6 +80,7 @@ export class FalloutMaWActor extends Actor {
     if (!options?.pack) stampPrototypeUuid(this, data, "Actor");
     if (!["character", "construct"].includes(this.type)) return undefined;
 
+    await applyTokenPrototypeDefaults(this, data, options);
     if (this.type === "character") applyCreatureRaceDefaults(this);
     else clearCreatureSelection(this);
     applyNewActorResourceDefaults(this);

@@ -27,6 +27,10 @@ import { StealthSettingsConfig } from "../apps/stealth-settings-config.mjs";
 import { SystemActionSettingsConfig } from "../apps/system-action-settings-config.mjs";
 import { ToolSettingsConfig } from "../apps/tool-settings-config.mjs";
 import { TokenActionHudSettings } from "../apps/token-action-hud-settings-config.mjs";
+import {
+  CharacterTokenPrototypeDefaultsConfig,
+  ConstructTokenPrototypeDefaultsConfig
+} from "../apps/token-prototype-defaults-config.mjs";
 import { TraumaSettingsConfig } from "../apps/trauma-settings-config.mjs";
 import { PersonalNameRandomizerConfig, registerPersonalGeneratorSettings } from "../apps/personal-generator.mjs";
 import { refreshPreparedActors, syncSettingsIntoSystemConfig } from "./accessors.mjs";
@@ -63,7 +67,8 @@ import {
   TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING,
   TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING,
   TOKEN_ACTION_HUD_ENABLED_SETTING,
-  TOKEN_ACTION_HUD_SCALE_SETTING
+  TOKEN_ACTION_HUD_SCALE_SETTING,
+  TOKEN_PROTOTYPE_DEFAULTS_SETTING
 } from "./constants.mjs";
 import { createDefaultAbilityCatalog } from "./abilities.mjs";
 import { createDefaultCombatSettings } from "./combat.mjs";
@@ -75,6 +80,7 @@ import { createDefaultLevelSettings } from "./levels.mjs";
 import { createDefaultSystemActionSettings, createDefaultToolSettings } from "./tools.mjs";
 import { createDefaultStealthSettings } from "../stealth/settings.mjs";
 import { createDefaultSkillDevelopmentCostSettings } from "./skill-development-costs.mjs";
+import { createDefaultTokenPrototypeDefaults, registerTokenPrototypeDefaultsApi } from "./token-prototype-defaults.mjs";
 import { createDefaultTraumaSettings } from "./traumas.mjs";
 import {
   DEFAULT_SKILL_CHECK_CONTROL,
@@ -317,6 +323,16 @@ export function registerSystemSettings() {
     default: getBaselineDefault(TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING, normalizeTokenActionHudIcons(DEFAULT_TOKEN_ACTION_HUD_ICONS))
   });
 
+  game.settings.register(FALLOUT_MAW.id, TOKEN_PROTOTYPE_DEFAULTS_SETTING, {
+    name: "Token Prototype Defaults",
+    scope: "world",
+    config: false,
+    type: Object,
+    default: getBaselineDefault(TOKEN_PROTOTYPE_DEFAULTS_SETTING, createDefaultTokenPrototypeDefaults())
+  });
+
+  registerTokenPrototypeDefaultsApi();
+
   game.settings.register(FALLOUT_MAW.id, COMBAT_CAROUSEL_ENABLED_SETTING, {
     name: "Combat Carousel",
     scope: "client",
@@ -482,6 +498,22 @@ export function registerSystemSettings() {
     label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-table-cells-large",
     type: TokenActionHudSettings,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "characterTokenPrototypeDefaultsMenu", {
+    name: "Базовый прототип токена: Персонаж",
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-circle-user",
+    type: CharacterTokenPrototypeDefaultsConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "constructTokenPrototypeDefaultsMenu", {
+    name: "Базовый прототип токена: Конструкт",
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-robot",
+    type: ConstructTokenPrototypeDefaultsConfig,
     restricted: true
   });
 
