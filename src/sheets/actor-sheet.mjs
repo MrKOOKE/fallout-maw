@@ -138,6 +138,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #draggedItemData = null;
   #draggedItemId = "";
   #dragPreviewSourceKey = "";
+  #hoverPreviewInputKey = "";
   #hoverPreviewKey = "";
   #dragDrop = null;
   #tooltipTimer = null;
@@ -1196,6 +1197,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
     const sourceItemId = this.#draggedItemId || "";
     const parentId = this.#getInventoryContextParentId(zone);
+    const inputKey = `inventory:${parentId}:${zone.dataset.x ?? ""}:${zone.dataset.y ?? ""}:${sourceItemId}:${this.#dragPreviewSourceKey}`;
+    if (this.#hoverPreviewInputKey === inputKey) return;
+    this.#hoverPreviewInputKey = inputKey;
     const targetItem = this.#getTargetStackItem(zone, sourceItemId, parentId);
     const targetHasStackRoom = targetItem
       && this.#areStackable(this.#draggedItemData, targetItem)
@@ -1216,7 +1220,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         this.actor.items
       );
     if (!this.#isInventoryPlacementAvailable(placement, excludeItemIds, [], parentId)) {
-      this.#clearInventoryHoverPreview();
+      this.#clearInventoryHoverPreviewClasses();
       return;
     }
     this.#applyInventoryPlacementPreview(placement, parentId);
@@ -1225,7 +1229,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #applySingleZonePreview(zone, key = "") {
     const previewKey = `single:${key}`;
     if (this.#hoverPreviewKey === previewKey) return;
-    this.#clearInventoryHoverPreview();
+    this.#clearInventoryHoverPreviewClasses();
     this.#hoverPreviewKey = previewKey;
     zone?.classList?.add("drop-preview");
   }
@@ -1234,7 +1238,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!placement) return;
     const previewKey = `placement:${parentId}:${placement.x}:${placement.y}:${placement.width}:${placement.height}`;
     if (this.#hoverPreviewKey === previewKey) return;
-    this.#clearInventoryHoverPreview();
+    this.#clearInventoryHoverPreviewClasses();
     this.#hoverPreviewKey = previewKey;
     const escapedParentId = CSS.escape(parentId);
     for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
@@ -1250,7 +1254,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!targetItem) return;
     const previewKey = `stack:${parentId}:${targetItem.id}:${getItemQuantity(targetItem)}:${getItemMaxStack(targetItem)}`;
     if (this.#hoverPreviewKey === previewKey) return;
-    this.#clearInventoryHoverPreview();
+    this.#clearInventoryHoverPreviewClasses();
     this.#hoverPreviewKey = previewKey;
     const escapedItemId = CSS.escape(targetItem.id);
     const escapedParentId = CSS.escape(parentId);
@@ -1269,6 +1273,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #clearInventoryHoverPreview() {
+    this.#hoverPreviewInputKey = "";
+    this.#clearInventoryHoverPreviewClasses();
+  }
+
+  #clearInventoryHoverPreviewClasses() {
     this.#hoverPreviewKey = "";
     this.element?.querySelectorAll(".drop-preview, .drop-stack-preview").forEach(element => {
       element.classList.remove("drop-preview", "drop-stack-preview");

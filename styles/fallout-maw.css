@@ -8679,7 +8679,7 @@ label.fallout-maw-mitigation-cell {
   grid-area: 1 / 1;
   height: 100%;
   inset: 0;
-  object-fit: cover;
+  object-fit: contain;
   position: absolute;
   width: 100%;
   z-index: 0;
@@ -8695,8 +8695,10 @@ label.fallout-maw-mitigation-cell {
   display: block;
   font-size: 0.8rem;
   font-weight: 700;
+  grid-area: 1 / 1;
   line-height: 1.12;
   margin: 0 4px 4px;
+  max-height: calc(var(--fallout-maw-token-hud-action-label-height) * 2 + 6px);
   max-width: calc(100% - 8px);
   overflow: hidden;
   overflow-wrap: anywhere;
@@ -9169,6 +9171,9 @@ label.fallout-maw-mitigation-cell {
 }
 
 .fallout-maw-token-hud-main-action i {
+  align-self: center;
+  grid-area: 1 / 1;
+  justify-self: center;
   position: relative;
   z-index: 1;
 }
@@ -9256,7 +9261,7 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-token-hud-set-slot-preview:not(.empty) img {
   height: 100%;
   inset: 0;
-  object-fit: cover;
+  object-fit: contain;
   position: absolute;
   width: 100%;
 }
