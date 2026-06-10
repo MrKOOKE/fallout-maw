@@ -542,6 +542,9 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
       mode: MODE_HEALING
     }]);
   }
+  if (mode === MODE_DAMAGE && result?.amount > 0) {
+    result.finishingBlow = await applyFinishingBlowIfEligible(actor, data);
+  }
   if (createSummary) await publishDamageSummaryMessage([result]);
   return result;
 }
@@ -946,6 +949,160 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
     damageTypeKey: damageType?.key ?? data.damageTypeKey,
     createdTraumas
   };
+}
+
+async function applyFinishingBlowIfEligible(targetActor, data = {}) {
+  if (!targetActor || isActorDead(targetActor)) return null;
+
+  const attackerUuid = String(data?.source?.attackerUuid ?? "").trim();
+  if (!attackerUuid) return null;
+
+  const attacker = await fromUuid(attackerUuid);
+  if (!attacker) return null;
+
+  const threshold = Math.max(0, Math.min(100, toInteger(attacker.system?.combat?.finishingBlow)));
+  if (threshold <= 0) return null;
+
+  const health = targetActor.health;
+  const healthMax = Math.max(0, toInteger(health?.max));
+  if (healthMax <= 0) return null;
+
+  const healthValue = Math.max(0, Math.min(healthMax, toInteger(health?.value)));
+  const healthPercent = (healthValue / healthMax) * 100;
+  if (!(healthPercent < threshold)) return null;
+
+  const limbKey = selectFinishingBlowCriticalLimbKey(targetActor, data.limbKey);
+  if (!limbKey) return null;
+
+  const chance = Math.max(0, Math.min(100, toInteger(attacker.system?.combat?.finishingBlowChance)));
+  const roll = chance > 0 ? Math.ceil(Math.random() * 100) : 0;
+  if (chance > 0 && roll > chance) return null;
+
+  const destroyed = await destroyFinishingBlowCriticalLimb(targetActor, limbKey);
+  if (!destroyed) return null;
+
+  const result = {
+    attacker,
+    target: targetActor,
+    limbKey,
+    threshold,
+    healthPercent,
+    chance,
+    roll
+  };
+  await publishFinishingBlowMessage(result);
+  return {
+    attackerUuid: attacker.uuid,
+    targetUuid: targetActor.uuid,
+    limbKey,
+    threshold,
+    healthPercent,
+    chance,
+    roll
+  };
+}
+
+function selectFinishingBlowCriticalLimbKey(actor, preferredLimbKey = "") {
+  const preferred = String(preferredLimbKey ?? "").trim();
+  if (preferred && isCriticalLimb(actor, preferred) && !isLimbDestroyed(actor, preferred)) return preferred;
+
+  return Object.entries(actor?.system?.limbs ?? {})
+    .filter(([limbKey]) => isCriticalLimb(actor, limbKey) && !isLimbDestroyed(actor, limbKey))
+    .map(([limbKey, limb]) => ({
+      limbKey,
+      value: Math.max(0, getEffectiveLimbStateValue(actor, limbKey)),
+      max: Math.max(1, toInteger(limb?.max))
+    }))
+    .sort((left, right) => (left.value / left.max) - (right.value / right.max))
+    .at(0)?.limbKey ?? "";
+}
+
+async function destroyFinishingBlowCriticalLimb(actor, limbKey = "") {
+  const key = String(limbKey ?? "").trim();
+  if (!actor || !key || isLimbDestroyed(actor, key)) return false;
+
+  const constructPart = getConstructPartItemForLimb(actor, key);
+  if (constructPart) {
+    if (!hasItemFunction(constructPart, ITEM_FUNCTIONS.condition)) return false;
+    await actor.updateEmbeddedDocuments("Item", [{
+      _id: constructPart.id,
+      "system.functions.condition.value": 0
+    }], { falloutMawConstructPartConditionSync: true });
+  } else {
+    const installedProsthesis = getInstalledProsthesis(actor, key);
+    if (installedProsthesis) {
+      await breakInstalledProsthesis(actor, installedProsthesis);
+      await queueActorDamageStatusSync(actor);
+      return true;
+    }
+    const limb = actor.system?.limbs?.[key];
+    if (!limb) return false;
+    const updateData = {
+      [`system.limbs.${key}.missing`]: true,
+      [`system.limbs.${key}.damageAccumulation`]: {}
+    };
+    setLimbValueUpdate(updateData, actor, key, toInteger(limb.min));
+    await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
+  }
+
+  await applyDestroyedLimbConsequences(actor, [key], { ignoreInstalledProsthesis: true });
+  await queueActorDamageStatusSync(actor);
+  return true;
+}
+
+async function publishFinishingBlowMessage({
+  attacker = null,
+  target = null,
+  limbKey = "",
+  threshold = 0,
+  healthPercent = 0,
+  chance = 0,
+  roll = 0
+} = {}) {
+  if (!target) return undefined;
+  const roundedHealthPercent = Math.max(0, Math.floor(Number(healthPercent) || 0));
+  const chanceText = chance > 0
+    ? ` Шанс: ${chance}%, бросок: ${roll}%.`
+    : "";
+  const context = {
+    attacker: {
+      name: String(attacker?.name ?? game.i18n.localize("DOCUMENT.Actor"))
+    },
+    target: {
+      name: String(target.name ?? game.i18n.localize("DOCUMENT.Actor")),
+      img: getActorDamageSummaryImage(target)
+    },
+    limb: {
+      key: limbKey,
+      label: getLimbLabel(target, limbKey)
+    },
+    labels: {
+      kicker: "Добивание",
+      title: "Сработало добивание",
+      attacker: "Атакующий",
+      limb: "Критическая часть",
+      description: `Общее здоровье цели ${roundedHealthPercent}% ниже порога ${threshold}%. Критическая часть уничтожена.${chanceText}`
+    }
+  };
+  const content = await renderTemplate(TEMPLATES.finishingBlowChatCard, context);
+  return ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor: attacker ?? target }),
+    content,
+    sound: null,
+    flags: {
+      [SYSTEM_ID]: {
+        finishingBlow: {
+          attackerUuid: attacker?.uuid ?? "",
+          targetUuid: target.uuid,
+          limbKey,
+          threshold,
+          healthPercent: roundedHealthPercent,
+          chance,
+          roll
+        }
+      }
+    }
+  });
 }
 
 export function getActorTraumas(actor) {
@@ -3423,6 +3580,11 @@ async function applyDamageEntriesBatch(actor, entries = []) {
     }));
   }
 
+  const finishingBlowSource = selectBatchFinishingBlowSource(normalizedEntries);
+  const finishingBlow = actualHealthDelta > 0 && finishingBlowSource
+    ? await applyFinishingBlowIfEligible(actor, finishingBlowSource)
+    : null;
+
   return {
     actor,
     amount: normalizedEntries.reduce((sum, entry) => sum + entry.amount, 0),
@@ -3434,7 +3596,17 @@ async function applyDamageEntriesBatch(actor, entries = []) {
     healthDeltasByType,
     resourceLimitEntries,
     bleedingEntries,
-    createdTraumas
+    createdTraumas,
+    finishingBlow
+  };
+}
+
+function selectBatchFinishingBlowSource(entries = []) {
+  const entry = entries.find(candidate => String(candidate?.source?.attackerUuid ?? "").trim());
+  if (!entry) return null;
+  return {
+    limbKey: String(entry.limbKey ?? "").trim(),
+    source: entry.source
   };
 }
 

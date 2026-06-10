@@ -216,6 +216,20 @@ export function buildCombatEffectKeyTokens() {
       group: "Бой"
     }),
     createEffectKeyToken({
+      code: "finishingBlow",
+      key: "finishingBlow",
+      label: "Добивание",
+      path: "system.combat.finishingBlow",
+      group: "Бой"
+    }),
+    createEffectKeyToken({
+      code: "finishingBlowChance",
+      key: "finishingBlowChance",
+      label: "Шанс добивания",
+      path: "system.combat.finishingBlowChance",
+      group: "Бой"
+    }),
+    createEffectKeyToken({
       code: "incomingHealing",
       key: "incomingHealing",
       label: "Входящее лечение, %",

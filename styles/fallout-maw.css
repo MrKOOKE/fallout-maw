@@ -6215,7 +6215,8 @@ label.fallout-maw-mitigation-cell {
   color: var(--fallout-maw-terminal-red);
 }
 
-.fallout-maw-chat-card.fallout-maw-damage-summary-card {
+.fallout-maw-chat-card.fallout-maw-damage-summary-card,
+.fallout-maw-chat-card.fallout-maw-finishing-blow-card {
   --fallout-maw-damage-card-bg: #10130d;
   --fallout-maw-damage-card-bg-2: #1b1d16;
   --fallout-maw-damage-card-border: rgba(199, 178, 95, 0.72);
@@ -6238,6 +6239,18 @@ label.fallout-maw-mitigation-cell {
   font-family: var(--fallout-maw-actor-ui-font, var(--font-primary, serif));
   gap: 0.55rem;
   padding: 0.65rem;
+}
+
+.fallout-maw-finishing-blow-body {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.fallout-maw-finishing-blow-body p {
+  color: var(--fallout-maw-damage-card-muted);
+  font-size: 0.92rem;
+  line-height: 1.25;
+  margin: 0;
 }
 
 .fallout-maw-damage-summary-header {

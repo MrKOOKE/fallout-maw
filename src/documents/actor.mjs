@@ -175,7 +175,9 @@ export class FalloutMaWActor extends Actor {
     const overrides = {};
     const replacementData = this.getRollData();
     for (const change of changes) {
-      const preparedChange = prepareActorEffectChangeForApplication(this, change);
+      const preparedChange = prepareActorEffectChangeForApplication(this, change, {
+        stage: phase === "initial" ? "initial-active-effect" : "prepared"
+      });
       if (!preparedChange) continue;
       const result = ActiveEffect.applyChange(this, preparedChange, { replacementData });
       if (foundry.utils.isPlainObject(result)) Object.assign(overrides, result);

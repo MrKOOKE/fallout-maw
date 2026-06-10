@@ -4,12 +4,12 @@ import { getConditionWeakeningData, isItemBrokenByCondition } from "./item-funct
 
 const ITEM_EFFECT_FLAG_KEY = "itemEffect";
 
-export function prepareActorEffectChangeForApplication(actor, change = {}) {
+export function prepareActorEffectChangeForApplication(actor, change = {}, options = {}) {
   const item = getItemFreeSettingsEffectSourceItem(actor, change?.effect);
-  if (!item) return prepareEffectChangeForApplication(actor, change);
+  if (!item) return prepareEffectChangeForApplication(actor, change, options);
   if (isItemBrokenByCondition(item)) return null;
 
-  const prepared = prepareEffectChangeForApplication(actor, change);
+  const prepared = prepareEffectChangeForApplication(actor, change, options);
   if (!item.system?.functions?.freeSettings?.useConditionWeakening) return prepared;
 
   const weakening = getConditionWeakeningData(item);
@@ -25,8 +25,8 @@ export function prepareActorEffectChangeForApplication(actor, change = {}) {
   };
 }
 
-export function evaluateActorEffectChangeNumber(actor, change = {}, { fallback = Number.NaN } = {}) {
-  const prepared = prepareActorEffectChangeForApplication(actor, change);
+export function evaluateActorEffectChangeNumber(actor, change = {}, { fallback = Number.NaN, stage = "prepared" } = {}) {
+  const prepared = prepareActorEffectChangeForApplication(actor, change, { stage });
   if (!prepared) return fallback;
   const value = Number(prepared.value);
   return Number.isFinite(value) ? value : fallback;

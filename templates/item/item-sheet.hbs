@@ -289,7 +289,7 @@
             <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
             {{/each}}
           </select>
-          <input type="text" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.value" value="{{value}}">
+          <input type="text" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.value" value="{{value}}" data-formula-autocomplete="all">
           <input type="number" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.priority" value="{{priority}}" step="1">
           <div class="fallout-maw-inline-controls">
             <button type="button" class="fallout-maw-icon-button" data-delete-ability-change title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
@@ -477,7 +477,7 @@
               <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
               {{/each}}
             </select>
-            <input type="text" name="{{functionPath}}.{{functionIndex}}.penalties.{{penaltyIndex}}.value" value="{{value}}">
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.penalties.{{penaltyIndex}}.value" value="{{value}}" data-formula-autocomplete="all">
             <input type="number" name="{{functionPath}}.{{functionIndex}}.penalties.{{penaltyIndex}}.priority" value="{{priority}}" step="1">
             <button type="button" class="fallout-maw-icon-button" data-delete-ability-penalty title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
           </div>
@@ -702,7 +702,7 @@
             <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
             {{/each}}
           </select>
-          <input type="text" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.value" value="{{value}}">
+          <input type="text" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.value" value="{{value}}" data-formula-autocomplete="all">
           <input type="number" name="{{functionPath}}.{{functionIndex}}.changes.{{index}}.priority" value="{{priority}}" step="1">
           <div class="fallout-maw-inline-controls">
             <button type="button" class="fallout-maw-icon-button" data-delete-ability-change title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
@@ -890,7 +890,7 @@
               <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
               {{/each}}
             </select>
-            <input type="text" name="{{functionPath}}.{{functionIndex}}.penalties.{{penaltyIndex}}.value" value="{{value}}">
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.penalties.{{penaltyIndex}}.value" value="{{value}}" data-formula-autocomplete="all">
             <input type="number" name="{{functionPath}}.{{functionIndex}}.penalties.{{penaltyIndex}}.priority" value="{{priority}}" step="1">
             <button type="button" class="fallout-maw-icon-button" data-delete-ability-penalty title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
           </div>
@@ -1316,7 +1316,7 @@
           {{/each}}
         </select>
         <input type="hidden" name="system.functions.firstAid.changes.{{index}}.phase" value="initial">
-        <input type="text" name="system.functions.firstAid.changes.{{index}}.value" value="{{value}}">
+        <input type="text" name="system.functions.firstAid.changes.{{index}}.value" value="{{value}}" data-formula-autocomplete="all">
         <input type="number" name="system.functions.firstAid.changes.{{index}}.priority" value="{{priority}}" step="1">
         <button type="button" data-delete-first-aid-effect="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
       </div>

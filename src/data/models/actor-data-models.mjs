@@ -68,7 +68,9 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         initiative: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
       }),
       combat: new SchemaField({
-        burstStability: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
+        burstStability: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+        finishingBlow: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+        finishingBlowChance: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
       }),
       healing: new SchemaField({
         incomingPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
@@ -163,9 +165,11 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.development ??= {};
 
     const sourceSystem = this.parent?._source?.system ?? {};
-    const sourceResources = sourceSystem.resources ?? this.resources;
-    const sourceNeeds = sourceSystem.needs ?? this.needs;
-    const sourceProficiencies = sourceSystem.proficiencies ?? this.proficiencies;
+    const isConstruct = this.parent?.type === "construct";
+    const preparedBonusMode = isConstruct ? "delta" : "prepared";
+    const sourceResources = mergePreparedBonuses(sourceSystem.resources, this.resources, { preparedBonusMode });
+    const sourceNeeds = mergePreparedBonuses(sourceSystem.needs, this.needs, { preparedBonusMode });
+    const sourceProficiencies = mergePreparedBonuses(sourceSystem.proficiencies, this.proficiencies, { preparedBonusMode });
 
     const baseCharacteristics = normalizeNumberMap(this.characteristics, characteristicSettings);
     const characteristicBonuses = normalizeNumberMap(this.development?.characteristics, characteristicSettings);
@@ -177,7 +181,6 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.attributes.initiative = toInteger(this.characteristics.perception);
     replaceObjectContents(this.currencies, normalizeNumberMap(this.currencies, currencySettings));
 
-    const isConstruct = this.parent?.type === "construct";
     const race = isConstruct
       ? null
       : getCreatureOptions(characteristicSettings, damageTypeSettings).races.find(entry => entry.id === this.creature?.raceId);
@@ -458,6 +461,29 @@ function normalizeResourceMap(currentResources = {}, settings = [], maximums = {
           : defaultToMin ? min : max;
       const value = Math.min(Math.max(toInteger(fallbackValue), min), max);
       return [setting.key, { min, spent, bonus, value, max }];
+    })
+  );
+}
+
+function mergePreparedBonuses(source = {}, prepared = {}, { preparedBonusMode = "prepared" } = {}) {
+  const keys = new Set([
+    ...Object.keys(source ?? {}),
+    ...Object.keys(prepared ?? {})
+  ]);
+  return Object.fromEntries(
+    Array.from(keys).map(key => {
+      const value = source?.[key] ?? prepared?.[key] ?? {};
+      const sourceBonus = toInteger(value?.bonus);
+      const preparedBonus = toInteger(prepared?.[key]?.bonus ?? value?.bonus);
+      return [
+        key,
+        {
+          ...value,
+          bonus: preparedBonusMode === "delta"
+            ? preparedBonus - sourceBonus
+            : preparedBonus
+        }
+      ];
     })
   );
 }
