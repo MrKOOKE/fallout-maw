@@ -70,7 +70,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       combat: new SchemaField({
         burstStability: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         finishingBlow: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
-        finishingBlowChance: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
+        finishingBlowChance: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+        unconsciousnessResistance: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
       }),
       healing: new SchemaField({
         incomingPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),

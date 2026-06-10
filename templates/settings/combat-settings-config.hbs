@@ -13,10 +13,6 @@
         <input type="number" name="weaponSwitch.actionPointCost" value="{{settings.weaponSwitch.actionPointCost}}" min="0" step="1">
       </label>
       <label>
-        <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeEnabled"}}</span>
-        <input type="checkbox" name="dodge.enabled" {{checked settings.dodge.enabled}}>
-      </label>
-      <label>
         <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeAttackCostPercent"}}</span>
         <input type="number" name="dodge.attackCostPercent" value="{{settings.dodge.attackCostPercent}}" min="0" max="100" step="1">
       </label>
@@ -36,13 +32,32 @@
         <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeRoundRecoveryPercent"}}</span>
         <input type="number" name="dodge.roundRecoveryPercent" value="{{settings.dodge.roundRecoveryPercent}}" min="0" max="100" step="1">
       </label>
+    </div>
+
+    <header class="fallout-maw-panel-header">
+      <h2>Потеря сознания</h2>
+    </header>
+
+    <div class="fallout-maw-settings-grid">
       <label>
-        <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeRestoreOnCombatStart"}}</span>
-        <input type="checkbox" name="dodge.restoreOnCombatStart" {{checked settings.dodge.restoreOnCombatStart}}>
+        <span>Урон по обычной конечности</span>
+        <input type="text" name="unconsciousness.normalDamageFormula" value="{{settings.unconsciousness.normalDamageFormula}}" data-formula-autocomplete="all">
+        <small>Накопление сложности при состояние конечности &gt;0.</small>
       </label>
       <label>
-        <span>{{localize "FALLOUTMAW.Settings.Combat.DodgeRestoreOnCombatEnd"}}</span>
-        <input type="checkbox" name="dodge.restoreOnCombatEnd" {{checked settings.dodge.restoreOnCombatEnd}}>
+        <span>Урон по поврежденной конечности</span>
+        <input type="text" name="unconsciousness.negativeDamageFormula" value="{{settings.unconsciousness.negativeDamageFormula}}" data-formula-autocomplete="all">
+        <small>Накопление сложности при состояние конечности &lt;0.</small>
+      </label>
+      <label>
+        <span>Множитель по ключевой конечности</span>
+        <input type="text" name="unconsciousness.criticalDamageFormula" value="{{settings.unconsciousness.criticalDamageFormula}}" data-formula-autocomplete="all">
+        <small>Накопление сложности при повреждении ключевой конечности.</small>
+      </label>
+      <label>
+        <span>Множитель недостающего состояния</span>
+        <input type="text" name="unconsciousness.stateMultiplierFormula" value="{{settings.unconsciousness.stateMultiplierFormula}}" data-formula-autocomplete="all">
+        <small>Чем ниже состояние конечности от максимальной, тем больше сложности накапливается от других источников.</small>
       </label>
     </div>
   </section>

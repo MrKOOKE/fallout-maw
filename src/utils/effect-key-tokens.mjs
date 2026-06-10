@@ -230,6 +230,13 @@ export function buildCombatEffectKeyTokens() {
       group: "Бой"
     }),
     createEffectKeyToken({
+      code: "unconsciousnessResistance",
+      key: "unconsciousnessResistance",
+      label: "Сопротивление к потере сознания",
+      path: "system.combat.unconsciousnessResistance",
+      group: "Бой"
+    }),
+    createEffectKeyToken({
       code: "incomingHealing",
       key: "incomingHealing",
       label: "Входящее лечение, %",

@@ -5,6 +5,21 @@ import {
   setCombatSettings
 } from "../settings/accessors.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
+import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
+
+const UNCONSCIOUSNESS_FORMULA_VARIABLES = Object.freeze([
+  { key: "damage", abbr: "damage", label: "Урон" },
+  { key: "normalDamage", abbr: "normalDamage", label: "Урон в обычной зоне" },
+  { key: "negativeDamage", abbr: "negativeDamage", label: "Урон в минусовой зоне" },
+  { key: "previous", abbr: "previous", label: "Значение до урона" },
+  { key: "next", abbr: "next", label: "Значение после урона" },
+  { key: "min", abbr: "min", label: "Минимум конечности" },
+  { key: "max", abbr: "max", label: "Максимум конечности" },
+  { key: "missingStateRatio", abbr: "missingStateRatio", label: "Доля недостающего состояния" },
+  { key: "negativeDepthRatio", abbr: "negativeDepthRatio", label: "Доля глубины минуса" },
+  { key: "critical", abbr: "critical", label: "Критическая часть: 1 или 0" },
+  { key: "resistance", abbr: "resistance", label: "Сопротивление потере сознания" }
+]);
 
 export class CombatSettingsConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
@@ -44,12 +59,15 @@ export class CombatSettingsConfig extends FalloutMaWFormApplicationV2 {
     };
   }
 
-  async _processFormData(_event, form, formData) {
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    activateFormulaAutocomplete(this.element, {
+      variables: UNCONSCIOUSNESS_FORMULA_VARIABLES
+    });
+  }
+
+  async _processFormData(_event, _form, formData) {
     const data = getExpandedFormData(formData);
-    data.dodge ??= {};
-    data.dodge.enabled = Boolean(form.querySelector("[name='dodge.enabled']")?.checked);
-    data.dodge.restoreOnCombatStart = Boolean(form.querySelector("[name='dodge.restoreOnCombatStart']")?.checked);
-    data.dodge.restoreOnCombatEnd = Boolean(form.querySelector("[name='dodge.restoreOnCombatEnd']")?.checked);
     await setCombatSettings(data);
     this.settings = getCombatSettings();
     ui.notifications.info(game.i18n.localize("FALLOUTMAW.Messages.CombatSettingsSaved"));

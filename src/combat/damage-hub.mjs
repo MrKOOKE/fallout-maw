@@ -1,8 +1,9 @@
 import { BLEEDING_DAMAGE_TYPE_KEY, SYSTEM_ID, TEMPLATES, TRAUMA_CREATE_OPTION } from "../constants.mjs";
 import { spendActorDodgeForAreaDamage, spendDodgeForAreaDamageRequests } from "./dodge-resource.mjs";
-import { evaluateFormulaVariables } from "../formulas/index.mjs";
+import { evaluateFormulaVariables, parseFormula } from "../formulas/index.mjs";
 import {
   getCreatureOptions,
+  getCombatSettings,
   getDamageTypeSettings,
   getTimeMechanicsIgnored,
   getTokenActionHudDamageIcons,
@@ -1695,12 +1696,6 @@ function buildFullDamageRestoreUpdate(actor) {
   const updates = {};
   for (const [key, limb] of Object.entries(actor?.system?.limbs ?? {})) {
     if (getConstructPartItemForLimb(actor, key)) continue;
-    const keepMissing = isLimbPhysicallyMissing(actor, key) && hasInstalledProsthesis(actor, key);
-    if (keepMissing) {
-      updates[`system.limbs.${key}.missing`] = true;
-      updates[`system.limbs.${key}.damageAccumulation`] = {};
-      continue;
-    }
     const max = Math.max(0, toInteger(limb?.max));
     updates[`system.limbs.${key}.missing`] = false;
     updates[`system.limbs.${key}.value`] = max;
@@ -4302,33 +4297,77 @@ function createLimbShockCheck(actor, limbKey = "", damage = 0, nextValue = null,
 }
 
 function calculateLimbShockDifficulty(actor, limbKey = "", damage = 0, nextValue = null, previousValue = null) {
-  const difficultyDamage = calculateLimbShockDifficultyDamage(damage, previousValue, nextValue);
-  const base = Math.max(0, roundDamageAmount(difficultyDamage * (isCriticalLimb(actor, limbKey) ? 2 : 1)));
-  return Math.max(0, roundDamageAmount(base * getLimbShockStateMultiplier(actor, limbKey, nextValue)));
+  const settings = getCombatSettings().unconsciousness;
+  const variables = buildLimbShockFormulaVariables(actor, limbKey, damage, nextValue, previousValue);
+  const normalDifficultyDamage = evaluateLimbShockFormula(settings.normalDamageFormula, {
+    ...variables,
+    damage: variables.normalDamage
+  });
+  const negativeDifficultyDamage = evaluateLimbShockFormula(settings.negativeDamageFormula, {
+    ...variables,
+    damage: variables.negativeDamage
+  });
+  const difficultyDamage = Math.max(0, normalDifficultyDamage + negativeDifficultyDamage);
+  const limbDifficulty = variables.critical
+    ? Math.max(0, evaluateLimbShockFormula(settings.criticalDamageFormula, {
+      ...variables,
+      damage: difficultyDamage
+    }))
+    : difficultyDamage;
+  const stateMultiplier = Math.max(0, evaluateLimbShockFormula(settings.stateMultiplierFormula, {
+    ...variables,
+    damage: limbDifficulty
+  }));
+  return Math.max(0, roundDamageAmount((limbDifficulty * stateMultiplier) - variables.resistance));
 }
 
-function calculateLimbShockDifficultyDamage(damage = 0, previousValue = null, nextValue = null) {
+function buildLimbShockFormulaVariables(actor, limbKey = "", damage = 0, nextValue = null, previousValue = null) {
   const amount = Math.max(0, roundDamageAmount(damage));
-  if (amount <= 0) return 0;
+  const limb = actor?.system?.limbs?.[limbKey];
   const previous = Number.isFinite(Number(previousValue))
     ? toInteger(previousValue)
     : Number.isFinite(Number(nextValue))
       ? toInteger(nextValue) + amount
       : null;
-  if (!Number.isFinite(Number(previous))) return amount;
-  const normalStateDamage = Math.min(amount, Math.max(0, previous));
-  const negativeStateDamage = Math.max(0, amount - normalStateDamage);
-  return roundDamageAmount((normalStateDamage * 0.5) + negativeStateDamage);
+  const resolvedPrevious = Number.isFinite(Number(previous)) ? toInteger(previous) : amount;
+  const normalDamage = Math.min(amount, Math.max(0, resolvedPrevious));
+  const negativeDamage = Math.max(0, amount - normalDamage);
+  const min = toInteger(limb?.min);
+  const max = Math.max(0, toInteger(limb?.max));
+  const span = Math.max(1, Math.abs(min));
+  const value = Number.isFinite(Number(nextValue)) ? toInteger(nextValue) : toInteger(limb?.value);
+  const negativeDepthRatio = Math.min(1, Math.max(0, -value / span));
+  const stateSpan = Math.max(1, max - min);
+  const missingStateRatio = Math.min(1, Math.max(0, (max - value) / stateSpan));
+  return {
+    damage: amount,
+    normalDamage,
+    negativeDamage,
+    previous: resolvedPrevious,
+    next: value,
+    min,
+    max,
+    missingStateRatio,
+    negativeDepthRatio,
+    critical: isCriticalLimb(actor, limbKey) ? 1 : 0,
+    resistance: toInteger(actor?.system?.combat?.unconsciousnessResistance)
+  };
 }
 
-function getLimbShockStateMultiplier(actor, limbKey = "", nextValue = null) {
-  const limb = actor?.system?.limbs?.[limbKey];
-  if (!limb) return 1;
-  const min = toInteger(limb.min);
-  const span = Math.max(1, Math.abs(min));
-  const value = Number.isFinite(Number(nextValue)) ? toInteger(nextValue) : toInteger(limb.value);
-  const negativeDepthRatio = Math.min(1, Math.max(0, -value / span));
-  return 1 + negativeDepthRatio;
+function evaluateLimbShockFormula(formula, variables = {}) {
+  try {
+    const normalizedVariables = Object.fromEntries(
+      Object.entries(variables ?? {}).map(([key, value]) => [String(key).toLowerCase(), Number(value) || 0])
+    );
+    const expression = parseFormula(String(formula ?? "0").trim() || "0", {
+      variables: Object.keys(variables ?? {})
+    });
+    const value = expression.evaluate(identifier => normalizedVariables[String(identifier).toLowerCase()] ?? 0);
+    return Number.isFinite(value) ? value : 0;
+  } catch (error) {
+    console.warn(`fallout-maw | Unconsciousness formula failed: ${error.message}`);
+    return 0;
+  }
 }
 
 function calculateEvenLimbHealing(actor, amount = 0, { limbStates = new Map(), damageAccumulation = new Map() } = {}) {
@@ -5031,7 +5070,8 @@ function synchronizeManualLimbValueUpdates(actor, changes = {}) {
     const valuePath = `system.limbs.${limbKey}.value`;
     if (!hasUpdatePath(changes, valuePath)) continue;
     const previousValue = getEffectiveLimbStateValue(actor, limbKey);
-    const value = clampLimbStateValue(actor, limbKey, getUpdatePath(changes, valuePath));
+    const restoringMissing = getUpdatePath(changes, `system.limbs.${limbKey}.missing`) === false;
+    const value = clampLimbStateValueForUpdate(actor, limbKey, getUpdatePath(changes, valuePath), { restoringMissing });
     setUpdatePath(changes, valuePath, value);
     setUpdatePath(changes, `system.limbs.${limbKey}.spent`, calculateLimbSpentFromValue(limb, value));
     const accumulationPath = `system.limbs.${limbKey}.damageAccumulation`;
@@ -5092,6 +5132,15 @@ function getUncappedSourceLimbValue(actor, limbKey = "", limb = null) {
 function getEffectiveLimbStateValue(actor, limbKey = "", value = null) {
   const limb = actor?.system?.limbs?.[limbKey];
   return clampLimbStateValue(actor, limbKey, value ?? limb?.value);
+}
+
+function clampLimbStateValueForUpdate(actor, limbKey = "", value = null, { restoringMissing = false } = {}) {
+  if (!restoringMissing) return clampLimbStateValue(actor, limbKey, value);
+  const limb = actor?.system?.limbs?.[limbKey];
+  if (!limb) return 0;
+  const max = Math.max(0, toInteger(limb.max));
+  const min = toInteger(limb.min ?? -max);
+  return Math.min(Math.max(toInteger(value), min), max);
 }
 
 function clampLimbStateValue(actor, limbKey = "", value = null) {

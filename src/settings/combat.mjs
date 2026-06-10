@@ -11,6 +11,12 @@ export const DEFAULT_COMBAT_SETTINGS = Object.freeze({
     roundRecoveryPercent: 20,
     restoreOnCombatStart: true,
     restoreOnCombatEnd: true
+  }),
+  unconsciousness: Object.freeze({
+    normalDamageFormula: "damage * 0.5",
+    negativeDamageFormula: "damage",
+    criticalDamageFormula: "damage * 2",
+    stateMultiplierFormula: "1 + missingStateRatio"
   })
 });
 
@@ -38,8 +44,19 @@ export function normalizeCombatSettings(value = {}) {
       roundRecoveryPercent: clampInteger(source.dodge?.roundRecoveryPercent, DEFAULT_COMBAT_SETTINGS.dodge.roundRecoveryPercent, 0, 100),
       restoreOnCombatStart: Boolean(source.dodge?.restoreOnCombatStart),
       restoreOnCombatEnd: Boolean(source.dodge?.restoreOnCombatEnd)
+    },
+    unconsciousness: {
+      normalDamageFormula: normalizeFormula(source.unconsciousness?.normalDamageFormula, DEFAULT_COMBAT_SETTINGS.unconsciousness.normalDamageFormula),
+      negativeDamageFormula: normalizeFormula(source.unconsciousness?.negativeDamageFormula, DEFAULT_COMBAT_SETTINGS.unconsciousness.negativeDamageFormula),
+      criticalDamageFormula: normalizeFormula(source.unconsciousness?.criticalDamageFormula, DEFAULT_COMBAT_SETTINGS.unconsciousness.criticalDamageFormula),
+      stateMultiplierFormula: normalizeFormula(source.unconsciousness?.stateMultiplierFormula, DEFAULT_COMBAT_SETTINGS.unconsciousness.stateMultiplierFormula)
     }
   };
+}
+
+function normalizeFormula(value, fallback) {
+  const text = String(value ?? "").trim();
+  return text || fallback;
 }
 
 function clampInteger(value, fallback, min, max) {
