@@ -1798,6 +1798,200 @@
   </section>
   {{/if}}
 
+  {{#if hasTrapFunction}}
+  <section class="fallout-maw-panel" data-trap-function-section>
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Item.FunctionTrap"}}</h2>
+      <div class="fallout-maw-inline-controls">
+        <button type="button" data-remove-item-function="trap" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+    </div>
+    <input type="hidden" name="system.functions.trap.enabled" value="true">
+
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.TrapInstallation"}}</h3>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapActionPointCost"}}</span>
+        <input type="number" name="system.functions.trap.actionPointCost" value="{{system.functions.trap.actionPointCost}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapInstallationDifficulty"}}</span>
+        <input type="number" name="system.functions.trap.installation.difficulty" value="{{system.functions.trap.installation.difficulty}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapSkill"}}</span>
+        <select name="system.functions.trap.installation.skillKey">
+          {{#each trapInstallationSkillChoices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+    </div>
+
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.TrapDetection"}}</h3>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapDetectionRadius"}}</span>
+        <input type="text" name="system.functions.trap.detection.radiusMeters" value="{{system.functions.trap.detection.radiusMeters}}" data-formula-autocomplete="all">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapDetectionDifficulty"}}</span>
+        <input type="number" name="system.functions.trap.detection.difficulty" value="{{system.functions.trap.detection.difficulty}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapDetectionSkill"}}</span>
+        <select name="system.functions.trap.detection.skillKey">
+          {{#each trapDetectionSkillChoices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+    </div>
+
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.TrapActivation"}}</h3>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label class="fallout-maw-split-number-field">
+        <span>{{localize "FALLOUTMAW.Item.TrapTriggerSize"}}</span>
+        <div>
+          <input type="number" name="system.functions.trap.trigger.widthCells" value="{{system.functions.trap.trigger.widthCells}}" min="1" step="1">
+          <strong>/</strong>
+          <input type="number" name="system.functions.trap.trigger.heightCells" value="{{system.functions.trap.trigger.heightCells}}" min="1" step="1">
+        </div>
+      </label>
+    </div>
+
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.TrapEvasion"}}</h3>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapEvasionDifficulty"}}</span>
+        <input type="number" name="system.functions.trap.evasion.difficulty" value="{{system.functions.trap.evasion.difficulty}}" min="0" step="1" data-trap-evasion-difficulty>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapEvasionSkill"}}</span>
+        <select name="system.functions.trap.evasion.skillKey">
+          {{#each trapEvasionSkillChoices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapAvoidPercent"}}</span>
+        <input type="number" name="system.functions.trap.evasion.avoidPercent" value="{{system.functions.trap.evasion.avoidPercent}}" min="1" max="100" step="1">
+      </label>
+    </div>
+
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.TrapEffect"}}</h3>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapDamageRadius"}}</span>
+        <input type="text" name="system.functions.trap.effect.damageRadiusMeters" value="{{system.functions.trap.effect.damageRadiusMeters}}" data-formula-autocomplete="all">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponPenetration"}}</span>
+        <input type="text" name="system.functions.trap.effect.penetration" value="{{system.functions.trap.effect.penetration}}" data-formula-autocomplete="all">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponDamage"}}</span>
+        <input type="text" name="system.functions.trap.effect.damage" value="{{system.functions.trap.effect.damage}}" data-formula-autocomplete="all">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponPellets"}}</span>
+        <input type="text" name="system.functions.trap.effect.pellets" value="{{system.functions.trap.effect.pellets}}" data-formula-autocomplete="all">
+      </label>
+    </div>
+
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.WeaponDamageTypes"}}</h3>
+      <button type="button" data-add-trap-damage-type><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponAddDamageType"}}</button>
+    </div>
+    <div class="fallout-maw-settings-table fallout-maw-weapon-damage-types">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Type"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.ValuePercent"}}</span>
+        <span></span>
+      </div>
+      {{#each trapDamageTypeRows}}
+      <div class="fallout-maw-settings-row" data-trap-damage-type-row="{{index}}">
+        <select name="system.functions.trap.effect.damageTypes.{{index}}.key" data-trap-damage-type-key>
+          {{#each choices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="number" name="system.functions.trap.effect.damageTypes.{{index}}.percent" value="{{percent}}" min="0" max="100" step="1" data-trap-damage-percent>
+        <button type="button" data-delete-trap-damage-type="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{/each}}
+    </div>
+    <input type="hidden" name="system.functions.trap.effect.damageTypeKey" value="{{system.functions.trap.effect.damageTypeKey}}">
+
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.WeaponVolleyRegion"}}</h3>
+      <button type="button" data-add-trap-region-damage><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponVolleyAddRegionDamage"}}</button>
+    </div>
+    <div class="fallout-maw-settings-table fallout-maw-damage-entry-table fallout-maw-volley-region-damage">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Item.WeaponDamageType"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span></span>
+      </div>
+      {{#each trapRegionDamageRows}}
+      <div class="fallout-maw-settings-row" data-trap-region-damage-row="{{index}}">
+        <select name="system.functions.trap.effect.regionDamageEntries.{{index}}.damageTypeKey" data-trap-region-damage-type>
+          {{#each choices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="text" name="system.functions.trap.effect.regionDamageEntries.{{index}}.amount" value="{{amount}}" data-formula-autocomplete="all" data-trap-region-damage-amount>
+        <button type="button" class="fallout-maw-icon-delete-button" data-delete-trap-region-damage="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.WeaponVolleyNoRegionDamage"}}</p>
+      {{/each}}
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadius"}}</span>
+        <input type="text" name="system.functions.trap.effect.regionRadius" value="{{system.functions.trap.effect.regionRadius}}" data-formula-autocomplete="all">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDuration"}}</span>
+        <input type="text" name="system.functions.trap.effect.regionDurationSeconds" value="{{system.functions.trap.effect.regionDurationSeconds}}" data-formula-autocomplete="all">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDelay"}}</span>
+        <input type="text" name="system.functions.trap.effect.regionDelaySeconds" value="{{system.functions.trap.effect.regionDelaySeconds}}" data-formula-autocomplete="all">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadiusDelta"}}</span>
+        <input type="text" name="system.functions.trap.effect.regionRadiusDeltaMeters" value="{{system.functions.trap.effect.regionRadiusDeltaMeters}}" data-formula-autocomplete="all">
+      </label>
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.TrapTriggerPresentation"}}</h3>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapTriggerAnimation"}}</span>
+        <input type="text" name="system.functions.trap.triggerAnimationKey" value="{{system.functions.trap.triggerAnimationKey}}">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapTriggerSound"}}</span>
+        <input type="text" name="system.functions.trap.triggerSoundPath" value="{{system.functions.trap.triggerSoundPath}}">
+      </label>
+    </div>
+  </section>
+  {{/if}}
+
   {{#each weaponFunctionSections}}
   {{#if active}}
   <section class="fallout-maw-panel" data-weapon-function-section data-weapon-function-path="{{path}}">

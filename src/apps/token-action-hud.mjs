@@ -46,6 +46,7 @@ import {
   spendWeaponReloadActionPoints,
   startWeaponAttack
 } from "../combat/weapon-attack-controller.mjs";
+import { startTrapPlacement } from "../canvas/traps.mjs";
 import { useActiveItem } from "../items/active-item-use.mjs";
 import {
   canActivateLightSource,
@@ -939,6 +940,14 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
     if (!isActiveItem(item)) return undefined;
+    if (hasItemFunction(item, ITEM_FUNCTIONS.trap)) {
+      return startTrapPlacement({
+        actor: this.actor,
+        token: this.token,
+        item,
+        application: this
+      });
+    }
     return useActiveItem({
       actor: this.actor,
       token: this.token,

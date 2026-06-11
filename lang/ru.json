@@ -140,6 +140,18 @@
           "radiusDeltaMeters": { "label": "Изменение радиуса, м" },
           "deleteRegionWhenExpired": { "label": "Удалить регион по истечении" }
         }
+      },
+      "TRAPDETECTION": {
+        "label": "Обнаружение ловушки",
+        "FIELDS": {
+          "trapTileId": { "label": "Tile ловушки" }
+        }
+      },
+      "TRAPACTIVATION": {
+        "label": "Активация ловушки",
+        "FIELDS": {
+          "trapTileId": { "label": "Tile ловушки" }
+        }
       }
     },
     "Actor": {
@@ -191,6 +203,7 @@
       "FunctionEnergyConsumer": "Потребитель энергии",
       "FunctionLightSource": "Источник света",
       "FunctionFirstAid": "Первая помощь",
+      "FunctionTrap": "Ловушка",
       "FunctionWeapon": "Оружие",
       "FunctionModule": "Модуль",
       "FunctionProsthesis": "Протез",
@@ -300,6 +313,27 @@
       "DamageSourceDamage": "Урон",
       "DamageSourceDamageTypes": "Типы урона",
       "DamageSourceExplosion": "Взрыв",
+      "TrapInstallation": "Установка",
+      "TrapActionPointCost": "Стоимость применения, ОД",
+      "TrapInstallationDifficulty": "Сложность установки",
+      "TrapSkill": "Навык",
+      "TrapDetection": "Обнаружение",
+      "TrapDetectionRadius": "Радиус обнаружения",
+      "TrapDetectionDifficulty": "Сложность обнаружения",
+      "TrapDetectionSkill": "Навык обнаружения",
+      "TrapActivation": "Активация",
+      "TrapTriggerSize": "Ширина/Высота области срабатывания",
+      "TrapTriggerWidth": "Ширина триггера",
+      "TrapTriggerHeight": "Высота триггера",
+      "TrapEvasion": "Уклонение",
+      "TrapEvasionDifficulty": "Сложность",
+      "TrapEvasionSkill": "Навык",
+      "TrapAvoidPercent": "Доля избегаемого воздействия, %",
+      "TrapEffect": "Срабатывание",
+      "TrapDamageRadius": "Радиус поражения",
+      "TrapTriggerPresentation": "Оформление срабатывания",
+      "TrapTriggerAnimation": "Анимация срабатывания",
+      "TrapTriggerSound": "Звук срабатывания",
       "WeaponDamage": "Урон",
       "WeaponDamageMode": "Режим урона",
       "WeaponDamageModeManual": "Урон",

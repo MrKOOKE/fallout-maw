@@ -1,6 +1,7 @@
 import { useFirstAidItem } from "./first-aid.mjs";
 import { openLightSourceEnergyDialog } from "./light-source.mjs";
 import { useNeedChangeItem } from "./need-change.mjs";
+import { startTrapPlacement } from "../canvas/traps.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction, isActiveItem } from "../utils/item-functions.mjs";
 
 export function canUseActiveItem(item = null) {
@@ -22,6 +23,14 @@ export async function useActiveItem({ actor = null, token = null, item = null, a
       showToggle: true
     });
     return true;
+  }
+  if (hasItemFunction(freshItem, ITEM_FUNCTIONS.trap)) {
+    return startTrapPlacement({
+      actor: sourceActor,
+      token: sourceToken,
+      item: freshItem,
+      application
+    });
   }
 
   const target = resolveActiveItemTarget(sourceActor, sourceToken);

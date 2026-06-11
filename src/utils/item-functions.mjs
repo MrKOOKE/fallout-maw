@@ -12,6 +12,7 @@ export const ITEM_FUNCTIONS = {
   firstAid: "firstAid",
   lightSource: "lightSource",
   needChange: "needChange",
+  trap: "trap",
   weapon: "weapon",
   module: "module",
   prosthesis: "prosthesis",
@@ -109,6 +110,10 @@ export function getNeedChangeFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.needChange] ?? {};
 }
 
+export function getTrapFunction(itemOrSystem = null) {
+  return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.trap] ?? {};
+}
+
 export function getNeedChangeChargesData(itemOrSystem = null) {
   return getFunctionChargesData(getNeedChangeFunction(itemOrSystem));
 }
@@ -161,6 +166,7 @@ export function isInstalledProsthesis(itemOrSystem = null, limbKey = "") {
 export function isActiveItem(itemOrSystem = null) {
   return hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.firstAid)
     || hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.needChange)
+    || hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.trap)
     || hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.lightSource);
 }
 

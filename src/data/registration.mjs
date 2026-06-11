@@ -27,6 +27,14 @@ export function registerDataModels() {
 
   Object.assign(CONFIG.RegionBehavior.dataModels, regionBehaviorData.config);
   Object.assign(CONFIG.RegionBehavior.typeIcons, regionBehaviorData.icons);
+  Object.assign(CONFIG.RegionBehavior.typeLabels, regionBehaviorData.labels);
+  Object.assign(CONFIG.RegionBehavior.typeHints, regionBehaviorData.hints);
+  game.system.documentTypes.RegionBehavior ??= {};
+  for (const type of Object.keys(regionBehaviorData.config)) game.system.documentTypes.RegionBehavior[type] ??= {};
+  if (game.model) {
+    game.model.RegionBehavior ??= {};
+    Object.assign(game.model.RegionBehavior, regionBehaviorData.config);
+  }
 }
 
 export function registerTrackableAttributes() {

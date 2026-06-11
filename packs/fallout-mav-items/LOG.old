@@ -1,7 +1,3 @@
-2026/06/10-20:38:05.168 107e8 Recovering log #68
-2026/06/10-20:38:05.175 107e8 Delete type=0 #68
-2026/06/10-20:38:05.175 107e8 Delete type=3 #67
-2026/06/10-21:07:42.579 8fdc Level-0 table #72: started
-2026/06/10-21:07:42.579 8fdc Level-0 table #72: 0 bytes OK
-2026/06/10-21:07:42.583 8fdc Delete type=0 #70
-2026/06/10-21:07:42.591 8fdc Manual compaction at level-0 from '!folders!12xG5ev8hwrbfXcd' @ 72057594037927935 : 1 .. '!items!udoVwxGEgxbgMjh0' @ 0 : 0; will stop at (end)
+2026/06/10-21:10:07.774 14e9c Recovering log #71
+2026/06/10-21:10:07.783 14e9c Delete type=0 #71
+2026/06/10-21:10:07.783 14e9c Delete type=3 #69

@@ -11,3 +11,9 @@ export const config = {
 export const icons = {
   "fallout-maw.periodicDamage": "fa-solid fa-burst"
 };
+
+export const labels = {
+  "fallout-maw.periodicDamage": "FALLOUTMAW.RegionBehavior.PeriodicDamage.Name"
+};
+
+export const hints = {};

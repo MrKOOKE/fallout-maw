@@ -181,6 +181,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const hasFirstAidFunction = sheetHasItemFunction(ITEM_FUNCTIONS.firstAid);
     const hasLightSourceFunction = sheetHasItemFunction(ITEM_FUNCTIONS.lightSource);
     const hasNeedChangeFunction = sheetHasItemFunction(ITEM_FUNCTIONS.needChange);
+    const hasTrapFunction = sheetHasItemFunction(ITEM_FUNCTIONS.trap);
     const hasWeaponFunction = sheetHasItemFunction(ITEM_FUNCTIONS.weapon);
     const hasToolFunction = sheetHasItemFunction(ITEM_FUNCTIONS.tool);
     const containerLoadReduction = Math.max(0, Math.min(100, Number(item.system?.functions?.container?.loadReduction) || 0));
@@ -251,6 +252,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         value: ITEM_FUNCTIONS.needChange,
         label: "Изменение потребностей",
         disabled: hasNeedChangeFunction
+      },
+      {
+        value: ITEM_FUNCTIONS.trap,
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionTrap"),
+        disabled: hasTrapFunction
       },
       {
         value: ITEM_FUNCTIONS.weapon,
@@ -360,6 +366,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       hasFirstAidFunction,
       hasLightSourceFunction,
       hasNeedChangeFunction,
+      hasTrapFunction,
+      trapInstallationSkillChoices: buildSkillChoices(item.system?.functions?.trap?.installation?.skillKey ?? "traps", skillSettings),
+      trapDetectionSkillChoices: buildSkillChoices(item.system?.functions?.trap?.detection?.skillKey ?? "naturalist", skillSettings),
+      trapEvasionSkillChoices: buildSkillChoices(item.system?.functions?.trap?.evasion?.skillKey ?? "athletics", skillSettings),
+      trapDamageTypeRows: buildWeaponDamageTypeRowsForData(item.system?.functions?.trap?.effect ?? {}, damageTypeSettings),
+      trapRegionDamageRows: buildVolleyRegionDamageRowsForData(item.system?.functions?.trap?.effect?.regionDamageEntries, damageTypeSettings),
       lightSourceResourceCosts: buildLightSourceResourceCostRows(item, hasConditionFunction, hasEnergyConsumerFunction),
       firstAidEffectRows: buildFirstAidEffectRows(item),
       firstAidNeedRows: buildFirstAidNeedRows(item),
@@ -472,6 +484,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     } else if (form?.querySelector?.("[data-free-settings-panel]")) {
       foundry.utils.setProperty(submitData, "system.functions.freeSettings.useConditionWeakening", false);
     }
+    const trapEvasionDifficultyInput = form?.querySelector?.("[data-trap-evasion-difficulty]");
+    if (trapEvasionDifficultyInput && String(trapEvasionDifficultyInput.value ?? "").trim() === "") {
+      foundry.utils.setProperty(submitData, "system.functions.trap.evasion.difficulty", null);
+    }
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
     return super._processSubmitData(event, form, submitData, options);
   }
@@ -520,6 +536,22 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-damage-source-volley-region-damage]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteDamageSourceVolleyRegionDamage(event));
+    });
+    this.element?.querySelectorAll("[data-add-trap-damage-type]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddTrapDamageType(event));
+    });
+    this.element?.querySelectorAll("[data-delete-trap-damage-type]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteTrapDamageType(event));
+    });
+    this.element?.querySelectorAll("[data-trap-damage-percent]").forEach(input => {
+      input.addEventListener("input", event => this.#onTrapDamagePercentInput(event));
+      input.addEventListener("change", event => this.#onTrapDamagePercentChange(event));
+    });
+    this.element?.querySelectorAll("[data-add-trap-region-damage]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddTrapRegionDamage(event));
+    });
+    this.element?.querySelectorAll("[data-delete-trap-region-damage]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteTrapRegionDamage(event));
     });
     this.element?.querySelectorAll("[data-weapon-damage-mode]").forEach(select => {
       select.addEventListener("change", event => this.#onWeaponDamageModeChange(event));
@@ -2318,6 +2350,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       });
     }
 
+    if (functionKey === ITEM_FUNCTIONS.trap) {
+      this.#functionPickerActive = false;
+      return this.item.update({
+        "system.functions.trap": createDefaultTrapFunctionData({ enabled: true })
+      });
+    }
+
     if (functionKey === ITEM_FUNCTIONS.weapon) {
       this.#functionPickerActive = false;
       return this.item.update({
@@ -2541,6 +2580,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (functionKey === ITEM_FUNCTIONS.lightSource) {
       return this.item.update({
         "system.functions.lightSource": createDefaultLightSourceFunctionData({ enabled: false })
+      });
+    }
+    if (functionKey === ITEM_FUNCTIONS.trap) {
+      return this.item.update({
+        "system.functions.trap": createDefaultTrapFunctionData({ enabled: false })
       });
     }
     if (functionKey === ITEM_FUNCTIONS.weapon) {
@@ -3223,6 +3267,67 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.item.update({ "system.functions.damageSource.volley.regionDamageEntries": entries });
   }
 
+  #onAddTrapDamageType(event) {
+    event.preventDefault();
+    const entries = readTrapDamageTypeRows(this.element);
+    const damageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
+    const existingKeys = new Set(entries.map(entry => entry.key));
+    const key = damageTypes.find(type => !existingKeys.has(type.key))?.key
+      ?? damageTypes.at(0)?.key
+      ?? "firearm";
+    entries.push({ key, percent: 0 });
+    return this.item.update({ "system.functions.trap.effect.damageTypes": normalizeWeaponDamageTypeOverflow(entries, entries.length - 1) });
+  }
+
+  #onDeleteTrapDamageType(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteTrapDamageType);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const entries = readTrapDamageTypeRows(this.element);
+    entries.splice(index, 1);
+    return this.item.update({ "system.functions.trap.effect.damageTypes": entries.length ? entries : [{ key: "firearm", percent: 100 }] });
+  }
+
+  #onTrapDamagePercentInput(event) {
+    const input = event.currentTarget;
+    const row = input.closest("[data-trap-damage-type-row]");
+    if (!row) return;
+    const index = Number(row.dataset.trapDamageTypeRow);
+    if (!Number.isInteger(index)) return;
+    const entries = normalizeWeaponDamageTypeOverflow(readTrapDamageTypeRows(this.element), index);
+    writeTrapDamageTypePercents(this.element, entries);
+  }
+
+  #onTrapDamagePercentChange(event) {
+    event.preventDefault();
+    const row = event.currentTarget.closest("[data-trap-damage-type-row]");
+    const index = Number(row?.dataset?.trapDamageTypeRow);
+    const entries = normalizeWeaponDamageTypeOverflow(readTrapDamageTypeRows(this.element), Number.isInteger(index) ? index : -1);
+    writeTrapDamageTypePercents(this.element, entries);
+    return this.item.update({ "system.functions.trap.effect.damageTypes": entries });
+  }
+
+  #onAddTrapRegionDamage(event) {
+    event.preventDefault();
+    const entries = readTrapRegionDamageRows(this.element);
+    const damageTypes = getConfigurableDamageTypes(getDamageTypeSettings());
+    const existingKeys = new Set(entries.map(entry => entry.damageTypeKey));
+    const damageTypeKey = damageTypes.find(type => !existingKeys.has(type.key))?.key
+      ?? damageTypes.at(0)?.key
+      ?? "firearm";
+    entries.push({ damageTypeKey, amount: "0" });
+    return this.item.update({ "system.functions.trap.effect.regionDamageEntries": entries });
+  }
+
+  #onDeleteTrapRegionDamage(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteTrapRegionDamage);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const entries = readTrapRegionDamageRows(this.element);
+    entries.splice(index, 1);
+    return this.item.update({ "system.functions.trap.effect.regionDamageEntries": entries });
+  }
+
   #onWeaponDamageModeChange(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -3681,6 +3786,7 @@ function getItemFunctionLabel(functionKey = "") {
   if (functionKey === ITEM_FUNCTIONS.firstAid) return game.i18n.localize("FALLOUTMAW.Item.FunctionFirstAid");
   if (functionKey === ITEM_FUNCTIONS.lightSource) return game.i18n.localize("FALLOUTMAW.Item.FunctionLightSource");
   if (functionKey === ITEM_FUNCTIONS.needChange) return "Изменение потребностей";
+  if (functionKey === ITEM_FUNCTIONS.trap) return game.i18n.localize("FALLOUTMAW.Item.FunctionTrap");
   if (functionKey === ITEM_FUNCTIONS.weapon) return game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon");
   if (functionKey === ITEM_FUNCTIONS.module) return game.i18n.localize("FALLOUTMAW.Item.FunctionModule");
   if (functionKey === ITEM_FUNCTIONS.prosthesis) return game.i18n.localize("FALLOUTMAW.Item.FunctionProsthesis");
@@ -5161,6 +5267,46 @@ function createDefaultLightSourceFunctionData(source = {}) {
     rotation: 0,
     color: DEFAULT_LIGHT_SOURCE_COLOR,
     resourceCosts: []
+  }, foundry.utils.deepClone(source), { inplace: false });
+}
+
+function createDefaultTrapFunctionData(source = {}) {
+  return foundry.utils.mergeObject({
+    enabled: false,
+    actionPointCost: 0,
+    installation: {
+      difficulty: 60,
+      skillKey: "traps"
+    },
+    detection: {
+      radiusMeters: 1,
+      difficulty: 60,
+      skillKey: "naturalist"
+    },
+    trigger: {
+      widthCells: 1,
+      heightCells: 1
+    },
+    evasion: {
+      difficulty: null,
+      skillKey: "athletics",
+      avoidPercent: 50
+    },
+    effect: {
+      damageRadiusMeters: 0,
+      penetration: 0,
+      damage: 0,
+      pellets: 1,
+      damageTypeKey: "firearm",
+      damageTypes: [{ key: "firearm", percent: 100 }],
+      regionRadius: 0,
+      regionDamageEntries: [],
+      regionDurationSeconds: 0,
+      regionDelaySeconds: 0,
+      regionRadiusDeltaMeters: 0
+    },
+    triggerAnimationKey: "",
+    triggerSoundPath: ""
   }, foundry.utils.deepClone(source), { inplace: false });
 }
 
@@ -7101,11 +7247,37 @@ function readDamageSourceDamageTypeRows(root) {
   })).filter(entry => entry.key);
 }
 
+function readTrapDamageTypeRows(root) {
+  const rows = Array.from(root?.querySelectorAll("[data-trap-damage-type-row]") ?? []);
+  return rows.map(row => ({
+    key: String(row.querySelector("[data-trap-damage-type-key]")?.value ?? "").trim(),
+    percent: clampPercent(row.querySelector("[data-trap-damage-percent]")?.value)
+  })).filter(entry => entry.key);
+}
+
+function readTrapRegionDamageRows(root) {
+  const rows = Array.from(root?.querySelectorAll("[data-trap-region-damage-row]") ?? []);
+  return normalizeVolleyRegionDamageEntries(rows.map(row => ({
+    damageTypeKey: String(row.querySelector("[data-trap-region-damage-type]")?.value ?? "").trim(),
+    amount: normalizeDamageFormula(row.querySelector("[data-trap-region-damage-amount]")?.value)
+  })));
+}
+
 function writeDamageSourceTypePercents(root, entries = []) {
   const rows = Array.from(root?.querySelectorAll("[data-damage-source-type-row]") ?? []);
   rows.forEach((row, index) => {
     const value = String(clampPercent(entries[index]?.percent));
     row.querySelectorAll("[data-damage-source-percent]").forEach(input => {
+      input.value = value;
+    });
+  });
+}
+
+function writeTrapDamageTypePercents(root, entries = []) {
+  const rows = Array.from(root?.querySelectorAll("[data-trap-damage-type-row]") ?? []);
+  rows.forEach((row, index) => {
+    const value = String(clampPercent(entries[index]?.percent));
+    row.querySelectorAll("[data-trap-damage-percent]").forEach(input => {
       input.value = value;
     });
   });

@@ -73,6 +73,7 @@ export class GearDataModel extends BaseItemDataModel {
         lightSource: lightSourceFunctionField(),
         module: moduleFunctionField(),
         prosthesis: prosthesisFunctionField(),
+        trap: trapFunctionField(),
         weapon: weaponFunctionField(),
         additionalWeapons: new TypedObjectField(weaponFunctionField({ named: true }), { required: true, initial: {} }),
         damageMitigation: new SchemaField({
@@ -272,6 +273,46 @@ function damageSourceVolleyField() {
     regionRadiusDeltaMeters: new StringField({ required: true, blank: true, initial: "0" }),
     explosionAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
     explosionSoundPath: new StringField({ required: true, blank: true, initial: "" })
+  });
+}
+
+function trapFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    actionPointCost: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    installation: new SchemaField({
+      difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
+      skillKey: new StringField({ required: true, blank: false, initial: "traps" })
+    }),
+    detection: new SchemaField({
+      radiusMeters: new StringField({ required: true, blank: true, initial: "1" }),
+      difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
+      skillKey: new StringField({ required: true, blank: false, initial: "naturalist" })
+    }),
+    trigger: new SchemaField({
+      widthCells: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+      heightCells: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
+    }),
+    evasion: new SchemaField({
+      difficulty: new NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
+      skillKey: new StringField({ required: true, blank: false, initial: "athletics" }),
+      avoidPercent: new NumberField({ required: true, integer: true, min: 1, max: 100, initial: 50 })
+    }),
+    effect: new SchemaField({
+      damageRadiusMeters: new StringField({ required: true, blank: true, initial: "0" }),
+      penetration: new StringField({ required: true, blank: true, initial: "0" }),
+      damage: new StringField({ required: true, blank: true, initial: "0" }),
+      pellets: new StringField({ required: true, blank: true, initial: "1" }),
+      damageTypeKey: new StringField({ required: true, blank: false, initial: "firearm" }),
+      damageTypes: new ArrayField(weaponDamageTypeField(), { required: true, initial: [{ key: "firearm", percent: 100 }] }),
+      regionRadius: new StringField({ required: true, blank: true, initial: "0" }),
+      regionDamageEntries: new ArrayField(weaponDamageEntryField(), { required: true, initial: [] }),
+      regionDurationSeconds: new StringField({ required: true, blank: true, initial: "0" }),
+      regionDelaySeconds: new StringField({ required: true, blank: true, initial: "0" }),
+      regionRadiusDeltaMeters: new StringField({ required: true, blank: true, initial: "0" })
+    }),
+    triggerAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
+    triggerSoundPath: new StringField({ required: true, blank: true, initial: "" })
   });
 }
 
