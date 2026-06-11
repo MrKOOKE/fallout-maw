@@ -26,7 +26,10 @@ import {
   getRaceEquipmentSlotsForItem,
   getRequiredEquipmentSlotsForItem,
   getRequiredWeaponSlotsForItem,
-  getSelectedEquipmentSlotKeys,
+  getValidSelectedEquipmentSlotKeys,
+  getValidSelectedEquipmentSlotKeysForOptions,
+  getValidSelectedWeaponSlotKeys,
+  getValidSelectedWeaponSlotKeysForOptions,
   getWeaponSlotRequirement,
   getWeaponSlotRequirementSize,
   isContainerWeaponSetKey
@@ -1152,7 +1155,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       highlighted = true;
     }
 
-    if (!getWeaponSlotRequirement(itemData).selectedKeys.size) return highlighted;
+    if (!getValidSelectedWeaponSlotKeys(race, itemData).size) return highlighted;
     for (const set of race?.weaponSets ?? []) {
       for (const slot of set.slots ?? []) {
         if (!canUseWeaponSlotForItem(race, itemData, set.key, slot.key)) continue;
@@ -2038,7 +2041,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       const slots = set?.slots ?? [];
       const primaryIndex = slots.findIndex(slot => slot.key === primarySlotKey);
       if (primaryIndex < 0) return [];
-      const size = getWeaponSlotRequirementSize(itemData);
+      const size = getWeaponSlotRequirementSize(itemData, race);
       const requiredSlots = slots.slice(primaryIndex, primaryIndex + size);
       return requiredSlots.length === size ? requiredSlots.map(slot => slot.key) : [];
     }
@@ -2159,6 +2162,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #areStackable(sourceData, targetItem) {
     const sourceSystem = sourceData?.system ?? {};
     const targetSystem = targetItem?.system ?? {};
+    const creatureOptions = getCreatureOptions();
     return (
       sourceData?.type === targetItem?.type
       && !isContainerItem(sourceData)
@@ -2171,8 +2175,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       && getItemMaxStack(sourceSystem) === getItemMaxStack(targetSystem)
       && getItemFootprint(sourceSystem).width === getItemFootprint(targetSystem).width
       && getItemFootprint(sourceSystem).height === getItemFootprint(targetSystem).height
-      && serializeSet(getSelectedEquipmentSlotKeys(sourceSystem)) === serializeSet(getSelectedEquipmentSlotKeys(targetSystem))
-      && serializeWeaponSlotRequirement(sourceSystem) === serializeWeaponSlotRequirement(targetSystem)
+      && serializeSet(getValidSelectedEquipmentSlotKeysForOptions(creatureOptions, sourceSystem)) === serializeSet(getValidSelectedEquipmentSlotKeysForOptions(creatureOptions, targetSystem))
+      && serializeWeaponSlotRequirement(sourceSystem, creatureOptions) === serializeWeaponSlotRequirement(targetSystem, creatureOptions)
       && serializeItemFunctions(sourceSystem.functions) === serializeItemFunctions(targetSystem.functions)
     );
   }
@@ -3311,11 +3315,12 @@ function findComparableEquippedItems(item, actor) {
 }
 
 function findComparableEquippedEquipmentItems(item, actor) {
-  const hoveredSlotKeys = getSelectedEquipmentSlotKeys(item);
+  const race = getTooltipActorRace(actor);
+  const hoveredSlotKeys = getValidSelectedEquipmentSlotKeys(race, item);
   if (!hoveredSlotKeys.size) return [];
   return getTooltipActorItems(actor).filter(candidate => {
     if (!isComparableEquippedCandidate(candidate, item, "equipment")) return false;
-    return hasSetOverlap(hoveredSlotKeys, getSelectedEquipmentSlotKeys(candidate));
+    return hasSetOverlap(hoveredSlotKeys, getValidSelectedEquipmentSlotKeys(race, candidate));
   });
 }
 
@@ -4934,9 +4939,9 @@ function serializeSet(set) {
   return Array.from(set).sort().join("|");
 }
 
-function serializeWeaponSlotRequirement(system = {}) {
+function serializeWeaponSlotRequirement(system = {}, creatureOptions = getCreatureOptions()) {
   const requirement = getWeaponSlotRequirement(system);
-  return `${requirement.mode}:${serializeSet(requirement.selectedKeys)}`;
+  return `${requirement.mode}:${serializeSet(getValidSelectedWeaponSlotKeysForOptions(creatureOptions, system))}`;
 }
 
 function serializeItemFunctions(functions = {}) {

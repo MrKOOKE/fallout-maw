@@ -2661,7 +2661,7 @@ function getHudWeaponPlacementSlotKeys(actor, item, weaponSetKey = "", weaponSlo
     const slots = set?.slots ?? [];
     const primaryIndex = slots.findIndex(slot => slot.key === weaponSlotKey);
     if (primaryIndex < 0) return [];
-    const size = getWeaponSlotRequirementSize(item);
+    const size = getWeaponSlotRequirementSize(item, race);
     const requiredSlots = slots.slice(primaryIndex, primaryIndex + size);
     return requiredSlots.length === size ? requiredSlots.map(slot => slot.key) : [];
   }

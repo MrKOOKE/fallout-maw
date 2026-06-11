@@ -5,7 +5,9 @@ import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import {
   canUseWeaponSlotForItem,
   getRaceEquipmentSlotsForItem,
-  getSelectedEquipmentSlotKeys,
+  getValidSelectedEquipmentSlotKeysForOptions,
+  getValidSelectedWeaponSlotKeys,
+  getValidSelectedWeaponSlotKeysForOptions,
   getWeaponSlotRequirement
 } from "../utils/equipment-slots.mjs";
 import {
@@ -861,9 +863,11 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         this.element?.querySelector(`[data-weapon-set="${CSS.escape(set.key)}"][data-weapon-slot="${CSS.escape(slot.key)}"]`)?.classList.add("drop-match-preview");
       }
     }
-    this.element?.querySelectorAll('[data-weapon-set^="container:"][data-weapon-slot]').forEach(element => {
-      element.classList.add("drop-match-preview");
-    });
+    if (getValidSelectedWeaponSlotKeys(race, item).size) {
+      this.element?.querySelectorAll('[data-weapon-set^="container:"][data-weapon-slot]').forEach(element => {
+        element.classList.add("drop-match-preview");
+      });
+    }
   }
 
   #onInventoryContextMenu(event) {
@@ -2445,6 +2449,7 @@ function collectCraftItemSourceKeys(keys, itemOrDocument = null, fallbackUuid = 
 function getCraftItemFingerprint(itemOrNode = null) {
   const system = itemOrNode?.system ?? itemOrNode ?? {};
   const footprint = getCraftItemFootprint(itemOrNode);
+  const creatureOptions = getCreatureOptions();
   const weaponRequirement = getWeaponSlotRequirement(system);
   return JSON.stringify(normalizeStackComparableValue({
     type: itemOrNode?.type ?? system?.type ?? "",
@@ -2456,10 +2461,10 @@ function getCraftItemFingerprint(itemOrNode = null) {
     maxStack: getItemMaxStack(itemOrNode),
     width: footprint.width,
     height: footprint.height,
-    equipmentSlots: Array.from(getSelectedEquipmentSlotKeys(system)).sort(),
+    equipmentSlots: Array.from(getValidSelectedEquipmentSlotKeysForOptions(creatureOptions, system)).sort(),
     weaponSlotRequirement: {
       mode: weaponRequirement.mode,
-      selectedKeys: Array.from(weaponRequirement.selectedKeys).sort()
+      selectedKeys: Array.from(getValidSelectedWeaponSlotKeysForOptions(creatureOptions, system)).sort()
     },
     functions: system.functions ?? {}
   }));

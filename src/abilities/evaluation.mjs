@@ -7,7 +7,7 @@ import {
   ABILITY_HEALTH_TARGETS,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
-import { getEquipmentSlotSelectionKey, getSelectedEquipmentSlotKeys } from "../utils/equipment-slots.mjs";
+import { getEquipmentSlotSelectionKey, getValidSelectedEquipmentSlotKeys } from "../utils/equipment-slots.mjs";
 import { isAbilityAcquisitionChangeKey } from "../utils/ability-acquisition-change-keys.mjs";
 import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -125,12 +125,13 @@ function isActorEquipmentSlotOccupied(actor, requestedSlotKey = "") {
     acceptedEquipmentKeys.add(slot.key);
     acceptedSelectionKeys.add(getEquipmentSlotSelectionKey(slot.label));
   }
+  if (!slot) return false;
 
   for (const item of actor.items ?? []) {
     if (item?.type === "ability") continue;
     if (item.system?.placement?.mode !== "equipment") continue;
     if (acceptedEquipmentKeys.has(String(item.system?.placement?.equipmentSlot ?? ""))) return true;
-    for (const selectedKey of getSelectedEquipmentSlotKeys(item)) {
+    for (const selectedKey of getValidSelectedEquipmentSlotKeys(race, item)) {
       if (acceptedSelectionKeys.has(selectedKey)) return true;
     }
   }

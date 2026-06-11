@@ -498,7 +498,7 @@ function isPhantomWeaponSlotForItem({ setKey = "", slot = {}, slotIndex = 0, set
   if (isContainerWeaponSetKey(setKey)) {
     const primaryIndex = setSlots.findIndex(entry => entry.key === placement.weaponSlot);
     if (primaryIndex < 0) return false;
-    const size = getWeaponSlotRequirementSize(item);
+    const size = getWeaponSlotRequirementSize(item, race);
     return slotIndex > primaryIndex && slotIndex < (primaryIndex + size);
   }
 

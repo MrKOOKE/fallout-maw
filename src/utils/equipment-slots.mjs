@@ -29,6 +29,28 @@ export function getSelectedEquipmentSlotKeys(itemOrSystem) {
   );
 }
 
+export function getCreatureEquipmentSlotSelectionKeys(creatureOptions) {
+  const keys = new Set();
+  for (const race of creatureOptions?.races ?? []) {
+    for (const slot of race.equipmentSlots ?? []) keys.add(getEquipmentSlotSelectionKey(slot.label));
+  }
+  return keys;
+}
+
+export function getRaceEquipmentSlotSelectionKeys(race) {
+  return new Set((race?.equipmentSlots ?? []).map(slot => getEquipmentSlotSelectionKey(slot.label)));
+}
+
+export function getValidSelectedEquipmentSlotKeys(race, itemOrSystem) {
+  const validKeys = getRaceEquipmentSlotSelectionKeys(race);
+  return new Set(Array.from(getSelectedEquipmentSlotKeys(itemOrSystem)).filter(key => validKeys.has(key)));
+}
+
+export function getValidSelectedEquipmentSlotKeysForOptions(creatureOptions, itemOrSystem) {
+  const validKeys = getCreatureEquipmentSlotSelectionKeys(creatureOptions);
+  return new Set(Array.from(getSelectedEquipmentSlotKeys(itemOrSystem)).filter(key => validKeys.has(key)));
+}
+
 export function getEquipmentSlotRequirement(itemOrSystem) {
   const system = itemOrSystem?.system ?? itemOrSystem ?? {};
   return {
@@ -39,9 +61,10 @@ export function getEquipmentSlotRequirement(itemOrSystem) {
 
 export function getRequiredEquipmentSlotsForItem(race, itemOrSystem, primarySlotKey = "") {
   const requirement = getEquipmentSlotRequirement(itemOrSystem);
-  if (!requirement.selectedKeys.size) return [];
-  const slots = (race?.equipmentSlots ?? []).filter(slot => requirement.selectedKeys.has(getEquipmentSlotSelectionKey(slot.label)));
-  if (requirement.mode !== "oneOf") return slots.length === requirement.selectedKeys.size ? slots : [];
+  const selectedKeys = getValidSelectedEquipmentSlotKeys(race, itemOrSystem);
+  if (!selectedKeys.size) return [];
+  const slots = (race?.equipmentSlots ?? []).filter(slot => selectedKeys.has(getEquipmentSlotSelectionKey(slot.label)));
+  if (requirement.mode !== "oneOf") return slots;
   const key = String(primarySlotKey ?? "");
   const slot = key ? slots.find(entry => entry.key === key) : slots[0];
   return slot ? [slot] : [];
@@ -71,13 +94,45 @@ export function getWeaponSlotRequirement(itemOrSystem) {
   };
 }
 
-export function getWeaponSlotRequirementSize(itemOrSystem) {
+export function getCreatureWeaponSlotSelectionKeys(creatureOptions) {
+  const keys = new Set();
+  for (const race of creatureOptions?.races ?? []) {
+    for (const set of race.weaponSets ?? []) {
+      for (const slot of set.slots ?? []) keys.add(getWeaponSlotSelectionKey(slot));
+    }
+  }
+  return keys;
+}
+
+export function getRaceWeaponSlotSelectionKeys(race) {
+  const keys = new Set();
+  for (const set of race?.weaponSets ?? []) {
+    for (const slot of set.slots ?? []) keys.add(getWeaponSlotSelectionKey(slot));
+  }
+  return keys;
+}
+
+export function getValidSelectedWeaponSlotKeys(race, itemOrSystem) {
+  const validKeys = getRaceWeaponSlotSelectionKeys(race);
   const requirement = getWeaponSlotRequirement(itemOrSystem);
-  return requirement.mode === "all" ? Math.max(1, requirement.selectedKeys.size) : 1;
+  return new Set(Array.from(requirement.selectedKeys).filter(key => validKeys.has(key)));
+}
+
+export function getValidSelectedWeaponSlotKeysForOptions(creatureOptions, itemOrSystem) {
+  const validKeys = getCreatureWeaponSlotSelectionKeys(creatureOptions);
+  const requirement = getWeaponSlotRequirement(itemOrSystem);
+  return new Set(Array.from(requirement.selectedKeys).filter(key => validKeys.has(key)));
+}
+
+export function getWeaponSlotRequirementSize(itemOrSystem, race = null) {
+  const requirement = getWeaponSlotRequirement(itemOrSystem);
+  const selectedKeys = race ? getValidSelectedWeaponSlotKeys(race, itemOrSystem) : requirement.selectedKeys;
+  if (race && requirement.selectedKeys.size && !selectedKeys.size) return 0;
+  return requirement.mode === "all" ? Math.max(1, selectedKeys.size) : 1;
 }
 
 export function getRaceEquipmentSlotsForItem(race, itemOrSystem) {
-  const selectedKeys = getSelectedEquipmentSlotKeys(itemOrSystem);
+  const selectedKeys = getValidSelectedEquipmentSlotKeys(race, itemOrSystem);
   if (!selectedKeys.size) return [];
   return (race?.equipmentSlots ?? []).filter(slot => selectedKeys.has(getEquipmentSlotSelectionKey(slot.label)));
 }
@@ -87,8 +142,10 @@ export function getWeaponSlotsForRequirement(race, itemOrSystem, setKey = "") {
   if (!set) return [];
 
   const requirement = getWeaponSlotRequirement(itemOrSystem);
+  const selectedKeys = getValidSelectedWeaponSlotKeys(race, itemOrSystem);
   if (!requirement.selectedKeys.size) return set.slots ?? [];
-  return (set.slots ?? []).filter(slot => requirement.selectedKeys.has(getWeaponSlotSelectionKey(slot)));
+  if (!selectedKeys.size) return [];
+  return (set.slots ?? []).filter(slot => selectedKeys.has(getWeaponSlotSelectionKey(slot)));
 }
 
 export function canUseWeaponSlotForItem(race, itemOrSystem, setKey = "", slotKey = "") {
@@ -97,11 +154,13 @@ export function canUseWeaponSlotForItem(race, itemOrSystem, setKey = "", slotKey
   const slot = (set?.slots ?? []).find(entry => entry.key === slotKey) ?? null;
   if (!slot) return false;
   const requirement = getWeaponSlotRequirement(itemOrSystem);
+  const selectedKeys = getValidSelectedWeaponSlotKeys(race, itemOrSystem);
   if (!requirement.selectedKeys.size) return true;
-  if (!requirement.selectedKeys.has(getWeaponSlotSelectionKey(slot))) return false;
+  if (!selectedKeys.size) return false;
+  if (!selectedKeys.has(getWeaponSlotSelectionKey(slot))) return false;
   if (requirement.mode !== "all") return true;
   const setSlotKeys = new Set((set.slots ?? []).map(entry => getWeaponSlotSelectionKey(entry)));
-  return Array.from(requirement.selectedKeys).every(key => setSlotKeys.has(key));
+  return Array.from(selectedKeys).every(key => setSlotKeys.has(key));
 }
 
 export function getRequiredWeaponSlotsForItem(race, itemOrSystem, setKey = "", primarySlotKey = "") {
@@ -111,17 +170,28 @@ export function getRequiredWeaponSlotsForItem(race, itemOrSystem, setKey = "", p
   const slots = set.slots ?? [];
   const primarySlot = slots.find(slot => slot.key === primarySlotKey) ?? null;
   const requirement = getWeaponSlotRequirement(itemOrSystem);
+  const selectedKeys = getValidSelectedWeaponSlotKeys(race, itemOrSystem);
   if (!requirement.selectedKeys.size) return primarySlot ? [primarySlot] : [];
+  if (!selectedKeys.size) return [];
   if (requirement.mode === "oneOf") {
-    if (!primarySlot || !requirement.selectedKeys.has(getWeaponSlotSelectionKey(primarySlot))) return [];
+    if (!primarySlot || !selectedKeys.has(getWeaponSlotSelectionKey(primarySlot))) return [];
     return [primarySlot];
   }
-  const requiredSlots = slots.filter(slot => requirement.selectedKeys.has(getWeaponSlotSelectionKey(slot)));
-  return requiredSlots.length === requirement.selectedKeys.size ? requiredSlots : [];
+  const requiredSlots = slots.filter(slot => selectedKeys.has(getWeaponSlotSelectionKey(slot)));
+  return requiredSlots.length === selectedKeys.size ? requiredSlots : [];
 }
 
 export function isContainerWeaponSetKey(setKey = "") {
   return String(setKey ?? "").startsWith("container:");
+}
+
+export function cleanBooleanSlotSelections(slots = {}, validKeys = new Set()) {
+  const cleaned = {};
+  for (const [key, selected] of Object.entries(slots ?? {})) {
+    if (!selected || !validKeys.has(key)) continue;
+    cleaned[key] = true;
+  }
+  return cleaned;
 }
 
 export function groupRaceEquipmentSlotsBySet(creatureOptions) {

@@ -44,7 +44,9 @@ import {
   getRaceEquipmentSlotsForItem,
   getRequiredEquipmentSlotsForItem,
   getRequiredWeaponSlotsForItem,
-  getSelectedEquipmentSlotKeys,
+  getValidSelectedEquipmentSlotKeysForOptions,
+  getValidSelectedWeaponSlotKeys,
+  getValidSelectedWeaponSlotKeysForOptions,
   getWeaponSlotRequirement,
   getWeaponSlotRequirementSize,
   isContainerWeaponSetKey
@@ -1833,12 +1835,14 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
         }
       }
 
-      this.element?.querySelectorAll(
-        `[data-search-actor-uuid="${actorUuid}"][data-weapon-set^="container:"][data-weapon-slot]`
-      ).forEach(element => {
-        element.classList.add("drop-match-preview");
-        highlighted = true;
-      });
+      if (getValidSelectedWeaponSlotKeys(race, itemData).size) {
+        this.element?.querySelectorAll(
+          `[data-search-actor-uuid="${actorUuid}"][data-weapon-set^="container:"][data-weapon-slot]`
+        ).forEach(element => {
+          element.classList.add("drop-match-preview");
+          highlighted = true;
+        });
+      }
     }
 
     return highlighted;
@@ -5053,7 +5057,7 @@ function getActorWeaponPlacementSlotKeys(actor, itemData, placement = {}) {
     const slots = set?.slots ?? [];
     const primaryIndex = slots.findIndex(slot => slot.key === primarySlotKey);
     if (primaryIndex < 0) return [];
-    const size = getWeaponSlotRequirementSize(itemData);
+    const size = getWeaponSlotRequirementSize(itemData, race);
     const requiredSlots = slots.slice(primaryIndex, primaryIndex + size);
     return requiredSlots.length === size ? requiredSlots.map(slot => slot.key) : [];
   }
@@ -5723,6 +5727,7 @@ function projectActorInventoryState(actor, { updates = [], deletes = [], creates
 function areStackable(sourceData, targetItem) {
   const sourceSystem = sourceData?.system ?? {};
   const targetSystem = targetItem?.system ?? {};
+  const creatureOptions = getCreatureOptions();
   return (
     sourceData?.type === targetItem?.type
     && !isContainerItem(sourceData)
@@ -5736,8 +5741,8 @@ function areStackable(sourceData, targetItem) {
     && getItemMaxStack(sourceSystem) === getItemMaxStack(targetSystem)
     && getItemFootprint(sourceSystem).width === getItemFootprint(targetSystem).width
     && getItemFootprint(sourceSystem).height === getItemFootprint(targetSystem).height
-    && serializeSet(getSelectedEquipmentSlotKeys(sourceSystem)) === serializeSet(getSelectedEquipmentSlotKeys(targetSystem))
-    && serializeWeaponSlotRequirement(sourceSystem) === serializeWeaponSlotRequirement(targetSystem)
+    && serializeSet(getValidSelectedEquipmentSlotKeysForOptions(creatureOptions, sourceSystem)) === serializeSet(getValidSelectedEquipmentSlotKeysForOptions(creatureOptions, targetSystem))
+    && serializeWeaponSlotRequirement(sourceSystem, creatureOptions) === serializeWeaponSlotRequirement(targetSystem, creatureOptions)
     && serializeItemFunctions(sourceSystem.functions) === serializeItemFunctions(targetSystem.functions)
   );
 }
@@ -5746,9 +5751,9 @@ function serializeSet(set) {
   return Array.from(set).sort().join("|");
 }
 
-function serializeWeaponSlotRequirement(system = {}) {
+function serializeWeaponSlotRequirement(system = {}, creatureOptions = getCreatureOptions()) {
   const requirement = getWeaponSlotRequirement(system);
-  return `${requirement.mode}:${serializeSet(requirement.selectedKeys)}`;
+  return `${requirement.mode}:${serializeSet(getValidSelectedWeaponSlotKeysForOptions(creatureOptions, system))}`;
 }
 
 function serializeItemFunctions(functions = {}) {

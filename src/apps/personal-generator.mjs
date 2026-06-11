@@ -1394,7 +1394,7 @@ function getRequiredGeneratedWeaponSlotKeys(actor, item, placement, setSlots = [
   const race = getActorRace(actor);
   if (isContainerWeaponSetKey(placement.weaponSet)) {
     const index = setSlots.findIndex(slot => slot.key === placement.weaponSlot);
-    const size = getWeaponSlotRequirementSize(item);
+    const size = getWeaponSlotRequirementSize(item, race);
     const required = setSlots.slice(index, index + size);
     return required.length === size ? required.map(slot => `${placement.weaponSet}:${slot.key}`) : [];
   }

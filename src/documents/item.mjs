@@ -5,9 +5,15 @@ import {
   isContainerItem
 } from "../utils/inventory-containers.mjs";
 import { DISEASE_CREATE_OPTION, TRAUMA_CREATE_OPTION } from "../constants.mjs";
+import { getCreatureOptions } from "../settings/accessors.mjs";
 import { migrateItemData } from "../migrations/documents.mjs";
 import { handleItemDamageUpdate } from "../combat/damage-hub.mjs";
 import { rewriteItemReferenceData, stampPrototypeUuid } from "../utils/document-references.mjs";
+import {
+  cleanBooleanSlotSelections,
+  getCreatureEquipmentSlotSelectionKeys,
+  getCreatureWeaponSlotSelectionKeys
+} from "../utils/equipment-slots.mjs";
 
 const MANUALLY_CREATABLE_ITEM_TYPES = Object.freeze(["gear", "ability"]);
 
@@ -40,6 +46,7 @@ export class FalloutMaWItem extends Item {
 
   async _preCreate(data, options, user) {
     if ((await super._preCreate(data, options, user)) === false) return false;
+    this.updateSource(getCleanSlotRequirementSource(this));
     if (!options?.pack) stampPrototypeUuid(this, data, "Item");
     if (this.type === "trauma" && options?.[TRAUMA_CREATE_OPTION] !== true) {
       ui.notifications?.warn?.("Травмы создаются только системой при получении повреждения.");
@@ -108,6 +115,7 @@ export class FalloutMaWItem extends Item {
     if ((await super._preUpdate(changes, options, user)) === false) return false;
 
     const nextSource = foundry.utils.mergeObject(this.toObject(), changes, { inplace: false });
+    Object.assign(changes, getSlotRequirementDeletionUpdates(nextSource));
     if (isContainerItem(nextSource)) {
       foundry.utils.setProperty(changes, "system.quantity", 1);
       foundry.utils.setProperty(changes, "system.maxStack", 1);
@@ -154,4 +162,49 @@ export class FalloutMaWItem extends Item {
   get totalWeight() {
     return getItemTotalWeight(this, this.actor?.items ?? []);
   }
+}
+
+function getCleanSlotRequirementSource(itemOrData) {
+  const source = itemOrData?.toObject?.() ?? itemOrData ?? {};
+  if (!hasSlotRequirementSource(source)) return {};
+  const creatureOptions = getCreatureOptions();
+  return {
+    system: {
+      occupiedSlots: cleanBooleanSlotSelections(
+        source.system?.occupiedSlots ?? {},
+        getCreatureEquipmentSlotSelectionKeys(creatureOptions)
+      ),
+      weaponSlotRequirement: {
+        slots: cleanBooleanSlotSelections(
+          source.system?.weaponSlotRequirement?.slots ?? {},
+          getCreatureWeaponSlotSelectionKeys(creatureOptions)
+        )
+      }
+    }
+  };
+}
+
+function getSlotRequirementDeletionUpdates(itemOrData) {
+  const source = itemOrData?.toObject?.() ?? itemOrData ?? {};
+  if (!hasSlotRequirementSource(source)) return {};
+  const creatureOptions = getCreatureOptions();
+  const validEquipmentKeys = getCreatureEquipmentSlotSelectionKeys(creatureOptions);
+  const validWeaponKeys = getCreatureWeaponSlotSelectionKeys(creatureOptions);
+  return {
+    ...getSlotRequirementRecordDeletionUpdates("system.occupiedSlots", source.system?.occupiedSlots, validEquipmentKeys),
+    ...getSlotRequirementRecordDeletionUpdates("system.weaponSlotRequirement.slots", source.system?.weaponSlotRequirement?.slots, validWeaponKeys)
+  };
+}
+
+function hasSlotRequirementSource(source = {}) {
+  return Boolean(source.system?.occupiedSlots || source.system?.weaponSlotRequirement?.slots);
+}
+
+function getSlotRequirementRecordDeletionUpdates(path, slots = {}, validKeys = new Set()) {
+  const updates = {};
+  for (const [key, selected] of Object.entries(slots ?? {})) {
+    if (selected && validKeys.has(key)) continue;
+    updates[`${path}.-=${key}`] = null;
+  }
+  return updates;
 }
