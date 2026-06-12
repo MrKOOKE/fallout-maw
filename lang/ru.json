@@ -348,6 +348,7 @@
       "TrapDetectionSkill": "Навык обнаружения",
       "TrapActivation": "Активация",
       "TrapTriggerSize": "Ширина/Высота области срабатывания",
+      "TrapTriggerImageScale": "Масштаб изображения",
       "TrapTriggerWidth": "Ширина триггера",
       "TrapTriggerHeight": "Высота триггера",
       "TrapEvasion": "Уклонение",

@@ -291,7 +291,8 @@ function trapFunctionField() {
     }),
     trigger: new SchemaField({
       widthCells: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
-      heightCells: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
+      heightCells: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+      imageScale: new NumberField({ required: true, min: 0, initial: 0.5 })
     }),
     evasion: new SchemaField({
       difficulty: new NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),

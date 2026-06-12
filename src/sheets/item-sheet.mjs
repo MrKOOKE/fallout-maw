@@ -5285,7 +5285,8 @@ function createDefaultTrapFunctionData(source = {}) {
     },
     trigger: {
       widthCells: 1,
-      heightCells: 1
+      heightCells: 1,
+      imageScale: 0.5
     },
     evasion: {
       difficulty: null,

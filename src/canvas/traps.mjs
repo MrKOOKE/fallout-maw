@@ -9,6 +9,14 @@ import { getItemQuantity } from "../utils/inventory-containers.mjs";
 import { ITEM_FUNCTIONS, getTrapFunction, hasItemFunction } from "../utils/item-functions.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import {
+  DEFAULT_FACTION_NAME,
+  getActorFactionBelongs,
+  getActorPrimaryFaction,
+  getFactionNamesWithDefault,
+  getFactionSettings,
+  getRelationTo
+} from "../settings/factions.mjs";
 
 const TRAP_SOCKET = `system.${SYSTEM_ID}`;
 const TRAP_SOCKET_SCOPE = "fallout-maw.traps";
@@ -19,11 +27,14 @@ const DEFAULT_REGION_DAMAGE_INTERVAL_SECONDS = 6;
 const PREVIEW_BORDER_COLOR = 0xf0a23a;
 const PREVIEW_FILL_COLOR = 0xf0a23a;
 const TRAP_CONTROLLED_MOVEMENT_OPTION = "falloutMawTrapControlledMovement";
+const TRAP_SAFE_HIGHLIGHT_LAYER = "fallout-maw-safe-traps";
+const TRAP_SAFE_HIGHLIGHT_COLOR = 0x43c96b;
 
 let activeTrapPlacement = null;
 let trapTilePatchRegistered = false;
 let trapCanvasInteractionRegistered = false;
 let trapCanvasInteractionView = null;
+let trapVisibilityRefreshQueued = false;
 const pendingTrapActivationKeys = new Set();
 const pendingTrapMovementKeys = new Set();
 
@@ -37,6 +48,10 @@ export function registerTrapHooks() {
     refreshTrapTileVisibility();
   });
   Hooks.on("controlToken", refreshTrapTileVisibility);
+  Hooks.on("updateActor", (actor, changes = {}) => {
+    const flat = foundry.utils.flattenObject(changes ?? {});
+    if (`flags.${SYSTEM_ID}.factionBelongs` in flat || `flags.${SYSTEM_ID}.factionRelations` in flat) refreshTrapTileVisibility();
+  });
   Hooks.on("createTile", tile => {
     if (isTrapTileDocument(tile)) refreshTrapTileVisibility();
   });
@@ -44,7 +59,7 @@ export function registerTrapHooks() {
     if (isTrapTileDocument(tile)) refreshTrapTileVisibility();
   });
   Hooks.on("deleteTile", tile => {
-    if (activeTrapPlacement?.sceneId === tile?.parent?.id) refreshTrapTileVisibility();
+    if (isTrapTileDocument(tile)) queueTrapTileVisibilityRefresh();
   });
   Hooks.on("preMoveToken", onTrapPreMoveToken);
   Hooks.on("createToken", token => {
@@ -122,6 +137,10 @@ async function processTrapContactForToken(token) {
   for (const tile of trapTiles) {
     const trap = getTrapFlag(tile);
     if (!trap || trap.ownerActorUuid === actor.uuid) continue;
+    if (isActorSafeForTrap(trap, actor)) {
+      await revealTrapToActor(tile, actor);
+      continue;
+    }
     const trapData = normalizeTrapData(trap.data);
     const detectionRadius = metersToPixels(trapData.detection.radiusMeters, scene, trap.ownerActorUuid);
     if (detectionRadius > 0) {
@@ -146,6 +165,10 @@ async function processTrapInitialDetection(tile) {
   for (const token of scene.tokens?.contents ?? []) {
     const actor = token?.actor;
     if (!actor || actor.uuid === trap.ownerActorUuid) continue;
+    if (isActorSafeForTrap(trap, actor)) {
+      await revealTrapToActor(tile, actor);
+      continue;
+    }
     const point = getTokenCenter(token);
     if (Math.hypot(point.x - center.x, point.y - center.y) > detectionRadius) continue;
     await handleTrapDetectionForToken(tile, token);
@@ -158,6 +181,10 @@ async function handleTrapDetectionForToken(tile, token) {
   const trap = getTrapFlag(tile);
   if (!tile || !actor || !trap) return false;
   if (actor.uuid === trap.ownerActorUuid) return false;
+  if (isActorSafeForTrap(trap, actor)) {
+    await revealTrapToActor(tile, actor);
+    return true;
+  }
 
   const attempted = new Set(asStringArray(trap.attemptedDetectionActorUuids));
   if (attempted.has(actor.uuid)) return false;
@@ -177,9 +204,7 @@ async function handleTrapDetectionForToken(tile, token) {
   });
   if (!isSkillCheckSuccess(outcome)) return false;
 
-  const visible = new Set(asStringArray(getTrapFlag(tile)?.visibleActorUuids ?? trap.visibleActorUuids));
-  visible.add(actor.uuid);
-  await tile.update({ [`flags.${SYSTEM_ID}.${TRAP_FLAG}.visibleActorUuids`]: Array.from(visible) }, { render: false });
+  await revealTrapToActor(tile, actor);
   ui.notifications.info(`${actor.name}: ловушка обнаружена.`);
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
@@ -195,6 +220,7 @@ async function handleTrapActivationForToken(tile, token) {
   const trap = getTrapFlag(tile);
   if (!tile || !actor || !trap || trap.armed === false) return;
   if (actor.uuid === trap.ownerActorUuid) return;
+  if (isActorSafeForTrap(trap, actor)) return;
   await tile.update({ [`flags.${SYSTEM_ID}.${TRAP_FLAG}.armed`]: false }, { render: false });
   await triggerTrap(tile, token);
 }
@@ -278,7 +304,7 @@ async function announceTrapTriggerEnterNow({ sceneId = "", tileId = "", tokenId 
   const token = scene?.tokens?.get(tokenId);
   const actor = token?.actor;
   const trap = getTrapFlag(tile);
-  if (!scene || !tile || !actor || !trap || actor.uuid === trap.ownerActorUuid) return;
+  if (!scene || !tile || !actor || !trap || actor.uuid === trap.ownerActorUuid || isActorSafeForTrap(trap, actor)) return;
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
     content: `<p><strong>${escapeHTML(actor.name)}</strong> активирует ловушку.</p>`
@@ -418,7 +444,7 @@ function updateTrapPlacementPreview(placement, point) {
     .beginFill(PREVIEW_FILL_COLOR, 0.16)
     .drawRect(0, 0, rect.width, rect.height)
     .endFill();
-  if (preview.sprite) fitSpriteIntoRect(preview.sprite, rect.width, rect.height);
+  if (preview.sprite) fitSpriteIntoRect(preview.sprite, rect.width, rect.height, placement.trapData?.trigger?.imageScale);
 }
 
 function destroyTrapPlacementPreview(placement) {
@@ -428,10 +454,10 @@ function destroyTrapPlacementPreview(placement) {
   placement.preview = null;
 }
 
-function fitSpriteIntoRect(sprite, width, height) {
+function fitSpriteIntoRect(sprite, width, height, imageScale = 0.5) {
   const textureWidth = Math.max(1, Number(sprite.texture?.width) || 1);
   const textureHeight = Math.max(1, Number(sprite.texture?.height) || 1);
-  const scale = Math.min(width / textureWidth, height / textureHeight) * 0.9;
+  const scale = Math.min(width / textureWidth, height / textureHeight) * Math.max(0, Number(imageScale) || 0);
   sprite.anchor.set(0.5, 0.5);
   sprite.scale.set(scale, scale);
   sprite.position.set(width / 2, height / 2);
@@ -469,8 +495,8 @@ function getTrapTileAtCanvasEvent(event) {
 async function pickupTrapTile(tile) {
   const trap = getTrapFlag(tile);
   const actor = getTrapViewerActor();
-  if (!trap || !actor || actor.uuid !== trap.ownerActorUuid || !actor.isOwner) {
-    ui.notifications.warn("Забрать ловушку может только владелец.");
+  if (!trap || !actor || !actor.isOwner || !canActorPickupTrap(trap, actor)) {
+    ui.notifications.warn("Забрать ловушку может только владелец, член его фракции или союзник.");
     return;
   }
   const confirmed = await foundry.applications.api.DialogV2.confirm({
@@ -513,7 +539,7 @@ async function pickupTrapDocumentsNow({ sceneId = "", tileId = "", actorUuid = "
   const tile = scene?.tiles?.get(tileId);
   const actor = actorUuid ? await fromUuid(actorUuid) : null;
   const trap = getTrapFlag(tile);
-  if (!scene || !tile || !actor || !trap || actor.uuid !== trap.ownerActorUuid) return;
+  if (!scene || !tile || !actor || !trap || !canActorPickupTrap(trap, actor)) return;
   await restoreTrapItemToOwner(actor, trap);
   await deleteTrapDocuments(tile);
 }
@@ -571,6 +597,8 @@ async function createTrapDocumentsNow(request = {}) {
   const point = serializePoint(request.point);
   const itemData = request.itemData ?? {};
   const trapData = normalizeTrapData(request.trapData);
+  const ownerActor = request.ownerActorUuid ? await fromUuid(String(request.ownerActorUuid)) : null;
+  const factionState = createTrapFactionState(ownerActor);
   const gridSize = getSceneGridSize(scene);
   const width = Math.max(1, trapData.trigger.widthCells) * gridSize;
   const height = Math.max(1, trapData.trigger.heightCells) * gridSize;
@@ -588,8 +616,8 @@ async function createTrapDocumentsNow(request = {}) {
       anchorX: 0.5,
       anchorY: 0.5,
       fit: "contain",
-      scaleX: 0.9,
-      scaleY: 0.9
+      scaleX: trapData.trigger.imageScale,
+      scaleY: trapData.trigger.imageScale
     },
     x,
     y,
@@ -604,6 +632,8 @@ async function createTrapDocumentsNow(request = {}) {
         [TRAP_FLAG]: {
           armed: true,
           ownerActorUuid: String(request.ownerActorUuid ?? ""),
+          ownerPrimaryFaction: factionState.ownerPrimaryFaction,
+          safeFactionNames: factionState.safeFactionNames,
           sourceItemUuid: String(request.sourceItemUuid ?? ""),
           itemData: foundry.utils.deepClone(itemData),
           visibleActorUuids: [String(request.ownerActorUuid ?? "")].filter(Boolean),
@@ -812,6 +842,7 @@ async function deleteTrapDocuments(tile) {
   const regionIds = [trap.detectionRegionId, trap.triggerRegionId].filter(id => scene.regions?.get(id));
   if (regionIds.length) await scene.deleteEmbeddedDocuments("Region", regionIds);
   await scene.deleteEmbeddedDocuments("Tile", [tile.id]);
+  queueTrapTileVisibilityRefresh();
 }
 
 function patchTrapTileVisibility() {
@@ -826,6 +857,7 @@ function patchTrapTileVisibility() {
     const result = originalRefreshVisibility?.apply(this, args);
     if (isTrapTileDocument(this.document) && !isTrapVisibleForCurrentViewer(this.document)) {
       if (this.mesh) this.mesh.visible = false;
+      if (this.controls) this.controls.visible = false;
     }
     return result;
   };
@@ -844,10 +876,20 @@ function patchTrapTileVisibility() {
 }
 
 function refreshTrapTileVisibility() {
+  refreshTrapSafeHighlights();
   for (const tile of canvas?.tiles?.placeables ?? []) {
     if (!isTrapTileDocument(tile.document)) continue;
     tile.renderFlags?.set?.({ refreshVisibility: true, refreshState: true });
   }
+}
+
+function queueTrapTileVisibilityRefresh() {
+  if (trapVisibilityRefreshQueued) return;
+  trapVisibilityRefreshQueued = true;
+  globalThis.setTimeout(() => {
+    trapVisibilityRefreshQueued = false;
+    refreshTrapTileVisibility();
+  }, 0);
 }
 
 function isTrapVisibleForCurrentViewer(tileDocument) {
@@ -860,7 +902,51 @@ function isTrapVisibleForCurrentViewer(tileDocument) {
     : [game.user?.character?.uuid ?? ""].filter(Boolean);
   if (!actorUuids.length) return false;
   const visible = new Set(asStringArray(trap.visibleActorUuids));
-  return actorUuids.some(uuid => uuid === trap.ownerActorUuid || visible.has(uuid));
+  return actorUuids.some(uuid => {
+    if (uuid === trap.ownerActorUuid || visible.has(uuid)) return true;
+    const actor = fromUuidSyncSafe(uuid);
+    return isActorSafeForTrap(trap, actor);
+  });
+}
+
+function refreshTrapSafeHighlights() {
+  const grid = canvas?.interface?.grid;
+  if (!canvas?.ready || !grid) return;
+  const layer = grid.getHighlightLayer?.(TRAP_SAFE_HIGHLIGHT_LAYER)
+    ?? grid.addHighlightLayer?.(TRAP_SAFE_HIGHLIGHT_LAYER);
+  layer?.clear?.();
+  if (!layer) return;
+  for (const tile of canvas.scene?.tiles?.contents ?? []) {
+    if (!isTrapTileDocument(tile)) continue;
+    if (!isTrapVisibleForCurrentViewer(tile) || !isTrapSafeForCurrentViewer(tile)) continue;
+    drawTrapSafeHighlight(layer, tile);
+  }
+}
+
+function drawTrapSafeHighlight(layer, tile) {
+  const width = Math.max(2, CONFIG.Canvas.objectBorderThickness * canvas.dimensions.uiScale);
+  const rect = getTrapTileRectangle(tile);
+  const line = Math.min(width, rect.width / 2, rect.height / 2);
+  layer.beginFill(TRAP_SAFE_HIGHLIGHT_COLOR, 0.95);
+  layer.drawRect(rect.x, rect.y, rect.width, line);
+  layer.drawRect(rect.x, rect.y + rect.height - line, rect.width, line);
+  layer.drawRect(rect.x, rect.y + line, line, Math.max(0, rect.height - (line * 2)));
+  layer.drawRect(rect.x + rect.width - line, rect.y + line, line, Math.max(0, rect.height - (line * 2)));
+  layer.endFill();
+}
+
+function isTrapSafeForCurrentViewer(tileDocument) {
+  const trap = getTrapFlag(tileDocument);
+  if (!trap) return false;
+  return getTrapCurrentViewerActors().some(actor => isActorSafeForTrap(trap, actor));
+}
+
+function getTrapCurrentViewerActors() {
+  const controlled = (canvas?.tokens?.controlled ?? [])
+    .map(token => token?.actor)
+    .filter(Boolean);
+  if (controlled.length) return controlled;
+  return [game.user?.character].filter(Boolean);
 }
 
 function getTrapFlag(tileOrDocument) {
@@ -885,7 +971,7 @@ function findFirstTrapMovementEvent(tokenDocument, actor, movement = {}, trapTil
       const candidates = [];
       for (const tile of trapTiles) {
         const trap = getTrapFlag(tile);
-        if (!trap || trap.armed === false || trap.ownerActorUuid === actor.uuid) continue;
+        if (!trap || trap.armed === false || trap.ownerActorUuid === actor.uuid || isActorSafeForTrap(trap, actor)) continue;
 
         const trapData = normalizeTrapData(trap.data);
         const detectionRadius = metersToPixels(trapData.detection.radiusMeters, tile.parent ?? canvas.scene, trap.ownerActorUuid);
@@ -1074,7 +1160,75 @@ function isTrapVisibleToActor(tile, actor) {
   const trap = getTrapFlag(tile);
   if (!trap || !actor) return false;
   const visible = new Set(asStringArray(trap.visibleActorUuids));
-  return actor.uuid === trap.ownerActorUuid || visible.has(actor.uuid);
+  return actor.uuid === trap.ownerActorUuid || visible.has(actor.uuid) || isActorSafeForTrap(trap, actor);
+}
+
+async function revealTrapToActor(tile, actor) {
+  if (!tile || !actor?.uuid) return false;
+  const trap = getTrapFlag(tile);
+  if (!trap) return false;
+  const visible = new Set(asStringArray(trap.visibleActorUuids));
+  if (visible.has(actor.uuid)) return false;
+  visible.add(actor.uuid);
+  await tile.update({ [`flags.${SYSTEM_ID}.${TRAP_FLAG}.visibleActorUuids`]: Array.from(visible) }, { render: false });
+  refreshTrapTileVisibility();
+  return true;
+}
+
+function canActorPickupTrap(trap, actor) {
+  return Boolean(actor?.uuid && (actor.uuid === trap?.ownerActorUuid || isActorSafeForTrap(trap, actor)));
+}
+
+function isActorSafeForTrap(trap, actor) {
+  if (!trap || !actor) return false;
+  if (actor.uuid === trap.ownerActorUuid) return true;
+  const ownerActor = fromUuidSyncSafe(trap.ownerActorUuid);
+  if (ownerActor && isActorFactionSafeForOwner(ownerActor, actor)) return true;
+  const safeFactions = new Set(asStringArray(trap.safeFactionNames));
+  if (!safeFactions.size) return false;
+  const actorFactions = getActorTrapFactionNames(actor);
+  return actorFactions.some(name => safeFactions.has(name));
+}
+
+function isActorFactionSafeForOwner(ownerActor, actor) {
+  return getActorTrapFactionNames(actor).some(factionName => getRelationTo(ownerActor, factionName) === "ally");
+}
+
+function createTrapFactionState(ownerActor) {
+  const ownerPrimaryFaction = normalizeTrapFactionName(getActorPrimaryFaction(ownerActor));
+  const safeFactionNames = new Set();
+  for (const factionName of getActorTrapFactionNames(ownerActor)) safeFactionNames.add(factionName);
+  for (const factionName of getFactionNamesWithDefault(getFactionSettings())) {
+    const normalized = normalizeTrapFactionName(factionName);
+    if (!normalized) continue;
+    if (getRelationTo(ownerActor, normalized) === "ally") safeFactionNames.add(normalized);
+  }
+  return {
+    ownerPrimaryFaction,
+    safeFactionNames: Array.from(safeFactionNames)
+  };
+}
+
+function getActorTrapFactionNames(actor) {
+  const names = new Set([
+    ...getActorFactionBelongs(actor),
+    getActorPrimaryFaction(actor)
+  ].map(normalizeTrapFactionName).filter(Boolean));
+  return Array.from(names);
+}
+
+function normalizeTrapFactionName(value) {
+  const name = String(value ?? "").trim();
+  if (!name || name === DEFAULT_FACTION_NAME) return "";
+  return name;
+}
+
+function fromUuidSyncSafe(uuid) {
+  try {
+    return globalThis.fromUuidSync?.(uuid) ?? null;
+  } catch (_error) {
+    return null;
+  }
 }
 
 function getTokenCenterAt(tokenDocument, data = {}) {
@@ -1094,13 +1248,13 @@ function getTrapDamageTargets(scene, center, radiusPixels, ownerActorUuid, trigg
   const triggering = triggeringToken?.document ?? triggeringToken ?? null;
   const tokens = scene.tokens?.contents ?? [];
   const targets = tokens
-    .filter(token => token?.actor && token.actor.uuid !== ownerActorUuid)
+    .filter(token => token?.actor)
     .filter(token => {
       if (radiusPixels <= 0) return token.id === triggering?.id;
       const tokenCenter = getTokenCenter(token);
       return Math.hypot(tokenCenter.x - center.x, tokenCenter.y - center.y) <= radiusPixels;
     });
-  if (!targets.length && triggering?.actor && triggering.actor.uuid !== ownerActorUuid) return [triggering];
+  if (!targets.length && triggering?.actor) return [triggering];
   return targets;
 }
 
@@ -1120,7 +1274,8 @@ function normalizeTrapData(source = {}) {
     },
     trigger: {
       widthCells: Math.max(1, toInteger(data.trigger?.widthCells) || 1),
-      heightCells: Math.max(1, toInteger(data.trigger?.heightCells) || 1)
+      heightCells: Math.max(1, toInteger(data.trigger?.heightCells) || 1),
+      imageScale: normalizeTrapImageScale(data.trigger?.imageScale)
     },
     evasion: {
       difficulty: normalizeNullableDifficulty(data.evasion?.difficulty),
@@ -1148,6 +1303,12 @@ function normalizeTrapData(source = {}) {
 function normalizeNullableDifficulty(value) {
   if (value === null || value === undefined || String(value).trim() === "") return null;
   return Math.max(0, toInteger(value));
+}
+
+function normalizeTrapImageScale(value) {
+  const scale = Number(value);
+  if (!Number.isFinite(scale)) return 0.5;
+  return Math.max(0, scale);
 }
 
 function normalizeDamageTypeEntries(entries = [], fallbackKey = "firearm") {
@@ -1208,6 +1369,13 @@ function getTileCenter(tile) {
     x: topLeft.x + ((Number(tile?.width) || 0) / 2),
     y: topLeft.y + ((Number(tile?.height) || 0) / 2)
   };
+}
+
+function getTrapTileRectangle(tile) {
+  const topLeft = getTileTopLeft(tile);
+  const width = Math.abs(Number(tile?.width) || 0);
+  const height = Math.abs(Number(tile?.height) || 0);
+  return new PIXI.Rectangle(topLeft.x, topLeft.y, width, height);
 }
 
 function getTileTopLeft(tile) {
