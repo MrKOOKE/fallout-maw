@@ -1,0 +1,49 @@
+<div class="fallout-maw-config-body">
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Factions.ActorTitle"}}</h2>
+    </header>
+
+    <div class="fallout-maw-settings-grid">
+      <label>
+        <span>{{localize "FALLOUTMAW.Common.Search"}}</span>
+        <input type="search" data-faction-search placeholder="{{localize 'FALLOUTMAW.Factions.SearchPlaceholder'}}">
+      </label>
+    </div>
+
+    <p class="hint">{{localize "FALLOUTMAW.Factions.ActorHint"}}</p>
+
+    <div class="fallout-maw-settings-table fallout-maw-actor-faction-table">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Factions.Faction"}}</span>
+        <span>{{localize "FALLOUTMAW.Factions.Belongs"}}</span>
+        <span>{{localize "FALLOUTMAW.Factions.Relation"}}</span>
+        <span>{{localize "FALLOUTMAW.Factions.Score"}}</span>
+      </div>
+      {{#each rows}}
+      <div class="fallout-maw-settings-row {{#if isPrimary}}is-primary{{/if}}" data-faction-relation-row data-faction-name="{{name}}">
+        <strong>{{name}}</strong>
+        <label class="fallout-maw-faction-belongs-field">
+          <input type="checkbox" data-field="belongs" {{#if belongs}}checked{{/if}}>
+          <span>{{localize "FALLOUTMAW.Factions.Belongs"}}</span>
+        </label>
+        <div class="fallout-maw-faction-relation-controls">
+          <label><input type="radio" data-field="relation" name="relation-{{@index}}" value="ally" {{#if ally}}checked{{/if}} {{#if isPrimary}}disabled{{/if}}> {{localize "FALLOUTMAW.Factions.Ally"}}</label>
+          <label><input type="radio" data-field="relation" name="relation-{{@index}}" value="neutral" {{#if neutral}}checked{{/if}} {{#if isPrimary}}disabled{{/if}}> {{localize "FALLOUTMAW.Factions.Neutral"}}</label>
+          <label><input type="radio" data-field="relation" name="relation-{{@index}}" value="enemy" {{#if enemy}}checked{{/if}} {{#if isPrimary}}disabled{{/if}}> {{localize "FALLOUTMAW.Factions.Enemy"}}</label>
+        </div>
+        <label class="fallout-maw-faction-score-field">
+          <input type="number" data-field="score" min="-100" max="100" step="1" value="{{score}}" {{#if isPrimary}}disabled{{/if}}>
+          <span>/100</span>
+        </label>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Factions.Empty"}}</p>
+      {{/each}}
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  </footer>
+</div>

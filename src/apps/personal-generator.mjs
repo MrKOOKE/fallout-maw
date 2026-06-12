@@ -105,7 +105,7 @@ export function registerPersonalGeneratorHooks() {
   Hooks.on("getActorContextOptions", (app, entryOptions) => {
     entryOptions.unshift(
       {
-        label: "Перс. генератор",
+        label: game.i18n.localize("FALLOUTMAW.Actor.PersonalGenerator"),
         icon: "fa-solid fa-user-gear",
         visible: li => getActorFromDirectoryEntry(app, li)?.isOwner === true,
         onClick: (_event, li) => openPersonalGenerator(getActorFromDirectoryEntry(app, li))

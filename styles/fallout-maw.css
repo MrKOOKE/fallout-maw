@@ -10247,6 +10247,36 @@ label.fallout-maw-mitigation-cell {
   grid-template-columns: 2rem 80px minmax(120px, 1fr) minmax(150px, 1.1fr) 74px minmax(220px, 1.4fr) 2.5rem;
 }
 
+.fallout-maw-faction-settings-table .fallout-maw-settings-row {
+  grid-template-columns: 2rem minmax(220px, 1fr) 2.5rem;
+}
+
+.fallout-maw-actor-faction-table .fallout-maw-settings-row {
+  grid-template-columns: minmax(150px, 1fr) 120px minmax(270px, 2fr) 96px;
+}
+
+.fallout-maw-actor-faction-table .fallout-maw-settings-row.is-primary {
+  opacity: 0.8;
+}
+
+.fallout-maw-faction-relation-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+}
+
+.fallout-maw-faction-relation-controls label,
+.fallout-maw-faction-belongs-field,
+.fallout-maw-faction-score-field {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.fallout-maw-faction-score-field input {
+  width: 70px;
+}
+
 .need-settings .fallout-maw-settings-row {
   grid-template-columns: 2rem 80px minmax(120px, 1fr) minmax(150px, 1.1fr) 74px minmax(220px, 1.4fr) 2.5rem 2.5rem;
 }
@@ -13216,6 +13246,8 @@ label.fallout-maw-mitigation-cell {
   .currency-settings .fallout-maw-settings-row,
   .damage-type-settings .fallout-maw-settings-row,
   .limb-settings .fallout-maw-settings-row,
+  .fallout-maw-faction-settings-table .fallout-maw-settings-row,
+  .fallout-maw-actor-faction-table .fallout-maw-settings-row,
   .fallout-maw-stealth-settings-table .fallout-maw-settings-row,
   .fallout-maw-skill-row {
     grid-template-columns: 1fr;

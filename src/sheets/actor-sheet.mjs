@@ -58,6 +58,7 @@ import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-fo
 import { openPersonalGenerator } from "../apps/personal-generator.mjs";
 import { openConstructStructure } from "../apps/construct-structure.mjs";
 import { ActorTradeSettingsConfig } from "../apps/actor-trade-settings-config.mjs";
+import { openActorFactionConfig } from "../apps/faction-settings-config.mjs";
 import {
   DAMAGE_MITIGATION_MODES,
   ITEM_FUNCTIONS,
@@ -182,6 +183,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         openPersonalGenerator: this.#onOpenPersonalGenerator,
         openConstructStructure: this.#onOpenConstructStructure,
         openTradeSettings: this.#onOpenTradeSettings,
+        openFactionConfig: this.#onOpenFactionConfig,
         openDevelopment: this.#onOpenDevelopment,
         toggleFreeEdit: this.#onToggleFreeEdit,
         selectLimb: this.#onSelectLimb,
@@ -253,6 +255,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       action: "openTradeSettings",
       icon: "fa-solid fa-cash-register",
       label: "Торговля",
+      ownership: "OWNER"
+    });
+    controls.unshift({
+      action: "openFactionConfig",
+      icon: "fa-solid fa-flag",
+      label: game.i18n.localize("FALLOUTMAW.Factions.ActorButton"),
       ownership: "OWNER"
     });
     controls.unshift(this.actor.type === "construct"
@@ -570,6 +578,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   static #onOpenTradeSettings(event) {
     event.preventDefault();
     return new ActorTradeSettingsConfig(this.actor).render(true);
+  }
+
+  static #onOpenFactionConfig(event) {
+    event.preventDefault();
+    return openActorFactionConfig(this.actor);
   }
 
   static #onSelectLimb(event, target) {

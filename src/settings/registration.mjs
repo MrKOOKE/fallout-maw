@@ -18,6 +18,7 @@ import { CreatureOptionsConfig } from "../apps/creature-options-config.mjs";
 import { CurrencySettingsConfig } from "../apps/currency-settings-config.mjs";
 import { DamageTypesConfig } from "../apps/damage-types-config.mjs";
 import { DiseaseSettingsConfig } from "../apps/disease-settings-config.mjs";
+import { FactionSettingsConfig } from "../apps/faction-settings-config.mjs";
 import { ItemCategorySettingsConfig } from "../apps/item-category-settings-config.mjs";
 import { LevelSettingsConfig } from "../apps/level-settings-config.mjs";
 import { ProficiencySettingsConfig } from "../apps/proficiency-settings-config.mjs";
@@ -50,6 +51,8 @@ import {
   CURRENCY_SETTINGS_SETTING,
   DAMAGE_TYPES_SETTING,
   DISEASE_SETTINGS_SETTING,
+  FACTION_MATRIX_SETTING,
+  FACTION_SETTINGS_SETTING,
   ITEM_CATEGORIES_SETTING,
   LEVELS_SETTING,
   MIGRATION_STATE_SETTING,
@@ -75,6 +78,7 @@ import { createDefaultCombatSettings } from "./combat.mjs";
 import { createDefaultCoverSettings } from "./cover.mjs";
 import { createEmptyCreatureOptions } from "./creature-options.mjs";
 import { createDefaultDiseaseSettings } from "./diseases.mjs";
+import { createDefaultFactionMatrix, createDefaultFactionSettings, registerFactionApi } from "./factions.mjs";
 import { createDefaultItemCategorySettings } from "./item-categories.mjs";
 import { createDefaultLevelSettings } from "./levels.mjs";
 import { createDefaultSystemActionSettings, createDefaultToolSettings } from "./tools.mjs";
@@ -275,6 +279,22 @@ export function registerSystemSettings() {
     default: getBaselineDefault(COVER_SETTINGS_SETTING, createDefaultCoverSettings())
   });
 
+  game.settings.register(FALLOUT_MAW.id, FACTION_SETTINGS_SETTING, {
+    name: localize("FALLOUTMAW.Factions.SettingsTitle"),
+    scope: "world",
+    config: false,
+    type: Object,
+    default: getBaselineDefault(FACTION_SETTINGS_SETTING, createDefaultFactionSettings())
+  });
+
+  game.settings.register(FALLOUT_MAW.id, FACTION_MATRIX_SETTING, {
+    name: localize("FALLOUTMAW.Factions.MatrixTitle"),
+    scope: "world",
+    config: false,
+    type: Object,
+    default: getBaselineDefault(FACTION_MATRIX_SETTING, createDefaultFactionMatrix())
+  });
+
   game.settings.register(FALLOUT_MAW.id, TIME_MECHANICS_IGNORED_SETTING, {
     name: "Игнорировать механики времени",
     scope: "world",
@@ -461,6 +481,14 @@ export function registerSystemSettings() {
     restricted: true
   });
 
+  game.settings.registerMenu(FALLOUT_MAW.id, "factionSettingsMenu", {
+    name: localize("FALLOUTMAW.Factions.SettingsTitle"),
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-flag",
+    type: FactionSettingsConfig,
+    restricted: true
+  });
+
   game.settings.registerMenu(FALLOUT_MAW.id, "personalNameRandomizerMenu", {
     name: "Настройки персонального генератора",
     label: localize("FALLOUTMAW.Settings.Open"),
@@ -531,5 +559,6 @@ export function registerSystemSettings() {
 export async function finalizeSystemSettings() {
   await migrateSystemSettings();
   syncSettingsIntoSystemConfig();
+  registerFactionApi();
   refreshPreparedActors();
 }
