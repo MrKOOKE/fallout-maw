@@ -17,7 +17,9 @@ import {
   getActorFactionBelongs,
   getActorPrimaryFaction,
   getFactionNamesWithDefault,
+  getFactionScore,
   getFactionSettings,
+  getRelationFromScore,
   getRelationTo
 } from "../settings/factions.mjs";
 
@@ -29,6 +31,8 @@ const DEFAULT_TRAP_IMAGE = "icons/svg/hazard.svg";
 const DEFAULT_REGION_DAMAGE_INTERVAL_SECONDS = 6;
 const PREVIEW_BORDER_COLOR = 0xf0a23a;
 const PREVIEW_FILL_COLOR = 0xf0a23a;
+const DETECTION_PREVIEW_BORDER_COLOR = 0xd6c45f;
+const DETECTION_PREVIEW_FILL_COLOR = 0xd6c45f;
 const TRAP_CONTROLLED_MOVEMENT_OPTION = "falloutMawTrapControlledMovement";
 const TRAP_SAFE_HIGHLIGHT_LAYER = "fallout-maw-safe-traps";
 const TRAP_SAFE_HIGHLIGHT_COLOR = 0x43c96b;
@@ -149,8 +153,8 @@ export async function startTrapPlacement({ actor = null, token = null, item = nu
     return false;
   }
 
-  cancelActiveTrapPlacement();
-  activeTrapPlacement = {
+  return beginTrapPlacement({
+    mode: "actor",
     actorUuid: sourceActor.uuid,
     actorId: sourceActor.id,
     itemId: item.id,
@@ -159,16 +163,65 @@ export async function startTrapPlacement({ actor = null, token = null, item = nu
     tokenId: token?.id ?? token?.document?.id ?? "",
     application,
     trapData: normalizeTrapData(getTrapFunction(item)),
-    itemData: item.toObject(),
+    itemData: item.toObject()
+  });
+}
+
+export async function startWorldTrapPlacement({ item = null, factionName = "", application = null } = {}) {
+  if (!game.user?.isGM || !item || item.actor || !hasItemFunction(item, ITEM_FUNCTIONS.trap, { ignoreBroken: true })) return false;
+  if (!canvas?.ready || !canvas.scene) {
+    ui.notifications.warn("Сцена не готова для установки ловушки.");
+    return false;
+  }
+  return beginTrapPlacement({
+    mode: "world",
+    actorUuid: "",
+    actorId: "",
+    itemId: item.id,
+    sourceItemUuid: item.uuid,
+    sceneId: canvas.scene.id,
+    tokenId: "",
+    application,
+    factionName: normalizeTrapFactionName(factionName),
+    trapData: normalizeTrapData(getTrapFunction(item)),
+    itemData: item.toObject()
+  });
+}
+
+export function getWorldTrapPlacementState() {
+  if (activeTrapPlacement?.mode !== "world") return null;
+  return {
+    itemId: activeTrapPlacement.itemId,
+    factionName: activeTrapPlacement.factionName
+  };
+}
+
+export function cancelWorldTrapPlacement({ notify = false, refreshApplication = true } = {}) {
+  if (activeTrapPlacement?.mode !== "world") return false;
+  cancelActiveTrapPlacement({ notify, refreshApplication });
+  return true;
+}
+
+async function beginTrapPlacement(source = {}) {
+  cancelActiveTrapPlacement({ refreshApplication: false });
+  activeTrapPlacement = {
+    ...source,
     preview: null,
     rotation: 0,
     lastPoint: null,
-    inputShield: createTrapCanvasInputShield("crosshair")
+    inputShield: null
   };
+  activeTrapPlacement.inputShield = createTrapCanvasInputShield("crosshair", {
+    passthroughElement: activeTrapPlacement.mode === "world" ? activeTrapPlacement.application?.element : null
+  });
   await createTrapPlacementPreview(activeTrapPlacement);
   bindTrapCanvasInput(activeTrapPlacement, onTrapPlacementCanvasEvent, { pointerMove: true });
   window.addEventListener("keydown", onTrapPlacementKeyDown, { capture: true });
-  ui.notifications.info(`${item.name}: выберите точку установки ловушки. Esc/ПКМ отменяет.`);
+  const name = activeTrapPlacement.itemData?.name ?? "Ловушка";
+  const instruction = activeTrapPlacement.mode === "world"
+    ? "размещайте ловушки кликами. Esc или кнопка «Остановить» завершает установку."
+    : "выберите точку установки. Esc/ПКМ завершает.";
+  ui.notifications.info(`${name}: ${instruction}`);
   return true;
 }
 
@@ -432,6 +485,7 @@ async function onTrapPlacementPointerDown(event) {
   event.stopImmediatePropagation?.();
 
   const placement = activeTrapPlacement;
+  if (placement.mode === "world") return placeWorldTrapAtPointer(placement, event);
   const actor = await fromUuid(placement.actorUuid);
   const item = actor?.items?.get(placement.itemId);
   if (!actor?.isOwner || !item || !hasItemFunction(item, ITEM_FUNCTIONS.trap)) {
@@ -504,6 +558,47 @@ async function onTrapPlacementPointerDown(event) {
   await placement.application?.render?.({ force: true });
 }
 
+async function placeWorldTrapAtPointer(placement, event) {
+  if (!game.user?.isGM || activeTrapPlacement !== placement) return;
+  const item = game.items?.get(placement.itemId);
+  if (!item || item.actor || !hasItemFunction(item, ITEM_FUNCTIONS.trap, { ignoreBroken: true })) {
+    cancelActiveTrapPlacement();
+    return;
+  }
+
+  const trapData = normalizeTrapData(getTrapFunction(item));
+  const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
+  const rect = getTrapPlacementRectFromPoint(point, trapData, canvas.scene, placement.rotation);
+  const clipped = getTrapPlacementClippedArea(rect, canvas.scene);
+  if (!clipped.polygons.length) {
+    ui.notifications.warn(`${item.name}: стены полностью отсекают область установки.`);
+    return;
+  }
+
+  let linkedAction = null;
+  if (trapData.trigger.activationMode === TRAP_LINKED_ACTION_MODE) {
+    suspendTrapPlacement(placement);
+    linkedAction = await selectTrapLinkedAction();
+    if (activeTrapPlacement !== placement) return;
+    resumeTrapPlacement(placement);
+    if (!linkedAction) return;
+  }
+
+  await requestCreateTrapDocuments({
+    sceneId: canvas.scene?.id ?? placement.sceneId,
+    point: rect,
+    ownerActorUuid: "",
+    ownerFactionName: placement.factionName,
+    sourceItemUuid: item.uuid,
+    itemData: item.toObject(),
+    trapData,
+    placementRect: rect,
+    rotation: placement.rotation,
+    linkedAction
+  });
+  await placement.application?.render?.({ force: true });
+}
+
 function onTrapPlacementCanvasEvent(event) {
   if (!activeTrapPlacement) return;
   stopTrapCanvasInputEvent(event);
@@ -529,6 +624,7 @@ function onTrapPlacementContextMenu(event) {
   event.preventDefault?.();
   event.stopPropagation?.();
   event.stopImmediatePropagation?.();
+  if (activeTrapPlacement.mode === "world") return;
   cancelActiveTrapPlacement({ notify: true });
 }
 
@@ -559,17 +655,38 @@ function rotateActiveTrapPlacement() {
   if (placement.lastPoint) updateTrapPlacementPreview(placement, placement.lastPoint);
 }
 
-function cancelActiveTrapPlacement({ notify = false } = {}) {
+function suspendTrapPlacement(placement) {
+  if (!placement || activeTrapPlacement !== placement) return;
+  unbindTrapCanvasInput(placement, { delay: 0 });
+  window.removeEventListener("keydown", onTrapPlacementKeyDown, { capture: true });
+  if (placement.preview?.container) placement.preview.container.visible = false;
+}
+
+function resumeTrapPlacement(placement) {
+  if (!placement || activeTrapPlacement !== placement) return;
+  placement.inputShield = createTrapCanvasInputShield("crosshair", {
+    passthroughElement: placement.mode === "world" ? placement.application?.element : null
+  });
+  bindTrapCanvasInput(placement, onTrapPlacementCanvasEvent, { pointerMove: true });
+  window.addEventListener("keydown", onTrapPlacementKeyDown, { capture: true });
+  if (placement.preview?.container) placement.preview.container.visible = true;
+  if (placement.lastPoint) updateTrapPlacementPreview(placement, placement.lastPoint);
+}
+
+function cancelActiveTrapPlacement({ notify = false, refreshApplication = true } = {}) {
   if (!activeTrapPlacement) return;
   const placement = activeTrapPlacement;
   unbindTrapCanvasInput(placement);
   window.removeEventListener("keydown", onTrapPlacementKeyDown, { capture: true });
   destroyTrapPlacementPreview(placement);
   activeTrapPlacement = null;
+  if (refreshApplication && placement.mode === "world" && placement.application?.rendered) {
+    void placement.application.render({ force: true });
+  }
   if (notify) ui.notifications.info("Установка ловушки отменена.");
 }
 
-function createTrapCanvasInputShield(cursor = "crosshair") {
+function createTrapCanvasInputShield(cursor = "crosshair", { passthroughElement = null } = {}) {
   if (!document.body) return null;
   if (canvas?.currentMouseManager) {
     if (canvas.currentMouseManager.interactionData) canvas.currentMouseManager.interactionData.cancelled = true;
@@ -583,10 +700,57 @@ function createTrapCanvasInputShield(cursor = "crosshair") {
     zIndex: "100000",
     background: "transparent",
     cursor,
-    pointerEvents: "auto"
+    pointerEvents: passthroughElement ? "none" : "auto"
   });
+  if (passthroughElement) configureTrapInputShieldPassthrough(shield, passthroughElement, cursor);
   document.body.appendChild(shield);
   return shield;
+}
+
+function configureTrapInputShieldPassthrough(shield, passthroughElement, cursor) {
+  const panes = Array.from({ length: 4 }, () => {
+    const pane = document.createElement("div");
+    Object.assign(pane.style, {
+      position: "absolute",
+      background: "transparent",
+      cursor,
+      pointerEvents: "auto"
+    });
+    shield.appendChild(pane);
+    return pane;
+  });
+
+  const update = () => {
+    if (!passthroughElement?.isConnected) return;
+    const rect = passthroughElement.getBoundingClientRect();
+    const left = Math.max(0, Math.min(window.innerWidth, rect.left));
+    const right = Math.max(left, Math.min(window.innerWidth, rect.right));
+    const top = Math.max(0, Math.min(window.innerHeight, rect.top));
+    const bottom = Math.max(top, Math.min(window.innerHeight, rect.bottom));
+    setTrapInputShieldPane(panes[0], 0, 0, window.innerWidth, top);
+    setTrapInputShieldPane(panes[1], 0, bottom, window.innerWidth, window.innerHeight - bottom);
+    setTrapInputShieldPane(panes[2], 0, top, left, bottom - top);
+    setTrapInputShieldPane(panes[3], right, top, window.innerWidth - right, bottom - top);
+  };
+  const resizeObserver = new ResizeObserver(update);
+  resizeObserver.observe(passthroughElement);
+  window.addEventListener("resize", update);
+  document.addEventListener("pointermove", update, true);
+  shield._falloutMawCleanup = () => {
+    resizeObserver.disconnect();
+    window.removeEventListener("resize", update);
+    document.removeEventListener("pointermove", update, true);
+  };
+  update();
+}
+
+function setTrapInputShieldPane(pane, left, top, width, height) {
+  Object.assign(pane.style, {
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${Math.max(0, width)}px`,
+    height: `${Math.max(0, height)}px`
+  });
 }
 
 function bindTrapCanvasInput(session, listener, { pointerMove = false } = {}) {
@@ -614,6 +778,7 @@ function unbindTrapCanvasInput(session, { delay = 300 } = {}) {
         for (const type of binding.types) target.removeEventListener(type, binding.listener, true);
       }
     }
+    shield?._falloutMawCleanup?.();
     shield?.remove?.();
   };
   if (delay > 0) window.setTimeout(cleanup, delay);
@@ -876,7 +1041,9 @@ async function createTrapPlacementPreview(placement) {
   if (!layer || !placement) return;
   const container = new PIXI.Container();
   container.eventMode = "none";
+  const detectionGraphics = new PIXI.Graphics();
   const graphics = new PIXI.Graphics();
+  container.addChild(detectionGraphics);
   container.addChild(graphics);
   const image = normalizeImagePath(placement.itemData?.img, DEFAULT_TRAP_IMAGE);
   let sprite = null;
@@ -891,7 +1058,7 @@ async function createTrapPlacementPreview(placement) {
     console.warn(`${SYSTEM_ID} | Trap placement preview texture failed to load: ${image}`, error);
   }
   layer.addChild(container);
-  placement.preview = { container, graphics, sprite };
+  placement.preview = { container, detectionGraphics, graphics, sprite };
 }
 
 function updateTrapPlacementPreview(placement, point) {
@@ -900,7 +1067,28 @@ function updateTrapPlacementPreview(placement, point) {
   const rotation = normalizeTrapRotation(placement.rotation);
   const rect = getTrapPlacementRectFromPoint(point, placement.trapData, canvas.scene, rotation);
   const clipped = getTrapPlacementClippedArea(rect, canvas.scene);
+  const detectionRadius = metersToPixels(
+    placement.trapData?.detection?.radiusMeters,
+    canvas.scene,
+    placement.actorUuid
+  );
+  const detection = getTrapDetectionClippedArea({
+    x: rect.x + (rect.width / 2),
+    y: rect.y + (rect.height / 2),
+    elevation: Number(rect.elevation) || 0
+  }, detectionRadius, canvas.scene);
   preview.container.position.set(rect.x, rect.y);
+  preview.detectionGraphics.clear();
+  for (const polygon of detection.polygons) {
+    const points = getPolygonPointObjects(polygon)
+      .flatMap(point => [point.x - rect.x, point.y - rect.y]);
+    if (points.length < 6) continue;
+    preview.detectionGraphics
+      .lineStyle(2, DETECTION_PREVIEW_BORDER_COLOR, 0.9)
+      .beginFill(DETECTION_PREVIEW_FILL_COLOR, 0.09)
+      .drawPolygon(points)
+      .endFill();
+  }
   preview.graphics.clear();
   for (const polygon of clipped.polygons) {
     const points = getPolygonPointObjects(polygon)
@@ -1357,7 +1545,7 @@ async function createTrapDocumentsNow(request = {}) {
   const trapData = normalizeTrapData(request.trapData);
   const rotation = normalizeTrapRotation(request.rotation);
   const ownerActor = request.ownerActorUuid ? await fromUuid(String(request.ownerActorUuid)) : null;
-  const factionState = createTrapFactionState(ownerActor);
+  const factionState = createTrapFactionState(ownerActor, request.ownerFactionName);
   const rect = normalizeTrapPlacementRect(request.placementRect, scene)
     ?? getTrapPlacementRectFromPoint(point, trapData, scene, rotation);
   const clipped = getTrapPlacementClippedArea(rect, scene);
@@ -2239,7 +2427,20 @@ function isActorFactionSafeForOwner(ownerActor, actor) {
   return getActorTrapFactionNames(actor).some(factionName => getRelationTo(ownerActor, factionName) === "ally");
 }
 
-function createTrapFactionState(ownerActor) {
+function createTrapFactionState(ownerActor, ownerFactionName = "") {
+  const selectedFaction = normalizeTrapFactionName(ownerFactionName);
+  if (!ownerActor && selectedFaction) {
+    const safeFactionNames = new Set([selectedFaction]);
+    for (const factionName of getFactionNamesWithDefault(getFactionSettings())) {
+      const normalized = normalizeTrapFactionName(factionName);
+      if (!normalized) continue;
+      if (getRelationFromScore(getFactionScore(selectedFaction, normalized)) === "ally") safeFactionNames.add(normalized);
+    }
+    return {
+      ownerPrimaryFaction: selectedFaction,
+      safeFactionNames: Array.from(safeFactionNames)
+    };
+  }
   const ownerPrimaryFaction = normalizeTrapFactionName(getActorPrimaryFaction(ownerActor));
   const safeFactionNames = new Set();
   for (const factionName of getActorTrapFactionNames(ownerActor)) safeFactionNames.add(factionName);
@@ -2727,6 +2928,38 @@ function getTrapPlacementClippedArea(rect, scene) {
   }
 }
 
+function getTrapDetectionClippedArea(origin, radius, scene) {
+  const emptyResult = { polygons: [], bounds: null };
+  if (canvas.scene?.id !== scene?.id || radius <= 0) return emptyResult;
+  const backend = CONFIG.Canvas?.polygonBackends?.sight;
+  const level = canvas.level;
+  if (!backend?.create || !level?.parent) return emptyResult;
+
+  const center = {
+    x: Number(origin?.x) || 0,
+    y: Number(origin?.y) || 0,
+    elevation: Number(origin?.elevation) || 0
+  };
+  try {
+    const polygon = backend.create(center, {
+      type: "sight",
+      level,
+      edgeTypes: {
+        wall: true,
+        source: false
+      },
+      boundaryShapes: [new PIXI.Circle(center.x, center.y, radius)],
+      radius,
+      angle: 360,
+      useThreshold: true
+    });
+    return normalizeTrapPlacementPolygons(polygon);
+  } catch (error) {
+    console.warn(`${SYSTEM_ID} | Trap detection preview wall clipping failed`, error);
+    return emptyResult;
+  }
+}
+
 function normalizeTrapPlacementPolygons(polygon) {
   const polygons = [];
   const source = Array.isArray(polygon?.polygons) && polygon.polygons.length ? polygon.polygons : [polygon];
@@ -2903,6 +3136,7 @@ function serializeTrapCreateRequest(request = {}) {
     sceneId: String(request.sceneId ?? ""),
     point: serializePoint(request.point),
     ownerActorUuid: String(request.ownerActorUuid ?? ""),
+    ownerFactionName: normalizeTrapFactionName(request.ownerFactionName),
     sourceItemUuid: String(request.sourceItemUuid ?? ""),
     itemData: foundry.utils.deepClone(request.itemData ?? {}),
     trapData: normalizeTrapData(request.trapData),

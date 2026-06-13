@@ -1,0 +1,29 @@
+<section class="fallout-maw-trap-placement-panel">
+  <label class="fallout-maw-trap-placement-faction">
+    <span>{{localize "FALLOUTMAW.TrapPlacement.Faction"}}</span>
+    <select data-trap-placement-faction>
+      {{#each factionOptions}}
+      <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+      {{/each}}
+    </select>
+  </label>
+
+  <div class="fallout-maw-trap-placement-list">
+    {{#each trapItems}}
+    <article class="fallout-maw-trap-placement-entry">
+      <img src="{{img}}" alt="">
+      <strong>{{name}}</strong>
+      <button type="button" data-action="placeTrap" data-item-id="{{id}}" {{#if placing}}class="active"{{/if}}>
+        <i class="fa-solid {{#if placing}}fa-stop{{else}}fa-location-dot{{/if}}"></i>
+        {{#if placing}}
+        {{localize "FALLOUTMAW.TrapPlacement.Stop"}}
+        {{else}}
+        {{localize "FALLOUTMAW.TrapPlacement.Place"}}
+        {{/if}}
+      </button>
+    </article>
+    {{else}}
+    <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.TrapPlacement.Empty"}}</p>
+    {{/each}}
+  </div>
+</section>

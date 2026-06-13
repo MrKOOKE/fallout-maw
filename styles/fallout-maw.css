@@ -7834,6 +7834,89 @@ label.fallout-maw-mitigation-cell {
   box-shadow: 0 0 0 1px rgba(244, 219, 129, 0.16);
 }
 
+.fallout-maw-trap-placement-control .window-content {
+  background: rgba(10, 10, 14, 0.96);
+  color: var(--fallout-maw-actor-text-strong);
+  overflow: hidden;
+  padding: 0.65rem;
+}
+
+.fallout-maw-trap-placement-panel {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-rows: max-content auto;
+}
+
+.fallout-maw-trap-placement-faction {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.fallout-maw-trap-placement-faction span {
+  color: var(--fallout-maw-actor-heading);
+  font-weight: 700;
+}
+
+.fallout-maw-trap-placement-faction select {
+  background: rgba(18, 19, 14, 0.94);
+  border: 1px solid rgba(164, 146, 85, 0.62);
+  color: var(--fallout-maw-actor-text-strong);
+  height: 2rem;
+}
+
+.fallout-maw-trap-placement-list {
+  display: grid;
+  gap: 0.45rem;
+  max-height: min(620px, calc(100vh - 190px));
+  overflow-y: auto;
+  padding-right: 0.2rem;
+}
+
+.fallout-maw-trap-placement-entry {
+  align-items: center;
+  background: rgba(22, 22, 22, 0.9);
+  border: 1px solid rgba(218, 207, 147, 0.3);
+  border-radius: 3px;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: 42px minmax(0, 1fr) max-content;
+  margin: 0;
+  padding: 0.4rem;
+}
+
+.fallout-maw-trap-placement-entry img {
+  border: 1px solid rgba(218, 207, 147, 0.34);
+  height: 42px;
+  object-fit: contain;
+  width: 42px;
+}
+
+.fallout-maw-trap-placement-entry strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-trap-placement-entry button {
+  align-items: center;
+  background: rgba(39, 36, 24, 0.94);
+  border: 1px solid rgba(218, 207, 147, 0.48);
+  color: var(--fallout-maw-actor-text-strong);
+  display: inline-flex;
+  gap: 0.35rem;
+  height: 2rem;
+  padding: 0 0.55rem;
+}
+
+.fallout-maw-trap-placement-entry button:hover {
+  border-color: rgba(244, 219, 129, 0.86);
+}
+
+.fallout-maw-trap-placement-entry button.active {
+  border-color: #b94a48;
+  color: #ffb3ad;
+}
+
 .fallout-maw-token-action-hud {
   --fallout-maw-token-hud-gap: 7px;
   --fallout-maw-token-hud-tile: 115px;

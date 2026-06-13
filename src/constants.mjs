@@ -21,6 +21,7 @@ export const TEMPLATES = Object.freeze({
   trapLinkedActionDialog: `systems/${SYSTEM_ID}/templates/actor/trap-linked-action-dialog.hbs`,
   constructStructure: `systems/${SYSTEM_ID}/templates/actor/construct-structure.hbs`,
   animationLibraryBrowser: `systems/${SYSTEM_ID}/templates/actor/animation-library-browser.hbs`,
+  trapPlacementControl: `systems/${SYSTEM_ID}/templates/actor/trap-placement-control.hbs`,
   skillCheckControl: `systems/${SYSTEM_ID}/templates/actor/skill-check-control.hbs`,
   worldTimeControl: `systems/${SYSTEM_ID}/templates/actor/world-time-control.hbs`,
   skillCheckAnimation: `systems/${SYSTEM_ID}/templates/actor/skill-check-animation.hbs`,

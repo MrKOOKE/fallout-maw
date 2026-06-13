@@ -27,6 +27,7 @@ import {
 } from "./apps/token-action-hud.mjs";
 import { initializeCombatCarousel, registerCombatCarouselHooks } from "./apps/combat-carousel.mjs";
 import { registerAnimationLibraryBrowserHooks } from "./apps/animation-library-browser.mjs";
+import { registerTrapPlacementControlHooks } from "./apps/trap-placement-control.mjs";
 import { registerWorldTimeControlHooks } from "./apps/world-time-control.mjs";
 import { registerPersonalGeneratorHooks } from "./apps/personal-generator.mjs";
 import { registerSkillCheckSocket } from "./rolls/skill-check.mjs";
@@ -114,6 +115,7 @@ Hooks.once("init", () => {
   registerWorldTimeControlHooks();
   registerPersonalGeneratorHooks();
   registerAnimationLibraryBrowserHooks();
+  registerTrapPlacementControlHooks();
   registerStealthHooks();
 });
 

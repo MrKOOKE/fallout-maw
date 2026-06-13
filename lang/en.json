@@ -115,6 +115,14 @@
       "Empty": "No animations found.",
       "Select": "Select an animation."
     },
+    "TrapPlacement": {
+      "Title": "Trap Placement",
+      "Faction": "Installer Faction",
+      "NoFaction": "No faction - triggers for everyone",
+      "Place": "Place",
+      "Stop": "Stop",
+      "Empty": "No placeable traps are available in World Items."
+    },
     "RegionBehavior": {
       "PeriodicDamage": {
         "Name": "Periodic Damage",
