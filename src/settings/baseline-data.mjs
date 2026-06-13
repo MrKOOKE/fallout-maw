@@ -3,7 +3,7 @@ export const SETTINGS_BASELINE_VERSION = 1;
 export const SETTINGS_BASELINE = Object.freeze({
   "version": 1,
   "system": "fallout-maw",
-  "createdAt": "2026-05-31T09:26:44.449Z",
+  "createdAt": "2026-06-13T10:04:06.714Z",
   "sourceWorld": "fallout",
   "settings": {
     "fallout-maw.abilitiesCatalog": {
@@ -19,7 +19,8 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "id": "lBaJVF6DzKnhNhwy",
                 "name": "Четыре глаза",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/chetyre-glaza.webp",
-                "description": "",
+                "visible": true,
+                "description": "<p>Когда слот очков занят вы получете +2 к Восприятию.<br>В ином случае вы получаете -2 к Восприятию.</p>",
                 "system": {
                   "cost": 0,
                   "formula": "",
@@ -77,6 +78,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "id": "Iqzqk9O9J5my2pdM",
                 "name": "Стрельба навскидку",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/strelba-navsikdku.webp",
+                "visible": true,
                 "description": "<p>Вы лишаетесь Прицельного выстрела, но Выстрел навскидку и Стрельба очередью стоят на 1 ОД меньше.</p>",
                 "system": {
                   "cost": 0,
@@ -95,7 +97,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                       "changes": [
                         {
                           "id": "bhE1a6twduA420fQ",
-                          "key": "system.costs.actions.system.blocks.actions.aimedShot",
+                          "key": "system.blocks.actions.aimedShot",
                           "type": "add",
                           "value": "1",
                           "phase": "initial",
@@ -103,7 +105,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                         },
                         {
                           "id": "jG0JEYumYS2XsNPY",
-                          "key": "на system.costs.actions.snapshot",
+                          "key": "system.costs.actions.snapshot",
                           "type": "add",
                           "value": "-1",
                           "phase": "initial",
@@ -133,82 +135,10 @@ export const SETTINGS_BASELINE = Object.freeze({
             "locked": false,
             "abilities": [
               {
-                "id": "vgAop7J19NFMwQUD",
-                "name": "Адреналиновый драйв",
-                "img": "icons/svg/aura.svg",
-                "description": "<p>Когда состояние любой ключевой конечности &lt;=50%<br>Или<br>Когда общее ОЗ &lt;=50%<br>Сила: +4</p>",
-                "system": {
-                  "cost": 1000,
-                  "formula": "",
-                  "acquisition": {
-                    "onlyFree": false,
-                    "onlyManual": false,
-                    "skillKey": "meleeCombat",
-                    "difficulty": 60
-                  },
-                  "acquisitionRequirements": [],
-                  "functions": [
-                    {
-                      "id": "VMEez0y8JAHtE9Y5",
-                      "type": "effectChanges",
-                      "changes": [
-                        {
-                          "id": "VMEez0y8JAHtE9Y5",
-                          "key": "system.characteristics.strength",
-                          "type": "add",
-                          "value": "4",
-                          "phase": "initial",
-                          "priority": null
-                        }
-                      ],
-                      "conditions": [
-                        {
-                          "id": "6NaorK6Q2ztpLzv2",
-                          "groupId": "AscNIfLv73uju6I3",
-                          "type": "healthPercent",
-                          "operator": "lte",
-                          "percent": 50,
-                          "equipmentSlotKey": "",
-                          "healthTarget": "criticalLimb",
-                          "limbKey": "head",
-                          "limit": 1,
-                          "durationSeconds": 0
-                        },
-                        {
-                          "id": "uTFXIgJP2Th6OhcX",
-                          "groupId": "AscNIfLv73uju6I3",
-                          "type": "healthPercent",
-                          "operator": "lte",
-                          "percent": 50,
-                          "equipmentSlotKey": "",
-                          "healthTarget": "criticalLimb",
-                          "limbKey": "torso",
-                          "limit": 1,
-                          "durationSeconds": 0
-                        },
-                        {
-                          "id": "KLM0Ynw5Wo6eSso3",
-                          "groupId": "AscNIfLv73uju6I3",
-                          "type": "healthPercent",
-                          "operator": "lte",
-                          "percent": 50,
-                          "equipmentSlotKey": "",
-                          "healthTarget": "general",
-                          "limbKey": "all",
-                          "limit": 1,
-                          "durationSeconds": 0
-                        }
-                      ],
-                      "penalties": [],
-                      "sort": 0
-                    }
-                  ]
-                }
-              },
-              {
                 "id": "yQ1yCA4gGpvmfz7O",
                 "name": "Приз",
                 "img": "systems/fallout-maw/assets/icons/22-28/priz.webp",
+                "visible": true,
                 "description": "<p>Вы получаете дополнительный коронный навык.</p>",
                 "system": {
                   "cost": 1000,
@@ -226,7 +156,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                       "type": "acquisitionChanges",
                       "changes": [
                         {
-                          "id": "xl2cB0eNBCtXUiCC",
+                          "id": "wXjIiu4H2ByEYfwB",
                           "key": "system.development.points.signatureSkills",
                           "type": "add",
                           "value": "1",
@@ -245,6 +175,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "id": "nA1IMMboEOo8ErXF",
                 "name": "Интенсивная тренировка",
                 "img": "systems/fallout-maw/assets/icons/1-7/intensivnaya-trenirovka.webp",
+                "visible": true,
                 "description": "<p>Вы получаете +1 к выбранной характеристиике.</p>",
                 "system": {
                   "cost": 1000,
@@ -349,6 +280,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "id": "l1BFCOKpM2z7XdmL",
                 "name": "Скорострел",
                 "img": "systems/fallout-maw/assets/icons/8-14/More_Criticals.png",
+                "visible": true,
                 "description": "<p>Стоимость действий: Выстрел навскидку, Прицельный выстрел, Стрельба очередью уменьшается на 1 ОД</p><p>Перезарядка: 6 секунд.</p>",
                 "system": {
                   "cost": 1000,
@@ -428,6 +360,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "id": "sVmseBLoyMBrEknL",
                 "name": "Быстрый взмах",
                 "img": "systems/fallout-maw/assets/icons/8-14/master-drobyashego-oruzhiya.webp",
+                "visible": true,
                 "description": "<p>Стоимость действий: Неприцельный удар, Прицельный удар уменьшается на 1 ОД</p><p>Перезарядка: 6 секунд.</p>",
                 "system": {
                   "cost": 1000,
@@ -492,7 +425,8 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "id": "2GePnXgDpE5bAj9P",
                 "name": "Убойные удары",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/kulachishi.webp",
-                "description": "",
+                "visible": true,
+                "description": "<p>Ваши удары (в том числе с оружием) получают +[[5 + athletics/10]] к пробивной силе.</p>",
                 "system": {
                   "cost": 1000,
                   "formula": "",
@@ -519,7 +453,15 @@ export const SETTINGS_BASELINE = Object.freeze({
                           "id": "jMFRvAHgPj3WhHQ3",
                           "key": "system.penetration.actions.meleeAttack",
                           "type": "add",
-                          "value": "10",
+                          "value": "5 + ath/10",
+                          "phase": "initial",
+                          "priority": null
+                        },
+                        {
+                          "id": "jXI6sRg7ykuKY59Q",
+                          "key": "system.penetration.actions.aimedMeleeAttack",
+                          "type": "add",
+                          "value": "5 + ath/10",
                           "phase": "initial",
                           "priority": null
                         }
@@ -542,6 +484,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "id": "geh3jh8LBxjW2Tvx",
                 "name": "Барахольщик",
                 "img": "systems/fallout-maw/assets/icons/1-7/baraholshik.webp",
+                "visible": true,
                 "description": "<p>Добавляет дополнительный нижний ряд слотов в инвентаре и увеличивает грузоподъемность на 50 кг.</p>",
                 "system": {
                   "cost": 1000,
@@ -593,6 +536,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "id": "Tuu1UCNuS9ViJB5I",
                 "name": "Крепкий хребет",
                 "img": "systems/fallout-maw/assets/icons/8-14/krepkij-hrebet.webp",
+                "visible": true,
                 "description": "<p>Добавляет по 2 ряда слотов сетки инвентаря в высоту и шириу, а так же увеличивает грузоподьемность на 100 кг.</p>",
                 "system": {
                   "cost": 1000,
@@ -645,6 +589,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "id": "vO0Mt1Talbc4Zkh0",
                 "name": "Твердая рука",
                 "img": "systems/fallout-maw/assets/icons/1-7/tvyordaya-ruka.webp",
+                "visible": true,
                 "description": "<p>Уменьшает отдачу при стрельбе очередью на 50%</p>",
                 "system": {
                   "cost": 1000,
@@ -681,6 +626,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "id": "KeI4l5UwYGowZ3yT",
                 "name": "Марафонец",
                 "img": "systems/fallout-maw/assets/icons/8-14/marafonec.webp",
+                "visible": true,
                 "description": "<p>Увеличивает ваши ОП на 4</p>",
                 "system": {
                   "cost": 1000,
@@ -719,6 +665,124 @@ export const SETTINGS_BASELINE = Object.freeze({
                     }
                   ]
                 }
+              },
+              {
+                "id": "DeslrzONoVH2agnv",
+                "name": "Крадун",
+                "img": "systems/fallout-maw/assets/icons/1-7/koshachij-glaz.webp",
+                "visible": true,
+                "description": "<p>Вы больше не получаете штраф к стоимости передвижения от положения Присед.</p>",
+                "system": {
+                  "cost": 1000,
+                  "formula": "",
+                  "acquisition": {
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "athletics",
+                    "difficulty": 100
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "oxhDXKUbyjkl6Pm7",
+                      "type": "skill",
+                      "skillKey": "athletics",
+                      "value": 100
+                    }
+                  ],
+                  "functions": [
+                    {
+                      "id": "XEMrtDzzo0yDU549",
+                      "type": "effectChanges",
+                      "changes": [
+                        {
+                          "id": "fJ8vxwM8YPRbet8M",
+                          "key": "system.postures.crawl.movementMultiplier",
+                          "type": "add",
+                          "value": "-1",
+                          "phase": "initial",
+                          "priority": null
+                        }
+                      ],
+                      "conditions": [],
+                      "penalties": [],
+                      "sort": 0
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "vgAop7J19NFMwQUD",
+                "name": "Адреналиновый драйв",
+                "img": "systems/fallout-maw/assets/icons/8-14/adrenalinovyj-drajv.webp",
+                "visible": true,
+                "description": "<p>Когда состояние любой ключевой конечности &lt;=50%<br>Или<br>Когда общее ОЗ &lt;=50%<br>Сила: +4</p>",
+                "system": {
+                  "cost": 1000,
+                  "formula": "",
+                  "acquisition": {
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat",
+                    "difficulty": 60
+                  },
+                  "acquisitionRequirements": [],
+                  "functions": [
+                    {
+                      "id": "VMEez0y8JAHtE9Y5",
+                      "type": "effectChanges",
+                      "changes": [
+                        {
+                          "id": "VMEez0y8JAHtE9Y5",
+                          "key": "system.characteristics.strength",
+                          "type": "add",
+                          "value": "4",
+                          "phase": "initial",
+                          "priority": null
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "id": "6NaorK6Q2ztpLzv2",
+                          "groupId": "AscNIfLv73uju6I3",
+                          "type": "healthPercent",
+                          "operator": "lte",
+                          "percent": 50,
+                          "equipmentSlotKey": "",
+                          "healthTarget": "criticalLimb",
+                          "limbKey": "head",
+                          "limit": 1,
+                          "durationSeconds": 0
+                        },
+                        {
+                          "id": "uTFXIgJP2Th6OhcX",
+                          "groupId": "AscNIfLv73uju6I3",
+                          "type": "healthPercent",
+                          "operator": "lte",
+                          "percent": 50,
+                          "equipmentSlotKey": "",
+                          "healthTarget": "criticalLimb",
+                          "limbKey": "torso",
+                          "limit": 1,
+                          "durationSeconds": 0
+                        },
+                        {
+                          "id": "KLM0Ynw5Wo6eSso3",
+                          "groupId": "AscNIfLv73uju6I3",
+                          "type": "healthPercent",
+                          "operator": "lte",
+                          "percent": 50,
+                          "equipmentSlotKey": "",
+                          "healthTarget": "general",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "durationSeconds": 0
+                        }
+                      ],
+                      "penalties": [],
+                      "sort": 0
+                    }
+                  ]
+                }
               }
             ]
           },
@@ -737,6 +801,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "id": "Ddvgs7mYk9MxyL9c",
                 "name": "Непробиваемый",
                 "img": "systems/fallout-maw/assets/icons/1-7/neprobivaemost.webp",
+                "visible": true,
                 "description": "<p>Сопротивелние ко всем видам урона: +10</p>",
                 "system": {
                   "cost": 1000,
@@ -773,6 +838,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "id": "HE8qSgb8wyjvazCJ",
                 "name": "Бегущий мертвец",
                 "img": "systems/fallout-maw/assets/icons/8-14/begushij-mertvec.webp",
+                "visible": true,
                 "description": "<p>Когда состояние вашей ключевой конечности &lt;=50%<br>Или<br>Когда ваше общее ОЗ &lt;=50%</p><p><br>ОП: +6</p>",
                 "system": {
                   "cost": 1000,
@@ -866,6 +932,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "id": "gnt1kmEiLFOcwtMK",
                 "name": "Иньектор",
                 "img": "systems/fallout-maw/assets/icons/1-7/inuektor.webp",
+                "visible": true,
                 "description": "<p>Когда вы лечите всех, эффективность увеличивается на 25%.</p>",
                 "system": {
                   "cost": 1000,
@@ -964,7 +1031,121 @@ export const SETTINGS_BASELINE = Object.freeze({
             "id": "skill-gambling",
             "name": "Азарт",
             "locked": false,
-            "abilities": []
+            "abilities": [
+              {
+                "id": "HTvsbNk0SvsHUJlY",
+                "name": "Беззаботный",
+                "img": "systems/fallout-maw/assets/icons/15-21/bezzabotnost.webp",
+                "visible": true,
+                "description": "<p>Каждый раз, когда вы употребляете Алкоголь.<br>Удача: +1<br>Длительность: 1 час</p>",
+                "system": {
+                  "cost": 100,
+                  "formula": "",
+                  "acquisition": {
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "gambling",
+                    "difficulty": 130
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "CLgNtQg1CzV57dCL",
+                      "type": "skill",
+                      "skillKey": "gambling",
+                      "value": 80
+                    }
+                  ],
+                  "functions": [
+                    {
+                      "id": "zOv3WYrBCKsMiYYs",
+                      "type": "effectChanges",
+                      "changes": [
+                        {
+                          "id": "0IcLFbYDQskqhU4t",
+                          "key": "system.characteristics.luck",
+                          "type": "add",
+                          "value": "1",
+                          "phase": "initial",
+                          "priority": null
+                        }
+                      ],
+                      "conditions": [
+                        {
+                          "id": "73MKn81SBaDVwe4u",
+                          "groupId": "",
+                          "type": "itemUse",
+                          "operator": "lte",
+                          "percent": 50,
+                          "equipmentSlotKey": "",
+                          "healthTarget": "general",
+                          "limbKey": "all",
+                          "limit": 1,
+                          "requiredCount": 1,
+                          "itemCategories": [
+                            "Алкоголь"
+                          ],
+                          "durationSeconds": 3600
+                        }
+                      ],
+                      "penalties": [],
+                      "sort": 0
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "5UoFXMjcBIB2sBTt",
+                "name": "Кровавая баня",
+                "img": "systems/fallout-maw/assets/icons/1-7/bystraya-reakciya.webp",
+                "visible": true,
+                "description": "<p>Если после вашей атаки у цели осталось менее 30% ОЗ, то с шансом [[40+gambling/10]]% цель будет убита.</p>",
+                "system": {
+                  "cost": 1000,
+                  "formula": "",
+                  "acquisition": {
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "gambling",
+                    "difficulty": 130
+                  },
+                  "acquisitionRequirements": [
+                    {
+                      "id": "aZ7V26z8VuDZUobr",
+                      "type": "skill",
+                      "skillKey": "gambling",
+                      "value": 80
+                    }
+                  ],
+                  "functions": [
+                    {
+                      "id": "5PfmJyhkCoJBFvwC",
+                      "type": "effectChanges",
+                      "changes": [
+                        {
+                          "id": "zpqYwmjwm49jXefh",
+                          "key": "system.combat.finishingBlow",
+                          "type": "add",
+                          "value": "30",
+                          "phase": "initial",
+                          "priority": null
+                        },
+                        {
+                          "id": "vypWbZ8EPszllamj",
+                          "key": "system.combat.finishingBlowChance",
+                          "type": "add",
+                          "value": "40+gam",
+                          "phase": "initial",
+                          "priority": null
+                        }
+                      ],
+                      "conditions": [],
+                      "penalties": [],
+                      "sort": 0
+                    }
+                  ]
+                }
+              }
+            ]
           }
         ]
       }
@@ -1058,6 +1239,9 @@ export const SETTINGS_BASELINE = Object.freeze({
     "fallout-maw.combatSettings": {
       "scope": "world",
       "value": {
+        "weaponSwitch": {
+          "actionPointCost": 3
+        },
         "dodge": {
           "enabled": true,
           "attackCostPercent": 10,
@@ -1067,7 +1251,59 @@ export const SETTINGS_BASELINE = Object.freeze({
           "roundRecoveryPercent": 20,
           "restoreOnCombatStart": true,
           "restoreOnCombatEnd": true
+        },
+        "unconsciousness": {
+          "normalDamageFormula": "damage * 0.5",
+          "negativeDamageFormula": "damage",
+          "criticalDamageFormula": "damage * 2",
+          "stateMultiplierFormula": "1 + missingStateRatio"
         }
+      }
+    },
+    "fallout-maw.coverSettings": {
+      "scope": "world",
+      "value": {
+        "entries": [
+          {
+            "key": "partial",
+            "label": "Частичное",
+            "img": "systems/fallout-maw/assets/HUD/shield_low.svg",
+            "overlapPercent": 25,
+            "change": {
+              "key": "system.resources.dodge.bonus",
+              "type": "add",
+              "value": "25",
+              "phase": "initial",
+              "priority": 0
+            }
+          },
+          {
+            "key": "half",
+            "label": "Половинчатое",
+            "img": "systems/fallout-maw/assets/HUD/shield_half.svg",
+            "overlapPercent": 50,
+            "change": {
+              "key": "system.resources.dodge.bonus",
+              "type": "add",
+              "value": "50",
+              "phase": "initial",
+              "priority": 0
+            }
+          },
+          {
+            "key": "full",
+            "label": "Полное",
+            "img": "systems/fallout-maw/assets/HUD/shield_full.svg",
+            "overlapPercent": 80,
+            "change": {
+              "key": "system.resources.dodge.bonus",
+              "type": "add",
+              "value": "100",
+              "phase": "initial",
+              "priority": 0
+            }
+          }
+        ]
       }
     },
     "fallout-maw.creatureOptions": {
@@ -1083,8 +1319,8 @@ export const SETTINGS_BASELINE = Object.freeze({
             "name": "Животное"
           },
           {
-            "id": "k3mqATEkk7YmGeVa",
-            "name": "Робот"
+            "id": "newType",
+            "name": "Насекомые"
           }
         ],
         "races": [
@@ -1113,8 +1349,8 @@ export const SETTINGS_BASELINE = Object.freeze({
               {
                 "key": "head",
                 "label": "Голова",
-                "stateMax": "50 + con * 5",
-                "damageMultiplier": 1.3,
+                "stateMax": "50 + con * 4",
+                "damageMultiplier": 1,
                 "aimedDifficultyPercent": 50,
                 "critical": true,
                 "lossEffects": []
@@ -1122,8 +1358,8 @@ export const SETTINGS_BASELINE = Object.freeze({
               {
                 "key": "eyes",
                 "label": "Глаза",
-                "stateMax": "50 + con * 2",
-                "damageMultiplier": 1.4,
+                "stateMax": "40 + con * 2",
+                "damageMultiplier": 1,
                 "aimedDifficultyPercent": 70,
                 "critical": false,
                 "lossEffects": [
@@ -1148,8 +1384,8 @@ export const SETTINGS_BASELINE = Object.freeze({
               {
                 "key": "groin",
                 "label": "Пах",
-                "stateMax": "50 + con * 5",
-                "damageMultiplier": 1.2,
+                "stateMax": "40 + con * 4",
+                "damageMultiplier": 1,
                 "aimedDifficultyPercent": 50,
                 "critical": false,
                 "lossEffects": []
@@ -1158,7 +1394,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "key": "leftArm",
                 "label": "Левая рука",
                 "stateMax": "50 + con * 5",
-                "damageMultiplier": 0.8,
+                "damageMultiplier": 1,
                 "aimedDifficultyPercent": 20,
                 "critical": false,
                 "lossEffects": [
@@ -1182,7 +1418,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "key": "rightArm",
                 "label": "Правая рука",
                 "stateMax": "50 + con * 5",
-                "damageMultiplier": 0.8,
+                "damageMultiplier": 1,
                 "aimedDifficultyPercent": 20,
                 "critical": false,
                 "lossEffects": [
@@ -1206,7 +1442,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "key": "leftLeg",
                 "label": "Левая нога",
                 "stateMax": "50 + con * 5",
-                "damageMultiplier": 0.8,
+                "damageMultiplier": 1,
                 "aimedDifficultyPercent": 20,
                 "critical": false,
                 "lossEffects": [
@@ -1237,7 +1473,7 @@ export const SETTINGS_BASELINE = Object.freeze({
                 "key": "rightLeg",
                 "label": "Правая нога",
                 "stateMax": "50 + con * 5",
-                "damageMultiplier": 0.8,
+                "damageMultiplier": 1,
                 "aimedDifficultyPercent": 20,
                 "critical": false,
                 "lossEffects": [
@@ -20882,6 +21118,323 @@ export const SETTINGS_BASELINE = Object.freeze({
                 ]
               }
             ],
+            "naturalItemSets": [
+              {
+                "id": "naturalSet",
+                "label": "Обычный",
+                "naturalWeapons": [
+                  {
+                    "id": "rvV9nDyaEvqo3W4r",
+                    "item": {
+                      "name": "Руки и ноги",
+                      "type": "gear",
+                      "img": "systems/fallout-maw/assets/Oruzhie/Obichnoe/Bez%20Oruzhiya/boksyorskie-binty.webp",
+                      "system": {
+                        "itemFunction": "",
+                        "quantity": 1,
+                        "maxStack": 1,
+                        "weight": 0,
+                        "price": 0,
+                        "equipped": false,
+                        "container": {
+                          "parentId": "",
+                          "columns": 1,
+                          "rows": 1,
+                          "maxLoad": 0
+                        },
+                        "placement": {
+                          "mode": "weapon",
+                          "equipmentSlot": "",
+                          "weaponSet": "naturalRaceWeapons",
+                          "weaponSlot": "rvV9nDyaEvqo3W4r",
+                          "limbKey": "",
+                          "x": 1,
+                          "y": 1,
+                          "width": 1,
+                          "height": 1
+                        },
+                        "occupiedSlots": {},
+                        "weaponSlotRequirement": {
+                          "mode": "oneOf",
+                          "slots": {}
+                        },
+                        "description": "",
+                        "itemCategory": "",
+                        "priceCurrency": "",
+                        "functions": {
+                          "container": {
+                            "enabled": false,
+                            "loadReduction": 0,
+                            "extraWeaponSlots": 0
+                          },
+                          "condition": {
+                            "enabled": false,
+                            "value": 0,
+                            "max": 0,
+                            "weakeningThreshold": 20,
+                            "recoveryMethods": []
+                          },
+                          "damageSource": {
+                            "enabled": false,
+                            "name": "",
+                            "damage": 0,
+                            "pellets": 1,
+                            "damageTypeKey": "firearm",
+                            "damageTypes": [
+                              {
+                                "key": "firearm",
+                                "percent": 100
+                              }
+                            ],
+                            "attackAnimationKey": "",
+                            "attackSoundPath": "",
+                            "attackAnimationDelayMs": 0,
+                            "accuracyBonus": 0,
+                            "criticalChanceModifier": 0,
+                            "criticalDamagePercent": 0,
+                            "maxRangeMeters": 0,
+                            "effectiveRange": {
+                              "value": 0,
+                              "max": 0
+                            },
+                            "penetration": 0,
+                            "volley": {
+                              "damageRadius": 0,
+                              "regionRadius": 0,
+                              "regionDamageEntries": [],
+                              "regionDurationSeconds": 0,
+                              "regionDelaySeconds": 0,
+                              "regionRadiusDeltaMeters": 0,
+                              "explosionAnimationKey": "",
+                              "explosionSoundPath": ""
+                            }
+                          },
+                          "module": {
+                            "enabled": false,
+                            "name": "",
+                            "targetFunction": "weapon",
+                            "weapon": {
+                              "damage": 0,
+                              "accuracyBonus": 0,
+                              "criticalChanceModifier": 0,
+                              "criticalDamagePercent": 0,
+                              "attackConeDegrees": 0,
+                              "maxRangeMeters": 0,
+                              "effectiveRange": {
+                                "value": 0,
+                                "max": 0
+                              },
+                              "penetration": 0,
+                              "magazineMax": 0,
+                              "actionPointCosts": {
+                                "aimedShot": 0,
+                                "snapshot": 0,
+                                "burst": 0,
+                                "volley": 0,
+                                "meleeAttack": 0,
+                                "aimedMeleeAttack": 0,
+                                "reload": 0
+                              }
+                            },
+                            "additionalWeapons": {}
+                          },
+                          "weapon": {
+                            "enabled": true,
+                            "damageMode": "manual",
+                            "damage": 30,
+                            "pellets": 1,
+                            "damageTypeKey": "firearm",
+                            "damageTypes": [
+                              {
+                                "key": "bludgeoning",
+                                "percent": 100
+                              }
+                            ],
+                            "attackAnimationKey": "fallout-maw.generic.creature.fist.creature_attack_fist_001_003_red",
+                            "attackSoundPath": "systems/fallout-maw/audio/Weapon_Sounds/Kulaki/wpn_hand_hit_flesh_02.mp3",
+                            "attackAnimationDelayMs": 200,
+                            "proficiencyKey": "pistol",
+                            "skillKey": "meleeCombat",
+                            "accuracyBonus": 0,
+                            "criticalChanceModifier": 0,
+                            "criticalDamagePercent": 150,
+                            "attackConeDegrees": 3,
+                            "maxRangeMeters": 1,
+                            "effectiveRange": {
+                              "value": 0,
+                              "max": 1
+                            },
+                            "penetration": 0,
+                            "magazine": {
+                              "value": 0,
+                              "max": 0,
+                              "sourceItemUuid": "",
+                              "sourceItemUuids": []
+                            },
+                            "resourceCosts": [],
+                            "moduleSlots": [],
+                            "specialProperties": [],
+                            "requirements": [],
+                            "availableActions": {
+                              "aimedShot": false,
+                              "snapshot": false,
+                              "burst": false,
+                              "volley": false,
+                              "meleeAttack": true,
+                              "aimedMeleeAttack": true,
+                              "reload": false
+                            },
+                            "aimedShot": {
+                              "name": "",
+                              "actionPointCost": 5,
+                              "attackConeDegrees": 3,
+                              "criticalFailureConsequences": []
+                            },
+                            "snapshot": {
+                              "name": "",
+                              "actionPointCost": 5,
+                              "attackConeDegrees": 3,
+                              "criticalFailureConsequences": []
+                            },
+                            "burst": {
+                              "name": "",
+                              "actionPointCost": 5,
+                              "attackConeDegrees": 3,
+                              "count": 3,
+                              "difficultyPerShot": 10,
+                              "criticalFailureConsequences": []
+                            },
+                            "volley": {
+                              "name": "",
+                              "actionPointCost": 5,
+                              "damageRadius": 0,
+                              "regionRadius": 0,
+                              "regionDamageEntries": [],
+                              "regionDurationSeconds": 0,
+                              "regionDelaySeconds": 0,
+                              "regionRadiusDeltaMeters": 0,
+                              "explosionAnimationKey": "",
+                              "explosionSoundPath": "",
+                              "criticalFailureConsequences": []
+                            },
+                            "meleeAttack": {
+                              "name": "",
+                              "actionPointCost": 4,
+                              "attackConeDegrees": 120,
+                              "criticalFailureConsequences": [],
+                              "thrust": {
+                                "enabled": true,
+                                "accuracyModifier": 0,
+                                "criticalChanceModifier": 0,
+                                "damagePercentModifier": 0
+                              },
+                              "swing": {
+                                "enabled": true,
+                                "accuracyModifier": 0,
+                                "criticalChanceModifier": 0,
+                                "damagePercentModifier": 0
+                              }
+                            },
+                            "aimedMeleeAttack": {
+                              "name": "",
+                              "actionPointCost": 5,
+                              "attackConeDegrees": 120,
+                              "criticalFailureConsequences": [],
+                              "thrust": {
+                                "enabled": true,
+                                "accuracyModifier": 0,
+                                "criticalChanceModifier": 0,
+                                "damagePercentModifier": 0
+                              },
+                              "swing": {
+                                "enabled": true,
+                                "accuracyModifier": 0,
+                                "criticalChanceModifier": 0,
+                                "damagePercentModifier": 0
+                              }
+                            },
+                            "reload": {
+                              "name": "",
+                              "actionPointCost": 2
+                            }
+                          },
+                          "additionalWeapons": {},
+                          "damageMitigation": {
+                            "enabled": false,
+                            "mode": "defense",
+                            "limbSetIds": [],
+                            "entries": {}
+                          },
+                          "firstAid": {
+                            "enabled": false,
+                            "healing": 0,
+                            "healingIsPercentage": false,
+                            "durationSeconds": 0,
+                            "intervalSeconds": 6,
+                            "actionPointCost": 0,
+                            "maxDistance": 0,
+                            "difficulty": 0,
+                            "criticalSuccessHealingBonus": 20,
+                            "criticalFailureDamageMin": 1,
+                            "criticalFailureDamageMax": 10,
+                            "charges": {
+                              "value": 1,
+                              "max": 1
+                            },
+                            "needs": [],
+                            "limbSelection": {
+                              "count": 0,
+                              "value": 0
+                            },
+                            "removeEffects": [],
+                            "changes": []
+                          },
+                          "tools": {}
+                        },
+                        "craft": {
+                          "mode": "craft",
+                          "nodes": [],
+                          "links": [],
+                          "viewport": {
+                            "x": 0,
+                            "y": 0,
+                            "zoom": 1
+                          },
+                          "disassembly": {
+                            "nodes": [],
+                            "links": [],
+                            "viewport": {
+                              "x": 0,
+                              "y": 0,
+                              "zoom": 1
+                            }
+                          }
+                        }
+                      },
+                      "effects": [],
+                      "folder": null,
+                      "sort": 0,
+                      "ownership": {
+                        "default": 0
+                      },
+                      "flags": {},
+                      "_stats": {
+                        "coreVersion": "14.361",
+                        "systemId": "fallout-maw",
+                        "systemVersion": "0.2.0",
+                        "createdTime": null,
+                        "modifiedTime": null,
+                        "lastModifiedBy": null,
+                        "compendiumSource": null,
+                        "duplicateSource": null,
+                        "exportSource": null
+                      }
+                    }
+                  }
+                ],
+                "naturalFeatures": []
+              }
+            ],
             "inventorySize": {
               "columns": 10,
               "rows": 3
@@ -21513,6 +22066,14 @@ export const SETTINGS_BASELINE = Object.freeze({
                 ]
               }
             ],
+            "naturalItemSets": [
+              {
+                "id": "naturalSet",
+                "label": "Основной",
+                "naturalWeapons": [],
+                "naturalFeatures": []
+              }
+            ],
             "inventorySize": {
               "columns": 10,
               "rows": 2
@@ -21969,8 +22530,15 @@ export const SETTINGS_BASELINE = Object.freeze({
           "key": "piercing",
           "label": "Колющий",
           "color": "#d9d0bd",
-          "img": "systems/fallout-maw/assets/HUD/IKONKI_whait-01.svg",
+          "img": "systems/fallout-maw/assets/HUD/ac-badge__-no-bg-preview_carve.photos.png",
           "settings": {
+            "bleeding": {
+              "enabled": true,
+              "effectName": "Кровотечение",
+              "img": "icons/skills/wounds/blood-drip-droplet-red.webp",
+              "percent": 20,
+              "durationSeconds": 24
+            },
             "periodic": {
               "enabled": false,
               "effectName": "",
@@ -22006,6 +22574,13 @@ export const SETTINGS_BASELINE = Object.freeze({
           "color": "#d95c5c",
           "img": "systems/fallout-maw/assets/HUD/IKONKI_whait-02.svg",
           "settings": {
+            "bleeding": {
+              "enabled": true,
+              "effectName": "Обильное кровотечение",
+              "img": "icons/skills/wounds/injury-triple-slash-bleed.webp",
+              "percent": 40,
+              "durationSeconds": 12
+            },
             "periodic": {
               "enabled": false,
               "effectName": "",
@@ -22041,6 +22616,13 @@ export const SETTINGS_BASELINE = Object.freeze({
           "color": "#c49a6c",
           "img": "systems/fallout-maw/assets/HUD/IKONKI_whait-03.svg",
           "settings": {
+            "bleeding": {
+              "enabled": false,
+              "effectName": "Кровотечение",
+              "img": "icons/skills/wounds/blood-drip-droplet-red.webp",
+              "percent": 0,
+              "durationSeconds": 24
+            },
             "periodic": {
               "enabled": false,
               "effectName": "",
@@ -22052,7 +22634,7 @@ export const SETTINGS_BASELINE = Object.freeze({
             },
             "needIncrease": {
               "enabled": false,
-              "needKey": "",
+              "needKey": "hunger",
               "percent": 100,
               "preventHealthDamage": false
             },
@@ -22066,7 +22648,7 @@ export const SETTINGS_BASELINE = Object.freeze({
             },
             "equipmentConditionDamage": {
               "enabled": true,
-              "formula": "protected + unconditional"
+              "formula": "protected * 1,5 + unconditional"
             }
           }
         },
@@ -22076,6 +22658,13 @@ export const SETTINGS_BASELINE = Object.freeze({
           "color": "#f0d48a",
           "img": "systems/fallout-maw/assets/HUD/IKONKI_whait-04.svg",
           "settings": {
+            "bleeding": {
+              "enabled": true,
+              "effectName": "Кровотечение",
+              "img": "icons/skills/wounds/blood-drip-droplet-red.webp",
+              "percent": 20,
+              "durationSeconds": 24
+            },
             "periodic": {
               "enabled": false,
               "effectName": "",
@@ -22111,6 +22700,13 @@ export const SETTINGS_BASELINE = Object.freeze({
           "color": "#78f0ff",
           "img": "systems/fallout-maw/assets/HUD/IKONKI_whait-05.svg",
           "settings": {
+            "bleeding": {
+              "enabled": false,
+              "effectName": "Кровотечение",
+              "img": "icons/skills/wounds/blood-drip-droplet-red.webp",
+              "percent": 0,
+              "durationSeconds": 24
+            },
             "periodic": {
               "enabled": false,
               "effectName": "",
@@ -22146,6 +22742,13 @@ export const SETTINGS_BASELINE = Object.freeze({
           "color": "#ff6a2a",
           "img": "systems/fallout-maw/assets/HUD/IKONKI_whait-06.svg",
           "settings": {
+            "bleeding": {
+              "enabled": false,
+              "effectName": "Кровотечение",
+              "img": "icons/skills/wounds/blood-drip-droplet-red.webp",
+              "percent": 0,
+              "durationSeconds": 24
+            },
             "periodic": {
               "enabled": true,
               "effectName": "Горение",
@@ -22181,6 +22784,13 @@ export const SETTINGS_BASELINE = Object.freeze({
           "color": "#6da8ff",
           "img": "systems/fallout-maw/assets/HUD/IKONKI_whait-07.svg",
           "settings": {
+            "bleeding": {
+              "enabled": false,
+              "effectName": "Кровотечение",
+              "img": "icons/skills/wounds/blood-drip-droplet-red.webp",
+              "percent": 0,
+              "durationSeconds": 24
+            },
             "periodic": {
               "enabled": false,
               "effectName": "",
@@ -22225,6 +22835,13 @@ export const SETTINGS_BASELINE = Object.freeze({
           "color": "#f6f05a",
           "img": "systems/fallout-maw/assets/HUD/IKONKI_whait-08.svg",
           "settings": {
+            "bleeding": {
+              "enabled": false,
+              "effectName": "Кровотечение",
+              "img": "icons/skills/wounds/blood-drip-droplet-red.webp",
+              "percent": 0,
+              "durationSeconds": 24
+            },
             "periodic": {
               "enabled": false,
               "effectName": "",
@@ -22260,6 +22877,13 @@ export const SETTINGS_BASELINE = Object.freeze({
           "color": "#7be36d",
           "img": "icons/svg/acid.svg",
           "settings": {
+            "bleeding": {
+              "enabled": false,
+              "effectName": "Кровотечение",
+              "img": "icons/skills/wounds/blood-drip-droplet-red.webp",
+              "percent": 0,
+              "durationSeconds": 24
+            },
             "periodic": {
               "enabled": false,
               "effectName": "",
@@ -22295,9 +22919,16 @@ export const SETTINGS_BASELINE = Object.freeze({
           "color": "#97ff6b",
           "img": "icons/svg/poison.svg",
           "settings": {
+            "bleeding": {
+              "enabled": false,
+              "effectName": "Кровотечение",
+              "img": "icons/skills/wounds/blood-drip-droplet-red.webp",
+              "percent": 0,
+              "durationSeconds": 24
+            },
             "periodic": {
               "enabled": true,
-              "effectName": "Яд",
+              "effectName": "Отравление",
               "img": "icons/magic/death/skull-poison-green.webp",
               "immediatePercent": 0,
               "delayedPercent": 100,
@@ -22306,7 +22937,7 @@ export const SETTINGS_BASELINE = Object.freeze({
             },
             "needIncrease": {
               "enabled": false,
-              "needKey": "",
+              "needKey": "hunger",
               "percent": 100,
               "preventHealthDamage": false
             },
@@ -22330,6 +22961,13 @@ export const SETTINGS_BASELINE = Object.freeze({
           "color": "#cf4dff",
           "img": "icons/svg/radiation.svg",
           "settings": {
+            "bleeding": {
+              "enabled": false,
+              "effectName": "Кровотечение",
+              "img": "icons/skills/wounds/blood-drip-droplet-red.webp",
+              "percent": 0,
+              "durationSeconds": 24
+            },
             "periodic": {
               "enabled": false,
               "effectName": "",
@@ -22344,6 +22982,50 @@ export const SETTINGS_BASELINE = Object.freeze({
               "needKey": "radcont",
               "percent": 100,
               "preventHealthDamage": true
+            },
+            "resourceLimit": {
+              "enabled": false,
+              "effectName": "",
+              "img": "",
+              "color": "#3f8cff",
+              "durationSeconds": 12,
+              "resources": []
+            },
+            "equipmentConditionDamage": {
+              "enabled": true,
+              "formula": "protected + unconditional"
+            }
+          }
+        },
+        {
+          "key": "bleeding",
+          "label": "Кровотечение",
+          "color": "#b82020",
+          "img": "icons/skills/wounds/blood-drip-droplet-red.webp",
+          "locked": true,
+          "system": true,
+          "settings": {
+            "bleeding": {
+              "enabled": false,
+              "effectName": "Кровотечение",
+              "img": "icons/skills/wounds/blood-drip-droplet-red.webp",
+              "percent": 0,
+              "durationSeconds": 24
+            },
+            "periodic": {
+              "enabled": false,
+              "effectName": "",
+              "img": "",
+              "immediatePercent": 100,
+              "delayedPercent": 0,
+              "tickCount": 0,
+              "intervalSeconds": 6
+            },
+            "needIncrease": {
+              "enabled": false,
+              "needKey": "",
+              "percent": 100,
+              "preventHealthDamage": false
             },
             "resourceLimit": {
               "enabled": false,
@@ -22506,6 +23188,69 @@ export const SETTINGS_BASELINE = Object.freeze({
       "scope": "world",
       "value": []
     },
+    "fallout-maw.factionMatrix": {
+      "scope": "world",
+      "value": {
+        "Неопределено": {
+          "Неопределено": 0,
+          "Игроки": 0,
+          "Рейдеры": 0,
+          "Легион": 0,
+          "Братство": 0,
+          "НКР": 0
+        },
+        "Игроки": {
+          "Неопределено": 0,
+          "Игроки": 0,
+          "Рейдеры": 0,
+          "Легион": 0,
+          "Братство": 0,
+          "НКР": 0
+        },
+        "Рейдеры": {
+          "Неопределено": 0,
+          "Игроки": 0,
+          "Рейдеры": 0,
+          "Легион": 0,
+          "Братство": 0,
+          "НКР": 0
+        },
+        "Легион": {
+          "Неопределено": 0,
+          "Игроки": 0,
+          "Рейдеры": 0,
+          "Легион": 0,
+          "Братство": 0,
+          "НКР": 0
+        },
+        "Братство": {
+          "Неопределено": 0,
+          "Игроки": 0,
+          "Рейдеры": 0,
+          "Легион": 0,
+          "Братство": 0,
+          "НКР": 0
+        },
+        "НКР": {
+          "Неопределено": 0,
+          "Игроки": 0,
+          "Рейдеры": 0,
+          "Легион": 0,
+          "Братство": 0,
+          "НКР": 0
+        }
+      }
+    },
+    "fallout-maw.factionSettings": {
+      "scope": "world",
+      "value": [
+        "Игроки",
+        "Рейдеры",
+        "Легион",
+        "Братство",
+        "НКР"
+      ]
+    },
     "fallout-maw.floatingSize": {
       "scope": "world",
       "value": 60
@@ -22525,6 +23270,25 @@ export const SETTINGS_BASELINE = Object.freeze({
     "fallout-maw.hideFirstRound": {
       "scope": "world",
       "value": false
+    },
+    "fallout-maw.itemCategories": {
+      "scope": "world",
+      "value": {
+        "categories": [
+          {
+            "label": "Оружие"
+          },
+          {
+            "label": "Снаряжение"
+          },
+          {
+            "label": "Пища"
+          },
+          {
+            "label": "Алкоголь"
+          }
+        ]
+      }
     },
     "fallout-maw.lessButtons": {
       "scope": "client",
@@ -23089,6 +23853,12 @@ export const SETTINGS_BASELINE = Object.freeze({
             "abbr": "thb",
             "label": "Двуручное дробящее",
             "max": 1000
+          },
+          {
+            "key": "natural",
+            "abbr": "nat",
+            "label": "Природное",
+            "max": 1000
           }
         ],
         "influence": {
@@ -23174,7 +23944,7 @@ export const SETTINGS_BASELINE = Object.freeze({
     "fallout-maw.skillCheckControl": {
       "scope": "world",
       "value": {
-        "resultMode": "standard",
+        "resultMode": "success",
         "skillModifier": 0,
         "difficultyModifier": 0,
         "criticalSuccessBonus": 0,
@@ -23183,6 +23953,37 @@ export const SETTINGS_BASELINE = Object.freeze({
         "resetResultAfterUse": false,
         "resetModifiersAfterUse": false,
         "resetEdgeModeAfterUse": false
+      }
+    },
+    "fallout-maw.skillDevelopmentCosts": {
+      "scope": "world",
+      "value": {
+        "thresholds": [
+          {
+            "threshold": 80,
+            "cost": 2
+          },
+          {
+            "threshold": 120,
+            "cost": 4
+          },
+          {
+            "threshold": 160,
+            "cost": 6
+          },
+          {
+            "threshold": 200,
+            "cost": 8
+          },
+          {
+            "threshold": 240,
+            "cost": 10
+          },
+          {
+            "threshold": 280,
+            "cost": 12
+          }
+        ]
       }
     },
     "fallout-maw.skillSettings": {
@@ -23578,38 +24379,44 @@ export const SETTINGS_BASELINE = Object.freeze({
         {
           "key": "medicine",
           "label": "Медицина",
-          "img": "icons/svg/heal.svg",
+          "img": "systems/fallout-maw/assets/Komandy%20dlya%20upravleniya%20tokenom/menyu_meditsiny.webp",
           "toolKey": "medical"
         },
         {
           "key": "repair",
           "label": "Ремонт",
-          "img": "icons/tools/smithing/tongs-steel-grey.webp",
+          "img": "systems/fallout-maw/assets/Komandy%20dlya%20upravleniya%20tokenom/menyu_remonta.webp",
           "toolKey": "repair"
         },
         {
           "key": "search",
           "label": "Обыск",
-          "img": "icons/svg/eye.svg",
+          "img": "systems/fallout-maw/assets/Komandy%20dlya%20upravleniya%20tokenom/obysk.webp",
           "toolKey": ""
         },
         {
           "key": "trade",
           "label": "Торговля",
-          "img": "icons/svg/coins.svg",
+          "img": "systems/fallout-maw/assets/Komandy%20dlya%20upravleniya%20tokenom/torgovlya.webp",
           "toolKey": ""
         },
         {
           "key": "craft",
           "label": "Крафт",
-          "img": "icons/tools/smithing/hammer-sledge-steel-grey.webp",
+          "img": "systems/fallout-maw/assets/Komandy%20dlya%20upravleniya%20tokenom/Kraft.png",
           "toolKey": "repair"
         },
         {
           "key": "stealth",
           "label": "Скрытность",
-          "img": "icons/svg/invisible.svg",
+          "img": "systems/fallout-maw/assets/Komandy%20dlya%20upravleniya%20tokenom/Sidya.png",
           "toolKey": ""
+        },
+        {
+          "key": "traps",
+          "label": "Ловушки",
+          "img": "systems/fallout-maw/assets/HUD/Fo4%20Fortune%20Finder.webp",
+          "toolKey": "mechanicalHacking"
         }
       ]
     },
@@ -23633,14 +24440,20 @@ export const SETTINGS_BASELINE = Object.freeze({
       "value": {
         "damageReductionIcon": "systems/fallout-maw/assets/HUD/ac-badge__-no-bg-preview_carve.photos.png",
         "damageBlockedIcon": "systems/fallout-maw/assets/HUD/ac-gold-shield-badge-Picsart-BackgroundRemover.png",
-        "levelUpIcon": "icons/svg/upgrade.svg",
+        "dodgeConversionIcon": "icons/svg/shield.svg",
+        "levelUpIcon": "systems/fallout-maw/assets/Komandy%20dlya%20upravleniya%20tokenom/lvl-up.webp",
         "mainActions": {
           "weapon": "icons/svg/combat.svg",
-          "items": "icons/svg/item-bag.svg",
-          "abilities": "icons/svg/aura.svg",
-          "skills": "icons/svg/dice-target.svg",
-          "actions": "icons/svg/aura.svg",
-          "settings": "icons/svg/lever.svg"
+          "items": "systems/fallout-maw/assets/HUD/Fo4%20Strong%20Back.webp",
+          "abilities": "systems/fallout-maw/assets/HUD/Fo4%20Inspirational.webp",
+          "skills": "icons/svg/d20-highlight.svg",
+          "actions": "systems/fallout-maw/assets/HUD/Well-Rested%20colored.webp",
+          "settings": "icons/tools/hand/wrench-double.webp"
+        },
+        "activeActions": {
+          "grapple": "icons/svg/sword.svg",
+          "dragGrappled": "icons/svg/wingfoot.svg",
+          "push": "icons/svg/impact.svg"
         },
         "weaponActions": {
           "aimedShot": "icons/svg/target.svg",
@@ -23649,27 +24462,38 @@ export const SETTINGS_BASELINE = Object.freeze({
           "volley": "icons/svg/explosion.svg",
           "meleeAttack": "icons/svg/sword.svg",
           "aimedMeleeAttack": "icons/svg/target.svg",
-          "reload": "icons/svg/upgrade.svg"
+          "push": "icons/svg/up.svg",
+          "reload": "icons/svg/upgrade.svg",
+          "replaceWeapon": "icons/svg/direction.svg",
+          "lightOn": "icons/svg/light.svg",
+          "lightOff": "icons/svg/light.svg",
+          "lightRecharge": "icons/svg/upgrade.svg"
+        },
+        "postures": {
+          "walk": "icons/svg/walk.svg",
+          "crawl": "systems/fallout-maw/assets/Komandy%20dlya%20upravleniya%20tokenom/sit.webp",
+          "burrow": "systems/fallout-maw/assets/Komandy%20dlya%20upravleniya%20tokenom/lie.webp",
+          "knocked": "icons/svg/falling.svg"
         },
         "skillIcons": {
-          "rangedCombat": "icons/weapons/guns/gun-pistol-flintlock.webp",
-          "meleeCombat": "icons/svg/combat.svg",
-          "athletics": "icons/svg/jump.svg",
-          "energy": "icons/svg/lightning.svg",
-          "resilience": "icons/svg/holy-shield.svg",
-          "throwing": "icons/weapons/thrown/throwing-knife-flat-steel.webp",
-          "firstAid": "icons/svg/heal.svg",
-          "doctor": "icons/svg/pill.svg",
-          "naturalist": "icons/svg/oak.svg",
-          "stealth": "icons/svg/invisible.svg",
-          "lockpicking": "icons/svg/padlock.svg",
-          "theft": "icons/svg/chest.svg",
-          "traps": "icons/svg/net.svg",
-          "science": "icons/svg/book.svg",
-          "repair": "icons/tools/smithing/tongs-steel-grey.webp",
-          "speech": "icons/svg/mystery-man.svg",
-          "barter": "icons/svg/coins.svg",
-          "gambling": "icons/sundries/gaming/gaming-set-dice.webp"
+          "rangedCombat": "systems/fallout-maw/assets/HUD/Fo4%20Rifleman.webp",
+          "meleeCombat": "systems/fallout-maw/assets/HUD/An%20Ambitious%20Plan%20icon.webp",
+          "athletics": "systems/fallout-maw/assets/HUD/Fo4%20Action%20Boy.webp",
+          "energy": "systems/fallout-maw/assets/HUD/Fo4%20Adamantium%20Skeleton.webp",
+          "resilience": "systems/fallout-maw/assets/HUD/Fo4%20Toughness.webp",
+          "throwing": "systems/fallout-maw/assets/HUD/Fo4%20Ninja.webp",
+          "firstAid": "systems/fallout-maw/assets/HUD/Fo4%20Medic.webp",
+          "doctor": "systems/fallout-maw/assets/HUD/Fo4%20Chemist.webp",
+          "naturalist": "systems/fallout-maw/assets/HUD/Fo4FH%20Far%20Harbor%20Survivalist.webp",
+          "stealth": "systems/fallout-maw/assets/HUD/Fo4%20Sneak%20perk.webp",
+          "lockpicking": "systems/fallout-maw/assets/HUD/Fo4%20Locksmith.webp",
+          "theft": "systems/fallout-maw/assets/HUD/Fo4%20Pickpocket.webp",
+          "traps": "systems/fallout-maw/assets/HUD/Fo4%20Fortune%20Finder.webp",
+          "science": "systems/fallout-maw/assets/HUD/Fo4%20Hacker.webp",
+          "repair": "systems/fallout-maw/assets/HUD/Fo4%20Blacksmith.webp",
+          "speech": "systems/fallout-maw/assets/HUD/Fo4%20Local%20Leader.webp",
+          "barter": "systems/fallout-maw/assets/HUD/Fo4%20Cap%20Collector.webp",
+          "gambling": "systems/fallout-maw/assets/HUD/Fo4%20Bloody%20Mess.webp"
         },
         "emptyWeaponSlotIcon": "icons/svg/combat.svg"
       }
@@ -23681,6 +24505,129 @@ export const SETTINGS_BASELINE = Object.freeze({
     "fallout-maw.tokenActionHudScale": {
       "scope": "client",
       "value": 50
+    },
+    "fallout-maw.tokenPrototypeDefaults": {
+      "scope": "world",
+      "value": {
+        "base": {},
+        "types": {
+          "character": {
+            "displayName": 20,
+            "actorLink": true,
+            "width": 1,
+            "height": 1,
+            "depth": 1,
+            "texture": {
+              "src": "icons/svg/mystery-man.svg",
+              "fit": "contain",
+              "anchorX": 0.5,
+              "anchorY": 0.5,
+              "tint": "#ffffff",
+              "scaleX": 1,
+              "scaleY": 1
+            },
+            "lockRotation": false,
+            "rotation": 0,
+            "alpha": 1,
+            "disposition": 0,
+            "displayBars": 40,
+            "bar1": {
+              "attribute": "resources.health"
+            },
+            "bar2": {
+              "attribute": null
+            },
+            "light": {
+              "dim": 0,
+              "bright": 0,
+              "angle": 360,
+              "color": "",
+              "alpha": 0.5,
+              "priority": 0,
+              "negative": false,
+              "animation": {
+                "type": "",
+                "speed": 5,
+                "reverse": false,
+                "intensity": 5
+              },
+              "coloration": 1,
+              "luminosity": 0.5,
+              "attenuation": 0.5,
+              "saturation": 0,
+              "contrast": 0,
+              "shadows": 0
+            },
+            "sight": {
+              "enabled": true,
+              "range": 10,
+              "angle": 360,
+              "visionMode": "basic",
+              "color": "",
+              "attenuation": 0.1,
+              "brightness": 0,
+              "saturation": 0,
+              "contrast": 0
+            },
+            "detectionModes": {
+              "seeAll": {
+                "range": null,
+                "enabled": false
+              },
+              "seeInvisibility": {
+                "range": null,
+                "enabled": false
+              },
+              "senseAll": {
+                "range": null,
+                "enabled": false
+              },
+              "senseInvisibility": {
+                "range": null,
+                "enabled": false
+              },
+              "lightPerception": {
+                "range": null,
+                "enabled": false
+              },
+              "basicSight": {
+                "range": null,
+                "enabled": false
+              },
+              "feelTremor": {
+                "range": null,
+                "enabled": false
+              }
+            },
+            "occludable": {
+              "radius": 0
+            },
+            "ring": {
+              "enabled": false,
+              "colors": {
+                "ring": "",
+                "background": ""
+              },
+              "subject": {
+                "texture": "",
+                "scale": 1
+              },
+              "effects": 0
+            },
+            "turnMarker": {
+              "mode": 1,
+              "animation": "",
+              "src": "",
+              "disposition": false
+            },
+            "movementAction": "",
+            "randomImg": false,
+            "appendNumber": false,
+            "prependAdjective": false
+          },
+          "construct": {}
+        }
+      }
     },
     "fallout-maw.toolSettings": {
       "scope": "world",
@@ -23709,10 +24656,20 @@ export const SETTINGS_BASELINE = Object.freeze({
         "groups": {
           "eyes|groin|head|leftArm|leftLeg|rightArm|rightLeg|torso": {
             "races": [],
+            "thresholds": [
+              {
+                "id": "oEM2wUNdl2kv9lK1",
+                "thresholdPercent": 60
+              },
+              {
+                "id": "7RLO6LAUNUfxuMId",
+                "thresholdPercent": 0
+              }
+            ],
             "limbs": {
               "head": {
                 "label": "Голова",
-                "stateMax": "50 + con * 5",
+                "stateMax": "50 + con * 4",
                 "stages": [
                   {
                     "id": "oEM2wUNdl2kv9lK1",
@@ -23744,132 +24701,6 @@ export const SETTINGS_BASELINE = Object.freeze({
                         "thresholdPercent": 60
                       },
                       "slashing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "bludgeoning": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "firearm": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "energy": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "fire": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "cryo": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "electric": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "acid": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "poison": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "radiation": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "bleeding": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      }
-                    }
-                  },
-                  {
-                    "id": "uwsSZ5wc8sq0jYyT",
-                    "thresholdPercent": 60,
-                    "profiles": {
-                      "piercing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "slashing": {
                         "name": "Травма Режущий",
                         "img": "icons/svg/blood.svg",
                         "healingDifficulty": 60,
@@ -23892,132 +24723,6 @@ export const SETTINGS_BASELINE = Object.freeze({
                             "priority": null
                           }
                         ],
-                        "thresholdPercent": 60
-                      },
-                      "bludgeoning": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "firearm": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "energy": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "fire": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "cryo": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "electric": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "acid": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "poison": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "radiation": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "bleeding": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      }
-                    }
-                  },
-                  {
-                    "id": "4Pnqa18G7SAOBDHK",
-                    "thresholdPercent": 60,
-                    "profiles": {
-                      "piercing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "slashing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
                         "thresholdPercent": 60
                       },
                       "bludgeoning": {
@@ -24046,132 +24751,6 @@ export const SETTINGS_BASELINE = Object.freeze({
                         "thresholdPercent": 60
                       },
                       "firearm": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "energy": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "fire": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "cryo": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "electric": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "acid": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "poison": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "radiation": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "bleeding": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      }
-                    }
-                  },
-                  {
-                    "id": "fAG5aVqhVtrRYWbR",
-                    "thresholdPercent": 60,
-                    "profiles": {
-                      "piercing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "slashing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "bludgeoning": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "firearm": {
                         "name": "Травма Огнестрельный",
                         "img": "icons/svg/blood.svg",
                         "healingDifficulty": 60,
@@ -24187,132 +24766,6 @@ export const SETTINGS_BASELINE = Object.freeze({
                             "priority": null
                           }
                         ],
-                        "thresholdPercent": 60
-                      },
-                      "energy": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "fire": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "cryo": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "electric": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "acid": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "poison": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "radiation": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "bleeding": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      }
-                    }
-                  },
-                  {
-                    "id": "TjIMvM6Pqrbk03xY",
-                    "thresholdPercent": 60,
-                    "profiles": {
-                      "piercing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "slashing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "bludgeoning": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "firearm": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
                         "thresholdPercent": 60
                       },
                       "energy": {
@@ -24338,132 +24791,6 @@ export const SETTINGS_BASELINE = Object.freeze({
                             "priority": null
                           }
                         ],
-                        "thresholdPercent": 60
-                      },
-                      "fire": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "cryo": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "electric": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "acid": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "poison": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "radiation": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "bleeding": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      }
-                    }
-                  },
-                  {
-                    "id": "6L6z8WGXbOvh0BA0",
-                    "thresholdPercent": 60,
-                    "profiles": {
-                      "piercing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "slashing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "bludgeoning": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "firearm": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "energy": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
                         "thresholdPercent": 60
                       },
                       "fire": {
@@ -24517,16 +24844,6 @@ export const SETTINGS_BASELINE = Object.freeze({
                         "thresholdPercent": 60
                       },
                       "radiation": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 60
-                      },
-                      "bleeding": {
                         "name": "",
                         "img": "",
                         "healingDifficulty": 60,
@@ -24575,132 +24892,6 @@ export const SETTINGS_BASELINE = Object.freeze({
                         "thresholdPercent": 0
                       },
                       "slashing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "bludgeoning": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "firearm": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "energy": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "fire": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "cryo": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "electric": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "acid": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "poison": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "radiation": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "bleeding": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      }
-                    }
-                  },
-                  {
-                    "id": "iCOcuD1wWtoxqKJI",
-                    "thresholdPercent": 0,
-                    "profiles": {
-                      "piercing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "slashing": {
                         "name": "Травма Режущий",
                         "img": "icons/svg/blood.svg",
                         "healingDifficulty": 140,
@@ -24733,132 +24924,6 @@ export const SETTINGS_BASELINE = Object.freeze({
                         "thresholdPercent": 0
                       },
                       "bludgeoning": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "firearm": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "energy": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "fire": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "cryo": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "electric": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "acid": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "poison": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "radiation": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "bleeding": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      }
-                    }
-                  },
-                  {
-                    "id": "wbqKRIJwTZqHNWYt",
-                    "thresholdPercent": 0,
-                    "profiles": {
-                      "piercing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "slashing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "bludgeoning": {
                         "name": "Травма Дробящий",
                         "img": "icons/svg/blood.svg",
                         "healingDifficulty": 140,
@@ -24881,132 +24946,6 @@ export const SETTINGS_BASELINE = Object.freeze({
                             "priority": null
                           }
                         ],
-                        "thresholdPercent": 0
-                      },
-                      "firearm": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "energy": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "fire": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "cryo": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "electric": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "acid": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "poison": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "radiation": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "bleeding": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      }
-                    }
-                  },
-                  {
-                    "id": "fufUpQYFAU0BE2ww",
-                    "thresholdPercent": 0,
-                    "profiles": {
-                      "piercing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "slashing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "bludgeoning": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
                         "thresholdPercent": 0
                       },
                       "firearm": {
@@ -25042,132 +24981,6 @@ export const SETTINGS_BASELINE = Object.freeze({
                         "thresholdPercent": 0
                       },
                       "energy": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "fire": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "cryo": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "electric": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "acid": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "poison": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "radiation": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "bleeding": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      }
-                    }
-                  },
-                  {
-                    "id": "1OdLv8ZGcSEsjyfd",
-                    "thresholdPercent": 0,
-                    "profiles": {
-                      "piercing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "slashing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "bludgeoning": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "firearm": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "energy": {
                         "name": "Травма Энергетический",
                         "img": "icons/svg/blood.svg",
                         "healingDifficulty": 180,
@@ -25197,132 +25010,6 @@ export const SETTINGS_BASELINE = Object.freeze({
                             "priority": null
                           }
                         ],
-                        "thresholdPercent": 0
-                      },
-                      "fire": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "cryo": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "electric": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "acid": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "poison": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "radiation": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "bleeding": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      }
-                    }
-                  },
-                  {
-                    "id": "Drk3R9dJs6IbHWkf",
-                    "thresholdPercent": 0,
-                    "profiles": {
-                      "piercing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "slashing": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "bludgeoning": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "firearm": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
-                        "thresholdPercent": 0
-                      },
-                      "energy": {
-                        "name": "",
-                        "img": "",
-                        "healingDifficulty": 60,
-                        "healingToolClass": "D",
-                        "healingProgress": 100,
-                        "healingSkillKey": "doctor",
-                        "effects": [],
                         "thresholdPercent": 0
                       },
                       "fire": {
@@ -25384,8 +25071,236 @@ export const SETTINGS_BASELINE = Object.freeze({
                         "healingSkillKey": "doctor",
                         "effects": [],
                         "thresholdPercent": 0
+                      }
+                    }
+                  }
+                ]
+              },
+              "eyes": {
+                "label": "Глаза",
+                "stateMax": "40 + con * 2",
+                "stages": [
+                  {
+                    "id": "oEM2wUNdl2kv9lK1",
+                    "thresholdPercent": 60,
+                    "profiles": {
+                      "piercing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
                       },
-                      "bleeding": {
+                      "slashing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "bludgeoning": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "firearm": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "energy": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "fire": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "cryo": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "electric": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "acid": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "poison": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "radiation": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      }
+                    }
+                  },
+                  {
+                    "id": "7RLO6LAUNUfxuMId",
+                    "thresholdPercent": 0,
+                    "profiles": {
+                      "piercing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "slashing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "bludgeoning": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "firearm": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "energy": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "fire": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "cryo": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "electric": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "acid": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "poison": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "radiation": {
                         "name": "",
                         "img": "",
                         "healingDifficulty": 60,
@@ -25399,40 +25314,1433 @@ export const SETTINGS_BASELINE = Object.freeze({
                   }
                 ]
               },
-              "eyes": {
-                "label": "Глаза",
-                "stateMax": "50 + con * 5",
-                "stages": []
-              },
               "torso": {
                 "label": "Туловище",
                 "stateMax": "100 + con * 5",
-                "stages": []
+                "stages": [
+                  {
+                    "id": "oEM2wUNdl2kv9lK1",
+                    "thresholdPercent": 60,
+                    "profiles": {
+                      "piercing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "slashing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "bludgeoning": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "firearm": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "energy": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "fire": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "cryo": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "electric": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "acid": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "poison": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "radiation": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      }
+                    }
+                  },
+                  {
+                    "id": "7RLO6LAUNUfxuMId",
+                    "thresholdPercent": 0,
+                    "profiles": {
+                      "piercing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "slashing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "bludgeoning": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "firearm": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "energy": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "fire": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "cryo": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "electric": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "acid": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "poison": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "radiation": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      }
+                    }
+                  }
+                ]
               },
               "groin": {
                 "label": "Пах",
-                "stateMax": "50 + con * 5",
-                "stages": []
+                "stateMax": "40 + con * 4",
+                "stages": [
+                  {
+                    "id": "oEM2wUNdl2kv9lK1",
+                    "thresholdPercent": 60,
+                    "profiles": {
+                      "piercing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "slashing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "bludgeoning": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "firearm": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "energy": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "fire": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "cryo": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "electric": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "acid": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "poison": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "radiation": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      }
+                    }
+                  },
+                  {
+                    "id": "7RLO6LAUNUfxuMId",
+                    "thresholdPercent": 0,
+                    "profiles": {
+                      "piercing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "slashing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "bludgeoning": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "firearm": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "energy": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "fire": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "cryo": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "electric": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "acid": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "poison": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "radiation": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      }
+                    }
+                  }
+                ]
               },
               "leftArm": {
                 "label": "Левая рука",
                 "stateMax": "50 + con * 5",
-                "stages": []
+                "stages": [
+                  {
+                    "id": "oEM2wUNdl2kv9lK1",
+                    "thresholdPercent": 60,
+                    "profiles": {
+                      "piercing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "slashing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "bludgeoning": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "firearm": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "energy": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "fire": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "cryo": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "electric": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "acid": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "poison": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "radiation": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      }
+                    }
+                  },
+                  {
+                    "id": "7RLO6LAUNUfxuMId",
+                    "thresholdPercent": 0,
+                    "profiles": {
+                      "piercing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "slashing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "bludgeoning": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "firearm": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "energy": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "fire": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "cryo": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "electric": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "acid": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "poison": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "radiation": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      }
+                    }
+                  }
+                ]
               },
               "rightArm": {
                 "label": "Правая рука",
                 "stateMax": "50 + con * 5",
-                "stages": []
+                "stages": [
+                  {
+                    "id": "oEM2wUNdl2kv9lK1",
+                    "thresholdPercent": 60,
+                    "profiles": {
+                      "piercing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "slashing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "bludgeoning": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "firearm": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "energy": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "fire": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "cryo": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "electric": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "acid": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "poison": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "radiation": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      }
+                    }
+                  },
+                  {
+                    "id": "7RLO6LAUNUfxuMId",
+                    "thresholdPercent": 0,
+                    "profiles": {
+                      "piercing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "slashing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "bludgeoning": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "firearm": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "energy": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "fire": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "cryo": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "electric": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "acid": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "poison": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "radiation": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      }
+                    }
+                  }
+                ]
               },
               "leftLeg": {
                 "label": "Левая нога",
                 "stateMax": "50 + con * 5",
-                "stages": []
+                "stages": [
+                  {
+                    "id": "oEM2wUNdl2kv9lK1",
+                    "thresholdPercent": 60,
+                    "profiles": {
+                      "piercing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "slashing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "bludgeoning": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "firearm": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "energy": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "fire": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "cryo": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "electric": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "acid": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "poison": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "radiation": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      }
+                    }
+                  },
+                  {
+                    "id": "7RLO6LAUNUfxuMId",
+                    "thresholdPercent": 0,
+                    "profiles": {
+                      "piercing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "slashing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "bludgeoning": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "firearm": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "energy": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "fire": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "cryo": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "electric": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "acid": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "poison": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "radiation": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      }
+                    }
+                  }
+                ]
               },
               "rightLeg": {
                 "label": "Правая нога",
                 "stateMax": "50 + con * 5",
-                "stages": []
+                "stages": [
+                  {
+                    "id": "oEM2wUNdl2kv9lK1",
+                    "thresholdPercent": 60,
+                    "profiles": {
+                      "piercing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "slashing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "bludgeoning": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "firearm": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "energy": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "fire": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "cryo": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "electric": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "acid": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "poison": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      },
+                      "radiation": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 60
+                      }
+                    }
+                  },
+                  {
+                    "id": "7RLO6LAUNUfxuMId",
+                    "thresholdPercent": 0,
+                    "profiles": {
+                      "piercing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "slashing": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "bludgeoning": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "firearm": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "energy": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "fire": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "cryo": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "electric": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "acid": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "poison": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      },
+                      "radiation": {
+                        "name": "",
+                        "img": "",
+                        "healingDifficulty": 60,
+                        "healingToolClass": "D",
+                        "healingProgress": 100,
+                        "healingSkillKey": "doctor",
+                        "effects": [],
+                        "thresholdPercent": 0
+                      }
+                    }
+                  }
+                ]
               }
             }
           }
