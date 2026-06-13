@@ -46,7 +46,8 @@ export class BaseItemDataModel extends foundry.abstract.TypeDataModel {
         x: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
         y: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
         width: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
-        height: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
+        height: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+        rotated: new BooleanField({ required: true, initial: false })
       })
     };
   }

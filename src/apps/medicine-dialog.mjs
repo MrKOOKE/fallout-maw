@@ -788,7 +788,8 @@ function createInstallProsthesisUpdate(item, limbKey = "") {
     "system.placement.x": 1,
     "system.placement.y": 1,
     "system.placement.width": Math.max(1, toInteger(placement.width) || 1),
-    "system.placement.height": Math.max(1, toInteger(placement.height) || 1)
+    "system.placement.height": Math.max(1, toInteger(placement.height) || 1),
+    "system.placement.rotated": Boolean(placement.rotated)
   };
 }
 
@@ -811,7 +812,8 @@ function createProsthesisItemData(item, limbKey = "") {
         x: 1,
         y: 1,
         width: Math.max(1, toInteger(placement.width) || 1),
-        height: Math.max(1, toInteger(placement.height) || 1)
+        height: Math.max(1, toInteger(placement.height) || 1),
+        rotated: Boolean(placement.rotated)
       }
     }
   });
@@ -832,7 +834,8 @@ function createReturnProsthesisUpdate(item) {
     "system.placement.x": 1,
     "system.placement.y": 10000,
     "system.placement.width": Math.max(1, toInteger(placement.width) || 1),
-    "system.placement.height": Math.max(1, toInteger(placement.height) || 1)
+    "system.placement.height": Math.max(1, toInteger(placement.height) || 1),
+    "system.placement.rotated": Boolean(placement.rotated)
   };
 }
 
@@ -855,7 +858,8 @@ function createReturnedProsthesisItemData(item) {
         x: 1,
         y: 10000,
         width: Math.max(1, toInteger(placement.width) || 1),
-        height: Math.max(1, toInteger(placement.height) || 1)
+        height: Math.max(1, toInteger(placement.height) || 1),
+        rotated: Boolean(placement.rotated)
       }
     }
   });

@@ -330,7 +330,8 @@ function createActorDropItemData(itemData, targetPlacement) {
         x: storedPlacement.x,
         y: storedPlacement.y,
         width: storedPlacement.width,
-        height: storedPlacement.height
+        height: storedPlacement.height,
+        rotated: storedPlacement.rotated
       }
     }
   });

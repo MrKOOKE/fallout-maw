@@ -19,7 +19,7 @@
       <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}} {{#if phantom}}phantom{{/if}}" data-inventory-cell data-x="{{x}}" data-y="{{y}}" data-drop-zone style="{{style}}"></div>
       {{/each}}
       {{#each grid.items}}
-      <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if equipped}}equipped{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
+      <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if equipped}}equipped{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
         <img src="{{img}}" alt="{{name}}">
         {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
       </article>

@@ -39,6 +39,12 @@ import {
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
 import {
+  canShowInventoryRotateAction,
+  createInventoryRotationUpdate,
+  getInventoryRotationUnavailableLabel,
+  resolveInventoryItemRotation
+} from "../utils/inventory-rotation.mjs";
+import {
   canUseWeaponSlotForItem,
   doesItemOccupyEquipmentSlot,
   getRaceEquipmentSlotsForItem,
@@ -1397,16 +1403,17 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const footprint = entryKind === "currency" ? { width: 1, height: 1 } : getItemFootprint(item, this.#getActorForTradeSide(side)?.items);
     const width = Math.max(1, Math.min(columns, toInteger(footprint?.width) || 1));
     const height = Math.max(1, toInteger(footprint?.height) || 1);
+    const rotated = entryKind !== "currency" && Boolean(item?.system?.placement?.rotated);
     const occupied = getTradeOfferOccupiedPlacements(this.#tradeOffers[side], { excludeKind: entryKind, excludeKey: entryKey });
     const pointerPosition = grid && zone ? getTradeOfferGridPointerPosition(grid, event, { columns }) : null;
     if (zone && !pointerPosition) return null;
     const pointer = getTradeOfferGridPointerPlacement(pointerPosition, { columns, width, height });
     const rows = Math.max(TRADE_OFFER_MAX_ROWS, pointer ? pointer.y + height : height);
-    if (pointer && isTradeOfferPlacementAvailable(pointer, occupied, columns, rows)) return { ...pointer, columns };
+    if (pointer && isTradeOfferPlacementAvailable(pointer, occupied, columns, rows)) return { ...pointer, columns, rotated };
     const placement = pointer
       ? findNearestAvailableTradeOfferPlacement(occupied, columns, rows, { width, height }, pointer)
       : findFirstAvailableTradeOfferPlacement(occupied, columns, rows, { width, height });
-    return placement ? { ...placement, columns } : null;
+    return placement ? { ...placement, columns, rotated } : null;
   }
 
   #getTradeOfferGridElement(zone = null) {
@@ -1984,6 +1991,8 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const isSlottedItem = isSlottedEquipment || isSlottedWeapon;
     const isEquipped = Boolean(item.system?.equipped);
     const isContainer = isContainerItem(item);
+    const canRotate = canShowInventoryRotateAction(item);
+    const rotationResolution = canRotate ? this.#resolveSearchItemRotation(actor, item) : null;
     const menuOptions = [];
 
     if (game.user?.isGM) {
@@ -1994,6 +2003,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
     if (canUseActiveItem(item)) {
       menuOptions.push(["use", "fa-play", "Применить"]);
+    }
+    if (canRotate) {
+      menuOptions.push(["rotate", "fa-rotate", game.i18n.localize("FALLOUTMAW.Item.Rotate"), !rotationResolution, rotationResolution ? "" : getInventoryRotationUnavailableLabel()]);
     }
     if (isSlottedItem || isEquipped) {
       menuOptions.push(["unequip", "fa-hand", game.i18n.localize("FALLOUTMAW.Item.Unequip")]);
@@ -2015,7 +2027,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     menu.style.left = `${event.clientX}px`;
     menu.style.top = `${event.clientY}px`;
     menu.innerHTML = menuOptions
-      .map(([action, icon, label]) => `<button type="button" data-action="${action}"><i class="fa-solid ${icon}"></i>${label}</button>`)
+      .map(([action, icon, label, disabled = false, title = ""]) => `<button type="button" data-action="${action}"${disabled ? " disabled" : ""}${title ? ` title="${escapeHTML(title)}"` : ""}><i class="fa-solid ${icon}"></i>${label}</button>`)
       .join("");
     document.body.append(menu);
 
@@ -2027,6 +2039,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openSearchContainerSheet(item);
       if (action === "use") return useActiveItem({ actor, item, application: this });
+      if (action === "rotate") return this.#rotateSearchItem(actor, item);
       if (action === "equip") return this.#equipSearchItem(actor, item);
       if (action === "unequip") return this.#unequipSearchItem(actor, item);
       if (action === "split") return this.#splitSearchItem(actor, item);
@@ -2405,6 +2418,51 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     app.render({ force: true });
     app.bringToFront();
     return app;
+  }
+
+  #resolveSearchItemRotation(actor, item) {
+    const parentId = item.system?.placement?.mode === LOCKED_STORAGE_PLACEMENT_MODE
+      ? LOCKED_STORAGE_PARENT_ID
+      : getItemContainerParentId(item);
+    const { columns, rows } = getActorInventoryContextDimensions(actor, parentId);
+    return resolveInventoryItemRotation({
+      item,
+      parentId,
+      contextItems: getContextInventoryItems(parentId, actor.items),
+      columns,
+      rows,
+      allItems: actor.items,
+      excludeItemIds: [item.id],
+      options: getActorInventoryContextOptions(actor, parentId)
+    });
+  }
+
+  async #rotateSearchItem(actor, item, resolution = this.#resolveSearchItemRotation(actor, item)) {
+    const updateData = createInventoryRotationUpdate(item, resolution);
+    if (!updateData) {
+      ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+      return null;
+    }
+    const payload = this.#prepareSearchOperationPayload({
+      searcherActorUuid: this.#searcherActorUuid,
+      searchedActorUuid: this.#searchedActorUuid,
+      actorUuid: actor.uuid,
+      itemId: item.id
+    });
+    try {
+      const responsibleGM = getResponsibleGM();
+      if (responsibleGM && responsibleGM.id !== game.user?.id) {
+        await requestSearchInventorySocket("rotateItem", payload, responsibleGM);
+      } else if (canModifySearchTransferDirectly(actor, actor)) {
+        await enqueueSearchInventoryOperation(() => performSearchInventoryRotate(payload, game.user?.id ?? ""));
+      } else {
+        await requestSearchInventorySocket("rotateItem", payload, responsibleGM);
+      }
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Search inventory rotate failed`, error);
+      ui.notifications.warn(error.message || game.i18n.localize("FALLOUTMAW.Messages.InventoryRotateNoSpace"));
+    }
+    return null;
   }
 
   async #equipSearchItem(actor, item) {
@@ -3200,6 +3258,41 @@ async function performSearchInventorySplit(payload = {}, requesterUserId = "") {
   return splitActorInventoryItem(actor, item, toInteger(payload.amount));
 }
 
+async function performSearchInventoryRotate(payload = {}, requesterUserId = "") {
+  const searcherActor = await resolveActor(payload.searcherActorUuid);
+  const searchedActor = await resolveActor(payload.searchedActorUuid);
+  const actor = await resolveActor(payload.actorUuid);
+  if (!searcherActor || !searchedActor || !actor) throw new Error("Actor not found.");
+
+  validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
+
+  const allowedActorUuids = getSearchOrTradeAllowedActorUuids(payload, searcherActor, searchedActor, requesterUserId);
+  if (!allowedActorUuids.has(actor.uuid)) throw new Error("Search rotate actor mismatch.");
+
+  const item = actor.items?.get(String(payload.itemId ?? ""));
+  if (!item) throw new Error("Item not found.");
+  assertSearchTransferableItem(item, { allowLocked: true });
+  const parentId = item.system?.placement?.mode === LOCKED_STORAGE_PLACEMENT_MODE
+    ? LOCKED_STORAGE_PARENT_ID
+    : getItemContainerParentId(item);
+  const { columns, rows } = getActorInventoryContextDimensions(actor, parentId);
+  const resolution = resolveInventoryItemRotation({
+    item,
+    parentId,
+    contextItems: getContextInventoryItems(parentId, actor.items),
+    columns,
+    rows,
+    allItems: actor.items,
+    excludeItemIds: [item.id],
+    options: getActorInventoryContextOptions(actor, parentId)
+  });
+  const updateData = createInventoryRotationUpdate(item, resolution);
+  if (!updateData) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryRotateNoSpace"));
+  if (!validateActorProjectedInventoryState(actor, { updates: [updateData] })) throwInventoryNoSpace();
+  await actor.updateEmbeddedDocuments("Item", [updateData]);
+  return actor.items.get(item.id) ?? null;
+}
+
 async function performSearchInventoryStack(payload = {}, requesterUserId = "") {
   const searcherActor = await resolveActor(payload.searcherActorUuid);
   const searchedActor = await resolveActor(payload.searchedActorUuid);
@@ -3850,7 +3943,8 @@ function normalizeTradeOfferPlacement(placement = null, fallback = null) {
     x: Math.max(1, toInteger(placement?.x) || toInteger(fallback?.x) || 1),
     y: Math.max(1, toInteger(placement?.y) || toInteger(fallback?.y) || 1),
     width: Math.max(1, toInteger(placement?.width) || toInteger(fallback?.width) || 1),
-    height: Math.max(1, toInteger(placement?.height) || toInteger(fallback?.height) || 1)
+    height: Math.max(1, toInteger(placement?.height) || toInteger(fallback?.height) || 1),
+    rotated: Boolean(placement?.rotated ?? fallback?.rotated)
   };
 }
 
@@ -3981,6 +4075,7 @@ function prepareTradeOfferSideContext(offer = {}, actor = null, side = "", trade
     const price = calculateItemTradePrice(liveItem ?? itemData, tradeCurrencyKey, quantity, { sellerActor: sourceActor, barterAdjustmentPercent });
     const footprint = getItemFootprint(liveItem ?? itemData, sourceActor?.items);
     const placement = resolveTradeOfferEntryPlacement(entry.placement, footprint, occupiedPlacements, columns);
+    placement.rotated = Boolean(entry.placement?.rotated ?? (liveItem ?? itemData)?.system?.placement?.rotated);
     const offerKey = getTradeOfferEntryKey(entry, "item");
     occupiedPlacements.push({ kind: "item", key: offerKey, placement });
     total += price;
@@ -5399,7 +5494,8 @@ function createInventoryStackData(itemData, quantity, parentId, placement, { equ
         x: storedPlacement.x,
         y: storedPlacement.y,
         width: storedPlacement.width,
-        height: storedPlacement.height
+        height: storedPlacement.height,
+        rotated: storedPlacement.rotated
       }
     }
   });
@@ -5580,7 +5676,8 @@ function createPlacementItemUpdate(itemId, quantity, parentId, placement, itemDa
     "system.placement.x": storedPlacement.x,
     "system.placement.y": storedPlacement.y,
     "system.placement.width": storedPlacement.width,
-    "system.placement.height": storedPlacement.height
+    "system.placement.height": storedPlacement.height,
+    "system.placement.rotated": storedPlacement.rotated
   };
 }
 
@@ -5607,7 +5704,8 @@ function createLockedStorageItemUpdate(item) {
     "system.placement.x": storedPlacement.x,
     "system.placement.y": storedPlacement.y,
     "system.placement.width": storedPlacement.width,
-    "system.placement.height": storedPlacement.height
+    "system.placement.height": storedPlacement.height,
+    "system.placement.rotated": storedPlacement.rotated
   };
 }
 
@@ -6065,6 +6163,10 @@ async function handleSearchInventorySocketMessage(message = {}) {
     } else if (message.action === "splitItem") {
       result = await enqueueSearchInventoryOperation(
         () => performSearchInventorySplit(message.payload ?? {}, message.requesterUserId ?? "")
+      );
+    } else if (message.action === "rotateItem") {
+      result = await enqueueSearchInventoryOperation(
+        () => performSearchInventoryRotate(message.payload ?? {}, message.requesterUserId ?? "")
       );
     } else if (message.action === "transferCurrency") {
       result = await enqueueSearchInventoryOperation(

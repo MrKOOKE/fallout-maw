@@ -88,6 +88,15 @@ export function getItemBaseFootprint(itemOrSystem = null) {
   };
 }
 
+export function getItemEffectiveBaseFootprint(itemOrSystem = null) {
+  const footprint = getItemBaseFootprint(itemOrSystem);
+  if (!Boolean(getItemSystem(itemOrSystem)?.placement?.rotated)) return footprint;
+  return {
+    width: footprint.height,
+    height: footprint.width
+  };
+}
+
 export function getContainerContents(containerOrId, items) {
   const parentId = typeof containerOrId === "string" ? containerOrId : getItemId(containerOrId);
   if (!parentId) return [];
@@ -190,7 +199,7 @@ export function getContainerContentsWeight(containerOrId, items) {
 }
 
 export function getItemFootprint(itemOrSystem = null, items = null, memo = new Map(), visiting = new Set()) {
-  const baseFootprint = getItemBaseFootprint(itemOrSystem);
+  const baseFootprint = getItemEffectiveBaseFootprint(itemOrSystem);
   const itemId = getItemId(itemOrSystem);
 
   if (!isContainerItem(itemOrSystem) || !items || !itemId) return baseFootprint;
@@ -199,25 +208,25 @@ export function getItemFootprint(itemOrSystem = null, items = null, memo = new M
 
   visiting.add(itemId);
 
-  const occupiedColumns = new Set();
-  const occupiedRows = new Set();
+  let occupiedColumns = 0;
+  let occupiedRows = 0;
   for (const item of getContainerContents(itemId, items)) {
     const placement = normalizeInventoryPlacement(item.system?.placement ?? {}, item, items, memo, visiting);
-    for (let x = placement.x; x < (placement.x + placement.width); x += 1) occupiedColumns.add(x);
-    for (let y = placement.y; y < (placement.y + placement.height); y += 1) occupiedRows.add(y);
+    occupiedColumns = Math.max(occupiedColumns, placement.x + placement.width - 1);
+    occupiedRows = Math.max(occupiedRows, placement.y + placement.height - 1);
   }
 
   visiting.delete(itemId);
   const footprint = {
-    width: Math.max(baseFootprint.width, occupiedColumns.size || 0),
-    height: Math.max(baseFootprint.height, occupiedRows.size || 0)
+    width: Math.max(baseFootprint.width, occupiedColumns),
+    height: Math.max(baseFootprint.height, occupiedRows)
   };
   memo.set(itemId, footprint);
   return footprint;
 }
 
 export function createInventoryPlacement(x = 1, y = 1, itemOrSystem = null, items = null) {
-  const { width, height } = items ? getItemFootprint(itemOrSystem, items) : getItemBaseFootprint(itemOrSystem);
+  const { width, height } = items ? getItemFootprint(itemOrSystem, items) : getItemEffectiveBaseFootprint(itemOrSystem);
   return {
     mode: "inventory",
     equipmentSlot: "",
@@ -227,7 +236,8 @@ export function createInventoryPlacement(x = 1, y = 1, itemOrSystem = null, item
     x: Math.max(1, toInteger(x)),
     y: Math.max(1, toInteger(y)),
     width,
-    height
+    height,
+    rotated: Boolean(getItemSystem(itemOrSystem)?.placement?.rotated)
   };
 }
 
@@ -241,7 +251,8 @@ export function normalizeInventoryPlacement(
   const basePlacement = createInventoryPlacement(placement?.x, placement?.y, itemOrSystem, null);
   const effectiveFootprint = items
     ? getItemFootprint(itemOrSystem, items, memo, visiting)
-    : getItemBaseFootprint(itemOrSystem);
+    : getItemEffectiveBaseFootprint(itemOrSystem);
+  const hasItem = Boolean(itemOrSystem);
 
   return {
     ...basePlacement,
@@ -250,10 +261,11 @@ export function normalizeInventoryPlacement(
     weaponSet: String(placement?.weaponSet ?? ""),
     weaponSlot: String(placement?.weaponSlot ?? ""),
     limbKey: String(placement?.limbKey ?? ""),
-    width: isContainerItem(itemOrSystem)
+    rotated: Boolean(placement?.rotated ?? getItemSystem(itemOrSystem)?.placement?.rotated),
+    width: hasItem
       ? effectiveFootprint.width
       : Math.max(1, toInteger(placement?.width) || effectiveFootprint.width),
-    height: isContainerItem(itemOrSystem)
+    height: hasItem
       ? effectiveFootprint.height
       : Math.max(1, toInteger(placement?.height) || effectiveFootprint.height)
   };
@@ -271,7 +283,8 @@ export function createStoredPlacement(placement = {}, itemOrSystem = null) {
     x: Math.max(1, toInteger(placement?.x)),
     y: Math.max(1, toInteger(placement?.y)),
     width: baseFootprint.width,
-    height: baseFootprint.height
+    height: baseFootprint.height,
+    rotated: Boolean(placement?.rotated ?? getItemSystem(itemOrSystem)?.placement?.rotated)
   };
 }
 
@@ -403,12 +416,25 @@ export function findFirstAvailableResolvedInventoryPlacement(
 
 export function buildInventoryCellStyle(x, y, placement = null) {
   if (placement) {
+    const width = Math.max(1, toInteger(placement.width) || 1);
+    const height = Math.max(1, toInteger(placement.height) || 1);
     return [
       `grid-column: ${placement.x} / span ${placement.width};`,
-      `grid-row: ${placement.y} / span ${placement.height};`
+      `grid-row: ${placement.y} / span ${placement.height};`,
+      `--fallout-maw-inventory-item-columns: ${width};`,
+      `--fallout-maw-inventory-item-rows: ${height};`,
+      `--fallout-maw-inventory-rotated-image-width: ${buildInventorySpanLengthStyle(height)};`,
+      `--fallout-maw-inventory-rotated-image-height: ${buildInventorySpanLengthStyle(width)};`
     ].join(" ");
   }
   return `grid-column: ${x}; grid-row: ${y};`;
+}
+
+function buildInventorySpanLengthStyle(span) {
+  span = Math.max(1, toInteger(span) || 1);
+  const cells = Array.from({ length: span }, () => "var(--fallout-maw-inventory-cell-size)");
+  const gaps = Array.from({ length: Math.max(0, span - 1) }, () => "var(--fallout-maw-inventory-grid-gap)");
+  return `calc(${[...cells, ...gaps].join(" + ")} - 0.4rem)`;
 }
 
 export function prepareInventoryGridContext(contextItems, columns, rows, allItems, mapItem, options = {}) {
@@ -620,7 +646,8 @@ function findFirstPhantomInventoryPlacement(itemOrSystem, allItems, columns, row
         x,
         y,
         width: footprint.width,
-        height: footprint.height
+        height: footprint.height,
+        rotated: Boolean(getItemSystem(itemOrSystem)?.placement?.rotated)
       };
       if (!reservedPlacements.some(existing => inventoryPlacementsOverlap(candidate, existing))) return candidate;
     }
@@ -634,6 +661,7 @@ function findFirstPhantomInventoryPlacement(itemOrSystem, allItems, columns, row
     x: 1,
     y: maxY + 1,
     width: footprint.width,
-    height: footprint.height
+    height: footprint.height,
+    rotated: Boolean(getItemSystem(itemOrSystem)?.placement?.rotated)
   };
 }

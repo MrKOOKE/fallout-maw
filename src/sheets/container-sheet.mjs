@@ -21,6 +21,12 @@ import {
   prepareInventoryGridContext,
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
+import {
+  canShowInventoryRotateAction,
+  createInventoryRotationUpdate,
+  getInventoryRotationUnavailableLabel,
+  resolveInventoryItemRotation
+} from "../utils/inventory-rotation.mjs";
 import { isItemBrokenByCondition } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
@@ -583,7 +589,8 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
         "system.placement.x": storedPlacement.x,
         "system.placement.y": storedPlacement.y,
         "system.placement.width": storedPlacement.width,
-        "system.placement.height": storedPlacement.height
+        "system.placement.height": storedPlacement.height,
+        "system.placement.rotated": storedPlacement.rotated
       };
       deleteSource = false;
     }
@@ -670,7 +677,8 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
           x: storedPlacement.x,
           y: storedPlacement.y,
           width: storedPlacement.width,
-          height: storedPlacement.height
+          height: storedPlacement.height,
+          rotated: storedPlacement.rotated
         }
       }
     });
@@ -747,6 +755,11 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     if (canUseActiveItem(item)) {
       menuOptions.push(["use", "fa-play", "Применить"]);
     }
+    const canRotate = canShowInventoryRotateAction(item);
+    const rotationResolution = canRotate ? this.#resolveInventoryRotation(item) : null;
+    if (canRotate) {
+      menuOptions.push(["rotate", "fa-rotate", game.i18n.localize("FALLOUTMAW.Item.Rotate"), !rotationResolution, rotationResolution ? "" : getInventoryRotationUnavailableLabel()]);
+    }
     if (getItemQuantity(item) > 1) {
       menuOptions.push(["split", "fa-code-branch", "Разделить"]);
     }
@@ -755,7 +768,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       menuOptions.push(["delete", "fa-trash", game.i18n.localize("FALLOUTMAW.Common.Delete")]);
     }
     menu.innerHTML = menuOptions
-      .map(([action, icon, label]) => `<button type="button" data-action="${action}"><i class="fa-solid ${icon}"></i>${label}</button>`)
+      .map(([action, icon, label, disabled = false, title = ""]) => `<button type="button" data-action="${action}"${disabled ? " disabled" : ""}${title ? ` title="${escapeAttribute(title)}"` : ""}><i class="fa-solid ${icon}"></i>${label}</button>`)
       .join("");
     menu.style.left = `${event.clientX}px`;
     menu.style.top = `${event.clientY}px`;
@@ -774,11 +787,36 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
         return app;
       }
       if (action === "use") return useActiveItem({ actor: this.actor, item, application: this });
+      if (action === "rotate") return this.#rotateInventoryItem(item);
       if (action === "split") return this.#splitInventoryItem(item);
       if (action === "copy" && game.user?.isGM) return this.#copyInventoryItem(item);
       if (action === "delete" && game.user?.isGM) return item.delete();
       return undefined;
     });
+  }
+
+  #resolveInventoryRotation(item) {
+    const { columns, rows } = getContainerDimensions(this.item);
+    return resolveInventoryItemRotation({
+      item,
+      parentId: this.item.id,
+      contextItems: getContextInventoryItems(this.item.id, this.actor.items),
+      columns,
+      rows,
+      allItems: this.actor.items,
+      excludeItemIds: [item.id]
+    });
+  }
+
+  async #rotateInventoryItem(item, resolution = this.#resolveInventoryRotation(item)) {
+    const updateData = createInventoryRotationUpdate(item, resolution);
+    if (!updateData) {
+      this.#warnValidation({ reason: "no-space" });
+      return null;
+    }
+    if (!this.#validateProjectedInventoryState({ updates: [updateData] })) return null;
+    await this.actor.updateEmbeddedDocuments("Item", [updateData]);
+    return this.actor.items.get(item.id) ?? null;
   }
 
   async #copyInventoryItem(item) {
@@ -901,6 +939,10 @@ function escapeHTML(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function escapeAttribute(value) {
+  return escapeHTML(value);
 }
 
 function formatWeight(value) {

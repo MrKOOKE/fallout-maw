@@ -87,7 +87,7 @@
               <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}} {{#if phantom}}phantom{{/if}}" data-search-drop-zone data-search-actor-uuid="{{../actor.uuid}}" data-inventory-cell data-inventory-parent-id="" data-x="{{x}}" data-y="{{y}}" style="{{style}}"></div>
               {{/each}}
               {{#each inventory.grid.items}}
-              <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if equipped}}equipped{{/if}} {{#if locked}}locked{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
+              <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if equipped}}equipped{{/if}} {{#if locked}}locked{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
                 <img src="{{img}}" alt="{{name}}">
                 {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
               </article>
@@ -112,7 +112,7 @@
                 <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}} {{#if phantom}}phantom{{/if}}" data-search-drop-zone data-search-actor-uuid="{{../actorUuid}}" data-inventory-cell data-inventory-parent-id="{{../id}}" data-x="{{x}}" data-y="{{y}}" style="{{style}}"></div>
                 {{/each}}
                 {{#each grid.items}}
-                <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if equipped}}equipped{{/if}} {{#if locked}}locked{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
+                <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if equipped}}equipped{{/if}} {{#if locked}}locked{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
                   <img src="{{img}}" alt="{{name}}">
                   {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
                 </article>
@@ -133,7 +133,7 @@
                 <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}} {{#if phantom}}phantom{{/if}}" data-search-drop-zone data-search-actor-uuid="{{../../actor.uuid}}" data-inventory-cell data-inventory-parent-id="{{../id}}" data-x="{{x}}" data-y="{{y}}" style="{{style}}"></div>
                 {{/each}}
                 {{#each grid.items}}
-                <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item locked {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
+                <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item locked {{#if placement.rotated}}rotated{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
                   <img src="{{img}}" alt="{{name}}">
                   {{#if showFirstAidCharges}}<span class="fallout-maw-inventory-item-charges">{{firstAidCharges.value}}/{{firstAidCharges.max}}</span>{{/if}}
                   {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}

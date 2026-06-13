@@ -5929,6 +5929,7 @@ async function returnBrokenProsthesisToInventory(actor, prosthesis) {
     "system.placement.y": placement.y,
     "system.placement.width": placement.width,
     "system.placement.height": placement.height,
+    "system.placement.rotated": Boolean(placement.rotated),
     "system.functions.condition.value": 0
   }]);
 }
@@ -5939,7 +5940,8 @@ function createOverflowInventoryPlacement(item) {
     x: 1,
     y: 10000,
     width: Math.max(1, toInteger(placement.width) || 1),
-    height: Math.max(1, toInteger(placement.height) || 1)
+    height: Math.max(1, toInteger(placement.height) || 1),
+    rotated: Boolean(placement.rotated)
   };
 }
 

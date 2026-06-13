@@ -641,8 +641,21 @@ function hexToRgb(hexColor) {
 
 function buildInventoryCellStyle(x, y, placement = null) {
   const normalized = placement ?? { width: 1, height: 1 };
+  const width = Math.max(1, toInteger(normalized.width));
+  const height = Math.max(1, toInteger(normalized.height));
   return [
-    `grid-column: ${x} / span ${Math.max(1, toInteger(normalized.width))}`,
-    `grid-row: ${y} / span ${Math.max(1, toInteger(normalized.height))}`
+    `grid-column: ${x} / span ${width}`,
+    `grid-row: ${y} / span ${height}`,
+    `--fallout-maw-inventory-item-columns: ${width}`,
+    `--fallout-maw-inventory-item-rows: ${height}`,
+    `--fallout-maw-inventory-rotated-image-width: ${buildInventorySpanLengthStyle(height)}`,
+    `--fallout-maw-inventory-rotated-image-height: ${buildInventorySpanLengthStyle(width)}`
   ].join("; ");
+}
+
+function buildInventorySpanLengthStyle(span) {
+  span = Math.max(1, toInteger(span) || 1);
+  const cells = Array.from({ length: span }, () => "var(--fallout-maw-inventory-cell-size)");
+  const gaps = Array.from({ length: Math.max(0, span - 1) }, () => "var(--fallout-maw-inventory-grid-gap)");
+  return `calc(${[...cells, ...gaps].join(" + ")} - 0.4rem)`;
 }

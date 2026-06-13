@@ -2641,7 +2641,8 @@ async function equipHudWeaponInSlot(actor, item, weaponSetKey = "", weaponSlotKe
       "system.placement.x": storedPlacement.x,
       "system.placement.y": storedPlacement.y,
       "system.placement.width": storedPlacement.width,
-      "system.placement.height": storedPlacement.height
+      "system.placement.height": storedPlacement.height,
+      "system.placement.rotated": storedPlacement.rotated
     }
   ];
 
@@ -2730,7 +2731,8 @@ function createHudWeaponReplacementUpdates(actor, conflicts = [], excludeItemIds
       "system.placement.x": storedPlacement.x,
       "system.placement.y": storedPlacement.y,
       "system.placement.width": storedPlacement.width,
-      "system.placement.height": storedPlacement.height
+      "system.placement.height": storedPlacement.height,
+      "system.placement.rotated": storedPlacement.rotated
     });
   }
   return updates;
@@ -4087,7 +4089,8 @@ async function createActorMagazineSourceStack(actor, sourceItem, quantity) {
         x: storedPlacement.x,
         y: storedPlacement.y,
         width: storedPlacement.width,
-        height: storedPlacement.height
+        height: storedPlacement.height,
+        rotated: storedPlacement.rotated
       }
     }
   });
@@ -4127,7 +4130,8 @@ async function returnModuleItemToActorInventory(actor, itemData) {
         x: storedPlacement.x,
         y: storedPlacement.y,
         width: storedPlacement.width,
-        height: storedPlacement.height
+        height: storedPlacement.height,
+        rotated: storedPlacement.rotated
       }
     }
   });

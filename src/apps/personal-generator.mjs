@@ -1332,7 +1332,8 @@ async function applyGeneratedEquipment(actor, createdItems = []) {
       "system.placement.x": storedPlacement.x,
       "system.placement.y": storedPlacement.y,
       "system.placement.width": storedPlacement.width,
-      "system.placement.height": storedPlacement.height
+      "system.placement.height": storedPlacement.height,
+      "system.placement.rotated": storedPlacement.rotated
     });
   }
   if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
@@ -1791,7 +1792,8 @@ function createInventoryItemDataForPlacement(itemData, target) {
         x: storedPlacement.x,
         y: storedPlacement.y,
         width: storedPlacement.width,
-        height: storedPlacement.height
+        height: storedPlacement.height,
+        rotated: storedPlacement.rotated
       }
     }
   });

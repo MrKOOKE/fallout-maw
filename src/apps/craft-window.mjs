@@ -35,6 +35,7 @@ import { FalloutMaWContainerSheet } from "../sheets/container-sheet.mjs";
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import {
   ROOT_CONTAINER_ID,
+  INFINITE_ROOT_INVENTORY_EMPTY_ROWS,
   LOCKED_STORAGE_PARENT_ID,
   LOCKED_STORAGE_PLACEMENT_MODE,
   createStoredPlacement,
@@ -52,6 +53,12 @@ import {
   normalizeInventoryPlacement,
   placementContainsInventoryCell
 } from "../utils/inventory-containers.mjs";
+import {
+  canShowInventoryRotateAction,
+  createInventoryRotationUpdate,
+  getInventoryRotationUnavailableLabel,
+  resolveInventoryItemRotation
+} from "../utils/inventory-rotation.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { getEnabledToolFunctions } from "../utils/item-functions.mjs";
 import { isCompendiumUuid, resolveWorldItemSync } from "../utils/world-items.mjs";
@@ -1184,6 +1191,11 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (canUseActiveItem(item)) {
       menuOptions.push(["use", "fa-play", "Применить"]);
     }
+    const canRotate = canShowInventoryRotateAction(item);
+    const rotationResolution = canRotate ? this.#resolveCraftItemRotation(item) : null;
+    if (canRotate) {
+      menuOptions.push(["rotate", "fa-rotate", game.i18n.localize("FALLOUTMAW.Item.Rotate"), !rotationResolution, rotationResolution ? "" : getInventoryRotationUnavailableLabel()]);
+    }
     if (isSlottedItem || isEquipped) {
       menuOptions.push(["unequip", "fa-hand", game.i18n.localize("FALLOUTMAW.Item.Unequip")]);
     } else {
@@ -1204,7 +1216,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     menu.style.left = `${event.clientX}px`;
     menu.style.top = `${event.clientY}px`;
     menu.innerHTML = menuOptions
-      .map(([action, icon, label]) => `<button type="button" data-action="${action}"><i class="fa-solid ${icon}"></i>${label}</button>`)
+      .map(([action, icon, label, disabled = false, title = ""]) => `<button type="button" data-action="${action}"${disabled ? " disabled" : ""}${title ? ` title="${escapeAttribute(title)}"` : ""}><i class="fa-solid ${icon}"></i>${label}</button>`)
       .join("");
     document.body.append(menu);
 
@@ -1216,6 +1228,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openCraftContainerSheet(item);
       if (action === "use") return useActiveItem({ actor: this.#actor, item, application: this });
+      if (action === "rotate") return this.#rotateCraftItem(item);
       if (action === "equip") return this.#equipCraftItem(item);
       if (action === "unequip") return this.#unequipCraftItem(item);
       if (action === "split") return this.#splitCraftItem(item);
@@ -1231,6 +1244,43 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     app.render({ force: true });
     app.bringToFront();
     return app;
+  }
+
+  #resolveCraftItemRotation(item) {
+    const parentId = item.system?.placement?.mode === LOCKED_STORAGE_PLACEMENT_MODE
+      ? LOCKED_STORAGE_PARENT_ID
+      : getItemContainerParentId(item);
+    const dimensions = parentId && parentId !== LOCKED_STORAGE_PARENT_ID
+      ? getContainerDimensions(this.#actor.items.get(parentId))
+      : getActorInventoryGridDimensions(this.#actor, getActorRace(this.#actor));
+    const options = parentId === LOCKED_STORAGE_PARENT_ID
+      ? {
+        allowOverflowRows: true,
+        extraRows: INFINITE_ROOT_INVENTORY_EMPTY_ROWS,
+        placementMode: LOCKED_STORAGE_PLACEMENT_MODE,
+        preferredPlacementModes: [LOCKED_STORAGE_PLACEMENT_MODE]
+      }
+      : getActorRootInventoryGridOptions(this.#actor, parentId);
+    return resolveInventoryItemRotation({
+      item,
+      parentId,
+      contextItems: getContextInventoryItems(parentId, this.#actor.items),
+      columns: dimensions.columns,
+      rows: dimensions.rows,
+      allItems: this.#actor.items,
+      excludeItemIds: [item.id],
+      options
+    });
+  }
+
+  async #rotateCraftItem(item, resolution = this.#resolveCraftItemRotation(item)) {
+    const updateData = createInventoryRotationUpdate(item, resolution);
+    if (!updateData) {
+      ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+      return null;
+    }
+    await this.#actor.updateEmbeddedDocuments("Item", [updateData]);
+    return this.#actor.items.get(item.id) ?? null;
   }
 
   async #equipCraftItem(item) {
@@ -3673,6 +3723,15 @@ function prepareRecipeSummary(item) {
 function getActorRace(actor) {
   const raceId = actor?.system?.creature?.raceId;
   return getCreatureOptions().races.find(entry => entry.id === raceId) ?? null;
+}
+
+function escapeAttribute(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function createEmptyInventoryContext() {

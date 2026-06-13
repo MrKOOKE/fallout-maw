@@ -109,6 +109,12 @@ import {
   prepareInventoryGridContext,
   validateInventoryTree
 } from "../utils/inventory-containers.mjs";
+import {
+  canShowInventoryRotateAction,
+  createInventoryRotationUpdate,
+  getInventoryRotationUnavailableLabel,
+  resolveInventoryItemRotation
+} from "../utils/inventory-rotation.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
@@ -1625,7 +1631,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       "system.placement.x": storedPlacement.x,
       "system.placement.y": storedPlacement.y,
       "system.placement.width": storedPlacement.width,
-      "system.placement.height": storedPlacement.height
+      "system.placement.height": storedPlacement.height,
+      "system.placement.rotated": storedPlacement.rotated
     };
     const replacementUpdates = this.#createUnequipReplacementUpdates(conflicts, [item.id]);
     if (!replacementUpdates) return null;
@@ -1734,7 +1741,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           x: storedPlacement.x,
           y: storedPlacement.y,
           width: storedPlacement.width,
-          height: storedPlacement.height
+          height: storedPlacement.height,
+          rotated: storedPlacement.rotated
         }
       }
     });
@@ -1811,7 +1819,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         "system.placement.x": storedPlacement.x,
         "system.placement.y": storedPlacement.y,
         "system.placement.width": storedPlacement.width,
-        "system.placement.height": storedPlacement.height
+        "system.placement.height": storedPlacement.height,
+        "system.placement.rotated": storedPlacement.rotated
       };
       deleteSource = false;
     }
@@ -1922,7 +1931,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
           x: storedPlacement.x,
           y: storedPlacement.y,
           width: storedPlacement.width,
-          height: storedPlacement.height
+          height: storedPlacement.height,
+          rotated: storedPlacement.rotated
         }
       }
     });
@@ -2252,6 +2262,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const isEquipped = Boolean(item.system?.equipped);
     const isContainer = isContainerItem(item);
     const canEquip = this.#canEquipInventoryItem(item);
+    const canRotate = canShowInventoryRotateAction(item);
+    const rotationResolution = canRotate ? this.#resolveInventoryRotation(item) : null;
+    const rotateUnavailableLabel = getInventoryRotationUnavailableLabel();
     const menu = document.createElement("nav");
     menu.className = "fallout-maw-inventory-context-menu";
     menu.dataset.pointerX = String(event.clientX);
@@ -2288,6 +2301,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (canUseActiveItem(item)) {
       menuOptions.push(["use", "fa-play", "Применить"]);
     }
+    if (canRotate) {
+      menuOptions.push(["rotate", "fa-rotate", game.i18n.localize("FALLOUTMAW.Item.Rotate"), !rotationResolution, rotationResolution ? "" : rotateUnavailableLabel]);
+    }
     if (isSlottedItem || isEquipped) {
       menuOptions.push(["unequip", "fa-hand", game.i18n.localize("FALLOUTMAW.Item.Unequip")]);
     } else if (canEquip) {
@@ -2303,7 +2319,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       menuOptions.push(["delete", "fa-trash", game.i18n.localize("FALLOUTMAW.Common.Delete")]);
     }
     menu.innerHTML = menuOptions
-      .map(([action, icon, label]) => `<button type="button" data-action="${action}"><i class="fa-solid ${icon}"></i>${label}</button>`)
+      .map(([action, icon, label, disabled = false, title = ""]) => `<button type="button" data-action="${action}"${disabled ? " disabled" : ""}${title ? ` title="${escapeAttribute(title)}"` : ""}><i class="fa-solid ${icon}"></i>${label}</button>`)
       .join("");
     document.body.append(menu);
     this.#positionOverlayAtPointer(menu, { x: event.clientX, y: event.clientY }, 8);
@@ -2316,6 +2332,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openContainerSheet(item);
       if (action === "use") return useActiveItem({ actor: this.actor, item, application: this });
+      if (action === "rotate") return this.#rotateInventoryItem(item);
       if (action === "equip") return this.#equipInventoryItem(item);
       if (action === "unequip") return this.#unequipInventoryItem(item);
       if (action === "split") return this.#splitInventoryItem(item);
@@ -2358,6 +2375,34 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     app.render({ force: true });
     app.bringToFront();
     return app;
+  }
+
+  #resolveInventoryRotation(item) {
+    const parentId = item.system?.placement?.mode === LOCKED_STORAGE_PLACEMENT_MODE
+      ? LOCKED_STORAGE_PARENT_ID
+      : getItemContainerParentId(item);
+    const { columns, rows } = this.#getInventoryGridDimensions(parentId);
+    return resolveInventoryItemRotation({
+      item,
+      parentId,
+      contextItems: this.#getContextInventoryItems(parentId),
+      columns,
+      rows,
+      allItems: this.actor.items,
+      excludeItemIds: [item.id],
+      options: this.#getInventoryGridOptions(parentId)
+    });
+  }
+
+  async #rotateInventoryItem(item, resolution = this.#resolveInventoryRotation(item)) {
+    const updateData = createInventoryRotationUpdate(item, resolution);
+    if (!updateData) {
+      this.#warnInventoryNoSpace();
+      return null;
+    }
+    if (!this.#validateProjectedInventoryState({ updates: [updateData] })) return null;
+    await this.actor.updateEmbeddedDocuments("Item", [updateData]);
+    return this.actor.items.get(item.id) ?? null;
   }
 
   async #copyInventoryItem(item) {
@@ -2441,7 +2486,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       "system.placement.x": storedPlacement.x,
       "system.placement.y": storedPlacement.y,
       "system.placement.width": storedPlacement.width,
-      "system.placement.height": storedPlacement.height
+      "system.placement.height": storedPlacement.height,
+      "system.placement.rotated": storedPlacement.rotated
     };
     const replacementUpdates = this.#createUnequipReplacementUpdates(placementResolution.conflicts, [item.id]);
     if (!replacementUpdates) return null;
@@ -2564,7 +2610,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       "system.placement.x": storedPlacement.x,
       "system.placement.y": storedPlacement.y,
       "system.placement.width": storedPlacement.width,
-      "system.placement.height": storedPlacement.height
+      "system.placement.height": storedPlacement.height,
+      "system.placement.rotated": storedPlacement.rotated
     };
   }
 
