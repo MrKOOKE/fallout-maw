@@ -3,12 +3,13 @@ import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "../combat/reaction-resources.mjs";
 import { requestDamageApplications } from "../combat/damage-hub.mjs";
 import { playWeaponExplosionAnimation } from "../combat/attack-animations.mjs";
+import { buildWeaponExplosionDamageRequests, executeWeaponAttackAgainstToken } from "../combat/weapon-attack-controller.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
-import { normalizeImagePath } from "../utils/actor-display-data.mjs";
+import { normalizeImagePath, prepareInventoryContext } from "../utils/actor-display-data.mjs";
 import { getItemQuantity } from "../utils/inventory-containers.mjs";
-import { getToolSettings } from "../settings/accessors.mjs";
-import { ITEM_FUNCTIONS, getEnabledToolFunctions, getTrapFunction, hasItemFunction } from "../utils/item-functions.mjs";
-import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
+import { getCreatureOptions, getToolSettings } from "../settings/accessors.mjs";
+import { ITEM_FUNCTIONS, getEnabledToolFunctions, getEnabledWeaponFunctions, getTrapFunction, getWeaponFunctionModuleSlots, hasItemFunction } from "../utils/item-functions.mjs";
+import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
   DEFAULT_FACTION_NAME,
@@ -32,11 +33,34 @@ const TRAP_SAFE_HIGHLIGHT_LAYER = "fallout-maw-safe-traps";
 const TRAP_SAFE_HIGHLIGHT_COLOR = 0x43c96b;
 const TRAP_INTERACTION_HIGHLIGHT_LAYER = "fallout-maw-interaction-traps";
 const TRAP_INTERACTION_HIGHLIGHT_COLOR = 0xf0c84b;
+const TRAP_LINKED_ACTOR_HIGHLIGHT_LAYER = "fallout-maw-linked-actor-tokens";
+const TRAP_LINKED_ACTOR_HIGHLIGHT_COLOR = 0xe34fcb;
+const TRAP_LINKED_ACTION_MODE = "linkedAction";
+const TRAP_BLOCKED_CANVAS_EVENT_TYPES = Object.freeze([
+  "pointerdown",
+  "pointerup",
+  "mousedown",
+  "mouseup",
+  "click",
+  "dblclick",
+  "auxclick",
+  "contextmenu"
+]);
+const TRAP_LINKED_ACTIONS = Object.freeze([
+  ["aimedShot", "FALLOUTMAW.Item.WeaponActionAimedShot"],
+  ["snapshot", "FALLOUTMAW.Item.WeaponActionSnapshot"],
+  ["burst", "FALLOUTMAW.Item.WeaponActionBurst"],
+  ["volley", "FALLOUTMAW.Item.WeaponActionVolley"],
+  ["meleeAttack", "FALLOUTMAW.Item.WeaponActionMeleeAttack"],
+  ["aimedMeleeAttack", "FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"],
+  ["push", "FALLOUTMAW.Item.WeaponActionPush"]
+]);
 const TOOL_CLASS_RANKS = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 let activeTrapPlacement = null;
 let activeTrapInteraction = null;
+let activeTrapLinkedActorSelection = null;
 let trapTilePatchRegistered = false;
 let trapGmFreeDoubleClickListenerRegistered = false;
 let trapVisibilityRefreshQueued = false;
@@ -83,6 +107,7 @@ export function registerTrapHooks() {
   Hooks.on("canvasTearDown", () => {
     cancelActiveTrapPlacement();
     cancelTrapInteractionMode();
+    cancelTrapLinkedActorSelection();
   });
 }
 
@@ -113,13 +138,11 @@ export async function startTrapPlacement({ actor = null, token = null, item = nu
     application,
     trapData: normalizeTrapData(getTrapFunction(item)),
     itemData: item.toObject(),
-    preview: null
+    preview: null,
+    inputShield: createTrapCanvasInputShield("crosshair")
   };
   await createTrapPlacementPreview(activeTrapPlacement);
-  const view = canvas.app?.view;
-  view?.addEventListener("pointermove", onTrapPlacementPointerMove, { capture: true });
-  view?.addEventListener("pointerdown", onTrapPlacementPointerDown, { capture: true });
-  view?.addEventListener("contextmenu", onTrapPlacementContextMenu, { capture: true });
+  bindTrapCanvasInput(activeTrapPlacement, onTrapPlacementCanvasEvent, { pointerMove: true });
   window.addEventListener("keydown", onTrapPlacementKeyDown, { capture: true });
   ui.notifications.info(`${item.name}: выберите точку установки ловушки. Esc/ПКМ отменяет.`);
   return true;
@@ -141,11 +164,10 @@ export function startTrapInteractionMode({ actor = null, token = null } = {}) {
   activeTrapInteraction = {
     actorUuid: sourceActor.uuid,
     tokenId: token?.id ?? token?.document?.id ?? "",
-    sceneId: canvas.scene.id
+    sceneId: canvas.scene.id,
+    inputShield: createTrapCanvasInputShield("pointer")
   };
-  const view = canvas.app?.view;
-  view?.addEventListener("pointerdown", onTrapInteractionPointerDown, { capture: true });
-  view?.addEventListener("contextmenu", onTrapInteractionContextMenu, { capture: true });
+  bindTrapCanvasInput(activeTrapInteraction, onTrapInteractionCanvasEvent);
   window.addEventListener("keydown", onTrapInteractionKeyDown, { capture: true });
   refreshTrapInteractionHighlights();
   ui.notifications.info("Режим ловушек: выберите подсвеченную ловушку. Esc/ПКМ отменяет.");
@@ -411,17 +433,53 @@ async function onTrapPlacementPointerDown(event) {
     return;
   }
 
+  const linkedAction = trapData.trigger.activationMode === TRAP_LINKED_ACTION_MODE
+    ? await selectTrapLinkedAction()
+    : null;
+  if (trapData.trigger.activationMode === TRAP_LINKED_ACTION_MODE && !linkedAction) {
+    ui.notifications.info(`${item.name}: установка отменена до выбора связанного действия.`);
+    await placement.application?.render?.({ force: true });
+    return;
+  }
+
+  const currentItem = actor.items?.get(placement.itemId);
+  if (!currentItem || getItemQuantity(currentItem) <= 0) {
+    ui.notifications.warn(`${item.name}: предмет больше недоступен.`);
+    await placement.application?.render?.({ force: true });
+    return;
+  }
   const created = await requestCreateTrapDocuments({
     sceneId: canvas.scene?.id ?? placement.sceneId,
     point: rect,
     ownerActorUuid: actor.uuid,
-    sourceItemUuid: item.uuid,
-    itemData: item.toObject(),
-    trapData
+    sourceItemUuid: currentItem.uuid,
+    itemData: currentItem.toObject(),
+    trapData,
+    linkedAction
   });
   if (!created && !game.user?.isGM) return;
-  await consumeTrapItem(item);
+  await consumeTrapItem(currentItem);
   await placement.application?.render?.({ force: true });
+}
+
+function onTrapPlacementCanvasEvent(event) {
+  if (!activeTrapPlacement) return;
+  stopTrapCanvasInputEvent(event);
+  if (event.type === "pointermove") {
+    onTrapPlacementPointerMove(event);
+    return;
+  }
+  if (event.type === "contextmenu" || event.type === "auxclick" || event.button === 2) {
+    onTrapPlacementContextMenu(event);
+    return;
+  }
+  if (!["pointerdown", "mousedown"].includes(event.type) || event.button !== 0) return;
+  const placement = activeTrapPlacement;
+  if (placement.inputPending) return;
+  placement.inputPending = true;
+  void onTrapPlacementPointerDown(event).finally(() => {
+    if (activeTrapPlacement === placement) placement.inputPending = false;
+  });
 }
 
 function onTrapPlacementContextMenu(event) {
@@ -439,23 +497,323 @@ function onTrapPlacementPointerMove(event) {
 }
 
 function onTrapPlacementKeyDown(event) {
-  if (!activeTrapPlacement || event.key !== "Escape") return;
+  if (!activeTrapPlacement) return;
   event.preventDefault?.();
   event.stopPropagation?.();
   event.stopImmediatePropagation?.();
-  cancelActiveTrapPlacement({ notify: true });
+  if (event.key === "Escape") cancelActiveTrapPlacement({ notify: true });
 }
 
 function cancelActiveTrapPlacement({ notify = false } = {}) {
   if (!activeTrapPlacement) return;
-  const view = canvas?.app?.view;
-  view?.removeEventListener("pointermove", onTrapPlacementPointerMove, { capture: true });
-  view?.removeEventListener("pointerdown", onTrapPlacementPointerDown, { capture: true });
-  view?.removeEventListener("contextmenu", onTrapPlacementContextMenu, { capture: true });
+  const placement = activeTrapPlacement;
+  unbindTrapCanvasInput(placement);
   window.removeEventListener("keydown", onTrapPlacementKeyDown, { capture: true });
-  destroyTrapPlacementPreview(activeTrapPlacement);
+  destroyTrapPlacementPreview(placement);
   activeTrapPlacement = null;
   if (notify) ui.notifications.info("Установка ловушки отменена.");
+}
+
+function createTrapCanvasInputShield(cursor = "crosshair") {
+  if (!document.body) return null;
+  if (canvas?.currentMouseManager) {
+    if (canvas.currentMouseManager.interactionData) canvas.currentMouseManager.interactionData.cancelled = true;
+    canvas.currentMouseManager.cancel();
+  }
+  const shield = document.createElement("div");
+  shield.dataset.falloutMawTrapInputShield = "true";
+  Object.assign(shield.style, {
+    position: "fixed",
+    inset: "0",
+    zIndex: "100000",
+    background: "transparent",
+    cursor,
+    pointerEvents: "auto"
+  });
+  document.body.appendChild(shield);
+  return shield;
+}
+
+function bindTrapCanvasInput(session, listener, { pointerMove = false } = {}) {
+  if (!session || typeof listener !== "function") return;
+  const targets = [canvas?.app?.view, session.inputShield].filter(Boolean);
+  const types = pointerMove
+    ? ["pointermove", ...TRAP_BLOCKED_CANVAS_EVENT_TYPES]
+    : [...TRAP_BLOCKED_CANVAS_EVENT_TYPES];
+  for (const target of targets) {
+    for (const type of types) target.addEventListener(type, listener, true);
+  }
+  session.canvasInputBinding = { targets, types, listener };
+}
+
+function unbindTrapCanvasInput(session, { delay = 300 } = {}) {
+  const binding = session?.canvasInputBinding;
+  const shield = session?.inputShield;
+  if (session) {
+    session.canvasInputBinding = null;
+    session.inputShield = null;
+  }
+  const cleanup = () => {
+    if (binding) {
+      for (const target of binding.targets) {
+        for (const type of binding.types) target.removeEventListener(type, binding.listener, true);
+      }
+    }
+    shield?.remove?.();
+  };
+  if (delay > 0) window.setTimeout(cleanup, delay);
+  else cleanup();
+}
+
+function stopTrapCanvasInputEvent(event) {
+  event.preventDefault?.();
+  event.stopPropagation?.();
+  event.stopImmediatePropagation?.();
+}
+
+async function selectTrapLinkedAction() {
+  const token = await waitForTrapLinkedActorSelection();
+  if (!token?.actor) return null;
+  const dialog = new TrapLinkedActionDialog({ token });
+  return dialog.wait();
+}
+
+function waitForTrapLinkedActorSelection() {
+  cancelTrapLinkedActorSelection();
+  if (!canvas?.ready || !canvas.app?.view) return Promise.resolve(null);
+  return new Promise(resolve => {
+    activeTrapLinkedActorSelection = {
+      resolve,
+      inputShield: createTrapCanvasInputShield("crosshair")
+    };
+    bindTrapCanvasInput(activeTrapLinkedActorSelection, onTrapLinkedActorCanvasEvent);
+    window.addEventListener("keydown", onTrapLinkedActorKeyDown, { capture: true });
+    refreshTrapLinkedActorHighlights();
+    ui.notifications.info("Выберите подсвеченного актёра для связи с ловушкой. Esc/ПКМ отменяет.");
+  });
+}
+
+function onTrapLinkedActorCanvasEvent(event) {
+  if (!activeTrapLinkedActorSelection) return;
+  stopTrapCanvasInputEvent(event);
+  if (event.type === "contextmenu" || event.type === "auxclick" || event.button === 2) {
+    cancelTrapLinkedActorSelection();
+    return;
+  }
+  if (!["pointerdown", "mousedown"].includes(event.type) || event.button !== 0) return;
+  const token = getTrapLinkedActorTokenAtEvent(event);
+  if (token) finishTrapLinkedActorSelection(token);
+}
+
+function onTrapLinkedActorKeyDown(event) {
+  if (!activeTrapLinkedActorSelection) return;
+  event.preventDefault?.();
+  event.stopPropagation?.();
+  event.stopImmediatePropagation?.();
+  if (event.key === "Escape") cancelTrapLinkedActorSelection();
+}
+
+function finishTrapLinkedActorSelection(token = null) {
+  const selection = activeTrapLinkedActorSelection;
+  if (!selection) return;
+  cleanupTrapLinkedActorSelection();
+  selection.resolve(token);
+}
+
+function cancelTrapLinkedActorSelection() {
+  finishTrapLinkedActorSelection(null);
+  refreshTrapLinkedActorHighlights();
+}
+
+function cleanupTrapLinkedActorSelection() {
+  const selection = activeTrapLinkedActorSelection;
+  unbindTrapCanvasInput(selection);
+  window.removeEventListener("keydown", onTrapLinkedActorKeyDown, { capture: true });
+  activeTrapLinkedActorSelection = null;
+  refreshTrapLinkedActorHighlights();
+}
+
+function getTrapLinkedActorTokenAtEvent(event) {
+  if (!Number.isFinite(Number(event?.clientX)) || !Number.isFinite(Number(event?.clientY))) return null;
+  const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
+  return [...(canvas.tokens?.placeables ?? [])]
+    .filter(token => token.actor && token.visible !== false && token.renderable !== false)
+    .sort((left, right) => (right._lastSortedIndex ?? 0) - (left._lastSortedIndex ?? 0))
+    .find(token => token.bounds?.contains?.(point.x, point.y) || token.hitArea?.contains?.(point.x - token.x, point.y - token.y)) ?? null;
+}
+
+function refreshTrapLinkedActorHighlights() {
+  const grid = canvas?.interface?.grid;
+  if (!canvas?.ready || !grid) return;
+  const layer = grid.getHighlightLayer?.(TRAP_LINKED_ACTOR_HIGHLIGHT_LAYER)
+    ?? grid.addHighlightLayer?.(TRAP_LINKED_ACTOR_HIGHLIGHT_LAYER);
+  layer?.clear?.();
+  if (!layer || !activeTrapLinkedActorSelection) return;
+  for (const token of canvas.tokens?.placeables ?? []) {
+    if (!token.actor || token.visible === false || token.renderable === false) continue;
+    const bounds = token.bounds;
+    if (!bounds) continue;
+    const width = Math.max(3, CONFIG.Canvas.objectBorderThickness * canvas.dimensions.uiScale);
+    layer.lineStyle(width, TRAP_LINKED_ACTOR_HIGHLIGHT_COLOR, 0.95);
+    layer.drawRect(bounds.x, bounds.y, bounds.width, bounds.height);
+  }
+}
+
+class TrapLinkedActionDialog extends HandlebarsApplicationMixin(ApplicationV2) {
+  #token = null;
+  #expandedWeaponId = "";
+  #selectedAction = null;
+  #resultPromise = null;
+  #resolveResult = null;
+  #settled = false;
+
+  constructor({ token = null } = {}) {
+    super();
+    this.#token = token;
+    this.#resultPromise = new Promise(resolve => {
+      this.#resolveResult = resolve;
+    });
+  }
+
+  static DEFAULT_OPTIONS = {
+    id: "fallout-maw-trap-linked-action-dialog",
+    classes: ["fallout-maw", "fallout-maw-trap-linked-action-dialog"],
+    position: { width: 720, height: "auto" },
+    window: { resizable: true },
+    actions: {
+      toggleWeapon: this.#onToggleWeapon,
+      selectAction: this.#onSelectAction,
+      confirmAction: this.#onConfirmAction,
+      cancelAction: this.#onCancelAction
+    }
+  };
+
+  static PARTS = {
+    body: { template: TEMPLATES.trapLinkedActionDialog }
+  };
+
+  get title() {
+    return `Связать ловушку - ${this.#token?.name ?? this.#token?.actor?.name ?? "актёр"}`;
+  }
+
+  async wait() {
+    await this.render({ force: true });
+    return this.#resultPromise;
+  }
+
+  async _prepareContext(options) {
+    const context = await super._prepareContext(options);
+    const weaponSets = prepareTrapLinkedWeaponSets(this.#token?.actor, {
+      expandedWeaponId: this.#expandedWeaponId,
+      selectedAction: this.#selectedAction
+    });
+    return {
+      ...context,
+      actorName: this.#token?.name ?? this.#token?.actor?.name ?? "Актёр",
+      weaponSets,
+      hasWeapons: weaponSets.some(set => set.weapons.length > 0),
+      canConfirm: Boolean(this.#selectedAction)
+    };
+  }
+
+  async _onClose(options) {
+    await super._onClose(options);
+    this.#finish(null);
+  }
+
+  #finish(result) {
+    if (this.#settled) return;
+    this.#settled = true;
+    this.#resolveResult?.(result);
+  }
+
+  static #onToggleWeapon(event, target) {
+    event.preventDefault();
+    const itemId = String(target.dataset.weaponItemId ?? "");
+    this.#expandedWeaponId = this.#expandedWeaponId === itemId ? "" : itemId;
+    return this.render({ force: true });
+  }
+
+  static #onSelectAction(event, target) {
+    event.preventDefault();
+    this.#selectedAction = {
+      sceneId: canvas.scene?.id ?? "",
+      tokenId: this.#token?.id ?? "",
+      actorUuid: this.#token?.actor?.uuid ?? "",
+      weaponItemId: String(target.dataset.weaponItemId ?? ""),
+      weaponFunctionId: String(target.dataset.weaponFunctionId ?? ITEM_FUNCTIONS.weapon),
+      actionKey: String(target.dataset.weaponActionKey ?? ""),
+      actorName: this.#token?.name ?? this.#token?.actor?.name ?? "",
+      weaponName: String(target.dataset.weaponName ?? ""),
+      actionName: String(target.dataset.weaponActionName ?? "")
+    };
+    return this.render({ force: true });
+  }
+
+  static async #onConfirmAction(event) {
+    event.preventDefault();
+    if (!this.#selectedAction) return;
+    this.#finish(normalizeTrapLinkedAction(this.#selectedAction));
+    await this.close();
+  }
+
+  static #onCancelAction(event) {
+    event.preventDefault();
+    return this.close();
+  }
+}
+
+function prepareTrapLinkedWeaponSets(actor, { expandedWeaponId = "", selectedAction = null } = {}) {
+  if (!actor) return [];
+  const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
+  const inventory = prepareInventoryContext(actor, race);
+  const sets = [
+    ...(inventory.naturalWeaponSet ? [inventory.naturalWeaponSet] : []),
+    ...(inventory.weaponSets ?? [])
+  ];
+  return sets.map(set => {
+    const seen = new Set();
+    const weapons = [];
+    for (const slot of set.slots ?? []) {
+      const itemId = String(slot.item?.id ?? "");
+      if (!itemId || seen.has(itemId) || slot.phantom || slot.item?.phantom || slot.useDisabled || slot.item?.useDisabled) continue;
+      seen.add(itemId);
+      const weapon = actor.items?.get(itemId);
+      if (!weapon) continue;
+      const functions = getEnabledWeaponFunctions(weapon).map(weaponFunction => {
+        const functionId = weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id;
+        const weaponData = applyWeaponModuleModifiers(weaponFunction.data ?? {}, {
+          moduleSlots: getWeaponFunctionModuleSlots(weapon, functionId)
+        });
+        const actions = TRAP_LINKED_ACTIONS
+          .filter(([actionKey]) => Boolean(weaponData.availableActions?.[actionKey]))
+          .map(([actionKey, labelKey]) => {
+            const actionName = String(weaponData?.[actionKey]?.name ?? "").trim() || game.i18n.localize(labelKey);
+            return {
+              actionKey,
+              actionName,
+              selected: selectedAction?.weaponItemId === itemId
+                && selectedAction?.weaponFunctionId === functionId
+                && selectedAction?.actionKey === actionKey
+            };
+          });
+        return {
+          functionId,
+          label: weaponFunction.isPrimary ? "Основная функция" : (weaponFunction.name || "Дополнительная функция"),
+          actions
+        };
+      }).filter(entry => entry.actions.length > 0);
+      if (!functions.length) continue;
+      weapons.push({
+        itemId,
+        name: weapon.name,
+        img: normalizeImagePath(weapon.img, "icons/svg/sword.svg"),
+        expanded: expandedWeaponId === itemId,
+        functions
+      });
+    }
+    return { key: set.key, label: set.label || set.key, weapons };
+  }).filter(set => set.weapons.length > 0);
 }
 
 async function createTrapPlacementPreview(placement) {
@@ -558,6 +916,17 @@ async function onTrapInteractionPointerDown(event) {
   await openTrapInteractionDialog(tile, actor);
 }
 
+function onTrapInteractionCanvasEvent(event) {
+  if (!activeTrapInteraction) return;
+  stopTrapCanvasInputEvent(event);
+  if (event.type === "contextmenu" || event.type === "auxclick" || event.button === 2) {
+    onTrapInteractionContextMenu(event);
+    return;
+  }
+  if (!["pointerdown", "mousedown"].includes(event.type) || event.button !== 0) return;
+  void onTrapInteractionPointerDown(event);
+}
+
 function onTrapInteractionContextMenu(event) {
   if (!activeTrapInteraction) return;
   event.preventDefault?.();
@@ -567,11 +936,11 @@ function onTrapInteractionContextMenu(event) {
 }
 
 function onTrapInteractionKeyDown(event) {
-  if (!activeTrapInteraction || event.key !== "Escape") return;
+  if (!activeTrapInteraction) return;
   event.preventDefault?.();
   event.stopPropagation?.();
   event.stopImmediatePropagation?.();
-  cancelTrapInteractionMode({ notify: true });
+  if (event.key === "Escape") cancelTrapInteractionMode({ notify: true });
 }
 
 function cancelTrapInteractionMode({ notify = false } = {}) {
@@ -579,9 +948,8 @@ function cancelTrapInteractionMode({ notify = false } = {}) {
     refreshTrapInteractionHighlights();
     return;
   }
-  const view = canvas?.app?.view;
-  view?.removeEventListener("pointerdown", onTrapInteractionPointerDown, { capture: true });
-  view?.removeEventListener("contextmenu", onTrapInteractionContextMenu, { capture: true });
+  const interaction = activeTrapInteraction;
+  unbindTrapCanvasInput(interaction);
   window.removeEventListener("keydown", onTrapInteractionKeyDown, { capture: true });
   activeTrapInteraction = null;
   refreshTrapInteractionHighlights();
@@ -955,6 +1323,7 @@ async function createTrapDocumentsNow(request = {}) {
           lastDisarmToolItemId: "",
           detectionRegionId: "",
           triggerRegionId: "",
+          linkedAction: normalizeTrapLinkedAction(request.linkedAction),
           data: trapData,
           createdAt: Number(game.time?.worldTime) || 0
         }
@@ -1041,6 +1410,11 @@ async function triggerTrap(tile, triggeringToken) {
   if (!scene || !trap) return;
 
   const trapData = normalizeTrapData(trap.data);
+  if (trapData.trigger.activationMode === TRAP_LINKED_ACTION_MODE) {
+    await triggerLinkedTrapAction(tile, triggeringToken, trap);
+    await deleteTrapDocuments(tile);
+    return;
+  }
   const ownerActor = trap.ownerActorUuid ? await fromUuid(trap.ownerActorUuid) : null;
   const center = getTileCenter(tile);
   const triggerRect = getTrapTileRectangle(tile);
@@ -1055,7 +1429,7 @@ async function triggerTrap(tile, triggeringToken) {
   for (const token of targets) {
     const actor = token.actor;
     if (!actor) continue;
-    let targetDamage = damageBase;
+    let damageMultiplier = 1;
     if (trapData.evasion.difficulty !== null) {
       const targetDistance = getPointDistanceFromRectangle(getTokenCenter(token), triggerRect);
       const evasionDifficulty = getTrapEvasionDifficultyAtDistance(
@@ -1073,30 +1447,28 @@ async function triggerTrap(tile, triggeringToken) {
         requester: "trapEvasion"
       });
       if (isSkillCheckSuccess(outcome)) {
-        targetDamage = Math.max(0, Math.round(targetDamage * (1 - (trapData.evasion.avoidPercent / 100))));
+        damageMultiplier = Math.max(0, 1 - (trapData.evasion.avoidPercent / 100));
       }
     }
-    for (let pellet = 0; pellet < pellets; pellet += 1) {
-      const limbKey = selectRandomWeightedLimbKey(actor);
-      for (const entry of distributeDamageByType(targetDamage, damageTypes)) {
-        requests.push({
-          actor,
-          limbKey,
-          amount: entry.amount,
-          damageTypeKey: entry.damageTypeKey,
-          scope: "healthAndLimb",
-          applyMitigation: true,
-          source: {
-            kind: "trap",
-            trapTileId: tile.id,
-            trapName: tile.name,
-            ownerActorUuid: trap.ownerActorUuid,
-            sourceItemUuid: trap.sourceItemUuid,
-            penetrationPower
-          }
-        });
+    requests.push(...buildWeaponExplosionDamageRequests({
+      targetToken: token.object ?? canvas.tokens?.get?.(token.id) ?? token,
+      center,
+      radiusPixels,
+      baseDamage: damageBase,
+      pelletCount: pellets,
+      damageTypes,
+      penetrationPower,
+      damageModifier: amount => Math.round(amount * damageMultiplier),
+      source: {
+        kind: "trap",
+        trapTileId: tile.id,
+        trapName: tile.name,
+        ownerActorUuid: trap.ownerActorUuid,
+        sourceItemUuid: trap.sourceItemUuid,
+        blastCenter: serializePoint(center),
+        blastRadius: trapData.effect.damageRadiusMeters
       }
-    }
+    }));
   }
 
   await playWeaponExplosionAnimation({
@@ -1112,6 +1484,49 @@ async function triggerTrap(tile, triggeringToken) {
   if (requests.length) await requestDamageApplications(requests);
   await createTrapEffectRegion(scene, tile, trapData, center, ownerActor);
   await deleteTrapDocuments(tile);
+}
+
+async function triggerLinkedTrapAction(tile, triggeringToken, trap) {
+  const scene = tile?.parent ?? canvas.scene;
+  const trapData = normalizeTrapData(trap?.data);
+  const linkedAction = normalizeTrapLinkedAction(trap?.linkedAction);
+  const targetToken = triggeringToken?.object
+    ?? canvas.tokens?.get?.(triggeringToken?.id)
+    ?? triggeringToken;
+  const attackerDocument = scene?.tokens?.get(linkedAction?.tokenId ?? "");
+  const attackerToken = attackerDocument?.object ?? canvas.tokens?.get?.(attackerDocument?.id);
+  const weapon = attackerDocument?.actor?.items?.get(linkedAction?.weaponItemId ?? "");
+
+  await playWeaponExplosionAnimation({
+    weaponData: {
+      volley: {
+        explosionAnimationKey: trapData.triggerAnimationKey,
+        explosionSoundPath: trapData.triggerSoundPath
+      }
+    },
+    center: getTileCenter(tile),
+    radiusPixels: 0
+  });
+
+  if (!linkedAction
+    || !targetToken?.actor
+    || !attackerToken?.actor
+    || attackerToken.actor.uuid !== linkedAction.actorUuid
+    || !weapon) {
+    ui.notifications.warn(`${tile?.name ?? "Ловушка"}: связанный актёр или оружие недоступны.`);
+    return false;
+  }
+  const executed = await executeWeaponAttackAgainstToken({
+    attackerToken,
+    targetToken,
+    weapon,
+    actionKey: linkedAction.actionKey,
+    weaponFunctionId: linkedAction.weaponFunctionId
+  });
+  if (!executed) {
+    ui.notifications.warn(`${attackerToken.name}: действие «${linkedAction.actionName || linkedAction.actionKey}» сейчас невозможно.`);
+  }
+  return executed;
 }
 
 async function createTrapEffectRegion(scene, tile, trapData, center, ownerActor) {
@@ -1396,7 +1811,7 @@ function findFirstTrapMovementEvent(tokenDocument, actor, movement = {}, trapTil
         const wasInsideTrigger = isPointInsideTile(tile, previous.point);
         const isInsideTrigger = isPointInsideTile(tile, current.point);
         if (!wasInsideTrigger && isInsideTrigger) {
-          const type = trapData.trigger.activationMode === "enter" ? "triggerImmediate" : "triggerEnter";
+          const type = trapData.trigger.activationMode !== "exit" ? "triggerImmediate" : "triggerEnter";
           candidates.push({ type, tile, priority: 1, waypoint: current.waypoint });
         }
         if (trapData.trigger.activationMode === "exit" && wasInsideTrigger && !isInsideTrigger) {
@@ -1743,7 +2158,25 @@ function normalizeNullableDifficulty(value) {
 }
 
 function normalizeTrapActivationMode(value) {
-  return String(value ?? "exit").trim() === "enter" ? "enter" : "exit";
+  const mode = String(value ?? "exit").trim();
+  return ["enter", "exit", TRAP_LINKED_ACTION_MODE].includes(mode) ? mode : "exit";
+}
+
+function normalizeTrapLinkedAction(source = null) {
+  if (!source || typeof source !== "object") return null;
+  const action = {
+    sceneId: String(source.sceneId ?? "").trim(),
+    tokenId: String(source.tokenId ?? "").trim(),
+    actorUuid: String(source.actorUuid ?? "").trim(),
+    weaponItemId: String(source.weaponItemId ?? "").trim(),
+    weaponFunctionId: String(source.weaponFunctionId ?? ITEM_FUNCTIONS.weapon).trim() || ITEM_FUNCTIONS.weapon,
+    actionKey: String(source.actionKey ?? "").trim(),
+    actorName: String(source.actorName ?? "").trim(),
+    weaponName: String(source.weaponName ?? "").trim(),
+    actionName: String(source.actionName ?? "").trim()
+  };
+  if (!action.tokenId || !action.actorUuid || !action.weaponItemId || !action.actionKey) return null;
+  return action;
 }
 
 function normalizeTrapImageScale(value) {
@@ -1822,21 +2255,6 @@ function normalizeRegionDamageEntries(entries = []) {
       amount: String(entry?.amount ?? "0").trim() || "0"
     }))
     .filter(entry => entry.damageTypeKey || isFormulaTextConfigured(entry.amount));
-}
-
-function distributeDamageByType(amount, damageTypes = []) {
-  const total = Math.max(0, toInteger(amount));
-  if (total <= 0) return [];
-  const entries = normalizeDamageTypeEntries(damageTypes);
-  const percentTotal = entries.reduce((sum, entry) => sum + Math.max(0, entry.percent), 0) || 100;
-  let allocated = 0;
-  return entries.map((entry, index) => {
-    const amountForType = index === entries.length - 1
-      ? Math.max(0, total - allocated)
-      : Math.max(0, Math.round(total * (entry.percent / percentTotal)));
-    allocated += amountForType;
-    return { damageTypeKey: entry.damageTypeKey, amount: amountForType };
-  }).filter(entry => entry.amount > 0 && entry.damageTypeKey);
 }
 
 function metersToPixels(value, scene, actorOrUuid = null) {
@@ -1952,7 +2370,8 @@ function serializeTrapCreateRequest(request = {}) {
     ownerActorUuid: String(request.ownerActorUuid ?? ""),
     sourceItemUuid: String(request.sourceItemUuid ?? ""),
     itemData: foundry.utils.deepClone(request.itemData ?? {}),
-    trapData: normalizeTrapData(request.trapData)
+    trapData: normalizeTrapData(request.trapData),
+    linkedAction: normalizeTrapLinkedAction(request.linkedAction)
   };
 }
 

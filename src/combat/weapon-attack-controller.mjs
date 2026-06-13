@@ -91,6 +91,81 @@ export function startWeaponAttack({ token = null, weapon = null, actionKey = "",
   return activeAttack;
 }
 
+export async function executeWeaponAttackAgainstToken({
+  attackerToken = null,
+  targetToken = null,
+  weapon = null,
+  actionKey = "",
+  weaponFunctionId = ""
+} = {}) {
+  if (!attackerToken?.actor || !targetToken?.actor || !weapon || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) return false;
+  if (!getWeaponAttackData(weapon, weaponFunctionId)?.enabled) return false;
+  if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) return false;
+  if (isWeaponActionBlocked(attackerToken.actor, actionKey)) return false;
+  if (isWeaponPlacementDisabled(attackerToken.actor, weapon)) return false;
+  if (!hasRequiredWeaponResources(weapon, getActionAttackCount(weapon, actionKey, weaponFunctionId), weaponFunctionId)) return false;
+  if (!hasRequiredWeaponActionPoints(attackerToken.actor, weapon, actionKey, weaponFunctionId)) return false;
+
+  cancelWeaponAttack();
+  const controller = new WeaponAttackController(attackerToken, weapon, actionKey, weaponFunctionId);
+  try {
+    controller.attachPreview();
+    return await controller.executeAgainstToken(targetToken);
+  } finally {
+    controller.destroy();
+  }
+}
+
+export function buildWeaponExplosionDamageRequests({
+  targetToken = null,
+  center = null,
+  radiusPixels = 0,
+  baseDamage = 0,
+  pelletCount = 1,
+  damageTypes = [],
+  penetrationPower = 0,
+  source = {},
+  damageModifier = null
+} = {}) {
+  const actor = targetToken?.actor;
+  if (!actor || !center) return [];
+  const falloff = Number(radiusPixels) > 0
+    ? getVolleyDamageFalloff(targetToken, { end: center, radiusPixels })
+    : 1;
+  const falloffDamage = Math.round(Math.max(0, Number(baseDamage) || 0) * falloff);
+  const damageAmount = Math.max(0, Math.round(Number(
+    typeof damageModifier === "function" ? damageModifier(falloffDamage) : falloffDamage
+  ) || 0));
+  const pelletDamages = distributeIntegerAmount(damageAmount, Array(Math.max(1, toInteger(pelletCount))).fill(1));
+  const normalizedTypes = normalizeExplosionDamageTypes(damageTypes);
+  const requests = [];
+
+  for (let pelletIndex = 0; pelletIndex < pelletDamages.length; pelletIndex += 1) {
+    const pelletDamage = pelletDamages[pelletIndex] ?? 0;
+    if (pelletDamage <= 0) continue;
+    const limbKey = selectRandomLimbKey(actor);
+    if (!limbKey) continue;
+    const typeAmounts = distributeIntegerAmount(pelletDamage, normalizedTypes.map(entry => entry.weight));
+    for (let typeIndex = 0; typeIndex < normalizedTypes.length; typeIndex += 1) {
+      const amount = typeAmounts[typeIndex] ?? 0;
+      if (amount <= 0) continue;
+      requests.push({
+        actor,
+        limbKey,
+        amount,
+        damageTypeKey: normalizedTypes[typeIndex].key,
+        scope: "healthAndLimb",
+        source: {
+          ...source,
+          penetrationPower,
+          pelletIndex
+        }
+      });
+    }
+  }
+  return requests;
+}
+
 function isWeaponPlacementDisabled(actor, weapon) {
   if (!actor || !weapon) return false;
   const placement = weapon.system?.placement ?? {};
@@ -152,12 +227,47 @@ class WeaponAttackController {
   }
 
   activate() {
-    this.container.eventMode = "none";
-    getAttackPreviewLayer().addChild(this.container);
+    this.attachPreview();
     canvas.stage.on("mousemove", this.events.move);
     document.addEventListener("pointerdown", this.events.pointerDown, { capture: true });
     canvas.app.ticker.add(this.events.tick);
     canvas.app.view.oncontextmenu = this.events.cancel;
+  }
+
+  attachPreview() {
+    if (this.container.parent) return;
+    this.container.eventMode = "none";
+    getAttackPreviewLayer().addChild(this.container);
+  }
+
+  async executeAgainstToken(targetToken) {
+    this.pointer = getTokenAimPoint(targetToken);
+    if (!this.pointer) return false;
+    this.refresh(true);
+    if (!this.geometry) return false;
+
+    if (!this.targetedAction) {
+      await this.performCurrentAttack();
+      return true;
+    }
+    if (!this.targets.includes(targetToken)) return false;
+
+    this.selectedTarget = targetToken;
+    this.lockedGeometry = serializeGeometry(this.geometry);
+    this.selectedLimbKey = this.requiresLimbSelection ? selectRandomWeightedLimbKey(targetToken.actor) : "";
+    if (this.requiresDirectionSelection) {
+      this.aimedMode = "direction";
+      const directions = getEnabledMeleeDirections(this.weapon, this.actionKey, this.weaponFunctionId);
+      const direction = directions.find(entry => entry.mode === "thrust") ?? directions[0];
+      if (!direction) return false;
+      await this.performDirectedAttack(direction.key);
+      return true;
+    }
+
+    this.aimedMode = "limb";
+    if (!this.selectedLimbKey) return false;
+    await this.performAimedAttack(this.selectedLimbKey);
+    return true;
   }
 
   destroy() {
@@ -266,6 +376,10 @@ class WeaponAttackController {
     event.stopPropagation?.();
     event.preventDefault?.();
     this.updatePointerFromClientEvent(event);
+    return this.performCurrentAttack();
+  }
+
+  async performCurrentAttack() {
     if (this.targetedAction) return this.onAimedConfirm();
     if (!this.pointer) return;
     if (this.actionKey === PUSH_ACTION_KEY) return this.performPushAttack();
@@ -1237,32 +1351,27 @@ class WeaponAttackController {
 
   resolveVolleyDamageAgainstTarget(target, geometry, blastOutcome) {
     if (!isDeadTarget(target)) this.dodgeExposure.record(target.actor);
-    const falloff = getVolleyDamageFalloff(target, geometry);
-    const baseDamage = Math.round(getWeaponDamage(this.weapon, this.weaponFunctionId) * falloff);
-    const damageAmount = getCriticalDamageAmount(this.weapon, baseDamage, blastOutcome.outcome, this.weaponFunctionId);
-    const pelletDamages = distributeIntegerAmount(damageAmount, Array(getWeaponPelletCount(this.weapon, this.weaponFunctionId)).fill(1));
-    const requests = [];
-    for (let pelletIndex = 0; pelletIndex < pelletDamages.length; pelletIndex += 1) {
-      const amount = pelletDamages[pelletIndex] ?? 0;
-      if (amount <= 0) continue;
-      const limbKey = selectRandomLimbKey(target.actor);
-      requests.push(...buildWeaponDamageRequests(this.weapon, {
-        attackerActor: this.token.actor,
-        actor: target.actor,
-        limbKey,
-        amount,
-        source: {
-          weaponUuid: this.weapon.uuid,
-          actionKey: this.actionKey,
-          attackerUuid: this.token.actor.uuid,
-          tokenId: this.token.id,
-          blastCenter: serializePoint(geometry.end),
-          blastRadius: getVolleyDamageRadius(this.weapon, this.weaponFunctionId),
-          pelletIndex
-        }
-      }, this.weaponFunctionId));
-    }
-    return requests;
+    return buildWeaponExplosionDamageRequests({
+      targetToken: target,
+      center: geometry.end,
+      radiusPixels: geometry.radiusPixels,
+      baseDamage: getWeaponDamage(this.weapon, this.weaponFunctionId),
+      pelletCount: getWeaponPelletCount(this.weapon, this.weaponFunctionId),
+      damageTypes: getWeaponDamageTypeEntries(this.weapon, this.weaponFunctionId),
+      penetrationPower: getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
+        actor: this.token.actor,
+        actionKey: this.actionKey
+      }),
+      damageModifier: amount => getCriticalDamageAmount(this.weapon, amount, blastOutcome.outcome, this.weaponFunctionId),
+      source: {
+        weaponUuid: this.weapon.uuid,
+        actionKey: this.actionKey,
+        attackerUuid: this.token.actor.uuid,
+        tokenId: this.token.id,
+        blastCenter: serializePoint(geometry.end),
+        blastRadius: getVolleyDamageRadius(this.weapon, this.weaponFunctionId)
+      }
+    });
   }
 
   async resolveAimedAttackAgainstTarget(target, { limbKey = "", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
@@ -3571,6 +3680,16 @@ function getWeaponDamageTypeEntries(weapon, weaponFunctionId = "") {
   if (entries.length) return entries;
   const fallback = String(weaponData.damageTypeKey ?? "").trim() || "firearm";
   return [{ key: fallback, weight: 100 }];
+}
+
+function normalizeExplosionDamageTypes(entries = []) {
+  const normalized = (Array.isArray(entries) ? entries : [])
+    .map(entry => ({
+      key: String(entry?.key ?? entry?.damageTypeKey ?? "").trim(),
+      weight: Math.max(0, Number(entry?.weight ?? entry?.percent) || 0)
+    }))
+    .filter(entry => entry.key && entry.weight > 0);
+  return normalized.length ? normalized : [{ key: "firearm", weight: 100 }];
 }
 
 function getEffectiveWeaponDamageData(weapon, weaponFunctionId = "") {

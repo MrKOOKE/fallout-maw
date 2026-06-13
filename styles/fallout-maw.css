@@ -5927,6 +5927,103 @@ label.fallout-maw-mitigation-cell {
   font-family: var(--fallout-maw-actor-ui-font, var(--font-primary, serif));
 }
 
+.application.fallout-maw-trap-linked-action-dialog {
+  min-width: 520px;
+}
+
+.application.fallout-maw-trap-linked-action-dialog .window-content {
+  padding: 0;
+  overflow: hidden auto;
+}
+
+.fallout-maw-trap-linked-action {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  color: var(--color-text-primary);
+}
+
+.fallout-maw-trap-linked-action-header {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-border-light-primary);
+}
+
+.fallout-maw-trap-linked-action-header strong {
+  font-size: 1.15rem;
+}
+
+.fallout-maw-trap-linked-action-sets,
+.fallout-maw-trap-linked-action-functions,
+.fallout-maw-trap-linked-action-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.fallout-maw-trap-linked-action-set > h3,
+.fallout-maw-trap-linked-action-function > h4 {
+  margin: 0 0 6px;
+}
+
+.fallout-maw-trap-linked-action-weapon {
+  border: 1px solid var(--color-border-light-primary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.fallout-maw-trap-linked-action-weapon-toggle {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+}
+
+.fallout-maw-trap-linked-action-weapon-toggle img {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  border: 0;
+}
+
+.fallout-maw-trap-linked-action-functions {
+  padding: 10px;
+  border-top: 1px solid var(--color-border-light-primary);
+}
+
+.fallout-maw-trap-linked-action-actions {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.fallout-maw-trap-linked-action-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 36px;
+}
+
+.fallout-maw-trap-linked-action-action.selected {
+  color: #fff;
+  border-color: #d13fbd;
+  background: rgba(177, 43, 158, 0.72);
+  box-shadow: 0 0 8px rgba(227, 79, 203, 0.75);
+}
+
+.fallout-maw-trap-linked-action-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border-light-primary);
+}
+
 .application.fallout-maw-trap-disarm-dialog .window-header {
   background: rgba(16, 19, 13, 0.96);
   border-bottom: 1px solid var(--fallout-maw-terminal-line);

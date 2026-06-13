@@ -1,0 +1,60 @@
+<div class="fallout-maw-sheet fallout-maw-trap-linked-action">
+  <header class="fallout-maw-trap-linked-action-header">
+    <strong>{{actorName}}</strong>
+    <span>Выберите оружие, затем действие, которое выполнится при срабатывании ловушки.</span>
+  </header>
+
+  <div class="fallout-maw-trap-linked-action-sets">
+    {{#each weaponSets}}
+    <section class="fallout-maw-trap-linked-action-set">
+      <h3>{{label}}</h3>
+      {{#each weapons}}
+      <article class="fallout-maw-trap-linked-action-weapon {{#if expanded}}expanded{{/if}}">
+        <button type="button" class="fallout-maw-trap-linked-action-weapon-toggle" data-action="toggleWeapon" data-weapon-item-id="{{itemId}}">
+          <img src="{{img}}" alt="">
+          <span>{{name}}</span>
+          <i class="fa-solid {{#if expanded}}fa-chevron-up{{else}}fa-chevron-down{{/if}}"></i>
+        </button>
+        {{#if expanded}}
+        <div class="fallout-maw-trap-linked-action-functions">
+          {{#each functions}}
+          <div class="fallout-maw-trap-linked-action-function">
+            <h4>{{label}}</h4>
+            <div class="fallout-maw-trap-linked-action-actions">
+              {{#each actions}}
+              <button
+                type="button"
+                class="fallout-maw-trap-linked-action-action {{#if selected}}selected{{/if}}"
+                data-action="selectAction"
+                data-weapon-item-id="{{../../itemId}}"
+                data-weapon-name="{{../../name}}"
+                data-weapon-function-id="{{../functionId}}"
+                data-weapon-action-key="{{actionKey}}"
+                data-weapon-action-name="{{actionName}}"
+              >
+                <i class="fa-solid fa-crosshairs"></i>
+                <span>{{actionName}}</span>
+              </button>
+              {{/each}}
+            </div>
+          </div>
+          {{/each}}
+        </div>
+        {{/if}}
+      </article>
+      {{/each}}
+    </section>
+    {{else}}
+    <p class="fallout-maw-empty-list">У актёра нет доступного оружия с боевыми действиями.</p>
+    {{/each}}
+  </div>
+
+  <footer class="fallout-maw-trap-linked-action-footer">
+    <button type="button" data-action="confirmAction" {{#unless canConfirm}}disabled{{/unless}}>
+      <i class="fa-solid fa-link"></i> Подтвердить связь
+    </button>
+    <button type="button" data-action="cancelAction">
+      <i class="fa-solid fa-xmark"></i> Отмена
+    </button>
+  </footer>
+</div>

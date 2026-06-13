@@ -371,6 +371,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       trapInstallationSkillChoices: buildSkillChoices(item.system?.functions?.trap?.installation?.skillKey ?? "traps", skillSettings),
       trapDetectionSkillChoices: buildSkillChoices(item.system?.functions?.trap?.detection?.skillKey ?? "naturalist", skillSettings),
       trapActivationModeChoices: buildTrapActivationModeChoices(item.system?.functions?.trap?.trigger?.activationMode ?? "exit"),
+      isTrapLinkedActionMode: item.system?.functions?.trap?.trigger?.activationMode === "linkedAction",
       trapEvasionSkillChoices: buildSkillChoices(item.system?.functions?.trap?.evasion?.skillKey ?? "athletics", skillSettings),
       trapDisarmToolChoices: buildToolChoices(item.system?.functions?.trap?.disarm?.toolKey ?? "mechanicalHacking", toolSettings),
       trapDisarmClassChoices: buildToolClassChoices(item.system?.functions?.trap?.disarm?.toolClass ?? "D"),
@@ -7016,7 +7017,7 @@ function buildSkillChoices(selectedKey = "", skillSettings = []) {
 }
 
 function buildTrapActivationModeChoices(selectedMode = "exit") {
-  const selected = selectedMode === "enter" ? "enter" : "exit";
+  const selected = ["enter", "exit", "linkedAction"].includes(selectedMode) ? selectedMode : "exit";
   return [
     {
       value: "enter",
@@ -7027,6 +7028,11 @@ function buildTrapActivationModeChoices(selectedMode = "exit") {
       value: "exit",
       label: game.i18n.localize("FALLOUTMAW.Item.TrapActivationModeExit"),
       selected: selected === "exit"
+    },
+    {
+      value: "linkedAction",
+      label: game.i18n.localize("FALLOUTMAW.Item.TrapActivationModeLinkedAction"),
+      selected: selected === "linkedAction"
     }
   ];
 }
