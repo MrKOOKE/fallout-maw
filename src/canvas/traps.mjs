@@ -31,6 +31,7 @@ const PREVIEW_FILL_COLOR = 0xf0a23a;
 const TRAP_CONTROLLED_MOVEMENT_OPTION = "falloutMawTrapControlledMovement";
 const TRAP_SAFE_HIGHLIGHT_LAYER = "fallout-maw-safe-traps";
 const TRAP_SAFE_HIGHLIGHT_COLOR = 0x43c96b;
+const TRAP_HOSTILE_HIGHLIGHT_COLOR = 0xd85f5f;
 const TRAP_INTERACTION_HIGHLIGHT_LAYER = "fallout-maw-interaction-traps";
 const TRAP_INTERACTION_HIGHLIGHT_COLOR = 0xf0c84b;
 const TRAP_LINKED_ACTOR_HIGHLIGHT_LAYER = "fallout-maw-linked-actor-tokens";
@@ -81,6 +82,9 @@ export function registerTrapHooks() {
     refreshTrapTileVisibility();
     refreshTrapInteractionHighlights();
   });
+  Hooks.on("sightRefresh", refreshTrapTileVisibility);
+  Hooks.on("visibilityRefresh", refreshTrapTileVisibility);
+  Hooks.on("updateToken", queueTrapTileVisibilityRefresh);
   Hooks.on("updateActor", (actor, changes = {}) => {
     const flat = foundry.utils.flattenObject(changes ?? {});
     if (`flags.${SYSTEM_ID}.factionBelongs` in flat || `flags.${SYSTEM_ID}.factionRelations` in flat) refreshTrapTileVisibility();
@@ -139,6 +143,8 @@ export async function startTrapPlacement({ actor = null, token = null, item = nu
     trapData: normalizeTrapData(getTrapFunction(item)),
     itemData: item.toObject(),
     preview: null,
+    rotation: 0,
+    lastPoint: null,
     inputShield: createTrapCanvasInputShield("crosshair")
   };
   await createTrapPlacementPreview(activeTrapPlacement);
@@ -414,7 +420,12 @@ async function onTrapPlacementPointerDown(event) {
   if (!canSpendCombatActionPoints(actor, apCost, { label: "установки ловушки" })) return;
 
   const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
-  const rect = getTrapPlacementRectFromPoint(point, trapData, canvas.scene);
+  const rect = getTrapPlacementRectFromPoint(point, trapData, canvas.scene, placement.rotation);
+  const clipped = getTrapPlacementClippedArea(rect, canvas.scene);
+  if (!clipped.polygons.length) {
+    ui.notifications.warn(`${item.name}: стены полностью отсекают область установки.`);
+    return;
+  }
   cancelActiveTrapPlacement();
   await spendCombatActionPoints(actor, apCost);
 
@@ -455,6 +466,8 @@ async function onTrapPlacementPointerDown(event) {
     sourceItemUuid: currentItem.uuid,
     itemData: currentItem.toObject(),
     trapData,
+    placementRect: rect,
+    rotation: placement.rotation,
     linkedAction
   });
   if (!created && !game.user?.isGM) return;
@@ -493,6 +506,7 @@ function onTrapPlacementContextMenu(event) {
 function onTrapPlacementPointerMove(event) {
   if (!activeTrapPlacement) return;
   const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
+  activeTrapPlacement.lastPoint = point;
   updateTrapPlacementPreview(activeTrapPlacement, point);
 }
 
@@ -501,7 +515,19 @@ function onTrapPlacementKeyDown(event) {
   event.preventDefault?.();
   event.stopPropagation?.();
   event.stopImmediatePropagation?.();
+  if (event.code === "KeyR" || String(event.key ?? "").toLowerCase() === "r" || String(event.key ?? "").toLowerCase() === "к") {
+    if (event.repeat) return;
+    rotateActiveTrapPlacement();
+    return;
+  }
   if (event.key === "Escape") cancelActiveTrapPlacement({ notify: true });
+}
+
+function rotateActiveTrapPlacement() {
+  const placement = activeTrapPlacement;
+  if (!placement) return;
+  placement.rotation = normalizeTrapRotation((placement.rotation ?? 0) + 90);
+  if (placement.lastPoint) updateTrapPlacementPreview(placement, placement.lastPoint);
 }
 
 function cancelActiveTrapPlacement({ notify = false } = {}) {
@@ -842,14 +868,31 @@ async function createTrapPlacementPreview(placement) {
 function updateTrapPlacementPreview(placement, point) {
   const preview = placement?.preview;
   if (!preview?.container) return;
-  const rect = getTrapPlacementRectFromPoint(point, placement.trapData, canvas.scene);
+  const rotation = normalizeTrapRotation(placement.rotation);
+  const rect = getTrapPlacementRectFromPoint(point, placement.trapData, canvas.scene, rotation);
+  const clipped = getTrapPlacementClippedArea(rect, canvas.scene);
   preview.container.position.set(rect.x, rect.y);
-  preview.graphics.clear()
-    .lineStyle(3, PREVIEW_BORDER_COLOR, 0.95)
-    .beginFill(PREVIEW_FILL_COLOR, 0.16)
-    .drawRect(0, 0, rect.width, rect.height)
-    .endFill();
-  if (preview.sprite) fitSpriteIntoRect(preview.sprite, rect.width, rect.height, placement.trapData?.trigger?.imageScale);
+  preview.graphics.clear();
+  for (const polygon of clipped.polygons) {
+    const points = getPolygonPointObjects(polygon)
+      .flatMap(point => [point.x - rect.x, point.y - rect.y]);
+    if (points.length < 6) continue;
+    preview.graphics
+      .lineStyle(3, PREVIEW_BORDER_COLOR, 0.95)
+      .beginFill(PREVIEW_FILL_COLOR, 0.16)
+      .drawPolygon(points)
+      .endFill();
+  }
+  if (preview.sprite) {
+    preview.sprite.visible = Boolean(clipped.polygons.length);
+    fitSpriteIntoRect(
+      preview.sprite,
+      rect.width,
+      rect.height,
+      placement.trapData?.trigger?.imageScale,
+      rotation
+    );
+  }
 }
 
 function destroyTrapPlacementPreview(placement) {
@@ -859,13 +902,18 @@ function destroyTrapPlacementPreview(placement) {
   placement.preview = null;
 }
 
-function fitSpriteIntoRect(sprite, width, height, imageScale = 0.5) {
+function fitSpriteIntoRect(sprite, width, height, imageScale = 0.5, rotation = 0, x = 0, y = 0) {
   const textureWidth = Math.max(1, Number(sprite.texture?.width) || 1);
   const textureHeight = Math.max(1, Number(sprite.texture?.height) || 1);
-  const scale = Math.min(width / textureWidth, height / textureHeight) * Math.max(0, Number(imageScale) || 0);
+  const normalizedRotation = normalizeTrapRotation(rotation);
+  const rotated = normalizedRotation === 90 || normalizedRotation === 270;
+  const fitWidth = rotated ? textureHeight : textureWidth;
+  const fitHeight = rotated ? textureWidth : textureHeight;
+  const scale = Math.min(width / fitWidth, height / fitHeight) * Math.max(0, Number(imageScale) || 0);
   sprite.anchor.set(0.5, 0.5);
   sprite.scale.set(scale, scale);
-  sprite.position.set(width / 2, height / 2);
+  sprite.rotation = Math.toRadians?.(normalizedRotation) ?? (normalizedRotation * Math.PI / 180);
+  sprite.position.set((Number(x) || 0) + (width / 2), (Number(y) || 0) + (height / 2));
 }
 
 function getTrapTileAtCanvasEvent(event) {
@@ -1278,12 +1326,19 @@ async function createTrapDocumentsNow(request = {}) {
   const point = serializePoint(request.point);
   const itemData = request.itemData ?? {};
   const trapData = normalizeTrapData(request.trapData);
+  const rotation = normalizeTrapRotation(request.rotation);
   const ownerActor = request.ownerActorUuid ? await fromUuid(String(request.ownerActorUuid)) : null;
   const factionState = createTrapFactionState(ownerActor);
-  const gridSize = getSceneGridSize(scene);
-  const width = Math.max(1, trapData.trigger.widthCells) * gridSize;
-  const height = Math.max(1, trapData.trigger.heightCells) * gridSize;
-  const rect = getTrapPlacementRectFromPoint(point, trapData, scene);
+  const rect = normalizeTrapPlacementRect(request.placementRect, scene)
+    ?? getTrapPlacementRectFromPoint(point, trapData, scene, rotation);
+  const clipped = getTrapPlacementClippedArea(rect, scene);
+  if (!clipped.polygons.length) {
+    ui.notifications.warn(`${String(itemData.name ?? "Ловушка")}: стены полностью отсекают область установки.`);
+    return null;
+  }
+  const width = rect.width;
+  const height = rect.height;
+  const tileDimensions = getTileDocumentDimensionsForVisualRect(rect, rotation);
   const left = Math.round(rect.x);
   const top = Math.round(rect.y);
   const x = Math.round(left + (width / 2));
@@ -1302,8 +1357,9 @@ async function createTrapDocumentsNow(request = {}) {
     },
     x,
     y,
-    width,
-    height,
+    width: tileDimensions.width,
+    height: tileDimensions.height,
+    rotation,
     elevation: Number.isFinite(Number(point.elevation)) ? Number(point.elevation) : 0,
     sort: getNextTileSort(scene),
     hidden: false,
@@ -1366,17 +1422,11 @@ async function createTrapDocumentsNow(request = {}) {
   regionData.push({
     name: `${tile.name}: активация`,
     color: "#d85f5f",
-    shapes: [{
-      type: "rectangle",
-      x: left,
-      y: top,
-      width,
-      height,
-      anchorX: 0,
-      anchorY: 0,
-      rotation: 0,
-      gridBased: false
-    }],
+    shapes: clipped.polygons.map(polygon => ({
+      type: "polygon",
+      points: polygon.points.map(value => Math.round(value)),
+      origin: null
+    })),
     elevation: { bottom: null, top: null },
     levels: levelId ? [levelId] : [],
     restriction: { enabled: Boolean(levelId), type: "move", priority: 0 },
@@ -1620,7 +1670,9 @@ function patchTrapTileVisibility() {
   TileClass.prototype._refreshVisibility = function(...args) {
     const result = originalRefreshVisibility?.apply(this, args);
     if (isTrapTileDocument(this.document) && !isTrapVisibleForCurrentViewer(this.document)) {
+      this.visible = false;
       if (this.mesh) this.mesh.visible = false;
+      if (this.bg) this.bg.visible = false;
       if (this.controls) this.controls.visible = false;
     }
     return result;
@@ -1699,19 +1751,11 @@ function queueTrapTileVisibilityRefresh() {
 function isTrapVisibleForCurrentViewer(tileDocument) {
   const trap = getTrapFlag(tileDocument);
   if (!trap) return true;
-  if (trap.disarmed === true || trap.armed === false) return true;
   const controlled = (canvas?.tokens?.controlled ?? []).filter(token => token?.actor);
   if (game.user?.isGM && !controlled.length) return true;
-  const actorUuids = controlled.length
-    ? controlled.map(token => token.actor.uuid)
-    : [game.user?.character?.uuid ?? ""].filter(Boolean);
-  if (!actorUuids.length) return false;
-  const visible = new Set(asStringArray(trap.visibleActorUuids));
-  return actorUuids.some(uuid => {
-    if (uuid === trap.ownerActorUuid || visible.has(uuid)) return true;
-    const actor = fromUuidSyncSafe(uuid);
-    return isActorSafeForTrap(trap, actor);
-  });
+  const actors = getTrapCurrentViewerActors();
+  if (!actors.length) return false;
+  return actors.some(actor => isTrapKnownToActor(trap, actor)) && isTrapInCurrentVision(tileDocument);
 }
 
 function refreshTrapSafeHighlights() {
@@ -1721,15 +1765,17 @@ function refreshTrapSafeHighlights() {
     ?? grid.addHighlightLayer?.(TRAP_SAFE_HIGHLIGHT_LAYER);
   layer?.clear?.();
   if (!layer) return;
+  const actors = getTrapCurrentViewerActors();
+  if (!actors.length) return;
   for (const tile of canvas.scene?.tiles?.contents ?? []) {
     if (!isTrapTileDocument(tile)) continue;
-    if (!isTrapVisibleForCurrentViewer(tile) || !isTrapSafeForCurrentViewer(tile)) continue;
-    drawTrapSafeHighlight(layer, tile);
+    if (!isTrapVisibleForCurrentViewer(tile)) continue;
+    const trap = getTrapFlag(tile);
+    const color = actors.some(actor => isActorSafeForTrap(trap, actor))
+      ? TRAP_SAFE_HIGHLIGHT_COLOR
+      : TRAP_HOSTILE_HIGHLIGHT_COLOR;
+    drawTrapActivationHighlight(layer, tile, color);
   }
-}
-
-function drawTrapSafeHighlight(layer, tile) {
-  drawTrapInnerOutline(layer, tile, TRAP_SAFE_HIGHLIGHT_COLOR);
 }
 
 function refreshTrapInteractionHighlights() {
@@ -1745,6 +1791,16 @@ function refreshTrapInteractionHighlights() {
     if (!isTrapTileDocument(tile) || !isTrapVisibleToActor(tile, actor)) continue;
     drawTrapInnerOutline(layer, tile, TRAP_INTERACTION_HIGHLIGHT_COLOR);
   }
+}
+
+function drawTrapActivationHighlight(layer, tile, color) {
+  const polygons = getTrapActivationPolygons(tile);
+  if (!polygons.length) return;
+  const width = Math.max(2, CONFIG.Canvas.objectBorderThickness * canvas.dimensions.uiScale);
+  layer.lineStyle(width, color, 0.95);
+  layer.beginFill(color, 0.16);
+  for (const polygon of polygons) layer.drawPolygon(polygon.points);
+  layer.endFill();
 }
 
 function drawTrapInnerOutline(layer, tile, color) {
@@ -1985,9 +2041,8 @@ function interpolatePoint(start, end, t) {
 function isTrapVisibleToActor(tile, actor) {
   const trap = getTrapFlag(tile);
   if (!trap || !actor) return false;
-  if (trap.disarmed === true || trap.armed === false) return true;
-  const visible = new Set(asStringArray(trap.visibleActorUuids));
-  return actor.uuid === trap.ownerActorUuid || visible.has(actor.uuid) || isActorSafeForTrap(trap, actor);
+  if (!isTrapKnownToActor(trap, actor)) return false;
+  return isTrapInCurrentVision(tile);
 }
 
 async function revealTrapToActor(tile, actor) {
@@ -2274,22 +2329,21 @@ function getSceneGridSize(scene) {
 
 function getTileCenter(tile) {
   const topLeft = getTileTopLeft(tile);
+  const dimensions = getTileEffectiveDimensions(tile);
   return {
-    x: topLeft.x + ((Number(tile?.width) || 0) / 2),
-    y: topLeft.y + ((Number(tile?.height) || 0) / 2)
+    x: topLeft.x + (dimensions.width / 2),
+    y: topLeft.y + (dimensions.height / 2)
   };
 }
 
 function getTrapTileRectangle(tile) {
   const topLeft = getTileTopLeft(tile);
-  const width = Math.abs(Number(tile?.width) || 0);
-  const height = Math.abs(Number(tile?.height) || 0);
-  return new PIXI.Rectangle(topLeft.x, topLeft.y, width, height);
+  const dimensions = getTileEffectiveDimensions(tile);
+  return new PIXI.Rectangle(topLeft.x, topLeft.y, dimensions.width, dimensions.height);
 }
 
 function getTileTopLeft(tile) {
-  const width = Math.abs(Number(tile?.width) || 0);
-  const height = Math.abs(Number(tile?.height) || 0);
+  const { width, height } = getTileEffectiveDimensions(tile);
   const texture = tile?.texture ?? tile?.document?.texture ?? {};
   const anchorX = Number.isFinite(Number(texture.anchorX)) ? Number(texture.anchorX) : 0.5;
   const anchorY = Number.isFinite(Number(texture.anchorY)) ? Number(texture.anchorY) : 0.5;
@@ -2297,6 +2351,14 @@ function getTileTopLeft(tile) {
     x: (Number(tile?.x) || 0) - (anchorX * width),
     y: (Number(tile?.y) || 0) - (anchorY * height)
   };
+}
+
+function getTileEffectiveDimensions(tile) {
+  const width = Math.abs(Number(tile?.width) || 0);
+  const height = Math.abs(Number(tile?.height) || 0);
+  const rotation = normalizeTrapRotation(tile?.rotation ?? tile?.document?.rotation);
+  if (rotation === 90 || rotation === 270) return { width: height, height: width };
+  return { width, height };
 }
 
 function getTokenCenter(token) {
@@ -2310,38 +2372,229 @@ function getTokenCenter(token) {
   };
 }
 
-function getTrapPlacementRectFromPoint(point, trapData, scene) {
-  const gridSize = getSceneGridSize(scene);
-  const width = Math.max(1, toInteger(trapData?.trigger?.widthCells) || 1) * gridSize;
-  const height = Math.max(1, toInteger(trapData?.trigger?.heightCells) || 1) * gridSize;
-  const topLeft = getSnappedTopLeft(point, scene);
+function getTrapPlacementRectFromPoint(point, trapData, scene, rotation = 0) {
+  const dimensions = getTrapPlacementDimensions(trapData, scene, rotation);
+  const width = dimensions.width;
+  const height = dimensions.height;
+  const center = getSnappedTrapCenter(point, scene, width, height);
   return {
-    x: Math.round(topLeft.x),
-    y: Math.round(topLeft.y),
+    x: Math.round(center.x - (width / 2)),
+    y: Math.round(center.y - (height / 2)),
     width,
     height,
     elevation: Number(point?.elevation) || 0
   };
 }
 
-function getSnappedTopLeft(point, scene) {
-  if (canvas.scene?.id === scene?.id && canvas.grid && !canvas.grid.isGridless) {
-    const source = { x: Number(point?.x) || 0, y: Number(point?.y) || 0 };
-    const offset = canvas.grid.getOffset?.(source);
-    const topLeft = offset ? canvas.grid.getTopLeftPoint?.(offset) : null;
-    if (topLeft) return topLeft;
-  }
-  const size = getSceneGridSize(scene);
+function normalizeTrapPlacementRect(source = null, scene = null) {
+  if (!source) return null;
+  const x = Number(source.x);
+  const y = Number(source.y);
+  const width = Number(source.width);
+  const height = Number(source.height);
+  if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null;
   return {
-    x: Math.floor((Number(point?.x) || 0) / size) * size,
-    y: Math.floor((Number(point?.y) || 0) / size) * size
+    x: Math.round(x),
+    y: Math.round(y),
+    width: Math.round(width),
+    height: Math.round(height),
+    elevation: Number.isFinite(Number(source.elevation)) ? Number(source.elevation) : 0
   };
+}
+
+function getTrapPlacementDimensions(trapData, scene, rotation = 0) {
+  const size = getSceneGridSize(scene);
+  const baseWidth = Math.max(1, toInteger(trapData?.trigger?.widthCells) || 1) * size;
+  const baseHeight = Math.max(1, toInteger(trapData?.trigger?.heightCells) || 1) * size;
+  const normalizedRotation = normalizeTrapRotation(rotation);
+  if (normalizedRotation === 90 || normalizedRotation === 270) return { width: baseHeight, height: baseWidth };
+  return { width: baseWidth, height: baseHeight };
+}
+
+function getTileDocumentDimensionsForVisualRect(rect, rotation = 0) {
+  const width = Math.max(1, Math.round(Number(rect?.width) || 0));
+  const height = Math.max(1, Math.round(Number(rect?.height) || 0));
+  const normalizedRotation = normalizeTrapRotation(rotation);
+  if (normalizedRotation === 90 || normalizedRotation === 270) return { width: height, height: width };
+  return { width, height };
+}
+
+function getSnappedTrapCenter(point, scene, width, height) {
+  const size = getSceneGridSize(scene);
+  const source = { x: Number(point?.x) || 0, y: Number(point?.y) || 0 };
+  if (canvas.scene?.id === scene?.id && canvas.grid && !canvas.grid.isGridless && canvas.grid.isSquare) {
+    const modes = CONST.GRID_SNAPPING_MODES;
+    const modeX = getTrapCenterSnapMode(width, size, modes);
+    const modeY = getTrapCenterSnapMode(height, size, modes);
+    if (canvas.grid.getSnappedPoint) {
+      if (modeX === modeY) return canvas.grid.getSnappedPoint(source, { mode: modeX, resolution: 1 });
+      return {
+        x: canvas.grid.getSnappedPoint(source, { mode: modeX, resolution: 1 }).x,
+        y: canvas.grid.getSnappedPoint(source, { mode: modeY, resolution: 1 }).y
+      };
+    }
+  }
+  return {
+    x: snapTrapCenterCoordinate(source.x, size, width),
+    y: snapTrapCenterCoordinate(source.y, size, height)
+  };
+}
+
+function getTrapCenterSnapMode(length, gridSize, modes) {
+  const cells = Math.max(1, Math.round((Number(length) || gridSize) / gridSize));
+  return cells % 2 === 0 ? modes.VERTEX : modes.CENTER;
+}
+
+function snapTrapCenterCoordinate(value, gridSize, length) {
+  const cells = Math.max(1, Math.round((Number(length) || gridSize) / gridSize));
+  if (cells % 2 === 0) return Math.round((Number(value) || 0) / gridSize) * gridSize;
+  return (Math.round(((Number(value) || 0) - (gridSize / 2)) / gridSize) * gridSize) + (gridSize / 2);
+}
+
+function normalizeTrapRotation(rotation = 0) {
+  const value = Math.round((Number(rotation) || 0) / 90) * 90;
+  return ((value % 360) + 360) % 360;
+}
+
+function getTrapPlacementClippedArea(rect, scene) {
+  const rectangle = new PIXI.Rectangle(
+    Number(rect?.x) || 0,
+    Number(rect?.y) || 0,
+    Math.max(1, Number(rect?.width) || 0),
+    Math.max(1, Number(rect?.height) || 0)
+  ).normalize();
+  const emptyResult = { polygons: [], bounds: null };
+  if (canvas.scene?.id !== scene?.id) return emptyResult;
+
+  const backend = CONFIG.Canvas?.polygonBackends?.move;
+  const level = canvas.level;
+  if (!backend?.create || !level?.parent) return emptyResult;
+
+  const origin = {
+    x: rectangle.x + (rectangle.width / 2),
+    y: rectangle.y + (rectangle.height / 2),
+    elevation: Number(rect?.elevation) || 0
+  };
+  try {
+    const polygon = backend.create(origin, {
+      type: "move",
+      level,
+      edgeTypes: { wall: { mode: 2 } },
+      boundaryShapes: [rectangle],
+      radius: Math.hypot(rectangle.width, rectangle.height),
+      angle: 360
+    });
+    return normalizeTrapPlacementPolygons(polygon);
+  } catch (error) {
+    console.warn(`${SYSTEM_ID} | Trap placement wall clipping failed`, error);
+    return emptyResult;
+  }
+}
+
+function normalizeTrapPlacementPolygons(polygon) {
+  const polygons = [];
+  const source = Array.isArray(polygon?.polygons) && polygon.polygons.length ? polygon.polygons : [polygon];
+  for (const entry of source) {
+    const points = Array.isArray(entry?.points) ? entry.points : [];
+    if (points.length < 6) continue;
+    const normalized = new PIXI.Polygon(points.map(value => Math.round(Number(value) || 0)));
+    if (getPolygonArea(normalized) <= 1) continue;
+    polygons.push(normalized);
+  }
+  if (!polygons.length) return { polygons: [], bounds: null };
+  return {
+    polygons,
+    bounds: getBoundingRectForPolygons(polygons)
+  };
+}
+
+function getBoundingRectForPolygons(polygons = []) {
+  const points = polygons.flatMap(getPolygonPointObjects);
+  if (!points.length) return null;
+  const minX = Math.min(...points.map(point => point.x));
+  const minY = Math.min(...points.map(point => point.y));
+  const maxX = Math.max(...points.map(point => point.x));
+  const maxY = Math.max(...points.map(point => point.y));
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(1, maxX - minX),
+    height: Math.max(1, maxY - minY)
+  };
+}
+
+function getPolygonPointObjects(polygon) {
+  const points = Array.isArray(polygon?.points) ? polygon.points : [];
+  const result = [];
+  for (let index = 0; index < points.length - 1; index += 2) {
+    result.push({
+      x: Number(points[index]) || 0,
+      y: Number(points[index + 1]) || 0
+    });
+  }
+  return result;
+}
+
+function getPolygonArea(polygon) {
+  const points = getPolygonPointObjects(polygon);
+  if (points.length < 3) return 0;
+  let area = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    area += (current.x * next.y) - (next.x * current.y);
+  }
+  return Math.abs(area / 2);
+}
+
+function getTrapVisibilityTestPoints(tileDocument) {
+  const rect = getTrapTileRectangle(tileDocument);
+  const elevation = Number(tileDocument?.elevation ?? tileDocument?.document?.elevation) || 0;
+  const insetX = Math.min(rect.width / 4, Math.max(1, rect.width / 2));
+  const insetY = Math.min(rect.height / 4, Math.max(1, rect.height / 2));
+  return [
+    { x: rect.x + (rect.width / 2), y: rect.y + (rect.height / 2), elevation },
+    { x: rect.x + insetX, y: rect.y + insetY, elevation },
+    { x: rect.x + rect.width - insetX, y: rect.y + insetY, elevation },
+    { x: rect.x + rect.width - insetX, y: rect.y + rect.height - insetY, elevation },
+    { x: rect.x + insetX, y: rect.y + rect.height - insetY, elevation }
+  ];
+}
+
+function isTrapInCurrentVision(tileDocument) {
+  if (!canvas?.visibility || !canvas?.ready) return false;
+  if (!canvas.visibility.tokenVision) return true;
+  const points = getTrapVisibilityTestPoints(tileDocument);
+  const object = tileDocument?.object ?? tileDocument?.document?.object ?? null;
+  return canvas.visibility.testVisibility(points, { tolerance: 0, object });
+}
+
+function isTrapKnownToActor(trap, actor) {
+  if (!trap || !actor?.uuid) return false;
+  if (trap.disarmed === true || trap.armed === false) return true;
+  const visible = new Set(asStringArray(trap.visibleActorUuids));
+  return actor.uuid === trap.ownerActorUuid || visible.has(actor.uuid) || isActorSafeForTrap(trap, actor);
+}
+
+function getTrapActivationPolygons(tileDocument) {
+  const scene = tileDocument?.parent ?? canvas.scene;
+  const trap = getTrapFlag(tileDocument);
+  const regionId = String(trap?.triggerRegionId ?? "");
+  const region = regionId ? scene?.regions?.get(regionId) : null;
+  const shapes = Array.from(region?.shapes ?? []);
+  const polygons = [];
+  for (const shape of shapes) {
+    if (shape?.type !== "polygon" || !Array.isArray(shape.points) || shape.points.length < 6) continue;
+    const polygon = new PIXI.Polygon(shape.points.map(value => Math.round(Number(value) || 0)));
+    if (getPolygonArea(polygon) <= 1) continue;
+    polygons.push(polygon);
+  }
+  return polygons;
 }
 
 function isPointInsideTile(tile, point) {
   const { x: left, y: top } = getTileTopLeft(tile);
-  const width = Math.abs(Number(tile?.width) || 0);
-  const height = Math.abs(Number(tile?.height) || 0);
+  const { width, height } = getTileEffectiveDimensions(tile);
   return point.x >= left && point.x <= left + width && point.y >= top && point.y <= top + height;
 }
 
@@ -2371,6 +2624,8 @@ function serializeTrapCreateRequest(request = {}) {
     sourceItemUuid: String(request.sourceItemUuid ?? ""),
     itemData: foundry.utils.deepClone(request.itemData ?? {}),
     trapData: normalizeTrapData(request.trapData),
+    placementRect: normalizeTrapPlacementRect(request.placementRect),
+    rotation: normalizeTrapRotation(request.rotation),
     linkedAction: normalizeTrapLinkedAction(request.linkedAction)
   };
 }
