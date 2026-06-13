@@ -296,6 +296,10 @@ function trapFunctionField() {
       heightCells: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
       imageScale: new NumberField({ required: true, min: 0, initial: 0.5 })
     }),
+    recharge: new SchemaField({
+      value: new NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
+      unit: new StringField({ required: true, blank: false, choices: ["seconds", "minutes", "hours"], initial: "seconds" })
+    }),
     evasion: new SchemaField({
       difficulty: new NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
       skillKey: new StringField({ required: true, blank: false, initial: "athletics" }),

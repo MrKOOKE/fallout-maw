@@ -371,6 +371,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       trapInstallationSkillChoices: buildSkillChoices(item.system?.functions?.trap?.installation?.skillKey ?? "traps", skillSettings),
       trapDetectionSkillChoices: buildSkillChoices(item.system?.functions?.trap?.detection?.skillKey ?? "naturalist", skillSettings),
       trapActivationModeChoices: buildTrapActivationModeChoices(item.system?.functions?.trap?.trigger?.activationMode ?? "exit"),
+      trapRechargeUnitChoices: buildTrapRechargeUnitChoices(item.system?.functions?.trap?.recharge?.unit ?? "seconds"),
       isTrapLinkedActionMode: item.system?.functions?.trap?.trigger?.activationMode === "linkedAction",
       trapEvasionSkillChoices: buildSkillChoices(item.system?.functions?.trap?.evasion?.skillKey ?? "athletics", skillSettings),
       trapDisarmToolChoices: buildToolChoices(item.system?.functions?.trap?.disarm?.toolKey ?? "mechanicalHacking", toolSettings),
@@ -492,6 +493,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const trapEvasionDifficultyInput = form?.querySelector?.("[data-trap-evasion-difficulty]");
     if (trapEvasionDifficultyInput && String(trapEvasionDifficultyInput.value ?? "").trim() === "") {
       foundry.utils.setProperty(submitData, "system.functions.trap.evasion.difficulty", null);
+    }
+    const trapRechargeValueInput = form?.querySelector?.("[data-trap-recharge-value]");
+    if (trapRechargeValueInput && String(trapRechargeValueInput.value ?? "").trim() === "") {
+      foundry.utils.setProperty(submitData, "system.functions.trap.recharge.value", null);
     }
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
     return super._processSubmitData(event, form, submitData, options);
@@ -5335,6 +5340,10 @@ function createDefaultTrapFunctionData(source = {}) {
       heightCells: 1,
       imageScale: 0.5
     },
+    recharge: {
+      value: null,
+      unit: "seconds"
+    },
     evasion: {
       difficulty: null,
       skillKey: "athletics",
@@ -7033,6 +7042,27 @@ function buildTrapActivationModeChoices(selectedMode = "exit") {
       value: "linkedAction",
       label: game.i18n.localize("FALLOUTMAW.Item.TrapActivationModeLinkedAction"),
       selected: selected === "linkedAction"
+    }
+  ];
+}
+
+function buildTrapRechargeUnitChoices(selectedUnit = "seconds") {
+  const selected = ["seconds", "minutes", "hours"].includes(selectedUnit) ? selectedUnit : "seconds";
+  return [
+    {
+      value: "seconds",
+      label: game.i18n.localize("FALLOUTMAW.Item.TrapRechargeUnitSeconds"),
+      selected: selected === "seconds"
+    },
+    {
+      value: "minutes",
+      label: game.i18n.localize("FALLOUTMAW.Item.TrapRechargeUnitMinutes"),
+      selected: selected === "minutes"
+    },
+    {
+      value: "hours",
+      label: game.i18n.localize("FALLOUTMAW.Item.TrapRechargeUnitHours"),
+      selected: selected === "hours"
     }
   ];
 }

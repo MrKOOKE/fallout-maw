@@ -37,6 +37,11 @@ const TRAP_INTERACTION_HIGHLIGHT_COLOR = 0xf0c84b;
 const TRAP_LINKED_ACTOR_HIGHLIGHT_LAYER = "fallout-maw-linked-actor-tokens";
 const TRAP_LINKED_ACTOR_HIGHLIGHT_COLOR = 0xe34fcb;
 const TRAP_LINKED_ACTION_MODE = "linkedAction";
+const TRAP_RECHARGE_UNITS = Object.freeze({
+  seconds: 1,
+  minutes: 60,
+  hours: 3600
+});
 const TRAP_BLOCKED_CANVAS_EVENT_TYPES = Object.freeze([
   "pointerdown",
   "pointerup",
@@ -77,6 +82,7 @@ export function registerTrapHooks() {
     registerTrapGmFreeDoubleClickListener();
     refreshTrapTileVisibility();
     refreshTrapInteractionHighlights();
+    void processDueTrapRecharges();
   });
   Hooks.on("controlToken", () => {
     refreshTrapTileVisibility();
@@ -84,6 +90,7 @@ export function registerTrapHooks() {
   });
   Hooks.on("sightRefresh", refreshTrapTileVisibility);
   Hooks.on("visibilityRefresh", refreshTrapTileVisibility);
+  Hooks.on("updateWorldTime", () => void processDueTrapRecharges());
   Hooks.on("updateToken", queueTrapTileVisibilityRefresh);
   Hooks.on("updateActor", (actor, changes = {}) => {
     const flat = foundry.utils.flattenObject(changes ?? {});
@@ -1343,7 +1350,6 @@ async function createTrapDocumentsNow(request = {}) {
   const top = Math.round(rect.y);
   const x = Math.round(left + (width / 2));
   const y = Math.round(top + (height / 2));
-  const center = { x, y };
 
   const createdTiles = await scene.createEmbeddedDocuments("Tile", [{
     name: String(itemData.name ?? "Ловушка"),
@@ -1379,6 +1385,9 @@ async function createTrapDocumentsNow(request = {}) {
           lastDisarmToolItemId: "",
           detectionRegionId: "",
           triggerRegionId: "",
+          recharging: false,
+          rearmAt: 0,
+          rechargeStartedAt: 0,
           linkedAction: normalizeTrapLinkedAction(request.linkedAction),
           data: trapData,
           createdAt: Number(game.time?.worldTime) || 0
@@ -1389,7 +1398,22 @@ async function createTrapDocumentsNow(request = {}) {
   const tile = createdTiles?.[0] ?? null;
   if (!tile) return null;
 
-  const detectionRadius = metersToPixels(trapData.detection.radiusMeters, scene, request.ownerActorUuid);
+  await createTrapActivationDocuments(scene, tile, trapData, rect, clipped, request.ownerActorUuid);
+  await processTrapInitialDetection(tile);
+  return tile;
+}
+
+async function createTrapActivationDocuments(scene, tile, trapData, rect, clipped = null, ownerActorUuid = "") {
+  if (!scene || !tile || !game.user?.isGM) return null;
+  const normalizedTrapData = normalizeTrapData(trapData);
+  const triggerRect = normalizeTrapPlacementRect(rect, scene) ?? getTrapTileRectangle(tile);
+  const clippedArea = clipped?.polygons?.length ? clipped : getTrapPlacementClippedArea(triggerRect, scene);
+  if (!clippedArea.polygons.length) return null;
+  const center = {
+    x: Math.round(triggerRect.x + (triggerRect.width / 2)),
+    y: Math.round(triggerRect.y + (triggerRect.height / 2))
+  };
+  const detectionRadius = metersToPixels(normalizedTrapData.detection.radiusMeters, scene, ownerActorUuid);
   const levelId = getRegionRestrictionLevelId(scene);
   const regionData = [];
   if (detectionRadius > 0) {
@@ -1422,7 +1446,7 @@ async function createTrapDocumentsNow(request = {}) {
   regionData.push({
     name: `${tile.name}: активация`,
     color: "#d85f5f",
-    shapes: clipped.polygons.map(polygon => ({
+    shapes: clippedArea.polygons.map(polygon => ({
       type: "polygon",
       points: polygon.points.map(value => Math.round(value)),
       origin: null
@@ -1447,11 +1471,16 @@ async function createTrapDocumentsNow(request = {}) {
   const detectionRegion = regions.find(region => region.getFlag?.(SYSTEM_ID, "trapRegion")?.kind === "detection");
   const triggerRegion = regions.find(region => region.getFlag?.(SYSTEM_ID, "trapRegion")?.kind === "activation");
   await tile.update({
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.armed`]: true,
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.recharging`]: false,
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.rearmAt`]: 0,
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.rechargeStartedAt`]: 0,
     [`flags.${SYSTEM_ID}.${TRAP_FLAG}.detectionRegionId`]: detectionRegion?.id ?? "",
-    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.triggerRegionId`]: triggerRegion?.id ?? ""
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.triggerRegionId`]: triggerRegion?.id ?? "",
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.attemptedDetectionActorUuids`]: [],
+    alpha: 1
   }, { render: false });
-  await processTrapInitialDetection(tile);
-  return tile;
+  return { detectionRegion, triggerRegion };
 }
 
 async function triggerTrap(tile, triggeringToken) {
@@ -1462,7 +1491,7 @@ async function triggerTrap(tile, triggeringToken) {
   const trapData = normalizeTrapData(trap.data);
   if (trapData.trigger.activationMode === TRAP_LINKED_ACTION_MODE) {
     await triggerLinkedTrapAction(tile, triggeringToken, trap);
-    await deleteTrapDocuments(tile);
+    await finishTrapAfterActivation(tile, trapData);
     return;
   }
   const ownerActor = trap.ownerActorUuid ? await fromUuid(trap.ownerActorUuid) : null;
@@ -1533,7 +1562,7 @@ async function triggerTrap(tile, triggeringToken) {
   });
   if (requests.length) await requestDamageApplications(requests);
   await createTrapEffectRegion(scene, tile, trapData, center, ownerActor);
-  await deleteTrapDocuments(tile);
+  await finishTrapAfterActivation(tile, trapData);
 }
 
 async function triggerLinkedTrapAction(tile, triggeringToken, trap) {
@@ -1622,6 +1651,69 @@ async function createTrapEffectRegion(scene, tile, trapData, center, ownerActor)
   return created?.[0] ?? null;
 }
 
+async function finishTrapAfterActivation(tile, trapData) {
+  const rechargeSeconds = getTrapRechargeSeconds(trapData);
+  if (rechargeSeconds <= 0) return deleteTrapDocuments(tile);
+  return startTrapRecharge(tile, rechargeSeconds);
+}
+
+async function startTrapRecharge(tile, rechargeSeconds) {
+  const scene = tile?.parent ?? canvas.scene;
+  const trap = getTrapFlag(tile);
+  if (!scene || !tile || !trap || !game.user?.isGM) return null;
+  await deleteTrapRegions(tile);
+  const now = Number(game.time?.worldTime) || 0;
+  await tile.update({
+    alpha: 0.45,
+    "texture.tint": "#777777",
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.armed`]: false,
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.recharging`]: true,
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.rechargeStartedAt`]: now,
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.rearmAt`]: now + Math.max(1, toInteger(rechargeSeconds)),
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.detectionRegionId`]: "",
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.triggerRegionId`]: ""
+  }, { render: false });
+  queueTrapTileVisibilityRefresh();
+  return tile;
+}
+
+async function processDueTrapRecharges() {
+  if (!game.user?.isGM || !canvas?.ready || !canvas.scene) return;
+  const now = Number(game.time?.worldTime) || 0;
+  const dueTiles = (canvas.scene.tiles?.contents ?? [])
+    .filter(tile => {
+      const trap = getTrapFlag(tile);
+      return trap?.recharging === true
+        && trap.disarmed !== true
+        && Number(trap.rearmAt) > 0
+        && Number(trap.rearmAt) <= now;
+    })
+    .sort((left, right) => (Number(getTrapFlag(left)?.rearmAt) || 0) - (Number(getTrapFlag(right)?.rearmAt) || 0));
+  for (const tile of dueTiles) {
+    await restoreTrapFromRecharge(tile);
+  }
+}
+
+async function restoreTrapFromRecharge(tile) {
+  const scene = tile?.parent ?? canvas.scene;
+  const trap = getTrapFlag(tile);
+  if (!scene || !tile || !trap || !game.user?.isGM) return null;
+  await deleteTrapRegions(tile);
+  const trapData = normalizeTrapData(trap.data);
+  const rect = getTrapTileRectangle(tile);
+  const clipped = getTrapPlacementClippedArea(rect, scene);
+  if (!clipped.polygons.length) return null;
+  const created = await createTrapActivationDocuments(scene, tile, trapData, rect, clipped, trap.ownerActorUuid);
+  if (!created) return null;
+  await tile.update({
+    alpha: 1,
+    "texture.tint": "#ffffff"
+  }, { render: false });
+  queueTrapTileVisibilityRefresh();
+  await processTrapInitialDetection(tile);
+  return tile;
+}
+
 async function deleteTrapDocuments(tile) {
   const scene = tile?.parent ?? canvas.scene;
   const trap = getTrapFlag(tile);
@@ -1647,8 +1739,13 @@ async function markTrapDisarmed(tile, actor = null, { toolItemId = "", attemptsR
   if (actor?.uuid) visible.add(actor.uuid);
   await tile.update({
     hidden: false,
+    alpha: 1,
+    "texture.tint": "#ffffff",
     [`flags.${SYSTEM_ID}.${TRAP_FLAG}.armed`]: false,
     [`flags.${SYSTEM_ID}.${TRAP_FLAG}.disarmed`]: true,
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.recharging`]: false,
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.rearmAt`]: 0,
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.rechargeStartedAt`]: 0,
     [`flags.${SYSTEM_ID}.${TRAP_FLAG}.visibleActorUuids`]: Array.from(visible),
     [`flags.${SYSTEM_ID}.${TRAP_FLAG}.disarmAttemptsRemaining`]: attemptsRemaining === null ? getTrapDisarmAttemptsRemaining(trap) : Math.max(0, toInteger(attemptsRemaining)),
     [`flags.${SYSTEM_ID}.${TRAP_FLAG}.lastDisarmToolItemId`]: String(toolItemId ?? ""),
@@ -2058,7 +2155,12 @@ async function revealTrapToActor(tile, actor) {
 }
 
 function canActorPickupTrap(trap, actor) {
-  return Boolean(actor?.uuid && (trap?.disarmed === true || trap?.armed === false || actor.uuid === trap?.ownerActorUuid || isActorSafeForTrap(trap, actor)));
+  return Boolean(actor?.uuid && (
+    trap?.disarmed === true
+    || (trap?.armed === false && trap?.recharging !== true)
+    || actor.uuid === trap?.ownerActorUuid
+    || isActorSafeForTrap(trap, actor)
+  ));
 }
 
 function isActorSafeForTrap(trap, actor) {
@@ -2178,6 +2280,10 @@ function normalizeTrapData(source = {}) {
       heightCells: Math.max(1, toInteger(data.trigger?.heightCells) || 1),
       imageScale: normalizeTrapImageScale(data.trigger?.imageScale)
     },
+    recharge: {
+      value: normalizeTrapRechargeValue(data.recharge?.value),
+      unit: normalizeTrapRechargeUnit(data.recharge?.unit)
+    },
     evasion: {
       difficulty: normalizeNullableDifficulty(data.evasion?.difficulty),
       skillKey: String(data.evasion?.skillKey ?? "athletics").trim() || "athletics",
@@ -2215,6 +2321,23 @@ function normalizeNullableDifficulty(value) {
 function normalizeTrapActivationMode(value) {
   const mode = String(value ?? "exit").trim();
   return ["enter", "exit", TRAP_LINKED_ACTION_MODE].includes(mode) ? mode : "exit";
+}
+
+function normalizeTrapRechargeValue(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
+  const number = Math.max(0, toInteger(value));
+  return number > 0 ? number : null;
+}
+
+function normalizeTrapRechargeUnit(value) {
+  const unit = String(value ?? "seconds").trim();
+  return Object.hasOwn(TRAP_RECHARGE_UNITS, unit) ? unit : "seconds";
+}
+
+function getTrapRechargeSeconds(trapData = {}) {
+  const recharge = normalizeTrapData(trapData).recharge;
+  if (!recharge.value) return 0;
+  return Math.max(0, recharge.value * (TRAP_RECHARGE_UNITS[recharge.unit] ?? 1));
 }
 
 function normalizeTrapLinkedAction(source = null) {
