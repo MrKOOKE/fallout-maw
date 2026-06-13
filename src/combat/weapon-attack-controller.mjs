@@ -300,6 +300,7 @@ class WeaponAttackController {
 
   onPointerDown(event) {
     if (![0, 2].includes(event.button) || this.processing) return;
+    if (event.button === 2 && event.ctrlKey && isCanvasViewEvent(event)) return;
     if (this.handleLimbMenuPointerDown(event)) return;
     if (!isCanvasViewEvent(event)) return;
 
@@ -354,6 +355,10 @@ class WeaponAttackController {
 
   onCancel(event) {
     event?.preventDefault?.();
+    if (event?.ctrlKey) {
+      this.suppressNextContextMenu = false;
+      return false;
+    }
     if (this.suppressNextContextMenu) {
       this.suppressNextContextMenu = false;
       return false;
