@@ -1414,8 +1414,38 @@
   color: #fff3d8;
 }
 
-.fallout-maw-craft-reverse-button {
+.fallout-maw-craft-reverse-button,
+.fallout-maw-craft-cost-button {
   flex: 0 1 auto;
+}
+
+.fallout-maw-craft-cost-dialog {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.fallout-maw-craft-cost-dialog p {
+  margin: 0;
+}
+
+.fallout-maw-craft-cost-dialog .form-group {
+  align-items: center;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: minmax(0, 1fr) 8rem;
+}
+
+.fallout-maw-craft-cost-dialog input {
+  text-align: right;
+}
+
+.fallout-maw-craft-cost-dialog-total {
+  border-top: 1px solid rgba(210, 185, 145, 0.26);
+  padding-top: 0.65rem;
+}
+
+.fallout-maw-craft-cost-dialog-note {
+  opacity: 0.72;
 }
 
 .fallout-maw-craft-world {

@@ -271,7 +271,7 @@ async function handleTrapActivationForToken(tile, token) {
   await triggerTrap(tile, token);
 }
 
-async function requestTrapActivation(tile, token) {
+async function requestTrapActivation(tile, token, { announce = false } = {}) {
   const sceneId = tile?.parent?.id ?? canvas.scene?.id ?? "";
   const tileId = tile?.id ?? "";
   const tokenId = token?.id ?? token?.document?.id ?? "";
@@ -281,7 +281,7 @@ async function requestTrapActivation(tile, token) {
   window.setTimeout(() => pendingTrapActivationKeys.delete(key), 10000);
 
   if (game.user?.isActiveGM) {
-    await activateTrapTileNow({ sceneId, tileId, tokenId });
+    await activateTrapTileNow({ sceneId, tileId, tokenId, announce });
     pendingTrapActivationKeys.delete(key);
     return;
   }
@@ -297,7 +297,7 @@ async function requestTrapActivation(tile, token) {
     action: "activateTrapTile",
     gmUserId: gm.id,
     senderUserId: game.user?.id ?? "",
-    request: { sceneId, tileId, tokenId }
+    request: { sceneId, tileId, tokenId, announce }
   });
 }
 
@@ -359,10 +359,11 @@ async function announceTrapTriggerEnterNow({ sceneId = "", tileId = "", tokenId 
   pauseGameForTrap();
 }
 
-async function activateTrapTileNow({ sceneId = "", tileId = "", tokenId = "" } = {}) {
+async function activateTrapTileNow({ sceneId = "", tileId = "", tokenId = "", announce = false } = {}) {
   const scene = game.scenes?.get(sceneId) ?? canvas.scene;
   const tile = scene?.tiles?.get(tileId);
   const token = scene?.tokens?.get(tokenId);
+  if (announce) await announceTrapTriggerEnterNow({ sceneId, tileId, tokenId });
   await handleTrapActivationForToken(tile, token);
 }
 
@@ -1042,8 +1043,9 @@ async function triggerTrap(tile, triggeringToken) {
   const trapData = normalizeTrapData(trap.data);
   const ownerActor = trap.ownerActorUuid ? await fromUuid(trap.ownerActorUuid) : null;
   const center = getTileCenter(tile);
+  const triggerRect = getTrapTileRectangle(tile);
   const radiusPixels = metersToPixels(trapData.effect.damageRadiusMeters, scene, trap.ownerActorUuid);
-  const targets = getTrapDamageTargets(scene, center, radiusPixels, trap.ownerActorUuid, triggeringToken);
+  const targets = getTrapDamageTargets(scene, triggerRect, radiusPixels, triggeringToken);
   const damageBase = evaluateActorFormula(trapData.effect.damage, ownerActor, { fallback: 0, minimum: 0, context: "trap damage" });
   const pellets = Math.max(1, evaluateActorFormula(trapData.effect.pellets, ownerActor, { fallback: 1, minimum: 1, context: "trap pellets" }));
   const penetrationPower = evaluateActorFormula(trapData.effect.penetration, ownerActor, { fallback: 0, minimum: 0, context: "trap penetration" });
@@ -1053,24 +1055,30 @@ async function triggerTrap(tile, triggeringToken) {
   for (const token of targets) {
     const actor = token.actor;
     if (!actor) continue;
-    let damage = damageBase;
+    let targetDamage = damageBase;
     if (trapData.evasion.difficulty !== null) {
+      const targetDistance = getPointDistanceFromRectangle(getTokenCenter(token), triggerRect);
+      const evasionDifficulty = getTrapEvasionDifficultyAtDistance(
+        trapData.evasion.difficulty,
+        targetDistance,
+        radiusPixels
+      );
       const outcome = await requestSkillCheck({
         actor,
         skillKey: trapData.evasion.skillKey,
-        data: { difficulty: trapData.evasion.difficulty },
+        data: { difficulty: evasionDifficulty },
         animate: false,
         createMessage: true,
         prompt: false,
         requester: "trapEvasion"
       });
       if (isSkillCheckSuccess(outcome)) {
-        damage = Math.max(0, Math.round(damage * (1 - (trapData.evasion.avoidPercent / 100))));
+        targetDamage = Math.max(0, Math.round(targetDamage * (1 - (trapData.evasion.avoidPercent / 100))));
       }
     }
     for (let pellet = 0; pellet < pellets; pellet += 1) {
       const limbKey = selectRandomWeightedLimbKey(actor);
-      for (const entry of distributeDamageByType(damage, damageTypes)) {
+      for (const entry of distributeDamageByType(targetDamage, damageTypes)) {
         requests.push({
           actor,
           limbKey,
@@ -1388,9 +1396,10 @@ function findFirstTrapMovementEvent(tokenDocument, actor, movement = {}, trapTil
         const wasInsideTrigger = isPointInsideTile(tile, previous.point);
         const isInsideTrigger = isPointInsideTile(tile, current.point);
         if (!wasInsideTrigger && isInsideTrigger) {
-          candidates.push({ type: "triggerEnter", tile, priority: 1, waypoint: current.waypoint });
+          const type = trapData.trigger.activationMode === "enter" ? "triggerImmediate" : "triggerEnter";
+          candidates.push({ type, tile, priority: 1, waypoint: current.waypoint });
         }
-        if (wasInsideTrigger && !isInsideTrigger) {
+        if (trapData.trigger.activationMode === "exit" && wasInsideTrigger && !isInsideTrigger) {
           candidates.push({ type: "triggerExit", tile, priority: 2, waypoint: previous.waypoint });
         }
       }
@@ -1459,6 +1468,7 @@ async function runTrapMovementInterruption(tokenDocument, movement, event) {
     await moveTokenToTrapEvent(tokenDocument, event.waypoint, movement);
     if (event.type === "detection") await requestTrapDetectionStop(event.tile, tokenDocument);
     else if (event.type === "triggerEnter") await requestTrapTriggerEnterNotice(event.tile, tokenDocument);
+    else if (event.type === "triggerImmediate") await requestTrapActivation(event.tile, tokenDocument, { announce: true });
     else if (event.type === "triggerExit") await requestTrapActivation(event.tile, tokenDocument);
   } finally {
     pendingTrapMovementKeys.delete(key);
@@ -1646,18 +1656,36 @@ function getTokenCenterAt(tokenDocument, data = {}) {
   };
 }
 
-function getTrapDamageTargets(scene, center, radiusPixels, ownerActorUuid, triggeringToken) {
+function getTrapDamageTargets(scene, triggerRect, radiusPixels, triggeringToken) {
   const triggering = triggeringToken?.document ?? triggeringToken ?? null;
   const tokens = scene.tokens?.contents ?? [];
   const targets = tokens
     .filter(token => token?.actor)
     .filter(token => {
       if (radiusPixels <= 0) return token.id === triggering?.id;
-      const tokenCenter = getTokenCenter(token);
-      return Math.hypot(tokenCenter.x - center.x, tokenCenter.y - center.y) <= radiusPixels;
+      return getPointDistanceFromRectangle(getTokenCenter(token), triggerRect) <= radiusPixels;
     });
   if (!targets.length && triggering?.actor) return [triggering];
   return targets;
+}
+
+function getTrapEvasionDifficultyAtDistance(baseDifficulty, distancePixels, radiusPixels) {
+  const base = Math.max(0, toInteger(baseDifficulty));
+  if (base <= 0 || radiusPixels <= 0) return base;
+  const distanceRatio = Math.max(0, Math.min(1, Number(distancePixels) / radiusPixels));
+  return Math.max(0, Math.round(base * (1 - (0.8 * distanceRatio))));
+}
+
+function getPointDistanceFromRectangle(point, rect) {
+  const left = Number(rect?.x) || 0;
+  const top = Number(rect?.y) || 0;
+  const right = left + Math.max(0, Number(rect?.width) || 0);
+  const bottom = top + Math.max(0, Number(rect?.height) || 0);
+  const x = Number(point?.x) || 0;
+  const y = Number(point?.y) || 0;
+  const nearestX = Math.max(left, Math.min(right, x));
+  const nearestY = Math.max(top, Math.min(bottom, y));
+  return Math.hypot(x - nearestX, y - nearestY);
 }
 
 function normalizeTrapData(source = {}) {
@@ -1675,6 +1703,7 @@ function normalizeTrapData(source = {}) {
       skillKey: String(data.detection?.skillKey ?? "naturalist").trim() || "naturalist"
     },
     trigger: {
+      activationMode: normalizeTrapActivationMode(data.trigger?.activationMode),
       widthCells: Math.max(1, toInteger(data.trigger?.widthCells) || 1),
       heightCells: Math.max(1, toInteger(data.trigger?.heightCells) || 1),
       imageScale: normalizeTrapImageScale(data.trigger?.imageScale)
@@ -1711,6 +1740,10 @@ function normalizeTrapData(source = {}) {
 function normalizeNullableDifficulty(value) {
   if (value === null || value === undefined || String(value).trim() === "") return null;
   return Math.max(0, toInteger(value));
+}
+
+function normalizeTrapActivationMode(value) {
+  return String(value ?? "exit").trim() === "enter" ? "enter" : "exit";
 }
 
 function normalizeTrapImageScale(value) {

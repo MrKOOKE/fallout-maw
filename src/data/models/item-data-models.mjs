@@ -290,6 +290,7 @@ function trapFunctionField() {
       skillKey: new StringField({ required: true, blank: false, initial: "naturalist" })
     }),
     trigger: new SchemaField({
+      activationMode: new StringField({ required: true, blank: false, choices: ["enter", "exit"], initial: "exit" }),
       widthCells: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
       heightCells: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
       imageScale: new NumberField({ required: true, min: 0, initial: 0.5 })

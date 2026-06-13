@@ -43,6 +43,7 @@ import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { buildAbilityAcquisitionChangeKeyTokens } from "../utils/ability-acquisition-change-keys.mjs";
 import { captureApplicationScrollPositions, restoreApplicationScrollPositions } from "../utils/application-scroll.mjs";
 import { isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
+import { escapeHtml } from "../utils/dom.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
   getWeaponModuleSlots,
@@ -369,6 +370,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       hasTrapFunction,
       trapInstallationSkillChoices: buildSkillChoices(item.system?.functions?.trap?.installation?.skillKey ?? "traps", skillSettings),
       trapDetectionSkillChoices: buildSkillChoices(item.system?.functions?.trap?.detection?.skillKey ?? "naturalist", skillSettings),
+      trapActivationModeChoices: buildTrapActivationModeChoices(item.system?.functions?.trap?.trigger?.activationMode ?? "exit"),
       trapEvasionSkillChoices: buildSkillChoices(item.system?.functions?.trap?.evasion?.skillKey ?? "athletics", skillSettings),
       trapDisarmToolChoices: buildToolChoices(item.system?.functions?.trap?.disarm?.toolKey ?? "mechanicalHacking", toolSettings),
       trapDisarmClassChoices: buildToolClassChoices(item.system?.functions?.trap?.disarm?.toolClass ?? "D"),
@@ -824,6 +826,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-craft-mode]").forEach(button => {
       button.addEventListener("click", event => this.#onCraftModeChange(event));
     });
+    this.element?.querySelector("[data-craft-calculate-cost]")?.addEventListener("click", event => this.#onCraftCalculateCost(event));
     this.element?.querySelector("[data-craft-reverse-creation]")?.addEventListener("click", event => this.#onCraftReverseCreation(event));
     this.element?.querySelector('[data-action="tab"][data-tab="craft"]')?.addEventListener("click", () => {
       this.#scheduleCraftLinkRenderAfterLayout();
@@ -1313,6 +1316,28 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.#craftSelection = null;
     this.#craftAttachSourceNodeId = "";
     this.#craftViewportOverride = null;
+    return this.render();
+  }
+
+  async #onCraftCalculateCost(event) {
+    event.preventDefault();
+    const calculation = calculateCraftItemCost(this.item);
+    if (!calculation.componentCount && !calculation.toolCount) {
+      ui.notifications.warn("В рецепте нет компонентов или расходуемых инструментов для расчёта стоимости.");
+      return undefined;
+    }
+
+    const result = await openCraftCostDialog(calculation);
+    if (!result) return undefined;
+
+    const difficultyPercent = Math.max(0, Number(result.difficultyPercent) || 0);
+    const toolCost = Math.max(0, Math.round(Number(result.toolCost) || 0));
+    const finalPrice = Math.max(0, Math.round((calculation.componentCost * (1 + (difficultyPercent / 100))) + toolCost));
+    await this.item.update({
+      "system.price": finalPrice,
+      "system.priceCurrency": calculation.currencyKey
+    });
+    ui.notifications.info(`Стоимость предмета обновлена: ${formatCraftCost(finalPrice)} ${calculation.currencyLabel}.`);
     return this.render();
   }
 
@@ -5304,6 +5329,7 @@ function createDefaultTrapFunctionData(source = {}) {
       skillKey: "naturalist"
     },
     trigger: {
+      activationMode: "exit",
       widthCells: 1,
       heightCells: 1,
       imageScale: 0.5
@@ -5491,6 +5517,7 @@ function prepareCraftContext(item, skillSettings = [], selection = null, attachS
       }
     ],
     canReverseCreation: mode === CRAFT_MODE_DISASSEMBLY && hasCraftRecipeData(getCraftRecipeData(item, CRAFT_MODE_CREATE)),
+    canCalculateCost: mode === CRAFT_MODE_CREATE,
     linkFieldPrefix: mode === CRAFT_MODE_DISASSEMBLY ? "system.craft.disassembly.links" : "system.craft.links",
     blocks: blocks.map(block => ({
       ...block,
@@ -5512,6 +5539,158 @@ function prepareCraftContext(item, skillSettings = [], selection = null, attachS
     attachSourceNode,
     hasPopover: Boolean(selectedNode || selectedLink)
   };
+}
+
+function calculateCraftItemCost(item) {
+  const currencies = getCurrencySettings();
+  const targetCurrency = currencies.find(currency => currency.key === item?.system?.priceCurrency)
+    ?? currencies.find(currency => currency.primaryTrade)
+    ?? currencies[0]
+    ?? { key: "", label: "", value: 1 };
+  const nodes = getCraftNodesWithRootForMode(item, CRAFT_MODE_CREATE);
+  const root = nodes.find(node => node.root);
+  const resultQuantity = Math.max(1, toInteger(root?.quantity) || toInteger(item?.system?.quantity) || 1);
+  let componentTotal = 0;
+  let toolTotal = 0;
+  let componentCount = 0;
+  let toolCount = 0;
+  let missingPriceCount = 0;
+  let invalidToolSupplyCount = 0;
+
+  for (const node of nodes) {
+    if (node.root) continue;
+    const source = resolveCraftNodeSourceItem(node);
+    if (!source) {
+      missingPriceCount += 1;
+      continue;
+    }
+    const quantity = Math.max(1, toInteger(node.quantity) || 1);
+    const price = convertCraftCostCurrency(Number(source.system?.price) || 0, source.system?.priceCurrency, targetCurrency, currencies);
+    const toolFunction = getCraftNodeToolFunction(node);
+    if (toolFunction && !toolFunction.useAsItem) {
+      toolCount += 1;
+      const maximumSupply = Math.max(0, toInteger(toolFunction.supply?.max));
+      if (maximumSupply <= 0) {
+        invalidToolSupplyCount += 1;
+        continue;
+      }
+      toolTotal += price * (quantity / maximumSupply);
+      continue;
+    }
+    componentCount += 1;
+    componentTotal += price * quantity;
+  }
+
+  const difficulty = getCraftLinksForMode(item, CRAFT_MODE_CREATE)
+    .filter(link => !link.noCheck)
+    .reduce((maximum, link) => Math.max(maximum, normalizeCraftLinkDifficulty(link.difficulty)), 0);
+  const difficultyPercent = calculateCraftDifficultyCostPercent(difficulty);
+
+  return {
+    componentCost: Math.max(0, Math.round(componentTotal / resultQuantity)),
+    toolCost: Math.max(0, Math.round(toolTotal / resultQuantity)),
+    componentCount,
+    toolCount,
+    difficulty,
+    difficultyPercent,
+    resultQuantity,
+    currencyKey: String(targetCurrency.key ?? ""),
+    currencyLabel: String(targetCurrency.label ?? targetCurrency.key ?? ""),
+    missingPriceCount,
+    invalidToolSupplyCount
+  };
+}
+
+function convertCraftCostCurrency(amount, sourceCurrencyKey, targetCurrency, currencies = getCurrencySettings()) {
+  const value = Math.max(0, Number(amount) || 0);
+  const sourceCurrency = currencies.find(currency => currency.key === sourceCurrencyKey) ?? targetCurrency;
+  const sourceRate = Math.max(0, Number(sourceCurrency?.value) || 0);
+  const targetRate = Math.max(0, Number(targetCurrency?.value) || 0);
+  if (!sourceRate || !targetRate) return value;
+  return (value * sourceRate) / targetRate;
+}
+
+function calculateCraftDifficultyCostPercent(difficulty) {
+  const tens = Math.floor(Math.max(0, Number(difficulty) || 0) / 10);
+  const completedTiers = Math.floor(tens / 5);
+  const remainingTens = tens - (5 * completedTiers);
+  return (5 * completedTiers * (completedTiers + 1) / 2) + ((completedTiers + 1) * remainingTens);
+}
+
+async function openCraftCostDialog(calculation) {
+  const currencyLabel = escapeHtml(calculation.currencyLabel);
+  const notes = [];
+  if (calculation.resultQuantity > 1) notes.push(`Расчёт разделён на ${calculation.resultQuantity} результата.`);
+  if (calculation.missingPriceCount) notes.push(`Не удалось прочитать ${calculation.missingPriceCount} компонентов.`);
+  if (calculation.invalidToolSupplyCount) notes.push(`У ${calculation.invalidToolSupplyCount} инструментов не задан максимальный запас.`);
+  const initialFinal = Math.round((calculation.componentCost * (1 + (calculation.difficultyPercent / 100))) + calculation.toolCost);
+  const content = `
+    <div class="fallout-maw-craft-cost-dialog">
+      <p><strong>Компоненты:</strong> ${formatCraftCost(calculation.componentCost)} ${currencyLabel}</p>
+      <p><strong>Сложность рецепта:</strong> ${calculation.difficulty}</p>
+      <div class="form-group">
+        <label for="fallout-maw-craft-cost-difficulty">Надбавка за сложность, %</label>
+        <input id="fallout-maw-craft-cost-difficulty" name="difficultyPercent" type="number" value="${calculation.difficultyPercent}" min="0" step="1">
+      </div>
+      <div class="form-group">
+        <label for="fallout-maw-craft-cost-tools">Стоимость расхода инструментов</label>
+        <input id="fallout-maw-craft-cost-tools" name="toolCost" type="number" value="${formatCraftCost(calculation.toolCost)}" min="0" step="1">
+      </div>
+      <p class="fallout-maw-craft-cost-dialog-total"><strong>Итоговая стоимость:</strong> <span data-craft-cost-total>${formatCraftCost(initialFinal)}</span> ${currencyLabel}</p>
+      ${notes.length ? `<p class="fallout-maw-craft-cost-dialog-note">${notes.map(escapeHtml).join(" ")}</p>` : ""}
+    </div>
+  `;
+
+  const result = await DialogV2.wait({
+    window: { title: "Расчёт стоимости крафта" },
+    content,
+    render: (_event, dialog) => activateCraftCostDialog(dialog, calculation.componentCost),
+    buttons: [
+      {
+        action: "apply",
+        label: "Применить",
+        icon: "fa-solid fa-check",
+        default: true,
+        callback: (_event, button) => {
+          const data = new FormDataExtended(button.form).object;
+          return {
+            difficultyPercent: data.difficultyPercent,
+            toolCost: data.toolCost
+          };
+        }
+      },
+      {
+        action: "cancel",
+        label: game.i18n.localize("Cancel"),
+        icon: "fa-solid fa-xmark",
+        type: "button"
+      }
+    ],
+    position: { width: 480 },
+    rejectClose: false,
+    modal: true
+  });
+  return result && result !== "cancel" ? result : null;
+}
+
+function activateCraftCostDialog(dialog, componentCost) {
+  const form = dialog.element?.querySelector("form");
+  if (!form) return;
+  const difficultyInput = form.elements.namedItem("difficultyPercent");
+  const toolInput = form.elements.namedItem("toolCost");
+  const total = form.querySelector("[data-craft-cost-total]");
+  const update = () => {
+    const difficultyPercent = Math.max(0, Number(difficultyInput?.value) || 0);
+    const toolCost = Math.max(0, Math.round(Number(toolInput?.value) || 0));
+    if (total) total.textContent = formatCraftCost(Math.round((componentCost * (1 + (difficultyPercent / 100))) + toolCost));
+  };
+  difficultyInput?.addEventListener("input", update);
+  toolInput?.addEventListener("input", update);
+  update();
+}
+
+function formatCraftCost(value) {
+  return new Intl.NumberFormat(game.i18n.lang, { maximumFractionDigits: 0 }).format(Math.max(0, Math.round(Number(value) || 0)));
 }
 
 function normalizeCraftMode(mode) {
@@ -6834,6 +7013,22 @@ function buildSkillChoices(selectedKey = "", skillSettings = []) {
     label: skill.label,
     selected: skill.key === selected
   }));
+}
+
+function buildTrapActivationModeChoices(selectedMode = "exit") {
+  const selected = selectedMode === "enter" ? "enter" : "exit";
+  return [
+    {
+      value: "enter",
+      label: game.i18n.localize("FALLOUTMAW.Item.TrapActivationModeEnter"),
+      selected: selected === "enter"
+    },
+    {
+      value: "exit",
+      label: game.i18n.localize("FALLOUTMAW.Item.TrapActivationModeExit"),
+      selected: selected === "exit"
+    }
+  ];
 }
 
 function buildToolChoices(selectedKey = "", toolSettings = []) {

@@ -1855,7 +1855,17 @@
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.TrapActivation"}}</h3>
     </div>
-    <div class="fallout-maw-list-grid three-columns">
+    <div class="fallout-maw-list-grid one-column">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapActivationMode"}}</span>
+        <select name="system.functions.trap.trigger.activationMode">
+          {{#each trapActivationModeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+    </div>
+    <div class="fallout-maw-list-grid two-columns">
       <label class="fallout-maw-split-number-field">
         <span>{{localize "FALLOUTMAW.Item.TrapTriggerSize"}}</span>
         <div>
@@ -2674,6 +2684,11 @@
       <button type="button" class="{{#if selected}}active{{/if}}" data-craft-mode="{{key}}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}">{{label}}</button>
       {{/each}}
     </div>
+    {{#if craft.canCalculateCost}}
+    <button type="button" class="fallout-maw-craft-cost-button" data-craft-calculate-cost>
+      <i class="fa-solid fa-calculator"></i> Рассчитать стоимость
+    </button>
+    {{/if}}
     {{#if craft.canReverseCreation}}
     <button type="button" class="fallout-maw-craft-reverse-button" data-craft-reverse-creation>
       <i class="fa-solid fa-rotate"></i> Реверсировать Создание
