@@ -1853,6 +1853,60 @@
     </div>
 
     <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.TrapDetectionConditions"}}</h3>
+      <button type="button" data-add-trap-detection-condition {{#unless canAddTrapDetectionCondition}}disabled{{/unless}}>
+        <i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Common.Add"}}
+      </button>
+    </div>
+    <div class="fallout-maw-ability-conditions">
+      {{#each trapDetectionConditionRows}}
+      <div class="fallout-maw-ability-condition-row{{#if isPending}} empty{{else}} configured{{/if}}" data-trap-detection-condition-row="{{index}}">
+        <input type="hidden" name="system.functions.trap.detection.conditions.{{index}}.id" value="{{id}}">
+        {{#if isPending}}
+        <label>
+          <span>{{localize "FALLOUTMAW.Item.TrapDetectionCondition"}}</span>
+          <select name="system.functions.trap.detection.conditions.{{index}}.type" data-trap-detection-condition-type>
+            {{#each typeChoices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+        </label>
+        <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-trap-detection-condition title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+        {{else}}
+        <input type="hidden" name="system.functions.trap.detection.conditions.{{index}}.type" value="{{type}}">
+        <div class="fallout-maw-ability-condition-card">
+          <div class="fallout-maw-ability-condition-card-header">
+            <h4>{{typeLabel}}</h4>
+            <div class="fallout-maw-inline-controls">
+              <button type="button" data-add-trap-lighting-threshold><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.TrapDetectionAddThreshold"}}</button>
+              <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-trap-detection-condition title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>
+          {{#if isLighting}}
+          <div class="fallout-maw-settings-table fallout-maw-damage-entry-table">
+            <div class="fallout-maw-settings-row fallout-maw-grid-header">
+              <span>{{localize "FALLOUTMAW.Item.TrapDetectionIlluminationPercent"}}</span>
+              <span>{{localize "FALLOUTMAW.Item.TrapDetectionDifficultyBonus"}}</span>
+              <span></span>
+            </div>
+            {{#each thresholdRows}}
+            <div class="fallout-maw-settings-row" data-trap-lighting-threshold-row="{{thresholdIndex}}">
+              <input type="number" name="system.functions.trap.detection.conditions.{{../index}}.thresholds.{{thresholdIndex}}.illuminationPercent" value="{{illuminationPercent}}" min="0" max="100" step="1">
+              <input type="number" name="system.functions.trap.detection.conditions.{{../index}}.thresholds.{{thresholdIndex}}.difficultyBonus" value="{{difficultyBonus}}" min="0" step="1">
+              <button type="button" class="fallout-maw-icon-delete-button" data-delete-trap-lighting-threshold title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+            </div>
+            {{/each}}
+          </div>
+          {{/if}}
+        </div>
+        {{/if}}
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.TrapDetectionNoConditions"}}</p>
+      {{/each}}
+    </div>
+
+    <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.TrapActivation"}}</h3>
     </div>
     <div class="fallout-maw-list-grid one-column">

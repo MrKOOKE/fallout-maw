@@ -354,7 +354,7 @@ function analyzeTokenLighting(token) {
   };
 }
 
-function analyzeLightingPoint(point) {
+export function analyzeLightingPoint(point) {
   const elevatedPoint = {
     x: Number(point?.x) || 0,
     y: Number(point?.y) || 0,

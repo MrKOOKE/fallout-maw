@@ -66,6 +66,14 @@ const DEFAULT_ATTACK_ANIMATION_DELAY_MS = 200;
 const DEFAULT_CONDITION_WEAKENING_THRESHOLD = 10;
 const DEFAULT_LIGHT_SOURCE_ANGLE_DEGREES = 360;
 const DEFAULT_LIGHT_SOURCE_COLOR = "";
+const TRAP_DETECTION_LIGHTING_CONDITION = "lighting";
+const DEFAULT_TRAP_LIGHTING_THRESHOLDS = Object.freeze([
+  Object.freeze({ illuminationPercent: 80, difficultyBonus: 20 }),
+  Object.freeze({ illuminationPercent: 60, difficultyBonus: 40 }),
+  Object.freeze({ illuminationPercent: 40, difficultyBonus: 60 }),
+  Object.freeze({ illuminationPercent: 20, difficultyBonus: 80 }),
+  Object.freeze({ illuminationPercent: 0, difficultyBonus: 120 })
+]);
 const CRAFT_ROOT_NODE_ID = "root";
 const CRAFT_GRID_FALLBACK_STEP = 56;
 const CRAFT_DRAG_THRESHOLD_PX = 4;
@@ -370,6 +378,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       hasTrapFunction,
       trapInstallationSkillChoices: buildSkillChoices(item.system?.functions?.trap?.installation?.skillKey ?? "traps", skillSettings),
       trapDetectionSkillChoices: buildSkillChoices(item.system?.functions?.trap?.detection?.skillKey ?? "naturalist", skillSettings),
+      trapDetectionConditionRows: buildTrapDetectionConditionRows(item.system?.functions?.trap?.detection?.conditions),
+      canAddTrapDetectionCondition: canAddTrapDetectionCondition(item.system?.functions?.trap?.detection?.conditions),
       trapActivationModeChoices: buildTrapActivationModeChoices(item.system?.functions?.trap?.trigger?.activationMode ?? "exit"),
       trapRechargeUnitChoices: buildTrapRechargeUnitChoices(item.system?.functions?.trap?.recharge?.unit ?? "seconds"),
       isTrapLinkedActionMode: item.system?.functions?.trap?.trigger?.activationMode === "linkedAction",
@@ -565,6 +575,19 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-trap-region-damage]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteTrapRegionDamage(event));
+    });
+    this.element?.querySelector("[data-add-trap-detection-condition]")?.addEventListener("click", event => this.#onAddTrapDetectionCondition(event));
+    this.element?.querySelectorAll("[data-delete-trap-detection-condition]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteTrapDetectionCondition(event));
+    });
+    this.element?.querySelectorAll("[data-trap-detection-condition-type]").forEach(select => {
+      select.addEventListener("change", event => this.#onTrapDetectionConditionTypeChange(event));
+    });
+    this.element?.querySelectorAll("[data-add-trap-lighting-threshold]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddTrapLightingThreshold(event));
+    });
+    this.element?.querySelectorAll("[data-delete-trap-lighting-threshold]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteTrapLightingThreshold(event));
     });
     this.element?.querySelectorAll("[data-trap-effect-mode]").forEach(select => {
       select.addEventListener("change", event => this.#onTrapEffectModeChange(event));
@@ -3368,6 +3391,71 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.item.update({ "system.functions.trap.effect.regionDamageEntries": entries });
   }
 
+  #getSubmittedTrapDetectionConditions() {
+    if (!this.form) {
+      return normalizeTrapDetectionConditions(this.item.system?.functions?.trap?.detection?.conditions);
+    }
+    const formData = new FormDataExtended(this.form);
+    const submitData = this._processFormData(null, this.form, formData);
+    return normalizeTrapDetectionConditions(
+      foundry.utils.getProperty(submitData, "system.functions.trap.detection.conditions")
+      ?? this.item.system?.functions?.trap?.detection?.conditions
+    );
+  }
+
+  #onAddTrapDetectionCondition(event) {
+    event.preventDefault();
+    const conditions = this.#getSubmittedTrapDetectionConditions();
+    if (!canAddTrapDetectionCondition(conditions)) return undefined;
+    conditions.push(createTrapDetectionCondition());
+    return this.#submitCurrentForm({ "system.functions.trap.detection.conditions": conditions });
+  }
+
+  #onDeleteTrapDetectionCondition(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const index = Number(event.currentTarget?.closest?.("[data-trap-detection-condition-row]")?.dataset.trapDetectionConditionRow ?? -1);
+    const conditions = this.#getSubmittedTrapDetectionConditions();
+    if (!conditions[index]) return undefined;
+    conditions.splice(index, 1);
+    return this.#submitCurrentForm({ "system.functions.trap.detection.conditions": conditions });
+  }
+
+  #onTrapDetectionConditionTypeChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    const index = Number(event.currentTarget?.closest?.("[data-trap-detection-condition-row]")?.dataset.trapDetectionConditionRow ?? -1);
+    const conditions = this.#getSubmittedTrapDetectionConditions();
+    const condition = conditions[index];
+    if (!condition) return undefined;
+    const type = String(event.currentTarget?.value ?? "");
+    conditions[index] = createTrapDetectionCondition(type, { id: condition.id });
+    return this.#submitCurrentForm({ "system.functions.trap.detection.conditions": conditions });
+  }
+
+  #onAddTrapLightingThreshold(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.closest?.("[data-trap-detection-condition-row]")?.dataset.trapDetectionConditionRow ?? -1);
+    const conditions = this.#getSubmittedTrapDetectionConditions();
+    const condition = conditions[index];
+    if (condition?.type !== TRAP_DETECTION_LIGHTING_CONDITION) return undefined;
+    condition.thresholds.push({ illuminationPercent: 0, difficultyBonus: 0 });
+    return this.#submitCurrentForm({ "system.functions.trap.detection.conditions": conditions });
+  }
+
+  #onDeleteTrapLightingThreshold(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const conditionIndex = Number(event.currentTarget?.closest?.("[data-trap-detection-condition-row]")?.dataset.trapDetectionConditionRow ?? -1);
+    const thresholdIndex = Number(event.currentTarget?.closest?.("[data-trap-lighting-threshold-row]")?.dataset.trapLightingThresholdRow ?? -1);
+    const conditions = this.#getSubmittedTrapDetectionConditions();
+    const condition = conditions[conditionIndex];
+    if (condition?.type !== TRAP_DETECTION_LIGHTING_CONDITION || !condition.thresholds[thresholdIndex]) return undefined;
+    condition.thresholds.splice(thresholdIndex, 1);
+    return this.#submitCurrentForm({ "system.functions.trap.detection.conditions": conditions });
+  }
+
   #onTrapEffectModeChange(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -5346,7 +5434,8 @@ function createDefaultTrapFunctionData(source = {}) {
     detection: {
       radiusMeters: 1,
       difficulty: 60,
-      skillKey: "naturalist"
+      skillKey: "naturalist",
+      conditions: []
     },
     trigger: {
       activationMode: "exit",
@@ -7038,6 +7127,71 @@ function buildSkillChoices(selectedKey = "", skillSettings = []) {
     label: skill.label,
     selected: skill.key === selected
   }));
+}
+
+function createTrapDetectionCondition(type = "", source = {}) {
+  const normalizedType = type === TRAP_DETECTION_LIGHTING_CONDITION ? TRAP_DETECTION_LIGHTING_CONDITION : "";
+  return {
+    id: String(source?.id ?? "").trim() || foundry.utils.randomID(),
+    type: normalizedType,
+    thresholds: normalizedType === TRAP_DETECTION_LIGHTING_CONDITION
+      ? DEFAULT_TRAP_LIGHTING_THRESHOLDS.map(entry => ({ ...entry }))
+      : []
+  };
+}
+
+function normalizeTrapDetectionConditions(conditions = []) {
+  return (Array.isArray(conditions) ? conditions : Object.values(conditions ?? {}))
+    .map(condition => {
+      const type = condition?.type === TRAP_DETECTION_LIGHTING_CONDITION ? TRAP_DETECTION_LIGHTING_CONDITION : "";
+      return {
+        id: String(condition?.id ?? "").trim() || foundry.utils.randomID(),
+        type,
+        thresholds: type === TRAP_DETECTION_LIGHTING_CONDITION
+          ? (Array.isArray(condition?.thresholds) ? condition.thresholds : Object.values(condition?.thresholds ?? {}))
+            .map(threshold => ({
+              illuminationPercent: Math.max(0, Math.min(100, toInteger(threshold?.illuminationPercent))),
+              difficultyBonus: Math.max(0, toInteger(threshold?.difficultyBonus))
+            }))
+          : []
+      };
+    })
+    .filter((condition, index, entries) => (
+      condition.type !== TRAP_DETECTION_LIGHTING_CONDITION
+      || entries.findIndex(entry => entry.type === TRAP_DETECTION_LIGHTING_CONDITION) === index
+    ));
+}
+
+function buildTrapDetectionConditionRows(conditions = []) {
+  return normalizeTrapDetectionConditions(conditions).map((condition, index) => ({
+    ...condition,
+    index,
+    isPending: !condition.type,
+    isLighting: condition.type === TRAP_DETECTION_LIGHTING_CONDITION,
+    typeLabel: game.i18n.localize("FALLOUTMAW.Item.TrapDetectionConditionLighting"),
+    typeChoices: [
+      {
+        value: "",
+        label: game.i18n.localize("FALLOUTMAW.Item.TrapDetectionConditionSelect"),
+        selected: !condition.type,
+        disabled: true
+      },
+      {
+        value: TRAP_DETECTION_LIGHTING_CONDITION,
+        label: game.i18n.localize("FALLOUTMAW.Item.TrapDetectionConditionLighting"),
+        selected: condition.type === TRAP_DETECTION_LIGHTING_CONDITION
+      }
+    ],
+    thresholdRows: condition.thresholds.map((threshold, thresholdIndex) => ({
+      ...threshold,
+      thresholdIndex
+    }))
+  }));
+}
+
+function canAddTrapDetectionCondition(conditions = []) {
+  const normalized = normalizeTrapDetectionConditions(conditions);
+  return !normalized.some(condition => !condition.type || condition.type === TRAP_DETECTION_LIGHTING_CONDITION);
 }
 
 function buildTrapActivationModeChoices(selectedMode = "exit") {

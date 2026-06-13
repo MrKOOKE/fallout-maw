@@ -11,6 +11,7 @@ import { getCreatureOptions, getToolSettings } from "../settings/accessors.mjs";
 import { ITEM_FUNCTIONS, getEnabledToolFunctions, getEnabledWeaponFunctions, getTrapFunction, getWeaponFunctionModuleSlots, hasItemFunction } from "../utils/item-functions.mjs";
 import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { analyzeLightingPoint } from "../stealth/index.mjs";
 import {
   DEFAULT_FACTION_NAME,
   getActorFactionBelongs,
@@ -39,6 +40,7 @@ const TRAP_LINKED_ACTOR_HIGHLIGHT_COLOR = 0xe34fcb;
 const TRAP_LINKED_ACTION_MODE = "linkedAction";
 const TRAP_EFFECT_EXPLOSION_MODE = "explosion";
 const TRAP_EFFECT_ATTACK_MODE = "attack";
+const TRAP_DETECTION_LIGHTING_CONDITION = "lighting";
 const TRAP_RECHARGE_UNITS = Object.freeze({
   seconds: 1,
   minutes: 60,
@@ -72,6 +74,7 @@ let activeTrapLinkedActorSelection = null;
 let trapTilePatchRegistered = false;
 let trapGmFreeDoubleClickListenerRegistered = false;
 let trapVisibilityRefreshQueued = false;
+let trapDetectionRefreshTimeout = 0;
 const pendingTrapActivationKeys = new Set();
 const pendingTrapMovementKeys = new Set();
 
@@ -90,8 +93,12 @@ export function registerTrapHooks() {
     refreshTrapTileVisibility();
     refreshTrapInteractionHighlights();
   });
-  Hooks.on("sightRefresh", refreshTrapTileVisibility);
+  Hooks.on("sightRefresh", () => {
+    refreshTrapTileVisibility();
+    queueTrapDetectionRefresh();
+  });
   Hooks.on("visibilityRefresh", refreshTrapTileVisibility);
+  Hooks.on("lightingRefresh", queueTrapDetectionRefresh);
   Hooks.on("updateWorldTime", () => void processDueTrapRecharges());
   Hooks.on("updateToken", queueTrapTileVisibilityRefresh);
   Hooks.on("updateActor", (actor, changes = {}) => {
@@ -118,6 +125,8 @@ export function registerTrapHooks() {
     void processTrapContactForToken(token);
   });
   Hooks.on("canvasTearDown", () => {
+    if (trapDetectionRefreshTimeout) window.clearTimeout(trapDetectionRefreshTimeout);
+    trapDetectionRefreshTimeout = 0;
     cancelActiveTrapPlacement();
     cancelTrapInteractionMode();
     cancelTrapLinkedActorSelection();
@@ -257,6 +266,15 @@ async function processTrapInitialDetection(tile) {
   }
 }
 
+function queueTrapDetectionRefresh() {
+  if (!game.user?.isActiveGM || !canvas?.ready || trapDetectionRefreshTimeout) return;
+  trapDetectionRefreshTimeout = window.setTimeout(async () => {
+    trapDetectionRefreshTimeout = 0;
+    const trapTiles = (canvas.scene?.tiles?.contents ?? []).filter(isTrapTileDocument);
+    for (const tile of trapTiles) await processTrapInitialDetection(tile);
+  }, 100);
+}
+
 async function handleTrapDetectionForToken(tile, token) {
   if (!game.user?.isActiveGM) return;
   const actor = token?.actor ?? token?.document?.actor;
@@ -268,14 +286,16 @@ async function handleTrapDetectionForToken(tile, token) {
     await revealTrapToActor(tile, actor);
     return true;
   }
+  if (!canTokenSeeTrap(tile, token)) return false;
 
   const attempted = new Set(asStringArray(trap.attemptedDetectionActorUuids));
   if (attempted.has(actor.uuid)) return false;
   attempted.add(actor.uuid);
   await tile.update({ [`flags.${SYSTEM_ID}.${TRAP_FLAG}.attemptedDetectionActorUuids`]: Array.from(attempted) }, { render: false });
 
-  const difficulty = Math.max(0, toInteger(trap.data?.detection?.difficulty));
-  const skillKey = String(trap.data?.detection?.skillKey ?? "naturalist");
+  const trapData = normalizeTrapData(trap.data);
+  const difficulty = Math.max(0, trapData.detection.difficulty + getTrapDetectionLightingDifficultyBonus(tile, trapData));
+  const skillKey = trapData.detection.skillKey;
   const outcome = await requestSkillCheck({
     actor,
     skillKey,
@@ -1997,7 +2017,7 @@ function findFirstTrapMovementEvent(tokenDocument, actor, movement = {}, trapTil
         if (detectionRadius > 0 && !attempted.has(actor.uuid)) {
           const center = getTileCenter(tile);
           const isDetected = Math.hypot(current.point.x - center.x, current.point.y - center.y) <= detectionRadius;
-          if (isDetected) {
+          if (isDetected && canTokenSeeTrap(tile, tokenDocument, { observerPoint: current.point })) {
             candidates.push({ type: "detection", tile, priority: 0, waypoint: current.waypoint });
           }
         }
@@ -2313,7 +2333,8 @@ function normalizeTrapData(source = {}) {
     detection: {
       radiusMeters: String(data.detection?.radiusMeters ?? "1").trim() || "1",
       difficulty: Math.max(0, toInteger(data.detection?.difficulty)),
-      skillKey: String(data.detection?.skillKey ?? "naturalist").trim() || "naturalist"
+      skillKey: String(data.detection?.skillKey ?? "naturalist").trim() || "naturalist",
+      conditions: normalizeTrapDetectionConditions(data.detection?.conditions)
     },
     trigger: {
       activationMode: normalizeTrapActivationMode(data.trigger?.activationMode),
@@ -2379,6 +2400,51 @@ function normalizeTrapRechargeUnit(value) {
 function normalizeTrapEffectMode(value) {
   const mode = String(value ?? TRAP_EFFECT_EXPLOSION_MODE).trim();
   return mode === TRAP_EFFECT_ATTACK_MODE ? TRAP_EFFECT_ATTACK_MODE : TRAP_EFFECT_EXPLOSION_MODE;
+}
+
+function normalizeTrapDetectionConditions(conditions = []) {
+  const normalized = (Array.isArray(conditions) ? conditions : Object.values(conditions ?? {}))
+    .map(condition => {
+      const type = condition?.type === TRAP_DETECTION_LIGHTING_CONDITION
+        ? TRAP_DETECTION_LIGHTING_CONDITION
+        : "";
+      return {
+        id: String(condition?.id ?? "").trim(),
+        type,
+        thresholds: type === TRAP_DETECTION_LIGHTING_CONDITION
+          ? (Array.isArray(condition?.thresholds) ? condition.thresholds : Object.values(condition?.thresholds ?? {}))
+            .map(threshold => ({
+              illuminationPercent: Math.max(0, Math.min(100, toInteger(threshold?.illuminationPercent))),
+              difficultyBonus: Math.max(0, toInteger(threshold?.difficultyBonus))
+            }))
+          : []
+      };
+    });
+  const lightingIndex = normalized.findIndex(condition => condition.type === TRAP_DETECTION_LIGHTING_CONDITION);
+  return normalized.filter((condition, index) => (
+    condition.type !== TRAP_DETECTION_LIGHTING_CONDITION || index === lightingIndex
+  ));
+}
+
+function getTrapDetectionLightingDifficultyBonus(tile, trapData) {
+  const condition = trapData?.detection?.conditions
+    ?.find(entry => entry.type === TRAP_DETECTION_LIGHTING_CONDITION);
+  if (!condition?.thresholds?.length) return 0;
+  const illuminationPercent = getTrapIlluminationPercent(tile);
+  return condition.thresholds.reduce((bonus, threshold) => (
+    illuminationPercent <= threshold.illuminationPercent
+      ? Math.max(bonus, threshold.difficultyBonus)
+      : bonus
+  ), 0);
+}
+
+function getTrapIlluminationPercent(tile) {
+  const samples = getTrapVisibilityTestPoints(tile).map(point => analyzeLightingPoint(point));
+  const brightest = samples.reduce(
+    (best, sample) => sample.effectiveDarkness < best.effectiveDarkness ? sample : best,
+    samples[0] ?? analyzeLightingPoint(getTileCenter(tile))
+  );
+  return Math.max(0, Math.min(100, Math.round((1 - brightest.effectiveDarkness) * 100)));
 }
 
 function getTrapRechargeSeconds(trapData = {}) {
@@ -2729,6 +2795,52 @@ function getTrapVisibilityTestPoints(tileDocument) {
     { x: rect.x + rect.width - insetX, y: rect.y + rect.height - insetY, elevation },
     { x: rect.x + insetX, y: rect.y + rect.height - insetY, elevation }
   ];
+}
+
+function canTokenSeeTrap(tileDocument, token, { observerPoint = null } = {}) {
+  if (!canvas?.ready || !canvas?.visibility) return false;
+  if (!canvas.visibility.tokenVision) return true;
+
+  const tokenDocument = token?.document ?? token;
+  const tokenObject = tokenDocument?.object ?? token?.object;
+  const VisionSource = CONFIG.Canvas.visionSourceClass;
+  if (!tokenDocument || !tokenObject?.hasSight || !VisionSource) return false;
+  if (typeof tokenObject._getVisionSourceData !== "function") return false;
+  if (typeof canvas.visibility._createVisibilityTestConfig !== "function") return false;
+
+  const source = new VisionSource({
+    sourceId: `${tokenObject.sourceId ?? tokenDocument.id}.trap-visibility.${foundry.utils.randomID()}`,
+    object: tokenObject
+  });
+  try {
+    Object.assign(source.blinded, tokenObject._getVisionBlindedStates?.() ?? {});
+    const sourceData = tokenObject._getVisionSourceData();
+    const origin = observerPoint ?? getTokenCenter(tokenDocument);
+    source.initialize({
+      ...sourceData,
+      x: Number(origin?.x) || 0,
+      y: Number(origin?.y) || 0,
+      elevation: Number(origin?.elevation ?? sourceData?.elevation ?? tokenDocument.elevation) || 0,
+      disabled: false,
+      preview: false
+    });
+    if (source.isBlinded) return false;
+
+    const points = getTrapVisibilityTestPoints(tileDocument);
+    const object = tileDocument?.object ?? tileDocument?.document?.object ?? null;
+    const config = canvas.visibility._createVisibilityTestConfig(points, { tolerance: 0, object });
+    for (const modeId of ["basicSight", "lightPerception"]) {
+      const mode = tokenDocument.detectionModes?.[modeId];
+      const detectionMode = CONFIG.Canvas.detectionModes?.[modeId];
+      if (mode && detectionMode?.testVisibility(source, mode, config) === true) return true;
+    }
+    return false;
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Trap vision test failed`, error);
+    return false;
+  } finally {
+    source.destroy();
+  }
 }
 
 function isTrapInCurrentVision(tileDocument) {

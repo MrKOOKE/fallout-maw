@@ -288,7 +288,8 @@ function trapFunctionField() {
     detection: new SchemaField({
       radiusMeters: new StringField({ required: true, blank: true, initial: "1" }),
       difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
-      skillKey: new StringField({ required: true, blank: false, initial: "naturalist" })
+      skillKey: new StringField({ required: true, blank: false, initial: "naturalist" }),
+      conditions: new ArrayField(trapDetectionConditionField(), { required: true, initial: [] })
     }),
     trigger: new SchemaField({
       activationMode: new StringField({ required: true, blank: false, choices: ["enter", "exit", "linkedAction"], initial: "exit" }),
@@ -327,6 +328,17 @@ function trapFunctionField() {
     }),
     triggerAnimationKey: new StringField({ required: true, blank: true, initial: "" }),
     triggerSoundPath: new StringField({ required: true, blank: true, initial: "" })
+  });
+}
+
+function trapDetectionConditionField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: false, initial: () => foundry.utils.randomID() }),
+    type: new StringField({ required: true, blank: true, choices: ["", "lighting"], initial: "" }),
+    thresholds: new ArrayField(new SchemaField({
+      illuminationPercent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 0 }),
+      difficultyBonus: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
+    }), { required: true, initial: [] })
   });
 }
 
