@@ -1898,6 +1898,7 @@
       </label>
     </div>
 
+    {{#if isTrapEffectExplosionMode}}
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.TrapEvasion"}}</h3>
     </div>
@@ -1919,6 +1920,7 @@
         <input type="number" name="system.functions.trap.evasion.avoidPercent" value="{{system.functions.trap.evasion.avoidPercent}}" min="1" max="100" step="1">
       </label>
     </div>
+    {{/if}}
 
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.TrapDisarm"}}</h3>
@@ -1955,9 +1957,19 @@
     </div>
     <div class="fallout-maw-list-grid three-columns">
       <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapEffectMode"}}</span>
+        <select name="system.functions.trap.effect.mode" data-trap-effect-mode>
+          {{#each trapEffectModeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      {{#if isTrapEffectExplosionMode}}
+      <label>
         <span>{{localize "FALLOUTMAW.Item.TrapDamageRadius"}}</span>
         <input type="text" name="system.functions.trap.effect.damageRadiusMeters" value="{{system.functions.trap.effect.damageRadiusMeters}}" data-formula-autocomplete="all">
       </label>
+      {{/if}}
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponPenetration"}}</span>
         <input type="text" name="system.functions.trap.effect.penetration" value="{{system.functions.trap.effect.penetration}}" data-formula-autocomplete="all">
@@ -1996,6 +2008,7 @@
     </div>
     <input type="hidden" name="system.functions.trap.effect.damageTypeKey" value="{{system.functions.trap.effect.damageTypeKey}}">
 
+    {{#if isTrapEffectExplosionMode}}
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.WeaponVolleyRegion"}}</h3>
       <button type="button" data-add-trap-region-damage><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.WeaponVolleyAddRegionDamage"}}</button>
@@ -2038,6 +2051,7 @@
         <input type="text" name="system.functions.trap.effect.regionRadiusDeltaMeters" value="{{system.functions.trap.effect.regionRadiusDeltaMeters}}" data-formula-autocomplete="all">
       </label>
     </div>
+    {{/if}}
     <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.TrapTriggerPresentation"}}</h3>
     </div>

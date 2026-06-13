@@ -373,6 +373,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       trapActivationModeChoices: buildTrapActivationModeChoices(item.system?.functions?.trap?.trigger?.activationMode ?? "exit"),
       trapRechargeUnitChoices: buildTrapRechargeUnitChoices(item.system?.functions?.trap?.recharge?.unit ?? "seconds"),
       isTrapLinkedActionMode: item.system?.functions?.trap?.trigger?.activationMode === "linkedAction",
+      trapEffectModeChoices: buildTrapEffectModeChoices(item.system?.functions?.trap?.effect?.mode ?? "explosion"),
+      isTrapEffectAttackMode: item.system?.functions?.trap?.effect?.mode === "attack",
+      isTrapEffectExplosionMode: item.system?.functions?.trap?.effect?.mode !== "attack",
       trapEvasionSkillChoices: buildSkillChoices(item.system?.functions?.trap?.evasion?.skillKey ?? "athletics", skillSettings),
       trapDisarmToolChoices: buildToolChoices(item.system?.functions?.trap?.disarm?.toolKey ?? "mechanicalHacking", toolSettings),
       trapDisarmClassChoices: buildToolClassChoices(item.system?.functions?.trap?.disarm?.toolClass ?? "D"),
@@ -562,6 +565,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-trap-region-damage]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteTrapRegionDamage(event));
+    });
+    this.element?.querySelectorAll("[data-trap-effect-mode]").forEach(select => {
+      select.addEventListener("change", event => this.#onTrapEffectModeChange(event));
     });
     this.element?.querySelectorAll("[data-weapon-damage-mode]").forEach(select => {
       select.addEventListener("change", event => this.#onWeaponDamageModeChange(event));
@@ -3362,6 +3368,14 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.item.update({ "system.functions.trap.effect.regionDamageEntries": entries });
   }
 
+  #onTrapEffectModeChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    const mode = String(event.currentTarget?.value ?? "") === "attack" ? "attack" : "explosion";
+    return this.item.update({ "system.functions.trap.effect.mode": mode });
+  }
+
   #onWeaponDamageModeChange(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -5356,6 +5370,7 @@ function createDefaultTrapFunctionData(source = {}) {
       attempts: 1
     },
     effect: {
+      mode: "explosion",
       damageRadiusMeters: 0,
       penetration: 0,
       damage: 0,
@@ -7063,6 +7078,22 @@ function buildTrapRechargeUnitChoices(selectedUnit = "seconds") {
       value: "hours",
       label: game.i18n.localize("FALLOUTMAW.Item.TrapRechargeUnitHours"),
       selected: selected === "hours"
+    }
+  ];
+}
+
+function buildTrapEffectModeChoices(selectedMode = "explosion") {
+  const selected = ["explosion", "attack"].includes(selectedMode) ? selectedMode : "explosion";
+  return [
+    {
+      value: "explosion",
+      label: game.i18n.localize("FALLOUTMAW.Item.TrapEffectModeExplosion"),
+      selected: selected === "explosion"
+    },
+    {
+      value: "attack",
+      label: game.i18n.localize("FALLOUTMAW.Item.TrapEffectModeAttack"),
+      selected: selected === "attack"
     }
   ];
 }

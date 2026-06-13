@@ -312,6 +312,7 @@ function trapFunctionField() {
       attempts: new NumberField({ required: true, integer: true, min: 0, initial: 1 })
     }),
     effect: new SchemaField({
+      mode: new StringField({ required: true, blank: false, choices: ["explosion", "attack"], initial: "explosion" }),
       damageRadiusMeters: new StringField({ required: true, blank: true, initial: "0" }),
       penetration: new StringField({ required: true, blank: true, initial: "0" }),
       damage: new StringField({ required: true, blank: true, initial: "0" }),

@@ -37,6 +37,8 @@ const TRAP_INTERACTION_HIGHLIGHT_COLOR = 0xf0c84b;
 const TRAP_LINKED_ACTOR_HIGHLIGHT_LAYER = "fallout-maw-linked-actor-tokens";
 const TRAP_LINKED_ACTOR_HIGHLIGHT_COLOR = 0xe34fcb;
 const TRAP_LINKED_ACTION_MODE = "linkedAction";
+const TRAP_EFFECT_EXPLOSION_MODE = "explosion";
+const TRAP_EFFECT_ATTACK_MODE = "attack";
 const TRAP_RECHARGE_UNITS = Object.freeze({
   seconds: 1,
   minutes: 60,
@@ -1496,14 +1498,53 @@ async function triggerTrap(tile, triggeringToken) {
   }
   const ownerActor = trap.ownerActorUuid ? await fromUuid(trap.ownerActorUuid) : null;
   const center = getTileCenter(tile);
-  const triggerRect = getTrapTileRectangle(tile);
-  const radiusPixels = metersToPixels(trapData.effect.damageRadiusMeters, scene, trap.ownerActorUuid);
-  const targets = getTrapDamageTargets(scene, triggerRect, radiusPixels, triggeringToken);
   const damageBase = evaluateActorFormula(trapData.effect.damage, ownerActor, { fallback: 0, minimum: 0, context: "trap damage" });
   const pellets = Math.max(1, evaluateActorFormula(trapData.effect.pellets, ownerActor, { fallback: 1, minimum: 1, context: "trap pellets" }));
   const penetrationPower = evaluateActorFormula(trapData.effect.penetration, ownerActor, { fallback: 0, minimum: 0, context: "trap penetration" });
   const damageTypes = normalizeDamageTypeEntries(trapData.effect.damageTypes, trapData.effect.damageTypeKey);
   const requests = [];
+
+  if (trapData.effect.mode === TRAP_EFFECT_ATTACK_MODE) {
+    const targetToken = triggeringToken?.object
+      ?? canvas.tokens?.get?.(triggeringToken?.id)
+      ?? triggeringToken;
+    if (targetToken?.actor) {
+      requests.push(...buildWeaponExplosionDamageRequests({
+        targetToken,
+        center: getTokenCenter(targetToken),
+        radiusPixels: 0,
+        baseDamage: damageBase,
+        pelletCount: pellets,
+        damageTypes,
+        penetrationPower,
+        source: {
+          kind: "trapAttack",
+          trapTileId: tile.id,
+          trapName: tile.name,
+          ownerActorUuid: trap.ownerActorUuid,
+          sourceItemUuid: trap.sourceItemUuid,
+          targetTokenId: targetToken.document?.id ?? targetToken.id ?? ""
+        }
+      }));
+    }
+    await playWeaponExplosionAnimation({
+      weaponData: {
+        volley: {
+          explosionAnimationKey: trapData.triggerAnimationKey,
+          explosionSoundPath: trapData.triggerSoundPath
+        }
+      },
+      center,
+      radiusPixels: 0
+    });
+    if (requests.length) await requestDamageApplications(requests);
+    await finishTrapAfterActivation(tile, trapData);
+    return;
+  }
+
+  const triggerRect = getTrapTileRectangle(tile);
+  const radiusPixels = metersToPixels(trapData.effect.damageRadiusMeters, scene, trap.ownerActorUuid);
+  const targets = getTrapDamageTargets(scene, triggerRect, radiusPixels, triggeringToken);
 
   for (const token of targets) {
     const actor = token.actor;
@@ -2296,6 +2337,7 @@ function normalizeTrapData(source = {}) {
       attempts: normalizeTrapDisarmNumber(data.disarm?.attempts, 1)
     },
     effect: {
+      mode: normalizeTrapEffectMode(data.effect?.mode),
       damageRadiusMeters: String(data.effect?.damageRadiusMeters ?? "0").trim() || "0",
       penetration: String(data.effect?.penetration ?? "0").trim() || "0",
       damage: String(data.effect?.damage ?? "0").trim() || "0",
@@ -2332,6 +2374,11 @@ function normalizeTrapRechargeValue(value) {
 function normalizeTrapRechargeUnit(value) {
   const unit = String(value ?? "seconds").trim();
   return Object.hasOwn(TRAP_RECHARGE_UNITS, unit) ? unit : "seconds";
+}
+
+function normalizeTrapEffectMode(value) {
+  const mode = String(value ?? TRAP_EFFECT_EXPLOSION_MODE).trim();
+  return mode === TRAP_EFFECT_ATTACK_MODE ? TRAP_EFFECT_ATTACK_MODE : TRAP_EFFECT_EXPLOSION_MODE;
 }
 
 function getTrapRechargeSeconds(trapData = {}) {
