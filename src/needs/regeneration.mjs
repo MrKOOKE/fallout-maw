@@ -1,5 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
-import { requestDamageApplication } from "../combat/damage-hub.mjs";
+import { deleteHealedTraumas, requestDamageApplication } from "../combat/damage-hub.mjs";
 import { evaluateFormula, getSkillValues } from "../formulas/index.mjs";
 import { createDiseaseImmunityEffect } from "./need-thresholds.mjs";
 import {
@@ -106,10 +106,15 @@ async function applyTreatmentRegeneration(actor, targets, amount) {
 
   if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
 
-  for (const item of completed) {
-    if (item.type === "disease") await createDiseaseImmunityEffect(actor, item);
+  const completedDiseases = completed.filter(item => item.type === "disease");
+  const completedTraumas = completed.filter(item => item.type === "trauma");
+  for (const item of completedDiseases) await createDiseaseImmunityEffect(actor, item);
+  if (completedDiseases.length) {
+    await actor.deleteEmbeddedDocuments("Item", completedDiseases.map(item => item.id));
   }
-  if (completed.length) await actor.deleteEmbeddedDocuments("Item", completed.map(item => item.id));
+  if (completedTraumas.length) {
+    await deleteHealedTraumas(actor, completedTraumas.map(item => item.id));
+  }
 
   return result.remaining;
 }

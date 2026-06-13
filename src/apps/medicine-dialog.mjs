@@ -1,5 +1,5 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
-import { applyDestroyedLimbConsequences, clearLimbLossState, getActorHealingModifierPercent, requestDamageApplication, setLimbMissingState } from "../combat/damage-hub.mjs";
+import { applyDestroyedLimbConsequences, clearLimbLossState, deleteHealedTraumas, getActorHealingModifierPercent, requestDamageApplication, setLimbMissingState } from "../combat/damage-hub.mjs";
 import { createDiseaseImmunityEffect } from "../needs/need-thresholds.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getCreatureOptions, getSkillSettings, getSystemActionSettings, getToolSettings } from "../settings/accessors.mjs";
@@ -1042,8 +1042,12 @@ async function applyTreatmentToActor(actor, { treatmentType = "trauma", treatmen
   const maxProgress = Math.max(1, toInteger(trauma.system?.healingProgressMax));
   const nextProgress = Math.min(maxProgress, Math.max(0, toInteger(finalProgress)));
   if (completed || nextProgress >= maxProgress) {
-    if (trauma.type === "disease") await createDiseaseImmunityEffect(actor, trauma);
-    await trauma.delete();
+    if (trauma.type === "disease") {
+      await createDiseaseImmunityEffect(actor, trauma);
+      await trauma.delete();
+    } else {
+      await deleteHealedTraumas(actor, [trauma.id]);
+    }
   } else {
     await trauma.update({ "system.healingProgress": nextProgress });
   }

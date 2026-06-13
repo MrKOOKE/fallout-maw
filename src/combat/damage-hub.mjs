@@ -889,6 +889,7 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
   } else if (shouldUpdateLimb) {
     const result = calculateTargetedLimbHealing(actor, data.limbKey, effectiveAmount);
     limbStates = result.limbStates;
+    damageAccumulation = result.damageAccumulation;
     actualHealthDelta = result.healthDelta;
     actualLimbDelta = result.limbDelta;
     const state = limbStates.get(data.limbKey);
@@ -896,6 +897,7 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
   } else {
     const result = calculateEvenLimbHealing(actor, effectiveAmount);
     limbStates = result.limbStates;
+    damageAccumulation = result.damageAccumulation;
     actualHealthDelta = result.healthDelta;
     actualLimbDelta = result.limbDelta;
   }
@@ -907,7 +909,7 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
   }
   for (const [limbKey, accumulation] of damageAccumulation) {
     if (isConstructPartLimb(actor, limbKey)) continue;
-    updateData[`system.limbs.${limbKey}.damageAccumulation`] = normalizeDamageAccumulation(accumulation);
+    updateData[`system.limbs.${limbKey}.damageAccumulation`] = replaceDamageAccumulation(accumulation);
   }
   if (Object.keys(updateData).length) await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
   if (actor?.type === "construct" && limbStates.size) await syncConstructPartConditionValues(actor, limbStates);
@@ -1040,7 +1042,7 @@ async function destroyFinishingBlowCriticalLimb(actor, limbKey = "") {
     if (!limb) return false;
     const updateData = {
       [`system.limbs.${key}.missing`]: true,
-      [`system.limbs.${key}.damageAccumulation`]: {}
+      [`system.limbs.${key}.damageAccumulation`]: replaceDamageAccumulation()
     };
     setLimbValueUpdate(updateData, actor, key, toInteger(limb.min));
     await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
@@ -1199,7 +1201,7 @@ export async function restoreDestroyedLimb(actor, limbKey = "") {
       [`system.limbs.${limbKey}.missing`]: false,
       [`system.limbs.${limbKey}.value`]: max,
       [`system.limbs.${limbKey}.spent`]: 0,
-      [`system.limbs.${limbKey}.damageAccumulation`]: {}
+      [`system.limbs.${limbKey}.damageAccumulation`]: replaceDamageAccumulation()
     }, { falloutMawSkipDamageStatusSync: true });
     await queueActorDamageStatusSync(freshActor);
     return freshActor;
@@ -1215,13 +1217,53 @@ export async function clearLimbLossState(actor, limbKey = "") {
   });
 }
 
+export async function deleteHealedTraumas(actor, traumaIds = []) {
+  const actorUuid = actor?.uuid;
+  const ids = Array.from(new Set(
+    (Array.isArray(traumaIds) ? traumaIds : [traumaIds])
+      .map(id => String(id ?? "").trim())
+      .filter(Boolean)
+  ));
+  if (!actorUuid || !ids.length) return actor;
+
+  return queueActorDamageMutation(actorUuid, async freshActor => {
+    if (!freshActor) return undefined;
+    const traumas = ids
+      .map(id => freshActor.items?.get?.(id))
+      .filter(item => item?.type === "trauma");
+    if (!traumas.length) return freshActor;
+
+    const limbKeys = new Set();
+    for (const trauma of traumas) {
+      const primaryLimbKey = String(trauma.system?.limbKey ?? "").trim();
+      if (primaryLimbKey) limbKeys.add(primaryLimbKey);
+      for (const source of trauma.system?.sources ?? []) {
+        const limbKey = String(source?.limbKey ?? "").trim();
+        if (limbKey) limbKeys.add(limbKey);
+      }
+    }
+
+    const updates = {};
+    for (const limbKey of limbKeys) {
+      if (!freshActor.system?.limbs?.[limbKey]) continue;
+      updates[`system.limbs.${limbKey}.damageAccumulation`] = replaceDamageAccumulation();
+    }
+    if (Object.keys(updates).length) {
+      await freshActor.update(updates, { falloutMawSkipDamageStatusSync: true });
+    }
+    await freshActor.deleteEmbeddedDocuments("Item", traumas.map(item => item.id), { animate: false });
+    await queueActorDamageStatusSync(freshActor);
+    return freshActor;
+  });
+}
+
 export async function setLimbMissingState(actor, limbKey = "", { syncStatus = false } = {}) {
   if (!actor || !limbKey) return undefined;
   const limb = actor.system?.limbs?.[limbKey];
   if (!limb) return undefined;
   await actor.update({
     [`system.limbs.${limbKey}.missing`]: true,
-    [`system.limbs.${limbKey}.damageAccumulation`]: {}
+    [`system.limbs.${limbKey}.damageAccumulation`]: replaceDamageAccumulation()
   }, { falloutMawSkipDamageStatusSync: !syncStatus });
   if (syncStatus) await queueActorDamageStatusSync(actor);
   return actor;
@@ -1697,7 +1739,7 @@ function buildFullDamageRestoreUpdate(actor) {
     updates[`system.limbs.${key}.missing`] = false;
     updates[`system.limbs.${key}.value`] = max;
     updates[`system.limbs.${key}.spent`] = 0;
-    updates[`system.limbs.${key}.damageAccumulation`] = {};
+    updates[`system.limbs.${key}.damageAccumulation`] = replaceDamageAccumulation();
   }
   for (const [key, resource] of Object.entries(actor?.system?.resources ?? {})) {
     if (key === "health") continue;
@@ -3458,7 +3500,7 @@ async function distributeManualHealthValueUpdate(actor, changes = {}, options = 
     setLimbValueUpdate(changes, actor, limbKey, value);
   }
   for (const [limbKey, accumulation] of result.damageAccumulation ?? new Map()) {
-    changes[`system.limbs.${limbKey}.damageAccumulation`] = normalizeDamageAccumulation(accumulation);
+    changes[`system.limbs.${limbKey}.damageAccumulation`] = replaceDamageAccumulation(accumulation);
   }
   if (result.prosthesisHealthAdjustments?.length) {
     await applyManualProsthesisHealthAdjustments(actor, result.prosthesisHealthAdjustments);
@@ -3525,7 +3567,7 @@ async function applyDamageEntriesBatch(actor, entries = []) {
   }
   for (const [limbKey, accumulation] of damageAccumulation) {
     if (isConstructPartLimb(actor, limbKey)) continue;
-    updateData[`system.limbs.${limbKey}.damageAccumulation`] = normalizeDamageAccumulation(accumulation);
+    updateData[`system.limbs.${limbKey}.damageAccumulation`] = replaceDamageAccumulation(accumulation);
   }
 
   if (Object.keys(updateData).length) await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
@@ -4961,6 +5003,10 @@ function normalizeDamageRequest(request = {}) {
   };
 }
 
+function replaceDamageAccumulation(value = {}) {
+  return foundry.data.operators.ForcedReplacement.create(normalizeDamageAccumulation(value));
+}
+
 function getDamageRequestConditionItem(actor, data = {}) {
   const itemId = String(data.itemId ?? data.targetItemId ?? data.source?.targetItemId ?? "").trim();
   if (!itemId) return null;
@@ -5939,7 +5985,7 @@ function buildAccumulationUpdate(actor, limbKey, damageTypeKey, amount, mode) {
       .filter(([_key, value]) => value > 0.0001)
   );
 
-  update[`system.limbs.${limbKey}.damageAccumulation`] = normalized;
+  update[`system.limbs.${limbKey}.damageAccumulation`] = replaceDamageAccumulation(normalized);
   return update;
 }
 
