@@ -1893,6 +1893,36 @@
     </div>
 
     <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.TrapDisarm"}}</h3>
+    </div>
+    <div class="fallout-maw-list-grid four-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapDisarmTool"}}</span>
+        <select name="system.functions.trap.disarm.toolKey">
+          {{#each trapDisarmToolChoices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapDisarmClass"}}</span>
+        <select name="system.functions.trap.disarm.toolClass">
+          {{#each trapDisarmClassChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapDisarmDifficulty"}}</span>
+        <input type="number" name="system.functions.trap.disarm.difficulty" value="{{system.functions.trap.disarm.difficulty}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.TrapDisarmAttempts"}}</span>
+        <input type="number" name="system.functions.trap.disarm.attempts" value="{{system.functions.trap.disarm.attempts}}" min="0" step="1">
+      </label>
+    </div>
+
+    <div class="fallout-maw-panel-header">
       <h3>{{localize "FALLOUTMAW.Item.TrapEffect"}}</h3>
     </div>
     <div class="fallout-maw-list-grid three-columns">
@@ -1990,7 +2020,10 @@
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.TrapTriggerSound"}}</span>
-        <input type="text" name="system.functions.trap.triggerSoundPath" value="{{system.functions.trap.triggerSoundPath}}">
+        <div class="fallout-maw-image-picker-field">
+          <input type="text" name="system.functions.trap.triggerSoundPath" value="{{system.functions.trap.triggerSoundPath}}" data-trap-trigger-sound-input>
+          <button type="button" data-browse-trap-trigger-sound title="{{localize 'FILES.Browse'}}"><i class="fa-solid fa-music"></i></button>
+        </div>
       </label>
     </div>
   </section>

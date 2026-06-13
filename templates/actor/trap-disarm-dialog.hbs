@@ -1,0 +1,56 @@
+<div class="fallout-maw-sheet fallout-maw-trap-disarm-terminal">
+  <div class="fallout-maw-trap-disarm-body">
+    <section class="fallout-maw-trap-disarm-column">
+      <div class="fallout-maw-trap-disarm-line">Объект: <strong>{{targetName}}</strong></div>
+      <div class="fallout-maw-trap-disarm-line {{statusClass}}">Статус: {{statusLabel}}</div>
+      <div class="fallout-maw-trap-disarm-line">Сложность: <strong>{{difficulty}}</strong></div>
+      <div class="fallout-maw-trap-disarm-line">Класс ловушки: <strong>{{requiredClass}}</strong></div>
+      <div class="fallout-maw-trap-disarm-line">Метод обезвреживания: <strong>{{toolLabel}}</strong></div>
+      <div class="fallout-maw-trap-disarm-line">Попытки: <strong>{{attemptsRemaining}}</strong> / {{attemptsTotal}}</div>
+    </section>
+
+    <section class="fallout-maw-trap-disarm-column">
+      <div class="fallout-maw-trap-disarm-tools">
+        <table>
+          <thead>
+            <tr>
+              <th>Название</th>
+              <th>Кл.</th>
+              <th>Заряд</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#if hasTools}}
+              {{#each tools}}
+                <tr class="fallout-maw-trap-disarm-tool-row {{#if selected}}selected{{/if}}" data-action="selectTool" data-trap-disarm-tool="{{itemId}}">
+                  <td>{{name}}</td>
+                  <td>{{toolClass}}</td>
+                  <td>{{supplyValue}}/{{supplyMax}}</td>
+                </tr>
+              {{/each}}
+            {{else}}
+              <tr class="fallout-maw-trap-disarm-tool-row disabled">
+                <td colspan="3">Нет подходящих инструментов</td>
+              </tr>
+            {{/if}}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <footer class="fallout-maw-trap-disarm-footer">
+    {{#if disarmed}}
+      <button type="button" data-action="pickupTrap" {{#unless canPickup}}disabled{{/unless}}>
+        <i class="fa-solid fa-hand"></i> Забрать
+      </button>
+    {{else}}
+      <button type="button" data-action="disarmTrap" {{#if disarmDisabled}}disabled{{/if}}>
+        <i class="fa-solid fa-screwdriver-wrench"></i> Обезвредить
+      </button>
+    {{/if}}
+    <button type="button" data-action="closeDialog">
+      <i class="fa-solid fa-xmark"></i> Отмена
+    </button>
+  </footer>
+</div>

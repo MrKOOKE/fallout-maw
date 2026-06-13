@@ -46,7 +46,7 @@ import {
   spendWeaponReloadActionPoints,
   startWeaponAttack
 } from "../combat/weapon-attack-controller.mjs";
-import { startTrapPlacement } from "../canvas/traps.mjs";
+import { startTrapInteractionMode, startTrapPlacement } from "../canvas/traps.mjs";
 import { useActiveItem } from "../items/active-item-use.mjs";
 import {
   canActivateLightSource,
@@ -989,7 +989,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   static #onUseSystemAction(event, target) {
     event.preventDefault();
     const key = String(target.dataset.systemActionKey ?? "");
-    if (!["advancement", "medicine", "repair", "search", "trade", "craft", "stealth"].includes(key)) return undefined;
+    if (!["advancement", "medicine", "repair", "search", "trade", "craft", "stealth", "traps"].includes(key)) return undefined;
 
     if (key === "advancement") {
       if (!this.actor?.isOwner) return undefined;
@@ -1000,6 +1000,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     void this.render({ force: true });
     if (key === "craft") return openCraftWindow({ actor: this.actor });
     if (key === "stealth") return openStealthWindow(this.token);
+    if (key === "traps") return startTrapInteractionMode({ actor: this.actor, token: this.token });
     if (key === "trade") return this.#requestTradeInventory();
     if (key === "search") return this.#openSearchInventory();
     if (key === "repair") return requestRepairTarget(this.token);

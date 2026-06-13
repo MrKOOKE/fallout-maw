@@ -5869,6 +5869,261 @@ label.fallout-maw-mitigation-cell {
   margin: 0;
 }
 
+.application.fallout-maw-trap-disarm-dialog {
+  --fallout-maw-terminal-bg: #10130d;
+  --fallout-maw-terminal-bg-2: #1b1d16;
+  --fallout-maw-terminal-border: rgba(199, 178, 95, 0.72);
+  --fallout-maw-terminal-line: rgba(216, 192, 94, 0.42);
+  --fallout-maw-terminal-text: #fff1b6;
+  --fallout-maw-terminal-muted: #d5c98b;
+  --fallout-maw-terminal-accent: #f0cf55;
+  --fallout-maw-terminal-green: #79c65d;
+  --fallout-maw-terminal-red: #e65345;
+  --fallout-maw-terminal-orange: #e08e3d;
+  background:
+    repeating-linear-gradient(180deg, rgba(235, 218, 132, 0.035) 0 1px, transparent 1px 4px),
+    radial-gradient(circle at 18% 12%, rgba(224, 190, 69, 0.1), transparent 45%),
+    linear-gradient(180deg, var(--fallout-maw-terminal-bg-2), var(--fallout-maw-terminal-bg));
+  border: 2px solid var(--fallout-maw-terminal-border);
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 1px rgba(224, 190, 69, 0.22),
+    0 0 14px rgba(224, 190, 69, 0.18),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.72),
+    inset 0 0 18px rgba(0, 0, 0, 0.45),
+    0 12px 28px rgba(0, 0, 0, 0.68);
+  color: var(--fallout-maw-terminal-text);
+  font-size: 1.16rem;
+  font-family: var(--fallout-maw-actor-ui-font, var(--font-primary, serif));
+}
+
+.application.fallout-maw-trap-disarm-dialog .window-header {
+  background: rgba(16, 19, 13, 0.96);
+  border-bottom: 1px solid var(--fallout-maw-terminal-line);
+  color: var(--fallout-maw-terminal-accent);
+  font-family: inherit;
+}
+
+.application.fallout-maw-trap-disarm-dialog .window-title {
+  color: var(--fallout-maw-terminal-accent);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.application.fallout-maw-trap-disarm-dialog .window-header .header-button {
+  color: var(--fallout-maw-terminal-muted);
+}
+
+.application.fallout-maw-trap-disarm-dialog .window-content {
+  background: transparent;
+  color: var(--fallout-maw-terminal-text);
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.fallout-maw-trap-disarm-terminal {
+  display: flex;
+  flex-direction: column;
+  min-height: 360px;
+}
+
+.fallout-maw-trap-disarm-header {
+  align-items: stretch;
+  border-bottom: 1px solid var(--fallout-maw-terminal-line);
+  cursor: move;
+  display: flex;
+  justify-content: space-between;
+  min-height: 42px;
+  user-select: none;
+}
+
+.fallout-maw-trap-disarm-tabs {
+  align-items: flex-end;
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.35rem 0.45rem 0;
+}
+
+.fallout-maw-trap-disarm-tabs button,
+.fallout-maw-trap-disarm-window-actions button,
+.fallout-maw-trap-disarm-footer button {
+  background: rgba(16, 19, 13, 0.92);
+  border: 1px solid var(--fallout-maw-terminal-line);
+  border-radius: 3px;
+  color: var(--fallout-maw-terminal-muted);
+  font: inherit;
+}
+
+.fallout-maw-trap-disarm-tabs button {
+  border-bottom: 0;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 0.45rem 0.85rem;
+}
+
+.fallout-maw-trap-disarm-tabs button.active {
+  background: rgba(240, 207, 85, 0.12);
+  color: var(--fallout-maw-terminal-accent);
+  text-shadow: 0 0 8px rgba(240, 207, 85, 0.22);
+}
+
+.fallout-maw-trap-disarm-window-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.fallout-maw-trap-disarm-window-actions button {
+  align-items: center;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  width: 28px;
+}
+
+.fallout-maw-trap-disarm-body {
+  display: grid;
+  flex: 1;
+  gap: 1rem;
+  grid-template-columns: 1fr 1fr;
+  overflow: auto;
+  padding: 0.65rem;
+}
+
+.fallout-maw-trap-disarm-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.14rem;
+  min-width: 0;
+  padding: 0;
+}
+
+.fallout-maw-trap-disarm-line {
+  color: var(--fallout-maw-terminal-muted);
+  display: block;
+  line-height: 1.25;
+  padding: 0.1rem 0;
+}
+
+.fallout-maw-trap-disarm-line strong {
+  color: var(--fallout-maw-terminal-text);
+}
+
+.fallout-maw-trap-disarm-line.status-warn {
+  color: var(--fallout-maw-terminal-orange);
+  font-weight: 800;
+}
+
+.fallout-maw-trap-disarm-line.status-ok {
+  color: var(--fallout-maw-terminal-green);
+  font-weight: 800;
+}
+
+.fallout-maw-trap-disarm-line.status-bad {
+  color: var(--fallout-maw-terminal-red);
+  font-weight: 800;
+}
+
+.fallout-maw-trap-disarm-tools {
+  border: 0;
+  margin-top: 0.2rem;
+  min-height: 180px;
+  overflow: auto;
+}
+
+.fallout-maw-trap-disarm-tools table {
+  border-collapse: collapse;
+  color: var(--fallout-maw-terminal-text);
+  width: 100%;
+}
+
+.fallout-maw-trap-disarm-tools th,
+.fallout-maw-trap-disarm-tools td {
+  border: 1px solid rgba(216, 192, 94, 0.34);
+  padding: 0.34rem 0.42rem;
+  text-align: left;
+}
+
+.fallout-maw-trap-disarm-tools th {
+  background: rgba(16, 19, 13, 0.92);
+  color: var(--fallout-maw-terminal-text);
+  font-weight: 800;
+}
+
+.fallout-maw-trap-disarm-tools th:nth-child(2),
+.fallout-maw-trap-disarm-tools th:nth-child(3),
+.fallout-maw-trap-disarm-tools td:nth-child(2),
+.fallout-maw-trap-disarm-tools td:nth-child(3) {
+  text-align: center;
+}
+
+.fallout-maw-trap-disarm-tool-row {
+  cursor: pointer;
+}
+
+.fallout-maw-trap-disarm-tool-row:hover {
+  background: rgba(240, 207, 85, 0.1);
+}
+
+.fallout-maw-trap-disarm-tool-row.selected {
+  background: rgba(240, 207, 85, 0.14);
+  box-shadow: inset 0 0 0 2px var(--fallout-maw-terminal-accent);
+  color: var(--fallout-maw-terminal-accent);
+}
+
+.fallout-maw-trap-disarm-tool-row.disabled {
+  color: rgba(213, 201, 139, 0.48);
+  cursor: default;
+}
+
+.fallout-maw-trap-disarm-tool-row.disabled:hover {
+  background: transparent;
+}
+
+.fallout-maw-trap-disarm-footer {
+  align-items: center;
+  border-top: 1px solid var(--fallout-maw-terminal-line);
+  display: flex;
+  justify-content: space-between;
+  padding: 0.65rem;
+}
+
+.fallout-maw-trap-disarm-footer button {
+  align-items: center;
+  display: inline-flex;
+  font-weight: 800;
+  gap: 0.45rem;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0.35rem 0.65rem;
+}
+
+.fallout-maw-trap-disarm-footer button:not(:disabled):hover,
+.fallout-maw-trap-disarm-window-actions button:hover {
+  border-color: var(--fallout-maw-terminal-accent);
+  color: var(--fallout-maw-terminal-accent);
+  text-shadow: 0 0 8px rgba(240, 207, 85, 0.22);
+}
+
+.fallout-maw-trap-disarm-footer button:disabled {
+  color: rgba(213, 201, 139, 0.38);
+  cursor: default;
+  opacity: 0.7;
+}
+
+@media (max-width: 760px) {
+  .application.fallout-maw-trap-disarm-dialog {
+    width: 94vw;
+  }
+
+  .fallout-maw-trap-disarm-body {
+    grid-template-columns: 1fr;
+  }
+}
+
 .fallout-maw-chat-card.fallout-maw-skill-check-card {
   --fallout-maw-terminal-bg: #10130d;
   --fallout-maw-terminal-bg-2: #1b1d16;

@@ -299,6 +299,12 @@ function trapFunctionField() {
       skillKey: new StringField({ required: true, blank: false, initial: "athletics" }),
       avoidPercent: new NumberField({ required: true, integer: true, min: 1, max: 100, initial: 50 })
     }),
+    disarm: new SchemaField({
+      toolKey: new StringField({ required: true, blank: true, initial: "mechanicalHacking" }),
+      toolClass: new StringField({ required: true, blank: false, choices: ["D", "C", "B", "A", "S"], initial: "D" }),
+      difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
+      attempts: new NumberField({ required: true, integer: true, min: 0, initial: 1 })
+    }),
     effect: new SchemaField({
       damageRadiusMeters: new StringField({ required: true, blank: true, initial: "0" }),
       penetration: new StringField({ required: true, blank: true, initial: "0" }),

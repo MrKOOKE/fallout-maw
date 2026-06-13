@@ -1,4 +1,4 @@
-﻿import { SYSTEM_ID } from "../constants.mjs";
+﻿import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "../combat/reaction-resources.mjs";
 import { requestDamageApplications } from "../combat/damage-hub.mjs";
@@ -6,7 +6,8 @@ import { playWeaponExplosionAnimation } from "../combat/attack-animations.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { getItemQuantity } from "../utils/inventory-containers.mjs";
-import { ITEM_FUNCTIONS, getTrapFunction, hasItemFunction } from "../utils/item-functions.mjs";
+import { getToolSettings } from "../settings/accessors.mjs";
+import { ITEM_FUNCTIONS, getEnabledToolFunctions, getTrapFunction, hasItemFunction } from "../utils/item-functions.mjs";
 import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
@@ -29,11 +30,15 @@ const PREVIEW_FILL_COLOR = 0xf0a23a;
 const TRAP_CONTROLLED_MOVEMENT_OPTION = "falloutMawTrapControlledMovement";
 const TRAP_SAFE_HIGHLIGHT_LAYER = "fallout-maw-safe-traps";
 const TRAP_SAFE_HIGHLIGHT_COLOR = 0x43c96b;
+const TRAP_INTERACTION_HIGHLIGHT_LAYER = "fallout-maw-interaction-traps";
+const TRAP_INTERACTION_HIGHLIGHT_COLOR = 0xf0c84b;
+const TOOL_CLASS_RANKS = Object.freeze({ D: 0, C: 1, B: 2, A: 3, S: 4 });
+const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 let activeTrapPlacement = null;
+let activeTrapInteraction = null;
 let trapTilePatchRegistered = false;
-let trapCanvasInteractionRegistered = false;
-let trapCanvasInteractionView = null;
+let trapGmFreeDoubleClickListenerRegistered = false;
 let trapVisibilityRefreshQueued = false;
 const pendingTrapActivationKeys = new Set();
 const pendingTrapMovementKeys = new Set();
@@ -41,22 +46,32 @@ const pendingTrapMovementKeys = new Set();
 export function registerTrapHooks() {
   game.socket.on(TRAP_SOCKET, handleTrapSocketMessage);
   patchTrapTileVisibility();
-  registerTrapCanvasInteractions();
+  registerTrapGmFreeDoubleClickListener();
   Hooks.on("canvasReady", () => {
     patchTrapTileVisibility();
-    registerTrapCanvasInteractions();
+    registerTrapGmFreeDoubleClickListener();
     refreshTrapTileVisibility();
+    refreshTrapInteractionHighlights();
   });
-  Hooks.on("controlToken", refreshTrapTileVisibility);
+  Hooks.on("controlToken", () => {
+    refreshTrapTileVisibility();
+    refreshTrapInteractionHighlights();
+  });
   Hooks.on("updateActor", (actor, changes = {}) => {
     const flat = foundry.utils.flattenObject(changes ?? {});
     if (`flags.${SYSTEM_ID}.factionBelongs` in flat || `flags.${SYSTEM_ID}.factionRelations` in flat) refreshTrapTileVisibility();
   });
   Hooks.on("createTile", tile => {
-    if (isTrapTileDocument(tile)) refreshTrapTileVisibility();
+    if (isTrapTileDocument(tile)) {
+      refreshTrapTileVisibility();
+      refreshTrapInteractionHighlights();
+    }
   });
   Hooks.on("updateTile", tile => {
-    if (isTrapTileDocument(tile)) refreshTrapTileVisibility();
+    if (isTrapTileDocument(tile)) {
+      refreshTrapTileVisibility();
+      refreshTrapInteractionHighlights();
+    }
   });
   Hooks.on("deleteTile", tile => {
     if (isTrapTileDocument(tile)) queueTrapTileVisibilityRefresh();
@@ -65,7 +80,10 @@ export function registerTrapHooks() {
   Hooks.on("createToken", token => {
     void processTrapContactForToken(token);
   });
-  Hooks.on("canvasTearDown", cancelActiveTrapPlacement);
+  Hooks.on("canvasTearDown", () => {
+    cancelActiveTrapPlacement();
+    cancelTrapInteractionMode();
+  });
 }
 
 export async function startTrapPlacement({ actor = null, token = null, item = null, application = null } = {}) {
@@ -104,6 +122,33 @@ export async function startTrapPlacement({ actor = null, token = null, item = nu
   view?.addEventListener("contextmenu", onTrapPlacementContextMenu, { capture: true });
   window.addEventListener("keydown", onTrapPlacementKeyDown, { capture: true });
   ui.notifications.info(`${item.name}: выберите точку установки ловушки. Esc/ПКМ отменяет.`);
+  return true;
+}
+
+export function startTrapInteractionMode({ actor = null, token = null } = {}) {
+  const sourceActor = actor ?? token?.actor ?? token?.document?.actor ?? getTrapViewerActor();
+  if (!sourceActor?.isOwner) {
+    ui.notifications.warn("Для работы с ловушками нужен выбранный актёр.");
+    return false;
+  }
+  if (!canvas?.ready || !canvas.scene) {
+    ui.notifications.warn("Сцена не готова для работы с ловушками.");
+    return false;
+  }
+
+  cancelActiveTrapPlacement();
+  cancelTrapInteractionMode();
+  activeTrapInteraction = {
+    actorUuid: sourceActor.uuid,
+    tokenId: token?.id ?? token?.document?.id ?? "",
+    sceneId: canvas.scene.id
+  };
+  const view = canvas.app?.view;
+  view?.addEventListener("pointerdown", onTrapInteractionPointerDown, { capture: true });
+  view?.addEventListener("contextmenu", onTrapInteractionContextMenu, { capture: true });
+  window.addEventListener("keydown", onTrapInteractionKeyDown, { capture: true });
+  refreshTrapInteractionHighlights();
+  ui.notifications.info("Режим ловушек: выберите подсвеченную ловушку. Esc/ПКМ отменяет.");
   return true;
 }
 
@@ -180,6 +225,7 @@ async function handleTrapDetectionForToken(tile, token) {
   const actor = token?.actor ?? token?.document?.actor;
   const trap = getTrapFlag(tile);
   if (!tile || !actor || !trap) return false;
+  if (trap.armed === false || trap.disarmed === true) return false;
   if (actor.uuid === trap.ownerActorUuid) return false;
   if (isActorSafeForTrap(trap, actor)) {
     await revealTrapToActor(tile, actor);
@@ -463,50 +509,258 @@ function fitSpriteIntoRect(sprite, width, height, imageScale = 0.5) {
   sprite.position.set(width / 2, height / 2);
 }
 
-function registerTrapCanvasInteractions() {
-  const view = canvas?.app?.view;
-  if (!view || trapCanvasInteractionView === view) return;
-  if (trapCanvasInteractionView && trapCanvasInteractionRegistered) {
-    trapCanvasInteractionView.removeEventListener("dblclick", onTrapTileDoubleClick, { capture: true });
-  }
-  view.addEventListener("dblclick", onTrapTileDoubleClick, { capture: true });
-  trapCanvasInteractionView = view;
-  trapCanvasInteractionRegistered = true;
+function getTrapTileAtCanvasEvent(event) {
+  if (!Number.isFinite(Number(event?.clientX)) || !Number.isFinite(Number(event?.clientY))) return null;
+  const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
+  const interactionActor = activeTrapInteraction ? getActiveTrapInteractionActor() : (shouldOpenGmTrapFreeDialog() ? null : getTrapViewerActor());
+  return (canvas.scene?.tiles?.contents ?? [])
+    .filter(tile => (
+      isTrapTileDocument(tile)
+      && (interactionActor ? isTrapVisibleToActor(tile, interactionActor) : isTrapVisibleForCurrentViewer(tile))
+      && isPointInsideTile(tile, point)
+    ))
+    .sort((left, right) => (Number(right.sort) || 0) - (Number(left.sort) || 0))
+    .at(0) ?? null;
 }
 
-function onTrapTileDoubleClick(event) {
+function registerTrapGmFreeDoubleClickListener() {
+  const view = canvas?.app?.view;
+  if (trapGmFreeDoubleClickListenerRegistered || !view) return;
+  view.addEventListener("dblclick", onTrapGmFreeCanvasDoubleClick, { capture: true });
+  trapGmFreeDoubleClickListenerRegistered = true;
+}
+
+function onTrapGmFreeCanvasDoubleClick(event) {
+  if (!shouldOpenGmTrapFreeDialog()) return;
   const tile = getTrapTileAtCanvasEvent(event);
   if (!tile) return;
   event.preventDefault?.();
   event.stopPropagation?.();
   event.stopImmediatePropagation?.();
-  void pickupTrapTile(tile);
+  void openTrapGmFreeDialog(tile);
 }
 
-function getTrapTileAtCanvasEvent(event) {
-  if (!Number.isFinite(Number(event?.clientX)) || !Number.isFinite(Number(event?.clientY))) return null;
-  const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
-  return (canvas.scene?.tiles?.contents ?? [])
-    .filter(tile => isTrapTileDocument(tile) && isTrapVisibleForCurrentViewer(tile) && isPointInsideTile(tile, point))
-    .sort((left, right) => (Number(right.sort) || 0) - (Number(left.sort) || 0))
-    .at(0) ?? null;
-}
+async function onTrapInteractionPointerDown(event) {
+  if (!activeTrapInteraction || event.button !== 0) return;
+  const tile = getTrapTileAtCanvasEvent(event);
+  if (!tile) return;
+  event.preventDefault?.();
+  event.stopPropagation?.();
+  event.stopImmediatePropagation?.();
 
-async function pickupTrapTile(tile) {
-  const trap = getTrapFlag(tile);
-  const actor = getTrapViewerActor();
-  if (!trap || !actor || !actor.isOwner || !canActorPickupTrap(trap, actor)) {
-    ui.notifications.warn("Забрать ловушку может только владелец, член его фракции или союзник.");
+  const actor = getActiveTrapInteractionActor();
+  cancelTrapInteractionMode();
+  if (!actor?.isOwner) {
+    ui.notifications.warn("Для работы с ловушкой нужен выбранный актёр.");
     return;
   }
-  const confirmed = await foundry.applications.api.DialogV2.confirm({
-    window: { title: "Забрать ловушку" },
-    content: `<p>Забрать <strong>${escapeHTML(tile.name)}</strong>?</p>`,
+  await openTrapInteractionDialog(tile, actor);
+}
+
+function onTrapInteractionContextMenu(event) {
+  if (!activeTrapInteraction) return;
+  event.preventDefault?.();
+  event.stopPropagation?.();
+  event.stopImmediatePropagation?.();
+  cancelTrapInteractionMode({ notify: true });
+}
+
+function onTrapInteractionKeyDown(event) {
+  if (!activeTrapInteraction || event.key !== "Escape") return;
+  event.preventDefault?.();
+  event.stopPropagation?.();
+  event.stopImmediatePropagation?.();
+  cancelTrapInteractionMode({ notify: true });
+}
+
+function cancelTrapInteractionMode({ notify = false } = {}) {
+  if (!activeTrapInteraction) {
+    refreshTrapInteractionHighlights();
+    return;
+  }
+  const view = canvas?.app?.view;
+  view?.removeEventListener("pointerdown", onTrapInteractionPointerDown, { capture: true });
+  view?.removeEventListener("contextmenu", onTrapInteractionContextMenu, { capture: true });
+  window.removeEventListener("keydown", onTrapInteractionKeyDown, { capture: true });
+  activeTrapInteraction = null;
+  refreshTrapInteractionHighlights();
+  if (notify) ui.notifications.info("Режим ловушек отменён.");
+}
+
+function getActiveTrapInteractionActor() {
+  const uuid = String(activeTrapInteraction?.actorUuid ?? "");
+  if (uuid) return fromUuidSyncSafe(uuid);
+  return getTrapViewerActor();
+}
+
+async function openTrapInteractionDialog(tile, actor) {
+  const trap = getTrapFlag(tile);
+  if (!trap || !actor) return;
+  const canPickup = canActorPickupTrap(trap, actor);
+  const action = await DialogV2.wait({
+    window: { title: tile.name || "Ловушка" },
+    content: `<p><strong>${escapeHTML(tile.name || "Ловушка")}</strong></p>`,
+    buttons: canPickup
+      ? [
+          { action: "pickup", label: "Забрать", icon: "fa-solid fa-hand", default: true },
+          { action: "cancel", label: "Отмена", icon: "fa-solid fa-xmark", type: "button" }
+        ]
+      : [
+          { action: "disarm", label: "Обезвредить", icon: "fa-solid fa-screwdriver-wrench", default: true },
+          { action: "cancel", label: "Отмена", icon: "fa-solid fa-xmark", type: "button" }
+        ],
     rejectClose: false,
-    modal: true
+    modal: true,
+    position: { width: 360 }
   });
-  if (!confirmed) return;
-  await requestPickupTrapDocuments(tile, actor);
+  if (action === "pickup") return requestPickupTrapDocuments(tile, actor);
+  if (action === "disarm") return openTrapDisarmDialog(tile, actor);
+  return undefined;
+}
+
+async function openTrapDisarmDialog(tile, actor) {
+  return new TrapDisarmDialog({ tile, actor }).render({ force: true });
+}
+
+class TrapDisarmDialog extends HandlebarsApplicationMixin(ApplicationV2) {
+  #tile = null;
+  #actor = null;
+  #selectedToolId = "";
+  #localAttemptsRemaining = null;
+  #localDisarmed = false;
+  #disarmInFlight = false;
+
+  constructor({ tile, actor } = {}) {
+    super();
+    this.#tile = tile;
+    this.#actor = actor;
+  }
+
+  static DEFAULT_OPTIONS = {
+    id: "fallout-maw-trap-disarm-dialog",
+    classes: ["fallout-maw", "fallout-maw-trap-disarm-dialog"],
+    position: {
+      width: 900,
+      height: "auto"
+    },
+    window: {
+      resizable: true
+    },
+    actions: {
+      selectTool: this.#onSelectTool,
+      disarmTrap: this.#onDisarmTrap,
+      pickupTrap: this.#onPickupTrap,
+      closeDialog: this.#onCloseDialog
+    }
+  };
+
+  static PARTS = {
+    body: {
+      template: TEMPLATES.trapDisarmDialog
+    }
+  };
+
+  get title() {
+    return `Обезвреживание - ${this.#tile?.name || "Ловушка"}`;
+  }
+
+  async _prepareContext(options) {
+    const context = await super._prepareContext(options);
+    const trap = getTrapFlag(this.#tile);
+    const trapData = normalizeTrapData(trap?.data);
+    const disarm = trapData.disarm;
+    const disarmed = this.#localDisarmed || trap?.disarmed === true || trap?.armed === false;
+    const attemptsRemaining = this.#localAttemptsRemaining ?? getTrapDisarmAttemptsRemaining(trap);
+    const tools = getTrapDisarmToolCandidates(this.#actor, disarm);
+    if (!this.#selectedToolId || !tools.some(tool => tool.itemId === this.#selectedToolId)) {
+      this.#selectedToolId = String(trap?.lastDisarmToolItemId ?? tools[0]?.itemId ?? "");
+    }
+    const toolLabel = getToolSettings().find(tool => tool.key === disarm.toolKey)?.label ?? disarm.toolKey;
+    const selectedTool = tools.find(tool => tool.itemId === this.#selectedToolId) ?? null;
+    const attemptsFinished = attemptsRemaining <= 0;
+    return {
+      ...context,
+      title: "ОБЕЗВРЕЖИВАНИЕ",
+      targetName: this.#tile?.name || "Ловушка",
+      toolLabel,
+      requiredClass: disarm.toolClass,
+      difficulty: disarm.difficulty,
+      attemptsRemaining,
+      attemptsTotal: disarm.attempts,
+      statusLabel: disarmed ? "Ловушка обезврежена" : (attemptsFinished ? "Попытки исчерпаны" : "Ловушка активна"),
+      statusClass: disarmed ? "status-ok" : (attemptsFinished ? "status-bad" : "status-warn"),
+      disarmed,
+      tools: tools.map(tool => ({ ...tool, selected: tool.itemId === this.#selectedToolId })),
+      hasTools: tools.length > 0,
+      selectedToolId: this.#selectedToolId,
+      selectedTool,
+      canPickup: disarmed && this.#actor?.isOwner,
+      disarmDisabled: disarmed || !this.#actor?.isOwner || attemptsFinished || !selectedTool
+    };
+  }
+
+  static #onSelectTool(event, target) {
+    event.preventDefault();
+    this.#selectedToolId = String(target.dataset.trapDisarmTool ?? "");
+    return this.render({ force: true });
+  }
+
+  static async #onDisarmTrap(event) {
+    event.preventDefault();
+    if (this.#disarmInFlight) return undefined;
+    const trap = getTrapFlag(this.#tile);
+    if (!trap || trap.disarmed === true || trap.armed === false || !this.#actor?.isOwner) return undefined;
+    const trapData = normalizeTrapData(trap.data);
+    const disarm = trapData.disarm;
+    const remaining = this.#localAttemptsRemaining ?? getTrapDisarmAttemptsRemaining(trap);
+    if (remaining <= 0) {
+      ui.notifications.warn("Попытки обезвреживания закончились.");
+      return this.render({ force: true });
+    }
+    const tools = getTrapDisarmToolCandidates(this.#actor, disarm);
+    const selectedTool = tools.find(tool => tool.itemId === this.#selectedToolId);
+    if (!selectedTool) {
+      ui.notifications.warn("Нет подходящего инструмента для обезвреживания.");
+      return this.render({ force: true });
+    }
+
+    this.#disarmInFlight = true;
+    try {
+      const outcome = await requestSkillCheck({
+        actor: this.#actor,
+        skillKey: "traps",
+        data: { difficulty: disarm.difficulty },
+        animate: false,
+        createMessage: true,
+        prompt: false,
+        requester: "trapDisarm"
+      });
+      const success = isSkillCheckSuccess(outcome);
+      const nextRemaining = Math.max(0, remaining - (success ? 0 : 1));
+      await requestDisarmTrapDocuments(this.#tile, this.#actor, {
+        success,
+        toolItemId: selectedTool.itemId,
+        attemptsRemaining: nextRemaining
+      });
+      this.#localAttemptsRemaining = success ? null : nextRemaining;
+      if (success) this.#localDisarmed = true;
+    } finally {
+      this.#disarmInFlight = false;
+    }
+    return this.render({ force: true });
+  }
+
+  static async #onPickupTrap(event) {
+    event.preventDefault();
+    if (!this.#actor?.isOwner) return undefined;
+    await requestPickupTrapDocuments(this.#tile, this.#actor);
+    return this.close();
+  }
+
+  static #onCloseDialog(event) {
+    event.preventDefault();
+    return this.close();
+  }
 }
 
 async function requestPickupTrapDocuments(tile, actor) {
@@ -534,6 +788,34 @@ async function requestPickupTrapDocuments(tile, actor) {
   });
 }
 
+async function requestDisarmTrapDocuments(tile, actor, { success = false, toolItemId = "", attemptsRemaining = 0 } = {}) {
+  const request = {
+    sceneId: tile?.parent?.id ?? canvas.scene?.id ?? "",
+    tileId: tile?.id ?? "",
+    actorUuid: actor?.uuid ?? "",
+    success: Boolean(success),
+    toolItemId: String(toolItemId ?? ""),
+    attemptsRemaining: Math.max(0, toInteger(attemptsRemaining))
+  };
+  if (!request.sceneId || !request.tileId || !request.actorUuid) return;
+  if (game.user?.isGM) {
+    await disarmTrapDocumentsNow(request);
+    return;
+  }
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для обезвреживания ловушки.");
+    return;
+  }
+  game.socket.emit(TRAP_SOCKET, {
+    scope: TRAP_SOCKET_SCOPE,
+    action: "disarmTrapDocuments",
+    gmUserId: gm.id,
+    senderUserId: game.user?.id ?? "",
+    request
+  });
+}
+
 async function pickupTrapDocumentsNow({ sceneId = "", tileId = "", actorUuid = "" } = {}) {
   const scene = game.scenes?.get(sceneId) ?? canvas.scene;
   const tile = scene?.tiles?.get(tileId);
@@ -542,6 +824,35 @@ async function pickupTrapDocumentsNow({ sceneId = "", tileId = "", actorUuid = "
   if (!scene || !tile || !actor || !trap || !canActorPickupTrap(trap, actor)) return;
   await restoreTrapItemToOwner(actor, trap);
   await deleteTrapDocuments(tile);
+}
+
+async function disarmTrapDocumentsNow({ sceneId = "", tileId = "", actorUuid = "", success = false, toolItemId = "", attemptsRemaining = 0 } = {}) {
+  const scene = game.scenes?.get(sceneId) ?? canvas.scene;
+  const tile = scene?.tiles?.get(tileId);
+  const actor = actorUuid ? await fromUuid(actorUuid) : null;
+  const trap = getTrapFlag(tile);
+  if (!scene || !tile || !actor || !trap || canActorPickupTrap(trap, actor)) return;
+
+  if (success) {
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `<p><strong>${escapeHTML(actor.name)}</strong> обезвреживает ловушку <strong>${escapeHTML(tile.name)}</strong>.</p>`
+    });
+    ui.notifications.info(`${actor.name}: ловушка обезврежена.`);
+    await markTrapDisarmed(tile, actor, { toolItemId, attemptsRemaining });
+    return;
+  }
+
+  const remaining = Math.max(0, toInteger(attemptsRemaining));
+  await tile.update({
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.disarmAttemptsRemaining`]: remaining,
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.lastDisarmToolItemId`]: String(toolItemId ?? "")
+  }, { render: false });
+  await ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    content: `<p><strong>${escapeHTML(actor.name)}</strong> не смог обезвредить ловушку <strong>${escapeHTML(tile.name)}</strong>. Осталось попыток: ${remaining}.</p>`
+  });
+  if (remaining <= 0) ui.notifications.warn(`${tile.name}: попытки обезвреживания закончились.`);
 }
 
 async function restoreTrapItemToOwner(actor, trap) {
@@ -585,6 +896,7 @@ async function handleTrapSocketMessage(payload = {}) {
   if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
   if (payload.action === "createTrapDocuments") await createTrapDocumentsNow(payload.request ?? {});
   if (payload.action === "pickupTrapDocuments") await pickupTrapDocumentsNow(payload.request ?? {});
+  if (payload.action === "disarmTrapDocuments") await disarmTrapDocumentsNow(payload.request ?? {});
   if (payload.action === "activateTrapTile") await activateTrapTileNow(payload.request ?? {});
   if (payload.action === "resolveTrapDetectionStop") await resolveTrapDetectionStopNow(payload.request ?? {});
   if (payload.action === "announceTrapTriggerEnter") await announceTrapTriggerEnterNow(payload.request ?? {});
@@ -638,6 +950,8 @@ async function createTrapDocumentsNow(request = {}) {
           itemData: foundry.utils.deepClone(itemData),
           visibleActorUuids: [String(request.ownerActorUuid ?? "")].filter(Boolean),
           attemptedDetectionActorUuids: [],
+          disarmAttemptsRemaining: trapData.disarm.attempts,
+          lastDisarmToolItemId: "",
           detectionRegionId: "",
           triggerRegionId: "",
           data: trapData,
@@ -839,9 +1153,35 @@ async function deleteTrapDocuments(tile) {
   const scene = tile?.parent ?? canvas.scene;
   const trap = getTrapFlag(tile);
   if (!scene || !tile || !trap) return;
+  await deleteTrapRegions(tile);
+  await scene.deleteEmbeddedDocuments("Tile", [tile.id]);
+  queueTrapTileVisibilityRefresh();
+}
+
+async function deleteTrapRegions(tile) {
+  const scene = tile?.parent ?? canvas.scene;
+  const trap = getTrapFlag(tile);
+  if (!scene || !tile || !trap) return;
   const regionIds = [trap.detectionRegionId, trap.triggerRegionId].filter(id => scene.regions?.get(id));
   if (regionIds.length) await scene.deleteEmbeddedDocuments("Region", regionIds);
-  await scene.deleteEmbeddedDocuments("Tile", [tile.id]);
+}
+
+async function markTrapDisarmed(tile, actor = null, { toolItemId = "", attemptsRemaining = null } = {}) {
+  const trap = getTrapFlag(tile);
+  if (!tile || !trap || !game.user?.isGM) return;
+  await deleteTrapRegions(tile);
+  const visible = new Set(asStringArray(trap.visibleActorUuids));
+  if (actor?.uuid) visible.add(actor.uuid);
+  await tile.update({
+    hidden: false,
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.armed`]: false,
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.disarmed`]: true,
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.visibleActorUuids`]: Array.from(visible),
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.disarmAttemptsRemaining`]: attemptsRemaining === null ? getTrapDisarmAttemptsRemaining(trap) : Math.max(0, toInteger(attemptsRemaining)),
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.lastDisarmToolItemId`]: String(toolItemId ?? ""),
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.detectionRegionId`]: "",
+    [`flags.${SYSTEM_ID}.${TRAP_FLAG}.triggerRegionId`]: ""
+  }, { render: false });
   queueTrapTileVisibilityRefresh();
 }
 
@@ -852,6 +1192,7 @@ function patchTrapTileVisibility() {
   const originalRefreshVisibility = TileClass.prototype._refreshVisibility;
   const originalCanView = TileClass.prototype._canView;
   const originalCanHover = TileClass.prototype._canHover;
+  const originalOnClickLeft2 = TileClass.prototype._onClickLeft2;
 
   TileClass.prototype._refreshVisibility = function(...args) {
     const result = originalRefreshVisibility?.apply(this, args);
@@ -872,7 +1213,46 @@ function patchTrapTileVisibility() {
     return originalCanHover.call(this, user, event);
   };
 
+  TileClass.prototype._onClickLeft2 = function(event) {
+    if (!isTrapTileDocument(this.document) || !shouldOpenGmTrapFreeDialog()) return originalOnClickLeft2.call(this, event);
+    event?.stopPropagation?.();
+    void openTrapGmFreeDialog(this.document);
+    return false;
+  };
+
   trapTilePatchRegistered = true;
+}
+
+function shouldOpenGmTrapFreeDialog() {
+  return Boolean(game.user?.isGM && !(canvas?.tokens?.controlled ?? []).length);
+}
+
+async function openTrapGmFreeDialog(tile) {
+  const trap = getTrapFlag(tile);
+  if (!game.user?.isGM || !trap) return;
+  const disarmed = trap.disarmed === true || trap.armed === false;
+  const action = await DialogV2.wait({
+    window: { title: tile.name || "Ловушка" },
+    content: `<p><strong>${escapeHTML(tile.name || "Ловушка")}</strong></p>`,
+    buttons: disarmed
+      ? [
+          { action: "delete", label: "Удалить", icon: "fa-solid fa-trash" },
+          { action: "cancel", label: "Отмена", icon: "fa-solid fa-xmark", type: "button" }
+        ]
+      : [
+          { action: "disarm", label: "Обезвредить", icon: "fa-solid fa-screwdriver-wrench" },
+          { action: "apply", label: "Применить", icon: "fa-solid fa-burst" },
+          { action: "delete", label: "Удалить", icon: "fa-solid fa-trash" },
+          { action: "cancel", label: "Отмена", icon: "fa-solid fa-xmark", type: "button" }
+        ],
+    rejectClose: false,
+    modal: true,
+    position: { width: 380 }
+  });
+  if (action === "disarm") return markTrapDisarmed(tile, null);
+  if (action === "delete") return deleteTrapDocuments(tile);
+  if (action === "apply") return triggerTrap(tile, null);
+  return undefined;
 }
 
 function refreshTrapTileVisibility() {
@@ -889,12 +1269,14 @@ function queueTrapTileVisibilityRefresh() {
   globalThis.setTimeout(() => {
     trapVisibilityRefreshQueued = false;
     refreshTrapTileVisibility();
+    refreshTrapInteractionHighlights();
   }, 0);
 }
 
 function isTrapVisibleForCurrentViewer(tileDocument) {
   const trap = getTrapFlag(tileDocument);
   if (!trap) return true;
+  if (trap.disarmed === true || trap.armed === false) return true;
   const controlled = (canvas?.tokens?.controlled ?? []).filter(token => token?.actor);
   if (game.user?.isGM && !controlled.length) return true;
   const actorUuids = controlled.length
@@ -924,10 +1306,29 @@ function refreshTrapSafeHighlights() {
 }
 
 function drawTrapSafeHighlight(layer, tile) {
+  drawTrapInnerOutline(layer, tile, TRAP_SAFE_HIGHLIGHT_COLOR);
+}
+
+function refreshTrapInteractionHighlights() {
+  const grid = canvas?.interface?.grid;
+  if (!canvas?.ready || !grid) return;
+  const layer = grid.getHighlightLayer?.(TRAP_INTERACTION_HIGHLIGHT_LAYER)
+    ?? grid.addHighlightLayer?.(TRAP_INTERACTION_HIGHLIGHT_LAYER);
+  layer?.clear?.();
+  if (!layer || !activeTrapInteraction) return;
+  const actor = getActiveTrapInteractionActor();
+  if (!actor) return;
+  for (const tile of canvas.scene?.tiles?.contents ?? []) {
+    if (!isTrapTileDocument(tile) || !isTrapVisibleToActor(tile, actor)) continue;
+    drawTrapInnerOutline(layer, tile, TRAP_INTERACTION_HIGHLIGHT_COLOR);
+  }
+}
+
+function drawTrapInnerOutline(layer, tile, color) {
   const width = Math.max(2, CONFIG.Canvas.objectBorderThickness * canvas.dimensions.uiScale);
   const rect = getTrapTileRectangle(tile);
   const line = Math.min(width, rect.width / 2, rect.height / 2);
-  layer.beginFill(TRAP_SAFE_HIGHLIGHT_COLOR, 0.95);
+  layer.beginFill(color, 0.95);
   layer.drawRect(rect.x, rect.y, rect.width, line);
   layer.drawRect(rect.x, rect.y + rect.height - line, rect.width, line);
   layer.drawRect(rect.x, rect.y + line, line, Math.max(0, rect.height - (line * 2)));
@@ -1159,6 +1560,7 @@ function interpolatePoint(start, end, t) {
 function isTrapVisibleToActor(tile, actor) {
   const trap = getTrapFlag(tile);
   if (!trap || !actor) return false;
+  if (trap.disarmed === true || trap.armed === false) return true;
   const visible = new Set(asStringArray(trap.visibleActorUuids));
   return actor.uuid === trap.ownerActorUuid || visible.has(actor.uuid) || isActorSafeForTrap(trap, actor);
 }
@@ -1176,7 +1578,7 @@ async function revealTrapToActor(tile, actor) {
 }
 
 function canActorPickupTrap(trap, actor) {
-  return Boolean(actor?.uuid && (actor.uuid === trap?.ownerActorUuid || isActorSafeForTrap(trap, actor)));
+  return Boolean(actor?.uuid && (trap?.disarmed === true || trap?.armed === false || actor.uuid === trap?.ownerActorUuid || isActorSafeForTrap(trap, actor)));
 }
 
 function isActorSafeForTrap(trap, actor) {
@@ -1282,6 +1684,12 @@ function normalizeTrapData(source = {}) {
       skillKey: String(data.evasion?.skillKey ?? "athletics").trim() || "athletics",
       avoidPercent: Math.max(1, Math.min(100, toInteger(data.evasion?.avoidPercent) || 50))
     },
+    disarm: {
+      toolKey: String(data.disarm?.toolKey ?? "mechanicalHacking").trim() || "mechanicalHacking",
+      toolClass: normalizeToolClass(data.disarm?.toolClass),
+      difficulty: normalizeTrapDisarmNumber(data.disarm?.difficulty, 60),
+      attempts: normalizeTrapDisarmNumber(data.disarm?.attempts, 1)
+    },
     effect: {
       damageRadiusMeters: String(data.effect?.damageRadiusMeters ?? "0").trim() || "0",
       penetration: String(data.effect?.penetration ?? "0").trim() || "0",
@@ -1309,6 +1717,56 @@ function normalizeTrapImageScale(value) {
   const scale = Number(value);
   if (!Number.isFinite(scale)) return 0.5;
   return Math.max(0, scale);
+}
+
+function normalizeTrapDisarmNumber(value, fallback) {
+  if (value === null || value === undefined || String(value).trim() === "") return fallback;
+  return Math.max(0, toInteger(value));
+}
+
+function normalizeToolClass(value) {
+  const toolClass = String(value ?? "D").trim().toUpperCase();
+  return Object.hasOwn(TOOL_CLASS_RANKS, toolClass) ? toolClass : "D";
+}
+
+function isToolClassAtLeast(actualClass, requiredClass) {
+  return (TOOL_CLASS_RANKS[normalizeToolClass(actualClass)] ?? 0) >= (TOOL_CLASS_RANKS[normalizeToolClass(requiredClass)] ?? 0);
+}
+
+function getTrapDisarmAttemptsRemaining(trap) {
+  const configured = normalizeTrapData(trap?.data).disarm.attempts;
+  const stored = trap?.disarmAttemptsRemaining;
+  if (stored === null || stored === undefined || stored === "") return configured;
+  return Math.max(0, toInteger(stored));
+}
+
+function getTrapDisarmToolCandidates(actor, disarm = {}) {
+  const requiredToolKey = String(disarm.toolKey ?? "").trim();
+  const requiredClass = normalizeToolClass(disarm.toolClass);
+  if (!actor || !requiredToolKey) return [];
+  return (actor.items?.contents ?? [])
+    .flatMap(item => getEnabledToolFunctions(item)
+      .filter(tool => String(tool.toolKey ?? "") === requiredToolKey)
+      .map(tool => {
+        const supplyMax = Math.max(0, toInteger(tool.supply?.max));
+        const supplyValue = Math.max(0, Math.min(supplyMax || Number.MAX_SAFE_INTEGER, toInteger(tool.supply?.value)));
+        return {
+          item,
+          itemId: item.id,
+          name: item.name,
+          img: item.img,
+          toolKey: String(tool.toolKey ?? ""),
+          toolClass: normalizeToolClass(tool.toolClass),
+          supplyValue,
+          supplyMax
+        };
+      }))
+    .filter(tool => isToolClassAtLeast(tool.toolClass, requiredClass) && tool.supplyValue > 0)
+    .sort((left, right) => {
+      const rankDelta = (TOOL_CLASS_RANKS[right.toolClass] ?? 0) - (TOOL_CLASS_RANKS[left.toolClass] ?? 0);
+      if (rankDelta) return rankDelta;
+      return String(left.name ?? "").localeCompare(String(right.name ?? ""));
+    });
 }
 
 function normalizeDamageTypeEntries(entries = [], fallbackKey = "firearm") {

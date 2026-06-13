@@ -370,6 +370,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       trapInstallationSkillChoices: buildSkillChoices(item.system?.functions?.trap?.installation?.skillKey ?? "traps", skillSettings),
       trapDetectionSkillChoices: buildSkillChoices(item.system?.functions?.trap?.detection?.skillKey ?? "naturalist", skillSettings),
       trapEvasionSkillChoices: buildSkillChoices(item.system?.functions?.trap?.evasion?.skillKey ?? "athletics", skillSettings),
+      trapDisarmToolChoices: buildToolChoices(item.system?.functions?.trap?.disarm?.toolKey ?? "mechanicalHacking", toolSettings),
+      trapDisarmClassChoices: buildToolClassChoices(item.system?.functions?.trap?.disarm?.toolClass ?? "D"),
       trapDamageTypeRows: buildWeaponDamageTypeRowsForData(item.system?.functions?.trap?.effect ?? {}, damageTypeSettings),
       trapRegionDamageRows: buildVolleyRegionDamageRowsForData(item.system?.functions?.trap?.effect?.regionDamageEntries, damageTypeSettings),
       lightSourceResourceCosts: buildLightSourceResourceCostRows(item, hasConditionFunction, hasEnergyConsumerFunction),
@@ -595,6 +597,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-browse-weapon-explosion-sound]").forEach(button => {
       button.addEventListener("click", event => this.#onBrowseWeaponExplosionSound(event));
     });
+    this.element?.querySelector("[data-browse-trap-trigger-sound]")?.addEventListener("click", event => this.#onBrowseTrapTriggerSound(event));
     this.element?.querySelector("[data-add-item-function]")?.addEventListener("click", event => this.#onAddItemFunction(event));
     this.element?.querySelector("[data-add-prosthesis-limb]")?.addEventListener("click", event => this.#onAddProsthesisLimb(event));
     this.element?.querySelectorAll("[data-delete-prosthesis-limb]").forEach(button => {
@@ -3545,6 +3548,23 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return picker.render({ force: true });
   }
 
+  async #onBrowseTrapTriggerSound(event) {
+    event.preventDefault();
+    const input = this.element?.querySelector("[data-trap-trigger-sound-input]");
+    if (!input) return undefined;
+    const picker = new foundry.applications.apps.FilePicker.implementation({
+      type: "audio",
+      current: input.value ?? "",
+      callback: path => {
+        input.value = path;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    activateWeaponSoundPickerPreview(picker);
+    await picker.browse(undefined, { render: false });
+    return picker.render({ force: true });
+  }
+
   #onMitigationLimbSetChoice(event) {
     event.preventDefault();
     const groupId = String(event.currentTarget?.dataset?.mitigationLimbSetChoice ?? "");
@@ -5293,6 +5313,12 @@ function createDefaultTrapFunctionData(source = {}) {
       skillKey: "athletics",
       avoidPercent: 50
     },
+    disarm: {
+      toolKey: "mechanicalHacking",
+      toolClass: "D",
+      difficulty: 60,
+      attempts: 1
+    },
     effect: {
       damageRadiusMeters: 0,
       penetration: 0,
@@ -6807,6 +6833,24 @@ function buildSkillChoices(selectedKey = "", skillSettings = []) {
     key: skill.key,
     label: skill.label,
     selected: skill.key === selected
+  }));
+}
+
+function buildToolChoices(selectedKey = "", toolSettings = []) {
+  const selected = String(selectedKey ?? "");
+  return toolSettings.map(tool => ({
+    key: tool.key,
+    label: tool.label,
+    selected: tool.key === selected
+  }));
+}
+
+function buildToolClassChoices(selectedClass = "D") {
+  const selected = String(selectedClass ?? "D") || "D";
+  return ["D", "C", "B", "A", "S"].map(value => ({
+    value,
+    label: value,
+    selected: value === selected
   }));
 }
 

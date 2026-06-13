@@ -67,6 +67,12 @@ export const DEFAULT_SYSTEM_ACTION_SETTINGS = Object.freeze([
     label: "Скрытность",
     img: "icons/svg/invisible.svg",
     toolKey: ""
+  },
+  {
+    key: "traps",
+    label: "Ловушки",
+    img: "icons/svg/hazard.svg",
+    toolKey: "mechanicalHacking"
   }
 ]);
 
