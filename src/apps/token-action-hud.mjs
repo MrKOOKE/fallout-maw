@@ -85,9 +85,11 @@ import {
   getContainerContentsWeight,
   getContainerDimensions,
   getContainerMaxLoad,
+  getItemContainerParentId,
   getItemMaxStack,
   getContextInventoryItems,
   getItemTotalWeight,
+  getItemUnitWeight,
   hasContainerCycle,
   getItemQuantity
 } from "../utils/inventory-containers.mjs";
@@ -3945,7 +3947,8 @@ async function extractWeaponMagazineSource(actor, weapon, weaponFunctionId, weap
   if (!current) {
     throw new Error(game.i18n.localize("FALLOUTMAW.Item.WeaponReloadMagazineEmpty"));
   }
-  const sourceStacks = getActorMagazineSourceStacks(actor, sourceItem);
+  const returnPlan = createActorMagazineSourceReturnPlan(actor, sourceItem, current);
+  if (!returnPlan.valid) throw new Error(returnPlan.message);
   const updates = [{
     _id: weapon.id,
     ...createWeaponFunctionUpdateData(weapon, weaponFunctionId, {
@@ -3953,16 +3956,10 @@ async function extractWeaponMagazineSource(actor, weapon, weaponFunctionId, weap
       "magazine.value": 0
     })
   }];
-  const targetStack = sourceStacks.at(0);
-  if (targetStack) {
-    updates.push({
-      _id: targetStack.id,
-      "system.quantity": getItemQuantity(targetStack) + current
-    });
-    return actor.updateEmbeddedDocuments("Item", updates);
-  }
+  updates.push(...returnPlan.updates);
   await actor.updateEmbeddedDocuments("Item", updates);
-  return createActorMagazineSourceStack(actor, sourceItem, current);
+  if (returnPlan.creates.length) return actor.createEmbeddedDocuments("Item", returnPlan.creates);
+  return undefined;
 }
 
 function getWeaponFunctionPath(weapon, weaponFunctionId = "") {
@@ -4066,35 +4063,98 @@ function normalizeDamageSourceVolleySignature(volley = {}) {
   ].join(";");
 }
 
-async function createActorMagazineSourceStack(actor, sourceItem, quantity) {
+function createActorMagazineSourceReturnPlan(actor, sourceItem, quantity) {
+  if (!actor || !sourceItem) return { valid: false, message: game.i18n.localize("FALLOUTMAW.Item.WeaponReloadSourceEmpty"), updates: [], creates: [] };
+  let remaining = Math.max(0, toInteger(quantity));
+  const updates = [];
+  const creates = [];
+  const reservedPlacementContexts = [];
+  const maxStack = Math.max(1, getItemMaxStack(sourceItem));
+
+  for (const stack of getActorMagazineSourceStacks(actor, sourceItem).filter(item => canReturnMagazineSourceToStack(actor, item))) {
+    if (remaining <= 0) break;
+    const room = getMagazineSourceStackReturnRoom(actor, stack, reservedPlacementContexts);
+    if (!room) continue;
+    const returned = Math.min(remaining, room);
+    updates.push({
+      _id: stack.id,
+      "system.quantity": getItemQuantity(stack) + returned
+    });
+    reserveMagazineSourceContainerLoad(stack, sourceItem, returned, reservedPlacementContexts);
+    remaining -= returned;
+  }
+
+  while (remaining > 0) {
+    const stackQuantity = Math.min(remaining, maxStack);
+    const createData = createActorMagazineSourceStackData(sourceItem, stackQuantity);
+    const placementContext = getFirstAvailableHudInventoryPlacementContext(actor, createData, [], reservedPlacementContexts);
+    if (!placementContext) {
+      return { valid: false, message: game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"), updates: [], creates: [] };
+    }
+    const storedPlacement = createStoredPlacement(placementContext.placement, createData);
+    foundry.utils.mergeObject(createData, {
+      system: {
+        equipped: false,
+        container: {
+          parentId: String(placementContext.parentId ?? ROOT_CONTAINER_ID)
+        },
+        placement: {
+          mode: storedPlacement.mode,
+          equipmentSlot: storedPlacement.equipmentSlot,
+          weaponSet: storedPlacement.weaponSet,
+          weaponSlot: storedPlacement.weaponSlot,
+          x: storedPlacement.x,
+          y: storedPlacement.y,
+          width: storedPlacement.width,
+          height: storedPlacement.height,
+          rotated: storedPlacement.rotated
+        }
+      }
+    });
+    creates.push(createData);
+    reservedPlacementContexts.push({ ...placementContext, itemData: createData });
+    remaining -= stackQuantity;
+  }
+
+  return { valid: true, message: "", updates, creates };
+}
+
+function createActorMagazineSourceStackData(sourceItem, quantity) {
   const createData = sourceItem.toObject();
   delete createData._id;
   foundry.utils.setProperty(createData, "system.quantity", Math.max(0, toInteger(quantity)));
   foundry.utils.setProperty(createData, `flags.${SYSTEM_ID}.damageSourcePrototypeUuid`, sourceItem.uuid);
+  return createData;
+}
 
-  const placement = getFirstAvailableRootInventoryPlacement(actor, createData);
-  if (!placement) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
-  const storedPlacement = createStoredPlacement(placement, createData);
-  foundry.utils.mergeObject(createData, {
-    system: {
-      equipped: false,
-      container: {
-        parentId: ROOT_CONTAINER_ID
-      },
-      placement: {
-        mode: storedPlacement.mode,
-        equipmentSlot: storedPlacement.equipmentSlot,
-        weaponSet: storedPlacement.weaponSet,
-        weaponSlot: storedPlacement.weaponSlot,
-        x: storedPlacement.x,
-        y: storedPlacement.y,
-        width: storedPlacement.width,
-        height: storedPlacement.height,
-        rotated: storedPlacement.rotated
-      }
-    }
-  });
-  return actor.createEmbeddedDocuments("Item", [createData]);
+function canReturnMagazineSourceToStack(actor, item) {
+  if (!item || getItemQuantity(item) >= getItemMaxStack(item)) return false;
+  if (String(item.system?.placement?.mode ?? "inventory") !== "inventory") return false;
+  const parentId = getItemContainerParentId(item);
+  return !parentId || Boolean(actor?.items?.get(parentId));
+}
+
+function getMagazineSourceStackReturnRoom(actor, item, reservedPlacementContexts = []) {
+  const stackRoom = Math.max(0, getItemMaxStack(item) - getItemQuantity(item));
+  if (!stackRoom) return 0;
+  const parentId = getItemContainerParentId(item);
+  if (!parentId) return stackRoom;
+  const container = actor?.items?.get(parentId);
+  if (!container) return 0;
+  const unitWeight = getItemUnitWeight(item);
+  if (unitWeight <= 0) return stackRoom;
+  const reservedLoad = reservedPlacementContexts
+    .filter(entry => String(entry?.parentId ?? ROOT_CONTAINER_ID) === String(parentId))
+    .reduce((total, entry) => total + getItemTotalWeight(entry.itemData, actor.items), 0);
+  const availableLoad = Math.max(0, getContainerMaxLoad(container) - getContainerContentsWeight(container, actor.items) - reservedLoad);
+  return Math.min(stackRoom, Math.floor((availableLoad + 0.0001) / unitWeight));
+}
+
+function reserveMagazineSourceContainerLoad(item, sourceItem, quantity, reservedPlacementContexts = []) {
+  const parentId = getItemContainerParentId(item);
+  if (!parentId || quantity <= 0) return;
+  const itemData = createActorMagazineSourceStackData(sourceItem, quantity);
+  reservedPlacementContexts.push({ parentId, itemData });
 }
 
 async function returnModuleItemToActorInventory(actor, itemData) {
