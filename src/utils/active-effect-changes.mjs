@@ -1,8 +1,24 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { getSkillSettings } from "../settings/accessors.mjs";
 import { prepareEffectChangeForApplication } from "./effect-change-values.mjs";
 import { getConditionWeakeningData, isItemBrokenByCondition } from "./item-functions.mjs";
 
 const ITEM_EFFECT_FLAG_KEY = "itemEffect";
+export const ALL_SKILLS_BONUS_EFFECT_KEY = "system.skills.all.bonus";
+
+export function expandActorEffectChangeKeys(actor, change = {}) {
+  if (String(change?.key ?? "") !== ALL_SKILLS_BONUS_EFFECT_KEY) return [change];
+  const skillKeys = new Set([
+    ...getSkillSettings().map(skill => String(skill?.key ?? "").trim()),
+    ...Object.keys(actor?.system?.skills ?? {})
+  ]);
+  return Array.from(skillKeys)
+    .filter(key => key && key !== "all")
+    .map(key => ({
+      ...change,
+      key: `system.skills.${key}.bonus`
+    }));
+}
 
 export function prepareActorEffectChangeForApplication(actor, change = {}, options = {}) {
   const item = getItemFreeSettingsEffectSourceItem(actor, change?.effect);

@@ -1,5 +1,6 @@
 import { createEffectKeyToken } from "../apps/effect-key-autocomplete.mjs";
 import { WEAPON_SWITCH_COST_KEY } from "../combat/weapon-switching.mjs";
+import { ALL_SKILLS_BONUS_EFFECT_KEY } from "./active-effect-changes.mjs";
 import {
   getCharacteristicSettings,
   getCreatureOptions,
@@ -26,6 +27,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
       path: `system.skills.${entry.key}.bonus`,
       group: game.i18n.localize("FALLOUTMAW.Common.Skills")
     })),
+    buildAllSkillsEffectKeyToken(),
     ...getResourceSettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
       key: entry.key,
@@ -116,6 +118,16 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
   }
 
   return tokens.filter(Boolean);
+}
+
+export function buildAllSkillsEffectKeyToken() {
+  return createEffectKeyToken({
+    code: "allSkills",
+    key: "allSkills",
+    label: "Все навыки",
+    path: ALL_SKILLS_BONUS_EFFECT_KEY,
+    group: game.i18n.localize("FALLOUTMAW.Common.Skills")
+  });
 }
 
 export function buildActionCostEffectKeyTokens() {

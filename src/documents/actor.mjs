@@ -31,7 +31,7 @@ import {
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import { clampActorLimbValuesToCurrentCaps, handleActorDamageUpdate, prepareActorDamageUpdate, requestDamageApplication } from "../combat/damage-hub.mjs";
 import { migrateActorData } from "../migrations/documents.mjs";
-import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
+import { expandActorEffectChangeKeys, prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 import { stampPrototypeUuid } from "../utils/document-references.mjs";
 
 export class FalloutMaWActor extends Actor {
@@ -161,7 +161,7 @@ export class FalloutMaWActor extends Actor {
           copy.key = copy.key.slice(6);
           tokenChanges.push(copy);
         } else {
-          changes.push(copy);
+          changes.push(...expandActorEffectChangeKeys(this, copy));
         }
       }
       if (phase === "initial") {

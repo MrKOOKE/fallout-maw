@@ -35,6 +35,7 @@ import {
   isContainerWeaponSetKey
 } from "../utils/equipment-slots.mjs";
 import { buildDamageMitigationTables, buildDamageTypeIconClass, buildDamageTypeIconStyle } from "../utils/damage-mitigation-display.mjs";
+import { ALL_SKILLS_BONUS_EFFECT_KEY } from "../utils/active-effect-changes.mjs";
 import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
   import {
     completeResearch,
@@ -5433,6 +5434,7 @@ function buildEffectPathLabelMap({
     base: baseLabel,
     developmentBonus: developmentBonusLabel
   });
+  map.set(ALL_SKILLS_BONUS_EFFECT_KEY, "Все навыки");
   addEffectPathLabels(map, "system.resources", resourceSettings, {
     value: valueLabel,
     max: maximumLabel,

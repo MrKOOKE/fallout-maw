@@ -29,7 +29,7 @@ import {
   normalizeNaturalRaceItemData,
   NATURAL_RACE_ITEM_KINDS
 } from "../races/natural-items.mjs";
-import { buildActionCostEffectKeyTokens, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildWeaponSwitchCostEffectKeyToken } from "../utils/effect-key-tokens.mjs";
+import { buildActionCostEffectKeyTokens, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildWeaponSwitchCostEffectKeyToken } from "../utils/effect-key-tokens.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateEffectKeyAutocomplete, createEffectKeyToken } from "./effect-key-autocomplete.mjs";
@@ -1101,6 +1101,7 @@ function buildEffectKeyTokens() {
   return [
     ...getCharacteristicSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.characteristics.${entry.key}`, group: "Характеристики" })),
     ...getSkillSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.skills.${entry.key}.bonus`, group: "Навыки" })),
+    buildAllSkillsEffectKeyToken(),
     ...getResourceSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.resources.${entry.key}.bonus`, group: "Ресурсы" })),
     ...getNeedSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.needs.${entry.key}.bonus`, group: "Потребности" })),
     ...getProficiencySettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.proficiencies.${entry.key}.bonus`, group: "Владения" })),

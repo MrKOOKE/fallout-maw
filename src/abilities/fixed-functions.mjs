@@ -17,6 +17,7 @@ import {
   setLimbMissingState
 } from "../combat/damage-hub.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { ALL_SKILLS_BONUS_EFFECT_KEY } from "../utils/active-effect-changes.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -317,20 +318,17 @@ async function applyDeusExMachinaInsight(actor, abilityItem, abilityFunction, se
     ui.notifications.warn("Прозрение уже активно.");
     return false;
   }
-  const changes = getSkillSettings()
-    .map(skill => String(skill?.key ?? "").trim())
-    .filter(Boolean)
-    .map(key => ({
-      key: `system.skills.${key}.bonus`,
-      type: "add",
-      value: String(settings.insight.skillBonus),
-      phase: "initial",
-      priority: null
-    }));
-  if (!changes.length) {
+  if (!getSkillSettings().length) {
     ui.notifications.warn("Навыки не настроены.");
     return false;
   }
+  const changes = [{
+    key: ALL_SKILLS_BONUS_EFFECT_KEY,
+    type: "add",
+    value: String(settings.insight.skillBonus),
+    phase: "initial",
+    priority: null
+  }];
 
   const startTime = Number(game.time?.worldTime) || 0;
   await actor.createEmbeddedDocuments("ActiveEffect", [{

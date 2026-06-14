@@ -8,6 +8,7 @@ import {
 import { toInteger } from "../utils/numbers.mjs";
 import { abilityConditionsApply } from "./evaluation.mjs";
 import { syncActorAbilityEffects } from "./effects.mjs";
+import { ALL_SKILLS_BONUS_EFFECT_KEY } from "../utils/active-effect-changes.mjs";
 import {
   ABILITY_FUNCTION_COOLDOWN_FLAG_KEY,
   getAbilityFunctionCooldownEffect,
@@ -45,7 +46,7 @@ export async function applyAbilityCooldownsForSkillCheck(outcome = {}) {
   if (!actor || !skillKey) return [];
 
   const changeKey = `${SKILL_BONUS_KEY_PREFIX}${skillKey}${SKILL_BONUS_KEY_SUFFIX}`;
-  return applyAbilityCooldownsForTriggeredKeys(actor, new Set([changeKey]), { trigger: "skillCheck" });
+  return applyAbilityCooldownsForTriggeredKeys(actor, new Set([changeKey, ALL_SKILLS_BONUS_EFFECT_KEY]), { trigger: "skillCheck" });
 }
 
 export async function applyAbilityCooldownsForWeaponAction({ actor = null, actionKey = "" } = {}) {
