@@ -1392,6 +1392,36 @@
   min-width: 0;
 }
 
+.fallout-maw-craft-recipebar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.45rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.fallout-maw-craft-recipebar label {
+  align-items: center;
+  display: inline-flex;
+  flex: 1 1 18rem;
+  gap: 0.35rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.fallout-maw-craft-recipebar select {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+}
+
+.fallout-maw-craft-recipebar button {
+  min-height: 1.8rem;
+  white-space: nowrap;
+}
+
 .fallout-maw-craft-modebar-tabs {
   display: inline-flex;
   gap: 0.25rem;

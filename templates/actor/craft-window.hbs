@@ -241,7 +241,7 @@
           </div>
           <div class="fallout-maw-craft-window-recipe-category-list">
             {{#each recipes}}
-            <article class="fallout-maw-craft-window-recipe {{#if selected}}selected{{/if}} {{#if missing}}missing{{/if}}" role="button" tabindex="0" data-recipe-uuid="{{uuid}}" data-tooltip-uuid="{{uuid}}" data-recipe-search-text="{{displayName}} {{../label}}">
+            <article class="fallout-maw-craft-window-recipe {{#if selected}}selected{{/if}} {{#if missing}}missing{{/if}}" role="button" tabindex="0" data-recipe-uuid="{{uuid}}" data-tooltip-uuid="{{itemUuid}}" data-recipe-search-text="{{displayName}} {{recipeName}} {{../label}}">
               <img src="{{img}}" alt="{{displayName}}">
               <span class="name">{{displayName}}</span>
             </article>

@@ -2764,6 +2764,22 @@
 </section>
 
 <section class="tab {{tabs.craft.cssClass}}" data-group="{{tabs.craft.group}}" data-tab="{{tabs.craft.id}}">
+  <div class="fallout-maw-craft-recipebar">
+    <label>
+      <span>Рецепт</span>
+      <select data-craft-recipe-select>
+        {{#each craft.recipes}}
+        <option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>
+        {{/each}}
+      </select>
+    </label>
+    <button type="button" data-craft-add-recipe>
+      <i class="fa-solid fa-plus"></i> Добавить рецепт
+    </button>
+    <button type="button" data-craft-delete-recipe {{#unless craft.canDeleteActiveRecipe}}disabled{{/unless}}>
+      <i class="fa-solid fa-trash"></i> Удалить рецепт
+    </button>
+  </div>
   <div class="fallout-maw-craft-modebar">
     <div class="fallout-maw-craft-modebar-tabs" role="tablist">
       {{#each craft.modes}}

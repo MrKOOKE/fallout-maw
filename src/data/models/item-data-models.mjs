@@ -689,6 +689,18 @@ function craftRecipeField() {
     nodes: new ArrayField(craftNodeField(), { required: true, initial: [] }),
     links: new ArrayField(craftLinkField(), { required: true, initial: [] }),
     viewport: craftViewportField(),
+    disassembly: craftRecipeLayoutField(),
+    recipes: new ArrayField(craftRecipeVariantField(), { required: true, initial: [] })
+  });
+}
+
+function craftRecipeVariantField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: false, initial: () => foundry.utils.randomID() }),
+    name: new StringField({ required: true, blank: false, initial: "Рецепт_1" }),
+    nodes: new ArrayField(craftNodeField(), { required: true, initial: [] }),
+    links: new ArrayField(craftLinkField(), { required: true, initial: [] }),
+    viewport: craftViewportField(),
     disassembly: craftRecipeLayoutField()
   });
 }

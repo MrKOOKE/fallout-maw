@@ -85,15 +85,19 @@ const CRAFT_BLOCK_SEARCH_RADIUS = 24;
 const CRAFT_MODE_CREATE = "craft";
 const CRAFT_MODE_DISASSEMBLY = "disassembly";
 const CRAFT_LEGACY_BEND_PIXEL_THRESHOLD = 80;
+const DEFAULT_CRAFT_RECIPE_ID = "recipe1";
+const DEFAULT_CRAFT_RECIPE_NAME = "Рецепт_1";
 let itemSheetSourceSyncHooksRegistered = false;
 let activeWeaponSoundPickerPreview = null;
 const activeCraftModes = new WeakMap();
+const activeCraftRecipeIds = new WeakMap();
 
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #scrollPositions = new Map();
   #functionPickerActive = false;
   #mitigationFillDrag = null;
   #craftMode = CRAFT_MODE_CREATE;
+  #craftRecipeId = DEFAULT_CRAFT_RECIPE_ID;
   #craftSelection = null;
   #craftAttachSourceNodeId = "";
   #activeWeaponFunctionTab = ITEM_FUNCTIONS.weapon;
@@ -329,8 +333,19 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       }
     }
 
+    const craftRecipes = getCraftRecipeEntries(item);
+    this.#craftRecipeId = resolveCraftRecipeId(item, this.#craftRecipeId);
     activeCraftModes.set(item, this.#craftMode);
+    activeCraftRecipeIds.set(item, this.#craftRecipeId);
     const craft = prepareCraftContext(item, skillSettings, this.#craftSelection, this.#craftAttachSourceNodeId, this.#craftMode);
+    craft.recipes = craftRecipes.map(recipe => ({
+      id: recipe.id,
+      name: recipe.name,
+      selected: recipe.id === this.#craftRecipeId,
+      canDelete: recipe.id !== DEFAULT_CRAFT_RECIPE_ID
+    }));
+    craft.activeRecipeId = this.#craftRecipeId;
+    craft.canDeleteActiveRecipe = this.#craftRecipeId !== DEFAULT_CRAFT_RECIPE_ID;
     const weaponFunctionSections = buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, proficiencySettings, characteristicSettings, hasConditionFunction);
     this.#activeWeaponFunctionTab = resolveActiveWeaponFunctionTab(this.#activeWeaponFunctionTab, weaponFunctionSections);
     for (const section of weaponFunctionSections) section.active = section.tabId === this.#activeWeaponFunctionTab;
@@ -858,6 +873,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     workspace.querySelector("[data-craft-link-skill]")?.addEventListener("change", event => this.#onCraftLinkSkillChange(event));
     workspace.querySelector("[data-craft-link-difficulty]")?.addEventListener("change", event => this.#onCraftLinkDifficultyChange(event));
     workspace.querySelector("[data-craft-link-no-check]")?.addEventListener("change", event => this.#onCraftLinkNoCheckChange(event));
+    this.element?.querySelector("[data-craft-recipe-select]")?.addEventListener("change", event => this.#onCraftRecipeSelect(event));
+    this.element?.querySelector("[data-craft-add-recipe]")?.addEventListener("click", event => this.#onCraftAddRecipe(event));
+    this.element?.querySelector("[data-craft-delete-recipe]")?.addEventListener("click", event => this.#onCraftDeleteRecipe(event));
     this.element?.querySelectorAll("[data-craft-mode]").forEach(button => {
       button.addEventListener("click", event => this.#onCraftModeChange(event));
     });
@@ -938,12 +956,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const nextX = Math.round(drag.startX + (event.clientX - drag.startClientX));
     const nextY = Math.round(drag.startY + (event.clientY - drag.startClientY));
     const viewport = this.#setCraftViewportStyle(nextX, nextY);
-    const path = getCraftRecipeDataPath(getActiveCraftMode(this.item));
-    return this.item.update({
-      [`${path}.viewport.x`]: viewport.x,
-      [`${path}.viewport.y`]: viewport.y,
-      [`${path}.viewport.zoom`]: viewport.zoom
-    });
+    return this.#updateCraftRecipe({ viewport });
   }
 
   #getCraftViewport() {
@@ -1058,11 +1071,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (this.#craftViewportPersistTimeout) window.clearTimeout(this.#craftViewportPersistTimeout);
     this.#craftViewportPersistTimeout = window.setTimeout(() => {
       this.#craftViewportPersistTimeout = 0;
-      const path = getCraftRecipeDataPath(getActiveCraftMode(this.item));
-      this.item.update({
-        [`${path}.viewport.x`]: Math.round(x),
-        [`${path}.viewport.y`]: Math.round(y),
-        [`${path}.viewport.zoom`]: clampCraftZoom(zoom)
+      this.#updateCraftRecipe({
+        viewport: {
+          x: Math.round(x),
+          y: Math.round(y),
+          zoom: clampCraftZoom(zoom)
+        }
       });
     }, 140);
   }
@@ -1354,6 +1368,68 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.render();
   }
 
+  #onCraftRecipeSelect(event) {
+    event.preventDefault();
+    const recipeId = String(event.currentTarget?.value ?? "");
+    if (!recipeId || recipeId === this.#craftRecipeId) return undefined;
+    this.#craftRecipeId = resolveCraftRecipeId(this.item, recipeId);
+    activeCraftRecipeIds.set(this.item, this.#craftRecipeId);
+    this.#craftSelection = null;
+    this.#craftAttachSourceNodeId = "";
+    this.#craftViewportOverride = null;
+    return this.render();
+  }
+
+  async #onCraftAddRecipe(event) {
+    event.preventDefault();
+    const recipes = getCraftRecipeEntries(this.item);
+    const recipe = createBlankCraftRecipeEntry({
+      id: getNextCraftRecipeId(recipes),
+      name: getNextCraftRecipeName(recipes)
+    });
+    recipes.push(recipe);
+    this.#craftRecipeId = recipe.id;
+    activeCraftRecipeIds.set(this.item, this.#craftRecipeId);
+    this.#craftSelection = null;
+    this.#craftAttachSourceNodeId = "";
+    this.#craftViewportOverride = null;
+    return this.item.update({ "system.craft.recipes": recipes });
+  }
+
+  async #onCraftDeleteRecipe(event) {
+    event.preventDefault();
+    if (this.#craftRecipeId === DEFAULT_CRAFT_RECIPE_ID) {
+      ui.notifications.warn(`${DEFAULT_CRAFT_RECIPE_NAME} удалить нельзя.`);
+      return undefined;
+    }
+
+    const recipes = getCraftRecipeEntries(this.item);
+    const recipe = recipes.find(entry => entry.id === this.#craftRecipeId);
+    if (!recipe) return undefined;
+    const confirmed = await DialogV2.confirm({
+      window: { title: "Удалить рецепт" },
+      content: `<p>Удалить ${escapeHtml(recipe.name)}?</p>`,
+      yes: {
+        icon: "fa-solid fa-trash",
+        label: "Удалить"
+      },
+      no: {
+        label: game.i18n.localize("Cancel")
+      },
+      rejectClose: false,
+      modal: true
+    });
+    if (!confirmed) return undefined;
+
+    const nextRecipes = recipes.filter(entry => entry.id !== recipe.id);
+    this.#craftRecipeId = DEFAULT_CRAFT_RECIPE_ID;
+    activeCraftRecipeIds.set(this.item, this.#craftRecipeId);
+    this.#craftSelection = null;
+    this.#craftAttachSourceNodeId = "";
+    this.#craftViewportOverride = null;
+    return this.item.update({ "system.craft.recipes": nextRecipes });
+  }
+
   async #onCraftCalculateCost(event) {
     event.preventDefault();
     const calculation = calculateCraftItemCost(this.item);
@@ -1401,11 +1477,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.#craftSelection = null;
     this.#craftAttachSourceNodeId = "";
     this.#craftViewportOverride = null;
-    return this.item.update({
-      "system.craft.disassembly.nodes": reversed.nodes,
-      "system.craft.disassembly.links": reversed.links,
-      "system.craft.disassembly.viewport": reversed.viewport
-    });
+    return this.#updateCraftRecipe(reversed);
   }
 
   #onCraftAttachNode(event) {
@@ -1935,16 +2007,31 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   #updateCraftRecipe({ nodes = null, links = null, viewport = null } = {}) {
     const updateData = {};
-    const path = getCraftRecipeDataPath(getActiveCraftMode(this.item));
+    const recipes = getCraftRecipeEntries(this.item);
+    const recipeId = resolveCraftRecipeId(this.item, this.#craftRecipeId);
+    const index = Math.max(0, recipes.findIndex(recipe => recipe.id === recipeId));
+    const recipe = cloneCraftRecipeEntry(recipes[index] ?? recipes[0]);
+    const mode = getActiveCraftMode(this.item);
+    const current = mode === CRAFT_MODE_DISASSEMBLY ? recipe.disassembly : recipe;
     if (nodes || links) {
       const normalized = normalizeCraftRecipeParts(
         nodes ? nodes.map(normalizeCraftNode) : getCraftNodesWithRoot(this.item),
         links ? links.map(normalizeCraftLink) : getCraftLinks(this.item)
       );
-      if (nodes) updateData[`${path}.nodes`] = normalized.nodes;
-      if (nodes || links) updateData[`${path}.links`] = normalized.links;
+      if (nodes) current.nodes = normalized.nodes;
+      if (nodes || links) current.links = normalized.links;
     }
-    if (viewport) updateData[`${path}.viewport`] = normalizeCraftViewport(viewport);
+    if (viewport) current.viewport = normalizeCraftViewport(viewport);
+    if (mode === CRAFT_MODE_DISASSEMBLY) recipe.disassembly = current;
+
+    recipes[index] = recipe;
+    updateData["system.craft.recipes"] = recipes;
+    if (recipe.id === DEFAULT_CRAFT_RECIPE_ID) {
+      updateData["system.craft.nodes"] = recipe.nodes;
+      updateData["system.craft.links"] = recipe.links;
+      updateData["system.craft.viewport"] = recipe.viewport;
+      updateData["system.craft.disassembly"] = recipe.disassembly;
+    }
     return this.item.update(updateData);
   }
 
@@ -5824,14 +5911,141 @@ function getActiveCraftMode(item) {
   return normalizeCraftMode(activeCraftModes.get(item));
 }
 
-function getCraftRecipeDataPath(mode = CRAFT_MODE_CREATE) {
-  return normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY ? "system.craft.disassembly" : "system.craft";
+function getCraftRecipeData(item, mode = getActiveCraftMode(item)) {
+  const recipe = getActiveCraftRecipeEntry(item);
+  if (normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY) return recipe.disassembly ?? {};
+  return recipe;
 }
 
-function getCraftRecipeData(item, mode = getActiveCraftMode(item)) {
-  const craft = item?.system?.craft ?? {};
-  if (normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY) return craft.disassembly ?? {};
-  return craft;
+function getActiveCraftRecipeEntry(item) {
+  const recipes = getCraftRecipeEntries(item);
+  const id = resolveCraftRecipeId(item, activeCraftRecipeIds.get(item));
+  return recipes.find(recipe => recipe.id === id) ?? recipes[0] ?? createDefaultCraftRecipeEntry(item);
+}
+
+function resolveCraftRecipeId(item, recipeId = "") {
+  const requested = String(recipeId ?? "").trim();
+  const recipes = getCraftRecipeEntries(item);
+  if (recipes.some(recipe => recipe.id === requested)) return requested;
+  return recipes[0]?.id ?? DEFAULT_CRAFT_RECIPE_ID;
+}
+
+function getCraftRecipeEntries(itemOrCraft = {}) {
+  const craft = itemOrCraft?.system?.craft ?? itemOrCraft ?? {};
+  const legacyRecipe = createDefaultCraftRecipeEntry({ system: { craft } });
+  const source = Array.isArray(craft?.recipes) && craft.recipes.length
+    ? craft.recipes
+    : [legacyRecipe];
+  const usedIds = new Set();
+  const entries = source.map((entry, index) => {
+    const fallback = (index === 0 || entry?.id === DEFAULT_CRAFT_RECIPE_ID) ? legacyRecipe : {};
+    const normalized = normalizeCraftRecipeEntry(mergeCraftRecipeWithLegacyFallback(entry, fallback), index, usedIds);
+    usedIds.add(normalized.id);
+    return normalized;
+  });
+  if (!entries.some(entry => entry.id === DEFAULT_CRAFT_RECIPE_ID)) {
+    entries.unshift(legacyRecipe);
+  }
+  return entries;
+}
+
+function createDefaultCraftRecipeEntry(itemOrCraft = {}) {
+  const craft = itemOrCraft?.system?.craft ?? itemOrCraft ?? {};
+  return normalizeCraftRecipeEntry({
+    id: DEFAULT_CRAFT_RECIPE_ID,
+    name: DEFAULT_CRAFT_RECIPE_NAME,
+    nodes: craft.nodes ?? [],
+    links: craft.links ?? [],
+    viewport: craft.viewport ?? {},
+    disassembly: craft.disassembly ?? {}
+  }, 0);
+}
+
+function normalizeCraftRecipeEntry(entry = {}, index = 0, usedIds = new Set()) {
+  const fallbackId = index === 0 ? DEFAULT_CRAFT_RECIPE_ID : `recipe${index + 1}`;
+  let id = String(entry?.id ?? fallbackId).trim() || fallbackId;
+  id = getUniqueCraftRecipeId(id, usedIds);
+  return {
+    id,
+    name: String(entry?.name ?? (index === 0 ? DEFAULT_CRAFT_RECIPE_NAME : `Рецепт_${index + 1}`)).trim() || `Рецепт_${index + 1}`,
+    ...normalizeCraftRecipeLayout(entry),
+    disassembly: normalizeCraftRecipeLayout(entry?.disassembly)
+  };
+}
+
+function mergeCraftRecipeWithLegacyFallback(entry = {}, fallback = {}) {
+  const source = foundry.utils.deepClone(entry ?? {});
+  const hasLegacyData = hasCraftRecipeEntryData(fallback);
+  const isDefaultRecipe = !source.id || source.id === DEFAULT_CRAFT_RECIPE_ID;
+  if (!hasLegacyData || !isDefaultRecipe || hasCraftRecipeEntryData(source)) {
+    return { ...fallback, ...source };
+  }
+  return {
+    ...source,
+    nodes: fallback.nodes,
+    links: fallback.links,
+    viewport: fallback.viewport,
+    disassembly: fallback.disassembly
+  };
+}
+
+function createBlankCraftRecipeEntry(overrides = {}) {
+  return normalizeCraftRecipeEntry({
+    nodes: [],
+    links: [],
+    viewport: {},
+    disassembly: {},
+    ...overrides
+  }, 1);
+}
+
+function cloneCraftRecipeEntry(entry = {}, overrides = {}) {
+  return normalizeCraftRecipeEntry({
+    ...foundry.utils.deepClone(entry ?? {}),
+    ...overrides
+  }, 1);
+}
+
+function normalizeCraftRecipeLayout(layout = {}) {
+  return {
+    nodes: Array.from(layout?.nodes ?? []).map(normalizeCraftNode),
+    links: Array.from(layout?.links ?? []).map(normalizeCraftLink),
+    viewport: normalizeCraftViewport(layout?.viewport ?? {})
+  };
+}
+
+function getNextCraftRecipeId(recipes = []) {
+  const used = new Set(recipes.map(recipe => recipe.id));
+  let index = 2;
+  while (used.has(`recipe${index}`)) index += 1;
+  return `recipe${index}`;
+}
+
+function getNextCraftRecipeName(recipes = []) {
+  const used = new Set(recipes.map(recipe => String(recipe.name ?? "")));
+  for (let index = 2; index < 1000; index += 1) {
+    const name = `Рецепт_${index}`;
+    if (!used.has(name)) return name;
+  }
+  return `Рецепт_${recipes.length + 1}`;
+}
+
+function getUniqueCraftRecipeId(baseId = "recipe", usedIds = new Set()) {
+  const used = usedIds instanceof Set ? usedIds : new Set(usedIds ?? []);
+  const base = String(baseId ?? "").trim() || "recipe";
+  if (!used.has(base)) return base;
+  let index = 2;
+  while (used.has(`${base}${index}`)) index += 1;
+  return `${base}${index}`;
+}
+
+function hasCraftRecipeEntryData(recipe = {}) {
+  return Boolean(
+    (recipe?.nodes ?? []).length
+    || (recipe?.links ?? []).length
+    || (recipe?.disassembly?.nodes ?? []).length
+    || (recipe?.disassembly?.links ?? []).length
+  );
 }
 
 function hasCraftRecipeData(craft = {}) {
