@@ -3,7 +3,7 @@ export const SETTINGS_BASELINE_VERSION = 1;
 export const SETTINGS_BASELINE = Object.freeze({
   "version": 1,
   "system": "fallout-maw",
-  "createdAt": "2026-06-13T10:04:06.714Z",
+  "createdAt": "2026-06-14T10:47:04.088Z",
   "sourceWorld": "fallout",
   "settings": {
     "fallout-maw.abilitiesCatalog": {
@@ -24560,7 +24560,7 @@ export const SETTINGS_BASELINE = Object.freeze({
             },
             "sight": {
               "enabled": true,
-              "range": 10,
+              "range": 2,
               "angle": 360,
               "visionMode": "basic",
               "color": "",
@@ -24588,7 +24588,7 @@ export const SETTINGS_BASELINE = Object.freeze({
               },
               "lightPerception": {
                 "range": null,
-                "enabled": false
+                "enabled": true
               },
               "basicSight": {
                 "range": null,
@@ -24625,7 +24625,120 @@ export const SETTINGS_BASELINE = Object.freeze({
             "appendNumber": false,
             "prependAdjective": false
           },
-          "construct": {}
+          "construct": {
+            "displayName": 20,
+            "actorLink": true,
+            "width": 1,
+            "height": 1,
+            "depth": 1,
+            "texture": {
+              "src": "icons/svg/mystery-man.svg",
+              "fit": "contain",
+              "anchorX": 0.5,
+              "anchorY": 0.5,
+              "tint": "#ffffff",
+              "scaleX": 1,
+              "scaleY": 1
+            },
+            "lockRotation": false,
+            "rotation": 0,
+            "alpha": 1,
+            "disposition": 0,
+            "displayBars": 40,
+            "bar1": {
+              "attribute": "resources.health"
+            },
+            "bar2": {
+              "attribute": "resources.dodge"
+            },
+            "light": {
+              "dim": 0,
+              "bright": 0,
+              "angle": 360,
+              "color": "",
+              "alpha": 0.5,
+              "priority": 0,
+              "negative": false,
+              "animation": {
+                "type": "",
+                "speed": 5,
+                "reverse": false,
+                "intensity": 5
+              },
+              "coloration": 1,
+              "luminosity": 0.5,
+              "attenuation": 0.5,
+              "saturation": 0,
+              "contrast": 0,
+              "shadows": 0
+            },
+            "sight": {
+              "enabled": true,
+              "range": 0,
+              "angle": 360,
+              "visionMode": "basic",
+              "color": "",
+              "attenuation": 0.1,
+              "brightness": 0,
+              "saturation": 0,
+              "contrast": 0
+            },
+            "detectionModes": {
+              "seeAll": {
+                "range": null,
+                "enabled": false
+              },
+              "seeInvisibility": {
+                "range": null,
+                "enabled": false
+              },
+              "senseAll": {
+                "range": null,
+                "enabled": false
+              },
+              "senseInvisibility": {
+                "range": null,
+                "enabled": false
+              },
+              "lightPerception": {
+                "range": null,
+                "enabled": true
+              },
+              "basicSight": {
+                "range": null,
+                "enabled": false
+              },
+              "feelTremor": {
+                "range": null,
+                "enabled": false
+              }
+            },
+            "occludable": {
+              "radius": 0
+            },
+            "ring": {
+              "enabled": false,
+              "colors": {
+                "ring": "",
+                "background": ""
+              },
+              "subject": {
+                "texture": "",
+                "scale": 1
+              },
+              "effects": 0
+            },
+            "turnMarker": {
+              "mode": 1,
+              "animation": "",
+              "src": "",
+              "disposition": false
+            },
+            "movementAction": "",
+            "randomImg": false,
+            "appendNumber": false,
+            "prependAdjective": false
+          }
         }
       }
     },

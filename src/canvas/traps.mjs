@@ -356,12 +356,13 @@ async function handleTrapDetectionForToken(tile, token) {
     data: { difficulty },
     animate: false,
     createMessage: true,
+    messageData: result => isSkillCheckSuccess(result) ? {} : createTrapDetectionFailureMessageData(),
     prompt: false,
     requester: "trapDetection"
   });
   if (!isSkillCheckSuccess(outcome)) return false;
 
-  await revealTrapToActor(tile, actor);
+  await revealTrapToActor(tile, actor, { shareWithFaction: true });
   ui.notifications.info(`${actor.name}: ловушка обнаружена.`);
   await ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
@@ -2197,7 +2198,7 @@ function findFirstTrapMovementEvent(tokenDocument, actor, movement = {}, trapTil
           const center = getTileCenter(tile);
           const isDetected = Math.hypot(current.point.x - center.x, current.point.y - center.y) <= detectionRadius;
           if (isDetected && canTokenSeeTrap(tile, tokenDocument, { observerPoint: current.point })) {
-            candidates.push({ type: "detection", tile, priority: 0, waypoint: current.waypoint });
+            candidates.push(createTrapMovementEvent("detection", tile, current.waypoint));
           }
         }
 
@@ -2205,10 +2206,10 @@ function findFirstTrapMovementEvent(tokenDocument, actor, movement = {}, trapTil
         const isInsideTrigger = isPointInsideTile(tile, current.point);
         if (!wasInsideTrigger && isInsideTrigger) {
           const type = trapData.trigger.activationMode !== "exit" ? "triggerImmediate" : "triggerEnter";
-          candidates.push({ type, tile, priority: 1, waypoint: current.waypoint });
+          candidates.push(createTrapMovementEvent(type, tile, current.waypoint));
         }
         if (trapData.trigger.activationMode === "exit" && wasInsideTrigger && !isInsideTrigger) {
-          candidates.push({ type: "triggerExit", tile, priority: 2, waypoint: previous.waypoint });
+          candidates.push(createTrapMovementEvent("triggerExit", tile, previous.waypoint));
         }
       }
       if (candidates.length) {
@@ -2219,6 +2220,16 @@ function findFirstTrapMovementEvent(tokenDocument, actor, movement = {}, trapTil
     }
   }
   return null;
+}
+
+function createTrapMovementEvent(type, tile, waypoint = {}) {
+  return { type, tile, waypoint, priority: getTrapMovementEventPriority(type) };
+}
+
+function getTrapMovementEventPriority(type = "") {
+  if (type === "triggerImmediate" || type === "triggerExit") return 0;
+  if (type === "triggerEnter") return 1;
+  return 2;
 }
 
 function getMovementSamples(tokenDocument, movement = {}) {
@@ -2382,16 +2393,64 @@ function isTrapVisibleToActor(tile, actor) {
   return isTrapInCurrentVision(tile);
 }
 
-async function revealTrapToActor(tile, actor) {
+async function revealTrapToActor(tile, actor, { shareWithFaction = false } = {}) {
   if (!tile || !actor?.uuid) return false;
   const trap = getTrapFlag(tile);
   if (!trap) return false;
   const visible = new Set(asStringArray(trap.visibleActorUuids));
-  if (visible.has(actor.uuid)) return false;
-  visible.add(actor.uuid);
+  const previousSize = visible.size;
+  for (const actorUuid of getTrapKnowledgeActorUuids(actor, { shareWithFaction })) {
+    if (actorUuid) visible.add(actorUuid);
+  }
+  if (visible.size === previousSize) return false;
   await tile.update({ [`flags.${SYSTEM_ID}.${TRAP_FLAG}.visibleActorUuids`]: Array.from(visible) }, { render: false });
   refreshTrapTileVisibility();
   return true;
+}
+
+function createTrapDetectionFailureMessageData() {
+  const whisper = ChatMessage.getWhisperRecipients("GM").map(user => user.id);
+  if (!whisper.length && game.user?.isGM) whisper.push(game.user.id);
+  return {
+    blind: true,
+    whisper
+  };
+}
+
+function getTrapKnowledgeActorUuids(actor, { shareWithFaction = false } = {}) {
+  const actors = new Map([[actor?.uuid, actor]].filter(([uuid]) => Boolean(uuid)));
+  if (!shareWithFaction) return Array.from(actors.keys());
+
+  const sharedFactionNames = getTrapKnowledgeSharedFactionNames(actor);
+  if (!sharedFactionNames.size) return Array.from(actors.keys());
+
+  for (const candidate of game.actors?.contents ?? []) {
+    if (isActorInTrapKnowledgeFactions(candidate, sharedFactionNames)) actors.set(candidate.uuid, candidate);
+  }
+  for (const token of canvas?.scene?.tokens?.contents ?? []) {
+    const candidate = token?.actor;
+    if (isActorInTrapKnowledgeFactions(candidate, sharedFactionNames)) actors.set(candidate.uuid, candidate);
+  }
+  return Array.from(actors.keys());
+}
+
+function getTrapKnowledgeSharedFactionNames(actor) {
+  const actorFactions = getActorTrapFactionNames(actor);
+  const names = new Set(actorFactions);
+  for (const factionName of getFactionNamesWithDefault(getFactionSettings())) {
+    const normalized = normalizeTrapFactionName(factionName);
+    if (!normalized) continue;
+    if (getRelationTo(actor, normalized) === "ally"
+      || actorFactions.some(source => getRelationFromScore(getFactionScore(source, normalized)) === "ally")) {
+      names.add(normalized);
+    }
+  }
+  return names;
+}
+
+function isActorInTrapKnowledgeFactions(actor, sharedFactionNames = new Set()) {
+  if (!actor?.uuid || !sharedFactionNames.size) return false;
+  return getActorTrapFactionNames(actor).some(factionName => sharedFactionNames.has(factionName));
 }
 
 function canActorPickupTrap(trap, actor) {

@@ -40,6 +40,7 @@ export async function requestSkillCheck({
   data = {},
   animate = true,
   createMessage = true,
+  messageData = {},
   prompt = false,
   requester = ""
 } = {}) {
@@ -54,7 +55,8 @@ export async function requestSkillCheck({
   if (animate) await playSkillCheckAnimation(outcome);
   if (!createMessage) return outcome;
 
-  const message = await publishSkillCheckMessageSafely(() => publishSkillCheckMessage(outcome, { requester }));
+  const resolvedMessageData = typeof messageData === "function" ? messageData(outcome) : messageData;
+  const message = await publishSkillCheckMessageSafely(() => publishSkillCheckMessage(outcome, { requester, messageData: resolvedMessageData }));
   return {
     ...outcome,
     message
@@ -281,7 +283,7 @@ async function performSkillCheck(actor, skill, data = {}) {
   };
 }
 
-async function publishSkillCheckMessage(outcome, { requester = "" } = {}) {
+async function publishSkillCheckMessage(outcome, { requester = "", messageData = {} } = {}) {
   const { actor, check, rolls, result, total } = outcome;
   const cardContext = buildSkillCheckViewContext(outcome);
 
@@ -291,6 +293,7 @@ async function publishSkillCheckMessage(outcome, { requester = "" } = {}) {
     content,
     sound: null,
     rolls: rolls.map(roll => roll.toJSON()),
+    ...normalizeSkillCheckMessageData(messageData),
     flags: {
       "fallout-maw": {
         skillCheck: {
@@ -304,6 +307,15 @@ async function publishSkillCheckMessage(outcome, { requester = "" } = {}) {
       }
     }
   });
+}
+
+function normalizeSkillCheckMessageData(messageData = {}) {
+  if (!messageData || typeof messageData !== "object") return {};
+  return {
+    ...(Array.isArray(messageData.whisper) ? { whisper: messageData.whisper } : {}),
+    ...(messageData.blind !== undefined ? { blind: Boolean(messageData.blind) } : {}),
+    ...(messageData.type !== undefined ? { type: messageData.type } : {})
+  };
 }
 
 function buildSkillCheckViewContext(outcome) {
