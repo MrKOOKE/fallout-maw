@@ -172,6 +172,13 @@ export function registerNaturalRaceItemHooks() {
   });
 }
 
+export async function syncLoadedActorNaturalRaceItems() {
+  if (!game.user?.isActiveGM) return;
+  for (const actor of getLoadedNaturalRaceItemActors()) {
+    await syncActorNaturalRaceItems(actor);
+  }
+}
+
 export async function syncActorNaturalRaceItems(actor) {
   if (!actor || !game.user?.isActiveGM) return;
   if (actor.type !== "character") return;
@@ -183,9 +190,10 @@ export async function syncActorNaturalRaceItems(actor) {
     const naturalSet = getActorNaturalItemSet(actor, race);
     const desired = buildDesiredNaturalItems(race, naturalSet);
     const naturalItems = actor.items?.filter(item => isNaturalRaceItem(item)) ?? [];
-    const deletes = naturalItems.map(item => item.id);
+    const { creates, deletes } = planActorNaturalRaceItemSync(naturalItems, desired);
+    if (!creates.length && !deletes.length) return;
     if (deletes.length) await actor.deleteEmbeddedDocuments("Item", deletes, { allowNaturalRaceItemDelete: true });
-    if (desired.length) await actor.createEmbeddedDocuments("Item", desired.map(entry => entry.data));
+    if (creates.length) await actor.createEmbeddedDocuments("Item", creates.map(entry => entry.data));
   } finally {
     naturalItemSyncActors.delete(actor.uuid);
   }
@@ -282,9 +290,55 @@ function buildDesiredNaturalItem(race, naturalSet, entry, kind) {
   };
 }
 
+function planActorNaturalRaceItemSync(naturalItems = [], desired = []) {
+  const desiredByKey = new Map(desired.map(entry => [getNaturalRaceItemSyncKey(entry), entry]));
+  const keptKeys = new Set();
+  const deletes = [];
+
+  for (const item of naturalItems) {
+    const flag = getNaturalRaceItemFlag(item);
+    const key = getNaturalRaceItemSyncKey(flag);
+    const desiredEntry = desiredByKey.get(key);
+    const current = {
+      kind: String(flag?.kind ?? ""),
+      raceId: String(flag?.raceId ?? ""),
+      subtypeId: String(flag?.subtypeId ?? ""),
+      sourceId: String(flag?.sourceId ?? ""),
+      templateSignature: String(flag?.templateSignature ?? "")
+    };
+    const matches = desiredEntry
+      && !keptKeys.has(key)
+      && current.kind === desiredEntry.kind
+      && current.raceId === desiredEntry.raceId
+      && current.subtypeId === desiredEntry.subtypeId
+      && current.sourceId === desiredEntry.sourceId
+      && current.templateSignature === desiredEntry.templateSignature;
+    if (matches) {
+      keptKeys.add(key);
+      continue;
+    }
+    deletes.push(item.id);
+  }
+
+  const creates = desired.filter(entry => !keptKeys.has(getNaturalRaceItemSyncKey(entry)));
+  return { creates, deletes };
+}
+
+function getNaturalRaceItemSyncKey(entry = {}) {
+  return `${entry?.kind ?? ""}:${entry?.sourceId ?? ""}`;
+}
+
 function getNaturalRaceItemTemplateSignature(itemData, kind, sourceId = "") {
   const data = normalizeNaturalRaceItemData(itemData, kind, sourceId);
   return JSON.stringify(sortObjectKeys(data));
+}
+
+function getLoadedNaturalRaceItemActors() {
+  const actors = new Set(game.actors?.contents ?? []);
+  for (const token of globalThis.canvas?.tokens?.placeables ?? []) {
+    if (token.actor) actors.add(token.actor);
+  }
+  return actors;
 }
 
 function getUniqueNaturalSetId(baseId = "naturalSet", existingIds = []) {

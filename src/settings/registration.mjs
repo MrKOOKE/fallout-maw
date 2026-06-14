@@ -93,6 +93,7 @@ import {
   normalizeTokenActionHudIcons
 } from "./accessors.mjs";
 import { migrateSystemSettings } from "../migrations/settings.mjs";
+import { syncLoadedActorNaturalRaceItems } from "../races/natural-items.mjs";
 
 export function registerSystemSettings() {
   registerPersonalGeneratorSettings();
@@ -113,7 +114,7 @@ export function registerSystemSettings() {
     config: false,
     type: Object,
     default: getBaselineDefault(CREATURE_OPTIONS_SETTING, createEmptyCreatureOptions()),
-    onChange: refreshPreparedActors
+    onChange: onCreatureOptionsChanged
   });
 
   game.settings.register(FALLOUT_MAW.id, CHARACTERISTICS_SETTING, {
@@ -561,4 +562,9 @@ export async function finalizeSystemSettings() {
   syncSettingsIntoSystemConfig();
   registerFactionApi();
   refreshPreparedActors();
+}
+
+function onCreatureOptionsChanged() {
+  refreshPreparedActors();
+  if (game.ready) void syncLoadedActorNaturalRaceItems();
 }
