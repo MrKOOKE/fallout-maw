@@ -42,6 +42,7 @@ import { registerLightSourceHooks } from "./items/light-source.mjs";
 import { registerAbilityEffectHooks, syncLoadedActorAbilityEffects } from "./abilities/effects.mjs";
 import { registerAbilityCooldownHooks } from "./abilities/cooldowns.mjs";
 import { registerAbilityItemUseHooks } from "./abilities/item-use-triggers.mjs";
+import { registerFixedAbilityFunctionHooks } from "./abilities/fixed-functions.mjs";
 import { registerDescriptionFormulaEnrichment } from "./formulas/description-formulas.mjs";
 import { registerNeedThresholdHooks } from "./needs/need-thresholds.mjs";
 import { registerRegenerationHooks } from "./needs/regeneration.mjs";
@@ -105,6 +106,7 @@ Hooks.once("init", () => {
   registerAbilityEffectHooks();
   registerAbilityCooldownHooks();
   registerAbilityItemUseHooks();
+  registerFixedAbilityFunctionHooks();
   registerNeedThresholdHooks();
   registerRegenerationHooks();
   registerNaturalRaceItemHooks();

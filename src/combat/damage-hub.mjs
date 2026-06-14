@@ -29,6 +29,7 @@ import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-fo
 import { toInteger } from "../utils/numbers.mjs";
 
 const DAMAGE_SOCKET = `system.${SYSTEM_ID}`;
+export const DAMAGE_APPLIED_HOOK = "fallout-maw.damageApplied";
 const DAMAGE_SOCKET_REQUEST_TIMEOUT_MS = 60000;
 const TRAUMA_FLAG_SCOPE = "fallout-maw";
 const TRAUMA_FLAG_KEY = "trauma";
@@ -375,6 +376,7 @@ async function applyDamageCycleNow(requests = []) {
   }
 
   await publishDamageSummaryMessage(results);
+  notifyDamageApplied(results);
   return results;
 }
 
@@ -546,7 +548,10 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
   if (mode === MODE_DAMAGE && result?.amount > 0) {
     result.finishingBlow = await applyFinishingBlowIfEligible(actor, data);
   }
-  if (createSummary) await publishDamageSummaryMessage([result]);
+  if (createSummary) {
+    await publishDamageSummaryMessage([result]);
+    notifyDamageApplied([result]);
+  }
   return result;
 }
 
@@ -592,7 +597,10 @@ async function applyItemConditionDamageApplicationNow(actor, data = {}, { create
     limbKey: data.limbKey,
     damageTypeKey: data.damageTypeKey
   };
-  if (createSummary) await publishDamageSummaryMessage([result]);
+  if (createSummary) {
+    await publishDamageSummaryMessage([result]);
+    notifyDamageApplied([result]);
+  }
   return result;
 }
 
@@ -623,7 +631,10 @@ async function applyPeriodicSplitDamageApplicationNow(actor, data = {}, { create
     amount: immediateAmount,
     delayedAmount
   };
-  if (createSummary) await publishDamageSummaryMessage([result]);
+  if (createSummary) {
+    await publishDamageSummaryMessage([result]);
+    notifyDamageApplied([result]);
+  }
   return result;
 }
 
@@ -755,7 +766,10 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
     await createCombinedBleedingDamageEffect(actor, batchResult.bleedingEntries);
   }
   const results = [batchResult, ...singleResults].filter(Boolean);
-  if (createSummary) await publishDamageSummaryMessage(results);
+  if (createSummary) {
+    await publishDamageSummaryMessage(results);
+    notifyDamageApplied(results);
+  }
   return results;
 }
 
@@ -950,6 +964,7 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
     scope,
     limbKey: data.limbKey,
     damageTypeKey: damageType?.key ?? data.damageTypeKey,
+    source: data.source,
     createdTraumas
   };
 }
@@ -1947,7 +1962,7 @@ function getInstalledProsthesis(actor, limbKey = "") {
     )) ?? null;
 }
 
-function isCriticalLimb(actor, limbKey = "") {
+export function isCriticalLimb(actor, limbKey = "") {
   const constructPart = getConstructPartItemForLimb(actor, limbKey);
   if (constructPart) return Boolean(getConstructPartFunction(constructPart).critical);
   const actorLimb = actor?.system?.limbs?.[limbKey];
@@ -3615,6 +3630,8 @@ async function applyDamageEntriesBatch(actor, entries = []) {
   }
 
   const finishingBlowSource = selectBatchFinishingBlowSource(normalizedEntries);
+  const totalLimbDelta = Array.from(limbStates.values()).reduce((sum, state) => sum + state.totalDelta, 0);
+  const sourceDamageEntries = buildBatchSourceDamageEntries(normalizedEntries, actualHealthDelta, requestedHealthDamage);
   const finishingBlow = actualHealthDelta > 0 && finishingBlowSource
     ? await applyFinishingBlowIfEligible(actor, finishingBlowSource)
     : null;
@@ -3623,7 +3640,7 @@ async function applyDamageEntriesBatch(actor, entries = []) {
     actor,
     amount: normalizedEntries.reduce((sum, entry) => sum + entry.amount, 0),
     healthDelta: actualHealthDelta,
-    limbDelta: Array.from(limbStates.values()).reduce((sum, state) => sum + state.totalDelta, 0),
+    limbDelta: totalLimbDelta,
     limbDeltas: buildBatchLimbDeltaEntries(actor, limbStates),
     mode: MODE_DAMAGE,
     scope: SCOPE_HEALTH_AND_LIMB,
@@ -3631,6 +3648,8 @@ async function applyDamageEntriesBatch(actor, entries = []) {
     resourceLimitEntries,
     bleedingEntries,
     createdTraumas,
+    sourceDamageEntries,
+    source: finishingBlowSource?.source ?? {},
     finishingBlow
   };
 }
@@ -3745,6 +3764,36 @@ function buildBatchDamageNumberEntries(entries = [], actualHealthDelta = 0, requ
     .map(({ damageTypeKey, amount, source }) => ({ damageTypeKey, amount, source }));
 }
 
+function buildBatchSourceDamageEntries(entries = [], actualDamageDelta = 0, requestedDamage = 0) {
+  if (!actualDamageDelta || !requestedDamage) return [];
+  const damageRatio = actualDamageDelta / requestedDamage;
+  const rows = entries
+    .map((entry, index) => {
+      const exact = entry.amount * damageRatio;
+      return {
+        index,
+        source: entry.source && typeof entry.source === "object" ? entry.source : {},
+        exact,
+        damage: Math.floor(exact),
+        fraction: exact - Math.floor(exact)
+      };
+    })
+    .filter(row => row.exact > 0);
+  let remaining = actualDamageDelta - rows.reduce((sum, row) => sum + row.damage, 0);
+  for (const row of rows.sort((left, right) => right.fraction - left.fraction)) {
+    if (remaining <= 0) break;
+    row.damage += 1;
+    remaining -= 1;
+  }
+  return rows
+    .sort((left, right) => left.index - right.index)
+    .filter(row => row.damage > 0)
+    .map(row => ({
+      damage: row.damage,
+      source: row.source
+    }));
+}
+
 function buildBatchBleedingEntries(entries = [], actualHealthDelta = 0, requestedHealthDamage = 0) {
   if (!actualHealthDelta || !requestedHealthDamage) return [];
   const healthRatio = actualHealthDelta / requestedHealthDamage;
@@ -3832,6 +3881,12 @@ async function publishDamageSummaryMessage(results = []) {
       }
     }
   });
+}
+
+function notifyDamageApplied(results = []) {
+  const flatResults = results.flat(Infinity).filter(Boolean);
+  if (!flatResults.length) return;
+  Hooks.callAll(DAMAGE_APPLIED_HOOK, { results: flatResults });
 }
 
 function buildDamageSummaryViewContext(results = []) {

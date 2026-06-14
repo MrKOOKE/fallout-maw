@@ -1268,7 +1268,69 @@
 
 .fallout-maw-function-picker {
   display: grid;
+  gap: 0.4rem;
   margin-top: 0.5rem;
+}
+
+.fallout-maw-fixed-function-dialog {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.fallout-maw-fixed-settings {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.fallout-maw-fixed-settings-row {
+  align-items: end;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.fallout-maw-fixed-settings-row > strong {
+  grid-column: 1 / -1;
+}
+
+.fallout-maw-fixed-progress-inputs,
+.fallout-maw-split-number-field-control {
+  align-items: center;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.fallout-maw-fixed-progress-inputs {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.fallout-maw-split-number-field-control {
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, auto);
+}
+
+.fallout-maw-radio-card {
+  align-items: flex-start;
+  border: 1px solid var(--fallout-maw-border);
+  border-radius: 6px;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 0.6rem;
+}
+
+.fallout-maw-radio-card.disabled {
+  opacity: 0.55;
+}
+
+.fallout-maw-radio-card span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.fallout-maw-radio-card em,
+.fallout-maw-radio-card small {
+  color: var(--fallout-maw-muted);
+  font-style: normal;
 }
 
 .fallout-maw-range-field {

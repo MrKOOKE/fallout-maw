@@ -5,6 +5,7 @@ import {
   ABILITY_CHANGE_TYPES,
   ABILITY_CONDITION_TYPES,
   ABILITY_EQUIPMENT_OPERATORS,
+  ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
   ABILITY_HEALTH_LIMB_ALL,
   ABILITY_HEALTH_TARGETS,
@@ -14,8 +15,14 @@ import {
   createAbilityCondition,
   createAbilityFunction,
   normalizeAbilityEntry,
+  normalizeDeusExMachinaSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
+import {
+  createFixedAbilityFunction,
+  getFixedAbilityFunctionChoices,
+  getFixedAbilityFunctionLabel
+} from "../abilities/fixed-functions.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { buildAbilityAcquisitionChangeKeyTokens } from "../utils/ability-acquisition-change-keys.mjs";
 import { getEquipmentSlotSelectionKey } from "../utils/equipment-slots.mjs";
@@ -30,6 +37,7 @@ const TextEditor = foundry.applications.ux.TextEditor.implementation;
 export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
   #activeTab = "details";
   #functionPickerActive = false;
+  #fixedFunctionPickerActive = false;
   #saveDebounced;
 
   constructor(catalogApp, categoryId, abilityId, options = {}) {
@@ -112,7 +120,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       descriptionHTML,
       canAddFunction: true,
       showFunctionPicker: this.#functionPickerActive,
+      showFixedFunctionPicker: this.#fixedFunctionPickerActive,
       functionChoices: buildFunctionChoices(),
+      fixedFunctionChoices: getFixedAbilityFunctionChoices(),
       onlyFree: Boolean(this.ability.system?.acquisition?.onlyFree),
       onlyManual: Boolean(this.ability.system?.acquisition?.onlyManual),
       acquisitionRequirements: (this.ability.system?.acquisitionRequirements ?? []).map(requirement => prepareAcquisitionRequirementForDisplay(requirement, {
@@ -134,6 +144,12 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.form?.addEventListener("input", this.#onAutosaveInput);
     this.form?.addEventListener("change", this.#onAutosaveChange);
     this.element?.querySelector?.("[data-choose-ability-function]")?.addEventListener("change", event => this.#onChooseFunction(event));
+    this.element?.querySelector?.("[data-choose-fixed-ability-function]")?.addEventListener("change", event => this.#onChooseFixedFunction(event));
+    this.element?.querySelector?.("[data-fixed-ability-function-search]")?.addEventListener("input", event => this.#onFixedFunctionSearch(event));
+    this.element?.querySelectorAll?.("[data-fixed-rescue-mode]")?.forEach(select => {
+      select.addEventListener("change", () => syncFixedRescueCountVisibility(select));
+      syncFixedRescueCountVisibility(select);
+    });
     this.element?.querySelectorAll?.("[data-field='conditionType']")?.forEach(select => {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
     });
@@ -201,11 +217,40 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     this.#syncFromForm();
     const selected = String(event.currentTarget?.value ?? "");
+    if (selected === ABILITY_FUNCTION_TYPES.fixed) {
+      this.#functionPickerActive = false;
+      this.#fixedFunctionPickerActive = true;
+      this.#activeTab = "functions";
+      return this.#persist({ render: true, sync: false });
+    }
     if (![ABILITY_FUNCTION_TYPES.effectChanges, ABILITY_FUNCTION_TYPES.acquisitionChanges].includes(selected)) return undefined;
     this.ability.system.functions.push(createAbilityFunction(selected));
     this.#functionPickerActive = false;
+    this.#fixedFunctionPickerActive = false;
     this.#activeTab = "functions";
     return this.#persist({ render: true, sync: false });
+  }
+
+  #onChooseFixedFunction(event) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const abilityFunction = createFixedAbilityFunction(event.currentTarget?.value ?? "");
+    if (!abilityFunction) return undefined;
+    this.ability.system.functions.push(abilityFunction);
+    this.#functionPickerActive = false;
+    this.#fixedFunctionPickerActive = false;
+    this.#activeTab = "functions";
+    return this.#persist({ render: true, sync: false });
+  }
+
+  #onFixedFunctionSearch(event) {
+    const query = String(event.currentTarget?.value ?? "").trim().toLocaleLowerCase();
+    const select = this.element?.querySelector("[data-choose-fixed-ability-function]");
+    select?.querySelectorAll("option").forEach(option => {
+      const value = String(option.value ?? "");
+      if (!value) return;
+      option.hidden = query && !String(option.textContent ?? "").toLocaleLowerCase().includes(query);
+    });
   }
 
   #onConditionTypeChange(event) {
@@ -245,7 +290,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     this.#syncFromForm();
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", target.closest("[data-ability-function-row]"));
-    if (functionIndex >= 0) this.ability.system.functions[functionIndex]?.changes?.push(createAbilityChange());
+    const entry = this.ability.system.functions[functionIndex];
+    if (entry?.type !== ABILITY_FUNCTION_TYPES.fixed) entry?.changes?.push(createAbilityChange());
     return this.#persist({ render: true, sync: false });
   }
 
@@ -263,7 +309,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.#syncFromForm();
     const functionRow = target.closest("[data-ability-function-row]");
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", functionRow);
-    if (functionIndex >= 0) this.ability.system.functions[functionIndex]?.conditions?.push(createAbilityCondition(""));
+    const entry = this.ability.system.functions[functionIndex];
+    if (entry?.type !== ABILITY_FUNCTION_TYPES.fixed) entry?.conditions?.push(createAbilityCondition(""));
     return this.#persist({ render: true, sync: false });
   }
 
@@ -339,6 +386,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.#syncFromForm();
     const functionIndex = getRowIndex(this.form, "[data-ability-function-row]", target.closest("[data-ability-function-row]"));
     const entry = this.ability.system.functions[functionIndex];
+    if (entry?.type === ABILITY_FUNCTION_TYPES.fixed) return this.#persist({ render: true, sync: false });
     if (entry?.conditions?.some(condition => isRuntimeCondition(condition?.type))) entry.penalties.push(createAbilityChange());
     return this.#persist({ render: true, sync: false });
   }
@@ -407,10 +455,44 @@ function readAbilityFunctions(root) {
   return Array.from(root.querySelectorAll("[data-ability-function-row]") ?? []).map(row => ({
     id: row.dataset.functionId || foundry.utils.randomID(),
     type: row.dataset.functionType,
+    fixedKey: row.querySelector("[data-field='fixedKey']")?.value ?? "",
+    fixedSettings: readFixedFunctionSettings(row),
     changes: readAbilityChanges(row.querySelector(":scope > [data-ability-changes]"), "[data-ability-change-row]"),
     conditions: readAbilityConditions(row.querySelector("[data-ability-conditions]")),
     penalties: readAbilityChanges(row.querySelector("[data-ability-penalties]"), "[data-ability-penalty-row]")
   }));
+}
+
+function syncFixedRescueCountVisibility(select) {
+  const row = select?.closest?.(".fallout-maw-fixed-settings-row");
+  const countField = row?.querySelector?.("[data-fixed-rescue-count]");
+  if (countField) countField.hidden = String(select.value ?? "all") !== "count";
+}
+
+function readFixedFunctionSettings(row) {
+  const fixedKey = row.querySelector("[data-field='fixedKey']")?.value ?? "";
+  if (fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) return {};
+  return {
+    damageRequired: row.querySelector("[data-field='fixed.damageRequired']")?.value,
+    insight: {
+      skillBonus: row.querySelector("[data-field='fixed.insight.skillBonus']")?.value,
+      durationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.insight.durationAmount']")?.value,
+        row.querySelector("[data-field='fixed.insight.durationUnit']")?.value
+      )
+    },
+    disintegrate: {
+      destroyPercent: row.querySelector("[data-field='fixed.disintegrate.destroyPercent']")?.value
+    },
+    luckyFind: {
+      valueMin: row.querySelector("[data-field='fixed.luckyFind.valueMin']")?.value,
+      valueMax: row.querySelector("[data-field='fixed.luckyFind.valueMax']")?.value
+    },
+    rescue: {
+      restoreMode: row.querySelector("[data-field='fixed.rescue.restoreMode']")?.value,
+      restoreCount: row.querySelector("[data-field='fixed.rescue.restoreCount']")?.value
+    }
+  };
 }
 
 function readAbilityChanges(root, selector) {
@@ -462,6 +544,11 @@ function prepareFunctionForDisplay(entry) {
   const normalized = normalizeAbilityFunctions([entry])[0] ?? createAbilityFunction();
   const isAcquisitionChanges = normalized.type === ABILITY_FUNCTION_TYPES.acquisitionChanges;
   const isEffectChanges = normalized.type === ABILITY_FUNCTION_TYPES.effectChanges;
+  const isFixed = normalized.type === ABILITY_FUNCTION_TYPES.fixed;
+  const fixedKey = String(normalized.fixedKey ?? "");
+  const fixedDeusSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina
+    ? prepareDeusExMachinaSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const conditions = normalized.conditions.map(condition => prepareConditionForDisplay(condition, {
     changeCount: normalized.changes.length,
     allowLimitedChanges: isEffectChanges
@@ -471,9 +558,10 @@ function prepareFunctionForDisplay(entry) {
     ...normalized,
     isAcquisitionChanges,
     isEffectChanges,
-    typeLabel: isAcquisitionChanges
-      ? "Разовое изменение при приобретении"
-      : "Свободная настройка",
+    isFixed,
+    fixedKey,
+    fixedDeusSettings,
+    typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: normalized.changes.map(prepareChangeForDisplay),
     conditions,
     conditionGroups: buildConditionDisplayGroups(conditions),
@@ -490,6 +578,21 @@ function prepareChangeForDisplay(change, index) {
     index,
     priority: change.priority ?? "",
     typeChoices: buildChangeTypeChoices(change.type)
+  };
+}
+
+function prepareDeusExMachinaSettingsForDisplay(settings = {}) {
+  const normalized = normalizeDeusExMachinaSettings(settings);
+  const duration = splitDurationSeconds(normalized.insight.durationSeconds);
+  return {
+    ...normalized,
+    insightDurationAmount: duration.amount,
+    insightDurationUnitChoices: buildDurationUnitChoices(duration.unit),
+    restoreModeChoices: [
+      { value: "all", label: "Все ключевые конечности", selected: normalized.rescue.restoreMode === "all" },
+      { value: "count", label: "Ограниченное число", selected: normalized.rescue.restoreMode !== "all" }
+    ],
+    isRestoreCountMode: normalized.rescue.restoreMode !== "all"
   };
 }
 
@@ -599,6 +702,7 @@ function getAcquisitionRequirementTypeLabel(type) {
 function buildFunctionChoices() {
   return [
     { value: "", label: "Выберите функцию", disabled: true, selected: true },
+    { value: ABILITY_FUNCTION_TYPES.fixed, label: "Фиксированные функции" },
     { value: ABILITY_FUNCTION_TYPES.effectChanges, label: "Свободная настройка" },
     { value: ABILITY_FUNCTION_TYPES.acquisitionChanges, label: "Разовое изменение при приобретении" }
   ];

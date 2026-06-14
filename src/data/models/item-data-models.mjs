@@ -125,9 +125,11 @@ function abilityFunctionField() {
     type: new StringField({
       required: true,
       blank: false,
-      choices: ["effectChanges", "acquisitionChanges", "characteristicBonus", "skillBonus"],
+      choices: ["effectChanges", "acquisitionChanges", "characteristicBonus", "skillBonus", "fixed"],
       initial: "effectChanges"
     }),
+    fixedKey: new StringField({ required: true, blank: true, initial: "" }),
+    fixedSettings: new ObjectField({ required: true, initial: {} }),
     changes: new ArrayField(abilityChangeField(), { required: true, initial: [] }),
     conditions: new ArrayField(abilityConditionField(), { required: true, initial: [] }),
     penalties: new ArrayField(abilityChangeField(), { required: true, initial: [] }),

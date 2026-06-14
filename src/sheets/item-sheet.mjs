@@ -2,7 +2,7 @@ import { activateEffectKeyAutocomplete } from "../apps/effect-key-autocomplete.m
 import { activateDescriptionFormulaAutocomplete } from "../apps/description-formula-autocomplete.mjs";
 import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
 import { NeedAdvancedSettingsConfig } from "../apps/need-settings-config.mjs";
-import { BLEEDING_DAMAGE_TYPE_KEY, TEMPLATES } from "../constants.mjs";
+import { BLEEDING_DAMAGE_TYPE_KEY, SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getItemCategorySettings, getNeedSettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
 import { getEquipmentSlotSelectionKey, groupRaceEquipmentSlotsBySet, groupRaceWeaponSlotsBySet } from "../utils/equipment-slots.mjs";
 import {
@@ -28,6 +28,7 @@ import {
 } from "../utils/item-functions.mjs";
 import { FALLBACK_ICON, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
+  ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_CHANGE_TYPES,
   ABILITY_CONDITION_TYPES,
   ABILITY_EQUIPMENT_OPERATORS,
@@ -37,8 +38,15 @@ import {
   createAbilityChange,
   createAbilityCondition,
   createAbilityFunction,
+  normalizeDeusExMachinaSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
+import {
+  ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY,
+  createFixedAbilityFunction,
+  getFixedAbilityFunctionChoices,
+  getFixedAbilityFunctionLabel
+} from "../abilities/fixed-functions.mjs";
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { buildAbilityAcquisitionChangeKeyTokens } from "../utils/ability-acquisition-change-keys.mjs";
 import { captureApplicationScrollPositions, restoreApplicationScrollPositions } from "../utils/application-scroll.mjs";
@@ -95,6 +103,7 @@ const activeCraftRecipeIds = new WeakMap();
 export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
   #scrollPositions = new Map();
   #functionPickerActive = false;
+  #fixedAbilityFunctionPickerActive = false;
   #mitigationFillDrag = null;
   #craftMode = CRAFT_MODE_CREATE;
   #craftRecipeId = DEFAULT_CRAFT_RECIPE_ID;
@@ -300,6 +309,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         selected: true
       },
       {
+        value: ABILITY_FUNCTION_TYPES.fixed,
+        label: "Фиксированные функции"
+      },
+      {
         value: ABILITY_FUNCTION_TYPES.effectChanges,
         label: "Свободная настройка"
       },
@@ -435,6 +448,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       isAbilityOnlyFree: Boolean(item.system?.acquisition?.onlyFree),
       isAbilityOnlyManual: Boolean(item.system?.acquisition?.onlyManual),
       canAddAbilityFunction: true,
+      showFixedAbilityFunctionPicker: this.#fixedAbilityFunctionPickerActive,
+      fixedAbilityFunctionChoices: getFixedAbilityFunctionChoices(),
       abilityFunctionChoices,
       abilityResearchSkillChoices: skillSettings.map((skill, index) => ({
         key: skill.key,
@@ -442,7 +457,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         selected: skill.key === item.system?.acquisition?.skillKey || (!item.system?.acquisition?.skillKey && index === 0)
       })),
       abilityFunctions: normalizeAbilityFunctions(item.system?.functions ?? [])
-        .map((entry, index) => prepareAbilityFunctionRowsForDisplay(entry, index, "system.functions")),
+        .map((entry, index) => prepareAbilityFunctionRowsForDisplay(entry, index, "system.functions", item)),
       itemFunctionChoices: availableFunctionChoices,
       currencies: currencySettings.map(currency => ({
         ...currency,
@@ -527,6 +542,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       foundry.utils.setProperty(submitData, "system.functions.trap.recharge.value", null);
     }
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
+    normalizeSubmittedFixedAbilityFunctions(form, submitData);
     return super._processSubmitData(event, form, submitData, options);
   }
 
@@ -534,6 +550,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const submitData = super._processFormData(event, form, formData);
     normalizeWeaponSpecialPropertiesInSubmitData(submitData);
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
+    normalizeSubmittedFixedAbilityFunctions(form, submitData);
     return submitData;
   }
 
@@ -691,6 +708,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelector("[data-choose-item-function]")?.addEventListener("change", event => this.#onChooseItemFunction(event));
     this.element?.querySelector("[data-choose-ability-function]")?.addEventListener("change", event => this.#onChooseAbilityFunction(event));
+    this.element?.querySelector("[data-choose-fixed-ability-function]")?.addEventListener("change", event => this.#onChooseFixedAbilityFunction(event));
+    this.element?.querySelector("[data-fixed-ability-function-search]")?.addEventListener("input", event => this.#onFixedAbilityFunctionSearch(event));
+    this.element?.querySelectorAll("[data-fixed-rescue-mode]").forEach(select => {
+      select.addEventListener("change", () => syncFixedRescueCountVisibility(select));
+      syncFixedRescueCountVisibility(select);
+    });
     this.element?.querySelectorAll("[data-delete-ability-function]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAbilityFunction(event));
     });
@@ -2166,15 +2189,44 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.render();
   }
 
-  #onChooseAbilityFunction(event) {
+  async #onChooseAbilityFunction(event) {
     event.preventDefault();
     const functionType = String(event.currentTarget?.value ?? "");
     if (!Object.values(ABILITY_FUNCTION_TYPES).includes(functionType)) return undefined;
+    if (functionType === ABILITY_FUNCTION_TYPES.fixed) {
+      this.#functionPickerActive = false;
+      this.#fixedAbilityFunctionPickerActive = true;
+      await this.#submitCurrentForm();
+      return this.render();
+    }
     const functionPath = this.#getAbilityFunctionPathForEvent(event);
     const functions = this.#getSubmittedAbilityFunctions(functionPath);
     functions.push(createAbilityFunction(functionType));
     this.#functionPickerActive = false;
+    this.#fixedAbilityFunctionPickerActive = false;
     return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onChooseFixedAbilityFunction(event) {
+    event.preventDefault();
+    const fixedKey = String(event.currentTarget?.value ?? "");
+    const abilityFunction = createFixedAbilityFunction(fixedKey);
+    if (!abilityFunction) return undefined;
+    const functions = this.#getSubmittedAbilityFunctions("system.functions");
+    functions.push(abilityFunction);
+    this.#functionPickerActive = false;
+    this.#fixedAbilityFunctionPickerActive = false;
+    return this.#submitCurrentForm({ "system.functions": functions });
+  }
+
+  #onFixedAbilityFunctionSearch(event) {
+    const query = String(event.currentTarget?.value ?? "").trim().toLocaleLowerCase();
+    const select = this.element?.querySelector("[data-choose-fixed-ability-function]");
+    select?.querySelectorAll("option").forEach(option => {
+      const value = String(option.value ?? "");
+      if (!value) return;
+      option.hidden = query && !String(option.textContent ?? "").toLocaleLowerCase().includes(query);
+    });
   }
 
   #onDeleteAbilityFunction(event) {
@@ -2199,6 +2251,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const functionPath = this.#getAbilityFunctionPathForEvent(event);
     const functions = this.#getSubmittedAbilityFunctions(functionPath);
     if (!functions[functionIndex]) return undefined;
+    if (functions[functionIndex].type === ABILITY_FUNCTION_TYPES.fixed) return undefined;
     functions[functionIndex].changes.push(createAbilityChange());
     return this.#submitCurrentForm({ [functionPath]: functions });
   }
@@ -2221,6 +2274,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const functionPath = this.#getAbilityFunctionPathForEvent(event);
     const functions = this.#getSubmittedAbilityFunctions(functionPath);
     if (!functions[functionIndex]) return undefined;
+    if (functions[functionIndex].type === ABILITY_FUNCTION_TYPES.fixed) return undefined;
     functions[functionIndex].conditions.push(createAbilityCondition(""));
     return this.#submitCurrentForm({ [functionPath]: functions });
   }
@@ -2303,6 +2357,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const functionIndex = Number(event.currentTarget?.closest?.("[data-ability-function-row]")?.dataset.functionIndex ?? -1);
     const functionPath = this.#getAbilityFunctionPathForEvent(event);
     const functions = this.#getSubmittedAbilityFunctions(functionPath);
+    if (functions[functionIndex]?.type === ABILITY_FUNCTION_TYPES.fixed) return undefined;
     if (!functions[functionIndex]?.conditions?.some(condition => isAbilityRuntimeCondition(condition?.type))) return undefined;
     functions[functionIndex].penalties.push(createAbilityChange());
     return this.#submitCurrentForm({ [functionPath]: functions });
@@ -4147,10 +4202,15 @@ function activateItemEffectKeyAutocompletes(root) {
   });
 }
 
-function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, functionPath = "system.functions") {
+function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, functionPath = "system.functions", item = null) {
   const type = String(entry?.type ?? ABILITY_FUNCTION_TYPES.effectChanges);
   const isAcquisitionChanges = type === ABILITY_FUNCTION_TYPES.acquisitionChanges;
   const isEffectChanges = type === ABILITY_FUNCTION_TYPES.effectChanges;
+  const isFixed = type === ABILITY_FUNCTION_TYPES.fixed;
+  const fixedKey = String(entry?.fixedKey ?? "");
+  const fixedDeusSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina
+    ? prepareDeusExMachinaSettingsForDisplay(entry?.fixedSettings, entry, item)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -4163,7 +4223,10 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     functionPath,
     isAcquisitionChanges,
     isEffectChanges,
-    typeLabel: isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка",
+    isFixed,
+    fixedKey,
+    fixedDeusSettings,
+    typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
     conditionGroups: buildAbilityConditionDisplayGroups(conditions),
@@ -4189,6 +4252,26 @@ function prepareAbilityPenaltyForDisplay(change, functionIndex, index, functionP
   return {
     ...prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath),
     penaltyIndex: index
+  };
+}
+
+function prepareDeusExMachinaSettingsForDisplay(settings = {}, abilityFunction = {}, item = null) {
+  const normalized = normalizeDeusExMachinaSettings(settings);
+  const duration = splitAbilityDurationSeconds(normalized.insight.durationSeconds);
+  const stateKey = [String(abilityFunction?.id ?? ""), ABILITY_FIXED_FUNCTION_KEYS.deusExMachina].filter(Boolean).join(":");
+  const state = item?.getFlag?.(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY)
+    ?? item?.flags?.[SYSTEM_ID]?.[ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY]
+    ?? {};
+  return {
+    ...normalized,
+    damageCurrent: Math.max(0, toInteger(state?.[stateKey]?.damage)),
+    insightDurationAmount: duration.amount,
+    insightDurationUnitChoices: buildAbilityDurationUnitChoices(duration.unit),
+    restoreModeChoices: [
+      { value: "all", label: "Все ключевые конечности", selected: normalized.rescue.restoreMode === "all" },
+      { value: "count", label: "Ограниченное число", selected: normalized.rescue.restoreMode !== "all" }
+    ],
+    isRestoreCountMode: normalized.rescue.restoreMode !== "all"
   };
 }
 
@@ -4519,6 +4602,47 @@ function normalizeSubmittedAbilityItemUseConditions(form = null, submitData = {}
     foundry.utils.setProperty(submitData, `${conditionPath}.itemCategories`, categories);
     foundry.utils.setProperty(submitData, `${conditionPath}.durationSeconds`, durationSeconds);
   }
+}
+
+function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
+  for (const row of form?.querySelectorAll?.("[data-ability-function-row][data-function-type='fixed']") ?? []) {
+    const functionPath = String(row.dataset.functionPath ?? "");
+    const functionIndex = Number(row.dataset.functionIndex ?? -1);
+    const functionId = String(row.dataset.functionId ?? "").trim();
+    const fixedKey = String(row.querySelector("input[name$='.fixedKey']")?.value ?? "").trim();
+    if (!functionPath || functionIndex < 0 || fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) continue;
+
+    const durationSeconds = abilityDurationPartsToSeconds(
+      row.querySelector("[data-fixed-insight-duration-amount]")?.value,
+      row.querySelector("[data-fixed-insight-duration-unit]")?.value
+    );
+    foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.insight.durationSeconds`, durationSeconds);
+
+    const stateKey = [functionId, fixedKey].filter(Boolean).join(":");
+    const currentDamage = Math.max(0, toInteger(row.querySelector("[data-fixed-damage-current]")?.value));
+    const requiredDamage = Math.max(1, toInteger(row.querySelector("input[name$='.fixedSettings.damageRequired']")?.value));
+    foundry.utils.setProperty(
+      submitData,
+      `flags.${SYSTEM_ID}.${ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY}.${stateKey}.fixedKey`,
+      fixedKey
+    );
+    foundry.utils.setProperty(
+      submitData,
+      `flags.${SYSTEM_ID}.${ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY}.${stateKey}.damage`,
+      currentDamage
+    );
+    foundry.utils.setProperty(
+      submitData,
+      `flags.${SYSTEM_ID}.${ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY}.${stateKey}.readyNotified`,
+      currentDamage >= requiredDamage
+    );
+  }
+}
+
+function syncFixedRescueCountVisibility(select) {
+  const row = select?.closest?.(".fallout-maw-fixed-settings-row");
+  const countField = row?.querySelector?.("[data-fixed-rescue-count]");
+  if (countField) countField.hidden = String(select.value ?? "all") !== "count";
 }
 
 function normalizeSubmittedWeaponFunctionSpecialProperties(weaponData = null) {

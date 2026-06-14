@@ -256,6 +256,16 @@
       </select>
     </div>
     {{/if}}
+    {{#if showFixedAbilityFunctionPicker}}
+    <div class="fallout-maw-function-picker">
+      <input type="search" data-fixed-ability-function-search placeholder="Поиск фиксированной функции">
+      <select data-choose-fixed-ability-function>
+        {{#each fixedAbilityFunctionChoices}}
+        <option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>
+        {{/each}}
+      </select>
+    </div>
+    {{/if}}
   </section>
 
   {{#each abilityFunctions}}
@@ -263,13 +273,87 @@
     <div class="fallout-maw-panel-header">
       <h2>{{typeLabel}}</h2>
       <div class="fallout-maw-inline-controls">
+        {{#unless isFixed}}
         <button type="button" data-add-ability-change><i class="fa-solid fa-plus"></i> Добавить строку</button>
         <button type="button" data-add-ability-condition><i class="fa-solid fa-plus"></i> Добавить условие</button>
+        {{/unless}}
         <button type="button" class="fallout-maw-icon-button" data-delete-ability-function title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
       </div>
     </div>
     <input type="hidden" name="{{functionPath}}.{{@index}}.id" value="{{id}}">
     <input type="hidden" name="{{functionPath}}.{{@index}}.type" value="{{type}}">
+    {{#if isFixed}}
+    <input type="hidden" name="{{functionPath}}.{{@index}}.fixedKey" value="{{fixedKey}}">
+    {{#if fixedDeusSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-panel-header">
+        <h3>Настройки: Бог из машины</h3>
+      </div>
+      <div class="fallout-maw-fixed-settings">
+        <label>
+          <span>Прогресс урона</span>
+          <div class="fallout-maw-fixed-progress-inputs">
+            <input type="number" value="{{fixedDeusSettings.damageCurrent}}" min="0" step="1" data-fixed-damage-current aria-label="Текущий прогресс">
+            <b>/</b>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.damageRequired" value="{{fixedDeusSettings.damageRequired}}" min="1" step="1" aria-label="Урон для срабатывания">
+          </div>
+        </label>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Прозрение</strong>
+          <label>
+            <span>Бонус к навыкам</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.insight.skillBonus" value="{{fixedDeusSettings.insight.skillBonus}}" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" value="{{fixedDeusSettings.insightDurationAmount}}" min="0" step="1" data-fixed-insight-duration-amount>
+              <select data-fixed-insight-duration-unit>
+                {{#each fixedDeusSettings.insightDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Забавный случай</strong>
+          <label>
+            <span>Уничтожаемые предметы и валюта, %</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.disintegrate.destroyPercent" value="{{fixedDeusSettings.disintegrate.destroyPercent}}" min="0" max="100" step="1">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Удачная находка</strong>
+          <label>
+            <span>Минимум ценности</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.luckyFind.valueMin" value="{{fixedDeusSettings.luckyFind.valueMin}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Максимум ценности</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.luckyFind.valueMax" value="{{fixedDeusSettings.luckyFind.valueMax}}" min="0" step="1">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Чудесное спасение</strong>
+          <label>
+            <span>Восстановить</span>
+            <select name="{{functionPath}}.{{functionIndex}}.fixedSettings.rescue.restoreMode" data-fixed-rescue-mode>
+              {{#each fixedDeusSettings.restoreModeChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          <label data-fixed-rescue-count {{#unless fixedDeusSettings.isRestoreCountMode}}hidden{{/unless}}>
+            <span>Исцеляемые конечности</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.rescue.restoreCount" value="{{fixedDeusSettings.rescue.restoreCount}}" min="1" step="1">
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+    {{/if}}
+    {{#unless isFixed}}
     <div data-ability-changes>
       {{#each changes}}
       <div class="fallout-maw-ability-change-card" data-ability-change-row data-change-index="{{index}}">
@@ -300,6 +384,7 @@
       <p class="fallout-maw-empty-list">Строки изменений не настроены.</p>
       {{/each}}
     </div>
+    {{/unless}}
 
     {{#if hasConditions}}
     <div class="fallout-maw-ability-subsection">

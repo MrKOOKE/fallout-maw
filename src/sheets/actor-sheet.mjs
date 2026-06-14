@@ -119,6 +119,7 @@ import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import { getAbilityItemUseProgressEntries } from "../abilities/runtime-state.mjs";
+import { getFixedAbilityFunctionProgressEntries } from "../abilities/fixed-functions.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import {
   applyWeaponModuleModifiers,
@@ -3458,7 +3459,10 @@ function renderAbilityItemTooltipContentHTML(item, _actor, { descriptionHTML = "
 }
 
 function buildAbilityTooltipFunctionSections(item) {
-  const progressRows = getAbilityItemUseProgressEntries(item)
+  const progressRows = [
+    ...getAbilityItemUseProgressEntries(item),
+    ...getFixedAbilityFunctionProgressEntries(item)
+  ]
     .map(entry => [entry.label, `${entry.current} / ${entry.required}`]);
   const sections = [
     renderTooltipFunctionSection("Прогресс условий", progressRows)

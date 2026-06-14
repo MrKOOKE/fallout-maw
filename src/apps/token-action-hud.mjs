@@ -64,6 +64,10 @@ import { openCraftWindow } from "./craft-window.mjs";
 import { openStealthWindow } from "../stealth/index.mjs";
 import { getWeaponActionBlockState } from "../abilities/runtime-state.mjs";
 import {
+  hasActiveFixedAbilityFunction,
+  useFixedAbilityFunctionItem
+} from "../abilities/fixed-functions.mjs";
+import {
   canUseWeaponSlotForItem,
   getRequiredWeaponSlotsForItem,
   getWeaponSlotRequirement,
@@ -452,6 +456,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       rollSkill: TokenActionHud.#onRollSkill,
       openItem: { handler: TokenActionHud.#onOpenItem, buttons: [1] },
       useItem: { handler: TokenActionHud.#onUseItem, buttons: [0, 1] },
+      useAbility: { handler: TokenActionHud.#onUseAbility, buttons: [0, 1] },
       useActiveAction: TokenActionHud.#onUseActiveAction,
       dragGrappledTarget: TokenActionHud.#onDragGrappledTarget,
       useSystemAction: TokenActionHud.#onUseSystemAction
@@ -958,6 +963,21 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     });
   }
 
+  static async #onUseAbility(event, target) {
+    event.preventDefault();
+    const item = this.actor?.items.get(target.dataset.itemId ?? "");
+    if (!item) return undefined;
+    if (isMiddleMouseClick(event)) return item.sheet?.render(true);
+    if (event.button !== 0) return undefined;
+    if (!hasActiveFixedAbilityFunction(item)) return undefined;
+    return useFixedAbilityFunctionItem({
+      actor: this.actor,
+      token: this.token,
+      item,
+      application: this
+    });
+  }
+
   static async #onUseActiveAction(event, target) {
     event.preventDefault();
     const key = String(target.dataset.activeActionKey ?? "");
@@ -1135,7 +1155,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #shouldPinHudTooltipOnMiddleClick(actionElement) {
     const action = String(actionElement?.dataset?.action ?? "");
-    return action === "openItem" || action === "useItem";
+    return action === "openItem" || action === "useItem" || action === "useAbility";
   }
 
   #pinHudTooltipFromActionElement(actionElement, event = null) {
@@ -1216,7 +1236,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const button = target.closest("[data-action][data-item-id]");
     if (!button || !this.element?.contains(button)) return null;
     const action = String(button.dataset.action ?? "");
-    return ["openItem", "useItem", "selectHudWeapon", "useWeaponAction", "toggleWeaponActions", "equipHudWeapon", "replaceHudWeapon"].includes(action) ? button : null;
+    return ["openItem", "useItem", "useAbility", "selectHudWeapon", "useWeaponAction", "toggleWeaponActions", "equipHudWeapon", "replaceHudWeapon"].includes(action) ? button : null;
   }
 
   #getHudTooltipItemElement(target) {
@@ -2302,7 +2322,7 @@ function prepareAbilityGroups(abilities = []) {
 
 function isActiveAbility(item) {
   const system = item?.system ?? {};
-  return Boolean(system.active || system.activation?.enabled || system.use?.enabled);
+  return Boolean(system.active || system.activation?.enabled || system.use?.enabled || hasActiveFixedAbilityFunction(item));
 }
 
 function prepareSystemActionButtons(hudIcons = {}) {

@@ -9,7 +9,12 @@ export const ABILITY_FUNCTION_TYPES = Object.freeze({
   effectChanges: "effectChanges",
   acquisitionChanges: "acquisitionChanges",
   characteristicBonus: "characteristicBonus",
-  skillBonus: "skillBonus"
+  skillBonus: "skillBonus",
+  fixed: "fixed"
+});
+
+export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
+  deusExMachina: "deusExMachina"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -116,10 +121,12 @@ export function normalizeAbilityFunctions(value = []) {
     .map((entry, index) => normalizeAbilityFunction(entry, index));
 }
 
-export function createAbilityFunction(type = ABILITY_FUNCTION_TYPES.effectChanges) {
+export function createAbilityFunction(type = ABILITY_FUNCTION_TYPES.effectChanges, options = {}) {
   return normalizeAbilityFunction({
     id: foundry.utils.randomID(),
     type,
+    fixedKey: options?.fixedKey,
+    fixedSettings: options?.fixedSettings,
     changes: [],
     conditions: [],
     penalties: []
@@ -226,6 +233,10 @@ function normalizeAbilityFunction(value = {}, index = 0) {
   return {
     id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
     type,
+    fixedKey: type === ABILITY_FUNCTION_TYPES.fixed ? normalizeFixedFunctionKey(value?.fixedKey) : "",
+    fixedSettings: type === ABILITY_FUNCTION_TYPES.fixed
+      ? normalizeFixedFunctionSettings(value?.fixedKey, value?.fixedSettings ?? value?.settings)
+      : {},
     changes: isLegacy
       ? legacyFunctionToChanges(value)
       : normalizeAbilityChanges(value?.changes ?? value?.effects),
@@ -401,6 +412,42 @@ function normalizeAbilityCondition(value = {}) {
     limbKey: String(value?.limbKey ?? ABILITY_HEALTH_LIMB_ALL).trim() || ABILITY_HEALTH_LIMB_ALL,
     limit: 1,
     durationSeconds: 0
+  };
+}
+
+function normalizeFixedFunctionKey(value = "") {
+  const key = String(value ?? "").trim();
+  return Object.values(ABILITY_FIXED_FUNCTION_KEYS).includes(key)
+    ? key
+    : ABILITY_FIXED_FUNCTION_KEYS.deusExMachina;
+}
+
+function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
+  if (normalizeFixedFunctionKey(fixedKey) === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) {
+    return normalizeDeusExMachinaSettings(value);
+  }
+  return {};
+}
+
+export function normalizeDeusExMachinaSettings(value = {}) {
+  const rescueMode = String(value?.rescue?.restoreMode ?? value?.rescueRestoreMode ?? "") === "count" ? "count" : "all";
+  return {
+    damageRequired: Math.max(1, toInteger(value?.damageRequired ?? 2000)),
+    insight: {
+      skillBonus: toInteger(value?.insight?.skillBonus ?? value?.insightSkillBonus ?? 20),
+      durationSeconds: Math.max(0, toInteger(value?.insight?.durationSeconds ?? value?.insightDurationSeconds ?? 86400))
+    },
+    disintegrate: {
+      destroyPercent: Math.max(0, Math.min(100, toInteger(value?.disintegrate?.destroyPercent ?? value?.disintegrateDestroyPercent ?? 100)))
+    },
+    luckyFind: {
+      valueMin: Math.max(0, toInteger(value?.luckyFind?.valueMin ?? value?.luckyFindValueMin ?? 1000)),
+      valueMax: Math.max(0, toInteger(value?.luckyFind?.valueMax ?? value?.luckyFindValueMax ?? 5000))
+    },
+    rescue: {
+      restoreMode: rescueMode,
+      restoreCount: Math.max(1, toInteger(value?.rescue?.restoreCount ?? value?.rescueRestoreCount ?? 1))
+    }
   };
 }
 
