@@ -209,11 +209,12 @@ async function beginTrapPlacement(source = {}) {
     preview: null,
     rotation: 0,
     lastPoint: null,
+    documentInput: source.mode === "world",
+    passthroughElement: source.mode === "world" ? source.application?.element : null,
     inputShield: null
   };
-  activeTrapPlacement.inputShield = createTrapCanvasInputShield("crosshair", {
-    passthroughElement: activeTrapPlacement.mode === "world" ? activeTrapPlacement.application?.element : null
-  });
+  activeTrapPlacement.inputShield = activeTrapPlacement.documentInput ? null : createTrapCanvasInputShield("crosshair");
+  if (activeTrapPlacement.documentInput) setTrapPlacementDocumentCursor(activeTrapPlacement, "crosshair");
   await createTrapPlacementPreview(activeTrapPlacement);
   bindTrapCanvasInput(activeTrapPlacement, onTrapPlacementCanvasEvent, { pointerMove: true });
   window.addEventListener("keydown", onTrapPlacementKeyDown, { capture: true });
@@ -601,6 +602,7 @@ async function placeWorldTrapAtPointer(placement, event) {
 
 function onTrapPlacementCanvasEvent(event) {
   if (!activeTrapPlacement) return;
+  if (shouldAllowTrapPlacementEventPassthrough(activeTrapPlacement, event)) return;
   stopTrapCanvasInputEvent(event);
   if (event.type === "pointermove") {
     onTrapPlacementPointerMove(event);
@@ -617,6 +619,27 @@ function onTrapPlacementCanvasEvent(event) {
   void onTrapPlacementPointerDown(event).finally(() => {
     if (activeTrapPlacement === placement) placement.inputPending = false;
   });
+}
+
+function shouldAllowTrapPlacementEventPassthrough(placement, event) {
+  if (placement.mode !== "world") return false;
+  if (isEventInsideTrapPlacementPassthroughElement(placement, event)) return true;
+  const isRightButtonEvent = event.button === 2 || (Number(event.buttons) & 2) === 2;
+  if (!isRightButtonEvent) return false;
+  if (event.type === "contextmenu" || event.type === "auxclick") {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    event.stopImmediatePropagation?.();
+    return true;
+  }
+  return true;
+}
+
+function isEventInsideTrapPlacementPassthroughElement(placement, event) {
+  const element = placement?.passthroughElement;
+  if (!element) return false;
+  const path = event.composedPath?.() ?? [];
+  return path.includes(element);
 }
 
 function onTrapPlacementContextMenu(event) {
@@ -664,9 +687,10 @@ function suspendTrapPlacement(placement) {
 
 function resumeTrapPlacement(placement) {
   if (!placement || activeTrapPlacement !== placement) return;
-  placement.inputShield = createTrapCanvasInputShield("crosshair", {
-    passthroughElement: placement.mode === "world" ? placement.application?.element : null
-  });
+  placement.documentInput = placement.mode === "world";
+  placement.passthroughElement = placement.documentInput ? placement.application?.element : null;
+  placement.inputShield = placement.documentInput ? null : createTrapCanvasInputShield("crosshair");
+  if (placement.documentInput) setTrapPlacementDocumentCursor(placement, "crosshair");
   bindTrapCanvasInput(placement, onTrapPlacementCanvasEvent, { pointerMove: true });
   window.addEventListener("keydown", onTrapPlacementKeyDown, { capture: true });
   if (placement.preview?.container) placement.preview.container.visible = true;
@@ -686,7 +710,7 @@ function cancelActiveTrapPlacement({ notify = false, refreshApplication = true }
   if (notify) ui.notifications.info("Установка ловушки отменена.");
 }
 
-function createTrapCanvasInputShield(cursor = "crosshair", { passthroughElement = null } = {}) {
+function createTrapCanvasInputShield(cursor = "crosshair") {
   if (!document.body) return null;
   if (canvas?.currentMouseManager) {
     if (canvas.currentMouseManager.interactionData) canvas.currentMouseManager.interactionData.cancelled = true;
@@ -700,62 +724,29 @@ function createTrapCanvasInputShield(cursor = "crosshair", { passthroughElement 
     zIndex: "100000",
     background: "transparent",
     cursor,
-    pointerEvents: passthroughElement ? "none" : "auto"
+    pointerEvents: "auto"
   });
-  if (passthroughElement) configureTrapInputShieldPassthrough(shield, passthroughElement, cursor);
   document.body.appendChild(shield);
   return shield;
 }
 
-function configureTrapInputShieldPassthrough(shield, passthroughElement, cursor) {
-  const panes = Array.from({ length: 4 }, () => {
-    const pane = document.createElement("div");
-    Object.assign(pane.style, {
-      position: "absolute",
-      background: "transparent",
-      cursor,
-      pointerEvents: "auto"
-    });
-    shield.appendChild(pane);
-    return pane;
-  });
-
-  const update = () => {
-    if (!passthroughElement?.isConnected) return;
-    const rect = passthroughElement.getBoundingClientRect();
-    const left = Math.max(0, Math.min(window.innerWidth, rect.left));
-    const right = Math.max(left, Math.min(window.innerWidth, rect.right));
-    const top = Math.max(0, Math.min(window.innerHeight, rect.top));
-    const bottom = Math.max(top, Math.min(window.innerHeight, rect.bottom));
-    setTrapInputShieldPane(panes[0], 0, 0, window.innerWidth, top);
-    setTrapInputShieldPane(panes[1], 0, bottom, window.innerWidth, window.innerHeight - bottom);
-    setTrapInputShieldPane(panes[2], 0, top, left, bottom - top);
-    setTrapInputShieldPane(panes[3], right, top, window.innerWidth - right, bottom - top);
-  };
-  const resizeObserver = new ResizeObserver(update);
-  resizeObserver.observe(passthroughElement);
-  window.addEventListener("resize", update);
-  document.addEventListener("pointermove", update, true);
-  shield._falloutMawCleanup = () => {
-    resizeObserver.disconnect();
-    window.removeEventListener("resize", update);
-    document.removeEventListener("pointermove", update, true);
-  };
-  update();
+function setTrapPlacementDocumentCursor(session, cursor = "crosshair") {
+  if (!document.body || !session) return;
+  if (session.previousBodyCursor === undefined) session.previousBodyCursor = document.body.style.cursor ?? "";
+  document.body.style.cursor = cursor;
 }
 
-function setTrapInputShieldPane(pane, left, top, width, height) {
-  Object.assign(pane.style, {
-    left: `${left}px`,
-    top: `${top}px`,
-    width: `${Math.max(0, width)}px`,
-    height: `${Math.max(0, height)}px`
-  });
+function restoreTrapPlacementDocumentCursor(session) {
+  if (!document.body || !session || session.previousBodyCursor === undefined) return;
+  document.body.style.cursor = session.previousBodyCursor;
+  delete session.previousBodyCursor;
 }
 
 function bindTrapCanvasInput(session, listener, { pointerMove = false } = {}) {
   if (!session || typeof listener !== "function") return;
-  const targets = [canvas?.app?.view, session.inputShield].filter(Boolean);
+  const targets = session.documentInput
+    ? [document]
+    : [canvas?.app?.view, session.inputShield].filter(Boolean);
   const types = pointerMove
     ? ["pointermove", ...TRAP_BLOCKED_CANVAS_EVENT_TYPES]
     : [...TRAP_BLOCKED_CANVAS_EVENT_TYPES];
@@ -778,7 +769,7 @@ function unbindTrapCanvasInput(session, { delay = 300 } = {}) {
         for (const type of binding.types) target.removeEventListener(type, binding.listener, true);
       }
     }
-    shield?._falloutMawCleanup?.();
+    restoreTrapPlacementDocumentCursor(session);
     shield?.remove?.();
   };
   if (delay > 0) window.setTimeout(cleanup, delay);

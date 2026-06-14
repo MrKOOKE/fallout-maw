@@ -74,20 +74,35 @@ export function applyWeaponModuleModifiers(weaponData = {}, options = {}) {
 }
 
 function applySingleWeaponModule(weaponData, modifiers = {}) {
-  addNumber(weaponData, "damage", modifiers.damage, { integer: true, min: 0 });
-  addNumber(weaponData, "accuracyBonus", modifiers.accuracyBonus, { integer: true });
-  addNumber(weaponData, "criticalChanceModifier", modifiers.criticalChanceModifier, { integer: true });
-  addNumber(weaponData, "criticalDamagePercent", modifiers.criticalDamagePercent, { integer: true, min: 0 });
+  addFormulaNumber(weaponData, "damage", modifiers.damage, { integer: true, min: 0 });
+  addFormulaNumber(weaponData, "accuracyBonus", modifiers.accuracyBonus, { integer: true });
+  addFormulaNumber(weaponData, "criticalChanceModifier", modifiers.criticalChanceModifier, { integer: true });
+  addFormulaNumber(weaponData, "criticalDamagePercent", modifiers.criticalDamagePercent, { integer: true, min: 0 });
   addNumber(weaponData, "attackConeDegrees", modifiers.attackConeDegrees, { min: 0 });
-  addNumber(weaponData, "maxRangeMeters", modifiers.maxRangeMeters, { min: 0 });
-  addNumber(weaponData, "effectiveRange.value", modifiers.effectiveRange?.value, { min: 0 });
-  addNumber(weaponData, "effectiveRange.max", modifiers.effectiveRange?.max, { min: 0 });
-  addNumber(weaponData, "penetration", modifiers.penetration, { integer: true, min: 0 });
+  addFormulaNumber(weaponData, "maxRangeMeters", modifiers.maxRangeMeters, { min: 0 });
+  addFormulaNumber(weaponData, "effectiveRange.value", modifiers.effectiveRange?.value, { min: 0 });
+  addFormulaNumber(weaponData, "effectiveRange.max", modifiers.effectiveRange?.max, { min: 0 });
+  addFormulaNumber(weaponData, "penetration", modifiers.penetration, { integer: true, min: 0 });
   addNumber(weaponData, "magazine.max", modifiers.magazineMax, { integer: true, min: 0 });
 
   for (const actionKey of WEAPON_MODULE_ACTION_KEYS) {
     addNumber(weaponData, `${actionKey}.actionPointCost`, modifiers.actionPointCosts?.[actionKey], { integer: true, min: 0 });
   }
+}
+
+function addFormulaNumber(target, path, delta, { integer = false, min = null } = {}) {
+  const change = integer ? toInteger(delta) : Number(delta);
+  if (!Number.isFinite(change) || change === 0) return;
+  const currentRaw = foundry.utils.getProperty(target, path);
+  const current = Number(currentRaw);
+  if (Number.isFinite(current)) {
+    const next = Number.isFinite(Number(min)) ? Math.max(Number(min), current + change) : current + change;
+    foundry.utils.setProperty(target, path, integer ? Math.trunc(next) : next);
+    return;
+  }
+  const currentText = normalizeFormulaText(currentRaw);
+  const changeText = String(integer ? Math.trunc(change) : change);
+  foundry.utils.setProperty(target, path, currentText === "0" ? changeText : `(${currentText}) + (${changeText})`);
 }
 
 function addNumber(target, path, delta, { integer = false, min = null } = {}) {
@@ -99,4 +114,9 @@ function addNumber(target, path, delta, { integer = false, min = null } = {}) {
   let next = fallback + change;
   if (Number.isFinite(Number(min))) next = Math.max(Number(min), next);
   foundry.utils.setProperty(target, path, integer ? Math.trunc(next) : next);
+}
+
+function normalizeFormulaText(value, fallback = "0") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
 }

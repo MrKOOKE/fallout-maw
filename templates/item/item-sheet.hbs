@@ -2173,11 +2173,11 @@
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponDamage"}}</span>
-        <input type="text" name="{{path}}.damage" value="{{weaponData.damage}}" data-formula-autocomplete="all" {{#if usesDamageSource}}disabled{{/if}}>
+        <input type="text" name="{{path}}.damage" value="{{effectiveWeaponData.damage}}" data-formula-autocomplete="all" {{#if usesDamageSource}}disabled{{/if}}>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponPellets"}}</span>
-        <input type="text" name="{{path}}.pellets" value="{{weaponData.pellets}}" data-formula-autocomplete="all" {{#if usesDamageSource}}disabled{{/if}}>
+        <input type="text" name="{{path}}.pellets" value="{{effectiveWeaponData.pellets}}" data-formula-autocomplete="all" {{#if usesDamageSource}}disabled{{/if}}>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponSkill"}}</span>
@@ -2685,7 +2685,7 @@
     <div class="fallout-maw-list-grid {{#if hasVolleyAction}}three-columns{{else}}two-columns{{/if}}">
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponAttackAnimation"}}</span>
-        <input type="text" name="{{path}}.attackAnimationKey" value="{{weaponData.attackAnimationKey}}" {{#if usesDamageSource}}disabled{{/if}}>
+        <input type="text" name="{{path}}.attackAnimationKey" value="{{effectiveWeaponData.attackAnimationKey}}" {{#if usesDamageSource}}disabled{{/if}}>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponAttackSound"}}</span>
@@ -2697,7 +2697,7 @@
       {{#if hasVolleyAction}}
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponExplosionAnimation"}}</span>
-        <input type="text" name="{{path}}.volley.explosionAnimationKey" value="{{weaponData.volley.explosionAnimationKey}}" {{#if usesDamageSource}}disabled{{/if}}>
+        <input type="text" name="{{path}}.volley.explosionAnimationKey" value="{{effectiveWeaponData.volley.explosionAnimationKey}}" {{#if usesDamageSource}}disabled{{/if}}>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponExplosionSound"}}</span>

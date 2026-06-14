@@ -4547,12 +4547,14 @@ function buildWeaponFunctionSection({
   id = "",
   index = -1
 } = {}) {
-  const effectiveWeaponData = getWeaponDisplayData(weaponData);
+  const formWeaponData = getWeaponFormData(weaponData, sourceWeaponData);
+  const effectiveWeaponData = getWeaponDisplayData(formWeaponData);
   return {
     title,
     tabId,
     path,
-    weaponData: effectiveWeaponData,
+    weaponData: formWeaponData,
+    effectiveWeaponData,
     isPrimary,
     isAdditional,
     isModuleWeapon,
@@ -4561,20 +4563,27 @@ function buildWeaponFunctionSection({
     canHaveModuleSlots,
     id,
     index,
-    damageModeChoices: buildWeaponDamageModeChoices(weaponData?.damageMode),
-    usesDamageSource: isSourceDamageMode(weaponData),
-    hasMagazineCost: hasWeaponResourceCostData(weaponData, "magazine") || isSourceDamageMode(weaponData),
-    magazineSourceItems: buildWeaponMagazineSourceItems(weaponData),
-    moduleSlots: canHaveModuleSlots ? buildWeaponModuleSlotRows(weaponData) : [],
-    hasVolleyAction: Boolean(weaponData?.availableActions?.volley),
-    damageTypeRows: buildWeaponDamageTypeRowsForData(effectiveWeaponData, damageTypeSettings, sourceWeaponData),
-    skillChoices: buildWeaponSkillChoicesForData(effectiveWeaponData, skillSettings),
-    proficiencyChoices: buildWeaponProficiencyChoicesForData(effectiveWeaponData, proficiencySettings),
-    resourceCosts: buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction),
-    specialProperties: buildWeaponSpecialPropertyRowsForData(weaponData),
-    requirements: buildWeaponRequirementRowsForData(weaponData, characteristicSettings, skillSettings),
-    actionChoices: buildWeaponActionChoicesForData(effectiveWeaponData, sourceWeaponData, damageTypeSettings)
+    damageModeChoices: buildWeaponDamageModeChoices(formWeaponData?.damageMode),
+    usesDamageSource: isSourceDamageMode(formWeaponData),
+    hasMagazineCost: hasWeaponResourceCostData(formWeaponData, "magazine") || isSourceDamageMode(formWeaponData),
+    magazineSourceItems: buildWeaponMagazineSourceItems(formWeaponData),
+    moduleSlots: canHaveModuleSlots ? buildWeaponModuleSlotRows(formWeaponData) : [],
+    hasVolleyAction: Boolean(formWeaponData?.availableActions?.volley),
+    damageTypeRows: buildWeaponDamageTypeRowsForData(effectiveWeaponData, damageTypeSettings, formWeaponData),
+    skillChoices: buildWeaponSkillChoicesForData(formWeaponData, skillSettings),
+    proficiencyChoices: buildWeaponProficiencyChoicesForData(formWeaponData, proficiencySettings),
+    resourceCosts: buildWeaponResourceCostRowsForData(formWeaponData, hasConditionFunction),
+    specialProperties: buildWeaponSpecialPropertyRowsForData(formWeaponData),
+    requirements: buildWeaponRequirementRowsForData(formWeaponData, characteristicSettings, skillSettings),
+    actionChoices: buildWeaponActionChoicesForData(effectiveWeaponData, formWeaponData, damageTypeSettings)
   };
+}
+
+function getWeaponFormData(weaponData = {}, sourceWeaponData = {}) {
+  // Form controls must submit persisted values, not derived source or module totals.
+  const formData = foundry.utils.deepClone(weaponData ?? {});
+  if (!sourceWeaponData || typeof sourceWeaponData !== "object") return formData;
+  return foundry.utils.mergeObject(formData, sourceWeaponData, { inplace: true });
 }
 
 function buildWeaponModuleChoices(excludeItem = null) {
@@ -4918,7 +4927,7 @@ function getWeaponDisplayData(weaponData = {}) {
       value: addFormulaTexts(weaponData.effectiveRange?.value, source.effectiveRange?.value),
       max: addFormulaTexts(weaponData.effectiveRange?.max, source.effectiveRange?.max)
     },
-    penetration: weaponData.penetration,
+    penetration: addFormulaTexts(weaponData.penetration, source.penetration),
     volley: mergeDamageSourceVolleyData(weaponData.volley, source.volley)
   };
 }
