@@ -6222,7 +6222,7 @@ function calculateCraftItemCost(item) {
     const quantity = Math.max(1, toInteger(node.quantity) || 1);
     const price = convertCraftCostCurrency(Number(source.system?.price) || 0, source.system?.priceCurrency, targetCurrency, currencies);
     const toolFunction = getCraftNodeToolFunction(node);
-    if (toolFunction && !toolFunction.useAsItem) {
+    if (isCraftNodeToolRequirement(node, toolFunction)) {
       toolCount += 1;
       const maximumSupply = Math.max(0, toInteger(toolFunction.supply?.max));
       if (maximumSupply <= 0) {
@@ -6528,6 +6528,7 @@ function createDefaultWeaponPushActionData() {
 }
 
 function getCraftNodeToolRequirements(node = {}) {
+  if (String(node.blockId ?? "").trim()) return [];
   const toolFunction = getCraftNodeToolFunction(node);
   if (!toolFunction || toolFunction.useAsItem) return [];
   return [{
@@ -6540,6 +6541,10 @@ function getCraftNodeToolFunction(node = {}) {
   const source = resolveCraftNodeSourceItem(node);
   if (!source) return null;
   return getEnabledToolFunctions(source)[0] ?? null;
+}
+
+function isCraftNodeToolRequirement(node = {}, toolFunction = getCraftNodeToolFunction(node)) {
+  return Boolean(!node.root && !String(node.blockId ?? "").trim() && toolFunction && !toolFunction.useAsItem);
 }
 
 function resolveCraftNodeSourceItem(node = {}) {

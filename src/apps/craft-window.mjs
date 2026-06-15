@@ -1743,6 +1743,7 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
     key: requirement.key,
     sourceUuid: requirement.sourceUuid,
     sourceKeys: requirement.sourceKeys,
+    identity: requirement.identity,
     fingerprint: requirement.fingerprint,
     quantity: requirement.quantity
   }));
@@ -2349,6 +2350,7 @@ function getCraftRenderData(recipe, actor, mode = CRAFT_MODE_CREATE, { toolSelec
       key: requirement.key,
       sourceUuid: requirement.sourceUuid,
       sourceKeys: requirement.sourceKeys,
+      identity: requirement.identity,
       fingerprint: requirement.fingerprint,
       quantity: requirement.quantity,
       owned: ownedByRequirement.get(requirement.key) ?? 0
@@ -2364,13 +2366,14 @@ function getCraftRequirements(nodes = [], { includeRoot = false } = {}) {
   const requirements = [];
   for (const node of nodes) {
     if (node.root && !includeRoot) continue;
-    if (!node.root && getCraftNodeToolRequirements(node).length) continue;
+    if (isCraftNodeToolRequirement(node)) continue;
     const sourceUuid = getCraftNodeSourceUuid(node);
     const quantity = Math.max(1, toInteger(node.quantity) || 1);
     const sourceItem = resolveWorldItemSync(sourceUuid);
     const sourceKeys = getCraftItemSourceKeys(sourceItem, sourceUuid);
+    const identity = getCraftItemIdentity(sourceItem ?? node);
     const fingerprint = getCraftItemFingerprint(sourceItem ?? node);
-    const key = getCraftRequirementKey({ sourceKeys, fingerprint, sourceUuid });
+    const key = getCraftRequirementKey({ sourceKeys, identity, fingerprint, sourceUuid });
     const existing = requirements.find(requirement => requirement.key === key);
     if (existing) {
       existing.quantity += quantity;
@@ -2381,6 +2384,7 @@ function getCraftRequirements(nodes = [], { includeRoot = false } = {}) {
       key,
       sourceUuid,
       sourceKeys: Array.from(sourceKeys),
+      identity,
       fingerprint,
       quantity,
       nodeIds: [node.id]
@@ -2393,7 +2397,7 @@ function getCraftToolRequirements(nodes = []) {
   const requirements = [];
   const toolLabels = new Map(getToolSettings().map(tool => [tool.key, tool.label]));
   for (const node of nodes) {
-    if (node.root) continue;
+    if (node.root || String(node.blockId ?? "").trim()) continue;
     const quantity = Math.max(1, toInteger(node.quantity) || 1);
     for (const tool of getCraftNodeToolRequirements(node)) {
       const key = getCraftToolRequirementKey(tool);
@@ -2428,6 +2432,10 @@ function getCraftNodeToolRequirements(node = {}) {
     .filter(tool => tool.toolKey);
 }
 
+function isCraftNodeToolRequirement(node = {}) {
+  return Boolean(!node.root && !String(node.blockId ?? "").trim() && getCraftNodeToolRequirements(node).length);
+}
+
 function getCraftToolRequirementKey({ toolKey = "", toolClass = "D" } = {}) {
   return `tool:${toolKey}:${normalizeToolClass(toolClass)}`;
 }
@@ -2460,20 +2468,23 @@ function craftItemMatchesRequirement(item, requirement = {}) {
 
   const requirementKeys = new Set(Array.from(requirement.sourceKeys ?? []).map(key => String(key ?? "").trim()).filter(Boolean));
   const itemKeys = getCraftItemSourceKeys(item);
+  const identity = String(requirement.identity ?? "");
   if (requirementKeys.size && itemKeys.size) {
-    return setsIntersect(requirementKeys, itemKeys);
+    if (setsIntersect(requirementKeys, itemKeys)) return !identity || getCraftItemIdentity(item) === identity;
   }
 
   const fingerprint = String(requirement.fingerprint ?? "");
+  if (identity && getCraftItemIdentity(item) === identity) return true;
   if (fingerprint && getCraftItemFingerprint(item) !== fingerprint) return false;
 
   return Boolean(fingerprint);
 }
 
-function getCraftRequirementKey({ sourceKeys = new Set(), fingerprint = "", sourceUuid = "" } = {}) {
+function getCraftRequirementKey({ sourceKeys = new Set(), identity = "", fingerprint = "", sourceUuid = "" } = {}) {
   const normalizedKeys = Array.from(sourceKeys).map(key => String(key ?? "").trim()).filter(Boolean).sort();
   return JSON.stringify({
     source: normalizedKeys.length ? normalizedKeys : [String(sourceUuid ?? "").trim()].filter(Boolean),
+    identity: String(identity ?? ""),
     fingerprint: String(fingerprint ?? "")
   });
 }
@@ -2506,6 +2517,19 @@ function collectCraftItemSourceKeys(keys, itemOrDocument = null, fallbackUuid = 
     const sourceDocument = resolveWorldItemSync(key);
     if (sourceDocument) collectCraftItemSourceKeys(keys, sourceDocument, "", depth + 1);
   }
+}
+
+function getCraftItemIdentity(itemOrNode = null) {
+  const system = itemOrNode?.system ?? itemOrNode ?? {};
+  const footprint = getCraftItemFootprint(itemOrNode);
+  return JSON.stringify(normalizeStackComparableValue({
+    type: itemOrNode?.type ?? system?.type ?? "",
+    name: itemOrNode?.name ?? "",
+    img: normalizeImagePath(itemOrNode?.img || FALLBACK_ICON),
+    maxStack: getItemMaxStack(itemOrNode),
+    width: footprint.width,
+    height: footprint.height
+  }));
 }
 
 function getCraftItemFingerprint(itemOrNode = null) {
