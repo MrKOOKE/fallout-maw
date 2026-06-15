@@ -449,6 +449,30 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedFourLeafCloverSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header">
+        <h3>Настройки: Клевер-четырёхлистник</h3>
+      </div>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Заряды</strong>
+          <label>
+            <span>Текущие заряды</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.currentCharges" value="{{fixedFourLeafCloverSettings.currentCharges}}" min="0" step="1">
+          </label>
+          <label>
+            <span>За провал</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.failureCharges" value="{{fixedFourLeafCloverSettings.failureCharges}}" min="0" step="1">
+          </label>
+          <label>
+            <span>За критический провал</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.criticalFailureCharges" value="{{fixedFourLeafCloverSettings.criticalFailureCharges}}" min="0" step="1">
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{/if}}
     {{#unless isFixed}}
     <div data-ability-changes>

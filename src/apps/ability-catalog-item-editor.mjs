@@ -20,6 +20,7 @@ import {
   normalizeAbilityEntry,
   normalizeCurseAndBlessingSettings,
   normalizeAllOrNothingSettings,
+  normalizeFourLeafCloverSettings,
   normalizeReaperSettings,
   normalizeDeusExMachinaSettings,
   normalizeAbilityFunctions
@@ -558,6 +559,13 @@ function readFixedFunctionSettings(row) {
       attackChanceFormula: row.querySelector("[data-field='fixed.reaper.attackChanceFormula']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover) {
+    return {
+      currentCharges: row.querySelector("[data-field='fixed.fourLeafClover.currentCharges']")?.value,
+      failureCharges: row.querySelector("[data-field='fixed.fourLeafClover.failureCharges']")?.value,
+      criticalFailureCharges: row.querySelector("[data-field='fixed.fourLeafClover.criticalFailureCharges']")?.value
+    };
+  }
   if (fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) return {};
   return {
     damageRequired: row.querySelector("[data-field='fixed.damageRequired']")?.value,
@@ -650,6 +658,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedReaperSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reaper
     ? prepareReaperSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedFourLeafCloverSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover
+    ? prepareFourLeafCloverSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const conditions = normalized.conditions.map(condition => prepareConditionForDisplay(condition, {
     changeCount: normalized.changes.length,
     allowLimitedChanges: isEffectChanges
@@ -665,6 +676,7 @@ function prepareFunctionForDisplay(entry) {
     fixedCurseAndBlessingSettings,
     fixedAllOrNothingSettings,
     fixedReaperSettings,
+    fixedFourLeafCloverSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: normalized.changes.map(prepareChangeForDisplay),
     conditions,
@@ -722,6 +734,10 @@ function prepareAllOrNothingSettingsForDisplay(settings = {}) {
 
 function prepareReaperSettingsForDisplay(settings = {}) {
   return normalizeReaperSettings(settings);
+}
+
+function prepareFourLeafCloverSettingsForDisplay(settings = {}) {
+  return normalizeFourLeafCloverSettings(settings);
 }
 
 function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedChanges = false } = {}) {

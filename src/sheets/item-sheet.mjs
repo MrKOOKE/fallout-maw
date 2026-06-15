@@ -44,6 +44,7 @@ import {
   normalizeAllOrNothingSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
+  normalizeFourLeafCloverSettings,
   normalizeReaperSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
@@ -4282,6 +4283,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedReaperSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reaper
     ? prepareReaperSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedFourLeafCloverSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover
+    ? prepareFourLeafCloverSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -4300,6 +4304,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedCurseAndBlessingSettings,
     fixedAllOrNothingSettings,
     fixedReaperSettings,
+    fixedFourLeafCloverSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
@@ -4371,6 +4376,10 @@ function prepareAllOrNothingSettingsForDisplay(settings = {}) {
 
 function prepareReaperSettingsForDisplay(settings = {}) {
   return normalizeReaperSettings(settings);
+}
+
+function prepareFourLeafCloverSettingsForDisplay(settings = {}) {
+  return normalizeFourLeafCloverSettings(settings);
 }
 
 function prepareAbilityConditionForDisplay(condition, functionIndex, index, { changeCount = 0, allowLimitedChanges = false, functionPath = "system.functions" } = {}) {

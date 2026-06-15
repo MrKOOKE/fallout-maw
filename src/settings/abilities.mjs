@@ -17,7 +17,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   deusExMachina: "deusExMachina",
   curseAndBlessing: "curseAndBlessing",
   allOrNothing: "allOrNothing",
-  reaper: "reaper"
+  reaper: "reaper",
+  fourLeafClover: "fourLeafClover"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -500,6 +501,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.reaper) {
     return normalizeReaperSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover) {
+    return normalizeFourLeafCloverSettings(value);
+  }
   return {};
 }
 
@@ -548,6 +552,14 @@ export function normalizeReaperSettings(value = {}) {
   return {
     killChanceFormula: String(value?.killChanceFormula ?? "50+gambling/10").trim() || "50+gambling/10",
     attackChanceFormula: String(value?.attackChanceFormula ?? "10+gambling/15").trim() || "10+gambling/15"
+  };
+}
+
+export function normalizeFourLeafCloverSettings(value = {}) {
+  return {
+    currentCharges: Math.max(0, toInteger(value?.currentCharges ?? 0)),
+    failureCharges: Math.max(0, toInteger(value?.failureCharges ?? 1)),
+    criticalFailureCharges: Math.max(0, toInteger(value?.criticalFailureCharges ?? 3))
   };
 }
 

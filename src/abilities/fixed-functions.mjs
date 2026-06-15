@@ -9,6 +9,7 @@ import {
   normalizeAllOrNothingSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
+  normalizeFourLeafCloverSettings,
   normalizeReaperSettings
 } from "../settings/abilities.mjs";
 import {
@@ -83,6 +84,14 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.reaper
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover,
+    label: "Клевер-четырёхлистник",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover
+    })
   })
 ]);
 
@@ -96,6 +105,12 @@ export function registerFixedAbilityFunctionHooks() {
   Hooks.on(WEAPON_ATTACK_RESOLVED_HOOK, context => {
     void consumeAllOrNothingResultEffects(context);
     void processReaperAttackResolution(context);
+  });
+  Hooks.on("fallout-maw.modifySkillCheck", check => {
+    applyFourLeafCloverCriticalBonus(check);
+  });
+  Hooks.on("fallout-maw.skillCheckResolved", outcome => {
+    void updateFourLeafCloverCharges(outcome);
   });
 }
 
@@ -162,12 +177,20 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
   return normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
     .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.fixed)
     .map(entry => {
+      if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover) {
+        const settings = normalizeFourLeafCloverSettings(entry.fixedSettings);
+        return {
+          key: getFixedFunctionStateKey(entry),
+          label: "Заряд",
+          value: String(settings.currentCharges)
+        };
+      }
       if (entry.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) return null;
       const settings = normalizeDeusExMachinaSettings(entry.fixedSettings);
       const stateKey = getFixedFunctionStateKey(entry);
       return {
         key: stateKey,
-        label: getFixedAbilityFunctionLabel(entry.fixedKey),
+        label: "Урон",
         current: Math.max(0, Math.min(settings.damageRequired, toInteger(state[stateKey]?.damage))),
         required: settings.damageRequired
       };
@@ -602,6 +625,63 @@ async function restoreReaperActionPoints(actor, amount = 0) {
     [`system.resources.${ACTION_RESOURCE_KEY}.value`]: current + restored
   });
   return restored;
+}
+
+function applyFourLeafCloverCriticalBonus(check = {}) {
+  const actor = check.actor;
+  if (!actor) return;
+  const charges = getActorFourLeafCloverCharges(actor);
+  if (charges <= 0) return;
+  check.criticalSuccessBonus = Math.max(0, toInteger(check.criticalSuccessBonus)) + charges;
+}
+
+async function updateFourLeafCloverCharges(outcome = {}) {
+  const actor = outcome?.actor;
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
+  const resultKey = String(outcome?.result?.key ?? "");
+  if (!["failure", "criticalFailure", "criticalSuccess"].includes(resultKey)) return;
+
+  for (const { abilityItem, abilityFunction, settings } of getActorFourLeafCloverEntries(actor)) {
+    let nextCharges = settings.currentCharges;
+    if (resultKey === "criticalSuccess") nextCharges = 0;
+    else if (resultKey === "criticalFailure") nextCharges += settings.criticalFailureCharges;
+    else nextCharges += settings.failureCharges;
+    if (nextCharges === settings.currentCharges) continue;
+    await updateFixedAbilityFunctionSettings(abilityItem, abilityFunction, {
+      ...abilityFunction.fixedSettings,
+      currentCharges: nextCharges
+    });
+  }
+}
+
+function getActorFourLeafCloverCharges(actor) {
+  return getActorFourLeafCloverEntries(actor)
+    .reduce((sum, entry) => sum + Math.max(0, toInteger(entry.settings.currentCharges)), 0);
+}
+
+function getActorFourLeafCloverEntries(actor) {
+  const entries = [];
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover) continue;
+      entries.push({
+        abilityItem,
+        abilityFunction,
+        settings: normalizeFourLeafCloverSettings(abilityFunction.fixedSettings)
+      });
+    }
+  }
+  return entries;
+}
+
+async function updateFixedAbilityFunctionSettings(abilityItem, abilityFunction, fixedSettings = {}) {
+  if (!abilityItem || !abilityFunction) return false;
+  const functions = foundry.utils.deepClone(abilityItem.system?.functions ?? []);
+  const index = functions.findIndex(entry => String(entry?.id ?? "") === String(abilityFunction.id ?? ""));
+  if (index < 0) return false;
+  functions[index].fixedSettings = fixedSettings;
+  await abilityItem.update({ "system.functions": functions });
+  return true;
 }
 
 function hasPendingAllOrNothingResultEffect(actor, abilityItem, abilityFunction) {

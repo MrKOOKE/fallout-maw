@@ -3485,7 +3485,7 @@ function buildAbilityTooltipFunctionSections(item, actor = null) {
     ...getAbilityItemUseProgressEntries(item),
     ...getFixedAbilityFunctionProgressEntries(item)
   ]
-    .map(entry => [entry.label, `${entry.current} / ${entry.required}`]);
+    .map(entry => [entry.label, entry.value ?? `${entry.current} / ${entry.required}`]);
   const energyRows = buildAbilityEnergyCostRows(item, actor);
   const sections = [
     renderTooltipFunctionSection("Энергия", energyRows),
