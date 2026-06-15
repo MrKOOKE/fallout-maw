@@ -32,6 +32,10 @@ export function registerAbilityEffectHooks() {
     if (!isAbilityEffectSyncRelevant(changes)) return;
     void syncActorAbilityEffects(actor);
   });
+  Hooks.on("updateToken", (tokenDocument, changes) => {
+    if (!foundry.utils.hasProperty(changes, "movementAction")) return;
+    void syncActorAbilityEffects(tokenDocument?.actor, { actorToken: tokenDocument });
+  });
   Hooks.on("updateActiveEffect", effect => {
     if (!effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) && !effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)) return;
     void syncActorAbilityEffects(effect.parent);
@@ -46,14 +50,14 @@ export function registerAbilityEffectHooks() {
 export async function syncLoadedActorAbilityEffects() {
   if (!game.user?.isActiveGM) return;
   const actors = new Map();
-  for (const actor of game.actors ?? []) actors.set(actor.uuid, actor);
+  for (const actor of game.actors ?? []) actors.set(actor.uuid, { actor, context: {} });
   for (const token of canvas?.tokens?.placeables ?? []) {
-    if (token.actor) actors.set(token.actor.uuid, token.actor);
+    if (token.actor) actors.set(token.actor.uuid, { actor: token.actor, context: { actorToken: token.document } });
   }
-  for (const actor of actors.values()) await syncActorAbilityEffects(actor);
+  for (const { actor, context } of actors.values()) await syncActorAbilityEffects(actor, context);
 }
 
-export async function syncActorAbilityEffects(actor) {
+export async function syncActorAbilityEffects(actor, context = {}) {
   if (!actor || !game.user?.isActiveGM) return;
   if (!["character", "construct"].includes(actor.type)) return;
   if (processingActors.has(actor.uuid)) return;
@@ -66,10 +70,10 @@ export async function syncActorAbilityEffects(actor) {
     const activeItemFreeSettingsItemIds = new Set(itemFreeSettingsItems.map(item => item.id));
 
     for (const item of abilityItems) {
-      await syncSingleAbilityEffect(actor, item);
+      await syncSingleAbilityEffect(actor, item, context);
     }
     for (const item of itemFreeSettingsItems) {
-      await syncSingleItemFreeSettingsEffect(actor, item);
+      await syncSingleItemFreeSettingsEffect(actor, item, context);
     }
 
     const stale = actor.effects
@@ -92,16 +96,16 @@ export async function syncActorAbilityEffects(actor) {
   }
 }
 
-async function syncSingleAbilityEffect(actor, item) {
+async function syncSingleAbilityEffect(actor, item, context = {}) {
   const existing = actor.effects.filter(effect => effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.abilityItemId === item.id);
-  const changes = buildAbilityEffectChanges(actor, item);
+  const changes = buildAbilityEffectChanges(actor, item, context);
   if (!changes.length) {
     if (existing.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existing.map(effect => effect.id));
     return;
   }
 
   const sourceId = getAbilitySourceId(item);
-  const showIcon = getAbilityEffectShowIcon(actor, item);
+  const showIcon = getAbilityEffectShowIcon(actor, item, context);
   const signature = JSON.stringify({ itemId: item.id, sourceId, changes, showIcon });
   const current = existing.find(effect => effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.signature === signature);
   const obsolete = existing.filter(effect => effect.id !== current?.id).map(effect => effect.id);
@@ -121,15 +125,15 @@ async function syncSingleAbilityEffect(actor, item) {
   await actor.createEmbeddedDocuments("ActiveEffect", [buildAbilityActiveEffectData(item, changes, signature, sourceId, showIcon)]);
 }
 
-async function syncSingleItemFreeSettingsEffect(actor, item) {
+async function syncSingleItemFreeSettingsEffect(actor, item, context = {}) {
   const existing = actor.effects.filter(effect => effect.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.itemId === item.id);
-  const changes = buildItemFreeSettingsEffectChanges(actor, item);
+  const changes = buildItemFreeSettingsEffectChanges(actor, item, context);
   if (!changes.length) {
     if (existing.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existing.map(effect => effect.id));
     return;
   }
 
-  const showIcon = getItemFreeSettingsEffectShowIcon(actor, item);
+  const showIcon = getItemFreeSettingsEffectShowIcon(actor, item, context);
   const signature = JSON.stringify({ itemId: item.id, changes, showIcon });
   const current = existing.find(effect => effect.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.signature === signature);
   const obsolete = existing.filter(effect => effect.id !== current?.id).map(effect => effect.id);
@@ -194,37 +198,39 @@ function buildItemFreeSettingsActiveEffectData(item, changes, signature, showIco
   };
 }
 
-function buildAbilityEffectChanges(actor, item) {
-  return getAbilityEffectChanges(actor, item)
+function buildAbilityEffectChanges(actor, item, context = {}) {
+  return getAbilityEffectChanges(actor, item, context)
     .filter(change => !String(change?.key ?? "").startsWith("system.skillAdvancementBase."));
 }
 
-function buildItemFreeSettingsEffectChanges(actor, item) {
+function buildItemFreeSettingsEffectChanges(actor, item, context = {}) {
   return getAbilityEffectChangesFromFunctions(actor, item?.system?.functions?.freeSettings?.entries ?? [], {
+    ...context,
     abilityItemId: item?.id ?? ""
   })
     .filter(change => !String(change?.key ?? "").startsWith("system.skillAdvancementBase."));
 }
 
-function getAbilityEffectShowIcon(actor, item) {
-  return hasActiveRuntimeAbilityState(actor, item)
+function getAbilityEffectShowIcon(actor, item, context = {}) {
+  return hasActiveRuntimeAbilityState(actor, item, context)
     ? ACTIVE_EFFECT_SHOW_ICON_ALWAYS
     : ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL;
 }
 
-function getItemFreeSettingsEffectShowIcon(actor, item) {
-  return hasActiveRuntimeItemFreeSettingsState(actor, item)
+function getItemFreeSettingsEffectShowIcon(actor, item, context = {}) {
+  return hasActiveRuntimeItemFreeSettingsState(actor, item, context)
     ? ACTIVE_EFFECT_SHOW_ICON_ALWAYS
     : ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL;
 }
 
-function hasActiveRuntimeAbilityState(actor, item) {
+function hasActiveRuntimeAbilityState(actor, item, context = {}) {
   return normalizeAbilityFunctions(item?.system?.functions ?? [])
     .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
     .some(entry => {
       const conditions = entry.conditions ?? [];
       if (!hasRuntimeConditions(conditions)) return false;
       return abilityConditionsApply(actor, conditions, {
+        ...context,
         abilityItemId: item.id,
         functionId: entry.id
       })
@@ -233,13 +239,14 @@ function hasActiveRuntimeAbilityState(actor, item) {
     });
 }
 
-function hasActiveRuntimeItemFreeSettingsState(actor, item) {
+function hasActiveRuntimeItemFreeSettingsState(actor, item, context = {}) {
   return normalizeAbilityFunctions(item?.system?.functions?.freeSettings?.entries ?? [])
     .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
     .some(entry => {
       const conditions = entry.conditions ?? [];
       if (!hasRuntimeConditions(conditions)) return false;
       return abilityConditionsApply(actor, conditions, {
+        ...context,
         abilityItemId: item.id,
         functionId: entry.id
       })

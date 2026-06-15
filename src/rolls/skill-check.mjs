@@ -1,5 +1,6 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getSkillSettings } from "../settings/accessors.mjs";
+import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
@@ -773,6 +774,7 @@ function resolveSkill(actor, skillKey) {
 }
 
 function normalizeRequestData(data) {
+  data ??= {};
   const advantage = Boolean(data.advantage);
   const disadvantage = Boolean(data.disadvantage);
   return {
@@ -781,14 +783,23 @@ function normalizeRequestData(data) {
     criticalSuccessBonus: toInteger(data.criticalSuccessBonus),
     criticalFailureBonus: toInteger(data.criticalFailureBonus),
     advantageCount: advantage ? Math.max(1, toInteger(data.advantageCount)) : 0,
-    disadvantageCount: disadvantage ? Math.max(1, toInteger(data.disadvantageCount)) : 0
+    disadvantageCount: disadvantage ? Math.max(1, toInteger(data.disadvantageCount)) : 0,
+    actorToken: data.actorToken ?? null,
+    targetToken: data.targetToken ?? null,
+    targetActor: data.targetActor ?? null
   };
 }
 
 function createMutableCheck(actor, skill, data) {
+  const context = resolveSkillCheckContext(actor, data);
+  const skillValue = getContextualAbilityChangeValue(actor, `system.skills.${skill.key}.bonus`, {
+    ...context,
+    baseValue: skill.value,
+    alternateKeys: ["system.skills.all.bonus"]
+  });
   return {
     actor,
-    skill: { ...skill },
+    skill: { ...skill, value: toInteger(skillValue) },
     difficulty: toInteger(data.difficulty ?? DEFAULT_CHECK.difficulty),
     situationalModifier: toInteger(data.situationalModifier ?? DEFAULT_CHECK.situationalModifier),
     criticalSuccessBonus: toInteger(data.criticalSuccessBonus ?? DEFAULT_CHECK.criticalSuccessBonus),
@@ -796,8 +807,37 @@ function createMutableCheck(actor, skill, data) {
     advantageCount: Math.max(0, toInteger(data.advantageCount)),
     disadvantageCount: Math.max(0, toInteger(data.disadvantageCount)),
     forcedResult: "",
-    modifiers: []
+    modifiers: [],
+    ...context
   };
+}
+
+function resolveSkillCheckContext(actor, data = {}) {
+  const explicitTargetToken = data?.targetToken ?? null;
+  const userTargetToken = getSingleUserTarget();
+  const selectedTargetToken = explicitTargetToken
+    ?? (!data?.targetActor || userTargetToken?.actor === data.targetActor ? userTargetToken : null);
+  const targetActor = data?.targetActor ?? selectedTargetToken?.actor ?? null;
+  const actorToken = data?.actorToken ?? getActorContextToken(actor);
+  return {
+    actorToken,
+    targetToken: selectedTargetToken,
+    targetActor
+  };
+}
+
+function getSingleUserTarget() {
+  const targets = game.user?.targets;
+  if (!targets || targets.size !== 1) return null;
+  return targets.first?.() ?? Array.from(targets)[0] ?? null;
+}
+
+function getActorContextToken(actor) {
+  if (actor?.token?.object) return actor.token.object;
+  const controlled = canvas?.tokens?.controlled?.filter(token => token?.actor?.uuid === actor?.uuid) ?? [];
+  if (controlled.length === 1) return controlled[0];
+  const active = actor?.getActiveTokens?.(false, true) ?? [];
+  return active.length === 1 ? active[0] : null;
 }
 
 async function rollD100(count, forcedTotal = null) {

@@ -221,6 +221,34 @@ function getPostureEffectKeyEntries() {
 export function buildCombatEffectKeyTokens() {
   return [
     createEffectKeyToken({
+      code: "accuracy",
+      key: "accuracy",
+      label: "Точность",
+      path: "system.combat.accuracy",
+      group: "Бой"
+    }),
+    createEffectKeyToken({
+      code: "criticalChance",
+      key: "criticalChance",
+      label: "Шанс на крит",
+      path: "system.combat.criticalChance",
+      group: "Бой"
+    }),
+    createEffectKeyToken({
+      code: "damageFlat",
+      key: "damageFlat",
+      label: "Урон, плоский",
+      path: "system.combat.damageFlat",
+      group: "Бой"
+    }),
+    createEffectKeyToken({
+      code: "damagePercent",
+      key: "damagePercent",
+      label: "Урон, %",
+      path: "system.combat.damagePercent",
+      group: "Бой"
+    }),
+    createEffectKeyToken({
       code: "burstStability",
       key: "burstStability",
       label: "Стабильность стрельбы очередью",

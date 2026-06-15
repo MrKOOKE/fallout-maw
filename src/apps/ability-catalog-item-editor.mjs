@@ -1,5 +1,6 @@
 import { TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getItemCategorySettings, getSkillSettings } from "../settings/accessors.mjs";
+import { getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
 import {
   ABILITY_ACQUISITION_CONDITION_TYPES,
   ABILITY_CHANGE_TYPES,
@@ -9,6 +10,8 @@ import {
   ABILITY_FUNCTION_TYPES,
   ABILITY_HEALTH_LIMB_ALL,
   ABILITY_HEALTH_TARGETS,
+  ABILITY_POSTURE_ACTIONS,
+  ABILITY_POSTURE_SUBJECTS,
   LOCKED_FEATURES_CATEGORY_ID,
   createAbilityAcquisitionCondition,
   createAbilityChange,
@@ -71,6 +74,10 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       deleteFunctionCondition: this.#onDeleteFunctionCondition,
       addConditionItemCategory: this.#onAddConditionItemCategory,
       deleteConditionItemCategory: this.#onDeleteConditionItemCategory,
+      addConditionTargetFaction: this.#onAddConditionTargetFaction,
+      deleteConditionTargetFaction: this.#onDeleteConditionTargetFaction,
+      addConditionPosture: this.#onAddConditionPosture,
+      deleteConditionPosture: this.#onDeleteConditionPosture,
       addFunctionPenalty: this.#onAddFunctionPenalty,
       deleteFunctionPenalty: this.#onDeleteFunctionPenalty,
       addAcquisitionRequirement: this.#onAddAcquisitionRequirement,
@@ -369,6 +376,54 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     return this.#persist({ render: true, sync: false });
   }
 
+  static #onAddConditionTargetFaction(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    if (!condition) return this.#persist({ render: true, sync: false });
+    const values = normalizeConditionValues(condition.targetFactionNames);
+    const next = getFirstUnusedTargetFaction(values);
+    if (next) condition.targetFactionNames = [...values, next];
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteConditionTargetFaction(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    const index = Number(target.closest("[data-target-faction-index]")?.dataset.targetFactionIndex ?? -1);
+    if (condition && index >= 0) {
+      const values = normalizeConditionValues(condition.targetFactionNames);
+      values.splice(index, 1);
+      condition.targetFactionNames = values;
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddConditionPosture(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    if (!condition) return this.#persist({ render: true, sync: false });
+    const values = normalizeConditionValues(condition.postureActions);
+    const next = ABILITY_POSTURE_ACTIONS.find(action => !values.includes(action));
+    if (next) condition.postureActions = [...values, next];
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteConditionPosture(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    const index = Number(target.closest("[data-posture-index]")?.dataset.postureIndex ?? -1);
+    if (condition && index >= 0) {
+      const values = normalizeConditionValues(condition.postureActions);
+      values.splice(index, 1);
+      condition.postureActions = values;
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
   #getConditionForTarget(target) {
     const functionRow = target.closest("[data-ability-function-row]");
     const conditionRow = target.closest("[data-ability-condition-row]");
@@ -516,6 +571,11 @@ function readAbilityConditions(root) {
     healthTarget: row.querySelector("[data-field='conditionHealthTarget']")?.value ?? ABILITY_HEALTH_TARGETS.general,
     limbKey: row.querySelector("[data-field='conditionLimbKey']")?.value ?? ABILITY_HEALTH_LIMB_ALL,
     equipmentSlotKey: row.querySelector("[data-field='conditionEquipmentSlotKey']")?.value ?? "",
+    targetFactionNames: readFieldValues(row, "[data-field='conditionTargetFaction']"),
+    targetRaceId: row.querySelector("[data-field='conditionTargetRace']")?.value ?? "",
+    targetTypeId: row.querySelector("[data-field='conditionTargetType']")?.value ?? "",
+    postureSubject: row.querySelector("[data-field='conditionPostureSubject']")?.value ?? ABILITY_POSTURE_SUBJECTS.self,
+    postureActions: readFieldValues(row, "[data-field='conditionPosture']"),
     limit: row.querySelector("[data-field='conditionLimit']")?.value ?? 1,
     requiredCount: row.querySelector("[data-field='conditionRequiredCount']")?.value ?? 1,
     itemCategories: readFieldValues(row, "[data-field='conditionItemCategory']"),
@@ -600,6 +660,10 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
   const type = String(condition?.type ?? "");
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
+  const isTargetFaction = type === ABILITY_CONDITION_TYPES.targetFaction;
+  const isTargetRace = type === ABILITY_CONDITION_TYPES.targetRace;
+  const isTargetType = type === ABILITY_CONDITION_TYPES.targetType;
+  const isPosture = type === ABILITY_CONDITION_TYPES.posture;
   const isLimitedChanges = type === ABILITY_CONDITION_TYPES.limitedChanges;
   const isCooldown = type === ABILITY_CONDITION_TYPES.cooldown;
   const isItemUse = type === ABILITY_CONDITION_TYPES.itemUse;
@@ -614,13 +678,17 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
   return {
     ...condition,
     healthTarget,
-    isPending: !isHealth && !isEquipment && !isLimitedChanges && !isCooldown && !isItemUse,
+    isPending: !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isLimitedChanges && !isCooldown && !isItemUse,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
     isHealthCriticalLimb,
     showLimbChoice: isHealth && !isHealthGeneral,
     isEquipment,
+    isTargetFaction,
+    isTargetRace,
+    isTargetType,
+    isPosture,
     isLimitedChanges,
     isCooldown,
     isItemUse,
@@ -645,6 +713,13 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
       { value: ABILITY_EQUIPMENT_OPERATORS.empty, label: "Не занят", selected: condition?.operator === ABILITY_EQUIPMENT_OPERATORS.empty }
     ],
     equipmentSlotChoices: buildEquipmentSlotChoices(condition?.equipmentSlotKey),
+    targetFactionRows: buildTargetFactionRows(condition?.targetFactionNames),
+    canAddTargetFaction: Boolean(getFirstUnusedTargetFaction(condition?.targetFactionNames)),
+    targetRaceChoices: buildTargetRaceChoices(condition?.targetRaceId),
+    targetTypeChoices: buildTargetTypeChoices(condition?.targetTypeId),
+    postureSubjectChoices: buildPostureSubjectChoices(condition?.postureSubject),
+    postureRows: buildPostureRows(condition?.postureActions),
+    canAddPosture: normalizeConditionValues(condition?.postureActions).length < ABILITY_POSTURE_ACTIONS.length,
     itemCategoryRows: buildItemUseCategoryRows(condition?.itemCategories),
     canAddItemCategory: Boolean(getFirstUnusedItemUseCategory(condition?.itemCategories))
   };
@@ -737,7 +812,11 @@ function buildConditionTypeChoices(selected = "", { allowLimitedChanges = true }
   const choices = [
     { value: "", label: "", selected: !selected },
     { value: ABILITY_CONDITION_TYPES.healthPercent, label: "Состояние ОЗ", selected: selected === ABILITY_CONDITION_TYPES.healthPercent },
-    { value: ABILITY_CONDITION_TYPES.equipmentSlotOccupied, label: "Занятость слотов экипировки", selected: selected === ABILITY_CONDITION_TYPES.equipmentSlotOccupied }
+    { value: ABILITY_CONDITION_TYPES.equipmentSlotOccupied, label: "Занятость слотов экипировки", selected: selected === ABILITY_CONDITION_TYPES.equipmentSlotOccupied },
+    { value: ABILITY_CONDITION_TYPES.targetFaction, label: "Фракция цели", selected: selected === ABILITY_CONDITION_TYPES.targetFaction },
+    { value: ABILITY_CONDITION_TYPES.targetRace, label: "Раса цели", selected: selected === ABILITY_CONDITION_TYPES.targetRace },
+    { value: ABILITY_CONDITION_TYPES.targetType, label: "Тип цели", selected: selected === ABILITY_CONDITION_TYPES.targetType },
+    { value: ABILITY_CONDITION_TYPES.posture, label: "Положение", selected: selected === ABILITY_CONDITION_TYPES.posture }
   ];
   if (allowLimitedChanges || selected === ABILITY_CONDITION_TYPES.limitedChanges) {
     choices.push({
@@ -763,6 +842,10 @@ function isRuntimeCondition(type = "") {
   return [
     ABILITY_CONDITION_TYPES.healthPercent,
     ABILITY_CONDITION_TYPES.equipmentSlotOccupied,
+    ABILITY_CONDITION_TYPES.targetFaction,
+    ABILITY_CONDITION_TYPES.targetRace,
+    ABILITY_CONDITION_TYPES.targetType,
+    ABILITY_CONDITION_TYPES.posture,
     ABILITY_CONDITION_TYPES.cooldown
   ].includes(type);
 }
@@ -858,6 +941,65 @@ function buildEquipmentSlotChoices(selected = "") {
     label,
     selected: value === selected
   }));
+}
+
+function buildTargetFactionRows(value = []) {
+  const selected = normalizeConditionValues(value);
+  return selected.map((faction, index) => ({
+    index,
+    choices: getFactionNamesWithDefault(getFactionSettings()).map(name => ({
+      value: name,
+      label: name,
+      selected: name === faction
+    }))
+  }));
+}
+
+function getFirstUnusedTargetFaction(value = []) {
+  const selected = new Set(normalizeConditionValues(value));
+  return getFactionNamesWithDefault(getFactionSettings()).find(name => !selected.has(name)) ?? "";
+}
+
+function buildTargetRaceChoices(selected = "") {
+  return [{ value: "", label: "", selected: !selected }, ...buildRaceChoices(selected)];
+}
+
+function buildTargetTypeChoices(selected = "") {
+  const types = [...(getCreatureOptions().types ?? [])];
+  if (selected && !types.some(type => type.id === selected)) types.push({ id: selected, name: selected });
+  return [
+    { value: "", label: "", selected: !selected },
+    ...types.map(type => ({ value: type.id, label: type.name || type.id, selected: type.id === selected }))
+  ];
+}
+
+function buildPostureSubjectChoices(selected = ABILITY_POSTURE_SUBJECTS.self) {
+  return [
+    { value: ABILITY_POSTURE_SUBJECTS.self, label: "Свое положение" },
+    { value: ABILITY_POSTURE_SUBJECTS.target, label: "Положение цели" }
+  ].map(choice => ({ ...choice, selected: choice.value === selected }));
+}
+
+function buildPostureRows(value = []) {
+  const labels = {
+    walk: "Стоя",
+    crawl: "В приседе",
+    burrow: "Лежа",
+    knocked: "Опрокинут"
+  };
+  return normalizeConditionValues(value).map((posture, index) => ({
+    index,
+    choices: ABILITY_POSTURE_ACTIONS.map(action => ({
+      value: action,
+      label: labels[action] ?? action,
+      selected: action === posture
+    }))
+  }));
+}
+
+function normalizeConditionValues(value = []) {
+  const source = Array.isArray(value) ? value : Object.values(value ?? {});
+  return Array.from(new Set(source.map(entry => String(entry ?? "").trim()).filter(Boolean)));
 }
 
 function buildItemUseCategoryRows(selectedCategories = []) {

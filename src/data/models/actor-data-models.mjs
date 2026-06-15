@@ -68,6 +68,10 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         initiative: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
       }),
       combat: new SchemaField({
+        accuracy: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+        criticalChance: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+        damageFlat: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+        damagePercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         burstStability: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         finishingBlow: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
         finishingBlowChance: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),

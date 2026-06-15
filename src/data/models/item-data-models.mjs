@@ -168,7 +168,7 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "healthPercent", "equipmentSlotOccupied", "limitedChanges", "cooldown", "itemUse"],
+      choices: ["", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "limitedChanges", "cooldown", "itemUse"],
       initial: ""
     }),
     operator: new StringField({ required: true, blank: false, choices: ["lte", "gte", "occupied", "empty"], initial: "lte" }),
@@ -181,6 +181,19 @@ function abilityConditionField() {
     }),
     limbKey: new StringField({ required: true, blank: false, initial: "all" }),
     equipmentSlotKey: new StringField({ required: true, blank: true, initial: "" }),
+    targetFactionNames: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
+      required: true,
+      initial: []
+    }),
+    targetRaceId: new StringField({ required: true, blank: true, initial: "" }),
+    targetTypeId: new StringField({ required: true, blank: true, initial: "" }),
+    postureSubject: new StringField({ required: true, blank: false, choices: ["self", "target"], initial: "self" }),
+    postureActions: new ArrayField(new StringField({
+      required: true,
+      blank: false,
+      choices: ["walk", "crawl", "burrow", "knocked"],
+      initial: "walk"
+    }), { required: true, initial: [] }),
     limit: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     requiredCount: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     itemCategories: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {

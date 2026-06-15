@@ -358,6 +358,51 @@
               </label>
               {{/if}}
 
+              {{#if isTargetFaction}}
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header">
+                  <span>Фракции цели</span>
+                  <button type="button" data-action="addConditionTargetFaction" {{#unless canAddTargetFaction}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button>
+                </div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each targetFactionRows}}
+                  <div class="fallout-maw-item-use-category-row" data-target-faction-index="{{index}}">
+                    <select data-field="conditionTargetFaction">
+                      {{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                    </select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteConditionTargetFaction" title="Удалить фракцию"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}<span class="fallout-maw-empty-list">Фракции не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              {{/if}}
+
+              {{#if isTargetRace}}
+              <label><span>Раса цели</span><select data-field="conditionTargetRace">{{#each targetRaceChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+              {{/if}}
+
+              {{#if isTargetType}}
+              <label><span>Тип цели</span><select data-field="conditionTargetType">{{#each targetTypeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+              {{/if}}
+
+              {{#if isPosture}}
+              <label><span>Чье положение</span><select data-field="conditionPostureSubject">{{#each postureSubjectChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header">
+                  <span>Положения</span>
+                  <button type="button" data-action="addConditionPosture" {{#unless canAddPosture}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button>
+                </div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each postureRows}}
+                  <div class="fallout-maw-item-use-category-row" data-posture-index="{{index}}">
+                    <select data-field="conditionPosture">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteConditionPosture" title="Удалить положение"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}<span class="fallout-maw-empty-list">Положения не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              {{/if}}
+
               {{#if isLimitedChanges}}
               <label>
                 <span>Выбрать изменений</span>

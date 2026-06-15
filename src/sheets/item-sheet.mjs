@@ -4,6 +4,7 @@ import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
 import { NeedAdvancedSettingsConfig } from "../apps/need-settings-config.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getDamageTypeSettings, getItemCategorySettings, getNeedSettings, getProficiencySettings, getSkillSettings, getToolSettings } from "../settings/accessors.mjs";
+import { getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
 import { getEquipmentSlotSelectionKey, groupRaceEquipmentSlotsBySet, groupRaceWeaponSlotsBySet } from "../utils/equipment-slots.mjs";
 import {
   buildDamageMitigationLimbSetChoices,
@@ -35,6 +36,8 @@ import {
   ABILITY_FUNCTION_TYPES,
   ABILITY_HEALTH_LIMB_ALL,
   ABILITY_HEALTH_TARGETS,
+  ABILITY_POSTURE_ACTIONS,
+  ABILITY_POSTURE_SUBJECTS,
   createAbilityChange,
   createAbilityCondition,
   createAbilityFunction,
@@ -740,6 +743,18 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("select[data-ability-item-use-category]").forEach(select => {
       select.addEventListener("change", event => this.#onAbilityItemUseCategoryChange(event));
+    });
+    this.element?.querySelectorAll("[data-add-ability-target-faction]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityTargetFaction(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-target-faction]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityTargetFaction(event));
+    });
+    this.element?.querySelectorAll("[data-add-ability-posture]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityPosture(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-posture]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityPosture(event));
     });
     this.element?.querySelectorAll("[data-add-ability-penalty]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityPenalty(event));
@@ -2336,6 +2351,50 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   #onAbilityItemUseCategoryChange(event) {
     event.preventDefault();
     return this.#submitCurrentForm();
+  }
+
+  #onAddAbilityTargetFaction(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    if (!condition) return undefined;
+    const values = normalizeAbilityConditionValues(condition.targetFactionNames);
+    const next = getFirstUnusedAbilityTargetFaction(values);
+    if (!next) return undefined;
+    condition.targetFactionNames = [...values, next];
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteAbilityTargetFaction(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    const index = Number(event.currentTarget?.closest?.("[data-target-faction-index]")?.dataset.targetFactionIndex ?? -1);
+    if (!condition || index < 0) return undefined;
+    const values = normalizeAbilityConditionValues(condition.targetFactionNames);
+    values.splice(index, 1);
+    condition.targetFactionNames = values;
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAddAbilityPosture(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    if (!condition) return undefined;
+    const values = normalizeAbilityConditionValues(condition.postureActions);
+    const next = ABILITY_POSTURE_ACTIONS.find(action => !values.includes(action));
+    if (!next) return undefined;
+    condition.postureActions = [...values, next];
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteAbilityPosture(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    const index = Number(event.currentTarget?.closest?.("[data-posture-index]")?.dataset.postureIndex ?? -1);
+    if (!condition || index < 0) return undefined;
+    const values = normalizeAbilityConditionValues(condition.postureActions);
+    values.splice(index, 1);
+    condition.postureActions = values;
+    return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
   #getAbilityConditionForEvent(event) {
@@ -4279,6 +4338,10 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
   const type = String(condition?.type ?? "");
   const isHealth = type === ABILITY_CONDITION_TYPES.healthPercent;
   const isEquipment = type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied;
+  const isTargetFaction = type === ABILITY_CONDITION_TYPES.targetFaction;
+  const isTargetRace = type === ABILITY_CONDITION_TYPES.targetRace;
+  const isTargetType = type === ABILITY_CONDITION_TYPES.targetType;
+  const isPosture = type === ABILITY_CONDITION_TYPES.posture;
   const isLimitedChanges = type === ABILITY_CONDITION_TYPES.limitedChanges;
   const isItemUse = type === ABILITY_CONDITION_TYPES.itemUse;
   const maxLimit = Math.max(1, changeCount);
@@ -4295,13 +4358,17 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
     functionIndex,
     index,
     healthTarget,
-    isPending: !isHealth && !isEquipment && !isLimitedChanges && !isItemUse,
+    isPending: !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isLimitedChanges && !isItemUse,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
     isHealthCriticalLimb,
     showLimbChoice: isHealth && !isHealthGeneral,
     isEquipment,
+    isTargetFaction,
+    isTargetRace,
+    isTargetType,
+    isPosture,
     isLimitedChanges,
     isItemUse,
     canAddAlternative: !isLimitedChanges && !isItemUse,
@@ -4324,6 +4391,13 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
       { value: ABILITY_EQUIPMENT_OPERATORS.empty, label: "Не занят", selected: condition?.operator === ABILITY_EQUIPMENT_OPERATORS.empty }
     ],
     equipmentSlotChoices: buildAbilityEquipmentSlotChoices(condition?.equipmentSlotKey),
+    targetFactionRows: buildAbilityTargetFactionRows(condition?.targetFactionNames),
+    canAddTargetFaction: Boolean(getFirstUnusedAbilityTargetFaction(condition?.targetFactionNames)),
+    targetRaceChoices: buildAbilityTargetRaceChoices(condition?.targetRaceId),
+    targetTypeChoices: buildAbilityTargetTypeChoices(condition?.targetTypeId),
+    postureSubjectChoices: buildAbilityPostureSubjectChoices(condition?.postureSubject),
+    postureRows: buildAbilityPostureRows(condition?.postureActions),
+    canAddPosture: normalizeAbilityConditionValues(condition?.postureActions).length < ABILITY_POSTURE_ACTIONS.length,
     itemCategoryRows: buildAbilityItemUseCategoryRows(condition?.itemCategories),
     canAddItemCategory: Boolean(getFirstUnusedAbilityItemUseCategory(condition?.itemCategories))
   };
@@ -4371,7 +4445,11 @@ function buildAbilityConditionTypeChoices(selected = "", { allowLimitedChanges =
   const choices = [
     { value: "", label: "", selected: !selected },
     { value: ABILITY_CONDITION_TYPES.healthPercent, label: "Состояние ОЗ", selected: selected === ABILITY_CONDITION_TYPES.healthPercent },
-    { value: ABILITY_CONDITION_TYPES.equipmentSlotOccupied, label: "Занятость слотов экипировки", selected: selected === ABILITY_CONDITION_TYPES.equipmentSlotOccupied }
+    { value: ABILITY_CONDITION_TYPES.equipmentSlotOccupied, label: "Занятость слотов экипировки", selected: selected === ABILITY_CONDITION_TYPES.equipmentSlotOccupied },
+    { value: ABILITY_CONDITION_TYPES.targetFaction, label: "Фракция цели", selected: selected === ABILITY_CONDITION_TYPES.targetFaction },
+    { value: ABILITY_CONDITION_TYPES.targetRace, label: "Раса цели", selected: selected === ABILITY_CONDITION_TYPES.targetRace },
+    { value: ABILITY_CONDITION_TYPES.targetType, label: "Тип цели", selected: selected === ABILITY_CONDITION_TYPES.targetType },
+    { value: ABILITY_CONDITION_TYPES.posture, label: "Положение", selected: selected === ABILITY_CONDITION_TYPES.posture }
   ];
   if (allowLimitedChanges || selected === ABILITY_CONDITION_TYPES.limitedChanges) {
     choices.push({
@@ -4391,7 +4469,11 @@ function buildAbilityConditionTypeChoices(selected = "", { allowLimitedChanges =
 function isAbilityRuntimeCondition(type = "") {
   return [
     ABILITY_CONDITION_TYPES.healthPercent,
-    ABILITY_CONDITION_TYPES.equipmentSlotOccupied
+    ABILITY_CONDITION_TYPES.equipmentSlotOccupied,
+    ABILITY_CONDITION_TYPES.targetFaction,
+    ABILITY_CONDITION_TYPES.targetRace,
+    ABILITY_CONDITION_TYPES.targetType,
+    ABILITY_CONDITION_TYPES.posture
   ].includes(type);
 }
 
@@ -4440,6 +4522,64 @@ function buildAbilityEquipmentSlotChoices(selected = "") {
     label,
     selected: value === selected
   }));
+}
+
+function buildAbilityTargetFactionRows(value = []) {
+  return normalizeAbilityConditionValues(value).map((faction, index) => ({
+    index,
+    choices: getFactionNamesWithDefault(getFactionSettings()).map(name => ({
+      value: name,
+      label: name,
+      selected: name === faction
+    }))
+  }));
+}
+
+function getFirstUnusedAbilityTargetFaction(value = []) {
+  const selected = new Set(normalizeAbilityConditionValues(value));
+  return getFactionNamesWithDefault(getFactionSettings()).find(name => !selected.has(name)) ?? "";
+}
+
+function buildAbilityTargetRaceChoices(selected = "") {
+  const races = [...(getCreatureOptions().races ?? [])];
+  if (selected && !races.some(race => race.id === selected)) races.push({ id: selected, name: selected });
+  return [
+    { value: "", label: "", selected: !selected },
+    ...races.map(race => ({ value: race.id, label: race.name || race.id, selected: race.id === selected }))
+  ];
+}
+
+function buildAbilityTargetTypeChoices(selected = "") {
+  const types = [...(getCreatureOptions().types ?? [])];
+  if (selected && !types.some(type => type.id === selected)) types.push({ id: selected, name: selected });
+  return [
+    { value: "", label: "", selected: !selected },
+    ...types.map(type => ({ value: type.id, label: type.name || type.id, selected: type.id === selected }))
+  ];
+}
+
+function buildAbilityPostureSubjectChoices(selected = ABILITY_POSTURE_SUBJECTS.self) {
+  return [
+    { value: ABILITY_POSTURE_SUBJECTS.self, label: "Свое положение" },
+    { value: ABILITY_POSTURE_SUBJECTS.target, label: "Положение цели" }
+  ].map(choice => ({ ...choice, selected: choice.value === selected }));
+}
+
+function buildAbilityPostureRows(value = []) {
+  const labels = { walk: "Стоя", crawl: "В приседе", burrow: "Лежа", knocked: "Опрокинут" };
+  return normalizeAbilityConditionValues(value).map((posture, index) => ({
+    index,
+    choices: ABILITY_POSTURE_ACTIONS.map(action => ({
+      value: action,
+      label: labels[action] ?? action,
+      selected: action === posture
+    }))
+  }));
+}
+
+function normalizeAbilityConditionValues(value = []) {
+  const source = Array.isArray(value) ? value : Object.values(value ?? {});
+  return Array.from(new Set(source.map(entry => String(entry ?? "").trim()).filter(Boolean)));
 }
 
 function buildAbilityItemUseCategoryRows(selectedCategories = []) {

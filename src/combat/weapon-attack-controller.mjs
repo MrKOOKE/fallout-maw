@@ -17,6 +17,7 @@ import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
 import { NATURAL_RACE_WEAPON_SET_KEY, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import { getStealthAttackModifiers, revealActorFromStealth } from "../stealth/index.mjs";
 import { getWeaponActionBlockState } from "../abilities/runtime-state.mjs";
+import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
 import { requestPushKnockback } from "./active-actions.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
@@ -599,8 +600,10 @@ class WeaponAttackController {
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getDodgeDifficulty(target.actor) + requirementDifficultyBonus,
-        situationalModifier: getWeaponPushAccuracyModifier(this.weapon, this.weaponFunctionId),
-        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId)
+        situationalModifier: getWeaponPushAccuracyModifier(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
+        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
+        actorToken: this.token,
+        targetToken: target
       },
       animate: false,
       createMessage: !checkBatch,
@@ -620,7 +623,9 @@ class WeaponAttackController {
       actor: target.actor,
       skillKey: resolveSkillKey(target.actor, "prc"),
       data: {
-        difficulty: 50 + getActorSkillValue(this.token.actor, "ath") + getWeaponPushDifficultyModifier(this.weapon, this.weaponFunctionId)
+        difficulty: 50 + getActorSkillValue(this.token.actor, "ath") + getWeaponPushDifficultyModifier(this.weapon, this.weaponFunctionId),
+        actorToken: target,
+        targetToken: this.token
       },
       animate: false,
       createMessage: true,
@@ -991,8 +996,10 @@ class WeaponAttackController {
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getDirectedAttackDifficulty(target.actor, resolvedLimbKey, Boolean(limbKey), difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus),
-        situationalModifier: getAttackModeAccuracyModifier(this.weapon, this.actionKey, mode, this.weaponFunctionId),
-        ...getAttackModeCriticalCheckModifiers(this.weapon, this.actionKey, mode, this.weaponFunctionId)
+        situationalModifier: getAttackModeAccuracyModifier(this.weapon, this.actionKey, mode, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
+        ...getAttackModeCriticalCheckModifiers(this.weapon, this.actionKey, mode, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
+        actorToken: this.token,
+        targetToken: target
       },
       animate: false,
       createMessage: !checkBatch,
@@ -1002,6 +1009,11 @@ class WeaponAttackController {
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) return null;
+    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, {
+      actorToken: this.token,
+      targetToken: target,
+      weaponFunctionId: this.weaponFunctionId
+    });
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
@@ -1190,8 +1202,10 @@ class WeaponAttackController {
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getDodgeDifficulty(target.actor) + difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus,
-        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId),
-        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId)
+        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
+        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
+        actorToken: this.token,
+        targetToken: target
       },
       animate: false,
       createMessage: !checkBatch,
@@ -1201,6 +1215,11 @@ class WeaponAttackController {
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) return null;
+    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, {
+      actorToken: this.token,
+      targetToken: target,
+      weaponFunctionId: this.weaponFunctionId
+    });
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
@@ -1290,8 +1309,9 @@ class WeaponAttackController {
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: BASE_VOLLEY_DIFFICULTY + rangeDifficultyBonus + requirementDifficultyBonus + Math.max(0, toInteger(difficultyBonus)),
-        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId),
-        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId)
+        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, { actorToken: this.token }),
+        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, { actorToken: this.token }),
+        actorToken: this.token
       },
       animate: false,
       createMessage: !checkBatch,
@@ -1367,7 +1387,16 @@ class WeaponAttackController {
         actor: this.token.actor,
         actionKey: this.actionKey
       }),
-      damageModifier: amount => getCriticalDamageAmount(this.weapon, amount, blastOutcome.outcome, this.weaponFunctionId),
+      damageModifier: amount => getCriticalDamageAmount(
+        this.weapon,
+        applyContextualDamageToAmount(this.weapon, amount, {
+          actorToken: this.token,
+          targetToken: target,
+          weaponFunctionId: this.weaponFunctionId
+        }),
+        blastOutcome.outcome,
+        this.weaponFunctionId
+      ),
       source: {
         weaponUuid: this.weapon.uuid,
         actionKey: this.actionKey,
@@ -1390,8 +1419,10 @@ class WeaponAttackController {
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getAimedAttackDifficulty(target.actor, limbKey, difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus),
-        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId),
-        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId)
+        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
+        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
+        actorToken: this.token,
+        targetToken: target
       },
       animate: false,
       createMessage: !checkBatch,
@@ -1401,6 +1432,11 @@ class WeaponAttackController {
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) return null;
+    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, {
+      actorToken: this.token,
+      targetToken: target,
+      weaponFunctionId: this.weaponFunctionId
+    });
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
@@ -1430,8 +1466,10 @@ class WeaponAttackController {
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getAimedAttackDifficulty(target.actor, holdingLimbKey, difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus),
-        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId),
-        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId)
+        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
+        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
+        actorToken: this.token,
+        targetToken: target
       },
       animate: false,
       createMessage: !checkBatch,
@@ -1442,6 +1480,11 @@ class WeaponAttackController {
     this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) return null;
 
+    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, {
+      actorToken: this.token,
+      targetToken: target,
+      weaponFunctionId: this.weaponFunctionId
+    });
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     const weaponDamageRequests = buildWeaponConditionDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
@@ -3451,16 +3494,19 @@ function getPointElevationAtDistance(originElevation, targetElevation, distance,
   return (Number(originElevation) || 0) + (((Number(targetElevation) || 0) - (Number(originElevation) || 0)) * t);
 }
 
-function getWeaponDamage(weapon, weaponFunctionId = "") {
+function getWeaponDamage(weapon, weaponFunctionId = "", context = {}) {
   const actor = getWeaponOwnerActor(weapon);
   const weaponData = getEffectiveWeaponDamageData(weapon, weaponFunctionId);
-  const baseDamage = evaluateActorFormula(weaponData?.damage, actor, {
+  const formulaDamage = evaluateActorFormula(weaponData?.damage, actor, {
     minimum: 0,
     context: `${weapon?.name ?? "weapon"} damage`
   });
+  const flatDamage = getContextualCombatValue(actor, "damageFlat", context);
+  const baseDamage = Math.max(0, formulaDamage + flatDamage);
   const attackPowerDamagePercent = toInteger(weaponData?.attackPowerDamagePercent);
   const poweredDamage = Math.round(baseDamage * Math.max(0, 100 + attackPowerDamagePercent) / 100);
-  const proficiencyModifier = getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "damage");
+  const proficiencyModifier = getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "damage")
+    + getContextualCombatValue(actor, "damagePercent", context);
   const modifiedDamage = Math.round(poweredDamage * Math.max(0, 100 + proficiencyModifier) / 100);
   return Math.max(0, Math.floor(modifiedDamage * getWeaponConditionWeakeningRatio(weapon)));
 }
@@ -3841,7 +3887,7 @@ function getSingleDamageRequestLimbKey(requests = []) {
   return String((Array.isArray(requests) ? requests : [requests]).find(request => request?.limbKey)?.limbKey ?? "").trim();
 }
 
-function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "") {
+function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "", context = {}) {
   const actor = getWeaponOwnerActor(weapon);
   const stealth = getStealthAttackModifiers(actor);
   const modifier = evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier, {
@@ -3849,6 +3895,7 @@ function getWeaponCriticalCheckModifiers(weapon, weaponFunctionId = "") {
     context: "critical chance"
   })
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance")
+    + getContextualCombatValue(actor, "criticalChance", context)
     + stealth.criticalChanceBonus
     - getWeaponConditionCritChancePenalty(weapon);
   return {
@@ -3944,22 +3991,24 @@ function isWeaponAttackModeEnabled(weapon, actionKey, mode, weaponFunctionId = "
   return getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.enabled !== false;
 }
 
-function getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId = "") {
-  return getWeaponAccuracyModifier(weapon, weaponFunctionId)
+function getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId = "", context = {}) {
+  return getWeaponAccuracyModifier(weapon, weaponFunctionId, context)
     + toInteger(getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.accuracyModifier)
 }
 
-function getWeaponAccuracyModifier(weapon, weaponFunctionId = "") {
+function getWeaponAccuracyModifier(weapon, weaponFunctionId = "", context = {}) {
+  const actor = getWeaponOwnerActor(weapon);
   return evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.accuracyBonus, {
     minimum: -Infinity,
     context: "weapon accuracy"
   })
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "accuracy")
+    + getContextualCombatValue(actor, "accuracy", context)
     - getWeaponConditionAccuracyPenalty(weapon);
 }
 
-function getWeaponPushAccuracyModifier(weapon, weaponFunctionId = "") {
-  return getWeaponAccuracyModifier(weapon, weaponFunctionId)
+function getWeaponPushAccuracyModifier(weapon, weaponFunctionId = "", context = {}) {
+  return getWeaponAccuracyModifier(weapon, weaponFunctionId, context)
     + evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.push?.accuracyModifier, {
       minimum: -Infinity,
       context: "push accuracy"
@@ -4030,7 +4079,7 @@ function addFormulaTexts(left, right) {
   return `(${leftText}) + (${rightText})`;
 }
 
-function getAttackModeCriticalCheckModifiers(weapon, actionKey, mode, weaponFunctionId = "") {
+function getAttackModeCriticalCheckModifiers(weapon, actionKey, mode, weaponFunctionId = "", context = {}) {
   const actor = getWeaponOwnerActor(weapon);
   const stealth = getStealthAttackModifiers(actor);
   const modifier = evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.criticalChanceModifier, {
@@ -4038,6 +4087,7 @@ function getAttackModeCriticalCheckModifiers(weapon, actionKey, mode, weaponFunc
     context: "critical chance"
   })
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "criticalChance")
+    + getContextualCombatValue(actor, "criticalChance", context)
     + evaluateWeaponFormula(weapon, getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.criticalChanceModifier, {
       minimum: -Infinity,
       context: "attack mode critical chance"
@@ -5126,6 +5176,24 @@ function getAimedAttackDifficulty(targetActor, limbKey = "", blockerBonus = 0) {
   return dodge + Math.round(dodge * (limbPercent / 100)) + Math.max(0, limbBonus) + Math.max(0, toInteger(blockerBonus));
 }
 
+function getContextualCombatValue(actor, key, context = {}) {
+  return getContextualAbilityChangeValue(actor, `system.combat.${key}`, {
+    ...context,
+    baseValue: toInteger(actor?.system?.combat?.[key])
+  });
+}
+
+function applyContextualDamageToAmount(weapon, amount, context = {}) {
+  const actor = getWeaponOwnerActor(weapon);
+  const baseFlat = toInteger(actor?.system?.combat?.damageFlat);
+  const basePercent = toInteger(actor?.system?.combat?.damagePercent);
+  const flatDelta = getContextualCombatValue(actor, "damageFlat", context) - baseFlat;
+  const percentDelta = getContextualCombatValue(actor, "damagePercent", context) - basePercent;
+  const pelletCount = Math.max(1, getWeaponPelletCount(weapon, context?.weaponFunctionId));
+  const adjusted = (Math.max(0, Number(amount) || 0) + (flatDelta / pelletCount)) * Math.max(0, 100 + percentDelta) / 100;
+  return Math.max(0, Math.round(adjusted));
+}
+
 function getAimedWeaponTargetKey(item = null) {
   return `weapon:${String(item?.id ?? "").trim()}`;
 }
@@ -5255,8 +5323,9 @@ function getDirectedAttackDifficulty(targetActor, limbKey = "", aimed = false, d
 function getGeneralAttackHitChance(attackerActor, weapon, targetActor, { difficultyBonus = 0, weaponFunctionId = "" } = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
-  const finalSkillValue = toInteger(attackerActor.system?.skills?.[skillKey]?.value)
-    + getWeaponAccuracyModifier(weapon, weaponFunctionId);
+  const context = { targetActor };
+  const finalSkillValue = getContextualAttackSkillValue(attackerActor, skillKey, context)
+    + getWeaponAccuracyModifier(weapon, weaponFunctionId, context);
   const difficulty = getDodgeDifficulty(targetActor)
     + Math.max(0, toInteger(difficultyBonus))
     + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId);
@@ -5266,7 +5335,7 @@ function getGeneralAttackHitChance(attackerActor, weapon, targetActor, { difficu
 function getVolleyAreaHitChance(attackerActor, weapon, geometry, { difficultyBonus = 0, weaponFunctionId = "" } = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
-  const finalSkillValue = toInteger(attackerActor.system?.skills?.[skillKey]?.value)
+  const finalSkillValue = getContextualAttackSkillValue(attackerActor, skillKey)
     + getWeaponAccuracyModifier(weapon, weaponFunctionId);
   const rangeDifficultyBonus = getEffectiveRangeDifficultyBonusForDistance(
     weaponData,
@@ -5282,8 +5351,9 @@ function getVolleyAreaHitChance(attackerActor, weapon, geometry, { difficultyBon
 function getAimedAttackHitChance(attackerActor, weapon, targetActor, limbKey = "", blockerBonus = 0, weaponFunctionId = "") {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
-  const finalSkillValue = toInteger(attackerActor.system?.skills?.[skillKey]?.value)
-    + getWeaponAccuracyModifier(weapon, weaponFunctionId);
+  const context = { targetActor };
+  const finalSkillValue = getContextualAttackSkillValue(attackerActor, skillKey, context)
+    + getWeaponAccuracyModifier(weapon, weaponFunctionId, context);
   const difficulty = getAimedAttackDifficulty(targetActor, limbKey, blockerBonus + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId));
   return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty);
 }
@@ -5291,8 +5361,9 @@ function getAimedAttackHitChance(attackerActor, weapon, targetActor, limbKey = "
 function getDirectedAttackHitChance(attackerActor, weapon, targetActor, { actionKey = "", mode = "thrust", limbKey = "", difficultyBonus = 0, weaponFunctionId = "" } = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
-  const finalSkillValue = toInteger(attackerActor.system?.skills?.[skillKey]?.value)
-    + getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId);
+  const context = { targetActor };
+  const finalSkillValue = getContextualAttackSkillValue(attackerActor, skillKey, context)
+    + getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId, context);
   const difficulty = getDirectedAttackDifficulty(
     targetActor,
     limbKey,
@@ -5300,6 +5371,14 @@ function getDirectedAttackHitChance(attackerActor, weapon, targetActor, { action
     difficultyBonus + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId)
   );
   return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty);
+}
+
+function getContextualAttackSkillValue(actor, skillKey = "", context = {}) {
+  return getContextualAbilityChangeValue(actor, `system.skills.${skillKey}.bonus`, {
+    ...context,
+    baseValue: toInteger(actor?.system?.skills?.[skillKey]?.value),
+    alternateKeys: ["system.skills.all.bonus"]
+  });
 }
 
 function getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty) {

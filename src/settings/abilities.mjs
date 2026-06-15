@@ -20,10 +20,21 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
 export const ABILITY_CONDITION_TYPES = Object.freeze({
   healthPercent: "healthPercent",
   equipmentSlotOccupied: "equipmentSlotOccupied",
+  targetFaction: "targetFaction",
+  targetRace: "targetRace",
+  targetType: "targetType",
+  posture: "posture",
   limitedChanges: "limitedChanges",
   cooldown: "cooldown",
   itemUse: "itemUse"
 });
+
+export const ABILITY_POSTURE_SUBJECTS = Object.freeze({
+  self: "self",
+  target: "target"
+});
+
+export const ABILITY_POSTURE_ACTIONS = Object.freeze(["walk", "crawl", "burrow", "knocked"]);
 
 export const ABILITY_HEALTH_TARGETS = Object.freeze({
   general: "general",
@@ -332,9 +343,52 @@ function normalizeAbilityCondition(value = {}) {
   const groupId = String(value?.groupId ?? "").trim();
   if (!type) return { id: String(value?.id ?? "").trim() || "", groupId, type: "" };
 
+  const id = String(value?.id ?? "").trim() || foundry.utils.randomID();
+
+  if (type === ABILITY_CONDITION_TYPES.targetFaction) {
+    return {
+      id,
+      groupId,
+      type,
+      targetFactionNames: normalizeStringList(value?.targetFactionNames ?? value?.factions ?? value?.faction)
+    };
+  }
+
+  if (type === ABILITY_CONDITION_TYPES.targetRace) {
+    return {
+      id,
+      groupId,
+      type,
+      targetRaceId: String(value?.targetRaceId ?? value?.raceId ?? "").trim()
+    };
+  }
+
+  if (type === ABILITY_CONDITION_TYPES.targetType) {
+    return {
+      id,
+      groupId,
+      type,
+      targetTypeId: String(value?.targetTypeId ?? value?.typeId ?? "").trim()
+    };
+  }
+
+  if (type === ABILITY_CONDITION_TYPES.posture) {
+    const postureSubject = String(value?.postureSubject ?? value?.subject ?? "") === ABILITY_POSTURE_SUBJECTS.target
+      ? ABILITY_POSTURE_SUBJECTS.target
+      : ABILITY_POSTURE_SUBJECTS.self;
+    return {
+      id,
+      groupId,
+      type,
+      postureSubject,
+      postureActions: normalizeStringList(value?.postureActions ?? value?.postures ?? value?.actions)
+        .filter(action => ABILITY_POSTURE_ACTIONS.includes(action))
+    };
+  }
+
   if (type === ABILITY_CONDITION_TYPES.limitedChanges) {
     return {
-      id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+      id,
       groupId,
       type,
       operator: "lte",
@@ -349,7 +403,7 @@ function normalizeAbilityCondition(value = {}) {
 
   if (type === ABILITY_CONDITION_TYPES.cooldown) {
     return {
-      id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+      id,
       groupId,
       type,
       operator: "lte",
@@ -364,7 +418,7 @@ function normalizeAbilityCondition(value = {}) {
 
   if (type === ABILITY_CONDITION_TYPES.itemUse) {
     return {
-      id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+      id,
       groupId,
       type,
       operator: "lte",
@@ -381,7 +435,7 @@ function normalizeAbilityCondition(value = {}) {
 
   if (type === ABILITY_CONDITION_TYPES.equipmentSlotOccupied) {
     return {
-      id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+      id,
       groupId,
       type,
       operator: String(value?.operator ?? "") === ABILITY_EQUIPMENT_OPERATORS.empty
@@ -402,7 +456,7 @@ function normalizeAbilityCondition(value = {}) {
     : ABILITY_HEALTH_TARGETS.general;
 
   return {
-    id: String(value?.id ?? "").trim() || foundry.utils.randomID(),
+    id,
     groupId,
     type,
     operator: String(value?.operator ?? "lte") === "gte" ? "gte" : "lte",
@@ -413,6 +467,13 @@ function normalizeAbilityCondition(value = {}) {
     limit: 1,
     durationSeconds: 0
   };
+}
+
+function normalizeStringList(value = []) {
+  const source = Array.isArray(value)
+    ? value
+    : value && typeof value === "object" ? Object.values(value) : [value];
+  return Array.from(new Set(source.map(entry => String(entry ?? "").trim()).filter(Boolean)));
 }
 
 function normalizeFixedFunctionKey(value = "") {
