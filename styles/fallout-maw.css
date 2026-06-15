@@ -1333,6 +1333,27 @@
   font-style: normal;
 }
 
+.fallout-maw-lucky-coin-skill-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fallout-maw-lucky-coin-skill-grid .fallout-maw-radio-card {
+  align-items: center;
+  min-width: 0;
+}
+
+.fallout-maw-lucky-coin-skill-grid .fallout-maw-radio-card strong {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 520px) {
+  .fallout-maw-lucky-coin-skill-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .fallout-maw-range-field {
   display: grid;
   gap: 0.35rem;

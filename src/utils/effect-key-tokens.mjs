@@ -5,6 +5,7 @@ import {
   ALL_SKILLS_BONUS_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+  ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
   SMART_FUDGE_RESULT_EFFECT_KEYS
 } from "./active-effect-changes.mjs";
 import {
@@ -255,6 +256,13 @@ function buildAbilityRuntimeEffectKeyTokens() {
       label: "Расход энергии на способность",
       path: ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
       group: "Способности"
+    }),
+    createEffectKeyToken({
+      code: "nextSkillModifier",
+      key: "nextSkillModifier",
+      label: "Следующая проверка выбранного навыка",
+      path: ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
+      group: "Навыки"
     }),
     createEffectKeyToken({
       code: "smartCriticalSuccess",

@@ -20,7 +20,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   reaper: "reaper",
   fourLeafClover: "fourLeafClover",
   atRandom: "atRandom",
-  lastChance: "lastChance"
+  lastChance: "lastChance",
+  luckyCoin: "luckyCoin"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -512,6 +513,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance) {
     return normalizeLastChanceSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin) {
+    return normalizeLuckyCoinSettings(value);
+  }
   return {};
 }
 
@@ -585,6 +589,17 @@ export function normalizeLastChanceSettings(value = {}) {
     chanceFormula: String(value?.chanceFormula ?? "70+gambling/10").trim() || "70+gambling/10",
     overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 50)),
     overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 43200))
+  };
+}
+
+export function normalizeLuckyCoinSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 10)),
+    chanceFormula: String(value?.chanceFormula ?? "50+gambling/10").trim() || "50+gambling/10",
+    successBonusFormula: String(value?.successBonusFormula ?? "10+gambling/5").trim() || "10+gambling/5",
+    failurePenaltyFormula: String(value?.failurePenaltyFormula ?? "5+gambling/10").trim() || "5+gambling/10",
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 10)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 3600))
   };
 }
 

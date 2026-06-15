@@ -403,6 +403,50 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedLuckyCoinSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Счастливая монетка</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label>
+            <span>Расход энергии</span>
+            <input type="number" data-field="fixed.luckyCoin.energyCost" value="{{fixedLuckyCoinSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Формула шанса</span>
+            <input type="text" data-field="fixed.luckyCoin.chanceFormula" value="{{fixedLuckyCoinSettings.chanceFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Формула бонуса</span>
+            <input type="text" data-field="fixed.luckyCoin.successBonusFormula" value="{{fixedLuckyCoinSettings.successBonusFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Формула штрафа</span>
+            <input type="text" data-field="fixed.luckyCoin.failurePenaltyFormula" value="{{fixedLuckyCoinSettings.failurePenaltyFormula}}" data-formula-autocomplete="all">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" data-field="fixed.luckyCoin.overloadEnergyCost" value="{{fixedLuckyCoinSettings.overloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.luckyCoin.overloadDurationAmount" value="{{fixedLuckyCoinSettings.overloadDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.luckyCoin.overloadDurationUnit">
+                {{#each fixedLuckyCoinSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{/if}}
 
     {{#unless isFixed}}

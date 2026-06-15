@@ -31,6 +31,7 @@ import { registerTrapPlacementControlHooks } from "./apps/trap-placement-control
 import { registerWorldTimeControlHooks } from "./apps/world-time-control.mjs";
 import { registerPersonalGeneratorHooks } from "./apps/personal-generator.mjs";
 import { registerSkillCheckSocket } from "./rolls/skill-check.mjs";
+import { registerOneTimeSkillModifierHooks } from "./rolls/one-time-skill-modifiers.mjs";
 import { registerDamageHubConfig, registerDamageSocket } from "./combat/damage-hub.mjs";
 import { registerAttackAnimationSocket } from "./combat/attack-animations.mjs";
 import { registerWeaponAttackSocket } from "./combat/weapon-attack-controller.mjs";
@@ -107,6 +108,7 @@ Hooks.once("init", () => {
   registerAbilityCooldownHooks();
   registerAbilityItemUseHooks();
   registerFixedAbilityFunctionHooks();
+  registerOneTimeSkillModifierHooks();
   registerNeedThresholdHooks();
   registerRegenerationHooks();
   registerNaturalRaceItemHooks();

@@ -40,6 +40,7 @@ import {
   ALL_SKILLS_BONUS_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+  ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
   SMART_FUDGE_RESULT_EFFECT_KEYS
 } from "../utils/active-effect-changes.mjs";
 import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
@@ -132,7 +133,8 @@ import {
   normalizeAbilityFunctions,
   normalizeAllOrNothingSettings,
   normalizeCurseAndBlessingSettings,
-  normalizeLastChanceSettings
+  normalizeLastChanceSettings,
+  normalizeLuckyCoinSettings
 } from "../settings/abilities.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import {
@@ -3503,13 +3505,16 @@ function buildAbilityEnergyCostRows(item, actor = null) {
       abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
     ));
   if (!entry) return [];
   const settings = entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
     ? normalizeAllOrNothingSettings(entry.fixedSettings)
     : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance
       ? normalizeLastChanceSettings(entry.fixedSettings)
-      : normalizeCurseAndBlessingSettings(entry.fixedSettings);
+      : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
+        ? normalizeLuckyCoinSettings(entry.fixedSettings)
+        : normalizeCurseAndBlessingSettings(entry.fixedSettings);
   const base = Math.max(0, toInteger(settings.energyCost));
   const total = getFixedAbilityEnergyCost(actor, item, entry, base);
   return [
@@ -5484,6 +5489,7 @@ function buildEffectPathLabelMap({
   map.set(ALL_SKILLS_ADVANTAGE_EFFECT_KEY, "Преимущество: все навыки");
   map.set(ALL_SKILLS_DISADVANTAGE_EFFECT_KEY, "Помеха: все навыки");
   map.set(ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY, "Расход энергии на способность");
+  map.set(ONE_TIME_SKILL_MODIFIER_EFFECT_KEY, "Следующая проверка выбранного навыка");
   map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.criticalSuccess, "Подтасовка: критический успех");
   map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.success, "Подтасовка: успех");
   map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.failure, "Подтасовка: провал");

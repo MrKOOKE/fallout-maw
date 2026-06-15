@@ -23,6 +23,7 @@ import {
   normalizeAtRandomSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
+  normalizeLuckyCoinSettings,
   normalizeReaperSettings,
   normalizeDeusExMachinaSettings,
   normalizeAbilityFunctions
@@ -586,6 +587,19 @@ function readFixedFunctionSettings(row) {
       )
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.luckyCoin.energyCost']")?.value,
+      chanceFormula: row.querySelector("[data-field='fixed.luckyCoin.chanceFormula']")?.value,
+      successBonusFormula: row.querySelector("[data-field='fixed.luckyCoin.successBonusFormula']")?.value,
+      failurePenaltyFormula: row.querySelector("[data-field='fixed.luckyCoin.failurePenaltyFormula']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.luckyCoin.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.luckyCoin.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.luckyCoin.overloadDurationUnit']")?.value
+      )
+    };
+  }
   if (fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) return {};
   return {
     damageRequired: row.querySelector("[data-field='fixed.damageRequired']")?.value,
@@ -687,6 +701,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedLastChanceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance
     ? prepareLastChanceSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedLuckyCoinSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
+    ? prepareLuckyCoinSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const conditions = normalized.conditions.map(condition => prepareConditionForDisplay(condition, {
     changeCount: normalized.changes.length,
     allowLimitedChanges: isEffectChanges
@@ -705,6 +722,7 @@ function prepareFunctionForDisplay(entry) {
     fixedFourLeafCloverSettings,
     fixedAtRandomSettings,
     fixedLastChanceSettings,
+    fixedLuckyCoinSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: normalized.changes.map(prepareChangeForDisplay),
     conditions,
@@ -774,6 +792,16 @@ function prepareAtRandomSettingsForDisplay(settings = {}) {
 
 function prepareLastChanceSettingsForDisplay(settings = {}) {
   const normalized = normalizeLastChanceSettings(settings);
+  const duration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: duration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(duration.unit)
+  };
+}
+
+function prepareLuckyCoinSettingsForDisplay(settings = {}) {
+  const normalized = normalizeLuckyCoinSettings(settings);
   const duration = splitDurationSeconds(normalized.overloadDurationSeconds);
   return {
     ...normalized,

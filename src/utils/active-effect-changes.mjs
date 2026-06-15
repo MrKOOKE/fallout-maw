@@ -9,6 +9,7 @@ export const ALL_SKILLS_BONUS_EFFECT_KEY = "system.skills.all.bonus";
 export const ALL_SKILLS_ADVANTAGE_EFFECT_KEY = "system.skills.all.advantage";
 export const ALL_SKILLS_DISADVANTAGE_EFFECT_KEY = "system.skills.all.disadvantage";
 export const ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY = "fallout-maw.ability.overload.energyCost";
+export const ONE_TIME_SKILL_MODIFIER_EFFECT_KEY = "fallout-maw.skillCheck.nextSkillModifier";
 export const SMART_FUDGE_RESULT_EFFECT_KEYS = Object.freeze({
   criticalSuccess: "fallout-maw.skillCheck.smartFudge.criticalSuccess",
   success: "fallout-maw.skillCheck.smartFudge.success",

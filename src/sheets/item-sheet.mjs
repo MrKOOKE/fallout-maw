@@ -47,6 +47,7 @@ import {
   normalizeDeusExMachinaSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
+  normalizeLuckyCoinSettings,
   normalizeReaperSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
@@ -4294,6 +4295,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedLastChanceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance
     ? prepareLastChanceSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedLuckyCoinSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
+    ? prepareLuckyCoinSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -4315,6 +4319,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedFourLeafCloverSettings,
     fixedAtRandomSettings,
     fixedLastChanceSettings,
+    fixedLuckyCoinSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
@@ -4398,6 +4403,16 @@ function prepareAtRandomSettingsForDisplay(settings = {}) {
 
 function prepareLastChanceSettingsForDisplay(settings = {}) {
   const normalized = normalizeLastChanceSettings(settings);
+  const duration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: duration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(duration.unit)
+  };
+}
+
+function prepareLuckyCoinSettingsForDisplay(settings = {}) {
+  const normalized = normalizeLuckyCoinSettings(settings);
   const duration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
   return {
     ...normalized,
@@ -4846,6 +4861,15 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
       const durationSeconds = abilityDurationPartsToSeconds(
         row.querySelector("[data-fixed-last-chance-overload-duration-amount]")?.value,
         row.querySelector("[data-fixed-last-chance-overload-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, durationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin) {
+      const durationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-lucky-coin-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-lucky-coin-overload-duration-unit]")?.value
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, durationSeconds);
       continue;

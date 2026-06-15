@@ -12,6 +12,7 @@ import {
   normalizeDeusExMachinaSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
+  normalizeLuckyCoinSettings,
   normalizeReaperSettings
 } from "../settings/abilities.mjs";
 import {
@@ -37,11 +38,16 @@ import {
   ALL_SKILLS_BONUS_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+  ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
   SMART_FUDGE_RESULT_EFFECT_KEYS,
   evaluateActorEffectChangeNumber
 } from "../utils/active-effect-changes.mjs";
 import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import { ACTION_RESOURCE_KEY } from "../combat/movement-resources.mjs";
+import {
+  ONE_TIME_SKILL_MODIFIER_FLAG_KEY,
+  getPendingOneTimeSkillModifierEffects
+} from "../rolls/one-time-skill-modifiers.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -51,6 +57,7 @@ const CURSE_AND_BLESSING_EFFECT_FLAG_KEY = "curseAndBlessing";
 const ABILITY_OVERLOAD_EFFECT_FLAG_KEY = "abilityOverload";
 const ALL_OR_NOTHING_EFFECT_FLAG_KEY = "allOrNothing";
 const AT_RANDOM_ACTION_BLOCK_EFFECT_FLAG_KEY = "atRandomActionBlock";
+const LUCKY_COIN_EFFECT_SOURCE = "luckyCoin";
 const FIXED_ABILITY_SOCKET = `system.${SYSTEM_ID}`;
 const FIXED_ABILITY_SOCKET_SCOPE = "fallout-maw.fixedAbilityFunctions";
 const ENERGY_RESOURCE_KEY = "power";
@@ -115,6 +122,14 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.lastChance
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.luckyCoin,
+    label: "Счастливая монетка",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
     })
   })
 ]);
@@ -238,6 +253,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
     return true;
   }
 
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin) {
+    const used = await useLuckyCoin(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) {
     const used = await useDeusExMachina(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
@@ -274,6 +295,137 @@ async function useAllOrNothing(actor, abilityItem, abilityFunction) {
   await applyAllOrNothingResultEffect(actor, abilityItem, abilityFunction, settings);
   await createAbilityChatMessage(actor, abilityItem, "Все или ничего: способность успешно применена.");
   return true;
+}
+
+async function useLuckyCoin(actor, abilityItem, abilityFunction) {
+  const settings = normalizeLuckyCoinSettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  if (hasPendingLuckyCoinEffect(actor)) {
+    ui.notifications.warn("Счастливая монетка: предыдущий эффект ещё не потрачен.");
+    return false;
+  }
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`Счастливая монетка: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+
+  const skill = await promptLuckyCoinSkill(actor);
+  if (!skill) return false;
+  if (hasPendingLuckyCoinEffect(actor)) {
+    ui.notifications.warn("Счастливая монетка: предыдущий эффект ещё не потрачен.");
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: "Перегрузка: Счастливая монетка",
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+
+  const chance = Math.min(100, Math.max(0, evaluateActorFormula(settings.chanceFormula, actor, {
+    fallback: 0,
+    minimum: 0,
+    context: "Счастливая монетка"
+  })));
+  const lucky = (Math.floor(Math.random() * 100) + 1) <= chance;
+  const magnitude = Math.max(0, toInteger(evaluateActorFormula(
+    lucky ? settings.successBonusFormula : settings.failurePenaltyFormula,
+    actor,
+    {
+      fallback: 0,
+      minimum: 0,
+      context: lucky ? "Счастливая монетка: удача" : "Счастливая монетка: неудача"
+    }
+  )));
+  const modifier = lucky ? magnitude : -magnitude;
+
+  await createLuckyCoinEffect(actor, abilityItem, abilityFunction, skill, modifier);
+  await createAbilityChatMessage(
+    actor,
+    abilityItem,
+    `${lucky ? "Удача улыбнулась вам." : "Удача отвернулась от вас."} ${skill.label}: ${modifier >= 0 ? "+" : ""}${modifier} к следующей проверке.`
+  );
+  return true;
+}
+
+function hasPendingLuckyCoinEffect(actor) {
+  return getPendingOneTimeSkillModifierEffects(actor, data => (
+    data.source === LUCKY_COIN_EFFECT_SOURCE
+  )).length > 0;
+}
+
+async function promptLuckyCoinSkill(actor) {
+  const skills = getSkillSettings()
+    .filter(skill => actor.system?.skills?.[skill.key])
+    .map(skill => ({
+      key: String(skill.key ?? ""),
+      label: String(skill.label ?? skill.key ?? "")
+    }))
+    .filter(skill => skill.key);
+  if (!skills.length) {
+    ui.notifications.warn("Счастливая монетка: у персонажа нет доступных навыков.");
+    return null;
+  }
+
+  const options = skills.map((skill, index) => `
+    <label class="fallout-maw-radio-card">
+      <input type="radio" name="skillKey" value="${escapeAttribute(skill.key)}" ${index === 0 ? "checked" : ""}>
+      <span><strong>${escapeHTML(skill.label)}</strong></span>
+    </label>
+  `).join("");
+  const formData = await DialogV2.input({
+    window: { title: "Счастливая монетка: выбор навыка" },
+    content: `<div class="fallout-maw-lucky-coin-skill-grid">${options}</div>`,
+    ok: {
+      label: "Подбросить",
+      icon: "fa-solid fa-coins",
+      callback: (_event, button) => new FormDataExtended(button.form).object
+    },
+    buttons: [{ action: "cancel", label: game.i18n.localize("FALLOUTMAW.Common.Cancel") }],
+    position: { width: 560 },
+    rejectClose: false
+  });
+  const skillKey = String(formData?.skillKey ?? "");
+  return skills.find(skill => skill.key === skillKey) ?? null;
+}
+
+async function createLuckyCoinEffect(actor, abilityItem, abilityFunction, skill, modifier) {
+  const createdAt = Number(game.time?.worldTime) || 0;
+  await actor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: `Счастливая монетка: ${skill.label}`,
+    img: abilityItem.img || "icons/svg/aura.svg",
+    origin: abilityItem.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    system: {
+      changes: [{
+        key: ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
+        type: "add",
+        value: String(toInteger(modifier)),
+        phase: "initial",
+        priority: null
+      }]
+    },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "temporary",
+        [ONE_TIME_SKILL_MODIFIER_FLAG_KEY]: {
+          pending: true,
+          source: LUCKY_COIN_EFFECT_SOURCE,
+          skillKey: skill.key,
+          skillLabel: skill.label,
+          abilityItemId: abilityItem.id,
+          abilitySourceId: getAbilitySourceId(abilityItem),
+          functionId: abilityFunction.id,
+          fixedKey: abilityFunction.fixedKey,
+          createdAt
+        }
+      }
+    }
+  }], { animate: false });
 }
 
 async function toggleCurseAndBlessing(actor, abilityItem, abilityFunction) {
