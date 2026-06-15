@@ -36,6 +36,7 @@ export const TEMPLATES = Object.freeze({
   skillCheckBatchChatCard: `systems/${SYSTEM_ID}/templates/chat/skill-check-batch-card.hbs`,
   damageSummaryChatCard: `systems/${SYSTEM_ID}/templates/chat/damage-summary-card.hbs`,
   finishingBlowChatCard: `systems/${SYSTEM_ID}/templates/chat/finishing-blow-card.hbs`,
+  lastChanceChatCard: `systems/${SYSTEM_ID}/templates/chat/last-chance-card.hbs`,
   researchCompleteChatCard: `systems/${SYSTEM_ID}/templates/chat/research-complete-card.hbs`,
   actorSheet: Object.freeze({
     header: `systems/${SYSTEM_ID}/templates/actor/parts/header.hbs`,

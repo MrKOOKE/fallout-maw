@@ -367,6 +367,42 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedLastChanceSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Последний шанс</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Срабатывание</strong>
+          <label>
+            <span>Расход энергии</span>
+            <input type="number" data-field="fixed.lastChance.energyCost" value="{{fixedLastChanceSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Формула шанса</span>
+            <input type="text" data-field="fixed.lastChance.chanceFormula" value="{{fixedLastChanceSettings.chanceFormula}}" data-formula-autocomplete="all">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" data-field="fixed.lastChance.overloadEnergyCost" value="{{fixedLastChanceSettings.overloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.lastChance.overloadDurationAmount" value="{{fixedLastChanceSettings.overloadDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.lastChance.overloadDurationUnit">
+                {{#each fixedLastChanceSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{/if}}
 
     {{#unless isFixed}}

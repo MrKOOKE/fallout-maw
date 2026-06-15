@@ -50,6 +50,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #experienceSyncTimer = null;
   #expandedAbilityCategories = new Set();
   #floor = null;
+  #gmMode = false;
   #isClosing = false;
   #page = "development";
   #researchPointSessionSpent = 0;
@@ -86,6 +87,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       decreaseCharacteristic: this.#onDecreaseCharacteristic,
       increaseCharacteristic: this.#onIncreaseCharacteristic,
       decreaseSkill: this.#onDecreaseSkill,
+      grantAbility: this.#onGrantAbility,
       increaseSkill: this.#onIncreaseSkill,
       nextPage: this.#onNextPage,
       previousPage: this.#onPreviousPage,
@@ -96,6 +98,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       purchaseTraitAbility: this.#onPurchaseTraitAbility,
       resetDevelopment: this.#onResetDevelopment,
       toggleAbilityCategory: this.#onToggleAbilityCategory,
+      toggleGMMode: this.#onToggleGMMode,
       toggleSignatureSkill: this.#onToggleSignatureSkill
     }
   };
@@ -106,8 +109,27 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     }
   };
 
+  static get scrollPreservationSelectors() {
+    return [
+      ...super.scrollPreservationSelectors,
+      ".fallout-maw-advancement-talents-list"
+    ];
+  }
+
   get title() {
     return this.actor?.name || localize("FALLOUTMAW.Advancement.Title");
+  }
+
+  _getFrameButtons(options) {
+    const buttons = super._getFrameButtons(options);
+    if (game.user?.isGM) {
+      buttons.push({
+        action: "toggleGMMode",
+        icon: "fallout-maw-advancement-gm-toggle",
+        label: "ГМ режим"
+      });
+    }
+    return buttons;
   }
 
   async _prepareContext(options) {
@@ -138,7 +160,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const experiencePercent = this.#draft.level >= maxLevel
       ? 100
       : Math.max(0, Math.min(100, ((currentExperience - currentThreshold) / experienceRange) * 100));
-    const canLevelUp = (this.#draft.level < maxLevel) && (currentExperience >= nextThreshold);
+    const canLevelUp = (this.#draft.level < maxLevel) && (this.#gmMode || (currentExperience >= nextThreshold));
     const abilityRequirementContext = this.#getAbilityRequirementContext({
       characteristicSettings,
       skillSettings,
@@ -153,6 +175,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     return {
       ...(await super._prepareContext(options)),
       actor: this.actor,
+      isGMMode: this.#gmMode,
       raceName: race?.name || "\u2014",
       level: this.#draft.level,
       canLevelUp,
@@ -185,8 +208,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         return {
           ...characteristic,
           value: toInteger(liveCharacteristics?.[characteristic.key]),
-          canIncrease: remaining.characteristics > 0,
-          canDecrease: currentPoints > floorPoints
+          canIncrease: this.#gmMode || remaining.characteristics > 0,
+          canDecrease: this.#gmMode ? toInteger(liveCharacteristics?.[characteristic.key]) > 0 : currentPoints > floorPoints
         };
       }),
       skills: skillSettings.map(skill => {
@@ -223,14 +246,14 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
           ...skill,
           value: totalValue,
           signature,
-          canIncrease: remaining.skills >= cost && totalValue < skillDevelopmentLimit,
-          canDecrease: toInteger(currentSkill.points) > toInteger(floorSkill.points),
+          canIncrease: this.#gmMode || (remaining.skills >= cost && totalValue < skillDevelopmentLimit),
+          canDecrease: this.#gmMode ? totalValue > 0 : toInteger(currentSkill.points) > toInteger(floorSkill.points),
           canToggleSignature: Boolean(currentSkill.signature)
-            ? canUnsetSignature
-            : (remaining.signatureSkills > 0),
+            ? (this.#gmMode || canUnsetSignature)
+            : (this.#gmMode || remaining.signatureSkills > 0),
           cost,
           pureValue,
-          tooltipHTML: renderSkillCostTooltipHTML({
+          tooltipHTML: this.#gmMode ? "" : renderSkillCostTooltipHTML({
             skill,
             totalValue,
             pureValue,
@@ -256,6 +279,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   async _onRender(context, options) {
     await super._onRender(context, options);
     this.#syncPageClass();
+    this.#syncGMModeFrame();
     this.#clearAbilityDescriptionTooltip();
     this.#activateRepeatButtons();
     this.#activateAbilitySearch();
@@ -265,6 +289,14 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
   #syncPageClass() {
     this.element?.classList.toggle("fallout-maw-advancement-page-abilities", this.#page === "abilities");
+  }
+
+  #syncGMModeFrame() {
+    const enabled = Boolean(game.user?.isGM && this.#gmMode);
+    this.element?.classList.toggle("fallout-maw-advancement-gm-mode", enabled);
+    const toggle = this.element?.querySelector?.('[data-action="toggleGMMode"]');
+    toggle?.classList.toggle("active", enabled);
+    toggle?.setAttribute("aria-pressed", String(enabled));
   }
 
   async _preClose(options) {
@@ -327,6 +359,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (!key) return;
 
     const currentValue = Boolean(this.#draft.development.skills[key]?.signature);
+    if (this.#gmMode) {
+      this.#draft.development.skills[key].signature = !currentValue;
+      await this.#applyDraftToActor();
+      return this.forceRender();
+    }
+
     if (currentValue) {
       if (this.#floor.development.skills[key]?.signature) return;
       this.#draft.development.skills[key].signature = false;
@@ -354,9 +392,14 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (this.#draft.level >= maxLevel) return;
 
     const nextThreshold = getLevelThreshold(levelSettings, this.#draft.level);
-    if (toInteger(this.#draft.development.experience) < nextThreshold) return;
+    if (!this.#gmMode && toInteger(this.#draft.development.experience) < nextThreshold) return;
 
     this.#draft.level += 1;
+    if (this.#gmMode) {
+      await this.#applyDraftToActor();
+      return this.forceRender();
+    }
+
     this.#draft.development.points.skills += evaluateProgressionFormula(
       this.actor.system?.progression?.skillPointsPerLevel,
       this.actor.system?.characteristics,
@@ -620,9 +663,25 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     return undefined;
   }
 
+  static #onToggleGMMode(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!game.user?.isGM) return undefined;
+    this.#gmMode = !this.#gmMode;
+    this.#stopRepeat();
+    return this.forceRender();
+  }
+
   async #changeCharacteristic(key, delta) {
     await this.#ensureDraft();
     this.#syncDraftFromForm();
+
+    if (this.#gmMode) {
+      if (delta < 0 && toInteger(this.actor.system?.characteristics?.[key]) <= 0) return false;
+      this.#draft.characteristics[key] = toInteger(this.#draft.characteristics[key]) + delta;
+      await this.#applyDraftToActor();
+      return true;
+    }
 
     if (delta > 0) {
       const available = Math.max(0, toInteger(this.#draft.development.points.characteristics));
@@ -647,6 +706,16 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   async #changeSkill(key, delta) {
     await this.#ensureDraft();
     this.#syncDraftFromForm();
+
+    if (this.#gmMode) {
+      if (delta < 0 && toInteger(this.actor.system?.skills?.[key]?.value) <= 0) return false;
+      const sourceBonus = toInteger(
+        this.actor.system?._source?.skills?.[key]?.bonus
+        ?? this.actor.system?.skills?.[key]?.bonus
+      );
+      await this.actor.update({ [`system.skills.${key}.bonus`]: sourceBonus + delta });
+      return true;
+    }
 
     if (delta > 0) {
       const available = Math.max(0, toInteger(this.#draft.development.points.skills));
@@ -776,6 +845,24 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     await this.#applyDraftToActor();
     await grantCatalogAbility(this.actor, sourceId);
     this.#syncDraftFromActor();
+    return this.forceRender();
+  }
+
+  static async #onGrantAbility(event, target) {
+    event.preventDefault();
+    if (!game.user?.isGM || !this.#gmMode) return this.forceRender();
+
+    const sourceId = target.closest("[data-ability-source-id]")?.dataset.abilitySourceId ?? "";
+    const entry = findCatalogAbility(sourceId);
+    if (!entry || actorHasAbility(this.actor, sourceId)) return this.forceRender();
+
+    const granted = await grantCatalogAbility(this.actor, sourceId);
+    if (granted) {
+      const research = this.#getAbilityResearch(sourceId);
+      if (research) await this.actor.deleteResearch(research.id);
+      this.#selectedAbilitySourceId = "";
+      this.#syncDraftFromActor();
+    }
     return this.forceRender();
   }
 
@@ -918,8 +1005,10 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         .map(ability => this.#prepareAbilityEntry(category, ability, remaining, skillSettings, requirementContext)));
       return {
         ...category,
-        displayName: isFeatures ? `Особенности (Доступно ${traitRemaining}/${traitTotal})` : category.name,
-        traitAvailabilityClass: isFeatures ? (traitRemaining > 0 ? "trait-available" : "trait-empty") : "",
+        displayName: isFeatures
+          ? (this.#gmMode ? "Особенности" : `Особенности (Доступно ${traitRemaining}/${traitTotal})`)
+          : category.name,
+        traitAvailabilityClass: isFeatures ? (this.#gmMode || traitRemaining > 0 ? "trait-available" : "trait-empty") : "",
         expanded: this.#expandedAbilityCategories.has(String(category.id ?? "")),
         abilities: abilities.sort(compareAbilityAvailability)
       };
@@ -954,7 +1043,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const completed = Boolean(research) && progress >= target;
     const skillLabel = skillSettings.find(skill => skill.key === ability?.system?.acquisition?.skillKey)?.label ?? skillSettings[0]?.label ?? "";
     const requirementRows = getAbilityAcquisitionRequirementRows(this.actor, ability, requirementContext);
-    const acquisitionAvailable = requirementRows.every(requirement => requirement.met);
+    const requirementsMet = requirementRows.every(requirement => requirement.met);
+    const acquisitionAvailable = this.#gmMode || requirementsMet;
     const requirementLabel = getAbilityAcquisitionRequirementLabel(requirementRows);
     const descriptionTooltipHTML = await renderAbilityDescriptionTooltipHTML(ability, {
       actor: this.actor,

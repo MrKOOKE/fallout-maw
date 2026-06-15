@@ -19,7 +19,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   allOrNothing: "allOrNothing",
   reaper: "reaper",
   fourLeafClover: "fourLeafClover",
-  atRandom: "atRandom"
+  atRandom: "atRandom",
+  lastChance: "lastChance"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -508,6 +509,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.atRandom) {
     return normalizeAtRandomSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance) {
+    return normalizeLastChanceSettings(value);
+  }
   return {};
 }
 
@@ -572,6 +576,15 @@ export function normalizeAtRandomSettings(value = {}) {
     actionPointCostReduction: Math.max(0, toInteger(value?.actionPointCostReduction ?? 1)),
     blockChanceFormula: String(value?.blockChanceFormula ?? "110-gambling/5").trim() || "110-gambling/5",
     extraBlockChanceFormula: String(value?.extraBlockChanceFormula ?? "60+gambling/5").trim() || "60+gambling/5"
+  };
+}
+
+export function normalizeLastChanceSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 10)),
+    chanceFormula: String(value?.chanceFormula ?? "70+gambling/10").trim() || "70+gambling/10",
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 50)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 43200))
   };
 }
 

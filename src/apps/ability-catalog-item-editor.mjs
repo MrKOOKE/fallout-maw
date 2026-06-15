@@ -22,6 +22,7 @@ import {
   normalizeAllOrNothingSettings,
   normalizeAtRandomSettings,
   normalizeFourLeafCloverSettings,
+  normalizeLastChanceSettings,
   normalizeReaperSettings,
   normalizeDeusExMachinaSettings,
   normalizeAbilityFunctions
@@ -574,6 +575,17 @@ function readFixedFunctionSettings(row) {
       extraBlockChanceFormula: row.querySelector("[data-field='fixed.atRandom.extraBlockChanceFormula']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.lastChance.energyCost']")?.value,
+      chanceFormula: row.querySelector("[data-field='fixed.lastChance.chanceFormula']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.lastChance.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.lastChance.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.lastChance.overloadDurationUnit']")?.value
+      )
+    };
+  }
   if (fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) return {};
   return {
     damageRequired: row.querySelector("[data-field='fixed.damageRequired']")?.value,
@@ -672,6 +684,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedAtRandomSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.atRandom
     ? prepareAtRandomSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedLastChanceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance
+    ? prepareLastChanceSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const conditions = normalized.conditions.map(condition => prepareConditionForDisplay(condition, {
     changeCount: normalized.changes.length,
     allowLimitedChanges: isEffectChanges
@@ -689,6 +704,7 @@ function prepareFunctionForDisplay(entry) {
     fixedReaperSettings,
     fixedFourLeafCloverSettings,
     fixedAtRandomSettings,
+    fixedLastChanceSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: normalized.changes.map(prepareChangeForDisplay),
     conditions,
@@ -754,6 +770,16 @@ function prepareFourLeafCloverSettingsForDisplay(settings = {}) {
 
 function prepareAtRandomSettingsForDisplay(settings = {}) {
   return normalizeAtRandomSettings(settings);
+}
+
+function prepareLastChanceSettingsForDisplay(settings = {}) {
+  const normalized = normalizeLastChanceSettings(settings);
+  const duration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: duration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(duration.unit)
+  };
 }
 
 function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedChanges = false } = {}) {

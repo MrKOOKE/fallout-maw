@@ -1,0 +1,26 @@
+<article class="fallout-maw-chat-card fallout-maw-last-chance-card {{stateClass}}">
+  <header class="fallout-maw-damage-summary-header">
+    <div>
+      <span class="fallout-maw-damage-summary-kicker">{{ability.name}}</span>
+      <h2>{{labels.title}}</h2>
+    </div>
+  </header>
+
+  <section class="fallout-maw-last-chance-body">
+    <div class="fallout-maw-last-chance-actor">
+      <img src="{{actor.img}}" alt="{{actor.name}}">
+      <div>
+        <strong>{{actor.name}}</strong>
+        <span>{{#if prevented}}{{labels.success}}{{else}}{{labels.failure}}{{/if}}</span>
+      </div>
+    </div>
+    <div class="fallout-maw-damage-summary-damage-row">
+      <span>{{labels.energy}}</span>
+      <b>-{{energyCost}}</b>
+    </div>
+    <div class="fallout-maw-damage-summary-damage-row">
+      <span>{{labels.damage}}</span>
+      <b>{{#if prevented}}-{{/if}}{{damage}}</b>
+    </div>
+  </section>
+</article>

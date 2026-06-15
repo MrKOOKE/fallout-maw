@@ -1,4 +1,4 @@
-import { SYSTEM_ID } from "../constants.mjs";
+import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import {
   ABILITY_FIXED_FUNCTION_KEYS,
@@ -11,6 +11,7 @@ import {
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
   normalizeFourLeafCloverSettings,
+  normalizeLastChanceSettings,
   normalizeReaperSettings
 } from "../settings/abilities.mjs";
 import {
@@ -22,6 +23,7 @@ import {
   applyDestroyedLimbConsequences,
   isCriticalLimb,
   isLimbDestroyed,
+  registerLethalDamagePreventionHandler,
   restoreDestroyedLimb,
   setLimbMissingState
 } from "../combat/damage-hub.mjs";
@@ -106,10 +108,19 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.atRandom
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.lastChance,
+    label: "Последний шанс",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.lastChance
+    })
   })
 ]);
 
 export function registerFixedAbilityFunctionHooks() {
+  registerLethalDamagePreventionHandler(context => processLastChanceLethalDamage(context));
   Hooks.on(DAMAGE_APPLIED_HOOK, context => {
     void advanceDeusExMachinaProgressFromDamage(context?.results ?? []);
   });
@@ -255,7 +266,11 @@ async function useAllOrNothing(actor, abilityItem, abilityFunction) {
     return false;
   }
   if (!(await spendEnergy(actor, energyCost))) return false;
-  await applyAllOrNothingOverloadEffect(actor, abilityItem, abilityFunction, settings);
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: "Перегрузка: Все или ничего",
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
   await applyAllOrNothingResultEffect(actor, abilityItem, abilityFunction, settings);
   await createAbilityChatMessage(actor, abilityItem, "Все или ничего: способность успешно применена.");
   return true;
@@ -492,26 +507,30 @@ async function applyCurseAndBlessingEffect(actor, abilityItem, abilityFunction, 
   return true;
 }
 
-async function applyAllOrNothingOverloadEffect(actor, abilityItem, abilityFunction, settings) {
+async function applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+  name = "Перегрузка",
+  energyCost = 0,
+  durationSeconds = 0
+} = {}) {
   if (!actor || (!game.user?.isGM && !actor.isOwner)) return false;
   const startTime = Number(game.time?.worldTime) || 0;
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
-    name: "Перегрузка: Все или ничего",
+    name,
     img: abilityItem.img || "icons/svg/aura.svg",
     origin: abilityItem.uuid,
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
     duration: {
-      seconds: Math.max(0, toInteger(settings.overloadDurationSeconds)),
+      seconds: Math.max(0, toInteger(durationSeconds)),
       startTime
     },
     system: {
       changes: [{
         key: ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
         type: "add",
-        value: String(Math.max(0, toInteger(settings.overloadEnergyCost))),
+        value: String(Math.max(0, toInteger(energyCost))),
         phase: "initial",
         priority: null
       }]
@@ -646,6 +665,97 @@ async function processAtRandomAttackResolution(context = {}) {
   }
 
   await replaceAtRandomActionBlockEffect(actor, entry.abilityItem, entry.abilityFunction, [...blockedActionKeys]);
+}
+
+async function processLastChanceLethalDamage({ actor = null, amount = 0 } = {}) {
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return { handled: false, prevented: false };
+  const entry = getActorLastChanceEntry(actor);
+  if (!entry) return { handled: false, prevented: false };
+
+  const energyCost = getAbilityEnergyCost(actor, entry.abilityItem, entry.abilityFunction, entry.settings.energyCost);
+  if (!hasEnergy(actor, energyCost)) return { handled: false, prevented: false };
+  if (!(await spendEnergy(actor, energyCost))) return { handled: false, prevented: false };
+
+  try {
+    await applyAbilityOverloadEffect(actor, entry.abilityItem, entry.abilityFunction, {
+      name: "Перегрузка: Последний шанс",
+      energyCost: entry.settings.overloadEnergyCost,
+      durationSeconds: entry.settings.overloadDurationSeconds
+    });
+  } catch (error) {
+    console.error("Fallout MaW | Failed to apply Last Chance overload", error);
+  }
+  const chance = Math.min(100, Math.max(0, evaluateActorFormula(entry.settings.chanceFormula, actor, {
+    fallback: 0,
+    minimum: 0,
+    context: "Последний шанс"
+  })));
+  const prevented = (Math.floor(Math.random() * 100) + 1) <= chance;
+  try {
+    await createLastChanceChatMessage(actor, entry.abilityItem, {
+      prevented,
+      damage: Math.max(0, toInteger(amount)),
+      energyCost
+    });
+  } catch (error) {
+    console.error("Fallout MaW | Failed to publish Last Chance result", error);
+  }
+  return { handled: true, prevented };
+}
+
+function getActorLastChanceEntry(actor) {
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
+    const abilityFunction = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
+      .find(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance);
+    if (!abilityFunction) continue;
+    return {
+      abilityItem,
+      abilityFunction,
+      settings: normalizeLastChanceSettings(abilityFunction.fixedSettings)
+    };
+  }
+  return null;
+}
+
+async function createLastChanceChatMessage(actor, abilityItem, { prevented = false, damage = 0, energyCost = 0 } = {}) {
+  const context = {
+    stateClass: prevented ? "success" : "failure",
+    actor: {
+      name: actor.name,
+      img: actor.img || "icons/svg/mystery-man.svg"
+    },
+    ability: {
+      name: abilityItem?.name || "Последний шанс",
+      img: abilityItem?.img || "icons/svg/aura.svg"
+    },
+    prevented,
+    damage: Math.max(0, toInteger(damage)),
+    energyCost: Math.max(0, toInteger(energyCost)),
+    labels: {
+      title: "Последний шанс",
+      success: "Смертельный урон отменён",
+      failure: "Последний шанс не сработал",
+      energy: "Потрачено энергии",
+      damage: prevented ? "Отменено урона" : "Смертельный урон"
+    }
+  };
+  const content = await renderTemplate(TEMPLATES.lastChanceChatCard, context);
+  return ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    content,
+    sound: null,
+    flags: {
+      [SYSTEM_ID]: {
+        lastChance: {
+          actorUuid: actor.uuid,
+          abilityItemId: abilityItem?.id ?? "",
+          prevented,
+          damage: context.damage,
+          energyCost: context.energyCost
+        }
+      }
+    }
+  });
 }
 
 function getActorAtRandomEntry(actor) {

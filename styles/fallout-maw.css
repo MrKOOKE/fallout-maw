@@ -5467,6 +5467,82 @@ label.fallout-maw-mitigation-cell {
   --fallout-maw-adv-mono-font: "Cascadia Mono", "Consolas", "Lucida Console", "Courier New", monospace;
 }
 
+.application.fallout-maw-advancement-app .window-header .fallout-maw-advancement-gm-toggle {
+  align-items: center;
+  background: rgba(239, 201, 112, 0.03);
+  border: 1px solid rgba(212, 181, 93, 0.22);
+  border-radius: 3px;
+  color: var(--fallout-maw-adv-text-soft);
+  display: inline-flex;
+  flex: 0 0 8.6rem;
+  font-family: var(--fallout-maw-adv-ui-font);
+  font-size: 0.78rem;
+  font-weight: 700;
+  gap: 0.45rem;
+  height: 1.65rem;
+  justify-content: space-between;
+  letter-spacing: 0.02em;
+  padding: 0.15rem 0.35rem 0.15rem 0.55rem;
+  width: 8.6rem;
+}
+
+.application.fallout-maw-advancement-app .window-header .fallout-maw-advancement-gm-toggle::before {
+  content: "ГМ режим";
+  white-space: nowrap;
+}
+
+.application.fallout-maw-advancement-app .window-header .fallout-maw-advancement-gm-toggle::after {
+  background:
+    radial-gradient(circle at 0.55rem 50%, #d9c98f 0 0.34rem, transparent 0.37rem),
+    rgba(83, 75, 51, 0.82);
+  border: 1px solid rgba(212, 181, 93, 0.34);
+  border-radius: 999px;
+  content: "";
+  flex: 0 0 2.25rem;
+  height: 1.05rem;
+  transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.application.fallout-maw-advancement-app .window-header .fallout-maw-advancement-gm-toggle.active {
+  background: rgba(28, 78, 119, 0.36);
+  border-color: rgba(80, 178, 255, 0.7);
+  color: #a9dbff;
+}
+
+.application.fallout-maw-advancement-app .window-header .fallout-maw-advancement-gm-toggle.active::after {
+  background:
+    radial-gradient(circle at calc(100% - 0.55rem) 50%, #e5f5ff 0 0.34rem, transparent 0.37rem),
+    rgba(33, 132, 204, 0.92);
+  border-color: rgba(132, 211, 255, 0.82);
+  box-shadow: 0 0 8px rgba(73, 174, 244, 0.35);
+}
+
+.application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode {
+  --fallout-maw-adv-border: rgba(74, 164, 230, 0.42);
+  --fallout-maw-adv-border-strong: rgba(133, 210, 255, 0.78);
+  border-color: rgba(83, 184, 250, 0.78);
+  box-shadow:
+    0 0 0 2px rgba(45, 149, 219, 0.72),
+    0 0 22px rgba(34, 137, 206, 0.28);
+}
+
+.application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-panel,
+.application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-advancement-talents-row,
+.application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-advancement-talent-group-header,
+.application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-advancement-talent-item,
+.application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-advancement-talent-search-input,
+.application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-advancement-talent-action-button {
+  border-color: var(--fallout-maw-adv-border);
+}
+
+.application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-advancement-section-title,
+.application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-advancement-row,
+.application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-advancement-skill-row,
+.application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-advancement-talents-details,
+.application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-advancement-talent-details-name {
+  border-color: rgba(74, 164, 230, 0.24);
+}
+
 .application.fallout-maw-advancement-app .window-header {
   background:
     linear-gradient(180deg, rgba(34, 34, 31, 0.98), rgba(16, 16, 14, 0.99));
@@ -6723,7 +6799,8 @@ label.fallout-maw-mitigation-cell {
 }
 
 .fallout-maw-chat-card.fallout-maw-damage-summary-card,
-.fallout-maw-chat-card.fallout-maw-finishing-blow-card {
+.fallout-maw-chat-card.fallout-maw-finishing-blow-card,
+.fallout-maw-chat-card.fallout-maw-last-chance-card {
   --fallout-maw-damage-card-bg: #10130d;
   --fallout-maw-damage-card-bg-2: #1b1d16;
   --fallout-maw-damage-card-border: rgba(199, 178, 95, 0.72);
@@ -7935,6 +8012,51 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-world-time-actions button:hover {
   border-color: rgba(244, 219, 129, 0.86);
   box-shadow: 0 0 0 1px rgba(244, 219, 129, 0.16);
+}
+
+.fallout-maw-last-chance-body {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.fallout-maw-last-chance-actor {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--fallout-maw-damage-card-line);
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  padding: 0.42rem;
+}
+
+.fallout-maw-last-chance-actor img {
+  border: 1px solid var(--fallout-maw-damage-card-border);
+  height: 2.5rem;
+  object-fit: cover;
+  width: 2.5rem;
+}
+
+.fallout-maw-last-chance-actor div {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.fallout-maw-last-chance-actor strong {
+  color: var(--fallout-maw-damage-card-text);
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-last-chance-actor span {
+  color: var(--fallout-maw-damage-card-muted);
+}
+
+.fallout-maw-last-chance-card.success .fallout-maw-last-chance-actor span {
+  color: #82d66f;
+}
+
+.fallout-maw-last-chance-card.failure .fallout-maw-last-chance-actor span {
+  color: var(--fallout-maw-damage-card-red);
 }
 
 .fallout-maw-trap-placement-control .window-content {

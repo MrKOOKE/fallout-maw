@@ -67,6 +67,7 @@
       </div>
       {{/each}}
     </div>
+    {{#unless isGMMode}}
     <div class="fallout-maw-advancement-section-footer fallout-maw-advancement-characteristics-footer">
       <div></div>
       <div class="fallout-maw-advancement-meter">
@@ -74,6 +75,7 @@
         <strong>{{characteristicPointsDisplay}}</strong>
       </div>
     </div>
+    {{/unless}}
   </section>
 
   <section class="fallout-maw-panel fallout-maw-advancement-section">
@@ -104,6 +106,7 @@
       </div>
       {{/each}}
     </div>
+    {{#unless isGMMode}}
     <div class="fallout-maw-advancement-section-footer fallout-maw-advancement-skills-footer">
       <div class="fallout-maw-advancement-meter">
         <span>{{localize "FALLOUTMAW.Advancement.SignatureSkillPoints"}}</span>
@@ -114,6 +117,7 @@
         <strong>{{skillPointsDisplay}}</strong>
       </div>
     </div>
+    {{/unless}}
   </section>
   {{/if}}
 
@@ -171,6 +175,11 @@
         </div>
       </div>
       <div class="fallout-maw-advancement-talent-action-panel" data-ability-source-id="{{selectedAbility.sourceId}}" data-research-id="{{selectedAbility.researchId}}">
+        {{#if isGMMode}}
+        <button type="button" class="fallout-maw-advancement-talent-action-button primary" data-action="grantAbility">
+          Выдать
+        </button>
+        {{else}}
         {{#if selectedAbility.isFeature}}
         <button type="button" class="fallout-maw-advancement-talent-action-button primary" data-action="purchaseTraitAbility" {{#unless selectedAbility.canPurchaseTrait}}disabled{{/unless}}>
           Приобрести
@@ -189,15 +198,20 @@
         </button>
         <div class="fallout-maw-advancement-talents-points">Свободные ОИ: {{researchPointsDisplay}}</div>
         {{/if}}
+        {{/if}}
       </div>
       {{else}}
       <div class="fallout-maw-advancement-talents-details">
         <div class="fallout-maw-advancement-details-placeholder">Выберите способность для просмотра данных исследования</div>
       </div>
       <div class="fallout-maw-advancement-talent-action-panel">
+        {{#if isGMMode}}
+        <button type="button" class="fallout-maw-advancement-talent-action-button primary" disabled>Выдать</button>
+        {{else}}
         <button type="button" class="fallout-maw-advancement-talent-action-button primary" disabled>Начать исследование</button>
         <button type="button" class="fallout-maw-advancement-talent-action-button secondary" disabled>Вложить очки</button>
         <div class="fallout-maw-advancement-talents-points">Свободные ОИ: {{researchPointsDisplay}}</div>
+        {{/if}}
       </div>
       {{/if}}
     </div>

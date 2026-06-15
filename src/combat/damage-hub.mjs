@@ -107,7 +107,14 @@ const damageMitigationTextureCache = new Map();
 const actorDamageStatusSyncQueue = new Map();
 const actorDamageMutationQueue = new Map();
 const pendingDamageSocketRequests = new Map();
+const lethalDamagePreventionHandlers = new Set();
 let damageHubOperationQueue = Promise.resolve();
+
+export function registerLethalDamagePreventionHandler(handler) {
+  if (typeof handler !== "function") return () => undefined;
+  lethalDamagePreventionHandlers.add(handler);
+  return () => lethalDamagePreventionHandlers.delete(handler);
+}
 
 export function registerDamageHubConfig() {
   CONFIG.ActiveEffect.expiryEvents[MANAGED_TIMED_DAMAGE_EXPIRY] = "FALLOUTMAW.Effects.ManagedTimedDamageExpiry";
@@ -481,10 +488,6 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
     })
     : { amount: requestedAmount, display: null };
   const mitigatedAmount = mitigationResult.amount;
-  if (mode === MODE_DAMAGE && data.applyMitigation && data.processDamageTypeSettings) {
-    await applyEquipmentConditionDamage(actor, mitigationResult.equipmentConditionDamage);
-    await applyResistanceOverheats(actor, [mitigationResult.resistanceOverheat]);
-  }
   const effectiveAmount = mode === MODE_DAMAGE && data.processDamageTypeSettings
     ? hasInstalledProsthesis(actor, data.limbKey)
       ? mitigatedAmount
@@ -497,6 +500,41 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
   if (effectiveAmount <= 0) return { actor, amount: 0, healthDelta: 0, limbDelta: 0, mode, scope };
 
   const needIncrease = damageType?.settings?.needIncrease;
+  if (mode === MODE_DAMAGE && !needIncrease?.preventHealthDamage) {
+    const estimate = estimateDirectDamageApplication(actor, {
+      ...data,
+      amount: effectiveAmount,
+      damageTypeKey: damageType?.key ?? data.damageTypeKey,
+      scope
+    }, damageType);
+    const prevented = await preventLethalDamageIfApplicable(actor, estimate, {
+      amount: effectiveAmount,
+      source: data.source,
+      requests: [{ ...data, amount: effectiveAmount, scope }]
+    });
+    if (prevented) {
+      return {
+        actor,
+        amount: 0,
+        potentialAmount: effectiveAmount,
+        preventedAmount: effectiveAmount,
+        lethalDamagePrevented: true,
+        healthDelta: 0,
+        limbDelta: 0,
+        mode,
+        scope,
+        limbKey: data.limbKey,
+        damageTypeKey: damageType?.key ?? data.damageTypeKey,
+        source: data.source
+      };
+    }
+  }
+
+  if (mode === MODE_DAMAGE && data.applyMitigation && data.processDamageTypeSettings) {
+    await applyEquipmentConditionDamage(actor, mitigationResult.equipmentConditionDamage);
+    await applyResistanceOverheats(actor, [mitigationResult.resistanceOverheat]);
+  }
+
   if (mode === MODE_DAMAGE && data.processDamageTypeSettings && needIncrease?.enabled) {
     await applyNeedIncrease(actor, {
       amount: effectiveAmount,
@@ -616,7 +654,7 @@ async function applyPeriodicSplitDamageApplicationNow(actor, data = {}, { create
     }, { createSummary: false })
     : { actor, amount: 0, healthDelta: 0, limbDelta: 0, mode: MODE_DAMAGE, scope, createdTraumas: [] };
 
-  if (delayedAmount > 0) await createPeriodicDamageEffect(actor, {
+  if (delayedAmount > 0 && !immediateResult?.lethalDamagePrevented) await createPeriodicDamageEffect(actor, {
     damageType,
     limbKey: data.limbKey,
     scope,
@@ -743,13 +781,38 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
   const mitigationDisplay = combineDamageMitigationDisplays(mitigationDisplays);
   if (mitigationDisplay) broadcastDamageMitigationIcon(actor, mitigationDisplay);
 
-  const batchResult = batchRequests.length
-    ? await applyDamageEntriesBatch(actor, batchRequests)
-    : undefined;
-  await applyEquipmentConditionDamage(actor, getEquipmentConditionDamageStateEntries(equipmentConditionDamageState));
-  await applyResistanceOverheats(actor, resistanceOverheats);
-  for (const entry of combinePendingPeriodicDamageEffects(pendingPeriodicDamageEffects)) {
-    await createPeriodicDamageEffect(actor, entry);
+  const batchPotentialAmount = batchRequests.reduce((sum, entry) => sum + Math.max(0, roundDamageAmount(entry.amount)), 0);
+  const batchSource = selectBatchFinishingBlowSource(batchRequests)?.source ?? {};
+  const batchEstimate = batchRequests.length ? estimateDamageEntriesBatch(actor, batchRequests) : null;
+  const batchPrevented = batchEstimate
+    ? await preventLethalDamageIfApplicable(actor, batchEstimate, {
+      amount: batchPotentialAmount,
+      source: batchSource,
+      requests: batchRequests
+    })
+    : false;
+  const batchResult = batchPrevented
+    ? {
+      actor,
+      amount: 0,
+      potentialAmount: batchPotentialAmount,
+      preventedAmount: batchPotentialAmount,
+      lethalDamagePrevented: true,
+      healthDelta: 0,
+      limbDelta: 0,
+      mode: MODE_DAMAGE,
+      scope: SCOPE_HEALTH_AND_LIMB,
+      source: batchSource
+    }
+    : batchRequests.length
+      ? await applyDamageEntriesBatch(actor, batchRequests)
+      : undefined;
+  if (!batchPrevented) {
+    await applyEquipmentConditionDamage(actor, getEquipmentConditionDamageStateEntries(equipmentConditionDamageState));
+    await applyResistanceOverheats(actor, resistanceOverheats);
+    for (const entry of combinePendingPeriodicDamageEffects(pendingPeriodicDamageEffects)) {
+      await createPeriodicDamageEffect(actor, entry);
+    }
   }
   if (batchResult?.resourceLimitEntries?.length) {
     for (const entry of batchResult.resourceLimitEntries) {
@@ -4078,6 +4141,101 @@ function calculateAggregateHealth(actor) {
   }, { min: 0, value: 0, max: 0 });
 }
 
+function estimateDirectDamageApplication(actor, data = {}, damageType = null) {
+  const scope = normalizeScope(data.scope, data.limbKey);
+  const effectiveAmount = Math.max(0, roundDamageAmount(data.amount));
+  const installedProsthesis = data.limbKey && (scope === SCOPE_LIMB || scope === SCOPE_HEALTH_AND_LIMB)
+    ? getInstalledProsthesis(actor, data.limbKey)
+    : null;
+  const result = installedProsthesis
+    ? estimateProsthesisLimbDamage(actor, data.limbKey, effectiveAmount, {
+      prosthesis: installedProsthesis,
+      damageType,
+      damageTypeKey: data.damageTypeKey
+    })
+    : data.limbKey && (scope === SCOPE_LIMB || scope === SCOPE_HEALTH_AND_LIMB)
+      ? estimateTargetedLimbDamage(actor, data.limbKey, effectiveAmount, { damageType, damageTypeKey: data.damageTypeKey })
+      : estimateEvenLimbDamage(actor, effectiveAmount, { damageType, damageTypeKey: data.damageTypeKey });
+  result.lethal = isDamageEstimateLethal(actor, result);
+  return result;
+}
+
+function estimateDamageEntriesBatch(actor, entries = []) {
+  const limbStates = new Map();
+  const damageAccumulation = new Map();
+  const brokenProsthesisLimbKeys = new Set();
+  const directProsthesisDamage = new Map();
+  const directProsthesisHealthDamage = new Map();
+  let healthDelta = 0;
+
+  for (const entry of entries) {
+    const scope = normalizeScope(entry.scope, entry.limbKey);
+    const installedProsthesis = entry.limbKey && (scope === SCOPE_LIMB || scope === SCOPE_HEALTH_AND_LIMB)
+      ? getInstalledProsthesis(actor, entry.limbKey)
+      : null;
+    if (installedProsthesis) {
+      const accumulated = (directProsthesisDamage.get(installedProsthesis.id) ?? 0) + roundDamageAmount(entry.amount);
+      directProsthesisDamage.set(installedProsthesis.id, accumulated);
+      const estimate = estimateProsthesisConditionDamage(installedProsthesis, accumulated);
+      if (estimate.next <= 0 && isCriticalLimb(actor, entry.limbKey)) brokenProsthesisLimbKeys.add(entry.limbKey);
+      directProsthesisHealthDamage.set(installedProsthesis.id, estimate.healthDelta);
+      continue;
+    }
+
+    const result = entry.limbKey && (scope === SCOPE_LIMB || scope === SCOPE_HEALTH_AND_LIMB)
+      ? estimateTargetedLimbDamage(actor, entry.limbKey, entry.amount, {
+        damageType: entry.damageType,
+        damageTypeKey: entry.damageTypeKey,
+        limbStates,
+        damageAccumulation
+      })
+      : estimateEvenLimbDamage(actor, entry.amount, {
+        damageType: entry.damageType,
+        damageTypeKey: entry.damageTypeKey,
+        limbStates,
+        damageAccumulation
+      });
+    healthDelta += result.healthDelta;
+    for (const limbKey of result.brokenProsthesisLimbKeys ?? []) brokenProsthesisLimbKeys.add(limbKey);
+  }
+
+  const result = createLimbMutationResult(limbStates, damageAccumulation, {
+    healthDelta: healthDelta + Array.from(directProsthesisHealthDamage.values()).reduce((sum, value) => sum + value, 0),
+    limbDelta: Array.from(limbStates.values()).reduce((sum, state) => sum + state.totalDelta, 0)
+  });
+  result.brokenProsthesisLimbKeys = [...brokenProsthesisLimbKeys];
+  result.lethal = isDamageEstimateLethal(actor, result);
+  return result;
+}
+
+async function preventLethalDamageIfApplicable(actor, estimate = {}, context = {}) {
+  if (isActorDead(actor)) return false;
+  if (!isDamageEstimateLethal(actor, estimate)) return false;
+  for (const handler of lethalDamagePreventionHandlers) {
+    let result;
+    try {
+      result = await handler({ actor, estimate, ...context });
+    } catch (error) {
+      console.error("Fallout MaW | Lethal damage prevention handler failed", error);
+      continue;
+    }
+    if (!result?.handled) continue;
+    return Boolean(result.prevented);
+  }
+  return false;
+}
+
+function isDamageEstimateLethal(actor, estimate = {}) {
+  if (estimate?.lethal === true) return true;
+  for (const [limbKey, state] of estimate?.limbStates ?? []) {
+    if (!isCriticalLimb(actor, limbKey)) continue;
+    if (hasInstalledProsthesis(actor, limbKey)) continue;
+    if (toInteger(state?.nextValue) <= toInteger(state?.min)) return true;
+  }
+  return (estimate?.brokenProsthesisLimbKeys ?? [])
+    .some(limbKey => isCriticalLimb(actor, limbKey));
+}
+
 function getProsthesisHealthForAggregate(prosthesis, limb = {}) {
   if (!prosthesis) return { value: 0, max: 0 };
   const integration = getProsthesisIntegrationPercent(prosthesis);
@@ -4236,10 +4394,12 @@ function estimateProsthesisLimbDamage(actor, limbKey = "", amount = 0, { prosthe
   const damageAccumulation = new Map();
   if (!prosthesis || damage <= 0) return createLimbMutationResult(limbStates, damageAccumulation);
   const result = estimateProsthesisConditionDamage(prosthesis, damage);
-  return createLimbMutationResult(limbStates, damageAccumulation, {
+  const mutationResult = createLimbMutationResult(limbStates, damageAccumulation, {
     healthDelta: result.healthDelta,
     limbDelta: result.conditionDelta
   });
+  mutationResult.brokenProsthesisLimbKeys = result.next <= 0 ? [limbKey] : [];
+  return mutationResult;
 }
 
 function estimateEvenLimbDamage(actor, amount = 0, { damageType = null, damageTypeKey = "", traumaDamageTypeKey = getTraumaDamageTypeKey(damageTypeKey), limbStates = new Map(), damageAccumulation = new Map(), excludeLimbKeys = new Set() } = {}) {
@@ -4526,6 +4686,7 @@ function estimateHealthDamageTargetAllocations(actor, allocations = new Map(), t
   const limbAllocations = new Map();
   let prosthesisHealthDelta = 0;
   let prosthesisConditionDelta = 0;
+  const brokenProsthesisLimbKeys = [];
 
   for (const [targetKey, amount] of allocations) {
     const target = targetsByKey.get(targetKey);
@@ -4534,6 +4695,7 @@ function estimateHealthDamageTargetAllocations(actor, allocations = new Map(), t
       const result = estimateProsthesisIntegratedHealthDamage(target.prosthesis, amount);
       prosthesisHealthDelta += result.healthDelta;
       prosthesisConditionDelta += result.conditionDelta;
+      if (result.broken) brokenProsthesisLimbKeys.push(target.limbKey);
       continue;
     }
     limbAllocations.set(target.limbKey ?? target.key, (limbAllocations.get(target.limbKey ?? target.key) ?? 0) + amount);
@@ -4551,6 +4713,7 @@ function estimateHealthDamageTargetAllocations(actor, allocations = new Map(), t
     limbDelta: limbResult.limbDelta + prosthesisConditionDelta
   });
   result.prosthesisConditionDelta = prosthesisConditionDelta;
+  result.brokenProsthesisLimbKeys = brokenProsthesisLimbKeys;
   return result;
 }
 
@@ -5804,14 +5967,15 @@ function estimateProsthesisIntegratedHealthDamage(prosthesis, healthAmount = 0) 
   const integration = getProsthesisIntegrationPercent(prosthesis);
   const requestedHealth = roundDamageAmount(healthAmount);
   if (!prosthesis || integration <= 0 || requestedHealth <= 0 || !hasItemFunction(prosthesis, ITEM_FUNCTIONS.condition)) {
-    return { conditionDamage: 0, conditionDelta: 0, healthDelta: 0 };
+    return { conditionDamage: 0, conditionDelta: 0, healthDelta: 0, broken: false };
   }
   const conditionDamage = Math.max(1, Math.ceil((requestedHealth * 100) / integration));
   const result = estimateProsthesisConditionDamage(prosthesis, conditionDamage);
   return {
     conditionDamage,
     conditionDelta: result.conditionDelta,
-    healthDelta: result.healthDelta
+    healthDelta: result.healthDelta,
+    broken: result.next <= 0
   };
 }
 

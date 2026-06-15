@@ -131,7 +131,8 @@ import {
   ABILITY_FIXED_FUNCTION_KEYS,
   normalizeAbilityFunctions,
   normalizeAllOrNothingSettings,
-  normalizeCurseAndBlessingSettings
+  normalizeCurseAndBlessingSettings,
+  normalizeLastChanceSettings
 } from "../settings/abilities.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import {
@@ -3501,11 +3502,14 @@ function buildAbilityEnergyCostRows(item, actor = null) {
     .find(abilityFunction => (
       abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance
     ));
   if (!entry) return [];
   const settings = entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
     ? normalizeAllOrNothingSettings(entry.fixedSettings)
-    : normalizeCurseAndBlessingSettings(entry.fixedSettings);
+    : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance
+      ? normalizeLastChanceSettings(entry.fixedSettings)
+      : normalizeCurseAndBlessingSettings(entry.fixedSettings);
   const base = Math.max(0, toInteger(settings.energyCost));
   const total = getFixedAbilityEnergyCost(actor, item, entry, base);
   return [
