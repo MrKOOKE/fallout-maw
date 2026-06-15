@@ -10,6 +10,7 @@ import {
 } from "./active-effect-changes.mjs";
 import {
   getCharacteristicSettings,
+  getCoverSettings,
   getCreatureOptions,
   getDamageTypeSettings,
   getNeedSettings,
@@ -17,6 +18,7 @@ import {
   getResourceSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
+import { getCoverBonusPercentEffectKey } from "../settings/cover.mjs";
 
 export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
   const tokens = [
@@ -114,6 +116,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
     ...buildActionBlockEffectKeyTokens(),
     ...buildActionPenetrationEffectKeyTokens(),
     ...buildAbilityRuntimeEffectKeyTokens(),
+    ...buildCoverBonusPercentEffectKeyTokens(),
     ...buildCombatEffectKeyTokens()
   ];
 
@@ -128,6 +131,16 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
   }
 
   return tokens.filter(Boolean);
+}
+
+export function buildCoverBonusPercentEffectKeyTokens() {
+  return getCoverSettings().entries.map(entry => createEffectKeyToken({
+    code: `cover:${entry.key}`,
+    key: entry.key,
+    label: `Укрытие: ${entry.label || entry.key}, изменение базы, %`,
+    path: getCoverBonusPercentEffectKey(entry.key),
+    group: "Укрытия"
+  })).filter(Boolean);
 }
 
 export function buildAllSkillsEffectKeyToken() {

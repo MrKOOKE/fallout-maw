@@ -618,6 +618,23 @@
               </div>
               {{/if}}
 
+              {{#if isOccupiedCover}}
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header">
+                  <span>Виды укрытия</span>
+                  <button type="button" data-action="addConditionCover" {{#unless canAddCover}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button>
+                </div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each coverRows}}
+                  <div class="fallout-maw-item-use-category-row" data-cover-index="{{index}}">
+                    <select data-field="conditionCover">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteConditionCover" title="Удалить укрытие"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}<span class="fallout-maw-empty-list">Укрытия не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              {{/if}}
+
               {{#if isLimitedChanges}}
               <label>
                 <span>Выбрать изменений</span>

@@ -12,6 +12,7 @@ const ITEM_EFFECT_FLAG_KEY = "itemEffect";
 const ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL = 1;
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const processingActors = new Set();
+const coverSyncTimers = new Map();
 
 export function registerAbilityEffectHooks() {
   Hooks.on("createItem", item => {
@@ -36,11 +37,16 @@ export function registerAbilityEffectHooks() {
     if (!foundry.utils.hasProperty(changes, "movementAction")) return;
     void syncActorAbilityEffects(tokenDocument?.actor, { actorToken: tokenDocument });
   });
+  Hooks.on("createActiveEffect", effect => {
+    if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
+  });
   Hooks.on("updateActiveEffect", effect => {
+    if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
     if (!effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) && !effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)) return;
     void syncActorAbilityEffects(effect.parent);
   });
   Hooks.on("deleteActiveEffect", effect => {
+    if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
     if (!effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) && !effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)) return;
     void syncActorAbilityEffects(effect.parent);
   });
@@ -55,6 +61,24 @@ export async function syncLoadedActorAbilityEffects() {
     if (token.actor) actors.set(token.actor.uuid, { actor: token.actor, context: { actorToken: token.document } });
   }
   for (const { actor, context } of actors.values()) await syncActorAbilityEffects(actor, context);
+}
+
+function isCoverEffect(effect = null) {
+  return Boolean(
+    effect?.getFlag?.(SYSTEM_ID, "forcedCover")
+    || effect?.getFlag?.(SYSTEM_ID, "autoCover")
+    || effect?.flags?.[SYSTEM_ID]?.forcedCover
+    || effect?.flags?.[SYSTEM_ID]?.autoCover
+  );
+}
+
+function queueCoverAbilityEffectSync(actor) {
+  if (!actor?.uuid) return;
+  globalThis.clearTimeout(coverSyncTimers.get(actor.uuid));
+  coverSyncTimers.set(actor.uuid, globalThis.setTimeout(() => {
+    coverSyncTimers.delete(actor.uuid);
+    void syncActorAbilityEffects(actor);
+  }, 20));
 }
 
 export async function syncActorAbilityEffects(actor, context = {}) {

@@ -104,6 +104,11 @@ export function abilityConditionApplies(actor, condition = {}, context = {}) {
     return Boolean(subjectActor && accepted.size && accepted.has(getContextPostureAction(subjectActor, subjectToken)));
   }
 
+  if (condition.type === ABILITY_CONDITION_TYPES.occupiedCover) {
+    const accepted = new Set(condition?.coverKeys ?? []);
+    return accepted.size > 0 && getActorOccupiedCoverKeys(actor).some(key => accepted.has(key));
+  }
+
   if (condition.type === ABILITY_CONDITION_TYPES.cooldown) {
     const abilityItemId = String(context?.abilityItemId ?? "").trim();
     const functionId = String(context?.functionId ?? "").trim();
@@ -174,6 +179,28 @@ function getContextPostureAction(actor, token = null) {
     if (data?.action) return String(data.action);
   }
   return "walk";
+}
+
+function getActorOccupiedCoverKeys(actor) {
+  const forced = [];
+  const automatic = [];
+  for (const effect of actor?.effects ?? []) {
+    if (effect?.disabled || effect?.active === false) continue;
+    const forcedKey = String(
+      effect?.getFlag?.(SYSTEM_ID, "forcedCover")?.key
+      ?? effect?.flags?.[SYSTEM_ID]?.forcedCover?.key
+      ?? ""
+    ).trim();
+    if (forcedKey) forced.push(forcedKey);
+
+    const automaticKey = String(
+      effect?.getFlag?.(SYSTEM_ID, "autoCover")?.key
+      ?? effect?.flags?.[SYSTEM_ID]?.autoCover?.key
+      ?? ""
+    ).trim();
+    if (automaticKey) automatic.push(automaticKey);
+  }
+  return Array.from(new Set(forced.length ? forced : automatic));
 }
 
 function isActiveFreeSettingsItem(item) {

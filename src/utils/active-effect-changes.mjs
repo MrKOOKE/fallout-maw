@@ -1,5 +1,9 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { getSkillSettings } from "../settings/accessors.mjs";
+import {
+  getCoverBonusPercentEffectKey,
+  getCoverKeyFromBonusPercentEffectKey
+} from "../settings/cover.mjs";
 import { toInteger } from "./numbers.mjs";
 import { prepareEffectChangeForApplication } from "./effect-change-values.mjs";
 import { getConditionWeakeningData, isItemBrokenByCondition } from "./item-functions.mjs";
@@ -40,6 +44,23 @@ export function expandActorEffectChangeKeys(actor, change = {}) {
 }
 
 export function prepareActorEffectChangeForApplication(actor, change = {}, options = {}) {
+  const prepared = prepareActorEffectChangeValue(actor, change, options);
+  if (!prepared) return null;
+  if (getCoverKeyFromBonusPercentEffectKey(prepared.key)) return null;
+
+  const coverKey = getEffectCoverKey(change?.effect);
+  if (!coverKey) return prepared;
+  const value = Number(prepared.value);
+  if (!Number.isFinite(value)) return prepared;
+
+  const percent = getActorCoverBonusPercent(actor, coverKey, options);
+  return {
+    ...prepared,
+    value: Math.round(value * (1 + (percent / 100)))
+  };
+}
+
+function prepareActorEffectChangeValue(actor, change = {}, options = {}) {
   const item = getItemFreeSettingsEffectSourceItem(actor, change?.effect);
   if (!item) return prepareEffectChangeForApplication(actor, change, options);
   if (isItemBrokenByCondition(item)) return null;
@@ -58,6 +79,44 @@ export function prepareActorEffectChangeForApplication(actor, change = {}, optio
     ...prepared,
     value: Math.trunc(value * ratio)
   };
+}
+
+function getActorCoverBonusPercent(actor, coverKey, options = {}) {
+  const effectKey = getCoverBonusPercentEffectKey(coverKey);
+  if (!effectKey) return 0;
+
+  const changes = [];
+  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+    if (effect?.disabled || effect?.active === false) continue;
+    for (const change of effect?.system?.changes ?? []) {
+      if (String(change?.key ?? "").trim() !== effectKey) continue;
+      changes.push({ ...change, effect });
+    }
+  }
+
+  changes.sort((left, right) => toInteger(left?.priority) - toInteger(right?.priority));
+  let percent = 0;
+  for (const change of changes) {
+    const prepared = prepareActorEffectChangeValue(actor, change, options);
+    const amount = Number(prepared?.value);
+    if (!Number.isFinite(amount)) continue;
+    if (change.type === "multiply") percent *= amount;
+    else if (change.type === "override") percent = amount;
+    else if (change.type === "upgrade") percent = Math.max(percent, amount);
+    else if (change.type === "downgrade") percent = Math.min(percent, amount);
+    else percent += amount;
+  }
+  return percent;
+}
+
+function getEffectCoverKey(effect = null) {
+  return String(
+    effect?.getFlag?.(SYSTEM_ID, "forcedCover")?.key
+    ?? effect?.getFlag?.(SYSTEM_ID, "autoCover")?.key
+    ?? effect?.flags?.[SYSTEM_ID]?.forcedCover?.key
+    ?? effect?.flags?.[SYSTEM_ID]?.autoCover?.key
+    ?? ""
+  ).trim();
 }
 
 export function evaluateActorEffectChangeNumber(actor, change = {}, { fallback = Number.NaN, stage = "prepared" } = {}) {

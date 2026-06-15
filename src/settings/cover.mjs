@@ -1,6 +1,19 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 
 export const DEFAULT_COVER_EFFECT_KEY = "system.resources.dodge.bonus";
+export const COVER_BONUS_PERCENT_EFFECT_KEY_PREFIX = "fallout-maw.cover.bonusPercent.";
+
+export function getCoverBonusPercentEffectKey(coverKey = "") {
+  const key = String(coverKey ?? "").trim();
+  return key ? `${COVER_BONUS_PERCENT_EFFECT_KEY_PREFIX}${key}` : "";
+}
+
+export function getCoverKeyFromBonusPercentEffectKey(effectKey = "") {
+  const key = String(effectKey ?? "").trim();
+  return key.startsWith(COVER_BONUS_PERCENT_EFFECT_KEY_PREFIX)
+    ? key.slice(COVER_BONUS_PERCENT_EFFECT_KEY_PREFIX.length)
+    : "";
+}
 
 const DEFAULT_COVER_ICON_ROOT = `systems/${FALLOUT_MAW.id}/assets/HUD`;
 const COVER_CHANGE_TYPES = new Set(["add", "multiply", "override", "upgrade", "downgrade", "custom"]);

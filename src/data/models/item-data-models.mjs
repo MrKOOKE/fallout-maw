@@ -168,7 +168,7 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "limitedChanges", "cooldown", "itemUse"],
+      choices: ["", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "limitedChanges", "cooldown", "itemUse"],
       initial: ""
     }),
     operator: new StringField({ required: true, blank: false, choices: ["lte", "gte", "occupied", "empty"], initial: "lte" }),
@@ -194,6 +194,10 @@ function abilityConditionField() {
       choices: ["walk", "crawl", "burrow", "knocked"],
       initial: "walk"
     }), { required: true, initial: [] }),
+    coverKeys: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
+      required: true,
+      initial: []
+    }),
     limit: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     requiredCount: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     itemCategories: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {

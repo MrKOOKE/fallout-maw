@@ -31,6 +31,7 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   targetRace: "targetRace",
   targetType: "targetType",
   posture: "posture",
+  occupiedCover: "occupiedCover",
   limitedChanges: "limitedChanges",
   cooldown: "cooldown",
   itemUse: "itemUse"
@@ -390,6 +391,15 @@ function normalizeAbilityCondition(value = {}) {
       postureSubject,
       postureActions: normalizeStringList(value?.postureActions ?? value?.postures ?? value?.actions)
         .filter(action => ABILITY_POSTURE_ACTIONS.includes(action))
+    };
+  }
+
+  if (type === ABILITY_CONDITION_TYPES.occupiedCover) {
+    return {
+      id,
+      groupId,
+      type,
+      coverKeys: normalizeStringList(value?.coverKeys ?? value?.covers ?? value?.cover)
     };
   }
 
