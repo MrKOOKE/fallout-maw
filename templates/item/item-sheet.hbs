@@ -429,6 +429,26 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedReaperSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header">
+        <h3>Настройки: Жнец</h3>
+      </div>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Восстановление ОД</strong>
+          <label>
+            <span>Формула за убийство</span>
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.killChanceFormula" value="{{fixedReaperSettings.killChanceFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Формула за атаку</span>
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.attackChanceFormula" value="{{fixedReaperSettings.attackChanceFormula}}" data-formula-autocomplete="all">
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{/if}}
     {{#unless isFixed}}
     <div data-ability-changes>

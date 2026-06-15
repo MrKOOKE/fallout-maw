@@ -16,7 +16,8 @@ export const ABILITY_FUNCTION_TYPES = Object.freeze({
 export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   deusExMachina: "deusExMachina",
   curseAndBlessing: "curseAndBlessing",
-  allOrNothing: "allOrNothing"
+  allOrNothing: "allOrNothing",
+  reaper: "reaper"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -496,6 +497,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing) {
     return normalizeAllOrNothingSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.reaper) {
+    return normalizeReaperSettings(value);
+  }
   return {};
 }
 
@@ -537,6 +541,13 @@ export function normalizeAllOrNothingSettings(value = {}) {
     chanceFormula: String(value?.chanceFormula ?? "50 + gambling/10").trim() || "50 + gambling/10",
     pelletCoveragePercent: Math.max(0, Math.min(100, toInteger(value?.pelletCoveragePercent ?? 50))),
     burstCoveragePercent: Math.max(0, Math.min(100, toInteger(value?.burstCoveragePercent ?? 50)))
+  };
+}
+
+export function normalizeReaperSettings(value = {}) {
+  return {
+    killChanceFormula: String(value?.killChanceFormula ?? "50+gambling/10").trim() || "50+gambling/10",
+    attackChanceFormula: String(value?.attackChanceFormula ?? "10+gambling/15").trim() || "10+gambling/15"
   };
 }
 

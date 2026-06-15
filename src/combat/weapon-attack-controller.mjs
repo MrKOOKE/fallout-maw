@@ -243,8 +243,11 @@ class WeaponAttackController {
     getAttackPreviewLayer().addChild(this.container);
   }
 
-  notifyAttackResolved({ attempted = true } = {}) {
+  notifyAttackResolved({ attempted = true, killedTargetUuids = [] } = {}) {
     if (!attempted) return;
+    const actionPointCost = isCombatActionPointSpendingActive()
+      ? getWeaponActionPointCost(this.token?.actor, this.weapon, this.actionKey, this.weaponFunctionId)
+      : 0;
     Hooks.callAll(WEAPON_ATTACK_RESOLVED_HOOK, {
       attackerUuid: this.token?.actor?.uuid ?? "",
       actorUuid: this.token?.actor?.uuid ?? "",
@@ -253,6 +256,8 @@ class WeaponAttackController {
       actionKey: this.actionKey,
       weaponFunctionId: this.weaponFunctionId,
       attackId: this.attackId,
+      actionPointCost,
+      killedTargetUuids: Array.from(new Set((killedTargetUuids ?? []).map(uuid => String(uuid ?? "").trim()).filter(Boolean))),
       senderUserId: game.user?.id ?? ""
     });
   }
@@ -430,6 +435,7 @@ class WeaponAttackController {
     this.refresh(true);
     const trajectories = [];
     const damageRequests = [];
+    const damageResults = [];
     const forceBatchCheckMessage = attackCount > 1;
     const collectCheckMessages = forceBatchCheckMessage || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey }) > 0;
     const checkBatch = collectCheckMessages
@@ -477,9 +483,9 @@ class WeaponAttackController {
       });
     }
     if (damageRequests.length) {
-      await applyQueuedDamageRequests(damageRequests);
+      damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
     }
-    this.notifyAttackResolved({ attempted });
+    this.notifyAttackResolved({ attempted, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.processing = false;
     this.refresh(true);
   }
@@ -491,6 +497,7 @@ class WeaponAttackController {
 
     const trajectories = [];
     const damageRequests = [];
+    const damageResults = [];
     const forceBatchCheckMessage = attackCount > 1 || this.targets.length > 1 || pelletCount > 1;
     const checkBatch = forceBatchCheckMessage || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey }) > 0
       ? createSkillCheckBatchCollector({
@@ -550,9 +557,9 @@ class WeaponAttackController {
         delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
       });
     }
-    if (damageRequests.length) await applyQueuedDamageRequests(damageRequests);
+    if (damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
-    this.notifyAttackResolved({ attempted });
+    this.notifyAttackResolved({ attempted, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.processing = false;
     this.refresh(true);
   }
@@ -678,6 +685,7 @@ class WeaponAttackController {
 
     const trajectories = [];
     const damageRequests = [];
+    const damageResults = [];
     const forceBatchCheckMessage = attackCount > 1;
     const collectCheckMessages = forceBatchCheckMessage || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey }) > 0;
     const checkBatch = collectCheckMessages
@@ -746,9 +754,9 @@ class WeaponAttackController {
       });
     }
     if (damageRequests.length) {
-      await applyQueuedDamageRequests(damageRequests);
+      damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
     }
-    this.notifyAttackResolved({ attempted });
+    this.notifyAttackResolved({ attempted, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.processing = false;
     this.refresh(true);
   }
@@ -795,6 +803,7 @@ class WeaponAttackController {
       })
       : null;
     const damageRequests = [];
+    const damageResults = [];
 
     this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
     for (const [index, trajectory] of trajectories.entries()) {
@@ -829,9 +838,9 @@ class WeaponAttackController {
       token: this.token,
       sourceItemUuid: this.weapon.uuid
     });
-    if (damageRequests.length) await applyQueuedDamageRequests(damageRequests);
+    if (damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
-    this.notifyAttackResolved();
+    this.notifyAttackResolved({ killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.processing = false;
     if (isDeadTarget(target)) this.unlockAimedTarget();
     this.refresh(true);
@@ -873,6 +882,7 @@ class WeaponAttackController {
     const target = this.selectedTarget;
     const geometry = deserializeGeometry(this.lockedGeometry) ?? this.geometry;
     const damageRequests = [];
+    const damageResults = [];
     let trajectories = [];
     let attempted = false;
 
@@ -926,9 +936,9 @@ class WeaponAttackController {
         delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
       });
     }
-    if (damageRequests.length) await applyQueuedDamageRequests(damageRequests);
+    if (damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
-    this.notifyAttackResolved({ attempted });
+    this.notifyAttackResolved({ attempted, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.processing = false;
     if (isDeadTarget(target)) this.unlockAimedTarget();
     this.refresh(true);
@@ -1354,9 +1364,9 @@ class WeaponAttackController {
     await spendWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId);
     await checkBatch?.publish({ forceBatch: true });
     await this.playVolleyAttackEffects(finalGeometries);
-    await applyQueuedDamageAndRegionRequests(damageRequests, regionRequests);
+    const damageResults = flattenDamageResults(await applyQueuedDamageAndRegionRequests(damageRequests, regionRequests));
 
-    this.notifyAttackResolved();
+    this.notifyAttackResolved({ killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.processing = false;
     this.refresh(true);
   }
@@ -5193,10 +5203,29 @@ async function applyQueuedDamageRequests(requests = []) {
 async function applyQueuedDamageAndRegionRequests(damageRequests = [], regionRequests = []) {
   if (regionRequests.length) {
     notifyWeaponAttackDamageResolved(damageRequests);
-    await requestApplyDamageAndCreateVolleyDamageRegions(damageRequests, regionRequests);
-    return;
+    const result = await requestApplyDamageAndCreateVolleyDamageRegions(damageRequests, regionRequests);
+    return result?.damage ?? [];
   }
-  if (damageRequests.length) await applyQueuedDamageRequests(damageRequests);
+  if (damageRequests.length) return applyQueuedDamageRequests(damageRequests);
+  return [];
+}
+
+function flattenDamageResults(results = []) {
+  return (Array.isArray(results) ? results : [results]).flat(Infinity).filter(Boolean);
+}
+
+function collectKilledTargetUuidsFromDamageResults(results = []) {
+  return Array.from(new Set(flattenDamageResults(results)
+    .filter(result => result?.mode === "damage" || !result?.mode)
+    .filter(result => (Number(result?.healthDelta) || 0) > 0 || (Number(result?.limbDelta) || 0) > 0)
+    .map(result => result.actor)
+    .filter(actor => actor && isKilledTargetActor(actor))
+    .map(actor => actor.uuid)
+    .filter(Boolean)));
+}
+
+function isKilledTargetActor(actor) {
+  return Boolean(actor?.statuses?.has?.("dead"));
 }
 
 function notifyWeaponAttackDamageResolved(requests = []) {

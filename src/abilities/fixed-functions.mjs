@@ -8,7 +8,8 @@ import {
   normalizeAbilityFunctions,
   normalizeAllOrNothingSettings,
   normalizeCurseAndBlessingSettings,
-  normalizeDeusExMachinaSettings
+  normalizeDeusExMachinaSettings,
+  normalizeReaperSettings
 } from "../settings/abilities.mjs";
 import {
   DAMAGE_APPLIED_HOOK,
@@ -32,6 +33,7 @@ import {
   evaluateActorEffectChangeNumber
 } from "../utils/active-effect-changes.mjs";
 import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
+import { ACTION_RESOURCE_KEY } from "../combat/movement-resources.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -73,6 +75,14 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.reaper,
+    label: "Жнец",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.reaper
+    })
   })
 ]);
 
@@ -85,6 +95,7 @@ export function registerFixedAbilityFunctionHooks() {
   });
   Hooks.on(WEAPON_ATTACK_RESOLVED_HOOK, context => {
     void consumeAllOrNothingResultEffects(context);
+    void processReaperAttackResolution(context);
   });
 }
 
@@ -540,6 +551,57 @@ async function consumeAllOrNothingResultEffects(context = {}) {
     .filter(Boolean);
   if (!effectIds.length) return;
   await actor.deleteEmbeddedDocuments("ActiveEffect", effectIds, { animate: false });
+}
+
+async function processReaperAttackResolution(context = {}) {
+  const actorUuid = String(context?.attackerUuid ?? context?.actorUuid ?? "").trim();
+  const actor = actorUuid ? fromUuidSync(actorUuid) : null;
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
+  const actionPointCost = Math.max(0, toInteger(context?.actionPointCost));
+  if (actionPointCost <= 0) return;
+
+  const killed = (context?.killedTargetUuids ?? []).some(uuid => String(uuid ?? "").trim());
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    const abilityFunction = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
+      .find(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reaper);
+    if (!abilityFunction) continue;
+    const settings = normalizeReaperSettings(abilityFunction.fixedSettings);
+    const restored = killed && rollReaperChance(actor, settings.killChanceFormula, "Жнец: убийство")
+      ? await restoreReaperActionPoints(actor, actionPointCost)
+      : 0;
+    if (restored > 0) {
+      await createAbilityChatMessage(actor, abilityItem, `Жнец: восстановлено ${restored} ОД за убийство.`);
+      return;
+    }
+    if (!rollReaperChance(actor, settings.attackChanceFormula, "Жнец: атака")) continue;
+    const attackRestored = await restoreReaperActionPoints(actor, actionPointCost);
+    if (attackRestored > 0) {
+      await createAbilityChatMessage(actor, abilityItem, `Жнец: восстановлено ${attackRestored} ОД за атаку.`);
+      return;
+    }
+  }
+}
+
+function rollReaperChance(actor, formula = "", context = "Жнец") {
+  const chance = Math.min(100, Math.max(0, evaluateActorFormula(formula, actor, {
+    fallback: 0,
+    minimum: 0,
+    context
+  })));
+  return (Math.floor(Math.random() * 100) + 1) <= chance;
+}
+
+async function restoreReaperActionPoints(actor, amount = 0) {
+  const resource = actor?.system?.resources?.[ACTION_RESOURCE_KEY];
+  if (!resource) return 0;
+  const current = Math.max(0, toInteger(resource.value));
+  const max = Math.max(current, toInteger(resource.max));
+  const restored = Math.min(Math.max(0, toInteger(amount)), Math.max(0, max - current));
+  if (restored <= 0) return 0;
+  await actor.update({
+    [`system.resources.${ACTION_RESOURCE_KEY}.value`]: current + restored
+  });
+  return restored;
 }
 
 function hasPendingAllOrNothingResultEffect(actor, abilityItem, abilityFunction) {

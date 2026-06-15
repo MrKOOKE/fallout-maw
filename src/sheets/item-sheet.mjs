@@ -44,6 +44,7 @@ import {
   normalizeAllOrNothingSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
+  normalizeReaperSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import {
@@ -4278,6 +4279,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedAllOrNothingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
     ? prepareAllOrNothingSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedReaperSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reaper
+    ? prepareReaperSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -4295,6 +4299,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedDeusSettings,
     fixedCurseAndBlessingSettings,
     fixedAllOrNothingSettings,
+    fixedReaperSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
@@ -4362,6 +4367,10 @@ function prepareAllOrNothingSettingsForDisplay(settings = {}) {
     overloadDurationAmount: duration.amount,
     overloadDurationUnitChoices: buildAbilityDurationUnitChoices(duration.unit)
   };
+}
+
+function prepareReaperSettingsForDisplay(settings = {}) {
+  return normalizeReaperSettings(settings);
 }
 
 function prepareAbilityConditionForDisplay(condition, functionIndex, index, { changeCount = 0, allowLimitedChanges = false, functionPath = "system.functions" } = {}) {

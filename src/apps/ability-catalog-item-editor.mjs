@@ -20,6 +20,7 @@ import {
   normalizeAbilityEntry,
   normalizeCurseAndBlessingSettings,
   normalizeAllOrNothingSettings,
+  normalizeReaperSettings,
   normalizeDeusExMachinaSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
@@ -551,6 +552,12 @@ function readFixedFunctionSettings(row) {
       burstCoveragePercent: row.querySelector("[data-field='fixed.allOrNothing.burstCoveragePercent']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reaper) {
+    return {
+      killChanceFormula: row.querySelector("[data-field='fixed.reaper.killChanceFormula']")?.value,
+      attackChanceFormula: row.querySelector("[data-field='fixed.reaper.attackChanceFormula']")?.value
+    };
+  }
   if (fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) return {};
   return {
     damageRequired: row.querySelector("[data-field='fixed.damageRequired']")?.value,
@@ -640,6 +647,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedAllOrNothingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
     ? prepareAllOrNothingSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedReaperSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reaper
+    ? prepareReaperSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const conditions = normalized.conditions.map(condition => prepareConditionForDisplay(condition, {
     changeCount: normalized.changes.length,
     allowLimitedChanges: isEffectChanges
@@ -654,6 +664,7 @@ function prepareFunctionForDisplay(entry) {
     fixedDeusSettings,
     fixedCurseAndBlessingSettings,
     fixedAllOrNothingSettings,
+    fixedReaperSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: normalized.changes.map(prepareChangeForDisplay),
     conditions,
@@ -707,6 +718,10 @@ function prepareAllOrNothingSettingsForDisplay(settings = {}) {
     overloadDurationAmount: duration.amount,
     overloadDurationUnitChoices: buildDurationUnitChoices(duration.unit)
   };
+}
+
+function prepareReaperSettingsForDisplay(settings = {}) {
+  return normalizeReaperSettings(settings);
 }
 
 function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedChanges = false } = {}) {
