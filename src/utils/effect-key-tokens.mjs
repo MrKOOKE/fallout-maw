@@ -1,6 +1,12 @@
 import { createEffectKeyToken } from "../apps/effect-key-autocomplete.mjs";
 import { WEAPON_SWITCH_COST_KEY } from "../combat/weapon-switching.mjs";
-import { ALL_SKILLS_BONUS_EFFECT_KEY } from "./active-effect-changes.mjs";
+import {
+  ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
+  ALL_SKILLS_BONUS_EFFECT_KEY,
+  ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
+  ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+  SMART_FUDGE_RESULT_EFFECT_KEYS
+} from "./active-effect-changes.mjs";
 import {
   getCharacteristicSettings,
   getCreatureOptions,
@@ -28,6 +34,8 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
       group: game.i18n.localize("FALLOUTMAW.Common.Skills")
     })),
     buildAllSkillsEffectKeyToken(),
+    buildAllSkillsAdvantageEffectKeyToken(),
+    buildAllSkillsDisadvantageEffectKeyToken(),
     ...getResourceSettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
       key: entry.key,
@@ -104,6 +112,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
     ...buildPostureEffectKeyTokens(),
     ...buildActionBlockEffectKeyTokens(),
     ...buildActionPenetrationEffectKeyTokens(),
+    ...buildAbilityRuntimeEffectKeyTokens(),
     ...buildCombatEffectKeyTokens()
   ];
 
@@ -126,6 +135,26 @@ export function buildAllSkillsEffectKeyToken() {
     key: "allSkills",
     label: "Все навыки",
     path: ALL_SKILLS_BONUS_EFFECT_KEY,
+    group: game.i18n.localize("FALLOUTMAW.Common.Skills")
+  });
+}
+
+export function buildAllSkillsAdvantageEffectKeyToken() {
+  return createEffectKeyToken({
+    code: "allSkillsAdvantage",
+    key: "allSkillsAdvantage",
+    label: "Преимущество: все навыки",
+    path: ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
+    group: game.i18n.localize("FALLOUTMAW.Common.Skills")
+  });
+}
+
+export function buildAllSkillsDisadvantageEffectKeyToken() {
+  return createEffectKeyToken({
+    code: "allSkillsDisadvantage",
+    key: "allSkillsDisadvantage",
+    label: "Помеха: все навыки",
+    path: ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
     group: game.i18n.localize("FALLOUTMAW.Common.Skills")
   });
 }
@@ -215,6 +244,46 @@ function getPostureEffectKeyEntries() {
     { key: "crawl", code: "crouchPosture", label: localizeOrFallback("FALLOUTMAW.Movement.Crouch", "Присед") },
     { key: "burrow", code: "pronePosture", label: localizeOrFallback("FALLOUTMAW.Movement.Prone", "Лежа") },
     { key: "knocked", code: "knockedPosture", label: localizeOrFallback("FALLOUTMAW.Movement.Knocked", "Опрокинутый") }
+  ];
+}
+
+function buildAbilityRuntimeEffectKeyTokens() {
+  return [
+    createEffectKeyToken({
+      code: "abilityOverloadEnergy",
+      key: "abilityOverloadEnergy",
+      label: "Расход энергии на способность",
+      path: ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+      group: "Способности"
+    }),
+    createEffectKeyToken({
+      code: "smartCriticalSuccess",
+      key: "smartCriticalSuccess",
+      label: "Подтасовка: критический успех",
+      path: SMART_FUDGE_RESULT_EFFECT_KEYS.criticalSuccess,
+      group: "Подтасовка"
+    }),
+    createEffectKeyToken({
+      code: "smartSuccess",
+      key: "smartSuccess",
+      label: "Подтасовка: успех",
+      path: SMART_FUDGE_RESULT_EFFECT_KEYS.success,
+      group: "Подтасовка"
+    }),
+    createEffectKeyToken({
+      code: "smartFailure",
+      key: "smartFailure",
+      label: "Подтасовка: провал",
+      path: SMART_FUDGE_RESULT_EFFECT_KEYS.failure,
+      group: "Подтасовка"
+    }),
+    createEffectKeyToken({
+      code: "smartCriticalFailure",
+      key: "smartCriticalFailure",
+      label: "Подтасовка: критический провал",
+      path: SMART_FUDGE_RESULT_EFFECT_KEYS.criticalFailure,
+      group: "Подтасовка"
+    })
   ];
 }
 

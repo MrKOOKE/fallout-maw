@@ -64,6 +64,7 @@ import { openCraftWindow } from "./craft-window.mjs";
 import { openStealthWindow } from "../stealth/index.mjs";
 import { getWeaponActionBlockState } from "../abilities/runtime-state.mjs";
 import {
+  getFixedAbilityToggleState,
   hasActiveFixedAbilityFunction,
   useFixedAbilityFunctionItem
 } from "../abilities/fixed-functions.mjs";
@@ -2295,12 +2296,17 @@ function isHudEquipmentLightSource(item = null) {
 function prepareOwnedAbilityButtons(actor, fallbackIcon) {
   return actor.items
     .filter(item => item.type === "ability")
-    .map(item => ({
-      id: item.id,
-      name: item.name,
-      img: normalizeImagePath(item.img, fallbackIcon),
-      active: isActiveAbility(item)
-    }));
+    .map(item => {
+      const toggleState = getFixedAbilityToggleState(item);
+      return {
+        id: item.id,
+        name: item.name,
+        img: normalizeImagePath(item.img, fallbackIcon),
+        active: isActiveAbility(item),
+        toggleable: toggleState.toggleable,
+        toggled: toggleState.active
+      };
+    });
 }
 
 function prepareAbilityGroups(abilities = []) {

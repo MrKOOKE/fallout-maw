@@ -5319,6 +5319,17 @@ label.fallout-maw-mitigation-cell {
   mask-image: linear-gradient(to bottom, black 88%, transparent);
 }
 
+.fallout-maw-inventory-tooltip .fallout-maw-ability-tooltip-content.description,
+.fallout-maw-inventory-tooltip .fallout-maw-ability-tooltip-content .description {
+  max-height: none;
+  overflow: visible;
+}
+
+.fallout-maw-inventory-tooltip .fallout-maw-ability-tooltip-content.description.overflowing,
+.fallout-maw-inventory-tooltip .fallout-maw-ability-tooltip-content .description.overflowing {
+  mask-image: none;
+}
+
 .fallout-maw-inventory-tooltip .description :first-child {
   margin-top: 0;
 }
@@ -9647,6 +9658,51 @@ label.fallout-maw-mitigation-cell {
   min-height: var(--fallout-maw-token-hud-tile);
   min-width: var(--fallout-maw-token-hud-action-tile-width);
   width: var(--fallout-maw-token-hud-action-tile-width);
+}
+
+@property --fallout-maw-toggle-outline-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.fallout-maw-token-hud-action-tile.toggleable.toggled::before {
+  background: conic-gradient(
+    from var(--fallout-maw-toggle-outline-angle),
+    transparent 0deg 210deg,
+    rgba(255, 207, 52, 0.15) 230deg,
+    #ffe77a 260deg,
+    #ffc400 292deg,
+    rgba(255, 207, 52, 0.18) 320deg,
+    transparent 345deg 360deg
+  );
+  content: "";
+  inset: 0;
+  padding: 3px;
+  pointer-events: none;
+  position: absolute;
+  z-index: 3;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: fallout-maw-toggle-outline-flow 1.8s linear infinite;
+}
+
+.fallout-maw-token-hud-action-tile.toggleable.toggled {
+  box-shadow: inset 0 0 10px rgba(255, 196, 0, 0.2), 0 0 8px rgba(255, 196, 0, 0.42);
+}
+
+@keyframes fallout-maw-toggle-outline-flow {
+  to {
+    --fallout-maw-toggle-outline-angle: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fallout-maw-token-hud-action-tile.toggleable.toggled::before {
+    animation: none;
+  }
 }
 
 .fallout-maw-token-hud-action-tile span {

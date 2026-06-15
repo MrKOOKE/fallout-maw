@@ -29,6 +29,8 @@ import {
 
 const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
 const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
+export const WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK = "fallout-maw.weaponAttackDamageResolved";
+export const WEAPON_ATTACK_RESOLVED_HOOK = "fallout-maw.weaponAttackResolved";
 const PREVIEW_BROADCAST_INTERVAL_MS = 16;
 const PREVIEW_POSITION_EPSILON = 0.5;
 const PREVIEW_ANGLE_EPSILON = 0.002;
@@ -241,6 +243,30 @@ class WeaponAttackController {
     getAttackPreviewLayer().addChild(this.container);
   }
 
+  notifyAttackResolved({ attempted = true } = {}) {
+    if (!attempted) return;
+    Hooks.callAll(WEAPON_ATTACK_RESOLVED_HOOK, {
+      attackerUuid: this.token?.actor?.uuid ?? "",
+      actorUuid: this.token?.actor?.uuid ?? "",
+      tokenUuid: this.token?.document?.uuid ?? "",
+      weaponUuid: this.weapon?.uuid ?? "",
+      actionKey: this.actionKey,
+      weaponFunctionId: this.weaponFunctionId,
+      attackId: this.attackId,
+      senderUserId: game.user?.id ?? ""
+    });
+  }
+
+  createAllOrNothingAttackContext({ mode = "", index = 0, count = 1 } = {}) {
+    return {
+      weaponAttackId: this.attackId,
+      weaponActionKey: this.actionKey,
+      allOrNothingAttackMode: String(mode ?? ""),
+      allOrNothingAttackIndex: Math.max(0, toInteger(index)),
+      allOrNothingAttackCount: Math.max(1, toInteger(count))
+    };
+  }
+
   async executeAgainstToken(targetToken) {
     this.pointer = getTokenAimPoint(targetToken);
     if (!this.pointer) return false;
@@ -417,7 +443,9 @@ class WeaponAttackController {
       this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
       const result = await this.resolveAttackPellets({
         checkBatch,
-        difficultyBonus: getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId, this.token.actor)
+        difficultyBonus: getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId, this.token.actor),
+        attackIndex,
+        attackCount
       });
       await this.dodgeExposure.flush();
       for (const trajectory of result.trajectories) {
@@ -451,6 +479,7 @@ class WeaponAttackController {
     if (damageRequests.length) {
       await applyQueuedDamageRequests(damageRequests);
     }
+    this.notifyAttackResolved({ attempted });
     this.processing = false;
     this.refresh(true);
   }
@@ -480,13 +509,19 @@ class WeaponAttackController {
       attempted = true;
 
       for (const target of this.targets) {
-        for (const damageAmount of pelletDamages) {
+        for (const [pelletIndex, damageAmount] of pelletDamages.entries()) {
           if (damageAmount <= 0) continue;
+          const totalPelletCount = attackCount * pelletDamages.length;
           const request = await this.resolveAttackAgainstTarget(target, {
             damageAmount,
             difficultyBonus,
             penetrationStep: 0,
-            checkBatch
+            checkBatch,
+            allOrNothingContext: this.createAllOrNothingAttackContext({
+              mode: pelletDamages.length > 1 ? "pellet" : "",
+              index: (attackIndex * pelletDamages.length) + pelletIndex,
+              count: totalPelletCount
+            })
           });
           if (request) damageRequests.push(...request);
         }
@@ -517,6 +552,7 @@ class WeaponAttackController {
     }
     if (damageRequests.length) await applyQueuedDamageRequests(damageRequests);
 
+    this.notifyAttackResolved({ attempted });
     this.processing = false;
     this.refresh(true);
   }
@@ -675,7 +711,12 @@ class WeaponAttackController {
           checkBatch,
           trajectory,
           baseDamage: pelletDamages[pelletIndex] ?? 0,
-          difficultyBonus
+          difficultyBonus,
+          allOrNothingContext: this.createAllOrNothingAttackContext({
+            mode: "burst",
+            index: projectileIndex,
+            count: projectileCount
+          })
         });
         trajectories.push({ ...(result.trajectory ?? trajectory), delayGroup: attackIndex });
         damageRequests.push(...result.damageRequests);
@@ -707,6 +748,7 @@ class WeaponAttackController {
     if (damageRequests.length) {
       await applyQueuedDamageRequests(damageRequests);
     }
+    this.notifyAttackResolved({ attempted });
     this.processing = false;
     this.refresh(true);
   }
@@ -759,7 +801,12 @@ class WeaponAttackController {
       const result = await this.resolveAimedPelletTrajectory(target, trajectory, targetSelection, {
         forceAimed: index === 0,
         checkBatch,
-        baseDamage: pelletDamages[index] ?? 0
+        baseDamage: pelletDamages[index] ?? 0,
+        allOrNothingContext: this.createAllOrNothingAttackContext({
+          mode: trajectories.length > 1 ? "pellet" : "",
+          index,
+          count: trajectories.length
+        })
       });
       damageRequests.push(...result.damageRequests);
     }
@@ -784,25 +831,28 @@ class WeaponAttackController {
     });
     if (damageRequests.length) await applyQueuedDamageRequests(damageRequests);
 
+    this.notifyAttackResolved();
     this.processing = false;
     if (isDeadTarget(target)) this.unlockAimedTarget();
     this.refresh(true);
   }
 
-  async resolveAimedPelletTrajectory(selectedTarget, trajectory, targetSelection, { forceAimed = false, baseDamage = null, checkBatch = null } = {}) {
+  async resolveAimedPelletTrajectory(selectedTarget, trajectory, targetSelection, { forceAimed = false, baseDamage = null, checkBatch = null, allOrNothingContext = null } = {}) {
     if (forceAimed || doesTrajectoryHitTarget(this.token, selectedTarget, trajectory)) {
       const blockerCount = getAimedTargetBlockers(this.token, selectedTarget, trajectory).length;
       return this.resolveAimedAttackTrajectory(selectedTarget, trajectory, targetSelection, {
         blockerBonus: getAimedTargetBlockerBonus(blockerCount),
         baseDamage,
-        checkBatch
+        checkBatch,
+        allOrNothingContext
       });
     }
 
     return this.resolveAttackTrajectory({
       checkBatch,
       trajectory,
-      baseDamage
+      baseDamage,
+      allOrNothingContext
     });
   }
 
@@ -878,6 +928,7 @@ class WeaponAttackController {
     }
     if (damageRequests.length) await applyQueuedDamageRequests(damageRequests);
 
+    this.notifyAttackResolved({ attempted });
     this.processing = false;
     if (isDeadTarget(target)) this.unlockAimedTarget();
     this.refresh(true);
@@ -1030,7 +1081,7 @@ class WeaponAttackController {
     }, this.weaponFunctionId);
   }
 
-  async resolveAimedAttackTrajectory(selectedTarget, trajectory, targetSelection, { blockerBonus = 0, baseDamage = null, checkBatch = null } = {}) {
+  async resolveAimedAttackTrajectory(selectedTarget, trajectory, targetSelection, { blockerBonus = 0, baseDamage = null, checkBatch = null, allOrNothingContext = null } = {}) {
     const damageRequests = [];
     baseDamage = Math.max(0, Number(baseDamage ?? getWeaponDamage(this.weapon, this.weaponFunctionId)) || 0);
     const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey });
@@ -1059,14 +1110,16 @@ class WeaponAttackController {
         difficultyBonus: blockerBonus,
         penetrationStep: 0,
         penetrationPower,
-        checkBatch
+        checkBatch,
+        allOrNothingContext
       })
       : await this.resolveAimedAttackAgainstTarget(selectedTarget, {
         limbKey: targetSelection?.limbKey ?? "",
         damageAmount: getPenetratedDamageAmount(baseDamage, 0),
         difficultyBonus: blockerBonus,
         penetrationStep: 0,
-        checkBatch
+        checkBatch,
+        allOrNothingContext
       });
     if (!firstRequest) {
       updateTrajectoryEnd(trajectory, selectMissPointNearTarget(this.token, selectedTarget, trajectory));
@@ -1090,7 +1143,8 @@ class WeaponAttackController {
         damageAmount,
         difficultyBonus: passthroughStep * 20,
         penetrationStep: passthroughStep,
-        checkBatch
+        checkBatch,
+        allOrNothingContext
       });
       if (!request) {
         finalAnimationPoint = hasSuccessfulHit
@@ -1120,10 +1174,11 @@ class WeaponAttackController {
     return { damageRequests, trajectory, checkBatch };
   }
 
-  async resolveAttackPellets({ checkBatch = null, difficultyBonus = 0 } = {}) {
+  async resolveAttackPellets({ checkBatch = null, difficultyBonus = 0, attackIndex = 0, attackCount = 1 } = {}) {
     const damageRequests = [];
     const trajectories = buildAttackTrajectories(this.token, this.geometry, this.targets, getWeaponPelletCount(this.weapon, this.weaponFunctionId));
     const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), trajectories.map(() => 1));
+    const totalPelletCount = Math.max(1, toInteger(attackCount)) * Math.max(1, trajectories.length);
     let attempted = false;
 
     for (const [index, trajectory] of trajectories.entries()) {
@@ -1131,7 +1186,12 @@ class WeaponAttackController {
         checkBatch,
         trajectory,
         baseDamage: pelletDamages[index] ?? 0,
-        difficultyBonus
+        difficultyBonus,
+        allOrNothingContext: this.createAllOrNothingAttackContext({
+          mode: trajectories.length > 1 ? "pellet" : "",
+          index: (Math.max(0, toInteger(attackIndex)) * trajectories.length) + index,
+          count: totalPelletCount
+        })
       });
       damageRequests.push(...result.damageRequests);
       attempted ||= result.attempted;
@@ -1140,7 +1200,7 @@ class WeaponAttackController {
     return { attempted, damageRequests, trajectories };
   }
 
-  async resolveAttackTrajectory({ checkBatch = null, trajectory = null, baseDamage = null, difficultyBonus = 0 } = {}) {
+  async resolveAttackTrajectory({ checkBatch = null, trajectory = null, baseDamage = null, difficultyBonus = 0, allOrNothingContext = null } = {}) {
     const damageRequests = [];
     trajectory ??= buildAttackTrajectory(this.token, this.geometry, this.targets);
     if (!this.targets.length) return { attempted: true, damageRequests, trajectory };
@@ -1160,7 +1220,8 @@ class WeaponAttackController {
         damageAmount,
         difficultyBonus: Math.max(0, toInteger(difficultyBonus)) + (penetrationsUsed * 20),
         penetrationStep: penetrationsUsed,
-        checkBatch
+        checkBatch,
+        allOrNothingContext
       });
       if (!request) {
         finalAnimationPoint = hasSuccessfulHit
@@ -1190,7 +1251,7 @@ class WeaponAttackController {
     return { attempted, damageRequests, trajectory };
   }
 
-  async resolveAttackAgainstTarget(target, { damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
+  async resolveAttackAgainstTarget(target, { damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null, allOrNothingContext = null } = {}) {
     if (isDeadTarget(target)) return null;
     this.dodgeExposure.record(target.actor);
     const limbKey = selectRandomLimbKey(target.actor, { includeDestroyed: true });
@@ -1205,7 +1266,8 @@ class WeaponAttackController {
         situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
         actorToken: this.token,
-        targetToken: target
+        targetToken: target,
+        ...(allOrNothingContext ?? {})
       },
       animate: false,
       createMessage: !checkBatch,
@@ -1294,6 +1356,7 @@ class WeaponAttackController {
     await this.playVolleyAttackEffects(finalGeometries);
     await applyQueuedDamageAndRegionRequests(damageRequests, regionRequests);
 
+    this.notifyAttackResolved();
     this.processing = false;
     this.refresh(true);
   }
@@ -1408,7 +1471,7 @@ class WeaponAttackController {
     });
   }
 
-  async resolveAimedAttackAgainstTarget(target, { limbKey = "", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null } = {}) {
+  async resolveAimedAttackAgainstTarget(target, { limbKey = "", damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null, allOrNothingContext = null } = {}) {
     if (isDeadTarget(target)) return null;
     this.dodgeExposure.record(target.actor);
     if (!limbKey || isLimbDestroyed(target.actor, limbKey)) return [];
@@ -1422,7 +1485,8 @@ class WeaponAttackController {
         situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
         actorToken: this.token,
-        targetToken: target
+        targetToken: target,
+        ...(allOrNothingContext ?? {})
       },
       animate: false,
       createMessage: !checkBatch,
@@ -1453,7 +1517,7 @@ class WeaponAttackController {
     }, this.weaponFunctionId);
   }
 
-  async resolveAimedWeaponAttackAgainstTarget(target, targetSelection, { baseDamage = 0, damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, penetrationPower = 0, checkBatch = null } = {}) {
+  async resolveAimedWeaponAttackAgainstTarget(target, targetSelection, { baseDamage = 0, damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, penetrationPower = 0, checkBatch = null, allOrNothingContext = null } = {}) {
     if (isDeadTarget(target)) return null;
     const targetWeapon = targetSelection?.item ?? null;
     const holdingLimbKey = String(targetSelection?.limbKey ?? "").trim();
@@ -1469,7 +1533,8 @@ class WeaponAttackController {
         situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
         actorToken: this.token,
-        targetToken: target
+        targetToken: target,
+        ...(allOrNothingContext ?? {})
       },
       animate: false,
       createMessage: !checkBatch,
@@ -5121,15 +5186,36 @@ function addUniquePoint(points, point) {
 }
 
 async function applyQueuedDamageRequests(requests = []) {
+  notifyWeaponAttackDamageResolved(requests);
   return requestDamageApplications(requests);
 }
 
 async function applyQueuedDamageAndRegionRequests(damageRequests = [], regionRequests = []) {
   if (regionRequests.length) {
+    notifyWeaponAttackDamageResolved(damageRequests);
     await requestApplyDamageAndCreateVolleyDamageRegions(damageRequests, regionRequests);
     return;
   }
   if (damageRequests.length) await applyQueuedDamageRequests(damageRequests);
+}
+
+function notifyWeaponAttackDamageResolved(requests = []) {
+  const byAttacker = new Map();
+  for (const request of (Array.isArray(requests) ? requests : [requests]).filter(Boolean)) {
+    const attackerUuid = String(request?.source?.attackerUuid ?? "").trim();
+    const targetUuid = String(request?.actor?.uuid ?? request?.actorUuid ?? "").trim();
+    if (!attackerUuid || !targetUuid) continue;
+    const targets = byAttacker.get(attackerUuid) ?? new Set();
+    targets.add(targetUuid);
+    byAttacker.set(attackerUuid, targets);
+  }
+  for (const [attackerUuid, targets] of byAttacker) {
+    Hooks.callAll(WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK, {
+      attackerUuid,
+      targetUuids: Array.from(targets),
+      senderUserId: game.user?.id ?? ""
+    });
+  }
 }
 
 function serializeWeaponDamageRequests(requests = []) {

@@ -232,6 +232,79 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedCurseAndBlessingSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Порча и благословение</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Срабатывание</strong>
+          <label>
+            <span>Расход энергии</span>
+            <input type="number" data-field="fixed.curse.energyCost" value="{{fixedCurseAndBlessingSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Формула шанса, %</span>
+            <input type="text" data-field="fixed.curse.triggerFormula" value="{{fixedCurseAndBlessingSettings.triggerFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Длительность изменения</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.curse.durationAmount" value="{{fixedCurseAndBlessingSettings.durationAmount}}" min="0" step="1">
+              <select data-field="fixed.curse.durationUnit">
+                {{#each fixedCurseAndBlessingSettings.durationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+    {{#if fixedAllOrNothingSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Все или ничего</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label>
+            <span>Расход энергии</span>
+            <input type="number" data-field="fixed.allOrNothing.energyCost" value="{{fixedAllOrNothingSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Формула шанса</span>
+            <input type="text" data-field="fixed.allOrNothing.chanceFormula" value="{{fixedAllOrNothingSettings.chanceFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Дробь, % пуль</span>
+            <input type="number" data-field="fixed.allOrNothing.pelletCoveragePercent" value="{{fixedAllOrNothingSettings.pelletCoveragePercent}}" min="0" max="100" step="1">
+          </label>
+          <label>
+            <span>Очередь, % пуль</span>
+            <input type="number" data-field="fixed.allOrNothing.burstCoveragePercent" value="{{fixedAllOrNothingSettings.burstCoveragePercent}}" min="0" max="100" step="1">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" data-field="fixed.allOrNothing.overloadEnergyCost" value="{{fixedAllOrNothingSettings.overloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.allOrNothing.overloadDurationAmount" value="{{fixedAllOrNothingSettings.overloadDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.allOrNothing.overloadDurationUnit">
+                {{#each fixedAllOrNothingSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{/if}}
 
     {{#unless isFixed}}

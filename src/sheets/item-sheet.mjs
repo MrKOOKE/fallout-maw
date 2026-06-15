@@ -41,6 +41,8 @@ import {
   createAbilityChange,
   createAbilityCondition,
   createAbilityFunction,
+  normalizeAllOrNothingSettings,
+  normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
@@ -4270,6 +4272,12 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedDeusSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina
     ? prepareDeusExMachinaSettingsForDisplay(entry?.fixedSettings, entry, item)
     : null;
+  const fixedCurseAndBlessingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing
+    ? prepareCurseAndBlessingSettingsForDisplay(entry?.fixedSettings)
+    : null;
+  const fixedAllOrNothingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
+    ? prepareAllOrNothingSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -4285,6 +4293,8 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     isFixed,
     fixedKey,
     fixedDeusSettings,
+    fixedCurseAndBlessingSettings,
+    fixedAllOrNothingSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
@@ -4331,6 +4341,26 @@ function prepareDeusExMachinaSettingsForDisplay(settings = {}, abilityFunction =
       { value: "count", label: "Ограниченное число", selected: normalized.rescue.restoreMode !== "all" }
     ],
     isRestoreCountMode: normalized.rescue.restoreMode !== "all"
+  };
+}
+
+function prepareCurseAndBlessingSettingsForDisplay(settings = {}) {
+  const normalized = normalizeCurseAndBlessingSettings(settings);
+  const duration = splitAbilityDurationSeconds(normalized.durationSeconds);
+  return {
+    ...normalized,
+    durationAmount: duration.amount,
+    durationUnitChoices: buildAbilityDurationUnitChoices(duration.unit)
+  };
+}
+
+function prepareAllOrNothingSettingsForDisplay(settings = {}) {
+  const normalized = normalizeAllOrNothingSettings(settings);
+  const duration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: duration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(duration.unit)
   };
 }
 
@@ -4750,7 +4780,27 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
     const functionIndex = Number(row.dataset.functionIndex ?? -1);
     const functionId = String(row.dataset.functionId ?? "").trim();
     const fixedKey = String(row.querySelector("input[name$='.fixedKey']")?.value ?? "").trim();
-    if (!functionPath || functionIndex < 0 || fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) continue;
+    if (!functionPath || functionIndex < 0) continue;
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing) {
+      const durationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-curse-duration-amount]")?.value,
+        row.querySelector("[data-fixed-curse-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.durationSeconds`, durationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing) {
+      const durationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-all-or-nothing-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-all-or-nothing-overload-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, durationSeconds);
+      continue;
+    }
+
+    if (fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) continue;
 
     const durationSeconds = abilityDurationPartsToSeconds(
       row.querySelector("[data-fixed-insight-duration-amount]")?.value,

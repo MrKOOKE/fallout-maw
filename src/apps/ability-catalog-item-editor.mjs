@@ -18,6 +18,8 @@ import {
   createAbilityCondition,
   createAbilityFunction,
   normalizeAbilityEntry,
+  normalizeCurseAndBlessingSettings,
+  normalizeAllOrNothingSettings,
   normalizeDeusExMachinaSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
@@ -526,6 +528,29 @@ function syncFixedRescueCountVisibility(select) {
 
 function readFixedFunctionSettings(row) {
   const fixedKey = row.querySelector("[data-field='fixedKey']")?.value ?? "";
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.curse.energyCost']")?.value,
+      triggerFormula: row.querySelector("[data-field='fixed.curse.triggerFormula']")?.value,
+      durationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.curse.durationAmount']")?.value,
+        row.querySelector("[data-field='fixed.curse.durationUnit']")?.value
+      )
+    };
+  }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.allOrNothing.energyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.allOrNothing.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.allOrNothing.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.allOrNothing.overloadDurationUnit']")?.value
+      ),
+      chanceFormula: row.querySelector("[data-field='fixed.allOrNothing.chanceFormula']")?.value,
+      pelletCoveragePercent: row.querySelector("[data-field='fixed.allOrNothing.pelletCoveragePercent']")?.value,
+      burstCoveragePercent: row.querySelector("[data-field='fixed.allOrNothing.burstCoveragePercent']")?.value
+    };
+  }
   if (fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) return {};
   return {
     damageRequired: row.querySelector("[data-field='fixed.damageRequired']")?.value,
@@ -609,6 +634,12 @@ function prepareFunctionForDisplay(entry) {
   const fixedDeusSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina
     ? prepareDeusExMachinaSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedCurseAndBlessingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing
+    ? prepareCurseAndBlessingSettingsForDisplay(normalized.fixedSettings)
+    : null;
+  const fixedAllOrNothingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
+    ? prepareAllOrNothingSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const conditions = normalized.conditions.map(condition => prepareConditionForDisplay(condition, {
     changeCount: normalized.changes.length,
     allowLimitedChanges: isEffectChanges
@@ -621,6 +652,8 @@ function prepareFunctionForDisplay(entry) {
     isFixed,
     fixedKey,
     fixedDeusSettings,
+    fixedCurseAndBlessingSettings,
+    fixedAllOrNothingSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: normalized.changes.map(prepareChangeForDisplay),
     conditions,
@@ -653,6 +686,26 @@ function prepareDeusExMachinaSettingsForDisplay(settings = {}) {
       { value: "count", label: "Ограниченное число", selected: normalized.rescue.restoreMode !== "all" }
     ],
     isRestoreCountMode: normalized.rescue.restoreMode !== "all"
+  };
+}
+
+function prepareCurseAndBlessingSettingsForDisplay(settings = {}) {
+  const normalized = normalizeCurseAndBlessingSettings(settings);
+  const duration = splitDurationSeconds(normalized.durationSeconds);
+  return {
+    ...normalized,
+    durationAmount: duration.amount,
+    durationUnitChoices: buildDurationUnitChoices(duration.unit)
+  };
+}
+
+function prepareAllOrNothingSettingsForDisplay(settings = {}) {
+  const normalized = normalizeAllOrNothingSettings(settings);
+  const duration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: duration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(duration.unit)
   };
 }
 

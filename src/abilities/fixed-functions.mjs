@@ -6,6 +6,8 @@ import {
   createAbilityFunction,
   getAbilitySourceId,
   normalizeAbilityFunctions,
+  normalizeAllOrNothingSettings,
+  normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings
 } from "../settings/abilities.mjs";
 import {
@@ -16,13 +18,31 @@ import {
   restoreDestroyedLimb,
   setLimbMissingState
 } from "../combat/damage-hub.mjs";
+import {
+  WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK,
+  WEAPON_ATTACK_RESOLVED_HOOK
+} from "../combat/weapon-attack-controller.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-import { ALL_SKILLS_BONUS_EFFECT_KEY } from "../utils/active-effect-changes.mjs";
+import {
+  ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
+  ALL_SKILLS_BONUS_EFFECT_KEY,
+  ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
+  ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+  SMART_FUDGE_RESULT_EFFECT_KEYS,
+  evaluateActorEffectChangeNumber
+} from "../utils/active-effect-changes.mjs";
+import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
 export const ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY = "abilityFixedFunctionState";
 const DEUS_EX_MACHINA_INSIGHT_EFFECT_FLAG_KEY = "deusExMachinaInsight";
+const CURSE_AND_BLESSING_EFFECT_FLAG_KEY = "curseAndBlessing";
+const ABILITY_OVERLOAD_EFFECT_FLAG_KEY = "abilityOverload";
+const ALL_OR_NOTHING_EFFECT_FLAG_KEY = "allOrNothing";
+const FIXED_ABILITY_SOCKET = `system.${SYSTEM_ID}`;
+const FIXED_ABILITY_SOCKET_SCOPE = "fallout-maw.fixedAbilityFunctions";
+const ENERGY_RESOURCE_KEY = "power";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const STATUS_EFFECTS = Object.freeze({
   dead: "dead"
@@ -36,6 +56,23 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.deusExMachina
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing,
+    label: "Порча и благословение",
+    active: true,
+    toggleable: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.allOrNothing,
+    label: "Все или ничего",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
+    })
   })
 ]);
 
@@ -43,6 +80,16 @@ export function registerFixedAbilityFunctionHooks() {
   Hooks.on(DAMAGE_APPLIED_HOOK, context => {
     void advanceDeusExMachinaProgressFromDamage(context?.results ?? []);
   });
+  Hooks.on(WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK, context => {
+    void requestCurseAndBlessingAttackResolution(context);
+  });
+  Hooks.on(WEAPON_ATTACK_RESOLVED_HOOK, context => {
+    void consumeAllOrNothingResultEffects(context);
+  });
+}
+
+export function registerFixedAbilityFunctionSocket() {
+  game.socket.on(FIXED_ABILITY_SOCKET, handleFixedAbilitySocketMessage);
 }
 
 export function getFixedAbilityFunctionDefinitions() {
@@ -78,6 +125,21 @@ export function isFixedAbilityFunctionActive(abilityFunction = {}) {
   return Boolean(getFixedAbilityFunctionDefinition(abilityFunction.fixedKey)?.active);
 }
 
+export function isFixedAbilityFunctionToggleable(abilityFunction = {}) {
+  if (abilityFunction?.type !== ABILITY_FUNCTION_TYPES.fixed) return false;
+  return Boolean(getFixedAbilityFunctionDefinition(abilityFunction.fixedKey)?.toggleable);
+}
+
+export function getFixedAbilityToggleState(item) {
+  if (item?.type !== "ability") return { toggleable: false, active: false };
+  const state = getFixedAbilityState(item);
+  const functions = normalizeAbilityFunctions(item.system?.functions ?? []).filter(isFixedAbilityFunctionToggleable);
+  return {
+    toggleable: functions.length > 0,
+    active: functions.some(entry => Boolean(state[getFixedFunctionStateKey(entry)]?.active))
+  };
+}
+
 export function hasActiveFixedAbilityFunction(item) {
   if (item?.type !== "ability") return false;
   return normalizeAbilityFunctions(item.system?.functions ?? []).some(isFixedAbilityFunctionActive);
@@ -108,14 +170,418 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
     .find(entry => isFixedAbilityFunctionActive(entry));
   if (!abilityFunction) return false;
 
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing) {
+    const used = await useAllOrNothing(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) {
     const used = await useDeusExMachina(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
   }
 
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing) {
+    await toggleCurseAndBlessing(actor, item, abilityFunction);
+    await application?.render?.({ force: true });
+    return true;
+  }
+
   ui.notifications.warn("Фиксированная функция пока не имеет обработчика применения.");
   return true;
+}
+
+async function useAllOrNothing(actor, abilityItem, abilityFunction) {
+  const settings = normalizeAllOrNothingSettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  if (hasPendingAllOrNothingResultEffect(actor, abilityItem, abilityFunction)) {
+    ui.notifications.warn("Все или ничего: результат первой активации еще не потрачен.");
+    return false;
+  }
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`Все или ничего: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+  await applyAllOrNothingOverloadEffect(actor, abilityItem, abilityFunction, settings);
+  await applyAllOrNothingResultEffect(actor, abilityItem, abilityFunction, settings);
+  await createAbilityChatMessage(actor, abilityItem, "Все или ничего: способность успешно применена.");
+  return true;
+}
+
+async function toggleCurseAndBlessing(actor, abilityItem, abilityFunction) {
+  const settings = normalizeCurseAndBlessingSettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  settings.energyCost = energyCost;
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  const nextActive = !Boolean(state[stateKey]?.active);
+  if (nextActive && !hasCurseAndBlessingEnergy(actor, energyCost)) {
+    ui.notifications.warn(`Порча и благословение: недостаточно энергии (${getActorEnergy(actor)} / ${settings.energyCost}).`);
+    return false;
+  }
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    active: nextActive
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  ui.notifications.info(`Порча и благословение: ${nextActive ? "включено" : "выключено"}.`);
+  return true;
+}
+
+async function requestCurseAndBlessingAttackResolution(context = {}) {
+  const attackerUuid = String(context?.attackerUuid ?? "").trim();
+  const targetUuids = Array.from(new Set((context?.targetUuids ?? [])
+    .map(uuid => String(uuid ?? "").trim())
+    .filter(Boolean)));
+  if (!attackerUuid || !targetUuids.length) return;
+  const payload = {
+    attackerUuid,
+    targetUuids,
+    senderUserId: context?.senderUserId ?? game.user?.id ?? ""
+  };
+  if (game.user?.isActiveGM) {
+    await processCurseAndBlessingAttackResolution(payload);
+    return;
+  }
+  const gm = getResponsibleGM();
+  if (gm) {
+    game.socket.emit(FIXED_ABILITY_SOCKET, {
+      scope: FIXED_ABILITY_SOCKET_SCOPE,
+      action: "resolveCurseAndBlessingAttack",
+      gmUserId: gm.id,
+      senderUserId: game.user?.id ?? "",
+      payload
+    });
+    return;
+  }
+  await processCurseAndBlessingAttackResolution(payload);
+}
+
+function handleFixedAbilitySocketMessage(message = {}) {
+  if (message?.scope !== FIXED_ABILITY_SOCKET_SCOPE) return;
+  if (message.action !== "resolveCurseAndBlessingAttack") return;
+  if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+  void processCurseAndBlessingAttackResolution({
+    ...(message.payload ?? {}),
+    senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
+  });
+}
+
+async function processCurseAndBlessingAttackResolution({ attackerUuid = "", targetUuids = [], senderUserId = "" } = {}) {
+  const attacker = await fromUuid(String(attackerUuid ?? ""));
+  const targets = (await Promise.all(Array.from(new Set(targetUuids))
+    .map(uuid => fromUuid(String(uuid ?? "")))))
+    .filter(Boolean);
+  if (!attacker || !targets.length) return;
+  const sender = game.users?.get(String(senderUserId ?? ""));
+  if (sender && !sender.isGM && !attacker.testUserPermission(sender, "OWNER")) return;
+  await processCurseAndBlessingActorFunctions({
+    owner: attacker,
+    effectTargets: targets,
+    effectKey: ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
+    effectName: "Порча"
+  });
+  for (const target of targets) {
+    await processCurseAndBlessingActorFunctions({
+      owner: target,
+      effectTargets: [target],
+      effectKey: ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
+      effectName: "Благословение"
+    });
+  }
+}
+
+async function processCurseAndBlessingActorFunctions({ owner = null, effectTargets = [], effectKey = "", effectName = "" } = {}) {
+  const targets = (Array.isArray(effectTargets) ? effectTargets : [effectTargets]).filter(Boolean);
+  if (!owner || !targets.length || (!game.user?.isGM && !owner.isOwner)) return;
+  for (const abilityItem of owner.items?.filter(item => item.type === "ability") ?? []) {
+    const state = getFixedAbilityState(abilityItem);
+    const functions = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
+      .filter(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing)
+      .filter(entry => Boolean(state[getFixedFunctionStateKey(entry)]?.active));
+    for (const abilityFunction of functions) {
+      const settings = normalizeCurseAndBlessingSettings(abilityFunction.fixedSettings);
+      const spent = await spendCurseAndBlessingEnergy(owner, abilityItem, abilityFunction, getAbilityEnergyCost(owner, abilityItem, abilityFunction, settings.energyCost));
+      if (!spent) continue;
+      const chance = Math.min(100, evaluateActorFormula(settings.triggerFormula, owner, {
+        fallback: 0,
+        minimum: 0,
+        context: "Порча и благословение"
+      }));
+      for (const target of targets) {
+        if ((Math.floor(Math.random() * 100) + 1) > chance) continue;
+        await applyCurseAndBlessingEffect(target, abilityItem, abilityFunction, {
+          effectKey,
+          effectName,
+          durationSeconds: settings.durationSeconds
+        });
+      }
+    }
+  }
+}
+
+async function spendCurseAndBlessingEnergy(actor, abilityItem, abilityFunction, energyCost = 0) {
+  const cost = Math.max(0, toInteger(energyCost));
+  if (!hasCurseAndBlessingEnergy(actor, cost)) {
+    await deactivateFixedAbilityFunction(abilityItem, abilityFunction);
+    await createAbilityChatMessage(actor, abilityItem, `Порча и благословение выключено: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
+    return false;
+  }
+  if (!cost) return true;
+  const resource = actor.system?.resources?.[ENERGY_RESOURCE_KEY];
+  const nextValue = Math.max(toInteger(resource?.min), getActorEnergy(actor) - cost);
+  const update = {
+    [`system.resources.${ENERGY_RESOURCE_KEY}.value`]: nextValue
+  };
+  if (resource && Object.hasOwn(resource, "spent")) {
+    update[`system.resources.${ENERGY_RESOURCE_KEY}.spent`] = Math.max(0, toInteger(resource.max) - nextValue);
+  }
+  await actor.update(update);
+  return true;
+}
+
+async function spendEnergy(actor, energyCost = 0) {
+  const cost = Math.max(0, toInteger(energyCost));
+  if (!hasEnergy(actor, cost)) return false;
+  if (!cost) return true;
+  const resource = actor.system?.resources?.[ENERGY_RESOURCE_KEY];
+  const nextValue = Math.max(toInteger(resource?.min), getActorEnergy(actor) - cost);
+  const update = {
+    [`system.resources.${ENERGY_RESOURCE_KEY}.value`]: nextValue
+  };
+  if (resource && Object.hasOwn(resource, "spent")) {
+    update[`system.resources.${ENERGY_RESOURCE_KEY}.spent`] = Math.max(0, toInteger(resource.max) - nextValue);
+  }
+  await actor.update(update);
+  return true;
+}
+
+function getAbilityEnergyCost(actor, abilityItem, abilityFunction, baseCost = 0) {
+  return Math.max(0, toInteger(baseCost)) + getAbilityOverloadEnergyCost(actor, abilityItem, abilityFunction);
+}
+
+export function getFixedAbilityEnergyCost(actor, abilityItem, abilityFunction, baseCost = 0) {
+  return getAbilityEnergyCost(actor, abilityItem, abilityFunction, baseCost);
+}
+
+function getAbilityOverloadEnergyCost(actor, abilityItem, abilityFunction) {
+  if (!actor || !abilityItem) return 0;
+  const abilityItemId = String(abilityItem.id ?? "").trim();
+  const abilitySourceId = getAbilitySourceId(abilityItem);
+  let total = 0;
+  for (const effect of actor.allApplicableEffects?.() ?? actor.effects ?? []) {
+    if (effect?.disabled) continue;
+    const overload = effect.getFlag?.(SYSTEM_ID, ABILITY_OVERLOAD_EFFECT_FLAG_KEY);
+    if (!abilityOverloadApplies(overload, { abilityItemId, abilitySourceId })) continue;
+    for (const change of effect.system?.changes ?? []) {
+      if (String(change?.key ?? "") !== ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY) continue;
+      total += Math.max(0, evaluateActorEffectChangeNumber(actor, { ...change, effect }, { fallback: 0 }));
+    }
+  }
+  return Math.max(0, Math.trunc(total));
+}
+
+function abilityOverloadApplies(overload = {}, { abilityItemId = "", abilitySourceId = "" } = {}) {
+  if (!overload || typeof overload !== "object") return false;
+  const overloadSourceId = String(overload.abilitySourceId ?? "").trim();
+  if (overloadSourceId && abilitySourceId) return overloadSourceId === abilitySourceId;
+  return String(overload.abilityItemId ?? "").trim() === abilityItemId;
+}
+
+async function deactivateFixedAbilityFunction(abilityItem, abilityFunction) {
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    active: false
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+}
+
+async function applyCurseAndBlessingEffect(actor, abilityItem, abilityFunction, { effectKey = "", effectName = "", durationSeconds = 0 } = {}) {
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return false;
+  const startTime = Number(game.time?.worldTime) || 0;
+  await actor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: effectName,
+    img: abilityItem.img || "icons/svg/aura.svg",
+    origin: abilityItem.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    duration: {
+      seconds: Math.max(0, toInteger(durationSeconds)),
+      startTime
+    },
+    system: {
+      changes: [{
+        key: effectKey,
+        type: "add",
+        value: "1",
+        phase: "initial",
+        priority: null
+      }]
+    },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "temporary",
+        [CURSE_AND_BLESSING_EFFECT_FLAG_KEY]: {
+          abilityItemId: abilityItem.id,
+          functionId: abilityFunction.id,
+          createdAt: startTime
+        }
+      }
+    }
+  }], { animate: false });
+  await createAbilityChatMessage(actor, abilityItem, `${effectName}: ${formatDuration(durationSeconds)}.`);
+  return true;
+}
+
+async function applyAllOrNothingOverloadEffect(actor, abilityItem, abilityFunction, settings) {
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return false;
+  const startTime = Number(game.time?.worldTime) || 0;
+  await actor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: "Перегрузка: Все или ничего",
+    img: abilityItem.img || "icons/svg/aura.svg",
+    origin: abilityItem.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    duration: {
+      seconds: Math.max(0, toInteger(settings.overloadDurationSeconds)),
+      startTime
+    },
+    system: {
+      changes: [{
+        key: ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+        type: "add",
+        value: String(Math.max(0, toInteger(settings.overloadEnergyCost))),
+        phase: "initial",
+        priority: null
+      }]
+    },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "temporary",
+        [ABILITY_OVERLOAD_EFFECT_FLAG_KEY]: {
+          abilityItemId: abilityItem.id,
+          abilitySourceId: getAbilitySourceId(abilityItem),
+          functionId: abilityFunction.id,
+          fixedKey: abilityFunction.fixedKey,
+          createdAt: startTime
+        }
+      }
+    }
+  }], { animate: false });
+  return true;
+}
+
+async function applyAllOrNothingResultEffect(actor, abilityItem, abilityFunction, settings) {
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return false;
+  const startTime = Number(game.time?.worldTime) || 0;
+  const chance = Math.min(100, Math.max(0, evaluateActorFormula(settings.chanceFormula ?? "50 + gambling/10", actor, {
+    fallback: 0,
+    minimum: 0,
+    context: "Все или ничего"
+  })));
+  const result = (Math.floor(Math.random() * 100) + 1) <= chance
+    ? "criticalSuccess"
+    : "criticalFailure";
+  const effectKey = SMART_FUDGE_RESULT_EFFECT_KEYS[result];
+  await actor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: "Все или ничего",
+    img: abilityItem.img || "icons/svg/aura.svg",
+    origin: abilityItem.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: 0,
+    system: {
+      changes: [{
+        key: effectKey,
+        type: "add",
+        value: "1",
+        phase: "initial",
+        priority: null
+      }]
+    },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "temporary",
+        [ALL_OR_NOTHING_EFFECT_FLAG_KEY]: {
+          pending: true,
+          abilityItemId: abilityItem.id,
+          abilitySourceId: getAbilitySourceId(abilityItem),
+          functionId: abilityFunction.id,
+          fixedKey: abilityFunction.fixedKey,
+          result,
+          pelletCoveragePercent: Math.max(0, Math.min(100, toInteger(settings.pelletCoveragePercent))),
+          burstCoveragePercent: Math.max(0, Math.min(100, toInteger(settings.burstCoveragePercent))),
+          createdAt: startTime
+        }
+      }
+    }
+  }], { animate: false });
+  return true;
+}
+
+async function consumeAllOrNothingResultEffects(context = {}) {
+  const actorUuid = String(context?.attackerUuid ?? context?.actorUuid ?? "").trim();
+  const actor = actorUuid ? fromUuidSync(actorUuid) : null;
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
+  const effectIds = Array.from(actor.effects ?? [])
+    .filter(effect => !effect.disabled && Boolean(effect.getFlag?.(SYSTEM_ID, ALL_OR_NOTHING_EFFECT_FLAG_KEY)?.pending))
+    .map(effect => effect.id)
+    .filter(Boolean);
+  if (!effectIds.length) return;
+  await actor.deleteEmbeddedDocuments("ActiveEffect", effectIds, { animate: false });
+}
+
+function hasPendingAllOrNothingResultEffect(actor, abilityItem, abilityFunction) {
+  if (!actor || !abilityItem) return false;
+  const abilityItemId = String(abilityItem.id ?? "").trim();
+  const abilitySourceId = getAbilitySourceId(abilityItem);
+  return Array.from(actor.effects ?? []).some(effect => (
+    !effect.disabled
+    && allOrNothingResultApplies(effect.getFlag?.(SYSTEM_ID, ALL_OR_NOTHING_EFFECT_FLAG_KEY), {
+      abilityItemId,
+      abilitySourceId,
+      functionId: abilityFunction?.id ?? ""
+    })
+  ));
+}
+
+function allOrNothingResultApplies(data = {}, { abilityItemId = "", abilitySourceId = "", functionId = "" } = {}) {
+  if (!data || typeof data !== "object" || !data.pending) return false;
+  const dataFunctionId = String(data.functionId ?? "").trim();
+  if (dataFunctionId && functionId && dataFunctionId !== String(functionId).trim()) return false;
+  const dataSourceId = String(data.abilitySourceId ?? "").trim();
+  if (dataSourceId && abilitySourceId) return dataSourceId === abilitySourceId;
+  return String(data.abilityItemId ?? "").trim() === abilityItemId;
+}
+
+function hasCurseAndBlessingEnergy(actor, cost = 0) {
+  return hasEnergy(actor, cost);
+}
+
+function hasEnergy(actor, cost = 0) {
+  return getActorEnergy(actor) - Math.max(0, toInteger(cost)) >= toInteger(actor?.system?.resources?.[ENERGY_RESOURCE_KEY]?.min);
+}
+
+function getActorEnergy(actor) {
+  return Math.max(0, toInteger(actor?.system?.resources?.[ENERGY_RESOURCE_KEY]?.value));
+}
+
+function getResponsibleGM() {
+  return game.users?.activeGM ?? (game.users?.contents ?? [])
+    .filter(user => user.active && user.isGM)
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .at(0) ?? null;
 }
 
 async function advanceDeusExMachinaProgressFromDamage(results = []) {

@@ -3,6 +3,7 @@ import { getSkillSettings } from "../settings/accessors.mjs";
 import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { getActorSmartFudgeResult } from "../utils/active-effect-changes.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -51,7 +52,7 @@ export async function requestSkillCheck({
   const requestData = prompt ? await promptSkillCheckData(actor, resolvedSkill) : data;
   if (!requestData) return undefined;
 
-  const outcome = await performSkillCheck(actor, resolvedSkill, normalizeRequestData(requestData));
+  const outcome = await performSkillCheck(actor, resolvedSkill, normalizeRequestData(requestData, requester));
   Hooks.callAll("fallout-maw.skillCheckResolved", outcome);
   if (animate) await playSkillCheckAnimation(outcome);
   if (!createMessage) return outcome;
@@ -78,7 +79,7 @@ export async function requestSkillCheckBatch({
 
   const outcomes = [];
   for (const entry of preparedEntries) {
-    const outcome = await performSkillCheck(entry.actor, entry.skill, normalizeRequestData(entry.data));
+    const outcome = await performSkillCheck(entry.actor, entry.skill, normalizeRequestData(entry.data, requester));
     Hooks.callAll("fallout-maw.skillCheckResolved", outcome);
     if (animate) await playSkillCheckAnimation(outcome);
     outcomes.push(outcome);
@@ -253,11 +254,18 @@ async function performSkillCheck(actor, skill, data = {}) {
   const finalSkillValue = toInteger(check.skill.value) + toInteger(check.situationalModifier) + edge.skillModifier;
   const critical = calculateCriticalThresholds(check);
   const forcedResult = normalizeForcedResult(check.forcedResult);
+  const smartFudgeResult = forcedResult ? "" : normalizeForcedResult(check.smartFudgeResult || getActorSmartFudgeResult(actor, { requester: check.requester, check }));
   const autoFailure = isAutomaticFailure(finalSkillValue, check.difficulty) && !forcedResult;
+  const smartFudgeRollRange = smartFudgeResult
+    ? getSmartFudgeRollRange(smartFudgeResult, check.difficulty, critical, finalSkillValue, autoFailure)
+    : null;
   const forcedRollTotal = forcedResult
     ? getForcedRollTotal(forcedResult, check.difficulty, critical, finalSkillValue)
     : null;
-  const rolls = await rollD100(edge.rollMode === "normal" ? 1 : 2, forcedRollTotal);
+  const rolls = await rollD100(edge.rollMode === "normal" ? 1 : 2, {
+    forcedTotal: forcedRollTotal,
+    smartRange: smartFudgeRollRange
+  });
   const selectedRoll = selectRoll(rolls, edge.rollMode);
   const total = finalSkillValue + selectedRoll.total;
   const result = determineResult(
@@ -769,11 +777,13 @@ function resolveSkill(actor, skillKey) {
     key: setting.key,
     abbr: setting.abbr,
     label: setting.label,
-    value: toInteger(actorSkill.value)
+    value: toInteger(actorSkill.value),
+    advantage: Math.max(0, toInteger(actorSkill.advantage)),
+    disadvantage: Math.max(0, toInteger(actorSkill.disadvantage))
   };
 }
 
-function normalizeRequestData(data) {
+function normalizeRequestData(data, requester = "") {
   data ??= {};
   const advantage = Boolean(data.advantage);
   const disadvantage = Boolean(data.disadvantage);
@@ -784,9 +794,16 @@ function normalizeRequestData(data) {
     criticalFailureBonus: toInteger(data.criticalFailureBonus),
     advantageCount: advantage ? Math.max(1, toInteger(data.advantageCount)) : 0,
     disadvantageCount: disadvantage ? Math.max(1, toInteger(data.disadvantageCount)) : 0,
+    requester: String(requester ?? ""),
     actorToken: data.actorToken ?? null,
     targetToken: data.targetToken ?? null,
-    targetActor: data.targetActor ?? null
+    targetActor: data.targetActor ?? null,
+    weaponAttackId: String(data.weaponAttackId ?? ""),
+    weaponActionKey: String(data.weaponActionKey ?? ""),
+    allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
+    allOrNothingAttackIndex: Math.max(0, toInteger(data.allOrNothingAttackIndex)),
+    allOrNothingAttackCount: Math.max(0, toInteger(data.allOrNothingAttackCount)),
+    smartFudgeResult: normalizeForcedResult(data.smartFudgeResult)
   };
 }
 
@@ -804,9 +821,16 @@ function createMutableCheck(actor, skill, data) {
     situationalModifier: toInteger(data.situationalModifier ?? DEFAULT_CHECK.situationalModifier),
     criticalSuccessBonus: toInteger(data.criticalSuccessBonus ?? DEFAULT_CHECK.criticalSuccessBonus),
     criticalFailureBonus: toInteger(data.criticalFailureBonus ?? DEFAULT_CHECK.criticalFailureBonus),
-    advantageCount: Math.max(0, toInteger(data.advantageCount)),
-    disadvantageCount: Math.max(0, toInteger(data.disadvantageCount)),
+    advantageCount: Math.max(0, toInteger(data.advantageCount)) + Math.max(0, toInteger(skill.advantage)),
+    disadvantageCount: Math.max(0, toInteger(data.disadvantageCount)) + Math.max(0, toInteger(skill.disadvantage)),
     forcedResult: "",
+    smartFudgeResult: String(data.smartFudgeResult ?? ""),
+    requester: String(data.requester ?? ""),
+    weaponAttackId: String(data.weaponAttackId ?? ""),
+    weaponActionKey: String(data.weaponActionKey ?? ""),
+    allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
+    allOrNothingAttackIndex: Math.max(0, toInteger(data.allOrNothingAttackIndex)),
+    allOrNothingAttackCount: Math.max(0, toInteger(data.allOrNothingAttackCount)),
     modifiers: [],
     ...context
   };
@@ -840,13 +864,32 @@ function getActorContextToken(actor) {
   return active.length === 1 ? active[0] : null;
 }
 
-async function rollD100(count, forcedTotal = null) {
+async function rollD100(count, { forcedTotal = null, smartRange = null } = {}) {
   const rolls = [];
   for (let index = 0; index < count; index += 1) {
-    const roll = new Roll(forcedTotal ? String(clamp(forcedTotal, 1, 100)) : "1d100");
-    rolls.push(await roll.evaluate());
+    if (forcedTotal) {
+      const roll = new Roll(String(clamp(forcedTotal, 1, 100)));
+      rolls.push(await roll.evaluate());
+    } else if (smartRange) {
+      rolls.push(await rollD100InRange(smartRange));
+    } else {
+      const roll = new Roll("1d100");
+      rolls.push(await roll.evaluate());
+    }
   }
   return rolls;
+}
+
+async function rollD100InRange(range = {}) {
+  const minimum = clamp(range.minimum, 1, 100);
+  const maximum = clamp(range.maximum, minimum, 100);
+  let fallback = null;
+  for (let attempt = 0; attempt < 500; attempt += 1) {
+    const roll = await new Roll("1d100").evaluate();
+    fallback = roll;
+    if (roll.total >= minimum && roll.total <= maximum) return roll;
+  }
+  return fallback ?? new Roll(String(minimum)).evaluate();
 }
 
 function calculateEdge(advantageCount, disadvantageCount) {
@@ -911,6 +954,18 @@ function getForcedRollTotal(forcedResult, difficulty, critical, finalSkillValue)
   if (forcedResult === "failure") return Math.max(1, clamp(toInteger(difficulty) - toInteger(finalSkillValue) - 1, 1, 100));
   if (forcedResult === "success") return Math.min(100, clamp(toInteger(difficulty) - toInteger(finalSkillValue), 1, 100));
   return null;
+}
+
+function getSmartFudgeRollRange(targetResult, difficulty, critical, finalSkillValue, autoFailure = false) {
+  const segmentClass = FORCED_RESULT_TO_SEGMENT[normalizeForcedResult(targetResult)];
+  if (!segmentClass) return null;
+  const definitions = buildThresholdDefinitions(difficulty, critical, finalSkillValue, autoFailure);
+  const target = definitions.find(definition => definition.cssClass === segmentClass);
+  if (!target) return null;
+  return {
+    minimum: clamp(target.minimum, 1, 100),
+    maximum: clamp(target.maximum, 1, 100)
+  };
 }
 
 function determineResult(roll, total, difficulty, critical, autoFailure = false, forcedResult = "") {

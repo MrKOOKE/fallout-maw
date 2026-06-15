@@ -19,7 +19,7 @@ import {
   getUniqueLimbSets,
   normalizeTraumaSettings
 } from "../settings/traumas.mjs";
-import { buildActionCostEffectKeyTokens, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildWeaponSwitchCostEffectKeyToken } from "../utils/effect-key-tokens.mjs";
+import { buildActionCostEffectKeyTokens, buildAllSkillsAdvantageEffectKeyToken, buildAllSkillsDisadvantageEffectKeyToken, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildWeaponSwitchCostEffectKeyToken } from "../utils/effect-key-tokens.mjs";
 
 export class TraumaSettingsConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
@@ -464,6 +464,8 @@ function buildEffectKeyTokens() {
       group: "Навыки"
     })),
     buildAllSkillsEffectKeyToken(),
+    buildAllSkillsAdvantageEffectKeyToken(),
+    buildAllSkillsDisadvantageEffectKeyToken(),
     ...getResourceSettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
       key: entry.key,

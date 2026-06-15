@@ -14,7 +14,9 @@ export const ABILITY_FUNCTION_TYPES = Object.freeze({
 });
 
 export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
-  deusExMachina: "deusExMachina"
+  deusExMachina: "deusExMachina",
+  curseAndBlessing: "curseAndBlessing",
+  allOrNothing: "allOrNothing"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -484,8 +486,15 @@ function normalizeFixedFunctionKey(value = "") {
 }
 
 function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
-  if (normalizeFixedFunctionKey(fixedKey) === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) {
+  const normalizedKey = normalizeFixedFunctionKey(fixedKey);
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) {
     return normalizeDeusExMachinaSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing) {
+    return normalizeCurseAndBlessingSettings(value);
+  }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing) {
+    return normalizeAllOrNothingSettings(value);
   }
   return {};
 }
@@ -509,6 +518,25 @@ export function normalizeDeusExMachinaSettings(value = {}) {
       restoreMode: rescueMode,
       restoreCount: Math.max(1, toInteger(value?.rescue?.restoreCount ?? value?.rescueRestoreCount ?? 1))
     }
+  };
+}
+
+export function normalizeCurseAndBlessingSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 10)),
+    triggerFormula: String(value?.triggerFormula ?? "30+gambling/10").trim() || "30+gambling/10",
+    durationSeconds: Math.max(0, toInteger(value?.durationSeconds ?? 12))
+  };
+}
+
+export function normalizeAllOrNothingSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 10)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 20)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 1800)),
+    chanceFormula: String(value?.chanceFormula ?? "50 + gambling/10").trim() || "50 + gambling/10",
+    pelletCoveragePercent: Math.max(0, Math.min(100, toInteger(value?.pelletCoveragePercent ?? 50))),
+    burstCoveragePercent: Math.max(0, Math.min(100, toInteger(value?.burstCoveragePercent ?? 50)))
   };
 }
 

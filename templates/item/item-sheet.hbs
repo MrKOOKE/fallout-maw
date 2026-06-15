@@ -352,6 +352,83 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedCurseAndBlessingSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-panel-header">
+        <h3>Настройки: Порча и благословение</h3>
+      </div>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Срабатывание</strong>
+          <label>
+            <span>Расход энергии</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.energyCost" value="{{fixedCurseAndBlessingSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Формула шанса, %</span>
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.triggerFormula" value="{{fixedCurseAndBlessingSettings.triggerFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Длительность изменения</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" value="{{fixedCurseAndBlessingSettings.durationAmount}}" min="0" step="1" data-fixed-curse-duration-amount>
+              <select data-fixed-curse-duration-unit>
+                {{#each fixedCurseAndBlessingSettings.durationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+    {{#if fixedAllOrNothingSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-panel-header">
+        <h3>Настройки: Все или ничего</h3>
+      </div>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label>
+            <span>Расход энергии</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.energyCost" value="{{fixedAllOrNothingSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Формула шанса</span>
+            <input type="text" name="{{functionPath}}.{{functionIndex}}.fixedSettings.chanceFormula" value="{{fixedAllOrNothingSettings.chanceFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Дробь, % пуль</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.pelletCoveragePercent" value="{{fixedAllOrNothingSettings.pelletCoveragePercent}}" min="0" max="100" step="1">
+          </label>
+          <label>
+            <span>Очередь, % пуль</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.burstCoveragePercent" value="{{fixedAllOrNothingSettings.burstCoveragePercent}}" min="0" max="100" step="1">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedAllOrNothingSettings.overloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" value="{{fixedAllOrNothingSettings.overloadDurationAmount}}" min="0" step="1" data-fixed-all-or-nothing-overload-duration-amount>
+              <select data-fixed-all-or-nothing-overload-duration-unit>
+                {{#each fixedAllOrNothingSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{/if}}
     {{#unless isFixed}}
     <div data-ability-changes>

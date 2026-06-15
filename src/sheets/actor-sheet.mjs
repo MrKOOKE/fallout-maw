@@ -35,7 +35,13 @@ import {
   isContainerWeaponSetKey
 } from "../utils/equipment-slots.mjs";
 import { buildDamageMitigationTables, buildDamageTypeIconClass, buildDamageTypeIconStyle } from "../utils/damage-mitigation-display.mjs";
-import { ALL_SKILLS_BONUS_EFFECT_KEY } from "../utils/active-effect-changes.mjs";
+import {
+  ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
+  ALL_SKILLS_BONUS_EFFECT_KEY,
+  ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
+  ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+  SMART_FUDGE_RESULT_EFFECT_KEYS
+} from "../utils/active-effect-changes.mjs";
 import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
   import {
     completeResearch,
@@ -120,7 +126,13 @@ import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import { getAbilityItemUseProgressEntries } from "../abilities/runtime-state.mjs";
-import { getFixedAbilityFunctionProgressEntries } from "../abilities/fixed-functions.mjs";
+import { getFixedAbilityEnergyCost, getFixedAbilityFunctionProgressEntries } from "../abilities/fixed-functions.mjs";
+import {
+  ABILITY_FIXED_FUNCTION_KEYS,
+  normalizeAbilityFunctions,
+  normalizeAllOrNothingSettings,
+  normalizeCurseAndBlessingSettings
+} from "../settings/abilities.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import {
   applyWeaponModuleModifiers,
@@ -3050,9 +3062,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const { viewportWidth, viewportHeight } = this.#getViewportMetrics();
     const margin = Math.max(8, 12 * this.#uiScale);
     const gap = Math.max(10, 12 * this.#uiScale);
-    this.#syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, this.#uiScale);
 
     const anchorRect = anchor.getBoundingClientRect();
+    const aboveAvailable = Math.max(0, anchorRect.top - margin - gap);
+    const belowAvailable = Math.max(0, viewportHeight - anchorRect.bottom - margin - gap);
+    const placeAbove = aboveAvailable >= Math.min(220 * this.#uiScale, belowAvailable) || belowAvailable < (160 * this.#uiScale);
+    const availableHeight = placeAbove ? aboveAvailable : belowAvailable;
+    this.#syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, this.#uiScale, { availableHeight });
+
     let tooltipRect = element.getBoundingClientRect();
 
     let left = anchorRect.left - tooltipRect.width - gap;
@@ -3066,19 +3083,19 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       direction = "clamped";
     }
 
-    let top = anchorRect.top + ((anchorRect.height - tooltipRect.height) / 2);
-    if (top < margin) top = margin;
-    if ((top + tooltipRect.height) > (viewportHeight - margin)) {
-      top = Math.max(margin, viewportHeight - tooltipRect.height - margin);
-    }
+    const top = placeAbove
+      ? anchorRect.top - tooltipRect.height - gap
+      : anchorRect.bottom + gap;
 
     element.dataset.tooltipDirection = direction;
     element.style.left = `${Math.round(left)}px`;
-    element.style.top = `${Math.round(top)}px`;
+    element.style.top = `${Math.round(Math.max(margin, Math.min(viewportHeight - tooltipRect.height - margin, top)))}px`;
 
-    this.#syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, this.#uiScale);
+    this.#syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, this.#uiScale, { availableHeight });
     tooltipRect = element.getBoundingClientRect();
-    if ((tooltipRect.top + tooltipRect.height) > (viewportHeight - margin)) {
+    if (placeAbove && tooltipRect.bottom > (anchorRect.top - gap)) {
+      element.style.top = `${Math.round(Math.max(margin, anchorRect.top - tooltipRect.height - gap))}px`;
+    } else if ((tooltipRect.top + tooltipRect.height) > (viewportHeight - margin)) {
       element.style.top = `${Math.round(Math.max(margin, viewportHeight - tooltipRect.height - margin))}px`;
     }
   }
@@ -3099,10 +3116,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     element.style.top = `${Math.round(top)}px`;
   }
 
-  #syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, scale = 1) {
+  #syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, scale = 1, { availableHeight = null } = {}) {
     if (!element) return;
     const safeScale = Math.max(0.1, Number(scale) || 1);
-    const maxTooltipHeight = Math.max(220, Math.floor((viewportHeight - (margin * 2)) / safeScale));
+    const viewportAvailableHeight = Math.max(0, viewportHeight - (margin * 2));
+    const resolvedAvailableHeight = Number.isFinite(Number(availableHeight))
+      ? Math.max(0, Math.min(viewportAvailableHeight, Number(availableHeight)))
+      : viewportAvailableHeight;
+    const maxTooltipHeight = Math.max(80, Math.floor(resolvedAvailableHeight / safeScale));
     element.style.setProperty("--fallout-maw-tooltip-max-height", `${maxTooltipHeight}px`);
 
     const picker = element.querySelector(".tooltip-module-picker-panels:has(.tooltip-module-picker-panel.active)");
@@ -3114,7 +3135,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const tooltipRect = element.getBoundingClientRect();
     const pickerRect = picker.getBoundingClientRect();
     const nonPickerHeight = Math.max(0, tooltipRect.height - pickerRect.height);
-    const maxPickerHeight = Math.max(160, Math.floor((viewportHeight - (margin * 2) - nonPickerHeight) / safeScale));
+    const maxPickerHeight = Math.max(80, Math.floor((resolvedAvailableHeight - nonPickerHeight) / safeScale));
     element.style.setProperty("--fallout-maw-module-picker-max-height", `${maxPickerHeight}px`);
   }
 
@@ -3449,8 +3470,8 @@ function getTooltipActorRace(actor) {
   return getCreatureOptions().races.find(entry => entry.id === raceId) ?? null;
 }
 
-function renderAbilityItemTooltipContentHTML(item, _actor, { descriptionHTML = "" } = {}) {
-  const functionSections = buildAbilityTooltipFunctionSections(item);
+function renderAbilityItemTooltipContentHTML(item, actor, { descriptionHTML = "" } = {}) {
+  const functionSections = buildAbilityTooltipFunctionSections(item, actor);
   return `
     <section class="content fallout-maw-ability-tooltip-content">
       ${functionSections}
@@ -3459,17 +3480,38 @@ function renderAbilityItemTooltipContentHTML(item, _actor, { descriptionHTML = "
   `;
 }
 
-function buildAbilityTooltipFunctionSections(item) {
+function buildAbilityTooltipFunctionSections(item, actor = null) {
   const progressRows = [
     ...getAbilityItemUseProgressEntries(item),
     ...getFixedAbilityFunctionProgressEntries(item)
   ]
     .map(entry => [entry.label, `${entry.current} / ${entry.required}`]);
+  const energyRows = buildAbilityEnergyCostRows(item, actor);
   const sections = [
+    renderTooltipFunctionSection("Энергия", energyRows),
     renderTooltipFunctionSection("Прогресс условий", progressRows)
   ].filter(Boolean);
   if (!sections.length) return "";
   return `<section class="functions">${sections.join("")}</section>`;
+}
+
+function buildAbilityEnergyCostRows(item, actor = null) {
+  if (!actor || item?.type !== "ability") return [];
+  const entry = normalizeAbilityFunctions(item.system?.functions ?? [])
+    .find(abilityFunction => (
+      abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
+    ));
+  if (!entry) return [];
+  const settings = entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
+    ? normalizeAllOrNothingSettings(entry.fixedSettings)
+    : normalizeCurseAndBlessingSettings(entry.fixedSettings);
+  const base = Math.max(0, toInteger(settings.energyCost));
+  const total = getFixedAbilityEnergyCost(actor, item, entry, base);
+  return [
+    ["Базовый расход", String(base)],
+    ["Итог", String(total)]
+  ];
 }
 
 function renderInventoryItemTooltipContentHTML(item, actor, { activeWeaponIndex = 0, baseMode = false, descriptionHTML = "" } = {}) {
@@ -5435,6 +5477,13 @@ function buildEffectPathLabelMap({
     developmentBonus: developmentBonusLabel
   });
   map.set(ALL_SKILLS_BONUS_EFFECT_KEY, "Все навыки");
+  map.set(ALL_SKILLS_ADVANTAGE_EFFECT_KEY, "Преимущество: все навыки");
+  map.set(ALL_SKILLS_DISADVANTAGE_EFFECT_KEY, "Помеха: все навыки");
+  map.set(ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY, "Расход энергии на способность");
+  map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.criticalSuccess, "Подтасовка: критический успех");
+  map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.success, "Подтасовка: успех");
+  map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.failure, "Подтасовка: провал");
+  map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.criticalFailure, "Подтасовка: критический провал");
   addEffectPathLabels(map, "system.resources", resourceSettings, {
     value: valueLabel,
     max: maximumLabel,

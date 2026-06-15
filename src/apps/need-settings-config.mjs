@@ -9,7 +9,7 @@ import {
   getSkillSettings
 } from "../settings/accessors.mjs";
 import { format, localize } from "../utils/i18n.mjs";
-import { buildActionCostEffectKeyTokens, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import { buildActionCostEffectKeyTokens, buildAllSkillsAdvantageEffectKeyToken, buildAllSkillsDisadvantageEffectKeyToken, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateEffectKeyAutocomplete, createEffectKeyToken } from "./effect-key-autocomplete.mjs";
 import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
@@ -516,6 +516,8 @@ function buildEffectKeyTokens() {
       group: "Навыки"
     })),
     buildAllSkillsEffectKeyToken(),
+    buildAllSkillsAdvantageEffectKeyToken(),
+    buildAllSkillsDisadvantageEffectKeyToken(),
     ...getResourceSettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
       key: entry.key,

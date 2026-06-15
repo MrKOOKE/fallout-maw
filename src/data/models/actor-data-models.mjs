@@ -312,6 +312,8 @@ function skillField() {
     base: new NumberField({ required: true, integer: true, initial: 0 }),
     min: new NumberField({ required: true, integer: true, initial: 0 }),
     bonus: new NumberField({ required: true, integer: true, initial: 0 }),
+    advantage: new NumberField({ required: true, integer: true, min: 0, initial: 0, persisted: false }),
+    disadvantage: new NumberField({ required: true, integer: true, min: 0, initial: 0, persisted: false }),
     developmentBonus: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
     abilityBonus: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
     max: new NumberField({ required: true, integer: true, min: 0, initial: DEFAULT_SKILL_DEVELOPMENT_LIMIT }),
@@ -392,10 +394,12 @@ function normalizeSkillMap(currentSkills = {}, skillSettings = [], skillBases = 
       const current = currentSkills?.[skill.key] ?? {};
       const base = toInteger(skillBases?.[skill.key]);
       const bonus = toInteger(current.bonus);
+      const advantage = Math.max(0, toInteger(current.advantage));
+      const disadvantage = Math.max(0, toInteger(current.disadvantage));
       const developmentBonus = toInteger(skillBonuses?.[skill.key]);
       const abilityBonus = toInteger(abilityBonuses?.[skill.key]);
       const value = Math.min(Math.max(base + bonus + developmentBonus + abilityBonus, min), max);
-      return [skill.key, { base, min, bonus, developmentBonus, abilityBonus, value, max }];
+      return [skill.key, { base, min, bonus, advantage, disadvantage, developmentBonus, abilityBonus, value, max }];
     })
   );
 }
