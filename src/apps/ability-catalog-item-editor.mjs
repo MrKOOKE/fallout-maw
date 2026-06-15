@@ -20,6 +20,7 @@ import {
   normalizeAbilityEntry,
   normalizeCurseAndBlessingSettings,
   normalizeAllOrNothingSettings,
+  normalizeAtRandomSettings,
   normalizeFourLeafCloverSettings,
   normalizeReaperSettings,
   normalizeDeusExMachinaSettings,
@@ -566,6 +567,13 @@ function readFixedFunctionSettings(row) {
       criticalFailureCharges: row.querySelector("[data-field='fixed.fourLeafClover.criticalFailureCharges']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.atRandom) {
+    return {
+      actionPointCostReduction: row.querySelector("[data-field='fixed.atRandom.actionPointCostReduction']")?.value,
+      blockChanceFormula: row.querySelector("[data-field='fixed.atRandom.blockChanceFormula']")?.value,
+      extraBlockChanceFormula: row.querySelector("[data-field='fixed.atRandom.extraBlockChanceFormula']")?.value
+    };
+  }
   if (fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) return {};
   return {
     damageRequired: row.querySelector("[data-field='fixed.damageRequired']")?.value,
@@ -661,6 +669,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedFourLeafCloverSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover
     ? prepareFourLeafCloverSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedAtRandomSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.atRandom
+    ? prepareAtRandomSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const conditions = normalized.conditions.map(condition => prepareConditionForDisplay(condition, {
     changeCount: normalized.changes.length,
     allowLimitedChanges: isEffectChanges
@@ -677,6 +688,7 @@ function prepareFunctionForDisplay(entry) {
     fixedAllOrNothingSettings,
     fixedReaperSettings,
     fixedFourLeafCloverSettings,
+    fixedAtRandomSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: normalized.changes.map(prepareChangeForDisplay),
     conditions,
@@ -738,6 +750,10 @@ function prepareReaperSettingsForDisplay(settings = {}) {
 
 function prepareFourLeafCloverSettingsForDisplay(settings = {}) {
   return normalizeFourLeafCloverSettings(settings);
+}
+
+function prepareAtRandomSettingsForDisplay(settings = {}) {
+  return normalizeAtRandomSettings(settings);
 }
 
 function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedChanges = false } = {}) {

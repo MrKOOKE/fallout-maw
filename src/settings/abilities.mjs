@@ -18,7 +18,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   curseAndBlessing: "curseAndBlessing",
   allOrNothing: "allOrNothing",
   reaper: "reaper",
-  fourLeafClover: "fourLeafClover"
+  fourLeafClover: "fourLeafClover",
+  atRandom: "atRandom"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -504,6 +505,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover) {
     return normalizeFourLeafCloverSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.atRandom) {
+    return normalizeAtRandomSettings(value);
+  }
   return {};
 }
 
@@ -560,6 +564,14 @@ export function normalizeFourLeafCloverSettings(value = {}) {
     currentCharges: Math.max(0, toInteger(value?.currentCharges ?? 0)),
     failureCharges: Math.max(0, toInteger(value?.failureCharges ?? 1)),
     criticalFailureCharges: Math.max(0, toInteger(value?.criticalFailureCharges ?? 3))
+  };
+}
+
+export function normalizeAtRandomSettings(value = {}) {
+  return {
+    actionPointCostReduction: Math.max(0, toInteger(value?.actionPointCostReduction ?? 1)),
+    blockChanceFormula: String(value?.blockChanceFormula ?? "110-gambling/5").trim() || "110-gambling/5",
+    extraBlockChanceFormula: String(value?.extraBlockChanceFormula ?? "60+gambling/5").trim() || "60+gambling/5"
   };
 }
 

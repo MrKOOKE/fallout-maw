@@ -7,11 +7,16 @@ import {
   getAbilitySourceId,
   normalizeAbilityFunctions,
   normalizeAllOrNothingSettings,
+  normalizeAtRandomSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
   normalizeFourLeafCloverSettings,
   normalizeReaperSettings
 } from "../settings/abilities.mjs";
+import {
+  ATTACKING_WEAPON_ACTION_KEYS,
+  getActionBlockEffectKey
+} from "./runtime-state.mjs";
 import {
   DAMAGE_APPLIED_HOOK,
   applyDestroyedLimbConsequences,
@@ -43,6 +48,7 @@ const DEUS_EX_MACHINA_INSIGHT_EFFECT_FLAG_KEY = "deusExMachinaInsight";
 const CURSE_AND_BLESSING_EFFECT_FLAG_KEY = "curseAndBlessing";
 const ABILITY_OVERLOAD_EFFECT_FLAG_KEY = "abilityOverload";
 const ALL_OR_NOTHING_EFFECT_FLAG_KEY = "allOrNothing";
+const AT_RANDOM_ACTION_BLOCK_EFFECT_FLAG_KEY = "atRandomActionBlock";
 const FIXED_ABILITY_SOCKET = `system.${SYSTEM_ID}`;
 const FIXED_ABILITY_SOCKET_SCOPE = "fallout-maw.fixedAbilityFunctions";
 const ENERGY_RESOURCE_KEY = "power";
@@ -92,6 +98,14 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.atRandom,
+    label: "На обум",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.atRandom
+    })
   })
 ]);
 
@@ -105,6 +119,9 @@ export function registerFixedAbilityFunctionHooks() {
   Hooks.on(WEAPON_ATTACK_RESOLVED_HOOK, context => {
     void consumeAllOrNothingResultEffects(context);
     void processReaperAttackResolution(context);
+  });
+  Hooks.on("fallout-maw.weaponActionResolved", context => {
+    void processAtRandomAttackResolution(context);
   });
   Hooks.on("fallout-maw.modifySkillCheck", check => {
     applyFourLeafCloverCriticalBonus(check);
@@ -603,6 +620,102 @@ async function processReaperAttackResolution(context = {}) {
       return;
     }
   }
+}
+
+async function processAtRandomAttackResolution(context = {}) {
+  const actorUuid = String(context?.attackerUuid ?? context?.actorUuid ?? "").trim();
+  const actor = context?.actor ?? (actorUuid ? fromUuidSync(actorUuid) : null);
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
+
+  const entry = getActorAtRandomEntry(actor);
+  if (!entry) return;
+
+  const actionKey = String(context?.actionKey ?? "").trim();
+  if (!ATTACKING_WEAPON_ACTION_KEYS.includes(actionKey)) return;
+
+  const blockedActionKeys = new Set();
+  if (rollAtRandomChance(actor, entry.settings.blockChanceFormula, "На обум: текущее действие")) {
+    blockedActionKeys.add(actionKey);
+  }
+
+  if (rollAtRandomChance(actor, entry.settings.extraBlockChanceFormula, "На обум: случайное действие")) {
+    const candidates = getAtRandomExtraActionCandidates(actionKey);
+    if (candidates.length) {
+      blockedActionKeys.add(candidates[Math.floor(Math.random() * candidates.length)]);
+    }
+  }
+
+  await replaceAtRandomActionBlockEffect(actor, entry.abilityItem, entry.abilityFunction, [...blockedActionKeys]);
+}
+
+function getActorAtRandomEntry(actor) {
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
+    const abilityFunction = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
+      .find(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.atRandom);
+    if (!abilityFunction) continue;
+    return {
+      abilityItem,
+      abilityFunction,
+      settings: normalizeAtRandomSettings(abilityFunction.fixedSettings)
+    };
+  }
+  return null;
+}
+
+function getAtRandomExtraActionCandidates(currentActionKey = "") {
+  const current = String(currentActionKey ?? "").trim();
+  return ATTACKING_WEAPON_ACTION_KEYS.filter(actionKey => actionKey !== current);
+}
+
+function rollAtRandomChance(actor, formula = "", context = "На обум") {
+  const chance = Math.min(100, Math.max(0, evaluateActorFormula(formula, actor, {
+    fallback: 0,
+    minimum: 0,
+    context
+  })));
+  return (Math.floor(Math.random() * 100) + 1) <= chance;
+}
+
+async function replaceAtRandomActionBlockEffect(actor, abilityItem, abilityFunction, actionKeys = []) {
+  const previousEffectIds = Array.from(actor.effects ?? [])
+    .filter(effect => Boolean(effect.getFlag?.(SYSTEM_ID, AT_RANDOM_ACTION_BLOCK_EFFECT_FLAG_KEY)))
+    .map(effect => effect.id)
+    .filter(Boolean);
+  if (previousEffectIds.length) {
+    await actor.deleteEmbeddedDocuments("ActiveEffect", previousEffectIds, { animate: false });
+  }
+
+  const uniqueActionKeys = Array.from(new Set(actionKeys
+    .map(actionKey => String(actionKey ?? "").trim())
+    .filter(actionKey => ATTACKING_WEAPON_ACTION_KEYS.includes(actionKey))));
+  if (!uniqueActionKeys.length) return;
+
+  await actor.createEmbeddedDocuments("ActiveEffect", [{
+    name: "На обум",
+    img: abilityItem.img,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    system: {
+      changes: uniqueActionKeys.map(actionKey => ({
+        key: getActionBlockEffectKey(actionKey),
+        type: "add",
+        value: "1",
+        phase: "initial",
+        priority: null
+      }))
+    },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "temporary",
+        [AT_RANDOM_ACTION_BLOCK_EFFECT_FLAG_KEY]: {
+          abilityItemId: abilityItem.id,
+          functionId: abilityFunction.id,
+          actionKeys: uniqueActionKeys
+        }
+      }
+    }
+  }], { animate: false });
 }
 
 function rollReaperChance(actor, formula = "", context = "Жнец") {

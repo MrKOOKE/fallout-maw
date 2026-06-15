@@ -345,6 +345,28 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedAtRandomSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: На обум</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Атакующие действия</strong>
+          <label>
+            <span>Снижение стоимости ОД</span>
+            <input type="number" data-field="fixed.atRandom.actionPointCostReduction" value="{{fixedAtRandomSettings.actionPointCostReduction}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Формула блокировки</span>
+            <input type="text" data-field="fixed.atRandom.blockChanceFormula" value="{{fixedAtRandomSettings.blockChanceFormula}}" data-formula-autocomplete="all">
+          </label>
+          <label>
+            <span>Формула дополнительной блокировки</span>
+            <input type="text" data-field="fixed.atRandom.extraBlockChanceFormula" value="{{fixedAtRandomSettings.extraBlockChanceFormula}}" data-formula-autocomplete="all">
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{/if}}
 
     {{#unless isFixed}}

@@ -62,7 +62,11 @@ import { requestRepairTarget } from "./repair-dialog.mjs";
 import { openSearchInventoryWindow, requestTradeInventoryWindow } from "./search-inventory.mjs";
 import { openCraftWindow } from "./craft-window.mjs";
 import { openStealthWindow } from "../stealth/index.mjs";
-import { getWeaponActionBlockState } from "../abilities/runtime-state.mjs";
+import {
+  getActorAtRandomActionPointCostReduction,
+  getActorAtRandomActionPointCostSources,
+  getWeaponActionBlockState
+} from "../abilities/runtime-state.mjs";
 import {
   getFixedAbilityToggleState,
   hasActiveFixedAbilityFunction,
@@ -3049,9 +3053,11 @@ function getWeaponActionPointCostForHud(actor, weaponData = {}, actionKey = "") 
 function getWeaponActionPointCostStateForHud(actor, weaponData = {}, actionKey = "", sourceWeaponData = weaponData, { moduleSlots = [] } = {}) {
   const baseCost = getWeaponActionPointBaseCost(sourceWeaponData, actionKey);
   const configuredCost = getWeaponActionPointBaseCost(weaponData, actionKey);
+  const atRandomReduction = getActorAtRandomActionPointCostReduction(actor, actionKey);
   const cost = Math.max(0, Math.ceil(
     applyDamageCostModifier(configuredCost, getDamageCostModifierState(actor, { actionKey }).action)
     + getActorPostureWeaponActionPointCostBonus(actor)
+    - atRandomReduction
   ));
   const tone = cost < baseCost ? "cheaper" : (cost > baseCost ? "dearer" : "");
   const sources = collectActionPointCostSources(actor, {
@@ -3086,6 +3092,18 @@ function collectActionPointCostSources(actor, { actionKey = "", baseCost = 0, co
   for (const source of collectPostureActionPointCostSources(actor, runningCost)) {
     sources.push(source);
     runningCost = Math.max(0, runningCost + source.delta);
+  }
+
+  for (const source of getActorAtRandomActionPointCostSources(actor, actionKey)) {
+    const delta = -Math.min(runningCost, Math.max(0, toInteger(source.reduction)));
+    if (!delta) continue;
+    sources.push({
+      key: source.key,
+      name: source.name,
+      img: normalizeImagePath(source.img, FALLBACK_ICON),
+      delta
+    });
+    runningCost = Math.max(0, runningCost + delta);
   }
 
   return combineActionPointCostSources(sources);

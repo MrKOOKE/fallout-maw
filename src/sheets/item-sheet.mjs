@@ -42,6 +42,7 @@ import {
   createAbilityCondition,
   createAbilityFunction,
   normalizeAllOrNothingSettings,
+  normalizeAtRandomSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
   normalizeFourLeafCloverSettings,
@@ -4286,6 +4287,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedFourLeafCloverSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover
     ? prepareFourLeafCloverSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedAtRandomSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.atRandom
+    ? prepareAtRandomSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -4305,6 +4309,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedAllOrNothingSettings,
     fixedReaperSettings,
     fixedFourLeafCloverSettings,
+    fixedAtRandomSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
@@ -4380,6 +4385,10 @@ function prepareReaperSettingsForDisplay(settings = {}) {
 
 function prepareFourLeafCloverSettingsForDisplay(settings = {}) {
   return normalizeFourLeafCloverSettings(settings);
+}
+
+function prepareAtRandomSettingsForDisplay(settings = {}) {
+  return normalizeAtRandomSettings(settings);
 }
 
 function prepareAbilityConditionForDisplay(condition, functionIndex, index, { changeCount = 0, allowLimitedChanges = false, functionPath = "system.functions" } = {}) {

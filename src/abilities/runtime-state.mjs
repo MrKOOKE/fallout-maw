@@ -1,8 +1,10 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import {
   ABILITY_CONDITION_TYPES,
+  ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
-  normalizeAbilityFunctions
+  normalizeAbilityFunctions,
+  normalizeAtRandomSettings
 } from "../settings/abilities.mjs";
 import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -10,6 +12,15 @@ import { toInteger } from "../utils/numbers.mjs";
 export const ABILITY_FUNCTION_COOLDOWN_FLAG_KEY = "abilityFunctionCooldown";
 export const ABILITY_ITEM_USE_COUNTERS_FLAG_KEY = "abilityItemUseCounters";
 export const ACTION_BLOCK_EFFECT_KEY_PREFIX = "system.blocks.actions.";
+export const ATTACKING_WEAPON_ACTION_KEYS = Object.freeze([
+  "aimedShot",
+  "snapshot",
+  "burst",
+  "volley",
+  "meleeAttack",
+  "aimedMeleeAttack",
+  "push"
+]);
 
 const TRUTHY_EFFECT_FALSE_VALUES = new Set(["", "0", "false", "no", "off"]);
 
@@ -37,6 +48,35 @@ export function getWeaponActionBlockState(actor, actionKey = "") {
 
 export function isWeaponActionBlocked(actor, actionKey = "") {
   return getWeaponActionBlockState(actor, actionKey).blocked;
+}
+
+export function isAttackingWeaponAction(actionKey = "") {
+  return ATTACKING_WEAPON_ACTION_KEYS.includes(String(actionKey ?? "").trim());
+}
+
+export function getActorAtRandomActionPointCostReduction(actor, actionKey = "") {
+  if (!isAttackingWeaponAction(actionKey)) return 0;
+  return getActorAtRandomActionPointCostSources(actor, actionKey)
+    .reduce((total, source) => total + source.reduction, 0);
+}
+
+export function getActorAtRandomActionPointCostSources(actor, actionKey = "") {
+  if (!isAttackingWeaponAction(actionKey)) return [];
+  const sources = [];
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.atRandom) continue;
+      const settings = normalizeAtRandomSettings(abilityFunction.fixedSettings);
+      if (settings.actionPointCostReduction <= 0) continue;
+      sources.push({
+        key: `ability:${abilityItem.id}:${abilityFunction.id}:atRandom`,
+        name: String(abilityItem.name ?? "").trim() || "На обум",
+        img: String(abilityItem.img ?? "").trim(),
+        reduction: settings.actionPointCostReduction
+      });
+    }
+  }
+  return sources;
 }
 
 export function hasAbilityFunctionCooldown(actor, { abilityItemId = "", functionId = "", conditionId = "" } = {}) {

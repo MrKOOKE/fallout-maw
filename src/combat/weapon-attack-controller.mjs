@@ -16,7 +16,10 @@ import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
 import { NATURAL_RACE_WEAPON_SET_KEY, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import { getStealthAttackModifiers, revealActorFromStealth } from "../stealth/index.mjs";
-import { getWeaponActionBlockState } from "../abilities/runtime-state.mjs";
+import {
+  getActorAtRandomActionPointCostReduction,
+  getWeaponActionBlockState
+} from "../abilities/runtime-state.mjs";
 import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
 import { requestPushKnockback } from "./active-actions.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
@@ -2795,7 +2798,8 @@ function getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId = "
     context: "weapon action point cost"
   });
   const modifiedCost = applyDamageCostModifier(baseCost, getDamageCostModifierState(actor, { actionKey }).action);
-  return Math.max(0, Math.ceil(modifiedCost + getActorPostureWeaponActionPointCostBonus(actor)));
+  const atRandomReduction = getActorAtRandomActionPointCostReduction(actor, actionKey);
+  return Math.max(0, Math.ceil(modifiedCost + getActorPostureWeaponActionPointCostBonus(actor) - atRandomReduction));
 }
 
 function hasRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "") {
