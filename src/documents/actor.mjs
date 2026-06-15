@@ -578,17 +578,21 @@ function prepareIntegratedProsthesisHealth(actor) {
   let value = 0;
   let max = 0;
   for (const [limbKey, limb] of Object.entries(actor.system?.limbs ?? {})) {
-    if (!Boolean(limb?.missing)) continue;
     const prosthesis = getInstalledActorProsthesis(actor, limbKey);
-    const contribution = getIntegratedProsthesisHealth(prosthesis, limb);
-    value += contribution.value;
-    max += contribution.max;
+    if (prosthesis) {
+      const contribution = getIntegratedProsthesisHealth(prosthesis, limb);
+      value += contribution.value;
+      max += contribution.max;
+      continue;
+    }
+    if (Boolean(limb?.missing)) continue;
+    value += Math.max(0, toInteger(limb?.value));
+    max += Math.max(0, toInteger(limb?.max));
   }
-  if (max <= 0) return;
 
   const min = Math.max(0, toInteger(health.min));
-  health.max = Math.max(min, toInteger(health.max) + max);
-  health.value = Math.min(Math.max(toInteger(health.value) + value, min), health.max);
+  health.max = Math.max(min, max);
+  health.value = Math.min(Math.max(value, min), health.max);
   health.spent = Math.max(0, health.max - health.value);
 }
 

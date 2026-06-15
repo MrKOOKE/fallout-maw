@@ -4064,14 +4064,14 @@ function getLimbLabel(actor, limbKey = "") {
 function calculateAggregateHealth(actor) {
   const entries = Object.entries(actor?.system?.limbs ?? {}).filter(([_key, limb]) => limb && typeof limb === "object");
   return entries.reduce((result, [limbKey, limb]) => {
-    if (isLimbPhysicallyMissing(actor, limbKey)) {
-      const prosthesis = getInstalledProsthesis(actor, limbKey);
-      if (!prosthesis) return result;
+    const prosthesis = getInstalledProsthesis(actor, limbKey);
+    if (prosthesis) {
       const replacement = getProsthesisHealthForAggregate(prosthesis, limb);
       result.value += replacement.value;
       result.max += replacement.max;
       return result;
     }
+    if (isLimbPhysicallyMissing(actor, limbKey)) return result;
     result.value += Math.max(0, getEffectiveLimbStateValue(actor, limbKey));
     result.max += Math.max(0, toInteger(limb?.max));
     return result;

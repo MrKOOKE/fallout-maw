@@ -438,13 +438,13 @@ function calculateHealthBarMaximums(actor, data = {}) {
   let blockedMax = 0;
   for (const [limbKey, limb] of Object.entries(actor.system?.limbs ?? {})) {
     const limbMax = Math.max(0, toInteger(limb?.max));
-    if (Boolean(limb?.missing)) {
-      const prosthesis = getInstalledProsthesis(actor, limbKey);
+    const prosthesis = getInstalledProsthesis(actor, limbKey);
+    if (prosthesis) {
       const contribution = getIntegratedProsthesisHealth(prosthesis, limb);
-      if (contribution.max > 0) {
-        availableMax += contribution.max;
-        continue;
-      }
+      availableMax += contribution.max;
+      continue;
+    }
+    if (Boolean(limb?.missing)) {
       blockedMax += limbMax;
       continue;
     }
