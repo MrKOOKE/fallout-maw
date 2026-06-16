@@ -87,20 +87,21 @@ async function createThrownItemTileDocument({ sceneId = "", itemData = null, poi
   const scene = game.scenes?.get(sceneId);
   if (!scene || !itemData || !point) return null;
 
-  const size = getDroppedItemTileSize(scene);
+  const image = normalizeImagePath(itemData.img, DEFAULT_TILE_IMAGE);
+  const dimensions = await getDroppedItemTileDimensions(scene, image);
   const x = Math.round(Number(point.x) || 0);
   const y = Math.round(Number(point.y) || 0);
   const created = await scene.createEmbeddedDocuments("Tile", [{
     name: String(itemData.name ?? game.i18n.localize("DOCUMENT.Item")),
     texture: {
-      src: normalizeImagePath(itemData.img, DEFAULT_TILE_IMAGE),
+      src: image,
       anchorX: 0.5,
       anchorY: 0.5
     },
     x,
     y,
-    width: size,
-    height: size,
+    width: dimensions.width,
+    height: dimensions.height,
     elevation: Number.isFinite(Number(point.elevation)) ? Number(point.elevation) : 0,
     sort: getNextTileSort(scene),
     hidden: false,
@@ -508,6 +509,23 @@ function normalizePickedUpItemData(itemData) {
 function getDroppedItemTileSize(scene) {
   const gridSize = Math.max(1, Number(scene?.grid?.size ?? canvas.grid?.size) || 100);
   return Math.max(24, Math.round(gridSize * 0.45));
+}
+
+async function getDroppedItemTileDimensions(scene, image) {
+  const height = getDroppedItemTileSize(scene);
+  let aspectRatio = 1;
+  try {
+    const texture = await foundry.canvas.loadTexture(image);
+    const textureWidth = Number(texture?.width ?? texture?.baseTexture?.width);
+    const textureHeight = Number(texture?.height ?? texture?.baseTexture?.height);
+    if (textureWidth > 0 && textureHeight > 0) aspectRatio = textureWidth / textureHeight;
+  } catch (_error) {
+    aspectRatio = 1;
+  }
+  return {
+    width: Math.max(1, Math.round(height * aspectRatio)),
+    height
+  };
 }
 
 function getNextTileSort(scene) {

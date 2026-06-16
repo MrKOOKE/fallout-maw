@@ -45,6 +45,7 @@ import {
   normalizeAtRandomSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
+  normalizeDisarmSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
   normalizeLuckyCoinSettings,
@@ -4326,6 +4327,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedLuckyCoinSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
     ? prepareLuckyCoinSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedDisarmSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm
+    ? prepareDisarmSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -4348,6 +4352,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedAtRandomSettings,
     fixedLastChanceSettings,
     fixedLuckyCoinSettings,
+    fixedDisarmSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
@@ -4446,6 +4451,19 @@ function prepareLuckyCoinSettingsForDisplay(settings = {}) {
     ...normalized,
     overloadDurationAmount: duration.amount,
     overloadDurationUnitChoices: buildAbilityDurationUnitChoices(duration.unit)
+  };
+}
+
+function prepareDisarmSettingsForDisplay(settings = {}) {
+  const normalized = normalizeDisarmSettings(settings);
+  const activeDuration = splitAbilityDurationSeconds(normalized.activeOverloadDurationSeconds);
+  const reactionDuration = splitAbilityDurationSeconds(normalized.reactionOverloadDurationSeconds);
+  return {
+    ...normalized,
+    activeOverloadDurationAmount: activeDuration.amount,
+    activeOverloadDurationUnitChoices: buildAbilityDurationUnitChoices(activeDuration.unit),
+    reactionOverloadDurationAmount: reactionDuration.amount,
+    reactionOverloadDurationUnitChoices: buildAbilityDurationUnitChoices(reactionDuration.unit)
   };
 }
 
@@ -4928,6 +4946,20 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
         row.querySelector("[data-fixed-lucky-coin-overload-duration-unit]")?.value
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, durationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm) {
+      const activeDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-disarm-active-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-disarm-active-overload-duration-unit]")?.value
+      );
+      const reactionDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-disarm-reaction-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-disarm-reaction-overload-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.activeOverloadDurationSeconds`, activeDurationSeconds);
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.reactionOverloadDurationSeconds`, reactionDurationSeconds);
       continue;
     }
 

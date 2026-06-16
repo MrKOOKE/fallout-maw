@@ -1,5 +1,5 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
-import { getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
+import { getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import {
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
@@ -10,6 +10,7 @@ import {
   normalizeAtRandomSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
+  normalizeDisarmSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
   normalizeLuckyCoinSettings,
@@ -30,7 +31,8 @@ import {
 } from "../combat/damage-hub.mjs";
 import {
   WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK,
-  WEAPON_ATTACK_RESOLVED_HOOK
+  WEAPON_ATTACK_RESOLVED_HOOK,
+  requestWeaponAttackCompletion
 } from "../combat/weapon-attack-controller.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
@@ -48,6 +50,19 @@ import {
   ONE_TIME_SKILL_MODIFIER_FLAG_KEY,
   getPendingOneTimeSkillModifierEffects
 } from "../rolls/one-time-skill-modifiers.mjs";
+import { requestSkillCheck } from "../rolls/skill-check.mjs";
+import { REACTION_EVENT_KEYS, REACTION_RESULT, registerReactionProvider } from "../combat/reaction-hub.mjs";
+import { canSpendCombatActionPoints, spendCombatActionPoints } from "../combat/reaction-resources.mjs";
+import { areTokensAdjacent } from "../combat/active-actions.mjs";
+import { createThrownItemTile } from "../canvas/thrown-items.mjs";
+import { prepareInventoryContext, normalizeImagePath } from "../utils/actor-display-data.mjs";
+import {
+  ROOT_CONTAINER_ID,
+  createStoredPlacement
+} from "../utils/inventory-containers.mjs";
+import { transferItemBetweenActors } from "../apps/search-inventory.mjs";
+import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
+import { isNaturalRaceWeapon } from "../races/natural-items.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -58,6 +73,9 @@ const ABILITY_OVERLOAD_EFFECT_FLAG_KEY = "abilityOverload";
 const ALL_OR_NOTHING_EFFECT_FLAG_KEY = "allOrNothing";
 const AT_RANDOM_ACTION_BLOCK_EFFECT_FLAG_KEY = "atRandomActionBlock";
 const LUCKY_COIN_EFFECT_SOURCE = "luckyCoin";
+const DISARM_REACTION_PROVIDER_ID = "disarm";
+const DISARM_QUERY_NAME = "falloutMawDisarm";
+const DISARM_SOCKET_TIMEOUT_MS = 60000;
 const FIXED_ABILITY_SOCKET = `system.${SYSTEM_ID}`;
 const FIXED_ABILITY_SOCKET_SCOPE = "fallout-maw.fixedAbilityFunctions";
 const ENERGY_RESOURCE_KEY = "power";
@@ -65,6 +83,7 @@ const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const STATUS_EFFECTS = Object.freeze({
   dead: "dead"
 });
+const pendingFixedAbilitySocketRequests = new Map();
 
 const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   Object.freeze({
@@ -131,10 +150,20 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.disarm,
+    label: "Обезоруживание",
+    active: true,
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.disarm
+    })
   })
 ]);
 
 export function registerFixedAbilityFunctionHooks() {
+  registerDisarmReactionProvider();
   registerLethalDamagePreventionHandler(context => processLastChanceLethalDamage(context));
   Hooks.on(DAMAGE_APPLIED_HOOK, context => {
     void advanceDeusExMachinaProgressFromDamage(context?.results ?? []);
@@ -259,6 +288,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
     return true;
   }
 
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm) {
+    const used = await useDisarm(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) {
     const used = await useDeusExMachina(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
@@ -347,6 +382,510 @@ async function useLuckyCoin(actor, abilityItem, abilityFunction) {
     `${lucky ? "Удача улыбнулась вам." : "Удача отвернулась от вас."} ${skill.label}: ${modifier >= 0 ? "+" : ""}${modifier} к следующей проверке.`
   );
   return true;
+}
+
+async function useDisarm(actor, abilityItem, abilityFunction) {
+  const token = getActorSceneToken(actor);
+  const targetToken = getSingleUserTarget();
+  if (!token || !targetToken?.actor) {
+    ui.notifications.warn("Обезоруживание: выберите одну цель.");
+    return false;
+  }
+  if (targetToken.actor.uuid === actor.uuid) {
+    ui.notifications.warn("Обезоруживание: цель не может быть вами.");
+    return false;
+  }
+  if (!areTokensAdjacent(token.document, targetToken.document)) {
+    ui.notifications.warn("Обезоруживание: цель должна быть на соседней клетке.");
+    return false;
+  }
+
+  return requestDisarmOperation({
+    mode: "active",
+    actorUuid: actor.uuid,
+    abilityItemId: abilityItem.id,
+    abilityFunctionId: abilityFunction.id,
+    actorTokenUuid: token.document.uuid,
+    targetTokenUuid: targetToken.document.uuid,
+    senderUserId: game.user?.id ?? ""
+  });
+}
+
+function registerDisarmReactionProvider() {
+  CONFIG.queries[DISARM_QUERY_NAME] = handleDisarmQuery;
+  registerReactionProvider({
+    id: DISARM_REACTION_PROVIDER_ID,
+    collect: collectDisarmReactionOffers,
+    execute: executeDisarmReaction
+  });
+}
+
+async function collectDisarmReactionOffers({ eventKey = "", context = {} } = {}) {
+  if (eventKey !== REACTION_EVENT_KEYS.weaponAttackTargeted) return [];
+  const defender = await fromUuid(String(context.targetActorUuid ?? ""));
+  const attacker = await fromUuid(String(context.attackerActorUuid ?? ""));
+  const defenderToken = await fromUuid(String(context.targetTokenUuid ?? ""));
+  const attackerToken = await fromUuid(String(context.attackerTokenUuid ?? ""));
+  const weapon = await fromUuid(String(context.weaponUuid ?? ""));
+  if (!defender || !attacker || !defenderToken || !attackerToken || !weapon) return [];
+  if (!areTokensAdjacent(defenderToken, attackerToken)) return [];
+  if (!isDisarmableWeapon(weapon)) return [];
+
+  const entry = getActorDisarmEntry(defender);
+  if (!entry) return [];
+  const settings = entry.settings;
+  const energyCost = getAbilityEnergyCost(defender, entry.abilityItem, entry.abilityFunction, settings.reactionEnergyCost);
+  if (!hasEnergy(defender, energyCost)) return [];
+  if (!canSpendCombatActionPoints(defender, settings.reactionActionPointCost, { label: "реакции" })) return [];
+
+  return [{
+    actorUuid: defender.uuid,
+    reactionId: DISARM_REACTION_PROVIDER_ID,
+    offerId: `${DISARM_REACTION_PROVIDER_ID}:${defender.uuid}:${context.attackId ?? foundry.utils.randomID()}`,
+    label: "Обезоруживание",
+    description: `Отнять ${weapon.name} до проверки атаки.`,
+    img: entry.abilityItem.img || "icons/svg/combat.svg",
+    costLines: [
+      `Энергия: ${settings.reactionEnergyCost} базовая / ${energyCost} итоговая`,
+      `ОР: ${settings.reactionActionPointCost}`
+    ],
+    abilityItemId: entry.abilityItem.id,
+    abilityFunctionId: entry.abilityFunction.id,
+    energyCost
+  }];
+}
+
+async function executeDisarmReaction({ context = {}, offer = {} } = {}) {
+  const defender = await fromUuid(String(offer.actorUuid ?? ""));
+  const attacker = await fromUuid(String(context.attackerActorUuid ?? ""));
+  const defenderToken = await fromUuid(String(context.targetTokenUuid ?? ""));
+  const attackerToken = await fromUuid(String(context.attackerTokenUuid ?? ""));
+  const weapon = await fromUuid(String(context.weaponUuid ?? ""));
+  const entry = getActorDisarmEntry(defender, offer);
+  if (!defender || !attacker || !defenderToken || !attackerToken || !weapon || !entry) return { handled: false };
+  const settings = entry.settings;
+  const energyCost = getAbilityEnergyCost(defender, entry.abilityItem, entry.abilityFunction, settings.reactionEnergyCost);
+  if (!isDisarmableWeapon(weapon) || !areTokensAdjacent(defenderToken, attackerToken)) return { handled: false };
+  if (!hasEnergy(defender, energyCost)) return { handled: false };
+  if (!canSpendCombatActionPoints(defender, settings.reactionActionPointCost, { label: "реакции" })) return { handled: false };
+
+  await spendEnergy(defender, energyCost);
+  if (settings.reactionActionPointCost > 0) await spendCombatActionPoints(defender, settings.reactionActionPointCost);
+  await applyAbilityOverloadEffect(defender, entry.abilityItem, entry.abilityFunction, {
+    name: "Перегрузка: Обезоруживание",
+    energyCost: settings.reactionOverloadEnergyCost,
+    durationSeconds: settings.reactionOverloadDurationSeconds
+  });
+
+  const success = await rollDisarmCheck({
+    actor: defender,
+    targetActor: attacker,
+    actorToken: defenderToken.object ?? defenderToken,
+    targetToken: attackerToken.object ?? attackerToken,
+    difficultyBase: settings.reactionDifficultyBase,
+    label: "Обезоруживание: реакция"
+  });
+  if (!success) {
+    await createAbilityChatMessage(defender, entry.abilityItem, `Обезоруживание: ${defender.name} не смог отнять ${weapon.name}.`);
+    return { handled: true, status: REACTION_RESULT.failed };
+  }
+  requestWeaponAttackCompletion({ attackId: context.attackId });
+  const moved = await moveDisarmedWeapon({
+    sourceActor: attacker,
+    targetActor: defender,
+    sourceWeapon: weapon,
+    targetToken: defenderToken,
+    actingUserId: getActorResponsibleUserId(defender)
+  });
+  await createAbilityChatMessage(
+    defender,
+    entry.abilityItem,
+    moved
+      ? `Обезоруживание: ${defender.name} отнял ${weapon.name} у ${attacker.name}.`
+      : `Обезоруживание: ${defender.name} не смог разместить ${weapon.name}.`
+  );
+  return {
+    handled: true,
+    status: REACTION_RESULT.success,
+    cancelCurrent: true,
+    cancelRemaining: true
+  };
+}
+
+async function requestDisarmOperation(payload = {}) {
+  if (game.user?.isGM) return processDisarmOperation(payload);
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Обезоруживание: нет активного GM для выполнения.");
+    return false;
+  }
+  const requestId = foundry.utils.randomID();
+  return new Promise(resolve => {
+    const timeout = window.setTimeout(() => {
+      pendingFixedAbilitySocketRequests.delete(requestId);
+      resolve(false);
+    }, DISARM_SOCKET_TIMEOUT_MS);
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout });
+    game.socket.emit(FIXED_ABILITY_SOCKET, {
+      scope: FIXED_ABILITY_SOCKET_SCOPE,
+      action: "performDisarm",
+      requestId,
+      gmUserId: gm.id,
+      senderUserId: game.user?.id ?? "",
+      payload
+    });
+  });
+}
+
+async function processDisarmSocketRequest(message = {}) {
+  const result = await processDisarmOperation({
+    ...(message.payload ?? {}),
+    senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
+  });
+  game.socket.emit(FIXED_ABILITY_SOCKET, {
+    scope: FIXED_ABILITY_SOCKET_SCOPE,
+    action: "disarmResult",
+    requestId: message.requestId,
+    targetUserId: message.senderUserId ?? "",
+    result: { used: Boolean(result) }
+  });
+}
+
+async function processDisarmOperation(payload = {}) {
+  const actor = await fromUuid(String(payload.actorUuid ?? ""));
+  const targetTokenDocument = await fromUuid(String(payload.targetTokenUuid ?? ""));
+  const actorTokenDocument = await fromUuid(String(payload.actorTokenUuid ?? ""));
+  const abilityItem = actor?.items?.get(String(payload.abilityItemId ?? ""));
+  const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+    .find(entry => entry.id === payload.abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm);
+  const sender = game.users?.get(String(payload.senderUserId ?? ""));
+  if (!actor || !targetTokenDocument?.actor || !actorTokenDocument || !abilityItem || !abilityFunction) return false;
+  if (sender && !sender.isGM && !actor.testUserPermission(sender, "OWNER")) return false;
+  if (!areTokensAdjacent(actorTokenDocument, targetTokenDocument)) return false;
+
+  const settings = normalizeDisarmSettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activeEnergyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`Обезоруживание: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!canSpendCombatActionPoints(actor, settings.activeActionPointCost, { label: "обезоруживания" })) return false;
+
+  const sourceWeapon = await promptDisarmSourceWeapon(targetTokenDocument.actor, payload.senderUserId);
+  if (!sourceWeapon) return false;
+  if (!isDisarmableWeapon(sourceWeapon)) return false;
+
+  await spendEnergy(actor, energyCost);
+  if (settings.activeActionPointCost > 0) await spendCombatActionPoints(actor, settings.activeActionPointCost);
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: "Перегрузка: Обезоруживание",
+    energyCost: settings.activeOverloadEnergyCost,
+    durationSeconds: settings.activeOverloadDurationSeconds
+  });
+
+  const success = await rollDisarmCheck({
+    actor,
+    targetActor: targetTokenDocument.actor,
+    actorToken: actorTokenDocument.object ?? actorTokenDocument,
+    targetToken: targetTokenDocument.object ?? targetTokenDocument,
+    difficultyBase: settings.activeDifficultyBase,
+    label: "Обезоруживание"
+  });
+  if (!success) {
+    await createAbilityChatMessage(actor, abilityItem, `Обезоруживание: ${actor.name} не смог отнять ${sourceWeapon.name}.`);
+    return true;
+  }
+
+  const moved = await moveDisarmedWeapon({
+    sourceActor: targetTokenDocument.actor,
+    targetActor: actor,
+    sourceWeapon,
+    targetToken: actorTokenDocument,
+    actingUserId: payload.senderUserId ?? getActorResponsibleUserId(actor)
+  });
+  await createAbilityChatMessage(
+    actor,
+    abilityItem,
+    moved
+      ? `Обезоруживание: ${actor.name} отнял ${sourceWeapon.name} у ${targetTokenDocument.actor.name}.`
+      : `Обезоруживание: ${actor.name} не смог разместить ${sourceWeapon.name}.`
+  );
+  return true;
+}
+
+async function promptDisarmSourceWeapon(actor, userId = "") {
+  const weapons = getDisarmableWeapons(actor);
+  if (!weapons.length) {
+    ui.notifications.warn("Обезоруживание: у цели нет оружия, которое можно отнять.");
+    return null;
+  }
+  if (weapons.length === 1) return weapons[0];
+  const result = await queryDisarmUser(userId, {
+    mode: "sourceWeapon",
+    title: "Обезоруживание: выбор оружия",
+    weapons: weapons.map(weapon => ({
+      id: weapon.id,
+      name: weapon.name,
+      img: normalizeImagePath(weapon.img, "icons/svg/combat.svg")
+    }))
+  });
+  return actor.items?.get(String(result?.weaponId ?? "")) ?? null;
+}
+
+async function promptDisarmDestination(actor, sourceWeapon, userId = "") {
+  return queryDisarmUser(userId || getActorResponsibleUserId(actor), {
+    mode: "destination",
+    title: "Обезоруживание: размещение оружия",
+    weaponName: sourceWeapon?.name ?? "",
+    weaponImg: normalizeImagePath(sourceWeapon?.img, "icons/svg/combat.svg")
+  });
+}
+
+async function queryDisarmUser(userId = "", data = {}) {
+  const user = game.users?.get(String(userId ?? "")) ?? getResponsibleGM();
+  if (!user) return null;
+  try {
+    if (user.isSelf) return handleDisarmQuery(data);
+    return user.query(DISARM_QUERY_NAME, data, { timeout: 30000 });
+  } catch (error) {
+    console.warn(`${SYSTEM_ID} | Disarm query failed`, error);
+    return null;
+  }
+}
+
+async function handleDisarmQuery(data = {}) {
+  const mode = String(data.mode ?? "");
+  if (mode === "sourceWeapon") {
+    const weapons = Array.isArray(data.weapons) ? data.weapons : [];
+    const options = weapons.map((weapon, index) => `
+      <label class="fallout-maw-radio-card">
+        <input type="radio" name="weaponId" value="${escapeAttribute(weapon.id)}" ${index === 0 ? "checked" : ""}>
+        <span><strong>${escapeHTML(weapon.name)}</strong></span>
+      </label>
+    `).join("");
+    return DialogV2.input({
+      window: { title: String(data.title ?? "Обезоруживание") },
+      content: `<div class="fallout-maw-disarm-choice-grid">${options}</div>`,
+      ok: {
+        label: "Выбрать",
+        icon: "fa-solid fa-hand",
+        callback: (_event, button) => new FormDataExtended(button.form).object
+      },
+      buttons: [{ action: "cancel", label: game.i18n.localize("FALLOUTMAW.Common.Cancel") }],
+      position: { width: 460 },
+      rejectClose: false
+    });
+  }
+  if (mode === "destination") {
+    return DialogV2.input({
+      window: { title: String(data.title ?? "Обезоруживание") },
+      content: `
+        <div class="fallout-maw-disarm-destination">
+          <p>Куда поместить <strong>${escapeHTML(data.weaponName)}</strong>?</p>
+          <label class="fallout-maw-radio-card">
+            <input type="radio" name="destination" value="replace" checked>
+            <span><strong>Заменить текущее оружие</strong></span>
+          </label>
+          <label class="fallout-maw-radio-card">
+            <input type="radio" name="destination" value="inventory">
+            <span><strong>Убрать в инвентарь</strong></span>
+          </label>
+          <label class="fallout-maw-radio-card">
+            <input type="radio" name="destination" value="drop">
+            <span><strong>Бросить на землю</strong></span>
+          </label>
+        </div>
+      `,
+      ok: {
+        label: "Разместить",
+        icon: "fa-solid fa-check",
+        callback: (_event, button) => new FormDataExtended(button.form).object
+      },
+      position: { width: 440 },
+      rejectClose: false,
+      close: () => ({ destination: "drop" })
+    });
+  }
+  return null;
+}
+
+async function rollDisarmCheck({ actor, targetActor, actorToken = null, targetToken = null, difficultyBase = 0, label = "Обезоруживание" } = {}) {
+  const outcome = await requestSkillCheck({
+    actor,
+    skillKey: "athletics",
+    data: {
+      difficulty: Math.max(0, toInteger(difficultyBase)) + getActorSkillValue(targetActor, "resilience"),
+      actorToken,
+      targetToken,
+      targetActor
+    },
+    animate: false,
+    createMessage: true,
+    prompt: false,
+    requester: "disarm",
+    messageData: { title: label }
+  });
+  return ["success", "criticalSuccess"].includes(String(outcome?.result?.key ?? ""));
+}
+
+async function moveDisarmedWeapon({ sourceActor, targetActor, sourceWeapon, targetToken = null, actingUserId = "" } = {}) {
+  if (!sourceActor || !targetActor || !sourceWeapon) return false;
+  const destination = await promptDisarmDestination(targetActor, sourceWeapon, actingUserId);
+  const requested = String(destination?.destination ?? "drop");
+  if (requested === "drop") return dropDisarmedWeaponOnGround({ sourceActor, sourceWeapon, targetToken });
+  const attempts = requested === "replace"
+    ? [getSelectedWeaponPlacement(targetActor)]
+    : [{ mode: "inventory" }];
+
+  for (const placement of attempts.filter(Boolean)) {
+    const moved = await tryTransferDisarmedWeapon({ sourceActor, targetActor, sourceWeapon, placement });
+    if (moved) return true;
+  }
+  ui.notifications.warn(`Обезоруживание: не удалось разместить ${sourceWeapon.name} у ${targetActor.name}.`);
+  return false;
+}
+
+async function dropDisarmedWeaponOnGround({ sourceActor, sourceWeapon, targetToken = null } = {}) {
+  const itemData = sourceWeapon?.toObject?.();
+  if (!itemData || !sourceActor) return false;
+  delete itemData._id;
+  delete itemData.id;
+  foundry.utils.setProperty(itemData, "system.equipped", false);
+  foundry.utils.setProperty(itemData, "system.container.parentId", ROOT_CONTAINER_ID);
+  foundry.utils.setProperty(itemData, "system.placement", createStoredPlacement({ mode: "inventory", x: 1, y: 1 }, itemData));
+  const point = getTokenCenterPoint(targetToken) ?? { x: 0, y: 0 };
+  const tile = await createThrownItemTile({
+    sceneId: canvas.scene?.id ?? targetToken?.parent?.id ?? "",
+    itemData,
+    point,
+    sourceActorUuid: sourceActor.uuid,
+    sourceItemUuid: sourceWeapon.uuid,
+    sourceUserId: game.user?.id ?? "",
+    combatId: game.combat?.id ?? ""
+  });
+  if (!tile && game.user?.isGM) return false;
+  await sourceActor.deleteEmbeddedDocuments("Item", [sourceWeapon.id]);
+  return true;
+}
+
+async function tryTransferDisarmedWeapon({ sourceActor, targetActor, sourceWeapon, placement = {} } = {}) {
+  const mode = String(placement.mode ?? "inventory");
+  const parentIds = mode === "inventory"
+    ? getDisarmInventoryParentIds(targetActor)
+    : [ROOT_CONTAINER_ID];
+  for (const parentId of parentIds) {
+    try {
+      await transferItemBetweenActors({
+        sourceActor,
+        targetActor,
+        sourceItem: sourceWeapon,
+        targetMode: mode,
+        targetParentId: parentId,
+        targetWeaponSet: placement.weaponSet ?? "",
+        targetWeaponSlot: placement.weaponSlot ?? "",
+        quantity: 1,
+        allowLocked: true,
+        spendWeaponSwitchCost: false
+      });
+      return true;
+    } catch (_error) {
+      continue;
+    }
+  }
+  return false;
+}
+
+function getDisarmableWeapons(actor) {
+  return (actor?.items?.contents ?? []).filter(isDisarmableWeapon);
+}
+
+function isDisarmableWeapon(item) {
+  return Boolean(
+    item
+    && item.type === "gear"
+    && String(item.system?.placement?.mode ?? "") === "weapon"
+    && !isNaturalRaceWeapon(item)
+    && hasItemFunction(item, ITEM_FUNCTIONS.weapon, { ignoreBroken: true })
+  );
+}
+
+function getActorDisarmEntry(actor, offer = null) {
+  const abilityItemId = String(offer?.abilityItemId ?? "");
+  const abilityFunctionId = String(offer?.abilityFunctionId ?? "");
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
+    if (abilityItemId && abilityItem.id !== abilityItemId) continue;
+    const abilityFunction = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
+      .find(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm && (!abilityFunctionId || entry.id === abilityFunctionId));
+    if (!abilityFunction) continue;
+    return {
+      abilityItem,
+      abilityFunction,
+      settings: normalizeDisarmSettings(abilityFunction.fixedSettings)
+    };
+  }
+  return null;
+}
+
+function getSelectedWeaponPlacement(actor) {
+  const selectedId = String(actor?.getFlag?.(SYSTEM_ID, "selectedHudWeaponItemId") ?? "");
+  const selected = selectedId ? actor.items?.get(selectedId) : null;
+  const placement = selected?.system?.placement ?? {};
+  if (selected && placement.mode === "weapon") return {
+    mode: "weapon",
+    weaponSet: placement.weaponSet,
+    weaponSlot: placement.weaponSlot
+  };
+  const first = getDisarmableWeapons(actor).at(0);
+  const firstPlacement = first?.system?.placement ?? {};
+  if (first && firstPlacement.mode === "weapon") return {
+    mode: "weapon",
+    weaponSet: firstPlacement.weaponSet,
+    weaponSlot: firstPlacement.weaponSlot
+  };
+  return null;
+}
+
+function getDisarmInventoryParentIds(actor) {
+  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId) ?? null;
+  const inventory = prepareInventoryContext(actor, race, { includeLocked: false });
+  return [
+    ROOT_CONTAINER_ID,
+    ...(inventory.containers ?? []).map(container => String(container?.id ?? "")).filter(Boolean)
+  ];
+}
+
+function getActorSkillValue(actor, skillKey = "") {
+  return toInteger(actor?.system?.skills?.[skillKey]?.value);
+}
+
+function getActorSceneToken(actor) {
+  return canvas.tokens?.placeables?.find(token => token?.actor?.uuid === actor?.uuid) ?? null;
+}
+
+function getSingleUserTarget() {
+  const targets = Array.from(game.user?.targets ?? []);
+  return targets.length === 1 ? targets[0] : null;
+}
+
+function getTokenCenterPoint(tokenDocument = null) {
+  const document = tokenDocument?.document ?? tokenDocument;
+  const center = document?.getCenterPoint?.();
+  if (center) return center;
+  const size = document?.getSize?.() ?? {};
+  return document ? {
+    x: (Number(document.x) || 0) + ((Number(size.width) || Number(document.width) || 1) / 2),
+    y: (Number(document.y) || 0) + ((Number(size.height) || Number(document.height) || 1) / 2)
+  } : null;
+}
+
+function getActorResponsibleUserId(actor) {
+  return (game.users?.contents ?? [])
+    .filter(user => user.active && !user.isGM && actor?.testUserPermission?.(user, "OWNER"))
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .at(0)?.id
+    ?? getResponsibleGM()?.id
+    ?? game.user?.id
+    ?? "";
 }
 
 function hasPendingLuckyCoinEffect(actor) {
@@ -480,12 +1019,27 @@ async function requestCurseAndBlessingAttackResolution(context = {}) {
 
 function handleFixedAbilitySocketMessage(message = {}) {
   if (message?.scope !== FIXED_ABILITY_SOCKET_SCOPE) return;
-  if (message.action !== "resolveCurseAndBlessingAttack") return;
-  if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
-  void processCurseAndBlessingAttackResolution({
-    ...(message.payload ?? {}),
-    senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
-  });
+  if (message.action === "resolveCurseAndBlessingAttack") {
+    if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+    void processCurseAndBlessingAttackResolution({
+      ...(message.payload ?? {}),
+      senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
+    });
+    return;
+  }
+  if (message.action === "performDisarm") {
+    if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+    void processDisarmSocketRequest(message);
+    return;
+  }
+  if (message.action === "disarmResult") {
+    if (message.targetUserId !== game.user?.id) return;
+    const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
+    if (!pending) return;
+    window.clearTimeout(pending.timeout);
+    pendingFixedAbilitySocketRequests.delete(message.requestId);
+    pending.resolve(Boolean(message.result?.used));
+  }
 }
 
 async function processCurseAndBlessingAttackResolution({ attackerUuid = "", targetUuids = [], senderUserId = "" } = {}) {
@@ -753,6 +1307,7 @@ async function applyAllOrNothingResultEffect(actor, abilityItem, abilityFunction
 }
 
 async function consumeAllOrNothingResultEffects(context = {}) {
+  if (context?.canceledByReaction && toInteger(context?.attackCheckCount) <= 0) return;
   const actorUuid = String(context?.attackerUuid ?? context?.actorUuid ?? "").trim();
   const actor = actorUuid ? fromUuidSync(actorUuid) : null;
   if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
@@ -765,6 +1320,7 @@ async function consumeAllOrNothingResultEffects(context = {}) {
 }
 
 async function processReaperAttackResolution(context = {}) {
+  if (context?.canceledByReaction) return;
   const actorUuid = String(context?.attackerUuid ?? context?.actorUuid ?? "").trim();
   const actor = actorUuid ? fromUuidSync(actorUuid) : null;
   if (!actor || (!game.user?.isGM && !actor.isOwner)) return;

@@ -1272,6 +1272,83 @@
   margin-top: 0.5rem;
 }
 
+.fallout-maw-reaction-dialog,
+.fallout-maw-disarm-destination {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.fallout-maw-reaction-options,
+.fallout-maw-disarm-choice-grid {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.fallout-maw-reaction-timer {
+  height: 4px;
+  overflow: hidden;
+  background: rgba(212, 181, 93, 0.18);
+  border: 1px solid rgba(212, 181, 93, 0.28);
+}
+
+.fallout-maw-reaction-timer span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #d4b55d;
+  transform-origin: left center;
+  animation-name: fallout-maw-reaction-timer-drain;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes fallout-maw-reaction-timer-drain {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+.fallout-maw-reaction-option {
+  display: grid;
+  grid-template-columns: auto 42px minmax(0, 1fr);
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.55rem;
+  border: 1px solid rgba(212, 181, 93, 0.35);
+  background: rgba(8, 12, 8, 0.72);
+}
+
+.fallout-maw-reaction-option img {
+  width: 42px;
+  height: 42px;
+  object-fit: cover;
+}
+
+.fallout-maw-reaction-option span {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.fallout-maw-reaction-option small,
+.fallout-maw-reaction-option em {
+  font-style: normal;
+  opacity: 0.82;
+}
+
+.fallout-maw-reaction-notice {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.fallout-maw-reaction-notice p,
+.fallout-maw-reaction-notice ul {
+  margin: 0;
+}
+
+.fallout-maw-reaction-notice ul {
+  padding-left: 1.15rem;
+}
+
 .fallout-maw-fixed-function-dialog {
   display: grid;
   gap: 0.5rem;

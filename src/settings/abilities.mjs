@@ -21,7 +21,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   fourLeafClover: "fourLeafClover",
   atRandom: "atRandom",
   lastChance: "lastChance",
-  luckyCoin: "luckyCoin"
+  luckyCoin: "luckyCoin",
+  disarm: "disarm"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -526,6 +527,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin) {
     return normalizeLuckyCoinSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm) {
+    return normalizeDisarmSettings(value);
+  }
   return {};
 }
 
@@ -610,6 +614,21 @@ export function normalizeLuckyCoinSettings(value = {}) {
     failurePenaltyFormula: String(value?.failurePenaltyFormula ?? "5+gambling/10").trim() || "5+gambling/10",
     overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 10)),
     overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 3600))
+  };
+}
+
+export function normalizeDisarmSettings(value = {}) {
+  return {
+    activeEnergyCost: Math.max(0, toInteger(value?.activeEnergyCost ?? value?.energyCost ?? 30)),
+    activeActionPointCost: Math.max(0, toInteger(value?.activeActionPointCost ?? 3)),
+    activeDifficultyBase: Math.max(0, toInteger(value?.activeDifficultyBase ?? 50)),
+    activeOverloadEnergyCost: Math.max(0, toInteger(value?.activeOverloadEnergyCost ?? value?.overloadEnergyCost ?? 50)),
+    activeOverloadDurationSeconds: Math.max(0, toInteger(value?.activeOverloadDurationSeconds ?? value?.overloadDurationSeconds ?? 12)),
+    reactionEnergyCost: Math.max(0, toInteger(value?.reactionEnergyCost ?? 20)),
+    reactionActionPointCost: Math.max(0, toInteger(value?.reactionActionPointCost ?? 2)),
+    reactionDifficultyBase: Math.max(0, toInteger(value?.reactionDifficultyBase ?? 20)),
+    reactionOverloadEnergyCost: Math.max(0, toInteger(value?.reactionOverloadEnergyCost ?? 20)),
+    reactionOverloadDurationSeconds: Math.max(0, toInteger(value?.reactionOverloadDurationSeconds ?? 6))
   };
 }
 

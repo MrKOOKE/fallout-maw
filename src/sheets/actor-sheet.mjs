@@ -133,6 +133,7 @@ import {
   normalizeAbilityFunctions,
   normalizeAllOrNothingSettings,
   normalizeCurseAndBlessingSettings,
+  normalizeDisarmSettings,
   normalizeLastChanceSettings,
   normalizeLuckyCoinSettings
 } from "../settings/abilities.mjs";
@@ -3506,8 +3507,20 @@ function buildAbilityEnergyCostRows(item, actor = null) {
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm
     ));
   if (!entry) return [];
+  if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm) {
+    const settings = normalizeDisarmSettings(entry.fixedSettings);
+    const activeBase = Math.max(0, toInteger(settings.activeEnergyCost));
+    const reactionBase = Math.max(0, toInteger(settings.reactionEnergyCost));
+    return [
+      ["Активация: базовый расход", String(activeBase)],
+      ["Активация: итог", String(getFixedAbilityEnergyCost(actor, item, entry, activeBase))],
+      ["Реакция: базовый расход", String(reactionBase)],
+      ["Реакция: итог", String(getFixedAbilityEnergyCost(actor, item, entry, reactionBase))]
+    ];
+  }
   const settings = entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
     ? normalizeAllOrNothingSettings(entry.fixedSettings)
     : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance

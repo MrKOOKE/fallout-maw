@@ -4536,7 +4536,8 @@ export async function transferItemBetweenActors({
   targetY = null,
   targetItemId = "",
   quantity = 0,
-  allowLocked = false
+  allowLocked = false,
+  spendWeaponSwitchCost = true
 } = {}) {
   assertSearchTransferableItem(sourceItem, { allowLocked });
   const itemData = sourceItem.toObject();
@@ -4563,9 +4564,9 @@ export async function transferItemBetweenActors({
   if (!preferredPlacement) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
 
   if (!isInventoryContextPlacementMode(preferredPlacement.mode)) {
-    if (sourceActor.uuid === targetActor.uuid) return moveOwnedItemToActorPlacement(targetActor, sourceItem, preferredPlacement);
+    if (sourceActor.uuid === targetActor.uuid) return moveOwnedItemToActorPlacement(targetActor, sourceItem, preferredPlacement, { spendWeaponSwitchCost });
     if (isContainerItem(sourceItem)) return transferContainerTree({ sourceActor, targetActor, sourceItem, targetParentId: ROOT_CONTAINER_ID, preferredPlacement });
-    return createExternalPlacedItem(targetActor, itemData, preferredPlacement, { sourceActor, sourceItem });
+    return createExternalPlacedItem(targetActor, itemData, preferredPlacement, { sourceActor, sourceItem, spendWeaponSwitchCost });
   }
 
   if (sourceActor.uuid === targetActor.uuid) {
@@ -4588,11 +4589,11 @@ export async function transferItemBetweenActors({
   });
 }
 
-async function moveOwnedItemToActorPlacement(actor, item, placement) {
+async function moveOwnedItemToActorPlacement(actor, item, placement, { spendWeaponSwitchCost = true } = {}) {
   const placementResolution = resolveActorPlacementWithReplacements(actor, item.toObject(), placement, [item.id]);
   if (!placementResolution) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
   const { placement: resolvedPlacement, conflicts } = placementResolution;
-  const spendsWeaponSwitch = resolvedPlacement.mode === "weapon";
+  const spendsWeaponSwitch = spendWeaponSwitchCost && resolvedPlacement.mode === "weapon";
   if (spendsWeaponSwitch && !canSpendWeaponSwitchActionPoints(actor)) return null;
   const updateData = createPlacementItemUpdate(item.id, getItemQuantity(item), ROOT_CONTAINER_ID, resolvedPlacement, item, {
     equipped: resolvedPlacement.mode === "equipment"
@@ -4608,11 +4609,11 @@ async function moveOwnedItemToActorPlacement(actor, item, placement) {
   return result;
 }
 
-async function createExternalPlacedItem(actor, itemData, placement, { sourceActor, sourceItem } = {}) {
+async function createExternalPlacedItem(actor, itemData, placement, { sourceActor, sourceItem, spendWeaponSwitchCost = true } = {}) {
   const placementResolution = resolveActorPlacementWithReplacements(actor, itemData, placement);
   if (!placementResolution) throw new Error(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
   const { placement: resolvedPlacement, conflicts } = placementResolution;
-  const spendsWeaponSwitch = resolvedPlacement.mode === "weapon";
+  const spendsWeaponSwitch = spendWeaponSwitchCost && resolvedPlacement.mode === "weapon";
   if (spendsWeaponSwitch && !canSpendWeaponSwitchActionPoints(actor)) return null;
   const createData = createInventoryStackData(itemData, getItemQuantity(itemData), ROOT_CONTAINER_ID, resolvedPlacement, {
     equipped: resolvedPlacement.mode === "equipment"

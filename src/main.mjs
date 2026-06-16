@@ -9,6 +9,7 @@ import { registerTrapHooks } from "./canvas/traps.mjs";
 import { registerCombatDodgeHooks, registerCombatDodgeSocket } from "./combat/dodge-resource.mjs";
 import { registerCombatMovementHooks } from "./combat/movement-resources.mjs";
 import { registerReactionResourceHooks } from "./combat/reaction-resources.mjs";
+import { registerReactionHubConfig, registerReactionHubSocket } from "./combat/reaction-hub.mjs";
 import { registerActiveActionHooks, registerActiveActionSocket } from "./combat/active-actions.mjs";
 import { registerDataModels, registerTrackableAttributes } from "./data/index.mjs";
 import { FalloutMaWActor, FalloutMaWCombat, FalloutMaWItem } from "./documents/index.mjs";
@@ -89,6 +90,7 @@ Hooks.once("init", () => {
   CONFIG.time.turnTime = 0;
   CONFIG.ActiveEffect.expiryAction = "delete";
   registerDamageHubConfig();
+  registerReactionHubConfig();
   CONFIG.ux.DragDrop = FalloutMaWDragDrop;
 
   registerSystemSettings();
@@ -192,6 +194,7 @@ Hooks.once("ready", async () => {
   refreshSkillCheckControlButton();
   registerSkillCheckSocket();
   registerDamageSocket();
+  registerReactionHubSocket();
   registerAttackAnimationSocket();
   registerCombatDodgeSocket();
   registerCoverSocket();
