@@ -35,6 +35,9 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   targetType: "targetType",
   posture: "posture",
   occupiedCover: "occupiedCover",
+  weaponAction: "weaponAction",
+  weaponSkill: "weaponSkill",
+  weaponProficiency: "weaponProficiency",
   limitedChanges: "limitedChanges",
   cooldown: "cooldown",
   itemUse: "itemUse"
@@ -406,6 +409,33 @@ function normalizeAbilityCondition(value = {}) {
     };
   }
 
+  if (type === ABILITY_CONDITION_TYPES.weaponAction) {
+    return {
+      id,
+      groupId,
+      type,
+      weaponActionKeys: normalizeConditionKeyList(value?.weaponActionKeys, value?.weaponActionKey)
+    };
+  }
+
+  if (type === ABILITY_CONDITION_TYPES.weaponSkill) {
+    return {
+      id,
+      groupId,
+      type,
+      skillKeys: normalizeConditionKeyList(value?.skillKeys, value?.skillKey)
+    };
+  }
+
+  if (type === ABILITY_CONDITION_TYPES.weaponProficiency) {
+    return {
+      id,
+      groupId,
+      type,
+      proficiencyKeys: normalizeConditionKeyList(value?.proficiencyKeys, value?.proficiencyKey)
+    };
+  }
+
   if (type === ABILITY_CONDITION_TYPES.limitedChanges) {
     return {
       id,
@@ -494,6 +524,13 @@ function normalizeStringList(value = []) {
     ? value
     : value && typeof value === "object" ? Object.values(value) : [value];
   return Array.from(new Set(source.map(entry => String(entry ?? "").trim()).filter(Boolean)));
+}
+
+function normalizeConditionKeyList(value = [], previous = "") {
+  const normalized = normalizeStringList(value);
+  const previousKey = String(previous ?? "").trim();
+  if (previousKey && !normalized.includes(previousKey)) normalized.push(previousKey);
+  return normalized;
 }
 
 function normalizeFixedFunctionKey(value = "") {

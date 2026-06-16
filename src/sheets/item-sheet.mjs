@@ -772,6 +772,24 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-delete-ability-cover]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAbilityCover(event));
     });
+    this.element?.querySelectorAll("[data-add-ability-weapon-action]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityWeaponAction(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-weapon-action]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityWeaponAction(event));
+    });
+    this.element?.querySelectorAll("[data-add-ability-weapon-skill]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityWeaponSkill(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-weapon-skill]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityWeaponSkill(event));
+    });
+    this.element?.querySelectorAll("[data-add-ability-weapon-proficiency]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityWeaponProficiency(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-weapon-proficiency]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityWeaponProficiency(event));
+    });
     this.element?.querySelectorAll("[data-add-ability-penalty]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityPenalty(event));
     });
@@ -2432,6 +2450,72 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const values = normalizeAbilityConditionValues(condition.coverKeys);
     values.splice(index, 1);
     condition.coverKeys = values;
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAddAbilityWeaponAction(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    if (!condition) return undefined;
+    const values = normalizeAbilityConditionValues(condition.weaponActionKeys);
+    const next = getFirstUnusedAbilityWeaponActionKey(values);
+    if (!next) return undefined;
+    condition.weaponActionKeys = [...values, next];
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteAbilityWeaponAction(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    const index = Number(event.currentTarget?.closest?.("[data-weapon-action-index]")?.dataset.weaponActionIndex ?? -1);
+    if (!condition || index < 0) return undefined;
+    const values = normalizeAbilityConditionValues(condition.weaponActionKeys);
+    values.splice(index, 1);
+    condition.weaponActionKeys = values;
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAddAbilityWeaponSkill(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    if (!condition) return undefined;
+    const values = normalizeAbilityConditionValues(condition.skillKeys);
+    const next = getFirstUnusedAbilitySkillKey(values);
+    if (!next) return undefined;
+    condition.skillKeys = [...values, next];
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteAbilityWeaponSkill(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    const index = Number(event.currentTarget?.closest?.("[data-skill-index]")?.dataset.skillIndex ?? -1);
+    if (!condition || index < 0) return undefined;
+    const values = normalizeAbilityConditionValues(condition.skillKeys);
+    values.splice(index, 1);
+    condition.skillKeys = values;
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAddAbilityWeaponProficiency(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    if (!condition) return undefined;
+    const values = normalizeAbilityConditionValues(condition.proficiencyKeys);
+    const next = getFirstUnusedAbilityProficiencyKey(values);
+    if (!next) return undefined;
+    condition.proficiencyKeys = [...values, next];
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteAbilityWeaponProficiency(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    const index = Number(event.currentTarget?.closest?.("[data-proficiency-index]")?.dataset.proficiencyIndex ?? -1);
+    if (!condition || index < 0) return undefined;
+    const values = normalizeAbilityConditionValues(condition.proficiencyKeys);
+    values.splice(index, 1);
+    condition.proficiencyKeys = values;
     return this.#submitCurrentForm({ [functionPath]: functions });
   }
 
@@ -4506,7 +4590,11 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
   const isTargetType = type === ABILITY_CONDITION_TYPES.targetType;
   const isPosture = type === ABILITY_CONDITION_TYPES.posture;
   const isOccupiedCover = type === ABILITY_CONDITION_TYPES.occupiedCover;
+  const isWeaponAction = type === ABILITY_CONDITION_TYPES.weaponAction;
+  const isWeaponSkill = type === ABILITY_CONDITION_TYPES.weaponSkill;
+  const isWeaponProficiency = type === ABILITY_CONDITION_TYPES.weaponProficiency;
   const isLimitedChanges = type === ABILITY_CONDITION_TYPES.limitedChanges;
+  const isCooldown = type === ABILITY_CONDITION_TYPES.cooldown;
   const isItemUse = type === ABILITY_CONDITION_TYPES.itemUse;
   const maxLimit = Math.max(1, changeCount);
   const duration = splitAbilityDurationSeconds(condition?.durationSeconds);
@@ -4522,7 +4610,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
     functionIndex,
     index,
     healthTarget,
-    isPending: !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isLimitedChanges && !isItemUse,
+    isPending: !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isLimitedChanges && !isCooldown && !isItemUse,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -4534,13 +4622,18 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
     isTargetType,
     isPosture,
     isOccupiedCover,
+    isWeaponAction,
+    isWeaponSkill,
+    isWeaponProficiency,
     isLimitedChanges,
+    isCooldown,
     isItemUse,
-    canAddAlternative: !isLimitedChanges && !isItemUse,
+    canAddAlternative: !isLimitedChanges && !isCooldown && !isItemUse,
     changeLimit: Math.max(1, Math.min(maxLimit, toInteger(condition?.limit ?? 1))),
     changeLimitMax: maxLimit,
     changeLimitTotal: changeCount,
     requiredCount: Math.max(1, toInteger(condition?.requiredCount ?? 1)),
+    durationSeconds: Math.max(0, toInteger(condition?.durationSeconds)),
     durationAmount: duration.amount,
     durationUnitChoices: buildAbilityDurationUnitChoices(duration.unit),
     typeLabel: getAbilityConditionTypeLabel(type),
@@ -4565,6 +4658,12 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
     canAddPosture: normalizeAbilityConditionValues(condition?.postureActions).length < ABILITY_POSTURE_ACTIONS.length,
     coverRows: buildAbilityCoverRows(condition?.coverKeys),
     canAddCover: Boolean(getFirstUnusedAbilityCoverKey(condition?.coverKeys)),
+    weaponActionRows: buildAbilityWeaponActionRows(condition?.weaponActionKeys),
+    canAddWeaponAction: Boolean(getFirstUnusedAbilityWeaponActionKey(condition?.weaponActionKeys)),
+    skillRows: buildAbilitySkillRows(condition?.skillKeys),
+    canAddSkill: Boolean(getFirstUnusedAbilitySkillKey(condition?.skillKeys)),
+    proficiencyRows: buildAbilityProficiencyRows(condition?.proficiencyKeys),
+    canAddProficiency: Boolean(getFirstUnusedAbilityProficiencyKey(condition?.proficiencyKeys)),
     itemCategoryRows: buildAbilityItemUseCategoryRows(condition?.itemCategories),
     canAddItemCategory: Boolean(getFirstUnusedAbilityItemUseCategory(condition?.itemCategories))
   };
@@ -4617,7 +4716,10 @@ function buildAbilityConditionTypeChoices(selected = "", { allowLimitedChanges =
     { value: ABILITY_CONDITION_TYPES.targetRace, label: "Раса цели", selected: selected === ABILITY_CONDITION_TYPES.targetRace },
     { value: ABILITY_CONDITION_TYPES.targetType, label: "Тип цели", selected: selected === ABILITY_CONDITION_TYPES.targetType },
     { value: ABILITY_CONDITION_TYPES.posture, label: "Положение", selected: selected === ABILITY_CONDITION_TYPES.posture },
-    { value: ABILITY_CONDITION_TYPES.occupiedCover, label: "Занимаемое укрытие", selected: selected === ABILITY_CONDITION_TYPES.occupiedCover }
+    { value: ABILITY_CONDITION_TYPES.occupiedCover, label: "Занимаемое укрытие", selected: selected === ABILITY_CONDITION_TYPES.occupiedCover },
+    { value: ABILITY_CONDITION_TYPES.weaponAction, label: "Тип атаки", selected: selected === ABILITY_CONDITION_TYPES.weaponAction },
+    { value: ABILITY_CONDITION_TYPES.weaponSkill, label: "Задействованный оружием навык", selected: selected === ABILITY_CONDITION_TYPES.weaponSkill },
+    { value: ABILITY_CONDITION_TYPES.weaponProficiency, label: "Задействованное оружейное владение", selected: selected === ABILITY_CONDITION_TYPES.weaponProficiency }
   ];
   if (allowLimitedChanges || selected === ABILITY_CONDITION_TYPES.limitedChanges) {
     choices.push({
@@ -4627,11 +4729,94 @@ function buildAbilityConditionTypeChoices(selected = "", { allowLimitedChanges =
     });
   }
   choices.push({
+    value: ABILITY_CONDITION_TYPES.cooldown,
+    label: "Перезарядка",
+    selected: selected === ABILITY_CONDITION_TYPES.cooldown
+  });
+  choices.push({
     value: ABILITY_CONDITION_TYPES.itemUse,
     label: "Применение предмета",
     selected: selected === ABILITY_CONDITION_TYPES.itemUse
   });
   return choices;
+}
+
+function buildAbilityWeaponActionEntries() {
+  return [
+    { key: "aimedShot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedShot") },
+    { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot") },
+    { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst") },
+    { key: "volley", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley") },
+    { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack") },
+    { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack") },
+    { key: "push", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionPush") }
+  ];
+}
+
+function buildAbilityWeaponActionRows(value = []) {
+  return normalizeAbilityConditionValues(value).map((actionKey, index) => ({
+    index,
+    choices: getAbilityWeaponActionEntriesWithSelected(actionKey).map(entry => ({
+      value: entry.key,
+      label: entry.label || entry.key,
+      selected: entry.key === actionKey
+    }))
+  }));
+}
+
+function getAbilityWeaponActionEntriesWithSelected(selected = "") {
+  const entries = buildAbilityWeaponActionEntries();
+  if (selected && !entries.some(entry => entry.key === selected)) entries.push({ key: selected, label: selected });
+  return entries;
+}
+
+function getFirstUnusedAbilityWeaponActionKey(value = []) {
+  const selected = new Set(normalizeAbilityConditionValues(value));
+  return buildAbilityWeaponActionEntries().find(entry => !selected.has(entry.key))?.key ?? "";
+}
+
+function buildAbilitySkillRows(value = []) {
+  return normalizeAbilityConditionValues(value).map((skillKey, index) => ({
+    index,
+    choices: getAbilitySkillEntriesWithSelected(skillKey).map(entry => ({
+      value: entry.key,
+      label: entry.label || entry.key,
+      selected: entry.key === skillKey
+    }))
+  }));
+}
+
+function getAbilitySkillEntriesWithSelected(selected = "") {
+  const entries = [...getSkillSettings()];
+  if (selected && !entries.some(entry => entry.key === selected)) entries.push({ key: selected, label: selected });
+  return entries;
+}
+
+function getFirstUnusedAbilitySkillKey(value = []) {
+  const selected = new Set(normalizeAbilityConditionValues(value));
+  return getSkillSettings().find(entry => !selected.has(entry.key))?.key ?? "";
+}
+
+function buildAbilityProficiencyRows(value = []) {
+  return normalizeAbilityConditionValues(value).map((proficiencyKey, index) => ({
+    index,
+    choices: getAbilityProficiencyEntriesWithSelected(proficiencyKey).map(entry => ({
+      value: entry.key,
+      label: entry.label || entry.key,
+      selected: entry.key === proficiencyKey
+    }))
+  }));
+}
+
+function getAbilityProficiencyEntriesWithSelected(selected = "") {
+  const entries = [...getProficiencySettings()];
+  if (selected && !entries.some(entry => entry.key === selected)) entries.push({ key: selected, label: selected });
+  return entries;
+}
+
+function getFirstUnusedAbilityProficiencyKey(value = []) {
+  const selected = new Set(normalizeAbilityConditionValues(value));
+  return getProficiencySettings().find(entry => !selected.has(entry.key))?.key ?? "";
 }
 
 function isAbilityRuntimeCondition(type = "") {
@@ -4642,7 +4827,11 @@ function isAbilityRuntimeCondition(type = "") {
     ABILITY_CONDITION_TYPES.targetRace,
     ABILITY_CONDITION_TYPES.targetType,
     ABILITY_CONDITION_TYPES.posture,
-    ABILITY_CONDITION_TYPES.occupiedCover
+    ABILITY_CONDITION_TYPES.occupiedCover,
+    ABILITY_CONDITION_TYPES.weaponAction,
+    ABILITY_CONDITION_TYPES.weaponSkill,
+    ABILITY_CONDITION_TYPES.weaponProficiency,
+    ABILITY_CONDITION_TYPES.cooldown
   ].includes(type);
 }
 

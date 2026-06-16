@@ -807,6 +807,57 @@
               </div>
               {{/if}}
 
+              {{#if isWeaponAction}}
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header">
+                  <span>Типы атаки</span>
+                  <button type="button" data-action="addConditionWeaponAction" {{#unless canAddWeaponAction}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button>
+                </div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each weaponActionRows}}
+                  <div class="fallout-maw-item-use-category-row" data-weapon-action-index="{{index}}">
+                    <select data-field="conditionWeaponAction">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteConditionWeaponAction" title="Удалить тип атаки"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}<span class="fallout-maw-empty-list">Типы атаки не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              {{/if}}
+
+              {{#if isWeaponSkill}}
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header">
+                  <span>Задействованные оружием навыки</span>
+                  <button type="button" data-action="addConditionWeaponSkill" {{#unless canAddSkill}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button>
+                </div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each skillRows}}
+                  <div class="fallout-maw-item-use-category-row" data-skill-index="{{index}}">
+                    <select data-field="conditionSkill">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteConditionWeaponSkill" title="Удалить навык"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}<span class="fallout-maw-empty-list">Навыки не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              {{/if}}
+
+              {{#if isWeaponProficiency}}
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header">
+                  <span>Задействованные оружейные владения</span>
+                  <button type="button" data-action="addConditionWeaponProficiency" {{#unless canAddProficiency}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button>
+                </div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each proficiencyRows}}
+                  <div class="fallout-maw-item-use-category-row" data-proficiency-index="{{index}}">
+                    <select data-field="conditionProficiency">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-action="deleteConditionWeaponProficiency" title="Удалить владение"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}<span class="fallout-maw-empty-list">Владения не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              {{/if}}
+
               {{#if isLimitedChanges}}
               <label>
                 <span>Выбрать изменений</span>

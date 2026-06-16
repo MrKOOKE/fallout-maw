@@ -21,6 +21,13 @@ const SKILL_BONUS_KEY_PREFIX = "system.skills.";
 const SKILL_BONUS_KEY_SUFFIX = ".bonus";
 const ACTION_COST_KEY_PREFIX = "system.costs.actions.";
 const ACTION_PENETRATION_KEY_PREFIX = "system.penetration.actions.";
+const WEAPON_ACTION_COMBAT_TRIGGER_KEYS = Object.freeze([
+  "system.combat.accuracy",
+  "system.combat.criticalChance",
+  "system.combat.damageFlat",
+  "system.combat.damagePercent",
+  "system.combat.burstStability"
+]);
 
 export function registerAbilityCooldownHooks() {
   Hooks.on("fallout-maw.skillCheckResolved", outcome => {
@@ -46,22 +53,35 @@ export async function applyAbilityCooldownsForSkillCheck(outcome = {}) {
   if (!actor || !skillKey) return [];
 
   const changeKey = `${SKILL_BONUS_KEY_PREFIX}${skillKey}${SKILL_BONUS_KEY_SUFFIX}`;
-  return applyAbilityCooldownsForTriggeredKeys(actor, new Set([changeKey, ALL_SKILLS_BONUS_EFFECT_KEY]), { trigger: "skillCheck" });
+  return applyAbilityCooldownsForTriggeredKeys(actor, new Set([changeKey, ALL_SKILLS_BONUS_EFFECT_KEY]), {
+    trigger: "skillCheck",
+    conditionContext: getCooldownConditionContext(outcome)
+  });
 }
 
-export async function applyAbilityCooldownsForWeaponAction({ actor = null, actionKey = "" } = {}) {
+export async function applyAbilityCooldownsForWeaponAction(context = {}) {
+  const { actor = null, actionKey = "" } = context;
   const normalizedActionKey = String(actionKey ?? "").trim();
   if (!actor || !normalizedActionKey || normalizedActionKey === "reload") return [];
 
+  const weaponData = context?.weaponData && typeof context.weaponData === "object" ? context.weaponData : null;
+  const skillKey = String(weaponData?.skillKey ?? "").trim();
+  const proficiencyKey = String(weaponData?.proficiencyKey ?? "").trim();
   const changeKeys = new Set([
     `${ACTION_COST_KEY_PREFIX}${normalizedActionKey}`,
-    `${ACTION_PENETRATION_KEY_PREFIX}${normalizedActionKey}`
+    `${ACTION_PENETRATION_KEY_PREFIX}${normalizedActionKey}`,
+    ...WEAPON_ACTION_COMBAT_TRIGGER_KEYS
   ]);
-  return applyAbilityCooldownsForTriggeredKeys(actor, changeKeys, { trigger: "weaponAction" });
+  if (skillKey) changeKeys.add(`${SKILL_BONUS_KEY_PREFIX}${skillKey}${SKILL_BONUS_KEY_SUFFIX}`);
+  if (proficiencyKey) changeKeys.add(`system.proficiencies.${proficiencyKey}.bonus`);
+  return applyAbilityCooldownsForTriggeredKeys(actor, changeKeys, {
+    trigger: "weaponAction",
+    conditionContext: getCooldownConditionContext(context)
+  });
 }
 
-async function applyAbilityCooldownsForTriggeredKeys(actor, changeKeys, { trigger = "" } = {}) {
-  const entries = findTriggeredCooldownEntries(actor, changeKeys);
+async function applyAbilityCooldownsForTriggeredKeys(actor, changeKeys, { trigger = "", conditionContext = {} } = {}) {
+  const entries = findTriggeredCooldownEntries(actor, changeKeys, conditionContext);
   const results = [];
   for (const entry of entries) {
     const result = await createOrRefreshAbilityFunctionCooldown(actor, entry, { trigger });
@@ -70,7 +90,7 @@ async function applyAbilityCooldownsForTriggeredKeys(actor, changeKeys, { trigge
   return results;
 }
 
-function findTriggeredCooldownEntries(actor, changeKeys) {
+function findTriggeredCooldownEntries(actor, changeKeys, conditionContext = {}) {
   const entries = [];
   if (!actor || !(changeKeys instanceof Set) || !changeKeys.size) return entries;
 
@@ -84,6 +104,7 @@ function findTriggeredCooldownEntries(actor, changeKeys) {
       if (!cooldownConditions.length) continue;
       if (!functionHasTriggeredChange(abilityFunction, changeKeys)) continue;
       if (!abilityConditionsApply(actor, abilityFunction.conditions, {
+        ...conditionContext,
         abilityItemId: item.id,
         functionId: abilityFunction.id
       })) continue;
@@ -100,6 +121,19 @@ function findTriggeredCooldownEntries(actor, changeKeys) {
   }
 
   return entries;
+}
+
+function getCooldownConditionContext(context = {}) {
+  const check = context?.check ?? {};
+  return {
+    actorToken: context?.actorToken ?? check?.actorToken ?? null,
+    targetToken: context?.targetToken ?? check?.targetToken ?? null,
+    targetActor: context?.targetActor ?? check?.targetActor ?? null,
+    weaponData: context?.weaponData && typeof context.weaponData === "object"
+      ? context.weaponData
+      : check?.weaponData && typeof check.weaponData === "object" ? check.weaponData : null,
+    weaponActionKey: String(context?.weaponActionKey ?? context?.actionKey ?? check?.weaponActionKey ?? "").trim()
+  };
 }
 
 function functionHasTriggeredChange(abilityFunction, changeKeys) {

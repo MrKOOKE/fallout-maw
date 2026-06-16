@@ -109,6 +109,24 @@ export function abilityConditionApplies(actor, condition = {}, context = {}) {
     return accepted.size > 0 && getActorOccupiedCoverKeys(actor).some(key => accepted.has(key));
   }
 
+  if (condition.type === ABILITY_CONDITION_TYPES.weaponAction) {
+    const accepted = new Set(condition?.weaponActionKeys ?? []);
+    const contextActionKey = String(context?.weaponActionKey ?? "").trim();
+    return Boolean(accepted.size && contextActionKey && accepted.has(contextActionKey));
+  }
+
+  if (condition.type === ABILITY_CONDITION_TYPES.weaponSkill) {
+    const accepted = new Set(condition?.skillKeys ?? []);
+    const weaponSkillKey = String(context?.weaponData?.skillKey ?? "").trim();
+    return Boolean(accepted.size && weaponSkillKey && accepted.has(weaponSkillKey));
+  }
+
+  if (condition.type === ABILITY_CONDITION_TYPES.weaponProficiency) {
+    const accepted = new Set(condition?.proficiencyKeys ?? []);
+    const weaponProficiencyKey = String(context?.weaponData?.proficiencyKey ?? "").trim();
+    return Boolean(accepted.size && weaponProficiencyKey && accepted.has(weaponProficiencyKey));
+  }
+
   if (condition.type === ABILITY_CONDITION_TYPES.cooldown) {
     const abilityItemId = String(context?.abilityItemId ?? "").trim();
     const functionId = String(context?.functionId ?? "").trim();
@@ -137,7 +155,7 @@ export function abilityConditionApplies(actor, condition = {}, context = {}) {
 function getConditionalFunctionChanges(actor, entry = {}, context = {}) {
   const conditions = entry.conditions ?? [];
   if (!conditions.length) return entry.changes ?? [];
-  if (hasAbilityTargetContextCondition(conditions) && !context?.allowContextual) return [];
+  if ((hasAbilityTargetContextCondition(conditions) || hasWeaponContextCondition(conditions)) && !context?.allowContextual) return [];
   if (abilityConditionsRequireTarget(conditions) && !(context?.targetActor ?? context?.targetToken?.actor)) return [];
   if (hasItemUseCondition(conditions)) return [];
   return abilityConditionsApply(actor, conditions, { ...context, functionId: entry.id ?? "" })
@@ -167,6 +185,18 @@ function isTargetActorCondition(condition = {}) {
     ABILITY_CONDITION_TYPES.targetType
   ].includes(condition?.type)
     || (condition?.type === ABILITY_CONDITION_TYPES.posture && condition?.postureSubject === ABILITY_POSTURE_SUBJECTS.target);
+}
+
+function hasWeaponContextCondition(conditions = []) {
+  return (conditions ?? []).some(isWeaponContextCondition);
+}
+
+function isWeaponContextCondition(condition = {}) {
+  return [
+    ABILITY_CONDITION_TYPES.weaponAction,
+    ABILITY_CONDITION_TYPES.weaponSkill,
+    ABILITY_CONDITION_TYPES.weaponProficiency
+  ].includes(condition?.type);
 }
 
 function getContextPostureAction(actor, token = null) {
@@ -218,7 +248,7 @@ export function getContextualAbilityEffectChanges(actor, context = {}) {
       : isActiveFreeSettingsItem(item) ? item.system?.functions?.freeSettings?.entries ?? [] : [];
     changes.push(...normalizeAbilityFunctions(functions)
       .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
-      .filter(entry => hasAbilityTargetContextCondition(entry.conditions))
+      .filter(entry => hasAbilityTargetContextCondition(entry.conditions) || hasWeaponContextCondition(entry.conditions))
       .flatMap(entry => getConditionalFunctionChanges(actor, entry, {
         ...context,
         abilityItemId: item.id ?? "",

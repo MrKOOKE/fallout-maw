@@ -798,6 +798,7 @@ function normalizeRequestData(data, requester = "") {
     actorToken: data.actorToken ?? null,
     targetToken: data.targetToken ?? null,
     targetActor: data.targetActor ?? null,
+    weaponData: data.weaponData && typeof data.weaponData === "object" ? data.weaponData : null,
     weaponAttackId: String(data.weaponAttackId ?? ""),
     weaponActionKey: String(data.weaponActionKey ?? ""),
     allOrNothingAttackMode: String(data.allOrNothingAttackMode ?? ""),
@@ -846,7 +847,9 @@ function resolveSkillCheckContext(actor, data = {}) {
   return {
     actorToken,
     targetToken: selectedTargetToken,
-    targetActor
+    targetActor,
+    weaponData: data?.weaponData && typeof data.weaponData === "object" ? data.weaponData : null,
+    weaponActionKey: String(data?.weaponActionKey ?? "").trim()
   };
 }
 

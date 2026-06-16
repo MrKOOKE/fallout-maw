@@ -299,6 +299,16 @@ class WeaponAttackController {
     };
   }
 
+  createWeaponAttackSkillCheckContext(targetToken = null) {
+    return {
+      actorToken: this.token,
+      targetToken,
+      weaponAttackId: this.attackId,
+      weaponActionKey: this.actionKey,
+      weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId)
+    };
+  }
+
   async resolveTargetReactions(target) {
     if (this.attackCanceledByReaction || !target?.actor || !this.token?.actor || !this.weapon) return false;
     const targetKey = String(target.actor.uuid ?? target.document?.uuid ?? target.id ?? "");
@@ -742,10 +752,9 @@ class WeaponAttackController {
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getDodgeDifficulty(target.actor) + requirementDifficultyBonus,
-        situationalModifier: getWeaponPushAccuracyModifier(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
-        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
-        actorToken: this.token,
-        targetToken: target
+        situationalModifier: getWeaponPushAccuracyModifier(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target)),
+        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target)),
+        ...this.createWeaponAttackSkillCheckContext(target)
       },
       animate: false,
       createMessage: !checkBatch,
@@ -1146,10 +1155,9 @@ class WeaponAttackController {
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getDirectedAttackDifficulty(target.actor, resolvedLimbKey, Boolean(limbKey), difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus),
-        situationalModifier: getAttackModeAccuracyModifier(this.weapon, this.actionKey, mode, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
-        ...getAttackModeCriticalCheckModifiers(this.weapon, this.actionKey, mode, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
-        actorToken: this.token,
-        targetToken: target
+        situationalModifier: getAttackModeAccuracyModifier(this.weapon, this.actionKey, mode, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target)),
+        ...getAttackModeCriticalCheckModifiers(this.weapon, this.actionKey, mode, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target)),
+        ...this.createWeaponAttackSkillCheckContext(target)
       },
       animate: false,
       createMessage: !checkBatch,
@@ -1161,8 +1169,7 @@ class WeaponAttackController {
     this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) return null;
     damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, {
-      actorToken: this.token,
-      targetToken: target,
+      ...this.createWeaponAttackSkillCheckContext(target),
       weaponFunctionId: this.weaponFunctionId
     });
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
@@ -1365,10 +1372,9 @@ class WeaponAttackController {
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getDodgeDifficulty(target.actor) + difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus,
-        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
-        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
-        actorToken: this.token,
-        targetToken: target,
+        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target)),
+        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target)),
+        ...this.createWeaponAttackSkillCheckContext(target),
         ...(allOrNothingContext ?? {})
       },
       animate: false,
@@ -1381,8 +1387,7 @@ class WeaponAttackController {
     this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) return null;
     damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, {
-      actorToken: this.token,
-      targetToken: target,
+      ...this.createWeaponAttackSkillCheckContext(target),
       weaponFunctionId: this.weaponFunctionId
     });
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
@@ -1476,9 +1481,9 @@ class WeaponAttackController {
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: BASE_VOLLEY_DIFFICULTY + rangeDifficultyBonus + requirementDifficultyBonus + Math.max(0, toInteger(difficultyBonus)),
-        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, { actorToken: this.token }),
-        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, { actorToken: this.token }),
-        actorToken: this.token
+        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext()),
+        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext()),
+        ...this.createWeaponAttackSkillCheckContext()
       },
       animate: false,
       createMessage: !checkBatch,
@@ -1558,8 +1563,7 @@ class WeaponAttackController {
       damageModifier: amount => getCriticalDamageAmount(
         this.weapon,
         applyContextualDamageToAmount(this.weapon, amount, {
-          actorToken: this.token,
-          targetToken: target,
+          ...this.createWeaponAttackSkillCheckContext(target),
           weaponFunctionId: this.weaponFunctionId
         }),
         blastOutcome.outcome,
@@ -1588,10 +1592,9 @@ class WeaponAttackController {
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getAimedAttackDifficulty(target.actor, limbKey, difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus),
-        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
-        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
-        actorToken: this.token,
-        targetToken: target,
+        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target)),
+        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target)),
+        ...this.createWeaponAttackSkillCheckContext(target),
         ...(allOrNothingContext ?? {})
       },
       animate: false,
@@ -1604,8 +1607,7 @@ class WeaponAttackController {
     this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) return null;
     damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, {
-      actorToken: this.token,
-      targetToken: target,
+      ...this.createWeaponAttackSkillCheckContext(target),
       weaponFunctionId: this.weaponFunctionId
     });
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
@@ -1638,10 +1640,9 @@ class WeaponAttackController {
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getAimedAttackDifficulty(target.actor, holdingLimbKey, difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus),
-        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
-        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, { actorToken: this.token, targetToken: target }),
-        actorToken: this.token,
-        targetToken: target,
+        situationalModifier: getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target)),
+        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target)),
+        ...this.createWeaponAttackSkillCheckContext(target),
         ...(allOrNothingContext ?? {})
       },
       animate: false,
@@ -1655,8 +1656,7 @@ class WeaponAttackController {
     if (!isSuccessfulAttack(outcome)) return null;
 
     damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, {
-      actorToken: this.token,
-      targetToken: target,
+      ...this.createWeaponAttackSkillCheckContext(target),
       weaponFunctionId: this.weaponFunctionId
     });
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
@@ -1985,6 +1985,7 @@ class WeaponAttackController {
     if (!this.chanceMenu) this.createChanceMenu();
     const chance = getGeneralAttackHitChance(this.token.actor, this.weapon, target.actor, {
       difficultyBonus: getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId),
+      actionKey: this.actionKey,
       weaponFunctionId: this.weaponFunctionId
     });
     this.chanceMenu.innerHTML = `
@@ -2023,6 +2024,7 @@ class WeaponAttackController {
       return [{
         label: game.i18n.localize("FALLOUTMAW.Item.AttackChanceArea"),
         chance: getVolleyAreaHitChance(this.token.actor, this.weapon, this.geometry, {
+          actionKey: this.actionKey,
           weaponFunctionId: this.weaponFunctionId,
           difficultyBonus: getBurstShotDifficultyBonus(this.weapon, this.actionKey, 0, this.weaponFunctionId, this.token.actor)
         })
@@ -2034,6 +2036,7 @@ class WeaponAttackController {
       label: String(target.name ?? target.actor?.name ?? game.i18n.localize("FALLOUTMAW.Item.AttackChanceHit")),
       chance: getGeneralAttackHitChance(this.token.actor, this.weapon, target.actor, {
         difficultyBonus: getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId),
+        actionKey: this.actionKey,
         weaponFunctionId: this.weaponFunctionId
       })
     }];
@@ -2129,7 +2132,7 @@ class WeaponAttackController {
         destroyed: isLimbDestroyed(target.actor, key),
         chance: isLimbDestroyed(target.actor, key)
           ? 0
-          : getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, key, blockerBonus, this.weaponFunctionId)
+          : getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, key, blockerBonus, this.weaponFunctionId, this.actionKey)
       }));
     if (!this.aimedShot) return limbRows;
     const weaponRows = getHeldWeaponAimTargets(target.actor)
@@ -2139,7 +2142,7 @@ class WeaponAttackController {
         destroyed: entry.destroyed || isLimbDestroyed(target.actor, entry.limbKey),
         chance: entry.destroyed || isLimbDestroyed(target.actor, entry.limbKey)
           ? 0
-          : getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, entry.limbKey, blockerBonus, this.weaponFunctionId)
+          : getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, entry.limbKey, blockerBonus, this.weaponFunctionId, this.actionKey)
       }));
     return [...limbRows, ...weaponRows];
   }
@@ -2937,7 +2940,14 @@ async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
     }
   }
   if (emitActionResolved && actionKey !== "reload") {
-    Hooks.callAll("fallout-maw.weaponActionResolved", { actor, weapon, actionKey, weaponFunctionId });
+    Hooks.callAll("fallout-maw.weaponActionResolved", {
+      actor,
+      weapon,
+      actionKey,
+      weaponActionKey: actionKey,
+      weaponFunctionId,
+      weaponData: getWeaponAttackData(weapon, weaponFunctionId)
+    });
   }
 }
 
@@ -5557,10 +5567,10 @@ function getDirectedAttackDifficulty(targetActor, limbKey = "", aimed = false, d
   return base + Math.max(0, toInteger(difficultyBonus));
 }
 
-function getGeneralAttackHitChance(attackerActor, weapon, targetActor, { difficultyBonus = 0, weaponFunctionId = "" } = {}) {
+function getGeneralAttackHitChance(attackerActor, weapon, targetActor, { difficultyBonus = 0, actionKey = "", weaponFunctionId = "" } = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
-  const context = { targetActor };
+  const context = { targetActor, weaponData, weaponActionKey: String(actionKey ?? "").trim() };
   const finalSkillValue = getContextualAttackSkillValue(attackerActor, skillKey, context)
     + getWeaponAccuracyModifier(weapon, weaponFunctionId, context);
   const difficulty = getDodgeDifficulty(targetActor)
@@ -5569,11 +5579,12 @@ function getGeneralAttackHitChance(attackerActor, weapon, targetActor, { difficu
   return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty);
 }
 
-function getVolleyAreaHitChance(attackerActor, weapon, geometry, { difficultyBonus = 0, weaponFunctionId = "" } = {}) {
+function getVolleyAreaHitChance(attackerActor, weapon, geometry, { difficultyBonus = 0, actionKey = "", weaponFunctionId = "" } = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
-  const finalSkillValue = getContextualAttackSkillValue(attackerActor, skillKey)
-    + getWeaponAccuracyModifier(weapon, weaponFunctionId);
+  const context = { weaponData, weaponActionKey: String(actionKey ?? "").trim() };
+  const finalSkillValue = getContextualAttackSkillValue(attackerActor, skillKey, context)
+    + getWeaponAccuracyModifier(weapon, weaponFunctionId, context);
   const rangeDifficultyBonus = getEffectiveRangeDifficultyBonusForDistance(
     weaponData,
     pixelsToMeters(geometry.distance)
@@ -5585,10 +5596,10 @@ function getVolleyAreaHitChance(attackerActor, weapon, geometry, { difficultyBon
   return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty);
 }
 
-function getAimedAttackHitChance(attackerActor, weapon, targetActor, limbKey = "", blockerBonus = 0, weaponFunctionId = "") {
+function getAimedAttackHitChance(attackerActor, weapon, targetActor, limbKey = "", blockerBonus = 0, weaponFunctionId = "", actionKey = "") {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
-  const context = { targetActor };
+  const context = { targetActor, weaponData, weaponActionKey: String(actionKey ?? "").trim() };
   const finalSkillValue = getContextualAttackSkillValue(attackerActor, skillKey, context)
     + getWeaponAccuracyModifier(weapon, weaponFunctionId, context);
   const difficulty = getAimedAttackDifficulty(targetActor, limbKey, blockerBonus + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId));
@@ -5598,7 +5609,7 @@ function getAimedAttackHitChance(attackerActor, weapon, targetActor, limbKey = "
 function getDirectedAttackHitChance(attackerActor, weapon, targetActor, { actionKey = "", mode = "thrust", limbKey = "", difficultyBonus = 0, weaponFunctionId = "" } = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
-  const context = { targetActor };
+  const context = { targetActor, weaponData, weaponActionKey: String(actionKey ?? "").trim() };
   const finalSkillValue = getContextualAttackSkillValue(attackerActor, skillKey, context)
     + getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId, context);
   const difficulty = getDirectedAttackDifficulty(

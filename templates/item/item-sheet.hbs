@@ -926,6 +926,45 @@
                 </div>
               </div>
               {{/if}}
+              {{#if isWeaponAction}}
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header"><span>Типы атаки</span><button type="button" data-add-ability-weapon-action {{#unless canAddWeaponAction}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each weaponActionRows}}
+                  <div class="fallout-maw-item-use-category-row" data-weapon-action-index="{{index}}">
+                    <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.weaponActionKeys.{{index}}">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-weapon-action title="Удалить тип атаки"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}<span class="fallout-maw-empty-list">Типы атаки не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              {{/if}}
+              {{#if isWeaponSkill}}
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header"><span>Задействованные оружием навыки</span><button type="button" data-add-ability-weapon-skill {{#unless canAddSkill}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each skillRows}}
+                  <div class="fallout-maw-item-use-category-row" data-skill-index="{{index}}">
+                    <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.skillKeys.{{index}}">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-weapon-skill title="Удалить навык"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}<span class="fallout-maw-empty-list">Навыки не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              {{/if}}
+              {{#if isWeaponProficiency}}
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header"><span>Задействованные оружейные владения</span><button type="button" data-add-ability-weapon-proficiency {{#unless canAddProficiency}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each proficiencyRows}}
+                  <div class="fallout-maw-item-use-category-row" data-proficiency-index="{{index}}">
+                    <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.proficiencyKeys.{{index}}">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-weapon-proficiency title="Удалить владение"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}<span class="fallout-maw-empty-list">Владения не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              {{/if}}
               {{#if isLimitedChanges}}
               <label>
                 <span>Выбрать изменений</span>
@@ -934,6 +973,12 @@
               <label>
                 <span>Всего изменений</span>
                 <input type="number" value="{{changeLimitTotal}}" disabled>
+              </label>
+              {{/if}}
+              {{#if isCooldown}}
+              <label>
+                <span>Длительность, секунд</span>
+                <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.durationSeconds" value="{{durationSeconds}}" min="0" step="1">
               </label>
               {{/if}}
               {{#if isItemUse}}
@@ -1381,6 +1426,45 @@
                 </div>
               </div>
               {{/if}}
+              {{#if isWeaponAction}}
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header"><span>Типы атаки</span><button type="button" data-add-ability-weapon-action {{#unless canAddWeaponAction}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each weaponActionRows}}
+                  <div class="fallout-maw-item-use-category-row" data-weapon-action-index="{{index}}">
+                    <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.weaponActionKeys.{{index}}">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-weapon-action title="Удалить тип атаки"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}<span class="fallout-maw-empty-list">Типы атаки не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              {{/if}}
+              {{#if isWeaponSkill}}
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header"><span>Задействованные оружием навыки</span><button type="button" data-add-ability-weapon-skill {{#unless canAddSkill}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each skillRows}}
+                  <div class="fallout-maw-item-use-category-row" data-skill-index="{{index}}">
+                    <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.skillKeys.{{index}}">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-weapon-skill title="Удалить навык"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}<span class="fallout-maw-empty-list">Навыки не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              {{/if}}
+              {{#if isWeaponProficiency}}
+              <div class="fallout-maw-item-use-category-field">
+                <div class="fallout-maw-item-use-category-header"><span>Задействованные оружейные владения</span><button type="button" data-add-ability-weapon-proficiency {{#unless canAddProficiency}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
+                <div class="fallout-maw-item-use-category-list">
+                  {{#each proficiencyRows}}
+                  <div class="fallout-maw-item-use-category-row" data-proficiency-index="{{index}}">
+                    <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.proficiencyKeys.{{index}}">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                    <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-weapon-proficiency title="Удалить владение"><i class="fa-solid fa-trash"></i></button>
+                  </div>
+                  {{else}}<span class="fallout-maw-empty-list">Владения не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              {{/if}}
               {{#if isLimitedChanges}}
               <label>
                 <span>Выбрать из изменений</span>
@@ -1389,6 +1473,12 @@
               <label>
                 <span>Всего изменений</span>
                 <input type="number" value="{{changeLimitTotal}}" disabled>
+              </label>
+              {{/if}}
+              {{#if isCooldown}}
+              <label>
+                <span>Длительность, секунд</span>
+                <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.durationSeconds" value="{{durationSeconds}}" min="0" step="1">
               </label>
               {{/if}}
               {{#if isItemUse}}

@@ -168,7 +168,7 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "limitedChanges", "cooldown", "itemUse"],
+      choices: ["", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "limitedChanges", "cooldown", "itemUse"],
       initial: ""
     }),
     operator: new StringField({ required: true, blank: false, choices: ["lte", "gte", "occupied", "empty"], initial: "lte" }),
@@ -195,6 +195,18 @@ function abilityConditionField() {
       initial: "walk"
     }), { required: true, initial: [] }),
     coverKeys: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
+      required: true,
+      initial: []
+    }),
+    weaponActionKeys: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
+      required: true,
+      initial: []
+    }),
+    skillKeys: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
+      required: true,
+      initial: []
+    }),
+    proficiencyKeys: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
       required: true,
       initial: []
     }),
