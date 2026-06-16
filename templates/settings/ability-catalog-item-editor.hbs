@@ -465,6 +465,87 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedRageSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Ярость</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label>
+            <span>Расход энергии</span>
+            <input type="number" data-field="fixed.rage.energyCost" value="{{fixedRageSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.rage.durationAmount" value="{{fixedRageSettings.durationAmount}}" min="0" step="1">
+              <select data-field="fixed.rage.durationUnit">
+                {{#each fixedRageSettings.durationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Ресурсы</strong>
+          <label>
+            <span>Бонус ОП</span>
+            <input type="number" data-field="fixed.rage.movementPointBonus" value="{{fixedRageSettings.movementPointBonus}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Бонус ОД</span>
+            <input type="number" data-field="fixed.rage.actionPointBonus" value="{{fixedRageSettings.actionPointBonus}}" min="0" step="1">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Проверки навыков</strong>
+          <label>
+            <span>Преимущество</span>
+            <select data-field="fixed.rage.advantageSkillKey">
+              {{#each fixedRageSettings.advantageSkillChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          <label>
+            <span>Количество преимуществ</span>
+            <input type="number" data-field="fixed.rage.advantageCount" value="{{fixedRageSettings.advantageCount}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Помеха</span>
+            <select data-field="fixed.rage.disadvantageSkillKey">
+              {{#each fixedRageSettings.disadvantageSkillChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          <label>
+            <span>Количество помех</span>
+            <input type="number" data-field="fixed.rage.disadvantageCount" value="{{fixedRageSettings.disadvantageCount}}" min="0" step="1">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" data-field="fixed.rage.overloadEnergyCost" value="{{fixedRageSettings.overloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.rage.overloadDurationAmount" value="{{fixedRageSettings.overloadDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.rage.overloadDurationUnit">
+                {{#each fixedRageSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedDisarmSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Обезоруживание</h3>

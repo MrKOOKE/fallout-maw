@@ -25,6 +25,7 @@ import {
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
   normalizeLuckyCoinSettings,
+  normalizeRageSettings,
   normalizeReaperSettings,
   normalizeDeusExMachinaSettings,
   normalizeDisarmSettings,
@@ -634,6 +635,26 @@ function readFixedFunctionSettings(row) {
       )
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.rage.energyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.rage.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.rage.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.rage.overloadDurationUnit']")?.value
+      ),
+      durationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.rage.durationAmount']")?.value,
+        row.querySelector("[data-field='fixed.rage.durationUnit']")?.value
+      ),
+      movementPointBonus: row.querySelector("[data-field='fixed.rage.movementPointBonus']")?.value,
+      actionPointBonus: row.querySelector("[data-field='fixed.rage.actionPointBonus']")?.value,
+      advantageSkillKey: row.querySelector("[data-field='fixed.rage.advantageSkillKey']")?.value,
+      advantageCount: row.querySelector("[data-field='fixed.rage.advantageCount']")?.value,
+      disadvantageSkillKey: row.querySelector("[data-field='fixed.rage.disadvantageSkillKey']")?.value,
+      disadvantageCount: row.querySelector("[data-field='fixed.rage.disadvantageCount']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm) {
     return {
       activeEnergyCost: row.querySelector("[data-field='fixed.disarm.activeEnergyCost']")?.value,
@@ -762,6 +783,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedLuckyCoinSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
     ? prepareLuckyCoinSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
+    ? prepareRageSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedDisarmSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm
     ? prepareDisarmSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -785,6 +809,7 @@ function prepareFunctionForDisplay(entry) {
     fixedDefensiveTacticsSettings,
     fixedLastChanceSettings,
     fixedLuckyCoinSettings,
+    fixedRageSettings,
     fixedDisarmSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: normalized.changes.map(prepareChangeForDisplay),
@@ -874,6 +899,22 @@ function prepareLuckyCoinSettingsForDisplay(settings = {}) {
     ...normalized,
     overloadDurationAmount: duration.amount,
     overloadDurationUnitChoices: buildDurationUnitChoices(duration.unit)
+  };
+}
+
+function prepareRageSettingsForDisplay(settings = {}) {
+  const normalized = normalizeRageSettings(settings);
+  const duration = splitDurationSeconds(normalized.durationSeconds);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  const skillSettings = getSkillSettings();
+  return {
+    ...normalized,
+    durationAmount: duration.amount,
+    durationUnitChoices: buildDurationUnitChoices(duration.unit),
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
+    advantageSkillChoices: buildSkillChoices(normalized.advantageSkillKey, skillSettings),
+    disadvantageSkillChoices: buildSkillChoices(normalized.disadvantageSkillKey, skillSettings)
   };
 }
 

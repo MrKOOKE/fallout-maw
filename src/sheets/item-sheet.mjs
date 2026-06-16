@@ -50,6 +50,7 @@ import {
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
   normalizeLuckyCoinSettings,
+  normalizeRageSettings,
   normalizeReaperSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
@@ -4334,6 +4335,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedDefensiveTacticsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.defensiveTactics
     ? prepareDefensiveTacticsSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
+    ? prepareRageSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -4358,6 +4362,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedLuckyCoinSettings,
     fixedDisarmSettings,
     fixedDefensiveTacticsSettings,
+    fixedRageSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
@@ -4441,6 +4446,22 @@ function prepareAtRandomSettingsForDisplay(settings = {}) {
 
 function prepareDefensiveTacticsSettingsForDisplay(settings = {}) {
   return normalizeDefensiveTacticsSettings(settings);
+}
+
+function prepareRageSettingsForDisplay(settings = {}) {
+  const normalized = normalizeRageSettings(settings);
+  const duration = splitAbilityDurationSeconds(normalized.durationSeconds);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  const skillSettings = getSkillSettings();
+  return {
+    ...normalized,
+    durationAmount: duration.amount,
+    durationUnitChoices: buildAbilityDurationUnitChoices(duration.unit),
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
+    advantageSkillChoices: buildSkillChoices(normalized.advantageSkillKey, skillSettings),
+    disadvantageSkillChoices: buildSkillChoices(normalized.disadvantageSkillKey, skillSettings)
+  };
 }
 
 function prepareLastChanceSettingsForDisplay(settings = {}) {
@@ -4969,6 +4990,20 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.activeOverloadDurationSeconds`, activeDurationSeconds);
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.reactionOverloadDurationSeconds`, reactionDurationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage) {
+      const durationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-rage-duration-amount]")?.value,
+        row.querySelector("[data-fixed-rage-duration-unit]")?.value
+      );
+      const overloadDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-rage-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-rage-overload-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.durationSeconds`, durationSeconds);
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
       continue;
     }
 

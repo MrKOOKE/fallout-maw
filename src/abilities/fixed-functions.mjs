@@ -15,7 +15,8 @@ import {
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
   normalizeLuckyCoinSettings,
-  normalizeReaperSettings
+  normalizeReaperSettings,
+  normalizeRageSettings
 } from "../settings/abilities.mjs";
 import {
   ATTACKING_WEAPON_ACTION_KEYS,
@@ -86,6 +87,7 @@ const ALL_OR_NOTHING_EFFECT_FLAG_KEY = "allOrNothing";
 const AT_RANDOM_ACTION_BLOCK_EFFECT_FLAG_KEY = "atRandomActionBlock";
 const LUCKY_COIN_EFFECT_SOURCE = "luckyCoin";
 const DEFENSIVE_TACTICS_EFFECT_FLAG_KEY = "defensiveTactics";
+const RAGE_EFFECT_FLAG_KEY = "rage";
 const DISARM_REACTION_PROVIDER_ID = "disarm";
 const DISARM_QUERY_NAME = "falloutMawDisarm";
 const DISARM_SOCKET_TIMEOUT_MS = 60000;
@@ -179,6 +181,14 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.defensiveTactics
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.rage,
+    label: "Ярость",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.rage
     })
   })
 ]);
@@ -317,6 +327,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
     return true;
   }
 
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage) {
+    const used = await useRage(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) {
     const used = await useDeusExMachina(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
@@ -404,6 +420,28 @@ async function useLuckyCoin(actor, abilityItem, abilityFunction) {
     abilityItem,
     `${lucky ? "Удача улыбнулась вам." : "Удача отвернулась от вас."} ${skill.label}: ${modifier >= 0 ? "+" : ""}${modifier} к следующей проверке.`
   );
+  return true;
+}
+
+async function useRage(actor, abilityItem, abilityFunction) {
+  const settings = normalizeRageSettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  if (hasActiveRageEffect(actor, abilityItem, abilityFunction)) {
+    ui.notifications.warn("Ярость: эффект уже активен.");
+    return false;
+  }
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`Ярость: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: "Перегрузка: Ярость",
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  await applyRageEffect(actor, abilityItem, abilityFunction, settings);
+  await createAbilityChatMessage(actor, abilityItem, `Ярость: эффект активен на ${formatDuration(settings.durationSeconds)}.`);
   return true;
 }
 
@@ -1278,6 +1316,95 @@ async function applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
     }
   }], { animate: false });
   return true;
+}
+
+async function applyRageEffect(actor, abilityItem, abilityFunction, settings = {}) {
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return false;
+  const normalized = normalizeRageSettings(settings);
+  const startTime = Number(game.time?.worldTime) || 0;
+  const changes = [];
+  if (normalized.movementPointBonus > 0) {
+    changes.push({
+      key: "system.resources.movementPoints.bonus",
+      type: "add",
+      value: String(normalized.movementPointBonus),
+      phase: "initial",
+      priority: null
+    });
+  }
+  if (normalized.actionPointBonus > 0) {
+    changes.push({
+      key: "system.resources.actionPoints.bonus",
+      type: "add",
+      value: String(normalized.actionPointBonus),
+      phase: "initial",
+      priority: null
+    });
+  }
+  if (normalized.advantageCount > 0 && normalized.advantageSkillKey) {
+    changes.push({
+      key: `system.skills.${normalized.advantageSkillKey}.advantage`,
+      type: "add",
+      value: String(normalized.advantageCount),
+      phase: "initial",
+      priority: null
+    });
+  }
+  if (normalized.disadvantageCount > 0 && normalized.disadvantageSkillKey) {
+    changes.push({
+      key: `system.skills.${normalized.disadvantageSkillKey}.disadvantage`,
+      type: "add",
+      value: String(normalized.disadvantageCount),
+      phase: "initial",
+      priority: null
+    });
+  }
+  if (!changes.length) return false;
+
+  await actor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: "Ярость",
+    img: abilityItem.img || "icons/svg/explosion.svg",
+    origin: abilityItem.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    duration: {
+      seconds: Math.max(0, toInteger(normalized.durationSeconds)),
+      startTime
+    },
+    system: { changes },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "temporary",
+        [RAGE_EFFECT_FLAG_KEY]: {
+          abilityItemId: abilityItem.id,
+          abilitySourceId: getAbilitySourceId(abilityItem),
+          functionId: abilityFunction.id,
+          fixedKey: abilityFunction.fixedKey,
+          createdAt: startTime
+        }
+      }
+    }
+  }], { animate: false });
+  return true;
+}
+
+function hasActiveRageEffect(actor, abilityItem, abilityFunction) {
+  if (!actor || !abilityItem) return false;
+  const abilityItemId = String(abilityItem.id ?? "").trim();
+  const abilitySourceId = getAbilitySourceId(abilityItem);
+  const functionId = String(abilityFunction?.id ?? "").trim();
+  return Array.from(actor.effects ?? []).some(effect => {
+    if (effect?.disabled) return false;
+    const data = effect.getFlag?.(SYSTEM_ID, RAGE_EFFECT_FLAG_KEY);
+    if (!data || typeof data !== "object") return false;
+    const dataFunctionId = String(data.functionId ?? "").trim();
+    if (functionId && dataFunctionId && functionId !== dataFunctionId) return false;
+    const dataSourceId = String(data.abilitySourceId ?? "").trim();
+    if (dataSourceId && abilitySourceId) return dataSourceId === abilitySourceId;
+    return String(data.abilityItemId ?? "").trim() === abilityItemId;
+  });
 }
 
 async function applyAllOrNothingResultEffect(actor, abilityItem, abilityFunction, settings) {

@@ -135,7 +135,8 @@ import {
   normalizeCurseAndBlessingSettings,
   normalizeDisarmSettings,
   normalizeLastChanceSettings,
-  normalizeLuckyCoinSettings
+  normalizeLuckyCoinSettings,
+  normalizeRageSettings
 } from "../settings/abilities.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import {
@@ -3508,6 +3509,7 @@ function buildAbilityEnergyCostRows(item, actor = null) {
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ));
   if (!entry) return [];
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm) {
@@ -3527,7 +3529,9 @@ function buildAbilityEnergyCostRows(item, actor = null) {
       ? normalizeLastChanceSettings(entry.fixedSettings)
       : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
         ? normalizeLuckyCoinSettings(entry.fixedSettings)
-        : normalizeCurseAndBlessingSettings(entry.fixedSettings);
+        : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
+          ? normalizeRageSettings(entry.fixedSettings)
+          : normalizeCurseAndBlessingSettings(entry.fixedSettings);
   const base = Math.max(0, toInteger(settings.energyCost));
   const total = getFixedAbilityEnergyCost(actor, item, entry, base);
   return [
@@ -5495,6 +5499,8 @@ function buildEffectPathLabelMap({
     value: valueLabel,
     max: maximumLabel,
     bonus: bonusLabel,
+    advantage: "Преимущество",
+    disadvantage: "Помеха",
     base: baseLabel,
     developmentBonus: developmentBonusLabel
   });

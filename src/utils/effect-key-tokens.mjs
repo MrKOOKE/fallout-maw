@@ -40,6 +40,8 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
       path: `system.skills.${entry.key}.bonus`,
       group: game.i18n.localize("FALLOUTMAW.Common.Skills")
     })),
+    ...buildSkillAdvantageEffectKeyTokens(),
+    ...buildSkillDisadvantageEffectKeyTokens(),
     buildAllSkillsEffectKeyToken(),
     buildAllSkillsAdvantageEffectKeyToken(),
     buildAllSkillsDisadvantageEffectKeyToken(),
@@ -195,6 +197,26 @@ export function buildAllSkillsDisadvantageEffectKeyToken() {
     path: ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
     group: game.i18n.localize("FALLOUTMAW.Common.Skills")
   });
+}
+
+export function buildSkillAdvantageEffectKeyTokens() {
+  return getSkillSettings().map(entry => createEffectKeyToken({
+    code: `${entry.abbr || entry.key}:adv`,
+    key: `${entry.key}.advantage`,
+    label: `Преимущество: ${entry.label || entry.key}`,
+    path: `system.skills.${entry.key}.advantage`,
+    group: game.i18n.localize("FALLOUTMAW.Common.Skills")
+  })).filter(Boolean);
+}
+
+export function buildSkillDisadvantageEffectKeyTokens() {
+  return getSkillSettings().map(entry => createEffectKeyToken({
+    code: `${entry.abbr || entry.key}:dis`,
+    key: `${entry.key}.disadvantage`,
+    label: `Помеха: ${entry.label || entry.key}`,
+    path: `system.skills.${entry.key}.disadvantage`,
+    group: game.i18n.localize("FALLOUTMAW.Common.Skills")
+  })).filter(Boolean);
 }
 
 export function buildActionCostEffectKeyTokens() {

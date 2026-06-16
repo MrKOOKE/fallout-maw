@@ -23,7 +23,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   lastChance: "lastChance",
   luckyCoin: "luckyCoin",
   disarm: "disarm",
-  defensiveTactics: "defensiveTactics"
+  defensiveTactics: "defensiveTactics",
+  rage: "rage"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -534,6 +535,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.defensiveTactics) {
     return normalizeDefensiveTacticsSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.rage) {
+    return normalizeRageSettings(value);
+  }
   return {};
 }
 
@@ -640,6 +644,21 @@ export function normalizeDefensiveTacticsSettings(value = {}) {
   return {
     dodgeLossReductionPercent: Math.max(0, toInteger(value?.dodgeLossReductionPercent ?? 10)),
     dodgeRoundRecoveryBonusPercent: Math.max(0, toInteger(value?.dodgeRoundRecoveryBonusPercent ?? 30))
+  };
+}
+
+export function normalizeRageSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 30)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 100)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 7200)),
+    durationSeconds: Math.max(0, toInteger(value?.durationSeconds ?? 18)),
+    movementPointBonus: Math.max(0, toInteger(value?.movementPointBonus ?? 3)),
+    actionPointBonus: Math.max(0, toInteger(value?.actionPointBonus ?? 1)),
+    advantageSkillKey: String(value?.advantageSkillKey ?? "meleeCombat").trim() || "meleeCombat",
+    advantageCount: Math.max(0, toInteger(value?.advantageCount ?? 1)),
+    disadvantageSkillKey: String(value?.disadvantageSkillKey ?? "rangedCombat").trim() || "rangedCombat",
+    disadvantageCount: Math.max(0, toInteger(value?.disadvantageCount ?? 1))
   };
 }
 
