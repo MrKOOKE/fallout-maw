@@ -10,10 +10,16 @@ const STATIC_ANIMATION_DURATION_MS = 600;
 const MIN_ANIMATION_DURATION_MS = 120;
 const MAX_ANIMATION_DURATION_MS = 12000;
 const DISTANCE_FILE_PATTERN = /(?:^|[_\-\s])\d{1,3}(?:ft|m)(?=$|[_\-\s.])/i;
+const MELEE_FILE_PATTERN = /(?:^|\/)Generic\/Weapon_Attacks\/Melee(?:\/|$)/i;
 const RANGED_TEMPLATE = Object.freeze({
   gridSize: 200,
   startPoint: 200,
   endPoint: 200
+});
+const MELEE_TEMPLATE = Object.freeze({
+  gridSize: 200,
+  startPoint: 300,
+  endPoint: 300
 });
 
 export function registerAttackAnimationSocket() {
@@ -286,7 +292,9 @@ function applySequencerStylePlacement(sprite, texture, entry) {
 }
 
 function getAnimationTemplate(file) {
-  if (!DISTANCE_FILE_PATTERN.test(String(file ?? ""))) return null;
+  const path = String(file ?? "");
+  if (MELEE_FILE_PATTERN.test(path)) return MELEE_TEMPLATE;
+  if (!DISTANCE_FILE_PATTERN.test(path)) return null;
   return RANGED_TEMPLATE;
 }
 
