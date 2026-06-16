@@ -123,6 +123,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #draggedItemId = "";
   #craftPanDrag = null;
   #craftViewportOverride = null;
+  #craftGridStep = CRAFT_GRID_FALLBACK_STEP;
+  #craftLinkData = { nodes: [], links: [] };
   #expandedRecipeCategories = new Set();
   #hoverPreviewInputKey = "";
   #hoverPreviewKey = "";
@@ -241,6 +243,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         toolSelections: this.#getCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode)
       })
       : createEmptyCraftContext(this.#busy);
+    this.#craftLinkData = selectedRecipe ? { nodes: craft.nodes ?? [], links: craft.links ?? [] } : { nodes: [], links: [] };
     if (selectedRecipe) this.#rememberDefaultCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, craft.toolRequirements);
     const selectedRecipeSummary = recipes.find(recipe => recipe.uuid === this.#selectedRecipeUuid) ?? null;
 
@@ -429,8 +432,10 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       button.addEventListener("click", event => {
         event.preventDefault();
         if (this.#busy) return;
+        const recipeUuid = String(event.currentTarget?.dataset?.recipeUuid ?? "");
+        if (recipeUuid === this.#selectedRecipeUuid) return;
         this.#captureScrollPositions();
-        this.#selectedRecipeUuid = String(event.currentTarget?.dataset?.recipeUuid ?? "");
+        this.#selectedRecipeUuid = recipeUuid;
         this.#selectedRecipe = null;
         this.#craftViewportOverride = null;
         this.#craftToolPickerNodeId = "";
@@ -490,6 +495,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     workspace.querySelectorAll("[data-craft-tool-select]").forEach(button => {
       button.addEventListener("click", event => this.#onCraftToolSelect(event));
     });
+    this.#craftGridStep = getCraftGridMetrics(workspace).step;
     const viewport = this.#getCraftViewport();
     this.#setCraftViewportStyle(viewport.x, viewport.y, viewport.zoom);
     this.#syncCraftNodeLayouts();
@@ -1512,13 +1518,15 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #syncCraftNodeLayouts() {
+    const workspace = this.element?.querySelector("[data-craft-workspace]");
+    const metrics = getCraftGridMetrics(workspace);
     this.element?.querySelectorAll("[data-craft-block-id]").forEach(block => {
       applyCraftElementLayout(block, {
         x: Number(block.dataset.craftX) || 0,
         y: Number(block.dataset.craftY) || 0,
         width: Number(block.dataset.craftWidth) || 1,
         height: Number(block.dataset.craftHeight) || 1
-      });
+      }, metrics);
     });
     this.element?.querySelectorAll("[data-craft-block-frame-id]").forEach(block => {
       applyCraftElementLayout(block, {
@@ -1526,7 +1534,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         y: Number(block.dataset.craftY) || 0,
         width: Number(block.dataset.craftWidth) || 1,
         height: Number(block.dataset.craftHeight) || 1
-      });
+      }, metrics);
     });
     this.element?.querySelectorAll("[data-craft-node-id]").forEach(node => {
       applyCraftElementLayout(node, {
@@ -1534,7 +1542,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         y: Number(node.dataset.craftY) || 0,
         width: Number(node.dataset.craftWidth) || 1,
         height: Number(node.dataset.craftHeight) || 1
-      });
+      }, metrics);
     });
   }
 
@@ -1571,22 +1579,16 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #setCraftViewportStyle(x, y, zoom = this.#getCraftViewport().zoom) {
     const workspace = this.element?.querySelector("[data-craft-workspace]");
     const world = this.element?.querySelector("[data-craft-world]");
-    const viewport = this.#clampCraftViewport(normalizeCraftViewport({ x, y, zoom }));
+    const viewport = normalizeCraftViewport({ x, y, zoom });
     this.#craftViewportOverride = viewport;
     workspace?.style.setProperty("--craft-pan-x", `${viewport.x}px`);
     workspace?.style.setProperty("--craft-pan-y", `${viewport.y}px`);
     workspace?.style.setProperty("--craft-zoom", String(viewport.zoom));
-    workspace?.style.setProperty("--fallout-maw-craft-scaled-step", `${Math.round(getCraftGridMetrics(workspace).step * viewport.zoom)}px`);
+    workspace?.style.setProperty("--fallout-maw-craft-scaled-step", `${Math.round(this.#craftGridStep * viewport.zoom)}px`);
     world?.style.setProperty("--craft-pan-x", `${viewport.x}px`);
     world?.style.setProperty("--craft-pan-y", `${viewport.y}px`);
     world?.style.setProperty("--craft-zoom", String(viewport.zoom));
-    this.#scheduleCraftLinkRender();
     return viewport;
-  }
-
-  #clampCraftViewport(viewport) {
-    const workspace = this.element?.querySelector("[data-craft-workspace]");
-    return clampCraftViewportToVisibleNode(viewport, workspace, this.#selectedRecipe ? getCraftNodesWithRoot(this.#selectedRecipe, this.#craftMode, this.#selectedRecipeId) : []);
   }
 
   #onCraftWorkspacePointerDown(event) {
@@ -1663,22 +1665,20 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!workspace.getClientRects().length || !svg.getClientRects().length) return;
     svg.replaceChildren();
 
-    const recipe = this.#selectedRecipe;
-    if (!recipe) return;
     const mode = operation?.mode ?? this.#craftMode;
-    const craft = getCraftRenderData(recipe, this.#actor, mode, { recipeId: this.#selectedRecipeId });
-    const nodeData = new Map(craft.nodes.map(node => [node.id, node]));
+    const craft = this.#craftLinkData;
+    const nodeData = new Map((craft.nodes ?? []).map(node => [node.id, node]));
     const resultByLink = createCraftLinkResultMap(operation?.linkResults ?? []);
-    const flowByLink = getCraftLinkFlowMap(craft.links, craft.nodes, mode);
+    const flowByLink = getCraftLinkFlowMap(craft.links ?? [], craft.nodes ?? [], mode);
 
-    for (const [linkIndex, link] of craft.links.entries()) {
+    for (const [linkIndex, link] of (craft.links ?? []).entries()) {
       const fromNode = nodeData.get(link.fromNodeId);
       const toNode = nodeData.get(link.toNodeId);
       if (!fromNode || !toNode || getCraftResolvedEndpointId(fromNode) === getCraftResolvedEndpointId(toNode)) continue;
-      const linkKey = getCraftResolvedLinkKey(link, craft.nodes);
+      const linkKey = getCraftResolvedLinkKey(link, craft.nodes ?? []);
       const flow = flowByLink.get(link.id) ?? getCraftLinkFlow(link, nodeData, mode);
-      const from = getCraftEndpointElement(workspace, craft.nodes, flow.fromNodeId);
-      const to = getCraftEndpointElement(workspace, craft.nodes, flow.toNodeId);
+      const from = getCraftEndpointElement(workspace, craft.nodes ?? [], flow.fromNodeId);
+      const to = getCraftEndpointElement(workspace, craft.nodes ?? [], flow.toNodeId);
       if (!from || !to) continue;
       const flowFromKey = getCraftResolvedEndpointId(nodeData.get(flow.fromNodeId));
       const flowToKey = getCraftResolvedEndpointId(nodeData.get(flow.toNodeId));
@@ -1690,7 +1690,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         result: resultByLink.get(`id:${link.id}`)
           ?? resultByLink.get(`key:${linkKey}`)
           ?? resultByLink.get(`index:${linkIndex}`),
-        recipeUuid: this.#selectedRecipeUuid || recipe.uuid,
+        recipeUuid: this.#selectedRecipeUuid,
         linkKey,
         linkIndex,
         flowFromKey,
@@ -2463,6 +2463,55 @@ function getActorOwnedCraftRequirements(actor, requirements = []) {
   return sources;
 }
 
+function createCraftAvailabilityIndex(actor = null) {
+  const items = [];
+  for (const item of actor?.items?.contents ?? []) {
+    if (isNaturalRaceItem(item)) continue;
+    const quantity = getItemQuantity(item);
+    if (quantity <= 0) continue;
+    items.push({
+      item,
+      quantity,
+      sourceKeys: getCraftItemSourceKeys(item),
+      identity: getCraftItemIdentity(item),
+      fingerprint: getCraftItemFingerprint(item),
+      tools: getEnabledToolFunctions(item)
+    });
+  }
+  return { items };
+}
+
+function getActorOwnedCraftRequirementsFromIndex(index = null, requirements = []) {
+  const sources = new Map();
+  const items = index?.items ?? [];
+  for (const requirement of requirements) {
+    let quantity = 0;
+    for (const item of items) {
+      if (!craftIndexedItemMatchesRequirement(item, requirement)) continue;
+      quantity += item.quantity;
+    }
+    sources.set(requirement.key, quantity);
+  }
+  return sources;
+}
+
+function craftIndexedItemMatchesRequirement(indexedItem = {}, requirement = {}) {
+  if (indexedItem.quantity <= 0) return false;
+
+  const requirementKeys = new Set(Array.from(requirement.sourceKeys ?? []).map(key => String(key ?? "").trim()).filter(Boolean));
+  const itemKeys = indexedItem.sourceKeys ?? new Set();
+  const identity = String(requirement.identity ?? "");
+  if (requirementKeys.size && itemKeys.size) {
+    if (setsIntersect(requirementKeys, itemKeys)) return !identity || indexedItem.identity === identity;
+  }
+
+  const fingerprint = String(requirement.fingerprint ?? "");
+  if (identity && indexedItem.identity === identity) return true;
+  if (fingerprint && indexedItem.fingerprint !== fingerprint) return false;
+
+  return Boolean(fingerprint);
+}
+
 function craftItemMatchesRequirement(item, requirement = {}) {
   if (getItemQuantity(item) <= 0) return false;
 
@@ -2478,6 +2527,68 @@ function craftItemMatchesRequirement(item, requirement = {}) {
   if (fingerprint && getCraftItemFingerprint(item) !== fingerprint) return false;
 
   return Boolean(fingerprint);
+}
+
+function createCraftToolRequirementAvailabilityPlan(index = null, requirements = []) {
+  const supplyByItemTool = new Map();
+  const ownedByRequirement = new Map();
+  const orderedRequirements = [...requirements]
+    .sort((left, right) => toToolClassRank(right.toolClass) - toToolClassRank(left.toolClass));
+
+  for (const requirement of orderedRequirements) {
+    const requiredQuantity = Math.max(0, toInteger(requirement.quantity));
+    const toolKey = String(requirement.toolKey ?? "").trim();
+    if (!requiredQuantity || !toolKey) {
+      ownedByRequirement.set(requirement.key, 0);
+      continue;
+    }
+
+    const selected = getDefaultCraftToolCandidate(getIndexedActorCraftToolCandidates(index, requirement, supplyByItemTool), requirement);
+    const owned = selected?.supplyValue ?? 0;
+    ownedByRequirement.set(requirement.key, owned);
+
+    let remaining = requiredQuantity;
+    if (selected?.supplyValue > 0) {
+      const spend = Math.min(selected.supplyValue, remaining);
+      selected.supplyValue -= spend;
+      remaining -= spend;
+      supplyByItemTool.set(selected.supplyKey, selected.supplyValue);
+    }
+  }
+
+  return { ownedByRequirement };
+}
+
+function getIndexedActorCraftToolCandidates(index = null, requirement = {}, supplyByItemTool = new Map()) {
+  const requiredClass = normalizeToolClass(requirement.toolClass);
+  const toolKey = String(requirement.toolKey ?? "").trim();
+  return (index?.items ?? [])
+    .flatMap(entry => (entry.tools ?? [])
+      .filter(tool => String(tool.toolKey ?? "") === toolKey && isToolClassAccepted(tool.toolClass, requiredClass))
+      .map(tool => {
+        const supplyKey = `${entry.item.id}:${toolKey}`;
+        const supplyValue = supplyByItemTool.has(supplyKey)
+          ? supplyByItemTool.get(supplyKey)
+          : Math.max(0, toInteger(tool.supply?.value));
+        return {
+          id: entry.item.id,
+          item: entry.item,
+          name: entry.item.name ?? "",
+          img: normalizeImagePath(entry.item.img || FALLBACK_ICON),
+          toolKey,
+          supplyKey,
+          toolClass: normalizeToolClass(tool.toolClass),
+          supplyValue
+        };
+      }))
+    .filter(candidate => candidate.supplyValue > 0)
+    .sort((left, right) => (
+      Number(right.supplyValue >= Math.max(0, toInteger(requirement.quantity))) - Number(left.supplyValue >= Math.max(0, toInteger(requirement.quantity)))
+      || (toToolClassRank(left.toolClass) - toToolClassRank(requiredClass)) - (toToolClassRank(right.toolClass) - toToolClassRank(requiredClass))
+      || right.supplyValue - left.supplyValue
+      || String(left.item.name ?? "").localeCompare(String(right.item.name ?? ""), game.i18n.lang)
+      || String(left.id ?? "").localeCompare(String(right.id ?? ""), game.i18n.lang)
+    ));
 }
 
 function getCraftRequirementKey({ sourceKeys = new Set(), identity = "", fingerprint = "", sourceUuid = "" } = {}) {
@@ -2974,8 +3085,8 @@ function clampCraftZoom(value) {
   return Math.max(CRAFT_MIN_ZOOM, Math.min(CRAFT_MAX_ZOOM, zoom));
 }
 
-function applyCraftElementLayout(element, { x = 0, y = 0, width = 1, height = 1 } = {}) {
-  const metrics = getCraftGridMetrics(element?.closest?.("[data-craft-workspace]"));
+function applyCraftElementLayout(element, { x = 0, y = 0, width = 1, height = 1 } = {}, metrics = null) {
+  metrics ??= getCraftGridMetrics(element?.closest?.("[data-craft-workspace]"));
   const normalizedWidth = Math.max(1, toInteger(width) || 1);
   const normalizedHeight = Math.max(1, toInteger(height) || 1);
   const widthPx = (normalizedWidth * metrics.cell) + ((normalizedWidth - 1) * metrics.gap);
@@ -2994,68 +3105,6 @@ function getCraftGridMetrics(element) {
   const gap = Math.max(0, cssDimensionToPixels(styles?.getPropertyValue("--fallout-maw-craft-grid-gap") || "4px", element)) || 4;
   const step = Math.max(1, cell + gap) || CRAFT_GRID_FALLBACK_STEP;
   return { cell, gap, step };
-}
-
-function clampCraftViewportToVisibleNode(viewport, workspace, nodes = []) {
-  const rect = workspace?.getBoundingClientRect();
-  if (!rect || rect.width <= 0 || rect.height <= 0 || !nodes.length) return viewport;
-  if (nodes.some(node => isCraftNodeVisibleInViewport(node, viewport, workspace))) return viewport;
-  let nearestAdjustment = null;
-  for (const node of nodes) {
-    const nodeRect = getCraftNodeScreenRect(node, viewport, workspace);
-    const dx = getCraftNodeContainmentDelta(nodeRect.left, nodeRect.right, rect.width);
-    const dy = getCraftNodeContainmentDelta(nodeRect.top, nodeRect.bottom, rect.height);
-    const distance = Math.hypot(dx, dy);
-    if (!nearestAdjustment || distance < nearestAdjustment.distance) {
-      nearestAdjustment = { dx, dy, distance };
-    }
-  }
-  if (!nearestAdjustment) return viewport;
-  return normalizeCraftViewport({
-    ...viewport,
-    x: viewport.x + nearestAdjustment.dx,
-    y: viewport.y + nearestAdjustment.dy
-  });
-}
-
-function isCraftNodeVisibleInViewport(node, viewport, workspace) {
-  const workspaceRect = workspace?.getBoundingClientRect();
-  if (!workspaceRect || workspaceRect.width <= 0 || workspaceRect.height <= 0) return true;
-  const nodeRect = getCraftNodeScreenRect(node, viewport, workspace);
-  return nodeRect.left >= 0
-    && nodeRect.right <= workspaceRect.width
-    && nodeRect.top >= 0
-    && nodeRect.bottom <= workspaceRect.height;
-}
-
-function getCraftNodeContainmentDelta(start, end, size) {
-  const nodeSize = end - start;
-  if (nodeSize > size) return (size / 2) - ((start + end) / 2);
-  if (start < 0) return -start;
-  if (end > size) return size - end;
-  return 0;
-}
-
-function getCraftNodeScreenRect(node, viewport, workspace) {
-  const metrics = getCraftGridMetrics(workspace);
-  const width = Math.max(1, toInteger(node.width) || 1);
-  const height = Math.max(1, toInteger(node.height) || 1);
-  const widthPx = (width * metrics.cell) + ((width - 1) * metrics.gap);
-  const heightPx = (height * metrics.cell) + ((height - 1) * metrics.gap);
-  const centerX = (Number(node.x) || 0) * metrics.step;
-  const centerY = (Number(node.y) || 0) * metrics.step;
-  const workspaceRect = workspace.getBoundingClientRect();
-  const zoom = clampCraftZoom(viewport.zoom);
-  const screenCenterX = (workspaceRect.width / 2) + viewport.x + (centerX * zoom);
-  const screenCenterY = (workspaceRect.height / 2) + viewport.y + (centerY * zoom);
-  const halfWidth = (widthPx * zoom) / 2;
-  const halfHeight = (heightPx * zoom) / 2;
-  return {
-    left: screenCenterX - halfWidth,
-    right: screenCenterX + halfWidth,
-    top: screenCenterY - halfHeight,
-    bottom: screenCenterY + halfHeight
-  };
 }
 
 function cssDimensionToPixels(value, element = document.documentElement) {
@@ -3747,12 +3796,13 @@ function prepareCraftRecipeCategories(recipes = [], actor = null, { selectedReci
   mode = normalizeCraftMode(mode);
   const normalizedSearch = normalizeCraftSearchText(search);
   const categories = new Map();
+  const availability = createCraftAvailabilityIndex(actor);
   for (const recipe of recipes) {
     if (!hasCraftRecipeDataForMode(recipe.system?.craft, mode)) continue;
     const category = getCraftRecipeCategory(recipe);
     const displayName = getCraftRecipeDisplayName(recipe);
     if (normalizedSearch && !normalizeCraftSearchText(`${displayName} ${category}`).includes(normalizedSearch)) continue;
-    const missing = getCraftRecipeMissingCount(recipe, actor, mode) > 0;
+    const missing = getCraftRecipeMissingCount(recipe, actor, mode, availability) > 0;
     const entry = {
       ...recipe,
       displayName,
@@ -3779,11 +3829,19 @@ function prepareCraftRecipeCategories(recipes = [], actor = null, { selectedReci
     .sort((left, right) => left.label.localeCompare(right.label, game.i18n.lang));
 }
 
-function getCraftRecipeMissingCount(recipe, actor, mode = CRAFT_MODE_CREATE) {
+function getCraftRecipeMissingCount(recipe, actor, mode = CRAFT_MODE_CREATE, availability = null) {
   if (!actor) return 0;
-  const data = getCraftRenderData(recipe, actor, mode);
-  return data.requirements.filter(requirement => requirement.owned < requirement.quantity).length
-    + data.toolRequirements.filter(requirement => requirement.owned < requirement.quantity).length;
+  mode = normalizeCraftMode(mode);
+  const nodes = getCraftNodesWithRoot(recipe, mode, recipe?.recipeId ?? DEFAULT_CRAFT_RECIPE_ID);
+  const requirements = mode === CRAFT_MODE_DISASSEMBLY
+    ? getCraftRequirements(nodes.filter(node => node.root), { includeRoot: true })
+    : getCraftRequirements(nodes);
+  const toolRequirements = mode === CRAFT_MODE_CREATE ? getCraftToolRequirements(nodes) : [];
+  const index = availability ?? createCraftAvailabilityIndex(actor);
+  const ownedByRequirement = getActorOwnedCraftRequirementsFromIndex(index, requirements);
+  const toolAvailability = createCraftToolRequirementAvailabilityPlan(index, toolRequirements);
+  return requirements.filter(requirement => (ownedByRequirement.get(requirement.key) ?? 0) < requirement.quantity).length
+    + toolRequirements.filter(requirement => (toolAvailability.ownedByRequirement.get(requirement.key) ?? 0) < requirement.quantity).length;
 }
 
 function getCraftRecipeCategory(recipe) {
