@@ -16,7 +16,8 @@ import {
   normalizeLastChanceSettings,
   normalizeLuckyCoinSettings,
   normalizeReaperSettings,
-  normalizeRageSettings
+  normalizeRageSettings,
+  normalizeWhirlwindSettings
 } from "../settings/abilities.mjs";
 import {
   ATTACKING_WEAPON_ACTION_KEYS,
@@ -32,10 +33,14 @@ import {
   setLimbMissingState
 } from "../combat/damage-hub.mjs";
 import {
+  hasWeaponAction,
+  isWeaponAttackModeEnabled,
+  startWeaponAttack,
   WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK,
   WEAPON_ATTACK_RESOLVED_HOOK,
   requestWeaponAttackCompletion
 } from "../combat/weapon-attack-controller.mjs";
+import { createWhirlwindAttackModifier } from "../combat/weapon-attack-modifiers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
@@ -190,6 +195,14 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.rage
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.whirlwind,
+    label: "Вихрь",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.whirlwind
+    })
   })
 ]);
 
@@ -333,6 +346,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
     return true;
   }
 
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind) {
+    const used = await useWhirlwind(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) {
     const used = await useDeusExMachina(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
@@ -443,6 +462,99 @@ async function useRage(actor, abilityItem, abilityFunction) {
   await applyRageEffect(actor, abilityItem, abilityFunction, settings);
   await createAbilityChatMessage(actor, abilityItem, `Ярость: эффект активен на ${formatDuration(settings.durationSeconds)}.`);
   return true;
+}
+
+async function useWhirlwind(actor, abilityItem, abilityFunction) {
+  const settings = normalizeWhirlwindSettings(abilityFunction.fixedSettings);
+  const token = getActorSceneToken(actor);
+  if (!token) {
+    ui.notifications.warn("Вихрь: выберите токен актера на сцене.");
+    return false;
+  }
+
+  const candidate = getWhirlwindWeaponCandidate(actor);
+  if (!candidate) {
+    ui.notifications.warn("Вихрь: нет оружия в оружейном наборе с неприцельной атакой и рубящим ударом.");
+    return false;
+  }
+
+  await actor.setFlag(SYSTEM_ID, "selectedHudWeaponSetKey", candidate.weaponSet);
+  await actor.setFlag(SYSTEM_ID, "selectedHudWeaponItemId", candidate.weapon.id);
+
+  const controller = startWeaponAttack({
+    token,
+    weapon: candidate.weapon,
+    actionKey: "meleeAttack",
+    weaponFunctionId: candidate.weaponFunctionId,
+    attackModifier: createWhirlwindAttackModifier({
+      accuracyModifier: settings.accuracyModifier,
+      onBeforeAttack: async () => {
+        const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+        if (!hasEnergy(actor, energyCost)) {
+          ui.notifications.warn(`Вихрь: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+          return false;
+        }
+        if (!(await spendEnergy(actor, energyCost))) return false;
+        await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+          name: "Перегрузка: Вихрь",
+          energyCost: settings.overloadEnergyCost,
+          durationSeconds: settings.overloadDurationSeconds
+        });
+        await createAbilityChatMessage(actor, abilityItem, "Вихрь: атака началась.");
+        return true;
+      }
+    })
+  });
+
+  if (!controller) {
+    ui.notifications.warn("Вихрь: не удалось начать атаку выбранным оружием.");
+    return false;
+  }
+  return true;
+}
+
+function getWhirlwindWeaponCandidate(actor) {
+  const candidates = getWhirlwindWeaponCandidates(actor);
+  const selectedId = String(actor?.getFlag?.(SYSTEM_ID, "selectedHudWeaponItemId") ?? "");
+  const selectedSet = String(actor?.getFlag?.(SYSTEM_ID, "selectedHudWeaponSetKey") ?? "");
+  return candidates.find(candidate => candidate.weapon.id === selectedId)
+    ?? candidates.find(candidate => candidate.weaponSet && candidate.weaponSet === selectedSet)
+    ?? candidates.at(0)
+    ?? null;
+}
+
+function getWhirlwindWeaponCandidates(actor) {
+  const rows = [];
+  for (const weapon of actor?.items?.contents ?? []) {
+    const placement = weapon.system?.placement ?? {};
+    if (weapon.type !== "gear" || String(placement.mode ?? "") !== "weapon") continue;
+    const weaponSet = String(placement.weaponSet ?? "");
+    if (!weaponSet) continue;
+    if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon, { ignoreBroken: true })) continue;
+    for (const weaponFunctionId of getWhirlwindWeaponFunctionIds(weapon)) {
+      if (!hasWeaponAction(weapon, "meleeAttack", weaponFunctionId)) continue;
+      if (!isWeaponAttackModeEnabled(weapon, "meleeAttack", "swing", weaponFunctionId)) continue;
+      rows.push({
+        weapon,
+        weaponSet,
+        weaponFunctionId
+      });
+    }
+  }
+  return rows;
+}
+
+function getWhirlwindWeaponFunctionIds(weapon) {
+  const ids = [ITEM_FUNCTIONS.weapon];
+  const additional = weapon?.system?.functions?.additionalWeapons;
+  const entries = Array.isArray(additional)
+    ? additional
+    : additional && typeof additional === "object" ? Object.values(additional) : [];
+  for (const entry of entries) {
+    const id = String(entry?.id ?? "").trim();
+    if (id) ids.push(id);
+  }
+  return Array.from(new Set(ids));
 }
 
 async function useDisarm(actor, abilityItem, abilityFunction) {

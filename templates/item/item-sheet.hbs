@@ -601,6 +601,44 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedWhirlwindSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header">
+        <h3>Настройки: Вихрь</h3>
+      </div>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label>
+            <span>Расход энергии</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.energyCost" value="{{fixedWhirlwindSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Изменение точности</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.accuracyModifier" value="{{fixedWhirlwindSettings.accuracyModifier}}" step="1">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedWhirlwindSettings.overloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" value="{{fixedWhirlwindSettings.overloadDurationAmount}}" min="0" step="1" data-fixed-whirlwind-overload-duration-amount>
+              <select data-fixed-whirlwind-overload-duration-unit>
+                {{#each fixedWhirlwindSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedRageSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header">

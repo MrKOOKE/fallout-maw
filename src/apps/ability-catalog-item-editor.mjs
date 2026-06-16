@@ -29,6 +29,7 @@ import {
   normalizeReaperSettings,
   normalizeDeusExMachinaSettings,
   normalizeDisarmSettings,
+  normalizeWhirlwindSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import {
@@ -713,6 +714,17 @@ function readFixedFunctionSettings(row) {
       )
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.whirlwind.energyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.whirlwind.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.whirlwind.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.whirlwind.overloadDurationUnit']")?.value
+      ),
+      accuracyModifier: row.querySelector("[data-field='fixed.whirlwind.accuracyModifier']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage) {
     return {
       energyCost: row.querySelector("[data-field='fixed.rage.energyCost']")?.value,
@@ -864,6 +876,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedLuckyCoinSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
     ? prepareLuckyCoinSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedWhirlwindSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind
+    ? prepareWhirlwindSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -890,6 +905,7 @@ function prepareFunctionForDisplay(entry) {
     fixedDefensiveTacticsSettings,
     fixedLastChanceSettings,
     fixedLuckyCoinSettings,
+    fixedWhirlwindSettings,
     fixedRageSettings,
     fixedDisarmSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
@@ -975,6 +991,16 @@ function prepareLastChanceSettingsForDisplay(settings = {}) {
 
 function prepareLuckyCoinSettingsForDisplay(settings = {}) {
   const normalized = normalizeLuckyCoinSettings(settings);
+  const duration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: duration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(duration.unit)
+  };
+}
+
+function prepareWhirlwindSettingsForDisplay(settings = {}) {
+  const normalized = normalizeWhirlwindSettings(settings);
   const duration = splitDurationSeconds(normalized.overloadDurationSeconds);
   return {
     ...normalized,

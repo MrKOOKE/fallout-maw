@@ -24,7 +24,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   luckyCoin: "luckyCoin",
   disarm: "disarm",
   defensiveTactics: "defensiveTactics",
-  rage: "rage"
+  rage: "rage",
+  whirlwind: "whirlwind"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -575,6 +576,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.rage) {
     return normalizeRageSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind) {
+    return normalizeWhirlwindSettings(value);
+  }
   return {};
 }
 
@@ -696,6 +700,15 @@ export function normalizeRageSettings(value = {}) {
     advantageCount: Math.max(0, toInteger(value?.advantageCount ?? 1)),
     disadvantageSkillKey: String(value?.disadvantageSkillKey ?? "rangedCombat").trim() || "rangedCombat",
     disadvantageCount: Math.max(0, toInteger(value?.disadvantageCount ?? 1))
+  };
+}
+
+export function normalizeWhirlwindSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 20)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 40)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 18)),
+    accuracyModifier: toInteger(value?.accuracyModifier ?? -30)
   };
 }
 

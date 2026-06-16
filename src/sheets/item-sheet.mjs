@@ -51,6 +51,7 @@ import {
   normalizeLastChanceSettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
+  normalizeWhirlwindSettings,
   normalizeReaperSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
@@ -4422,6 +4423,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedWhirlwindSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind
+    ? prepareWhirlwindSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -4447,6 +4451,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedDisarmSettings,
     fixedDefensiveTacticsSettings,
     fixedRageSettings,
+    fixedWhirlwindSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
@@ -4545,6 +4550,16 @@ function prepareRageSettingsForDisplay(settings = {}) {
     overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
     advantageSkillChoices: buildSkillChoices(normalized.advantageSkillKey, skillSettings),
     disadvantageSkillChoices: buildSkillChoices(normalized.disadvantageSkillKey, skillSettings)
+  };
+}
+
+function prepareWhirlwindSettingsForDisplay(settings = {}) {
+  const normalized = normalizeWhirlwindSettings(settings);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit)
   };
 }
 
@@ -5192,6 +5207,15 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
         row.querySelector("[data-fixed-rage-overload-duration-unit]")?.value
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.durationSeconds`, durationSeconds);
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind) {
+      const overloadDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-whirlwind-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-whirlwind-overload-duration-unit]")?.value
+      );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
       continue;
     }
