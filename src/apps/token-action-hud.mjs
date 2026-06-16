@@ -116,6 +116,7 @@ import {
   getWeaponModuleTechnicalName,
   isModuleItemCompatibleWithSlot
 } from "../utils/weapon-modules.mjs";
+import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { FalloutMaWFormApplicationV2, getFlatFormData } from "./base-form-application-v2.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -1355,11 +1356,13 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#itemTooltipAnchorElement = anchor;
       this.#itemTooltipItemId = item.id;
       this.#itemTooltipPinned = false;
+      this.#syncHudItemTooltipLayer();
       this.#positionHudItemTooltip();
       requestAnimationFrame(() => {
         if (!this.#itemTooltipElement) return;
         const description = this.#itemTooltipElement.querySelector(".description");
         description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+        this.#syncHudItemTooltipLayer();
         this.#positionHudItemTooltip();
       });
       return;
@@ -1372,6 +1375,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     tooltip.style.setProperty("--fallout-maw-ui-scale", String(tokenActionHudScaleFactor(getTokenActionHudScalePercent())));
     tooltip.style.pointerEvents = pinned ? "auto" : "none";
     tooltip.innerHTML = tooltipHTML;
+    tooltip.addEventListener("pointerdown", () => this.#syncHudItemTooltipLayer({ bringToFront: true }));
     tooltip.addEventListener("click", event => this.#onHudItemTooltipClick(event));
     tooltip.addEventListener("pointerover", event => this.#onHudItemTooltipPointerOver(event));
     tooltip.addEventListener("pointerout", event => this.#onHudItemTooltipPointerOut(event));
@@ -1389,17 +1393,19 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#itemTooltipItemId = item.id;
     this.#itemTooltipPinned = Boolean(pinned);
     if (pinned) this.#bindHudItemTooltipDocumentListeners();
+    this.#syncHudItemTooltipLayer({ bringToFront: pinned });
     this.#positionHudItemTooltip();
     requestAnimationFrame(() => {
       const description = tooltip.querySelector(".description");
       description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+      this.#syncHudItemTooltipLayer();
       this.#positionHudItemTooltip();
     });
   }
 
   async #refreshHudItemTooltip() {
     if (!this.#itemTooltipElement || !this.#itemTooltipItemId) return;
-    if (!this.#isLiveHudItemTooltipAnchor(this.#itemTooltipAnchorElement, this.#itemTooltipItemId)) {
+    if (!this.#resolveHudItemTooltipAnchor(this.#itemTooltipItemId) && !this.#itemTooltipPinned) {
       return this.#clearHudItemTooltip();
     }
     const item = this.actor?.items.get(this.#itemTooltipItemId);
@@ -1409,16 +1415,19 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       activeWeaponIndex: this.#itemTooltipWeaponTabIndex,
       baseMode: this.#itemTooltipBaseMode
     });
-    if (!this.#isLiveHudItemTooltipAnchor(this.#itemTooltipAnchorElement, this.#itemTooltipItemId)) {
+    if (!this.#itemTooltipElement || this.#itemTooltipItemId !== item.id) return;
+    if (!this.#resolveHudItemTooltipAnchor(this.#itemTooltipItemId) && !this.#itemTooltipPinned) {
       return this.#clearHudItemTooltip();
     }
     this.#itemTooltipElement.innerHTML = tooltipHTML;
     this.#itemTooltipElement.style.pointerEvents = this.#itemTooltipPinned ? "auto" : "none";
+    this.#syncHudItemTooltipLayer({ bringToFront: this.#itemTooltipPinned });
     this.#clampHudItemTooltipToViewport(this.#itemTooltipElement);
     requestAnimationFrame(() => {
       if (!this.#itemTooltipElement) return;
       const description = this.#itemTooltipElement.querySelector(".description");
       description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+      this.#syncHudItemTooltipLayer();
       this.#clampHudItemTooltipToViewport(this.#itemTooltipElement);
     });
   }
@@ -1428,6 +1437,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!nestedAnchor) {
       this.#clearNestedHudItemTooltip({ force: true });
     }
+    const interactiveControl = event.target?.closest?.("[data-tooltip-module-remove], [data-tooltip-module-choice], [data-tooltip-module-slot], [data-tooltip-weapon-tab]");
+    if (interactiveControl && this.#itemTooltipElement?.contains(interactiveControl)) this.#pinHudItemTooltip();
 
     const moduleRemove = event.target?.closest?.("[data-tooltip-module-remove]");
     if (moduleRemove && this.#itemTooltipElement?.contains(moduleRemove)) {
@@ -1613,6 +1624,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     tooltip.classList.toggle("pinned", Boolean(pinned));
     tooltip.style.setProperty("--fallout-maw-ui-scale", String(tokenActionHudScaleFactor(getTokenActionHudScalePercent())));
     tooltip.innerHTML = html;
+    tooltip.addEventListener("pointerdown", () => this.#syncHudItemTooltipLayer({ bringToFront: true }));
     tooltip.addEventListener("pointerenter", () => this.#cancelNestedHudItemTooltipClose());
     tooltip.addEventListener("pointerleave", event => {
       if (this.#itemTooltipNestedPinned) return;
@@ -1623,27 +1635,37 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       if (event.button !== 1) return;
       event.preventDefault();
       event.stopPropagation();
-      this.#itemTooltipNestedPinned = true;
-      tooltip.classList.add("pinned");
+      this.#pinNestedHudItemTooltip();
     });
 
     document.body.append(tooltip);
     this.#itemTooltipNestedElement = tooltip;
     this.#itemTooltipNestedAnchorElement = anchor;
     this.#itemTooltipNestedPinned = Boolean(pinned);
+    this.#syncHudItemTooltipLayer({ bringToFront: pinned });
     this.#positionNestedHudItemTooltip();
     requestAnimationFrame(() => {
       if (!this.#itemTooltipNestedElement) return;
       const description = this.#itemTooltipNestedElement.querySelector(".description");
       description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+      this.#syncHudItemTooltipLayer();
       this.#positionNestedHudItemTooltip();
     });
+  }
+
+  #pinHudItemTooltip() {
+    this.#itemTooltipPinned = true;
+    this.#itemTooltipElement?.classList.add("pinned");
+    if (this.#itemTooltipElement) this.#itemTooltipElement.style.pointerEvents = "auto";
+    this.#bindHudItemTooltipDocumentListeners();
+    this.#syncHudItemTooltipLayer({ bringToFront: true });
   }
 
   #pinNestedHudItemTooltip() {
     this.#cancelNestedHudItemTooltipClose();
     this.#itemTooltipNestedPinned = true;
     this.#itemTooltipNestedElement?.classList.add("pinned");
+    this.#syncHudItemTooltipLayer({ bringToFront: true });
   }
 
   #positionNestedHudItemTooltip() {
@@ -1654,28 +1676,28 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#clearNestedHudItemTooltip({ force: true });
       return;
     }
-    const view = this.element?.ownerDocument?.defaultView ?? window;
+    const { viewportWidth, viewportHeight } = this.#getHudTooltipViewportMetrics();
     const margin = 10;
     const gap = 12;
-    this.#syncHudItemTooltipAvailableHeight(tooltip, view.innerHeight, margin);
+    this.#syncHudItemTooltipAvailableHeight(tooltip, viewportHeight, margin);
 
     const anchorRect = anchor.getBoundingClientRect();
     const parentRect = this.#itemTooltipElement?.getBoundingClientRect();
     let rect = tooltip.getBoundingClientRect();
     let left = (parentRect?.right ?? anchorRect.right) + gap;
-    if ((left + rect.width) > (view.innerWidth - margin)) {
+    if ((left + rect.width) > (viewportWidth - margin)) {
       left = (parentRect?.left ?? anchorRect.left) - rect.width - gap;
     }
-    left = Math.max(margin, Math.min(view.innerWidth - rect.width - margin, left));
+    left = Math.max(margin, Math.min(viewportWidth - rect.width - margin, left));
     let top = anchorRect.top + ((anchorRect.height - rect.height) / 2);
-    top = Math.max(margin, Math.min(view.innerHeight - rect.height - margin, top));
+    top = Math.max(margin, Math.min(viewportHeight - rect.height - margin, top));
     tooltip.style.left = `${Math.round(left)}px`;
     tooltip.style.top = `${Math.round(top)}px`;
 
-    this.#syncHudItemTooltipAvailableHeight(tooltip, view.innerHeight, margin);
+    this.#syncHudItemTooltipAvailableHeight(tooltip, viewportHeight, margin);
     rect = tooltip.getBoundingClientRect();
-    if ((rect.top + rect.height) > (view.innerHeight - margin)) {
-      tooltip.style.top = `${Math.round(Math.max(margin, view.innerHeight - rect.height - margin))}px`;
+    if ((rect.top + rect.height) > (viewportHeight - margin)) {
+      tooltip.style.top = `${Math.round(Math.max(margin, viewportHeight - rect.height - margin))}px`;
     }
   }
 
@@ -1722,36 +1744,40 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #positionHudItemTooltip() {
     const tooltip = this.#itemTooltipElement;
-    const anchor = this.#itemTooltipAnchorElement;
+    const anchor = this.#resolveHudItemTooltipAnchor(this.#itemTooltipItemId);
     if (!tooltip) return;
-    if (!this.#isLiveHudItemTooltipAnchor(anchor, this.#itemTooltipItemId)) {
+    if (!anchor) {
+      if (this.#itemTooltipPinned) {
+        this.#clampHudItemTooltipToViewport(tooltip);
+        return;
+      }
       this.#clearHudItemTooltip();
       return;
     }
-    const view = this.element?.ownerDocument?.defaultView ?? window;
     const anchorRect = anchor.getBoundingClientRect();
+    const { viewportWidth, viewportHeight } = this.#getHudTooltipViewportMetrics();
     const margin = 10;
     const gap = 12;
     const aboveAvailable = Math.max(0, anchorRect.top - margin - gap);
-    const belowAvailable = Math.max(0, view.innerHeight - anchorRect.bottom - margin - gap);
+    const belowAvailable = Math.max(0, viewportHeight - anchorRect.bottom - margin - gap);
     const placeAbove = aboveAvailable >= Math.min(220, belowAvailable) || belowAvailable < 160;
     const availableHeight = placeAbove ? aboveAvailable : belowAvailable;
-    this.#syncHudItemTooltipAvailableHeight(tooltip, view.innerHeight, margin, { availableHeight });
+    this.#syncHudItemTooltipAvailableHeight(tooltip, viewportHeight, margin, { availableHeight });
     let tooltipRect = tooltip.getBoundingClientRect();
     let left = anchorRect.left + ((anchorRect.width - tooltipRect.width) / 2);
-    left = Math.max(margin, Math.min(view.innerWidth - tooltipRect.width - margin, left));
+    left = Math.max(margin, Math.min(viewportWidth - tooltipRect.width - margin, left));
     let top = placeAbove
       ? anchorRect.top - tooltipRect.height - gap
       : anchorRect.bottom + gap;
     tooltip.style.left = `${Math.round(left)}px`;
-    tooltip.style.top = `${Math.round(Math.max(margin, Math.min(view.innerHeight - tooltipRect.height - margin, top)))}px`;
+    tooltip.style.top = `${Math.round(Math.max(margin, Math.min(viewportHeight - tooltipRect.height - margin, top)))}px`;
     tooltip.dataset.tooltipDirection = "hud";
-    this.#syncHudItemTooltipAvailableHeight(tooltip, view.innerHeight, margin, { availableHeight });
+    this.#syncHudItemTooltipAvailableHeight(tooltip, viewportHeight, margin, { availableHeight });
     tooltipRect = tooltip.getBoundingClientRect();
     if (placeAbove && tooltipRect.bottom > (anchorRect.top - gap)) {
       tooltip.style.top = `${Math.round(Math.max(margin, anchorRect.top - tooltipRect.height - gap))}px`;
-    } else if ((tooltipRect.top + tooltipRect.height) > (view.innerHeight - margin)) {
-      tooltip.style.top = `${Math.round(Math.max(margin, view.innerHeight - tooltipRect.height - margin))}px`;
+    } else if ((tooltipRect.top + tooltipRect.height) > (viewportHeight - margin)) {
+      tooltip.style.top = `${Math.round(Math.max(margin, viewportHeight - tooltipRect.height - margin))}px`;
     }
   }
 
@@ -1761,18 +1787,40 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#positionHudItemTooltip();
       return;
     }
-    const view = this.element?.ownerDocument?.defaultView ?? window;
+    const { viewportWidth, viewportHeight } = this.#getHudTooltipViewportMetrics();
     const margin = 10;
-    this.#syncHudItemTooltipAvailableHeight(tooltip, view.innerHeight, margin);
+    this.#syncHudItemTooltipAvailableHeight(tooltip, viewportHeight, margin);
     const rect = tooltip.getBoundingClientRect();
     let left = Number.parseFloat(tooltip.style.left);
     let top = Number.parseFloat(tooltip.style.top);
     if (!Number.isFinite(left)) left = rect.left;
     if (!Number.isFinite(top)) top = rect.top;
-    left = Math.max(margin, Math.min(view.innerWidth - rect.width - margin, left));
-    top = Math.max(margin, Math.min(view.innerHeight - rect.height - margin, top));
+    left = Math.max(margin, Math.min(viewportWidth - rect.width - margin, left));
+    top = Math.max(margin, Math.min(viewportHeight - rect.height - margin, top));
     tooltip.style.left = `${Math.round(left)}px`;
     tooltip.style.top = `${Math.round(top)}px`;
+  }
+
+  #getHudTooltipViewportMetrics() {
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    const documentElement = view.document?.documentElement ?? document.documentElement;
+    const visualViewport = view.visualViewport;
+    return {
+      viewportWidth: Math.max(
+        0,
+        Number(visualViewport?.width) || 0,
+        Number(view.innerWidth) || 0,
+        Number(documentElement?.clientWidth) || 0,
+        Number(window.innerWidth) || 0
+      ),
+      viewportHeight: Math.max(
+        0,
+        Number(visualViewport?.height) || 0,
+        Number(view.innerHeight) || 0,
+        Number(documentElement?.clientHeight) || 0,
+        Number(window.innerHeight) || 0
+      )
+    };
   }
 
   #syncHudItemTooltipAvailableHeight(tooltip, viewportHeight, margin, { availableHeight = null } = {}) {
@@ -1797,6 +1845,16 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const nonPickerHeight = Math.max(0, tooltipRect.height - pickerRect.height);
     const maxPickerHeight = Math.max(80, Math.floor((resolvedAvailableHeight - nonPickerHeight) / scale));
     tooltip.style.setProperty("--fallout-maw-module-picker-max-height", `${maxPickerHeight}px`);
+  }
+
+  #syncHudItemTooltipLayer({ bringToFront = false } = {}) {
+    if (bringToFront) this.bringToFront?.();
+    const baseZIndex = getOverlayBaseZIndex(this.element);
+    if (this.#itemTooltipElement) this.#itemTooltipElement.style.zIndex = String(baseZIndex + 2);
+    if (this.#itemTooltipNestedElement) this.#itemTooltipNestedElement.style.zIndex = String(baseZIndex + 3);
+    if (bringToFront || this.#itemTooltipPinned || this.#itemTooltipNestedPinned) {
+      reserveOverlayZIndex(baseZIndex + 3);
+    }
   }
 
   #bindHudItemTooltipDocumentListeners() {
@@ -1890,10 +1948,32 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     return !anchorItemId || anchorItemId === expectedItemId;
   }
 
+  #resolveHudItemTooltipAnchor(itemId = "") {
+    if (this.#isLiveHudItemTooltipAnchor(this.#itemTooltipAnchorElement, itemId)) return this.#itemTooltipAnchorElement;
+    const expectedItemId = String(itemId ?? "");
+    if (!expectedItemId) return null;
+    const escapedItemId = CSS.escape(expectedItemId);
+    const anchor = this.element?.querySelector(`[data-hud-tooltip-item="${escapedItemId}"], [data-item-id="${escapedItemId}"]`);
+    if (!this.#isLiveHudItemTooltipAnchor(anchor, expectedItemId)) return null;
+    this.#itemTooltipAnchorElement = anchor;
+    return anchor;
+  }
+
   #clearDetachedHudTooltips() {
-    if (this.#itemTooltipElement && !this.#isLiveHudItemTooltipAnchor(this.#itemTooltipAnchorElement, this.#itemTooltipItemId)) {
-      this.#clearHudItemTooltip();
-    } else if (this.#itemTooltipNestedElement && (
+    if (this.#itemTooltipElement) {
+      const anchor = this.#resolveHudItemTooltipAnchor(this.#itemTooltipItemId);
+      if (anchor) {
+        this.#syncHudItemTooltipLayer();
+        this.#positionHudItemTooltip();
+      } else if (this.#itemTooltipPinned) {
+        this.#syncHudItemTooltipLayer();
+        this.#clampHudItemTooltipToViewport(this.#itemTooltipElement);
+      } else {
+        this.#clearHudItemTooltip();
+      }
+    }
+
+    if (this.#itemTooltipNestedElement && (
       !this.#itemTooltipNestedAnchorElement?.isConnected
       || !this.#itemTooltipElement?.contains(this.#itemTooltipNestedAnchorElement)
     )) {

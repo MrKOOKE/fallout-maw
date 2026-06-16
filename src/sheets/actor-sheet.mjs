@@ -125,6 +125,7 @@ import {
 } from "../utils/inventory-rotation.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
+import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import { getAbilityItemUseProgressEntries } from "../abilities/runtime-state.mjs";
 import { getFixedAbilityEnergyCost, getFixedAbilityFunctionProgressEntries } from "../abilities/fixed-functions.mjs";
@@ -2301,6 +2302,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         .map(([action, icon, label]) => `<button type="button" data-action="${action}"><i class="fa-solid ${icon}"></i>${label}</button>`)
         .join("");
       document.body.append(menu);
+      this.#syncInventoryOverlayLayer({ bringToFront: true });
       this.#positionOverlayAtPointer(menu, { x: event.clientX, y: event.clientY }, 8);
 
       menu.addEventListener("click", clickEvent => {
@@ -2341,6 +2343,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       .map(([action, icon, label, disabled = false, title = ""]) => `<button type="button" data-action="${action}"${disabled ? " disabled" : ""}${title ? ` title="${escapeAttribute(title)}"` : ""}><i class="fa-solid ${icon}"></i>${label}</button>`)
       .join("");
     document.body.append(menu);
+    this.#syncInventoryOverlayLayer({ bringToFront: true });
     this.#positionOverlayAtPointer(menu, { x: event.clientX, y: event.clientY }, 8);
 
     menu.addEventListener("click", async clickEvent => {
@@ -2373,6 +2376,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#applyOverlayUiScale(menu);
     menu.innerHTML = `<button type="button" data-action="edit"><i class="fa-solid fa-pen-to-square"></i>${game.i18n.localize("FALLOUTMAW.Common.Edit")}</button>`;
     document.body.append(menu);
+    this.#syncInventoryOverlayLayer({ bringToFront: true });
     this.#positionOverlayAtPointer(menu, { x: event.clientX, y: event.clientY }, 8);
     menu.addEventListener("click", clickEvent => {
       const action = clickEvent.target.closest("button")?.dataset.action;
@@ -2664,11 +2668,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       this.#tooltipPinned = false;
       this.#tooltipItemId = item.id;
       this.#bindInventoryTooltipKeyMode();
+      this.#syncInventoryOverlayLayer();
       this.#positionInventoryTooltip();
       requestAnimationFrame(() => {
         if (!this.#tooltipElement) return;
         const description = this.#tooltipElement.querySelector(".description");
         description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+        this.#syncInventoryOverlayLayer();
         this.#positionInventoryTooltip();
       });
       return;
@@ -2680,6 +2686,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     tooltip.style.pointerEvents = pinned ? "auto" : "none";
     this.#applyOverlayUiScale(tooltip);
     tooltip.innerHTML = tooltipHTML;
+    tooltip.addEventListener("pointerdown", () => this.#syncInventoryOverlayLayer({ bringToFront: true }));
     tooltip.addEventListener("pointerenter", () => this.#cancelInventoryTooltipClose());
     tooltip.addEventListener("click", event => this.#onInventoryTooltipClick(event));
     tooltip.addEventListener("pointerover", event => this.#onInventoryTooltipPointerOver(event));
@@ -2701,10 +2708,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#tooltipItemId = item.id;
     if (pinned) this.#bindInventoryTooltipDocumentClose();
     this.#bindInventoryTooltipKeyMode();
+    this.#syncInventoryOverlayLayer({ bringToFront: pinned });
     this.#positionInventoryTooltip();
     requestAnimationFrame(() => {
       const description = tooltip.querySelector(".description");
       description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+      this.#syncInventoryOverlayLayer();
       this.#positionInventoryTooltip();
     });
   }
@@ -2820,19 +2829,23 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const item = this.actor.items.get(this.#tooltipItemId);
     if (!item) return;
     this.#clearNestedInventoryTooltip({ force: true });
-    this.#tooltipElement.innerHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
+    const tooltipHTML = await renderInventoryItemTooltipHTML(item, this.actor, {
       activeWeaponIndex: this.#tooltipWeaponTabIndex,
       baseMode: this.#tooltipBaseMode,
       compareActor: getInventoryTooltipCompareActor(),
       compareMode: this.#tooltipCompareMode
     });
+    if (!this.#tooltipElement || this.#tooltipItemId !== item.id) return;
+    this.#tooltipElement.innerHTML = tooltipHTML;
     this.#tooltipElement.classList.toggle("pinned", this.#tooltipPinned);
     this.#tooltipElement.style.pointerEvents = this.#tooltipPinned ? "auto" : "none";
+    this.#syncInventoryOverlayLayer({ bringToFront: this.#tooltipPinned });
     this.#clampInventoryTooltipToViewport(this.#tooltipElement);
     requestAnimationFrame(() => {
       if (!this.#tooltipElement) return;
       const description = this.#tooltipElement.querySelector(".description");
       description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+      this.#syncInventoryOverlayLayer();
       this.#clampInventoryTooltipToViewport(this.#tooltipElement);
     });
   }
@@ -2842,6 +2855,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#tooltipElement?.classList.add("pinned");
     if (this.#tooltipElement) this.#tooltipElement.style.pointerEvents = "auto";
     this.#bindInventoryTooltipDocumentClose();
+    this.#syncInventoryOverlayLayer({ bringToFront: true });
     const weaponIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipWeaponIndex));
     const slotIndex = Math.max(0, toInteger(slotElement?.dataset?.tooltipModuleSlotIndex));
     const panelKey = `${weaponIndex}:${slotIndex}`;
@@ -2930,12 +2944,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#tooltipElement?.classList.add("pinned");
     if (this.#tooltipElement) this.#tooltipElement.style.pointerEvents = "auto";
     this.#bindInventoryTooltipDocumentClose();
+    this.#syncInventoryOverlayLayer({ bringToFront: true });
   }
 
   #pinNestedInventoryTooltip() {
     this.#cancelNestedInventoryTooltipClose();
     this.#nestedTooltipPinned = true;
     this.#nestedTooltipElement?.classList.add("pinned");
+    this.#syncInventoryOverlayLayer({ bringToFront: true });
   }
 
   #showNestedInventoryTooltip(anchor, { pinned = false } = {}) {
@@ -2953,6 +2969,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     tooltip.classList.toggle("pinned", Boolean(pinned));
     this.#applyOverlayUiScale(tooltip);
     tooltip.innerHTML = html;
+    tooltip.addEventListener("pointerdown", () => this.#syncInventoryOverlayLayer({ bringToFront: true }));
     tooltip.addEventListener("pointerenter", () => {
       this.#cancelInventoryTooltipClose();
       this.#cancelNestedInventoryTooltipClose();
@@ -2976,11 +2993,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#nestedTooltipElement = tooltip;
     this.#nestedTooltipAnchorElement = anchor;
     this.#nestedTooltipPinned = Boolean(pinned);
+    this.#syncInventoryOverlayLayer({ bringToFront: pinned });
     this.#positionNestedInventoryTooltip();
     requestAnimationFrame(() => {
       if (!this.#nestedTooltipElement) return;
       const description = this.#nestedTooltipElement.querySelector(".description");
       description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
+      this.#syncInventoryOverlayLayer();
       this.#positionNestedInventoryTooltip();
     });
   }
@@ -3273,6 +3292,20 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     element.style.setProperty("--fallout-maw-ui-scale", String(this.#uiScale));
   }
 
+  #syncInventoryOverlayLayer({ bringToFront = false } = {}) {
+    if (bringToFront) this.bringToFront?.();
+    const baseZIndex = getOverlayBaseZIndex(this.element);
+    if (this.#tooltipElement) this.#tooltipElement.style.zIndex = String(baseZIndex + 2);
+    if (this.#nestedTooltipElement) this.#nestedTooltipElement.style.zIndex = String(baseZIndex + 3);
+    const ownerDocument = this.element?.ownerDocument ?? document;
+    for (const menu of ownerDocument.querySelectorAll(".fallout-maw-inventory-context-menu")) {
+      menu.style.zIndex = String(baseZIndex + 2);
+    }
+    if (bringToFront || this.#tooltipPinned || this.#nestedTooltipPinned || this.#inventoryContextMenuOpen) {
+      reserveOverlayZIndex(baseZIndex + 3);
+    }
+  }
+
   #positionOverlayAtPointer(element, pointer = {}, baseMargin = 14) {
     if (!element) return;
     const { viewportWidth, viewportHeight } = this.#getViewportMetrics();
@@ -3311,6 +3344,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         y: Number(menu.dataset.pointerY)
       }, 8);
     }
+    this.#syncInventoryOverlayLayer();
   }
 
   #bindViewportResize() {
