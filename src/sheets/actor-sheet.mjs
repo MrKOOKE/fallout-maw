@@ -3072,8 +3072,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const aboveAvailable = Math.max(0, anchorRect.top - margin - gap);
     const belowAvailable = Math.max(0, viewportHeight - anchorRect.bottom - margin - gap);
     const placeAbove = aboveAvailable >= Math.min(220 * this.#uiScale, belowAvailable) || belowAvailable < (160 * this.#uiScale);
-    const availableHeight = placeAbove ? aboveAvailable : belowAvailable;
-    this.#syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, this.#uiScale, { availableHeight });
+    this.#syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, this.#uiScale);
 
     let tooltipRect = element.getBoundingClientRect();
 
@@ -3096,7 +3095,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     element.style.left = `${Math.round(left)}px`;
     element.style.top = `${Math.round(Math.max(margin, Math.min(viewportHeight - tooltipRect.height - margin, top)))}px`;
 
-    this.#syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, this.#uiScale, { availableHeight });
+    this.#syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, this.#uiScale);
     tooltipRect = element.getBoundingClientRect();
     if (placeAbove && tooltipRect.bottom > (anchorRect.top - gap)) {
       element.style.top = `${Math.round(Math.max(margin, anchorRect.top - tooltipRect.height - gap))}px`;
@@ -3121,14 +3120,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     element.style.top = `${Math.round(top)}px`;
   }
 
-  #syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, scale = 1, { availableHeight = null } = {}) {
+  #syncInventoryTooltipAvailableHeight(element, viewportHeight, margin, scale = 1) {
     if (!element) return;
     const safeScale = Math.max(0.1, Number(scale) || 1);
     const viewportAvailableHeight = Math.max(0, viewportHeight - (margin * 2));
-    const resolvedAvailableHeight = Number.isFinite(Number(availableHeight))
-      ? Math.max(0, Math.min(viewportAvailableHeight, Number(availableHeight)))
-      : viewportAvailableHeight;
-    const maxTooltipHeight = Math.max(80, Math.floor(resolvedAvailableHeight / safeScale));
+    const maxTooltipHeight = Math.max(80, Math.floor(viewportAvailableHeight / safeScale));
     element.style.setProperty("--fallout-maw-tooltip-max-height", `${maxTooltipHeight}px`);
 
     const picker = element.querySelector(".tooltip-module-picker-panels:has(.tooltip-module-picker-panel.active)");
@@ -3140,7 +3136,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const tooltipRect = element.getBoundingClientRect();
     const pickerRect = picker.getBoundingClientRect();
     const nonPickerHeight = Math.max(0, tooltipRect.height - pickerRect.height);
-    const maxPickerHeight = Math.max(80, Math.floor((resolvedAvailableHeight - nonPickerHeight) / safeScale));
+    const maxPickerHeight = Math.max(80, Math.floor((viewportAvailableHeight - nonPickerHeight) / safeScale));
     element.style.setProperty("--fallout-maw-module-picker-max-height", `${maxPickerHeight}px`);
   }
 
