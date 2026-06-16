@@ -447,6 +447,79 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedDisarmSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Обезоруживание</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активное применение</strong>
+          <label>
+            <span>Расход энергии</span>
+            <input type="number" data-field="fixed.disarm.activeEnergyCost" value="{{fixedDisarmSettings.activeEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Расход ОД</span>
+            <input type="number" data-field="fixed.disarm.activeActionPointCost" value="{{fixedDisarmSettings.activeActionPointCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>База сложности</span>
+            <input type="number" data-field="fixed.disarm.activeDifficultyBase" value="{{fixedDisarmSettings.activeDifficultyBase}}" min="0" step="1">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка активного применения</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" data-field="fixed.disarm.activeOverloadEnergyCost" value="{{fixedDisarmSettings.activeOverloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.disarm.activeOverloadDurationAmount" value="{{fixedDisarmSettings.activeOverloadDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.disarm.activeOverloadDurationUnit">
+                {{#each fixedDisarmSettings.activeOverloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Реакция</strong>
+          <label>
+            <span>Расход энергии</span>
+            <input type="number" data-field="fixed.disarm.reactionEnergyCost" value="{{fixedDisarmSettings.reactionEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Расход ОР</span>
+            <input type="number" data-field="fixed.disarm.reactionActionPointCost" value="{{fixedDisarmSettings.reactionActionPointCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>База сложности</span>
+            <input type="number" data-field="fixed.disarm.reactionDifficultyBase" value="{{fixedDisarmSettings.reactionDifficultyBase}}" min="0" step="1">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка реакции</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" data-field="fixed.disarm.reactionOverloadEnergyCost" value="{{fixedDisarmSettings.reactionOverloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.disarm.reactionOverloadDurationAmount" value="{{fixedDisarmSettings.reactionOverloadDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.disarm.reactionOverloadDurationUnit">
+                {{#each fixedDisarmSettings.reactionOverloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{/if}}
 
     {{#unless isFixed}}

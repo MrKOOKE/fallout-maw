@@ -26,6 +26,7 @@ import {
   normalizeLuckyCoinSettings,
   normalizeReaperSettings,
   normalizeDeusExMachinaSettings,
+  normalizeDisarmSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import {
@@ -626,6 +627,26 @@ function readFixedFunctionSettings(row) {
       )
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm) {
+    return {
+      activeEnergyCost: row.querySelector("[data-field='fixed.disarm.activeEnergyCost']")?.value,
+      activeActionPointCost: row.querySelector("[data-field='fixed.disarm.activeActionPointCost']")?.value,
+      activeDifficultyBase: row.querySelector("[data-field='fixed.disarm.activeDifficultyBase']")?.value,
+      activeOverloadEnergyCost: row.querySelector("[data-field='fixed.disarm.activeOverloadEnergyCost']")?.value,
+      activeOverloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.disarm.activeOverloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.disarm.activeOverloadDurationUnit']")?.value
+      ),
+      reactionEnergyCost: row.querySelector("[data-field='fixed.disarm.reactionEnergyCost']")?.value,
+      reactionActionPointCost: row.querySelector("[data-field='fixed.disarm.reactionActionPointCost']")?.value,
+      reactionDifficultyBase: row.querySelector("[data-field='fixed.disarm.reactionDifficultyBase']")?.value,
+      reactionOverloadEnergyCost: row.querySelector("[data-field='fixed.disarm.reactionOverloadEnergyCost']")?.value,
+      reactionOverloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.disarm.reactionOverloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.disarm.reactionOverloadDurationUnit']")?.value
+      )
+    };
+  }
   if (fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) return {};
   return {
     damageRequired: row.querySelector("[data-field='fixed.damageRequired']")?.value,
@@ -731,6 +752,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedLuckyCoinSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
     ? prepareLuckyCoinSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedDisarmSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm
+    ? prepareDisarmSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const conditions = normalized.conditions.map(condition => prepareConditionForDisplay(condition, {
     changeCount: normalized.changes.length,
     allowLimitedChanges: isEffectChanges
@@ -750,6 +774,7 @@ function prepareFunctionForDisplay(entry) {
     fixedAtRandomSettings,
     fixedLastChanceSettings,
     fixedLuckyCoinSettings,
+    fixedDisarmSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: normalized.changes.map(prepareChangeForDisplay),
     conditions,
@@ -834,6 +859,19 @@ function prepareLuckyCoinSettingsForDisplay(settings = {}) {
     ...normalized,
     overloadDurationAmount: duration.amount,
     overloadDurationUnitChoices: buildDurationUnitChoices(duration.unit)
+  };
+}
+
+function prepareDisarmSettingsForDisplay(settings = {}) {
+  const normalized = normalizeDisarmSettings(settings);
+  const activeDuration = splitDurationSeconds(normalized.activeOverloadDurationSeconds);
+  const reactionDuration = splitDurationSeconds(normalized.reactionOverloadDurationSeconds);
+  return {
+    ...normalized,
+    activeOverloadDurationAmount: activeDuration.amount,
+    activeOverloadDurationUnitChoices: buildDurationUnitChoices(activeDuration.unit),
+    reactionOverloadDurationAmount: reactionDuration.amount,
+    reactionOverloadDurationUnitChoices: buildDurationUnitChoices(reactionDuration.unit)
   };
 }
 
