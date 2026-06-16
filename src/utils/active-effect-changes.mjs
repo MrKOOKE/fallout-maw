@@ -1,4 +1,5 @@
 import { SYSTEM_ID } from "../constants.mjs";
+import { isDodgeAmountModifierEffectKey } from "../combat/dodge-effect-keys.mjs";
 import { getSkillSettings } from "../settings/accessors.mjs";
 import {
   getCoverBonusPercentEffectKey,
@@ -47,6 +48,7 @@ export function prepareActorEffectChangeForApplication(actor, change = {}, optio
   const prepared = prepareActorEffectChangeValue(actor, change, options);
   if (!prepared) return null;
   if (getCoverKeyFromBonusPercentEffectKey(prepared.key)) return null;
+  if (isDodgeAmountModifierEffectKey(prepared.key)) return null;
 
   const coverKey = getEffectCoverKey(change?.effect);
   if (!coverKey) return prepared;
@@ -79,6 +81,13 @@ function prepareActorEffectChangeValue(actor, change = {}, options = {}) {
     ...prepared,
     value: Math.trunc(value * ratio)
   };
+}
+
+export function evaluateActorEffectChangeBaseNumber(actor, change = {}, { fallback = Number.NaN, stage = "prepared" } = {}) {
+  const prepared = prepareActorEffectChangeValue(actor, change, { stage });
+  if (!prepared) return fallback;
+  const value = Number(prepared.value);
+  return Number.isFinite(value) ? value : fallback;
 }
 
 function getActorCoverBonusPercent(actor, coverKey, options = {}) {

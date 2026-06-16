@@ -1,6 +1,11 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { getCombatSettings } from "../settings/accessors.mjs";
+import { evaluateActorEffectChangeBaseNumber } from "../utils/active-effect-changes.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import {
+  DODGE_LOSS_MODIFIER_EFFECT_KEY,
+  DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY
+} from "./dodge-effect-keys.mjs";
 
 const DODGE_RESOURCE_KEY = "dodge";
 const DODGE_SOCKET_ACTION_SPEND = "spendDodgeResource";
@@ -106,8 +111,13 @@ export async function restoreActorDodgeResource(actor, { mode = "full" } = {}) {
 
   const max = Math.max(0, toInteger(resource.max));
   const current = Math.max(0, toInteger(resource.value));
+  const roundRecoveryPercent = applyDodgePercentModifier(
+    actor,
+    getDodgeSettings().roundRecoveryPercent,
+    DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY
+  );
   const nextValue = mode === "round"
-    ? Math.min(max, current + calculateDodgeAmount(max, getDodgeSettings().roundRecoveryPercent))
+    ? Math.min(max, current + calculateDodgeAmount(max, roundRecoveryPercent))
     : max;
   if (nextValue === current) return;
   await updateActorDodgeValue(actor, nextValue);
@@ -122,10 +132,44 @@ async function spendActorDodgeResource(actor, multiplier = 1) {
 
   const max = Math.max(0, toInteger(resource.max));
   const current = Math.max(0, toInteger(resource.value));
-  const amount = calculateDodgeAmount(max, settings.attackCostPercent * Math.max(0, Number(multiplier) || 0));
+  const percent = applyDodgePercentModifier(
+    actor,
+    settings.attackCostPercent * Math.max(0, Number(multiplier) || 0),
+    DODGE_LOSS_MODIFIER_EFFECT_KEY
+  );
+  const amount = calculateDodgeAmount(max, percent);
   if (amount <= 0 || current <= 0) return;
 
   await updateActorDodgeValue(actor, Math.max(0, current - amount));
+}
+
+function applyDodgePercentModifier(actor, percent, effectKey) {
+  const changes = collectDodgeAmountModifierChanges(actor, effectKey);
+  let result = Math.max(0, Number(percent) || 0);
+  for (const change of changes) {
+    const value = evaluateActorEffectChangeBaseNumber(actor, change, { fallback: Number.NaN });
+    if (!Number.isFinite(value)) continue;
+    if (change.type === "multiply") result *= value;
+    else if (change.type === "override") result = value;
+    else if (change.type === "upgrade") result = Math.max(result, value);
+    else if (change.type === "downgrade") result = Math.min(result, value);
+    else result += value;
+  }
+  return Math.max(0, result);
+}
+
+function collectDodgeAmountModifierChanges(actor, effectKey) {
+  const acceptedKey = String(effectKey ?? "").trim();
+  if (!acceptedKey) return [];
+  const changes = [];
+  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+    if (effect?.disabled || effect?.active === false) continue;
+    for (const change of effect?.system?.changes ?? []) {
+      if (String(change?.key ?? "").trim() !== acceptedKey) continue;
+      changes.push({ ...change, effect });
+    }
+  }
+  return changes.sort((left, right) => toInteger(left?.priority) - toInteger(right?.priority));
 }
 
 async function updateActorDodgeValue(actor, value) {

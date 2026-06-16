@@ -1,4 +1,8 @@
 import { createEffectKeyToken } from "../apps/effect-key-autocomplete.mjs";
+import {
+  DODGE_LOSS_MODIFIER_EFFECT_KEY,
+  DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY
+} from "../combat/dodge-effect-keys.mjs";
 import { WEAPON_SWITCH_COST_KEY } from "../combat/weapon-switching.mjs";
 import {
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
@@ -117,6 +121,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
     ...buildActionPenetrationEffectKeyTokens(),
     ...buildAbilityRuntimeEffectKeyTokens(),
     ...buildCoverBonusPercentEffectKeyTokens(),
+    ...buildDodgeResourceEffectKeyTokens(),
     ...buildCombatEffectKeyTokens()
   ];
 
@@ -141,6 +146,25 @@ export function buildCoverBonusPercentEffectKeyTokens() {
     path: getCoverBonusPercentEffectKey(entry.key),
     group: "Укрытия"
   })).filter(Boolean);
+}
+
+export function buildDodgeResourceEffectKeyTokens() {
+  return [
+    createEffectKeyToken({
+      code: "dodgeLoss",
+      key: "dodgeLoss",
+      label: "Уклонение: изменение процента потери",
+      path: DODGE_LOSS_MODIFIER_EFFECT_KEY,
+      group: "Уклонение"
+    }),
+    createEffectKeyToken({
+      code: "dodgeRoundRecovery",
+      key: "dodgeRoundRecovery",
+      label: "Уклонение: изменение процента восстановления за раунд",
+      path: DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY,
+      group: "Уклонение"
+    })
+  ];
 }
 
 export function buildAllSkillsEffectKeyToken() {

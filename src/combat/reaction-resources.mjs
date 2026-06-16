@@ -277,10 +277,10 @@ async function createOrUpdateReactionDodgeEffect(actor, amount) {
       img: data.img,
       "system.changes": data.system.changes,
       flags: data.flags
-    });
+    }, { animate: false });
     return;
   }
-  await actor.createEmbeddedDocuments("ActiveEffect", [data]);
+  await actor.createEmbeddedDocuments("ActiveEffect", [data], { animate: false });
 }
 
 async function createOrUpdateReactionPointEffect(actor, amount) {
@@ -294,24 +294,24 @@ async function createOrUpdateReactionPointEffect(actor, amount) {
       img: data.img,
       "system.changes": data.system.changes,
       flags: data.flags
-    });
+    }, { animate: false });
     return;
   }
-  await actor.createEmbeddedDocuments("ActiveEffect", [data]);
+  await actor.createEmbeddedDocuments("ActiveEffect", [data], { animate: false });
 }
 
 async function deleteReactionPointEffects(actor) {
   const ids = actor?.effects
     ?.filter(effect => effect.getFlag(SYSTEM_ID, REACTION_POINTS_EFFECT_FLAG))
     .map(effect => effect.id) ?? [];
-  if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids);
+  if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids, { animate: false });
 }
 
 async function deleteReactionDodgeEffects(actor) {
   const ids = actor?.effects
     ?.filter(effect => effect.getFlag(SYSTEM_ID, REACTION_DODGE_EFFECT_FLAG))
     .map(effect => effect.id) ?? [];
-  if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids);
+  if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids, { animate: false });
 }
 
 async function addOneTimeActionPointEffect(actor, amount, { source = "" } = {}) {
