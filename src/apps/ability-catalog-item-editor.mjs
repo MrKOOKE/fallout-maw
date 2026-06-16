@@ -21,6 +21,7 @@ import {
   normalizeCurseAndBlessingSettings,
   normalizeAllOrNothingSettings,
   normalizeAtRandomSettings,
+  normalizeDefensiveTacticsSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
   normalizeLuckyCoinSettings,
@@ -603,6 +604,12 @@ function readFixedFunctionSettings(row) {
       extraBlockChanceFormula: row.querySelector("[data-field='fixed.atRandom.extraBlockChanceFormula']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.defensiveTactics) {
+    return {
+      dodgeLossReductionPercent: row.querySelector("[data-field='fixed.defensiveTactics.dodgeLossReductionPercent']")?.value,
+      dodgeRoundRecoveryBonusPercent: row.querySelector("[data-field='fixed.defensiveTactics.dodgeRoundRecoveryBonusPercent']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance) {
     return {
       energyCost: row.querySelector("[data-field='fixed.lastChance.energyCost']")?.value,
@@ -746,6 +753,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedAtRandomSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.atRandom
     ? prepareAtRandomSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedDefensiveTacticsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.defensiveTactics
+    ? prepareDefensiveTacticsSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedLastChanceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance
     ? prepareLastChanceSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -772,6 +782,7 @@ function prepareFunctionForDisplay(entry) {
     fixedReaperSettings,
     fixedFourLeafCloverSettings,
     fixedAtRandomSettings,
+    fixedDefensiveTacticsSettings,
     fixedLastChanceSettings,
     fixedLuckyCoinSettings,
     fixedDisarmSettings,
@@ -840,6 +851,10 @@ function prepareFourLeafCloverSettingsForDisplay(settings = {}) {
 
 function prepareAtRandomSettingsForDisplay(settings = {}) {
   return normalizeAtRandomSettings(settings);
+}
+
+function prepareDefensiveTacticsSettingsForDisplay(settings = {}) {
+  return normalizeDefensiveTacticsSettings(settings);
 }
 
 function prepareLastChanceSettingsForDisplay(settings = {}) {

@@ -367,6 +367,24 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedDefensiveTacticsSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Оборонительная тактика</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Уклонение</strong>
+          <label>
+            <span>Снижение потери уклонения, %</span>
+            <input type="number" data-field="fixed.defensiveTactics.dodgeLossReductionPercent" value="{{fixedDefensiveTacticsSettings.dodgeLossReductionPercent}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Бонус восстановления за раунд, %</span>
+            <input type="number" data-field="fixed.defensiveTactics.dodgeRoundRecoveryBonusPercent" value="{{fixedDefensiveTacticsSettings.dodgeRoundRecoveryBonusPercent}}" min="0" step="1">
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedLastChanceSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Последний шанс</h3>

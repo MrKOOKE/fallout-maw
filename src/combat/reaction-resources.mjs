@@ -7,6 +7,10 @@ import {
   restoreActorMovementResources
 } from "./movement-resources.mjs";
 import { restoreActorDodgeResource } from "./dodge-resource.mjs";
+import {
+  callActorTurnEndHandlers,
+  callActorTurnStartPreparedHandlers
+} from "./turn-events.mjs";
 
 export const REACTION_RESOURCE_KEY = "reactionPoints";
 export const ONE_TIME_ACTION_POINTS_KEY = "system.resources.actionPoints.once";
@@ -65,10 +69,12 @@ export async function prepareActorTurnStart(actor) {
 
   await restoreActorMovementResources(actor);
   await restoreActorDodgeResource(actor, { mode: "round" });
+  await callActorTurnStartPreparedHandlers({ actor, combat: game.combat });
 }
 
 export async function prepareActorTurnEnd(actor, { conversionMode = TURN_CONVERSION_MODES.dodge } = {}) {
   if (!actor?.isOwner) return;
+  await callActorTurnEndHandlers({ actor, combat: game.combat, conversionMode });
   if (conversionMode !== TURN_CONVERSION_MODES.skip) {
     const remainingActionPoints = getNormalActionPointValue(actor);
     if (remainingActionPoints > 0) {

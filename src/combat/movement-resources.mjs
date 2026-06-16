@@ -283,6 +283,18 @@ function getMovementResourceSpendingStack(actor) {
   return Array.isArray(stack) ? stack.filter(entry => entry && typeof entry === "object") : [];
 }
 
+export function hasActorCombatMovementInCurrentTurn(actor) {
+  if (!actor) return false;
+  const currentRound = Math.max(0, toInteger(game.combat?.round));
+  return getMovementResourceSpendingStack(actor).some(entry => {
+    if (String(entry?.actorUuid ?? "") !== String(actor.uuid ?? "")) return false;
+    if (currentRound > 0 && toInteger(entry?.round) !== currentRound) return false;
+    const resources = entry?.resources ?? {};
+    return [MOVEMENT_RESOURCE_KEY, ACTION_RESOURCE_KEY, REACTION_RESOURCE_KEY]
+      .some(key => Math.max(0, toInteger(resources[key])) > 0);
+  });
+}
+
 function findLastMovementResourceSpendingIndex(stack, tokenDocument) {
   const actorUuid = tokenDocument?.actor?.uuid ?? "";
   const sceneId = tokenDocument?.parent?.id ?? tokenDocument?.scene?.id ?? "";

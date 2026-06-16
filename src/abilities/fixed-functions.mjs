@@ -10,6 +10,7 @@ import {
   normalizeAtRandomSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
+  normalizeDefensiveTacticsSettings,
   normalizeDisarmSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
@@ -45,7 +46,18 @@ import {
   evaluateActorEffectChangeNumber
 } from "../utils/active-effect-changes.mjs";
 import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
-import { ACTION_RESOURCE_KEY } from "../combat/movement-resources.mjs";
+import {
+  ACTION_RESOURCE_KEY,
+  hasActorCombatMovementInCurrentTurn
+} from "../combat/movement-resources.mjs";
+import {
+  DODGE_LOSS_MODIFIER_EFFECT_KEY,
+  DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY
+} from "../combat/dodge-effect-keys.mjs";
+import {
+  registerActorTurnEndHandler,
+  registerActorTurnStartPreparedHandler
+} from "../combat/turn-events.mjs";
 import {
   ONE_TIME_SKILL_MODIFIER_FLAG_KEY,
   getPendingOneTimeSkillModifierEffects
@@ -73,6 +85,7 @@ const ABILITY_OVERLOAD_EFFECT_FLAG_KEY = "abilityOverload";
 const ALL_OR_NOTHING_EFFECT_FLAG_KEY = "allOrNothing";
 const AT_RANDOM_ACTION_BLOCK_EFFECT_FLAG_KEY = "atRandomActionBlock";
 const LUCKY_COIN_EFFECT_SOURCE = "luckyCoin";
+const DEFENSIVE_TACTICS_EFFECT_FLAG_KEY = "defensiveTactics";
 const DISARM_REACTION_PROVIDER_ID = "disarm";
 const DISARM_QUERY_NAME = "falloutMawDisarm";
 const DISARM_SOCKET_TIMEOUT_MS = 60000;
@@ -159,11 +172,21 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.disarm
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.defensiveTactics,
+    label: "Оборонительная тактика",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.defensiveTactics
+    })
   })
 ]);
 
 export function registerFixedAbilityFunctionHooks() {
   registerDisarmReactionProvider();
+  registerActorTurnEndHandler(context => applyDefensiveTacticsAtTurnEnd(context));
+  registerActorTurnStartPreparedHandler(context => deleteDefensiveTacticsEffects(context?.actor));
   registerLethalDamagePreventionHandler(context => processLastChanceLethalDamage(context));
   Hooks.on(DAMAGE_APPLIED_HOOK, context => {
     void advanceDeusExMachinaProgressFromDamage(context?.results ?? []);
@@ -1373,6 +1396,94 @@ async function processAtRandomAttackResolution(context = {}) {
   }
 
   await replaceAtRandomActionBlockEffect(actor, entry.abilityItem, entry.abilityFunction, [...blockedActionKeys]);
+}
+
+async function applyDefensiveTacticsAtTurnEnd({ actor = null } = {}) {
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
+  if (!game.combat?.started) return;
+  if (hasActorCombatMovementInCurrentTurn(actor)) return;
+
+  const entries = getActorDefensiveTacticsEntries(actor);
+  if (!entries.length) return;
+
+  await deleteDefensiveTacticsEffects(actor);
+  for (const entry of entries) {
+    await createDefensiveTacticsEffect(actor, entry.abilityItem, entry.abilityFunction, entry.settings);
+  }
+}
+
+async function deleteDefensiveTacticsEffects(actor) {
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
+  const effectIds = Array.from(actor.effects ?? [])
+    .filter(effect => Boolean(effect.getFlag?.(SYSTEM_ID, DEFENSIVE_TACTICS_EFFECT_FLAG_KEY)))
+    .map(effect => effect.id)
+    .filter(Boolean);
+  if (effectIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", effectIds, { animate: false });
+}
+
+async function createDefensiveTacticsEffect(actor, abilityItem, abilityFunction, settings = {}) {
+  const normalized = normalizeDefensiveTacticsSettings(settings);
+  const changes = [];
+  const lossReduction = Math.max(0, toInteger(normalized.dodgeLossReductionPercent));
+  const recoveryBonus = Math.max(0, toInteger(normalized.dodgeRoundRecoveryBonusPercent));
+  if (lossReduction > 0) {
+    changes.push({
+      key: DODGE_LOSS_MODIFIER_EFFECT_KEY,
+      type: "add",
+      value: String(-lossReduction),
+      phase: "initial",
+      priority: null
+    });
+  }
+  if (recoveryBonus > 0) {
+    changes.push({
+      key: DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY,
+      type: "add",
+      value: String(recoveryBonus),
+      phase: "initial",
+      priority: null
+    });
+  }
+  if (!changes.length) return false;
+
+  await actor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: "Оборонительная тактика",
+    img: abilityItem?.img || "icons/svg/shield.svg",
+    origin: abilityItem?.uuid ?? actor.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    system: { changes },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "temporary",
+        [DEFENSIVE_TACTICS_EFFECT_FLAG_KEY]: {
+          abilityItemId: abilityItem?.id ?? "",
+          functionId: abilityFunction?.id ?? "",
+          fixedKey: ABILITY_FIXED_FUNCTION_KEYS.defensiveTactics,
+          round: game.combat?.round ?? 0,
+          createdAt: game.time?.worldTime ?? 0
+        }
+      }
+    }
+  }], { animate: false });
+  return true;
+}
+
+function getActorDefensiveTacticsEntries(actor) {
+  const entries = [];
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.defensiveTactics) continue;
+      entries.push({
+        abilityItem,
+        abilityFunction,
+        settings: normalizeDefensiveTacticsSettings(abilityFunction.fixedSettings)
+      });
+    }
+  }
+  return entries;
 }
 
 async function processLastChanceLethalDamage({ actor = null, amount = 0 } = {}) {

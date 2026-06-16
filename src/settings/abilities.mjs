@@ -22,7 +22,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   atRandom: "atRandom",
   lastChance: "lastChance",
   luckyCoin: "luckyCoin",
-  disarm: "disarm"
+  disarm: "disarm",
+  defensiveTactics: "defensiveTactics"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -530,6 +531,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm) {
     return normalizeDisarmSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.defensiveTactics) {
+    return normalizeDefensiveTacticsSettings(value);
+  }
   return {};
 }
 
@@ -629,6 +633,13 @@ export function normalizeDisarmSettings(value = {}) {
     reactionDifficultyBase: Math.max(0, toInteger(value?.reactionDifficultyBase ?? 20)),
     reactionOverloadEnergyCost: Math.max(0, toInteger(value?.reactionOverloadEnergyCost ?? 20)),
     reactionOverloadDurationSeconds: Math.max(0, toInteger(value?.reactionOverloadDurationSeconds ?? 6))
+  };
+}
+
+export function normalizeDefensiveTacticsSettings(value = {}) {
+  return {
+    dodgeLossReductionPercent: Math.max(0, toInteger(value?.dodgeLossReductionPercent ?? 10)),
+    dodgeRoundRecoveryBonusPercent: Math.max(0, toInteger(value?.dodgeRoundRecoveryBonusPercent ?? 30))
   };
 }
 

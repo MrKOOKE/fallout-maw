@@ -45,6 +45,7 @@ import {
   normalizeAtRandomSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
+  normalizeDefensiveTacticsSettings,
   normalizeDisarmSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
@@ -4330,6 +4331,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedDisarmSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm
     ? prepareDisarmSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedDefensiveTacticsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.defensiveTactics
+    ? prepareDefensiveTacticsSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -4353,6 +4357,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedLastChanceSettings,
     fixedLuckyCoinSettings,
     fixedDisarmSettings,
+    fixedDefensiveTacticsSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
@@ -4432,6 +4437,10 @@ function prepareFourLeafCloverSettingsForDisplay(settings = {}) {
 
 function prepareAtRandomSettingsForDisplay(settings = {}) {
   return normalizeAtRandomSettings(settings);
+}
+
+function prepareDefensiveTacticsSettingsForDisplay(settings = {}) {
+  return normalizeDefensiveTacticsSettings(settings);
 }
 
 function prepareLastChanceSettingsForDisplay(settings = {}) {
