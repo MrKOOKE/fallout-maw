@@ -24,6 +24,7 @@ import {
   decorateActionPointHudEntry,
   promptEndTurnConversion
 } from "../combat/reaction-resources.mjs";
+import { isReactionSystemLocked } from "../combat/reaction-hub.mjs";
 import { canSpendWeaponSwitchActionPoints, getWeaponSwitchActionPointCost, spendWeaponSwitchActionPoints } from "../combat/weapon-switching.mjs";
 import {
   getGrappleTargetId,
@@ -164,6 +165,12 @@ let tokenActionHudPreviewPercent = null;
 let tokenActionHudMovementPreview = null;
 const pendingTokenActionHudSocketRequests = new Map();
 const hudImageAspectCache = new Map();
+
+function isHudActionBlockedByReactionLock() {
+  if (!isReactionSystemLocked()) return false;
+  ui.notifications.warn("Ожидание реакций: действие временно заблокировано.");
+  return true;
+}
 
 export function registerTokenActionHudHooks() {
   if (hooksRegistered) return;
@@ -620,6 +627,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static #onToggleTray(event, target) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     const tray = target.dataset.tray ?? "";
     this.#activeTray = this.#activeTray === tray ? "" : tray;
     if (this.#activeTray !== "weaponEquip") this.#weaponEquipTarget = null;
@@ -628,6 +636,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async #onSelectHudWeaponSet(event, target) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     const actor = this.actor;
     if (!actor?.isOwner) return undefined;
     const weaponSetKey = String(target.dataset.weaponSet ?? "");
@@ -678,6 +687,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async #onEndCombatTurn(event) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     const combat = game.combat;
     if (!isTokenCombatTurn(this.token, combat) || !canUserAdvanceCombatTurn(combat)) return undefined;
     this.#activeTray = "";
@@ -762,6 +772,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async #onSelectHudWeapon(event, target) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     const actor = this.actor;
     if (!actor?.isOwner) return undefined;
     const itemId = String(target.dataset.itemId ?? "");
@@ -779,6 +790,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async #onOpenWeaponSlotPicker(event, target) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     if (isMiddleMouseClick(event) || event.button !== 0) return undefined;
     const weaponSetKey = String(target.dataset.weaponSet ?? "");
     const weaponSlotKey = String(target.dataset.weaponSlot ?? "");
@@ -791,6 +803,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async #onReplaceHudWeapon(event, target) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     const itemId = String(target.dataset.itemId ?? "");
     if (isMiddleMouseClick(event)) return this.actor?.items.get(itemId)?.sheet?.render(true);
     if (event.button !== 0) return undefined;
@@ -806,6 +819,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async #onEquipHudWeapon(event, target) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     const actor = this.actor;
     const itemId = String(target.dataset.itemId ?? "");
     const item = actor?.items.get(itemId);
@@ -828,6 +842,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async #onToggleWeaponActions(event, target) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     const itemId = String(target.dataset.itemId ?? "");
     if (!itemId) return undefined;
     if (isMiddleMouseClick(event)) {
@@ -847,6 +862,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static #onUseWeaponAction(event, target) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     const actionKey = String(target.dataset.weaponActionKey ?? "");
     const weaponFunctionId = String(target.dataset.weaponFunctionId ?? "");
     const itemId = String(target.dataset.itemId ?? "");
@@ -877,6 +893,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async #onToggleLightSource(event, target) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     const itemId = String(target.dataset.itemId ?? "");
     const item = this.actor?.items.get(itemId);
     if (!item) return undefined;
@@ -889,6 +906,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async #onOpenLightSourceRecharge(event, target) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     const itemId = String(target.dataset.itemId ?? "");
     const item = this.actor?.items.get(itemId);
     if (!item) return undefined;
@@ -906,6 +924,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async #onSetWeaponAttackPower(event, target) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     const weaponFunctionId = String(target.dataset.weaponFunctionId ?? "");
     const itemId = String(target.dataset.itemId ?? "");
     const item = this.actor?.items.get(itemId);
@@ -949,6 +968,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async #onUseItem(event, target) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     const item = this.actor?.items.get(target.dataset.itemId ?? "");
     if (!item) return undefined;
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
@@ -972,6 +992,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async #onUseAbility(event, target) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     const item = this.actor?.items.get(target.dataset.itemId ?? "");
     if (!item) return undefined;
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
@@ -987,6 +1008,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async #onUseActiveAction(event, target) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     const key = String(target.dataset.activeActionKey ?? "");
     if (!this.token?.actor?.isOwner) return undefined;
     if (key === "grapple") {
@@ -1011,12 +1033,14 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static async #onDragGrappledTarget(event) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     await startGrappleReposition(this.token);
     return this.render({ force: true });
   }
 
   static #onUseSystemAction(event, target) {
     event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
     const key = String(target.dataset.systemActionKey ?? "");
     if (!["advancement", "medicine", "repair", "search", "trade", "craft", "stealth", "traps"].includes(key)) return undefined;
 

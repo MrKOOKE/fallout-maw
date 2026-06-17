@@ -8,6 +8,7 @@ import {
   normalizeAbilityFunctions,
   normalizeAllOrNothingSettings,
   normalizeAtRandomSettings,
+  normalizeCounterAttackSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
   normalizeDefensiveTacticsSettings,
@@ -35,8 +36,11 @@ import {
   setLimbMissingState
 } from "../combat/damage-hub.mjs";
 import {
+  getMissingWeaponResourceCost,
   hasWeaponAction,
+  hasRequiredWeaponResources,
   isWeaponAttackModeEnabled,
+  executeWeaponAttackAgainstToken,
   startWeaponAttack,
   WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK,
   WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK,
@@ -73,7 +77,7 @@ import {
   getPendingOneTimeSkillModifierEffects
 } from "../rolls/one-time-skill-modifiers.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { REACTION_EVENT_KEYS, REACTION_RESULT, registerReactionProvider } from "../combat/reaction-hub.mjs";
+import { REACTION_EVENT_KEYS, REACTION_RESULT, isReactionSystemLocked, registerReactionProvider, requestReactionEvent } from "../combat/reaction-hub.mjs";
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "../combat/reaction-resources.mjs";
 import { areTokensAdjacent } from "../combat/active-actions.mjs";
 import { createThrownItemTile } from "../canvas/thrown-items.mjs";
@@ -98,6 +102,7 @@ const LUCKY_COIN_EFFECT_SOURCE = "luckyCoin";
 const DEFENSIVE_TACTICS_EFFECT_FLAG_KEY = "defensiveTactics";
 const RAGE_EFFECT_FLAG_KEY = "rage";
 const DISARM_REACTION_PROVIDER_ID = "disarm";
+const COUNTER_ATTACK_REACTION_PROVIDER_ID = "counterAttack";
 const DISARM_QUERY_NAME = "falloutMawDisarm";
 const DISARM_SOCKET_TIMEOUT_MS = 60000;
 const FIXED_ABILITY_SOCKET = `system.${SYSTEM_ID}`;
@@ -224,11 +229,20 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.counterAttack,
+    label: "Контр атака",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.counterAttack
+    })
   })
 ]);
 
 export function registerFixedAbilityFunctionHooks() {
   registerDisarmReactionProvider();
+  registerCounterAttackReactionProvider();
   registerActorTurnEndHandler(context => applyDefensiveTacticsAtTurnEnd(context));
   registerActorTurnStartPreparedHandler(context => deleteDefensiveTacticsEffects(context?.actor));
   registerLethalDamagePreventionHandler(context => processLastChanceLethalDamage(context));
@@ -241,6 +255,7 @@ export function registerFixedAbilityFunctionHooks() {
   Hooks.on(WEAPON_ATTACK_RESOLVED_HOOK, context => {
     void consumeAllOrNothingResultEffects(context);
     void processReaperAttackResolution(context);
+    void requestCounterAttackReaction(context);
   });
   Hooks.on(WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK, context => {
     requestDoubleAttackDuplicate(context);
@@ -341,6 +356,10 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
 }
 
 export async function useFixedAbilityFunctionItem({ actor = null, item = null, application = null } = {}) {
+  if (isReactionSystemLocked()) {
+    ui.notifications.warn("Ожидание реакций: способность временно заблокирована.");
+    return false;
+  }
   if (!actor?.isOwner || item?.type !== "ability") return false;
   const abilityFunction = normalizeAbilityFunctions(item.system?.functions ?? [])
     .find(entry => isFixedAbilityFunctionActive(entry));
@@ -995,6 +1014,114 @@ function registerDisarmReactionProvider() {
   });
 }
 
+function registerCounterAttackReactionProvider() {
+  registerReactionProvider({
+    id: COUNTER_ATTACK_REACTION_PROVIDER_ID,
+    collect: collectCounterAttackReactionOffers,
+    execute: executeCounterAttackReaction
+  });
+}
+
+async function requestCounterAttackReaction(context = {}) {
+  if (context?.attempted === false) return;
+  const attackerActorUuid = String(context?.attackerUuid ?? context?.actorUuid ?? "").trim();
+  const attackerTokenUuid = String(context?.tokenUuid ?? "").trim();
+  const targetTokenUuids = Array.from(new Set((context?.targetTokenUuids ?? [])
+    .map(uuid => String(uuid ?? "").trim())
+    .filter(Boolean)));
+  if (!attackerActorUuid || !attackerTokenUuid || !targetTokenUuids.length) return;
+  await requestReactionEvent(REACTION_EVENT_KEYS.weaponAttackResolved, {
+    attackId: context?.attackId ?? "",
+    attackerActorUuid,
+    attackerTokenUuid,
+    targetTokenUuids,
+    weaponUuid: context?.weaponUuid ?? "",
+    actionKey: context?.actionKey ?? "",
+    weaponFunctionId: context?.weaponFunctionId ?? "",
+    title: "Контр атака",
+    message: "Атака завершена. Доступна реакция контратаки."
+  });
+}
+
+async function collectCounterAttackReactionOffers({ eventKey = "", context = {} } = {}) {
+  if (eventKey !== REACTION_EVENT_KEYS.weaponAttackResolved) return [];
+  const attacker = await fromUuid(String(context.attackerActorUuid ?? ""));
+  const attackerToken = await fromUuid(String(context.attackerTokenUuid ?? ""));
+  if (!attacker || !attackerToken) return [];
+
+  const offers = [];
+  const targetTokenUuids = Array.from(new Set((context.targetTokenUuids ?? [])
+    .map(uuid => String(uuid ?? "").trim())
+    .filter(Boolean)));
+  for (const targetTokenUuid of targetTokenUuids) {
+    const defenderToken = await fromUuid(targetTokenUuid);
+    const defender = defenderToken?.actor ?? null;
+    if (!defender || defender.uuid === attacker.uuid) continue;
+    if (!areTokensAdjacent(defenderToken, attackerToken)) continue;
+    const entry = getActorCounterAttackEntry(defender);
+    if (!entry) continue;
+    const settings = entry.settings;
+    const energyCost = getAbilityEnergyCost(defender, entry.abilityItem, entry.abilityFunction, settings.reactionEnergyCost);
+    if (!hasEnergy(defender, energyCost)) continue;
+    if (getMissingWeaponResourceCost(entry.weapon, 1, entry.weaponFunctionId)) continue;
+    offers.push({
+      actorUuid: defender.uuid,
+      reactionId: COUNTER_ATTACK_REACTION_PROVIDER_ID,
+      offerId: `${COUNTER_ATTACK_REACTION_PROVIDER_ID}:${defender.uuid}:${context.attackId ?? foundry.utils.randomID()}`,
+      label: "Контр атака",
+      description: `Ответить ${entry.weapon.name}: ${attacker.name}.`,
+      img: entry.abilityItem.img || entry.weapon.img || "icons/svg/sword.svg",
+      costLines: [
+        `Энергия: ${settings.reactionEnergyCost} базовая / ${energyCost} итоговая`
+      ],
+      abilityItemId: entry.abilityItem.id,
+      abilityFunctionId: entry.abilityFunction.id,
+      weaponId: entry.weapon.id,
+      weaponFunctionId: entry.weaponFunctionId,
+      defenderTokenUuid: defenderToken.uuid,
+      attackerTokenUuid: attackerToken.uuid,
+      energyCost
+    });
+  }
+  return offers;
+}
+
+async function executeCounterAttackReaction({ offer = {} } = {}) {
+  const defender = await fromUuid(String(offer.actorUuid ?? ""));
+  const defenderTokenDocument = await fromUuid(String(offer.defenderTokenUuid ?? ""));
+  const attackerTokenDocument = await fromUuid(String(offer.attackerTokenUuid ?? ""));
+  const entry = getActorCounterAttackEntry(defender, offer);
+  if (!defender || !defenderTokenDocument || !attackerTokenDocument || !entry) return { handled: false };
+  const settings = entry.settings;
+  const energyCost = getAbilityEnergyCost(defender, entry.abilityItem, entry.abilityFunction, settings.reactionEnergyCost);
+  if (!areTokensAdjacent(defenderTokenDocument, attackerTokenDocument)) return { handled: false };
+  if (!hasEnergy(defender, energyCost)) return { handled: false };
+  if (!hasRequiredWeaponResources(entry.weapon, 1, entry.weaponFunctionId)) return { handled: false };
+
+  await spendEnergy(defender, energyCost);
+  await applyAbilityOverloadEffect(defender, entry.abilityItem, entry.abilityFunction, {
+    name: "Перегрузка: Контр атака",
+    energyCost: settings.reactionOverloadEnergyCost,
+    durationSeconds: settings.reactionOverloadDurationSeconds
+  });
+
+  const used = await executeWeaponAttackAgainstToken({
+    attackerToken: defenderTokenDocument.object ?? defenderTokenDocument,
+    targetToken: attackerTokenDocument.object ?? attackerTokenDocument,
+    weapon: entry.weapon,
+    actionKey: "meleeAttack",
+    weaponFunctionId: entry.weaponFunctionId,
+    skipActionPointCost: true,
+    ignoreReactionLock: true
+  });
+  if (!used) {
+    await createAbilityChatMessage(defender, entry.abilityItem, "Контр атака: не удалось выполнить удар.");
+    return { handled: true, status: REACTION_RESULT.failed };
+  }
+  await createAbilityChatMessage(defender, entry.abilityItem, "Контр атака выполнена.");
+  return { handled: true, status: REACTION_RESULT.success };
+}
+
 async function collectDisarmReactionOffers({ eventKey = "", context = {} } = {}) {
   if (eventKey !== REACTION_EVENT_KEYS.weaponAttackTargeted) return [];
   const defender = await fromUuid(String(context.targetActorUuid ?? ""));
@@ -1399,6 +1526,82 @@ function getActorDisarmEntry(actor, offer = null) {
     };
   }
   return null;
+}
+
+function getActorCounterAttackEntry(actor, offer = null) {
+  const abilityItemId = String(offer?.abilityItemId ?? "");
+  const abilityFunctionId = String(offer?.abilityFunctionId ?? "");
+  const weaponId = String(offer?.weaponId ?? "").trim();
+  const requestedWeaponFunctionId = String(offer?.weaponFunctionId ?? "").trim();
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
+    if (abilityItemId && abilityItem.id !== abilityItemId) continue;
+    const abilityFunction = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
+      .find(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack && (!abilityFunctionId || entry.id === abilityFunctionId));
+    if (!abilityFunction) continue;
+    const settings = normalizeCounterAttackSettings(abilityFunction.fixedSettings);
+    const candidate = getCounterAttackWeaponCandidate(actor, settings, {
+      weaponId,
+      weaponFunctionId: requestedWeaponFunctionId
+    });
+    if (!candidate) continue;
+    return {
+      abilityItem,
+      abilityFunction,
+      settings,
+      ...candidate
+    };
+  }
+  return null;
+}
+
+function getCounterAttackWeaponCandidate(actor, settings = {}, { weaponId = "", weaponFunctionId = "" } = {}) {
+  const candidates = getCounterAttackWeaponCandidates(actor, settings);
+  if (weaponId) {
+    const exact = candidates.find(candidate => (
+      candidate.weapon.id === weaponId
+      && (!weaponFunctionId || candidate.weaponFunctionId === weaponFunctionId)
+    ));
+    if (exact) return exact;
+  }
+  const selectedId = String(actor?.getFlag?.(SYSTEM_ID, "selectedHudWeaponItemId") ?? "");
+  const selectedSet = String(actor?.getFlag?.(SYSTEM_ID, "selectedHudWeaponSetKey") ?? "");
+  return candidates.find(candidate => candidate.weapon.id === selectedId)
+    ?? candidates.find(candidate => candidate.weaponSet && candidate.weaponSet === selectedSet)
+    ?? candidates.at(0)
+    ?? null;
+}
+
+function getCounterAttackWeaponCandidates(actor, settings = {}) {
+  const rows = [];
+  const selectedSet = String(actor?.getFlag?.(SYSTEM_ID, "selectedHudWeaponSetKey") ?? "");
+  for (const weapon of actor?.items?.contents ?? []) {
+    const placement = weapon.system?.placement ?? {};
+    if (weapon.type !== "gear" || String(placement.mode ?? "") !== "weapon") continue;
+    const weaponSet = String(placement.weaponSet ?? "");
+    if (!weaponSet || (selectedSet && weaponSet !== selectedSet)) continue;
+    if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) continue;
+    for (const weaponFunctionId of getWhirlwindWeaponFunctionIds(weapon)) {
+      const weaponData = weaponFunctionId === ITEM_FUNCTIONS.weapon
+        ? weapon.system?.functions?.weapon
+        : getAdditionalWeaponFunctionData(weapon, weaponFunctionId);
+      if (String(weaponData?.skillKey ?? "").trim() !== settings.requiredSkillKey) continue;
+      if (!hasWeaponAction(weapon, "meleeAttack", weaponFunctionId)) continue;
+      if (
+        !isWeaponAttackModeEnabled(weapon, "meleeAttack", "thrust", weaponFunctionId)
+        && !isWeaponAttackModeEnabled(weapon, "meleeAttack", "swing", weaponFunctionId)
+      ) continue;
+      rows.push({ weapon, weaponSet, weaponFunctionId });
+    }
+  }
+  return rows;
+}
+
+function getAdditionalWeaponFunctionData(weapon, weaponFunctionId = "") {
+  const entries = weapon?.system?.functions?.additionalWeapons;
+  const values = Array.isArray(entries)
+    ? entries
+    : entries && typeof entries === "object" ? Object.values(entries) : [];
+  return values.find(entry => String(entry?.id ?? "").trim() === weaponFunctionId) ?? null;
 }
 
 function getSelectedWeaponPlacement(actor) {

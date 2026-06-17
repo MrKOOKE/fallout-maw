@@ -18,6 +18,7 @@ import {
   createAbilityCondition,
   createAbilityFunction,
   normalizeAbilityEntry,
+  normalizeCounterAttackSettings,
   normalizeCurseAndBlessingSettings,
   normalizeAllOrNothingSettings,
   normalizeAtRandomSettings,
@@ -745,6 +746,17 @@ function readFixedFunctionSettings(row) {
       requiredSkillKey: row.querySelector("[data-field='fixed.doubleAttack.requiredSkillKey']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
+    return {
+      reactionEnergyCost: row.querySelector("[data-field='fixed.counterAttack.reactionEnergyCost']")?.value,
+      reactionOverloadEnergyCost: row.querySelector("[data-field='fixed.counterAttack.reactionOverloadEnergyCost']")?.value,
+      reactionOverloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.counterAttack.reactionOverloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.counterAttack.reactionOverloadDurationUnit']")?.value
+      ),
+      requiredSkillKey: row.querySelector("[data-field='fixed.counterAttack.requiredSkillKey']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage) {
     return {
       energyCost: row.querySelector("[data-field='fixed.rage.energyCost']")?.value,
@@ -905,6 +917,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedDoubleAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
     ? prepareDoubleAttackSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedCounterAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack
+    ? prepareCounterAttackSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -934,6 +949,7 @@ function prepareFunctionForDisplay(entry) {
     fixedWhirlwindSettings,
     fixedLungeSettings,
     fixedDoubleAttackSettings,
+    fixedCounterAttackSettings,
     fixedRageSettings,
     fixedDisarmSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
@@ -1051,6 +1067,17 @@ function prepareDoubleAttackSettingsForDisplay(settings = {}) {
   const normalized = normalizeDoubleAttackSettings(settings);
   return {
     ...normalized,
+    skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
+  };
+}
+
+function prepareCounterAttackSettingsForDisplay(settings = {}) {
+  const normalized = normalizeCounterAttackSettings(settings);
+  const overloadDuration = splitDurationSeconds(normalized.reactionOverloadDurationSeconds);
+  return {
+    ...normalized,
+    reactionOverloadDurationAmount: overloadDuration.amount,
+    reactionOverloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
     skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
   };
 }

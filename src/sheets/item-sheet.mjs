@@ -43,6 +43,7 @@ import {
   createAbilityFunction,
   normalizeAllOrNothingSettings,
   normalizeAtRandomSettings,
+  normalizeCounterAttackSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
   normalizeDefensiveTacticsSettings,
@@ -4434,6 +4435,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedDoubleAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
     ? prepareDoubleAttackSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedCounterAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack
+    ? prepareCounterAttackSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -4462,6 +4466,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedWhirlwindSettings,
     fixedLungeSettings,
     fixedDoubleAttackSettings,
+    fixedCounterAttackSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
@@ -4587,6 +4592,17 @@ function prepareDoubleAttackSettingsForDisplay(settings = {}) {
   const normalized = normalizeDoubleAttackSettings(settings);
   return {
     ...normalized,
+    skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
+  };
+}
+
+function prepareCounterAttackSettingsForDisplay(settings = {}) {
+  const normalized = normalizeCounterAttackSettings(settings);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.reactionOverloadDurationSeconds);
+  return {
+    ...normalized,
+    reactionOverloadDurationAmount: overloadDuration.amount,
+    reactionOverloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
     skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
   };
 }
@@ -5254,6 +5270,15 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
         row.querySelector("[data-fixed-lunge-overload-duration-unit]")?.value
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
+      const overloadDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-counter-attack-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-counter-attack-overload-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.reactionOverloadDurationSeconds`, overloadDurationSeconds);
       continue;
     }
 

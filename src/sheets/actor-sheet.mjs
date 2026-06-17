@@ -134,6 +134,7 @@ import {
   ABILITY_FIXED_FUNCTION_KEYS,
   normalizeAbilityFunctions,
   normalizeAllOrNothingSettings,
+  normalizeCounterAttackSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDisarmSettings,
   normalizeDoubleAttackSettings,
@@ -3566,6 +3567,7 @@ function buildAbilityEnergyCostRows(item, actor = null) {
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
     ));
@@ -3577,6 +3579,14 @@ function buildAbilityEnergyCostRows(item, actor = null) {
     return [
       ["Активация: базовый расход", String(activeBase)],
       ["Активация: итог", String(getFixedAbilityEnergyCost(actor, item, entry, activeBase))],
+      ["Реакция: базовый расход", String(reactionBase)],
+      ["Реакция: итог", String(getFixedAbilityEnergyCost(actor, item, entry, reactionBase))]
+    ];
+  }
+  if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
+    const settings = normalizeCounterAttackSettings(entry.fixedSettings);
+    const reactionBase = Math.max(0, toInteger(settings.reactionEnergyCost));
+    return [
       ["Реакция: базовый расход", String(reactionBase)],
       ["Реакция: итог", String(getFixedAbilityEnergyCost(actor, item, entry, reactionBase))]
     ];

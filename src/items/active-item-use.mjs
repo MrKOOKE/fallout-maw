@@ -2,6 +2,7 @@ import { useFirstAidItem } from "./first-aid.mjs";
 import { openLightSourceEnergyDialog } from "./light-source.mjs";
 import { useNeedChangeItem } from "./need-change.mjs";
 import { startTrapPlacement } from "../canvas/traps.mjs";
+import { isReactionSystemLocked } from "../combat/reaction-hub.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction, isActiveItem } from "../utils/item-functions.mjs";
 
 export function canUseActiveItem(item = null) {
@@ -9,6 +10,10 @@ export function canUseActiveItem(item = null) {
 }
 
 export async function useActiveItem({ actor = null, token = null, item = null, application = null } = {}) {
+  if (isReactionSystemLocked()) {
+    ui.notifications.warn("Ожидание реакций: предмет временно заблокирован.");
+    return false;
+  }
   const sourceActor = actor ?? item?.actor ?? token?.actor ?? token?.document?.actor ?? null;
   if (!sourceActor?.isOwner || !item || !canUseActiveItem(item)) return false;
 

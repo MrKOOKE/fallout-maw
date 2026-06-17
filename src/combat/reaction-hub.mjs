@@ -5,7 +5,8 @@ const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
 
 export const REACTION_EVENT_KEYS = Object.freeze({
-  weaponAttackTargeted: "weaponAttackTargeted"
+  weaponAttackTargeted: "weaponAttackTargeted",
+  weaponAttackResolved: "weaponAttackResolved"
 });
 
 export const REACTION_RESULT = Object.freeze({
@@ -18,11 +19,15 @@ const REACTION_SOCKET = `system.${SYSTEM_ID}`;
 const REACTION_SOCKET_SCOPE = "fallout-maw.reactionHub";
 const REACTION_QUERY_NAME = "falloutMawReaction";
 const REACTION_TIMEOUT_MS = 20000;
+export const REACTION_LOCK_BYPASS_OPTION = "falloutMawReactionLockBypass";
 const pendingReactionSocketRequests = new Map();
 const reactionProviders = new Map();
+const activeReactionLocks = new Map();
+let reactionHubHooksRegistered = false;
 
 export function registerReactionHubConfig() {
   CONFIG.queries[REACTION_QUERY_NAME] = handleReactionQuery;
+  registerReactionHubHooks();
 }
 
 export function registerReactionHubSocket() {
@@ -35,6 +40,10 @@ export function registerReactionProvider(provider = {}) {
   if (!id || typeof provider.collect !== "function" || typeof provider.execute !== "function") return false;
   reactionProviders.set(id, provider);
   return true;
+}
+
+export function isReactionSystemLocked() {
+  return activeReactionLocks.size > 0;
 }
 
 export async function requestReactionEvent(eventKey = "", context = {}) {
@@ -67,6 +76,10 @@ function requestReactionEventFromGM(gm, request) {
 
 async function handleReactionSocketMessage(payload = {}) {
   if (payload?.scope !== REACTION_SOCKET_SCOPE) return;
+  if (payload.action === "setReactionLock") {
+    setLocalReactionLock(payload.lockId, Boolean(payload.active), payload.reason);
+    return;
+  }
   if (payload.action === "requestReactionEvent") {
     if (!game.user?.isGM || payload.targetUserId !== game.user.id) return;
     const result = await processReactionEventRequest(payload.request ?? {});
@@ -102,6 +115,8 @@ async function processReactionEventRequest(request = {}) {
       const actorUuid = String(offer?.actorUuid ?? "").trim();
       const offerId = String(offer?.offerId ?? offer?.reactionId ?? provider.id).trim();
       if (!actorUuid || !offerId) continue;
+      const actor = await fromUuid(actorUuid);
+      if (!canActorReact(actor)) continue;
       offers.push({
         ...offer,
         providerId: provider.id,
@@ -111,6 +126,7 @@ async function processReactionEventRequest(request = {}) {
   }
   if (!offers.length) return createReactionHubResult();
 
+  const lockId = foundry.utils.randomID();
   const actorOrder = [];
   const offersByActor = new Map();
   for (const offer of offers) {
@@ -120,27 +136,58 @@ async function processReactionEventRequest(request = {}) {
     }
     offersByActor.get(offer.actorUuid).push(offer);
   }
-  await createReactionOpportunityMessage({ context, actorOrder, offersByActor });
+  beginReactionLock(lockId, { reason: eventKey });
+  try {
+    await createReactionOpportunityMessage({ context, actorOrder, offersByActor });
+    const responses = await collectReactionResponses({ eventKey, context, actorOrder, offersByActor });
+    let finalResult = createReactionHubResult();
+    for (const entry of responses) {
+      const selectedOffer = entry.offer;
+      const actor = await fromUuid(String(selectedOffer.actorUuid ?? ""));
+      if (!canActorReact(actor)) continue;
+      const provider = reactionProviders.get(selectedOffer.providerId);
+      if (!provider) continue;
+      try {
+        const result = await provider.execute({
+          eventKey,
+          context,
+          offer: selectedOffer,
+          response: entry.response
+        });
+        const normalized = createReactionHubResult(result ?? {});
+        if (normalized.handled) finalResult = normalized;
+        if (normalized.cancelCurrent || normalized.cancelRemaining) return normalized;
+      } catch (error) {
+        console.error(`${SYSTEM_ID} | Reaction execution failed: ${selectedOffer.providerId}`, error);
+      }
+    }
+    return finalResult;
+  } finally {
+    endReactionLock(lockId);
+  }
+}
 
-  for (const actorUuid of actorOrder) {
+async function collectReactionResponses({ eventKey = "", context = {}, actorOrder = [], offersByActor = new Map() } = {}) {
+  let sequence = 0;
+  const queries = actorOrder.map(async actorUuid => {
     const actorOffers = offersByActor.get(actorUuid) ?? [];
     const actor = await fromUuid(actorUuid);
-    if (!actor) continue;
+    if (!canActorReact(actor)) return null;
     const response = await queryReactionOwner(actor, actorOffers, { eventKey, context });
-    if (!response?.offerId) continue;
+    if (!response?.offerId) return null;
     const selectedOffer = actorOffers.find(offer => offer.offerId === response.offerId);
-    if (!selectedOffer) continue;
-    const provider = reactionProviders.get(selectedOffer.providerId);
-    if (!provider) continue;
-    try {
-      const result = await provider.execute({ eventKey, context, offer: selectedOffer, response });
-      const normalized = createReactionHubResult(result ?? {});
-      if (normalized.handled || normalized.cancelCurrent || normalized.cancelRemaining) return normalized;
-    } catch (error) {
-      console.error(`${SYSTEM_ID} | Reaction execution failed: ${selectedOffer.providerId}`, error);
-    }
-  }
-  return createReactionHubResult();
+    if (!selectedOffer) return null;
+    return {
+      actorUuid,
+      offer: selectedOffer,
+      response,
+      respondedAt: Date.now(),
+      sequence: sequence++
+    };
+  });
+  return (await Promise.all(queries))
+    .filter(Boolean)
+    .sort((left, right) => (left.respondedAt - right.respondedAt) || (left.sequence - right.sequence));
 }
 
 async function createReactionOpportunityMessage({ context = {}, actorOrder = [], offersByActor = new Map() } = {}) {
@@ -151,13 +198,10 @@ async function createReactionOpportunityMessage({ context = {}, actorOrder = [],
     rows.push(`<li><strong>${escapeHTML(actor.name)}</strong></li>`);
   }
   if (!rows.length) return null;
-  const title = String(context?.title ?? "Реакция").trim() || "Реакция";
-  const message = String(context?.message ?? "").trim();
   return ChatMessage.create({
     content: `
       <div class="fallout-maw-reaction-notice">
-        <p><strong>${escapeHTML(title)}: ожидание реакции</strong></p>
-        ${message ? `<p>${escapeHTML(message)}</p>` : ""}
+        <p><strong>Актеры получили возможность среагировать</strong></p>
         <ul>${rows.join("")}</ul>
       </div>
     `,
@@ -249,6 +293,68 @@ function createReactionHubResult(data = {}) {
     cancelRemaining: Boolean(data.cancelRemaining),
     reason: String(data.reason ?? "")
   };
+}
+
+function registerReactionHubHooks() {
+  if (reactionHubHooksRegistered) return;
+  reactionHubHooksRegistered = true;
+  Hooks.on("preMoveToken", preventReactionLockedMovement);
+  Hooks.on("preUpdateToken", preventReactionLockedTokenUpdate);
+}
+
+function beginReactionLock(lockId = "", { reason = "" } = {}) {
+  setLocalReactionLock(lockId, true, reason);
+  broadcastReactionLock(lockId, true, reason);
+}
+
+function endReactionLock(lockId = "") {
+  setLocalReactionLock(lockId, false);
+  broadcastReactionLock(lockId, false);
+}
+
+function broadcastReactionLock(lockId = "", active = false, reason = "") {
+  game.socket?.emit?.(REACTION_SOCKET, {
+    scope: REACTION_SOCKET_SCOPE,
+    action: "setReactionLock",
+    lockId,
+    active: Boolean(active),
+    reason: String(reason ?? "")
+  });
+}
+
+function setLocalReactionLock(lockId = "", active = false, reason = "") {
+  const id = String(lockId ?? "").trim();
+  if (!id) return;
+  if (active) activeReactionLocks.set(id, { reason: String(reason ?? ""), startedAt: Date.now() });
+  else activeReactionLocks.delete(id);
+}
+
+function preventReactionLockedMovement(tokenDocument, _movement, operation = {}) {
+  if (operation?.[REACTION_LOCK_BYPASS_OPTION]) return true;
+  if (!isReactionSystemLocked()) return true;
+  if (tokenDocument?.actor) ui.notifications.warn("Ожидание реакций: перемещение временно заблокировано.");
+  return false;
+}
+
+function preventReactionLockedTokenUpdate(tokenDocument, changes = {}, options = {}) {
+  if (options?.[REACTION_LOCK_BYPASS_OPTION]) return true;
+  if (!isReactionSystemLocked()) return true;
+  const moves = foundry.utils.hasProperty(changes, "x")
+    || foundry.utils.hasProperty(changes, "y")
+    || foundry.utils.hasProperty(changes, "elevation");
+  if (!moves) return true;
+  if (tokenDocument?.actor) ui.notifications.warn("Ожидание реакций: перемещение временно заблокировано.");
+  return false;
+}
+
+function canActorReact(actor) {
+  if (!actor) return false;
+  const defeatedStatus = CONFIG.specialStatusEffects.DEFEATED;
+  return !(
+    actor.statuses?.has?.("dead")
+    || actor.statuses?.has?.("unconscious")
+    || (defeatedStatus && actor.statuses?.has?.(defeatedStatus))
+  );
 }
 
 function getResponsibleGM() {
