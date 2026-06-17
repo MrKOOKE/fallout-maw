@@ -1,5 +1,6 @@
 import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { escapeHtml, getHtmlRoot } from "../utils/dom.mjs";
+import { getOverlayBaseZIndex } from "../utils/overlay-layer.mjs";
 
 const DESCRIPTION_EDITOR_SELECTOR = "prose-mirror .ProseMirror, .editor-content.ProseMirror, .ProseMirror[contenteditable='true']";
 const FORMULA_CONTEXT_PATTERN = /\[\[[^\]\r\n]*?([\p{L}_][\p{L}\p{N}_]*)$/u;
@@ -185,6 +186,8 @@ class DescriptionFormulaAutocomplete {
     const rect = selection?.rangeCount ? selection.getRangeAt(0).getBoundingClientRect() : this.editor.getBoundingClientRect();
     const fallback = this.editor.getBoundingClientRect();
     const anchor = rect && (rect.width || rect.height) ? rect : fallback;
+    const owner = this.editor.closest(".application, .window-app") ?? this.editor;
+    this.menu.style.zIndex = String(getOverlayBaseZIndex(owner) + 10);
 
     this.menu.style.top = `${anchor.bottom + 2}px`;
     const minWidth = 240;

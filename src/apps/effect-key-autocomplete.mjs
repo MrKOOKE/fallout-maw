@@ -1,4 +1,5 @@
 import { escapeHtml, getHtmlRoot } from "../utils/dom.mjs";
+import { getOverlayBaseZIndex } from "../utils/overlay-layer.mjs";
 
 const EFFECT_KEY_INPUT_SELECTOR = "input[data-effect-key-autocomplete]";
 const TOKEN_BEFORE_CARET = /[\p{L}_][\p{L}\p{N}_]*$/u;
@@ -170,6 +171,8 @@ class EffectKeyAutocomplete {
   #position() {
     if (!this.menu) return;
     const rect = this.input.getBoundingClientRect();
+    const owner = this.input.closest(".application, .window-app") ?? this.input;
+    this.menu.style.zIndex = String(getOverlayBaseZIndex(owner) + 10);
     this.menu.style.top = `${rect.bottom + 2}px`;
     const minWidth = Math.max(rect.width, 300);
     const maxWidth = Math.max(minWidth, window.innerWidth - (MENU_VIEWPORT_PADDING * 2));

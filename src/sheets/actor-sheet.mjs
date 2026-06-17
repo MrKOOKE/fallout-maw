@@ -128,6 +128,7 @@ import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import { getAbilityItemUseProgressEntries } from "../abilities/runtime-state.mjs";
+import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
 import { getFixedAbilityEnergyCost, getFixedAbilityFunctionProgressEntries } from "../abilities/fixed-functions.mjs";
 import {
   ABILITY_FIXED_FUNCTION_KEYS,
@@ -506,6 +507,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#restoreActiveTabScroll();
     this.#syncFreeEditHeaderButton();
     this.#syncWorldSidebarPeekToggle();
+    this.#syncInventoryTooltipAfterRender();
   }
 
   _onClose(options) {
@@ -2841,13 +2843,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#tooltipElement.classList.toggle("pinned", this.#tooltipPinned);
     this.#tooltipElement.style.pointerEvents = this.#tooltipPinned ? "auto" : "none";
     this.#syncInventoryOverlayLayer({ bringToFront: this.#tooltipPinned });
-    this.#clampInventoryTooltipToViewport(this.#tooltipElement);
+    if (!this.#tooltipPinned && this.#resolveInventoryTooltipAnchor(this.#tooltipItemId)) this.#positionInventoryTooltip();
+    else this.#clampInventoryTooltipToViewport(this.#tooltipElement);
     requestAnimationFrame(() => {
       if (!this.#tooltipElement) return;
       const description = this.#tooltipElement.querySelector(".description");
       description?.classList.toggle("overflowing", description.clientHeight < description.scrollHeight);
       this.#syncInventoryOverlayLayer();
-      this.#clampInventoryTooltipToViewport(this.#tooltipElement);
+      if (!this.#tooltipPinned && this.#resolveInventoryTooltipAnchor(this.#tooltipItemId)) this.#positionInventoryTooltip();
+      else this.#clampInventoryTooltipToViewport(this.#tooltipElement);
     });
   }
 
@@ -3236,6 +3240,28 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#tooltipWeaponTabIndex = 0;
     this.#tooltipBaseMode = false;
     this.#tooltipCompareMode = false;
+  }
+
+  #resolveInventoryTooltipAnchor(itemId = "") {
+    if (this.#tooltipAnchorElement?.isConnected && this.element?.contains(this.#tooltipAnchorElement)) return this.#tooltipAnchorElement;
+    const expectedItemId = String(itemId ?? "");
+    if (!expectedItemId) return null;
+    const anchor = this.element?.querySelector(`[data-tooltip-item="${CSS.escape(expectedItemId)}"]`);
+    if (!anchor) return null;
+    this.#tooltipAnchorElement = anchor;
+    return anchor;
+  }
+
+  #syncInventoryTooltipAfterRender() {
+    if (!this.#tooltipElement || !this.#tooltipItemId) return;
+    this.#cancelInventoryTooltipClose();
+    const anchor = this.#resolveInventoryTooltipAnchor(this.#tooltipItemId);
+    if (!anchor && !this.#tooltipPinned) {
+      this.#clearInventoryTooltip({ force: true });
+      return;
+    }
+    this.#syncInventoryOverlayLayer({ bringToFront: this.#tooltipPinned });
+    void this.#refreshInventoryTooltip();
   }
 
   #getFullscreenSheetPosition(position = {}) {
@@ -4462,17 +4488,23 @@ function renderChangedTooltipSpan(text, positive) {
 }
 
 function getWeaponTooltipCalculatedStats(item, data = {}, { actor = null, baseMode = false } = {}) {
+  const contextual = baseMode ? null : getWeaponTooltipAbilityContext(item, data);
+  const contextualDamageFlat = contextual ? getTooltipContextualCombatValue(actor, "damageFlat", contextual) : 0;
+  const contextualDamagePercent = contextual ? getTooltipContextualCombatValue(actor, "damagePercent", contextual) : 0;
+  const contextualAccuracy = contextual ? getTooltipContextualCombatValue(actor, "accuracy", contextual) : 0;
+  const contextualCriticalChance = contextual ? getTooltipContextualCombatValue(actor, "criticalChance", contextual) : 0;
   const proficiencyDamage = baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "damage");
   const baseDamageFormula = getEffectiveWeaponDamageData(item, data).damage;
-  const baseDamage = actor
+  const formulaDamage = actor
     ? evaluateActorFormula(baseDamageFormula, actor, {
       minimum: 0,
       context: `${item?.name ?? "weapon"} tooltip damage`
     })
     : Math.max(0, toInteger(baseDamageFormula));
+  const baseDamage = Math.max(0, formulaDamage + contextualDamageFlat);
   const attackPowerDamagePercent = baseMode ? 0 : toInteger(data.attackPowerDamagePercent);
   const poweredDamage = Math.round(baseDamage * Math.max(0, 100 + attackPowerDamagePercent) / 100);
-  const modifiedDamage = Math.round(poweredDamage * Math.max(0, 100 + proficiencyDamage) / 100);
+  const modifiedDamage = Math.round(poweredDamage * Math.max(0, 100 + proficiencyDamage + contextualDamagePercent) / 100);
   const weakening = baseMode ? { active: false, ratio: 1, steps: 0 } : getConditionWeakeningData(item, { minimumRatio: 0.1 });
   const conditionAccuracyPenalty = weakening.active ? weakening.steps * 10 : 0;
   const conditionCritPenalty = weakening.active ? weakening.steps * 3 : 0;
@@ -4481,14 +4513,31 @@ function getWeaponTooltipCalculatedStats(item, data = {}, { actor = null, baseMo
     damage: Math.max(0, Math.floor(modifiedDamage * (weakening.active ? weakening.ratio : 1))),
     accuracyBonus: evaluateTooltipFormula(data.accuracyBonus, actor, { minimum: -Infinity })
       + (baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "accuracy"))
+      + contextualAccuracy
       - conditionAccuracyPenalty,
     criticalChanceModifier: evaluateTooltipFormula(data.criticalChanceModifier, actor, { minimum: -Infinity })
       + (baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "criticalChance"))
+      + contextualCriticalChance
       - conditionCritPenalty,
     criticalDamagePercent: Math.max(0, evaluateTooltipFormula(data.criticalDamagePercent, actor, { fallback: 150 })
       + (baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "criticalDamage"))),
     penetration: Math.max(0, evaluateTooltipFormula(data.penetration, actor))
   };
+}
+
+function getWeaponTooltipAbilityContext(item, data = {}) {
+  return {
+    weaponUuid: String(item?.uuid ?? "").trim(),
+    weaponData: data
+  };
+}
+
+function getTooltipContextualCombatValue(actor, key, context = {}) {
+  if (!actor) return 0;
+  return getContextualAbilityChangeValue(actor, `system.combat.${key}`, {
+    ...context,
+    baseValue: toInteger(actor?.system?.combat?.[key])
+  });
 }
 
 function getWeaponProficiencyInfluenceBonus(actor, data = {}, influenceKey = "") {

@@ -1139,7 +1139,19 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       return;
     }
     this.#clearActionPointCostTooltip();
+    if (this.#shouldKeepHudItemTooltipForAction(action, event)) {
+      this.#cancelHudItemTooltipClose();
+      return;
+    }
     if (event.type !== "contextmenu") this.#clearHudItemTooltip();
+  }
+
+  #shouldKeepHudItemTooltipForAction(actionElement, event) {
+    if (event.type !== "click") return false;
+    if (!this.#itemTooltipElement || !this.#itemTooltipItemId) return false;
+    if (String(actionElement?.dataset?.action ?? "") !== "useAbility") return false;
+    const itemId = String(actionElement?.dataset?.hudTooltipItem ?? actionElement?.dataset?.itemId ?? "");
+    return Boolean(itemId && itemId === this.#itemTooltipItemId);
   }
 
   #onHudContextMenu(event) {
@@ -1406,7 +1418,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async #refreshHudItemTooltip() {
     if (!this.#itemTooltipElement || !this.#itemTooltipItemId) return;
-    if (!this.#resolveHudItemTooltipAnchor(this.#itemTooltipItemId) && !this.#itemTooltipPinned) {
+    const initialAnchor = this.#resolveHudItemTooltipAnchor(this.#itemTooltipItemId);
+    if (!initialAnchor && !this.#itemTooltipPinned) {
       return this.#clearHudItemTooltip();
     }
     const item = this.actor?.items.get(this.#itemTooltipItemId);
@@ -1417,8 +1430,12 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       baseMode: this.#itemTooltipBaseMode
     });
     if (!this.#itemTooltipElement || this.#itemTooltipItemId !== item.id) return;
-    if (!this.#resolveHudItemTooltipAnchor(this.#itemTooltipItemId) && !this.#itemTooltipPinned) {
+    const currentAnchor = this.#resolveHudItemTooltipAnchor(this.#itemTooltipItemId);
+    if (!currentAnchor && !this.#itemTooltipPinned) {
       return this.#clearHudItemTooltip();
+    }
+    if (!this.#itemTooltipPinned && !this.#isHudItemTooltipHoverActive(currentAnchor)) {
+      this.#queueHudItemTooltipHoverValidation();
     }
     this.#itemTooltipElement.innerHTML = tooltipHTML;
     this.#itemTooltipElement.style.pointerEvents = this.#itemTooltipPinned ? "auto" : "none";
@@ -1960,15 +1977,40 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     return anchor;
   }
 
+  #isHudItemTooltipHoverActive(anchor = null) {
+    if (this.#itemTooltipPinned) return true;
+    return Boolean(
+      anchor?.matches?.(":hover")
+      || this.#itemTooltipElement?.matches?.(":hover")
+      || this.#itemTooltipNestedElement?.matches?.(":hover")
+    );
+  }
+
+  #queueHudItemTooltipHoverValidation() {
+    if (this.#itemTooltipPinned) return;
+    const view = this.element?.ownerDocument?.defaultView ?? window;
+    const validate = () => {
+      if (!this.#itemTooltipElement || this.#itemTooltipPinned) return;
+      const anchor = this.#resolveHudItemTooltipAnchor(this.#itemTooltipItemId);
+      if (!this.#isHudItemTooltipHoverActive(anchor)) this.#clearHudItemTooltip();
+    };
+    if (typeof view.requestAnimationFrame === "function") view.requestAnimationFrame(validate);
+    else view.setTimeout(validate, 0);
+  }
+
   #clearDetachedHudTooltips() {
     if (this.#itemTooltipElement) {
       const anchor = this.#resolveHudItemTooltipAnchor(this.#itemTooltipItemId);
       if (anchor) {
+        this.#cancelHudItemTooltipClose();
         this.#syncHudItemTooltipLayer();
         this.#positionHudItemTooltip();
+        void this.#refreshHudItemTooltip();
+        if (!this.#itemTooltipPinned) this.#queueHudItemTooltipHoverValidation();
       } else if (this.#itemTooltipPinned) {
         this.#syncHudItemTooltipLayer();
         this.#clampHudItemTooltipToViewport(this.#itemTooltipElement);
+        void this.#refreshHudItemTooltip();
       } else {
         this.#clearHudItemTooltip();
       }
