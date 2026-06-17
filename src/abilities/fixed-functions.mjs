@@ -15,6 +15,7 @@ import {
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
   normalizeLuckyCoinSettings,
+  normalizeLungeSettings,
   normalizeReaperSettings,
   normalizeRageSettings,
   normalizeWhirlwindSettings
@@ -40,7 +41,7 @@ import {
   WEAPON_ATTACK_RESOLVED_HOOK,
   requestWeaponAttackCompletion
 } from "../combat/weapon-attack-controller.mjs";
-import { createWhirlwindAttackModifier } from "../combat/weapon-attack-modifiers.mjs";
+import { createLungeAttackModifier, createWhirlwindAttackModifier } from "../combat/weapon-attack-modifiers.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
@@ -53,6 +54,7 @@ import {
 } from "../utils/active-effect-changes.mjs";
 import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import {
+  ABILITY_FREE_MOVEMENT_OPTION,
   ACTION_RESOURCE_KEY,
   hasActorCombatMovementInCurrentTurn
 } from "../combat/movement-resources.mjs";
@@ -203,6 +205,14 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.whirlwind
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.lunge,
+    label: "Выпад",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.lunge
+    })
   })
 ]);
 
@@ -348,6 +358,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind) {
     const used = await useWhirlwind(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge) {
+    const used = await useLunge(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
   }
@@ -555,6 +571,372 @@ function getWhirlwindWeaponFunctionIds(weapon) {
     if (id) ids.push(id);
   }
   return Array.from(new Set(ids));
+}
+
+async function useLunge(actor, abilityItem, abilityFunction) {
+  const settings = normalizeLungeSettings(abilityFunction.fixedSettings);
+  const token = getActorSceneToken(actor);
+  if (!token) {
+    ui.notifications.warn("Выпад: выберите токен актера на сцене.");
+    return false;
+  }
+
+  const candidate = getLungeWeaponCandidate(actor);
+  if (!candidate) {
+    ui.notifications.warn("Выпад: нет оружия в оружейном наборе с ближней атакой.");
+    return false;
+  }
+
+  const destination = await selectLungeDestination(token, settings);
+  if (!destination) return false;
+  const origin = getTokenDocumentPosition(token.document);
+
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`Выпад: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+
+  await actor.setFlag(SYSTEM_ID, "selectedHudWeaponSetKey", candidate.weaponSet);
+  await actor.setFlag(SYSTEM_ID, "selectedHudWeaponItemId", candidate.weapon.id);
+
+  const phantom = createLungePhantom(token, destination);
+  let moved = false;
+  let completionHandled = false;
+  const handleCompletion = async () => {
+    phantom?.destroy();
+    if (!moved || completionHandled) return;
+    completionHandled = true;
+    const stay = await promptLungeReturnChoice();
+    if (stay) return;
+    await moveTokenDocumentAndWait(token.document, origin);
+  };
+
+  const controller = startWeaponAttack({
+    token: token.document?.object ?? token,
+    weapon: candidate.weapon,
+    actionKey: candidate.actionKey,
+    weaponFunctionId: candidate.weaponFunctionId,
+    originOverride: getTokenMovementOrigin(token.document, destination),
+    onBeforeExecute: async () => {
+      if (!isLungeDestinationAvailable(token, destination, {
+        width: Math.max(1, Number(token?.w) || Number(canvas.grid?.size) || 100),
+        height: Math.max(1, Number(token?.h) || Number(canvas.grid?.size) || 100)
+      })) {
+        ui.notifications.warn("Выпад: выбранная клетка больше недоступна.");
+        return false;
+      }
+      if (!hasEnergy(actor, energyCost)) {
+        ui.notifications.warn(`Выпад: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+        return false;
+      }
+      if (!(await spendEnergy(actor, energyCost))) return false;
+      await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+        name: "Перегрузка: Выпад",
+        energyCost: settings.overloadEnergyCost,
+        durationSeconds: settings.overloadDurationSeconds
+      });
+      phantom?.destroy();
+      await moveTokenDocumentAndWait(token.document, destination);
+      moved = true;
+      return true;
+    },
+    attackModifier: createLungeAttackModifier({
+      onDestroy: handleCompletion
+    })
+  });
+
+  if (!controller) {
+    phantom?.destroy();
+    ui.notifications.warn("Выпад: не удалось начать ближнюю атаку выбранным оружием.");
+    return false;
+  }
+
+  await createAbilityChatMessage(actor, abilityItem, "Выпад: позиция выбрана, атака началась.");
+  return true;
+}
+
+function getLungeWeaponCandidate(actor) {
+  const candidates = getLungeWeaponCandidates(actor);
+  const selectedId = String(actor?.getFlag?.(SYSTEM_ID, "selectedHudWeaponItemId") ?? "");
+  const selectedSet = String(actor?.getFlag?.(SYSTEM_ID, "selectedHudWeaponSetKey") ?? "");
+  return candidates.find(candidate => candidate.weapon.id === selectedId)
+    ?? candidates.find(candidate => candidate.weaponSet && candidate.weaponSet === selectedSet)
+    ?? candidates.at(0)
+    ?? null;
+}
+
+function getLungeWeaponCandidates(actor) {
+  const rows = [];
+  for (const weapon of actor?.items?.contents ?? []) {
+    const placement = weapon.system?.placement ?? {};
+    if (weapon.type !== "gear" || String(placement.mode ?? "") !== "weapon") continue;
+    const weaponSet = String(placement.weaponSet ?? "");
+    if (!weaponSet) continue;
+    if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon, { ignoreBroken: true })) continue;
+    for (const weaponFunctionId of getWhirlwindWeaponFunctionIds(weapon)) {
+      const actionKey = getLungeWeaponActionKey(weapon, weaponFunctionId);
+      if (!actionKey) continue;
+      rows.push({ weapon, weaponSet, weaponFunctionId, actionKey });
+    }
+  }
+  return rows;
+}
+
+function getLungeWeaponActionKey(weapon, weaponFunctionId = "") {
+  if (hasWeaponAction(weapon, "meleeAttack", weaponFunctionId)) return "meleeAttack";
+  if (hasWeaponAction(weapon, "aimedMeleeAttack", weaponFunctionId)) return "aimedMeleeAttack";
+  return "";
+}
+
+async function selectLungeDestination(token, settings) {
+  let candidates = buildLungeDestinationCandidates(token, settings);
+  if (!candidates.length) {
+    ui.notifications.warn("Выпад: нет доступных клеток для перемещения.");
+    return null;
+  }
+
+  return new Promise(resolve => {
+    const graphics = new PIXI.Graphics();
+    let tokenPositionSignature = getLungeTokenPositionSignature(token);
+    const layer = canvas.controls?._rulerPaths;
+    if (!layer) {
+      graphics.destroy();
+      ui.notifications.warn("Выпад: слой предпросмотра атаки недоступен.");
+      resolve(null);
+      return;
+    }
+    layer.addChild(graphics);
+    drawLungeDestinationCandidates(graphics, candidates);
+    ui.notifications.info("Выпад: выберите клетку перемещения. Правая кнопка отменяет выбор.");
+
+    const refreshCandidates = () => {
+      const nextSignature = getLungeTokenPositionSignature(token);
+      if (nextSignature === tokenPositionSignature) return;
+      tokenPositionSignature = nextSignature;
+      candidates = buildLungeDestinationCandidates(token, settings);
+      drawLungeDestinationCandidates(graphics, candidates);
+    };
+    const cleanup = () => {
+      canvas.app?.ticker?.remove?.(refreshCandidates);
+      document.removeEventListener("pointerdown", onPointerDown, { capture: true });
+      graphics.destroy();
+    };
+    const finish = value => {
+      cleanup();
+      resolve(value);
+    };
+    const onPointerDown = event => {
+      if (![0, 2].includes(event.button)) return;
+      if (event.button === 2) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+        finish(null);
+        return;
+      }
+      const point = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
+      const candidate = candidates.find(entry => (
+        point.x >= entry.x && point.x <= entry.x + entry.width
+        && point.y >= entry.y && point.y <= entry.y + entry.height
+      ));
+      if (!candidate) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+      finish({ x: candidate.x, y: candidate.y });
+    };
+    canvas.app?.ticker?.add?.(refreshCandidates);
+    document.addEventListener("pointerdown", onPointerDown, { capture: true });
+  });
+}
+
+function buildLungeDestinationCandidates(token, settings) {
+  const document = token?.document ?? token;
+  const origin = getLungeTokenCurrentPosition(token);
+  const gridSize = Math.max(1, Number(canvas.grid?.size) || 100);
+  const maxCells = Math.max(1, toInteger(settings?.maxCells ?? 2));
+  const width = Math.max(gridSize, Number(token?.w ?? gridSize));
+  const height = Math.max(gridSize, Number(token?.h ?? gridSize));
+  const candidates = [];
+  for (let dx = -maxCells; dx <= maxCells; dx += 1) {
+    for (let dy = -maxCells; dy <= maxCells; dy += 1) {
+      if (dx === 0 && dy === 0) continue;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) > maxCells) continue;
+      const position = getSnappedTokenPosition(document, {
+        x: origin.x + dx * gridSize,
+        y: origin.y + dy * gridSize
+      });
+      if (!isLungeDestinationAvailable(token, position, { width, height })) continue;
+      candidates.push({
+        x: position.x,
+        y: position.y,
+        width,
+        height
+      });
+    }
+  }
+  return deduplicateLungeDestinationCandidates(candidates);
+}
+
+function getLungeTokenCurrentPosition(token) {
+  const document = token?.document ?? token;
+  const object = document?.object ?? token;
+  return {
+    x: Number(object?.x ?? document?.x ?? document?._source?.x ?? 0),
+    y: Number(object?.y ?? document?.y ?? document?._source?.y ?? 0)
+  };
+}
+
+function getLungeTokenPositionSignature(token) {
+  const position = getLungeTokenCurrentPosition(token);
+  return `${Math.round(position.x * 100) / 100}:${Math.round(position.y * 100) / 100}`;
+}
+
+function isLungeDestinationAvailable(token, position, { width = 0, height = 0 } = {}) {
+  const document = token?.document ?? token;
+  if (!document?.object) return false;
+  if (isLungeDestinationOccupied(token, position, { width, height })) return false;
+
+  const origin = getTokenMovementOrigin(document, getTokenDocumentPosition(document));
+  const destination = getTokenMovementOrigin(document, position);
+  return !document.object.checkCollision(destination, {
+    origin,
+    type: "move",
+    mode: "any"
+  });
+}
+
+function isLungeDestinationOccupied(token, position, { width = 0, height = 0 } = {}) {
+  const tokenId = String((token?.document ?? token)?.id ?? "");
+  const rect = new PIXI.Rectangle(
+    Number(position?.x) || 0,
+    Number(position?.y) || 0,
+    Math.max(1, Number(width) || 0),
+    Math.max(1, Number(height) || 0)
+  );
+  for (const other of canvas.tokens?.placeables ?? []) {
+    if (!other?.actor || String(other.document?.id ?? "") === tokenId) continue;
+    const otherRect = new PIXI.Rectangle(
+      Number(other.document?.x ?? other.x) || 0,
+      Number(other.document?.y ?? other.y) || 0,
+      Math.max(1, Number(other.w) || Number(canvas.grid?.size) || 100),
+      Math.max(1, Number(other.h) || Number(canvas.grid?.size) || 100)
+    );
+    if (rectanglesOverlap(rect, otherRect)) return true;
+  }
+  return false;
+}
+
+function rectanglesOverlap(left, right) {
+  return left.x < right.x + right.width
+    && left.x + left.width > right.x
+    && left.y < right.y + right.height
+    && left.y + left.height > right.y;
+}
+
+function deduplicateLungeDestinationCandidates(candidates = []) {
+  const seen = new Set();
+  const result = [];
+  for (const candidate of candidates) {
+    const key = `${Math.round(candidate.x)}:${Math.round(candidate.y)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(candidate);
+  }
+  return result;
+}
+
+function drawLungeDestinationCandidates(graphics, candidates = []) {
+  graphics.clear();
+  graphics.lineStyle(2, 0xf4d06f, 0.95);
+  graphics.beginFill(0xf4d06f, 0.18);
+  for (const candidate of candidates) {
+    graphics.drawRect(candidate.x, candidate.y, candidate.width, candidate.height);
+  }
+  graphics.endFill();
+}
+
+function createLungePhantom(token, position) {
+  const layer = canvas.controls?._rulerPaths;
+  const texture = token?.texture ?? token?.mesh?.texture;
+  if (!layer || !texture) return null;
+
+  const container = new PIXI.Container();
+  container.eventMode = "none";
+  container.alpha = 0.45;
+  container.x = Number(position?.x) || 0;
+  container.y = Number(position?.y) || 0;
+
+  const width = Math.max(1, Number(token?.w) || Number(canvas.grid?.size) || 100);
+  const height = Math.max(1, Number(token?.h) || Number(canvas.grid?.size) || 100);
+  const sprite = new PIXI.Sprite(texture);
+  sprite.width = width;
+  sprite.height = height;
+
+  const frame = new PIXI.Graphics();
+  frame.lineStyle(3, 0xf4d06f, 0.9);
+  frame.drawRect(0, 0, width, height);
+
+  container.addChild(sprite, frame);
+  layer.addChild(container);
+  return container;
+}
+
+async function promptLungeReturnChoice() {
+  const action = await DialogV2.wait({
+    window: { title: "Выпад" },
+    content: "",
+    buttons: [
+      {
+        action: "return",
+        label: "Вернуться назад",
+        icon: "fa-solid fa-arrow-rotate-left",
+        default: true
+      },
+      {
+        action: "stay",
+        label: "Остаться на месте",
+        icon: "fa-solid fa-location-dot",
+        type: "button"
+      }
+    ],
+    rejectClose: false,
+    modal: true,
+    position: { width: 360 }
+  });
+  return action === "stay";
+}
+
+function getTokenDocumentPosition(tokenDocument) {
+  return {
+    x: Number(tokenDocument?.x ?? tokenDocument?._source?.x ?? 0),
+    y: Number(tokenDocument?.y ?? tokenDocument?._source?.y ?? 0)
+  };
+}
+
+function getTokenMovementOrigin(tokenDocument, position) {
+  return tokenDocument.getMovementOrigin({
+    x: position.x,
+    y: position.y,
+    elevation: tokenDocument.elevation,
+    width: tokenDocument.width,
+    height: tokenDocument.height,
+    depth: tokenDocument.depth,
+    shape: tokenDocument.shape
+  });
+}
+
+function getSnappedTokenPosition(tokenDocument, position) {
+  return tokenDocument.getSnappedPosition(position);
+}
+
+async function moveTokenDocumentAndWait(tokenDocument, position) {
+  await tokenDocument?.update?.({ x: position.x, y: position.y }, {
+    animate: true,
+    [ABILITY_FREE_MOVEMENT_OPTION]: { [tokenDocument.id]: true }
+  });
+  await tokenDocument?.movement?.animation?.ended;
 }
 
 async function useDisarm(actor, abilityItem, abilityFunction) {

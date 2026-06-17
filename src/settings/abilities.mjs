@@ -25,7 +25,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   disarm: "disarm",
   defensiveTactics: "defensiveTactics",
   rage: "rage",
-  whirlwind: "whirlwind"
+  whirlwind: "whirlwind",
+  lunge: "lunge"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -579,6 +580,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind) {
     return normalizeWhirlwindSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge) {
+    return normalizeLungeSettings(value);
+  }
   return {};
 }
 
@@ -709,6 +713,15 @@ export function normalizeWhirlwindSettings(value = {}) {
     overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 40)),
     overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 18)),
     accuracyModifier: toInteger(value?.accuracyModifier ?? -30)
+  };
+}
+
+export function normalizeLungeSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 10)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 40)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 12)),
+    maxCells: Math.max(1, toInteger(value?.maxCells ?? 2))
   };
 }
 

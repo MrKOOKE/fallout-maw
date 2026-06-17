@@ -7,6 +7,7 @@ import { REACTION_RESOURCE_KEY, getCombatActionPointState, spendCombatActionPoin
 export const MOVEMENT_RESOURCE_KEY = "movementPoints";
 export const ACTION_RESOURCE_KEY = "actionPoints";
 export const MOVEMENT_RESOURCE_PREVIEW_HOOK = "falloutMawMovementResourcePreview";
+export const ABILITY_FREE_MOVEMENT_OPTION = "falloutMawAbilityFreeMovement";
 const MOVEMENT_RESOURCE_SPENDING_FLAG = "movementResourceSpending";
 const MOVEMENT_RESOURCE_SPENDING_LIMIT = 50;
 const MOVEMENT_RESOURCE_LABEL = "ОП";
@@ -130,6 +131,7 @@ export function isGMDebugMovementBypassActive() {
 
 function preventUnaffordableCombatMovement(tokenDocument, movement, operation) {
   if (isGrappleFollowMovement(tokenDocument, operation)) return true;
+  if (isAbilityFreeMovement(tokenDocument, operation)) return true;
   if (!isCombatMovementTracked(tokenDocument)) return true;
   if (movement?.method === "undo") return true;
   if (isGMDebugMovementBypassActive()) return true;
@@ -150,6 +152,7 @@ function preventUnaffordableCombatMovement(tokenDocument, movement, operation) {
 async function spendCombatMovementResources(tokenDocument, movement, operation, user) {
   if (!user?.isSelf) return;
   if (isGrappleFollowMovement(tokenDocument, operation)) return;
+  if (isAbilityFreeMovement(tokenDocument, operation)) return;
   if (!isCombatMovementTracked(tokenDocument)) return;
   if (movement?.method === "undo") return restoreLastMovementResourceSpending(tokenDocument);
   if (isGMDebugMovementBypassActive()) return;
@@ -322,6 +325,10 @@ function getMovementSectionCost(section) {
 
 function isGrappleFollowMovement(tokenDocument, operation) {
   return Boolean(operation?.[GRAPPLE_FOLLOW_MOVEMENT_OPTION]?.[tokenDocument?.id]);
+}
+
+function isAbilityFreeMovement(tokenDocument, operation) {
+  return Boolean(operation?.[ABILITY_FREE_MOVEMENT_OPTION]?.[tokenDocument?.id]);
 }
 
 function toInteger(value) {

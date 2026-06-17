@@ -49,6 +49,7 @@ import {
   normalizeDisarmSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
+  normalizeLungeSettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
   normalizeWhirlwindSettings,
@@ -4426,6 +4427,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedWhirlwindSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind
     ? prepareWhirlwindSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedLungeSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge
+    ? prepareLungeSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -4452,6 +4456,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedDefensiveTacticsSettings,
     fixedRageSettings,
     fixedWhirlwindSettings,
+    fixedLungeSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
@@ -4555,6 +4560,16 @@ function prepareRageSettingsForDisplay(settings = {}) {
 
 function prepareWhirlwindSettingsForDisplay(settings = {}) {
   const normalized = normalizeWhirlwindSettings(settings);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit)
+  };
+}
+
+function prepareLungeSettingsForDisplay(settings = {}) {
+  const normalized = normalizeLungeSettings(settings);
   const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
   return {
     ...normalized,
@@ -5215,6 +5230,15 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
       const overloadDurationSeconds = abilityDurationPartsToSeconds(
         row.querySelector("[data-fixed-whirlwind-overload-duration-amount]")?.value,
         row.querySelector("[data-fixed-whirlwind-overload-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge) {
+      const overloadDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-lunge-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-lunge-overload-duration-unit]")?.value
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, overloadDurationSeconds);
       continue;

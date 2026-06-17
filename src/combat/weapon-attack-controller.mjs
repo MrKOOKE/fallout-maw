@@ -103,7 +103,7 @@ export function requestWeaponAttackCompletion({ attackId = "" } = {}) {
   return true;
 }
 
-export function startWeaponAttack({ token = null, weapon = null, actionKey = "", weaponFunctionId = "", attackModifier = null } = {}) {
+export function startWeaponAttack({ token = null, weapon = null, actionKey = "", weaponFunctionId = "", attackModifier = null, originOverride = null, onBeforeExecute = null } = {}) {
   if (!token?.actor || !weapon || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) return undefined;
   if (!getWeaponAttackData(weapon, weaponFunctionId)?.enabled) return undefined;
   if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) return undefined;
@@ -113,7 +113,10 @@ export function startWeaponAttack({ token = null, weapon = null, actionKey = "",
   if (!hasRequiredWeaponActionPoints(token.actor, weapon, actionKey, weaponFunctionId)) return undefined;
 
   if (activeAttack && !cancelWeaponAttack()) return undefined;
-  activeAttack = new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, attackModifier);
+  activeAttack = new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, attackModifier, {
+    originOverride,
+    onBeforeExecute
+  });
   activeAttack.activate();
   return activeAttack;
 }
@@ -204,12 +207,15 @@ function isWeaponPlacementDisabled(actor, weapon) {
 }
 
 class WeaponAttackController {
-  constructor(token, weapon, actionKey, weaponFunctionId = "", attackModifier = null) {
+  constructor(token, weapon, actionKey, weaponFunctionId = "", attackModifier = null, options = {}) {
     this.token = token;
     this.weapon = weapon;
     this.actionKey = actionKey;
     this.weaponFunctionId = weaponFunctionId || ITEM_FUNCTIONS.weapon;
     this.attackModifier = normalizeWeaponAttackModifier(attackModifier);
+    this.originOverride = normalizeAttackOriginOverride(options.originOverride);
+    this.onBeforeExecute = typeof options.onBeforeExecute === "function" ? options.onBeforeExecute : null;
+    this.beforeExecuteCompleted = false;
     this.container = new PIXI.Container();
     this.shape = new PIXI.Graphics();
     this.targetMarkers = new PIXI.Graphics();
@@ -362,6 +368,7 @@ class WeaponAttackController {
 
   completeProcessingCycle({ refresh = true } = {}) {
     this.processing = false;
+    if (this.attackModifier?.finishAfterAttack && this.beforeExecuteCompleted) this.finishRequested = true;
     if (this.finishRequested || this.attackCanceledByReaction) {
       if (activeAttack === this) activeAttack = null;
       this.destroy();
@@ -428,6 +435,17 @@ class WeaponAttackController {
   destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
+    if (typeof this.attackModifier?.onDestroy === "function") {
+      void this.attackModifier.onDestroy({
+        actor: this.token?.actor ?? null,
+        token: this.token,
+        weapon: this.weapon,
+        actionKey: this.actionKey,
+        weaponFunctionId: this.weaponFunctionId,
+        attackModifier: this.attackModifier,
+        controller: this
+      });
+    }
     clearAttackAutoCoverSync(this.attackId);
     this.autoCoverActorUuids.clear();
     canvas.stage.off("mousemove", this.events.move);
@@ -442,6 +460,31 @@ class WeaponAttackController {
       attackId: this.attackId
     });
     this.container.destroy({ children: true });
+  }
+
+  getAttackOrigin() {
+    return this.originOverride ?? getTokenAimPoint(this.token);
+  }
+
+  async runBeforeExecute() {
+    if (this.beforeExecuteCompleted) return true;
+    if (!this.onBeforeExecute) {
+      this.beforeExecuteCompleted = true;
+      return true;
+    }
+    const allowed = await this.onBeforeExecute({
+      actor: this.token?.actor ?? null,
+      token: this.token,
+      weapon: this.weapon,
+      actionKey: this.actionKey,
+      weaponFunctionId: this.weaponFunctionId,
+      attackModifier: this.attackModifier,
+      controller: this
+    });
+    if (allowed === false) return false;
+    this.beforeExecuteCompleted = true;
+    this.originOverride = null;
+    return true;
   }
 
   onMove(event) {
@@ -561,6 +604,7 @@ class WeaponAttackController {
     if (this.actionKey === "burst") return this.performBurstAttack({ attackCount, pelletCount });
 
     this.processing = true;
+    if (!(await this.runBeforeExecute())) return this.completeProcessingCycle();
     this.pendingCriticalFailureResourceCosts = [];
     this.refresh(true);
     const trajectories = [];
@@ -992,6 +1036,7 @@ class WeaponAttackController {
     this.processing = true;
     this.pendingCriticalFailureResourceCosts = [];
     this.removeLimbMenu();
+    if (!(await this.runBeforeExecute())) return this.completeProcessingCycle();
     this.refresh(true);
 
     const geometry = deserializeGeometry(this.lockedGeometry) ?? this.geometry;
@@ -1078,6 +1123,7 @@ class WeaponAttackController {
     this.processing = true;
     this.pendingCriticalFailureResourceCosts = [];
     this.removeLimbMenu();
+    if (!(await this.runBeforeExecute())) return this.completeProcessingCycle();
     this.refresh(true);
 
     const target = this.selectedTarget;
@@ -1811,7 +1857,7 @@ class WeaponAttackController {
       return;
     }
 
-    const origin = getTokenAimPoint(this.token);
+    const origin = this.getAttackOrigin();
     this.geometry = this.targetedAction && ["limb", "direction"].includes(this.aimedMode)
       ? deserializeGeometry(this.lockedGeometry)
       : this.getAttackGeometry(origin);
@@ -5377,6 +5423,15 @@ function getTokenAimPoint(token) {
     };
   }
   return null;
+}
+
+function normalizeAttackOriginOverride(value = null) {
+  if (!Number.isFinite(Number(value?.x)) || !Number.isFinite(Number(value?.y))) return null;
+  return {
+    x: Number(value.x) || 0,
+    y: Number(value.y) || 0,
+    elevation: Number.isFinite(Number(value.elevation)) ? Number(value.elevation) : 0
+  };
 }
 
 function getTrajectoryTokenElevationHitDistance(trajectory, range, elevationRange) {

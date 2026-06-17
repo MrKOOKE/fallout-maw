@@ -124,6 +124,7 @@ const FormDataExtended = foundry.applications.ux.FormDataExtended;
 const TOKEN_ACTION_HUD_SOCKET = `system.${SYSTEM_ID}`;
 const TOKEN_ACTION_HUD_SOCKET_SCOPE = "fallout-maw.tokenActionHud";
 const TOKEN_ACTION_HUD_SOCKET_TIMEOUT = 10000;
+const ABILITY_OVERLOAD_EFFECT_FLAG_KEY = "abilityOverload";
 const ACTION_POINT_COST_TOOLTIP_DELAY_MS = 200;
 const SELECTED_HUD_WEAPON_FLAG = "selectedHudWeaponItemId";
 const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
@@ -4477,8 +4478,17 @@ function addLimitedResourceDisplay(entry, limit = null) {
 
 async function fullyRestoreActor(actor, { repairItems = false } = {}) {
   await fullyRestoreActorDamageState(actor);
+  await deleteActorOverloadEffects(actor);
   await setActorTokensPosture(actor, "walk");
   if (repairItems) await fullyRepairActorItems(actor);
+}
+
+async function deleteActorOverloadEffects(actor) {
+  const effectIds = Array.from(actor?.effects ?? [])
+    .filter(effect => Boolean(effect.getFlag?.(SYSTEM_ID, ABILITY_OVERLOAD_EFFECT_FLAG_KEY)))
+    .map(effect => effect.id)
+    .filter(Boolean);
+  if (effectIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", effectIds, { animate: false });
 }
 
 async function fullyRepairActorItems(actor) {

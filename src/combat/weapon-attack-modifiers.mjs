@@ -1,7 +1,8 @@
 import { toInteger } from "../utils/numbers.mjs";
 
 export const WEAPON_ATTACK_MODIFIER_KEYS = Object.freeze({
-  whirlwind: "whirlwind"
+  whirlwind: "whirlwind",
+  lunge: "lunge"
 });
 
 const WEAPON_ATTACK_MODIFIER_DEFINITIONS = Object.freeze({
@@ -14,6 +15,11 @@ const WEAPON_ATTACK_MODIFIER_DEFINITIONS = Object.freeze({
     circularGeometry: true,
     customExecution: true,
     accuracyModifier: -30
+  }),
+  [WEAPON_ATTACK_MODIFIER_KEYS.lunge]: Object.freeze({
+    key: WEAPON_ATTACK_MODIFIER_KEYS.lunge,
+    label: "Выпад",
+    finishAfterAttack: true
   })
 });
 
@@ -27,6 +33,18 @@ export function createWhirlwindAttackModifier({
     label,
     accuracyModifier,
     onBeforeAttack
+  });
+}
+
+export function createLungeAttackModifier({
+  label = "Выпад",
+  onDestroy = null
+} = {}) {
+  return normalizeWeaponAttackModifier({
+    key: WEAPON_ATTACK_MODIFIER_KEYS.lunge,
+    label,
+    onDestroy,
+    finishAfterAttack: true
   });
 }
 

@@ -639,6 +639,44 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedLungeSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header">
+        <h3>Настройки: Выпад</h3>
+      </div>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label>
+            <span>Расход энергии</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.energyCost" value="{{fixedLungeSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Дальность, клетки</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.maxCells" value="{{fixedLungeSettings.maxCells}}" min="1" step="1">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedLungeSettings.overloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" value="{{fixedLungeSettings.overloadDurationAmount}}" min="0" step="1" data-fixed-lunge-overload-duration-amount>
+              <select data-fixed-lunge-overload-duration-unit>
+                {{#each fixedLungeSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedRageSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header">

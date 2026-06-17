@@ -24,6 +24,7 @@ import {
   normalizeDefensiveTacticsSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
+  normalizeLungeSettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
   normalizeReaperSettings,
@@ -725,6 +726,17 @@ function readFixedFunctionSettings(row) {
       accuracyModifier: row.querySelector("[data-field='fixed.whirlwind.accuracyModifier']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.lunge.energyCost']")?.value,
+      maxCells: row.querySelector("[data-field='fixed.lunge.maxCells']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.lunge.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.lunge.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.lunge.overloadDurationUnit']")?.value
+      )
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage) {
     return {
       energyCost: row.querySelector("[data-field='fixed.rage.energyCost']")?.value,
@@ -879,6 +891,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedWhirlwindSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whirlwind
     ? prepareWhirlwindSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedLungeSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge
+    ? prepareLungeSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -906,6 +921,7 @@ function prepareFunctionForDisplay(entry) {
     fixedLastChanceSettings,
     fixedLuckyCoinSettings,
     fixedWhirlwindSettings,
+    fixedLungeSettings,
     fixedRageSettings,
     fixedDisarmSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
@@ -1001,6 +1017,16 @@ function prepareLuckyCoinSettingsForDisplay(settings = {}) {
 
 function prepareWhirlwindSettingsForDisplay(settings = {}) {
   const normalized = normalizeWhirlwindSettings(settings);
+  const duration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: duration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(duration.unit)
+  };
+}
+
+function prepareLungeSettingsForDisplay(settings = {}) {
+  const normalized = normalizeLungeSettings(settings);
   const duration = splitDurationSeconds(normalized.overloadDurationSeconds);
   return {
     ...normalized,
