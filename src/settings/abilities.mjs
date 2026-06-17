@@ -43,10 +43,18 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   weaponAction: "weaponAction",
   weaponSkill: "weaponSkill",
   weaponProficiency: "weaponProficiency",
+  aura: "aura",
   limitedChanges: "limitedChanges",
   cooldown: "cooldown",
   itemUse: "itemUse"
 });
+
+export const ABILITY_AURA_MODES = Object.freeze({
+  applyToTargets: "applyToTargets",
+  selfWhenPresent: "selfWhenPresent"
+});
+
+export const ABILITY_AURA_TARGET_GROUPS = Object.freeze(["ally", "enemy", "neutral"]);
 
 export const ABILITY_POSTURE_SUBJECTS = Object.freeze({
   self: "self",
@@ -441,6 +449,25 @@ function normalizeAbilityCondition(value = {}) {
     };
   }
 
+  if (type === ABILITY_CONDITION_TYPES.aura) {
+    const auraMode = normalizeAuraMode(value?.auraMode);
+    return {
+      id,
+      groupId,
+      type,
+      auraMode,
+      auraTargetGroups: normalizeAuraTargetGroups(value?.auraTargetGroups),
+      auraRadiusMeters: Math.max(0, Number(value?.auraRadiusMeters) || 0),
+      requiredCount: Math.max(1, toInteger(value?.requiredCount ?? 1)),
+      auraWallsBlock: normalizeBoolean(value?.auraWallsBlock, true),
+      auraIncludeSelf: auraMode === ABILITY_AURA_MODES.applyToTargets ? normalizeBoolean(value?.auraIncludeSelf, true) : false,
+      auraCombatOnly: normalizeBoolean(value?.auraCombatOnly, false),
+      auraCombatantsOnly: normalizeBoolean(value?.auraCombatantsOnly, false),
+      auraIgnoreIncapacitated: normalizeBoolean(value?.auraIgnoreIncapacitated, true),
+      auraIgnoreHidden: normalizeBoolean(value?.auraIgnoreHidden, true)
+    };
+  }
+
   if (type === ABILITY_CONDITION_TYPES.limitedChanges) {
     return {
       id,
@@ -536,6 +563,24 @@ function normalizeConditionKeyList(value = [], previous = "") {
   const previousKey = String(previous ?? "").trim();
   if (previousKey && !normalized.includes(previousKey)) normalized.push(previousKey);
   return normalized;
+}
+
+function normalizeAuraMode(value) {
+  const mode = String(value ?? "").trim();
+  return Object.values(ABILITY_AURA_MODES).includes(mode)
+    ? mode
+    : ABILITY_AURA_MODES.applyToTargets;
+}
+
+function normalizeAuraTargetGroups(value = []) {
+  const normalized = normalizeStringList(value).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
+  return normalized.length ? normalized : ["enemy"];
+}
+
+function normalizeBoolean(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return Boolean(fallback);
+  if (typeof value === "string") return value === "true";
+  return Boolean(value);
 }
 
 function normalizeFixedFunctionKey(value = "") {

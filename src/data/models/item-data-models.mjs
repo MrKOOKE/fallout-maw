@@ -168,7 +168,7 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "limitedChanges", "cooldown", "itemUse"],
+      choices: ["", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "cooldown", "itemUse"],
       initial: ""
     }),
     operator: new StringField({ required: true, blank: false, choices: ["lte", "gte", "occupied", "empty"], initial: "lte" }),
@@ -210,6 +210,25 @@ function abilityConditionField() {
       required: true,
       initial: []
     }),
+    auraMode: new StringField({
+      required: true,
+      blank: false,
+      choices: ["applyToTargets", "selfWhenPresent"],
+      initial: "applyToTargets"
+    }),
+    auraTargetGroups: new ArrayField(new StringField({
+      required: true,
+      blank: false,
+      choices: ["ally", "enemy", "neutral"],
+      initial: "enemy"
+    }), { required: true, initial: [] }),
+    auraRadiusMeters: new NumberField({ required: true, min: 0, initial: 0 }),
+    auraWallsBlock: new BooleanField({ required: true, initial: true }),
+    auraIncludeSelf: new BooleanField({ required: true, initial: true }),
+    auraCombatOnly: new BooleanField({ required: true, initial: false }),
+    auraCombatantsOnly: new BooleanField({ required: true, initial: false }),
+    auraIgnoreIncapacitated: new BooleanField({ required: true, initial: true }),
+    auraIgnoreHidden: new BooleanField({ required: true, initial: true }),
     limit: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     requiredCount: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     itemCategories: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {

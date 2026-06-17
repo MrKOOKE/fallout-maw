@@ -5,7 +5,13 @@ import {
   getAbilitySourceId,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
-import { abilityConditionsApply, getAbilityEffectChanges, getAbilityEffectChangesFromFunctions } from "./evaluation.mjs";
+import { abilityConditionsApply, getAbilityEffectChanges, getAbilityEffectChangesFromFunctions, getAbilityFunctionChangesForSatisfiedAuraCondition } from "./evaluation.mjs";
+import {
+  AURA_GENERATED_EFFECT_FLAG_KEY,
+  findAuraDistributionConditions,
+  getAuraGeneratedEffectFlag,
+  getAuraGeneratedTargetTokens
+} from "./aura-conditions.mjs";
 
 const ABILITY_EFFECT_FLAG_KEY = "abilityEffect";
 const ITEM_EFFECT_FLAG_KEY = "itemEffect";
@@ -13,44 +19,65 @@ const ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL = 1;
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const processingActors = new Set();
 const coverSyncTimers = new Map();
+let auraStateSyncTimer = null;
+let processingAuraEffects = false;
 
 export function registerAbilityEffectHooks() {
   Hooks.on("createItem", item => {
     if (item?.type === "ability" || isEquipmentItem(item) || hasItemFreeSettingsFunction(item)) void syncActorAbilityEffects(item.parent);
+    if (item?.type === "ability" || hasItemFreeSettingsFunction(item)) queueAuraStateSync();
   });
   Hooks.on("updateItem", (item, changes) => {
     if (item?.type === "ability" || isEquipmentItem(item) || isEquipmentItemUpdate(changes) || isItemFreeSettingsUpdate(item, changes)) void syncActorAbilityEffects(item.parent);
+    if (item?.type === "ability" || isItemFreeSettingsUpdate(item, changes)) queueAuraStateSync();
   });
   Hooks.on("deleteItem", item => {
     if (item?.type === "ability") {
       void deleteAbilityEffects(item.parent, item.id);
+      queueAuraStateSync();
       return;
     }
     if (item?.type === "gear") void deleteItemFreeSettingsEffects(item.parent, item.id);
     if (isEquipmentItem(item)) void syncActorAbilityEffects(item.parent);
+    if (item?.type === "gear") queueAuraStateSync();
   });
   Hooks.on("updateActor", (actor, changes) => {
     if (!isAbilityEffectSyncRelevant(changes)) return;
     void syncActorAbilityEffects(actor);
+    queueAuraStateSync();
   });
   Hooks.on("updateToken", (tokenDocument, changes) => {
-    if (!foundry.utils.hasProperty(changes, "movementAction")) return;
-    void syncActorAbilityEffects(tokenDocument?.actor, { actorToken: tokenDocument });
+    const relevant = isAuraTokenUpdateRelevant(changes);
+    if (foundry.utils.hasProperty(changes, "movementAction")) void syncActorAbilityEffects(tokenDocument?.actor, { actorToken: tokenDocument });
+    if (relevant) queueAuraStateSync();
   });
+  Hooks.on("createToken", () => queueAuraStateSync());
+  Hooks.on("deleteToken", () => queueAuraStateSync());
   Hooks.on("createActiveEffect", effect => {
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
+    if (!getAuraGeneratedEffectFlag(effect)) queueAuraStateSync();
   });
   Hooks.on("updateActiveEffect", effect => {
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
+    if (!getAuraGeneratedEffectFlag(effect)) queueAuraStateSync();
     if (!effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) && !effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)) return;
     void syncActorAbilityEffects(effect.parent);
+    queueAuraStateSync();
   });
   Hooks.on("deleteActiveEffect", effect => {
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
+    if (!getAuraGeneratedEffectFlag(effect)) queueAuraStateSync();
     if (!effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) && !effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)) return;
     void syncActorAbilityEffects(effect.parent);
+    queueAuraStateSync();
   });
   Hooks.on("canvasReady", () => void syncLoadedActorAbilityEffects());
+  Hooks.on("createCombat", () => queueAuraStateSync());
+  Hooks.on("updateCombat", () => queueAuraStateSync());
+  Hooks.on("deleteCombat", () => queueAuraStateSync());
+  Hooks.on("createCombatant", () => queueAuraStateSync());
+  Hooks.on("updateCombatant", () => queueAuraStateSync());
+  Hooks.on("deleteCombatant", () => queueAuraStateSync());
 }
 
 export async function syncLoadedActorAbilityEffects() {
@@ -61,6 +88,7 @@ export async function syncLoadedActorAbilityEffects() {
     if (token.actor) actors.set(token.actor.uuid, { actor: token.actor, context: { actorToken: token.document } });
   }
   for (const { actor, context } of actors.values()) await syncActorAbilityEffects(actor, context);
+  await syncAuraGeneratedEffects();
 }
 
 function isCoverEffect(effect = null) {
@@ -104,17 +132,15 @@ export async function syncActorAbilityEffects(actor, context = {}) {
       .filter(effect => {
         const data = effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY);
         return data?.abilityItemId && !activeAbilityItemIds.has(data.abilityItemId);
-      })
-      .map(effect => effect.id);
-    if (stale.length) await actor.deleteEmbeddedDocuments("ActiveEffect", stale);
+      });
+    await deleteAbilitySyncEffects(actor, stale, ABILITY_EFFECT_FLAG_KEY);
 
     const staleItemEffects = actor.effects
       .filter(effect => {
         const data = effect.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY);
         return data?.itemId && !activeItemFreeSettingsItemIds.has(data.itemId);
-      })
-      .map(effect => effect.id);
-    if (staleItemEffects.length) await actor.deleteEmbeddedDocuments("ActiveEffect", staleItemEffects);
+      });
+    await deleteAbilitySyncEffects(actor, staleItemEffects, ITEM_EFFECT_FLAG_KEY);
   } finally {
     processingActors.delete(actor.uuid);
   }
@@ -122,9 +148,10 @@ export async function syncActorAbilityEffects(actor, context = {}) {
 
 async function syncSingleAbilityEffect(actor, item, context = {}) {
   const existing = actor.effects.filter(effect => effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.abilityItemId === item.id);
+  const operationOptions = getAbilityEffectOperationOptions(item);
   const changes = buildAbilityEffectChanges(actor, item, context);
   if (!changes.length) {
-    if (existing.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existing.map(effect => effect.id));
+    if (existing.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existing.map(effect => effect.id), operationOptions);
     return;
   }
 
@@ -133,7 +160,7 @@ async function syncSingleAbilityEffect(actor, item, context = {}) {
   const signature = JSON.stringify({ itemId: item.id, sourceId, changes, showIcon });
   const current = existing.find(effect => effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.signature === signature);
   const obsolete = existing.filter(effect => effect.id !== current?.id).map(effect => effect.id);
-  if (obsolete.length) await actor.deleteEmbeddedDocuments("ActiveEffect", obsolete);
+  if (obsolete.length) await actor.deleteEmbeddedDocuments("ActiveEffect", obsolete, operationOptions);
 
   if (current) {
     const update = {};
@@ -142,18 +169,23 @@ async function syncSingleAbilityEffect(actor, item, context = {}) {
     if (current.img !== item.img) update.img = item.img;
     if (current.origin !== item.uuid) update.origin = item.uuid;
     if (current.showIcon !== showIcon) update.showIcon = showIcon;
+    const auraCondition = hasAuraConditionFunction(item?.system?.functions ?? []);
+    if (current.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.auraCondition !== auraCondition) {
+      update[`flags.${SYSTEM_ID}.${ABILITY_EFFECT_FLAG_KEY}.auraCondition`] = auraCondition;
+    }
     if (Object.keys(update).length) await current.update(update);
     return;
   }
 
-  await actor.createEmbeddedDocuments("ActiveEffect", [buildAbilityActiveEffectData(item, changes, signature, sourceId, showIcon)]);
+  await actor.createEmbeddedDocuments("ActiveEffect", [buildAbilityActiveEffectData(item, changes, signature, sourceId, showIcon)], operationOptions);
 }
 
 async function syncSingleItemFreeSettingsEffect(actor, item, context = {}) {
   const existing = actor.effects.filter(effect => effect.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.itemId === item.id);
+  const operationOptions = getItemFreeSettingsEffectOperationOptions(item);
   const changes = buildItemFreeSettingsEffectChanges(actor, item, context);
   if (!changes.length) {
-    if (existing.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existing.map(effect => effect.id));
+    if (existing.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existing.map(effect => effect.id), operationOptions);
     return;
   }
 
@@ -161,7 +193,7 @@ async function syncSingleItemFreeSettingsEffect(actor, item, context = {}) {
   const signature = JSON.stringify({ itemId: item.id, changes, showIcon });
   const current = existing.find(effect => effect.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.signature === signature);
   const obsolete = existing.filter(effect => effect.id !== current?.id).map(effect => effect.id);
-  if (obsolete.length) await actor.deleteEmbeddedDocuments("ActiveEffect", obsolete);
+  if (obsolete.length) await actor.deleteEmbeddedDocuments("ActiveEffect", obsolete, operationOptions);
 
   if (current) {
     const update = {};
@@ -170,14 +202,167 @@ async function syncSingleItemFreeSettingsEffect(actor, item, context = {}) {
     if (current.img !== item.img) update.img = item.img;
     if (current.origin !== item.uuid) update.origin = item.uuid;
     if (current.showIcon !== showIcon) update.showIcon = showIcon;
+    const auraCondition = hasAuraConditionFunction(item?.system?.functions?.freeSettings?.entries ?? []);
+    if (current.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.auraCondition !== auraCondition) {
+      update[`flags.${SYSTEM_ID}.${ITEM_EFFECT_FLAG_KEY}.auraCondition`] = auraCondition;
+    }
     if (Object.keys(update).length) await current.update(update);
     return;
   }
 
-  await actor.createEmbeddedDocuments("ActiveEffect", [buildItemFreeSettingsActiveEffectData(item, changes, signature, showIcon)]);
+  await actor.createEmbeddedDocuments("ActiveEffect", [buildItemFreeSettingsActiveEffectData(item, changes, signature, showIcon)], operationOptions);
+}
+
+function queueAuraStateSync() {
+  if (!game.user?.isActiveGM) return;
+  globalThis.clearTimeout(auraStateSyncTimer);
+  auraStateSyncTimer = globalThis.setTimeout(() => {
+    auraStateSyncTimer = null;
+    void syncLoadedActorAbilityEffects();
+  }, 40);
+}
+
+export async function syncAuraGeneratedEffects() {
+  if (!game.user?.isActiveGM || processingAuraEffects) return;
+  processingAuraEffects = true;
+  try {
+    const desired = buildDesiredAuraGeneratedEffects();
+    const actors = collectAuraEffectActors(desired);
+    for (const actor of actors.values()) {
+      await reconcileActorAuraGeneratedEffects(actor, desired.get(actor.uuid) ?? new Map());
+    }
+  } finally {
+    processingAuraEffects = false;
+  }
+}
+
+function buildDesiredAuraGeneratedEffects() {
+  const desired = new Map();
+  for (const sourceToken of canvas?.tokens?.placeables ?? []) {
+    const sourceActor = sourceToken?.actor;
+    if (!sourceActor || !["character", "construct"].includes(sourceActor.type)) continue;
+    for (const source of getAuraSourceFunctionSets(sourceActor)) {
+      for (const entry of normalizeAbilityFunctions(source.functions)) {
+        if (entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
+        for (const condition of findAuraDistributionConditions(entry.conditions)) {
+          const targets = getAuraGeneratedTargetTokens(sourceActor, condition, { actorToken: sourceToken });
+          if (!targets.length) continue;
+          for (const targetToken of targets) {
+            const targetActor = targetToken?.actor;
+            if (!targetActor) continue;
+            const changes = getAbilityFunctionChangesForSatisfiedAuraCondition(sourceActor, entry, condition, {
+              abilityItemId: source.item.id,
+              actorToken: sourceToken,
+              targetActor,
+              targetToken
+            }).filter(isApplicableGeneratedAuraChange);
+            if (!changes.length) continue;
+            const key = [
+              source.kind,
+              sourceActor.uuid,
+              source.item.id,
+              entry.id,
+              condition.id
+            ].join(".");
+            const signature = JSON.stringify({ key, changes });
+            const data = buildAuraGeneratedActiveEffectData(source, sourceActor, entry, condition, changes, key, signature);
+            const actorDesired = desired.get(targetActor.uuid) ?? new Map();
+            actorDesired.set(key, data);
+            desired.set(targetActor.uuid, actorDesired);
+          }
+        }
+      }
+    }
+  }
+  return desired;
+}
+
+function getAuraSourceFunctionSets(actor) {
+  const sources = [];
+  for (const item of actor?.items ?? []) {
+    if (item?.type === "ability") {
+      sources.push({ kind: "ability", item, functions: item.system?.functions ?? [] });
+      continue;
+    }
+    if (isActiveItemFreeSettingsItem(item)) {
+      sources.push({ kind: "itemFreeSettings", item, functions: item.system?.functions?.freeSettings?.entries ?? [] });
+    }
+  }
+  return sources;
+}
+
+function buildAuraGeneratedActiveEffectData(source, sourceActor, entry, condition, changes, key, signature) {
+  return {
+    type: "base",
+    name: source.item.name,
+    img: source.item.img || "icons/svg/aura.svg",
+    origin: source.item.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    system: { changes },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "active",
+        [AURA_GENERATED_EFFECT_FLAG_KEY]: {
+          key,
+          signature,
+          sourceKind: source.kind,
+          sourceActorUuid: sourceActor.uuid,
+          itemId: source.item.id,
+          functionId: entry.id,
+          conditionId: condition.id
+        }
+      }
+    }
+  };
+}
+
+function collectAuraEffectActors(desired = new Map()) {
+  const actors = new Map();
+  for (const actor of game.actors ?? []) {
+    if (actor?.effects?.some(effect => getAuraGeneratedEffectFlag(effect))) actors.set(actor.uuid, actor);
+  }
+  for (const token of canvas?.tokens?.placeables ?? []) {
+    const actor = token?.actor;
+    if (!actor?.uuid) continue;
+    if (desired.has(actor.uuid) || actor.effects?.some(effect => getAuraGeneratedEffectFlag(effect))) actors.set(actor.uuid, actor);
+  }
+  return actors;
+}
+
+async function reconcileActorAuraGeneratedEffects(actor, desired = new Map()) {
+  if (!actor) return;
+  const existing = actor.effects.filter(effect => getAuraGeneratedEffectFlag(effect));
+  const deletions = [];
+  const existingByKey = new Map();
+  for (const effect of existing) {
+    const flag = getAuraGeneratedEffectFlag(effect);
+    const key = String(flag?.key ?? "");
+    const target = desired.get(key);
+    if (!key || !target || flag?.signature !== target.flags?.[SYSTEM_ID]?.[AURA_GENERATED_EFFECT_FLAG_KEY]?.signature) {
+      deletions.push(effect.id);
+      continue;
+    }
+    existingByKey.set(key, effect);
+  }
+  if (deletions.length) await actor.deleteEmbeddedDocuments("ActiveEffect", deletions, { animate: false });
+
+  const creations = [];
+  for (const [key, data] of desired.entries()) {
+    if (!existingByKey.has(key)) creations.push(data);
+  }
+  if (creations.length) await actor.createEmbeddedDocuments("ActiveEffect", creations, { animate: false });
+}
+
+function isApplicableGeneratedAuraChange(change = {}) {
+  return String(change?.key ?? "").trim()
+    && String(change?.value ?? "") !== ""
+    && !String(change?.key ?? "").startsWith("system.skillAdvancementBase.");
 }
 
 function buildAbilityActiveEffectData(item, changes, signature, sourceId, showIcon) {
+  const auraCondition = hasAuraConditionFunction(item?.system?.functions ?? []);
   return {
     type: "base",
     name: item.name,
@@ -193,7 +378,8 @@ function buildAbilityActiveEffectData(item, changes, signature, sourceId, showIc
         [ABILITY_EFFECT_FLAG_KEY]: {
           abilityItemId: item.id,
           abilitySourceId: sourceId,
-          signature
+          signature,
+          auraCondition
         }
       }
     }
@@ -201,6 +387,7 @@ function buildAbilityActiveEffectData(item, changes, signature, sourceId, showIc
 }
 
 function buildItemFreeSettingsActiveEffectData(item, changes, signature, showIcon) {
+  const auraCondition = hasAuraConditionFunction(item?.system?.functions?.freeSettings?.entries ?? []);
   return {
     type: "base",
     name: item.name,
@@ -215,7 +402,8 @@ function buildItemFreeSettingsActiveEffectData(item, changes, signature, showIco
         kind: "active",
         [ITEM_EFFECT_FLAG_KEY]: {
           itemId: item.id,
-          signature
+          signature,
+          auraCondition
         }
       }
     }
@@ -287,6 +475,33 @@ function hasRuntimeConditions(conditions = []) {
   ));
 }
 
+function getAbilityEffectOperationOptions(item) {
+  return hasAuraConditionFunction(item?.system?.functions ?? []) ? { animate: false } : {};
+}
+
+function getItemFreeSettingsEffectOperationOptions(item) {
+  return hasAuraConditionFunction(item?.system?.functions?.freeSettings?.entries ?? []) ? { animate: false } : {};
+}
+
+function hasAuraConditionFunction(functions = []) {
+  return normalizeAbilityFunctions(functions)
+    .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
+    .some(entry => (entry.conditions ?? []).some(condition => condition?.type === ABILITY_CONDITION_TYPES.aura));
+}
+
+async function deleteAbilitySyncEffects(actor, effects = [], flagKey = "") {
+  if (!actor || !effects.length) return;
+  const auraIds = [];
+  const normalIds = [];
+  for (const effect of effects) {
+    const data = effect.getFlag(SYSTEM_ID, flagKey);
+    if (data?.auraCondition) auraIds.push(effect.id);
+    else normalIds.push(effect.id);
+  }
+  if (normalIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", normalIds);
+  if (auraIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", auraIds, { animate: false });
+}
+
 function hasApplicableAbilityChanges(changes = []) {
   return (changes ?? []).some(change => (
     String(change?.key ?? "").trim()
@@ -297,10 +512,9 @@ function hasApplicableAbilityChanges(changes = []) {
 
 async function deleteAbilityEffects(actor, abilityItemId = "") {
   if (!actor || !game.user?.isActiveGM || !abilityItemId) return;
-  const ids = actor.effects
-    .filter(effect => effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.abilityItemId === abilityItemId)
-    .map(effect => effect.id);
-  if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids);
+  const effects = actor.effects
+    .filter(effect => effect.getFlag(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY)?.abilityItemId === abilityItemId);
+  await deleteAbilitySyncEffects(actor, effects, ABILITY_EFFECT_FLAG_KEY);
 }
 
 function isAbilityEffectSyncRelevant(changes = {}) {
@@ -309,15 +523,29 @@ function isAbilityEffectSyncRelevant(changes = {}) {
     || path.startsWith("system.resources.health.")
     || path === "system.limbs"
     || path.startsWith("system.limbs.")
-    || path === "system.creature.raceId");
+    || path === "system.creature.raceId"
+    || path === `flags.${SYSTEM_ID}.factionBelongs`
+    || path.startsWith(`flags.${SYSTEM_ID}.factionBelongs.`)
+    || path === `flags.${SYSTEM_ID}.factionRelations`
+    || path.startsWith(`flags.${SYSTEM_ID}.factionRelations.`));
+}
+
+function isAuraTokenUpdateRelevant(changes = {}) {
+  const paths = Object.keys(foundry.utils.flattenObject(changes ?? {}));
+  return paths.some(path => [
+    "x",
+    "y",
+    "elevation",
+    "hidden",
+    "movementAction"
+  ].includes(path));
 }
 
 async function deleteItemFreeSettingsEffects(actor, itemId = "") {
   if (!actor || !game.user?.isActiveGM || !itemId) return;
-  const ids = actor.effects
-    .filter(effect => effect.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.itemId === itemId)
-    .map(effect => effect.id);
-  if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids);
+  const effects = actor.effects
+    .filter(effect => effect.getFlag(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)?.itemId === itemId);
+  await deleteAbilitySyncEffects(actor, effects, ITEM_EFFECT_FLAG_KEY);
 }
 
 function isEquipmentItem(item) {

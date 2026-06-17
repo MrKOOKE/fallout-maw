@@ -1146,6 +1146,35 @@
                 </div>
               </div>
               {{/if}}
+              {{#if isAura}}
+              <div class="fallout-maw-aura-condition">
+                <label><span>Режим наложения</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraMode" data-ability-aura-mode>{{#each auraModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                <div class="fallout-maw-item-use-category-field">
+                  <div class="fallout-maw-item-use-category-header"><span>{{auraTargetGroupsLabel}}</span><button type="button" data-add-ability-aura-target-group {{#unless canAddAuraTargetGroup}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
+                  <div class="fallout-maw-item-use-category-list">
+                    {{#each auraTargetGroupRows}}
+                    <div class="fallout-maw-item-use-category-row" data-aura-target-group-index="{{index}}">
+                      <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.auraTargetGroups.{{index}}">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}</select>
+                      <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-aura-target-group title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    {{else}}<span class="fallout-maw-empty-list">Цели не выбраны.</span>{{/each}}
+                  </div>
+                </div>
+                <div class="fallout-maw-aura-condition-caption">Условия воздействия</div>
+                <div class="fallout-maw-aura-condition-fields">
+                  <label><span>Радиус, м</span><input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraRadiusMeters" value="{{auraRadiusMeters}}" min="0" step="0.1"></label>
+                  <label><span>Требуется актеров для работы</span><input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.requiredCount" value="{{requiredCount}}" min="1" step="1"></label>
+                  {{#if showAuraIncludeSelf}}
+                  <label><span>Учитывать себя</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraIncludeSelf">{{#each auraIncludeSelfChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  {{/if}}
+                  <label><span>Только в бою</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraCombatOnly">{{#each auraCombatOnlyChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label><span>Блокирование стенами</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraWallsBlock">{{#each auraWallsBlockChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label><span>Только участники боя</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraCombatantsOnly">{{#each auraCombatantsOnlyChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label><span>Игнорировать мертвых и без сознания</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraIgnoreIncapacitated">{{#each auraIgnoreIncapacitatedChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label><span>Игнорировать скрытых</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraIgnoreHidden">{{#each auraIgnoreHiddenChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                </div>
+              </div>
+              {{/if}}
               {{#if isLimitedChanges}}
               <label>
                 <span>Выбрать изменений</span>
@@ -1643,6 +1672,35 @@
                     <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-weapon-proficiency title="Удалить владение"><i class="fa-solid fa-trash"></i></button>
                   </div>
                   {{else}}<span class="fallout-maw-empty-list">Владения не выбраны.</span>{{/each}}
+                </div>
+              </div>
+              {{/if}}
+              {{#if isAura}}
+              <div class="fallout-maw-aura-condition">
+                <label><span>Режим наложения</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraMode" data-ability-aura-mode>{{#each auraModeChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                <div class="fallout-maw-item-use-category-field">
+                  <div class="fallout-maw-item-use-category-header"><span>{{auraTargetGroupsLabel}}</span><button type="button" data-add-ability-aura-target-group {{#unless canAddAuraTargetGroup}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить</button></div>
+                  <div class="fallout-maw-item-use-category-list">
+                    {{#each auraTargetGroupRows}}
+                    <div class="fallout-maw-item-use-category-row" data-aura-target-group-index="{{index}}">
+                      <select name="{{../functionPath}}.{{../functionIndex}}.conditions.{{../index}}.auraTargetGroups.{{index}}">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}</select>
+                      <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-ability-aura-target-group title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    {{else}}<span class="fallout-maw-empty-list">Цели не выбраны.</span>{{/each}}
+                  </div>
+                </div>
+                <div class="fallout-maw-aura-condition-caption">Условия воздействия</div>
+                <div class="fallout-maw-aura-condition-fields">
+                  <label><span>Радиус, м</span><input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraRadiusMeters" value="{{auraRadiusMeters}}" min="0" step="0.1"></label>
+                  <label><span>Требуется актеров для работы</span><input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.requiredCount" value="{{requiredCount}}" min="1" step="1"></label>
+                  {{#if showAuraIncludeSelf}}
+                  <label><span>Учитывать себя</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraIncludeSelf">{{#each auraIncludeSelfChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  {{/if}}
+                  <label><span>Только в бою</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraCombatOnly">{{#each auraCombatOnlyChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label><span>Блокирование стенами</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraWallsBlock">{{#each auraWallsBlockChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label><span>Только участники боя</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraCombatantsOnly">{{#each auraCombatantsOnlyChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label><span>Игнорировать мертвых и без сознания</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraIgnoreIncapacitated">{{#each auraIgnoreIncapacitatedChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label><span>Игнорировать скрытых</span><select name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.auraIgnoreHidden">{{#each auraIgnoreHiddenChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
                 </div>
               </div>
               {{/if}}

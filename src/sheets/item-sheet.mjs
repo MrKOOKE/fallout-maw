@@ -30,6 +30,8 @@ import {
 import { FALLBACK_ICON, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
   ABILITY_FIXED_FUNCTION_KEYS,
+  ABILITY_AURA_MODES,
+  ABILITY_AURA_TARGET_GROUPS,
   ABILITY_CHANGE_TYPES,
   ABILITY_CONDITION_TYPES,
   ABILITY_EQUIPMENT_OPERATORS,
@@ -794,6 +796,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     });
     this.element?.querySelectorAll("[data-delete-ability-weapon-proficiency]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteAbilityWeaponProficiency(event));
+    });
+    this.element?.querySelectorAll("[data-add-ability-aura-target-group]").forEach(button => {
+      button.addEventListener("click", event => this.#onAddAbilityAuraTargetGroup(event));
+    });
+    this.element?.querySelectorAll("[data-delete-ability-aura-target-group]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteAbilityAuraTargetGroup(event));
+    });
+    this.element?.querySelectorAll("[data-ability-aura-mode]").forEach(select => {
+      select.addEventListener("change", event => this.#onAbilityAuraModeChange(event));
     });
     this.element?.querySelectorAll("[data-add-ability-penalty]").forEach(button => {
       button.addEventListener("click", event => this.#onAddAbilityPenalty(event));
@@ -2522,6 +2533,40 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     values.splice(index, 1);
     condition.proficiencyKeys = values;
     return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onAddAbilityAuraTargetGroup(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    if (!condition) return undefined;
+    const values = normalizeAbilityConditionValues(condition.auraTargetGroups).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
+    const next = ABILITY_AURA_TARGET_GROUPS.find(group => !values.includes(group));
+    if (!next) return undefined;
+    condition.auraTargetGroups = [...values, next];
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  #onDeleteAbilityAuraTargetGroup(event) {
+    event.preventDefault();
+    const { condition, functions, functionPath } = this.#getAbilityConditionForEvent(event);
+    const index = Number(event.currentTarget?.closest?.("[data-aura-target-group-index]")?.dataset.auraTargetGroupIndex ?? -1);
+    if (!condition || index < 0) return undefined;
+    const values = normalizeAbilityConditionValues(condition.auraTargetGroups).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
+    values.splice(index, 1);
+    condition.auraTargetGroups = values;
+    return this.#submitCurrentForm({ [functionPath]: functions });
+  }
+
+  async #onAbilityAuraModeChange(event) {
+    event.preventDefault();
+    const path = String(event.currentTarget?.name ?? "");
+    if (!path) return undefined;
+    const updateData = { [path]: event.currentTarget.value };
+    if (event.currentTarget.value === ABILITY_AURA_MODES.selfWhenPresent) {
+      updateData[path.replace(/\.auraMode$/, ".auraIncludeSelf")] = false;
+    }
+    await this.#submitCurrentForm(updateData);
+    return this.render();
   }
 
   #getAbilityConditionForEvent(event) {
@@ -4665,6 +4710,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
   const isWeaponAction = type === ABILITY_CONDITION_TYPES.weaponAction;
   const isWeaponSkill = type === ABILITY_CONDITION_TYPES.weaponSkill;
   const isWeaponProficiency = type === ABILITY_CONDITION_TYPES.weaponProficiency;
+  const isAura = type === ABILITY_CONDITION_TYPES.aura;
   const isLimitedChanges = type === ABILITY_CONDITION_TYPES.limitedChanges;
   const isCooldown = type === ABILITY_CONDITION_TYPES.cooldown;
   const isItemUse = type === ABILITY_CONDITION_TYPES.itemUse;
@@ -4682,7 +4728,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
     functionIndex,
     index,
     healthTarget,
-    isPending: !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isLimitedChanges && !isCooldown && !isItemUse,
+    isPending: !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isItemUse,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -4697,6 +4743,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
     isWeaponAction,
     isWeaponSkill,
     isWeaponProficiency,
+    isAura,
     isLimitedChanges,
     isCooldown,
     isItemUse,
@@ -4736,6 +4783,18 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
     canAddSkill: Boolean(getFirstUnusedAbilitySkillKey(condition?.skillKeys)),
     proficiencyRows: buildAbilityProficiencyRows(condition?.proficiencyKeys),
     canAddProficiency: Boolean(getFirstUnusedAbilityProficiencyKey(condition?.proficiencyKeys)),
+    auraModeChoices: buildAbilityAuraModeChoices(condition?.auraMode),
+    auraTargetGroupsLabel: getAbilityAuraTargetGroupsLabel(condition?.auraMode),
+    showAuraIncludeSelf: condition?.auraMode !== ABILITY_AURA_MODES.selfWhenPresent,
+    auraTargetGroupRows: buildAbilityAuraTargetGroupRows(condition?.auraTargetGroups),
+    canAddAuraTargetGroup: normalizeAbilityConditionValues(condition?.auraTargetGroups).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group)).length < ABILITY_AURA_TARGET_GROUPS.length,
+    auraRadiusMeters: Math.max(0, Number(condition?.auraRadiusMeters) || 0),
+    auraWallsBlockChoices: buildAbilityBooleanChoices(condition?.auraWallsBlock !== false),
+    auraIncludeSelfChoices: buildAbilityBooleanChoices(condition?.auraIncludeSelf !== false),
+    auraCombatOnlyChoices: buildAbilityBooleanChoices(Boolean(condition?.auraCombatOnly)),
+    auraCombatantsOnlyChoices: buildAbilityBooleanChoices(Boolean(condition?.auraCombatantsOnly)),
+    auraIgnoreIncapacitatedChoices: buildAbilityBooleanChoices(condition?.auraIgnoreIncapacitated !== false),
+    auraIgnoreHiddenChoices: buildAbilityBooleanChoices(condition?.auraIgnoreHidden !== false),
     itemCategoryRows: buildAbilityItemUseCategoryRows(condition?.itemCategories),
     canAddItemCategory: Boolean(getFirstUnusedAbilityItemUseCategory(condition?.itemCategories))
   };
@@ -4791,7 +4850,8 @@ function buildAbilityConditionTypeChoices(selected = "", { allowLimitedChanges =
     { value: ABILITY_CONDITION_TYPES.occupiedCover, label: "Занимаемое укрытие", selected: selected === ABILITY_CONDITION_TYPES.occupiedCover },
     { value: ABILITY_CONDITION_TYPES.weaponAction, label: "Тип атаки", selected: selected === ABILITY_CONDITION_TYPES.weaponAction },
     { value: ABILITY_CONDITION_TYPES.weaponSkill, label: "Задействованный оружием навык", selected: selected === ABILITY_CONDITION_TYPES.weaponSkill },
-    { value: ABILITY_CONDITION_TYPES.weaponProficiency, label: "Задействованное оружейное владение", selected: selected === ABILITY_CONDITION_TYPES.weaponProficiency }
+    { value: ABILITY_CONDITION_TYPES.weaponProficiency, label: "Задействованное оружейное владение", selected: selected === ABILITY_CONDITION_TYPES.weaponProficiency },
+    { value: ABILITY_CONDITION_TYPES.aura, label: "Аура", selected: selected === ABILITY_CONDITION_TYPES.aura }
   ];
   if (allowLimitedChanges || selected === ABILITY_CONDITION_TYPES.limitedChanges) {
     choices.push({
@@ -4903,8 +4963,53 @@ function isAbilityRuntimeCondition(type = "") {
     ABILITY_CONDITION_TYPES.weaponAction,
     ABILITY_CONDITION_TYPES.weaponSkill,
     ABILITY_CONDITION_TYPES.weaponProficiency,
+    ABILITY_CONDITION_TYPES.aura,
     ABILITY_CONDITION_TYPES.cooldown
   ].includes(type);
+}
+
+function buildAbilityAuraModeChoices(selected = ABILITY_AURA_MODES.applyToTargets) {
+  return [
+    { value: ABILITY_AURA_MODES.applyToTargets, label: "Обычный" },
+    { value: ABILITY_AURA_MODES.selfWhenPresent, label: "Сбор внешних условий для наложения на себя" }
+  ].map(choice => ({
+    ...choice,
+    selected: choice.value === selected
+  }));
+}
+
+function getAbilityAuraTargetGroupsLabel(mode = "") {
+  return mode === ABILITY_AURA_MODES.selfWhenPresent
+    ? "Цели для сбора условий"
+    : "Цели воздействия";
+}
+
+function buildAbilityAuraTargetGroupRows(value = []) {
+  const selected = normalizeAbilityConditionValues(value).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
+  return selected.map((group, index) => ({
+    index,
+    choices: ABILITY_AURA_TARGET_GROUPS.map(entry => ({
+      value: entry,
+      label: getAbilityAuraTargetGroupLabel(entry),
+      selected: entry === group,
+      disabled: entry !== group && selected.includes(entry)
+    }))
+  }));
+}
+
+function getAbilityAuraTargetGroupLabel(group = "") {
+  return {
+    ally: "Союзники",
+    enemy: "Враги",
+    neutral: "Нейтралы"
+  }[group] ?? group;
+}
+
+function buildAbilityBooleanChoices(selected = false) {
+  return [
+    { value: "true", label: "Да", selected: Boolean(selected) },
+    { value: "false", label: "Нет", selected: !selected }
+  ];
 }
 
 function buildAbilityHealthTargetChoices(selected = ABILITY_HEALTH_TARGETS.general) {

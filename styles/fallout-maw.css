@@ -2696,6 +2696,20 @@ body #prosemirror-dropdown {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
+.fallout-maw-aura-condition-caption {
+  color: var(--color-text-light-highlight);
+  font-weight: 700;
+  grid-column: 1 / -1;
+  margin-top: 0.25rem;
+}
+
+.fallout-maw-aura-condition-fields {
+  display: grid;
+  gap: 0.45rem;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
 .fallout-maw-item-use-category-field {
   display: grid;
   gap: 0.35rem;

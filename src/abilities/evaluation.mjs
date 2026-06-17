@@ -15,6 +15,7 @@ import { isAbilityAcquisitionChangeKey } from "../utils/ability-acquisition-chan
 import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { hasAbilityFunctionCooldown } from "./runtime-state.mjs";
+import { abilityAuraConditionApplies, isAuraDistributionCondition } from "./aura-conditions.mjs";
 
 export function getAbilityEffectChanges(actor, item, context = {}) {
   return getAbilityEffectChangesFromFunctions(actor, item?.system?.functions ?? [], {
@@ -77,6 +78,7 @@ export function abilityConditionsApply(actor, conditions = [], context = {}) {
 
 export function abilityConditionApplies(actor, condition = {}, context = {}) {
   if (condition.type === ABILITY_CONDITION_TYPES.itemUse) return false;
+  if (condition.type === ABILITY_CONDITION_TYPES.aura) return abilityAuraConditionApplies(actor, condition, context);
 
   const targetActor = context?.targetActor ?? context?.targetToken?.actor ?? null;
   if (condition.type === ABILITY_CONDITION_TYPES.targetFaction) {
@@ -158,9 +160,23 @@ function getConditionalFunctionChanges(actor, entry = {}, context = {}) {
   if ((hasAbilityTargetContextCondition(conditions) || hasWeaponContextCondition(conditions)) && !context?.allowContextual) return [];
   if (abilityConditionsRequireTarget(conditions) && !(context?.targetActor ?? context?.targetToken?.actor)) return [];
   if (hasItemUseCondition(conditions)) return [];
+  if (hasAuraDistributionCondition(conditions) && !context?.auraTargetApplication) return [];
   return abilityConditionsApply(actor, conditions, { ...context, functionId: entry.id ?? "" })
     ? entry.changes ?? []
     : entry.penalties ?? [];
+}
+
+export function getAbilityFunctionChangesForSatisfiedAuraCondition(actor, entry = {}, condition = {}, context = {}) {
+  if (!entry || entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) return [];
+  if (hasItemUseCondition(entry.conditions)) return [];
+  const applies = abilityConditionsApply(actor, entry.conditions ?? [], {
+    ...context,
+    functionId: entry.id ?? "",
+    satisfiedAuraConditionId: condition.id,
+    auraTargetApplication: true
+  });
+  if (applies) return entry.changes ?? [];
+  return context?.includeAuraPenalties ? entry.penalties ?? [] : [];
 }
 
 function abilityConditionsRequireTarget(conditions = []) {
@@ -189,6 +205,10 @@ function isTargetActorCondition(condition = {}) {
 
 function hasWeaponContextCondition(conditions = []) {
   return (conditions ?? []).some(isWeaponContextCondition);
+}
+
+function hasAuraDistributionCondition(conditions = []) {
+  return (conditions ?? []).some(isAuraDistributionCondition);
 }
 
 function isWeaponContextCondition(condition = {}) {

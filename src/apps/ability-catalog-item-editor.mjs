@@ -3,6 +3,8 @@ import { getCharacteristicSettings, getCoverSettings, getCreatureOptions, getIte
 import { getFactionNamesWithDefault, getFactionSettings } from "../settings/factions.mjs";
 import {
   ABILITY_ACQUISITION_CONDITION_TYPES,
+  ABILITY_AURA_MODES,
+  ABILITY_AURA_TARGET_GROUPS,
   ABILITY_CHANGE_TYPES,
   ABILITY_CONDITION_TYPES,
   ABILITY_EQUIPMENT_OPERATORS,
@@ -101,6 +103,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       deleteConditionWeaponSkill: this.#onDeleteConditionWeaponSkill,
       addConditionWeaponProficiency: this.#onAddConditionWeaponProficiency,
       deleteConditionWeaponProficiency: this.#onDeleteConditionWeaponProficiency,
+      addConditionAuraTargetGroup: this.#onAddConditionAuraTargetGroup,
+      deleteConditionAuraTargetGroup: this.#onDeleteConditionAuraTargetGroup,
       addFunctionPenalty: this.#onAddFunctionPenalty,
       deleteFunctionPenalty: this.#onDeleteFunctionPenalty,
       addAcquisitionRequirement: this.#onAddAcquisitionRequirement,
@@ -184,6 +188,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
     });
     this.element?.querySelectorAll?.("[data-field='conditionHealthTarget']")?.forEach(select => {
+      select.addEventListener("change", event => this.#onConditionTypeChange(event));
+    });
+    this.element?.querySelectorAll?.("[data-field='conditionAuraMode']")?.forEach(select => {
       select.addEventListener("change", event => this.#onConditionTypeChange(event));
     });
     this.element?.querySelectorAll?.("[data-field='acquisitionRequirementType']")?.forEach(select => {
@@ -294,6 +301,10 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       const conditionIndex = getRowIndex(functionRow, "[data-ability-condition-row]", conditionRow);
       const condition = this.ability.system.functions?.[functionIndex]?.conditions?.[conditionIndex];
       if (condition) condition.limbKey = ABILITY_HEALTH_LIMB_ALL;
+    }
+    if (event.currentTarget?.dataset?.field === "conditionAuraMode" && event.currentTarget.value === ABILITY_AURA_MODES.selfWhenPresent) {
+      const { condition } = this.#getConditionForTarget(event.currentTarget);
+      if (condition) condition.auraIncludeSelf = false;
     }
     this.#activeTab = "functions";
     return this.#persist({ render: true, sync: false });
@@ -539,6 +550,30 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       const values = normalizeConditionValues(condition.proficiencyKeys);
       values.splice(index, 1);
       condition.proficiencyKeys = values;
+    }
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onAddConditionAuraTargetGroup(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    if (!condition) return this.#persist({ render: true, sync: false });
+    const values = normalizeConditionValues(condition.auraTargetGroups).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
+    const next = ABILITY_AURA_TARGET_GROUPS.find(group => !values.includes(group));
+    if (next) condition.auraTargetGroups = [...values, next];
+    return this.#persist({ render: true, sync: false });
+  }
+
+  static #onDeleteConditionAuraTargetGroup(event, target) {
+    event.preventDefault();
+    this.#syncFromForm();
+    const { condition } = this.#getConditionForTarget(target);
+    const index = Number(target.closest("[data-aura-target-group-index]")?.dataset.auraTargetGroupIndex ?? -1);
+    if (condition && index >= 0) {
+      const values = normalizeConditionValues(condition.auraTargetGroups).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
+      values.splice(index, 1);
+      condition.auraTargetGroups = values;
     }
     return this.#persist({ render: true, sync: false });
   }
@@ -842,29 +877,43 @@ function readAbilityChanges(root, selector) {
 }
 
 function readAbilityConditions(root) {
-  return Array.from(root?.querySelectorAll("[data-ability-condition-row]") ?? []).map(row => ({
-    id: row.dataset.conditionId || foundry.utils.randomID(),
-    groupId: row.querySelector("[data-field='conditionGroupId']")?.value ?? row.dataset.conditionGroupId ?? "",
-    type: row.querySelector("[data-field='conditionType']")?.value || "",
-    operator: row.querySelector("[data-field='conditionOperator']")?.value ?? "lte",
-    percent: row.querySelector("[data-field='conditionPercent']")?.value ?? 50,
-    healthTarget: row.querySelector("[data-field='conditionHealthTarget']")?.value ?? ABILITY_HEALTH_TARGETS.general,
-    limbKey: row.querySelector("[data-field='conditionLimbKey']")?.value ?? ABILITY_HEALTH_LIMB_ALL,
-    equipmentSlotKey: row.querySelector("[data-field='conditionEquipmentSlotKey']")?.value ?? "",
-    targetFactionNames: readFieldValues(row, "[data-field='conditionTargetFaction']"),
-    targetRaceId: row.querySelector("[data-field='conditionTargetRace']")?.value ?? "",
-    targetTypeId: row.querySelector("[data-field='conditionTargetType']")?.value ?? "",
-    postureSubject: row.querySelector("[data-field='conditionPostureSubject']")?.value ?? ABILITY_POSTURE_SUBJECTS.self,
-    postureActions: readFieldValues(row, "[data-field='conditionPosture']"),
-    coverKeys: readFieldValues(row, "[data-field='conditionCover']"),
-    weaponActionKeys: readFieldValues(row, "[data-field='conditionWeaponAction']"),
-    skillKeys: readFieldValues(row, "[data-field='conditionSkill']"),
-    proficiencyKeys: readFieldValues(row, "[data-field='conditionProficiency']"),
-    limit: row.querySelector("[data-field='conditionLimit']")?.value ?? 1,
-    requiredCount: row.querySelector("[data-field='conditionRequiredCount']")?.value ?? 1,
-    itemCategories: readFieldValues(row, "[data-field='conditionItemCategory']"),
-    durationSeconds: readConditionDurationSeconds(row)
-  }));
+  return Array.from(root?.querySelectorAll("[data-ability-condition-row]") ?? []).map(row => {
+    const auraMode = row.querySelector("[data-field='conditionAuraMode']")?.value ?? ABILITY_AURA_MODES.applyToTargets;
+    return {
+      id: row.dataset.conditionId || foundry.utils.randomID(),
+      groupId: row.querySelector("[data-field='conditionGroupId']")?.value ?? row.dataset.conditionGroupId ?? "",
+      type: row.querySelector("[data-field='conditionType']")?.value || "",
+      operator: row.querySelector("[data-field='conditionOperator']")?.value ?? "lte",
+      percent: row.querySelector("[data-field='conditionPercent']")?.value ?? 50,
+      healthTarget: row.querySelector("[data-field='conditionHealthTarget']")?.value ?? ABILITY_HEALTH_TARGETS.general,
+      limbKey: row.querySelector("[data-field='conditionLimbKey']")?.value ?? ABILITY_HEALTH_LIMB_ALL,
+      equipmentSlotKey: row.querySelector("[data-field='conditionEquipmentSlotKey']")?.value ?? "",
+      targetFactionNames: readFieldValues(row, "[data-field='conditionTargetFaction']"),
+      targetRaceId: row.querySelector("[data-field='conditionTargetRace']")?.value ?? "",
+      targetTypeId: row.querySelector("[data-field='conditionTargetType']")?.value ?? "",
+      postureSubject: row.querySelector("[data-field='conditionPostureSubject']")?.value ?? ABILITY_POSTURE_SUBJECTS.self,
+      postureActions: readFieldValues(row, "[data-field='conditionPosture']"),
+      coverKeys: readFieldValues(row, "[data-field='conditionCover']"),
+      weaponActionKeys: readFieldValues(row, "[data-field='conditionWeaponAction']"),
+      skillKeys: readFieldValues(row, "[data-field='conditionSkill']"),
+      proficiencyKeys: readFieldValues(row, "[data-field='conditionProficiency']"),
+      auraMode,
+      auraTargetGroups: readFieldValues(row, "[data-field='conditionAuraTargetGroup']"),
+      auraRadiusMeters: row.querySelector("[data-field='conditionAuraRadiusMeters']")?.value ?? 0,
+      auraWallsBlock: readBooleanField(row.querySelector("[data-field='conditionAuraWallsBlock']"), true),
+      auraIncludeSelf: auraMode === ABILITY_AURA_MODES.applyToTargets
+        ? readBooleanField(row.querySelector("[data-field='conditionAuraIncludeSelf']"), true)
+        : false,
+      auraCombatOnly: readBooleanField(row.querySelector("[data-field='conditionAuraCombatOnly']"), false),
+      auraCombatantsOnly: readBooleanField(row.querySelector("[data-field='conditionAuraCombatantsOnly']"), false),
+      auraIgnoreIncapacitated: readBooleanField(row.querySelector("[data-field='conditionAuraIgnoreIncapacitated']"), true),
+      auraIgnoreHidden: readBooleanField(row.querySelector("[data-field='conditionAuraIgnoreHidden']"), true),
+      limit: row.querySelector("[data-field='conditionLimit']")?.value ?? 1,
+      requiredCount: row.querySelector("[data-field='conditionRequiredCount']")?.value ?? 1,
+      itemCategories: readFieldValues(row, "[data-field='conditionItemCategory']"),
+      durationSeconds: readConditionDurationSeconds(row)
+    };
+  });
 }
 
 function readAcquisitionRequirements(root) {
@@ -882,6 +931,11 @@ function readFieldValue(element, fallback = "") {
   if (!element) return fallback;
   if ("value" in element) return element.value;
   return element.getAttribute("value") ?? fallback;
+}
+
+function readBooleanField(element, fallback = false) {
+  if (!element) return Boolean(fallback);
+  return String(readFieldValue(element, fallback ? "true" : "false")) === "true";
 }
 
 function prepareFunctionForDisplay(entry) {
@@ -1144,6 +1198,7 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
   const isWeaponAction = type === ABILITY_CONDITION_TYPES.weaponAction;
   const isWeaponSkill = type === ABILITY_CONDITION_TYPES.weaponSkill;
   const isWeaponProficiency = type === ABILITY_CONDITION_TYPES.weaponProficiency;
+  const isAura = type === ABILITY_CONDITION_TYPES.aura;
   const isLimitedChanges = type === ABILITY_CONDITION_TYPES.limitedChanges;
   const isCooldown = type === ABILITY_CONDITION_TYPES.cooldown;
   const isItemUse = type === ABILITY_CONDITION_TYPES.itemUse;
@@ -1158,7 +1213,7 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
   return {
     ...condition,
     healthTarget,
-    isPending: !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isLimitedChanges && !isCooldown && !isItemUse,
+    isPending: !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isItemUse,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -1173,6 +1228,7 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
     isWeaponAction,
     isWeaponSkill,
     isWeaponProficiency,
+    isAura,
     isLimitedChanges,
     isCooldown,
     isItemUse,
@@ -1212,6 +1268,18 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
     canAddSkill: Boolean(getFirstUnusedSkillKey(condition?.skillKeys)),
     proficiencyRows: buildProficiencyRows(condition?.proficiencyKeys),
     canAddProficiency: Boolean(getFirstUnusedProficiencyKey(condition?.proficiencyKeys)),
+    auraModeChoices: buildAuraModeChoices(condition?.auraMode),
+    auraTargetGroupsLabel: getAuraTargetGroupsLabel(condition?.auraMode),
+    showAuraIncludeSelf: condition?.auraMode !== ABILITY_AURA_MODES.selfWhenPresent,
+    auraTargetGroupRows: buildAuraTargetGroupRows(condition?.auraTargetGroups),
+    canAddAuraTargetGroup: normalizeConditionValues(condition?.auraTargetGroups).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group)).length < ABILITY_AURA_TARGET_GROUPS.length,
+    auraRadiusMeters: Math.max(0, Number(condition?.auraRadiusMeters) || 0),
+    auraWallsBlockChoices: buildBooleanChoices(condition?.auraWallsBlock !== false),
+    auraIncludeSelfChoices: buildBooleanChoices(condition?.auraIncludeSelf !== false),
+    auraCombatOnlyChoices: buildBooleanChoices(Boolean(condition?.auraCombatOnly)),
+    auraCombatantsOnlyChoices: buildBooleanChoices(Boolean(condition?.auraCombatantsOnly)),
+    auraIgnoreIncapacitatedChoices: buildBooleanChoices(condition?.auraIgnoreIncapacitated !== false),
+    auraIgnoreHiddenChoices: buildBooleanChoices(condition?.auraIgnoreHidden !== false),
     itemCategoryRows: buildItemUseCategoryRows(condition?.itemCategories),
     canAddItemCategory: Boolean(getFirstUnusedItemUseCategory(condition?.itemCategories))
   };
@@ -1312,7 +1380,8 @@ function buildConditionTypeChoices(selected = "", { allowLimitedChanges = true }
     { value: ABILITY_CONDITION_TYPES.occupiedCover, label: "Занимаемое укрытие", selected: selected === ABILITY_CONDITION_TYPES.occupiedCover },
     { value: ABILITY_CONDITION_TYPES.weaponAction, label: "Тип атаки", selected: selected === ABILITY_CONDITION_TYPES.weaponAction },
     { value: ABILITY_CONDITION_TYPES.weaponSkill, label: "Задействованный оружием навык", selected: selected === ABILITY_CONDITION_TYPES.weaponSkill },
-    { value: ABILITY_CONDITION_TYPES.weaponProficiency, label: "Задействованное оружейное владение", selected: selected === ABILITY_CONDITION_TYPES.weaponProficiency }
+    { value: ABILITY_CONDITION_TYPES.weaponProficiency, label: "Задействованное оружейное владение", selected: selected === ABILITY_CONDITION_TYPES.weaponProficiency },
+    { value: ABILITY_CONDITION_TYPES.aura, label: "Аура", selected: selected === ABILITY_CONDITION_TYPES.aura }
   ];
   if (allowLimitedChanges || selected === ABILITY_CONDITION_TYPES.limitedChanges) {
     choices.push({
@@ -1346,8 +1415,53 @@ function isRuntimeCondition(type = "") {
     ABILITY_CONDITION_TYPES.weaponAction,
     ABILITY_CONDITION_TYPES.weaponSkill,
     ABILITY_CONDITION_TYPES.weaponProficiency,
+    ABILITY_CONDITION_TYPES.aura,
     ABILITY_CONDITION_TYPES.cooldown
   ].includes(type);
+}
+
+function buildAuraModeChoices(selected = ABILITY_AURA_MODES.applyToTargets) {
+  return [
+    { value: ABILITY_AURA_MODES.applyToTargets, label: "Обычный" },
+    { value: ABILITY_AURA_MODES.selfWhenPresent, label: "Сбор внешних условий для наложения на себя" }
+  ].map(choice => ({
+    ...choice,
+    selected: choice.value === selected
+  }));
+}
+
+function getAuraTargetGroupsLabel(mode = "") {
+  return mode === ABILITY_AURA_MODES.selfWhenPresent
+    ? "Цели для сбора условий"
+    : "Цели воздействия";
+}
+
+function buildAuraTargetGroupRows(value = []) {
+  const selected = normalizeConditionValues(value).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
+  return selected.map((group, index) => ({
+    index,
+    choices: ABILITY_AURA_TARGET_GROUPS.map(entry => ({
+      value: entry,
+      label: getAuraTargetGroupLabel(entry),
+      selected: entry === group,
+      disabled: entry !== group && selected.includes(entry)
+    }))
+  }));
+}
+
+function getAuraTargetGroupLabel(group = "") {
+  return {
+    ally: "Союзники",
+    enemy: "Враги",
+    neutral: "Нейтралы"
+  }[group] ?? group;
+}
+
+function buildBooleanChoices(selected = false) {
+  return [
+    { value: "true", label: "Да", selected: Boolean(selected) },
+    { value: "false", label: "Нет", selected: !selected }
+  ];
 }
 
 function buildHealthTargetChoices(selected = ABILITY_HEALTH_TARGETS.general) {
