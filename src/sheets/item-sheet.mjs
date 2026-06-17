@@ -49,6 +49,7 @@ import {
   normalizeDefensiveTacticsSettings,
   normalizeDisarmSettings,
   normalizeDoubleAttackSettings,
+  normalizeFullForceSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
   normalizeLungeSettings,
@@ -4438,6 +4439,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedCounterAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack
     ? prepareCounterAttackSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedFullForceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
+    ? prepareFullForceSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -4467,6 +4471,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedLungeSettings,
     fixedDoubleAttackSettings,
     fixedCounterAttackSettings,
+    fixedFullForceSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
@@ -4603,6 +4608,14 @@ function prepareCounterAttackSettingsForDisplay(settings = {}) {
     ...normalized,
     reactionOverloadDurationAmount: overloadDuration.amount,
     reactionOverloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
+    skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
+  };
+}
+
+function prepareFullForceSettingsForDisplay(settings = {}) {
+  const normalized = normalizeFullForceSettings(settings);
+  return {
+    ...normalized,
     skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
   };
 }

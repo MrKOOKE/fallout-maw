@@ -138,6 +138,7 @@ import {
   normalizeCurseAndBlessingSettings,
   normalizeDisarmSettings,
   normalizeDoubleAttackSettings,
+  normalizeFullForceSettings,
   normalizeLastChanceSettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings
@@ -3570,6 +3571,7 @@ function buildAbilityEnergyCostRows(item, actor = null) {
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
     ));
   if (!entry) return [];
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm) {
@@ -3601,7 +3603,9 @@ function buildAbilityEnergyCostRows(item, actor = null) {
           ? normalizeRageSettings(entry.fixedSettings)
           : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
             ? normalizeDoubleAttackSettings(entry.fixedSettings)
-            : normalizeCurseAndBlessingSettings(entry.fixedSettings);
+            : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
+              ? normalizeFullForceSettings(entry.fixedSettings)
+              : normalizeCurseAndBlessingSettings(entry.fixedSettings);
   const multiplier = entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
     ? Math.max(1, toInteger(settings.duplicateCount))
     : 1;
@@ -4511,10 +4515,9 @@ function getWeaponTooltipCalculatedStats(item, data = {}, { actor = null, baseMo
       context: `${item?.name ?? "weapon"} tooltip damage`
     })
     : Math.max(0, toInteger(baseDamageFormula));
-  const baseDamage = Math.max(0, formulaDamage + contextualDamageFlat);
   const attackPowerDamagePercent = baseMode ? 0 : toInteger(data.attackPowerDamagePercent);
-  const poweredDamage = Math.round(baseDamage * Math.max(0, 100 + attackPowerDamagePercent) / 100);
-  const modifiedDamage = Math.round(poweredDamage * Math.max(0, 100 + proficiencyDamage + contextualDamagePercent) / 100);
+  const damagePercent = attackPowerDamagePercent + proficiencyDamage + contextualDamagePercent;
+  const modifiedDamage = Math.round(formulaDamage * Math.max(0, 100 + damagePercent) / 100) + contextualDamageFlat;
   const weakening = baseMode ? { active: false, ratio: 1, steps: 0 } : getConditionWeakeningData(item, { minimumRatio: 0.1 });
   const conditionAccuracyPenalty = weakening.active ? weakening.steps * 10 : 0;
   const conditionCritPenalty = weakening.active ? weakening.steps * 3 : 0;

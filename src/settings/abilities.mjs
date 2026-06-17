@@ -28,7 +28,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   whirlwind: "whirlwind",
   lunge: "lunge",
   doubleAttack: "doubleAttack",
-  counterAttack: "counterAttack"
+  counterAttack: "counterAttack",
+  fullForce: "fullForce"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -591,6 +592,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     return normalizeCounterAttackSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce) {
+    return normalizeFullForceSettings(value);
+  }
   return {};
 }
 
@@ -747,6 +751,15 @@ export function normalizeCounterAttackSettings(value = {}) {
     reactionOverloadEnergyCost: Math.max(0, toInteger(value?.reactionOverloadEnergyCost ?? value?.overloadEnergyCost ?? 20)),
     reactionOverloadDurationSeconds: Math.max(0, toInteger(value?.reactionOverloadDurationSeconds ?? value?.overloadDurationSeconds ?? 18)),
     requiredSkillKey: String(value?.requiredSkillKey ?? "meleeCombat").trim() || "meleeCombat"
+  };
+}
+
+export function normalizeFullForceSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 10)),
+    requiredSkillKey: String(value?.requiredSkillKey ?? "meleeCombat").trim() || "meleeCombat",
+    damagePercentBonus: Math.max(0, toInteger(value?.damagePercentBonus ?? 100)),
+    conditionCostMultiplier: Math.max(1, toInteger(value?.conditionCostMultiplier ?? 5))
   };
 }
 

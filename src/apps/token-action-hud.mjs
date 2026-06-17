@@ -3621,9 +3621,8 @@ function applyWeaponAttackPowerDialogResourceCosts(weaponData = {}, resourceCost
 function getWeaponAttackPowerPreviewStats(actor = null, weapon = null, weaponData = {}) {
   const baseDamage = evaluateDialogFormula(weaponData.damage, actor, { minimum: 0, context: `${weapon?.name ?? "weapon"} attack power preview damage` });
   const attackPowerDamagePercent = toInteger(weaponData.attackPowerDamagePercent);
-  const poweredDamage = Math.round(baseDamage * Math.max(0, 100 + attackPowerDamagePercent) / 100);
   const proficiencyDamage = getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "damage");
-  const modifiedDamage = Math.round(poweredDamage * Math.max(0, 100 + proficiencyDamage) / 100);
+  const modifiedDamage = Math.round(baseDamage * Math.max(0, 100 + attackPowerDamagePercent + proficiencyDamage) / 100);
   const weakening = getConditionWeakeningData(weapon, { minimumRatio: 0.1 });
   const conditionAccuracyPenalty = weakening.active ? weakening.steps * 10 : 0;
   const conditionCritPenalty = weakening.active ? weakening.steps * 3 : 0;

@@ -563,6 +563,39 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedFullForceSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Со всей мощи</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активное состояние</strong>
+          <label>
+            <span>Расход энергии за атаку</span>
+            <input type="number" data-field="fixed.fullForce.energyCost" value="{{fixedFullForceSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Требуемый навык оружия</span>
+            <select data-field="fixed.fullForce.requiredSkillKey">
+              {{#each fixedFullForceSettings.skillChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Модификаторы оружейного действия</strong>
+          <label>
+            <span>Урон, %</span>
+            <input type="number" data-field="fixed.fullForce.damagePercentBonus" value="{{fixedFullForceSettings.damagePercentBonus}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Множитель расхода состояния</span>
+            <input type="number" data-field="fixed.fullForce.conditionCostMultiplier" value="{{fixedFullForceSettings.conditionCostMultiplier}}" min="1" step="1">
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedCounterAttackSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Контр атака</h3>

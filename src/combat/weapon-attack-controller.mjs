@@ -41,6 +41,7 @@ const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
 export const WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK = "fallout-maw.weaponAttackDamageResolved";
 export const WEAPON_ATTACK_RESOLVED_HOOK = "fallout-maw.weaponAttackResolved";
 export const WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK = "fallout-maw.weaponAttackDuplicateRequests";
+export const WEAPON_ACTION_MODIFIER_REQUEST_HOOK = "fallout-maw.weaponActionModifierRequests";
 const PREVIEW_BROADCAST_INTERVAL_MS = 16;
 const PREVIEW_POSITION_EPSILON = 0.5;
 const PREVIEW_ANGLE_EPSILON = 0.002;
@@ -79,6 +80,73 @@ const remoteAttackPreviews = new Map();
 const pendingRegionSocketRequests = new Map();
 let activeAttack = null;
 
+class WeaponActionModifierState {
+  constructor(context = {}) {
+    this.context = context;
+    this.combatValueBonuses = new Map();
+    this.resourceCostMultipliers = new Map();
+    this.spendRequirements = [];
+  }
+
+  addCombatValue(key = "", value = 0) {
+    const normalizedKey = String(key ?? "").trim();
+    if (!normalizedKey) return;
+    this.combatValueBonuses.set(normalizedKey, toInteger(this.combatValueBonuses.get(normalizedKey)) + toInteger(value));
+  }
+
+  getCombatValueBonus(key = "") {
+    return toInteger(this.combatValueBonuses.get(String(key ?? "").trim()));
+  }
+
+  multiplyResourceCost(type = "", multiplier = 1) {
+    const normalizedType = String(type ?? "").trim();
+    if (!normalizedType) return;
+    const normalizedMultiplier = Math.max(0, Number(multiplier) || 0);
+    this.resourceCostMultipliers.set(
+      normalizedType,
+      (Number(this.resourceCostMultipliers.get(normalizedType)) || 1) * normalizedMultiplier
+    );
+  }
+
+  getResourceCostMultiplier(type = "") {
+    return Number(this.resourceCostMultipliers.get(String(type ?? "").trim())) || 1;
+  }
+
+  addSpendRequirement(requirement = {}) {
+    if (!requirement || typeof requirement !== "object") return;
+    if (typeof requirement.canSpend !== "function" && typeof requirement.spend !== "function") return;
+    this.spendRequirements.push(requirement);
+  }
+
+  canSpend(context = {}) {
+    for (const requirement of this.spendRequirements) {
+      if (typeof requirement.canSpend !== "function") continue;
+      if (requirement.canSpend({ ...this.context, ...context }) === false) return false;
+    }
+    return true;
+  }
+
+  async spend(context = {}) {
+    for (const requirement of this.spendRequirements) {
+      if (typeof requirement.spend !== "function") continue;
+      if ((await requirement.spend({ ...this.context, ...context })) === false) return false;
+    }
+    return true;
+  }
+}
+
+function collectWeaponActionModifierState(context = {}) {
+  const state = new WeaponActionModifierState(context);
+  Hooks.callAll(WEAPON_ACTION_MODIFIER_REQUEST_HOOK, {
+    ...context,
+    modifierState: state,
+    addCombatValue: (key, value) => state.addCombatValue(key, value),
+    multiplyResourceCost: (type, multiplier) => state.multiplyResourceCost(type, multiplier),
+    addSpendRequirement: requirement => state.addSpendRequirement(requirement)
+  });
+  return state;
+}
+
 export function registerWeaponAttackSocket() {
   game.socket.on(WEAPON_ATTACK_SOCKET, handleWeaponAttackSocketMessage);
   Hooks.on("canvasReady", clearRemoteAttackPreviews);
@@ -112,14 +180,15 @@ export function startWeaponAttack({ token = null, weapon = null, actionKey = "",
   if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) return undefined;
   if (isWeaponActionBlocked(token.actor, actionKey)) return undefined;
   if (isWeaponPlacementDisabled(token.actor, weapon)) return undefined;
-  if (!hasRequiredWeaponResources(weapon, getActionAttackCount(weapon, actionKey, weaponFunctionId), weaponFunctionId)) return undefined;
   if (!hasRequiredWeaponActionPoints(token.actor, weapon, actionKey, weaponFunctionId)) return undefined;
 
   if (activeAttack && !cancelWeaponAttack()) return undefined;
-  activeAttack = new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, attackModifier, {
+  const controller = new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, attackModifier, {
     originOverride,
     onBeforeExecute
   });
+  if (!controller.hasRequiredWeaponResources(getActionAttackCount(weapon, actionKey, weaponFunctionId))) return undefined;
+  activeAttack = controller;
   activeAttack.activate();
   return activeAttack;
 }
@@ -139,13 +208,13 @@ export async function executeWeaponAttackAgainstToken({
   if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) return false;
   if (isWeaponActionBlocked(attackerToken.actor, actionKey)) return false;
   if (isWeaponPlacementDisabled(attackerToken.actor, weapon)) return false;
-  if (!hasRequiredWeaponResources(weapon, getActionAttackCount(weapon, actionKey, weaponFunctionId), weaponFunctionId)) return false;
   if (!skipActionPointCost && !hasRequiredWeaponActionPoints(attackerToken.actor, weapon, actionKey, weaponFunctionId)) return false;
 
   if (activeAttack && !cancelWeaponAttack({ ignoreReactionLock })) return false;
   const controller = new WeaponAttackController(attackerToken, weapon, actionKey, weaponFunctionId, null, {
     skipActionPointCost
   });
+  if (!controller.hasRequiredWeaponResources(getActionAttackCount(weapon, actionKey, weaponFunctionId))) return false;
   try {
     controller.attachPreview();
     return await controller.executeAgainstToken(targetToken);
@@ -256,6 +325,7 @@ class WeaponAttackController {
     this.autoCoverActorUuids = new Set();
     this.lastAutoCoverSignature = "";
     this.pendingCriticalFailureResourceCosts = [];
+    this.weaponActionModifierState = null;
     this.lastPreviewBroadcastAt = 0;
     this.lastBroadcastPreviewState = null;
     this.lastTargetMarkerRenderState = null;
@@ -331,8 +401,61 @@ class WeaponAttackController {
       targetToken,
       weaponAttackId: this.attackId,
       weaponActionKey: this.actionKey,
-      weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId)
+      weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
+      weaponActionModifierState: this.getWeaponActionModifierState()
     };
+  }
+
+  createWeaponActionModifierContext(extra = {}) {
+    return {
+      actor: this.token?.actor ?? null,
+      actorToken: this.token,
+      token: this.token,
+      weapon: this.weapon,
+      actionKey: this.actionKey,
+      weaponActionKey: this.actionKey,
+      weaponFunctionId: this.weaponFunctionId,
+      weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
+      attackModifier: this.attackModifier,
+      controller: this,
+      weaponAttackId: this.attackId,
+      ...extra
+    };
+  }
+
+  getWeaponActionModifierState() {
+    this.weaponActionModifierState ??= collectWeaponActionModifierState(this.createWeaponActionModifierContext());
+    return this.weaponActionModifierState;
+  }
+
+  createWeaponDamageContext(extra = {}) {
+    return {
+      ...this.createWeaponAttackSkillCheckContext(extra?.targetToken ?? null),
+      ...extra,
+      weaponFunctionId: this.weaponFunctionId,
+      weaponActionModifierState: this.getWeaponActionModifierState()
+    };
+  }
+
+  getWeaponDamage(extra = {}) {
+    return getWeaponDamage(this.weapon, this.weaponFunctionId, this.createWeaponDamageContext(extra));
+  }
+
+  getWeaponDamagePercentBase() {
+    return getWeaponDamagePercentBase(this.weapon, this.weaponFunctionId);
+  }
+
+  hasRequiredWeaponResources(multiplier = 1) {
+    const attackCount = Math.max(1, toInteger(multiplier));
+    const modifierState = this.getWeaponActionModifierState();
+    if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId, { modifierState })) return false;
+    return modifierState.canSpend(this.createWeaponActionModifierContext({ attackCount }));
+  }
+
+  async spendWeaponActionModifierCosts(attackCount = 1) {
+    return this.getWeaponActionModifierState().spend(this.createWeaponActionModifierContext({
+      attackCount: Math.max(1, toInteger(attackCount))
+    }));
   }
 
   async resolveTargetReactions(target) {
@@ -403,8 +526,10 @@ class WeaponAttackController {
 
   async spendCurrentAttackCosts({ attackCount = 1, trajectories = [], point = null } = {}) {
     if (this.shouldSpendWeaponResourcesForAttempt()) {
-      const spentQuantityItemData = getSpentQuantityItemData(this.weapon, attackCount, this.weaponFunctionId);
-      await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts);
+      if (!(await this.spendWeaponActionModifierCosts(attackCount))) return false;
+      const modifierState = this.getWeaponActionModifierState();
+      const spentQuantityItemData = getSpentQuantityItemData(this.weapon, attackCount, this.weaponFunctionId, { modifierState });
+      await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts, { modifierState });
       await createSpentQuantityItemTile({
         itemData: spentQuantityItemData,
         point,
@@ -416,6 +541,7 @@ class WeaponAttackController {
       emitActionResolved: !this.attackCanceledByReaction,
       spendActionPoints: !this.skipActionPointCost
     });
+    return true;
   }
 
   async executeAgainstToken(targetToken) {
@@ -534,7 +660,7 @@ class WeaponAttackController {
       })) === false) continue;
 
       const nextTotalAttackCount = baseAttackCount * (1 + duplicateCount + count);
-      if (!hasRequiredWeaponResources(this.weapon, nextTotalAttackCount, this.weaponFunctionId)) continue;
+      if (!this.hasRequiredWeaponResources(nextTotalAttackCount)) continue;
       if (typeof request?.onBeforeDuplicate === "function" && (await request.onBeforeDuplicate({
         actor: this.token?.actor ?? null,
         token: this.token,
@@ -672,7 +798,7 @@ class WeaponAttackController {
     if (this.volleyAction) return this.performVolleyAttack();
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     const pelletCount = getWeaponPelletCount(this.weapon, this.weaponFunctionId);
-    if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
+    if (!this.hasRequiredWeaponResources(attackCount)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
     if (hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, this.weaponFunctionId)) {
       return this.performConeTargetsAttack({ attackCount, pelletCount });
@@ -749,7 +875,7 @@ class WeaponAttackController {
     }
 
     const plannedAttackCount = Math.max(1, targets.length);
-    if (!hasRequiredWeaponResources(this.weapon, plannedAttackCount, this.weaponFunctionId)) return;
+    if (!this.hasRequiredWeaponResources(plannedAttackCount)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
 
     if (typeof this.attackModifier?.onBeforeAttack === "function") {
@@ -778,7 +904,9 @@ class WeaponAttackController {
       requester: "weaponAttack",
       title: this.attackModifier?.label || this.weapon.name
     });
-    const baseDamage = getAttackModeDamage(this.weapon, this.actionKey, "swing", getWeaponDamage(this.weapon, this.weaponFunctionId), this.weaponFunctionId);
+    const baseDamage = getAttackModeDamage(this.weapon, this.actionKey, "swing", this.getWeaponDamage(), this.weaponFunctionId, {
+      percentBaseAmount: this.getWeaponDamagePercentBase()
+    });
     let attempted = false;
     let attemptedAttackCount = 0;
 
@@ -857,7 +985,7 @@ class WeaponAttackController {
       if (this.attackCanceledByReaction) break;
       const difficultyBonus = getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId, this.token.actor);
       const shotTrajectories = buildAttackTrajectories(this.token, getRandomBurstMissGeometry(this.token, this.geometry), [], pelletCount);
-      const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), shotTrajectories.map(() => 1));
+      const pelletDamages = distributeIntegerAmount(this.getWeaponDamage(), shotTrajectories.map(() => 1));
       for (const trajectory of shotTrajectories) trajectories.push({ ...trajectory, delayGroup: attackIndex });
       attempted = true;
 
@@ -908,7 +1036,7 @@ class WeaponAttackController {
 
   async performPushAttack() {
     if (this.processing || !this.geometry) return;
-    if (!hasRequiredWeaponResources(this.weapon, 1, this.weaponFunctionId)) return;
+    if (!this.hasRequiredWeaponResources(1)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
 
     this.processing = true;
@@ -1042,7 +1170,7 @@ class WeaponAttackController {
     for (let attackIndex = 0; attackIndex < totalAttackCount; attackIndex += 1) {
       if (this.attackCanceledByReaction) break;
       const difficultyBonus = getBurstShotDifficultyBonus(this.weapon, this.actionKey, attackIndex, this.weaponFunctionId, this.token.actor);
-      const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), Array(Math.max(1, toInteger(pelletCount))).fill(1));
+      const pelletDamages = distributeIntegerAmount(this.getWeaponDamage(), Array(Math.max(1, toInteger(pelletCount))).fill(1));
 
       for (let pelletIndex = 0; pelletIndex < pelletDamages.length; pelletIndex += 1) {
         if (this.attackCanceledByReaction) break;
@@ -1098,7 +1226,7 @@ class WeaponAttackController {
   onAimedConfirm() {
     if (this.aimedMode !== "aim" || !this.hoveredTarget || !this.geometry) return undefined;
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
-    if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return undefined;
+    if (!this.hasRequiredWeaponResources(attackCount)) return undefined;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return undefined;
 
     this.selectedTarget = this.hoveredTarget;
@@ -1113,7 +1241,7 @@ class WeaponAttackController {
   async performAimedAttack(limbKey) {
     if (this.processing || this.aimedMode !== "limb" || !this.selectedTarget) return;
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
-    if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
+    if (!this.hasRequiredWeaponResources(attackCount)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
     const target = this.selectedTarget;
     const targetSelection = resolveAimedTargetSelection(target.actor, limbKey);
@@ -1131,7 +1259,7 @@ class WeaponAttackController {
     const aimPoint = selectTargetTrajectoryAimPoint(this.token, target, geometry) ?? getTokenAimPoint(target);
     const centerTrajectory = buildTrajectoryThroughPoint(this.token, geometry, aimPoint);
     const pelletCount = getWeaponPelletCount(this.weapon, this.weaponFunctionId);
-    const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), Array(pelletCount).fill(1));
+    const pelletDamages = distributeIntegerAmount(this.getWeaponDamage(), Array(pelletCount).fill(1));
     const trajectories = buildAimedAttackTrajectories(this.token, geometry, centerTrajectory, pelletCount);
     const checkBatch = (duplicatePlan.cycles > 1 || pelletCount > 1 || getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey }) > 0)
       ? createSkillCheckBatchCollector({
@@ -1211,7 +1339,7 @@ class WeaponAttackController {
       .find(entry => entry.key === directionKey);
     if (!direction) return;
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
-    if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
+    if (!this.hasRequiredWeaponResources(attackCount)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
 
     this.processing = true;
@@ -1284,7 +1412,9 @@ class WeaponAttackController {
 
   async resolveDirectedThrustTrajectory(selectedTarget, trajectory, { limbKey = "", checkBatch = null } = {}) {
     const damageRequests = [];
-    const baseDamage = getAttackModeDamage(this.weapon, this.actionKey, "thrust", getWeaponDamage(this.weapon, this.weaponFunctionId), this.weaponFunctionId);
+    const baseDamage = getAttackModeDamage(this.weapon, this.actionKey, "thrust", this.getWeaponDamage(), this.weaponFunctionId, {
+      percentBaseAmount: this.getWeaponDamagePercentBase()
+    });
     const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey });
     const targets = getTrajectoryTargetEntries(this.token, trajectory);
     const selectedEntry = targets.find(entry => entry.target === selectedTarget)
@@ -1357,7 +1487,9 @@ class WeaponAttackController {
     const damageRequests = [];
     const targets = getSwingTargetSequence(selectedTarget, directionKey, this.targets, geometry ?? this.geometry);
     const hitTargets = [];
-    const baseDamage = getAttackModeDamage(this.weapon, this.actionKey, "swing", getWeaponDamage(this.weapon, this.weaponFunctionId), this.weaponFunctionId);
+    const baseDamage = getAttackModeDamage(this.weapon, this.actionKey, "swing", this.getWeaponDamage(), this.weaponFunctionId, {
+      percentBaseAmount: this.getWeaponDamagePercentBase()
+    });
 
     for (const [index, target] of targets.entries()) {
       const damageAmount = Math.max(0, Math.round(baseDamage * Math.max(0, 1 - (index * 0.2))));
@@ -1408,10 +1540,7 @@ class WeaponAttackController {
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) return null;
-    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, {
-      ...this.createWeaponAttackSkillCheckContext(target),
-      weaponFunctionId: this.weaponFunctionId
-    });
+    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({ targetToken: target }));
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
@@ -1430,7 +1559,7 @@ class WeaponAttackController {
 
   async resolveAimedAttackTrajectory(selectedTarget, trajectory, targetSelection, { blockerBonus = 0, baseDamage = null, checkBatch = null, allOrNothingContext = null } = {}) {
     const damageRequests = [];
-    baseDamage = Math.max(0, Number(baseDamage ?? getWeaponDamage(this.weapon, this.weaponFunctionId)) || 0);
+    baseDamage = Math.max(0, Number(baseDamage ?? this.getWeaponDamage()) || 0);
     const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey });
     checkBatch ??= penetrationPower > 0
       ? createSkillCheckBatchCollector({
@@ -1524,7 +1653,7 @@ class WeaponAttackController {
   async resolveAttackPellets({ checkBatch = null, difficultyBonus = 0, attackIndex = 0, attackCount = 1 } = {}) {
     const damageRequests = [];
     const trajectories = buildAttackTrajectories(this.token, this.geometry, this.targets, getWeaponPelletCount(this.weapon, this.weaponFunctionId));
-    const pelletDamages = distributeIntegerAmount(getWeaponDamage(this.weapon, this.weaponFunctionId), trajectories.map(() => 1));
+    const pelletDamages = distributeIntegerAmount(this.getWeaponDamage(), trajectories.map(() => 1));
     const totalPelletCount = Math.max(1, toInteger(attackCount)) * Math.max(1, trajectories.length);
     let attempted = false;
 
@@ -1554,7 +1683,7 @@ class WeaponAttackController {
     if (!this.targets.length) return { attempted: true, damageRequests, trajectory };
 
     const targets = getTrajectoryTargetEntries(this.token, trajectory);
-    baseDamage = Math.max(0, Number(baseDamage ?? getWeaponDamage(this.weapon, this.weaponFunctionId)) || 0);
+    baseDamage = Math.max(0, Number(baseDamage ?? this.getWeaponDamage()) || 0);
     const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey });
     let penetrationsUsed = 0;
     let attempted = true;
@@ -1625,10 +1754,7 @@ class WeaponAttackController {
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) return null;
-    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, {
-      ...this.createWeaponAttackSkillCheckContext(target),
-      weaponFunctionId: this.weaponFunctionId
-    });
+    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({ targetToken: target }));
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
@@ -1648,7 +1774,7 @@ class WeaponAttackController {
   async performVolleyAttack() {
     if (this.processing || !this.geometry) return;
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
-    if (!hasRequiredWeaponResources(this.weapon, attackCount, this.weaponFunctionId)) return;
+    if (!this.hasRequiredWeaponResources(attackCount)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
 
     this.processing = true;
@@ -1794,7 +1920,7 @@ class WeaponAttackController {
       targetToken: target,
       center: geometry.end,
       radiusPixels: geometry.radiusPixels,
-      baseDamage: getWeaponDamage(this.weapon, this.weaponFunctionId),
+      baseDamage: this.getWeaponDamage(),
       pelletCount: getWeaponPelletCount(this.weapon, this.weaponFunctionId),
       damageTypes: getWeaponDamageTypeEntries(this.weapon, this.weaponFunctionId),
       penetrationPower: getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, {
@@ -1803,10 +1929,7 @@ class WeaponAttackController {
       }),
       damageModifier: amount => getCriticalDamageAmount(
         this.weapon,
-        applyContextualDamageToAmount(this.weapon, amount, {
-          ...this.createWeaponAttackSkillCheckContext(target),
-          weaponFunctionId: this.weaponFunctionId
-        }),
+        applyContextualDamageToAmount(this.weapon, amount, this.createWeaponDamageContext({ targetToken: target })),
         blastOutcome.outcome,
         this.weaponFunctionId
       ),
@@ -1846,10 +1969,7 @@ class WeaponAttackController {
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) return null;
-    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, {
-      ...this.createWeaponAttackSkillCheckContext(target),
-      weaponFunctionId: this.weaponFunctionId
-    });
+    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({ targetToken: target }));
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
@@ -1894,10 +2014,7 @@ class WeaponAttackController {
     this.recordCriticalFailureConsequences(outcome);
     if (!isSuccessfulAttack(outcome)) return null;
 
-    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, {
-      ...this.createWeaponAttackSkillCheckContext(target),
-      weaponFunctionId: this.weaponFunctionId
-    });
+    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({ targetToken: target }));
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     const weaponDamageRequests = buildWeaponConditionDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
@@ -3116,16 +3233,16 @@ function getBurstProjectileCount(attackCount = 1, pelletCount = 1) {
   return Math.max(1, toInteger(attackCount) || 1) * Math.max(1, toInteger(pelletCount) || 1);
 }
 
-export function hasRequiredWeaponResources(weapon, multiplier = 1, weaponFunctionId = "") {
-  const missing = getMissingWeaponResourceCost(weapon, multiplier, weaponFunctionId);
+export function hasRequiredWeaponResources(weapon, multiplier = 1, weaponFunctionId = "", { modifierState = null } = {}) {
+  const missing = getMissingWeaponResourceCost(weapon, multiplier, weaponFunctionId, { modifierState });
   if (!missing) return true;
   ui.notifications.warn(`${weapon?.name ?? ""}: не хватает ${missing.label} (${missing.current} / ${missing.required}).`);
   return false;
 }
 
-export function getMissingWeaponResourceCost(weapon, multiplier = 1, weaponFunctionId = "") {
+export function getMissingWeaponResourceCost(weapon, multiplier = 1, weaponFunctionId = "", { modifierState = null } = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
-  const costs = getWeaponResourceCosts(weaponData);
+  const costs = getWeaponResourceCosts(weaponData, { modifierState });
   for (const cost of costs) {
     const amount = Math.max(0, toInteger(cost.amount) * Math.max(1, toInteger(multiplier)));
     if (!amount) continue;
@@ -3203,13 +3320,13 @@ async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
   }
 }
 
-async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "", extraCosts = []) {
+async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "", extraCosts = [], { modifierState = null } = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const updateData = {};
   let deleteWeapon = false;
   let magazineValue = Math.max(0, toInteger(weaponData?.magazine?.value));
   const costs = [
-    ...getWeaponResourceCosts(weaponData).map(cost => ({
+    ...getWeaponResourceCosts(weaponData, { modifierState }).map(cost => ({
       type: cost.type,
       amount: Math.max(0, toInteger(cost.amount) * Math.max(1, toInteger(multiplier)))
     })),
@@ -3244,8 +3361,8 @@ async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "
   if (deleteWeapon && weapon.id) await weapon.delete();
 }
 
-function getSpentQuantityItemData(weapon, multiplier = 1, weaponFunctionId = "") {
-  const amount = getWeaponQuantityResourceCost(weapon, multiplier, weaponFunctionId);
+function getSpentQuantityItemData(weapon, multiplier = 1, weaponFunctionId = "", { modifierState = null } = {}) {
+  const amount = getWeaponQuantityResourceCost(weapon, multiplier, weaponFunctionId, { modifierState });
   if (amount <= 0) return null;
 
   const itemData = weapon.toObject();
@@ -3253,10 +3370,10 @@ function getSpentQuantityItemData(weapon, multiplier = 1, weaponFunctionId = "")
   return itemData;
 }
 
-function getWeaponQuantityResourceCost(weapon, multiplier = 1, weaponFunctionId = "") {
+function getWeaponQuantityResourceCost(weapon, multiplier = 1, weaponFunctionId = "", { modifierState = null } = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const countMultiplier = Math.max(1, toInteger(multiplier));
-  return getWeaponResourceCosts(weaponData).reduce((total, cost) => {
+  return getWeaponResourceCosts(weaponData, { modifierState }).reduce((total, cost) => {
     if (cost?.type !== "quantity") return total;
     return total + (Math.max(0, toInteger(cost.amount)) * countMultiplier);
   }, 0);
@@ -3979,21 +4096,26 @@ function getPointElevationAtDistance(originElevation, targetElevation, distance,
 function getWeaponDamage(weapon, weaponFunctionId = "", context = {}) {
   const actor = getWeaponOwnerActor(weapon);
   const weaponData = getEffectiveWeaponDamageData(weapon, weaponFunctionId);
-  const formulaDamage = evaluateActorFormula(weaponData?.damage, actor, {
-    minimum: 0,
-    context: `${weapon?.name ?? "weapon"} damage`
-  });
+  const formulaDamage = getWeaponDamagePercentBase(weapon, weaponFunctionId);
   const flatDamage = getContextualCombatValue(actor, "damageFlat", context);
-  const baseDamage = Math.max(0, formulaDamage + flatDamage);
   const attackPowerDamagePercent = toInteger(weaponData?.attackPowerDamagePercent);
-  const poweredDamage = Math.round(baseDamage * Math.max(0, 100 + attackPowerDamagePercent) / 100);
-  const proficiencyModifier = getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "damage")
+  const damagePercent = attackPowerDamagePercent
+    + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "damage")
     + getContextualCombatValue(actor, "damagePercent", context);
-  const modifiedDamage = Math.round(poweredDamage * Math.max(0, 100 + proficiencyModifier) / 100);
+  const modifiedDamage = Math.round(formulaDamage * Math.max(0, 100 + damagePercent) / 100) + flatDamage;
   return Math.max(0, Math.floor(modifiedDamage * getWeaponConditionWeakeningRatio(weapon)));
 }
 
-function getWeaponResourceCosts(weaponData = {}) {
+function getWeaponDamagePercentBase(weapon, weaponFunctionId = "") {
+  const actor = getWeaponOwnerActor(weapon);
+  const weaponData = getEffectiveWeaponDamageData(weapon, weaponFunctionId);
+  return evaluateActorFormula(weaponData?.damage, actor, {
+    minimum: 0,
+    context: `${weapon?.name ?? "weapon"} damage`
+  });
+}
+
+function getWeaponResourceCosts(weaponData = {}, { modifierState = null } = {}) {
   const costs = Array.isArray(weaponData?.resourceCosts)
     ? foundry.utils.deepClone(weaponData.resourceCosts)
     : [];
@@ -4001,7 +4123,17 @@ function getWeaponResourceCosts(weaponData = {}) {
     && !costs.some(cost => String(cost?.type ?? "") === "magazine")) {
     costs.push({ type: "magazine", amount: 1 });
   }
-  return costs;
+  if (!modifierState) return costs;
+  return costs.map(cost => {
+    const type = String(cost?.type ?? "").trim();
+    const multiplier = typeof modifierState.getResourceCostMultiplier === "function"
+      ? modifierState.getResourceCostMultiplier(type)
+      : 1;
+    return {
+      ...cost,
+      amount: Math.max(0, Math.ceil(toInteger(cost?.amount) * Math.max(0, Number(multiplier) || 0)))
+    };
+  });
 }
 
 function getVolleyDamageRadius(weapon, weaponFunctionId = "") {
@@ -4582,11 +4714,13 @@ function getAttackModeCriticalCheckModifiers(weapon, actionKey, mode, weaponFunc
   };
 }
 
-function getAttackModeDamage(weapon, actionKey, mode, baseDamage, weaponFunctionId = "") {
+function getAttackModeDamage(weapon, actionKey, mode, baseDamage, weaponFunctionId = "", { percentBaseAmount = null } = {}) {
   const modifier = evaluateWeaponFormula(weapon, getAttackModeSettings(weapon, actionKey, mode, weaponFunctionId)?.damagePercentModifier, {
     context: "attack mode damage percent"
   });
-  return Math.max(0, Math.round(Math.max(0, Number(baseDamage) || 0) * Math.max(0, 100 + modifier) / 100));
+  const damage = Math.max(0, Number(baseDamage) || 0);
+  const percentBase = Math.max(0, Number(percentBaseAmount ?? damage) || 0);
+  return Math.max(0, Math.round(damage + (percentBase * modifier / 100)));
 }
 
 function getWeaponConditionWeakening(weapon) {
@@ -5708,21 +5842,37 @@ function getAimedAttackDifficulty(targetActor, limbKey = "", blockerBonus = 0) {
 }
 
 function getContextualCombatValue(actor, key, context = {}) {
-  return getContextualAbilityChangeValue(actor, `system.combat.${key}`, {
+  const value = getContextualAbilityChangeValue(actor, `system.combat.${key}`, {
     ...context,
     baseValue: toInteger(actor?.system?.combat?.[key])
   });
+  const modifierState = context?.weaponActionModifierState ?? null;
+  const modifierBonus = typeof modifierState?.getCombatValueBonus === "function"
+    ? modifierState.getCombatValueBonus(key)
+    : 0;
+  return value + modifierBonus;
 }
 
 function applyContextualDamageToAmount(weapon, amount, context = {}) {
   const actor = getWeaponOwnerActor(weapon);
-  const baseFlat = toInteger(actor?.system?.combat?.damageFlat);
-  const basePercent = toInteger(actor?.system?.combat?.damagePercent);
-  const flatDelta = getContextualCombatValue(actor, "damageFlat", context) - baseFlat;
-  const percentDelta = getContextualCombatValue(actor, "damagePercent", context) - basePercent;
+  const baselineContext = getDamageBaselineContext(context);
+  const flatDelta = getContextualCombatValue(actor, "damageFlat", context)
+    - getContextualCombatValue(actor, "damageFlat", baselineContext);
+  const percentDelta = getContextualCombatValue(actor, "damagePercent", context)
+    - getContextualCombatValue(actor, "damagePercent", baselineContext);
   const pelletCount = Math.max(1, getWeaponPelletCount(weapon, context?.weaponFunctionId));
-  const adjusted = (Math.max(0, Number(amount) || 0) + (flatDelta / pelletCount)) * Math.max(0, 100 + percentDelta) / 100;
+  const percentBase = Math.max(0, Number(context?.damagePercentBaseAmount ?? (getWeaponDamagePercentBase(weapon, context?.weaponFunctionId) / pelletCount)) || 0);
+  const adjusted = Math.max(0, Number(amount) || 0) + (flatDelta / pelletCount) + (percentBase * percentDelta / 100);
   return Math.max(0, Math.round(adjusted));
+}
+
+function getDamageBaselineContext(context = {}) {
+  const {
+    targetActor,
+    targetToken,
+    ...baseline
+  } = context ?? {};
+  return baseline;
 }
 
 function getAimedWeaponTargetKey(item = null) {

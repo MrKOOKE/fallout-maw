@@ -15,6 +15,7 @@ import {
   normalizeDisarmSettings,
   normalizeDoubleAttackSettings,
   normalizeFourLeafCloverSettings,
+  normalizeFullForceSettings,
   normalizeLastChanceSettings,
   normalizeLuckyCoinSettings,
   normalizeLungeSettings,
@@ -42,6 +43,7 @@ import {
   isWeaponAttackModeEnabled,
   executeWeaponAttackAgainstToken,
   startWeaponAttack,
+  WEAPON_ACTION_MODIFIER_REQUEST_HOOK,
   WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK,
   WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK,
   WEAPON_ATTACK_RESOLVED_HOOK,
@@ -237,6 +239,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.counterAttack
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.fullForce,
+    label: "Со всей мощи",
+    active: true,
+    toggleable: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.fullForce
+    })
   })
 ]);
 
@@ -259,6 +270,9 @@ export function registerFixedAbilityFunctionHooks() {
   });
   Hooks.on(WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK, context => {
     requestDoubleAttackDuplicate(context);
+  });
+  Hooks.on(WEAPON_ACTION_MODIFIER_REQUEST_HOOK, context => {
+    requestFullForceWeaponActionModifiers(context);
   });
   Hooks.on("fallout-maw.weaponActionResolved", context => {
     void processAtRandomAttackResolution(context);
@@ -415,6 +429,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack) {
     await toggleDoubleAttack(actor, item, abilityFunction);
+    await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce) {
+    await toggleFullForce(actor, item, abilityFunction);
     await application?.render?.({ force: true });
     return true;
   }
@@ -1786,6 +1806,26 @@ async function toggleDoubleAttack(actor, abilityItem, abilityFunction) {
   return true;
 }
 
+async function toggleFullForce(actor, abilityItem, abilityFunction) {
+  const settings = normalizeFullForceSettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  const nextActive = !Boolean(state[stateKey]?.active);
+  if (nextActive && !hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`Со всей мощи: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    active: nextActive
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  ui.notifications.info(`Со всей мощи: ${nextActive ? "включено" : "выключено"}.`);
+  return true;
+}
+
 function requestDoubleAttackDuplicate(context = {}) {
   const actor = context?.actor ?? null;
   const weaponSkillKey = String(context?.weaponData?.skillKey ?? "").trim();
@@ -1806,6 +1846,39 @@ function requestDoubleAttackDuplicate(context = {}) {
         label: "Двоечка",
         count: duplicateCount,
         onBeforeDuplicate: async () => spendDoubleAttackEnergy(actor, abilityItem, abilityFunction, energyCost)
+      });
+    }
+  }
+}
+
+function requestFullForceWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  const weaponSkillKey = String(context?.weaponData?.skillKey ?? "").trim();
+  if (!actor || !weaponSkillKey || !context?.modifierState) return;
+
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    const state = getFixedAbilityState(abilityItem);
+    const functions = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
+      .filter(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce)
+      .filter(entry => Boolean(state[getFixedFunctionStateKey(entry)]?.active));
+    for (const abilityFunction of functions) {
+      const settings = normalizeFullForceSettings(abilityFunction.fixedSettings);
+      if (weaponSkillKey !== settings.requiredSkillKey) continue;
+      context.modifierState.addCombatValue("damagePercent", settings.damagePercentBonus);
+      context.modifierState.multiplyResourceCost("condition", settings.conditionCostMultiplier);
+      context.modifierState.addSpendRequirement({
+        source: "fullForce",
+        label: "Со всей мощи",
+        canSpend: ({ attackCount = 1 } = {}) => {
+          const cost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(attackCount));
+          if (hasEnergy(actor, cost)) return true;
+          ui.notifications.warn(`Со всей мощи: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
+          return false;
+        },
+        spend: async ({ attackCount = 1 } = {}) => {
+          const cost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(attackCount));
+          return spendFullForceEnergy(actor, abilityItem, abilityFunction, cost);
+        }
       });
     }
   }
@@ -1956,6 +2029,16 @@ async function spendDoubleAttackEnergy(actor, abilityItem, abilityFunction, ener
   }
   await actor.update(update);
   return true;
+}
+
+async function spendFullForceEnergy(actor, abilityItem, abilityFunction, energyCost = 0) {
+  const cost = Math.max(0, toInteger(energyCost));
+  if (!hasEnergy(actor, cost)) {
+    await deactivateFixedAbilityFunction(abilityItem, abilityFunction);
+    await createAbilityChatMessage(actor, abilityItem, `Со всей мощи выключено: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
+    return false;
+  }
+  return spendEnergy(actor, cost);
 }
 
 async function spendEnergy(actor, energyCost = 0) {

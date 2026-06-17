@@ -32,6 +32,7 @@ import {
   normalizeDeusExMachinaSettings,
   normalizeDisarmSettings,
   normalizeDoubleAttackSettings,
+  normalizeFullForceSettings,
   normalizeWhirlwindSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
@@ -746,6 +747,14 @@ function readFixedFunctionSettings(row) {
       requiredSkillKey: row.querySelector("[data-field='fixed.doubleAttack.requiredSkillKey']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.fullForce.energyCost']")?.value,
+      requiredSkillKey: row.querySelector("[data-field='fixed.fullForce.requiredSkillKey']")?.value,
+      damagePercentBonus: row.querySelector("[data-field='fixed.fullForce.damagePercentBonus']")?.value,
+      conditionCostMultiplier: row.querySelector("[data-field='fixed.fullForce.conditionCostMultiplier']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     return {
       reactionEnergyCost: row.querySelector("[data-field='fixed.counterAttack.reactionEnergyCost']")?.value,
@@ -920,6 +929,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedCounterAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack
     ? prepareCounterAttackSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedFullForceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
+    ? prepareFullForceSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -950,6 +962,7 @@ function prepareFunctionForDisplay(entry) {
     fixedLungeSettings,
     fixedDoubleAttackSettings,
     fixedCounterAttackSettings,
+    fixedFullForceSettings,
     fixedRageSettings,
     fixedDisarmSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
@@ -1078,6 +1091,14 @@ function prepareCounterAttackSettingsForDisplay(settings = {}) {
     ...normalized,
     reactionOverloadDurationAmount: overloadDuration.amount,
     reactionOverloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
+    skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
+  };
+}
+
+function prepareFullForceSettingsForDisplay(settings = {}) {
+  const normalized = normalizeFullForceSettings(settings);
+  return {
+    ...normalized,
     skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
   };
 }
