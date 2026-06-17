@@ -1,4 +1,5 @@
 import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 import { getDamageTypeSettings } from "../settings/accessors.mjs";
 import { isPostureEffectApplicableToActor } from "./posture-movement.mjs";
 import { appendGrappleFollowMovement } from "../combat/active-actions.mjs";
@@ -154,7 +155,7 @@ export class FalloutMaWToken extends foundry.canvas.placeables.Token {
     const anchor = getEffectTooltipAnchor();
     positionEffectTooltipAnchor(anchor, icon);
 
-    const html = buildEffectTooltipHTML(effect);
+    const html = buildEffectTooltipHTML(effect, this.actor);
     if (game.tooltip.element === anchor) {
       game.tooltip.tooltip.innerHTML = foundry.utils.cleanHTML(html);
       resetTooltipAnchor(anchor);
@@ -243,9 +244,9 @@ function registerMiddleClickGuard() {
   middleClickGuardRegistered = true;
 }
 
-function buildEffectTooltipHTML(effect) {
+function buildEffectTooltipHTML(effect, actor = null) {
   const name = localizeDocumentName(effect.name);
-  const changes = getEffectChanges(effect).map(formatEffectChange).filter(Boolean);
+  const changes = getEffectChanges(effect).map(change => formatEffectChange(change, actor, effect)).filter(Boolean);
   const duration = getEffectDurationLabel(effect);
 
   return `
@@ -282,21 +283,33 @@ function getEffectChanges(effect) {
   return Array.isArray(changes) ? changes.filter(change => String(change?.key ?? "").trim()) : [];
 }
 
-function formatEffectChange(change) {
+function formatEffectChange(change, actor = null, effect = null) {
   const damageEffect = formatDamageEffectChange(change);
   if (damageEffect) return damageEffect;
 
   const key = String(change?.key ?? "");
   if (key.startsWith(`${DAMAGE_EFFECT_CHANGE_ROOT}.`)) return "";
   const path = getChangeKeyLabel(key);
-  const value = stringifyChangeValue(change?.value);
+  const preparedChange = prepareTooltipEffectChange(actor, change, effect);
+  if (!preparedChange) return "";
+  const value = stringifyChangeValue(preparedChange.value);
   if (key.startsWith("system.costs.actions.")) {
-    return `<strong>${escapeHTML(stripEffectPathSuffix(path))}:</strong><span>${escapeHTML(formatActionPointDelta(value, change?.type))}</span>`;
+    return `<strong>${escapeHTML(stripEffectPathSuffix(path))}:</strong><span>${escapeHTML(formatActionPointDelta(value, preparedChange.type))}</span>`;
   }
   if (isPostureWeaponActionCostChange(key)) {
-    return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatActionPointDelta(value, change?.type))}</span>`;
+    return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatActionPointDelta(value, preparedChange.type))}</span>`;
   }
-  return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatSignedValue(value, change?.type))}</span>`;
+  return `<strong>${escapeHTML(path)}:</strong><span>${escapeHTML(formatSignedValue(value, preparedChange.type))}</span>`;
+}
+
+function prepareTooltipEffectChange(actor, change = {}, effect = null) {
+  return prepareActorEffectChangeForApplication(actor, { ...change, effect }, {
+    stage: getEffectChangePreparationStage(change)
+  });
+}
+
+function getEffectChangePreparationStage(change = {}) {
+  return String(change?.phase ?? "") === "initial" ? "initial-active-effect" : "prepared";
 }
 
 function formatDamageEffectChange(change) {

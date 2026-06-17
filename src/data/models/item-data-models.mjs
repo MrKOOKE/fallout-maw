@@ -222,7 +222,7 @@ function abilityConditionField() {
       choices: ["ally", "enemy", "neutral"],
       initial: "enemy"
     }), { required: true, initial: [] }),
-    auraRadiusMeters: new NumberField({ required: true, min: 0, initial: 0 }),
+    auraRadiusMeters: new StringField({ required: true, blank: true, initial: "0" }),
     auraWallsBlock: new BooleanField({ required: true, initial: true }),
     auraIncludeSelf: new BooleanField({ required: true, initial: true }),
     auraCombatOnly: new BooleanField({ required: true, initial: false }),
@@ -230,7 +230,7 @@ function abilityConditionField() {
     auraIgnoreIncapacitated: new BooleanField({ required: true, initial: true }),
     auraIgnoreHidden: new BooleanField({ required: true, initial: true }),
     limit: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
-    requiredCount: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+    requiredCount: new StringField({ required: true, blank: true, initial: "1" }),
     itemCategories: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
       required: true,
       initial: []

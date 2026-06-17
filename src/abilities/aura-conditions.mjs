@@ -6,6 +6,7 @@ import {
   ABILITY_CONDITION_TYPES
 } from "../settings/abilities.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 
 export const AURA_GENERATED_EFFECT_FLAG_KEY = "auraGenerated";
 
@@ -31,7 +32,11 @@ export function abilityAuraConditionApplies(actor, condition = {}, context = {})
 
 export function resolveAbilityAuraState(actor, condition = {}, context = {}) {
   const sourceToken = resolveActorToken(actor, context);
-  const requiredCount = Math.max(1, toInteger(condition?.requiredCount ?? 1));
+  const requiredCount = evaluateAuraFormula(condition?.requiredCount, actor, {
+    fallback: 1,
+    minimum: 1,
+    context: "aura required count"
+  });
   if (!sourceToken || !actor || !canvas?.tokens) {
     return {
       sourceToken: null,
@@ -109,9 +114,17 @@ function auraTargetAllowed(sourceToken, targetToken, condition = {}) {
 
 function isTokenInAuraRadius(sourceToken, targetToken, condition = {}) {
   if (sourceToken.id === targetToken.id) return true;
-  const radiusMeters = Math.max(0, Number(condition?.auraRadiusMeters ?? 0) || 0);
+  const radiusMeters = evaluateAuraFormula(condition?.auraRadiusMeters, sourceToken.actor, {
+    fallback: 0,
+    minimum: 0,
+    context: "aura radius"
+  });
   if (radiusMeters <= 0) return false;
   return measureTokenDistanceMeters(sourceToken, targetToken) <= radiusMeters;
+}
+
+function evaluateAuraFormula(formula, actor = null, { fallback = 0, minimum = 0, context = "" } = {}) {
+  return Math.max(minimum, toInteger(evaluateActorFormula(formula, actor, { fallback, minimum, context })));
 }
 
 function hasAuraLineOfSight(sourceToken, targetToken) {

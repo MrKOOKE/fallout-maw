@@ -1236,7 +1236,7 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
     changeLimit: Math.max(1, Math.min(maxLimit, toInteger(condition?.limit ?? 1))),
     changeLimitMax: maxLimit,
     changeLimitTotal: changeCount,
-    requiredCount: Math.max(1, toInteger(condition?.requiredCount ?? 1)),
+    requiredCount: isAura ? normalizeFormulaText(condition?.requiredCount, "1") : Math.max(1, toInteger(condition?.requiredCount ?? 1)),
     durationSeconds: Math.max(0, toInteger(condition?.durationSeconds)),
     durationAmount: duration.amount,
     durationUnitChoices: buildDurationUnitChoices(duration.unit),
@@ -1273,7 +1273,7 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
     showAuraIncludeSelf: condition?.auraMode !== ABILITY_AURA_MODES.selfWhenPresent,
     auraTargetGroupRows: buildAuraTargetGroupRows(condition?.auraTargetGroups),
     canAddAuraTargetGroup: normalizeConditionValues(condition?.auraTargetGroups).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group)).length < ABILITY_AURA_TARGET_GROUPS.length,
-    auraRadiusMeters: Math.max(0, Number(condition?.auraRadiusMeters) || 0),
+    auraRadiusMeters: normalizeFormulaText(condition?.auraRadiusMeters, "0"),
     auraWallsBlockChoices: buildBooleanChoices(condition?.auraWallsBlock !== false),
     auraIncludeSelfChoices: buildBooleanChoices(condition?.auraIncludeSelf !== false),
     auraCombatOnlyChoices: buildBooleanChoices(Boolean(condition?.auraCombatOnly)),
@@ -1434,6 +1434,10 @@ function getAuraTargetGroupsLabel(mode = "") {
   return mode === ABILITY_AURA_MODES.selfWhenPresent
     ? "Цели для сбора условий"
     : "Цели воздействия";
+}
+
+function normalizeFormulaText(value = "", fallback = "0") {
+  return String(value ?? "").trim() || fallback;
 }
 
 function buildAuraTargetGroupRows(value = []) {

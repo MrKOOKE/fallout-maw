@@ -31,6 +31,12 @@ const IN_TURN_REACTION_SOURCE = "inTurnReaction";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const DODGE_CONVERSION_MULTIPLIER = 5;
 const REACTION_FILL_COLOR = "#f2f2eb";
+const CLEAR_EFFECT_DURATION_UPDATE = Object.freeze({
+  start: null,
+  "duration.value": null,
+  "duration.expiry": null,
+  "duration.expired": false
+});
 
 export function registerReactionResourceHooks() {
   Hooks.on("updateActor", (actor, changes, options) => {
@@ -282,7 +288,8 @@ async function createOrUpdateReactionDodgeEffect(actor, amount) {
       name: data.name,
       img: data.img,
       "system.changes": data.system.changes,
-      flags: data.flags
+      flags: data.flags,
+      ...CLEAR_EFFECT_DURATION_UPDATE
     }, { animate: false });
     return;
   }
@@ -299,7 +306,8 @@ async function createOrUpdateReactionPointEffect(actor, amount) {
       name: data.name,
       img: data.img,
       "system.changes": data.system.changes,
-      flags: data.flags
+      flags: data.flags,
+      ...CLEAR_EFFECT_DURATION_UPDATE
     }, { animate: false });
     return;
   }
@@ -324,7 +332,7 @@ async function addOneTimeActionPointEffect(actor, amount, { source = "" } = {}) 
   const value = Math.max(0, toInteger(amount));
   if (!value) return;
   const data = buildOneTimeActionPointEffectData(actor, value, { source });
-  await actor.createEmbeddedDocuments("ActiveEffect", [data]);
+  await actor.createEmbeddedDocuments("ActiveEffect", [data], { animate: false });
 }
 
 async function spendOneTimeActionPoints(actor, amount) {
@@ -349,11 +357,11 @@ async function updateOneTimeActionPointChange(effect, index, value) {
   ));
   if (!activeChanges.some(candidate => String(candidate?.key ?? "") === ONE_TIME_ACTION_POINTS_KEY)) {
     if (!activeChanges.length) {
-      await effect.delete();
+      await effect.delete({ animate: false });
       return;
     }
   }
-  await effect.update({ "system.changes": activeChanges });
+  await effect.update({ "system.changes": activeChanges }, { animate: false });
 }
 
 async function deleteOneTimeActionPointEffects(actor, { source = "" } = {}) {
@@ -364,7 +372,7 @@ async function deleteOneTimeActionPointEffects(actor, { source = "" } = {}) {
       return !source || flag.source === source;
     })
     .map(effect => effect.id) ?? [];
-  if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids);
+  if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids, { animate: false });
 }
 
 function getOneTimeActionPointEntries(actor) {
@@ -388,10 +396,6 @@ function buildReactionDodgeEffectData(actor, value) {
     transfer: false,
     disabled: false,
     showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
-    duration: {
-      seconds: 6,
-      startTime: game.time?.worldTime ?? 0
-    },
     system: {
       changes: [{
         key: `system.resources.${DODGE_RESOURCE_KEY}.bonus`,

@@ -12,6 +12,7 @@ import {
   getAuraGeneratedEffectFlag,
   getAuraGeneratedTargetTokens
 } from "./aura-conditions.mjs";
+import { prepareEffectChangeForApplication } from "../utils/effect-change-values.mjs";
 
 const ABILITY_EFFECT_FLAG_KEY = "abilityEffect";
 const ITEM_EFFECT_FLAG_KEY = "itemEffect";
@@ -250,12 +251,12 @@ function buildDesiredAuraGeneratedEffects() {
           for (const targetToken of targets) {
             const targetActor = targetToken?.actor;
             if (!targetActor) continue;
-            const changes = getAbilityFunctionChangesForSatisfiedAuraCondition(sourceActor, entry, condition, {
+            const changes = prepareAuraGeneratedChanges(sourceActor, getAbilityFunctionChangesForSatisfiedAuraCondition(sourceActor, entry, condition, {
               abilityItemId: source.item.id,
               actorToken: sourceToken,
               targetActor,
               targetToken
-            }).filter(isApplicableGeneratedAuraChange);
+            })).filter(isApplicableGeneratedAuraChange);
             if (!changes.length) continue;
             const key = [
               source.kind,
@@ -353,6 +354,10 @@ async function reconcileActorAuraGeneratedEffects(actor, desired = new Map()) {
     if (!existingByKey.has(key)) creations.push(data);
   }
   if (creations.length) await actor.createEmbeddedDocuments("ActiveEffect", creations, { animate: false });
+}
+
+function prepareAuraGeneratedChanges(sourceActor, changes = []) {
+  return (changes ?? []).map(change => prepareEffectChangeForApplication(sourceActor, change));
 }
 
 function isApplicableGeneratedAuraChange(change = {}) {
@@ -521,6 +526,14 @@ function isAbilityEffectSyncRelevant(changes = {}) {
   const paths = Object.keys(foundry.utils.flattenObject(changes ?? {}));
   return paths.some(path => path === "system.resources.health"
     || path.startsWith("system.resources.health.")
+    || path === "system.characteristics"
+    || path.startsWith("system.characteristics.")
+    || path === "system.skills"
+    || path.startsWith("system.skills.")
+    || path === "system.development.characteristics"
+    || path.startsWith("system.development.characteristics.")
+    || path === "system.development.skills"
+    || path.startsWith("system.development.skills.")
     || path === "system.limbs"
     || path.startsWith("system.limbs.")
     || path === "system.creature.raceId"

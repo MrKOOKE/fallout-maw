@@ -1048,8 +1048,8 @@
                 </div>
                 <div class="fallout-maw-aura-condition-caption">Условия воздействия</div>
                 <div class="fallout-maw-aura-condition-fields">
-                  <label><span>Радиус, м</span><input type="number" data-field="conditionAuraRadiusMeters" value="{{auraRadiusMeters}}" min="0" step="0.1"></label>
-                  <label><span>Требуется актеров для работы</span><input type="number" data-field="conditionRequiredCount" value="{{requiredCount}}" min="1" step="1"></label>
+                  <label><span>Радиус, м</span><input type="text" data-field="conditionAuraRadiusMeters" value="{{auraRadiusMeters}}" data-formula-autocomplete="all"></label>
+                  <label><span>Требуется актеров для работы</span><input type="text" data-field="conditionRequiredCount" value="{{requiredCount}}" data-formula-autocomplete="all"></label>
                   {{#if showAuraIncludeSelf}}
                   <label><span>Учитывать себя</span><select data-field="conditionAuraIncludeSelf">{{#each auraIncludeSelfChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
                   {{/if}}

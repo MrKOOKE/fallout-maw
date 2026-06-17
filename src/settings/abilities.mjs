@@ -457,8 +457,8 @@ function normalizeAbilityCondition(value = {}) {
       type,
       auraMode,
       auraTargetGroups: normalizeAuraTargetGroups(value?.auraTargetGroups),
-      auraRadiusMeters: Math.max(0, Number(value?.auraRadiusMeters) || 0),
-      requiredCount: Math.max(1, toInteger(value?.requiredCount ?? 1)),
+      auraRadiusMeters: normalizeFormulaText(value?.auraRadiusMeters, "0"),
+      requiredCount: normalizeFormulaText(value?.requiredCount, "1"),
       auraWallsBlock: normalizeBoolean(value?.auraWallsBlock, true),
       auraIncludeSelf: auraMode === ABILITY_AURA_MODES.applyToTargets ? normalizeBoolean(value?.auraIncludeSelf, true) : false,
       auraCombatOnly: normalizeBoolean(value?.auraCombatOnly, false),
@@ -509,7 +509,7 @@ function normalizeAbilityCondition(value = {}) {
       healthTarget: ABILITY_HEALTH_TARGETS.general,
       limbKey: ABILITY_HEALTH_LIMB_ALL,
       limit: 1,
-      requiredCount: Math.max(1, toInteger(value?.requiredCount ?? value?.count ?? value?.limit ?? 1)),
+      requiredCount: String(Math.max(1, toInteger(value?.requiredCount ?? value?.count ?? value?.limit ?? 1))),
       itemCategories: normalizeItemUseCategories(value?.itemCategories ?? value?.categories ?? value?.category),
       durationSeconds: Math.max(0, toInteger(value?.durationSeconds ?? value?.duration ?? value?.seconds))
     };
@@ -575,6 +575,10 @@ function normalizeAuraMode(value) {
 function normalizeAuraTargetGroups(value = []) {
   const normalized = normalizeStringList(value).filter(group => ABILITY_AURA_TARGET_GROUPS.includes(group));
   return normalized.length ? normalized : ["enemy"];
+}
+
+function normalizeFormulaText(value = "", fallback = "0") {
+  return String(value ?? "").trim() || fallback;
 }
 
 function normalizeBoolean(value, fallback = false) {
