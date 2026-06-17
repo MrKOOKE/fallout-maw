@@ -26,7 +26,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   defensiveTactics: "defensiveTactics",
   rage: "rage",
   whirlwind: "whirlwind",
-  lunge: "lunge"
+  lunge: "lunge",
+  doubleAttack: "doubleAttack"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -583,6 +584,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge) {
     return normalizeLungeSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack) {
+    return normalizeDoubleAttackSettings(value);
+  }
   return {};
 }
 
@@ -722,6 +726,14 @@ export function normalizeLungeSettings(value = {}) {
     overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 40)),
     overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 12)),
     maxCells: Math.max(1, toInteger(value?.maxCells ?? 2))
+  };
+}
+
+export function normalizeDoubleAttackSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 40)),
+    duplicateCount: Math.max(1, toInteger(value?.duplicateCount ?? 1)),
+    requiredSkillKey: String(value?.requiredSkillKey ?? "meleeCombat").trim() || "meleeCombat"
   };
 }
 

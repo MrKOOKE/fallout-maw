@@ -12,6 +12,7 @@ import {
   normalizeDeusExMachinaSettings,
   normalizeDefensiveTacticsSettings,
   normalizeDisarmSettings,
+  normalizeDoubleAttackSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
   normalizeLuckyCoinSettings,
@@ -38,6 +39,7 @@ import {
   isWeaponAttackModeEnabled,
   startWeaponAttack,
   WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK,
+  WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK,
   WEAPON_ATTACK_RESOLVED_HOOK,
   requestWeaponAttackCompletion
 } from "../combat/weapon-attack-controller.mjs";
@@ -213,6 +215,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.lunge
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.doubleAttack,
+    label: "Двоечка",
+    active: true,
+    toggleable: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
+    })
   })
 ]);
 
@@ -230,6 +241,9 @@ export function registerFixedAbilityFunctionHooks() {
   Hooks.on(WEAPON_ATTACK_RESOLVED_HOOK, context => {
     void consumeAllOrNothingResultEffects(context);
     void processReaperAttackResolution(context);
+  });
+  Hooks.on(WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK, context => {
+    requestDoubleAttackDuplicate(context);
   });
   Hooks.on("fallout-maw.weaponActionResolved", context => {
     void processAtRandomAttackResolution(context);
@@ -376,6 +390,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.curseAndBlessing) {
     await toggleCurseAndBlessing(actor, item, abilityFunction);
+    await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack) {
+    await toggleDoubleAttack(actor, item, abilityFunction);
     await application?.render?.({ force: true });
     return true;
   }
@@ -1543,6 +1563,51 @@ async function toggleCurseAndBlessing(actor, abilityItem, abilityFunction) {
   return true;
 }
 
+async function toggleDoubleAttack(actor, abilityItem, abilityFunction) {
+  const settings = normalizeDoubleAttackSettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(settings.duplicateCount));
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  const nextActive = !Boolean(state[stateKey]?.active);
+  if (nextActive && !hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`Двоечка: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    active: nextActive
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  ui.notifications.info(`Двоечка: ${nextActive ? "включено" : "выключено"}.`);
+  return true;
+}
+
+function requestDoubleAttackDuplicate(context = {}) {
+  const actor = context?.actor ?? null;
+  const weaponSkillKey = String(context?.weaponData?.skillKey ?? "").trim();
+  if (!actor || !weaponSkillKey || typeof context?.addDuplicateRequest !== "function") return;
+
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    const state = getFixedAbilityState(abilityItem);
+    const functions = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
+      .filter(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack)
+      .filter(entry => Boolean(state[getFixedFunctionStateKey(entry)]?.active));
+    for (const abilityFunction of functions) {
+      const settings = normalizeDoubleAttackSettings(abilityFunction.fixedSettings);
+      if (weaponSkillKey !== settings.requiredSkillKey) continue;
+      const duplicateCount = Math.max(1, toInteger(settings.duplicateCount));
+      const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * duplicateCount;
+      context.addDuplicateRequest({
+        source: "doubleAttack",
+        label: "Двоечка",
+        count: duplicateCount,
+        onBeforeDuplicate: async () => spendDoubleAttackEnergy(actor, abilityItem, abilityFunction, energyCost)
+      });
+    }
+  }
+}
+
 async function requestCurseAndBlessingAttackResolution(context = {}) {
   const attackerUuid = String(context?.attackerUuid ?? "").trim();
   const targetUuids = Array.from(new Set((context?.targetUuids ?? [])
@@ -1655,6 +1720,26 @@ async function spendCurseAndBlessingEnergy(actor, abilityItem, abilityFunction, 
   if (!hasCurseAndBlessingEnergy(actor, cost)) {
     await deactivateFixedAbilityFunction(abilityItem, abilityFunction);
     await createAbilityChatMessage(actor, abilityItem, `Порча и благословение выключено: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
+    return false;
+  }
+  if (!cost) return true;
+  const resource = actor.system?.resources?.[ENERGY_RESOURCE_KEY];
+  const nextValue = Math.max(toInteger(resource?.min), getActorEnergy(actor) - cost);
+  const update = {
+    [`system.resources.${ENERGY_RESOURCE_KEY}.value`]: nextValue
+  };
+  if (resource && Object.hasOwn(resource, "spent")) {
+    update[`system.resources.${ENERGY_RESOURCE_KEY}.spent`] = Math.max(0, toInteger(resource.max) - nextValue);
+  }
+  await actor.update(update);
+  return true;
+}
+
+async function spendDoubleAttackEnergy(actor, abilityItem, abilityFunction, energyCost = 0) {
+  const cost = Math.max(0, toInteger(energyCost));
+  if (!hasEnergy(actor, cost)) {
+    await deactivateFixedAbilityFunction(abilityItem, abilityFunction);
+    await createAbilityChatMessage(actor, abilityItem, `Двоечка выключена: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
     return false;
   }
   if (!cost) return true;

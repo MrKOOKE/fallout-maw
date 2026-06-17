@@ -135,6 +135,7 @@ import {
   normalizeAllOrNothingSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDisarmSettings,
+  normalizeDoubleAttackSettings,
   normalizeLastChanceSettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings
@@ -3540,6 +3541,7 @@ function buildAbilityEnergyCostRows(item, actor = null) {
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
     ));
   if (!entry) return [];
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm) {
@@ -3561,9 +3563,14 @@ function buildAbilityEnergyCostRows(item, actor = null) {
         ? normalizeLuckyCoinSettings(entry.fixedSettings)
         : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
           ? normalizeRageSettings(entry.fixedSettings)
-          : normalizeCurseAndBlessingSettings(entry.fixedSettings);
-  const base = Math.max(0, toInteger(settings.energyCost));
-  const total = getFixedAbilityEnergyCost(actor, item, entry, base);
+          : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
+            ? normalizeDoubleAttackSettings(entry.fixedSettings)
+            : normalizeCurseAndBlessingSettings(entry.fixedSettings);
+  const multiplier = entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
+    ? Math.max(1, toInteger(settings.duplicateCount))
+    : 1;
+  const base = Math.max(0, toInteger(settings.energyCost)) * multiplier;
+  const total = getFixedAbilityEnergyCost(actor, item, entry, Math.max(0, toInteger(settings.energyCost))) * multiplier;
   return [
     ["Базовый расход", String(base)],
     ["Итог", String(total)]

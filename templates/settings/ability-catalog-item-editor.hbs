@@ -537,6 +537,32 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedDoubleAttackSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Двоечка</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активное состояние</strong>
+          <label>
+            <span>Расход энергии за дублирование</span>
+            <input type="number" data-field="fixed.doubleAttack.energyCost" value="{{fixedDoubleAttackSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Дополнительные атаки</span>
+            <input type="number" data-field="fixed.doubleAttack.duplicateCount" value="{{fixedDoubleAttackSettings.duplicateCount}}" min="1" step="1">
+          </label>
+          <label>
+            <span>Требуемый навык оружия</span>
+            <select data-field="fixed.doubleAttack.requiredSkillKey">
+              {{#each fixedDoubleAttackSettings.skillChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedRageSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Ярость</h3>

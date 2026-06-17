@@ -47,6 +47,7 @@ import {
   normalizeDeusExMachinaSettings,
   normalizeDefensiveTacticsSettings,
   normalizeDisarmSettings,
+  normalizeDoubleAttackSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
   normalizeLungeSettings,
@@ -4430,6 +4431,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedLungeSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge
     ? prepareLungeSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedDoubleAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
+    ? prepareDoubleAttackSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -4457,6 +4461,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedRageSettings,
     fixedWhirlwindSettings,
     fixedLungeSettings,
+    fixedDoubleAttackSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
@@ -4575,6 +4580,14 @@ function prepareLungeSettingsForDisplay(settings = {}) {
     ...normalized,
     overloadDurationAmount: overloadDuration.amount,
     overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit)
+  };
+}
+
+function prepareDoubleAttackSettingsForDisplay(settings = {}) {
+  const normalized = normalizeDoubleAttackSettings(settings);
+  return {
+    ...normalized,
+    skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
   };
 }
 

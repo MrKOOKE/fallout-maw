@@ -30,6 +30,7 @@ import {
   normalizeReaperSettings,
   normalizeDeusExMachinaSettings,
   normalizeDisarmSettings,
+  normalizeDoubleAttackSettings,
   normalizeWhirlwindSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
@@ -737,6 +738,13 @@ function readFixedFunctionSettings(row) {
       )
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.doubleAttack.energyCost']")?.value,
+      duplicateCount: row.querySelector("[data-field='fixed.doubleAttack.duplicateCount']")?.value,
+      requiredSkillKey: row.querySelector("[data-field='fixed.doubleAttack.requiredSkillKey']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage) {
     return {
       energyCost: row.querySelector("[data-field='fixed.rage.energyCost']")?.value,
@@ -894,6 +902,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedLungeSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lunge
     ? prepareLungeSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedDoubleAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
+    ? prepareDoubleAttackSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -922,6 +933,7 @@ function prepareFunctionForDisplay(entry) {
     fixedLuckyCoinSettings,
     fixedWhirlwindSettings,
     fixedLungeSettings,
+    fixedDoubleAttackSettings,
     fixedRageSettings,
     fixedDisarmSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
@@ -1032,6 +1044,14 @@ function prepareLungeSettingsForDisplay(settings = {}) {
     ...normalized,
     overloadDurationAmount: duration.amount,
     overloadDurationUnitChoices: buildDurationUnitChoices(duration.unit)
+  };
+}
+
+function prepareDoubleAttackSettingsForDisplay(settings = {}) {
+  const normalized = normalizeDoubleAttackSettings(settings);
+  return {
+    ...normalized,
+    skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
   };
 }
 
