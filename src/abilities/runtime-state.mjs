@@ -70,7 +70,7 @@ export function getActorAtRandomActionPointCostSources(actor, actionKey = "") {
       if (settings.actionPointCostReduction <= 0) continue;
       sources.push({
         key: `ability:${abilityItem.id}:${abilityFunction.id}:atRandom`,
-        name: String(abilityItem.name ?? "").trim() || "На обум",
+        name: String(abilityItem.name ?? "").trim() || "Способность",
         img: String(abilityItem.img ?? "").trim(),
         reduction: settings.actionPointCostReduction
       });

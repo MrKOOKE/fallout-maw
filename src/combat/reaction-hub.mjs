@@ -213,11 +213,14 @@ async function createReactionOpportunityMessage({ context = {}, actorOrder = [],
 async function queryReactionOwner(actor, offers = [], { eventKey = "", context = {} } = {}) {
   const owner = getResponsibleOwner(actor) ?? getResponsibleGM();
   if (!owner) return null;
+  const offerLabels = Array.from(new Set(offers
+    .map(offer => String(offer?.label ?? "").trim())
+    .filter(Boolean)));
   const queryData = {
     eventKey,
     actorUuid: actor.uuid,
     actorName: actor.name,
-    title: context?.title ?? "Реакция",
+    title: offerLabels.length === 1 ? offerLabels[0] : (context?.title ?? "Реакция"),
     message: context?.message ?? "",
     offers: offers.map(offer => ({
       offerId: offer.offerId,

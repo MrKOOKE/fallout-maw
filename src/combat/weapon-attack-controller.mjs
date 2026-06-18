@@ -960,7 +960,7 @@ class WeaponAttackController {
     const targets = Array.from(new Set(this.targets ?? []))
       .filter(target => target && target !== this.token);
     if (!targets.length) {
-      ui.notifications.warn("Вихрь: нет целей в радиусе атаки.");
+      ui.notifications.warn(`${this.attackModifier?.label || this.weapon.name}: нет целей в радиусе атаки.`);
       return;
     }
 

@@ -8,7 +8,7 @@ export const WEAPON_ATTACK_MODIFIER_KEYS = Object.freeze({
 const WEAPON_ATTACK_MODIFIER_DEFINITIONS = Object.freeze({
   [WEAPON_ATTACK_MODIFIER_KEYS.whirlwind]: Object.freeze({
     key: WEAPON_ATTACK_MODIFIER_KEYS.whirlwind,
-    label: "Вихрь",
+    label: "Способность",
     targetedAction: false,
     requiresLimbSelection: false,
     requiresDirectionSelection: false,
@@ -18,14 +18,14 @@ const WEAPON_ATTACK_MODIFIER_DEFINITIONS = Object.freeze({
   }),
   [WEAPON_ATTACK_MODIFIER_KEYS.lunge]: Object.freeze({
     key: WEAPON_ATTACK_MODIFIER_KEYS.lunge,
-    label: "Выпад",
+    label: "Способность",
     finishAfterAttack: true
   })
 });
 
 export function createWhirlwindAttackModifier({
   accuracyModifier = -30,
-  label = "Вихрь",
+  label = "Способность",
   onBeforeAttack = null
 } = {}) {
   return normalizeWeaponAttackModifier({
@@ -37,7 +37,7 @@ export function createWhirlwindAttackModifier({
 }
 
 export function createLungeAttackModifier({
-  label = "Выпад",
+  label = "Способность",
   onDestroy = null
 } = {}) {
   return normalizeWeaponAttackModifier({

@@ -469,49 +469,51 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
 }
 
 async function useAllOrNothing(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeAllOrNothingSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (hasPendingAllOrNothingResultEffect(actor, abilityItem, abilityFunction)) {
-    ui.notifications.warn("Все или ничего: результат первой активации еще не потрачен.");
+    ui.notifications.warn(`${abilityName}: результат первой активации еще не потрачен.`);
     return false;
   }
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`Все или ничего: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
     return false;
   }
   if (!(await spendEnergy(actor, energyCost))) return false;
   await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
-    name: "Перегрузка: Все или ничего",
+    name: getAbilityOverloadName(abilityItem),
     energyCost: settings.overloadEnergyCost,
     durationSeconds: settings.overloadDurationSeconds
   });
   await applyAllOrNothingResultEffect(actor, abilityItem, abilityFunction, settings);
-  await createAbilityChatMessage(actor, abilityItem, "Все или ничего: способность успешно применена.");
+  await createAbilityChatMessage(actor, abilityItem, "Способность успешно применена.");
   return true;
 }
 
 async function useLuckyCoin(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeLuckyCoinSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (hasPendingLuckyCoinEffect(actor)) {
-    ui.notifications.warn("Счастливая монетка: предыдущий эффект ещё не потрачен.");
+    ui.notifications.warn(`${abilityName}: предыдущий эффект ещё не потрачен.`);
     return false;
   }
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`Счастливая монетка: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
     return false;
   }
 
-  const skill = await promptLuckyCoinSkill(actor);
+  const skill = await promptLuckyCoinSkill(actor, abilityItem);
   if (!skill) return false;
   if (hasPendingLuckyCoinEffect(actor)) {
-    ui.notifications.warn("Счастливая монетка: предыдущий эффект ещё не потрачен.");
+    ui.notifications.warn(`${abilityName}: предыдущий эффект ещё не потрачен.`);
     return false;
   }
   if (!(await spendEnergy(actor, energyCost))) return false;
 
   await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
-    name: "Перегрузка: Счастливая монетка",
+    name: getAbilityOverloadName(abilityItem),
     energyCost: settings.overloadEnergyCost,
     durationSeconds: settings.overloadDurationSeconds
   });
@@ -519,7 +521,7 @@ async function useLuckyCoin(actor, abilityItem, abilityFunction) {
   const chance = Math.min(100, Math.max(0, evaluateActorFormula(settings.chanceFormula, actor, {
     fallback: 0,
     minimum: 0,
-    context: "Счастливая монетка"
+    context: abilityName
   })));
   const lucky = (Math.floor(Math.random() * 100) + 1) <= chance;
   const magnitude = Math.max(0, toInteger(evaluateActorFormula(
@@ -528,7 +530,7 @@ async function useLuckyCoin(actor, abilityItem, abilityFunction) {
     {
       fallback: 0,
       minimum: 0,
-      context: lucky ? "Счастливая монетка: удача" : "Счастливая монетка: неудача"
+      context: `${abilityName}: ${lucky ? "удача" : "неудача"}`
     }
   )));
   const modifier = lucky ? magnitude : -magnitude;
@@ -543,38 +545,40 @@ async function useLuckyCoin(actor, abilityItem, abilityFunction) {
 }
 
 async function useRage(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeRageSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (hasActiveRageEffect(actor, abilityItem, abilityFunction)) {
-    ui.notifications.warn("Ярость: эффект уже активен.");
+    ui.notifications.warn(`${abilityName}: эффект уже активен.`);
     return false;
   }
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`Ярость: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
     return false;
   }
   if (!(await spendEnergy(actor, energyCost))) return false;
   await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
-    name: "Перегрузка: Ярость",
+    name: getAbilityOverloadName(abilityItem),
     energyCost: settings.overloadEnergyCost,
     durationSeconds: settings.overloadDurationSeconds
   });
   await applyRageEffect(actor, abilityItem, abilityFunction, settings);
-  await createAbilityChatMessage(actor, abilityItem, `Ярость: эффект активен на ${formatDuration(settings.durationSeconds)}.`);
+  await createAbilityChatMessage(actor, abilityItem, `Эффект активен на ${formatDuration(settings.durationSeconds)}.`);
   return true;
 }
 
 async function useWhirlwind(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeWhirlwindSettings(abilityFunction.fixedSettings);
   const token = getActorSceneToken(actor);
   if (!token) {
-    ui.notifications.warn("Вихрь: выберите токен актера на сцене.");
+    ui.notifications.warn(`${abilityName}: выберите токен актера на сцене.`);
     return false;
   }
 
   const candidate = getWhirlwindWeaponCandidate(actor);
   if (!candidate) {
-    ui.notifications.warn("Вихрь: нет оружия в оружейном наборе с неприцельной атакой и рубящим ударом.");
+    ui.notifications.warn(`${abilityName}: нет оружия в оружейном наборе с неприцельной атакой и рубящим ударом.`);
     return false;
   }
 
@@ -587,27 +591,28 @@ async function useWhirlwind(actor, abilityItem, abilityFunction) {
     actionKey: "meleeAttack",
     weaponFunctionId: candidate.weaponFunctionId,
     attackModifier: createWhirlwindAttackModifier({
+      label: abilityName,
       accuracyModifier: settings.accuracyModifier,
       onBeforeAttack: async () => {
         const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
         if (!hasEnergy(actor, energyCost)) {
-          ui.notifications.warn(`Вихрь: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+          ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
           return false;
         }
         if (!(await spendEnergy(actor, energyCost))) return false;
         await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
-          name: "Перегрузка: Вихрь",
+          name: getAbilityOverloadName(abilityItem),
           energyCost: settings.overloadEnergyCost,
           durationSeconds: settings.overloadDurationSeconds
         });
-        await createAbilityChatMessage(actor, abilityItem, "Вихрь: атака началась.");
+        await createAbilityChatMessage(actor, abilityItem, "Атака началась.");
         return true;
       }
     })
   });
 
   if (!controller) {
-    ui.notifications.warn("Вихрь: не удалось начать атаку выбранным оружием.");
+    ui.notifications.warn(`${abilityName}: не удалось начать атаку выбранным оружием.`);
     return false;
   }
   return true;
@@ -658,26 +663,27 @@ function getWhirlwindWeaponFunctionIds(weapon) {
 }
 
 async function useLunge(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeLungeSettings(abilityFunction.fixedSettings);
   const token = getActorSceneToken(actor);
   if (!token) {
-    ui.notifications.warn("Выпад: выберите токен актера на сцене.");
+    ui.notifications.warn(`${abilityName}: выберите токен актера на сцене.`);
     return false;
   }
 
   const candidate = getLungeWeaponCandidate(actor);
   if (!candidate) {
-    ui.notifications.warn("Выпад: нет оружия в оружейном наборе с ближней атакой.");
+    ui.notifications.warn(`${abilityName}: нет оружия в оружейном наборе с ближней атакой.`);
     return false;
   }
 
-  const destination = await selectLungeDestination(token, settings);
+  const destination = await selectLungeDestination(token, settings, abilityName);
   if (!destination) return false;
   const origin = getTokenDocumentPosition(token.document);
 
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`Выпад: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
     return false;
   }
 
@@ -691,7 +697,7 @@ async function useLunge(actor, abilityItem, abilityFunction) {
     phantom?.destroy();
     if (!moved || completionHandled) return;
     completionHandled = true;
-    const stay = await promptLungeReturnChoice();
+    const stay = await promptLungeReturnChoice(abilityName);
     if (stay) return;
     await moveTokenDocumentAndWait(token.document, origin);
   };
@@ -707,16 +713,16 @@ async function useLunge(actor, abilityItem, abilityFunction) {
         width: Math.max(1, Number(token?.w) || Number(canvas.grid?.size) || 100),
         height: Math.max(1, Number(token?.h) || Number(canvas.grid?.size) || 100)
       })) {
-        ui.notifications.warn("Выпад: выбранная клетка больше недоступна.");
+        ui.notifications.warn(`${abilityName}: выбранная клетка больше недоступна.`);
         return false;
       }
       if (!hasEnergy(actor, energyCost)) {
-        ui.notifications.warn(`Выпад: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+        ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
         return false;
       }
       if (!(await spendEnergy(actor, energyCost))) return false;
       await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
-        name: "Перегрузка: Выпад",
+        name: getAbilityOverloadName(abilityItem),
         energyCost: settings.overloadEnergyCost,
         durationSeconds: settings.overloadDurationSeconds
       });
@@ -726,17 +732,18 @@ async function useLunge(actor, abilityItem, abilityFunction) {
       return true;
     },
     attackModifier: createLungeAttackModifier({
+      label: abilityName,
       onDestroy: handleCompletion
     })
   });
 
   if (!controller) {
     phantom?.destroy();
-    ui.notifications.warn("Выпад: не удалось начать ближнюю атаку выбранным оружием.");
+    ui.notifications.warn(`${abilityName}: не удалось начать ближнюю атаку выбранным оружием.`);
     return false;
   }
 
-  await createAbilityChatMessage(actor, abilityItem, "Выпад: позиция выбрана, атака началась.");
+  await createAbilityChatMessage(actor, abilityItem, "Позиция выбрана, атака началась.");
   return true;
 }
 
@@ -773,10 +780,10 @@ function getLungeWeaponActionKey(weapon, weaponFunctionId = "") {
   return "";
 }
 
-async function selectLungeDestination(token, settings) {
+async function selectLungeDestination(token, settings, abilityName = "Способность") {
   let candidates = buildLungeDestinationCandidates(token, settings);
   if (!candidates.length) {
-    ui.notifications.warn("Выпад: нет доступных клеток для перемещения.");
+    ui.notifications.warn(`${abilityName}: нет доступных клеток для перемещения.`);
     return null;
   }
 
@@ -786,13 +793,13 @@ async function selectLungeDestination(token, settings) {
     const layer = canvas.controls?._rulerPaths;
     if (!layer) {
       graphics.destroy();
-      ui.notifications.warn("Выпад: слой предпросмотра атаки недоступен.");
+      ui.notifications.warn(`${abilityName}: слой предпросмотра атаки недоступен.`);
       resolve(null);
       return;
     }
     layer.addChild(graphics);
     drawLungeDestinationCandidates(graphics, candidates);
-    ui.notifications.info("Выпад: выберите клетку перемещения. Правая кнопка отменяет выбор.");
+    ui.notifications.info(`${abilityName}: выберите клетку перемещения. Правая кнопка отменяет выбор.`);
 
     const refreshCandidates = () => {
       const nextSignature = getLungeTokenPositionSignature(token);
@@ -967,9 +974,9 @@ function createLungePhantom(token, position) {
   return container;
 }
 
-async function promptLungeReturnChoice() {
+async function promptLungeReturnChoice(abilityName = "Способность") {
   const action = await DialogV2.wait({
-    window: { title: "Выпад" },
+    window: { title: abilityName },
     content: "",
     buttons: [
       {
@@ -1024,18 +1031,19 @@ async function moveTokenDocumentAndWait(tokenDocument, position) {
 }
 
 async function useDisarm(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
   const token = getActorSceneToken(actor);
   const targetToken = getSingleUserTarget();
   if (!token || !targetToken?.actor) {
-    ui.notifications.warn("Обезоруживание: выберите одну цель.");
+    ui.notifications.warn(`${abilityName}: выберите одну цель.`);
     return false;
   }
   if (targetToken.actor.uuid === actor.uuid) {
-    ui.notifications.warn("Обезоруживание: цель не может быть вами.");
+    ui.notifications.warn(`${abilityName}: цель не может быть вами.`);
     return false;
   }
   if (!areTokensAdjacent(token.document, targetToken.document)) {
-    ui.notifications.warn("Обезоруживание: цель должна быть на соседней клетке.");
+    ui.notifications.warn(`${abilityName}: цель должна быть на соседней клетке.`);
     return false;
   }
 
@@ -1151,7 +1159,7 @@ async function executeWhereAreYouGoingMovementInterruption({ tokenDocument, move
     moverActorUuid: mover.uuid,
     moverTokenUuid: tokenDocument.uuid,
     reactorTokenUuids: event?.reactorTokenUuids ?? [],
-    title: "Ты куда собрался?",
+    title: "Реакция на перемещение",
     message: `${mover.name} пытается покинуть соседнюю клетку. Шаг отменён.`
   });
   if (result?.status === REACTION_RESULT.success) return;
@@ -1200,7 +1208,7 @@ async function collectWhereAreYouGoingReactionOffers({ eventKey = "", context = 
         entry.abilityFunction.id,
         context.movementId ?? foundry.utils.randomID()
       ].join(":"),
-      label: "Ты куда собрался?",
+      label: getAbilityDisplayName(entry.abilityItem),
       description: `Остановить ${mover.name} и нанести неприцельный удар.`,
       img: entry.abilityItem.img || "icons/svg/sword.svg",
       costLines: [
@@ -1241,7 +1249,8 @@ async function executeWhereAreYouGoingReaction({ offer = {} } = {}) {
   const selectedCandidate = candidates.length === 1
     ? candidates[0]
     : await queryWhereAreYouGoingWeaponOwner(reactor, candidates, {
-      targetName: moverToken.actor?.name ?? ""
+      targetName: moverToken.actor?.name ?? "",
+      abilityName: getAbilityDisplayName(entry.abilityItem)
     });
   if (!selectedCandidate) return { handled: true, status: REACTION_RESULT.declined };
   const { weapon, weaponFunctionId } = selectedCandidate;
@@ -1251,7 +1260,7 @@ async function executeWhereAreYouGoingReaction({ offer = {} } = {}) {
 
   await spendEnergy(reactor, energyCost);
   await applyAbilityOverloadEffect(reactor, entry.abilityItem, entry.abilityFunction, {
-    name: "Перегрузка: Ты куда собрался?",
+    name: getAbilityOverloadName(entry.abilityItem),
     energyCost: entry.settings.reactionOverloadEnergyCost,
     durationSeconds: entry.settings.reactionOverloadDurationSeconds
   });
@@ -1265,7 +1274,7 @@ async function executeWhereAreYouGoingReaction({ offer = {} } = {}) {
     skipActionPointCost: true,
     ignoreReactionLock: true
   });
-  if (used) await createWhereAreYouGoingChatMessage(reactor);
+  if (used) await createWhereAreYouGoingChatMessage(reactor, entry.abilityItem);
   return {
     handled: true,
     status: used ? REACTION_RESULT.success : REACTION_RESULT.failed,
@@ -1273,13 +1282,14 @@ async function executeWhereAreYouGoingReaction({ offer = {} } = {}) {
   };
 }
 
-async function queryWhereAreYouGoingWeaponOwner(actor, candidates = [], { targetName = "" } = {}) {
+async function queryWhereAreYouGoingWeaponOwner(actor, candidates = [], { targetName = "", abilityName = "Способность" } = {}) {
   const userId = getActorResponsibleUserId(actor);
   const user = game.users?.get(userId);
   if (!user) return null;
   const data = {
     actorName: actor.name,
     targetName,
+    abilityName,
     candidates: candidates.map(candidate => ({
       candidateId: getWhereAreYouGoingWeaponCandidateId(candidate),
       weaponName: candidate.weapon.name,
@@ -1311,7 +1321,7 @@ async function handleWhereAreYouGoingWeaponQuery(data = {}) {
     </label>
   `).join("");
   const formData = await DialogV2.input({
-    window: { title: "Ты куда собрался?: выбор оружия" },
+    window: { title: `${String(data.abilityName ?? "Способность")}: выбор оружия` },
     content: `
       <div class="fallout-maw-disarm-choice-grid">
         ${data.targetName ? `<p>Цель: <strong>${escapeHTML(data.targetName)}</strong></p>` : ""}
@@ -1367,10 +1377,10 @@ async function resumeWhereAreYouGoingMovement(tokenDocument, movement, event = {
   });
 }
 
-async function createWhereAreYouGoingChatMessage(actor) {
+async function createWhereAreYouGoingChatMessage(actor, abilityItem) {
   return ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
-    content: `<p>${escapeHTML(actor.name)} применил реакцию: Ты куда собрался?</p>`,
+    content: `<p>${escapeHTML(actor.name)} применил реакцию: ${escapeHTML(getAbilityDisplayName(abilityItem))}</p>`,
     sound: null
   });
 }
@@ -1391,7 +1401,7 @@ async function requestCounterAttackReaction(context = {}) {
     weaponUuid: context?.weaponUuid ?? "",
     actionKey: context?.actionKey ?? "",
     weaponFunctionId: context?.weaponFunctionId ?? "",
-    title: "Контр атака",
+    title: "Ответная реакция",
     message: "Атака завершена. Доступна реакция контратаки."
   });
 }
@@ -1421,7 +1431,7 @@ async function collectCounterAttackReactionOffers({ eventKey = "", context = {} 
       actorUuid: defender.uuid,
       reactionId: COUNTER_ATTACK_REACTION_PROVIDER_ID,
       offerId: `${COUNTER_ATTACK_REACTION_PROVIDER_ID}:${defender.uuid}:${context.attackId ?? foundry.utils.randomID()}`,
-      label: "Контр атака",
+      label: getAbilityDisplayName(entry.abilityItem),
       description: `Ответить ${entry.weapon.name}: ${attacker.name}.`,
       img: entry.abilityItem.img || entry.weapon.img || "icons/svg/sword.svg",
       costLines: [
@@ -1453,7 +1463,7 @@ async function executeCounterAttackReaction({ offer = {} } = {}) {
 
   await spendEnergy(defender, energyCost);
   await applyAbilityOverloadEffect(defender, entry.abilityItem, entry.abilityFunction, {
-    name: "Перегрузка: Контр атака",
+    name: getAbilityOverloadName(entry.abilityItem),
     energyCost: settings.reactionOverloadEnergyCost,
     durationSeconds: settings.reactionOverloadDurationSeconds
   });
@@ -1468,10 +1478,10 @@ async function executeCounterAttackReaction({ offer = {} } = {}) {
     ignoreReactionLock: true
   });
   if (!used) {
-    await createAbilityChatMessage(defender, entry.abilityItem, "Контр атака: не удалось выполнить удар.");
+    await createAbilityChatMessage(defender, entry.abilityItem, "Не удалось выполнить удар.");
     return { handled: true, status: REACTION_RESULT.failed };
   }
-  await createAbilityChatMessage(defender, entry.abilityItem, "Контр атака выполнена.");
+  await createAbilityChatMessage(defender, entry.abilityItem, "Ответная атака выполнена.");
   return { handled: true, status: REACTION_RESULT.success };
 }
 
@@ -1497,7 +1507,7 @@ async function collectDisarmReactionOffers({ eventKey = "", context = {} } = {})
     actorUuid: defender.uuid,
     reactionId: DISARM_REACTION_PROVIDER_ID,
     offerId: `${DISARM_REACTION_PROVIDER_ID}:${defender.uuid}:${context.attackId ?? foundry.utils.randomID()}`,
-    label: "Обезоруживание",
+    label: getAbilityDisplayName(entry.abilityItem),
     description: `Отнять ${weapon.name} до проверки атаки.`,
     img: entry.abilityItem.img || "icons/svg/combat.svg",
     costLines: [
@@ -1527,7 +1537,7 @@ async function executeDisarmReaction({ context = {}, offer = {} } = {}) {
   await spendEnergy(defender, energyCost);
   if (settings.reactionActionPointCost > 0) await spendCombatActionPoints(defender, settings.reactionActionPointCost);
   await applyAbilityOverloadEffect(defender, entry.abilityItem, entry.abilityFunction, {
-    name: "Перегрузка: Обезоруживание",
+    name: getAbilityOverloadName(entry.abilityItem),
     energyCost: settings.reactionOverloadEnergyCost,
     durationSeconds: settings.reactionOverloadDurationSeconds
   });
@@ -1538,10 +1548,10 @@ async function executeDisarmReaction({ context = {}, offer = {} } = {}) {
     actorToken: defenderToken.object ?? defenderToken,
     targetToken: attackerToken.object ?? attackerToken,
     difficultyBase: settings.reactionDifficultyBase,
-    label: "Обезоруживание: реакция"
+    label: `${getAbilityDisplayName(entry.abilityItem)}: реакция`
   });
   if (!success) {
-    await createAbilityChatMessage(defender, entry.abilityItem, `Обезоруживание: ${defender.name} не смог отнять ${weapon.name}.`);
+    await createAbilityChatMessage(defender, entry.abilityItem, `${defender.name} не смог отнять ${weapon.name}.`);
     return { handled: true, status: REACTION_RESULT.failed };
   }
   requestWeaponAttackCompletion({ attackId: context.attackId });
@@ -1550,14 +1560,15 @@ async function executeDisarmReaction({ context = {}, offer = {} } = {}) {
     targetActor: defender,
     sourceWeapon: weapon,
     targetToken: defenderToken,
-    actingUserId: getActorResponsibleUserId(defender)
+    actingUserId: getActorResponsibleUserId(defender),
+    abilityName: getAbilityDisplayName(entry.abilityItem)
   });
   await createAbilityChatMessage(
     defender,
     entry.abilityItem,
     moved
-      ? `Обезоруживание: ${defender.name} отнял ${weapon.name} у ${attacker.name}.`
-      : `Обезоруживание: ${defender.name} не смог разместить ${weapon.name}.`
+      ? `${defender.name} отнял ${weapon.name} у ${attacker.name}.`
+      : `${defender.name} не смог разместить ${weapon.name}.`
   );
   return {
     handled: true,
@@ -1571,7 +1582,7 @@ async function requestDisarmOperation(payload = {}) {
   if (game.user?.isGM) return processDisarmOperation(payload);
   const gm = getResponsibleGM();
   if (!gm) {
-    ui.notifications.warn("Обезоруживание: нет активного GM для выполнения.");
+    ui.notifications.warn("Нет активного GM для выполнения способности.");
     return false;
   }
   const requestId = foundry.utils.randomID();
@@ -1615,25 +1626,26 @@ async function processDisarmOperation(payload = {}) {
     .find(entry => entry.id === payload.abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm);
   const sender = game.users?.get(String(payload.senderUserId ?? ""));
   if (!actor || !targetTokenDocument?.actor || !actorTokenDocument || !abilityItem || !abilityFunction) return false;
+  const abilityName = getAbilityDisplayName(abilityItem);
   if (sender && !sender.isGM && !actor.testUserPermission(sender, "OWNER")) return false;
   if (!areTokensAdjacent(actorTokenDocument, targetTokenDocument)) return false;
 
   const settings = normalizeDisarmSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activeEnergyCost);
   if (!hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`Обезоруживание: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
     return false;
   }
   if (!canSpendCombatActionPoints(actor, settings.activeActionPointCost, { label: "обезоруживания" })) return false;
 
-  const sourceWeapon = await promptDisarmSourceWeapon(targetTokenDocument.actor, payload.senderUserId);
+  const sourceWeapon = await promptDisarmSourceWeapon(targetTokenDocument.actor, payload.senderUserId, abilityName);
   if (!sourceWeapon) return false;
   if (!isDisarmableWeapon(sourceWeapon)) return false;
 
   await spendEnergy(actor, energyCost);
   if (settings.activeActionPointCost > 0) await spendCombatActionPoints(actor, settings.activeActionPointCost);
   await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
-    name: "Перегрузка: Обезоруживание",
+    name: getAbilityOverloadName(abilityItem),
     energyCost: settings.activeOverloadEnergyCost,
     durationSeconds: settings.activeOverloadDurationSeconds
   });
@@ -1644,10 +1656,10 @@ async function processDisarmOperation(payload = {}) {
     actorToken: actorTokenDocument.object ?? actorTokenDocument,
     targetToken: targetTokenDocument.object ?? targetTokenDocument,
     difficultyBase: settings.activeDifficultyBase,
-    label: "Обезоруживание"
+    label: abilityName
   });
   if (!success) {
-    await createAbilityChatMessage(actor, abilityItem, `Обезоруживание: ${actor.name} не смог отнять ${sourceWeapon.name}.`);
+    await createAbilityChatMessage(actor, abilityItem, `${actor.name} не смог отнять ${sourceWeapon.name}.`);
     return true;
   }
 
@@ -1656,28 +1668,29 @@ async function processDisarmOperation(payload = {}) {
     targetActor: actor,
     sourceWeapon,
     targetToken: actorTokenDocument,
-    actingUserId: payload.senderUserId ?? getActorResponsibleUserId(actor)
+    actingUserId: payload.senderUserId ?? getActorResponsibleUserId(actor),
+    abilityName
   });
   await createAbilityChatMessage(
     actor,
     abilityItem,
     moved
-      ? `Обезоруживание: ${actor.name} отнял ${sourceWeapon.name} у ${targetTokenDocument.actor.name}.`
-      : `Обезоруживание: ${actor.name} не смог разместить ${sourceWeapon.name}.`
+      ? `${actor.name} отнял ${sourceWeapon.name} у ${targetTokenDocument.actor.name}.`
+      : `${actor.name} не смог разместить ${sourceWeapon.name}.`
   );
   return true;
 }
 
-async function promptDisarmSourceWeapon(actor, userId = "") {
+async function promptDisarmSourceWeapon(actor, userId = "", abilityName = "Способность") {
   const weapons = getDisarmableWeapons(actor);
   if (!weapons.length) {
-    ui.notifications.warn("Обезоруживание: у цели нет оружия, которое можно отнять.");
+    ui.notifications.warn(`${abilityName}: у цели нет оружия, которое можно отнять.`);
     return null;
   }
   if (weapons.length === 1) return weapons[0];
   const result = await queryDisarmUser(userId, {
     mode: "sourceWeapon",
-    title: "Обезоруживание: выбор оружия",
+    title: `${abilityName}: выбор оружия`,
     weapons: weapons.map(weapon => ({
       id: weapon.id,
       name: weapon.name,
@@ -1687,10 +1700,10 @@ async function promptDisarmSourceWeapon(actor, userId = "") {
   return actor.items?.get(String(result?.weaponId ?? "")) ?? null;
 }
 
-async function promptDisarmDestination(actor, sourceWeapon, userId = "") {
+async function promptDisarmDestination(actor, sourceWeapon, userId = "", abilityName = "Способность") {
   return queryDisarmUser(userId || getActorResponsibleUserId(actor), {
     mode: "destination",
-    title: "Обезоруживание: размещение оружия",
+    title: `${abilityName}: размещение оружия`,
     weaponName: sourceWeapon?.name ?? "",
     weaponImg: normalizeImagePath(sourceWeapon?.img, "icons/svg/combat.svg")
   });
@@ -1719,7 +1732,7 @@ async function handleDisarmQuery(data = {}) {
       </label>
     `).join("");
     return DialogV2.input({
-      window: { title: String(data.title ?? "Обезоруживание") },
+      window: { title: String(data.title ?? "Способность") },
       content: `<div class="fallout-maw-disarm-choice-grid">${options}</div>`,
       ok: {
         label: "Выбрать",
@@ -1733,7 +1746,7 @@ async function handleDisarmQuery(data = {}) {
   }
   if (mode === "destination") {
     return DialogV2.input({
-      window: { title: String(data.title ?? "Обезоруживание") },
+      window: { title: String(data.title ?? "Способность") },
       content: `
         <div class="fallout-maw-disarm-destination">
           <p>Куда поместить <strong>${escapeHTML(data.weaponName)}</strong>?</p>
@@ -1764,7 +1777,7 @@ async function handleDisarmQuery(data = {}) {
   return null;
 }
 
-async function rollDisarmCheck({ actor, targetActor, actorToken = null, targetToken = null, difficultyBase = 0, label = "Обезоруживание" } = {}) {
+async function rollDisarmCheck({ actor, targetActor, actorToken = null, targetToken = null, difficultyBase = 0, label = "Способность" } = {}) {
   const outcome = await requestSkillCheck({
     actor,
     skillKey: "athletics",
@@ -1783,9 +1796,9 @@ async function rollDisarmCheck({ actor, targetActor, actorToken = null, targetTo
   return ["success", "criticalSuccess"].includes(String(outcome?.result?.key ?? ""));
 }
 
-async function moveDisarmedWeapon({ sourceActor, targetActor, sourceWeapon, targetToken = null, actingUserId = "" } = {}) {
+async function moveDisarmedWeapon({ sourceActor, targetActor, sourceWeapon, targetToken = null, actingUserId = "", abilityName = "Способность" } = {}) {
   if (!sourceActor || !targetActor || !sourceWeapon) return false;
-  const destination = await promptDisarmDestination(targetActor, sourceWeapon, actingUserId);
+  const destination = await promptDisarmDestination(targetActor, sourceWeapon, actingUserId, abilityName);
   const requested = String(destination?.destination ?? "drop");
   if (requested === "drop") return dropDisarmedWeaponOnGround({ sourceActor, sourceWeapon, targetToken });
   const attempts = requested === "replace"
@@ -1796,7 +1809,7 @@ async function moveDisarmedWeapon({ sourceActor, targetActor, sourceWeapon, targ
     const moved = await tryTransferDisarmedWeapon({ sourceActor, targetActor, sourceWeapon, placement });
     if (moved) return true;
   }
-  ui.notifications.warn(`Обезоруживание: не удалось разместить ${sourceWeapon.name} у ${targetActor.name}.`);
+  ui.notifications.warn(`${abilityName}: не удалось разместить ${sourceWeapon.name} у ${targetActor.name}.`);
   return false;
 }
 
@@ -2121,7 +2134,8 @@ function hasPendingLuckyCoinEffect(actor) {
   )).length > 0;
 }
 
-async function promptLuckyCoinSkill(actor) {
+async function promptLuckyCoinSkill(actor, abilityItem) {
+  const abilityName = getAbilityDisplayName(abilityItem);
   const skills = getSkillSettings()
     .filter(skill => actor.system?.skills?.[skill.key])
     .map(skill => ({
@@ -2130,7 +2144,7 @@ async function promptLuckyCoinSkill(actor) {
     }))
     .filter(skill => skill.key);
   if (!skills.length) {
-    ui.notifications.warn("Счастливая монетка: у персонажа нет доступных навыков.");
+    ui.notifications.warn(`${abilityName}: у персонажа нет доступных навыков.`);
     return null;
   }
 
@@ -2141,7 +2155,7 @@ async function promptLuckyCoinSkill(actor) {
     </label>
   `).join("");
   const formData = await DialogV2.input({
-    window: { title: "Счастливая монетка: выбор навыка" },
+    window: { title: `${abilityName}: выбор навыка` },
     content: `<div class="fallout-maw-lucky-coin-skill-grid">${options}</div>`,
     ok: {
       label: "Подбросить",
@@ -2160,7 +2174,7 @@ async function createLuckyCoinEffect(actor, abilityItem, abilityFunction, skill,
   const createdAt = Number(game.time?.worldTime) || 0;
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
-    name: `Счастливая монетка: ${skill.label}`,
+    name: `${getAbilityDisplayName(abilityItem)}: ${skill.label}`,
     img: abilityItem.img || "icons/svg/aura.svg",
     origin: abilityItem.uuid,
     transfer: false,
@@ -2195,6 +2209,7 @@ async function createLuckyCoinEffect(actor, abilityItem, abilityFunction, skill,
 }
 
 async function toggleCurseAndBlessing(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeCurseAndBlessingSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   settings.energyCost = energyCost;
@@ -2202,7 +2217,7 @@ async function toggleCurseAndBlessing(actor, abilityItem, abilityFunction) {
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   const nextActive = !Boolean(state[stateKey]?.active);
   if (nextActive && !hasCurseAndBlessingEnergy(actor, energyCost)) {
-    ui.notifications.warn(`Порча и благословение: недостаточно энергии (${getActorEnergy(actor)} / ${settings.energyCost}).`);
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${settings.energyCost}).`);
     return false;
   }
   state[stateKey] = {
@@ -2211,18 +2226,19 @@ async function toggleCurseAndBlessing(actor, abilityItem, abilityFunction) {
     active: nextActive
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  ui.notifications.info(`Порча и благословение: ${nextActive ? "включено" : "выключено"}.`);
+  ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
   return true;
 }
 
 async function toggleDoubleAttack(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeDoubleAttackSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(settings.duplicateCount));
   const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   const nextActive = !Boolean(state[stateKey]?.active);
   if (nextActive && !hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`Двоечка: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
     return false;
   }
   state[stateKey] = {
@@ -2231,18 +2247,19 @@ async function toggleDoubleAttack(actor, abilityItem, abilityFunction) {
     active: nextActive
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  ui.notifications.info(`Двоечка: ${nextActive ? "включено" : "выключено"}.`);
+  ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
   return true;
 }
 
 async function toggleFullForce(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeFullForceSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   const nextActive = !Boolean(state[stateKey]?.active);
   if (nextActive && !hasEnergy(actor, energyCost)) {
-    ui.notifications.warn(`Со всей мощи: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
     return false;
   }
   state[stateKey] = {
@@ -2251,7 +2268,7 @@ async function toggleFullForce(actor, abilityItem, abilityFunction) {
     active: nextActive
   };
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  ui.notifications.info(`Со всей мощи: ${nextActive ? "включено" : "выключено"}.`);
+  ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
   return true;
 }
 
@@ -2272,7 +2289,7 @@ function requestDoubleAttackDuplicate(context = {}) {
       const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * duplicateCount;
       context.addDuplicateRequest({
         source: "doubleAttack",
-        label: "Двоечка",
+        label: getAbilityDisplayName(abilityItem),
         count: duplicateCount,
         onBeforeDuplicate: async () => spendDoubleAttackEnergy(actor, abilityItem, abilityFunction, energyCost)
       });
@@ -2297,11 +2314,11 @@ function requestFullForceWeaponActionModifiers(context = {}) {
       context.modifierState.multiplyResourceCost("condition", settings.conditionCostMultiplier);
       context.modifierState.addSpendRequirement({
         source: "fullForce",
-        label: "Со всей мощи",
+        label: getAbilityDisplayName(abilityItem),
         canSpend: ({ attackCount = 1 } = {}) => {
           const cost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(attackCount));
           if (hasEnergy(actor, cost)) return true;
-          ui.notifications.warn(`Со всей мощи: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
+          ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
           return false;
         },
         spend: async ({ attackCount = 1 } = {}) => {
@@ -2406,7 +2423,7 @@ async function processCurseAndBlessingActorFunctions({ owner = null, effectTarge
       const chance = Math.min(100, evaluateActorFormula(settings.triggerFormula, owner, {
         fallback: 0,
         minimum: 0,
-        context: "Порча и благословение"
+        context: getAbilityDisplayName(abilityItem)
       }));
       for (const target of targets) {
         if ((Math.floor(Math.random() * 100) + 1) > chance) continue;
@@ -2424,7 +2441,7 @@ async function spendCurseAndBlessingEnergy(actor, abilityItem, abilityFunction, 
   const cost = Math.max(0, toInteger(energyCost));
   if (!hasCurseAndBlessingEnergy(actor, cost)) {
     await deactivateFixedAbilityFunction(abilityItem, abilityFunction);
-    await createAbilityChatMessage(actor, abilityItem, `Порча и благословение выключено: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
+    await createAbilityChatMessage(actor, abilityItem, `Выключено: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
     return false;
   }
   if (!cost) return true;
@@ -2444,7 +2461,7 @@ async function spendDoubleAttackEnergy(actor, abilityItem, abilityFunction, ener
   const cost = Math.max(0, toInteger(energyCost));
   if (!hasEnergy(actor, cost)) {
     await deactivateFixedAbilityFunction(abilityItem, abilityFunction);
-    await createAbilityChatMessage(actor, abilityItem, `Двоечка выключена: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
+    await createAbilityChatMessage(actor, abilityItem, `Выключено: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
     return false;
   }
   if (!cost) return true;
@@ -2464,7 +2481,7 @@ async function spendFullForceEnergy(actor, abilityItem, abilityFunction, energyC
   const cost = Math.max(0, toInteger(energyCost));
   if (!hasEnergy(actor, cost)) {
     await deactivateFixedAbilityFunction(abilityItem, abilityFunction);
-    await createAbilityChatMessage(actor, abilityItem, `Со всей мощи выключено: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
+    await createAbilityChatMessage(actor, abilityItem, `Выключено: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
     return false;
   }
   return spendEnergy(actor, cost);
@@ -2657,7 +2674,7 @@ async function applyRageEffect(actor, abilityItem, abilityFunction, settings = {
 
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
-    name: "Ярость",
+    name: getAbilityDisplayName(abilityItem),
     img: abilityItem.img || "icons/svg/explosion.svg",
     origin: abilityItem.uuid,
     transfer: false,
@@ -2707,7 +2724,7 @@ async function applyAllOrNothingResultEffect(actor, abilityItem, abilityFunction
   const chance = Math.min(100, Math.max(0, evaluateActorFormula(settings.chanceFormula ?? "50 + gambling/10", actor, {
     fallback: 0,
     minimum: 0,
-    context: "Все или ничего"
+    context: getAbilityDisplayName(abilityItem)
   })));
   const result = (Math.floor(Math.random() * 100) + 1) <= chance
     ? "criticalSuccess"
@@ -2715,7 +2732,7 @@ async function applyAllOrNothingResultEffect(actor, abilityItem, abilityFunction
   const effectKey = SMART_FUDGE_RESULT_EFFECT_KEYS[result];
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
-    name: "Все или ничего",
+    name: getAbilityDisplayName(abilityItem),
     img: abilityItem.img || "icons/svg/aura.svg",
     origin: abilityItem.uuid,
     transfer: false,
@@ -2777,17 +2794,17 @@ async function processReaperAttackResolution(context = {}) {
       .find(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reaper);
     if (!abilityFunction) continue;
     const settings = normalizeReaperSettings(abilityFunction.fixedSettings);
-    const restored = killed && rollReaperChance(actor, settings.killChanceFormula, "Жнец: убийство")
+    const restored = killed && rollReaperChance(actor, settings.killChanceFormula, `${getAbilityDisplayName(abilityItem)}: убийство`)
       ? await restoreReaperActionPoints(actor, actionPointCost)
       : 0;
     if (restored > 0) {
-      await createAbilityChatMessage(actor, abilityItem, `Жнец: восстановлено ${restored} ОД за убийство.`);
+      await createAbilityChatMessage(actor, abilityItem, `Восстановлено ${restored} ОД за убийство.`);
       return;
     }
-    if (!rollReaperChance(actor, settings.attackChanceFormula, "Жнец: атака")) continue;
+    if (!rollReaperChance(actor, settings.attackChanceFormula, `${getAbilityDisplayName(abilityItem)}: атака`)) continue;
     const attackRestored = await restoreReaperActionPoints(actor, actionPointCost);
     if (attackRestored > 0) {
-      await createAbilityChatMessage(actor, abilityItem, `Жнец: восстановлено ${attackRestored} ОД за атаку.`);
+      await createAbilityChatMessage(actor, abilityItem, `Восстановлено ${attackRestored} ОД за атаку.`);
       return;
     }
   }
@@ -2805,11 +2822,11 @@ async function processAtRandomAttackResolution(context = {}) {
   if (!ATTACKING_WEAPON_ACTION_KEYS.includes(actionKey)) return;
 
   const blockedActionKeys = new Set();
-  if (rollAtRandomChance(actor, entry.settings.blockChanceFormula, "На обум: текущее действие")) {
+  if (rollAtRandomChance(actor, entry.settings.blockChanceFormula, `${getAbilityDisplayName(entry.abilityItem)}: текущее действие`)) {
     blockedActionKeys.add(actionKey);
   }
 
-  if (rollAtRandomChance(actor, entry.settings.extraBlockChanceFormula, "На обум: случайное действие")) {
+  if (rollAtRandomChance(actor, entry.settings.extraBlockChanceFormula, `${getAbilityDisplayName(entry.abilityItem)}: случайное действие`)) {
     const candidates = getAtRandomExtraActionCandidates(actionKey);
     if (candidates.length) {
       blockedActionKeys.add(candidates[Math.floor(Math.random() * candidates.length)]);
@@ -2869,7 +2886,7 @@ async function createDefensiveTacticsEffect(actor, abilityItem, abilityFunction,
 
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
-    name: "Оборонительная тактика",
+    name: getAbilityDisplayName(abilityItem),
     img: abilityItem?.img || "icons/svg/shield.svg",
     origin: abilityItem?.uuid ?? actor.uuid,
     transfer: false,
@@ -2918,7 +2935,7 @@ async function processLastChanceLethalDamage({ actor = null, amount = 0 } = {}) 
 
   try {
     await applyAbilityOverloadEffect(actor, entry.abilityItem, entry.abilityFunction, {
-      name: "Перегрузка: Последний шанс",
+      name: getAbilityOverloadName(entry.abilityItem),
       energyCost: entry.settings.overloadEnergyCost,
       durationSeconds: entry.settings.overloadDurationSeconds
     });
@@ -2928,7 +2945,7 @@ async function processLastChanceLethalDamage({ actor = null, amount = 0 } = {}) 
   const chance = Math.min(100, Math.max(0, evaluateActorFormula(entry.settings.chanceFormula, actor, {
     fallback: 0,
     minimum: 0,
-    context: "Последний шанс"
+    context: getAbilityDisplayName(entry.abilityItem)
   })));
   const prevented = (Math.floor(Math.random() * 100) + 1) <= chance;
   try {
@@ -2965,16 +2982,16 @@ async function createLastChanceChatMessage(actor, abilityItem, { prevented = fal
       img: actor.img || "icons/svg/mystery-man.svg"
     },
     ability: {
-      name: abilityItem?.name || "Последний шанс",
+      name: getAbilityDisplayName(abilityItem),
       img: abilityItem?.img || "icons/svg/aura.svg"
     },
     prevented,
     damage: Math.max(0, toInteger(damage)),
     energyCost: Math.max(0, toInteger(energyCost)),
     labels: {
-      title: "Последний шанс",
+      title: getAbilityDisplayName(abilityItem),
       success: "Смертельный урон отменён",
-      failure: "Последний шанс не сработал",
+      failure: `${getAbilityDisplayName(abilityItem)} не сработал`,
       energy: "Потрачено энергии",
       damage: prevented ? "Отменено урона" : "Смертельный урон"
     }
@@ -3017,7 +3034,7 @@ function getAtRandomExtraActionCandidates(currentActionKey = "") {
   return ATTACKING_WEAPON_ACTION_KEYS.filter(actionKey => actionKey !== current);
 }
 
-function rollAtRandomChance(actor, formula = "", context = "На обум") {
+function rollAtRandomChance(actor, formula = "", context = "Способность") {
   const chance = Math.min(100, Math.max(0, evaluateActorFormula(formula, actor, {
     fallback: 0,
     minimum: 0,
@@ -3041,7 +3058,7 @@ async function replaceAtRandomActionBlockEffect(actor, abilityItem, abilityFunct
   if (!uniqueActionKeys.length) return;
 
   await actor.createEmbeddedDocuments("ActiveEffect", [{
-    name: "На обум",
+    name: getAbilityDisplayName(abilityItem),
     img: abilityItem.img,
     transfer: false,
     disabled: false,
@@ -3068,7 +3085,7 @@ async function replaceAtRandomActionBlockEffect(actor, abilityItem, abilityFunct
   }], { animate: false });
 }
 
-function rollReaperChance(actor, formula = "", context = "Жнец") {
+function rollReaperChance(actor, formula = "", context = "Способность") {
   const chance = Math.min(100, Math.max(0, evaluateActorFormula(formula, actor, {
     fallback: 0,
     minimum: 0,
@@ -3243,40 +3260,41 @@ async function advanceDeusExMachinaProgress(actor, abilityItem, damage = 0) {
       readyNotified: Boolean(current.readyNotified) || ready
     };
     changed = true;
-    if (ready && !current.readyNotified) readyMessages.push(getFixedAbilityFunctionLabel(entry.fixedKey));
+    if (ready && !current.readyNotified) readyMessages.push(getAbilityDisplayName(abilityItem));
   }
 
   if (changed) await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
-  for (const label of readyMessages) {
-    await createAbilityChatMessage(actor, abilityItem, `${label}: накопление завершено. Способность готова к применению.`);
+  for (const _label of readyMessages) {
+    await createAbilityChatMessage(actor, abilityItem, "Накопление завершено. Способность готова к применению.");
   }
 }
 
 async function useDeusExMachina(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeDeusExMachinaSettings(abilityFunction.fixedSettings);
   const state = getFixedAbilityState(abilityItem);
   const stateKey = getFixedFunctionStateKey(abilityFunction);
   const progress = Math.max(0, toInteger(state[stateKey]?.damage));
   if (progress < settings.damageRequired) {
-    ui.notifications.warn(`Бог из машины: накоплено ${progress} / ${settings.damageRequired}.`);
+    ui.notifications.warn(`${abilityName}: накоплено ${progress} / ${settings.damageRequired}.`);
     return false;
   }
 
-  const choice = await requestDeusExMachinaChoice(actor, settings);
+  const choice = await requestDeusExMachinaChoice(actor, settings, abilityItem);
   if (!choice) return false;
 
   let applied = false;
   if (choice === "insight") applied = await applyDeusExMachinaInsight(actor, abilityItem, abilityFunction, settings);
-  else if (choice === "disintegrate") applied = await applyDeusExMachinaDisintegrate(actor, settings);
-  else if (choice === "luckyFind") applied = await applyDeusExMachinaLuckyFind(actor, settings);
-  else if (choice === "rescue") applied = await applyDeusExMachinaRescue(actor, settings);
+  else if (choice === "disintegrate") applied = await applyDeusExMachinaDisintegrate(actor, settings, abilityItem);
+  else if (choice === "luckyFind") applied = await applyDeusExMachinaLuckyFind(actor, settings, abilityItem);
+  else if (choice === "rescue") applied = await applyDeusExMachinaRescue(actor, settings, abilityItem);
 
   if (!applied) return false;
   await resetFixedFunctionProgress(abilityItem, abilityFunction);
   return true;
 }
 
-async function requestDeusExMachinaChoice(actor, settings) {
+async function requestDeusExMachinaChoice(actor, settings, abilityItem) {
   const insightActive = hasDeusExMachinaInsightEffect(actor);
   const targets = Array.from(game.user?.targets ?? []).filter(token => token?.actor);
   const canDisintegrate = targets.length === 1;
@@ -3328,7 +3346,7 @@ async function requestDeusExMachinaChoice(actor, settings) {
   let formData;
   try {
     formData = await DialogV2.input({
-      window: { title: "Бог из машины" },
+      window: { title: getAbilityDisplayName(abilityItem) },
       content,
       ok: {
         label: "Применить",
@@ -3404,7 +3422,7 @@ async function applyDeusExMachinaInsight(actor, abilityItem, abilityFunction, se
   const startTime = Number(game.time?.worldTime) || 0;
   await actor.createEmbeddedDocuments("ActiveEffect", [{
     type: "base",
-    name: "Прозрение",
+    name: getAbilityDisplayName(abilityItem),
     img: abilityItem.img || "icons/svg/aura.svg",
     origin: abilityItem.uuid,
     transfer: false,
@@ -3427,11 +3445,11 @@ async function applyDeusExMachinaInsight(actor, abilityItem, abilityFunction, se
       }
     }
   }], { animate: false });
-  await createAbilityChatMessage(actor, abilityItem, "Бог из машины: Прозрение применено.");
+  await createAbilityChatMessage(actor, abilityItem, "Прозрение применено.");
   return true;
 }
 
-async function applyDeusExMachinaDisintegrate(actor, settings) {
+async function applyDeusExMachinaDisintegrate(actor, settings, abilityItem) {
   const targets = Array.from(game.user?.targets ?? []).filter(token => token?.actor);
   if (targets.length !== 1) {
     ui.notifications.warn("Для Забавного случая нужна ровно одна цель.");
@@ -3447,11 +3465,11 @@ async function applyDeusExMachinaDisintegrate(actor, settings) {
   for (const limbKey of criticalLimbKeys) await setLimbMissingState(targetActor, limbKey, { syncStatus: false });
   await applyDestroyedLimbConsequences(targetActor, criticalLimbKeys);
   await destroyTargetPossessions(targetActor, settings.disintegrate.destroyPercent);
-  await createAbilityChatMessage(actor, null, `Бог из машины: цель ${targetActor.name} постиг забавный случай.`);
+  await createAbilityChatMessage(actor, abilityItem, `Цель ${targetActor.name} постиг забавный случай.`);
   return true;
 }
 
-async function applyDeusExMachinaLuckyFind(actor, settings) {
+async function applyDeusExMachinaLuckyFind(actor, settings, abilityItem) {
   const min = Math.min(settings.luckyFind.valueMin, settings.luckyFind.valueMax);
   const max = Math.max(settings.luckyFind.valueMin, settings.luckyFind.valueMax);
   const totalValue = min + Math.floor(Math.random() * ((max - min) + 1));
@@ -3466,11 +3484,11 @@ async function applyDeusExMachinaLuckyFind(actor, settings) {
     update[`system.currencies.${award.key}`] = Math.max(0, toInteger(actor.system?.currencies?.[award.key])) + award.amount;
   }
   await actor.update(update);
-  await createAbilityChatMessage(actor, null, `Бог из машины: найдена валюта общей ценностью ${totalValue}.`);
+  await createAbilityChatMessage(actor, abilityItem, `Найдена валюта общей ценностью ${totalValue}.`);
   return true;
 }
 
-async function applyDeusExMachinaRescue(actor, settings) {
+async function applyDeusExMachinaRescue(actor, settings, abilityItem) {
   if (!isActorDeadForDeusExMachina(actor)) {
     ui.notifications.warn("Чудесное спасение доступно только если владелец мертв.");
     return false;
@@ -3487,7 +3505,7 @@ async function applyDeusExMachinaRescue(actor, settings) {
   if (toInteger(health?.value) <= min) {
     await actor.update({ "system.resources.health.value": min + 1 });
   }
-  await createAbilityChatMessage(actor, null, "Бог из машины: Чудесное спасение применено.");
+  await createAbilityChatMessage(actor, abilityItem, "Чудесное спасение применено.");
   return true;
 }
 
@@ -3607,9 +3625,17 @@ function formatDuration(seconds = 0) {
 async function createAbilityChatMessage(actor, item, message = "") {
   return ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),
-    content: `<p><strong>${escapeHTML(item?.name ?? "Бог из машины")}</strong></p><p>${escapeHTML(message)}</p>`,
+    content: `<p><strong>${escapeHTML(getAbilityDisplayName(item))}</strong></p><p>${escapeHTML(message)}</p>`,
     sound: null
   });
+}
+
+function getAbilityDisplayName(item) {
+  return String(item?.name ?? "").trim() || "Способность";
+}
+
+function getAbilityOverloadName(item) {
+  return `Перегрузка: ${getAbilityDisplayName(item)}`;
 }
 
 function escapeHTML(value) {
