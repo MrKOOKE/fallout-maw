@@ -28,6 +28,7 @@ import {
   normalizeDefensiveTacticsSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
+  normalizeKeepAwaySettings,
   normalizeLungeSettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
@@ -724,6 +725,15 @@ function readFixedFunctionSettings(row) {
       innateDifficultyIgnorePercent: row.querySelector("[data-field='fixed.aiming.innateDifficultyIgnorePercent']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {
+    return {
+      activationEnergyCost: row.querySelector("[data-field='fixed.keepAway.activationEnergyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.keepAway.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: row.querySelector("[data-field='fixed.keepAway.overloadDurationSeconds']")?.value,
+      baseDifficulty: row.querySelector("[data-field='fixed.keepAway.baseDifficulty']")?.value,
+      lostHealthPercentMultiplier: row.querySelector("[data-field='fixed.keepAway.lostHealthPercentMultiplier']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover) {
     return {
       currentCharges: row.querySelector("[data-field='fixed.fourLeafClover.currentCharges']")?.value,
@@ -987,6 +997,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedAimingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming
     ? normalizeAimingSettings(normalized.fixedSettings)
     : null;
+  const fixedKeepAwaySettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway
+    ? normalizeKeepAwaySettings(normalized.fixedSettings)
+    : null;
   const fixedFourLeafCloverSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover
     ? prepareFourLeafCloverSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -1044,6 +1057,7 @@ function prepareFunctionForDisplay(entry) {
     fixedReaperSettings,
     fixedVirtuosoSettings,
     fixedAimingSettings,
+    fixedKeepAwaySettings,
     fixedFourLeafCloverSettings,
     fixedAtRandomSettings,
     fixedDefensiveTacticsSettings,

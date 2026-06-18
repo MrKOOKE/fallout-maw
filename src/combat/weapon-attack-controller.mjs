@@ -26,7 +26,7 @@ import {
   getWeaponActionBlockState
 } from "../abilities/runtime-state.mjs";
 import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
-import { requestPushKnockback } from "./active-actions.mjs";
+import { getKnockbackMaximumStrength, resolveKnockback } from "./active-actions.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import {
@@ -414,6 +414,7 @@ class WeaponAttackController {
     this.hoveredLimbKey = "";
     this.selectedLimbKey = "";
     this.lockedGeometry = null;
+    this.pushStrengthMaximum = 0;
     this.limbMenu = null;
     this.chanceMenu = null;
     this.suppressNextContextMenu = false;
@@ -458,7 +459,7 @@ class WeaponAttackController {
     getAttackPreviewLayer().addChild(this.container);
   }
 
-  notifyAttackResolved({ attempted = true, killedTargetUuids = [] } = {}) {
+  notifyAttackResolved({ attempted = true, killedTargetUuids = [], damageResults = [] } = {}) {
     if (!attempted) return;
     const actionPointCost = isCombatActionPointSpendingActive()
       ? getWeaponActionPointCost(this.token?.actor, this.weapon, this.actionKey, this.weaponFunctionId)
@@ -477,6 +478,8 @@ class WeaponAttackController {
       killedTargetUuids: Array.from(new Set((killedTargetUuids ?? []).map(uuid => String(uuid ?? "").trim()).filter(Boolean))),
       canceledByReaction: Boolean(this.attackCanceledByReaction),
       attackCheckCount: Math.max(0, toInteger(this.attackCheckCount)),
+      damageResults: Array.isArray(damageResults) ? damageResults : [],
+      modifierState: this.getWeaponActionModifierState(),
       senderUserId: game.user?.id ?? ""
     });
   }
@@ -799,6 +802,10 @@ class WeaponAttackController {
   onMove(event) {
     if (this.processing || isReactionSystemLocked()) return;
     event.stopPropagation();
+    if (this.pushStrengthMaximum > 0) {
+      this.refreshPushStrengthMenu();
+      return;
+    }
     if (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)) {
       this.refreshAimedLimbMenu();
       return;
@@ -823,9 +830,14 @@ class WeaponAttackController {
     event.stopPropagation();
     event.stopImmediatePropagation?.();
     event.cancelBubble = true;
+    if (event.button === 0 && this.pushStrengthMaximum > 0) return false;
     this.updatePointerFromClientEvent(event);
     if (event.button === 2) {
       this.suppressNextContextMenu = true;
+      if (this.pushStrengthMaximum > 0) {
+        this.cancelPushStrengthSelection();
+        return false;
+      }
       if (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)) {
         this.unlockAimedTarget();
         return false;
@@ -851,6 +863,13 @@ class WeaponAttackController {
     const directionButton = event.target?.closest?.("[data-attack-direction]");
     if (directionButton && this.aimedMode === "direction") {
       void this.performDirectedAttack(directionButton.dataset.attackDirection ?? "");
+      return true;
+    }
+
+    const strengthButton = event.target?.closest?.("[data-push-strength]");
+    if (strengthButton && this.pushStrengthMaximum > 0) {
+      const strength = Math.max(1, Math.min(this.pushStrengthMaximum, toInteger(strengthButton.dataset.pushStrength)));
+      void this.performPushAttack(strength);
       return true;
     }
 
@@ -883,6 +902,10 @@ class WeaponAttackController {
       this.suppressNextContextMenu = false;
       return false;
     }
+    if (this.pushStrengthMaximum > 0) {
+      this.cancelPushStrengthSelection();
+      return false;
+    }
     if (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)) {
       this.unlockAimedTarget();
       return false;
@@ -908,7 +931,7 @@ class WeaponAttackController {
     if (this.targetedAction) return this.onAimedConfirm();
     if (!this.pointer) return;
     if (isWhirlwindAttackModifier(this.attackModifier)) return this.performWhirlwindAttack();
-    if (this.actionKey === PUSH_ACTION_KEY) return this.performPushAttack();
+    if (this.actionKey === PUSH_ACTION_KEY) return this.preparePushAttack();
     if (this.volleyAction) return this.performVolleyAttack();
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     const pelletCount = getWeaponPelletCount(this.weapon, this.weaponFunctionId);
@@ -973,7 +996,7 @@ class WeaponAttackController {
     if (damageRequests.length) {
       damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
     }
-    this.notifyAttackResolved({ attempted, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
+    this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
   }
 
@@ -1071,7 +1094,7 @@ class WeaponAttackController {
     }
     if (damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
-    this.notifyAttackResolved({ attempted, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
+    this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
   }
 
@@ -1144,16 +1167,48 @@ class WeaponAttackController {
     }
     if (damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
-    this.notifyAttackResolved({ attempted, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
+    this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
   }
 
-  async performPushAttack() {
+  preparePushAttack() {
+    if (this.processing || this.pushStrengthMaximum > 0 || !this.geometry) return;
+    if (!this.hasRequiredWeaponResources(1)) return;
+    if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
+    if (!getPotentialTargets(this.token, this.geometry).length) {
+      ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Settings.HUD.NoPushTargets"));
+      return;
+    }
+    const maximumStrength = getKnockbackMaximumStrength(this.getPushDifficulty());
+    if (maximumStrength <= 1) return this.performPushAttack(1);
+    this.lockedGeometry = serializeGeometry(this.geometry);
+    this.pushStrengthMaximum = maximumStrength;
+    this.removeChanceMenu();
+    this.refresh(true);
+    this.refreshPushStrengthMenu();
+  }
+
+  cancelPushStrengthSelection() {
+    this.pushStrengthMaximum = 0;
+    this.lockedGeometry = null;
+    this.hoveredLimbKey = "";
+    this.removeLimbMenu();
+    this.refresh(true);
+  }
+
+  getPushDifficulty() {
+    return 50 + getActorSkillValue(this.token.actor, "ath")
+      + getWeaponPushDifficultyModifier(this.weapon, this.weaponFunctionId);
+  }
+
+  async performPushAttack(selectedStrength = 1) {
     if (this.processing || !this.geometry) return;
     if (!this.hasRequiredWeaponResources(1)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
 
     this.processing = true;
+    this.pushStrengthMaximum = 0;
+    this.removeLimbMenu();
     this.pendingCriticalFailureResourceCosts = [];
     this.refresh(true);
 
@@ -1184,10 +1239,18 @@ class WeaponAttackController {
     await this.dodgeExposure.flush();
     await checkBatch.publish({ forceBatch: forceBatchCheckMessage });
 
-    const knockbackTargets = [];
-    for (const target of hitTargets) {
-      const resisted = await this.resolvePushResistance(target);
-      if (!resisted) knockbackTargets.push(target);
+    const pushDifficulty = this.getPushDifficulty();
+    if (selectedStrength > 0) {
+      for (const target of hitTargets) {
+        await resolveKnockback({
+          attackerToken: this.token,
+          targetToken: target,
+          difficulty: pushDifficulty,
+          maximumStrength: selectedStrength,
+          reason: this.weapon.name,
+          requester: "weaponPushResistance"
+        });
+      }
     }
 
     if (attempted) {
@@ -1205,10 +1268,6 @@ class WeaponAttackController {
         delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
       });
     }
-    for (const target of knockbackTargets) {
-      await requestPushKnockback({ attackerToken: this.token, targetToken: target, reason: this.weapon.name });
-    }
-
     this.completeProcessingCycle();
   }
 
@@ -1238,23 +1297,6 @@ class WeaponAttackController {
       attempted: true,
       success: isSuccessfulAttack(outcome)
     };
-  }
-
-  async resolvePushResistance(target) {
-    const outcome = await requestSkillCheck({
-      actor: target.actor,
-      skillKey: resolveSkillKey(target.actor, "prc"),
-      data: {
-        difficulty: 50 + getActorSkillValue(this.token.actor, "ath") + getWeaponPushDifficultyModifier(this.weapon, this.weaponFunctionId),
-        actorToken: target,
-        targetToken: this.token
-      },
-      animate: false,
-      createMessage: true,
-      prompt: false,
-      requester: "weaponPushResistance"
-    });
-    return isSuccessfulAttack(outcome);
   }
 
   async performBurstAttack({ attackCount = 1, pelletCount = 1 } = {}) {
@@ -1334,7 +1376,7 @@ class WeaponAttackController {
     if (damageRequests.length) {
       damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
     }
-    this.notifyAttackResolved({ attempted, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
+    this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
   }
 
@@ -1425,7 +1467,7 @@ class WeaponAttackController {
     }
     if (damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
-    this.notifyAttackResolved({ killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
+    this.notifyAttackResolved({ damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
   }
 
@@ -1521,7 +1563,7 @@ class WeaponAttackController {
     }
     if (damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
-    this.notifyAttackResolved({ attempted, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
+    this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
   }
 
@@ -2010,7 +2052,7 @@ class WeaponAttackController {
     if (playEffects) await this.playVolleyAttackEffects(finalGeometries);
     const damageResults = flattenDamageResults(await applyQueuedDamageAndRegionRequests(damageRequests, regionRequests));
 
-    this.notifyAttackResolved({ killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
+    this.notifyAttackResolved({ damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
   }
 
@@ -2276,7 +2318,9 @@ class WeaponAttackController {
     }
 
     const origin = this.getAttackOrigin();
-    this.geometry = this.targetedAction && ["limb", "direction"].includes(this.aimedMode)
+    this.geometry = this.pushStrengthMaximum > 0
+      ? deserializeGeometry(this.lockedGeometry)
+      : this.targetedAction && ["limb", "direction"].includes(this.aimedMode)
       ? deserializeGeometry(this.lockedGeometry)
       : this.getAttackGeometry(origin);
     if (!this.geometry) return;
@@ -2312,7 +2356,7 @@ class WeaponAttackController {
       ? getAimedTargetUnderPointer(this.pointer, this.targets)
       : this.selectedTarget;
     drawAttackShape(this.shape, this.geometry, {
-      locked: this.processing || (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)),
+      locked: this.processing || this.pushStrengthMaximum > 0 || (this.targetedAction && ["limb", "direction"].includes(this.aimedMode)),
       hasTargets: this.targets.length > 0
     });
     const markerPreview = this.getTargetMarkerPreview(forceBroadcast || this.processing);
@@ -2320,7 +2364,10 @@ class WeaponAttackController {
       force: forceBroadcast || this.processing,
       time: performance.now()
     });
-    if (this.targetedAction) {
+    if (this.pushStrengthMaximum > 0) {
+      this.removeChanceMenu();
+      this.refreshPushStrengthMenu();
+    } else if (this.targetedAction) {
       this.removeChanceMenu();
       this.refreshAimedLimbMenu();
     } else {
@@ -2500,7 +2547,7 @@ class WeaponAttackController {
   updatePointerFromClientEvent(event) {
     if (!Number.isFinite(Number(event?.clientX)) || !Number.isFinite(Number(event?.clientY))) return;
     this.pointer = canvas.canvasCoordinatesFromClient({ x: event.clientX, y: event.clientY });
-    if (!this.processing && !(this.targetedAction && ["limb", "direction"].includes(this.aimedMode))) this.refresh();
+    if (!this.processing && this.pushStrengthMaximum <= 0 && !(this.targetedAction && ["limb", "direction"].includes(this.aimedMode))) this.refresh();
   }
 
   unlockAimedTarget() {
@@ -2544,6 +2591,21 @@ class WeaponAttackController {
       </button>
     `).join("");
     this.positionLimbMenu(target);
+    this.updateLimbMenuHover();
+  }
+
+  refreshPushStrengthMenu() {
+    if (this.processing || this.pushStrengthMaximum <= 1) return;
+    if (!this.limbMenu) this.createLimbMenu();
+    this.limbMenu.dataset.mode = "push-strength";
+    const distanceUnit = game.i18n.localize("FALLOUTMAW.Common.MeterShort");
+    this.limbMenu.innerHTML = Array.from({ length: this.pushStrengthMaximum }, (_entry, index) => index + 1)
+      .map(strength => `
+        <button type="button" data-push-strength="${strength}" class="${String(strength) === this.hoveredLimbKey ? "hover" : ""}">
+          <span>${strength} ${escapeHtml(distanceUnit)}</span>
+        </button>
+      `).join("");
+    this.positionPushStrengthMenu();
     this.updateLimbMenuHover();
   }
 
@@ -2648,9 +2710,10 @@ class WeaponAttackController {
     this.limbMenu.addEventListener("pointerover", event => {
       const button = event.target?.closest?.("[data-limb-key]");
       const directionButton = event.target?.closest?.("[data-attack-direction]");
-      const activeButton = button ?? directionButton;
+      const strengthButton = event.target?.closest?.("[data-push-strength]");
+      const activeButton = button ?? directionButton ?? strengthButton;
       if (!activeButton) return;
-      this.hoveredLimbKey = activeButton.dataset.limbKey ?? activeButton.dataset.attackDirection ?? "";
+      this.hoveredLimbKey = activeButton.dataset.limbKey ?? activeButton.dataset.attackDirection ?? activeButton.dataset.pushStrength ?? "";
       this.updateLimbMenuHover();
     });
     this.limbMenu.addEventListener("pointerout", event => {
@@ -2662,8 +2725,8 @@ class WeaponAttackController {
   }
 
   updateLimbMenuHover() {
-    for (const button of this.limbMenu?.querySelectorAll("[data-limb-key], [data-attack-direction]") ?? []) {
-      const key = button.dataset.limbKey ?? button.dataset.attackDirection ?? "";
+    for (const button of this.limbMenu?.querySelectorAll("[data-limb-key], [data-attack-direction], [data-push-strength]") ?? []) {
+      const key = button.dataset.limbKey ?? button.dataset.attackDirection ?? button.dataset.pushStrength ?? "";
       button.classList.toggle("hover", key === this.hoveredLimbKey);
     }
   }
@@ -2683,6 +2746,17 @@ class WeaponAttackController {
     const margin = 8;
     const left = Math.max(margin, Math.min(window.innerWidth - rect.width - margin, topLeft.x - rect.width - 10));
     const top = Math.max(margin, Math.min(window.innerHeight - rect.height - margin, (topLeft.y + bottomRight.y - rect.height) / 2));
+    this.limbMenu.style.left = `${Math.round(left)}px`;
+    this.limbMenu.style.top = `${Math.round(top)}px`;
+  }
+
+  positionPushStrengthMenu() {
+    if (!this.limbMenu || !this.pointer) return;
+    const position = canvas.clientCoordinatesFromCanvas(this.pointer);
+    const rect = this.limbMenu.getBoundingClientRect();
+    const margin = 8;
+    const left = Math.max(margin, Math.min(window.innerWidth - rect.width - margin, position.x + 12));
+    const top = Math.max(margin, Math.min(window.innerHeight - rect.height - margin, position.y + 12));
     this.limbMenu.style.left = `${Math.round(left)}px`;
     this.limbMenu.style.top = `${Math.round(top)}px`;
   }

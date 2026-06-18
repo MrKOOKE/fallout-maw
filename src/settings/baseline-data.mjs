@@ -1242,6 +1242,10 @@ export const SETTINGS_BASELINE = Object.freeze({
         "weaponSwitch": {
           "actionPointCost": 3
         },
+        "knockback": {
+          "repeatDifficultyThreshold": 100,
+          "repeatDifficultyStep": 50
+        },
         "dodge": {
           "enabled": true,
           "attackCostPercent": 10,

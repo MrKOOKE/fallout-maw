@@ -359,6 +359,24 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedKeepAwaySettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Держись подальше</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация и перегрузка</strong>
+          <label><span>Стоимость активации, энергия</span><input type="number" data-field="fixed.keepAway.activationEnergyCost" value="{{fixedKeepAwaySettings.activationEnergyCost}}" min="0" step="1"></label>
+          <label><span>Перегрузка, энергия</span><input type="number" data-field="fixed.keepAway.overloadEnergyCost" value="{{fixedKeepAwaySettings.overloadEnergyCost}}" min="0" step="1"></label>
+          <label><span>Длительность перегрузки, сек.</span><input type="number" data-field="fixed.keepAway.overloadDurationSeconds" value="{{fixedKeepAwaySettings.overloadDurationSeconds}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Отбрасывание</strong>
+          <label><span>Базовая сложность</span><input type="number" data-field="fixed.keepAway.baseDifficulty" value="{{fixedKeepAwaySettings.baseDifficulty}}" min="0" step="1"></label>
+          <label><span>Сложность за 1% потерянных ОЗ</span><input type="number" data-field="fixed.keepAway.lostHealthPercentMultiplier" value="{{fixedKeepAwaySettings.lostHealthPercentMultiplier}}" min="0" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedFourLeafCloverSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Клевер-четырёхлистник</h3>

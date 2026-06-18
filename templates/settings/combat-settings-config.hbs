@@ -35,6 +35,21 @@
     </div>
 
     <header class="fallout-maw-panel-header">
+      <h2>Отбрасывание</h2>
+    </header>
+
+    <div class="fallout-maw-settings-grid">
+      <label>
+        <span>Порог дополнительной проверки</span>
+        <input type="number" name="knockback.repeatDifficultyThreshold" value="{{settings.knockback.repeatDifficultyThreshold}}" min="1" step="1">
+      </label>
+      <label>
+        <span>Снижение сложности после каждой проверки</span>
+        <input type="number" name="knockback.repeatDifficultyStep" value="{{settings.knockback.repeatDifficultyStep}}" min="1" step="1">
+      </label>
+    </div>
+
+    <header class="fallout-maw-panel-header">
       <h2>Потеря сознания</h2>
     </header>
 

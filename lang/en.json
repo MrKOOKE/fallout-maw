@@ -37,6 +37,7 @@
     "Common": {
       "ActionPoints": "Action Points",
       "ActionPointsShort": "AP",
+      "MeterShort": "m",
       "Add": "Add",
       "Apply": "Apply",
       "Characteristics": "Characteristics",

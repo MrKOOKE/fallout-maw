@@ -20,6 +20,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   reaper: "reaper",
   virtuoso: "virtuoso",
   aiming: "aiming",
+  keepAway: "keepAway",
   fourLeafClover: "fourLeafClover",
   atRandom: "atRandom",
   lastChance: "lastChance",
@@ -617,6 +618,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming) {
     return normalizeAimingSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {
+    return normalizeKeepAwaySettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover) {
     return normalizeFourLeafCloverSettings(value);
   }
@@ -791,6 +795,16 @@ export function normalizeAimingSettings(value = {}) {
   return {
     energyCost: Math.max(0, toInteger(value?.energyCost ?? 20)),
     innateDifficultyIgnorePercent: Math.max(1, Math.min(100, toInteger(value?.innateDifficultyIgnorePercent ?? 100)))
+  };
+}
+
+export function normalizeKeepAwaySettings(value = {}) {
+  return {
+    activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? 10)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 10)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 6)),
+    baseDifficulty: Math.max(0, toInteger(value?.baseDifficulty ?? 50)),
+    lostHealthPercentMultiplier: Math.max(0, toInteger(value?.lostHealthPercentMultiplier ?? 5))
   };
 }
 

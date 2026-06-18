@@ -35,6 +35,7 @@
     },
     "Common": {
       "Color": "\u0426\u0432\u0435\u0442",
+      "MeterShort": "\u043c",
       "ActionPoints": "Очки действия",
       "ActionPointsShort": "ОД",
       "Add": "Добавить",

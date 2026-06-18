@@ -2,6 +2,10 @@ export const DEFAULT_COMBAT_SETTINGS = Object.freeze({
   weaponSwitch: Object.freeze({
     actionPointCost: 3
   }),
+  knockback: Object.freeze({
+    repeatDifficultyThreshold: 100,
+    repeatDifficultyStep: 50
+  }),
   dodge: Object.freeze({
     enabled: true,
     attackCostPercent: 10,
@@ -34,6 +38,10 @@ export function normalizeCombatSettings(value = {}) {
   return {
     weaponSwitch: {
       actionPointCost: clampInteger(source.weaponSwitch?.actionPointCost, DEFAULT_COMBAT_SETTINGS.weaponSwitch.actionPointCost, 0, 100)
+    },
+    knockback: {
+      repeatDifficultyThreshold: clampInteger(source.knockback?.repeatDifficultyThreshold, DEFAULT_COMBAT_SETTINGS.knockback.repeatDifficultyThreshold, 1, 10000),
+      repeatDifficultyStep: clampInteger(source.knockback?.repeatDifficultyStep, DEFAULT_COMBAT_SETTINGS.knockback.repeatDifficultyStep, 1, 10000)
     },
     dodge: {
       enabled: Boolean(source.dodge?.enabled),

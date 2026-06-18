@@ -18,6 +18,7 @@ import {
   normalizeFourLeafCloverSettings,
   normalizeFullForceSettings,
   normalizeLastChanceSettings,
+  normalizeKeepAwaySettings,
   normalizeLuckyCoinSettings,
   normalizeLungeSettings,
   normalizeReaperSettings,
@@ -85,7 +86,7 @@ import {
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { REACTION_EVENT_KEYS, REACTION_RESULT, isReactionSystemLocked, registerReactionProvider, requestReactionEvent } from "../combat/reaction-hub.mjs";
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "../combat/reaction-resources.mjs";
-import { areTokensAdjacent, areTokensAdjacentAt } from "../combat/active-actions.mjs";
+import { areTokensAdjacent, areTokensAdjacentAt, resolveKnockback } from "../combat/active-actions.mjs";
 import {
   getMovementRouteSamples,
   getMovementSegmentSamples,
@@ -183,6 +184,14 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     toggleable: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.aiming
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.keepAway,
+    label: "Держись подальше",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.keepAway
     })
   }),
   Object.freeze({
@@ -312,6 +321,7 @@ export function registerFixedAbilityFunctionHooks() {
     void consumeAllOrNothingResultEffects(context);
     void processReaperAttackResolution(context);
     void updateVirtuosoLastWeapon(context);
+    void processKeepAwayAttackResolution(context);
     void requestCounterAttackReaction(context);
   });
   Hooks.on(WEAPON_ATTACK_CHECK_RESOLVED_HOOK, context => {
@@ -324,6 +334,7 @@ export function registerFixedAbilityFunctionHooks() {
     requestFullForceWeaponActionModifiers(context);
     requestVirtuosoWeaponActionModifiers(context);
     requestAimingWeaponActionModifiers(context);
+    requestKeepAwayWeaponActionModifiers(context);
   });
   Hooks.on("fallout-maw.weaponActionResolved", context => {
     void processAtRandomAttackResolution(context);
@@ -413,6 +424,14 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
           key: stateKey,
           label: "Последнее оружие",
           value: String(state[stateKey]?.weaponName ?? "").trim() || "Нету"
+        };
+      }
+      if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {
+        const stateKey = getFixedFunctionStateKey(entry);
+        return {
+          key: stateKey,
+          label: "Следующий выстрел",
+          value: state[stateKey]?.pending ? "Готов" : "Не подготовлен"
         };
       }
       if (entry.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) return null;
@@ -532,6 +551,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming) {
     await toggleAiming(actor, item, abilityFunction);
     await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {
+    const used = await useKeepAway(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
     return true;
   }
 
@@ -2364,6 +2389,36 @@ async function toggleAiming(actor, abilityItem, abilityFunction) {
   return true;
 }
 
+async function useKeepAway(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeKeepAwaySettings(abilityFunction.fixedSettings);
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  if (state[stateKey]?.pending) {
+    ui.notifications.warn(`${abilityName}: следующий выстрел уже подготовлен.`);
+    return false;
+  }
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    pending: true
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  ui.notifications.info(`${abilityName}: следующий выстрел подготовлен.`);
+  return true;
+}
+
 function requestDoubleAttackDuplicate(context = {}) {
   const actor = context?.actor ?? null;
   const weaponSkillKey = String(context?.weaponData?.skillKey ?? "").trim();
@@ -2453,6 +2508,89 @@ function requestAimingWeaponActionModifiers(context = {}) {
           const cost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(attackCount));
           return spendEnergy(actor, cost);
         }
+      });
+    }
+  }
+}
+
+function requestKeepAwayWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  const actionKey = String(context?.actionKey ?? "");
+  if (!actor || !["snapshot", "aimedShot"].includes(actionKey) || !context?.modifierState) return;
+
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    const state = getFixedAbilityState(abilityItem);
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.keepAway) continue;
+      const stateKey = getFixedFunctionStateKey(abilityFunction);
+      if (!state[stateKey]?.pending) continue;
+      const entries = Array.isArray(context.modifierState.getOption("keepAwayEntries"))
+        ? context.modifierState.getOption("keepAwayEntries")
+        : [];
+      entries.push({ abilityItem, abilityFunction, settings: normalizeKeepAwaySettings(abilityFunction.fixedSettings) });
+      context.modifierState.setOption("keepAwayEntries", entries);
+      context.modifierState.addSpendRequirement({
+        source: "keepAway",
+        label: getAbilityDisplayName(abilityItem),
+        spend: () => consumeKeepAwayPreparation(abilityItem, abilityFunction)
+      });
+    }
+  }
+}
+
+async function consumeKeepAwayPreparation(abilityItem, abilityFunction) {
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  if (!state[stateKey]?.pending) return true;
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    pending: false
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  return true;
+}
+
+async function processKeepAwayAttackResolution(context = {}) {
+  const entries = context?.modifierState?.getOption?.("keepAwayEntries");
+  if (!Array.isArray(entries) || !entries.length) return;
+  if (!context?.damageResults?.length) return;
+  const attackerToken = fromUuidSync(String(context?.tokenUuid ?? ""));
+  if (!attackerToken) return;
+
+  const damageByActor = new Map();
+  for (const result of context.damageResults) {
+    if (result?.mode && result.mode !== "damage") continue;
+    const actor = result?.actor ?? null;
+    const actorUuid = String(actor?.uuid ?? result?.actorUuid ?? "").trim();
+    if (!actorUuid) continue;
+    const current = damageByActor.get(actorUuid) ?? { actor, healthDamage: 0 };
+    current.actor ??= actor;
+    current.healthDamage += Math.max(0, Number(result?.healthDelta) || 0);
+    damageByActor.set(actorUuid, current);
+  }
+  if (!damageByActor.size) return;
+
+  const targetTokens = (context?.targetTokenUuids ?? [])
+    .map(uuid => fromUuidSync(String(uuid ?? "")))
+    .filter(token => token?.actor);
+  for (const entry of entries) {
+    const settings = normalizeKeepAwaySettings(entry.settings);
+    for (const [actorUuid, damage] of damageByActor) {
+      const targetToken = targetTokens.find(token => token.actor?.uuid === actorUuid)
+        ?? (canvas.tokens?.placeables ?? []).find(token => token.actor?.uuid === actorUuid)?.document
+        ?? null;
+      const actor = damage.actor ?? targetToken?.actor;
+      if (!targetToken || !actor) continue;
+      const healthMax = Math.max(1, Number(actor.system?.resources?.health?.max) || 1);
+      const lostPercent = Math.max(0, Math.min(100, Math.floor((damage.healthDamage / healthMax) * 100)));
+      const difficulty = settings.baseDifficulty + (lostPercent * settings.lostHealthPercentMultiplier);
+      await resolveKnockback({
+        attackerToken,
+        targetToken,
+        difficulty,
+        reason: getAbilityDisplayName(entry.abilityItem),
+        requester: "keepAwayResistance"
       });
     }
   }

@@ -1,12 +1,10 @@
 import { GRAPPLE_FOLLOW_MOVEMENT_OPTION, SYSTEM_ID } from "../constants.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { getSkillSettings } from "../settings/accessors.mjs";
+import { getCombatSettings, getSkillSettings } from "../settings/accessors.mjs";
 import { MOVEMENT_RESOURCE_KEY, getCombatMovementResourceState } from "./movement-resources.mjs";
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "./reaction-resources.mjs";
 import { POSTURE_CHANGE_ACTION_POINT_COST, setActorTokensPosture } from "../canvas/posture-movement.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-
-const { DialogV2 } = foundry.applications.api;
 
 export const GRAPPLE_TARGET_FLAG = "grappleTargetTokenId";
 export const GRAPPLE_GRAPPLER_FLAG = "grappleGrapplerTokenId";
@@ -124,15 +122,81 @@ export async function startGrappleReposition(token) {
 }
 
 export async function requestPushKnockback({ attackerToken = null, targetToken = null, reason = "" } = {}) {
+  return requestKnockback({ attackerToken, targetToken, distanceCells: 1, reason });
+}
+
+export async function requestKnockback({ attackerToken = null, targetToken = null, distanceCells = 1, reason = "" } = {}) {
   const attackerDocument = getTokenDocument(attackerToken);
   const targetDocument = getTokenDocument(targetToken);
   if (!attackerDocument || !targetDocument || attackerDocument.id === targetDocument.id) return false;
-  return requestActiveActionGMOperation("pushKnockback", {
+  return requestActiveActionGMOperation("knockback", {
     sceneId: attackerDocument.parent?.id ?? targetDocument.parent?.id ?? canvas.scene?.id ?? "",
     attackerTokenId: attackerDocument.id,
     targetTokenId: targetDocument.id,
+    distanceCells: Math.max(1, toInteger(distanceCells)),
     reason
   });
+}
+
+export function getKnockbackMaximumStrength(difficulty = 0, options = {}) {
+  const settings = getCombatSettings().knockback;
+  const initialDifficulty = Math.max(0, toInteger(difficulty));
+  const threshold = Math.max(1, toInteger(options.repeatThreshold ?? settings.repeatDifficultyThreshold));
+  const step = Math.max(1, toInteger(options.difficultyStep ?? settings.repeatDifficultyStep));
+  let strength = 1;
+  let nextDifficulty = initialDifficulty - step;
+  while (nextDifficulty >= threshold) {
+    strength += 1;
+    nextDifficulty -= step;
+  }
+  return strength;
+}
+
+export async function resolveKnockback({
+  attackerToken = null,
+  targetToken = null,
+  difficulty = 0,
+  maximumStrength = null,
+  repeatThreshold = null,
+  difficultyStep = null,
+  reason = "",
+  requester = "knockbackResistance"
+} = {}) {
+  const attackerDocument = getTokenDocument(attackerToken);
+  const targetDocument = getTokenDocument(targetToken);
+  if (!attackerDocument || !targetDocument?.actor || attackerDocument.id === targetDocument.id) return null;
+  const initialDifficulty = Math.max(0, toInteger(difficulty));
+  const settings = getCombatSettings().knockback;
+  const threshold = repeatThreshold ?? settings.repeatDifficultyThreshold;
+  const step = Math.max(1, toInteger(difficultyStep ?? settings.repeatDifficultyStep));
+  const availableStrength = getKnockbackMaximumStrength(initialDifficulty, { repeatThreshold: threshold, difficultyStep: step });
+  const checkCount = Math.max(1, Math.min(
+    availableStrength,
+    maximumStrength === null ? availableStrength : toInteger(maximumStrength)
+  ));
+  let failedChecks = 0;
+  const outcomes = [];
+  for (let index = 0; index < checkCount; index += 1) {
+    const outcome = await requestSkillCheck({
+      actor: targetDocument.actor,
+      skillKey: resolveSkillKey(targetDocument.actor, "prc"),
+      data: {
+        difficulty: Math.max(0, initialDifficulty - (step * index)),
+        actorToken: targetDocument.object ?? targetDocument,
+        targetToken: attackerDocument.object ?? attackerDocument
+      },
+      animate: false,
+      createMessage: true,
+      prompt: false,
+      requester
+    });
+    outcomes.push(outcome);
+    if (!["success", "criticalSuccess"].includes(String(outcome?.result?.key ?? ""))) failedChecks += 1;
+  }
+  const moved = failedChecks > 0
+    ? await requestKnockback({ attackerToken: attackerDocument, targetToken: targetDocument, distanceCells: failedChecks, reason })
+    : false;
+  return { difficulty: initialDifficulty, checkCount, failedChecks, moved, outcomes };
 }
 
 async function startGrappleTargetSelection(grapplerDocument) {
@@ -329,7 +393,7 @@ async function executeActiveActionGMOperation(action, payload = {}) {
   if (action === "linkGrapple") return linkGrappleDocuments(payload);
   if (action === "unlinkGrapple") return unlinkGrappleDocuments(payload);
   if (action === "moveGrappledTarget") return moveGrappledTargetDocument(payload);
-  if (action === "pushKnockback") return pushKnockbackDocument(payload);
+  if (action === "pushKnockback" || action === "knockback") return knockbackDocument(payload);
   return false;
 }
 
@@ -425,14 +489,13 @@ async function moveGrappledTargetDocument({ sceneId = "", targetTokenId = "", x 
   return true;
 }
 
-async function pushKnockbackDocument({ sceneId = "", attackerTokenId = "", targetTokenId = "", reason = "" } = {}) {
+async function knockbackDocument({ sceneId = "", attackerTokenId = "", targetTokenId = "", distanceCells = 1, reason = "" } = {}) {
   const scene = getScene(sceneId);
   const attacker = scene?.tokens?.get(attackerTokenId);
   const target = scene?.tokens?.get(targetTokenId);
   if (!attacker || !target) return false;
-  const destination = getPushDestination(attacker, target);
+  const destination = getKnockbackDestination(attacker, target, distanceCells);
   if (!destination) return false;
-  if (!validateTokenDestination(target, destination, { ignoreIds: [attacker.id, target.id] })) return false;
   await breakGrappleRelationsForToken(scene, target.id);
   await target.update(destination, { [GRAPPLE_SYNC_OPTION]: true });
   await createActionMessage(formatHud("PushKnockback", { target: target.name, attacker: attacker.name }), target.actor, reason);
@@ -942,7 +1005,7 @@ function getCanvasPointFromClientEvent(event) {
   return canvas.stage?.worldTransform?.applyInverse?.(point, point) ?? null;
 }
 
-function getPushDestination(attackerDocument, targetDocument) {
+function getKnockbackDestination(attackerDocument, targetDocument, distanceCells = 1) {
   const gridSize = Math.max(1, Number(canvas.grid?.size) || 100);
   const attackerCenter = getTokenCenter(attackerDocument);
   const targetCenter = getTokenCenter(targetDocument);
@@ -950,11 +1013,20 @@ function getPushDestination(attackerDocument, targetDocument) {
   let dy = targetCenter.y - attackerCenter.y;
   if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) dx = 1;
   const length = Math.max(1, Math.hypot(dx, dy));
-  const destination = {
-    x: targetDocument.x + Math.round(dx / length) * gridSize,
-    y: targetDocument.y + Math.round(dy / length) * gridSize
+  const step = {
+    x: Math.round(dx / length) * gridSize,
+    y: Math.round(dy / length) * gridSize
   };
-  return snapTokenPosition(targetDocument, destination);
+  let destination = { x: targetDocument.x, y: targetDocument.y };
+  for (let index = 0; index < Math.max(1, toInteger(distanceCells)); index += 1) {
+    const candidate = snapTokenPosition(targetDocument, {
+      x: destination.x + step.x,
+      y: destination.y + step.y
+    });
+    if (!validateTokenDestination(targetDocument, candidate, { ignoreIds: [attackerDocument.id, targetDocument.id] })) break;
+    destination = candidate;
+  }
+  return destination.x === targetDocument.x && destination.y === targetDocument.y ? null : destination;
 }
 
 function validateTokenDestination(tokenDocument, destination, { ignoreIds = [] } = {}) {
