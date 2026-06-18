@@ -5,6 +5,7 @@ import { MOVEMENT_RESOURCE_KEY, getCombatMovementResourceState } from "./movemen
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "./reaction-resources.mjs";
 import { POSTURE_CHANGE_ACTION_POINT_COST, setActorTokensPosture } from "../canvas/posture-movement.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { isActorUnableToAct } from "./reaction-hub.mjs";
 
 export const GRAPPLE_TARGET_FLAG = "grappleTargetTokenId";
 export const GRAPPLE_GRAPPLER_FLAG = "grappleGrapplerTokenId";
@@ -85,7 +86,7 @@ export function appendGrappleFollowMovement(updates, movement, grapplerTokenOrDo
 export async function useGrappleAction(token) {
   const tokenDocument = getTokenDocument(token);
   const actor = tokenDocument?.actor;
-  if (!tokenDocument || !actor?.isOwner) return undefined;
+  if (!tokenDocument || !actor?.isOwner || isActorUnableToAct(actor)) return undefined;
 
   const grappleTargetId = getGrappleTargetId(tokenDocument);
   if (grappleTargetId) return requestUnlinkGrapple(tokenDocument, getSceneToken(tokenDocument, grappleTargetId));
@@ -100,7 +101,7 @@ export async function startGrappleReposition(token) {
   const grapplerDocument = getTokenDocument(token);
   const actor = grapplerDocument?.actor;
   const targetDocument = getSceneToken(grapplerDocument, getGrappleTargetId(grapplerDocument));
-  if (!actor?.isOwner || !targetDocument) {
+  if (!actor?.isOwner || isActorUnableToAct(actor) || !targetDocument) {
     ui.notifications.warn(localizeHud("NoGrappledTarget"));
     return undefined;
   }

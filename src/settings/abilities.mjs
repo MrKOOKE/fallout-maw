@@ -32,6 +32,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   lunge: "lunge",
   doubleAttack: "doubleAttack",
   counterAttack: "counterAttack",
+  counterSniper: "counterSniper",
   whereAreYouGoing: "whereAreYouGoing",
   fullForce: "fullForce"
 });
@@ -654,6 +655,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     return normalizeCounterAttackSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper) {
+    return normalizeCounterSniperSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing) {
     return normalizeWhereAreYouGoingSettings(value);
   }
@@ -840,6 +844,14 @@ export function normalizeCounterAttackSettings(value = {}) {
     reactionOverloadEnergyCost: Math.max(0, toInteger(value?.reactionOverloadEnergyCost ?? value?.overloadEnergyCost ?? 20)),
     reactionOverloadDurationSeconds: Math.max(0, toInteger(value?.reactionOverloadDurationSeconds ?? value?.overloadDurationSeconds ?? 18)),
     requiredSkillKey: String(value?.requiredSkillKey ?? "meleeCombat").trim() || "meleeCombat"
+  };
+}
+
+export function normalizeCounterSniperSettings(value = {}) {
+  return {
+    reactionEnergyCost: Math.max(0, toInteger(value?.reactionEnergyCost ?? value?.energyCost ?? 20)),
+    reactionOverloadEnergyCost: Math.max(0, toInteger(value?.reactionOverloadEnergyCost ?? value?.overloadEnergyCost ?? 40)),
+    reactionOverloadDurationSeconds: Math.max(0, toInteger(value?.reactionOverloadDurationSeconds ?? value?.overloadDurationSeconds ?? 12))
   };
 }
 

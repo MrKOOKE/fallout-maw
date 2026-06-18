@@ -840,6 +840,19 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedCounterSniperSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header"><h3>Настройки: Контр-снайпер</h3></div>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Реакция и перегрузка</strong>
+          <label><span>Стоимость реакции, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.reactionEnergyCost" value="{{fixedCounterSniperSettings.reactionEnergyCost}}" min="0" step="1"></label>
+          <label><span>Перегрузка, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.reactionOverloadEnergyCost" value="{{fixedCounterSniperSettings.reactionOverloadEnergyCost}}" min="0" step="1"></label>
+          <label><span>Длительность перегрузки, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.reactionOverloadDurationSeconds" value="{{fixedCounterSniperSettings.reactionOverloadDurationSeconds}}" min="0" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedWhereAreYouGoingSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header">

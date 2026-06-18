@@ -10,6 +10,7 @@ import {
   normalizeAimingSettings,
   normalizeAtRandomSettings,
   normalizeCounterAttackSettings,
+  normalizeCounterSniperSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
   normalizeDefensiveTacticsSettings,
@@ -45,7 +46,9 @@ import {
   hasWeaponAction,
   hasRequiredWeaponResources,
   isWeaponAttackModeEnabled,
+  canPerformAimedAttackAgainstToken,
   executeWeaponAttackAgainstToken,
+  startForcedAimedAttackSelection,
   startWeaponAttack,
   WEAPON_ACTION_MODIFIER_REQUEST_HOOK,
   WEAPON_ATTACK_CHECK_RESOLVED_HOOK,
@@ -120,6 +123,8 @@ const DEFENSIVE_TACTICS_EFFECT_FLAG_KEY = "defensiveTactics";
 const RAGE_EFFECT_FLAG_KEY = "rage";
 const DISARM_REACTION_PROVIDER_ID = "disarm";
 const COUNTER_ATTACK_REACTION_PROVIDER_ID = "counterAttack";
+const COUNTER_SNIPER_REACTION_PROVIDER_ID = "counterSniper";
+const COUNTER_SNIPER_AIM_QUERY_NAME = "falloutMawCounterSniperAim";
 const WHERE_ARE_YOU_GOING_REACTION_PROVIDER_ID = "whereAreYouGoing";
 const WHERE_ARE_YOU_GOING_MOVEMENT_PROVIDER_ID = "whereAreYouGoingMovement";
 const WHERE_ARE_YOU_GOING_WEAPON_QUERY_NAME = "falloutMawWhereAreYouGoingWeapon";
@@ -285,6 +290,14 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.counterSniper,
+    label: "Контр-снайпер",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.counterSniper
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing,
     label: "Ты куда собрался?",
     passive: true,
@@ -306,6 +319,7 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
 export function registerFixedAbilityFunctionHooks() {
   registerDisarmReactionProvider();
   registerCounterAttackReactionProvider();
+  registerCounterSniperReactionProvider();
   registerWhereAreYouGoingReactionProvider();
   registerWhereAreYouGoingMovementProvider();
   registerActorTurnEndHandler(context => applyDefensiveTacticsAtTurnEnd(context));
@@ -2368,6 +2382,173 @@ async function toggleFullForce(actor, abilityItem, abilityFunction) {
   return true;
 }
 
+function getActorCounterSniperEntry(actor, offer = null) {
+  const abilityItemId = String(offer?.abilityItemId ?? "");
+  const abilityFunctionId = String(offer?.abilityFunctionId ?? "");
+  const weaponId = String(offer?.weaponId ?? "");
+  const weaponFunctionId = String(offer?.weaponFunctionId ?? "");
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
+    if (abilityItemId && abilityItem.id !== abilityItemId) continue;
+    const abilityFunction = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
+      .find(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper && (!abilityFunctionId || entry.id === abilityFunctionId));
+    if (!abilityFunction) continue;
+    const candidate = getCounterSniperWeaponCandidate(actor, { weaponId, weaponFunctionId });
+    if (!candidate) continue;
+    return {
+      abilityItem,
+      abilityFunction,
+      settings: normalizeCounterSniperSettings(abilityFunction.fixedSettings),
+      ...candidate
+    };
+  }
+  return null;
+}
+
+function getCounterSniperWeaponCandidate(actor, { weaponId = "", weaponFunctionId = "" } = {}) {
+  const candidates = [];
+  for (const weapon of actor?.items?.contents ?? []) {
+    const placement = weapon.system?.placement ?? {};
+    if (weapon.type !== "gear" || String(placement.mode ?? "") !== "weapon" || !placement.weaponSet) continue;
+    if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) continue;
+    for (const candidateFunctionId of getWhirlwindWeaponFunctionIds(weapon)) {
+      if (!hasWeaponAction(weapon, "aimedShot", candidateFunctionId)) continue;
+      candidates.push({ weapon, weaponSet: String(placement.weaponSet), weaponFunctionId: candidateFunctionId });
+    }
+  }
+  if (weaponId) {
+    const exact = candidates.find(candidate => candidate.weapon.id === weaponId && (!weaponFunctionId || candidate.weaponFunctionId === weaponFunctionId));
+    if (exact) return exact;
+  }
+  const selectedItemId = String(actor?.getFlag?.(SYSTEM_ID, "selectedHudWeaponItemId") ?? "");
+  const selectedSet = String(actor?.getFlag?.(SYSTEM_ID, "selectedHudWeaponSetKey") ?? "");
+  return candidates.find(candidate => candidate.weapon.id === selectedItemId)
+    ?? candidates.find(candidate => selectedSet && candidate.weaponSet === selectedSet)
+    ?? candidates.at(0)
+    ?? null;
+}
+
+function isCounterSniperAlly(reactor, defendedActor) {
+  return areCounterSniperActorsAllied(reactor, defendedActor);
+}
+
+function isCounterSniperEnemy(reactor, attacker) {
+  return !areCounterSniperActorsAllied(reactor, attacker);
+}
+
+function areCounterSniperActorsAllied(left, right) {
+  if (!left || !right) return false;
+  if (left.uuid === right.uuid) return true;
+  const leftFactions = getActorFactionBelongs(left);
+  const rightFactions = getActorFactionBelongs(right);
+  const normalizedLeft = leftFactions.length ? leftFactions : [DEFAULT_FACTION_NAME];
+  const normalizedRight = rightFactions.length ? rightFactions : [DEFAULT_FACTION_NAME];
+  if (normalizedLeft.some(faction => normalizedRight.includes(faction))) return true;
+  return normalizedRight.some(faction => getRelationTo(left, faction) === "ally")
+    || normalizedLeft.some(faction => getRelationTo(right, faction) === "ally");
+}
+
+function registerCounterSniperReactionProvider() {
+  CONFIG.queries[COUNTER_SNIPER_AIM_QUERY_NAME] = handleCounterSniperAimQuery;
+  registerReactionProvider({
+    id: COUNTER_SNIPER_REACTION_PROVIDER_ID,
+    collect: collectCounterSniperReactionOffers,
+    execute: executeCounterSniperReaction
+  });
+}
+
+async function collectCounterSniperReactionOffers({ eventKey = "", context = {} } = {}) {
+  if (eventKey !== REACTION_EVENT_KEYS.aimedAttackLimbSelected) return [];
+  const attacker = await fromUuid(String(context.attackerActorUuid ?? ""));
+  const attackerToken = await fromUuid(String(context.attackerTokenUuid ?? ""));
+  const defendedActor = await fromUuid(String(context.targetActorUuid ?? ""));
+  if (!attacker || !attackerToken || !defendedActor) return [];
+
+  const offers = [];
+  const seenActors = new Set();
+  for (const reactorToken of attackerToken.parent?.tokens?.contents ?? []) {
+    const reactor = reactorToken?.actor;
+    if (!reactor || reactor.uuid === attacker.uuid || seenActors.has(reactor.uuid)) continue;
+    if (!isCounterSniperAlly(reactor, defendedActor) || !isCounterSniperEnemy(reactor, attacker)) continue;
+    const entry = getActorCounterSniperEntry(reactor);
+    if (!entry) continue;
+    const energyCost = getAbilityEnergyCost(reactor, entry.abilityItem, entry.abilityFunction, entry.settings.reactionEnergyCost);
+    if (!hasEnergy(reactor, energyCost)) continue;
+    if (!canPerformAimedAttackAgainstToken({
+      attackerToken: reactorToken,
+      targetToken: attackerToken,
+      weapon: entry.weapon,
+      weaponFunctionId: entry.weaponFunctionId
+    })) continue;
+    seenActors.add(reactor.uuid);
+    offers.push({
+      actorUuid: reactor.uuid,
+      offerId: `${COUNTER_SNIPER_REACTION_PROVIDER_ID}:${reactor.uuid}:${context.attackId ?? foundry.utils.randomID()}`,
+      label: getAbilityDisplayName(entry.abilityItem),
+      description: `Прицельный выстрел по ${attacker.name}: ${entry.weapon.name}.`,
+      img: entry.abilityItem.img || entry.weapon.img || "icons/svg/target.svg",
+      costLines: [`Энергия: ${entry.settings.reactionEnergyCost} базовая / ${energyCost} итоговая`],
+      abilityItemId: entry.abilityItem.id,
+      abilityFunctionId: entry.abilityFunction.id,
+      weaponId: entry.weapon.id,
+      weaponFunctionId: entry.weaponFunctionId,
+      reactorTokenUuid: reactorToken.uuid,
+      attackerTokenUuid: attackerToken.uuid
+    });
+  }
+  return offers;
+}
+
+async function executeCounterSniperReaction({ offer = {} } = {}) {
+  const reactor = await fromUuid(String(offer.actorUuid ?? ""));
+  const reactorToken = await fromUuid(String(offer.reactorTokenUuid ?? ""));
+  const attackerToken = await fromUuid(String(offer.attackerTokenUuid ?? ""));
+  const entry = getActorCounterSniperEntry(reactor, offer);
+  if (!reactor || !reactorToken || !attackerToken || !entry) return { handled: false };
+  const energyCost = getAbilityEnergyCost(reactor, entry.abilityItem, entry.abilityFunction, entry.settings.reactionEnergyCost);
+  if (!hasEnergy(reactor, energyCost) || !hasRequiredWeaponResources(entry.weapon, 1, entry.weaponFunctionId)) return { handled: false };
+
+  await spendEnergy(reactor, energyCost);
+  await applyAbilityOverloadEffect(reactor, entry.abilityItem, entry.abilityFunction, {
+    name: getAbilityOverloadName(entry.abilityItem),
+    energyCost: entry.settings.reactionOverloadEnergyCost,
+    durationSeconds: entry.settings.reactionOverloadDurationSeconds
+  });
+
+  const owner = getResponsibleActorOwner(reactor) ?? getResponsibleGM();
+  if (!owner) return { handled: true, status: REACTION_RESULT.failed };
+  const query = {
+    reactorTokenUuid: reactorToken.uuid,
+    attackerTokenUuid: attackerToken.uuid,
+    weaponUuid: entry.weapon.uuid,
+    weaponFunctionId: entry.weaponFunctionId
+  };
+  let used = false;
+  try {
+    used = owner.isSelf
+      ? await handleCounterSniperAimQuery(query)
+      : await owner.query(COUNTER_SNIPER_AIM_QUERY_NAME, query, { timeout: 120000 });
+  } catch (error) {
+    console.warn(`${SYSTEM_ID} | Counter sniper aim failed`, error);
+  }
+  await createAbilityChatMessage(reactor, entry.abilityItem, used
+    ? "Ответный прицельный выстрел выполнен."
+    : "Выбор части тела сорван; исходная атака продолжена.");
+  return { handled: true, status: used ? REACTION_RESULT.success : REACTION_RESULT.failed };
+}
+
+async function handleCounterSniperAimQuery(data = {}) {
+  const reactorTokenDocument = await fromUuid(String(data.reactorTokenUuid ?? ""));
+  const attackerTokenDocument = await fromUuid(String(data.attackerTokenUuid ?? ""));
+  const weapon = await fromUuid(String(data.weaponUuid ?? ""));
+  if (!reactorTokenDocument?.actor?.isOwner || !attackerTokenDocument?.actor || !weapon) return false;
+  return startForcedAimedAttackSelection({
+    attackerToken: reactorTokenDocument.object ?? reactorTokenDocument,
+    targetToken: attackerTokenDocument.object ?? attackerTokenDocument,
+    weapon,
+    weaponFunctionId: String(data.weaponFunctionId ?? "")
+  });
+}
+
 async function toggleAiming(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeAimingSettings(abilityFunction.fixedSettings);
@@ -3972,6 +4153,13 @@ async function createAbilityChatMessage(actor, item, message = "") {
     content: `<p><strong>${escapeHTML(getAbilityDisplayName(item))}</strong></p><p>${escapeHTML(message)}</p>`,
     sound: null
   });
+}
+
+function getResponsibleActorOwner(actor) {
+  return (game.users?.contents ?? [])
+    .filter(user => user.active && !user.isGM && actor?.testUserPermission?.(user, "OWNER"))
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .at(0) ?? null;
 }
 
 function getAbilityDisplayName(item) {

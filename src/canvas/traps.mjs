@@ -11,6 +11,7 @@ import { getCreatureOptions, getToolSettings } from "../settings/accessors.mjs";
 import { ITEM_FUNCTIONS, getEnabledToolFunctions, getEnabledWeaponFunctions, getTrapFunction, getWeaponFunctionModuleSlots, hasItemFunction } from "../utils/item-functions.mjs";
 import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { isActorUnableToAct } from "../combat/reaction-hub.mjs";
 import { analyzeLightingPoint } from "../stealth/index.mjs";
 import {
   getMovementRouteSamples,
@@ -147,6 +148,7 @@ export function registerTrapHooks() {
 export async function startTrapPlacement({ actor = null, token = null, item = null, application = null } = {}) {
   const sourceActor = actor ?? item?.actor ?? token?.actor ?? token?.document?.actor ?? null;
   if (!sourceActor?.isOwner || !item || !hasItemFunction(item, ITEM_FUNCTIONS.trap)) return false;
+  if (isActorUnableToAct(sourceActor)) return false;
   if (!canvas?.ready || !canvas.scene) {
     ui.notifications.warn("Сцена не готова для установки ловушки.");
     return false;

@@ -24,7 +24,7 @@ import {
   decorateActionPointHudEntry,
   promptEndTurnConversion
 } from "../combat/reaction-resources.mjs";
-import { isReactionSystemLocked } from "../combat/reaction-hub.mjs";
+import { isActorUnableToAct, isReactionSystemLocked } from "../combat/reaction-hub.mjs";
 import { canSpendWeaponSwitchActionPoints, getWeaponSwitchActionPointCost, spendWeaponSwitchActionPoints } from "../combat/weapon-switching.mjs";
 import {
   getGrappleTargetId,
@@ -880,6 +880,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!item || !actionKey) return undefined;
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
+    if (isActorUnableToAct(this.actor)) {
+      ui.notifications.warn(`${this.actor?.name ?? ""}: невозможно совершать боевые действия без сознания или после смерти.`);
+      return undefined;
+    }
     if (isHudWeaponDisabled(this.actor, item)) return undefined;
     if (isWeaponActionBrokenForHud(item, weaponFunctionId)) {
       ui.notifications.warn("Предмет сломан.");
@@ -1049,6 +1053,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isHudActionBlockedByReactionLock()) return undefined;
     const key = String(target.dataset.activeActionKey ?? "");
     if (!this.token?.actor?.isOwner) return undefined;
+    if (isActorUnableToAct(this.actor)) return undefined;
     if (key === "grapple") {
       await useGrappleAction(this.token);
       return this.render({ force: true });

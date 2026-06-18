@@ -21,6 +21,7 @@ import {
   createAbilityFunction,
   normalizeAbilityEntry,
   normalizeCounterAttackSettings,
+  normalizeCounterSniperSettings,
   normalizeCurseAndBlessingSettings,
   normalizeAllOrNothingSettings,
   normalizeAimingSettings,
@@ -826,6 +827,13 @@ function readFixedFunctionSettings(row) {
       requiredSkillKey: row.querySelector("[data-field='fixed.counterAttack.requiredSkillKey']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper) {
+    return {
+      reactionEnergyCost: row.querySelector("[data-field='fixed.counterSniper.reactionEnergyCost']")?.value,
+      reactionOverloadEnergyCost: row.querySelector("[data-field='fixed.counterSniper.reactionOverloadEnergyCost']")?.value,
+      reactionOverloadDurationSeconds: row.querySelector("[data-field='fixed.counterSniper.reactionOverloadDurationSeconds']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing) {
     return {
       reactionEnergyCost: row.querySelector("[data-field='fixed.whereAreYouGoing.reactionEnergyCost']")?.value,
@@ -1027,6 +1035,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedCounterAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack
     ? prepareCounterAttackSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedCounterSniperSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper
+    ? normalizeCounterSniperSettings(normalized.fixedSettings)
+    : null;
   const fixedWhereAreYouGoingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing
     ? prepareWhereAreYouGoingSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -1067,6 +1078,7 @@ function prepareFunctionForDisplay(entry) {
     fixedLungeSettings,
     fixedDoubleAttackSettings,
     fixedCounterAttackSettings,
+    fixedCounterSniperSettings,
     fixedFullForceSettings,
     fixedRageSettings,
     fixedDisarmSettings,

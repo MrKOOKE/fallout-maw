@@ -47,6 +47,7 @@ import {
   normalizeAimingSettings,
   normalizeAtRandomSettings,
   normalizeCounterAttackSettings,
+  normalizeCounterSniperSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
   normalizeDefensiveTacticsSettings,
@@ -4497,6 +4498,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedCounterAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack
     ? prepareCounterAttackSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedCounterSniperSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper
+    ? normalizeCounterSniperSettings(entry?.fixedSettings)
+    : null;
   const fixedWhereAreYouGoingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing
     ? prepareWhereAreYouGoingSettingsForDisplay(entry?.fixedSettings)
     : null;
@@ -4535,6 +4539,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedLungeSettings,
     fixedDoubleAttackSettings,
     fixedCounterAttackSettings,
+    fixedCounterSniperSettings,
     fixedWhereAreYouGoingSettings,
     fixedFullForceSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),

@@ -6,6 +6,7 @@ const FormDataExtended = foundry.applications.ux.FormDataExtended;
 
 export const REACTION_EVENT_KEYS = Object.freeze({
   weaponAttackTargeted: "weaponAttackTargeted",
+  aimedAttackLimbSelected: "aimedAttackLimbSelected",
   weaponAttackResolved: "weaponAttackResolved",
   tokenLeavingAdjacency: "tokenLeavingAdjacency"
 });
@@ -45,6 +46,16 @@ export function registerReactionProvider(provider = {}) {
 
 export function isReactionSystemLocked() {
   return activeReactionLocks.size > 0;
+}
+
+export function isActorUnableToAct(actor = null) {
+  if (!actor) return true;
+  const defeatedStatus = CONFIG.specialStatusEffects.DEFEATED;
+  return Boolean(
+    actor.statuses?.has?.("dead")
+    || actor.statuses?.has?.("unconscious")
+    || (defeatedStatus && actor.statuses?.has?.(defeatedStatus))
+  );
 }
 
 export async function requestReactionEvent(eventKey = "", context = {}) {
@@ -352,13 +363,7 @@ function preventReactionLockedTokenUpdate(tokenDocument, changes = {}, options =
 }
 
 function canActorReact(actor) {
-  if (!actor) return false;
-  const defeatedStatus = CONFIG.specialStatusEffects.DEFEATED;
-  return !(
-    actor.statuses?.has?.("dead")
-    || actor.statuses?.has?.("unconscious")
-    || (defeatedStatus && actor.statuses?.has?.(defeatedStatus))
-  );
+  return !isActorUnableToAct(actor);
 }
 
 function getResponsibleGM() {

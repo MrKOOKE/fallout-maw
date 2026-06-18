@@ -2,7 +2,7 @@ import { useFirstAidItem } from "./first-aid.mjs";
 import { openLightSourceEnergyDialog } from "./light-source.mjs";
 import { useNeedChangeItem } from "./need-change.mjs";
 import { startTrapPlacement } from "../canvas/traps.mjs";
-import { isReactionSystemLocked } from "../combat/reaction-hub.mjs";
+import { isActorUnableToAct, isReactionSystemLocked } from "../combat/reaction-hub.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction, isActiveItem, resolveActorItemOrInstalledModule } from "../utils/item-functions.mjs";
 
 export function canUseActiveItem(item = null) {
@@ -16,6 +16,10 @@ export async function useActiveItem({ actor = null, token = null, item = null, a
   }
   const sourceActor = actor ?? item?.actor ?? token?.actor ?? token?.document?.actor ?? null;
   if (!sourceActor?.isOwner || !item || !canUseActiveItem(item)) return false;
+  if (isActorUnableToAct(sourceActor)) {
+    ui.notifications.warn(`${sourceActor.name}: невозможно использовать предмет без сознания или после смерти.`);
+    return false;
+  }
 
   const freshItem = resolveActorItemOrInstalledModule(sourceActor, item.id) ?? item;
   const sourceToken = resolveActorToken(sourceActor, token);
