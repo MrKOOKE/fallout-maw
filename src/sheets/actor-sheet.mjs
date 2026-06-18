@@ -129,9 +129,9 @@ import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
-import { getAbilityItemUseProgressEntries } from "../abilities/runtime-state.mjs";
+import { getAbilityItemUseProgressEntries, getActorAtRandomActionPointCostReduction } from "../abilities/runtime-state.mjs";
 import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
-import { getFixedAbilityEnergyCost, getFixedAbilityFunctionProgressEntries } from "../abilities/fixed-functions.mjs";
+import { getFixedAbilityEnergyCost, getFixedAbilityFunctionProgressEntries, getFixedWeaponPreviewModifiers } from "../abilities/fixed-functions.mjs";
 import {
   ABILITY_FIXED_FUNCTION_KEYS,
   normalizeAbilityFunctions,
@@ -4300,7 +4300,10 @@ function buildWeaponTooltipRows(item, entry = {}, { actor = null, baseMode = fal
   }
   const penetration = stats.penetration;
   if (penetration) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponPenetration"), renderChangedNumber(penetration, baseStats.penetration, { baseMode })]);
-  rows.push(...getWeaponResourceCostRows(data, baseData, { baseMode }));
+  rows.push(...getWeaponResourceCostRows(data, baseData, {
+    baseMode,
+    resourceCostMultipliers: stats.resourceCostMultipliers
+  }));
   const requirements = getWeaponRequirementLabels(data, actor);
   if (requirements.length) rows.push([game.i18n.localize("FALLOUTMAW.Item.WeaponUseRequirements"), {
     html: renderTooltipValueTokens(requirements)
@@ -4429,9 +4432,14 @@ function renderChangedTooltipSpan(text, positive) {
 
 function getWeaponTooltipCalculatedStats(item, data = {}, { actor = null, baseMode = false } = {}) {
   const contextual = baseMode ? null : getWeaponTooltipAbilityContext(item, data);
+  const fixedModifiers = baseMode
+    ? { combatValues: {}, resourceCostMultipliers: {} }
+    : getFixedWeaponPreviewModifiers(actor, item, data);
   const contextualDamageFlat = contextual ? getTooltipContextualCombatValue(actor, "damageFlat", contextual) : 0;
-  const contextualDamagePercent = contextual ? getTooltipContextualCombatValue(actor, "damagePercent", contextual) : 0;
-  const contextualAccuracy = contextual ? getTooltipContextualCombatValue(actor, "accuracy", contextual) : 0;
+  const contextualDamagePercent = (contextual ? getTooltipContextualCombatValue(actor, "damagePercent", contextual) : 0)
+    + toInteger(fixedModifiers.combatValues?.damagePercent);
+  const contextualAccuracy = (contextual ? getTooltipContextualCombatValue(actor, "accuracy", contextual) : 0)
+    + toInteger(fixedModifiers.combatValues?.accuracy);
   const contextualCriticalChance = contextual ? getTooltipContextualCombatValue(actor, "criticalChance", contextual) : 0;
   const proficiencyDamage = baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "damage");
   const baseDamageFormula = getEffectiveWeaponDamageData(item, data).damage;
@@ -4460,7 +4468,8 @@ function getWeaponTooltipCalculatedStats(item, data = {}, { actor = null, baseMo
       - conditionCritPenalty,
     criticalDamagePercent: Math.max(0, evaluateTooltipFormula(data.criticalDamagePercent, actor, { fallback: 150 })
       + (baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "criticalDamage"))),
-    penetration: Math.max(0, evaluateTooltipFormula(data.penetration, actor))
+    penetration: Math.max(0, evaluateTooltipFormula(data.penetration, actor)),
+    resourceCostMultipliers: fixedModifiers.resourceCostMultipliers ?? {}
   };
 }
 
@@ -4787,13 +4796,16 @@ function getConditionRecoveryMethodRows(condition = {}) {
     });
 }
 
-function getWeaponResourceCostRows(data = {}, baseData = {}, { baseMode = false } = {}) {
+function getWeaponResourceCostRows(data = {}, baseData = {}, { baseMode = false, resourceCostMultipliers = {} } = {}) {
   return (data.resourceCosts ?? [])
     .filter(cost => !(String(cost?.type ?? "") === "magazine" && Math.max(0, toInteger(cost?.amount)) <= 1))
     .map((cost, index) => {
-      const amount = Math.max(0, toInteger(cost?.amount));
-      const baseAmount = Math.max(0, toInteger(baseData.resourceCosts?.[index]?.amount ?? amount));
-      const type = getWeaponResourceTypeLabel(cost?.type);
+      const costType = String(cost?.type ?? "").trim();
+      const rawAmount = Math.max(0, toInteger(cost?.amount));
+      const multiplier = baseMode ? 1 : Math.max(0, Number(resourceCostMultipliers?.[costType]) || 1);
+      const amount = Math.max(0, Math.ceil(rawAmount * multiplier));
+      const baseAmount = Math.max(0, toInteger(baseData.resourceCosts?.[index]?.amount ?? rawAmount));
+      const type = getWeaponResourceTypeLabel(costType);
       return [type, renderChangedNumber(amount, baseAmount, { baseMode, higherIsBetter: false })];
     })
     .filter(([type]) => Boolean(type));
@@ -4852,6 +4864,7 @@ function getWeaponActionLabels(data = {}, baseData = {}, { actor = null, baseMod
         : Math.max(0, Math.ceil(
           applyDamageCostModifier(configuredCost, getDamageCostModifierState(actor, { actionKey: key }).action)
           + getActorPostureWeaponActionPointCostBonus(actor)
+          - getActorAtRandomActionPointCostReduction(actor, key)
         ));
       const baseCost = getWeaponActionPointCost(baseData, key);
       const costText = `${cost} ОД`;

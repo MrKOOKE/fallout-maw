@@ -60,6 +60,7 @@ import {
   normalizeWhirlwindSettings,
   normalizeWhereAreYouGoingSettings,
   normalizeReaperSettings,
+  normalizeVirtuosoSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import {
@@ -4452,6 +4453,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedReaperSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reaper
     ? prepareReaperSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedVirtuosoSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso
+    ? prepareVirtuosoSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const fixedFourLeafCloverSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover
     ? prepareFourLeafCloverSettingsForDisplay(entry?.fixedSettings)
     : null;
@@ -4509,6 +4513,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedCurseAndBlessingSettings,
     fixedAllOrNothingSettings,
     fixedReaperSettings,
+    fixedVirtuosoSettings,
     fixedFourLeafCloverSettings,
     fixedAtRandomSettings,
     fixedLastChanceSettings,
@@ -4593,6 +4598,10 @@ function prepareAllOrNothingSettingsForDisplay(settings = {}) {
 
 function prepareReaperSettingsForDisplay(settings = {}) {
   return normalizeReaperSettings(settings);
+}
+
+function prepareVirtuosoSettingsForDisplay(settings = {}) {
+  return normalizeVirtuosoSettings(settings);
 }
 
 function prepareFourLeafCloverSettingsForDisplay(settings = {}) {

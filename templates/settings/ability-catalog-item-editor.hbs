@@ -323,6 +323,24 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedVirtuosoSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Виртуоз</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Бонус при смене оружия</strong>
+          <label>
+            <span>Точность</span>
+            <input type="number" data-field="fixed.virtuoso.accuracyBonus" value="{{fixedVirtuosoSettings.accuracyBonus}}" step="1">
+          </label>
+          <label>
+            <span>Урон, %</span>
+            <input type="number" data-field="fixed.virtuoso.damagePercentBonus" value="{{fixedVirtuosoSettings.damagePercentBonus}}" step="1">
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedFourLeafCloverSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Клевер-четырёхлистник</h3>

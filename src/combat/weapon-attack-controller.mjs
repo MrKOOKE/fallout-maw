@@ -46,6 +46,7 @@ const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
 const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
 export const WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK = "fallout-maw.weaponAttackDamageResolved";
 export const WEAPON_ATTACK_RESOLVED_HOOK = "fallout-maw.weaponAttackResolved";
+export const WEAPON_ATTACK_CHECK_RESOLVED_HOOK = "fallout-maw.weaponAttackCheckResolved";
 export const WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK = "fallout-maw.weaponAttackDuplicateRequests";
 export const WEAPON_ACTION_MODIFIER_REQUEST_HOOK = "fallout-maw.weaponActionModifierRequests";
 const PREVIEW_BROADCAST_INTERVAL_MS = 16;
@@ -467,6 +468,19 @@ class WeaponAttackController {
       canceledByReaction: Boolean(this.attackCanceledByReaction),
       attackCheckCount: Math.max(0, toInteger(this.attackCheckCount)),
       senderUserId: game.user?.id ?? ""
+    });
+  }
+
+  notifyAttackCheckResolved(outcome = null) {
+    Hooks.callAll(WEAPON_ATTACK_CHECK_RESOLVED_HOOK, {
+      actor: this.token?.actor ?? null,
+      token: this.token,
+      weapon: this.weapon,
+      actionKey: this.actionKey,
+      weaponFunctionId: this.weaponFunctionId,
+      weaponAttackId: this.attackId,
+      modifierState: this.getWeaponActionModifierState(),
+      outcome
     });
   }
 
@@ -1209,6 +1223,7 @@ class WeaponAttackController {
     this.attackCheckCount += 1;
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
+    this.notifyAttackCheckResolved(outcome);
     return {
       attempted: true,
       success: isSuccessfulAttack(outcome)
@@ -1629,9 +1644,13 @@ class WeaponAttackController {
     this.attackCheckCount += 1;
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
-    if (!isSuccessfulAttack(outcome)) return null;
+    if (!isSuccessfulAttack(outcome)) {
+      this.notifyAttackCheckResolved(outcome);
+      return null;
+    }
     damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({ targetToken: target }));
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
+    this.notifyAttackCheckResolved(outcome);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
       actor: target.actor,
@@ -1843,9 +1862,13 @@ class WeaponAttackController {
     this.attackCheckCount += 1;
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
-    if (!isSuccessfulAttack(outcome)) return null;
+    if (!isSuccessfulAttack(outcome)) {
+      this.notifyAttackCheckResolved(outcome);
+      return null;
+    }
     damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({ targetToken: target }));
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
+    this.notifyAttackCheckResolved(outcome);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
       actor: target.actor,
@@ -2010,6 +2033,7 @@ class WeaponAttackController {
       radiusPixels: geometry.radiusPixels,
       outcome
     });
+    this.notifyAttackCheckResolved(outcome);
     return {
       outcome,
       center,
@@ -2117,9 +2141,13 @@ class WeaponAttackController {
     this.attackCheckCount += 1;
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
-    if (!isSuccessfulAttack(outcome)) return null;
+    if (!isSuccessfulAttack(outcome)) {
+      this.notifyAttackCheckResolved(outcome);
+      return null;
+    }
     damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({ targetToken: target }));
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
+    this.notifyAttackCheckResolved(outcome);
     return buildWeaponDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
       actor: target.actor,
@@ -2161,10 +2189,14 @@ class WeaponAttackController {
     this.attackCheckCount += 1;
     checkBatch?.add(outcome);
     this.recordCriticalFailureConsequences(outcome);
-    if (!isSuccessfulAttack(outcome)) return null;
+    if (!isSuccessfulAttack(outcome)) {
+      this.notifyAttackCheckResolved(outcome);
+      return null;
+    }
 
     damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({ targetToken: target }));
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
+    this.notifyAttackCheckResolved(outcome);
     const weaponDamageRequests = buildWeaponConditionDamageRequests(this.weapon, {
       attackerActor: this.token.actor,
       actor: target.actor,

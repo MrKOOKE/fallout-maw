@@ -18,6 +18,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   curseAndBlessing: "curseAndBlessing",
   allOrNothing: "allOrNothing",
   reaper: "reaper",
+  virtuoso: "virtuoso",
   fourLeafClover: "fourLeafClover",
   atRandom: "atRandom",
   lastChance: "lastChance",
@@ -609,6 +610,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.reaper) {
     return normalizeReaperSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso) {
+    return normalizeVirtuosoSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover) {
     return normalizeFourLeafCloverSettings(value);
   }
@@ -769,6 +773,13 @@ export function normalizeRageSettings(value = {}) {
     advantageCount: Math.max(0, toInteger(value?.advantageCount ?? 1)),
     disadvantageSkillKey: String(value?.disadvantageSkillKey ?? "rangedCombat").trim() || "rangedCombat",
     disadvantageCount: Math.max(0, toInteger(value?.disadvantageCount ?? 1))
+  };
+}
+
+export function normalizeVirtuosoSettings(value = {}) {
+  return {
+    accuracyBonus: toInteger(value?.accuracyBonus ?? 20),
+    damagePercentBonus: toInteger(value?.damagePercentBonus ?? 20)
   };
 }
 

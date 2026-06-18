@@ -20,6 +20,7 @@ import {
   normalizeLuckyCoinSettings,
   normalizeLungeSettings,
   normalizeReaperSettings,
+  normalizeVirtuosoSettings,
   normalizeRageSettings,
   normalizeWhirlwindSettings,
   normalizeWhereAreYouGoingSettings
@@ -45,6 +46,7 @@ import {
   executeWeaponAttackAgainstToken,
   startWeaponAttack,
   WEAPON_ACTION_MODIFIER_REQUEST_HOOK,
+  WEAPON_ATTACK_CHECK_RESOLVED_HOOK,
   WEAPON_ATTACK_DAMAGE_RESOLVED_HOOK,
   WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK,
   WEAPON_ATTACK_RESOLVED_HOOK,
@@ -163,6 +165,14 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.reaper
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.virtuoso,
+    label: "Виртуоз",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.virtuoso
     })
   }),
   Object.freeze({
@@ -291,13 +301,18 @@ export function registerFixedAbilityFunctionHooks() {
   Hooks.on(WEAPON_ATTACK_RESOLVED_HOOK, context => {
     void consumeAllOrNothingResultEffects(context);
     void processReaperAttackResolution(context);
+    void updateVirtuosoLastWeapon(context);
     void requestCounterAttackReaction(context);
+  });
+  Hooks.on(WEAPON_ATTACK_CHECK_RESOLVED_HOOK, context => {
+    void consumeVirtuosoAttackBonus(context);
   });
   Hooks.on(WEAPON_ATTACK_DUPLICATE_REQUEST_HOOK, context => {
     requestDoubleAttackDuplicate(context);
   });
   Hooks.on(WEAPON_ACTION_MODIFIER_REQUEST_HOOK, context => {
     requestFullForceWeaponActionModifiers(context);
+    requestVirtuosoWeaponActionModifiers(context);
   });
   Hooks.on("fallout-maw.weaponActionResolved", context => {
     void processAtRandomAttackResolution(context);
@@ -381,6 +396,14 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
           value: String(settings.currentCharges)
         };
       }
+      if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso) {
+        const stateKey = getFixedFunctionStateKey(entry);
+        return {
+          key: stateKey,
+          label: "Последнее оружие",
+          value: String(state[stateKey]?.weaponName ?? "").trim() || "Нету"
+        };
+      }
       if (entry.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) return null;
       const settings = normalizeDeusExMachinaSettings(entry.fixedSettings);
       const stateKey = getFixedFunctionStateKey(entry);
@@ -392,6 +415,37 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
       };
     })
     .filter(Boolean);
+}
+
+export function getFixedWeaponPreviewModifiers(actor, weapon, weaponData = {}) {
+  const combatValues = { accuracy: 0, damagePercent: 0 };
+  const resourceCostMultipliers = { condition: 1 };
+  const weaponName = String(weapon?.name ?? "").trim();
+  const weaponSkillKey = String(weaponData?.skillKey ?? "").trim();
+  if (!actor || !weaponName) return { combatValues, resourceCostMultipliers };
+
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    const state = getFixedAbilityState(abilityItem);
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      const stateKey = getFixedFunctionStateKey(abilityFunction);
+      if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso) {
+        const previousWeaponName = String(state[stateKey]?.weaponName ?? "").trim();
+        if (previousWeaponName && previousWeaponName === weaponName) continue;
+        const settings = normalizeVirtuosoSettings(abilityFunction.fixedSettings);
+        combatValues.accuracy += settings.accuracyBonus;
+        combatValues.damagePercent += settings.damagePercentBonus;
+        continue;
+      }
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.fullForce) continue;
+      if (!state[stateKey]?.active) continue;
+      const settings = normalizeFullForceSettings(abilityFunction.fixedSettings);
+      if (!weaponSkillKey || weaponSkillKey !== settings.requiredSkillKey) continue;
+      combatValues.damagePercent += settings.damagePercentBonus;
+      resourceCostMultipliers.condition *= settings.conditionCostMultiplier;
+    }
+  }
+
+  return { combatValues, resourceCostMultipliers };
 }
 
 export async function useFixedAbilityFunctionItem({ actor = null, item = null, application = null } = {}) {
@@ -2327,6 +2381,84 @@ function requestFullForceWeaponActionModifiers(context = {}) {
         }
       });
     }
+  }
+}
+
+function requestVirtuosoWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  const weaponName = String(context?.weapon?.name ?? "").trim();
+  if (!actor || !weaponName || !ATTACKING_WEAPON_ACTION_KEYS.includes(String(context?.actionKey ?? ""))) return;
+
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    const state = getFixedAbilityState(abilityItem);
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.virtuoso) continue;
+      const previousWeaponName = String(state[getFixedFunctionStateKey(abilityFunction)]?.weaponName ?? "").trim();
+      if (previousWeaponName && previousWeaponName === weaponName) continue;
+      const settings = normalizeVirtuosoSettings(abilityFunction.fixedSettings);
+      context.modifierState.addCombatValue("accuracy", settings.accuracyBonus);
+      context.modifierState.addCombatValue("damagePercent", settings.damagePercentBonus);
+    }
+  }
+}
+
+async function updateVirtuosoLastWeapon(context = {}) {
+  if (context?.canceledByReaction) return;
+  const actionKey = String(context?.actionKey ?? "").trim();
+  if (!ATTACKING_WEAPON_ACTION_KEYS.includes(actionKey)) return;
+  const actorUuid = String(context?.attackerUuid ?? context?.actorUuid ?? "").trim();
+  const actor = actorUuid ? fromUuidSync(actorUuid) : null;
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
+  const weaponUuid = String(context?.weaponUuid ?? "").trim();
+  const weapon = weaponUuid ? fromUuidSync(weaponUuid) : null;
+  const weaponName = String(weapon?.name ?? "").trim();
+  if (!weaponName) return;
+
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    const functions = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
+      .filter(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso);
+    if (!functions.length) continue;
+    const state = getFixedAbilityState(abilityItem);
+    let changed = false;
+    for (const abilityFunction of functions) {
+      const stateKey = getFixedFunctionStateKey(abilityFunction);
+      if (String(state[stateKey]?.weaponName ?? "").trim() === weaponName) continue;
+      state[stateKey] = {
+        ...state[stateKey],
+        fixedKey: abilityFunction.fixedKey,
+        weaponName
+      };
+      changed = true;
+    }
+    if (changed) await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  }
+}
+
+async function consumeVirtuosoAttackBonus(context = {}) {
+  const actor = context?.actor ?? null;
+  const weaponName = String(context?.weapon?.name ?? "").trim();
+  if (!actor || !weaponName || (!game.user?.isGM && !actor.isOwner)) return;
+
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    const functions = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
+      .filter(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso);
+    if (!functions.length) continue;
+    const state = getFixedAbilityState(abilityItem);
+    let changed = false;
+    for (const abilityFunction of functions) {
+      const stateKey = getFixedFunctionStateKey(abilityFunction);
+      if (String(state[stateKey]?.weaponName ?? "").trim() === weaponName) continue;
+      const settings = normalizeVirtuosoSettings(abilityFunction.fixedSettings);
+      context.modifierState?.addCombatValue?.("accuracy", -settings.accuracyBonus);
+      context.modifierState?.addCombatValue?.("damagePercent", -settings.damagePercentBonus);
+      state[stateKey] = {
+        ...state[stateKey],
+        fixedKey: abilityFunction.fixedKey,
+        weaponName
+      };
+      changed = true;
+    }
+    if (changed) await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
   }
 }
 

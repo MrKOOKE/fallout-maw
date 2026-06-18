@@ -31,6 +31,7 @@ import {
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
   normalizeReaperSettings,
+  normalizeVirtuosoSettings,
   normalizeDeusExMachinaSettings,
   normalizeDisarmSettings,
   normalizeDoubleAttackSettings,
@@ -710,6 +711,12 @@ function readFixedFunctionSettings(row) {
       attackChanceFormula: row.querySelector("[data-field='fixed.reaper.attackChanceFormula']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso) {
+    return {
+      accuracyBonus: row.querySelector("[data-field='fixed.virtuoso.accuracyBonus']")?.value,
+      damagePercentBonus: row.querySelector("[data-field='fixed.virtuoso.damagePercentBonus']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover) {
     return {
       currentCharges: row.querySelector("[data-field='fixed.fourLeafClover.currentCharges']")?.value,
@@ -967,6 +974,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedReaperSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.reaper
     ? prepareReaperSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedVirtuosoSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso
+    ? normalizeVirtuosoSettings(normalized.fixedSettings)
+    : null;
   const fixedFourLeafCloverSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover
     ? prepareFourLeafCloverSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -1022,6 +1032,7 @@ function prepareFunctionForDisplay(entry) {
     fixedCurseAndBlessingSettings,
     fixedAllOrNothingSettings,
     fixedReaperSettings,
+    fixedVirtuosoSettings,
     fixedFourLeafCloverSettings,
     fixedAtRandomSettings,
     fixedDefensiveTacticsSettings,
