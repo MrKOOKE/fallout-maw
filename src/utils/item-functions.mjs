@@ -21,6 +21,7 @@ export const ITEM_FUNCTIONS = {
 };
 export const CONSTRUCT_PART_MITIGATION_LIMB_KEY = "constructPart";
 export const MODULE_WEAPON_FUNCTION_ID_PREFIX = "module:";
+export const INSTALLED_MODULE_ITEM_ID_PREFIX = "installed-module:";
 export const WEAPON_SPECIAL_PROPERTIES = Object.freeze({
   pending: "pending",
   hitAllConeTargets: "hitAllConeTargets",
@@ -381,6 +382,35 @@ export function getWeaponFunctionModuleSlots(itemOrSystem = null, functionId = "
   return id === ITEM_FUNCTIONS.weapon && Array.isArray(primary.moduleSlots) ? primary.moduleSlots : [];
 }
 
+export function getActorItemsWithInstalledModules(actor = null) {
+  return [
+    ...getActorItemDocuments(actor),
+    ...getActorInstalledModuleItems(actor)
+  ];
+}
+
+export function resolveActorItemOrInstalledModule(actor = null, itemId = "") {
+  const id = String(itemId ?? "").trim();
+  if (!actor || !id) return null;
+  return actor.items?.get?.(id) ?? getActorInstalledModuleItems(actor).find(item => item.id === id) ?? null;
+}
+
+export function getActorInstalledModuleItems(actor = null) {
+  const modules = [];
+  for (const hostItem of getActorItemDocuments(actor)) {
+    if (!isActiveModuleHostItem(hostItem)) continue;
+    const slots = Array.isArray(getWeaponFunction(hostItem)?.moduleSlots)
+      ? getWeaponFunction(hostItem).moduleSlots
+      : [];
+    slots.forEach((slot, slotIndex) => {
+      const itemData = getWeaponModuleSlotItemData(slot);
+      if (!itemData?.system || !hasItemFunction(itemData, ITEM_FUNCTIONS.module)) return;
+      modules.push(createInstalledModuleItem(actor, hostItem, slot, slotIndex, itemData));
+    });
+  }
+  return modules;
+}
+
 export function getWeaponFunctionUpdatePath(itemOrSystem = null, functionId = "") {
   const id = String(functionId || ITEM_FUNCTIONS.weapon);
   if (!id || id === ITEM_FUNCTIONS.weapon) return "system.functions.weapon";
@@ -495,6 +525,113 @@ function getInstalledModuleWeaponFunctions(itemOrSystem = null, { ignoreBroken =
         }
       }));
   });
+}
+
+function getActorItemDocuments(actor = null) {
+  if (Array.isArray(actor?.items?.contents)) return actor.items.contents;
+  if (typeof actor?.items?.values === "function") return Array.from(actor.items.values());
+  return Array.from(actor?.items ?? []);
+}
+
+function isActiveModuleHostItem(item = null) {
+  if (!item?.system || !hasItemFunction(item, ITEM_FUNCTIONS.weapon)) return false;
+  const mode = String(item.system?.placement?.mode ?? "").trim();
+  return Boolean(item.system?.equipped)
+    || ["equipment", "weapon", "constructPart"].includes(mode)
+    || Object.values(item.system?.occupiedSlots ?? {}).some(Boolean);
+}
+
+function createInstalledModuleItem(actor, hostItem, slot = {}, slotIndex = 0, sourceItemData = {}) {
+  const slotId = String(slot?.id ?? "") || `slot-${slotIndex + 1}`;
+  const id = createInstalledModuleItemId(hostItem, slotId);
+  const data = prepareInstalledModuleItemData(sourceItemData, id, hostItem, slotId);
+  const item = {
+    ...data,
+    id,
+    _id: id,
+    actor,
+    parent: actor,
+    uuid: `${hostItem.uuid}.Module.${slotId}`,
+    sheet: hostItem.sheet,
+    getFlag(scope, key) {
+      return foundry.utils.getProperty(this.flags ?? {}, `${scope}.${key}`);
+    },
+    async setFlag(scope, key, value) {
+      return this.update({ [`flags.${scope}.${key}`]: value });
+    },
+    async unsetFlag(scope, key) {
+      const nextData = foundry.utils.deepClone(getWeaponModuleSlotItemData(getCurrentHostModuleSlot(actor, hostItem, slotIndex)) ?? data);
+      deleteNestedProperty(nextData, `flags.${scope}.${key}`);
+      await updateInstalledModuleItemData(actor, hostItem, slotIndex, nextData);
+      return undefined;
+    },
+    toObject() {
+      return foundry.utils.deepClone({ ...data, _id: id });
+    },
+    async update(updateData = {}, options = {}) {
+      const currentSlot = getCurrentHostModuleSlot(actor, hostItem, slotIndex);
+      const currentData = foundry.utils.deepClone(getWeaponModuleSlotItemData(currentSlot) ?? data);
+      foundry.utils.mergeObject(currentData, foundry.utils.expandObject(updateData ?? {}), { inplace: true });
+      await updateInstalledModuleItemData(actor, hostItem, slotIndex, currentData, options);
+      return resolveActorItemOrInstalledModule(actor, id);
+    }
+  };
+  return item;
+}
+
+function createInstalledModuleItemId(hostItem = null, slotId = "") {
+  return `${INSTALLED_MODULE_ITEM_ID_PREFIX}${hostItem?.id ?? ""}:${String(slotId ?? "")}`;
+}
+
+function prepareInstalledModuleItemData(sourceItemData = {}, id = "", hostItem = null, slotId = "") {
+  const data = foundry.utils.deepClone(sourceItemData);
+  data.type ||= "gear";
+  data.name ||= "Module";
+  data.img ||= "icons/svg/item-bag.svg";
+  data.flags ??= {};
+  data.system ??= {};
+  data.system.equipped = true;
+  data.system.placement = {
+    ...(data.system.placement ?? {}),
+    mode: "module",
+    parentItemId: hostItem?.id ?? "",
+    moduleSlotId: slotId
+  };
+  data._id = id;
+  return data;
+}
+
+function getCurrentHostModuleSlot(actor = null, hostItem = null, slotIndex = 0) {
+  const currentHost = actor?.items?.get?.(hostItem?.id ?? "") ?? hostItem;
+  const slots = Array.isArray(getWeaponFunction(currentHost)?.moduleSlots)
+    ? getWeaponFunction(currentHost).moduleSlots
+    : [];
+  return slots[slotIndex] ?? null;
+}
+
+async function updateInstalledModuleItemData(actor = null, hostItem = null, slotIndex = 0, itemData = {}, options = {}) {
+  const currentHost = actor?.items?.get?.(hostItem?.id ?? "") ?? hostItem;
+  if (!currentHost?.update) return false;
+  const slots = foundry.utils.deepClone(Array.isArray(getWeaponFunction(currentHost)?.moduleSlots)
+    ? getWeaponFunction(currentHost).moduleSlots
+    : []);
+  if (!slots[slotIndex]) return false;
+  slots[slotIndex] = {
+    ...slots[slotIndex],
+    itemData: foundry.utils.deepClone(itemData)
+  };
+  await currentHost.update({ "system.functions.weapon.moduleSlots": slots }, options);
+  return true;
+}
+
+function deleteNestedProperty(target = {}, path = "") {
+  const parts = String(path ?? "").split(".").filter(Boolean);
+  if (!parts.length) return;
+  const key = parts.pop();
+  const parent = parts.reduce((value, part) => (
+    value && typeof value === "object" ? value[part] : undefined
+  ), target);
+  if (parent && typeof parent === "object") delete parent[key];
 }
 
 function normalizeWeaponFunctionEntries(functions = null) {

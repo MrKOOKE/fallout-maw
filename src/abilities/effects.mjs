@@ -6,6 +6,7 @@ import {
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import { abilityConditionsApply, getAbilityEffectChanges, getAbilityEffectChangesFromFunctions, getAbilityFunctionChangesForSatisfiedAuraCondition } from "./evaluation.mjs";
+import { getActorItemsWithInstalledModules } from "../utils/item-functions.mjs";
 import {
   AURA_GENERATED_EFFECT_FLAG_KEY,
   findAuraDistributionConditions,
@@ -119,7 +120,7 @@ export async function syncActorAbilityEffects(actor, context = {}) {
   try {
     const abilityItems = actor.items?.filter(item => item.type === "ability") ?? [];
     const activeAbilityItemIds = new Set(abilityItems.map(item => item.id));
-    const itemFreeSettingsItems = actor.items?.filter(item => isActiveItemFreeSettingsItem(item)) ?? [];
+    const itemFreeSettingsItems = getActorItemsWithInstalledModules(actor).filter(item => isActiveItemFreeSettingsItem(item));
     const activeItemFreeSettingsItemIds = new Set(itemFreeSettingsItems.map(item => item.id));
 
     for (const item of abilityItems) {
@@ -280,7 +281,7 @@ function buildDesiredAuraGeneratedEffects() {
 
 function getAuraSourceFunctionSets(actor) {
   const sources = [];
-  for (const item of actor?.items ?? []) {
+  for (const item of getActorItemsWithInstalledModules(actor)) {
     if (item?.type === "ability") {
       sources.push({ kind: "ability", item, functions: item.system?.functions ?? [] });
       continue;

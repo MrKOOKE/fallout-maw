@@ -3,12 +3,14 @@ import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { FALLBACK_ICON, escapeHTML, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
   ITEM_FUNCTIONS,
+  getActorItemsWithInstalledModules,
   getConditionFunction,
   getEnergyConsumerFunction,
   getEnergySourceFunction,
   getLightSourceFunction,
   hasItemFunction,
-  isItemBrokenByCondition
+  isItemBrokenByCondition,
+  resolveActorItemOrInstalledModule
 } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
@@ -90,14 +92,14 @@ export async function openLightSourceEnergyDialog({ actor = null, token = null, 
   const renderContent = () => renderLightSourceEnergyDialogContent({
     actor,
     token,
-    item: actor.items.get(item.id) ?? item,
+    item: resolveActorItemOrInstalledModule(actor, item.id) ?? item,
     showToggle,
     usesEnergy,
     selectedSourceUuid
   });
   const refreshDialogContent = dialog => {
     if (selectedSourceUuid) {
-      const freshItem = actor.items.get(item.id);
+      const freshItem = resolveActorItemOrInstalledModule(actor, item.id);
       const source = getAvailableEnergySourceItems(actor, getEnergyConsumerFunction(freshItem))
         .find(candidate => candidate.uuid === selectedSourceUuid);
       if (!source) selectedSourceUuid = "";
@@ -106,7 +108,7 @@ export async function openLightSourceEnergyDialog({ actor = null, token = null, 
     if (root) root.outerHTML = renderContent();
   };
   const switchSource = async (dialog, sourceUuid) => {
-    const freshItem = actor.items.get(item.id);
+    const freshItem = resolveActorItemOrInstalledModule(actor, item.id);
     const source = getAvailableEnergySourceItems(actor, getEnergyConsumerFunction(freshItem))
       .find(candidate => candidate.uuid === sourceUuid);
     if (!freshItem || !source) {
@@ -120,7 +122,7 @@ export async function openLightSourceEnergyDialog({ actor = null, token = null, 
     await application?.render({ force: true });
   };
   const extractSource = async dialog => {
-    const freshItem = actor.items.get(item.id);
+    const freshItem = resolveActorItemOrInstalledModule(actor, item.id);
     if (!freshItem) return;
     const extracted = await extractEnergyConsumerSource(actor, freshItem);
     if (!extracted) ui.notifications?.warn?.(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoEnergySource"));
@@ -129,7 +131,7 @@ export async function openLightSourceEnergyDialog({ actor = null, token = null, 
     await application?.render({ force: true });
   };
   const toggleFromDialog = async dialog => {
-    const freshItem = actor.items.get(item.id);
+    const freshItem = resolveActorItemOrInstalledModule(actor, item.id);
     if (!freshItem) return;
     await toggleLightSource(token?.document ?? token, freshItem);
     refreshDialogContent(dialog);
@@ -248,9 +250,7 @@ export function getActiveEnergySourceItem(actor = null, consumerData = {}) {
 }
 
 export function getAvailableEnergySourceItems(actor = null, consumerData = {}) {
-  const sourceItems = Array.isArray(actor?.items?.contents)
-    ? actor.items.contents
-    : (typeof actor?.items?.values === "function" ? Array.from(actor.items.values()) : []);
+  const sourceItems = getActorItemsWithInstalledModules(actor);
   return sourceItems
     .filter(item => hasItemFunction(item, ITEM_FUNCTIONS.energySource, { ignoreBroken: true }))
     .filter(item => energySourceMatchesConsumer(item, consumerData))
@@ -390,7 +390,7 @@ export async function syncTokenLightSources(tokenOrDocument = null) {
   const entries = getActiveLightSourceEntries(tokenDocument);
   const activeSources = [];
   for (const entry of entries) {
-    const item = actor.items?.get(entry.itemId);
+    const item = resolveActorItemOrInstalledModule(actor, entry.itemId);
     if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.lightSource) || isItemBrokenByCondition(item)) continue;
     if (!canActivateLightSource(item)) continue;
     activeSources.push({ item, light: getLightSourceFunction(item) });
@@ -443,7 +443,7 @@ async function processSceneLightSourceWorldTime(scene = null, deltaSeconds = 0) 
     const remaining = [];
     let changed = false;
     for (const entry of entries) {
-      const item = actor.items?.get(entry.itemId);
+      const item = resolveActorItemOrInstalledModule(actor, entry.itemId);
       if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.lightSource) || isItemBrokenByCondition(item)) {
         changed = true;
         continue;

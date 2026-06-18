@@ -7,7 +7,7 @@ import {
 } from "../settings/cover.mjs";
 import { toInteger } from "./numbers.mjs";
 import { prepareEffectChangeForApplication } from "./effect-change-values.mjs";
-import { getConditionWeakeningData, isItemBrokenByCondition } from "./item-functions.mjs";
+import { getConditionWeakeningData, isItemBrokenByCondition, resolveActorItemOrInstalledModule } from "./item-functions.mjs";
 
 const ITEM_EFFECT_FLAG_KEY = "itemEffect";
 export const ALL_SKILLS_BONUS_EFFECT_KEY = "system.skills.all.bonus";
@@ -208,5 +208,5 @@ function stableHash(value = "") {
 function getItemFreeSettingsEffectSourceItem(actor, effect = null) {
   const data = effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY);
   const itemId = String(data?.itemId ?? "").trim();
-  return itemId ? actor?.items?.get(itemId) ?? null : null;
+  return itemId ? resolveActorItemOrInstalledModule(actor, itemId) : null;
 }

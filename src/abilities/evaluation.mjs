@@ -13,6 +13,7 @@ import {
 import { getEquipmentSlotSelectionKey, getValidSelectedEquipmentSlotKeys } from "../utils/equipment-slots.mjs";
 import { isAbilityAcquisitionChangeKey } from "../utils/ability-acquisition-change-keys.mjs";
 import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
+import { getActorItemsWithInstalledModules } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { hasAbilityFunctionCooldown } from "./runtime-state.mjs";
 import { abilityAuraConditionApplies, isAuraDistributionCondition } from "./aura-conditions.mjs";
@@ -262,7 +263,7 @@ function isActiveFreeSettingsItem(item) {
 export function getContextualAbilityEffectChanges(actor, context = {}) {
   if (!actor) return [];
   const changes = [];
-  for (const item of actor.items ?? []) {
+  for (const item of getActorItemsWithInstalledModules(actor)) {
     const functions = item?.type === "ability"
       ? item.system?.functions ?? []
       : isActiveFreeSettingsItem(item) ? item.system?.functions?.freeSettings?.entries ?? [] : [];

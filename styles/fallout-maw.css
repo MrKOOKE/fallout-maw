@@ -5154,8 +5154,7 @@ label.fallout-maw-mitigation-cell {
   white-space: nowrap;
 }
 
-#tooltip.fallout-maw-module-item-tooltip,
-.fallout-maw-nested-tooltip.fallout-maw-module-item-tooltip {
+#tooltip.fallout-maw-module-item-tooltip {
   box-sizing: border-box;
   max-width: min(760px, calc(100vw - 1rem));
   min-width: min(560px, calc(100vw - 1rem));
@@ -5165,11 +5164,6 @@ label.fallout-maw-mitigation-cell {
 
 #tooltip.fallout-maw-module-item-tooltip {
   pointer-events: none;
-}
-
-.fallout-maw-nested-tooltip {
-  pointer-events: auto;
-  z-index: 100001;
 }
 
 .fallout-maw-inventory-tooltip .tooltip-module-picker-panels {

@@ -3,7 +3,7 @@ import { openLightSourceEnergyDialog } from "./light-source.mjs";
 import { useNeedChangeItem } from "./need-change.mjs";
 import { startTrapPlacement } from "../canvas/traps.mjs";
 import { isReactionSystemLocked } from "../combat/reaction-hub.mjs";
-import { ITEM_FUNCTIONS, hasItemFunction, isActiveItem } from "../utils/item-functions.mjs";
+import { ITEM_FUNCTIONS, hasItemFunction, isActiveItem, resolveActorItemOrInstalledModule } from "../utils/item-functions.mjs";
 
 export function canUseActiveItem(item = null) {
   return Boolean(item?.actor?.isOwner && isActiveItem(item));
@@ -17,7 +17,7 @@ export async function useActiveItem({ actor = null, token = null, item = null, a
   const sourceActor = actor ?? item?.actor ?? token?.actor ?? token?.document?.actor ?? null;
   if (!sourceActor?.isOwner || !item || !canUseActiveItem(item)) return false;
 
-  const freshItem = sourceActor.items?.get(item.id) ?? item;
+  const freshItem = resolveActorItemOrInstalledModule(sourceActor, item.id) ?? item;
   const sourceToken = resolveActorToken(sourceActor, token);
   if (hasItemFunction(freshItem, ITEM_FUNCTIONS.lightSource)) {
     await openLightSourceEnergyDialog({
