@@ -636,6 +636,38 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedWhereAreYouGoingSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Ты куда собрался?</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Реакция</strong>
+          <label>
+            <span>Расход энергии</span>
+            <input type="number" data-field="fixed.whereAreYouGoing.reactionEnergyCost" value="{{fixedWhereAreYouGoingSettings.reactionEnergyCost}}" min="0" step="1">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" data-field="fixed.whereAreYouGoing.reactionOverloadEnergyCost" value="{{fixedWhereAreYouGoingSettings.reactionOverloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.whereAreYouGoing.reactionOverloadDurationAmount" value="{{fixedWhereAreYouGoingSettings.reactionOverloadDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.whereAreYouGoing.reactionOverloadDurationUnit">
+                {{#each fixedWhereAreYouGoingSettings.reactionOverloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedRageSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Ярость</h3>

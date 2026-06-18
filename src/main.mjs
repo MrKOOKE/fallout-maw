@@ -6,6 +6,7 @@ import { registerPostureMovementHooks } from "./canvas/posture-movement.mjs";
 import { registerCoverHooks, registerCoverSocket } from "./canvas/cover.mjs";
 import { registerThrownItemHooks } from "./canvas/thrown-items.mjs";
 import { registerTrapHooks } from "./canvas/traps.mjs";
+import { registerMovementInterruptionHooks } from "./canvas/movement-interruptions.mjs";
 import { registerCombatDodgeHooks, registerCombatDodgeSocket } from "./combat/dodge-resource.mjs";
 import { registerCombatMovementHooks } from "./combat/movement-resources.mjs";
 import { registerReactionResourceHooks } from "./combat/reaction-resources.mjs";
@@ -102,6 +103,7 @@ Hooks.once("init", () => {
   registerTrackableAttributes();
   registerPostureMovementHooks();
   registerCoverHooks();
+  registerMovementInterruptionHooks();
   registerCombatDodgeHooks();
   registerCombatMovementHooks();
   registerReactionResourceHooks();

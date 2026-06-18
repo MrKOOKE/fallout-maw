@@ -21,7 +21,8 @@ import {
   normalizeLungeSettings,
   normalizeReaperSettings,
   normalizeRageSettings,
-  normalizeWhirlwindSettings
+  normalizeWhirlwindSettings,
+  normalizeWhereAreYouGoingSettings
 } from "../settings/abilities.mjs";
 import {
   ATTACKING_WEAPON_ACTION_KEYS,
@@ -81,7 +82,17 @@ import {
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { REACTION_EVENT_KEYS, REACTION_RESULT, isReactionSystemLocked, registerReactionProvider, requestReactionEvent } from "../combat/reaction-hub.mjs";
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "../combat/reaction-resources.mjs";
-import { areTokensAdjacent } from "../combat/active-actions.mjs";
+import { areTokensAdjacent, areTokensAdjacentAt } from "../combat/active-actions.mjs";
+import {
+  getMovementRouteSamples,
+  getMovementSegmentSamples,
+  registerMovementInterruptionProvider
+} from "../canvas/movement-interruptions.mjs";
+import {
+  DEFAULT_FACTION_NAME,
+  getActorFactionBelongs,
+  getRelationTo
+} from "../settings/factions.mjs";
 import { createThrownItemTile } from "../canvas/thrown-items.mjs";
 import { prepareInventoryContext, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import {
@@ -105,6 +116,10 @@ const DEFENSIVE_TACTICS_EFFECT_FLAG_KEY = "defensiveTactics";
 const RAGE_EFFECT_FLAG_KEY = "rage";
 const DISARM_REACTION_PROVIDER_ID = "disarm";
 const COUNTER_ATTACK_REACTION_PROVIDER_ID = "counterAttack";
+const WHERE_ARE_YOU_GOING_REACTION_PROVIDER_ID = "whereAreYouGoing";
+const WHERE_ARE_YOU_GOING_MOVEMENT_PROVIDER_ID = "whereAreYouGoingMovement";
+const WHERE_ARE_YOU_GOING_WEAPON_QUERY_NAME = "falloutMawWhereAreYouGoingWeapon";
+const WHERE_ARE_YOU_GOING_RESUME_OPTION = "falloutMawWhereAreYouGoingResume";
 const DISARM_QUERY_NAME = "falloutMawDisarm";
 const DISARM_SOCKET_TIMEOUT_MS = 60000;
 const FIXED_ABILITY_SOCKET = `system.${SYSTEM_ID}`;
@@ -241,6 +256,14 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing,
+    label: "Ты куда собрался?",
+    passive: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.fullForce,
     label: "Со всей мощи",
     active: true,
@@ -254,6 +277,8 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
 export function registerFixedAbilityFunctionHooks() {
   registerDisarmReactionProvider();
   registerCounterAttackReactionProvider();
+  registerWhereAreYouGoingReactionProvider();
+  registerWhereAreYouGoingMovementProvider();
   registerActorTurnEndHandler(context => applyDefensiveTacticsAtTurnEnd(context));
   registerActorTurnStartPreparedHandler(context => deleteDefensiveTacticsEffects(context?.actor));
   registerLethalDamagePreventionHandler(context => processLastChanceLethalDamage(context));
@@ -1042,6 +1067,314 @@ function registerCounterAttackReactionProvider() {
   });
 }
 
+function registerWhereAreYouGoingReactionProvider() {
+  CONFIG.queries[WHERE_ARE_YOU_GOING_WEAPON_QUERY_NAME] = handleWhereAreYouGoingWeaponQuery;
+  registerReactionProvider({
+    id: WHERE_ARE_YOU_GOING_REACTION_PROVIDER_ID,
+    collect: collectWhereAreYouGoingReactionOffers,
+    execute: executeWhereAreYouGoingReaction
+  });
+}
+
+function registerWhereAreYouGoingMovementProvider() {
+  registerMovementInterruptionProvider({
+    id: WHERE_ARE_YOU_GOING_MOVEMENT_PROVIDER_ID,
+    collect: collectWhereAreYouGoingMovementInterruptions,
+    execute: executeWhereAreYouGoingMovementInterruption
+  });
+}
+
+function collectWhereAreYouGoingMovementInterruptions({ tokenDocument, movement, options = {} } = {}) {
+  const mover = tokenDocument?.actor;
+  const combat = getActiveSceneCombat(tokenDocument?.parent);
+  if (!mover || !combat || !isTokenActiveCombatant(combat, tokenDocument)) return [];
+  const skippedReactorTokenUuids = new Set(
+    (options?.[WHERE_ARE_YOU_GOING_RESUME_OPTION]?.reactorTokenUuids ?? [])
+      .map(uuid => String(uuid ?? "").trim())
+      .filter(Boolean)
+  );
+
+  const reactors = (tokenDocument.parent?.tokens?.contents ?? [])
+    .filter(other => other?.actor && other.id !== tokenDocument.id)
+    .filter(other => isTokenActiveCombatant(combat, other))
+    .filter(other => canUseWhereAreYouGoingReaction(other.actor))
+    .filter(other => isWhereAreYouGoingOpponent(other.actor, mover))
+    .filter(other => getActorWhereAreYouGoingEntries(other.actor).some(entry => (
+      hasEnergy(other.actor, getAbilityEnergyCost(
+        other.actor,
+        entry.abilityItem,
+        entry.abilityFunction,
+        entry.settings.reactionEnergyCost
+      ))
+      && getWhereAreYouGoingWeaponCandidates(other.actor)
+        .some(candidate => hasRequiredWeaponResources(candidate.weapon, 1, candidate.weaponFunctionId))
+    )));
+  if (!reactors.length) return [];
+
+  const samples = getMovementRouteSamples(tokenDocument, movement);
+  let routeOrder = 0;
+  for (let index = 1; index < samples.length; index += 1) {
+    const segmentSamples = getMovementSegmentSamples(tokenDocument, samples[index - 1], samples[index]);
+    for (let segmentIndex = 1; segmentIndex < segmentSamples.length; segmentIndex += 1) {
+      routeOrder += 1;
+      const previous = segmentSamples[segmentIndex - 1];
+      const current = segmentSamples[segmentIndex];
+      const leavingReactors = reactors.filter(reactor => {
+        const wasAdjacent = areTokensAdjacentAt(tokenDocument, previous.waypoint, reactor, null);
+        const isAdjacent = areTokensAdjacentAt(tokenDocument, current.waypoint, reactor, null);
+        if (skippedReactorTokenUuids.has(reactor.uuid)) {
+          if (!isAdjacent) skippedReactorTokenUuids.delete(reactor.uuid);
+          return false;
+        }
+        return wasAdjacent && !isAdjacent;
+      });
+      if (!leavingReactors.length) continue;
+      return [{
+        type: REACTION_EVENT_KEYS.tokenLeavingAdjacency,
+        eventId: `${movement?.id ?? foundry.utils.randomID()}:${routeOrder}`,
+        routeOrder,
+        priority: -100,
+        waypoint: previous.waypoint,
+        reactorTokenUuids: leavingReactors.map(reactor => reactor.uuid),
+        remainingWaypoints: buildRemainingMovementWaypoints(segmentSamples, segmentIndex, samples, index)
+      }];
+    }
+  }
+  return [];
+}
+
+async function executeWhereAreYouGoingMovementInterruption({ tokenDocument, movement, event } = {}) {
+  const mover = tokenDocument?.actor;
+  if (!mover) return;
+  const result = await requestReactionEvent(REACTION_EVENT_KEYS.tokenLeavingAdjacency, {
+    movementId: movement?.id ?? "",
+    moverActorUuid: mover.uuid,
+    moverTokenUuid: tokenDocument.uuid,
+    reactorTokenUuids: event?.reactorTokenUuids ?? [],
+    title: "Ты куда собрался?",
+    message: `${mover.name} пытается покинуть соседнюю клетку. Шаг отменён.`
+  });
+  if (result?.status === REACTION_RESULT.success) return;
+  await resumeWhereAreYouGoingMovement(tokenDocument, movement, event);
+}
+
+async function collectWhereAreYouGoingReactionOffers({ eventKey = "", context = {} } = {}) {
+  if (eventKey !== REACTION_EVENT_KEYS.tokenLeavingAdjacency) return [];
+  const mover = await fromUuid(String(context.moverActorUuid ?? ""));
+  const moverToken = await fromUuid(String(context.moverTokenUuid ?? ""));
+  if (!mover || !moverToken) return [];
+
+  const offers = [];
+  for (const reactorTokenUuid of context.reactorTokenUuids ?? []) {
+    const reactorToken = await fromUuid(String(reactorTokenUuid ?? ""));
+    const reactor = reactorToken?.actor;
+    if (
+      !reactor
+      || !canUseWhereAreYouGoingReaction(reactor)
+      || !areTokensAdjacent(reactorToken, moverToken)
+      || !isWhereAreYouGoingOpponent(reactor, mover)
+    ) continue;
+    const entry = getActorWhereAreYouGoingEntries(reactor).find(candidateEntry => {
+      const candidateEnergyCost = getAbilityEnergyCost(
+        reactor,
+        candidateEntry.abilityItem,
+        candidateEntry.abilityFunction,
+        candidateEntry.settings.reactionEnergyCost
+      );
+      return hasEnergy(reactor, candidateEnergyCost)
+        && getAvailableWhereAreYouGoingWeaponCandidates(reactor).length > 0;
+    });
+    if (!entry) continue;
+    const energyCost = getAbilityEnergyCost(
+      reactor,
+      entry.abilityItem,
+      entry.abilityFunction,
+      entry.settings.reactionEnergyCost
+    );
+    offers.push({
+      actorUuid: reactor.uuid,
+      reactionId: WHERE_ARE_YOU_GOING_REACTION_PROVIDER_ID,
+      offerId: [
+        WHERE_ARE_YOU_GOING_REACTION_PROVIDER_ID,
+        reactor.uuid,
+        entry.abilityFunction.id,
+        context.movementId ?? foundry.utils.randomID()
+      ].join(":"),
+      label: "Ты куда собрался?",
+      description: `Остановить ${mover.name} и нанести неприцельный удар.`,
+      img: entry.abilityItem.img || "icons/svg/sword.svg",
+      costLines: [
+        `Энергия: ${entry.settings.reactionEnergyCost} базовая / ${energyCost} итоговая`
+      ],
+      abilityItemId: entry.abilityItem.id,
+      abilityFunctionId: entry.abilityFunction.id,
+      reactorTokenUuid: reactorToken.uuid,
+      moverTokenUuid: moverToken.uuid,
+      energyCost
+    });
+  }
+  return offers;
+}
+
+async function executeWhereAreYouGoingReaction({ offer = {} } = {}) {
+  const reactor = await fromUuid(String(offer.actorUuid ?? ""));
+  const reactorToken = await fromUuid(String(offer.reactorTokenUuid ?? ""));
+  const moverToken = await fromUuid(String(offer.moverTokenUuid ?? ""));
+  const entry = getActorWhereAreYouGoingEntry(reactor, offer);
+  if (!reactor || !reactorToken || !moverToken || !entry || !canUseWhereAreYouGoingReaction(reactor)) {
+    return { handled: false };
+  }
+  if (!areTokensAdjacent(reactorToken, moverToken)) return { handled: false };
+
+  const energyCost = getAbilityEnergyCost(
+    reactor,
+    entry.abilityItem,
+    entry.abilityFunction,
+    entry.settings.reactionEnergyCost
+  );
+  if (!hasEnergy(reactor, energyCost)) {
+    return { handled: false };
+  }
+
+  const candidates = getAvailableWhereAreYouGoingWeaponCandidates(reactor);
+  if (!candidates.length) return { handled: true, status: REACTION_RESULT.failed };
+  const selectedCandidate = candidates.length === 1
+    ? candidates[0]
+    : await queryWhereAreYouGoingWeaponOwner(reactor, candidates, {
+      targetName: moverToken.actor?.name ?? ""
+    });
+  if (!selectedCandidate) return { handled: true, status: REACTION_RESULT.declined };
+  const { weapon, weaponFunctionId } = selectedCandidate;
+  if (!hasRequiredWeaponResources(weapon, 1, weaponFunctionId)) {
+    return { handled: true, status: REACTION_RESULT.failed };
+  }
+
+  await spendEnergy(reactor, energyCost);
+  await applyAbilityOverloadEffect(reactor, entry.abilityItem, entry.abilityFunction, {
+    name: "Перегрузка: Ты куда собрался?",
+    energyCost: entry.settings.reactionOverloadEnergyCost,
+    durationSeconds: entry.settings.reactionOverloadDurationSeconds
+  });
+
+  const used = await executeWeaponAttackAgainstToken({
+    attackerToken: reactorToken.object ?? reactorToken,
+    targetToken: moverToken.object ?? moverToken,
+    weapon,
+    actionKey: "meleeAttack",
+    weaponFunctionId,
+    skipActionPointCost: true,
+    ignoreReactionLock: true
+  });
+  if (used) await createWhereAreYouGoingChatMessage(reactor);
+  return {
+    handled: true,
+    status: used ? REACTION_RESULT.success : REACTION_RESULT.failed,
+    cancelCurrent: used
+  };
+}
+
+async function queryWhereAreYouGoingWeaponOwner(actor, candidates = [], { targetName = "" } = {}) {
+  const userId = getActorResponsibleUserId(actor);
+  const user = game.users?.get(userId);
+  if (!user) return null;
+  const data = {
+    actorName: actor.name,
+    targetName,
+    candidates: candidates.map(candidate => ({
+      candidateId: getWhereAreYouGoingWeaponCandidateId(candidate),
+      weaponName: candidate.weapon.name,
+      img: normalizeImagePath(candidate.weapon.img, "icons/svg/sword.svg")
+    }))
+  };
+  try {
+    const response = user.isSelf
+      ? await handleWhereAreYouGoingWeaponQuery(data)
+      : await user.query(WHERE_ARE_YOU_GOING_WEAPON_QUERY_NAME, data, { timeout: 30000 });
+    const candidateId = String(response?.candidateId ?? "").trim();
+    return candidates.find(candidate => getWhereAreYouGoingWeaponCandidateId(candidate) === candidateId) ?? null;
+  } catch (error) {
+    console.warn(`${SYSTEM_ID} | Where are you going weapon query failed`, error);
+    return null;
+  }
+}
+
+async function handleWhereAreYouGoingWeaponQuery(data = {}) {
+  const candidates = Array.isArray(data.candidates) ? data.candidates : [];
+  if (!candidates.length) return null;
+  const options = candidates.map((candidate, index) => `
+    <label class="fallout-maw-radio-card fallout-maw-weapon-choice-card">
+      <input type="radio" name="candidateId" value="${escapeAttribute(candidate.candidateId)}" ${index === 0 ? "checked" : ""}>
+      <img src="${escapeAttribute(candidate.img)}" alt="">
+      <span>
+        <strong>${escapeHTML(candidate.weaponName)}</strong>
+      </span>
+    </label>
+  `).join("");
+  const formData = await DialogV2.input({
+    window: { title: "Ты куда собрался?: выбор оружия" },
+    content: `
+      <div class="fallout-maw-disarm-choice-grid">
+        ${data.targetName ? `<p>Цель: <strong>${escapeHTML(data.targetName)}</strong></p>` : ""}
+        ${options}
+      </div>
+    `,
+    ok: {
+      label: "Атаковать",
+      icon: "fa-solid fa-sword",
+      callback: (_event, button) => new FormDataExtended(button.form).object
+    },
+    buttons: [{ action: "cancel", label: game.i18n.localize("FALLOUTMAW.Common.Cancel") }],
+    position: { width: 480 },
+    rejectClose: false
+  });
+  const candidateId = String(formData?.candidateId ?? "").trim();
+  return candidateId ? { candidateId } : null;
+}
+
+function buildRemainingMovementWaypoints(segmentSamples = [], segmentIndex = 0, routeSamples = [], routeIndex = 0) {
+  const waypoints = [
+    ...segmentSamples.slice(segmentIndex).map(sample => sample?.waypoint),
+    ...routeSamples.slice(routeIndex + 1).map(sample => sample?.waypoint)
+  ].filter(Boolean);
+  const result = [];
+  const seen = new Set();
+  for (const waypoint of waypoints) {
+    const key = [
+      Math.round(Number(waypoint.x) || 0),
+      Math.round(Number(waypoint.y) || 0),
+      Math.round(Number(waypoint.elevation) || 0)
+    ].join(":");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ ...waypoint, checkpoint: true });
+  }
+  return result;
+}
+
+async function resumeWhereAreYouGoingMovement(tokenDocument, movement, event = {}) {
+  const waypoints = Array.isArray(event.remainingWaypoints) ? event.remainingWaypoints : [];
+  if (!tokenDocument || !waypoints.length) return false;
+  return tokenDocument.move(waypoints, {
+    [WHERE_ARE_YOU_GOING_RESUME_OPTION]: {
+      reactorTokenUuids: event.reactorTokenUuids ?? []
+    },
+    method: movement?.method,
+    autoRotate: Boolean(movement?.autoRotate),
+    showRuler: Boolean(movement?.showRuler),
+    terrainOptions: movement?.terrainOptions,
+    constrainOptions: movement?.constrainOptions,
+    measureOptions: movement?.measureOptions
+  });
+}
+
+async function createWhereAreYouGoingChatMessage(actor) {
+  return ChatMessage.create({
+    speaker: ChatMessage.getSpeaker({ actor }),
+    content: `<p>${escapeHTML(actor.name)} применил реакцию: Ты куда собрался?</p>`,
+    sound: null
+  });
+}
+
 async function requestCounterAttackReaction(context = {}) {
   if (context?.attempted === false) return;
   const attackerActorUuid = String(context?.attackerUuid ?? context?.actorUuid ?? "").trim();
@@ -1574,6 +1907,58 @@ function getActorCounterAttackEntry(actor, offer = null) {
   return null;
 }
 
+function getActorWhereAreYouGoingEntries(actor) {
+  const entries = [];
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing) continue;
+      entries.push({
+        abilityItem,
+        abilityFunction,
+        settings: normalizeWhereAreYouGoingSettings(abilityFunction.fixedSettings)
+      });
+    }
+  }
+  return entries;
+}
+
+function getActorWhereAreYouGoingEntry(actor, offer = null) {
+  const abilityItemId = String(offer?.abilityItemId ?? "");
+  const abilityFunctionId = String(offer?.abilityFunctionId ?? "");
+  return getActorWhereAreYouGoingEntries(actor).find(entry => (
+    (!abilityItemId || entry.abilityItem.id === abilityItemId)
+    && (!abilityFunctionId || entry.abilityFunction.id === abilityFunctionId)
+  )) ?? null;
+}
+
+function getWhereAreYouGoingWeaponCandidates(actor) {
+  const rows = [];
+  for (const weapon of actor?.items?.contents ?? []) {
+    const placement = weapon.system?.placement ?? {};
+    if (weapon.type !== "gear" || String(placement.mode ?? "") !== "weapon") continue;
+    const weaponSet = String(placement.weaponSet ?? "");
+    if (!weaponSet || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) continue;
+    for (const weaponFunctionId of getWhirlwindWeaponFunctionIds(weapon)) {
+      if (!hasWeaponAction(weapon, "meleeAttack", weaponFunctionId)) continue;
+      if (
+        !isWeaponAttackModeEnabled(weapon, "meleeAttack", "thrust", weaponFunctionId)
+        && !isWeaponAttackModeEnabled(weapon, "meleeAttack", "swing", weaponFunctionId)
+      ) continue;
+      rows.push({ weapon, weaponSet, weaponFunctionId });
+    }
+  }
+  return rows;
+}
+
+function getAvailableWhereAreYouGoingWeaponCandidates(actor) {
+  return getWhereAreYouGoingWeaponCandidates(actor)
+    .filter(candidate => hasRequiredWeaponResources(candidate.weapon, 1, candidate.weaponFunctionId));
+}
+
+function getWhereAreYouGoingWeaponCandidateId(candidate = {}) {
+  return `${candidate.weapon?.id ?? ""}:${candidate.weaponFunctionId ?? ""}`;
+}
+
 function getCounterAttackWeaponCandidate(actor, settings = {}, { weaponId = "", weaponFunctionId = "" } = {}) {
   const candidates = getCounterAttackWeaponCandidates(actor, settings);
   if (weaponId) {
@@ -1622,6 +2007,50 @@ function getAdditionalWeaponFunctionData(weapon, weaponFunctionId = "") {
     ? entries
     : entries && typeof entries === "object" ? Object.values(entries) : [];
   return values.find(entry => String(entry?.id ?? "").trim() === weaponFunctionId) ?? null;
+}
+
+function getActiveSceneCombat(scene = null) {
+  const combat = game.combat;
+  if (!combat?.started) return null;
+  const sceneId = String(scene?.id ?? canvas.scene?.id ?? "");
+  const combatSceneId = String(combat.scene?.id ?? combat.scene ?? combat.sceneId ?? "");
+  if (!sceneId || (combatSceneId && combatSceneId !== sceneId)) return null;
+  if (!combatSceneId) {
+    const hasSceneCombatant = (combat.combatants?.contents ?? Array.from(combat.combatants ?? []))
+      .some(combatant => !combatant?.sceneId || String(combatant.sceneId) === sceneId);
+    if (!hasSceneCombatant) return null;
+  }
+  return combat;
+}
+
+function isTokenActiveCombatant(combat, tokenDocument) {
+  const document = tokenDocument?.document ?? tokenDocument;
+  const tokenId = String(document?.id ?? "");
+  const sceneId = String(document?.parent?.id ?? "");
+  if (!combat || !tokenId) return false;
+  return (combat.combatants?.contents ?? Array.from(combat.combatants ?? []))
+    .some(combatant => (
+      String(combatant?.tokenId ?? combatant?.token?.id ?? "") === tokenId
+      && (!combatant?.sceneId || String(combatant.sceneId) === sceneId)
+      && !combatant?.isDefeated
+    ));
+}
+
+function isWhereAreYouGoingOpponent(reactor, mover) {
+  if (!reactor || !mover || reactor.uuid === mover.uuid) return false;
+  const factions = getActorFactionBelongs(mover);
+  return (factions.length ? factions : [DEFAULT_FACTION_NAME])
+    .some(faction => getRelationTo(reactor, faction) !== "ally");
+}
+
+function canUseWhereAreYouGoingReaction(actor) {
+  if (!actor) return false;
+  const defeatedStatus = CONFIG.specialStatusEffects.DEFEATED;
+  return !(
+    actor.statuses?.has?.("dead")
+    || actor.statuses?.has?.("unconscious")
+    || (defeatedStatus && actor.statuses?.has?.(defeatedStatus))
+  );
 }
 
 function getSelectedWeaponPlacement(actor) {

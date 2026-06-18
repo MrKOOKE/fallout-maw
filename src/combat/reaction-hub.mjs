@@ -6,7 +6,8 @@ const FormDataExtended = foundry.applications.ux.FormDataExtended;
 
 export const REACTION_EVENT_KEYS = Object.freeze({
   weaponAttackTargeted: "weaponAttackTargeted",
-  weaponAttackResolved: "weaponAttackResolved"
+  weaponAttackResolved: "weaponAttackResolved",
+  tokenLeavingAdjacency: "tokenLeavingAdjacency"
 });
 
 export const REACTION_RESULT = Object.freeze({

@@ -58,6 +58,7 @@ import {
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
   normalizeWhirlwindSettings,
+  normalizeWhereAreYouGoingSettings,
   normalizeReaperSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
@@ -4484,6 +4485,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedCounterAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack
     ? prepareCounterAttackSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedWhereAreYouGoingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing
+    ? prepareWhereAreYouGoingSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const fixedFullForceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
     ? prepareFullForceSettingsForDisplay(entry?.fixedSettings)
     : null;
@@ -4516,6 +4520,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedLungeSettings,
     fixedDoubleAttackSettings,
     fixedCounterAttackSettings,
+    fixedWhereAreYouGoingSettings,
     fixedFullForceSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
@@ -4654,6 +4659,16 @@ function prepareCounterAttackSettingsForDisplay(settings = {}) {
     reactionOverloadDurationAmount: overloadDuration.amount,
     reactionOverloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
     skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
+  };
+}
+
+function prepareWhereAreYouGoingSettingsForDisplay(settings = {}) {
+  const normalized = normalizeWhereAreYouGoingSettings(settings);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.reactionOverloadDurationSeconds);
+  return {
+    ...normalized,
+    reactionOverloadDurationAmount: overloadDuration.amount,
+    reactionOverloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit)
   };
 }
 
@@ -5399,6 +5414,15 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
       const overloadDurationSeconds = abilityDurationPartsToSeconds(
         row.querySelector("[data-fixed-counter-attack-overload-duration-amount]")?.value,
         row.querySelector("[data-fixed-counter-attack-overload-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.reactionOverloadDurationSeconds`, overloadDurationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing) {
+      const overloadDurationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-where-are-you-going-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-where-are-you-going-overload-duration-unit]")?.value
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.reactionOverloadDurationSeconds`, overloadDurationSeconds);
       continue;

@@ -1061,7 +1061,11 @@ function isDestinationOccupied(tokenDocument, destination, { ignoreIds = [] } = 
 }
 
 export function areTokensAdjacent(left, right) {
-  return areRectsAdjacent(getTokenRect(left), getTokenRect(right));
+  return areTokensAdjacentAt(left, null, right, null);
+}
+
+export function areTokensAdjacentAt(left, leftPosition = null, right, rightPosition = null) {
+  return areRectsAdjacent(getTokenRect(left, leftPosition), getTokenRect(right, rightPosition));
 }
 
 function areRectsAdjacent(left, right) {

@@ -13,6 +13,11 @@ import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { analyzeLightingPoint } from "../stealth/index.mjs";
 import {
+  getMovementRouteSamples,
+  getMovementSegmentSamples,
+  registerMovementInterruptionProvider
+} from "./movement-interruptions.mjs";
+import {
   DEFAULT_FACTION_NAME,
   getActorFactionBelongs,
   getActorPrimaryFaction,
@@ -33,7 +38,6 @@ const PREVIEW_BORDER_COLOR = 0xf0a23a;
 const PREVIEW_FILL_COLOR = 0xf0a23a;
 const DETECTION_PREVIEW_BORDER_COLOR = 0xd6c45f;
 const DETECTION_PREVIEW_FILL_COLOR = 0xd6c45f;
-const TRAP_CONTROLLED_MOVEMENT_OPTION = "falloutMawTrapControlledMovement";
 const TRAP_SAFE_HIGHLIGHT_LAYER = "fallout-maw-safe-traps";
 const TRAP_SAFE_HIGHLIGHT_COLOR = 0x43c96b;
 const TRAP_HOSTILE_HIGHLIGHT_COLOR = 0xd85f5f;
@@ -80,9 +84,13 @@ let trapGmFreeDoubleClickListenerRegistered = false;
 let trapVisibilityRefreshQueued = false;
 let trapDetectionRefreshTimeout = 0;
 const pendingTrapActivationKeys = new Set();
-const pendingTrapMovementKeys = new Set();
 
 export function registerTrapHooks() {
+  registerMovementInterruptionProvider({
+    id: "traps",
+    collect: collectTrapMovementInterruptions,
+    execute: executeTrapMovementInterruption
+  });
   game.socket.on(TRAP_SOCKET, handleTrapSocketMessage);
   patchTrapTileVisibility();
   registerTrapGmFreeDoubleClickListener();
@@ -124,7 +132,6 @@ export function registerTrapHooks() {
   Hooks.on("deleteTile", tile => {
     if (isTrapTileDocument(tile)) queueTrapTileVisibilityRefresh();
   });
-  Hooks.on("preMoveToken", onTrapPreMoveToken);
   Hooks.on("createToken", token => {
     void processTrapContactForToken(token);
   });
@@ -252,22 +259,23 @@ export function startTrapInteractionMode({ actor = null, token = null } = {}) {
   return true;
 }
 
-function onTrapPreMoveToken(token, movement, options = {}) {
-  if (options[TRAP_CONTROLLED_MOVEMENT_OPTION]) return;
-  if (game.paused) return false;
-  const tokenDocument = token?.document ?? token;
-  const actor = tokenDocument?.actor ?? token?.actor;
+function collectTrapMovementInterruptions({ tokenDocument, movement } = {}) {
+  const actor = tokenDocument?.actor;
   const scene = tokenDocument?.parent ?? canvas.scene;
-  if (!scene || !actor || !movement) return;
+  if (!scene || !actor || !movement) return [];
 
   const trapTiles = (scene.tiles?.contents ?? []).filter(isTrapTileDocument);
-  if (!trapTiles.length) return;
+  if (!trapTiles.length) return [];
 
   const event = findFirstTrapMovementEvent(tokenDocument, actor, movement, trapTiles);
-  if (event) {
-    void runTrapMovementInterruption(tokenDocument, movement, event);
-    return false;
-  }
+  return event ? [event] : [];
+}
+
+async function executeTrapMovementInterruption({ tokenDocument, event } = {}) {
+  if (event.type === "detection") await requestTrapDetectionStop(event.tile, tokenDocument);
+  else if (event.type === "triggerEnter") await requestTrapTriggerEnterNotice(event.tile, tokenDocument);
+  else if (event.type === "triggerImmediate") await requestTrapActivation(event.tile, tokenDocument, { announce: true });
+  else if (event.type === "triggerExit") await requestTrapActivation(event.tile, tokenDocument);
 }
 
 async function processTrapContactForToken(token) {
@@ -2178,12 +2186,14 @@ function isTrapTileDocument(tileDocument) {
 }
 
 function findFirstTrapMovementEvent(tokenDocument, actor, movement = {}, trapTiles = []) {
-  const samples = getMovementSamples(tokenDocument, movement);
+  const samples = getMovementRouteSamples(tokenDocument, movement);
   if (!actor || samples.length < 2) return null;
+  let routeOrder = 0;
 
   for (let index = 1; index < samples.length; index += 1) {
-    const segmentSamples = getGridMovementSamplesBetween(tokenDocument, samples[index - 1], samples[index]);
+    const segmentSamples = getMovementSegmentSamples(tokenDocument, samples[index - 1], samples[index]);
     for (let segmentIndex = 1; segmentIndex < segmentSamples.length; segmentIndex += 1) {
+      routeOrder += 1;
       const previous = segmentSamples[segmentIndex - 1];
       const current = segmentSamples[segmentIndex];
       const candidates = [];
@@ -2215,7 +2225,7 @@ function findFirstTrapMovementEvent(tokenDocument, actor, movement = {}, trapTil
       if (candidates.length) {
         candidates.sort((left, right) => left.priority - right.priority);
         const { type, tile, waypoint } = candidates[0];
-        return { type, tile, waypoint };
+        return { type, tile, waypoint, routeOrder, priority: getTrapMovementEventPriority(type), eventId: `${type}:${tile.id}` };
       }
     }
   }
@@ -2230,160 +2240,6 @@ function getTrapMovementEventPriority(type = "") {
   if (type === "triggerImmediate" || type === "triggerExit") return 0;
   if (type === "triggerEnter") return 1;
   return 2;
-}
-
-function getMovementSamples(tokenDocument, movement = {}) {
-  const waypoints = [
-    {},
-    ...(movement.passed?.waypoints ?? []),
-    movement.destination
-  ].filter(Boolean);
-  const samples = waypoints
-    .map(waypoint => ({ waypoint, point: getTokenCenterAt(tokenDocument, waypoint) }))
-    .filter(sample => sample.point);
-  const unique = [];
-  const seen = new Set();
-  for (const sample of samples) {
-    const key = `${Math.round(sample.point.x)}:${Math.round(sample.point.y)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    unique.push(sample);
-  }
-  return unique;
-}
-
-function getGridMovementSamplesBetween(tokenDocument, previous, current) {
-  const start = previous?.point;
-  const end = current?.point;
-  if (!start || !end) return [previous, current].filter(Boolean);
-
-  const scene = tokenDocument?.parent ?? canvas.scene;
-  const gridSize = Math.max(1, getSceneGridSize(scene));
-  const distance = Math.hypot(end.x - start.x, end.y - start.y);
-  const steps = Math.max(1, Math.ceil(distance / Math.max(1, gridSize / 3)));
-  const samples = [previous];
-  const seen = new Set([getMovementSampleKey(previous)]);
-
-  for (let step = 1; step < steps; step += 1) {
-    const point = interpolatePoint(start, end, step / steps);
-    const waypoint = createSnappedWaypointAtTokenCenter(tokenDocument, point, current.waypoint);
-    const key = getPositionKey(waypoint);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    samples.push({ waypoint, point: getTokenCenterAt(tokenDocument, waypoint) });
-  }
-
-  const currentWaypoint = createSnappedWaypointAtTokenCenter(tokenDocument, current.point, current.waypoint);
-  const currentKey = getPositionKey(currentWaypoint);
-  if (!seen.has(currentKey)) samples.push({ waypoint: currentWaypoint, point: getTokenCenterAt(tokenDocument, currentWaypoint) });
-  return samples.filter(sample => sample?.point);
-}
-
-async function runTrapMovementInterruption(tokenDocument, movement, event) {
-  const key = `${tokenDocument?.parent?.id ?? ""}:${tokenDocument?.id ?? ""}:${movement?.id ?? ""}:${event?.type ?? ""}`;
-  if (!tokenDocument || !event?.tile || pendingTrapMovementKeys.has(key)) return;
-  pendingTrapMovementKeys.add(key);
-  try {
-    await moveTokenToTrapEvent(tokenDocument, event.waypoint, movement);
-    if (event.type === "detection") await requestTrapDetectionStop(event.tile, tokenDocument);
-    else if (event.type === "triggerEnter") await requestTrapTriggerEnterNotice(event.tile, tokenDocument);
-    else if (event.type === "triggerImmediate") await requestTrapActivation(event.tile, tokenDocument, { announce: true });
-    else if (event.type === "triggerExit") await requestTrapActivation(event.tile, tokenDocument);
-  } finally {
-    pendingTrapMovementKeys.delete(key);
-  }
-}
-
-async function moveTokenToTrapEvent(tokenDocument, waypoint = {}, movement = {}) {
-  const destination = prepareTrapMovementWaypoint(waypoint, tokenDocument);
-  await tokenDocument.move([destination], {
-    [TRAP_CONTROLLED_MOVEMENT_OPTION]: true,
-    autoRotate: Boolean(movement?.autoRotate),
-    showRuler: false
-  });
-  await waitForTrapMovementAnimation(tokenDocument);
-}
-
-function prepareTrapMovementWaypoint(waypoint = {}, tokenDocument = null) {
-  return {
-    x: waypoint.x ?? tokenDocument?._source?.x ?? tokenDocument?.x,
-    y: waypoint.y ?? tokenDocument?._source?.y ?? tokenDocument?.y,
-    elevation: waypoint.elevation ?? tokenDocument?._source?.elevation ?? tokenDocument?.elevation,
-    width: waypoint.width ?? tokenDocument?._source?.width ?? tokenDocument?.width,
-    height: waypoint.height ?? tokenDocument?._source?.height ?? tokenDocument?.height,
-    depth: waypoint.depth ?? tokenDocument?._source?.depth ?? tokenDocument?.depth,
-    shape: waypoint.shape ?? tokenDocument?._source?.shape ?? tokenDocument?.shape,
-    level: waypoint.level ?? tokenDocument?._source?.level ?? tokenDocument?.level,
-    action: waypoint.action,
-    snapped: waypoint.snapped,
-    explicit: waypoint.explicit,
-    checkpoint: true
-  };
-}
-
-function createSnappedWaypointAtTokenCenter(tokenDocument, point, sourceWaypoint = {}) {
-  const document = tokenDocument?.document ?? tokenDocument;
-  const width = sourceWaypoint?.width ?? document?._source?.width ?? document?.width;
-  const height = sourceWaypoint?.height ?? document?._source?.height ?? document?.height;
-  const depth = sourceWaypoint?.depth ?? document?._source?.depth ?? document?.depth;
-  const shape = sourceWaypoint?.shape ?? document?._source?.shape ?? document?.shape;
-  const level = sourceWaypoint?.level ?? document?._source?.level ?? document?.level;
-  let pivot = null;
-  if (typeof document?.getCenterPoint === "function") {
-    pivot = document.getCenterPoint({ x: 0, y: 0, elevation: 0, width, height, depth, shape, level });
-  }
-  const size = getSceneGridSize(document?.parent ?? canvas.scene);
-  const rawPosition = {
-    x: Math.round(point.x - (Number(pivot?.x) || ((Number(width) || 1) * size / 2))),
-    y: Math.round(point.y - (Number(pivot?.y) || ((Number(height) || 1) * size / 2))),
-    elevation: sourceWaypoint?.elevation ?? document?._source?.elevation ?? document?.elevation,
-    width,
-    height,
-    depth,
-    shape,
-    level
-  };
-  const snapped = document?.getSnappedPosition?.(rawPosition) ?? rawPosition;
-  return {
-    ...sourceWaypoint,
-    x: Math.round(Number(snapped.x ?? rawPosition.x) || 0),
-    y: Math.round(Number(snapped.y ?? rawPosition.y) || 0),
-    elevation: snapped.elevation ?? rawPosition.elevation,
-    width,
-    height,
-    depth,
-    shape,
-    level,
-    snapped: true,
-    checkpoint: true
-  };
-}
-
-async function waitForTrapMovementAnimation(tokenDocument) {
-  await new Promise(resolve => requestAnimationFrame(resolve));
-  try {
-    await (tokenDocument?.movement?.animation?.ended ?? tokenDocument?.object?.movementAnimationPromise);
-  } catch (_error) {
-    // Foundry movement can be cancelled by another module; trap resolution should continue at the stopped point.
-  }
-}
-
-function getPositionKey(waypoint = {}) {
-  return `${Math.round(Number(waypoint?.x) || 0)}:${Math.round(Number(waypoint?.y) || 0)}:${Math.round(Number(waypoint?.elevation) || 0)}`;
-}
-
-function getMovementSampleKey(sample = {}) {
-  const waypoint = sample.waypoint ?? {};
-  if (Number.isFinite(Number(waypoint.x)) && Number.isFinite(Number(waypoint.y))) return getPositionKey(waypoint);
-  const point = sample.point ?? {};
-  return `${Math.round(Number(point.x) || 0)}:${Math.round(Number(point.y) || 0)}:${Math.round(Number(waypoint.elevation) || 0)}`;
-}
-
-function interpolatePoint(start, end, t) {
-  return {
-    x: start.x + ((end.x - start.x) * Math.max(0, Math.min(1, t))),
-    y: start.y + ((end.y - start.y) * Math.max(0, Math.min(1, t)))
-  };
 }
 
 function isTrapVisibleToActor(tile, actor) {

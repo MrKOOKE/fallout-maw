@@ -143,7 +143,8 @@ import {
   normalizeFullForceSettings,
   normalizeLastChanceSettings,
   normalizeLuckyCoinSettings,
-  normalizeRageSettings
+  normalizeRageSettings,
+  normalizeWhereAreYouGoingSettings
 } from "../settings/abilities.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import {
@@ -3415,6 +3416,7 @@ function buildAbilityEnergyCostRows(item, actor = null) {
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
@@ -3433,6 +3435,14 @@ function buildAbilityEnergyCostRows(item, actor = null) {
   }
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     const settings = normalizeCounterAttackSettings(entry.fixedSettings);
+    const reactionBase = Math.max(0, toInteger(settings.reactionEnergyCost));
+    return [
+      ["Реакция: базовый расход", String(reactionBase)],
+      ["Реакция: итог", String(getFixedAbilityEnergyCost(actor, item, entry, reactionBase))]
+    ];
+  }
+  if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing) {
+    const settings = normalizeWhereAreYouGoingSettings(entry.fixedSettings);
     const reactionBase = Math.max(0, toInteger(settings.reactionEnergyCost));
     return [
       ["Реакция: базовый расход", String(reactionBase)],

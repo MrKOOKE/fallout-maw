@@ -1415,6 +1415,17 @@ body #prosemirror-dropdown {
   font-style: normal;
 }
 
+.fallout-maw-weapon-choice-card {
+  align-items: center;
+  grid-template-columns: auto 48px minmax(0, 1fr);
+}
+
+.fallout-maw-weapon-choice-card img {
+  height: 48px;
+  object-fit: cover;
+  width: 48px;
+}
+
 .fallout-maw-lucky-coin-skill-grid {
   display: grid;
   gap: 0.5rem;

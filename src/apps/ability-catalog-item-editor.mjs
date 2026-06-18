@@ -36,6 +36,7 @@ import {
   normalizeDoubleAttackSettings,
   normalizeFullForceSettings,
   normalizeWhirlwindSettings,
+  normalizeWhereAreYouGoingSettings,
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import {
@@ -801,6 +802,16 @@ function readFixedFunctionSettings(row) {
       requiredSkillKey: row.querySelector("[data-field='fixed.counterAttack.requiredSkillKey']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing) {
+    return {
+      reactionEnergyCost: row.querySelector("[data-field='fixed.whereAreYouGoing.reactionEnergyCost']")?.value,
+      reactionOverloadEnergyCost: row.querySelector("[data-field='fixed.whereAreYouGoing.reactionOverloadEnergyCost']")?.value,
+      reactionOverloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.whereAreYouGoing.reactionOverloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.whereAreYouGoing.reactionOverloadDurationUnit']")?.value
+      )
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage) {
     return {
       energyCost: row.querySelector("[data-field='fixed.rage.energyCost']")?.value,
@@ -983,6 +994,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedCounterAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack
     ? prepareCounterAttackSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedWhereAreYouGoingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.whereAreYouGoing
+    ? prepareWhereAreYouGoingSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedFullForceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
     ? prepareFullForceSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -1003,6 +1017,7 @@ function prepareFunctionForDisplay(entry) {
     isEffectChanges,
     isFixed,
     fixedKey,
+    fixedWhereAreYouGoingSettings,
     fixedDeusSettings,
     fixedCurseAndBlessingSettings,
     fixedAllOrNothingSettings,
@@ -1146,6 +1161,16 @@ function prepareCounterAttackSettingsForDisplay(settings = {}) {
     reactionOverloadDurationAmount: overloadDuration.amount,
     reactionOverloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
     skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
+  };
+}
+
+function prepareWhereAreYouGoingSettingsForDisplay(settings = {}) {
+  const normalized = normalizeWhereAreYouGoingSettings(settings);
+  const overloadDuration = splitDurationSeconds(normalized.reactionOverloadDurationSeconds);
+  return {
+    ...normalized,
+    reactionOverloadDurationAmount: overloadDuration.amount,
+    reactionOverloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit)
   };
 }
 
