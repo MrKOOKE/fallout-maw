@@ -19,6 +19,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   allOrNothing: "allOrNothing",
   reaper: "reaper",
   virtuoso: "virtuoso",
+  aiming: "aiming",
   fourLeafClover: "fourLeafClover",
   atRandom: "atRandom",
   lastChance: "lastChance",
@@ -613,6 +614,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso) {
     return normalizeVirtuosoSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming) {
+    return normalizeAimingSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover) {
     return normalizeFourLeafCloverSettings(value);
   }
@@ -780,6 +784,13 @@ export function normalizeVirtuosoSettings(value = {}) {
   return {
     accuracyBonus: toInteger(value?.accuracyBonus ?? 20),
     damagePercentBonus: toInteger(value?.damagePercentBonus ?? 20)
+  };
+}
+
+export function normalizeAimingSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 20)),
+    innateDifficultyIgnorePercent: Math.max(1, Math.min(100, toInteger(value?.innateDifficultyIgnorePercent ?? 100)))
   };
 }
 

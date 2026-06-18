@@ -469,6 +469,26 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedAimingSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header">
+        <h3>Настройки: Выцеливание</h3>
+      </div>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Прицельный выстрел</strong>
+          <label>
+            <span>Расход энергии за атаку</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.energyCost" value="{{fixedAimingSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Игнорирование врождённой сложности, %</span>
+            <input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.innateDifficultyIgnorePercent" value="{{fixedAimingSettings.innateDifficultyIgnorePercent}}" min="1" max="100" step="1">
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedFourLeafCloverSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header">

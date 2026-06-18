@@ -44,6 +44,7 @@ import {
   createAbilityCondition,
   createAbilityFunction,
   normalizeAllOrNothingSettings,
+  normalizeAimingSettings,
   normalizeAtRandomSettings,
   normalizeCounterAttackSettings,
   normalizeCurseAndBlessingSettings,
@@ -4456,6 +4457,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedVirtuosoSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso
     ? prepareVirtuosoSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedAimingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming
+    ? prepareAimingSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const fixedFourLeafCloverSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover
     ? prepareFourLeafCloverSettingsForDisplay(entry?.fixedSettings)
     : null;
@@ -4514,6 +4518,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedAllOrNothingSettings,
     fixedReaperSettings,
     fixedVirtuosoSettings,
+    fixedAimingSettings,
     fixedFourLeafCloverSettings,
     fixedAtRandomSettings,
     fixedLastChanceSettings,
@@ -4602,6 +4607,10 @@ function prepareReaperSettingsForDisplay(settings = {}) {
 
 function prepareVirtuosoSettingsForDisplay(settings = {}) {
   return normalizeVirtuosoSettings(settings);
+}
+
+function prepareAimingSettingsForDisplay(settings = {}) {
+  return normalizeAimingSettings(settings);
 }
 
 function prepareFourLeafCloverSettingsForDisplay(settings = {}) {

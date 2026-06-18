@@ -23,6 +23,7 @@ import {
   normalizeCounterAttackSettings,
   normalizeCurseAndBlessingSettings,
   normalizeAllOrNothingSettings,
+  normalizeAimingSettings,
   normalizeAtRandomSettings,
   normalizeDefensiveTacticsSettings,
   normalizeFourLeafCloverSettings,
@@ -717,6 +718,12 @@ function readFixedFunctionSettings(row) {
       damagePercentBonus: row.querySelector("[data-field='fixed.virtuoso.damagePercentBonus']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.aiming.energyCost']")?.value,
+      innateDifficultyIgnorePercent: row.querySelector("[data-field='fixed.aiming.innateDifficultyIgnorePercent']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover) {
     return {
       currentCharges: row.querySelector("[data-field='fixed.fourLeafClover.currentCharges']")?.value,
@@ -977,6 +984,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedVirtuosoSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.virtuoso
     ? normalizeVirtuosoSettings(normalized.fixedSettings)
     : null;
+  const fixedAimingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming
+    ? normalizeAimingSettings(normalized.fixedSettings)
+    : null;
   const fixedFourLeafCloverSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover
     ? prepareFourLeafCloverSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -1033,6 +1043,7 @@ function prepareFunctionForDisplay(entry) {
     fixedAllOrNothingSettings,
     fixedReaperSettings,
     fixedVirtuosoSettings,
+    fixedAimingSettings,
     fixedFourLeafCloverSettings,
     fixedAtRandomSettings,
     fixedDefensiveTacticsSettings,

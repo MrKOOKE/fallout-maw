@@ -95,6 +95,7 @@ class WeaponActionModifierState {
     this.combatValueBonuses = new Map();
     this.resourceCostMultipliers = new Map();
     this.spendRequirements = [];
+    this.options = new Map();
   }
 
   addCombatValue(key = "", value = 0) {
@@ -119,6 +120,15 @@ class WeaponActionModifierState {
 
   getResourceCostMultiplier(type = "") {
     return Number(this.resourceCostMultipliers.get(String(type ?? "").trim())) || 1;
+  }
+
+  setOption(key = "", value = true) {
+    const normalizedKey = String(key ?? "").trim();
+    if (normalizedKey) this.options.set(normalizedKey, value);
+  }
+
+  getOption(key = "") {
+    return this.options.get(String(key ?? "").trim());
   }
 
   addSpendRequirement(requirement = {}) {
@@ -2127,7 +2137,12 @@ class WeaponAttackController {
       actor: this.token.actor,
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
-        difficulty: getAimedAttackDifficulty(target.actor, limbKey, difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus),
+        difficulty: getAimedAttackDifficulty(
+          target.actor,
+          limbKey,
+          difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus,
+          { innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent") }
+        ),
         situationalModifier: this.getAccuracyModifier(getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target))),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target)),
         ...this.createWeaponAttackSkillCheckContext(target),
@@ -2175,7 +2190,12 @@ class WeaponAttackController {
       actor: this.token.actor,
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
-        difficulty: getAimedAttackDifficulty(target.actor, holdingLimbKey, difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus),
+        difficulty: getAimedAttackDifficulty(
+          target.actor,
+          holdingLimbKey,
+          difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus,
+          { innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent") }
+        ),
         situationalModifier: this.getAccuracyModifier(getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target))),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target)),
         ...this.createWeaponAttackSkillCheckContext(target),
@@ -2682,7 +2702,9 @@ class WeaponAttackController {
         destroyed: isLimbDestroyed(target.actor, key),
         chance: isLimbDestroyed(target.actor, key)
           ? 0
-          : getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, key, blockerBonus, this.weaponFunctionId, this.actionKey)
+          : getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, key, blockerBonus, this.weaponFunctionId, this.actionKey, {
+            innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent")
+          })
       }));
     if (!this.aimedShot) return limbRows;
     const weaponRows = getHeldWeaponAimTargets(target.actor)
@@ -2692,7 +2714,9 @@ class WeaponAttackController {
         destroyed: entry.destroyed || isLimbDestroyed(target.actor, entry.limbKey),
         chance: entry.destroyed || isLimbDestroyed(target.actor, entry.limbKey)
           ? 0
-          : getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, entry.limbKey, blockerBonus, this.weaponFunctionId, this.actionKey)
+          : getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, entry.limbKey, blockerBonus, this.weaponFunctionId, this.actionKey, {
+            innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent")
+          })
       }));
     return [...limbRows, ...weaponRows];
   }
@@ -6331,12 +6355,15 @@ function getAimedTargetUnderPointer(pointer, targets = []) {
   return targets.find(target => getTokenWorldPolygon(target)?.contains?.(pointer.x, pointer.y)) ?? null;
 }
 
-function getAimedAttackDifficulty(targetActor, limbKey = "", blockerBonus = 0) {
+function getAimedAttackDifficulty(targetActor, limbKey = "", blockerBonus = 0, { innateDifficultyIgnorePercent = 0 } = {}) {
   const dodge = getDodgeDifficulty(targetActor);
   const limb = targetActor.system?.limbs?.[limbKey];
   const limbPercent = toInteger(limb?.aimedDifficultyPercent);
-  const limbBonus = toInteger(limb?.aimedDifficultyBonus);
-  return dodge + Math.round(dodge * (limbPercent / 100)) + Math.max(0, limbBonus) + Math.max(0, toInteger(blockerBonus));
+  const limbBonus = Math.max(0, toInteger(limb?.aimedDifficultyBonus));
+  const innateDifficulty = Math.round(dodge * (limbPercent / 100)) + limbBonus;
+  const ignorePercent = Math.max(0, Math.min(100, toInteger(innateDifficultyIgnorePercent)));
+  const remainingInnateDifficulty = Math.round(innateDifficulty * (100 - ignorePercent) / 100);
+  return dodge + remainingInnateDifficulty + Math.max(0, toInteger(blockerBonus));
 }
 
 function getContextualCombatValue(actor, key, context = {}) {
@@ -6528,13 +6555,18 @@ function getVolleyAreaHitChance(attackerActor, weapon, geometry, { difficultyBon
   return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty);
 }
 
-function getAimedAttackHitChance(attackerActor, weapon, targetActor, limbKey = "", blockerBonus = 0, weaponFunctionId = "", actionKey = "") {
+function getAimedAttackHitChance(attackerActor, weapon, targetActor, limbKey = "", blockerBonus = 0, weaponFunctionId = "", actionKey = "", options = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
   const context = { targetActor, weaponData, weaponActionKey: String(actionKey ?? "").trim() };
   const finalSkillValue = getContextualAttackSkillValue(attackerActor, skillKey, context)
     + getWeaponAccuracyModifier(weapon, weaponFunctionId, context);
-  const difficulty = getAimedAttackDifficulty(targetActor, limbKey, blockerBonus + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId));
+  const difficulty = getAimedAttackDifficulty(
+    targetActor,
+    limbKey,
+    blockerBonus + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId),
+    options
+  );
   return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty);
 }
 

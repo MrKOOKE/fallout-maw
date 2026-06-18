@@ -7,6 +7,7 @@ import {
   getAbilitySourceId,
   normalizeAbilityFunctions,
   normalizeAllOrNothingSettings,
+  normalizeAimingSettings,
   normalizeAtRandomSettings,
   normalizeCounterAttackSettings,
   normalizeCurseAndBlessingSettings,
@@ -176,6 +177,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.aiming,
+    label: "Выцеливание",
+    active: true,
+    toggleable: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.aiming
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover,
     label: "Клевер-четырёхлистник",
     passive: true,
@@ -313,6 +323,7 @@ export function registerFixedAbilityFunctionHooks() {
   Hooks.on(WEAPON_ACTION_MODIFIER_REQUEST_HOOK, context => {
     requestFullForceWeaponActionModifiers(context);
     requestVirtuosoWeaponActionModifiers(context);
+    requestAimingWeaponActionModifiers(context);
   });
   Hooks.on("fallout-maw.weaponActionResolved", context => {
     void processAtRandomAttackResolution(context);
@@ -514,6 +525,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce) {
     await toggleFullForce(actor, item, abilityFunction);
+    await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming) {
+    await toggleAiming(actor, item, abilityFunction);
     await application?.render?.({ force: true });
     return true;
   }
@@ -2326,6 +2343,27 @@ async function toggleFullForce(actor, abilityItem, abilityFunction) {
   return true;
 }
 
+async function toggleAiming(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeAimingSettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  const nextActive = !Boolean(state[stateKey]?.active);
+  if (nextActive && !hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    active: nextActive
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
+  return true;
+}
+
 function requestDoubleAttackDuplicate(context = {}) {
   const actor = context?.actor ?? null;
   const weaponSkillKey = String(context?.weaponData?.skillKey ?? "").trim();
@@ -2378,6 +2416,42 @@ function requestFullForceWeaponActionModifiers(context = {}) {
         spend: async ({ attackCount = 1 } = {}) => {
           const cost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(attackCount));
           return spendFullForceEnergy(actor, abilityItem, abilityFunction, cost);
+        }
+      });
+    }
+  }
+}
+
+function requestAimingWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  if (!actor || String(context?.actionKey ?? "") !== "aimedShot" || !context?.modifierState) return;
+
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    const state = getFixedAbilityState(abilityItem);
+    const functions = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
+      .filter(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming)
+      .filter(entry => Boolean(state[getFixedFunctionStateKey(entry)]?.active));
+    for (const abilityFunction of functions) {
+      const settings = normalizeAimingSettings(abilityFunction.fixedSettings);
+      context.modifierState.setOption(
+        "innateAimedDifficultyIgnorePercent",
+        Math.max(
+          toInteger(context.modifierState.getOption("innateAimedDifficultyIgnorePercent")),
+          settings.innateDifficultyIgnorePercent
+        )
+      );
+      context.modifierState.addSpendRequirement({
+        source: "aiming",
+        label: getAbilityDisplayName(abilityItem),
+        canSpend: ({ attackCount = 1 } = {}) => {
+          const cost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(attackCount));
+          if (hasEnergy(actor, cost)) return true;
+          ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
+          return false;
+        },
+        spend: async ({ attackCount = 1 } = {}) => {
+          const cost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(attackCount));
+          return spendEnergy(actor, cost);
         }
       });
     }

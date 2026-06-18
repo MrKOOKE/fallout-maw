@@ -136,6 +136,7 @@ import {
   ABILITY_FIXED_FUNCTION_KEYS,
   normalizeAbilityFunctions,
   normalizeAllOrNothingSettings,
+  normalizeAimingSettings,
   normalizeCounterAttackSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDisarmSettings,
@@ -3420,6 +3421,7 @@ function buildAbilityEnergyCostRows(item, actor = null) {
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming
     ));
   if (!entry) return [];
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm) {
@@ -3461,7 +3463,9 @@ function buildAbilityEnergyCostRows(item, actor = null) {
             ? normalizeDoubleAttackSettings(entry.fixedSettings)
             : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
               ? normalizeFullForceSettings(entry.fixedSettings)
-              : normalizeCurseAndBlessingSettings(entry.fixedSettings);
+              : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming
+                ? normalizeAimingSettings(entry.fixedSettings)
+                : normalizeCurseAndBlessingSettings(entry.fixedSettings);
   const multiplier = entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
     ? Math.max(1, toInteger(settings.duplicateCount))
     : 1;
