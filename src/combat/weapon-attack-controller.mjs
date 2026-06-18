@@ -3,7 +3,12 @@ import { SYSTEM_ID } from "../constants.mjs";
 import { playWeaponAttackAnimations, playWeaponExplosionAnimation } from "./attack-animations.mjs";
 import { applyDamageCostModifier, applyDamageRequestsInCurrentHubOperation, estimateDamageApplication, getDamageCostModifierState, getLimbHealingCap, isLimbDestroyed, requestDamageApplications, runDamageHubOperation } from "./damage-hub.mjs";
 import { createDodgeAttackExposureTracker, getWeaponDodgeAttackMultiplier } from "./dodge-resource.mjs";
-import { createThrownItemTile } from "../canvas/thrown-items.mjs";
+import {
+  DELAYED_THROWN_ITEM_FLAG,
+  DELAYED_THROWN_ITEM_REGION_FLAG,
+  createThrownItemTile,
+  deleteDelayedThrownItemDocuments
+} from "../canvas/thrown-items.mjs";
 import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
 import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, hasItemFunction, hasWeaponSpecialPropertyData } from "../utils/item-functions.mjs";
 import { getCoverSettings, getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
@@ -35,6 +40,7 @@ import {
   isWhirlwindAttackModifier,
   normalizeWeaponAttackModifier
 } from "./weapon-attack-modifiers.mjs";
+import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 
 const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
 const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
@@ -78,7 +84,9 @@ const GEOMETRY_EPSILON = 0.0001;
 const AUTO_COVER_GRID_STEPS = 4;
 const remoteAttackPreviews = new Map();
 const pendingRegionSocketRequests = new Map();
+const processingDelayedVolleyRegions = new Set();
 let activeAttack = null;
+let delayedVolleyProcessorRegistered = false;
 
 class WeaponActionModifierState {
   constructor(context = {}) {
@@ -150,6 +158,13 @@ function collectWeaponActionModifierState(context = {}) {
 export function registerWeaponAttackSocket() {
   game.socket.on(WEAPON_ATTACK_SOCKET, handleWeaponAttackSocketMessage);
   Hooks.on("canvasReady", clearRemoteAttackPreviews);
+  if (!delayedVolleyProcessorRegistered) {
+    registerQueuedWorldTimeProcessor(processDelayedVolleyExplosions, { priority: 90 });
+    Hooks.on("canvasReady", () => {
+      void processDelayedVolleyExplosions(Number(game.time?.worldTime) || 0);
+    });
+    delayedVolleyProcessorRegistered = true;
+  }
 }
 
 export function cancelWeaponAttack({ ignoreReactionLock = false } = {}) {
@@ -221,6 +236,76 @@ export async function executeWeaponAttackAgainstToken({
   } finally {
     controller.destroy();
   }
+}
+
+export function getDelayedVolleyWeaponState(weapon = null, weaponFunctionId = "") {
+  const flag = weapon?.getFlag?.(SYSTEM_ID, DELAYED_THROWN_ITEM_FLAG) ?? {};
+  const delaySeconds = weapon && hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)
+    ? getVolleyExplosionDelaySeconds(weapon, weaponFunctionId)
+    : 0;
+  const id = String(flag.id ?? "").trim();
+  return {
+    configured: delaySeconds > 0,
+    armed: Boolean(id),
+    id,
+    delaySeconds,
+    explodeAtWorldTime: Number(flag.explodeAtWorldTime) || 0
+  };
+}
+
+export function canArmDelayedVolleyWeapon(weapon = null, weaponFunctionId = "") {
+  const state = getDelayedVolleyWeaponState(weapon, weaponFunctionId);
+  return state.configured && !state.armed;
+}
+
+export async function armDelayedVolleyWeapon({ token = null, weapon = null, weaponFunctionId = "" } = {}) {
+  if (!token?.actor || !weapon?.isOwner || !canArmDelayedVolleyWeapon(weapon, weaponFunctionId)) return false;
+  const delaySeconds = getVolleyExplosionDelaySeconds(weapon, weaponFunctionId);
+  const center = getTokenAimPoint(token);
+  const sceneId = token.document?.parent?.id ?? canvas.scene?.id ?? "";
+  if (!center || !sceneId) return false;
+
+  const delayedThrownItemId = foundry.utils.randomID();
+  const explodeAtWorldTime = (Number(game.time?.worldTime) || 0) + delaySeconds;
+  const geometry = {
+    type: VOLLEY_ACTION_KEY,
+    origin: serializePoint(center),
+    end: serializePoint(center),
+    angle: 0,
+    distance: 1,
+    halfAngle: 0,
+    radiusPixels: metersToPixels(getVolleyDamageRadius(weapon, weaponFunctionId)),
+    shapePoints: []
+  };
+  const regionRequest = buildDelayedVolleyExplosionRegionRequest({
+    sceneId,
+    delayedThrownItemId,
+    explodeAtWorldTime,
+    weapon,
+    weaponFunctionId,
+    actionKey: VOLLEY_ACTION_KEY,
+    attackerToken: token,
+    finalGeometries: [geometry],
+    blastOutcomes: [{}],
+    baseDamage: getWeaponDamage(weapon, weaponFunctionId, {
+      actor: token.actor,
+      actorToken: token,
+      token,
+      actionKey: VOLLEY_ACTION_KEY,
+      weaponActionKey: VOLLEY_ACTION_KEY,
+      weaponFunctionId
+    }),
+    attachmentTokenId: token.id
+  });
+  const region = await requestCreateDelayedVolleyExplosionRegion(regionRequest);
+  if (!region) return false;
+  await weapon.update({
+    [`flags.${SYSTEM_ID}.${DELAYED_THROWN_ITEM_FLAG}`]: {
+      id: delayedThrownItemId,
+      explodeAtWorldTime
+    }
+  });
+  return true;
 }
 
 export function buildWeaponExplosionDamageRequests({
@@ -524,18 +609,23 @@ class WeaponAttackController {
     return !this.attackCanceledByReaction || this.attackCheckCount > 0;
   }
 
-  async spendCurrentAttackCosts({ attackCount = 1, trajectories = [], point = null } = {}) {
+  async spendCurrentAttackCosts({ attackCount = 1, trajectories = [], point = null, createSpentQuantityTile = true, delayedThrownItemId = "" } = {}) {
+    this.spentQuantityItemData = null;
     if (this.shouldSpendWeaponResourcesForAttempt()) {
       if (!(await this.spendWeaponActionModifierCosts(attackCount))) return false;
       const modifierState = this.getWeaponActionModifierState();
       const spentQuantityItemData = getSpentQuantityItemData(this.weapon, attackCount, this.weaponFunctionId, { modifierState });
+      this.spentQuantityItemData = spentQuantityItemData;
       await spendWeaponResources(this.weapon, attackCount, this.weaponFunctionId, this.pendingCriticalFailureResourceCosts, { modifierState });
-      await createSpentQuantityItemTile({
-        itemData: spentQuantityItemData,
-        point,
-        token: this.token,
-        sourceItemUuid: this.weapon.uuid
-      });
+      if (createSpentQuantityTile) {
+        await createSpentQuantityItemTile({
+          itemData: spentQuantityItemData,
+          point,
+          token: this.token,
+          sourceItemUuid: this.weapon.uuid,
+          delayedThrownItemId
+        });
+      }
     }
     await spendWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId, {
       emitActionResolved: !this.attackCanceledByReaction,
@@ -1782,10 +1872,15 @@ class WeaponAttackController {
     this.refresh(true);
     const duplicatePlan = await this.prepareDuplicateAttackPlan({ attackCount });
     const totalAttackCount = duplicatePlan.totalAttackCount;
+    const explosionDelaySeconds = getVolleyExplosionDelaySeconds(this.weapon, this.weaponFunctionId);
+    const existingDelayedThrownItem = this.weapon.getFlag?.(SYSTEM_ID, DELAYED_THROWN_ITEM_FLAG) ?? {};
+    const existingDelayedThrownItemId = String(existingDelayedThrownItem.id ?? "").trim();
+    const delayedExplosion = Boolean(existingDelayedThrownItemId) || explosionDelaySeconds > 0;
 
     const intendedGeometry = this.geometry;
     const damageRequests = [];
     const finalGeometries = [];
+    const blastOutcomes = [];
     const regionRequests = [];
     const checkBatch = totalAttackCount > 1
       ? createSkillCheckBatchCollector({
@@ -1794,7 +1889,7 @@ class WeaponAttackController {
       })
       : null;
 
-    this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
+    if (!delayedExplosion) this.dodgeExposure.begin(getWeaponDodgeAttackMultiplier(this.actionKey));
     for (let attackIndex = 0; attackIndex < totalAttackCount; attackIndex += 1) {
       const blastOutcome = await this.resolveVolleyBlastPoint(intendedGeometry, {
         checkBatch,
@@ -1807,30 +1902,79 @@ class WeaponAttackController {
         distance: Math.max(1, Math.hypot(blastOutcome.center.x - intendedGeometry.origin.x, blastOutcome.center.y - intendedGeometry.origin.y))
       };
       finalGeometries.push(finalGeometry);
-      const blastTargets = getPotentialTargets(this.token, finalGeometry, {
-        includeAttacker: true,
-        includeDead: true
-      });
-
-      const regionRequest = this.buildVolleyDamageRegionRequest(finalGeometry, blastOutcome);
-      if (regionRequest) regionRequests.push(regionRequest);
-
-      for (const target of blastTargets) {
-        const result = this.resolveVolleyDamageAgainstTarget(target, finalGeometry, blastOutcome);
-        damageRequests.push(...(result ?? []));
+      blastOutcomes.push(blastOutcome);
+      if (!delayedExplosion) {
+        const blastTargets = getPotentialTargets(this.token, finalGeometry, {
+          includeAttacker: true,
+          includeDead: true
+        });
+        const regionRequest = this.buildVolleyDamageRegionRequest(finalGeometry, blastOutcome);
+        if (regionRequest) regionRequests.push(regionRequest);
+        for (const target of blastTargets) {
+          const result = this.resolveVolleyDamageAgainstTarget(target, finalGeometry, blastOutcome);
+          damageRequests.push(...(result ?? []));
+        }
       }
     }
-    await this.dodgeExposure.flush();
+    if (!delayedExplosion) await this.dodgeExposure.flush();
 
     this.geometry = finalGeometries[finalGeometries.length - 1] ?? intendedGeometry;
     this.targets = getPotentialTargets(this.token, this.geometry, { includeAttacker: true, includeDead: true });
 
+    const delayedThrownItemId = delayedExplosion ? (existingDelayedThrownItemId || foundry.utils.randomID()) : "";
+    const sourceItemUuid = this.weapon.uuid;
+    const landingPoint = getAttackLandingPoint(finalGeometries, this.pointer);
+    const delayedRegionRequest = delayedExplosion
+      ? buildDelayedVolleyExplosionRegionRequest({
+        sceneId: canvas.scene?.id ?? "",
+        delayedThrownItemId,
+        explodeAtWorldTime: Number(existingDelayedThrownItem.explodeAtWorldTime)
+          || ((Number(game.time?.worldTime) || 0) + explosionDelaySeconds),
+        weapon: this.weapon,
+        weaponFunctionId: this.weaponFunctionId,
+        actionKey: this.actionKey,
+        attackerToken: this.token,
+        finalGeometries,
+        blastOutcomes,
+        baseDamage: this.getWeaponDamage()
+      })
+      : null;
+
     await this.spendCurrentAttackCosts({
       attackCount: totalAttackCount,
-      point: getAttackLandingPoint(finalGeometries, this.pointer)
+      point: landingPoint,
+      createSpentQuantityTile: false
     });
     await checkBatch?.publish({ forceBatch: true });
-    if (this.shouldPlayWeaponAnimationForAttempt()) await this.playVolleyAttackEffects(finalGeometries);
+
+    const playEffects = this.shouldPlayWeaponAnimationForAttempt();
+    if (delayedExplosion) {
+      if (playEffects) await this.playVolleyAttackEffects(finalGeometries, { includeExplosion: false });
+      if (this.spentQuantityItemData) {
+        foundry.utils.setProperty(
+          this.spentQuantityItemData,
+          `flags.${SYSTEM_ID}.${DELAYED_THROWN_ITEM_FLAG}`,
+          {
+            id: delayedThrownItemId,
+            explodeAtWorldTime: delayedRegionRequest.explodeAtWorldTime
+          }
+        );
+      }
+      await Promise.all([
+        createSpentQuantityItemTile({
+          itemData: this.spentQuantityItemData,
+          point: landingPoint,
+          token: this.token,
+          sourceItemUuid,
+          delayedThrownItemId
+        }),
+        requestCreateDelayedVolleyExplosionRegion(delayedRegionRequest)
+      ]);
+      this.completeProcessingCycle();
+      return;
+    }
+
+    if (playEffects) await this.playVolleyAttackEffects(finalGeometries);
     const damageResults = flattenDamageResults(await applyQueuedDamageAndRegionRequests(damageRequests, regionRequests));
 
     this.notifyAttackResolved({ killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
@@ -1886,30 +2030,35 @@ class WeaponAttackController {
       radiusPixels: metersToPixels(settings.radiusMeters),
       color: getVolleyRegionColor(settings.damageEntries),
       damageEntries: settings.damageEntries,
-      delaySeconds: settings.delaySeconds,
+      delaySeconds: 0,
       durationSeconds: settings.durationSeconds,
       radiusDeltaMeters: settings.radiusDeltaMeters
     };
   }
 
-  async playVolleyAttackEffects(finalGeometries = []) {
+  async playVolleyAttackEffects(finalGeometries = [], { includeProjectile = true, includeExplosion = true } = {}) {
     const delayMs = getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId);
     const animationTasks = finalGeometries.map(async (geometry, index) => {
       if (index > 0 && delayMs > 0) await sleep(index * delayMs);
-      await playWeaponAttackAnimations({
-        weapon: this.weapon,
-        weaponFunctionId: this.weaponFunctionId,
-        weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
-        trajectories: [buildVolleyAnimationTrajectory(geometry)],
-        delayMs: 0
-      });
-      await playWeaponExplosionAnimation({
-        weapon: this.weapon,
-        weaponFunctionId: this.weaponFunctionId,
-        weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
-        center: geometry.end,
-        radiusPixels: geometry.radiusPixels
-      });
+      const weaponData = getWeaponAttackData(this.weapon, this.weaponFunctionId);
+      if (includeProjectile) {
+        await playWeaponAttackAnimations({
+          weapon: this.weapon,
+          weaponFunctionId: this.weaponFunctionId,
+          weaponData,
+          trajectories: [buildVolleyAnimationTrajectory(geometry)],
+          delayMs: 0
+        });
+      }
+      if (includeExplosion) {
+        await playWeaponExplosionAnimation({
+          weapon: this.weapon,
+          weaponFunctionId: this.weaponFunctionId,
+          weaponData,
+          center: geometry.end,
+          radiusPixels: geometry.radiusPixels
+        });
+      }
     });
     await Promise.all(animationTasks);
   }
@@ -2763,6 +2912,20 @@ function handleWeaponAttackSocketMessage(payload = {}) {
     void createVolleyDamageRegion(payload.region);
     return;
   }
+  if (payload.action === "createDelayedVolleyExplosionRegion") {
+    if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
+    void createDelayedVolleyExplosionRegionNow(payload.region).then(region => {
+      respondVolleyRegionSocketRequest(payload, { ok: true, results: serializeRegionSocketResults([region]) });
+    }).catch(error => {
+      console.error("Fallout MaW | Delayed volley region socket request failed", error);
+      respondVolleyRegionSocketRequest(payload, {
+        ok: false,
+        error: String(error?.message ?? error ?? "Delayed volley region socket request failed."),
+        results: []
+      });
+    });
+    return;
+  }
   if (payload.action === "clearPreview") {
     removeRemoteAttackPreview(payload.attackId);
     return;
@@ -2893,6 +3056,44 @@ async function requestCreateVolleyDamageRegions(regions = []) {
   }
 }
 
+async function requestCreateDelayedVolleyExplosionRegion(regionData = null) {
+  if (!regionData?.sceneId) return null;
+  if (game.user?.isGM) return createDelayedVolleyExplosionRegionNow(regionData);
+
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для создания области отложенного взрыва.");
+    return null;
+  }
+
+  const requestId = foundry.utils.randomID();
+  const promise = new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      pendingRegionSocketRequests.delete(requestId);
+      reject(new Error("Delayed volley region socket request timed out."));
+    }, REGION_SOCKET_REQUEST_TIMEOUT_MS);
+    pendingRegionSocketRequests.set(requestId, { resolve, reject, timeout });
+  });
+
+  game.socket.emit(WEAPON_ATTACK_SOCKET, {
+    scope: WEAPON_ATTACK_SOCKET_SCOPE,
+    action: "createDelayedVolleyExplosionRegion",
+    gmUserId: gm.id,
+    senderUserId: game.user?.id ?? "",
+    requestId,
+    region: regionData
+  });
+
+  try {
+    const results = await promise;
+    return results?.[0] ?? null;
+  } catch (error) {
+    console.error("Fallout MaW | Delayed volley region socket request failed", error);
+    ui.notifications.warn("Нет ответа GM на создание области отложенного взрыва.");
+    return null;
+  }
+}
+
 async function requestApplyDamageAndCreateVolleyDamageRegions(damageRequests = [], regionRequests = []) {
   const serializableDamageRequests = serializeWeaponDamageRequests(damageRequests);
   const regions = (Array.isArray(regionRequests) ? regionRequests : [regionRequests])
@@ -3018,6 +3219,191 @@ async function createVolleyDamageRegionNow(regionData = {}) {
     }]
   }]);
   return created?.[0] ?? null;
+}
+
+async function createDelayedVolleyExplosionRegionNow(regionData = {}) {
+  const scene = game.scenes?.get(String(regionData.sceneId ?? "")) ?? canvas.scene;
+  if (!scene || !game.user?.isGM) return null;
+
+  const explosions = (Array.isArray(regionData.explosions) ? regionData.explosions : [])
+    .filter(explosion => explosion?.center && Number(explosion.radiusPixels) > 0);
+  const delayedThrownItemId = String(regionData.delayedThrownItemId ?? "").trim();
+  const attachmentTokenId = String(regionData.attachmentTokenId ?? "").trim();
+  const explodeAtWorldTime = Number(regionData.explodeAtWorldTime);
+  if (!explosions.length || !delayedThrownItemId || !Number.isFinite(explodeAtWorldTime)) return null;
+
+  const levelId = getRegionRestrictionLevelId(scene);
+  const shapes = explosions.map(explosion => ({
+    type: "circle",
+    x: Number(explosion.center.x) || 0,
+    y: Number(explosion.center.y) || 0,
+    radius: Math.max(1, Number(explosion.radiusPixels) || 1),
+    gridBased: false
+  }));
+  const existing = (scene.regions?.contents ?? []).find(region => (
+    String(region.getFlag?.(SYSTEM_ID, DELAYED_THROWN_ITEM_REGION_FLAG)?.id ?? "") === delayedThrownItemId
+  ));
+  if (existing) {
+    const updated = await scene.updateEmbeddedDocuments("Region", [{
+      _id: existing.id,
+      shapes,
+      levels: levelId ? [levelId] : [],
+      hidden: false,
+      attachment: { token: attachmentTokenId || null }
+    }]);
+    return updated?.[0] ?? existing;
+  }
+
+  const created = await scene.createEmbeddedDocuments("Region", [{
+    name: String(regionData.name ?? "").trim() || "Отложенный взрыв",
+    color: String(regionData.color ?? "#dd8431"),
+    shapes,
+    elevation: { bottom: null, top: null },
+    levels: levelId ? [levelId] : [],
+    restriction: { enabled: false, type: "move", priority: 0 },
+    attachment: { token: attachmentTokenId || null },
+    visibility: CONST.REGION_VISIBILITY.ALWAYS,
+    highlightMode: "shapes",
+    displayMeasurements: false,
+    behaviors: [],
+    flags: {
+      [SYSTEM_ID]: {
+        [DELAYED_THROWN_ITEM_REGION_FLAG]: {
+          id: delayedThrownItemId,
+          explodeAtWorldTime,
+          explosions: foundry.utils.deepClone(explosions),
+          source: foundry.utils.deepClone(regionData.source ?? {})
+        }
+      }
+    }
+  }]);
+  return created?.[0] ?? null;
+}
+
+async function processDelayedVolleyExplosions(worldTime = 0) {
+  if (!game.user?.isGM || getResponsibleGM()?.id !== game.user.id) return;
+  const scene = canvas.scene;
+  if (!scene) return;
+  const now = Number(worldTime) || Number(game.time?.worldTime) || 0;
+  const dueRegions = (scene.regions?.contents ?? []).filter(region => {
+    const pending = region.getFlag?.(SYSTEM_ID, DELAYED_THROWN_ITEM_REGION_FLAG);
+    return pending?.id && Number(pending.explodeAtWorldTime) <= now;
+  });
+  for (const region of dueRegions) await resolveDelayedVolleyExplosionRegion(region, now);
+}
+
+async function resolveDelayedVolleyExplosionRegion(region = null, worldTime = 0) {
+  if (!region?.id || processingDelayedVolleyRegions.has(region.uuid)) return;
+  const pending = region.getFlag?.(SYSTEM_ID, DELAYED_THROWN_ITEM_REGION_FLAG);
+  if (!pending?.id) return;
+  processingDelayedVolleyRegions.add(region.uuid);
+  try {
+    const scene = region.parent;
+    if (!scene || canvas.scene?.id !== scene.id) return;
+    const source = pending.source ?? {};
+    const attackerToken = scene.tokens?.get(String(region.attachment?.token ?? ""))?.object
+      ?? scene.tokens?.get(String(source.attackerTokenId ?? ""))?.object
+      ?? canvas.tokens?.placeables?.at(0)
+      ?? null;
+
+    const damageRequests = [];
+    const regionRequests = [];
+    const targetActorUuids = new Set();
+    const targetTokenUuids = new Set();
+    const explosions = Array.isArray(pending.explosions) ? pending.explosions : [];
+    const shapes = Array.from(region.shapes ?? []);
+    const dodgeExposure = createDodgeAttackExposureTracker();
+    dodgeExposure.begin(getWeaponDodgeAttackMultiplier(String(source.actionKey ?? "")));
+
+    for (const [index, explosion] of explosions.entries()) {
+      const center = getDelayedVolleyRegionShapeCenter(shapes[index], explosion.center);
+      const geometry = {
+        type: VOLLEY_ACTION_KEY,
+        origin: center,
+        end: center,
+        angle: 0,
+        distance: 1,
+        halfAngle: 0,
+        radiusPixels: Math.max(1, Number(explosion.radiusPixels) || 1),
+        shapePoints: []
+      };
+      const targets = attackerToken
+        ? getPotentialTargets(attackerToken, geometry, { includeAttacker: true, includeDead: true })
+        : (canvas.tokens?.placeables ?? []).filter(target => (
+          target.actor && target.visible && isTokenInVolleyPlanarRadius(target, geometry)
+        ));
+      for (const target of targets) {
+        if (!isDeadTarget(target)) dodgeExposure.record(target.actor);
+        targetActorUuids.add(target.actor?.uuid);
+        targetTokenUuids.add(target.document?.uuid);
+        damageRequests.push(...buildWeaponExplosionDamageRequests({
+          targetToken: target,
+          center,
+          radiusPixels: geometry.radiusPixels,
+          baseDamage: explosion.damageAmount,
+          pelletCount: explosion.pelletCount,
+          damageTypes: explosion.damageTypes,
+          penetrationPower: explosion.penetrationPower,
+          source: {
+            weaponUuid: source.weaponUuid,
+            actionKey: source.actionKey,
+            attackerUuid: source.attackerUuid,
+            tokenId: source.attackerTokenId,
+            worldTime
+          }
+        }));
+      }
+
+      if (explosion.residualRegion) {
+        regionRequests.push({
+          sceneId: scene.id,
+          ...foundry.utils.deepClone(explosion.residualRegion),
+          center,
+          delaySeconds: 0
+        });
+      }
+
+      await playWeaponExplosionAnimation({
+        weaponData: source.weaponData,
+        center,
+        radiusPixels: geometry.radiusPixels
+      });
+    }
+
+    await dodgeExposure.flush();
+    const damageResults = flattenDamageResults(await applyQueuedDamageAndRegionRequests(damageRequests, regionRequests));
+    Hooks.callAll(WEAPON_ATTACK_RESOLVED_HOOK, {
+      attackerUuid: String(source.attackerUuid ?? ""),
+      actorUuid: String(source.attackerUuid ?? ""),
+      tokenUuid: String(source.attackerTokenUuid ?? ""),
+      weaponUuid: String(source.weaponUuid ?? ""),
+      actionKey: String(source.actionKey ?? ""),
+      weaponFunctionId: String(source.weaponFunctionId ?? ""),
+      actionPointCost: 0,
+      targetActorUuids: Array.from(targetActorUuids).filter(Boolean),
+      targetTokenUuids: Array.from(targetTokenUuids).filter(Boolean),
+      killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults),
+      canceledByReaction: false,
+      attackCheckCount: explosions.length,
+      senderUserId: game.user?.id ?? ""
+    });
+
+    await scene.deleteEmbeddedDocuments("Region", [region.id]);
+    await deleteDelayedThrownItemDocuments(String(pending.id));
+  } catch (error) {
+    console.error(`${SYSTEM_ID} | Delayed volley explosion failed.`, error);
+  } finally {
+    processingDelayedVolleyRegions.delete(region.uuid);
+  }
+}
+
+function getDelayedVolleyRegionShapeCenter(shape = null, fallback = null) {
+  const origin = shape?.origin;
+  return serializePoint({
+    x: Number(origin?.x ?? shape?.x ?? fallback?.x) || 0,
+    y: Number(origin?.y ?? shape?.y ?? fallback?.y) || 0,
+    elevation: Number(fallback?.elevation) || 0
+  });
 }
 
 function getRegionRestrictionLevelId(scene) {
@@ -3354,7 +3740,12 @@ async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "
         : toInteger(weapon.system?.quantity);
       const next = Math.max(0, current - amount);
       if (next <= 0) deleteWeapon = true;
-      else updateData["system.quantity"] = next;
+      else {
+        updateData["system.quantity"] = next;
+        if (weapon.getFlag?.(SYSTEM_ID, DELAYED_THROWN_ITEM_FLAG)?.id) {
+          updateData[`flags.${SYSTEM_ID}.-=${DELAYED_THROWN_ITEM_FLAG}`] = null;
+        }
+      }
     }
   }
   if (Object.keys(updateData).length) await weapon.update(updateData);
@@ -3379,14 +3770,15 @@ function getWeaponQuantityResourceCost(weapon, multiplier = 1, weaponFunctionId 
   }, 0);
 }
 
-async function createSpentQuantityItemTile({ itemData = null, point = null, token = null, sourceItemUuid = "" } = {}) {
+async function createSpentQuantityItemTile({ itemData = null, point = null, token = null, sourceItemUuid = "", delayedThrownItemId = "" } = {}) {
   if (!itemData || !point) return null;
   return createThrownItemTile({
     sceneId: canvas.scene?.id ?? "",
     itemData,
     point,
     sourceActorUuid: token?.actor?.uuid ?? "",
-    sourceItemUuid
+    sourceItemUuid,
+    delayedThrownItemId
   });
 }
 
@@ -4143,6 +4535,85 @@ function getVolleyDamageRadius(weapon, weaponFunctionId = "") {
   });
 }
 
+function getVolleyExplosionDelaySeconds(weapon, weaponFunctionId = "") {
+  return evaluateWeaponFormula(weapon, getWeaponAttackData(weapon, weaponFunctionId)?.volley?.regionDelaySeconds, {
+    minimum: 0,
+    context: "volley explosion delay"
+  });
+}
+
+function buildDelayedVolleyExplosionRegionRequest({
+  sceneId = "",
+  delayedThrownItemId = "",
+  explodeAtWorldTime = 0,
+  weapon = null,
+  weaponFunctionId = "",
+  actionKey = "",
+  attackerToken = null,
+  finalGeometries = [],
+  blastOutcomes = [],
+  baseDamage = 0,
+  attachmentTokenId = ""
+} = {}) {
+  const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
+  const damageTypes = getWeaponDamageTypeEntries(weapon, weaponFunctionId);
+  const regionSettings = getVolleyRegionSettings(weapon, weaponFunctionId);
+  const residualRegion = regionSettings.enabled
+    ? {
+      name: weapon?.name
+        ? `${weapon.name}: ${game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.RegionName")}`
+        : game.i18n.localize("FALLOUTMAW.RegionBehavior.PeriodicDamage.RegionName"),
+      radiusPixels: metersToPixels(regionSettings.radiusMeters),
+      color: getVolleyRegionColor(regionSettings.damageEntries),
+      damageEntries: regionSettings.damageEntries,
+      durationSeconds: regionSettings.durationSeconds,
+      radiusDeltaMeters: regionSettings.radiusDeltaMeters
+    }
+    : null;
+  const explosions = finalGeometries.map((geometry, index) => ({
+    center: serializePoint(geometry.end),
+    radiusPixels: Math.max(1, Number(geometry.radiusPixels) || 1),
+    damageAmount: getCriticalDamageAmount(
+      weapon,
+      Math.max(0, Number(baseDamage) || 0),
+      blastOutcomes[index]?.outcome,
+      weaponFunctionId
+    ),
+    pelletCount: getWeaponPelletCount(weapon, weaponFunctionId),
+    damageTypes,
+    penetrationPower: getWeaponPenetrationPower(weapon, weaponFunctionId, {
+      actor: attackerToken?.actor,
+      actionKey
+    }),
+    residualRegion
+  }));
+  const dominantDamageTypeKey = [...damageTypes]
+    .sort((left, right) => right.weight - left.weight)
+    .at(0)?.key;
+  const dominantDamageType = getDamageTypeSettings()
+    .find(type => type.key === dominantDamageTypeKey);
+
+  return {
+    sceneId,
+    delayedThrownItemId,
+    explodeAtWorldTime,
+    attachmentTokenId: String(attachmentTokenId ?? ""),
+    name: weapon?.name ? `${weapon.name}: отложенный взрыв` : "Отложенный взрыв",
+    color: dominantDamageType?.color ?? "#dd8431",
+    explosions,
+    source: {
+      attackerUuid: attackerToken?.actor?.uuid ?? "",
+      attackerTokenId: attackerToken?.id ?? "",
+      attackerTokenUuid: attackerToken?.document?.uuid ?? "",
+      weaponUuid: weapon?.uuid ?? "",
+      weaponName: weapon?.name ?? "",
+      weaponFunctionId,
+      actionKey,
+      weaponData: foundry.utils.deepClone(weaponData)
+    }
+  };
+}
+
 function getVolleyRegionSettings(weapon, weaponFunctionId = "") {
   const volley = getWeaponAttackData(weapon, weaponFunctionId)?.volley ?? {};
   const radiusMeters = evaluateWeaponFormula(weapon, volley.regionRadius, {
@@ -4154,19 +4625,14 @@ function getVolleyRegionSettings(weapon, weaponFunctionId = "") {
     minimum: 0,
     context: "volley region duration"
   });
-  const delaySeconds = evaluateWeaponFormula(weapon, volley.regionDelaySeconds, {
-    minimum: 0,
-    context: "volley region delay"
-  });
   const radiusDeltaMeters = evaluateWeaponFormula(weapon, volley.regionRadiusDeltaMeters, {
     context: "volley region radius delta"
   });
   return {
-    enabled: radiusMeters > 0 && damageEntries.length > 0 && (durationSeconds > 0 || delaySeconds > 0),
+    enabled: radiusMeters > 0 && damageEntries.length > 0 && durationSeconds > 0,
     radiusMeters,
     damageEntries,
     durationSeconds,
-    delaySeconds,
     radiusDeltaMeters
   };
 }

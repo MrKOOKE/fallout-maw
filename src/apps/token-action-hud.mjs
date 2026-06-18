@@ -42,7 +42,9 @@ import {
 import { evaluateActorEffectChangeNumber } from "../utils/active-effect-changes.mjs";
 import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import {
+  armDelayedVolleyWeapon,
   cancelWeaponAttack,
+  getDelayedVolleyWeaponState,
   hasRequiredWeaponReloadActionPoints,
   spendWeaponReloadActionPoints,
   startWeaponAttack
@@ -191,6 +193,7 @@ export function registerTokenActionHudHooks() {
   Hooks.on("createCombatant", scheduleTokenActionHudRefresh);
   Hooks.on("deleteCombatant", scheduleTokenActionHudRefresh);
   Hooks.on("updateSetting", scheduleTokenActionHudRefreshForSetting);
+  Hooks.on("updateWorldTime", updateArmedExplosionTooltipCountdowns);
   Hooks.on(MOVEMENT_RESOURCE_PREVIEW_HOOK, applyTokenActionHudMovementPreview);
   window.addEventListener("resize", scheduleTokenActionHudRefresh);
   tokenActionHudRefresh = foundry.utils.debounce(syncTokenActionHud, 60);
@@ -231,6 +234,17 @@ export function refreshTokenActionHudForActor(actor) {
 
 function scheduleTokenActionHudRefresh() {
   tokenActionHudRefresh?.();
+}
+
+function updateArmedExplosionTooltipCountdowns(worldTime = 0) {
+  const now = Number(worldTime) || Number(game.time?.worldTime) || 0;
+  for (const status of document.querySelectorAll("[data-armed-explode-at]")) {
+    const output = status.querySelector("[data-armed-time-remaining]");
+    const explodeAtWorldTime = Number(status.dataset.armedExplodeAt);
+    if (!output || !Number.isFinite(explodeAtWorldTime)) continue;
+    const remainingSeconds = Math.max(0, Math.ceil(explodeAtWorldTime - now));
+    output.textContent = `${game.i18n.localize("FALLOUTMAW.Item.WeaponExplosionTimeRemaining")}: ${remainingSeconds} ${game.i18n.localize("FALLOUTMAW.Common.SecondsShort")}`;
+  }
 }
 
 function scheduleTokenActionHudRefreshForActor(actor) {
@@ -856,7 +870,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     return this.render({ force: true });
   }
 
-  static #onUseWeaponAction(event, target) {
+  static async #onUseWeaponAction(event, target) {
     event.preventDefault();
     if (isHudActionBlockedByReactionLock()) return undefined;
     const actionKey = String(target.dataset.weaponActionKey ?? "");
@@ -870,6 +884,34 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isWeaponActionBrokenForHud(item, weaponFunctionId)) {
       ui.notifications.warn("Предмет сломан.");
       return undefined;
+    }
+    if (actionKey === "armDelayedExplosion") {
+      const state = getDelayedVolleyWeaponState(item, weaponFunctionId);
+      if (!state.configured || state.armed) return undefined;
+      const confirmed = await DialogV2.confirm({
+        window: { title: game.i18n.localize("FALLOUTMAW.Item.WeaponArmExplosionConfirmTitle") },
+        content: `<p>${escapeHTML(game.i18n.format("FALLOUTMAW.Item.WeaponArmExplosionConfirmText", {
+          item: item.name,
+          seconds: formatNumberForHud(state.delaySeconds)
+        }))}</p>`,
+        yes: {
+          label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionArmExplosion"),
+          icon: "fa-solid fa-bomb"
+        },
+        no: {
+          label: game.i18n.localize("FALLOUTMAW.Common.Cancel"),
+          icon: "fa-solid fa-xmark"
+        },
+        rejectClose: false,
+        modal: true
+      });
+      if (!confirmed) return undefined;
+      await armDelayedVolleyWeapon({
+        token: this.token,
+        weapon: item,
+        weaponFunctionId
+      });
+      return this.render({ force: true });
     }
     const blockState = getWeaponActionBlockState(this.actor, actionKey);
     if (blockState.blocked) {
@@ -3035,6 +3077,7 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
   const weaponData = moduleWeaponData;
   const actions = weaponData?.availableActions ?? {};
   const hasMagazineCost = hasWeaponResourceCostData(weaponData, "magazine");
+  const delayedExplosionState = getDelayedVolleyWeaponState(selectedWeapon, weaponFunction?.id);
   const buttons = [
     {
       key: "attackPower",
@@ -3048,6 +3091,16 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
     { key: "snapshot", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionSnapshot"), configured: Boolean(actions.snapshot) },
     { key: "burst", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionBurst"), configured: Boolean(actions.burst), visible: Boolean(actions.burst) },
     { key: "volley", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionVolley"), configured: Boolean(actions.volley), visible: Boolean(actions.volley) },
+    {
+      key: "armDelayedExplosion",
+      label: game.i18n.localize(delayedExplosionState.armed
+        ? "FALLOUTMAW.Item.WeaponArmed"
+        : "FALLOUTMAW.Item.WeaponActionArmExplosion"),
+      configured: delayedExplosionState.configured,
+      visible: delayedExplosionState.configured,
+      disabled: delayedExplosionState.armed,
+      noActionPointCost: true
+    },
     { key: "meleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionMeleeAttack"), configured: Boolean(actions.meleeAttack) },
     { key: "aimedMeleeAttack", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionAimedMeleeAttack"), configured: Boolean(actions.aimedMeleeAttack) },
     { key: "push", label: game.i18n.localize("FALLOUTMAW.Item.WeaponActionPush"), configured: Boolean(actions.push), visible: Boolean(actions.push) },
@@ -3064,6 +3117,15 @@ function prepareWeaponActionButtonsForFunction(actor, selectedWeapon, weaponFunc
       };
     }
     const blockState = getWeaponActionBlockState(actor, action.key);
+    if (action.noActionPointCost) {
+      return {
+        ...action,
+        disabled: forceDisabled || action.disabled,
+        itemId: selectedWeapon.id,
+        weaponFunctionId: weaponFunction.isPrimary ? ITEM_FUNCTIONS.weapon : weaponFunction.id,
+        img: normalizeImagePath(hudIcons.weaponActions?.[action.key], "icons/svg/explosion.svg")
+      };
+    }
     const actionPointCostState = getWeaponActionPointCostStateForHud(actor, weaponData, action.key, weaponFunction?.data ?? {}, { moduleSlots });
     const actionPointCost = actionPointCostState.cost;
     return {

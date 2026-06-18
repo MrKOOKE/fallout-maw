@@ -2336,6 +2336,10 @@
         <input type="text" name="system.functions.damageSource.volley.damageRadius" value="{{system.functions.damageSource.volley.damageRadius}}" data-formula-autocomplete="all">
       </label>
       <label>
+        <span>{{localize "FALLOUTMAW.Item.WeaponVolleyExplosionDelay"}}</span>
+        <input type="text" name="system.functions.damageSource.volley.regionDelaySeconds" value="{{system.functions.damageSource.volley.regionDelaySeconds}}" data-formula-autocomplete="all">
+      </label>
+      <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponExplosionAnimation"}}</span>
         <input type="text" name="system.functions.damageSource.volley.explosionAnimationKey" value="{{system.functions.damageSource.volley.explosionAnimationKey}}">
       </label>
@@ -2372,10 +2376,6 @@
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDuration"}}</span>
         <input type="text" name="system.functions.damageSource.volley.regionDurationSeconds" value="{{system.functions.damageSource.volley.regionDurationSeconds}}" data-formula-autocomplete="all">
-      </label>
-      <label>
-        <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDelay"}}</span>
-        <input type="text" name="system.functions.damageSource.volley.regionDelaySeconds" value="{{system.functions.damageSource.volley.regionDelaySeconds}}" data-formula-autocomplete="all">
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadiusDelta"}}</span>
@@ -3422,6 +3422,10 @@
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyDamageRadius"}}</span>
             <input type="text" name="{{../path}}.volley.damageRadius" value="{{volleyDamageRadius}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
           </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyExplosionDelay"}}</span>
+            <input type="text" name="{{../path}}.volley.regionDelaySeconds" value="{{volleyRegionDelaySeconds}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
+          </label>
         </div>
         <div class="fallout-maw-panel-header">
           <h4>{{localize "FALLOUTMAW.Item.WeaponVolleyRegion"}}</h4>
@@ -3455,10 +3459,6 @@
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDuration"}}</span>
             <input type="text" name="{{../path}}.volley.regionDurationSeconds" value="{{volleyRegionDurationSeconds}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
-          </label>
-          <label>
-            <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionDelay"}}</span>
-            <input type="text" name="{{../path}}.volley.regionDelaySeconds" value="{{volleyRegionDelaySeconds}}" data-formula-autocomplete="all" {{#if ../usesDamageSource}}disabled{{/if}}>
           </label>
           <label>
             <span>{{localize "FALLOUTMAW.Item.WeaponVolleyRegionRadiusDelta"}}</span>

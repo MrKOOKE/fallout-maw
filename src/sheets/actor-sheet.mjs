@@ -44,6 +44,7 @@ import {
   SMART_FUDGE_RESULT_EFFECT_KEYS
 } from "../utils/active-effect-changes.mjs";
 import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
+import { DELAYED_THROWN_ITEM_FLAG } from "../canvas/thrown-items.mjs";
   import {
     completeResearch,
     deleteResearchWithConfirm,
@@ -3472,6 +3473,7 @@ function renderInventoryItemTooltipContentHTML(item, actor, { activeWeaponIndex 
   const totalPrice = unitPrice * quantity;
   const weightLabel = formatUnitAndTotal(unitWeight, totalWeight, quantity, game.i18n.localize("FALLOUTMAW.Common.Kg"));
   const priceHTML = renderTooltipPriceValue(unitPrice, totalPrice, quantity, currency);
+  const armedStatus = renderArmedDelayedExplosionStatus(item);
   const functionSections = buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex, baseMode });
   return `
     <section class="content">
@@ -3484,8 +3486,22 @@ function renderInventoryItemTooltipContentHTML(item, actor, { activeWeaponIndex 
           <div class="metric price-metric">${priceHTML}</div>
         </div>
       </section>
+      ${armedStatus}
       ${functionSections}
       ${descriptionHTML ? `<section class="description">${descriptionHTML}</section>` : ""}
+    </section>
+  `;
+}
+
+function renderArmedDelayedExplosionStatus(item = null) {
+  const state = item?.getFlag?.(FALLOUT_MAW.id, DELAYED_THROWN_ITEM_FLAG);
+  const explodeAtWorldTime = Number(state?.explodeAtWorldTime);
+  if (!state?.id || !Number.isFinite(explodeAtWorldTime)) return "";
+  const remainingSeconds = Math.max(0, Math.ceil(explodeAtWorldTime - (Number(game.time?.worldTime) || 0)));
+  return `
+    <section class="fallout-maw-tooltip-armed-status" data-armed-explode-at="${explodeAtWorldTime}">
+      <strong>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.WeaponArmed"))}</strong>
+      <span data-armed-time-remaining>${escapeHTML(game.i18n.localize("FALLOUTMAW.Item.WeaponExplosionTimeRemaining"))}: ${remainingSeconds} ${escapeHTML(game.i18n.localize("FALLOUTMAW.Common.SecondsShort"))}</span>
     </section>
   `;
 }
@@ -4507,12 +4523,12 @@ function getWeaponVolleyRows(data = {}, { actor = null } = {}) {
   const regionDamage = getWeaponDamageEntryLabels(volley.regionDamageEntries, actor);
   const regionRadius = evaluateTooltipFormula(volley.regionRadius, actor);
   const regionDuration = evaluateTooltipFormula(volley.regionDurationSeconds, actor);
-  const regionDelay = evaluateTooltipFormula(volley.regionDelaySeconds, actor);
+  const explosionDelay = evaluateTooltipFormula(volley.regionDelaySeconds, actor);
   const regionDelta = evaluateTooltipFormula(volley.regionRadiusDeltaMeters, actor);
   if (regionRadius > 0) rows.push(["Радиус области", `${formatNumber(regionRadius)} м`]);
   if (regionDamage) rows.push(["Урон области", regionDamage]);
   if (regionDuration > 0) rows.push(["Длительность области", `${formatNumber(regionDuration)} с`]);
-  if (regionDelay > 0) rows.push(["Задержка области", `${formatNumber(regionDelay)} с`]);
+  if (explosionDelay > 0) rows.push(["Задержка до взрыва", `${formatNumber(explosionDelay)} с`]);
   if (regionDelta !== 0) rows.push(["Изменение радиуса", `${regionDelta > 0 ? "+" : ""}${formatNumber(regionDelta)} м`]);
   return rows;
 }

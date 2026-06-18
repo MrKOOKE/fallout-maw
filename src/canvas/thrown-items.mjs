@@ -17,6 +17,8 @@ const { DialogV2 } = foundry.applications.api;
 const THROWN_ITEM_SOCKET = `system.${SYSTEM_ID}`;
 const THROWN_ITEM_SOCKET_SCOPE = "thrownItems";
 const THROWN_ITEM_FLAG = "thrownItem";
+export const DELAYED_THROWN_ITEM_FLAG = "delayedThrownItem";
+export const DELAYED_THROWN_ITEM_REGION_FLAG = "delayedThrownItemRegion";
 const DEFAULT_TILE_IMAGE = "icons/svg/item-bag.svg";
 
 let tilePatchRegistered = false;
@@ -36,16 +38,22 @@ export function registerThrownItemHooks() {
   });
 }
 
-export async function createThrownItemTile({ sceneId = "", itemData = null, point = null, sourceActorUuid = "", sourceItemUuid = "", sourceUserId = "", combatId = "" } = {}) {
+export async function createThrownItemTile({ sceneId = "", itemData = null, point = null, sourceActorUuid = "", sourceItemUuid = "", sourceUserId = "", combatId = "", delayedThrownItemId = "" } = {}) {
   if (!sceneId || !itemData || !point) return null;
+  delayedThrownItemId = String(delayedThrownItemId ?? "").trim();
+  const droppedItemData = normalizeDroppedItemData(itemData);
+  if (delayedThrownItemId) {
+    foundry.utils.setProperty(droppedItemData, `flags.${SYSTEM_ID}.${DELAYED_THROWN_ITEM_FLAG}.id`, delayedThrownItemId);
+  }
   const request = {
     sceneId,
-    itemData: normalizeDroppedItemData(itemData),
+    itemData: droppedItemData,
     point: serializePoint(point),
     sourceActorUuid: String(sourceActorUuid ?? ""),
     sourceItemUuid: String(sourceItemUuid ?? ""),
     sourceUserId: String(sourceUserId || game.user?.id || ""),
-    combatId: String(combatId || game.combat?.id || "")
+    combatId: String(combatId || game.combat?.id || ""),
+    delayedThrownItemId
   };
 
   if (game.user?.isGM) return createThrownItemTileDocument(request);
@@ -83,7 +91,7 @@ async function handleThrownItemSocketMessage(payload = {}) {
   }
 }
 
-async function createThrownItemTileDocument({ sceneId = "", itemData = null, point = null, sourceActorUuid = "", sourceItemUuid = "", sourceUserId = "", combatId = "" } = {}) {
+async function createThrownItemTileDocument({ sceneId = "", itemData = null, point = null, sourceActorUuid = "", sourceItemUuid = "", sourceUserId = "", combatId = "", delayedThrownItemId = "" } = {}) {
   const scene = game.scenes?.get(sceneId);
   if (!scene || !itemData || !point) return null;
 
@@ -120,6 +128,103 @@ async function createThrownItemTileDocument({ sceneId = "", itemData = null, poi
     }
   }]);
   return created?.[0] ?? null;
+}
+
+export async function deleteDelayedThrownItemDocuments(delayedThrownItemId = "") {
+  const id = String(delayedThrownItemId ?? "").trim();
+  if (!id) return;
+  const actors = new Map((game.actors?.contents ?? []).map(actor => [actor.uuid, actor]));
+  for (const scene of game.scenes?.contents ?? []) {
+    const tileIds = (scene.tiles?.contents ?? [])
+      .filter(tile => getDelayedThrownItemId(tile.getFlag?.(SYSTEM_ID, THROWN_ITEM_FLAG)?.itemData) === id)
+      .map(tile => tile.id)
+      .filter(Boolean);
+    if (tileIds.length) await scene.deleteEmbeddedDocuments("Tile", tileIds);
+    for (const token of scene.tokens?.contents ?? []) {
+      if (token.actor?.uuid) actors.set(token.actor.uuid, token.actor);
+    }
+  }
+  for (const actor of actors.values()) {
+    const matchingItems = actor.items.filter(item => getDelayedThrownItemId(item) === id);
+    const itemIds = [];
+    const updates = [];
+    for (const item of matchingItems) {
+      const quantity = Math.max(0, toInteger(item.system?.quantity));
+      if (quantity > 1) {
+        updates.push({
+          _id: item.id,
+          "system.quantity": quantity - 1,
+          [`flags.${SYSTEM_ID}.-=${DELAYED_THROWN_ITEM_FLAG}`]: null
+        });
+      } else if (item.id) itemIds.push(item.id);
+    }
+    if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
+    if (itemIds.length) await actor.deleteEmbeddedDocuments("Item", itemIds);
+  }
+}
+
+async function attachDelayedThrownItemRegionToActor(itemData = null, actor = null, scene = null) {
+  const delayedThrownItemId = String(itemData?.flags?.[SYSTEM_ID]?.[DELAYED_THROWN_ITEM_FLAG]?.id ?? "").trim();
+  if (!delayedThrownItemId || !actor || !scene) return;
+  const token = getActorSceneTokenDocument(actor, scene);
+  if (!token) return;
+  const center = getTokenCenterPoint(token.object ?? token);
+  const levelId = String(token._source?.level ?? token.level?.id ?? token.level ?? "").trim();
+  const updates = [];
+  for (const region of scene.regions?.contents ?? []) {
+    if (String(region.getFlag?.(SYSTEM_ID, DELAYED_THROWN_ITEM_REGION_FLAG)?.id ?? "") !== delayedThrownItemId) continue;
+    updates.push({
+      _id: region.id,
+      shapes: moveRegionShapesToPoint(region, center),
+      elevation: { bottom: null, top: null },
+      levels: levelId ? [levelId] : [],
+      hidden: Boolean(token.hidden),
+      attachment: { token: token.id }
+    });
+  }
+  if (updates.length) await scene.updateEmbeddedDocuments("Region", updates);
+}
+
+function getActorSceneTokenDocument(actor = null, scene = null) {
+  return (scene?.tokens?.contents ?? []).find(token => {
+    const tokenActor = token.actor;
+    return tokenActor?.uuid === actor?.uuid || tokenActor?.id === actor?.id;
+  }) ?? null;
+}
+
+function getTokenCenterPoint(token = null) {
+  const document = token?.document ?? token;
+  const object = token?.object ?? token;
+  if (Number.isFinite(Number(object?.center?.x)) && Number.isFinite(Number(object?.center?.y))) {
+    return {
+      x: Number(object.center.x),
+      y: Number(object.center.y),
+      elevation: Number(document?.elevation) || 0
+    };
+  }
+  const gridSize = Math.max(1, Number(document?.parent?.grid?.size ?? canvas.grid?.size) || 100);
+  return {
+    x: (Number(document?.x) || 0) + ((Number(document?.width) || 1) * gridSize / 2),
+    y: (Number(document?.y) || 0) + ((Number(document?.height) || 1) * gridSize / 2),
+    elevation: Number(document?.elevation) || 0
+  };
+}
+
+function moveRegionShapesToPoint(region = null, point = null) {
+  const target = serializePoint(point);
+  return (region?.shapes ?? []).map(shape => {
+    const clone = shape.clone();
+    clone.move(target);
+    return clone.toObject();
+  });
+}
+
+function getDelayedThrownItemId(itemOrData = null) {
+  if (!itemOrData) return "";
+  if (typeof itemOrData.getFlag === "function") {
+    return String(itemOrData.getFlag(SYSTEM_ID, DELAYED_THROWN_ITEM_FLAG)?.id ?? "").trim();
+  }
+  return String(itemOrData?.flags?.[SYSTEM_ID]?.[DELAYED_THROWN_ITEM_FLAG]?.id ?? "").trim();
 }
 
 function patchTileInteractions() {
@@ -288,6 +393,7 @@ async function pickupThrownItemTile({ sceneId = "", tileId = "", actorUuid = "",
   });
 
   await actor.createEmbeddedDocuments("Item", [itemData]);
+  await attachDelayedThrownItemRegionToActor(itemData, actor, scene);
   await scene.deleteEmbeddedDocuments("Tile", [tile.id]);
 }
 
