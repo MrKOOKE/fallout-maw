@@ -804,7 +804,7 @@ export function normalizeKeepAwaySettings(value = {}) {
     overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 10)),
     overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 6)),
     baseDifficulty: Math.max(0, toInteger(value?.baseDifficulty ?? 50)),
-    lostHealthPercentMultiplier: Math.max(0, toInteger(value?.lostHealthPercentMultiplier ?? 5))
+    lostHealthPercentMultiplier: Math.max(0, toNumber(value?.lostHealthPercentMultiplier ?? 2.5))
   };
 }
 

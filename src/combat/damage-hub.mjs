@@ -411,6 +411,7 @@ function serializeDamageCycleSocketResults(results = []) {
     actorUuid: String(result.actor?.uuid ?? result.actorUuid ?? ""),
     amount: roundDamageAmount(result.amount),
     healthDelta: roundDamageAmount(result.healthDelta),
+    resourceHealthDelta: roundDamageAmount(result.resourceHealthDelta),
     limbDelta: roundDamageAmount(result.limbDelta),
     mode: result.mode ?? MODE_DAMAGE,
     scope: result.scope ?? "",
@@ -754,6 +755,7 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
   const actor = await fromUuid(actorUuid);
   if (!actor) return undefined;
   if (!game.user?.isGM && !actor.isOwner) return undefined;
+  const resourceHealthBefore = calculateAggregateHealth(actor).value;
 
   const batchRequests = [];
   const singleResults = [];
@@ -791,7 +793,7 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
       requests: batchRequests
     })
     : false;
-  const batchResult = batchPrevented
+  let batchResult = batchPrevented
     ? {
       actor,
       amount: 0,
@@ -827,6 +829,13 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
   }
   if (batchResult?.bleedingEntries?.length) {
     await createCombinedBleedingDamageEffect(actor, batchResult.bleedingEntries);
+  }
+  if (batchResult) {
+    const resourceHealthAfter = calculateAggregateHealth(actor).value;
+    batchResult = {
+      ...batchResult,
+      resourceHealthDelta: Math.max(0, roundDamageAmount(resourceHealthBefore - resourceHealthAfter))
+    };
   }
   const results = [batchResult, ...singleResults].filter(Boolean);
   if (createSummary) {

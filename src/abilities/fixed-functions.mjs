@@ -2566,7 +2566,7 @@ async function processKeepAwayAttackResolution(context = {}) {
     if (!actorUuid) continue;
     const current = damageByActor.get(actorUuid) ?? { actor, healthDamage: 0 };
     current.actor ??= actor;
-    current.healthDamage += Math.max(0, Number(result?.healthDelta) || 0);
+    current.healthDamage += Math.max(0, Number(result?.resourceHealthDelta) || 0);
     damageByActor.set(actorUuid, current);
   }
   if (!damageByActor.size) return;
@@ -2583,8 +2583,8 @@ async function processKeepAwayAttackResolution(context = {}) {
       const actor = damage.actor ?? targetToken?.actor;
       if (!targetToken || !actor) continue;
       const healthMax = Math.max(1, Number(actor.system?.resources?.health?.max) || 1);
-      const lostPercent = Math.max(0, Math.min(100, Math.floor((damage.healthDamage / healthMax) * 100)));
-      const difficulty = settings.baseDifficulty + (lostPercent * settings.lostHealthPercentMultiplier);
+      const lostPercent = Math.max(0, Math.min(100, (damage.healthDamage / healthMax) * 100));
+      const difficulty = Math.floor(settings.baseDifficulty + (lostPercent * settings.lostHealthPercentMultiplier));
       await resolveKnockback({
         attackerToken,
         targetToken,

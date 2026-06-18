@@ -174,9 +174,10 @@ export async function resolveKnockback({
     availableStrength,
     maximumStrength === null ? availableStrength : toInteger(maximumStrength)
   ));
-  let failedChecks = 0;
+  const unableToResist = isUnableToResist(targetDocument);
+  let failedChecks = unableToResist ? checkCount : 0;
   const outcomes = [];
-  for (let index = 0; index < checkCount; index += 1) {
+  for (let index = 0; !unableToResist && index < checkCount; index += 1) {
     const outcome = await requestSkillCheck({
       actor: targetDocument.actor,
       skillKey: resolveSkillKey(targetDocument.actor, "prc"),
@@ -196,7 +197,7 @@ export async function resolveKnockback({
   const moved = failedChecks > 0
     ? await requestKnockback({ attackerToken: attackerDocument, targetToken: targetDocument, distanceCells: failedChecks, reason })
     : false;
-  return { difficulty: initialDifficulty, checkCount, failedChecks, moved, outcomes };
+  return { difficulty: initialDifficulty, checkCount, failedChecks, moved, outcomes, unableToResist };
 }
 
 async function startGrappleTargetSelection(grapplerDocument) {
