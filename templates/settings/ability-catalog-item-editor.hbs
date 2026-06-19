@@ -650,6 +650,20 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedTwoHandsSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: С двух рук</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активное состояние</strong>
+          <label>
+            <span>Расход энергии за парный залп</span>
+            <input type="number" data-field="fixed.twoHands.energyCost" value="{{fixedTwoHandsSettings.energyCost}}" min="0" step="1">
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedCounterAttackSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Контр атака</h3>

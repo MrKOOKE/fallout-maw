@@ -1,7 +1,17 @@
-﻿import { FALLOUT_MAW } from "../config/system-config.mjs";
-import { MIGRATION_STATE_SETTING } from "../settings/constants.mjs";
+import { FALLOUT_MAW } from "../config/system-config.mjs";
+import { ABILITIES_CATALOG_SETTING, MIGRATION_STATE_SETTING } from "../settings/constants.mjs";
+import { getSkillSettings } from "../settings/accessors.mjs";
+import {
+  ABILITY_FIXED_FUNCTION_KEYS,
+  createTwoHandsAbilityCatalogEntry,
+  normalizeAbilityCatalog
+} from "../settings/abilities.mjs";
 
 const SETTING_MIGRATIONS = Object.freeze([
+  {
+    id: "2026-06-19-add-two-hands-ability",
+    migrate: migrateTwoHandsAbilityCatalog
+  }
 ]);
 
 export async function migrateSystemSettings() {
@@ -32,10 +42,33 @@ function normalizeMigrationState(value = {}) {
   };
 }
 
+async function migrateTwoHandsAbilityCatalog() {
+  const catalog = normalizeAbilityCatalog(
+    game.settings.get(FALLOUT_MAW.id, ABILITIES_CATALOG_SETTING),
+    getSkillSettings()
+  );
+  if (catalogHasFixedAbilityFunction(catalog, ABILITY_FIXED_FUNCTION_KEYS.twoHands)) return;
+
+  const categories = foundry.utils.deepClone(catalog.categories ?? []);
+  const features = categories.find(category => category.id === "features") ?? categories[0];
+  if (!features) return;
+  features.abilities = [createTwoHandsAbilityCatalogEntry(), ...(features.abilities ?? [])];
+
+  await game.settings.set(FALLOUT_MAW.id, ABILITIES_CATALOG_SETTING, {
+    ...catalog,
+    categories
+  });
+}
+
+function catalogHasFixedAbilityFunction(catalog = {}, fixedKey = "") {
+  return (catalog.categories ?? []).some(category => (category.abilities ?? []).some(ability => (
+    ability?.system?.functions ?? []
+  ).some(abilityFunction => abilityFunction?.fixedKey === fixedKey)));
+}
+
 function isPrimaryActiveGM() {
   const activeGMs = (game.users?.contents ?? [])
     .filter(user => user.active && user.isGM)
     .sort((left, right) => left.id.localeCompare(right.id));
   return activeGMs.at(0)?.id === game.user?.id;
 }
-

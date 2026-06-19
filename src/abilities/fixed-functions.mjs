@@ -25,6 +25,7 @@ import {
   normalizeReaperSettings,
   normalizeVirtuosoSettings,
   normalizeRageSettings,
+  normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
   normalizeWhereAreYouGoingSettings
 } from "../settings/abilities.mjs";
@@ -313,6 +314,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.fullForce
     })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.twoHands,
+    label: "С двух рук",
+    active: true,
+    toggleable: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.twoHands
+    })
   })
 ]);
 
@@ -492,6 +502,47 @@ export function getFixedWeaponPreviewModifiers(actor, weapon, weaponData = {}) {
   return { combatValues, resourceCostMultipliers };
 }
 
+export function getActorTwoHandsEntry(actor) {
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
+    const state = getFixedAbilityState(abilityItem);
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.twoHands) continue;
+      if (!state[getFixedFunctionStateKey(abilityFunction)]?.active) continue;
+      const settings = normalizeTwoHandsSettings(abilityFunction.fixedSettings);
+      return {
+        abilityItem,
+        abilityFunction,
+        settings,
+        label: getAbilityDisplayName(abilityItem),
+        energyCost: getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost)
+      };
+    }
+  }
+  return null;
+}
+
+export function hasActorTwoHandsActive(actor) {
+  return Boolean(getActorTwoHandsEntry(actor));
+}
+
+export function canSpendActorTwoHandsEnergy(actor, entry = getActorTwoHandsEntry(actor)) {
+  const cost = Math.max(0, toInteger(entry?.energyCost ?? 0));
+  if (hasEnergy(actor, cost)) return true;
+  ui.notifications.warn(`${entry?.label ?? "С двух рук"}: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
+  return false;
+}
+
+export async function spendActorTwoHandsEnergy(actor, entry = getActorTwoHandsEntry(actor)) {
+  if (!entry?.abilityItem || !entry?.abilityFunction) return false;
+  const cost = Math.max(0, toInteger(entry.energyCost));
+  if (!hasEnergy(actor, cost)) {
+    await deactivateFixedAbilityFunction(entry.abilityItem, entry.abilityFunction);
+    await createAbilityChatMessage(actor, entry.abilityItem, `Выключено: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
+    return false;
+  }
+  return spendEnergy(actor, cost);
+}
+
 export async function useFixedAbilityFunctionItem({ actor = null, item = null, application = null } = {}) {
   if (isReactionSystemLocked()) {
     ui.notifications.warn("Ожидание реакций: способность временно заблокирована.");
@@ -558,6 +609,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce) {
     await toggleFullForce(actor, item, abilityFunction);
+    await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.twoHands) {
+    await toggleTwoHands(actor, item, abilityFunction);
     await application?.render?.({ force: true });
     return true;
   }
@@ -2364,6 +2421,27 @@ async function toggleDoubleAttack(actor, abilityItem, abilityFunction) {
 async function toggleFullForce(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeFullForceSettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  const nextActive = !Boolean(state[stateKey]?.active);
+  if (nextActive && !hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    active: nextActive
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  ui.notifications.info(`${abilityName}: ${nextActive ? "включено" : "выключено"}.`);
+  return true;
+}
+
+async function toggleTwoHands(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeTwoHandsSettings(abilityFunction.fixedSettings);
   const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
   const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
   const stateKey = getFixedFunctionStateKey(abilityFunction);

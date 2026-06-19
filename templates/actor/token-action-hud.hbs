@@ -203,6 +203,33 @@
       {{/if}}
 
       {{#if (eq activeTray "weaponActions")}}
+      {{#if tray.hasWeaponActionGroups}}
+      {{#each tray.weaponActionGroups}}
+      <div class="fallout-maw-token-hud-weapon-action-block">
+        {{#each rows}}
+        <div class="fallout-maw-token-hud-action-row">
+          <div class="fallout-maw-token-hud-action-row-title">{{label}}</div>
+          <div class="fallout-maw-token-hud-action-row-buttons">
+            {{#each actions}}
+            {{#if isAttackPowerControl}}
+            <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile fallout-maw-token-hud-attack-power-tile" data-action="setWeaponAttackPower" data-item-id="{{itemId}}" data-weapon-function-id="{{weaponFunctionId}}" aria-label="{{label}}" {{#if disabled}}disabled{{/if}}>
+              <strong class="fallout-maw-token-hud-attack-power-readout">{{attackPowerLabel}}</strong>
+              <span>{{label}}</span>
+            </button>
+            {{else}}
+            <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile {{#if dualPending}}dual-pending{{/if}}" data-action="useWeaponAction" data-item-id="{{itemId}}" data-weapon-function-id="{{weaponFunctionId}}" data-weapon-action-key="{{key}}" {{#if dualSideKey}}data-dual-side-key="{{dualSideKey}}"{{/if}} aria-label="{{label}}" {{#if disabled}}disabled{{/if}}>
+              <img src="{{img}}" alt="{{label}}" onerror="this.src='{{../../../fallbackIcon}}'">
+              <span>{{label}}</span>
+              {{#if actionPointCostLabel}}<strong class="{{actionPointCostClass}}" {{#if actionPointCostTooltipHtml}}data-action-point-cost-tooltip data-action-point-cost-tooltip-html="{{actionPointCostTooltipHtml}}"{{/if}} aria-label="{{actionPointCostTooltipLabel}}">{{actionPointCostLabel}}</strong>{{/if}}
+            </button>
+            {{/if}}
+            {{/each}}
+          </div>
+        </div>
+        {{/each}}
+      </div>
+      {{/each}}
+      {{else}}
       {{#each tray.weaponActionRows}}
       <div class="fallout-maw-token-hud-action-row">
         <div class="fallout-maw-token-hud-action-row-title">{{label}}</div>
@@ -232,7 +259,7 @@
             <span>{{label}}</span>
           </button>
           {{else}}
-          <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="useWeaponAction" data-item-id="{{itemId}}" data-weapon-function-id="{{weaponFunctionId}}" data-weapon-action-key="{{key}}" aria-label="{{label}}" {{#if disabled}}disabled{{/if}}>
+          <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile {{#if dualPending}}dual-pending{{/if}}" data-action="useWeaponAction" data-item-id="{{itemId}}" data-weapon-function-id="{{weaponFunctionId}}" data-weapon-action-key="{{key}}" {{#if dualSideKey}}data-dual-side-key="{{dualSideKey}}"{{/if}} aria-label="{{label}}" {{#if disabled}}disabled{{/if}}>
             <img src="{{img}}" alt="{{label}}" onerror="this.src='{{../../fallbackIcon}}'">
             <span>{{label}}</span>
             {{#if actionPointCostLabel}}<strong class="{{actionPointCostClass}}" {{#if actionPointCostTooltipHtml}}data-action-point-cost-tooltip data-action-point-cost-tooltip-html="{{actionPointCostTooltipHtml}}"{{/if}} aria-label="{{actionPointCostTooltipLabel}}">{{actionPointCostLabel}}</strong>{{/if}}
@@ -247,6 +274,8 @@
       {{else}}
       <div class="fallout-maw-token-hud-empty">Действий нет</div>
       {{/each}}
+      {{/if}}
+
       {{/if}}
 
       {{#if (eq activeTray "weaponSets")}}

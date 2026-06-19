@@ -88,6 +88,7 @@ const remoteAttackPreviews = new Map();
 const pendingRegionSocketRequests = new Map();
 const processingDelayedVolleyRegions = new Set();
 let activeAttack = null;
+let activeDualWeaponAttack = null;
 let delayedVolleyProcessorRegistered = false;
 
 class WeaponActionModifierState {
@@ -184,6 +185,8 @@ export function cancelWeaponAttack({ ignoreReactionLock = false } = {}) {
   if (activeAttack?.processing) return false;
   activeAttack?.destroy();
   activeAttack = null;
+  activeDualWeaponAttack?.destroy();
+  activeDualWeaponAttack = null;
   return true;
 }
 
@@ -198,6 +201,46 @@ export function requestWeaponAttackCompletion({ attackId = "" } = {}) {
     senderUserId: game.user?.id ?? ""
   });
   return true;
+}
+
+class DualWeaponAttackPreview {
+  constructor() {
+    this.container = new PIXI.Container();
+    this.container.eventMode = "none";
+    this.entries = [];
+    getAttackPreviewLayer().addChild(this.container);
+  }
+
+  add(selection = {}) {
+    const geometry = deserializeGeometry(selection.lockedGeometry) ?? deserializeGeometry(selection.geometry);
+    if (!geometry) return;
+    const shape = new PIXI.Graphics();
+    const targetMarkers = new PIXI.Graphics();
+    this.container.addChild(shape, targetMarkers);
+    drawAttackShape(shape, geometry, {
+      locked: true,
+      hasTargets: Boolean(selection.targetUuid)
+    });
+    const target = resolveTokenObjectFromUuidSync(selection.targetUuid);
+    drawTargetMarkerPositions(
+      targetMarkers,
+      target ? [getTargetMarkerPreviewData(target)].filter(Boolean) : [],
+      target ? getTargetCenterMarkerPosition(target) : null
+    );
+    this.entries.push({ shape, targetMarkers });
+  }
+
+  destroy() {
+    this.container.destroy({ children: true });
+    this.entries = [];
+  }
+}
+
+function resolveTokenObjectFromUuidSync(uuid = "") {
+  const normalizedUuid = String(uuid ?? "").trim();
+  if (!normalizedUuid || typeof fromUuidSync !== "function") return null;
+  const document = fromUuidSync(normalizedUuid);
+  return document?.object ?? null;
 }
 
 export function startWeaponAttack({ token = null, weapon = null, actionKey = "", weaponFunctionId = "", attackModifier = null, originOverride = null, onBeforeExecute = null } = {}) {
@@ -219,6 +262,149 @@ export function startWeaponAttack({ token = null, weapon = null, actionKey = "",
   activeAttack = controller;
   activeAttack.activate();
   return activeAttack;
+}
+
+export function startDualWeaponAttack({
+  token = null,
+  attacks = [],
+  label = "С двух рук",
+  canSpendEnergy = null,
+  spendEnergy = null
+} = {}) {
+  if (isReactionSystemLocked()) return undefined;
+  const actor = token?.actor ?? null;
+  const entries = (Array.isArray(attacks) ? attacks : []).slice(0, 2)
+    .map(entry => ({
+      weapon: entry?.weapon ?? null,
+      actionKey: String(entry?.actionKey ?? ""),
+      weaponFunctionId: String(entry?.weaponFunctionId || ITEM_FUNCTIONS.weapon)
+    }));
+  if (!actor || entries.length !== 2 || isActorUnableToAct(actor)) return undefined;
+  if (new Set(entries.map(entry => entry.weapon?.id ?? "")).size !== 2) return undefined;
+
+  for (const entry of entries) {
+    if (!entry.weapon || !hasItemFunction(entry.weapon, ITEM_FUNCTIONS.weapon)) return undefined;
+    if (!getWeaponAttackData(entry.weapon, entry.weaponFunctionId)?.enabled) return undefined;
+    if (!hasWeaponAction(entry.weapon, entry.actionKey, entry.weaponFunctionId)) return undefined;
+    if (isWeaponActionBlocked(actor, entry.actionKey)) return undefined;
+    if (isWeaponPlacementDisabled(actor, entry.weapon)) return undefined;
+  }
+
+  activeDualWeaponAttack?.destroy();
+  activeDualWeaponAttack = null;
+  const captured = [];
+  const runCaptured = async () => {
+    try {
+      if (!validateDualWeaponAttackResources(actor, captured, label)) return false;
+      if (typeof canSpendEnergy === "function" && canSpendEnergy() === false) return false;
+      const actionPointCost = Math.max(0, ...captured.map(entry => getWeaponActionPointCost(actor, entry.weapon, entry.actionKey, entry.weaponFunctionId)));
+      if (isCombatActionPointSpendingActive() && actionPointCost > 0 && !canSpendCombatActionPoints(actor, actionPointCost, { label: "действия" })) return false;
+      if (typeof spendEnergy === "function" && (await spendEnergy()) === false) return false;
+      if (isCombatActionPointSpendingActive() && actionPointCost > 0) await spendCombatActionPoints(actor, actionPointCost);
+      for (const selection of captured) {
+        await executeCapturedWeaponAttack(selection, { skipActionPointCost: true });
+      }
+      return true;
+    } finally {
+      activeDualWeaponAttack?.destroy();
+      activeDualWeaponAttack = null;
+    }
+  };
+
+  const startCapture = index => {
+    const entry = entries[index];
+    const controller = new WeaponAttackController(token, entry.weapon, entry.actionKey, entry.weaponFunctionId, null, {
+      skipActionPointCost: true,
+      captureOnly: true,
+      onCapture: async selection => {
+        captured.push(selection);
+        activeDualWeaponAttack?.add(selection);
+        if (captured.length < entries.length) {
+          if (!startCapture(captured.length)) {
+            activeDualWeaponAttack?.destroy();
+            activeDualWeaponAttack = null;
+          }
+          return;
+        }
+        activeAttack = null;
+        await runCaptured();
+      }
+    });
+    if (!controller.hasRequiredWeaponResources(getActionAttackCount(entry.weapon, entry.actionKey, entry.weaponFunctionId))) return undefined;
+    if (activeAttack && !cancelWeaponAttack()) return undefined;
+    if (index === 0 && !activeDualWeaponAttack) activeDualWeaponAttack = new DualWeaponAttackPreview();
+    activeAttack = controller;
+    ui.notifications.info(`${label}: выберите траекторию ${index + 1} / ${entries.length}.`);
+    controller.activate();
+    return controller;
+  };
+
+  return startCapture(0);
+}
+
+function validateDualWeaponAttackResources(actor, selections = [], label = "С двух рук") {
+  if (!actor || selections.length !== 2) return false;
+  for (const selection of selections) {
+    const weapon = selection?.weapon ?? null;
+    const actionKey = String(selection?.actionKey ?? "");
+    const weaponFunctionId = String(selection?.weaponFunctionId || ITEM_FUNCTIONS.weapon);
+    if (!weapon || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) return false;
+    if (!getWeaponAttackData(weapon, weaponFunctionId)?.enabled) return false;
+    if (!hasWeaponAction(weapon, actionKey, weaponFunctionId)) return false;
+    if (isWeaponActionBlocked(actor, actionKey)) {
+      ui.notifications.warn(`${label}: действие ${actionKey} заблокировано.`);
+      return false;
+    }
+    if (isWeaponPlacementDisabled(actor, weapon)) return false;
+    const attackCount = getActionAttackCount(weapon, actionKey, weaponFunctionId);
+    if (!hasRequiredWeaponResources(weapon, attackCount, weaponFunctionId)) return false;
+  }
+  return true;
+}
+
+async function executeCapturedWeaponAttack(selection = {}, { skipActionPointCost = true } = {}) {
+  const token = selection?.token ?? null;
+  const weapon = selection?.weapon ?? null;
+  const actionKey = String(selection?.actionKey ?? "");
+  const weaponFunctionId = String(selection?.weaponFunctionId || ITEM_FUNCTIONS.weapon);
+  if (!token?.actor || !weapon || !actionKey) return false;
+
+  const controller = new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, null, {
+    skipActionPointCost
+  });
+  controller.pointer = deserializePoint(selection.pointer);
+  controller.geometry = deserializeGeometry(selection.geometry);
+  controller.lockedGeometry = selection.lockedGeometry ?? serializeGeometry(controller.geometry);
+  controller.selectedLimbKey = String(selection.selectedLimbKey ?? "");
+
+  const targetDocument = selection.targetUuid ? await fromUuid(selection.targetUuid) : null;
+  const selectedTarget = targetDocument?.object ?? targetDocument ?? null;
+  try {
+    if (selection.mode === "aimed") {
+      controller.selectedTarget = selectedTarget;
+      controller.aimedMode = "limb";
+      controller.refresh(true);
+      await controller.performAimedAttack(selection.selectedLimbKey);
+      return true;
+    }
+    if (selection.mode === "directed") {
+      controller.selectedTarget = selectedTarget;
+      controller.aimedMode = "direction";
+      controller.refresh(true);
+      await controller.performDirectedAttack(selection.directionKey);
+      return true;
+    }
+    if (selection.mode === "push") {
+      controller.refresh(true);
+      await controller.performPushAttack(selection.selectedStrength);
+      return true;
+    }
+    controller.refresh(true);
+    await controller.performCurrentAttack();
+    return true;
+  } finally {
+    controller.destroy();
+  }
 }
 
 export async function executeWeaponAttackAgainstToken({
@@ -478,6 +664,8 @@ class WeaponAttackController {
     this.onBeforeExecute = typeof options.onBeforeExecute === "function" ? options.onBeforeExecute : null;
     this.skipActionPointCost = Boolean(options.skipActionPointCost);
     this.ignoreReactionLock = Boolean(options.ignoreReactionLock);
+    this.captureOnly = Boolean(options.captureOnly);
+    this.onCapture = typeof options.onCapture === "function" ? options.onCapture : null;
     this.beforeExecuteCompleted = false;
     this.container = new PIXI.Container();
     this.shape = new PIXI.Graphics();
@@ -1046,6 +1234,26 @@ class WeaponAttackController {
     return true;
   }
 
+  async captureAttackSelection(data = {}) {
+    if (!this.captureOnly) return false;
+    const selection = {
+      token: this.token,
+      weapon: this.weapon,
+      actionKey: this.actionKey,
+      weaponFunctionId: this.weaponFunctionId,
+      pointer: serializePoint(this.pointer),
+      geometry: serializeGeometry(this.geometry),
+      lockedGeometry: this.lockedGeometry ?? serializeGeometry(this.geometry),
+      targetUuid: this.selectedTarget?.document?.uuid ?? this.selectedTarget?.uuid ?? "",
+      selectedLimbKey: this.selectedLimbKey,
+      ...data
+    };
+    if (activeAttack === this) activeAttack = null;
+    this.destroy();
+    await this.onCapture?.(selection);
+    return true;
+  }
+
   async performCurrentAttack() {
     if (this.interruptForIncapacitation()) return;
     if (this.targetedAction) return this.onAimedConfirm();
@@ -1057,6 +1265,7 @@ class WeaponAttackController {
     const pelletCount = getWeaponPelletCount(this.weapon, this.weaponFunctionId);
     if (!this.hasRequiredWeaponResources(attackCount)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
+    if (this.captureOnly) return this.captureAttackSelection({ mode: "current" });
     if (hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, this.weaponFunctionId)) {
       return this.performConeTargetsAttack({ attackCount, pelletCount });
     }
@@ -1325,6 +1534,12 @@ class WeaponAttackController {
     if (this.processing || !this.geometry) return;
     if (!this.hasRequiredWeaponResources(1)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
+    if (this.captureOnly) {
+      return this.captureAttackSelection({
+        mode: "push",
+        selectedStrength: Math.max(1, toInteger(selectedStrength))
+      });
+    }
 
     this.processing = true;
     this.pushStrengthMaximum = 0;
@@ -1533,6 +1748,13 @@ class WeaponAttackController {
       if (this.attackModifier?.preventCancel) this.requestFinish();
       return;
     }
+    if (this.captureOnly) {
+      this.selectedLimbKey = limbKey;
+      return this.captureAttackSelection({
+        mode: "aimed",
+        selectedLimbKey: limbKey
+      });
+    }
 
     this.processing = true;
     this.pendingCriticalFailureResourceCosts = [];
@@ -1655,6 +1877,13 @@ class WeaponAttackController {
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!this.hasRequiredWeaponResources(attackCount)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
+    if (this.captureOnly) {
+      return this.captureAttackSelection({
+        mode: "directed",
+        directionKey: direction.key,
+        selectedLimbKey: this.selectedLimbKey
+      });
+    }
 
     this.processing = true;
     this.pendingCriticalFailureResourceCosts = [];
@@ -2098,6 +2327,7 @@ class WeaponAttackController {
     const attackCount = getActionAttackCount(this.weapon, this.actionKey, this.weaponFunctionId);
     if (!this.hasRequiredWeaponResources(attackCount)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
+    if (this.captureOnly) return this.captureAttackSelection({ mode: "current" });
 
     this.processing = true;
     this.pendingCriticalFailureResourceCosts = [];

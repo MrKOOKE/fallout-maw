@@ -39,6 +39,7 @@ import {
   normalizeDisarmSettings,
   normalizeDoubleAttackSettings,
   normalizeFullForceSettings,
+  normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
   normalizeWhereAreYouGoingSettings,
   normalizeAbilityFunctions
@@ -816,6 +817,11 @@ function readFixedFunctionSettings(row) {
       conditionCostMultiplier: row.querySelector("[data-field='fixed.fullForce.conditionCostMultiplier']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.twoHands) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.twoHands.energyCost']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     return {
       reactionEnergyCost: row.querySelector("[data-field='fixed.counterAttack.reactionEnergyCost']")?.value,
@@ -1044,6 +1050,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedFullForceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
     ? prepareFullForceSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedTwoHandsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.twoHands
+    ? normalizeTwoHandsSettings(normalized.fixedSettings)
+    : null;
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -1080,6 +1089,7 @@ function prepareFunctionForDisplay(entry) {
     fixedCounterAttackSettings,
     fixedCounterSniperSettings,
     fixedFullForceSettings,
+    fixedTwoHandsSettings,
     fixedRageSettings,
     fixedDisarmSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),

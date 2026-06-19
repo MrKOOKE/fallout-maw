@@ -47,6 +47,7 @@ import {
   getDelayedVolleyWeaponState,
   hasRequiredWeaponReloadActionPoints,
   spendWeaponReloadActionPoints,
+  startDualWeaponAttack,
   startWeaponAttack
 } from "../combat/weapon-attack-controller.mjs";
 import { startTrapInteractionMode, startTrapPlacement } from "../canvas/traps.mjs";
@@ -71,8 +72,12 @@ import {
   getWeaponActionBlockState
 } from "../abilities/runtime-state.mjs";
 import {
+  canSpendActorTwoHandsEnergy,
+  getActorTwoHandsEntry,
   getFixedAbilityToggleState,
   hasActiveFixedAbilityFunction,
+  hasActorTwoHandsActive,
+  spendActorTwoHandsEnergy,
   useFixedAbilityFunctionItem
 } from "../abilities/fixed-functions.mjs";
 import {
@@ -131,6 +136,7 @@ const ABILITY_OVERLOAD_EFFECT_FLAG_KEY = "abilityOverload";
 const ACTION_POINT_COST_TOOLTIP_DELAY_MS = 200;
 const SELECTED_HUD_WEAPON_FLAG = "selectedHudWeaponItemId";
 const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
+const DUAL_WEAPON_ACTION_KEYS = new Set(["aimedShot", "snapshot", "burst", "volley", "meleeAttack", "aimedMeleeAttack", "push"]);
 const TOKEN_ACTION_HUD_SCALE_DEFAULT = 50;
 const TOKEN_ACTION_HUD_SCALE_MIN = 25;
 const TOKEN_ACTION_HUD_SCALE_MAX = 100;
@@ -423,6 +429,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #token = null;
   #activeTray = "";
   #weaponEquipTarget = null;
+  #dualWeaponActionSelection = null;
   #limbDisplayLayer = "state";
   #layoutFrame = null;
   #itemTooltipElement = null;
@@ -511,6 +518,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       cancelWeaponAttack();
       this.#activeTray = "";
       this.#weaponEquipTarget = null;
+      this.#dualWeaponActionSelection = null;
       this.#editableMeterSections.resources = false;
       this.#editableMeterSections.needs = false;
     }
@@ -531,7 +539,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const weaponSets = prepareHudWeaponSets(actor, hudWeaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", hudIcons);
     const selectedWeaponSlot = getSelectedHudWeaponSlot(weaponSet, selectedWeapon?.id ?? "");
     const selectedWeaponDisabled = Boolean(selectedWeaponSlot?.useDisabled);
-    const weaponActionRows = prepareWeaponActionRows(actor, selectedWeapon, selectedWeaponDisabled, hudIcons, selectedWeaponSlot, this.token);
+    const dualWeaponState = prepareDualWeaponHudState(actor, weaponSet);
+    if (!dualWeaponState.active) this.#dualWeaponActionSelection = null;
+    const weaponActionRows = dualWeaponState.active
+      ? prepareDualWeaponActionRows(actor, dualWeaponState.weaponSlots, hudIcons, this.#dualWeaponActionSelection)
+      : prepareWeaponActionRows(actor, selectedWeapon, selectedWeaponDisabled, hudIcons, selectedWeaponSlot, this.token);
     const weaponEquipChoices = prepareHudWeaponEquipChoices(actor, this.#weaponEquipTarget, hudIcons);
     const skills = prepareSkillButtons(actor, hudIcons);
     const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg", { activeOnly: true });
@@ -641,6 +653,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const tray = target.dataset.tray ?? "";
     this.#activeTray = this.#activeTray === tray ? "" : tray;
     if (this.#activeTray !== "weaponEquip") this.#weaponEquipTarget = null;
+    if (this.#activeTray !== "weaponActions") this.#dualWeaponActionSelection = null;
     return this.render({ force: true });
   }
 
@@ -659,6 +672,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const firstWeaponId = getUniqueHudWeaponSlots(set?.slots ?? []).at(0)?.item?.id ?? "";
     if (firstWeaponId) await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, firstWeaponId);
     this.#activeTray = "";
+    this.#dualWeaponActionSelection = null;
     return this.render({ force: true });
   }
 
@@ -795,6 +809,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (weaponSetKey) await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
     this.#weaponEquipTarget = null;
     this.#activeTray = "";
+    this.#dualWeaponActionSelection = null;
     return this.render({ force: true });
   }
 
@@ -808,6 +823,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     await this.actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
     this.#weaponEquipTarget = { weaponSetKey, weaponSlotKey, replaceItemId: "" };
     this.#activeTray = "weaponEquip";
+    this.#dualWeaponActionSelection = null;
     return this.render({ force: true });
   }
 
@@ -824,6 +840,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     await this.actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, itemId);
     this.#weaponEquipTarget = { weaponSetKey, weaponSlotKey, replaceItemId: itemId };
     this.#activeTray = "weaponEquip";
+    this.#dualWeaponActionSelection = null;
     return this.render({ force: true });
   }
 
@@ -847,6 +864,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, item.id);
     this.#weaponEquipTarget = null;
     this.#activeTray = "weaponActions";
+    this.#dualWeaponActionSelection = null;
     return this.render({ force: true });
   }
 
@@ -865,8 +883,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (itemId) await this.actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, itemId);
     const weaponSetKey = String(target.dataset.weaponSet ?? "");
     if (weaponSetKey) await this.actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
+    const dualWeaponState = prepareDualWeaponHudState(this.actor, resolveActivePreparedHudWeaponSet(this.actor));
+    const wasOpen = this.#activeTray === "weaponActions" && dualWeaponState.active;
     this.#weaponEquipTarget = null;
-    this.#activeTray = wasOpenForItem ? "" : "weaponActions";
+    this.#activeTray = (dualWeaponState.active ? wasOpen : wasOpenForItem) ? "" : "weaponActions";
+    if (this.#activeTray !== "weaponActions") this.#dualWeaponActionSelection = null;
     return this.render({ force: true });
   }
 
@@ -930,7 +951,53 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
         application: this
       });
     }
+    if (DUAL_WEAPON_ACTION_KEYS.has(actionKey)) {
+      const dualWeaponState = prepareDualWeaponHudState(this.actor, resolveActivePreparedHudWeaponSet(this.actor));
+      if (dualWeaponState.active && dualWeaponState.weaponSlots.some(slot => slot.weapon?.id === item.id)) {
+        return this.#handleDualWeaponActionSelection({ item, actionKey, weaponFunctionId });
+      }
+    }
     return startWeaponAttack({ token: this.token, weapon: item, actionKey, weaponFunctionId });
+  }
+
+  async #handleDualWeaponActionSelection({ item = null, actionKey = "", weaponFunctionId = "" } = {}) {
+    if (!item || !actionKey) return undefined;
+    const selection = {
+      itemId: item.id,
+      actionKey,
+      weaponFunctionId: String(weaponFunctionId || ITEM_FUNCTIONS.weapon)
+    };
+    const pending = this.#dualWeaponActionSelection;
+    if (!pending || pending.itemId === item.id) {
+      this.#dualWeaponActionSelection = selection;
+      ui.notifications.info(`С двух рук: выберите действие второго оружия.`);
+      return this.render({ force: true });
+    }
+
+    const firstWeapon = this.actor?.items.get(pending.itemId);
+    const secondWeapon = this.actor?.items.get(selection.itemId);
+    if (!firstWeapon || !secondWeapon) {
+      this.#dualWeaponActionSelection = null;
+      return this.render({ force: true });
+    }
+
+    const twoHandsEntry = getActorTwoHandsEntry(this.actor);
+    this.#dualWeaponActionSelection = null;
+    const controller = startDualWeaponAttack({
+      token: this.token,
+      label: twoHandsEntry?.label ?? "С двух рук",
+      attacks: [
+        { weapon: firstWeapon, actionKey: pending.actionKey, weaponFunctionId: pending.weaponFunctionId },
+        { weapon: secondWeapon, actionKey: selection.actionKey, weaponFunctionId: selection.weaponFunctionId }
+      ],
+      canSpendEnergy: () => canSpendActorTwoHandsEnergy(this.actor, twoHandsEntry),
+      spendEnergy: () => spendActorTwoHandsEnergy(this.actor, twoHandsEntry)
+    });
+    if (!controller) {
+      this.#dualWeaponActionSelection = pending;
+      ui.notifications.warn("С двух рук: невозможно начать парный залп.");
+    }
+    return this.render({ force: true });
   }
 
   static async #onToggleLightSource(event, target) {
@@ -2450,6 +2517,7 @@ function prepareActionGroups(activeActions = [], systemActions = []) {
 }
 
 function prepareTrayContext(activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet = null, weaponSets = [], weaponEquipChoices = []) {
+  const weaponActionGroups = prepareWeaponActionGroups(weaponActionRows);
   const trayItems = activeTray === "skills"
     ? skills
     : activeTray === "items"
@@ -2474,6 +2542,8 @@ function prepareTrayContext(activeTray, skills, items, abilities, activeActions,
     systemActions,
     actionGroups,
     weaponActionRows,
+    weaponActionGroups,
+    hasWeaponActionGroups: Boolean(weaponActionGroups.length),
     weaponSet,
     weaponSets,
     weaponEquipChoices,
@@ -2486,6 +2556,27 @@ function prepareTrayMetrics(_items) {
   return {
     style: ""
   };
+}
+
+function prepareWeaponActionGroups(rows = []) {
+  const groupedRows = (rows ?? []).filter(row => row?.groupId);
+  if (!groupedRows.length) return [];
+  const groups = [];
+  const indexById = new Map();
+  for (const row of groupedRows) {
+    const groupId = String(row.groupId ?? "");
+    if (!groupId) continue;
+    if (!indexById.has(groupId)) {
+      indexById.set(groupId, groups.length);
+      groups.push({
+        id: groupId,
+        label: row.groupLabel || groupId,
+        rows: []
+      });
+    }
+    groups[indexById.get(groupId)].rows.push(row);
+  }
+  return groups;
 }
 
 function prepareActions(activeTray, selectedWeapon, items, abilities, actionGroups, hudIcons = {}) {
@@ -2974,6 +3065,51 @@ function isWeaponActionBrokenForHud(weapon, weaponFunctionId = "") {
   if (!id || id === ITEM_FUNCTIONS.weapon) return false;
   return getEnabledWeaponFunctions(weapon, { ignoreBroken: true })
     .some(entry => String(entry.id ?? "") === id && Boolean(entry.sourceBroken));
+}
+
+function prepareDualWeaponHudState(actor, preparedWeaponSet = null) {
+  if (!actor || !hasActorTwoHandsActive(actor)) return { active: false, weaponSlots: [] };
+  const weaponSlots = getUniqueHudWeaponSlots(preparedWeaponSet?.slots ?? [])
+    .filter(slot => slot?.item?.id && !slot.phantom && !slot.useDisabled)
+    .map(slot => ({
+      ...slot,
+      weapon: actor.items.get(slot.item.id)
+    }))
+    .filter(slot => slot.weapon && !isHudWeaponDisabled(actor, slot.weapon));
+  return {
+    active: weaponSlots.length === 2,
+    weaponSlots: weaponSlots.length === 2 ? weaponSlots : []
+  };
+}
+
+function prepareDualWeaponActionRows(actor, weaponSlots = [], hudIcons = {}, pendingSelection = null) {
+  return weaponSlots.flatMap(slot => {
+    const weapon = slot?.weapon ?? actor?.items?.get(slot?.item?.id ?? "");
+    if (!weapon) return [];
+    const weaponBroken = isItemBrokenByCondition(weapon);
+    return getEnabledWeaponFunctions(weapon, { ignoreBroken: true })
+      .sort((left, right) => {
+        if (left.isPrimary === right.isPrimary) return (left.index ?? 0) - (right.index ?? 0);
+        return left.isPrimary ? 1 : -1;
+      })
+      .map((weaponFunction, index) => ({
+        id: `dual:${weapon.id}:${weaponFunction.id}`,
+        groupId: weapon.id,
+        groupLabel: weapon.name,
+        label: weaponFunction.isPrimary
+          ? weapon.name
+          : `${weapon.name}: ${weaponFunction.name || `${game.i18n.localize("FALLOUTMAW.Item.AdditionalWeaponFunction")} ${index + 1}`}`,
+        actions: prepareWeaponActionButtonsForFunction(actor, weapon, weaponFunction, false, hudIcons, { weaponBroken })
+          .map(action => ({
+            ...action,
+            dualSideKey: weapon.id,
+            dualPending: Boolean(pendingSelection?.itemId === weapon.id
+              && pendingSelection?.actionKey === action.key
+              && String(pendingSelection?.weaponFunctionId || ITEM_FUNCTIONS.weapon) === String(action.weaponFunctionId || ITEM_FUNCTIONS.weapon))
+          }))
+      }))
+      .filter(row => row.actions.length);
+  });
 }
 
 function prepareWeaponActionRows(actor, selectedWeapon, forceDisabled = false, hudIcons = {}, selectedWeaponSlot = null, token = null) {

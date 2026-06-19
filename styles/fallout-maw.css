@@ -8879,6 +8879,17 @@ label.fallout-maw-mitigation-cell {
   width: var(--fallout-maw-token-hud-actions-width);
 }
 
+.fallout-maw-token-hud-popup.weapon-actions:has(.fallout-maw-token-hud-weapon-action-block) {
+  align-items: flex-end;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 8px;
+  justify-content: flex-start;
+  max-width: var(--fallout-maw-token-hud-actions-width);
+  overflow: auto;
+  width: max-content;
+}
+
 .fallout-maw-token-hud-popup.abilities {
   align-content: stretch;
   align-items: stretch;
@@ -8919,6 +8930,26 @@ label.fallout-maw-mitigation-cell {
   gap: 7px;
   justify-content: flex-start;
   width: 100%;
+}
+
+.fallout-maw-token-hud-weapon-action-block {
+  align-items: flex-start;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 7px;
+  width: max-content;
+}
+
+.fallout-maw-token-hud-weapon-action-block + .fallout-maw-token-hud-weapon-action-block {
+  border-left: 1px solid rgba(231, 204, 128, 0.42);
+  margin-top: 0;
+  padding-left: 8px;
+}
+
+.fallout-maw-token-hud-weapon-action-block .fallout-maw-token-hud-action-row,
+.fallout-maw-token-hud-weapon-action-block .fallout-maw-token-hud-action-row-title {
+  width: max-content;
 }
 
 .fallout-maw-token-hud-action-row-title {
@@ -9965,6 +9996,11 @@ label.fallout-maw-mitigation-cell {
 
 .fallout-maw-token-hud-action-tile.toggleable.toggled {
   box-shadow: inset 0 0 10px rgba(255, 196, 0, 0.2), 0 0 8px rgba(255, 196, 0, 0.42);
+}
+
+.fallout-maw-token-hud-action-tile.dual-pending {
+  border-color: rgba(96, 201, 255, 0.88);
+  box-shadow: inset 0 0 10px rgba(96, 201, 255, 0.24), 0 0 8px rgba(96, 201, 255, 0.44);
 }
 
 @keyframes fallout-maw-toggle-outline-flow {

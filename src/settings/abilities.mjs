@@ -34,7 +34,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   counterAttack: "counterAttack",
   counterSniper: "counterSniper",
   whereAreYouGoing: "whereAreYouGoing",
-  fullForce: "fullForce"
+  fullForce: "fullForce",
+  twoHands: "twoHands"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -102,7 +103,8 @@ export function createDefaultAbilityCatalog(skillSettings = createDefaultSkillSe
       createAbilityCategory({
         id: LOCKED_FEATURES_CATEGORY_ID,
         name: "Особенности",
-        locked: true
+        locked: true,
+        abilities: [createTwoHandsAbilityCatalogEntry()]
       }),
       createAbilityCategory({
         id: GENERAL_ABILITY_CATEGORY_ID,
@@ -114,6 +116,40 @@ export function createDefaultAbilityCatalog(skillSettings = createDefaultSkillSe
       }))
     ]
   };
+}
+
+export function createTwoHandsAbilityCatalogEntry() {
+  return normalizeAbilityEntry({
+    id: "fixed-two-hands",
+    name: "С двух рук",
+    img: "icons/svg/combat.svg",
+    visible: true,
+    description: "<p>Переключаемая функция: парный залп двух активных оружий в текущем наборе. Каждый залп расходует 10 энергии, а стоимость ОД берется по самому дорогому выбранному действию.</p>",
+    system: {
+      cost: 0,
+      formula: "",
+      acquisition: {
+        onlyFree: false,
+        onlyManual: false,
+        skillKey: "meleeCombat",
+        difficulty: 60
+      },
+      acquisitionRequirements: [],
+      functions: [
+        {
+          id: "fixed-two-hands-function",
+          type: ABILITY_FUNCTION_TYPES.fixed,
+          fixedKey: ABILITY_FIXED_FUNCTION_KEYS.twoHands,
+          fixedSettings: {
+            energyCost: 10
+          },
+          changes: [],
+          conditions: [],
+          penalties: []
+        }
+      ]
+    }
+  });
 }
 
 export function normalizeAbilityCatalog(value = {}, skillSettings = createDefaultSkillSettings()) {
@@ -664,6 +700,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce) {
     return normalizeFullForceSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.twoHands) {
+    return normalizeTwoHandsSettings(value);
+  }
   return {};
 }
 
@@ -869,6 +908,12 @@ export function normalizeFullForceSettings(value = {}) {
     requiredSkillKey: String(value?.requiredSkillKey ?? "meleeCombat").trim() || "meleeCombat",
     damagePercentBonus: Math.max(0, toInteger(value?.damagePercentBonus ?? 100)),
     conditionCostMultiplier: Math.max(1, toInteger(value?.conditionCostMultiplier ?? 5))
+  };
+}
+
+export function normalizeTwoHandsSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 10))
   };
 }
 

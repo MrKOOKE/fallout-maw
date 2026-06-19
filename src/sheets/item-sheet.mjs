@@ -60,6 +60,7 @@ import {
   normalizeLungeSettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
+  normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
   normalizeWhereAreYouGoingSettings,
   normalizeReaperSettings,
@@ -4507,6 +4508,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedFullForceSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
     ? prepareFullForceSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedTwoHandsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.twoHands
+    ? normalizeTwoHandsSettings(entry?.fixedSettings)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -4542,6 +4546,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedCounterSniperSettings,
     fixedWhereAreYouGoingSettings,
     fixedFullForceSettings,
+    fixedTwoHandsSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,

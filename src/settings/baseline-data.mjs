@@ -16,6 +16,38 @@ export const SETTINGS_BASELINE = Object.freeze({
             "locked": true,
             "abilities": [
               {
+                "id": "fixed-two-hands",
+                "name": "С двух рук",
+                "img": "icons/svg/combat.svg",
+                "visible": true,
+                "description": "<p>Переключаемая функция: парный залп двух активных оружий в текущем наборе. Каждый залп расходует 10 энергии, а стоимость ОД берется по самому дорогому выбранному действию.</p>",
+                "system": {
+                  "cost": 0,
+                  "formula": "",
+                  "acquisition": {
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "meleeCombat",
+                    "difficulty": 60
+                  },
+                  "acquisitionRequirements": [],
+                  "functions": [
+                    {
+                      "id": "fixed-two-hands-function",
+                      "type": "fixed",
+                      "fixedKey": "twoHands",
+                      "fixedSettings": {
+                        "energyCost": 10
+                      },
+                      "changes": [],
+                      "conditions": [],
+                      "penalties": [],
+                      "sort": 0
+                    }
+                  ]
+                }
+              },
+              {
                 "id": "lBaJVF6DzKnhNhwy",
                 "name": "Четыре глаза",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/chetyre-glaza.webp",
