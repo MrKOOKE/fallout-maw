@@ -138,7 +138,7 @@
 
       {{#if (eq activeTray "items")}}
       {{#each tray.items}}
-      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="useItem" data-item-id="{{id}}" data-hud-tooltip-item="{{id}}" aria-label="{{name}}">
+      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile {{#if active}}active{{/if}}" data-action="{{action}}" data-item-id="{{itemId}}" data-condition-id="{{conditionId}}" data-hud-tooltip-item="{{itemId}}" aria-label="{{name}}" {{#if disabled}}disabled{{/if}}>
         <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../fallbackIcon}}'">
         <span>{{name}}</span>
         {{#if showFirstAidCharges}}<strong class="fallout-maw-token-hud-item-charges">{{firstAidCharges.value}}/{{firstAidCharges.max}}</strong>{{else}}

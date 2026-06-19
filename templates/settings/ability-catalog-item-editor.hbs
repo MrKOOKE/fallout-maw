@@ -1220,6 +1220,17 @@
               </label>
               {{/if}}
 
+              {{#if isEnergyConsumption}}
+              <label>
+                <span>Название</span>
+                <input type="text" data-field="conditionEnergyConsumptionName" value="{{energyConsumptionName}}">
+              </label>
+              <label>
+                <span>Расход в час</span>
+                <input type="number" data-field="conditionAmountPerHour" value="{{amountPerHour}}" min="0" step="0.01">
+              </label>
+              {{/if}}
+
               {{#if isItemUse}}
               <div class="fallout-maw-item-use-category-field">
                 <div class="fallout-maw-item-use-category-header">

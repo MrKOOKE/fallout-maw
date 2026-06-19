@@ -6,7 +6,7 @@ import {
   normalizeAbilityFunctions
 } from "../settings/abilities.mjs";
 import { abilityConditionsApply, getAbilityEffectChanges, getAbilityEffectChangesFromFunctions, getAbilityFunctionChangesForSatisfiedAuraCondition } from "./evaluation.mjs";
-import { getActorItemsWithInstalledModules } from "../utils/item-functions.mjs";
+import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
 import {
   AURA_GENERATED_EFFECT_FLAG_KEY,
   findAuraDistributionConditions,
@@ -73,6 +73,10 @@ export function registerAbilityEffectHooks() {
     void syncActorAbilityEffects(effect.parent);
     queueAuraStateSync();
   });
+  Hooks.on("fallout-maw.energyConsumptionChanged", actor => {
+    void syncActorAbilityEffects(actor);
+    queueAuraStateSync();
+  });
   Hooks.on("canvasReady", () => void syncLoadedActorAbilityEffects());
   Hooks.on("createCombat", () => queueAuraStateSync());
   Hooks.on("updateCombat", () => queueAuraStateSync());
@@ -120,7 +124,7 @@ export async function syncActorAbilityEffects(actor, context = {}) {
   try {
     const abilityItems = actor.items?.filter(item => item.type === "ability") ?? [];
     const activeAbilityItemIds = new Set(abilityItems.map(item => item.id));
-    const itemFreeSettingsItems = getActorItemsWithInstalledModules(actor).filter(item => isActiveItemFreeSettingsItem(item));
+    const itemFreeSettingsItems = getActorItemsWithActiveHudModules(actor).filter(item => isActiveItemFreeSettingsItem(item));
     const activeItemFreeSettingsItemIds = new Set(itemFreeSettingsItems.map(item => item.id));
 
     for (const item of abilityItems) {
@@ -281,7 +285,7 @@ function buildDesiredAuraGeneratedEffects() {
 
 function getAuraSourceFunctionSets(actor) {
   const sources = [];
-  for (const item of getActorItemsWithInstalledModules(actor)) {
+  for (const item of getActorItemsWithActiveHudModules(actor)) {
     if (item?.type === "ability") {
       sources.push({ kind: "ability", item, functions: item.system?.functions ?? [] });
       continue;

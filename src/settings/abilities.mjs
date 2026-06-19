@@ -56,6 +56,7 @@ export const ABILITY_CONDITION_TYPES = Object.freeze({
   aura: "aura",
   limitedChanges: "limitedChanges",
   cooldown: "cooldown",
+  energyConsumption: "energyConsumption",
   itemUse: "itemUse"
 });
 
@@ -540,6 +541,23 @@ function normalizeAbilityCondition(value = {}) {
       limbKey: ABILITY_HEALTH_LIMB_ALL,
       limit: 1,
       durationSeconds: Math.max(0, toInteger(value?.durationSeconds ?? value?.duration ?? value?.seconds))
+    };
+  }
+
+  if (type === ABILITY_CONDITION_TYPES.energyConsumption) {
+    return {
+      id,
+      groupId,
+      type,
+      operator: "lte",
+      percent: 50,
+      equipmentSlotKey: "",
+      healthTarget: ABILITY_HEALTH_TARGETS.general,
+      limbKey: ABILITY_HEALTH_LIMB_ALL,
+      limit: 1,
+      name: String(value?.name ?? "").trim(),
+      amountPerHour: Math.max(0, toNumber(value?.amountPerHour ?? value?.amount ?? 0)),
+      durationSeconds: 0
     };
   }
 

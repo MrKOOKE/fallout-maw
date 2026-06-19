@@ -1346,6 +1346,16 @@
                 <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.durationSeconds" value="{{durationSeconds}}" min="0" step="1">
               </label>
               {{/if}}
+              {{#if isEnergyConsumption}}
+              <label>
+                <span>Название</span>
+                <input type="text" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.name" value="{{energyConsumptionName}}">
+              </label>
+              <label>
+                <span>Расход в час</span>
+                <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.amountPerHour" value="{{amountPerHour}}" min="0" step="0.01">
+              </label>
+              {{/if}}
               {{#if isItemUse}}
               <div class="fallout-maw-item-use-category-field">
                 <div class="fallout-maw-item-use-category-header">
@@ -1873,6 +1883,16 @@
               <label>
                 <span>Длительность, секунд</span>
                 <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.durationSeconds" value="{{durationSeconds}}" min="0" step="1">
+              </label>
+              {{/if}}
+              {{#if isEnergyConsumption}}
+              <label>
+                <span>Название</span>
+                <input type="text" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.name" value="{{energyConsumptionName}}">
+              </label>
+              <label>
+                <span>Расход в час</span>
+                <input type="number" name="{{functionPath}}.{{functionIndex}}.conditions.{{index}}.amountPerHour" value="{{amountPerHour}}" min="0" step="0.01">
               </label>
               {{/if}}
               {{#if isItemUse}}

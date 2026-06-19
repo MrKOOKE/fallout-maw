@@ -60,6 +60,10 @@ import {
   openLightSourceEnergyDialog,
   toggleLightSource
 } from "../items/light-source.mjs";
+import {
+  getEnergyConsumptionControlEntries,
+  openEnergyConsumptionDialog
+} from "../items/energy-consumption.mjs";
 import { openLimbDamageDialog } from "./limb-damage-dialog.mjs";
 import { requestMedicineTarget } from "./medicine-dialog.mjs";
 import { requestRepairTarget } from "./repair-dialog.mjs";
@@ -479,6 +483,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       useWeaponAction: { handler: TokenActionHud.#onUseWeaponAction, buttons: [0, 1] },
       toggleLightSource: { handler: TokenActionHud.#onToggleLightSource, buttons: [0, 1] },
       openLightSourceRecharge: { handler: TokenActionHud.#onOpenLightSourceRecharge, buttons: [0, 1] },
+      openEnergyConsumption: { handler: TokenActionHud.#onOpenEnergyConsumption, buttons: [0, 1] },
       setWeaponAttackPower: { handler: TokenActionHud.#onSetWeaponAttackPower, buttons: [0, 1] },
       gmHealSelected: TokenActionHud.#onGmHealSelected,
       gmAwardExperience: TokenActionHud.#onGmAwardExperience,
@@ -546,7 +551,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       : prepareWeaponActionRows(actor, selectedWeapon, selectedWeaponDisabled, hudIcons, selectedWeaponSlot, this.token);
     const weaponEquipChoices = prepareHudWeaponEquipChoices(actor, this.#weaponEquipTarget, hudIcons);
     const skills = prepareSkillButtons(actor, hudIcons);
-    const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg", { activeOnly: true });
+    const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg", { activeOnly: true, weaponSet });
     const abilities = prepareOwnedAbilityButtons(actor, "icons/svg/aura.svg");
     const systemActions = prepareSystemActionButtons(hudIcons);
     const activeActions = prepareActiveActionButtons(this.#token, actor, weaponSet, selectedWeapon, selectedWeaponDisabled, hudIcons);
@@ -1028,6 +1033,24 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       item,
       application: this,
       showToggle: false
+    });
+  }
+
+  static async #onOpenEnergyConsumption(event, target) {
+    event.preventDefault();
+    if (isHudActionBlockedByReactionLock()) return undefined;
+    const itemId = String(target.dataset.itemId ?? "");
+    const conditionId = String(target.dataset.conditionId ?? "");
+    const item = resolveActorItemOrInstalledModule(this.actor, itemId);
+    if (!item) return undefined;
+    if (isMiddleMouseClick(event)) return item.sheet?.render(true);
+    if (event.button !== 0) return undefined;
+    if (target.disabled) return undefined;
+    return openEnergyConsumptionDialog({
+      actor: this.actor,
+      item,
+      conditionId,
+      application: this
     });
   }
 
@@ -2388,8 +2411,8 @@ function prepareSkillButtons(actor, hudIcons = {}) {
   });
 }
 
-function prepareOwnedItemButtons(actor, type, fallbackIcon, { activeOnly = false } = {}) {
-  return actor.items
+function prepareOwnedItemButtons(actor, type, fallbackIcon, { activeOnly = false, weaponSet = null } = {}) {
+  const activeItems = actor.items
     .filter(item => item.type === type)
     .filter(item => !activeOnly || isActiveItem(item))
     .filter(item => !hasItemFunction(item, ITEM_FUNCTIONS.lightSource, { ignoreBroken: true }) || isHudEquipmentLightSource(item))
@@ -2398,6 +2421,9 @@ function prepareOwnedItemButtons(actor, type, fallbackIcon, { activeOnly = false
       const isLightSource = hasItemFunction(item, ITEM_FUNCTIONS.lightSource, { ignoreBroken: true });
       return {
         id: item.id,
+        itemId: item.id,
+        conditionId: "",
+        action: "useItem",
         name: isLightSource ? getLightSourceDisplayName(item) : item.name,
         img: normalizeImagePath(item.img, fallbackIcon),
         quantity: toInteger(item.system?.quantity),
@@ -2406,6 +2432,19 @@ function prepareOwnedItemButtons(actor, type, fallbackIcon, { activeOnly = false
         showFirstAidCharges: !isLightSource && isActiveItem(item) && firstAidCharges.max > 1
       };
     });
+  if (!activeOnly || type !== "gear") return activeItems;
+  return [
+    ...activeItems,
+    ...getEnergyConsumptionControlEntries(actor, { weaponSet }).map(entry => ({
+      ...entry,
+      action: "openEnergyConsumption",
+      img: normalizeImagePath(entry.img, fallbackIcon),
+      quantity: 0,
+      showQuantity: false,
+      firstAidCharges: { value: 0, max: 0 },
+      showFirstAidCharges: false
+    }))
+  ];
 }
 
 function isHudEquipmentLightSource(item = null) {

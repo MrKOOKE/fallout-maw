@@ -168,9 +168,11 @@ function abilityConditionField() {
     type: new StringField({
       required: true,
       blank: true,
-      choices: ["", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "cooldown", "itemUse"],
+      choices: ["", "healthPercent", "equipmentSlotOccupied", "targetFaction", "targetRace", "targetType", "posture", "occupiedCover", "weaponAction", "weaponSkill", "weaponProficiency", "aura", "limitedChanges", "cooldown", "energyConsumption", "itemUse"],
       initial: ""
     }),
+    name: new StringField({ required: true, blank: true, initial: "" }),
+    amountPerHour: new NumberField({ required: true, min: 0, initial: 0 }),
     operator: new StringField({ required: true, blank: false, choices: ["lte", "gte", "occupied", "empty"], initial: "lte" }),
     percent: new NumberField({ required: true, integer: true, min: 0, max: 100, initial: 50 }),
     healthTarget: new StringField({
@@ -511,6 +513,7 @@ function energyConsumerFunctionField() {
     sourceItemUuid: new StringField({ required: true, blank: true, initial: "" }),
     sourceItemUuids: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), { required: true, initial: [] }),
     activeSourceUuid: new StringField({ required: true, blank: true, initial: "" }),
+    activeConditions: new TypedObjectField(new BooleanField({ required: true, initial: false }), { required: true, initial: {} }),
     installedSource: installedEnergySourceField()
   });
 }

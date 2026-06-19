@@ -13,10 +13,11 @@ import {
 import { getEquipmentSlotSelectionKey, getValidSelectedEquipmentSlotKeys } from "../utils/equipment-slots.mjs";
 import { isAbilityAcquisitionChangeKey } from "../utils/ability-acquisition-change-keys.mjs";
 import { evaluateEffectChangeNumber } from "../utils/effect-change-values.mjs";
-import { getActorItemsWithInstalledModules } from "../utils/item-functions.mjs";
+import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { hasAbilityFunctionCooldown } from "./runtime-state.mjs";
 import { abilityAuraConditionApplies, isAuraDistributionCondition } from "./aura-conditions.mjs";
+import { energyConsumptionConditionApplies } from "../items/energy-consumption.mjs";
 
 export function getAbilityEffectChanges(actor, item, context = {}) {
   return getAbilityEffectChangesFromFunctions(actor, item?.system?.functions ?? [], {
@@ -80,6 +81,7 @@ export function abilityConditionsApply(actor, conditions = [], context = {}) {
 export function abilityConditionApplies(actor, condition = {}, context = {}) {
   if (condition.type === ABILITY_CONDITION_TYPES.itemUse) return false;
   if (condition.type === ABILITY_CONDITION_TYPES.aura) return abilityAuraConditionApplies(actor, condition, context);
+  if (condition.type === ABILITY_CONDITION_TYPES.energyConsumption) return energyConsumptionConditionApplies(actor, condition, context);
 
   const targetActor = context?.targetActor ?? context?.targetToken?.actor ?? null;
   if (condition.type === ABILITY_CONDITION_TYPES.targetFaction) {
@@ -263,7 +265,7 @@ function isActiveFreeSettingsItem(item) {
 export function getContextualAbilityEffectChanges(actor, context = {}) {
   if (!actor) return [];
   const changes = [];
-  for (const item of getActorItemsWithInstalledModules(actor)) {
+  for (const item of getActorItemsWithActiveHudModules(actor)) {
     const functions = item?.type === "ability"
       ? item.system?.functions ?? []
       : isActiveFreeSettingsItem(item) ? item.system?.functions?.freeSettings?.entries ?? [] : [];

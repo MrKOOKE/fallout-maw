@@ -979,6 +979,8 @@ function readAbilityConditions(root) {
       auraIgnoreIncapacitated: readBooleanField(row.querySelector("[data-field='conditionAuraIgnoreIncapacitated']"), true),
       auraIgnoreHidden: readBooleanField(row.querySelector("[data-field='conditionAuraIgnoreHidden']"), true),
       limit: row.querySelector("[data-field='conditionLimit']")?.value ?? 1,
+      name: row.querySelector("[data-field='conditionEnergyConsumptionName']")?.value ?? "",
+      amountPerHour: row.querySelector("[data-field='conditionAmountPerHour']")?.value ?? 0,
       requiredCount: row.querySelector("[data-field='conditionRequiredCount']")?.value ?? 1,
       itemCategories: readFieldValues(row, "[data-field='conditionItemCategory']"),
       durationSeconds: readConditionDurationSeconds(row)
@@ -1313,6 +1315,7 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
   const isAura = type === ABILITY_CONDITION_TYPES.aura;
   const isLimitedChanges = type === ABILITY_CONDITION_TYPES.limitedChanges;
   const isCooldown = type === ABILITY_CONDITION_TYPES.cooldown;
+  const isEnergyConsumption = type === ABILITY_CONDITION_TYPES.energyConsumption;
   const isItemUse = type === ABILITY_CONDITION_TYPES.itemUse;
   const maxLimit = Math.max(1, changeCount);
   const duration = splitDurationSeconds(condition?.durationSeconds);
@@ -1325,7 +1328,7 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
   return {
     ...condition,
     healthTarget,
-    isPending: !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isItemUse,
+    isPending: !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isEnergyConsumption && !isItemUse,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -1343,13 +1346,16 @@ function prepareConditionForDisplay(condition, { changeCount = 0, allowLimitedCh
     isAura,
     isLimitedChanges,
     isCooldown,
+    isEnergyConsumption,
     isItemUse,
-    canAddAlternative: !isLimitedChanges && !isCooldown && !isItemUse,
+    canAddAlternative: !isLimitedChanges && !isCooldown && !isEnergyConsumption && !isItemUse,
     changeLimit: Math.max(1, Math.min(maxLimit, toInteger(condition?.limit ?? 1))),
     changeLimitMax: maxLimit,
     changeLimitTotal: changeCount,
     requiredCount: isAura ? normalizeFormulaText(condition?.requiredCount, "1") : Math.max(1, toInteger(condition?.requiredCount ?? 1)),
     durationSeconds: Math.max(0, toInteger(condition?.durationSeconds)),
+    energyConsumptionName: String(condition?.name ?? "").trim(),
+    amountPerHour: Math.max(0, Number(condition?.amountPerHour) || 0),
     durationAmount: duration.amount,
     durationUnitChoices: buildDurationUnitChoices(duration.unit),
     typeLabel: getConditionTypeLabel(type),
@@ -1508,6 +1514,11 @@ function buildConditionTypeChoices(selected = "", { allowLimitedChanges = true }
     selected: selected === ABILITY_CONDITION_TYPES.cooldown
   });
   choices.push({
+    value: ABILITY_CONDITION_TYPES.energyConsumption,
+    label: "Потребление энергии",
+    selected: selected === ABILITY_CONDITION_TYPES.energyConsumption
+  });
+  choices.push({
     value: ABILITY_CONDITION_TYPES.itemUse,
     label: "Применение предмета",
     selected: selected === ABILITY_CONDITION_TYPES.itemUse
@@ -1528,7 +1539,8 @@ function isRuntimeCondition(type = "") {
     ABILITY_CONDITION_TYPES.weaponSkill,
     ABILITY_CONDITION_TYPES.weaponProficiency,
     ABILITY_CONDITION_TYPES.aura,
-    ABILITY_CONDITION_TYPES.cooldown
+    ABILITY_CONDITION_TYPES.cooldown,
+    ABILITY_CONDITION_TYPES.energyConsumption
   ].includes(type);
 }
 

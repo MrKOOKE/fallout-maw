@@ -4771,6 +4771,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
   const isAura = type === ABILITY_CONDITION_TYPES.aura;
   const isLimitedChanges = type === ABILITY_CONDITION_TYPES.limitedChanges;
   const isCooldown = type === ABILITY_CONDITION_TYPES.cooldown;
+  const isEnergyConsumption = type === ABILITY_CONDITION_TYPES.energyConsumption;
   const isItemUse = type === ABILITY_CONDITION_TYPES.itemUse;
   const maxLimit = Math.max(1, changeCount);
   const duration = splitAbilityDurationSeconds(condition?.durationSeconds);
@@ -4786,7 +4787,7 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
     functionIndex,
     index,
     healthTarget,
-    isPending: !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isItemUse,
+    isPending: !isHealth && !isEquipment && !isTargetFaction && !isTargetRace && !isTargetType && !isPosture && !isOccupiedCover && !isWeaponAction && !isWeaponSkill && !isWeaponProficiency && !isAura && !isLimitedChanges && !isCooldown && !isEnergyConsumption && !isItemUse,
     isHealth,
     isHealthGeneral,
     isHealthLimb,
@@ -4804,13 +4805,16 @@ function prepareAbilityConditionForDisplay(condition, functionIndex, index, { ch
     isAura,
     isLimitedChanges,
     isCooldown,
+    isEnergyConsumption,
     isItemUse,
-    canAddAlternative: !isLimitedChanges && !isCooldown && !isItemUse,
+    canAddAlternative: !isLimitedChanges && !isCooldown && !isEnergyConsumption && !isItemUse,
     changeLimit: Math.max(1, Math.min(maxLimit, toInteger(condition?.limit ?? 1))),
     changeLimitMax: maxLimit,
     changeLimitTotal: changeCount,
     requiredCount: isAura ? normalizeAbilityFormulaText(condition?.requiredCount, "1") : Math.max(1, toInteger(condition?.requiredCount ?? 1)),
     durationSeconds: Math.max(0, toInteger(condition?.durationSeconds)),
+    energyConsumptionName: String(condition?.name ?? "").trim(),
+    amountPerHour: Math.max(0, Number(condition?.amountPerHour) || 0),
     durationAmount: duration.amount,
     durationUnitChoices: buildAbilityDurationUnitChoices(duration.unit),
     typeLabel: getAbilityConditionTypeLabel(type),
@@ -4924,6 +4928,11 @@ function buildAbilityConditionTypeChoices(selected = "", { allowLimitedChanges =
     selected: selected === ABILITY_CONDITION_TYPES.cooldown
   });
   choices.push({
+    value: ABILITY_CONDITION_TYPES.energyConsumption,
+    label: "Потребление энергии",
+    selected: selected === ABILITY_CONDITION_TYPES.energyConsumption
+  });
+  choices.push({
     value: ABILITY_CONDITION_TYPES.itemUse,
     label: "Применение предмета",
     selected: selected === ABILITY_CONDITION_TYPES.itemUse
@@ -5022,7 +5031,8 @@ function isAbilityRuntimeCondition(type = "") {
     ABILITY_CONDITION_TYPES.weaponSkill,
     ABILITY_CONDITION_TYPES.weaponProficiency,
     ABILITY_CONDITION_TYPES.aura,
-    ABILITY_CONDITION_TYPES.cooldown
+    ABILITY_CONDITION_TYPES.cooldown,
+    ABILITY_CONDITION_TYPES.energyConsumption
   ].includes(type);
 }
 
@@ -6487,6 +6497,7 @@ function createDefaultEnergyConsumerFunctionData(source = {}) {
     sourceItemUuid: "",
     sourceItemUuids: [],
     activeSourceUuid: "",
+    activeConditions: {},
     installedSource: createEmptyInstalledEnergySourceData()
   }, foundry.utils.deepClone(source), { inplace: false });
 }

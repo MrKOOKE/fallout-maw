@@ -648,7 +648,7 @@ function createEnergySourceItemDataFromInstalled(source = {}) {
   return data;
 }
 
-function energySourceMatchesConsumer(sourceItem = null, consumerData = {}) {
+export function energySourceMatchesConsumer(sourceItem = null, consumerData = {}) {
   const accepted = getAcceptedEnergySourceUuids(consumerData);
   if (!accepted.size) return true;
   if (accepted.has(sourceItem?.uuid) || accepted.has(sourceItem?.id)) return true;

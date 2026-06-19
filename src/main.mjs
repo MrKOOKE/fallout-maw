@@ -42,6 +42,7 @@ import { registerRepairSocket } from "./apps/repair-dialog.mjs";
 import { canStackItems, registerSearchInventorySocket } from "./apps/search-inventory.mjs";
 import { registerFirstAidSocket } from "./items/first-aid.mjs";
 import { registerLightSourceHooks } from "./items/light-source.mjs";
+import { registerEnergyConsumptionHooks } from "./items/energy-consumption.mjs";
 import { registerAbilityEffectHooks, syncLoadedActorAbilityEffects } from "./abilities/effects.mjs";
 import { registerAbilityCooldownHooks } from "./abilities/cooldowns.mjs";
 import { registerAbilityItemUseHooks } from "./abilities/item-use-triggers.mjs";
@@ -117,6 +118,7 @@ Hooks.once("init", () => {
   registerRegenerationHooks();
   registerNaturalRaceItemHooks();
   registerLightSourceHooks();
+  registerEnergyConsumptionHooks();
   registerSkillCheckControlHooks();
   registerTokenActionHudHooks();
   registerCombatCarouselHooks();
