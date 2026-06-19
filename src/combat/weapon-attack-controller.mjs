@@ -4593,11 +4593,6 @@ function drawRicochetAttackShape(graphics, geometry, { color = 0xffd166, alpha =
   graphics.lineStyle(2, color, 0.9);
   drawRicochetRayOutline(graphics, rays[0]);
   drawRicochetRayOutline(graphics, rays.at(-1));
-  const ends = rays.map(ray => ray?.end).filter(Boolean);
-  if (ends.length) {
-    graphics.moveTo(ends[0].x, ends[0].y);
-    for (const point of ends.slice(1)) graphics.lineTo(point.x, point.y);
-  }
 }
 
 function drawRicochetRayOutline(graphics, trajectory = {}) {
@@ -5181,6 +5176,7 @@ function buildRicochetTrajectory(attackerToken, geometry, initialAngle, elevatio
   const slope = Number(elevationSlope) || 0;
   const reflectionLimit = Math.max(0, toInteger(maxReflections));
   const segments = [];
+  const reflectionPath = [];
   let origin = { ...geometry.origin };
   let angle = Number(initialAngle) || 0;
   let remaining = totalDistance;
@@ -5206,8 +5202,9 @@ function buildRicochetTrajectory(attackerToken, geometry, initialAngle, elevatio
     remaining = Math.max(0, totalDistance - traveled);
 
     if (!collisionData.collision || reflectionCount >= reflectionLimit || remaining <= GEOMETRY_EPSILON) break;
-    const wallDirection = getCollisionWallDirection(collisionData.collision);
+    const wallDirection = getCollisionWallDirection(collisionData.collision, angle);
     if (!wallDirection) break;
+    reflectionPath.push(getWallDirectionKey(wallDirection));
     angle = reflectAngleAcrossWall(angle, wallDirection);
     reflectionCount += 1;
     const nudge = Math.min(0.5, remaining);
@@ -5227,6 +5224,8 @@ function buildRicochetTrajectory(attackerToken, geometry, initialAngle, elevatio
     elevationSlope: slope,
     end: last?.end ?? geometry.origin,
     reflectionCount,
+    reflectionPath,
+    branchKey: getRicochetTrajectoryBranchKey(reflectionPath),
     segments
   };
 }
@@ -5271,6 +5270,10 @@ function buildRicochetRayStrip(leftRay, rightRay) {
   for (let index = 0; index < samples.length - 1; index += 1) {
     const start = samples[index];
     const end = samples[index + 1];
+    const midpoint = (start + end) / 2;
+    const leftSample = getRicochetTrajectorySample(leftRay, midpoint);
+    const rightSample = getRicochetTrajectorySample(rightRay, midpoint);
+    if (!areRicochetSamplesCompatible(leftSample, rightSample)) continue;
     const leftStart = getPointOnRicochetTrajectory(leftRay, start);
     const leftEnd = getPointOnRicochetTrajectory(leftRay, end);
     const rightStart = getPointOnRicochetTrajectory(rightRay, start);
@@ -5281,21 +5284,54 @@ function buildRicochetRayStrip(leftRay, rightRay) {
   return cells;
 }
 
+function getRicochetTrajectoryBranchKey(trajectoryOrPath = null) {
+  const path = Array.isArray(trajectoryOrPath)
+    ? trajectoryOrPath
+    : trajectoryOrPath?.reflectionPath;
+  return path?.length ? path.join("|") : "direct";
+}
+
 function getPointOnRicochetTrajectory(trajectory, distance) {
+  return getRicochetTrajectorySample(trajectory, distance)?.point ?? null;
+}
+
+function getRicochetTrajectorySample(trajectory, distance) {
   const requested = Math.max(0, Number(distance) || 0);
   const segments = trajectory?.segments ?? [];
-  const segment = segments.find(entry => {
+  const segmentIndex = segments.findIndex(entry => {
     const start = Math.max(0, Number(entry.distanceOffset) || 0);
     const end = start + Math.max(0, Number(entry.distance) || 0);
     return requested <= end + GEOMETRY_EPSILON;
-  }) ?? segments.at(-1);
+  });
+  const segment = segmentIndex >= 0 ? segments[segmentIndex] : segments.at(-1);
   if (!segment) return null;
   const localDistance = clamp(
     requested - Math.max(0, Number(segment.distanceOffset) || 0),
     0,
     Math.max(0, Number(segment.distance) || 0)
   );
-  return getPointOnTrajectory(segment, localDistance);
+  return {
+    trajectory,
+    segment,
+    segmentIndex: segmentIndex >= 0 ? segmentIndex : segments.length - 1,
+    point: getPointOnTrajectory(segment, localDistance),
+    branchKey: getRicochetSegmentBranchKey(trajectory, segment)
+  };
+}
+
+function areRicochetSamplesCompatible(leftSample, rightSample) {
+  if (!leftSample?.segment || !rightSample?.segment) return false;
+  const leftReflectionCount = Math.max(0, toInteger(leftSample.segment.reflectionCount));
+  const rightReflectionCount = Math.max(0, toInteger(rightSample.segment.reflectionCount));
+  return leftReflectionCount === rightReflectionCount
+    && leftSample.branchKey === rightSample.branchKey;
+}
+
+function getRicochetSegmentBranchKey(trajectory = {}, segment = {}) {
+  const reflectionCount = Math.max(0, toInteger(segment?.reflectionCount));
+  if (reflectionCount <= 0) return "direct";
+  const path = Array.isArray(trajectory?.reflectionPath) ? trajectory.reflectionPath : [];
+  return path.slice(0, reflectionCount).join("|") || "direct";
 }
 
 function getRicochetTargetEntry(target, geometry) {
@@ -5389,7 +5425,7 @@ function getWallCollision(attackerToken, origin, angle, distance, targetElevatio
   };
 }
 
-function getCollisionWallDirection(collision) {
+function getCollisionWallDirection(collision, incomingAngle = null) {
   const directions = [];
   for (const edge of collision?.edges ?? []) {
     const dx = Number(edge?.b?.x) - Number(edge?.a?.x);
@@ -5402,11 +5438,57 @@ function getCollisionWallDirection(collision) {
       ux *= -1;
       uy *= -1;
     }
-    if (!directions.some(direction => Math.abs((direction.x * uy) - (direction.y * ux)) <= 0.001)) {
-      directions.push({ x: ux, y: uy });
+    const lineKey = getWallLineKey({ x: ux, y: uy }, edge);
+    if (!directions.some(direction => direction.lineKey === lineKey)) {
+      directions.push({ x: ux, y: uy, lineKey });
     }
   }
-  return directions.length === 1 ? directions[0] : null;
+  if (directions.length <= 1) return directions[0] ?? null;
+  return selectCollisionWallDirection(directions, incomingAngle);
+}
+
+function selectCollisionWallDirection(directions = [], incomingAngle = null) {
+  if (!directions.length) return null;
+  const angle = Number(incomingAngle);
+  if (!Number.isFinite(angle)) return directions[0] ?? null;
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  return directions
+    .map(direction => {
+      const nx = -direction.y;
+      const ny = direction.x;
+      const normalContact = Math.abs((dx * nx) + (dy * ny));
+      const reflected = reflectAngleAcrossWall(angle, direction);
+      return {
+        direction,
+        normalContact,
+        turn: Math.abs(normalizeAngle(reflected - angle)),
+        key: getWallDirectionKey(direction)
+      };
+    })
+    .sort((left, right) => (
+      (right.normalContact - left.normalContact)
+      || (left.turn - right.turn)
+      || left.key.localeCompare(right.key)
+    ))[0]?.direction ?? null;
+}
+
+function getWallDirectionKey(direction = {}) {
+  if (direction.lineKey) return String(direction.lineKey);
+  const angle = normalizeAngle(Math.atan2(Number(direction.y) || 0, Number(direction.x) || 0));
+  const canonical = angle < 0 ? angle + Math.PI : angle;
+  return String(Math.round(canonical * 1000));
+}
+
+function getWallLineKey(direction = {}, edge = {}) {
+  const ux = Number(direction.x) || 0;
+  const uy = Number(direction.y) || 0;
+  const angle = normalizeAngle(Math.atan2(uy, ux));
+  const canonical = angle < 0 ? angle + Math.PI : angle;
+  const nx = -uy;
+  const ny = ux;
+  const offset = (nx * (Number(edge?.a?.x) || 0)) + (ny * (Number(edge?.a?.y) || 0));
+  return `${Math.round(canonical * 1000)}:${Math.round(offset * 10)}`;
 }
 
 function reflectAngleAcrossWall(angle, wallDirection) {
