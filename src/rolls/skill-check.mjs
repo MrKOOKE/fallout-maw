@@ -815,6 +815,16 @@ function createMutableCheck(actor, skill, data) {
     baseValue: skill.value,
     alternateKeys: ["system.skills.all.bonus"]
   });
+  const skillAdvantage = getContextualAbilityChangeValue(actor, `system.skills.${skill.key}.advantage`, {
+    ...context,
+    baseValue: skill.advantage,
+    alternateKeys: ["system.skills.all.advantage"]
+  });
+  const skillDisadvantage = getContextualAbilityChangeValue(actor, `system.skills.${skill.key}.disadvantage`, {
+    ...context,
+    baseValue: skill.disadvantage,
+    alternateKeys: ["system.skills.all.disadvantage"]
+  });
   return {
     actor,
     skill: { ...skill, value: toInteger(skillValue) },
@@ -822,8 +832,8 @@ function createMutableCheck(actor, skill, data) {
     situationalModifier: toInteger(data.situationalModifier ?? DEFAULT_CHECK.situationalModifier),
     criticalSuccessBonus: toInteger(data.criticalSuccessBonus ?? DEFAULT_CHECK.criticalSuccessBonus),
     criticalFailureBonus: toInteger(data.criticalFailureBonus ?? DEFAULT_CHECK.criticalFailureBonus),
-    advantageCount: Math.max(0, toInteger(data.advantageCount)) + Math.max(0, toInteger(skill.advantage)),
-    disadvantageCount: Math.max(0, toInteger(data.disadvantageCount)) + Math.max(0, toInteger(skill.disadvantage)),
+    advantageCount: Math.max(0, toInteger(data.advantageCount)) + Math.max(0, toInteger(skillAdvantage)),
+    disadvantageCount: Math.max(0, toInteger(data.disadvantageCount)) + Math.max(0, toInteger(skillDisadvantage)),
     forcedResult: "",
     smartFudgeResult: String(data.smartFudgeResult ?? ""),
     requester: String(data.requester ?? ""),
