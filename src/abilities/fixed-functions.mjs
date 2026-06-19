@@ -90,6 +90,11 @@ import {
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { REACTION_EVENT_KEYS, REACTION_RESULT, isReactionSystemLocked, registerReactionProvider, requestReactionEvent } from "../combat/reaction-hub.mjs";
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "../combat/reaction-resources.mjs";
+import {
+  ENERGY_RESOURCE_KEY,
+  canActorSpendEnergy,
+  getActorEnergy
+} from "../combat/energy-resource.mjs";
 import { areTokensAdjacent, areTokensAdjacentAt, resolveKnockback } from "../combat/active-actions.mjs";
 import {
   getMovementRouteSamples,
@@ -134,12 +139,12 @@ const DISARM_QUERY_NAME = "falloutMawDisarm";
 const DISARM_SOCKET_TIMEOUT_MS = 60000;
 const FIXED_ABILITY_SOCKET = `system.${SYSTEM_ID}`;
 const FIXED_ABILITY_SOCKET_SCOPE = "fallout-maw.fixedAbilityFunctions";
-const ENERGY_RESOURCE_KEY = "power";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const STATUS_EFFECTS = Object.freeze({
   dead: "dead"
 });
 const pendingFixedAbilitySocketRequests = new Map();
+const actorEnergyMutationQueue = new Map();
 
 const FIXED_ABILITY_FUNCTIONS = Object.freeze([
   Object.freeze({
@@ -1560,7 +1565,7 @@ async function requestCounterAttackReaction(context = {}) {
     .map(uuid => String(uuid ?? "").trim())
     .filter(Boolean)));
   if (!attackerActorUuid || !attackerTokenUuid || !targetTokenUuids.length) return;
-  await requestReactionEvent(REACTION_EVENT_KEYS.weaponAttackResolved, {
+  const operation = () => requestReactionEvent(REACTION_EVENT_KEYS.weaponAttackResolved, {
     attackId: context?.attackId ?? "",
     attackerActorUuid,
     attackerTokenUuid,
@@ -1571,6 +1576,9 @@ async function requestCounterAttackReaction(context = {}) {
     title: "Ответная реакция",
     message: "Атака завершена. Доступна реакция контратаки."
   });
+  await (context?.reactionCoordinator?.run
+    ? context.reactionCoordinator.run(operation)
+    : operation());
 }
 
 async function collectCounterAttackReactionOffers({ eventKey = "", context = {} } = {}) {
@@ -2570,7 +2578,8 @@ async function collectCounterSniperReactionOffers({ eventKey = "", context = {} 
       weaponId: entry.weapon.id,
       weaponFunctionId: entry.weaponFunctionId,
       reactorTokenUuid: reactorToken.uuid,
-      attackerTokenUuid: attackerToken.uuid
+      attackerTokenUuid: attackerToken.uuid,
+      energyCost
     });
   }
   return offers;
@@ -3041,6 +3050,12 @@ async function processCurseAndBlessingActorFunctions({ owner = null, effectTarge
 }
 
 async function spendCurseAndBlessingEnergy(actor, abilityItem, abilityFunction, energyCost = 0) {
+  return runActorEnergyMutation(actor, () => (
+    spendCurseAndBlessingEnergyNow(actor, abilityItem, abilityFunction, energyCost)
+  ));
+}
+
+async function spendCurseAndBlessingEnergyNow(actor, abilityItem, abilityFunction, energyCost = 0) {
   const cost = Math.max(0, toInteger(energyCost));
   if (!hasCurseAndBlessingEnergy(actor, cost)) {
     await deactivateFixedAbilityFunction(abilityItem, abilityFunction);
@@ -3061,6 +3076,12 @@ async function spendCurseAndBlessingEnergy(actor, abilityItem, abilityFunction, 
 }
 
 async function spendDoubleAttackEnergy(actor, abilityItem, abilityFunction, energyCost = 0) {
+  return runActorEnergyMutation(actor, () => (
+    spendDoubleAttackEnergyNow(actor, abilityItem, abilityFunction, energyCost)
+  ));
+}
+
+async function spendDoubleAttackEnergyNow(actor, abilityItem, abilityFunction, energyCost = 0) {
   const cost = Math.max(0, toInteger(energyCost));
   if (!hasEnergy(actor, cost)) {
     await deactivateFixedAbilityFunction(abilityItem, abilityFunction);
@@ -3092,6 +3113,10 @@ async function spendFullForceEnergy(actor, abilityItem, abilityFunction, energyC
 
 async function spendEnergy(actor, energyCost = 0) {
   const cost = Math.max(0, toInteger(energyCost));
+  return runActorEnergyMutation(actor, () => spendEnergyNow(actor, cost));
+}
+
+async function spendEnergyNow(actor, cost = 0) {
   if (!hasEnergy(actor, cost)) return false;
   if (!cost) return true;
   const resource = actor.system?.resources?.[ENERGY_RESOURCE_KEY];
@@ -3104,6 +3129,20 @@ async function spendEnergy(actor, energyCost = 0) {
   }
   await actor.update(update);
   return true;
+}
+
+function runActorEnergyMutation(actor, operation) {
+  const actorUuid = String(actor?.uuid ?? "");
+  if (!actorUuid) return operation();
+  const previous = actorEnergyMutationQueue.get(actorUuid) ?? Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(operation)
+    .finally(() => {
+      if (actorEnergyMutationQueue.get(actorUuid) === next) actorEnergyMutationQueue.delete(actorUuid);
+    });
+  actorEnergyMutationQueue.set(actorUuid, next);
+  return next;
 }
 
 function getAbilityEnergyCost(actor, abilityItem, abilityFunction, baseCost = 0) {
@@ -3795,11 +3834,7 @@ function hasCurseAndBlessingEnergy(actor, cost = 0) {
 }
 
 function hasEnergy(actor, cost = 0) {
-  return getActorEnergy(actor) - Math.max(0, toInteger(cost)) >= toInteger(actor?.system?.resources?.[ENERGY_RESOURCE_KEY]?.min);
-}
-
-function getActorEnergy(actor) {
-  return Math.max(0, toInteger(actor?.system?.resources?.[ENERGY_RESOURCE_KEY]?.value));
+  return canActorSpendEnergy(actor, cost);
 }
 
 function getResponsibleGM() {

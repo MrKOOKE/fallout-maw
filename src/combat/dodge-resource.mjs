@@ -13,6 +13,7 @@ const DODGE_SOCKET_ACTION_RESTORE = "restoreDodgeResource";
 const DODGE_SOCKET_ACTION_RESULT = "dodgeResourceResult";
 const DODGE_SOCKET_REQUEST_TIMEOUT_MS = 30000;
 const pendingDodgeSocketRequests = new Map();
+const actorDodgeMutationQueue = new Map();
 
 export function registerCombatDodgeHooks() {
   Hooks.on("combatStart", combat => {
@@ -106,6 +107,10 @@ export async function restoreCombatDodgeResources(combat, { mode = "full" } = {}
 }
 
 export async function restoreActorDodgeResource(actor, { mode = "full" } = {}) {
+  return runActorDodgeMutation(actor, () => restoreActorDodgeResourceNow(actor, { mode }));
+}
+
+async function restoreActorDodgeResourceNow(actor, { mode = "full" } = {}) {
   const resource = getDodgeResource(actor);
   if (!resource) return;
 
@@ -124,6 +129,10 @@ export async function restoreActorDodgeResource(actor, { mode = "full" } = {}) {
 }
 
 async function spendActorDodgeResource(actor, multiplier = 1) {
+  return runActorDodgeMutation(actor, () => spendActorDodgeResourceNow(actor, multiplier));
+}
+
+async function spendActorDodgeResourceNow(actor, multiplier = 1) {
   const settings = getDodgeSettings();
   if (!settings.enabled) return;
   if (!isActiveCombatRunning()) return;
@@ -141,6 +150,20 @@ async function spendActorDodgeResource(actor, multiplier = 1) {
   if (amount <= 0 || current <= 0) return;
 
   await updateActorDodgeValue(actor, Math.max(0, current - amount));
+}
+
+function runActorDodgeMutation(actor, operation) {
+  const actorUuid = String(actor?.uuid ?? "");
+  if (!actorUuid) return operation();
+  const previous = actorDodgeMutationQueue.get(actorUuid) ?? Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(operation)
+    .finally(() => {
+      if (actorDodgeMutationQueue.get(actorUuid) === next) actorDodgeMutationQueue.delete(actorUuid);
+    });
+  actorDodgeMutationQueue.set(actorUuid, next);
+  return next;
 }
 
 function applyDodgePercentModifier(actor, percent, effectKey) {

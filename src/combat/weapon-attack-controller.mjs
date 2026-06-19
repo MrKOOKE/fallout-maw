@@ -156,6 +156,22 @@ class WeaponActionModifierState {
   }
 }
 
+function createWeaponReactionCoordinator() {
+  let tail = Promise.resolve();
+  return {
+    run(operation) {
+      const result = tail
+        .catch(() => undefined)
+        .then(() => operation());
+      tail = result.then(() => undefined, () => undefined);
+      return result;
+    },
+    drain() {
+      return tail.catch(() => undefined);
+    }
+  };
+}
+
 function collectWeaponActionModifierState(context = {}) {
   const state = new WeaponActionModifierState(context);
   Hooks.callAll(WEAPON_ACTION_MODIFIER_REQUEST_HOOK, {
@@ -293,6 +309,7 @@ export function startDualWeaponAttack({
   activeDualWeaponAttack?.destroy();
   activeDualWeaponAttack = null;
   const captured = [];
+  const reactionCoordinator = createWeaponReactionCoordinator();
   const runCaptured = async () => {
     try {
       if (!validateDualWeaponAttackResources(actor, captured, label)) return false;
@@ -301,10 +318,14 @@ export function startDualWeaponAttack({
       if (isCombatActionPointSpendingActive() && actionPointCost > 0 && !canSpendCombatActionPoints(actor, actionPointCost, { label: "действия" })) return false;
       if (typeof spendEnergy === "function" && (await spendEnergy()) === false) return false;
       if (isCombatActionPointSpendingActive() && actionPointCost > 0) await spendCombatActionPoints(actor, actionPointCost);
-      const results = await Promise.allSettled(captured.map(selection => executeCapturedWeaponAttack(selection, { skipActionPointCost: true })));
+      const results = await Promise.allSettled(captured.map(selection => executeCapturedWeaponAttack(selection, {
+        skipActionPointCost: true,
+        reactionCoordinator
+      })));
       for (const result of results) {
         if (result.status === "rejected") console.error("Fallout MaW | Dual weapon attack execution failed", result.reason);
       }
+      await reactionCoordinator.drain();
       return true;
     } finally {
       activeDualWeaponAttack?.destroy();
@@ -363,7 +384,7 @@ function validateDualWeaponAttackResources(actor, selections = [], label = "С �
   return true;
 }
 
-async function executeCapturedWeaponAttack(selection = {}, { skipActionPointCost = true } = {}) {
+async function executeCapturedWeaponAttack(selection = {}, { skipActionPointCost = true, reactionCoordinator = null } = {}) {
   const token = selection?.token ?? null;
   const weapon = selection?.weapon ?? null;
   const actionKey = String(selection?.actionKey ?? "");
@@ -371,7 +392,8 @@ async function executeCapturedWeaponAttack(selection = {}, { skipActionPointCost
   if (!token?.actor || !weapon || !actionKey) return false;
 
   const controller = new WeaponAttackController(token, weapon, actionKey, weaponFunctionId, null, {
-    skipActionPointCost
+    skipActionPointCost,
+    reactionCoordinator
   });
   controller.pointer = deserializePoint(selection.pointer);
   controller.geometry = deserializeGeometry(selection.geometry);
@@ -667,6 +689,7 @@ class WeaponAttackController {
     this.ignoreReactionLock = Boolean(options.ignoreReactionLock);
     this.captureOnly = Boolean(options.captureOnly);
     this.onCapture = typeof options.onCapture === "function" ? options.onCapture : null;
+    this.reactionCoordinator = options.reactionCoordinator?.run ? options.reactionCoordinator : null;
     this.beforeExecuteCompleted = false;
     this.container = new PIXI.Container();
     this.shape = new PIXI.Graphics();
@@ -758,6 +781,7 @@ class WeaponAttackController {
       attackCheckCount: Math.max(0, toInteger(this.attackCheckCount)),
       damageResults: Array.isArray(damageResults) ? damageResults : [],
       modifierState: this.getWeaponActionModifierState(),
+      reactionCoordinator: this.reactionCoordinator,
       senderUserId: game.user?.id ?? ""
     });
   }
@@ -858,7 +882,7 @@ class WeaponAttackController {
     this.reactionTargetKeys.add(reactionKey);
     if (target.actor.uuid) this.attackedTargetActorUuids.add(target.actor.uuid);
     if (target.document?.uuid) this.attackedTargetTokenUuids.add(target.document.uuid);
-    const result = await requestReactionEvent(REACTION_EVENT_KEYS.weaponAttackTargeted, {
+    const result = await this.requestReaction(REACTION_EVENT_KEYS.weaponAttackTargeted, {
       attackId: this.attackId,
       attackerActorUuid: this.token.actor.uuid,
       attackerTokenUuid: this.token.document?.uuid ?? "",
@@ -876,6 +900,13 @@ class WeaponAttackController {
     }
     if (this.interruptForIncapacitation()) return true;
     return false;
+  }
+
+  requestReaction(eventKey = "", context = {}) {
+    const operation = () => requestReactionEvent(eventKey, context);
+    return this.reactionCoordinator?.run
+      ? this.reactionCoordinator.run(operation)
+      : operation();
   }
 
   requestFinish() {
@@ -1836,7 +1867,7 @@ class WeaponAttackController {
 
   async requestAimedLimbSelectedReaction(target, limbKey = "") {
     if (this.actionKey !== "aimedShot") return undefined;
-    return requestReactionEvent(REACTION_EVENT_KEYS.aimedAttackLimbSelected, {
+    return this.requestReaction(REACTION_EVENT_KEYS.aimedAttackLimbSelected, {
       attackId: this.attackId,
       attackerActorUuid: this.token?.actor?.uuid ?? "",
       attackerTokenUuid: this.token?.document?.uuid ?? "",

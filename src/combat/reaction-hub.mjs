@@ -1,5 +1,6 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { escapeHTML, normalizeImagePath } from "../utils/actor-display-data.mjs";
+import { canActorSpendEnergy } from "./energy-resource.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -25,7 +26,6 @@ export const REACTION_LOCK_BYPASS_OPTION = "falloutMawReactionLockBypass";
 const pendingReactionSocketRequests = new Map();
 const reactionProviders = new Map();
 const activeReactionLocks = new Map();
-let reactionEventQueue = Promise.resolve();
 let reactionHubHooksRegistered = false;
 
 export function registerReactionHubConfig() {
@@ -113,22 +113,6 @@ async function handleReactionSocketMessage(payload = {}) {
 }
 
 async function processReactionEventRequest(request = {}) {
-  const previous = reactionEventQueue.catch(() => undefined);
-  let releaseQueuedEvent;
-  const queuedEvent = new Promise(resolve => {
-    releaseQueuedEvent = resolve;
-  });
-  reactionEventQueue = previous.then(() => queuedEvent);
-  await previous;
-
-  try {
-    return await processReactionEventRequestNow(request);
-  } finally {
-    releaseQueuedEvent();
-  }
-}
-
-async function processReactionEventRequestNow(request = {}) {
   if (!game.user?.isGM) return createReactionHubResult({ reason: "notGM" });
   const eventKey = String(request.eventKey ?? "").trim();
   const context = request.context ?? {};
@@ -146,6 +130,7 @@ async function processReactionEventRequestNow(request = {}) {
       if (!actorUuid || !offerId) continue;
       const actor = await fromUuid(actorUuid);
       if (!canActorReact(actor)) continue;
+      if (!canAffordReactionOffer(actor, offer)) continue;
       offers.push({
         ...offer,
         providerId: provider.id,
@@ -168,12 +153,15 @@ async function processReactionEventRequestNow(request = {}) {
   beginReactionLock(lockId, { reason: eventKey });
   try {
     await createReactionOpportunityMessage({ context, actorOrder, offersByActor });
-    const responses = await collectReactionResponses({ eventKey, context, actorOrder, offersByActor });
     let finalResult = createReactionHubResult();
-    for (const entry of responses) {
-      const selectedOffer = entry.offer;
-      const actor = await fromUuid(String(selectedOffer.actorUuid ?? ""));
+    for (const actorUuid of actorOrder) {
+      const actorOffers = offersByActor.get(actorUuid) ?? [];
+      const actor = await fromUuid(actorUuid);
       if (!canActorReact(actor)) continue;
+      const response = await queryReactionOwner(actor, actorOffers, { eventKey, context });
+      if (!response?.offerId) continue;
+      const selectedOffer = actorOffers.find(offer => offer.offerId === response.offerId);
+      if (!selectedOffer) continue;
       const provider = reactionProviders.get(selectedOffer.providerId);
       if (!provider) continue;
       try {
@@ -181,11 +169,11 @@ async function processReactionEventRequestNow(request = {}) {
           eventKey,
           context,
           offer: selectedOffer,
-          response: entry.response
+          response
         });
         const normalized = createReactionHubResult(result ?? {});
-        if (normalized.handled) finalResult = normalized;
-        if (normalized.cancelCurrent || normalized.cancelRemaining) return normalized;
+        finalResult = mergeReactionHubResults(finalResult, normalized);
+        if (normalized.cancelRemaining) break;
       } catch (error) {
         console.error(`${SYSTEM_ID} | Reaction execution failed: ${selectedOffer.providerId}`, error);
       }
@@ -196,27 +184,10 @@ async function processReactionEventRequestNow(request = {}) {
   }
 }
 
-async function collectReactionResponses({ eventKey = "", context = {}, actorOrder = [], offersByActor = new Map() } = {}) {
-  let sequence = 0;
-  const queries = actorOrder.map(async actorUuid => {
-    const actorOffers = offersByActor.get(actorUuid) ?? [];
-    const actor = await fromUuid(actorUuid);
-    if (!canActorReact(actor)) return null;
-    const response = await queryReactionOwner(actor, actorOffers, { eventKey, context });
-    if (!response?.offerId) return null;
-    const selectedOffer = actorOffers.find(offer => offer.offerId === response.offerId);
-    if (!selectedOffer) return null;
-    return {
-      actorUuid,
-      offer: selectedOffer,
-      response,
-      respondedAt: Date.now(),
-      sequence: sequence++
-    };
-  });
-  return (await Promise.all(queries))
-    .filter(Boolean)
-    .sort((left, right) => (left.respondedAt - right.respondedAt) || (left.sequence - right.sequence));
+function canAffordReactionOffer(actor, offer = {}) {
+  const energyCost = Math.max(0, toInteger(offer.energyCost));
+  if (energyCost > 0 && !canActorSpendEnergy(actor, energyCost)) return false;
+  return true;
 }
 
 async function createReactionOpportunityMessage({ context = {}, actorOrder = [], offersByActor = new Map() } = {}) {
@@ -327,6 +298,26 @@ function createReactionHubResult(data = {}) {
   };
 }
 
+function mergeReactionHubResults(current = {}, next = {}) {
+  const left = createReactionHubResult(current);
+  const right = createReactionHubResult(next);
+  const statusPriority = {
+    [REACTION_RESULT.declined]: 0,
+    [REACTION_RESULT.failed]: 1,
+    [REACTION_RESULT.success]: 2
+  };
+  const status = (statusPriority[right.status] ?? 0) > (statusPriority[left.status] ?? 0)
+    ? right.status
+    : left.status;
+  return createReactionHubResult({
+    handled: left.handled || right.handled,
+    status,
+    cancelCurrent: left.cancelCurrent || right.cancelCurrent,
+    cancelRemaining: left.cancelRemaining || right.cancelRemaining,
+    reason: right.reason || left.reason
+  });
+}
+
 function registerReactionHubHooks() {
   if (reactionHubHooksRegistered) return;
   reactionHubHooksRegistered = true;
@@ -395,4 +386,9 @@ function getResponsibleOwner(actor) {
     .filter(user => user.active && !user.isGM && actor?.testUserPermission?.(user, "OWNER"))
     .sort((left, right) => left.id.localeCompare(right.id))
     .at(0) ?? null;
+}
+
+function toInteger(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.trunc(number) : 0;
 }
