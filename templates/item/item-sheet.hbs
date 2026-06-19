@@ -505,7 +505,22 @@
           <label><span>Сложность за 1% потерянных ОЗ</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.lostHealthPercentMultiplier" value="{{fixedKeepAwaySettings.lostHealthPercentMultiplier}}" min="0" step="0.1"></label>
         </div>
       </div>
-    </div>
+      </div>
+    {{/if}}
+
+    {{#if fixedLethalAttackSettings}}
+      <h4>{{typeLabel}}</h4>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <label><span>Стоимость активации, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.activationEnergyCost" value="{{fixedLethalAttackSettings.activationEnergyCost}}" min="0" step="1"></label>
+          <label><span>Перегрузка, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedLethalAttackSettings.overloadEnergyCost}}" min="0" step="1"></label>
+          <label><span>Длительность перегрузки, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadDurationSeconds" value="{{fixedLethalAttackSettings.overloadDurationSeconds}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <label><span>Бонус урона, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.damagePercentBonus" value="{{fixedLethalAttackSettings.damagePercentBonus}}" min="0" step="1"></label>
+          <label><span>Ожидание атаки, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.attackWaitDurationSeconds" value="{{fixedLethalAttackSettings.attackWaitDurationSeconds}}" min="0" step="1"></label>
+        </div>
+      </div>
     {{/if}}
     {{#if fixedFourLeafCloverSettings}}
     <div class="fallout-maw-ability-subsection">

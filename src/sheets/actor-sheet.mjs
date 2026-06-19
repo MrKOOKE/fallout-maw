@@ -144,6 +144,7 @@ import {
   normalizeDoubleAttackSettings,
   normalizeFullForceSettings,
   normalizeLastChanceSettings,
+  normalizeLethalAttackSettings,
   normalizeKeepAwaySettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
@@ -3426,6 +3427,8 @@ function buildAbilityEnergyCostRows(item, actor = null) {
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lethalShot
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lethalStrike
     ));
   if (!entry) return [];
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm) {
@@ -3470,6 +3473,17 @@ function buildAbilityEnergyCostRows(item, actor = null) {
       ["Активация: базовый расход", String(activationBase)],
       ["Активация: итог", String(getFixedAbilityEnergyCost(actor, item, entry, activationBase))],
       ["Перегрузка", `${Math.max(0, toInteger(settings.overloadEnergyCost))} на ${Math.max(0, toInteger(settings.overloadDurationSeconds))} сек.`]
+    ];
+  }
+  if ([ABILITY_FIXED_FUNCTION_KEYS.lethalShot, ABILITY_FIXED_FUNCTION_KEYS.lethalStrike].includes(entry.fixedKey)) {
+    const settings = normalizeLethalAttackSettings(entry.fixedSettings);
+    const activationBase = Math.max(0, toInteger(settings.activationEnergyCost));
+    return [
+      ["Активация: базовый расход", String(activationBase)],
+      ["Активация: итог", String(getFixedAbilityEnergyCost(actor, item, entry, activationBase))],
+      ["Перегрузка", `${Math.max(0, toInteger(settings.overloadEnergyCost))} на ${Math.max(0, toInteger(settings.overloadDurationSeconds))} сек.`],
+      ["Бонус урона", `+${Math.max(0, toInteger(settings.damagePercentBonus))}%`],
+      ["Ожидание атаки", `${Math.max(0, toInteger(settings.attackWaitDurationSeconds))} сек.`]
     ];
   }
   const settings = entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing

@@ -56,6 +56,7 @@ import {
   normalizeFullForceSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
+  normalizeLethalAttackSettings,
   normalizeKeepAwaySettings,
   normalizeLungeSettings,
   normalizeLuckyCoinSettings,
@@ -4466,6 +4467,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedKeepAwaySettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway
     ? normalizeKeepAwaySettings(entry?.fixedSettings)
     : null;
+  const fixedLethalAttackSettings = [ABILITY_FIXED_FUNCTION_KEYS.lethalShot, ABILITY_FIXED_FUNCTION_KEYS.lethalStrike].includes(fixedKey)
+    ? normalizeLethalAttackSettings(entry?.fixedSettings)
+    : null;
   const fixedFourLeafCloverSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover
     ? prepareFourLeafCloverSettingsForDisplay(entry?.fixedSettings)
     : null;
@@ -4532,6 +4536,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedVirtuosoSettings,
     fixedAimingSettings,
     fixedKeepAwaySettings,
+    fixedLethalAttackSettings,
     fixedFourLeafCloverSettings,
     fixedAtRandomSettings,
     fixedLastChanceSettings,

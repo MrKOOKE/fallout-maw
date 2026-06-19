@@ -19,6 +19,7 @@ import {
   normalizeFourLeafCloverSettings,
   normalizeFullForceSettings,
   normalizeLastChanceSettings,
+  normalizeLethalAttackSettings,
   normalizeKeepAwaySettings,
   normalizeLuckyCoinSettings,
   normalizeLungeSettings,
@@ -29,6 +30,7 @@ import {
   normalizeWhirlwindSettings,
   normalizeWhereAreYouGoingSettings
 } from "../settings/abilities.mjs";
+import { abilityConditionsApply } from "./evaluation.mjs";
 import {
   ATTACKING_WEAPON_ACTION_KEYS,
   getActionBlockEffectKey
@@ -123,6 +125,7 @@ const DEUS_EX_MACHINA_INSIGHT_EFFECT_FLAG_KEY = "deusExMachinaInsight";
 const CURSE_AND_BLESSING_EFFECT_FLAG_KEY = "curseAndBlessing";
 const ABILITY_OVERLOAD_EFFECT_FLAG_KEY = "abilityOverload";
 const ALL_OR_NOTHING_EFFECT_FLAG_KEY = "allOrNothing";
+const LETHAL_ATTACK_EFFECT_FLAG_KEY = "lethalAttack";
 const AT_RANDOM_ACTION_BLOCK_EFFECT_FLAG_KEY = "atRandomActionBlock";
 const LUCKY_COIN_EFFECT_SOURCE = "luckyCoin";
 const DEFENSIVE_TACTICS_EFFECT_FLAG_KEY = "defensiveTactics";
@@ -203,6 +206,22 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.keepAway
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.lethalShot,
+    label: "Смертельный выстрел",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.lethalShot
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.lethalStrike,
+    label: "Смертельный удар",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.lethalStrike
     })
   }),
   Object.freeze({
@@ -348,6 +367,7 @@ export function registerFixedAbilityFunctionHooks() {
   });
   Hooks.on(WEAPON_ATTACK_RESOLVED_HOOK, context => {
     void consumeAllOrNothingResultEffects(context);
+    void consumeLethalAttackPreparationEffects(context);
     void processReaperAttackResolution(context);
     void updateVirtuosoLastWeapon(context);
     void processKeepAwayAttackResolution(context);
@@ -364,6 +384,7 @@ export function registerFixedAbilityFunctionHooks() {
     requestVirtuosoWeaponActionModifiers(context);
     requestAimingWeaponActionModifiers(context);
     requestKeepAwayWeaponActionModifiers(context);
+    requestLethalAttackWeaponActionModifiers(context);
   });
   Hooks.on("fallout-maw.weaponActionResolved", context => {
     void processAtRandomAttackResolution(context);
@@ -461,6 +482,13 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
           key: stateKey,
           label: "Следующий выстрел",
           value: state[stateKey]?.pending ? "Готов" : "Не подготовлен"
+        };
+      }
+      if ([ABILITY_FIXED_FUNCTION_KEYS.lethalShot, ABILITY_FIXED_FUNCTION_KEYS.lethalStrike].includes(entry.fixedKey)) {
+        return {
+          key: getFixedFunctionStateKey(entry),
+          label: "Следующая атака",
+          value: findLethalAttackPreparationEffect(abilityItem.parent, abilityItem, entry) ? "Готова" : "Не подготовлена"
         };
       }
       if (entry.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.deusExMachina) return null;
@@ -632,6 +660,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {
     const used = await useKeepAway(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if ([ABILITY_FIXED_FUNCTION_KEYS.lethalShot, ABILITY_FIXED_FUNCTION_KEYS.lethalStrike].includes(abilityFunction.fixedKey)) {
+    const used = await useLethalAttack(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
   }
@@ -2687,6 +2721,29 @@ async function useKeepAway(actor, abilityItem, abilityFunction) {
   return true;
 }
 
+async function useLethalAttack(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeLethalAttackSettings(abilityFunction.fixedSettings);
+  if (findLethalAttackPreparationEffect(actor, abilityItem, abilityFunction)) {
+    ui.notifications.warn(`${abilityName}: следующая атака уже подготовлена.`);
+    return false;
+  }
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  await applyLethalAttackPreparationEffect(actor, abilityItem, abilityFunction, settings);
+  ui.notifications.info(`${abilityName}: следующая атака подготовлена на ${settings.attackWaitDurationSeconds} сек.`);
+  return true;
+}
+
 function requestDoubleAttackDuplicate(context = {}) {
   const actor = context?.actor ?? null;
   const weaponSkillKey = String(context?.weaponData?.skillKey ?? "").trim();
@@ -2804,6 +2861,59 @@ function requestKeepAwayWeaponActionModifiers(context = {}) {
       });
     }
   }
+}
+
+function requestLethalAttackWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  const actionKey = String(context?.actionKey ?? "").trim();
+  if (!actor || !actionKey || !context?.modifierState) return;
+
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      const requiredActionKey = getLethalAttackActionKey(abilityFunction.fixedKey);
+      if (!requiredActionKey || actionKey !== requiredActionKey) continue;
+      const effect = findLethalAttackPreparationEffect(actor, abilityItem, abilityFunction);
+      if (!effect) continue;
+      const settings = normalizeLethalAttackSettings(abilityFunction.fixedSettings);
+      context.modifierState.addCombatValue("damagePercent", attackContext => {
+        const targetActor = attackContext?.targetActor ?? attackContext?.targetToken?.actor ?? null;
+        const limbKey = String(attackContext?.limbKey ?? "").trim();
+        if (!targetActor || !limbKey || !isCriticalLimb(targetActor, limbKey)) return 0;
+        return abilityConditionsApply(actor, abilityFunction.conditions ?? [], {
+          ...attackContext,
+          targetActor,
+          weaponActionKey: requiredActionKey
+        }) ? settings.damagePercentBonus : 0;
+      });
+    }
+  }
+}
+
+function getLethalAttackActionKey(fixedKey = "") {
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lethalShot) return "aimedShot";
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lethalStrike) return "aimedMeleeAttack";
+  return "";
+}
+
+async function consumeLethalAttackPreparationEffects(context = {}) {
+  const actionKey = String(context?.actionKey ?? "").trim();
+  if (!["aimedShot", "aimedMeleeAttack"].includes(actionKey)) return;
+  const limbKey = String(context?.selectedLimbKey ?? "").trim();
+  const targetActorUuid = String(context?.selectedTargetActorUuid ?? "").trim();
+  const targetActor = targetActorUuid ? fromUuidSync(targetActorUuid) : null;
+  if (!targetActor || !limbKey || !isCriticalLimb(targetActor, limbKey)) return;
+  const actorUuid = String(context?.attackerUuid ?? context?.actorUuid ?? "").trim();
+  const actor = actorUuid ? fromUuidSync(actorUuid) : null;
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return;
+  const effectIds = Array.from(actor.effects ?? [])
+    .filter(effect => !effect.disabled && !effect.isExpired)
+    .filter(effect => {
+      const data = effect.getFlag?.(SYSTEM_ID, LETHAL_ATTACK_EFFECT_FLAG_KEY);
+      return data?.pending && String(data.actionKey ?? "").trim() === actionKey;
+    })
+    .map(effect => effect.id)
+    .filter(Boolean);
+  if (effectIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", effectIds, { animate: false });
 }
 
 async function consumeKeepAwayPreparation(abilityItem, abilityFunction) {
@@ -3358,6 +3468,55 @@ function hasActiveRageEffect(actor, abilityItem, abilityFunction) {
     if (dataSourceId && abilitySourceId) return dataSourceId === abilitySourceId;
     return String(data.abilityItemId ?? "").trim() === abilityItemId;
   });
+}
+
+async function applyLethalAttackPreparationEffect(actor, abilityItem, abilityFunction, settings = {}) {
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return false;
+  const startTime = Number(game.time?.worldTime) || 0;
+  const durationSeconds = Math.max(0, toInteger(settings.attackWaitDurationSeconds));
+  await actor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: getAbilityDisplayName(abilityItem),
+    img: abilityItem.img || "icons/svg/target.svg",
+    origin: abilityItem.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    duration: {
+      seconds: durationSeconds,
+      startTime
+    },
+    system: { changes: [] },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "temporary",
+        [LETHAL_ATTACK_EFFECT_FLAG_KEY]: {
+          pending: true,
+          abilityItemId: abilityItem.id,
+          abilitySourceId: getAbilitySourceId(abilityItem),
+          functionId: abilityFunction.id,
+          fixedKey: abilityFunction.fixedKey,
+          actionKey: getLethalAttackActionKey(abilityFunction.fixedKey),
+          createdAt: startTime
+        }
+      }
+    }
+  }], { animate: false });
+  return true;
+}
+
+function findLethalAttackPreparationEffect(actor, abilityItem, abilityFunction) {
+  if (!actor || !abilityItem || !abilityFunction) return null;
+  const abilitySourceId = getAbilitySourceId(abilityItem);
+  return Array.from(actor.effects ?? []).find(effect => {
+    if (effect?.disabled || effect?.isExpired) return false;
+    const data = effect.getFlag?.(SYSTEM_ID, LETHAL_ATTACK_EFFECT_FLAG_KEY);
+    if (!data?.pending || String(data.functionId ?? "") !== String(abilityFunction.id ?? "")) return false;
+    const sourceId = String(data.abilitySourceId ?? "").trim();
+    return sourceId && abilitySourceId
+      ? sourceId === abilitySourceId
+      : String(data.abilityItemId ?? "") === String(abilityItem.id ?? "");
+  }) ?? null;
 }
 
 async function applyAllOrNothingResultEffect(actor, abilityItem, abilityFunction, settings) {

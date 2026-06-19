@@ -29,6 +29,7 @@ import {
   normalizeDefensiveTacticsSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
+  normalizeLethalAttackSettings,
   normalizeKeepAwaySettings,
   normalizeLungeSettings,
   normalizeLuckyCoinSettings,
@@ -736,6 +737,15 @@ function readFixedFunctionSettings(row) {
       lostHealthPercentMultiplier: row.querySelector("[data-field='fixed.keepAway.lostHealthPercentMultiplier']")?.value
     };
   }
+  if ([ABILITY_FIXED_FUNCTION_KEYS.lethalShot, ABILITY_FIXED_FUNCTION_KEYS.lethalStrike].includes(fixedKey)) {
+    return {
+      activationEnergyCost: row.querySelector("[data-field='fixed.lethalAttack.activationEnergyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.lethalAttack.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: row.querySelector("[data-field='fixed.lethalAttack.overloadDurationSeconds']")?.value,
+      damagePercentBonus: row.querySelector("[data-field='fixed.lethalAttack.damagePercentBonus']")?.value,
+      attackWaitDurationSeconds: row.querySelector("[data-field='fixed.lethalAttack.attackWaitDurationSeconds']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover) {
     return {
       currentCharges: row.querySelector("[data-field='fixed.fourLeafClover.currentCharges']")?.value,
@@ -1014,6 +1024,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedKeepAwaySettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway
     ? normalizeKeepAwaySettings(normalized.fixedSettings)
     : null;
+  const fixedLethalAttackSettings = [ABILITY_FIXED_FUNCTION_KEYS.lethalShot, ABILITY_FIXED_FUNCTION_KEYS.lethalStrike].includes(fixedKey)
+    ? normalizeLethalAttackSettings(normalized.fixedSettings)
+    : null;
   const fixedFourLeafCloverSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover
     ? prepareFourLeafCloverSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -1078,6 +1091,7 @@ function prepareFunctionForDisplay(entry) {
     fixedVirtuosoSettings,
     fixedAimingSettings,
     fixedKeepAwaySettings,
+    fixedLethalAttackSettings,
     fixedFourLeafCloverSettings,
     fixedAtRandomSettings,
     fixedDefensiveTacticsSettings,

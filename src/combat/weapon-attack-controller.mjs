@@ -103,11 +103,18 @@ class WeaponActionModifierState {
   addCombatValue(key = "", value = 0) {
     const normalizedKey = String(key ?? "").trim();
     if (!normalizedKey) return;
-    this.combatValueBonuses.set(normalizedKey, toInteger(this.combatValueBonuses.get(normalizedKey)) + toInteger(value));
+    const entry = this.combatValueBonuses.get(normalizedKey) ?? { value: 0, resolvers: [] };
+    if (typeof value === "function") entry.resolvers.push(value);
+    else entry.value += toInteger(value);
+    this.combatValueBonuses.set(normalizedKey, entry);
   }
 
-  getCombatValueBonus(key = "") {
-    return toInteger(this.combatValueBonuses.get(String(key ?? "").trim()));
+  getCombatValueBonus(key = "", context = {}) {
+    const entry = this.combatValueBonuses.get(String(key ?? "").trim());
+    if (!entry) return 0;
+    let value = toInteger(entry.value);
+    for (const resolver of entry.resolvers ?? []) value += toInteger(resolver({ ...this.context, ...context }));
+    return value;
   }
 
   multiplyResourceCost(type = "", multiplier = 1) {
@@ -773,6 +780,8 @@ class WeaponAttackController {
       actionKey: this.actionKey,
       weaponFunctionId: this.weaponFunctionId,
       attackId: this.attackId,
+      selectedLimbKey: String(this.selectedLimbKey ?? ""),
+      selectedTargetActorUuid: this.selectedTarget?.actor?.uuid ?? "",
       actionPointCost,
       targetActorUuids: Array.from(this.attackedTargetActorUuids),
       targetTokenUuids: Array.from(this.attackedTargetTokenUuids),
@@ -1780,8 +1789,8 @@ class WeaponAttackController {
       if (this.attackModifier?.preventCancel) this.requestFinish();
       return;
     }
+    this.selectedLimbKey = limbKey;
     if (this.captureOnly) {
-      this.selectedLimbKey = limbKey;
       return this.captureAttackSelection({
         mode: "aimed",
         selectedLimbKey: limbKey
@@ -2118,7 +2127,10 @@ class WeaponAttackController {
       this.notifyAttackCheckResolved(outcome);
       return null;
     }
-    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({ targetToken: target }));
+    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({
+      targetToken: target,
+      limbKey: resolvedLimbKey
+    }));
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     this.notifyAttackCheckResolved(outcome);
     return buildWeaponDamageRequests(this.weapon, {
@@ -2621,7 +2633,10 @@ class WeaponAttackController {
       this.notifyAttackCheckResolved(outcome);
       return null;
     }
-    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({ targetToken: target }));
+    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({
+      targetToken: target,
+      limbKey
+    }));
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     this.notifyAttackCheckResolved(outcome);
     return buildWeaponDamageRequests(this.weapon, {
@@ -6911,7 +6926,7 @@ function getContextualCombatValue(actor, key, context = {}) {
   });
   const modifierState = context?.weaponActionModifierState ?? null;
   const modifierBonus = typeof modifierState?.getCombatValueBonus === "function"
-    ? modifierState.getCombatValueBonus(key)
+    ? modifierState.getCombatValueBonus(key, context)
     : 0;
   return value + modifierBonus;
 }

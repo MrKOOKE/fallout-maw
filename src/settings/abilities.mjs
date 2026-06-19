@@ -21,6 +21,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   virtuoso: "virtuoso",
   aiming: "aiming",
   keepAway: "keepAway",
+  lethalShot: "lethalShot",
+  lethalStrike: "lethalStrike",
   fourLeafClover: "fourLeafClover",
   atRandom: "atRandom",
   lastChance: "lastChance",
@@ -658,6 +660,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {
     return normalizeKeepAwaySettings(value);
   }
+  if ([ABILITY_FIXED_FUNCTION_KEYS.lethalShot, ABILITY_FIXED_FUNCTION_KEYS.lethalStrike].includes(normalizedKey)) {
+    return normalizeLethalAttackSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.fourLeafClover) {
     return normalizeFourLeafCloverSettings(value);
   }
@@ -848,6 +853,16 @@ export function normalizeKeepAwaySettings(value = {}) {
     overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 6)),
     baseDifficulty: Math.max(0, toInteger(value?.baseDifficulty ?? 50)),
     lostHealthPercentMultiplier: Math.max(0, toNumber(value?.lostHealthPercentMultiplier ?? 2.5))
+  };
+}
+
+export function normalizeLethalAttackSettings(value = {}) {
+  return {
+    activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? 40)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 100)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 3600)),
+    damagePercentBonus: Math.max(0, toInteger(value?.damagePercentBonus ?? 200)),
+    attackWaitDurationSeconds: Math.max(0, toInteger(value?.attackWaitDurationSeconds ?? 12))
   };
 }
 
