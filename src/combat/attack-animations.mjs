@@ -35,22 +35,30 @@ export async function playWeaponAttackAnimations({ weapon = null, weaponFunction
   const entries = [];
   const soundGroups = getOrderedDelayGroups(trajectories);
   if (animationKey && trajectories.length) {
-    for (const trajectory of trajectories) {
-      const animationTrajectory = normalizeAnimationTrajectory(trajectory);
-      const file = await resolveAnimationLibraryFile(animationKey, {
-        distance: animationTrajectory.distance,
-        mediaType: "video"
-      });
-      if (!file) continue;
-      entries.push({
-        id: foundry.utils.randomID(),
-        file,
-        origin: animationTrajectory.origin,
-        end: animationTrajectory.end,
-        angle: animationTrajectory.angle,
-        distance: animationTrajectory.distance,
-        delayGroup: Number(trajectory.delayGroup ?? entries.length) || 0
-      });
+    for (const [trajectoryIndex, trajectory] of trajectories.entries()) {
+      const animationTrajectories = Array.isArray(trajectory?.segments) && trajectory.segments.length
+        ? trajectory.segments
+        : [trajectory];
+      const delayGroup = Number(trajectory.delayGroup ?? entries.length) || 0;
+      for (const [segmentIndex, segment] of animationTrajectories.entries()) {
+        const animationTrajectory = normalizeAnimationTrajectory(segment);
+        const file = await resolveAnimationLibraryFile(animationKey, {
+          distance: animationTrajectory.distance,
+          mediaType: "video"
+        });
+        if (!file) continue;
+        entries.push({
+          id: foundry.utils.randomID(),
+          file,
+          origin: animationTrajectory.origin,
+          end: animationTrajectory.end,
+          angle: animationTrajectory.angle,
+          distance: animationTrajectory.distance,
+          delayGroup,
+          chainId: `${delayGroup}:${trajectoryIndex}`,
+          segmentIndex
+        });
+      }
     }
   }
   if (!entries.length && !soundPath) return;
@@ -125,12 +133,25 @@ async function playAttackAnimationGroup(payload = {}) {
   for (let index = 0; index < soundGroups.length; index += 1) {
     if (index > 0 && delayMs > 0) await sleep(delayMs);
     promises.push(playAttackSound(payload.soundPath));
-    for (const entry of entriesByGroup.get(soundGroups[index]) ?? []) {
-      promises.push(playSingleAttackAnimation(entry));
+    const groupEntries = entriesByGroup.get(soundGroups[index]) ?? [];
+    const chains = new Map();
+    for (const entry of groupEntries) {
+      const chainId = String(entry.chainId ?? entry.id);
+      const chain = chains.get(chainId) ?? [];
+      chain.push(entry);
+      chains.set(chainId, chain);
+    }
+    for (const chain of chains.values()) {
+      promises.push(playAttackAnimationChain(chain));
     }
   }
 
   await Promise.all(promises);
+}
+
+async function playAttackAnimationChain(entries = []) {
+  const ordered = [...entries].sort((left, right) => (Number(left.segmentIndex) || 0) - (Number(right.segmentIndex) || 0));
+  for (const entry of ordered) await playSingleAttackAnimation(entry);
 }
 
 async function playAttackSound(path) {

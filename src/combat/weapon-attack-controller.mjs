@@ -822,14 +822,15 @@ class WeaponAttackController {
     };
   }
 
-  createWeaponAttackSkillCheckContext(targetToken = null) {
+  createWeaponAttackSkillCheckContext(targetToken = null, extra = {}) {
     return {
       actorToken: this.token,
       targetToken,
       weaponAttackId: this.attackId,
       weaponActionKey: this.actionKey,
       weaponData: getWeaponAttackData(this.weapon, this.weaponFunctionId),
-      weaponActionModifierState: this.getWeaponActionModifierState()
+      weaponActionModifierState: this.getWeaponActionModifierState(),
+      ...extra
     };
   }
 
@@ -2277,14 +2278,14 @@ class WeaponAttackController {
   async resolveAttackTrajectory({ checkBatch = null, trajectory = null, baseDamage = null, difficultyBonus = 0, allOrNothingContext = null } = {}) {
     const damageRequests = [];
     trajectory ??= buildAttackTrajectory(this.token, this.geometry, this.targets);
-    if (!this.targets.length) return { attempted: true, damageRequests, trajectory };
-
+    if (!this.targets.length && !Array.isArray(trajectory?.segments)) return { attempted: true, damageRequests, trajectory };
     const targets = getTrajectoryTargetEntries(this.token, trajectory);
     baseDamage = Math.max(0, Number(baseDamage ?? this.getWeaponDamage()) || 0);
     const penetrationPower = getWeaponPenetrationPower(this.weapon, this.weaponFunctionId, { actor: this.token.actor, actionKey: this.actionKey });
     let penetrationsUsed = 0;
     let attempted = true;
     let finalAnimationPoint = null;
+    let finalAnimationSegment = null;
     let hasSuccessfulHit = false;
 
     for (const entry of targets) {
@@ -2294,23 +2295,27 @@ class WeaponAttackController {
         damageAmount,
         difficultyBonus: Math.max(0, toInteger(difficultyBonus)) + (penetrationsUsed * 20),
         penetrationStep: penetrationsUsed,
+        reflectionCount: entry.reflectionCount,
         checkBatch,
         allOrNothingContext
       });
       if (!request) {
+        finalAnimationSegment = entry.segment ?? trajectory;
         finalAnimationPoint = hasSuccessfulHit
-          ? selectPointOnTrajectoryPastTarget(entry.target, trajectory)
-          : selectMissPointNearTarget(this.token, entry.target, trajectory);
+          ? selectPointOnTrajectoryPastTarget(entry.target, finalAnimationSegment)
+          : selectMissPointNearTarget(this.token, entry.target, finalAnimationSegment);
         break;
       }
       if (!request.length) {
-        finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, trajectory);
+        finalAnimationSegment = entry.segment ?? trajectory;
+        finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, finalAnimationSegment);
         continue;
       }
 
       damageRequests.push(...request);
       hasSuccessfulHit = true;
-      finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, trajectory);
+      finalAnimationSegment = entry.segment ?? trajectory;
+      finalAnimationPoint = selectPointOnTrajectoryPastTarget(entry.target, finalAnimationSegment);
       if (penetrationsUsed >= penetrationPower) break;
 
       const resolvedLimbKey = getSingleDamageRequestLimbKey(request);
@@ -2319,27 +2324,33 @@ class WeaponAttackController {
     }
 
     if (finalAnimationPoint) {
-      if (hasSuccessfulHit) updateTrajectoryDistanceEnd(trajectory, finalAnimationPoint);
+      if (Array.isArray(trajectory.segments)) {
+        truncateRicochetTrajectory(trajectory, finalAnimationSegment, finalAnimationPoint, { projected: hasSuccessfulHit });
+      } else if (hasSuccessfulHit) updateTrajectoryDistanceEnd(trajectory, finalAnimationPoint);
       else updateTrajectoryEnd(trajectory, finalAnimationPoint);
     }
     return { attempted, damageRequests, trajectory };
   }
 
-  async resolveAttackAgainstTarget(target, { damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, checkBatch = null, allOrNothingContext = null } = {}) {
+  async resolveAttackAgainstTarget(target, { damageAmount = 0, difficultyBonus = 0, penetrationStep = 0, reflectionCount = 0, checkBatch = null, allOrNothingContext = null } = {}) {
     if (await this.resolveTargetReactions(target)) return null;
     this.dodgeExposure.record(target.actor);
     const limbKey = selectRandomLimbKey(target.actor, { includeDestroyed: true });
     if (!limbKey || isLimbDestroyed(target.actor, limbKey)) return [];
     const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
     const requirementDifficultyBonus = getWeaponRequirementDifficultyPenalty(this.token.actor, this.weapon, this.weaponFunctionId);
+    const attackContext = this.createWeaponAttackSkillCheckContext(target, {
+      reflectionCount: Math.max(0, toInteger(reflectionCount))
+    });
     const outcome = await requestSkillCheck({
       actor: this.token.actor,
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
         difficulty: getDodgeDifficulty(target.actor) + difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus,
-        situationalModifier: this.getAccuracyModifier(getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target))),
-        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target)),
-        ...this.createWeaponAttackSkillCheckContext(target),
+        situationalModifier: this.getAccuracyModifier(getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, attackContext))
+          + getRicochetAccuracyBonus(attackContext.weaponActionModifierState, reflectionCount),
+        ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, attackContext),
+        ...attackContext,
         ...(allOrNothingContext ?? {})
       },
       animate: false,
@@ -2354,7 +2365,12 @@ class WeaponAttackController {
       this.notifyAttackCheckResolved(outcome);
       return null;
     }
-    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, this.createWeaponDamageContext({ targetToken: target }));
+    const damageContext = this.createWeaponDamageContext({
+      targetToken: target,
+      reflectionCount: Math.max(0, toInteger(reflectionCount))
+    });
+    damageAmount = applyContextualDamageToAmount(this.weapon, damageAmount, damageContext);
+    damageAmount = applyRicochetDamageBonus(this.weapon, damageAmount, damageContext);
     damageAmount = getCriticalDamageAmount(this.weapon, damageAmount, outcome, this.weaponFunctionId);
     this.notifyAttackCheckResolved(outcome);
     return buildWeaponDamageRequests(this.weapon, {
@@ -2367,7 +2383,8 @@ class WeaponAttackController {
         actionKey: this.actionKey,
         attackerUuid: this.token.actor.uuid,
         tokenId: this.token.id,
-        penetrationStep
+        penetrationStep,
+        reflectionCount: Math.max(0, toInteger(reflectionCount))
       }
     }, this.weaponFunctionId);
   }
@@ -2770,6 +2787,19 @@ class WeaponAttackController {
       ? deserializeGeometry(this.lockedGeometry)
       : this.getAttackGeometry(origin);
     if (!this.geometry) return;
+    const ricochet = this.actionKey === "snapshot"
+      ? this.getWeaponActionModifierState().getOption("ricochet")
+      : null;
+    if (ricochet?.maxReflections > 0) {
+      this.geometry.ricochet = ricochet;
+      this.geometry.ricochetTrajectory = buildTrajectoryByAngle(
+        this.token,
+        this.geometry,
+        this.geometry.angle,
+        Number(this.geometry.elevationSlope) || 0
+      );
+      this.geometry.ricochetCone = buildRicochetCone(this.token, this.geometry);
+    }
     let potentialTargets = getPotentialTargets(this.token, this.geometry, {
       includeAttacker: this.volleyAction,
       includeDead: this.volleyAction
@@ -4011,7 +4041,10 @@ function serializeGeometry(geometry) {
     halfAngle: Number(geometry.halfAngle) || 0,
     radiusPixels: Number(geometry.radiusPixels) || 0,
     aimPoint: geometry.aimPoint ? serializePoint(geometry.aimPoint) : null,
-    shapePoints: Array.isArray(geometry.shapePoints) ? geometry.shapePoints.map(serializePoint) : []
+    shapePoints: Array.isArray(geometry.shapePoints) ? geometry.shapePoints.map(serializePoint) : [],
+    ricochet: geometry.ricochet ? { ...geometry.ricochet } : null,
+    ricochetTrajectory: geometry.ricochetTrajectory ? serializeTrajectory(geometry.ricochetTrajectory) : null,
+    ricochetCone: serializeRicochetCone(geometry.ricochetCone)
   };
 }
 
@@ -4026,7 +4059,56 @@ function deserializeGeometry(geometry) {
     halfAngle: Number(geometry.halfAngle) || 0,
     radiusPixels: Number(geometry.radiusPixels) || 0,
     aimPoint: geometry.aimPoint ? deserializePoint(geometry.aimPoint) : null,
-    shapePoints: Array.isArray(geometry.shapePoints) ? geometry.shapePoints.map(deserializePoint) : []
+    shapePoints: Array.isArray(geometry.shapePoints) ? geometry.shapePoints.map(deserializePoint) : [],
+    ricochet: geometry.ricochet ? { ...geometry.ricochet } : null,
+    ricochetTrajectory: geometry.ricochetTrajectory ? deserializeTrajectory(geometry.ricochetTrajectory) : null,
+    ricochetCone: deserializeRicochetCone(geometry.ricochetCone)
+  };
+}
+
+function serializeRicochetCone(cone = null) {
+  if (!cone) return null;
+  return {
+    rays: Array.isArray(cone.rays) ? cone.rays.map(serializeTrajectory) : [],
+    strips: Array.isArray(cone.strips)
+      ? cone.strips.map(strip => strip.map(serializePoint))
+      : []
+  };
+}
+
+function deserializeRicochetCone(cone = null) {
+  if (!cone) return null;
+  return {
+    rays: Array.isArray(cone.rays) ? cone.rays.map(deserializeTrajectory) : [],
+    strips: Array.isArray(cone.strips)
+      ? cone.strips.map(strip => strip.map(deserializePoint))
+      : []
+  };
+}
+
+function serializeTrajectory(trajectory = {}) {
+  return {
+    ...trajectory,
+    origin: serializePoint(trajectory.origin),
+    end: serializePoint(trajectory.end),
+    segments: Array.isArray(trajectory.segments) ? trajectory.segments.map(segment => ({
+      ...segment,
+      origin: serializePoint(segment.origin),
+      end: serializePoint(segment.end)
+    })) : []
+  };
+}
+
+function deserializeTrajectory(trajectory = {}) {
+  return {
+    ...trajectory,
+    origin: deserializePoint(trajectory.origin),
+    end: deserializePoint(trajectory.end),
+    segments: Array.isArray(trajectory.segments) ? trajectory.segments.map(segment => ({
+      ...segment,
+      origin: deserializePoint(segment.origin),
+      end: deserializePoint(segment.end)
+    })) : []
   };
 }
 
@@ -4480,6 +4562,10 @@ function drawAttackShape(graphics, geometry, { locked = false, hasTargets = fals
     graphics.endFill();
     return;
   }
+  if (geometry.ricochet && Array.isArray(geometry.ricochetTrajectory?.segments)) {
+    drawRicochetAttackShape(graphics, geometry, { color, alpha });
+    return;
+  }
   const points = Array.isArray(geometry.shapePoints) && geometry.shapePoints.length
     ? geometry.shapePoints.flatMap(point => [point.x, point.y])
     : buildConePoints(geometry);
@@ -4488,6 +4574,37 @@ function drawAttackShape(graphics, geometry, { locked = false, hasTargets = fals
   if (points.length >= 6) graphics.drawPolygon(points);
   else graphics.moveTo(geometry.origin.x, geometry.origin.y).lineTo(geometry.end.x, geometry.end.y);
   graphics.endFill();
+}
+
+function drawRicochetAttackShape(graphics, geometry, { color = 0xffd166, alpha = 0.18 } = {}) {
+  const cone = geometry.ricochetCone;
+  const rays = Array.isArray(cone?.rays) ? cone.rays : [];
+  const strips = Array.isArray(cone?.strips) ? cone.strips : [];
+  if (rays.length < 2 || !strips.length) return;
+
+  graphics.lineStyle(0);
+  graphics.beginFill(color, alpha);
+  for (const strip of strips) {
+    const points = strip.flatMap(point => [point.x, point.y]);
+    if (points.length >= 6) graphics.drawPolygon(points);
+  }
+  graphics.endFill();
+
+  graphics.lineStyle(2, color, 0.9);
+  drawRicochetRayOutline(graphics, rays[0]);
+  drawRicochetRayOutline(graphics, rays.at(-1));
+  const ends = rays.map(ray => ray?.end).filter(Boolean);
+  if (ends.length) {
+    graphics.moveTo(ends[0].x, ends[0].y);
+    for (const point of ends.slice(1)) graphics.lineTo(point.x, point.y);
+  }
+}
+
+function drawRicochetRayOutline(graphics, trajectory = {}) {
+  const segments = trajectory?.segments ?? [];
+  if (!segments.length) return;
+  graphics.moveTo(segments[0].origin.x, segments[0].origin.y);
+  for (const segment of segments) graphics.lineTo(segment.end.x, segment.end.y);
 }
 
 function buildConePoints({ origin, angle, distance, halfAngle }) {
@@ -4527,6 +4644,20 @@ function buildClippedCirclePoints(attackerToken, { origin, distance }) {
 }
 
 function getPotentialTargets(attackerToken, geometry, { includeAttacker = false, includeDead = false } = {}) {
+  if (Array.isArray(geometry?.ricochetCone?.strips)) {
+    const entries = new Map();
+    return (canvas.tokens?.placeables ?? [])
+      .filter(target => {
+        if ((!includeAttacker && target === attackerToken) || !target.actor || !target.visible) return false;
+        const entry = getRicochetTargetEntry(target, geometry);
+        if (entry) entries.set(target, entry);
+        return entry !== null;
+      })
+      .sort((left, right) => (
+        (entries.get(left)?.distance ?? Infinity)
+        - (entries.get(right)?.distance ?? Infinity)
+      ));
+  }
   return (canvas.tokens?.placeables ?? []).filter(target => {
     if ((!includeAttacker && target === attackerToken) || !target.actor || !target.visible) return false;
     return geometry.type === VOLLEY_ACTION_KEY
@@ -4559,11 +4690,18 @@ function getAttackAutoCoverStates(attackerToken, geometry, targets = []) {
     .sort((left, right) => Math.max(0, toInteger(right.overlapPercent)) - Math.max(0, toInteger(left.overlapPercent)));
   if (!settings.length) return [];
 
+  const ricochetEntries = Array.isArray(geometry?.ricochetCone?.strips)
+    ? new Map((targets ?? []).map(target => [target, getRicochetTargetEntry(target, geometry)]))
+    : new Map();
   const states = [];
   for (const target of targets ?? []) {
     if (!target?.actor || target === attackerToken || isDeadTarget(target)) continue;
     if (getActorForcedCoverData(target.actor)?.key) continue;
-    const obstructionPercent = getTokenAttackObstructionPercent(attackerToken, target, geometry);
+    const ricochetEntry = ricochetEntries.get(target);
+    const obstructionGeometry = ricochetEntry?.segment
+      ? { ...geometry, origin: ricochetEntry.segment.origin }
+      : geometry;
+    const obstructionPercent = getTokenAttackObstructionPercent(attackerToken, target, obstructionGeometry);
     const cover = settings.find(entry => obstructionPercent >= Math.max(0, toInteger(entry.overlapPercent)));
     states.push({
       actorUuid: target.actor.uuid,
@@ -4908,6 +5046,15 @@ function drawBurstAllocationLabel(graphics, marker, label = "") {
 }
 
 function buildAttackTrajectory(attackerToken, coneGeometry, targets = []) {
+  if (Array.isArray(coneGeometry?.ricochetCone?.rays)) {
+    for (const target of targets ?? []) {
+      const entry = getRicochetTargetEntry(target, coneGeometry);
+      if (entry?.trajectory) return foundry.utils.deepClone(entry.trajectory);
+      const trajectory = findRicochetTrajectoryForTarget(attackerToken, target, coneGeometry);
+      if (trajectory) return trajectory;
+    }
+    return buildRandomTrajectory(attackerToken, coneGeometry);
+  }
   const aimPoint = selectTrajectoryAimPoint(attackerToken, coneGeometry, targets);
   if (aimPoint) return buildTrajectoryThroughPoint(attackerToken, coneGeometry, aimPoint);
   return buildRandomTrajectory(attackerToken, coneGeometry);
@@ -5008,6 +5155,9 @@ function buildRandomTrajectory(attackerToken, geometry) {
 }
 
 function buildTrajectoryByAngle(attackerToken, geometry, angle, elevationSlope = 0) {
+  if (geometry?.ricochet?.maxReflections > 0) {
+    return buildRicochetTrajectory(attackerToken, geometry, angle, elevationSlope, geometry.ricochet.maxReflections);
+  }
   const originElevation = Number(geometry.origin?.elevation) || 0;
   const targetElevation = originElevation + ((Number(elevationSlope) || 0) * Math.max(1, Number(geometry.distance) || 1));
   const clipped = getWallClippedEndpoint(attackerToken, geometry.origin, angle, geometry.distance, targetElevation);
@@ -5026,7 +5176,271 @@ function buildTrajectoryByAngle(attackerToken, geometry, angle, elevationSlope =
   };
 }
 
+function buildRicochetTrajectory(attackerToken, geometry, initialAngle, elevationSlope = 0, maxReflections = 0) {
+  const totalDistance = Math.max(1, Number(geometry.distance) || 1);
+  const slope = Number(elevationSlope) || 0;
+  const reflectionLimit = Math.max(0, toInteger(maxReflections));
+  const segments = [];
+  let origin = { ...geometry.origin };
+  let angle = Number(initialAngle) || 0;
+  let remaining = totalDistance;
+  let traveled = 0;
+  let reflectionCount = 0;
+
+  while (remaining > GEOMETRY_EPSILON) {
+    const targetElevation = (Number(geometry.origin?.elevation) || 0) + (slope * totalDistance);
+    const collisionData = getWallCollision(attackerToken, origin, angle, remaining, targetElevation);
+    const segmentDistance = collisionData.distance;
+    const segment = {
+      origin: { ...origin },
+      angle,
+      distance: segmentDistance,
+      halfAngle: 0,
+      elevationSlope: slope,
+      reflectionCount,
+      distanceOffset: traveled,
+      end: { ...collisionData.point }
+    };
+    segments.push(segment);
+    traveled += segmentDistance;
+    remaining = Math.max(0, totalDistance - traveled);
+
+    if (!collisionData.collision || reflectionCount >= reflectionLimit || remaining <= GEOMETRY_EPSILON) break;
+    const wallDirection = getCollisionWallDirection(collisionData.collision);
+    if (!wallDirection) break;
+    angle = reflectAngleAcrossWall(angle, wallDirection);
+    reflectionCount += 1;
+    const nudge = Math.min(0.5, remaining);
+    origin = {
+      x: collisionData.point.x + (Math.cos(angle) * nudge),
+      y: collisionData.point.y + (Math.sin(angle) * nudge),
+      elevation: collisionData.point.elevation
+    };
+  }
+
+  const last = segments.at(-1);
+  return {
+    origin: geometry.origin,
+    angle: Number(initialAngle) || 0,
+    distance: traveled,
+    halfAngle: 0,
+    elevationSlope: slope,
+    end: last?.end ?? geometry.origin,
+    reflectionCount,
+    segments
+  };
+}
+
+function buildRicochetCone(attackerToken, geometry, rayCount = 25) {
+  const amount = Math.max(2, toInteger(rayCount));
+  const halfAngle = Math.max(0, Number(geometry.halfAngle) || 0);
+  const rays = [];
+  for (let index = 0; index < amount; index += 1) {
+    const ratio = amount <= 1 ? 0.5 : index / (amount - 1);
+    const angle = geometry.angle - halfAngle + ((halfAngle * 2) * ratio);
+    rays.push(buildRicochetTrajectory(
+      attackerToken,
+      geometry,
+      angle,
+      Number(geometry.elevationSlope) || 0,
+      geometry.ricochet?.maxReflections
+    ));
+  }
+  return {
+    rays,
+    strips: rays.slice(0, -1).flatMap((ray, index) => buildRicochetRayStrip(ray, rays[index + 1]))
+  };
+}
+
+function buildRicochetRayStrip(leftRay, rightRay) {
+  const distances = new Set([0, Math.max(0, Number(leftRay?.distance) || 0), Math.max(0, Number(rightRay?.distance) || 0)]);
+  for (const ray of [leftRay, rightRay]) {
+    for (const segment of ray?.segments ?? []) {
+      distances.add(Math.max(0, Number(segment.distanceOffset) || 0));
+      distances.add(
+        Math.max(0, Number(segment.distanceOffset) || 0)
+        + Math.max(0, Number(segment.distance) || 0)
+      );
+    }
+  }
+  const maximum = Math.min(Math.max(0, Number(leftRay?.distance) || 0), Math.max(0, Number(rightRay?.distance) || 0));
+  const samples = Array.from(distances)
+    .filter(distance => distance >= 0 && distance <= maximum + GEOMETRY_EPSILON)
+    .sort((left, right) => left - right);
+  const cells = [];
+  for (let index = 0; index < samples.length - 1; index += 1) {
+    const start = samples[index];
+    const end = samples[index + 1];
+    const leftStart = getPointOnRicochetTrajectory(leftRay, start);
+    const leftEnd = getPointOnRicochetTrajectory(leftRay, end);
+    const rightStart = getPointOnRicochetTrajectory(rightRay, start);
+    const rightEnd = getPointOnRicochetTrajectory(rightRay, end);
+    if (!leftStart || !leftEnd || !rightStart || !rightEnd) continue;
+    cells.push([leftStart, leftEnd, rightEnd, rightStart]);
+  }
+  return cells;
+}
+
+function getPointOnRicochetTrajectory(trajectory, distance) {
+  const requested = Math.max(0, Number(distance) || 0);
+  const segments = trajectory?.segments ?? [];
+  const segment = segments.find(entry => {
+    const start = Math.max(0, Number(entry.distanceOffset) || 0);
+    const end = start + Math.max(0, Number(entry.distance) || 0);
+    return requested <= end + GEOMETRY_EPSILON;
+  }) ?? segments.at(-1);
+  if (!segment) return null;
+  const localDistance = clamp(
+    requested - Math.max(0, Number(segment.distanceOffset) || 0),
+    0,
+    Math.max(0, Number(segment.distance) || 0)
+  );
+  return getPointOnTrajectory(segment, localDistance);
+}
+
+function getRicochetTargetEntry(target, geometry) {
+  const tokenPolygon = getTokenWorldPolygon(target);
+  const cone = geometry?.ricochetCone;
+  if (!tokenPolygon || !Array.isArray(cone?.strips)) return null;
+  const intersectsArea = cone.strips.some(strip => {
+    if (!Array.isArray(strip) || strip.length < 3) return false;
+    const stripPolygon = new PIXI.Polygon(strip.flatMap(point => [point.x, point.y]));
+    const intersection = tokenPolygon.intersectPolygon?.(stripPolygon);
+    return getPolygonPointObjects(intersection).length >= 3;
+  });
+  if (!intersectsArea) return null;
+
+  let best = null;
+  for (const trajectory of cone.rays ?? []) {
+    const entries = getTrajectoryTargetEntries(null, trajectory);
+    const entry = entries.find(candidate => candidate.target === target);
+    if (!entry) continue;
+    if (!best || entry.distance < best.distance) best = { ...entry, trajectory };
+  }
+  if (best) return best;
+
+  const center = getTokenAimPoint(target);
+  const distance = Math.min(...(cone.strips ?? [])
+    .flat()
+    .map(point => Math.hypot(point.x - center.x, point.y - center.y)));
+  return {
+    target,
+    distance: Number.isFinite(distance) ? distance : Infinity,
+    trajectory: null,
+    segment: null,
+    reflectionCount: 0
+  };
+}
+
+function findRicochetTrajectoryForTarget(attackerToken, target, geometry, sampleCount = 97) {
+  if (!attackerToken || !target || !geometry?.ricochet) return null;
+  const amount = Math.max(3, toInteger(sampleCount));
+  const halfAngle = Math.max(0, Number(geometry.halfAngle) || 0);
+  let best = null;
+  for (let index = 0; index < amount; index += 1) {
+    const ratio = index / (amount - 1);
+    const angle = geometry.angle - halfAngle + ((halfAngle * 2) * ratio);
+    const trajectory = buildRicochetTrajectory(
+      attackerToken,
+      geometry,
+      angle,
+      Number(geometry.elevationSlope) || 0,
+      geometry.ricochet.maxReflections
+    );
+    const entry = getTrajectoryTargetEntries(attackerToken, trajectory).find(candidate => candidate.target === target);
+    if (!entry) continue;
+    if (!best || entry.distance < best.distance) best = { trajectory, distance: entry.distance };
+  }
+  return best?.trajectory ?? null;
+}
+
+function getWallCollision(attackerToken, origin, angle, distance, targetElevation = null) {
+  const maxDistance = Math.max(1, Number(distance) || 1);
+  const originElevation = Number(origin?.elevation) || 0;
+  const destinationElevation = Number.isFinite(Number(targetElevation)) ? Number(targetElevation) : originElevation;
+  const destination = {
+    x: origin.x + (Math.cos(angle) * maxDistance),
+    y: origin.y + (Math.sin(angle) * maxDistance),
+    elevation: destinationElevation
+  };
+  const collision = attackerToken?.checkCollision?.(destination, {
+    origin,
+    type: "sight",
+    mode: "closest"
+  }) ?? null;
+  const collisionX = Number.isFinite(Number(collision?.x)) ? Number(collision.x) : destination.x;
+  const collisionY = Number.isFinite(Number(collision?.y)) ? Number(collision.y) : destination.y;
+  const point = collision
+    ? {
+      x: collisionX,
+      y: collisionY,
+      elevation: getPointElevationAtDistance(
+        originElevation,
+        destinationElevation,
+        Math.hypot(collisionX - origin.x, collisionY - origin.y),
+        maxDistance
+      )
+    }
+    : destination;
+  return {
+    collision,
+    point,
+    distance: Math.max(0, Math.min(maxDistance, Math.hypot(point.x - origin.x, point.y - origin.y)))
+  };
+}
+
+function getCollisionWallDirection(collision) {
+  const directions = [];
+  for (const edge of collision?.edges ?? []) {
+    const dx = Number(edge?.b?.x) - Number(edge?.a?.x);
+    const dy = Number(edge?.b?.y) - Number(edge?.a?.y);
+    const length = Math.hypot(dx, dy);
+    if (length <= GEOMETRY_EPSILON) continue;
+    let ux = dx / length;
+    let uy = dy / length;
+    if (ux < -GEOMETRY_EPSILON || (Math.abs(ux) <= GEOMETRY_EPSILON && uy < 0)) {
+      ux *= -1;
+      uy *= -1;
+    }
+    if (!directions.some(direction => Math.abs((direction.x * uy) - (direction.y * ux)) <= 0.001)) {
+      directions.push({ x: ux, y: uy });
+    }
+  }
+  return directions.length === 1 ? directions[0] : null;
+}
+
+function reflectAngleAcrossWall(angle, wallDirection) {
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  const nx = -wallDirection.y;
+  const ny = wallDirection.x;
+  const dot = (dx * nx) + (dy * ny);
+  return Math.atan2(dy - (2 * dot * ny), dx - (2 * dot * nx));
+}
+
 function getTrajectoryTargetEntries(attackerToken, trajectory) {
+  if (Array.isArray(trajectory?.segments) && trajectory.segments.length) {
+    const byTarget = new Map();
+    for (const segment of trajectory.segments) {
+      for (const target of canvas.tokens?.placeables ?? []) {
+        if (target === attackerToken || !target.actor || !target.visible) continue;
+        const hit = getTokenTrajectoryHit(target, segment);
+        if (!hit) continue;
+        const distance = (Number(segment.distanceOffset) || 0) + hit.distance;
+        const current = byTarget.get(target);
+        if (!current || distance < current.distance) {
+          byTarget.set(target, {
+            target,
+            hit,
+            segment,
+            distance,
+            reflectionCount: Math.max(0, toInteger(segment.reflectionCount))
+          });
+        }
+      }
+    }
+    return Array.from(byTarget.values()).sort((left, right) => left.distance - right.distance);
+  }
   return (canvas.tokens?.placeables ?? [])
     .filter(target => target !== attackerToken && target.actor && target.visible)
     .map(target => ({ target, hit: getTokenTrajectoryHit(target, trajectory) }))
@@ -7223,6 +7637,37 @@ function getDodgeDifficulty(actor, { ignoreCover = false } = {}) {
   const value = toInteger(actor.system?.resources?.dodge?.value);
   if (!ignoreCover) return value;
   return Math.max(0, value - getActorCoverDodgeAdjustment(actor));
+}
+
+function truncateRicochetTrajectory(trajectory, segment, point, { projected = false } = {}) {
+  const index = trajectory?.segments?.indexOf(segment) ?? -1;
+  if (index < 0) return;
+  if (projected) updateTrajectoryDistanceEnd(segment, point);
+  else updateTrajectoryEnd(segment, point);
+  trajectory.segments = trajectory.segments.slice(0, index + 1);
+  let distance = 0;
+  for (const entry of trajectory.segments) {
+    entry.distanceOffset = distance;
+    distance += Math.max(0, Number(entry.distance) || 0);
+  }
+  trajectory.distance = distance;
+  trajectory.end = { ...segment.end };
+  trajectory.reflectionCount = Math.max(0, toInteger(segment.reflectionCount));
+}
+
+function getRicochetAccuracyBonus(modifierState, reflectionCount = 0) {
+  const settings = modifierState?.getOption?.("ricochet");
+  return Math.max(0, toInteger(reflectionCount)) * toInteger(settings?.accuracyBonusPerReflection);
+}
+
+function applyRicochetDamageBonus(weapon, amount, context = {}) {
+  const settings = context?.weaponActionModifierState?.getOption?.("ricochet");
+  const reflections = Math.max(0, toInteger(context?.reflectionCount));
+  const percent = reflections * toInteger(settings?.damagePercentBonusPerReflection);
+  if (!percent) return Math.max(0, Math.round(Number(amount) || 0));
+  const pelletCount = Math.max(1, getWeaponPelletCount(weapon, context?.weaponFunctionId));
+  const percentBase = Math.max(0, getWeaponDamagePercentBase(weapon, context?.weaponFunctionId) / pelletCount);
+  return Math.max(0, Math.round((Number(amount) || 0) + (percentBase * percent / 100)));
 }
 
 function getActorCoverDodgeAdjustment(actor) {

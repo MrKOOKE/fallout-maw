@@ -146,6 +146,7 @@ import {
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
   normalizeKeepAwaySettings,
+  normalizeRicochetSettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
   normalizeWhereAreYouGoingSettings
@@ -3426,6 +3427,7 @@ function buildAbilityEnergyCostRows(item, actor = null) {
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochet
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lethalShot
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lethalStrike
@@ -3468,6 +3470,15 @@ function buildAbilityEnergyCostRows(item, actor = null) {
   }
   if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {
     const settings = normalizeKeepAwaySettings(entry.fixedSettings);
+    const activationBase = Math.max(0, toInteger(settings.activationEnergyCost));
+    return [
+      ["Активация: базовый расход", String(activationBase)],
+      ["Активация: итог", String(getFixedAbilityEnergyCost(actor, item, entry, activationBase))],
+      ["Перегрузка", `${Math.max(0, toInteger(settings.overloadEnergyCost))} на ${Math.max(0, toInteger(settings.overloadDurationSeconds))} сек.`]
+    ];
+  }
+  if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochet) {
+    const settings = normalizeRicochetSettings(entry.fixedSettings);
     const activationBase = Math.max(0, toInteger(settings.activationEnergyCost));
     return [
       ["Активация: базовый расход", String(activationBase)],

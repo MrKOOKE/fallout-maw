@@ -20,6 +20,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   reaper: "reaper",
   virtuoso: "virtuoso",
   aiming: "aiming",
+  ricochet: "ricochet",
   keepAway: "keepAway",
   lethalShot: "lethalShot",
   lethalStrike: "lethalStrike",
@@ -658,6 +659,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming) {
     return normalizeAimingSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochet) {
+    return normalizeRicochetSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {
     return normalizeKeepAwaySettings(value);
   }
@@ -854,6 +858,17 @@ export function normalizeKeepAwaySettings(value = {}) {
     overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 6)),
     baseDifficulty: Math.max(0, toInteger(value?.baseDifficulty ?? 50)),
     lostHealthPercentMultiplier: Math.max(0, toNumber(value?.lostHealthPercentMultiplier ?? 2.5))
+  };
+}
+
+export function normalizeRicochetSettings(value = {}) {
+  return {
+    activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? 20)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 20)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 12)),
+    maxReflections: Math.max(0, toInteger(value?.maxReflections ?? 3)),
+    accuracyBonusPerReflection: toInteger(value?.accuracyBonusPerReflection ?? 10),
+    damagePercentBonusPerReflection: toInteger(value?.damagePercentBonusPerReflection ?? 10)
   };
 }
 

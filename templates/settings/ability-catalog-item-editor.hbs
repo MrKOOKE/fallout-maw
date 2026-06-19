@@ -359,6 +359,25 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedRicochetSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Рикошет</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация и перегрузка</strong>
+          <label><span>Стоимость активации, энергия</span><input type="number" data-field="fixed.ricochet.activationEnergyCost" value="{{fixedRicochetSettings.activationEnergyCost}}" min="0" step="1"></label>
+          <label><span>Перегрузка, энергия</span><input type="number" data-field="fixed.ricochet.overloadEnergyCost" value="{{fixedRicochetSettings.overloadEnergyCost}}" min="0" step="1"></label>
+          <label><span>Длительность перегрузки, сек.</span><input type="number" data-field="fixed.ricochet.overloadDurationSeconds" value="{{fixedRicochetSettings.overloadDurationSeconds}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Отражения</strong>
+          <label><span>Максимум отражений</span><input type="number" data-field="fixed.ricochet.maxReflections" value="{{fixedRicochetSettings.maxReflections}}" min="0" step="1"></label>
+          <label><span>Точность за отражение</span><input type="number" data-field="fixed.ricochet.accuracyBonusPerReflection" value="{{fixedRicochetSettings.accuracyBonusPerReflection}}" step="1"></label>
+          <label><span>Урон за отражение, %</span><input type="number" data-field="fixed.ricochet.damagePercentBonusPerReflection" value="{{fixedRicochetSettings.damagePercentBonusPerReflection}}" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedKeepAwaySettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Держись подальше</h3>

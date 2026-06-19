@@ -34,6 +34,7 @@ import {
   normalizeLungeSettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
+  normalizeRicochetSettings,
   normalizeReaperSettings,
   normalizeVirtuosoSettings,
   normalizeDeusExMachinaSettings,
@@ -728,6 +729,16 @@ function readFixedFunctionSettings(row) {
       innateDifficultyIgnorePercent: row.querySelector("[data-field='fixed.aiming.innateDifficultyIgnorePercent']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochet) {
+    return {
+      activationEnergyCost: row.querySelector("[data-field='fixed.ricochet.activationEnergyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.ricochet.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: row.querySelector("[data-field='fixed.ricochet.overloadDurationSeconds']")?.value,
+      maxReflections: row.querySelector("[data-field='fixed.ricochet.maxReflections']")?.value,
+      accuracyBonusPerReflection: row.querySelector("[data-field='fixed.ricochet.accuracyBonusPerReflection']")?.value,
+      damagePercentBonusPerReflection: row.querySelector("[data-field='fixed.ricochet.damagePercentBonusPerReflection']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {
     return {
       activationEnergyCost: row.querySelector("[data-field='fixed.keepAway.activationEnergyCost']")?.value,
@@ -1021,6 +1032,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedAimingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming
     ? normalizeAimingSettings(normalized.fixedSettings)
     : null;
+  const fixedRicochetSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochet
+    ? normalizeRicochetSettings(normalized.fixedSettings)
+    : null;
   const fixedKeepAwaySettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway
     ? normalizeKeepAwaySettings(normalized.fixedSettings)
     : null;
@@ -1090,6 +1104,7 @@ function prepareFunctionForDisplay(entry) {
     fixedReaperSettings,
     fixedVirtuosoSettings,
     fixedAimingSettings,
+    fixedRicochetSettings,
     fixedKeepAwaySettings,
     fixedLethalAttackSettings,
     fixedFourLeafCloverSettings,

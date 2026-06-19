@@ -26,6 +26,7 @@ import {
   normalizeReaperSettings,
   normalizeVirtuosoSettings,
   normalizeRageSettings,
+  normalizeRicochetSettings,
   normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
   normalizeWhereAreYouGoingSettings
@@ -206,6 +207,14 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     active: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.keepAway
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.ricochet,
+    label: "Рикошет",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.ricochet
     })
   }),
   Object.freeze({
@@ -391,6 +400,7 @@ export function registerFixedAbilityFunctionHooks() {
     requestFullForceWeaponActionModifiers(context);
     requestVirtuosoWeaponActionModifiers(context);
     requestAimingWeaponActionModifiers(context);
+    requestRicochetWeaponActionModifiers(context);
     requestKeepAwayWeaponActionModifiers(context);
     requestLethalAttackWeaponActionModifiers(context);
   });
@@ -485,6 +495,14 @@ export function getFixedAbilityFunctionProgressEntries(abilityItem) {
         };
       }
       if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {
+        const stateKey = getFixedFunctionStateKey(entry);
+        return {
+          key: stateKey,
+          label: "Следующий выстрел",
+          value: state[stateKey]?.pending ? "Готов" : "Не подготовлен"
+        };
+      }
+      if (entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochet) {
         const stateKey = getFixedFunctionStateKey(entry);
         return {
           key: stateKey,
@@ -668,6 +686,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
 
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway) {
     const used = await useKeepAway(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochet) {
+    const used = await useRicochet(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
     return true;
   }
@@ -2729,6 +2753,36 @@ async function useKeepAway(actor, abilityItem, abilityFunction) {
   return true;
 }
 
+async function useRicochet(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeRicochetSettings(abilityFunction.fixedSettings);
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  if (state[stateKey]?.pending) {
+    ui.notifications.warn(`${abilityName}: следующий выстрел уже подготовлен.`);
+    return false;
+  }
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.activationEnergyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    pending: true
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  ui.notifications.info(`${abilityName}: следующий выстрел навскидку подготовлен.`);
+  return true;
+}
+
 async function useLethalAttack(actor, abilityItem, abilityFunction) {
   const abilityName = getAbilityDisplayName(abilityItem);
   const settings = normalizeLethalAttackSettings(abilityFunction.fixedSettings);
@@ -2895,6 +2949,54 @@ function requestLethalAttackWeaponActionModifiers(context = {}) {
       });
     }
   }
+}
+
+function requestRicochetWeaponActionModifiers(context = {}) {
+  const actor = context?.actor ?? null;
+  if (!actor || String(context?.actionKey ?? "") !== "snapshot" || !context?.modifierState) return;
+
+  const entries = [];
+  for (const abilityItem of actor.items?.filter(item => item.type === "ability") ?? []) {
+    const state = getFixedAbilityState(abilityItem);
+    for (const abilityFunction of normalizeAbilityFunctions(abilityItem.system?.functions ?? [])) {
+      if (abilityFunction.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.ricochet) continue;
+      if (!state[getFixedFunctionStateKey(abilityFunction)]?.pending) continue;
+      entries.push({
+        abilityItem,
+        abilityFunction,
+        settings: normalizeRicochetSettings(abilityFunction.fixedSettings)
+      });
+    }
+  }
+  if (!entries.length) return;
+
+  context.modifierState.setOption("ricochetEntries", entries);
+  context.modifierState.setOption("ricochet", {
+    maxReflections: Math.max(...entries.map(entry => entry.settings.maxReflections)),
+    accuracyBonusPerReflection: entries.reduce((sum, entry) => sum + entry.settings.accuracyBonusPerReflection, 0),
+    damagePercentBonusPerReflection: entries.reduce((sum, entry) => sum + entry.settings.damagePercentBonusPerReflection, 0)
+  });
+  context.modifierState.addSpendRequirement({
+    source: "ricochet",
+    label: entries.map(entry => getAbilityDisplayName(entry.abilityItem)).join(", "),
+    spend: async () => {
+      for (const entry of entries) await consumeRicochetPreparation(entry.abilityItem, entry.abilityFunction);
+      return true;
+    }
+  });
+}
+
+async function consumeRicochetPreparation(abilityItem, abilityFunction) {
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  if (!state[stateKey]?.pending) return true;
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    pending: false
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  return true;
 }
 
 function getLethalAttackActionKey(fixedKey = "") {

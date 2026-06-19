@@ -489,6 +489,25 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedRicochetSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <div class="fallout-maw-ability-subsection-header"><h3>Настройки: Рикошет</h3></div>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация и перегрузка</strong>
+          <label><span>Стоимость активации, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.activationEnergyCost" value="{{fixedRicochetSettings.activationEnergyCost}}" min="0" step="1"></label>
+          <label><span>Перегрузка, энергия</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedRicochetSettings.overloadEnergyCost}}" min="0" step="1"></label>
+          <label><span>Длительность перегрузки, сек.</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadDurationSeconds" value="{{fixedRicochetSettings.overloadDurationSeconds}}" min="0" step="1"></label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Отражения</strong>
+          <label><span>Максимум отражений</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.maxReflections" value="{{fixedRicochetSettings.maxReflections}}" min="0" step="1"></label>
+          <label><span>Точность за отражение</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.accuracyBonusPerReflection" value="{{fixedRicochetSettings.accuracyBonusPerReflection}}" step="1"></label>
+          <label><span>Урон за отражение, %</span><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.damagePercentBonusPerReflection" value="{{fixedRicochetSettings.damagePercentBonusPerReflection}}" step="1"></label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedKeepAwaySettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header"><h3>Настройки: Держись подальше</h3></div>

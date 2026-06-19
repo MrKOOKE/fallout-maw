@@ -61,6 +61,7 @@ import {
   normalizeLungeSettings,
   normalizeLuckyCoinSettings,
   normalizeRageSettings,
+  normalizeRicochetSettings,
   normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
   normalizeWhereAreYouGoingSettings,
@@ -4464,6 +4465,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedAimingSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming
     ? prepareAimingSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedRicochetSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochet
+    ? normalizeRicochetSettings(entry?.fixedSettings)
+    : null;
   const fixedKeepAwaySettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.keepAway
     ? normalizeKeepAwaySettings(entry?.fixedSettings)
     : null;
@@ -4535,6 +4539,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedReaperSettings,
     fixedVirtuosoSettings,
     fixedAimingSettings,
+    fixedRicochetSettings,
     fixedKeepAwaySettings,
     fixedLethalAttackSettings,
     fixedFourLeafCloverSettings,
