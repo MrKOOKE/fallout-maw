@@ -301,7 +301,10 @@ export function startDualWeaponAttack({
       if (isCombatActionPointSpendingActive() && actionPointCost > 0 && !canSpendCombatActionPoints(actor, actionPointCost, { label: "действия" })) return false;
       if (typeof spendEnergy === "function" && (await spendEnergy()) === false) return false;
       if (isCombatActionPointSpendingActive() && actionPointCost > 0) await spendCombatActionPoints(actor, actionPointCost);
-      await Promise.all(captured.map(selection => executeCapturedWeaponAttack(selection, { skipActionPointCost: true })));
+      const results = await Promise.allSettled(captured.map(selection => executeCapturedWeaponAttack(selection, { skipActionPointCost: true })));
+      for (const result of results) {
+        if (result.status === "rejected") console.error("Fallout MaW | Dual weapon attack execution failed", result.reason);
+      }
       return true;
     } finally {
       activeDualWeaponAttack?.destroy();
