@@ -301,9 +301,7 @@ export function startDualWeaponAttack({
       if (isCombatActionPointSpendingActive() && actionPointCost > 0 && !canSpendCombatActionPoints(actor, actionPointCost, { label: "действия" })) return false;
       if (typeof spendEnergy === "function" && (await spendEnergy()) === false) return false;
       if (isCombatActionPointSpendingActive() && actionPointCost > 0) await spendCombatActionPoints(actor, actionPointCost);
-      for (const selection of captured) {
-        await executeCapturedWeaponAttack(selection, { skipActionPointCost: true });
-      }
+      await Promise.all(captured.map(selection => executeCapturedWeaponAttack(selection, { skipActionPointCost: true })));
       return true;
     } finally {
       activeDualWeaponAttack?.destroy();

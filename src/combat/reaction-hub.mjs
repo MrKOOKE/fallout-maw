@@ -25,6 +25,7 @@ export const REACTION_LOCK_BYPASS_OPTION = "falloutMawReactionLockBypass";
 const pendingReactionSocketRequests = new Map();
 const reactionProviders = new Map();
 const activeReactionLocks = new Map();
+let reactionEventQueue = Promise.resolve();
 let reactionHubHooksRegistered = false;
 
 export function registerReactionHubConfig() {
@@ -112,6 +113,22 @@ async function handleReactionSocketMessage(payload = {}) {
 }
 
 async function processReactionEventRequest(request = {}) {
+  const previous = reactionEventQueue.catch(() => undefined);
+  let releaseQueuedEvent;
+  const queuedEvent = new Promise(resolve => {
+    releaseQueuedEvent = resolve;
+  });
+  reactionEventQueue = previous.then(() => queuedEvent);
+  await previous;
+
+  try {
+    return await processReactionEventRequestNow(request);
+  } finally {
+    releaseQueuedEvent();
+  }
+}
+
+async function processReactionEventRequestNow(request = {}) {
   if (!game.user?.isGM) return createReactionHubResult({ reason: "notGM" });
   const eventKey = String(request.eventKey ?? "").trim();
   const context = request.context ?? {};
