@@ -22,6 +22,16 @@ export const ATTACKING_WEAPON_ACTION_KEYS = Object.freeze([
   "push"
 ]);
 
+export function hasActorFixedAbilityFunction(actor, fixedKey = "") {
+  const key = String(fixedKey ?? "").trim();
+  if (!actor || !key) return false;
+  return (actor.items ?? []).some(item => (
+    item?.type === "ability"
+    && normalizeAbilityFunctions(item.system?.functions ?? [])
+      .some(entry => entry.type === ABILITY_FUNCTION_TYPES.fixed && entry.fixedKey === key)
+  ));
+}
+
 const TRUTHY_EFFECT_FALSE_VALUES = new Set(["", "0", "false", "no", "off"]);
 
 export function getActionBlockEffectKey(actionKey = "") {

@@ -23,6 +23,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   keepAway: "keepAway",
   lethalShot: "lethalShot",
   lethalStrike: "lethalStrike",
+  hawkEye: "hawkEye",
   fourLeafClover: "fourLeafClover",
   atRandom: "atRandom",
   lastChance: "lastChance",

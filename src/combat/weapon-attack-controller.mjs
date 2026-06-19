@@ -12,6 +12,7 @@ import {
 import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
 import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, hasItemFunction, hasWeaponSpecialPropertyData } from "../utils/item-functions.mjs";
 import { getCoverSettings, getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
+import { ABILITY_FIXED_FUNCTION_KEYS } from "../settings/abilities.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { canSpendCombatActionPoints, getCombatActionPointState, spendCombatActionPoints } from "./reaction-resources.mjs";
 import { toInteger } from "../utils/numbers.mjs";
@@ -23,7 +24,8 @@ import { NATURAL_RACE_WEAPON_SET_KEY, isNaturalRaceWeapon } from "../races/natur
 import { getStealthAttackModifiers, revealActorFromStealth } from "../stealth/index.mjs";
 import {
   getActorAtRandomActionPointCostReduction,
-  getWeaponActionBlockState
+  getWeaponActionBlockState,
+  hasActorFixedAbilityFunction
 } from "../abilities/runtime-state.mjs";
 import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
 import { getKnockbackMaximumStrength, resolveKnockback } from "./active-actions.mjs";
@@ -712,6 +714,8 @@ class WeaponAttackController {
     this.previewSuppressed = false;
     this.meleeAction = MELEE_ACTION_KEYS.has(actionKey);
     this.aimedShot = isAimedShotAction(weapon, actionKey, this.weaponFunctionId);
+    this.ignoreAimedObstructions = this.aimedShot
+      && hasActorFixedAbilityFunction(this.token?.actor, ABILITY_FIXED_FUNCTION_KEYS.hawkEye);
     this.targetedAction = this.attackModifier?.targetedAction ?? (this.aimedShot || this.meleeAction);
     this.requiresLimbSelection = this.attackModifier?.requiresLimbSelection ?? (this.aimedShot || actionKey === "aimedMeleeAttack");
     this.requiresDirectionSelection = this.attackModifier?.requiresDirectionSelection ?? this.meleeAction;
@@ -1893,7 +1897,9 @@ class WeaponAttackController {
 
   async resolveAimedPelletTrajectory(selectedTarget, trajectory, targetSelection, { forceAimed = false, baseDamage = null, checkBatch = null, allOrNothingContext = null } = {}) {
     if (forceAimed || doesTrajectoryHitTarget(this.token, selectedTarget, trajectory)) {
-      const blockerCount = getAimedTargetBlockers(this.token, selectedTarget, trajectory).length;
+      const blockerCount = this.ignoreAimedObstructions
+        ? 0
+        : getAimedTargetBlockers(this.token, selectedTarget, trajectory).length;
       return this.resolveAimedAttackTrajectory(selectedTarget, trajectory, targetSelection, {
         blockerBonus: getAimedTargetBlockerBonus(blockerCount),
         baseDamage,
@@ -2614,7 +2620,10 @@ class WeaponAttackController {
           target.actor,
           limbKey,
           difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus,
-          { innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent") }
+          {
+            innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent"),
+            ignoreCover: this.ignoreAimedObstructions
+          }
         ),
         situationalModifier: this.getAccuracyModifier(getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target))),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target)),
@@ -2670,7 +2679,10 @@ class WeaponAttackController {
           target.actor,
           holdingLimbKey,
           difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus,
-          { innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent") }
+          {
+            innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent"),
+            ignoreCover: this.ignoreAimedObstructions
+          }
         ),
         situationalModifier: this.getAccuracyModifier(getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target))),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target)),
@@ -2832,7 +2844,9 @@ class WeaponAttackController {
   }
 
   syncAttackAutoCover(states = null) {
-    const nextStates = Array.isArray(states)
+    const nextStates = this.ignoreAimedObstructions
+      ? []
+      : Array.isArray(states)
       ? states
       : getAttackAutoCoverStates(this.token, this.geometry, this.targets);
     const signature = getAttackAutoCoverSignature(nextStates);
@@ -3199,7 +3213,9 @@ class WeaponAttackController {
     if (!this.requiresLimbSelection) return [];
     const aimPoint = this.geometry ? (selectTargetTrajectoryAimPoint(this.token, target, this.geometry) ?? getTokenAimPoint(target)) : null;
     const trajectory = this.geometry && aimPoint ? buildTrajectoryThroughPoint(this.token, this.geometry, aimPoint) : null;
-    const blockerCount = trajectory ? getAimedTargetBlockers(this.token, target, trajectory).length : 0;
+    const blockerCount = this.ignoreAimedObstructions || !trajectory
+      ? 0
+      : getAimedTargetBlockers(this.token, target, trajectory).length;
     const blockerBonus = getAimedTargetBlockerBonus(blockerCount)
       + getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
     const limbRows = Object.entries(target.actor?.system?.limbs ?? {})
@@ -3211,7 +3227,8 @@ class WeaponAttackController {
         chance: isLimbDestroyed(target.actor, key)
           ? 0
           : getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, key, blockerBonus, this.weaponFunctionId, this.actionKey, {
-            innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent")
+            innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent"),
+            ignoreCover: this.ignoreAimedObstructions
           })
       }));
     if (!this.aimedShot) return limbRows;
@@ -3223,7 +3240,8 @@ class WeaponAttackController {
         chance: entry.destroyed || isLimbDestroyed(target.actor, entry.limbKey)
           ? 0
           : getAimedAttackHitChance(this.token.actor, this.weapon, target.actor, entry.limbKey, blockerBonus, this.weaponFunctionId, this.actionKey, {
-            innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent")
+            innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent"),
+            ignoreCover: this.ignoreAimedObstructions
           })
       }));
     return [...limbRows, ...weaponRows];
@@ -6908,8 +6926,8 @@ function getAimedTargetUnderPointer(pointer, targets = []) {
   return targets.find(target => getTokenWorldPolygon(target)?.contains?.(pointer.x, pointer.y)) ?? null;
 }
 
-function getAimedAttackDifficulty(targetActor, limbKey = "", blockerBonus = 0, { innateDifficultyIgnorePercent = 0 } = {}) {
-  const dodge = getDodgeDifficulty(targetActor);
+function getAimedAttackDifficulty(targetActor, limbKey = "", blockerBonus = 0, { innateDifficultyIgnorePercent = 0, ignoreCover = false } = {}) {
+  const dodge = getDodgeDifficulty(targetActor, { ignoreCover });
   const limb = targetActor.system?.limbs?.[limbKey];
   const limbPercent = toInteger(limb?.aimedDifficultyPercent);
   const limbBonus = Math.max(0, toInteger(limb?.aimedDifficultyBonus));
@@ -7201,8 +7219,52 @@ function getAimedTargetBlockerBonus(blockerCount) {
   return (count * (count + 1) / 2) * AIMED_TARGET_BLOCKER_BONUS_STEP;
 }
 
-function getDodgeDifficulty(actor) {
-  return toInteger(actor.system?.resources?.dodge?.value);
+function getDodgeDifficulty(actor, { ignoreCover = false } = {}) {
+  const value = toInteger(actor.system?.resources?.dodge?.value);
+  if (!ignoreCover) return value;
+  return Math.max(0, value - getActorCoverDodgeAdjustment(actor));
+}
+
+function getActorCoverDodgeAdjustment(actor) {
+  const key = "system.resources.dodge.bonus";
+  const baseValue = toInteger(foundry.utils.getProperty(actor?._source, key));
+  const changes = [];
+  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+    if (effect?.disabled || effect?.active === false) continue;
+    for (const change of effect.system?.changes ?? []) {
+      if (String(change?.key ?? "").trim() !== key) continue;
+      const value = evaluateActorEffectChangeNumber(actor, { ...change, effect });
+      if (!Number.isFinite(value)) continue;
+      changes.push({ ...change, value, effect });
+    }
+  }
+  changes.sort((left, right) => toInteger(left?.priority) - toInteger(right?.priority));
+  const withCover = applyNumericEffectChanges(baseValue, changes);
+  const withoutCover = applyNumericEffectChanges(baseValue, changes.filter(change => !isCoverEffect(change.effect)));
+  return withCover - withoutCover;
+}
+
+function applyNumericEffectChanges(baseValue = 0, changes = []) {
+  let value = Number(baseValue) || 0;
+  for (const change of changes) {
+    const amount = Number(change?.value);
+    if (!Number.isFinite(amount)) continue;
+    if (change.type === "multiply") value *= amount;
+    else if (change.type === "override") value = amount;
+    else if (change.type === "upgrade") value = Math.max(value, amount);
+    else if (change.type === "downgrade") value = Math.min(value, amount);
+    else value += amount;
+  }
+  return value;
+}
+
+function isCoverEffect(effect) {
+  return Boolean(
+    effect?.getFlag?.(SYSTEM_ID, "forcedCover")
+    || effect?.getFlag?.(SYSTEM_ID, "autoCover")
+    || effect?.flags?.[SYSTEM_ID]?.forcedCover
+    || effect?.flags?.[SYSTEM_ID]?.autoCover
+  );
 }
 
 function isDeadTarget(token) {
