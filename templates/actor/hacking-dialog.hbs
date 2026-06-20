@@ -1,0 +1,52 @@
+<div class="fallout-maw-sheet fallout-maw-trap-disarm-terminal">
+  <div class="fallout-maw-trap-disarm-body">
+    <section class="fallout-maw-trap-disarm-column">
+      <div class="fallout-maw-trap-disarm-line">Объект: <strong>{{targetName}}</strong></div>
+      <div class="fallout-maw-trap-disarm-line {{statusClass}}">Статус: {{statusLabel}}</div>
+      <div class="fallout-maw-trap-disarm-line">Сложность: <strong>{{difficulty}}</strong></div>
+      <div class="fallout-maw-trap-disarm-line">Требуемый класс: <strong>{{requiredClass}}</strong></div>
+      <div class="fallout-maw-trap-disarm-line">Метод взлома: <strong>{{methodLabel}}</strong></div>
+      <div class="fallout-maw-trap-disarm-line">Попытки: <strong>{{attemptsRemaining}}</strong> / {{attemptsTotal}}</div>
+    </section>
+
+    <section class="fallout-maw-trap-disarm-column">
+      <div class="fallout-maw-trap-disarm-tools">
+        <table>
+          <thead>
+            <tr>
+              <th>Метод</th>
+              <th>Название</th>
+              <th>Кл.</th>
+              <th>Запас</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#if hasTools}}
+              {{#each tools}}
+                <tr class="fallout-maw-trap-disarm-tool-row {{#if selected}}selected{{/if}}" data-action="selectTool" data-hacking-candidate="{{candidateKey}}">
+                  <td>{{methodLabel}}</td>
+                  <td>{{name}}</td>
+                  <td>{{toolClass}}</td>
+                  <td>{{supplyValue}}/{{supplyMax}}</td>
+                </tr>
+              {{/each}}
+            {{else}}
+              <tr class="fallout-maw-trap-disarm-tool-row disabled">
+                <td colspan="4">Нет доступных методов с подходящими инструментами</td>
+              </tr>
+            {{/if}}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <footer class="fallout-maw-trap-disarm-footer">
+    <button type="button" data-action="attemptHack" {{#if hackDisabled}}disabled{{/if}}>
+      <i class="fa-solid fa-lock-open"></i> Взломать
+    </button>
+    <button type="button" data-action="closeDialog">
+      <i class="fa-solid fa-xmark"></i> Отмена
+    </button>
+  </footer>
+</div>

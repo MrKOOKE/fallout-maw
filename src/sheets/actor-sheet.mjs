@@ -65,6 +65,7 @@ import {
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { openPersonalGenerator } from "../apps/personal-generator.mjs";
+import { openHackingSettings } from "../apps/hacking-dialog.mjs";
 import { openButcheringConfig } from "../apps/butchering-config.mjs";
 import { openConstructStructure } from "../apps/construct-structure.mjs";
 import { ActorTradeSettingsConfig } from "../apps/actor-trade-settings-config.mjs";
@@ -217,6 +218,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     },
     actions: {
         openPersonalGenerator: this.#onOpenPersonalGenerator,
+        openHackingSettings: this.#onOpenHackingSettings,
         openButcheringConfig: this.#onOpenButcheringConfig,
         openConstructStructure: this.#onOpenConstructStructure,
         openTradeSettings: this.#onOpenTradeSettings,
@@ -289,6 +291,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   _getHeaderControls() {
     const controls = super._getHeaderControls();
     if (game.user?.isGM) {
+      controls.unshift({
+        action: "openHackingSettings",
+        icon: "fa-solid fa-lock",
+        label: "Настройки взлома",
+        ownership: "OWNER"
+      });
       controls.unshift({
         action: "openButcheringConfig",
         icon: "fa-solid fa-drumstick-bite",
@@ -614,6 +622,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   static #onOpenPersonalGenerator(event) {
     event.preventDefault();
     return openPersonalGenerator(this.actor);
+  }
+
+  static #onOpenHackingSettings(event) {
+    event.preventDefault();
+    return openHackingSettings(this.actor);
   }
 
   static #onOpenButcheringConfig(event) {

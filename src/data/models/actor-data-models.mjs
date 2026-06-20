@@ -85,6 +85,10 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
         infiniteInventory: new BooleanField({ required: true, initial: false }),
         markupPercent: new NumberField({ required: true, integer: true, initial: 0 })
       }),
+      hacking: new SchemaField({
+        enabled: new BooleanField({ required: true, initial: false }),
+        methods: new ArrayField(hackingMethodField(), { required: true, initial: [] })
+      }),
       creature: new SchemaField({
         typeId: new StringField({ required: true, blank: true, initial: "" }),
         raceId: new StringField({ required: true, blank: true, initial: "" }),
@@ -163,6 +167,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.combat ??= {};
     this.healing ??= {};
     this.trade ??= {};
+    this.hacking ??= {};
     this.damageDefenses ??= {};
     this.damageDefenseBonuses ??= {};
     this.damageResistances ??= {};
@@ -288,6 +293,23 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
 
 export class CharacterDataModel extends BaseActorDataModel {}
 export class ConstructDataModel extends BaseActorDataModel {}
+
+function hackingMethodField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: false, initial: () => foundry.utils.randomID() }),
+    toolKey: new StringField({ required: true, blank: true, initial: "" }),
+    toolClass: new StringField({
+      required: true,
+      blank: false,
+      choices: ["D", "C", "B", "A", "S"],
+      initial: "D"
+    }),
+    difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
+    toolCost: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+    attempts: new NumberField({ required: true, integer: true, min: 0, initial: 3 }),
+    attemptsRemaining: new NumberField({ required: true, integer: true, min: 0, initial: 3 })
+  });
+}
 
 function getRaceDamageResistanceFormulas(race, damageTypeSettings) {
   return normalizeFormulaMap(race?.damageResistances, damageTypeSettings);

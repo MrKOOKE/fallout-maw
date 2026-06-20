@@ -70,6 +70,7 @@ import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints } from 
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import { requestSkillCheckBatch } from "../rolls/skill-check.mjs";
 import { getButcheringConfig, hasConfiguredButchering } from "./butchering-config.mjs";
+import { requestActorHacking } from "./hacking-dialog.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
@@ -104,10 +105,20 @@ export function registerSearchInventorySocket() {
   }
 }
 
-export function openSearchInventoryWindow({ searcherActor, searchedActor } = {}) {
+export async function openSearchInventoryWindow({ searcherActor, searchedActor } = {}) {
   if (!searcherActor || !searchedActor) return undefined;
   if (searcherActor.uuid === searchedActor.uuid) return undefined;
+  if (searchedActor.system?.hacking?.enabled === true) {
+    return requestActorHacking({
+      hackerActor: searcherActor,
+      targetActor: searchedActor,
+      onUnlocked: () => openSearchInventoryWindowNow({ searcherActor, searchedActor })
+    });
+  }
+  return openSearchInventoryWindowNow({ searcherActor, searchedActor });
+}
 
+function openSearchInventoryWindowNow({ searcherActor, searchedActor } = {}) {
   searchInventoryWindow ??= new SearchInventoryApplication();
   searchInventoryWindow.setActors(searcherActor, searchedActor, {
     mode: SEARCH_INVENTORY_MODE_SEARCH,

@@ -14392,3 +14392,40 @@ label.fallout-maw-mitigation-cell {
     grid-template-columns: 1fr;
   }
 }
+.fallout-maw-hacking-method {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem;
+  border: 1px solid var(--color-border-light-2);
+  border-radius: 4px;
+}
+
+.fallout-maw-hacking-method-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) repeat(5, minmax(70px, 1fr)) 32px;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.fallout-maw-hacking-method-grid > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fallout-maw-hacking-method-grid > label > span {
+  font-size: var(--font-size-12);
+}
+
+.fallout-maw-hacking-method-delete {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.wall-config .fallout-maw-hacking-method-grid {
+  grid-template-columns: 1fr 72px;
+}
+
+.wall-config .fallout-maw-hacking-method-tool {
+  grid-column: 1 / -1;
+}
