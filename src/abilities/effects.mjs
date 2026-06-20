@@ -25,8 +25,10 @@ const processingActors = new Set();
 const actorSyncTimers = new Map();
 const queuedActorSyncs = new Map();
 const coverSyncTimers = new Map();
+const tokenMovementSyncVersions = new Map();
 let auraStateSyncTimer = null;
 let processingAuraEffects = false;
+let auraStateSyncRequested = false;
 
 export function registerAbilityEffectHooks() {
   Hooks.on("createItem", item => {
@@ -60,6 +62,11 @@ export function registerAbilityEffectHooks() {
   Hooks.on("updateToken", (tokenDocument, changes) => {
     const relevant = isAuraTokenUpdateRelevant(changes);
     const movementActionChanged = foundry.utils.hasProperty(changes, "movementAction");
+    const positionChanged = isAuraTokenPositionUpdate(changes);
+    if (positionChanged) {
+      queueAuraSyncAfterTokenMovement(tokenDocument, { syncMovingActor: movementActionChanged });
+      return;
+    }
     if (movementActionChanged) {
       queueActorAbilityEffectSync(tokenDocument?.actor, { actorToken: tokenDocument }, { aura: relevant });
     }
@@ -95,6 +102,47 @@ export function registerAbilityEffectHooks() {
   Hooks.on("createCombatant", () => queueAuraStateSync());
   Hooks.on("updateCombatant", () => queueAuraStateSync());
   Hooks.on("deleteCombatant", () => queueAuraStateSync());
+}
+
+function queueAuraSyncAfterTokenMovement(tokenDocument, { syncMovingActor = false } = {}) {
+  const tokenKey = String(tokenDocument?.uuid ?? tokenDocument?.id ?? "");
+  if (!tokenKey) {
+    queueAuraDependentStateSync(tokenDocument, { syncMovingActor });
+    return;
+  }
+
+  const version = (tokenMovementSyncVersions.get(tokenKey) ?? 0) + 1;
+  tokenMovementSyncVersions.set(tokenKey, version);
+  const movementPromise = tokenDocument?.object?.movementAnimationPromise;
+  if (!movementPromise?.then) {
+    queueAuraDependentStateSync(tokenDocument, { syncMovingActor });
+    tokenMovementSyncVersions.delete(tokenKey);
+    return;
+  }
+
+  void Promise.resolve(movementPromise)
+    .catch(() => undefined)
+    .then(() => {
+      if (tokenMovementSyncVersions.get(tokenKey) !== version) return;
+      tokenMovementSyncVersions.delete(tokenKey);
+      queueAuraDependentStateSync(tokenDocument, { syncMovingActor });
+    });
+}
+
+function queueAuraDependentStateSync(tokenDocument, { syncMovingActor = false } = {}) {
+  if (syncMovingActor) {
+    queueActorAbilityEffectSync(tokenDocument?.actor, { actorToken: tokenDocument }, { aura: true });
+  }
+
+  const actors = new Map();
+  for (const token of canvas?.tokens?.placeables ?? []) {
+    const actor = token?.actor;
+    if (!actor?.uuid || actors.has(actor.uuid)) continue;
+    if (!getAuraSourceFunctionSets(actor).some(source => hasAuraPresenceConditionFunction(source.functions))) continue;
+    actors.set(actor.uuid, actor);
+  }
+  for (const actor of actors.values()) queueActorAbilityEffectSync(actor);
+  queueAuraStateSync();
 }
 
 export async function syncLoadedActorAbilityEffects() {
@@ -259,6 +307,7 @@ async function syncSingleItemFreeSettingsEffect(actor, item, context = {}) {
 
 function queueAuraStateSync() {
   if (!game.user?.isActiveGM) return;
+  auraStateSyncRequested = true;
   globalThis.clearTimeout(auraStateSyncTimer);
   auraStateSyncTimer = globalThis.setTimeout(() => {
     auraStateSyncTimer = null;
@@ -267,14 +316,22 @@ function queueAuraStateSync() {
 }
 
 export async function syncAuraGeneratedEffects() {
-  if (!game.user?.isActiveGM || processingAuraEffects) return;
+  if (!game.user?.isActiveGM) return;
+  if (processingAuraEffects) {
+    auraStateSyncRequested = true;
+    return;
+  }
+
   processingAuraEffects = true;
   try {
-    const desired = buildDesiredAuraGeneratedEffects();
-    const actors = collectAuraEffectActors(desired);
-    for (const actor of actors.values()) {
-      await reconcileActorAuraGeneratedEffects(actor, desired.get(actor.uuid) ?? new Map());
-    }
+    do {
+      auraStateSyncRequested = false;
+      const desired = buildDesiredAuraGeneratedEffects();
+      const actors = collectAuraEffectActors(desired);
+      for (const actor of actors.values()) {
+        await reconcileActorAuraGeneratedEffects(actor, desired.get(actor.uuid) ?? new Map());
+      }
+    } while (auraStateSyncRequested);
   } finally {
     processingAuraEffects = false;
   }
@@ -537,6 +594,15 @@ function hasAuraConditionFunction(functions = []) {
     .some(entry => (entry.conditions ?? []).some(condition => condition?.type === ABILITY_CONDITION_TYPES.aura));
 }
 
+function hasAuraPresenceConditionFunction(functions = []) {
+  return normalizeAbilityFunctions(functions)
+    .filter(entry => entry.type === ABILITY_FUNCTION_TYPES.effectChanges)
+    .some(entry => (entry.conditions ?? []).some(condition => (
+      condition?.type === ABILITY_CONDITION_TYPES.aura
+      && condition?.auraMode !== "applyToTargets"
+    )));
+}
+
 async function deleteAbilitySyncEffects(actor, effects = [], flagKey = "") {
   if (!actor || !effects.length) return;
   const auraIds = [];
@@ -595,6 +661,11 @@ function isAuraTokenUpdateRelevant(changes = {}) {
     "hidden",
     "movementAction"
   ].includes(path));
+}
+
+function isAuraTokenPositionUpdate(changes = {}) {
+  const paths = Object.keys(foundry.utils.flattenObject(changes ?? {}));
+  return paths.some(path => ["x", "y", "elevation"].includes(path));
 }
 
 async function deleteItemFreeSettingsEffects(actor, itemId = "") {
