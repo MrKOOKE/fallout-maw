@@ -60,6 +60,7 @@ import {
   resolveInventoryItemRotation
 } from "../utils/inventory-rotation.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { getEnabledToolFunctions } from "../utils/item-functions.mjs";
 import { isCompendiumUuid, resolveWorldItemSync } from "../utils/world-items.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
@@ -1012,6 +1013,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     tooltip.style.setProperty("--fallout-maw-ui-scale", String(this.#uiScale));
     tooltip.style.pointerEvents = pinned ? "auto" : "none";
     tooltip.innerHTML = tooltipHTML;
+    tooltip.addEventListener("pointerdown", () => this.#syncInventoryTooltipLayer({ bringToFront: true }));
     tooltip.addEventListener("pointerenter", () => this.#cancelInventoryTooltipClose());
     tooltip.addEventListener("pointerleave", event => {
       if (this.#tooltipPinned) return;
@@ -1027,6 +1029,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       tooltip.classList.add("pinned");
       tooltip.style.pointerEvents = "auto";
       this.#bindInventoryTooltipDocumentClose();
+      this.#syncInventoryTooltipLayer({ bringToFront: true });
     });
     document.body.append(tooltip);
     this.#tooltipElement = tooltip;
@@ -1037,6 +1040,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#tooltipItemId = item.id;
     if (pinned) this.#bindInventoryTooltipDocumentClose();
     this.#bindInventoryTooltipKeyMode();
+    this.#syncInventoryTooltipLayer({ bringToFront: pinned });
     this.#positionInventoryTooltip();
     requestAnimationFrame(() => {
       const description = tooltip.querySelector(".description");
@@ -1069,6 +1073,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #positionInventoryTooltip() {
     if (!this.#tooltipElement || !this.#tooltipAnchorElement?.isConnected) return;
+    this.#syncInventoryTooltipLayer();
     const { viewportWidth, viewportHeight } = this.#getViewportMetrics();
     const margin = Math.max(8, 12 * this.#uiScale);
     const gap = Math.max(10, 12 * this.#uiScale);
@@ -1086,6 +1091,16 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if ((tooltipRect.top + tooltipRect.height) > (viewportHeight - margin)) {
       this.#tooltipElement.style.top = `${Math.round(Math.max(margin, viewportHeight - tooltipRect.height - margin))}px`;
     }
+  }
+
+  #syncInventoryTooltipLayer({ bringToFront = false } = {}) {
+    if (bringToFront) this.bringToFront?.();
+    const baseZIndex = getOverlayBaseZIndex(this.element);
+    if (this.#tooltipElement) this.#tooltipElement.style.zIndex = String(baseZIndex + 2);
+    if (game.tooltip?.element && this.#tooltipElement?.contains(game.tooltip.element)) {
+      game.tooltip.tooltip.style.zIndex = String(baseZIndex + 3);
+    }
+    if (bringToFront || this.#tooltipPinned) reserveOverlayZIndex(baseZIndex + 3);
   }
 
   async #resolveTooltipItem(anchor = this.#tooltipAnchorElement) {

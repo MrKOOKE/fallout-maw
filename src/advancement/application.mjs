@@ -32,6 +32,7 @@ import { TEMPLATES } from "../constants.mjs";
 import { localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
+import { getOverlayBaseZIndex } from "../utils/overlay-layer.mjs";
 import { FalloutMaWFormApplicationV2 } from "../apps/base-form-application-v2.mjs";
 
 const { DialogV2 } = foundry.applications.api;
@@ -588,8 +589,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     document.body.append(tooltip);
     this.#abilityTooltipElement = tooltip;
     this.#abilityTooltipPinned = pinned;
-    positionAbilityDescriptionTooltip(tooltip, anchor);
-    requestAnimationFrame(() => positionAbilityDescriptionTooltip(tooltip, anchor));
+    this.#positionAdvancementTooltip(tooltip, anchor);
+    requestAnimationFrame(() => this.#positionAdvancementTooltip(tooltip, anchor));
   }
 
   #clearAbilityDescriptionTooltip() {
@@ -645,8 +646,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     });
     document.body.append(tooltip);
     this.#skillCostTooltipElement = tooltip;
-    positionAbilityDescriptionTooltip(tooltip, anchor);
-    requestAnimationFrame(() => positionAbilityDescriptionTooltip(tooltip, anchor));
+    this.#positionAdvancementTooltip(tooltip, anchor);
+    requestAnimationFrame(() => this.#positionAdvancementTooltip(tooltip, anchor));
   }
 
   #clearSkillCostTooltip() {
@@ -657,6 +658,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#skillCostTooltipElement?.remove();
     this.#skillCostTooltipElement = null;
     this.#skillCostTooltipAnchor = null;
+  }
+
+  #positionAdvancementTooltip(tooltip, anchor) {
+    positionAbilityDescriptionTooltip(tooltip, anchor, {
+      layerElement: this.element
+    });
   }
 
   #syncDraftFromForm() {
@@ -1537,12 +1544,13 @@ function renderAbilityRequirementTooltipRow(requirement) {
   `;
 }
 
-function positionAbilityDescriptionTooltip(element, anchor) {
+function positionAbilityDescriptionTooltip(element, anchor, { layerElement = null } = {}) {
   if (!element || !anchor?.isConnected) return;
   const margin = 8;
   const gap = 12;
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
   const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  syncTooltipLayerWithApplication(element, layerElement);
   const anchorRect = anchor.getBoundingClientRect();
   let tooltipRect = element.getBoundingClientRect();
 
@@ -1572,4 +1580,9 @@ function positionAbilityDescriptionTooltip(element, anchor) {
   if ((tooltipRect.top + tooltipRect.height) > (viewportHeight - margin)) {
     element.style.top = `${Math.round(Math.max(margin, viewportHeight - tooltipRect.height - margin))}px`;
   }
+}
+
+function syncTooltipLayerWithApplication(element, applicationElement) {
+  if (!element || !applicationElement?.isConnected) return;
+  element.style.zIndex = String(getOverlayBaseZIndex(applicationElement) + 2);
 }

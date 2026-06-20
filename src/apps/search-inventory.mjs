@@ -62,6 +62,7 @@ import { FalloutMaWContainerSheet } from "../sheets/container-sheet.mjs";
 import { isNaturalRaceItem } from "../races/natural-items.mjs";
 import { getConditionFunction, getEnabledToolFunctions, hasItemFunction, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints } from "../combat/weapon-switching.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 
@@ -2874,6 +2875,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     tooltip.style.setProperty("--fallout-maw-ui-scale", String(this.#uiScale));
     tooltip.style.pointerEvents = pinned ? "auto" : "none";
     tooltip.innerHTML = tooltipHTML;
+    tooltip.addEventListener("pointerdown", () => this.#syncInventoryTooltipLayer({ bringToFront: true }));
     tooltip.addEventListener("pointerenter", () => this.#cancelInventoryTooltipClose());
     tooltip.addEventListener("pointerleave", event => {
       if (this.#tooltipPinned) return;
@@ -2889,6 +2891,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       tooltip.classList.add("pinned");
       tooltip.style.pointerEvents = "auto";
       this.#bindInventoryTooltipDocumentClose();
+      this.#syncInventoryTooltipLayer({ bringToFront: true });
     });
     document.body.append(tooltip);
     this.#tooltipElement = tooltip;
@@ -2898,6 +2901,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#tooltipItemId = item.id;
     if (pinned) this.#bindInventoryTooltipDocumentClose();
     this.#bindInventoryTooltipKeyMode();
+    this.#syncInventoryTooltipLayer({ bringToFront: pinned });
     this.#positionInventoryTooltip();
     requestAnimationFrame(() => {
       const description = tooltip.querySelector(".description");
@@ -2966,6 +2970,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
   #positionInventoryTooltip() {
     if (!this.#tooltipElement || !this.#tooltipAnchorElement?.isConnected) return;
+    this.#syncInventoryTooltipLayer();
     const { viewportWidth, viewportHeight } = this.#getViewportMetrics();
     const margin = Math.max(8, 12 * this.#uiScale);
     const gap = Math.max(10, 12 * this.#uiScale);
@@ -2983,6 +2988,16 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if ((tooltipRect.top + tooltipRect.height) > (viewportHeight - margin)) {
       this.#tooltipElement.style.top = `${Math.round(Math.max(margin, viewportHeight - tooltipRect.height - margin))}px`;
     }
+  }
+
+  #syncInventoryTooltipLayer({ bringToFront = false } = {}) {
+    if (bringToFront) this.bringToFront?.();
+    const baseZIndex = getOverlayBaseZIndex(this.element);
+    if (this.#tooltipElement) this.#tooltipElement.style.zIndex = String(baseZIndex + 2);
+    if (game.tooltip?.element && this.#tooltipElement?.contains(game.tooltip.element)) {
+      game.tooltip.tooltip.style.zIndex = String(baseZIndex + 3);
+    }
+    if (bringToFront || this.#tooltipPinned) reserveOverlayZIndex(baseZIndex + 3);
   }
 
   #updateInventoryTooltipOverflowState(tooltip = this.#tooltipElement) {
