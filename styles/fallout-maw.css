@@ -14429,3 +14429,13 @@ label.fallout-maw-mitigation-cell {
 .wall-config .fallout-maw-hacking-method-tool {
   grid-column: 1 / -1;
 }
+.fallout-maw-global-map-editor .fallout-maw-global-map-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.5rem;
+}
+
+.fallout-maw-global-map-editor .fallout-maw-global-map-form button.danger {
+  color: var(--color-level-error);
+}

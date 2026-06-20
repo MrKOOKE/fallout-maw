@@ -58,6 +58,7 @@ import { registerNeedThresholdHooks } from "./needs/need-thresholds.mjs";
 import { registerRegenerationHooks } from "./needs/regeneration.mjs";
 import { registerNaturalRaceItemHooks, syncLoadedActorNaturalRaceItems } from "./races/natural-items.mjs";
 import { registerStealthHooks } from "./stealth/index.mjs";
+import { initializeGlobalMapRuntime, registerGlobalMapSystem } from "./global-map/index.mjs";
 import { registerSystemSheets } from "./sheets/index.mjs";
 import { FalloutMaWDragDrop } from "./utils/drag-drop.mjs";
 import { registerFormFocusDragGuard } from "./utils/form-focus-drag-guard.mjs";
@@ -136,6 +137,7 @@ Hooks.once("init", () => {
   registerAnimationLibraryBrowserHooks();
   registerTrapPlacementControlHooks();
   registerStealthHooks();
+  registerGlobalMapSystem();
 });
 
 function registerWorldReferenceRepairHooks() {
@@ -228,6 +230,7 @@ Hooks.once("ready", async () => {
   await syncLoadedActorNaturalRaceItems();
   await syncLoadedActorAbilityEffects();
   await syncPeriodicDamageRegionEffects();
+  initializeGlobalMapRuntime();
 });
 
 Hooks.on("dropCanvasData", async (canvas, data, event) => {

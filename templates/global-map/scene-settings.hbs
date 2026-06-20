@@ -1,0 +1,17 @@
+<div class="fallout-maw-global-map-form">
+  <div class="form-group">
+    <label>Режим тумана</label>
+    <div class="form-fields">
+      <select name="fog.mode">
+        <option value="native" {{#if (eq fog.mode "native")}}selected{{/if}}>Штатное зрение Foundry</option>
+        <option value="cells" {{#if (eq fog.mode "cells")}}selected{{/if}}>Раскрытие по клеткам</option>
+      </select>
+    </div>
+  </div>
+  <div class="form-group">
+    <label>Радиус раскрытия</label>
+    <div class="form-fields"><input type="number" name="fog.cellRadius" value="{{fog.cellRadius}}" min="1" max="20" step="1"></div>
+  </div>
+  <p class="hint">Клеточный режим формирует штатную область vision из клеток и передаёт её стандартному FogManager V14.</p>
+  <footer class="form-footer"><button type="submit"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button></footer>
+</div>

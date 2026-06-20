@@ -1,0 +1,56 @@
+<div class="fallout-maw-global-map-form">
+  <div class="form-group">
+    <label>Название</label>
+    <div class="form-fields"><input type="text" name="location.name" value="{{location.name}}" required></div>
+  </div>
+  <div class="form-group">
+    <label>Размер в клетках</label>
+    <div class="form-fields"><input type="number" name="location.size" value="{{location.size}}" min="1" step="1"></div>
+  </div>
+  <div class="form-group">
+    <label>Иконка</label>
+    <div class="form-fields"><input type="text" name="location.image" value="{{location.image}}"></div>
+  </div>
+  <div class="form-group">
+    <label>Фон создаваемой сцены</label>
+    <div class="form-fields"><input type="text" name="location.mapImage" value="{{location.mapImage}}"></div>
+  </div>
+  {{#if isNew}}
+  <div class="form-group">
+    <label>Подключить существующую сцену</label>
+    <div class="form-fields">
+      <select name="location.existingSceneId">
+        <option value="">— Не подключать —</option>
+        {{#each sceneOptions}}<option value="{{id}}">{{name}}</option>{{/each}}
+      </select>
+    </div>
+  </div>
+  {{/if}}
+  <div class="form-group">
+    <label>Цвет рамки</label>
+    <div class="form-fields"><input type="color" name="location.strokeColor" value="{{location.strokeColor}}"></div>
+  </div>
+  <div class="form-group">
+    <label>Толщина рамки</label>
+    <div class="form-fields"><input type="number" name="location.strokeWidth" value="{{location.strokeWidth}}" min="1"></div>
+  </div>
+  <div class="form-group">
+    <label>Цвет текста</label>
+    <div class="form-fields"><input type="color" name="location.textColor" value="{{location.textColor}}"></div>
+  </div>
+  <div class="form-group">
+    <label>Размер текста</label>
+    <div class="form-fields"><input type="number" name="location.fontSize" value="{{location.fontSize}}" min="8"></div>
+  </div>
+  <div class="form-group">
+    <label>Всегда обнаружена</label>
+    <div class="form-fields">
+      <input type="hidden" name="location.alwaysDiscovered" value="false">
+      <input type="checkbox" name="location.alwaysDiscovered" value="true" {{checked location.alwaysDiscovered}}>
+    </div>
+  </div>
+  <footer class="form-footer">
+    <button type="submit"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
+    {{#if canDelete}}<button type="button" data-action="delete" class="danger"><i class="fa-solid fa-trash"></i> Удалить</button>{{/if}}
+  </footer>
+</div>

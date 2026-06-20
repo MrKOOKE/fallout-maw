@@ -1,0 +1,28 @@
+<div class="fallout-maw-global-map-form">
+  <div class="form-group"><label>Название</label><div class="form-fields"><input type="text" name="transition.name" value="{{transition.name}}" required></div></div>
+  <div class="form-group"><label>Цвет</label><div class="form-fields"><input type="color" name="transition.color" value="{{transition.color}}"></div></div>
+  <div class="form-group"><label>Радиус кисти</label><div class="form-fields"><input type="number" name="transition.brushRadius" value="{{transition.brushRadius}}" min="1" max="12"></div></div>
+  <div class="form-group">
+    <label>Скрыть от игроков</label>
+    <div class="form-fields">
+      <input type="hidden" name="transition.hidden" value="false">
+      <input type="checkbox" name="transition.hidden" value="true" {{checked transition.hidden}}>
+    </div>
+    <p class="hint">Скрытый переход не отображается игрокам и не срабатывает.</p>
+  </div>
+  <div class="form-group">
+    <label>Целевая сцена</label>
+    <div class="form-fields">
+      <select name="transition.targetSceneId">
+        <option value="">— Создать из фона —</option>
+        {{#each sceneOptions}}<option value="{{id}}" {{#if (eq id ../transition.targetSceneId)}}selected{{/if}}>{{name}}</option>{{/each}}
+      </select>
+    </div>
+  </div>
+  <div class="form-group"><label>Фон новой сцены</label><div class="form-fields"><input type="text" name="transition.mapImage" value="{{transition.mapImage}}"></div></div>
+  <p class="hint">ЛКМ добавляет клетки, Shift+ЛКМ удаляет. Область входа на целевой сцене можно задать инструментом «Вход».</p>
+  <footer class="form-footer">
+    <button type="submit"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
+    {{#if canDelete}}<button type="button" data-action="delete" class="danger"><i class="fa-solid fa-trash"></i> Удалить</button>{{/if}}
+  </footer>
+</div>

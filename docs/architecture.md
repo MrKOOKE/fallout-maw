@@ -62,6 +62,16 @@ Contains configuration windows opened from system settings. These extend the sha
 
 Settings app templates are form bodies, not nested forms. The outer form is provided by `ApplicationV2` through `tag: "form"`.
 
+### `src/global-map/`
+
+Owns the world-map feature:
+
+- managed Scene/Folder identity and hierarchy use versioned flags and stable IDs, never names;
+- the V14 interaction layer and scene controls render locations, terrains, transitions, and drawing previews;
+- V2 editors persist normalized scene state;
+- GM-authoritative sockets handle shared discovery and token travel;
+- cell fog contributes geometry to Foundry's standard visibility and FogManager pipeline.
+
 ## Adding a new large feature
 
 Create a folder for the domain first. Example for combat automation:

@@ -1,0 +1,21 @@
+<div class="fallout-maw-global-map-form">
+  {{#if hasMap}}
+    <p>Корневая сцена: <strong>{{rootName}}</strong></p>
+    {{#if valid}}
+      <p><i class="fa-solid fa-circle-check"></i> Структура корректна.</p>
+    {{else}}
+      <ul>{{#each issues}}<li>{{this}}</li>{{/each}}</ul>
+    {{/if}}
+  {{else}}
+    <p>Глобальная карта ещё не создана.</p>
+  {{/if}}
+  <footer class="form-footer">
+    <button type="button" data-action="open">
+      <i class="fa-solid fa-map-location-dot"></i>
+      {{#if hasMap}}Открыть карту{{else}}Создать карту{{/if}}
+    </button>
+    {{#if hasMap}}
+      <button type="button" data-action="validate"><i class="fa-solid fa-list-check"></i> Проверить структуру</button>
+    {{/if}}
+  </footer>
+</div>
