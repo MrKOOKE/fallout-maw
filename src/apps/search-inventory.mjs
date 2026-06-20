@@ -3339,7 +3339,7 @@ async function performActorButchering(payload = {}, requesterUserId = "") {
       if (!document) throw new Error(`Предмет награды «${reward.name}» недоступен.`);
       rewards.push({
         itemData: document.toObject(),
-        quantity: reward.quantity
+        quantity: randomButcheringRewardQuantity(reward)
       });
     }
   }
@@ -3398,7 +3398,7 @@ function selectWorstCaseButcheringRewards(config = {}, documents = new Map()) {
     for (const outcomeRewards of Object.values(stage.outcomes ?? {})) {
       const candidate = (outcomeRewards ?? []).map(reward => ({
         itemData: documents.get(reward.uuid)?.toObject(),
-        quantity: reward.quantity
+        quantity: Math.max(1, toInteger(reward.max) || toInteger(reward.quantity) || 1)
       })).filter(entry => entry.itemData);
       const score = getButcheringRewardDemand(candidate);
       if (compareButcheringRewardDemand(score, selectedScore) <= 0) continue;
@@ -3427,6 +3427,15 @@ function compareButcheringRewardDemand(left, right) {
   return (left.area - right.area)
     || (left.weight - right.weight)
     || (left.stacks - right.stacks);
+}
+
+function randomButcheringRewardQuantity(reward = {}) {
+  const legacyQuantity = Math.max(1, toInteger(reward.quantity) || 1);
+  const minimum = Math.max(1, toInteger(reward.min) || legacyQuantity);
+  const maximum = Math.max(1, toInteger(reward.max) || legacyQuantity);
+  const lower = Math.min(minimum, maximum);
+  const upper = Math.max(minimum, maximum);
+  return lower + Math.floor(Math.random() * ((upper - lower) + 1));
 }
 
 function createButcheringInventoryPlan(actor, rewards = []) {

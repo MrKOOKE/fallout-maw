@@ -179,9 +179,12 @@ class ButcheringConfigApplication extends FalloutMaWFormApplicationV2 {
             const rewardId = String(rewardElement.dataset.rewardId ?? "");
             const reward = existing.outcomes?.[outcome.key]?.find(entry => entry.id === rewardId);
             if (!reward) return null;
+            const minimum = Math.max(1, toInteger(rewardElement.querySelector("[data-reward-min]")?.value) || 1);
+            const maximum = Math.max(1, toInteger(rewardElement.querySelector("[data-reward-max]")?.value) || minimum);
             return {
               ...reward,
-              quantity: Math.max(1, toInteger(rewardElement.querySelector("[data-reward-quantity]")?.value) || 1)
+              min: Math.min(minimum, maximum),
+              max: Math.max(minimum, maximum)
             };
           })
           .filter(Boolean);
@@ -258,7 +261,8 @@ class ButcheringConfigApplication extends FalloutMaWFormApplicationV2 {
       uuid: item.uuid,
       name: item.name,
       img: item.img,
-      quantity: 1
+      min: 1,
+      max: 1
     });
     return this.forceRender();
   }
@@ -303,12 +307,16 @@ function normalizeButcheringStage(stage = {}, index = 0) {
 function normalizeButcheringReward(reward = {}) {
   const uuid = String(reward?.uuid ?? "").trim();
   if (!uuid) return null;
+  const legacyQuantity = Math.max(1, toInteger(reward?.quantity) || 1);
+  const minimum = Math.max(1, toInteger(reward?.min) || legacyQuantity);
+  const maximum = Math.max(1, toInteger(reward?.max) || legacyQuantity);
   return {
     id: String(reward?.id ?? "").trim() || foundry.utils.randomID(),
     uuid,
     name: String(reward?.name ?? "").trim() || "Предмет",
     img: String(reward?.img ?? "").trim() || "icons/svg/item-bag.svg",
-    quantity: Math.max(1, toInteger(reward?.quantity) || 1)
+    min: Math.min(minimum, maximum),
+    max: Math.max(minimum, maximum)
   };
 }
 

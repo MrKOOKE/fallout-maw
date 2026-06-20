@@ -51,11 +51,14 @@
             {{#each rewards}}
             <div class="fallout-maw-butchering-reward" data-butchering-reward data-outcome-key="{{../key}}" data-reward-id="{{id}}">
               <img src="{{img}}" alt="">
-              <strong>{{name}}</strong>
-              <label title="Количество">
-                <span>×</span>
-                <input type="number" data-reward-quantity value="{{quantity}}" min="1" step="1">
-              </label>
+              <div class="fallout-maw-butchering-reward-content">
+                <strong>{{name}}</strong>
+                <div class="fallout-maw-butchering-reward-range">
+                  <input type="number" data-reward-min value="{{min}}" min="1" step="1" aria-label="Минимальное количество">
+                  <span>—</span>
+                  <input type="number" data-reward-max value="{{max}}" min="1" step="1" aria-label="Максимальное количество">
+                </div>
+              </div>
               <button type="button" class="fallout-maw-icon-button" data-action="deleteReward" title="Удалить предмет">
                 <i class="fa-solid fa-xmark"></i>
               </button>
