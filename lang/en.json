@@ -136,7 +136,9 @@
         "DelaySeconds": "Delay, sec",
         "DurationSeconds": "Duration, sec",
         "RadiusDeltaMeters": "Radius Change, m",
-        "DeleteRegionWhenExpired": "Delete Region When Expired"
+        "DeleteRegionWhenExpired": "Delete Region When Expired",
+        "AreaEffectName": "Periodic damage area",
+        "AreaEffectDamageTiming": "damage every {seconds} sec."
       }
     },
     "REGIONBEHAVIORS": {
@@ -616,7 +618,10 @@
         "DodgeAreaDamageMultiplier": "Area damage multiplier",
         "DodgeRoundRecoveryPercent": "Round recovery, % of maximum dodge",
         "DodgeRestoreOnCombatStart": "Restore at combat start",
-        "DodgeRestoreOnCombatEnd": "Restore at combat end"
+        "DodgeRestoreOnCombatEnd": "Restore at combat end",
+        "AreasTitle": "Areas",
+        "AreaMovementDamageThresholdFormula": "Movement inside an area deals damage after N movement points",
+        "AreaMovementDamageThresholdHint": "Evaluated per actor. ОД and ОП are the resource maximums; the result is rounded down with a minimum of 1."
       },
       "HUD": {
         "Title": "HUD Settings",

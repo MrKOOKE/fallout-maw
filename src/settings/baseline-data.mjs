@@ -1278,6 +1278,9 @@ export const SETTINGS_BASELINE = Object.freeze({
           "repeatDifficultyThreshold": 100,
           "repeatDifficultyStep": 50
         },
+        "areas": {
+          "movementDamageThresholdFormula": "(ОД + ОП) / 5"
+        },
         "dodge": {
           "enabled": true,
           "attackCostPercent": 10,

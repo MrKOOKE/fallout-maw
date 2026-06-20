@@ -248,6 +248,7 @@ function buildEffectTooltipHTML(effect, actor = null) {
   const name = localizeDocumentName(effect.name);
   const changes = getEffectChanges(effect).map(change => formatEffectChange(change, actor, effect)).filter(Boolean);
   const duration = getEffectDurationLabel(effect);
+  const description = String(effect.description ?? "").trim();
 
   return `
     <article class="fallout-maw-effect-tooltip-content">
@@ -264,6 +265,7 @@ function buildEffectTooltipHTML(effect, actor = null) {
           <dd>${escapeHTML(duration)}</dd>
         </div>
       </dl>` : ""}
+      ${description ? `<section class="description">${foundry.utils.cleanHTML(description)}</section>` : ""}
       ${changes.length ? `<section class="changes">
         <h4>${escapeHTML(localize("FALLOUTMAW.Effects.Changes"))}</h4>
         <ol>${changes.map(change => `<li>${change}</li>`).join("")}</ol>

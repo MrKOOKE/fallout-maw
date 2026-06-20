@@ -35,6 +35,18 @@
     </div>
 
     <header class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Settings.Combat.AreasTitle"}}</h2>
+    </header>
+
+    <div class="fallout-maw-settings-grid">
+      <label>
+        <span>{{localize "FALLOUTMAW.Settings.Combat.AreaMovementDamageThresholdFormula"}}</span>
+        <input type="text" name="areas.movementDamageThresholdFormula" value="{{settings.areas.movementDamageThresholdFormula}}" data-formula-autocomplete="all">
+        <small>{{localize "FALLOUTMAW.Settings.Combat.AreaMovementDamageThresholdHint"}}</small>
+      </label>
+    </div>
+
+    <header class="fallout-maw-panel-header">
       <h2>Отбрасывание</h2>
     </header>
 

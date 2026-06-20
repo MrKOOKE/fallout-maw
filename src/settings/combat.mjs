@@ -6,6 +6,9 @@ export const DEFAULT_COMBAT_SETTINGS = Object.freeze({
     repeatDifficultyThreshold: 100,
     repeatDifficultyStep: 50
   }),
+  areas: Object.freeze({
+    movementDamageThresholdFormula: "(ОД + ОП) / 5"
+  }),
   dodge: Object.freeze({
     enabled: true,
     attackCostPercent: 10,
@@ -42,6 +45,12 @@ export function normalizeCombatSettings(value = {}) {
     knockback: {
       repeatDifficultyThreshold: clampInteger(source.knockback?.repeatDifficultyThreshold, DEFAULT_COMBAT_SETTINGS.knockback.repeatDifficultyThreshold, 1, 10000),
       repeatDifficultyStep: clampInteger(source.knockback?.repeatDifficultyStep, DEFAULT_COMBAT_SETTINGS.knockback.repeatDifficultyStep, 1, 10000)
+    },
+    areas: {
+      movementDamageThresholdFormula: normalizeFormula(
+        source.areas?.movementDamageThresholdFormula,
+        DEFAULT_COMBAT_SETTINGS.areas.movementDamageThresholdFormula
+      )
     },
     dodge: {
       enabled: Boolean(source.dodge?.enabled),

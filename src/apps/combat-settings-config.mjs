@@ -21,6 +21,11 @@ const UNCONSCIOUSNESS_FORMULA_VARIABLES = Object.freeze([
   { key: "resistance", abbr: "resistance", label: "Сопротивление потере сознания" }
 ]);
 
+const AREA_MOVEMENT_FORMULA_VARIABLES = Object.freeze([
+  { key: "actionPointsMax", abbr: "ОД", label: "Максимум ОД" },
+  { key: "movementPointsMax", abbr: "ОП", label: "Максимум ОП" }
+]);
+
 export class CombatSettingsConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
     super(options);
@@ -62,7 +67,7 @@ export class CombatSettingsConfig extends FalloutMaWFormApplicationV2 {
   async _onRender(context, options) {
     await super._onRender(context, options);
     activateFormulaAutocomplete(this.element, {
-      variables: UNCONSCIOUSNESS_FORMULA_VARIABLES
+      variables: [...UNCONSCIOUSNESS_FORMULA_VARIABLES, ...AREA_MOVEMENT_FORMULA_VARIABLES]
     });
   }
 

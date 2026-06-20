@@ -120,6 +120,53 @@ export function applyCombatMovementCostModifier(actor, cost = 0) {
   return Math.max(0, Math.ceil(postureCost * Math.max(0, perUnitCost)));
 }
 
+/**
+ * Measure movement without spending resources. This uses Foundry's route measurement and then applies the same
+ * actor-specific modifiers as combat movement spending.
+ */
+export function measureTheoreticalMovementPathCost(tokenDocument, waypoints = [], options = {}) {
+  return measureTheoreticalMovementSegmentsCost(tokenDocument, [{
+    from: waypoints[0],
+    to: waypoints.at(-1),
+    waypoints
+  }], options);
+}
+
+/** Measure and combine a set of route segments before applying actor movement modifiers once. */
+export function measureTheoreticalMovementSegmentsCost(tokenDocument, segments = [], options = {}) {
+  if (!tokenDocument?.actor) return 0;
+  let rawCost = 0;
+  for (const segment of Array.isArray(segments) ? segments : []) {
+    const waypoints = Array.isArray(segment?.waypoints)
+      ? segment.waypoints.filter(Boolean)
+      : [
+        segment?.from,
+        segment?.to ? {
+          ...segment.to,
+          action: segment.action ?? segment.to.action,
+          terrain: segment.terrain ?? segment.to.terrain,
+          snapped: segment.snapped ?? segment.to.snapped
+        } : null
+      ].filter(Boolean);
+    if (waypoints.length < 2) continue;
+    rawCost += measureRawMovementPathCost(tokenDocument, waypoints, options);
+  }
+  if (rawCost <= 0) return 0;
+  return applyCombatMovementCostModifier(tokenDocument.actor, Math.ceil(rawCost));
+}
+
+function measureRawMovementPathCost(tokenDocument, waypoints = [], options = {}) {
+  const measurement = tokenDocument.rendered
+    ? tokenDocument.object.measureMovementPath(waypoints, {
+      ...(options?.measureOptions ?? options),
+      preview: false
+    })
+    : tokenDocument.measureMovementPath(waypoints, options?.measureOptions ?? options);
+  const cost = Number(measurement.cost);
+  if (!Number.isFinite(cost) || cost < 0) throw new Error("Foundry returned an invalid movement cost.");
+  return cost;
+}
+
 export function isCombatMovementTracked(tokenDocument) {
   const combat = game.combat;
   return Boolean(combat && tokenDocument?.actor);

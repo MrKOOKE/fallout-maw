@@ -7,6 +7,10 @@ import { registerCoverHooks, registerCoverSocket } from "./canvas/cover.mjs";
 import { registerThrownItemHooks } from "./canvas/thrown-items.mjs";
 import { registerTrapHooks } from "./canvas/traps.mjs";
 import { registerMovementInterruptionHooks } from "./canvas/movement-interruptions.mjs";
+import {
+  registerPeriodicDamageRegionHooks,
+  syncPeriodicDamageRegionEffects
+} from "./canvas/periodic-damage-regions.mjs";
 import { registerCombatDodgeHooks, registerCombatDodgeSocket } from "./combat/dodge-resource.mjs";
 import { registerCombatMovementHooks } from "./combat/movement-resources.mjs";
 import { registerReactionResourceHooks } from "./combat/reaction-resources.mjs";
@@ -106,6 +110,7 @@ Hooks.once("init", () => {
   registerPostureMovementHooks();
   registerCoverHooks();
   registerMovementInterruptionHooks();
+  registerPeriodicDamageRegionHooks();
   registerCombatDodgeHooks();
   registerCombatMovementHooks();
   registerReactionResourceHooks();
@@ -219,6 +224,7 @@ Hooks.once("ready", async () => {
   initializeCombatCarousel();
   await syncLoadedActorNaturalRaceItems();
   await syncLoadedActorAbilityEffects();
+  await syncPeriodicDamageRegionEffects();
 });
 
 Hooks.on("dropCanvasData", async (canvas, data, event) => {

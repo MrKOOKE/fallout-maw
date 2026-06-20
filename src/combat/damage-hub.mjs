@@ -254,6 +254,48 @@ export async function requestRegionPeriodicDamage({ token = null, actor = null, 
   return requestDamageApplications(requests);
 }
 
+/**
+ * Submit every movement-triggered region hit through one normal damage-hub cycle.
+ * Each threshold crossing remains a regular damage request so mitigation and damage-type behavior stay centralized.
+ */
+export async function requestRegionMovementDamageBatch(groups = []) {
+  const requests = [];
+  for (const group of Array.isArray(groups) ? groups : []) {
+    const actor = group?.actor ?? await fromUuid(String(group?.actorUuid ?? ""));
+    const triggerCount = Math.max(0, toInteger(group?.triggerCount));
+    const entries = Array.isArray(group?.entries) ? group.entries : [];
+    if (!actor || !triggerCount || !entries.length) continue;
+
+    for (let triggerIndex = 0; triggerIndex < triggerCount; triggerIndex += 1) {
+      const limbKey = selectRandomDamageLimbKey(actor);
+      for (const entry of entries) {
+        const amount = evaluateActorFormula(entry?.amount, actor, {
+          minimum: 0,
+          context: "region movement damage"
+        });
+        const damageTypeKey = String(entry?.damageTypeKey ?? "").trim();
+        if (!damageTypeKey || amount <= 0) continue;
+        requests.push({
+          actor,
+          limbKey,
+          amount,
+          damageTypeKey,
+          scope: SCOPE_HEALTH_AND_LIMB,
+          source: {
+            ...(group?.source ?? {}),
+            kind: "regionMovementDamage",
+            triggerIndex,
+            triggerCount
+          }
+        });
+      }
+    }
+  }
+  if (!requests.length) return [];
+  await spendDodgeForAreaDamageRequests(requests);
+  return requestDamageApplications(requests);
+}
+
 export async function requestFirstAidEffect({
   actor = null,
   actorUuid = "",

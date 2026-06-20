@@ -135,7 +135,9 @@
         "DelaySeconds": "Задержка, сек",
         "DurationSeconds": "Длительность, сек",
         "RadiusDeltaMeters": "Изменение радиуса, м",
-        "DeleteRegionWhenExpired": "Удалить регион по истечении"
+        "DeleteRegionWhenExpired": "Удалить регион по истечении",
+        "AreaEffectName": "Область периодического урона",
+        "AreaEffectDamageTiming": "урона каждые {seconds} сек."
       }
     },
     "REGIONBEHAVIORS": {
@@ -676,7 +678,10 @@
         "DodgeAreaDamageMultiplier": "Множитель областного урона",
         "DodgeRoundRecoveryPercent": "Восстановление за раунд, % от максимума уклонения",
         "DodgeRestoreOnCombatStart": "Восстанавливать в начале боя",
-        "DodgeRestoreOnCombatEnd": "Восстанавливать в конце боя"
+        "DodgeRestoreOnCombatEnd": "Восстанавливать в конце боя",
+        "AreasTitle": "Области",
+        "AreaMovementDamageThresholdFormula": "Передвижение внутри области наносит урон после N очков движения",
+        "AreaMovementDamageThresholdHint": "Формула для каждого актёра. ОД и ОП — максимумы соответствующих ресурсов; результат округляется вниз, минимум 1."
       },
       "HUD": {
         "Title": "Настройки HUD",

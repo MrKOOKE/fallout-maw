@@ -80,7 +80,7 @@ class FormulaParser {
     }
 
     if (/[0-9.]/.test(character)) return this.parseNumber();
-    if (/[A-Za-z_]/.test(character)) return this.parseIdentifier();
+    if (/\p{L}|_/u.test(character)) return this.parseIdentifier();
 
     throw this.error(localize("FALLOUTMAW.Formula.ExpectedTerm"));
   }
@@ -100,7 +100,7 @@ class FormulaParser {
 
   parseIdentifier() {
     const start = this.index;
-    while (/[A-Za-z0-9_]/.test(this.peek())) this.index += 1;
+    while (/[\p{L}\p{N}_]/u.test(this.peek())) this.index += 1;
     const identifier = this.source.slice(start, this.index);
     const normalized = identifier.toLowerCase();
 
