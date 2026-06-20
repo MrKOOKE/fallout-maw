@@ -32,6 +32,7 @@ import { registerAnimationLibraryBrowserHooks } from "./apps/animation-library-b
 import { registerTrapPlacementControlHooks } from "./apps/trap-placement-control.mjs";
 import { registerWorldTimeControlHooks } from "./apps/world-time-control.mjs";
 import { registerPersonalGeneratorHooks } from "./apps/personal-generator.mjs";
+import { registerButcheringConfigHooks } from "./apps/butchering-config.mjs";
 import { registerSkillCheckSocket } from "./rolls/skill-check.mjs";
 import { registerOneTimeSkillModifierHooks } from "./rolls/one-time-skill-modifiers.mjs";
 import { registerDamageHubConfig, registerDamageSocket } from "./combat/damage-hub.mjs";
@@ -124,6 +125,7 @@ Hooks.once("init", () => {
   registerCombatCarouselHooks();
   registerWorldTimeControlHooks();
   registerPersonalGeneratorHooks();
+  registerButcheringConfigHooks();
   registerAnimationLibraryBrowserHooks();
   registerTrapPlacementControlHooks();
   registerStealthHooks();

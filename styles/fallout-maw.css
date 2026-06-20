@@ -12906,6 +12906,20 @@ label.fallout-maw-mitigation-cell {
   width: 100%;
 }
 
+.application.fallout-maw-actor-sheet .fallout-maw-butchering-storage-section {
+  flex: 0 0 auto;
+  padding: 0.65rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-butchering-storage-section > h2 {
+  margin: 0 0 0.5rem;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-bulk-controls button > i {
+  color: rgba(234, 224, 139, 0.92);
+  font-size: 1.35rem;
+}
+
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-search-sheet-body {
   gap: 0.65rem;
 }
@@ -14236,5 +14250,138 @@ label.fallout-maw-mitigation-cell {
   .fallout-maw-advancement-characteristics::before,
   .fallout-maw-advancement-skills::before {
     display: none;
+  }
+}
+.fallout-maw-butchering-config-summary {
+  align-items: end;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(14rem, 0.45fr) auto minmax(18rem, 1fr);
+  padding: 0.75rem;
+}
+
+.fallout-maw-butchering-config-summary .notes {
+  margin: 0;
+}
+
+.fallout-maw-butchering-stage-panel {
+  padding: 0.75rem;
+}
+
+.fallout-maw-butchering-stage-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.fallout-maw-butchering-stage {
+  padding: 0.65rem;
+}
+
+.fallout-maw-butchering-stage-header {
+  align-items: end;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: auto minmax(12rem, 1fr) 8rem auto;
+  margin-bottom: 0.65rem;
+}
+
+.fallout-maw-butchering-stage-header > strong {
+  align-self: center;
+  white-space: nowrap;
+}
+
+.fallout-maw-butchering-stage-header label {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.fallout-maw-butchering-outcomes {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.fallout-maw-butchering-outcome-headings {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0.2rem 0 0.45rem;
+  padding: 0 0.65rem;
+}
+
+.fallout-maw-butchering-outcome-headings h3 {
+  font-size: 1rem;
+  line-height: 1.15;
+  margin: 0;
+  text-align: center;
+}
+
+.fallout-maw-butchering-outcome {
+  background: rgba(0, 0, 0, 0.16);
+  border: 1px solid var(--fallout-maw-border);
+  border-radius: 0.3rem;
+  min-width: 0;
+  padding: 0.5rem;
+}
+
+.fallout-maw-butchering-dropzone {
+  border: 1px dashed rgba(230, 210, 150, 0.52);
+  border-radius: 0.25rem;
+  color: var(--fallout-maw-text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  justify-content: flex-start;
+  min-height: 4.25rem;
+  padding: 0.35rem;
+  text-align: center;
+}
+
+.fallout-maw-butchering-dropzone:hover {
+  background: rgba(230, 210, 150, 0.08);
+  border-color: rgba(230, 210, 150, 0.85);
+}
+
+.fallout-maw-butchering-drop-placeholder {
+  align-content: center;
+  flex: 1 1 auto;
+  width: 100%;
+}
+
+.fallout-maw-butchering-reward {
+  align-items: center;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: 2.1rem minmax(0, 1fr) auto auto;
+  text-align: left;
+  width: 100%;
+}
+
+.fallout-maw-butchering-reward > img {
+  border: 1px solid var(--fallout-maw-border);
+  height: 2.1rem;
+  object-fit: cover;
+  width: 2.1rem;
+}
+
+.fallout-maw-butchering-reward > strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-butchering-reward > label {
+  align-items: center;
+  display: flex;
+  gap: 0.2rem;
+}
+
+.fallout-maw-butchering-reward input {
+  width: 4.2rem;
+}
+
+@media (max-width: 1000px) {
+  .fallout-maw-butchering-config-summary {
+    grid-template-columns: 1fr;
   }
 }

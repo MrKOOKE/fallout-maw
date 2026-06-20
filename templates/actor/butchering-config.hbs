@@ -1,0 +1,79 @@
+<div class="fallout-maw-config-body fallout-maw-butchering-config-body">
+  <section class="fallout-maw-panel fallout-maw-butchering-config-summary">
+    <label class="fallout-maw-stacked-field">
+      <span>Навык разделки</span>
+      <select name="skillKey">
+        {{#each skillOptions}}
+        <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+        {{/each}}
+      </select>
+    </label>
+    <label class="fallout-maw-checkbox-cell">
+      <input type="checkbox" name="completed" {{#if config.completed}}checked{{/if}}>
+      <span>Цель разделана</span>
+    </label>
+    <p class="notes">Снятие отметки разрешает повторную разделку. Созданный ранее контейнер и его содержимое сохраняются.</p>
+  </section>
+
+  <section class="fallout-maw-panel fallout-maw-butchering-stage-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>Этапы разделки</h2>
+      <button type="button" data-action="addStage"><i class="fa-solid fa-plus"></i> Добавить этап</button>
+    </header>
+
+    <div class="fallout-maw-butchering-outcome-headings" aria-hidden="true">
+      {{#each outcomeHeaders}}
+      <h3>{{label}}</h3>
+      {{/each}}
+    </div>
+
+    <div class="fallout-maw-butchering-stage-list">
+      {{#each config.stages}}
+      <article class="fallout-maw-panel fallout-maw-butchering-stage" data-butchering-stage data-stage-id="{{id}}">
+        <header class="fallout-maw-butchering-stage-header">
+          <strong>Этап {{displayIndex}}</strong>
+          <label>
+            <span>Название</span>
+            <input type="text" data-stage-name value="{{name}}">
+          </label>
+          <label>
+            <span>Сложность</span>
+            <input type="number" data-stage-difficulty value="{{difficulty}}" min="0" step="1">
+          </label>
+          <button type="button" class="fallout-maw-icon-button" data-action="deleteStage" title="Удалить этап">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </header>
+
+        <div class="fallout-maw-butchering-outcomes">
+          {{#each outcomes}}
+          <section class="fallout-maw-butchering-outcome fallout-maw-butchering-dropzone" data-butchering-drop data-outcome-key="{{key}}">
+            {{#each rewards}}
+            <div class="fallout-maw-butchering-reward" data-butchering-reward data-outcome-key="{{../key}}" data-reward-id="{{id}}">
+              <img src="{{img}}" alt="">
+              <strong>{{name}}</strong>
+              <label title="Количество">
+                <span>×</span>
+                <input type="number" data-reward-quantity value="{{quantity}}" min="1" step="1">
+              </label>
+              <button type="button" class="fallout-maw-icon-button" data-action="deleteReward" title="Удалить предмет">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+            {{else}}
+            <span class="fallout-maw-butchering-drop-placeholder">Перетащите предмет сюда</span>
+            {{/each}}
+          </section>
+          {{/each}}
+        </div>
+      </article>
+      {{else}}
+      <p class="fallout-maw-empty-list">Этапы не настроены.</p>
+      {{/each}}
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  </footer>
+</div>

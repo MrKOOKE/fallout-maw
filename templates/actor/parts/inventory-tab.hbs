@@ -129,6 +129,26 @@
         </div>
       </section>
 
+      {{#with inventory.butcheringStorage}}
+      {{#if grid.items.length}}
+      <section class="fallout-maw-panel fallout-maw-butchering-storage-section">
+        <h2>Разделка</h2>
+        <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}}" data-inventory-grid data-inventory-parent-id="{{id}}" style="--fallout-maw-inventory-columns: {{grid.columns}};">
+          {{#each grid.cells}}
+          <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}} {{#if phantom}}phantom{{/if}}" data-inventory-cell data-inventory-parent-id="{{../id}}" data-x="{{x}}" data-y="{{y}}" style="{{style}}"></div>
+          {{/each}}
+          {{#each grid.items}}
+          <article class="fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
+            <img src="{{img}}" alt="{{name}}">
+            {{#if showFirstAidCharges}}<span class="fallout-maw-inventory-item-charges">{{firstAidCharges.value}}/{{firstAidCharges.max}}</span>{{/if}}
+            {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
+          </article>
+          {{/each}}
+        </div>
+      </section>
+      {{/if}}
+      {{/with}}
+
       <section class="fallout-maw-panel fallout-maw-inventory-pane">
         <h2>{{localize "FALLOUTMAW.Common.Inventory"}}</h2>
         <div class="fallout-maw-pane-scroll fallout-maw-inventory-scroll" data-scroll-key="inventory">

@@ -19,6 +19,9 @@ import {
   getItemTotalWeight,
   INFINITE_ROOT_INVENTORY_EMPTY_ROWS,
   isItemInLockedStorage,
+  isItemInButcheringStorage,
+  BUTCHERING_STORAGE_PARENT_ID,
+  BUTCHERING_STORAGE_PLACEMENT_MODE,
   isItemLocked,
   isContainerItem,
   LOCKED_STORAGE_PARENT_ID,
@@ -187,8 +190,36 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
     !assignedItemIds.has(item.id)
     && !getItemContainerParentId(item)
     && !isItemInLockedStorage(item)
+    && !isItemInButcheringStorage(item)
   ));
   const lockedStorageItems = allItems.filter(item => isItemInLockedStorage(item));
+  const butcheringStorageItems = allItems.filter(item => isItemInButcheringStorage(item));
+  const butcheringStorageColumns = butcheringStorageItems.reduce(
+    (maximum, item) => Math.max(maximum, getItemFootprint(item, allItems).width),
+    Math.max(1, columns)
+  );
+  const butcheringStorage = {
+    id: BUTCHERING_STORAGE_PARENT_ID,
+    columns: butcheringStorageColumns,
+    rows: 1,
+    grid: prepareInventoryGridContext(butcheringStorageItems, butcheringStorageColumns, 1, allItems, (item, placement) => {
+      const normalizedPlacement = {
+        ...placement,
+        mode: BUTCHERING_STORAGE_PLACEMENT_MODE
+      };
+      return {
+        ...createInventoryItemData(item, allItems, currencies, normalizedPlacement),
+        gridStyle: buildInventoryCellStyle(normalizedPlacement.x, normalizedPlacement.y, normalizedPlacement)
+      };
+    }, {
+      allowOverflowRows: true,
+      compactRows: true,
+      compactVerticalOffset: true,
+      extraRows: 1,
+      placementMode: BUTCHERING_STORAGE_PLACEMENT_MODE,
+      preferredPlacementModes: [BUTCHERING_STORAGE_PLACEMENT_MODE]
+    })
+  };
   const lockedStorage = {
     id: LOCKED_STORAGE_PARENT_ID,
     columns,
@@ -247,6 +278,7 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
     weaponSets,
     naturalWeaponSet,
     containers,
+    butcheringStorage,
     lockedStorage,
     grid
   };

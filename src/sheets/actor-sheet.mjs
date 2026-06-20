@@ -65,6 +65,7 @@ import {
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { openPersonalGenerator } from "../apps/personal-generator.mjs";
+import { openButcheringConfig } from "../apps/butchering-config.mjs";
 import { openConstructStructure } from "../apps/construct-structure.mjs";
 import { ActorTradeSettingsConfig } from "../apps/actor-trade-settings-config.mjs";
 import { openActorFactionConfig } from "../apps/faction-settings-config.mjs";
@@ -113,6 +114,7 @@ import {
   getItemTotalWeight,
   hasContainerCycle,
   isContainerItem,
+  isItemInButcheringStorage,
   isInventoryPlacementAvailable as isInventoryPlacementAvailableHelper,
   normalizeInventoryPlacement as normalizeInventoryPlacementHelper,
   placementContainsInventoryCell as placementContainsInventoryCellHelper,
@@ -215,6 +217,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     },
     actions: {
         openPersonalGenerator: this.#onOpenPersonalGenerator,
+        openButcheringConfig: this.#onOpenButcheringConfig,
         openConstructStructure: this.#onOpenConstructStructure,
         openTradeSettings: this.#onOpenTradeSettings,
         openFactionConfig: this.#onOpenFactionConfig,
@@ -285,6 +288,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   _getHeaderControls() {
     const controls = super._getHeaderControls();
+    if (game.user?.isGM) {
+      controls.unshift({
+        action: "openButcheringConfig",
+        icon: "fa-solid fa-drumstick-bite",
+        label: "Разделка",
+        ownership: "OWNER"
+      });
+    }
     controls.unshift({
       action: "openTradeSettings",
       icon: "fa-solid fa-cash-register",
@@ -603,6 +614,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   static #onOpenPersonalGenerator(event) {
     event.preventDefault();
     return openPersonalGenerator(this.actor);
+  }
+
+  static #onOpenButcheringConfig(event) {
+    event.preventDefault();
+    return openButcheringConfig(this.actor);
   }
 
   static #onOpenConstructStructure(event) {
@@ -1001,6 +1017,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const itemId = itemElement.dataset.itemId ?? itemElement.dataset.abilityId ?? "";
     const item = this.actor.items.get(itemId);
     if (!item) return;
+    if (isItemInButcheringStorage(item)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
 
     if (item.type === "ability" && !game.user?.isGM) return;
     event.preventDefault();
@@ -1110,6 +1131,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         if (item) {
           event.preventDefault();
           event.stopPropagation();
+          if (isItemInButcheringStorage(item)) return;
           this.#closeInventoryContextMenu();
           this.#clearInventoryTooltip({ force: true });
           await this.#cycleInventoryItemContainer(item);

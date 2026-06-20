@@ -6,6 +6,8 @@ export const ROOT_CONTAINER_ID = "";
 export const INFINITE_ROOT_INVENTORY_EMPTY_ROWS = 4;
 export const LOCKED_STORAGE_PARENT_ID = "__lockedStorage";
 export const LOCKED_STORAGE_PLACEMENT_MODE = "lockedStorage";
+export const BUTCHERING_STORAGE_PARENT_ID = "__butcheringStorage";
+export const BUTCHERING_STORAGE_PLACEMENT_MODE = "butcheringStorage";
 
 export function getItemsArray(items) {
   if (Array.isArray(items)) return items;
@@ -46,6 +48,14 @@ export function isLockedStoragePlacement(placement = null) {
 
 export function isItemInLockedStorage(itemOrSystem = null) {
   return isLockedStoragePlacement(getItemSystem(itemOrSystem)?.placement ?? {});
+}
+
+export function isButcheringStoragePlacement(placement = null) {
+  return String(placement?.mode ?? "") === BUTCHERING_STORAGE_PLACEMENT_MODE;
+}
+
+export function isItemInButcheringStorage(itemOrSystem = null) {
+  return isButcheringStoragePlacement(getItemSystem(itemOrSystem)?.placement ?? {});
 }
 
 export function getItemQuantity(itemOrSystem = null) {
@@ -168,6 +178,10 @@ export function getItemTotalWeight(itemOrSystem = null, items = null, memo = new
 export function getItemActorLoadWeight(itemOrSystem = null, items = null, memo = new Map(), visiting = new Set()) {
   const itemId = getItemId(itemOrSystem);
   if (itemId && memo.has(itemId)) return memo.get(itemId);
+  if (isItemInButcheringStorage(itemOrSystem)) {
+    if (itemId) memo.set(itemId, 0);
+    return 0;
+  }
 
   const ownWeight = getItemQuantity(itemOrSystem) * getItemUnitWeight(itemOrSystem);
   if (!isContainerItem(itemOrSystem) || !items || !itemId) {
@@ -323,6 +337,12 @@ export function getContextInventoryItems(parentId = ROOT_CONTAINER_ID, items = n
     return getItemsArray(items).filter(item => {
       if (!isInventoryManagedItem(item)) return false;
       return isItemInLockedStorage(item);
+    });
+  }
+  if (String(parentId ?? ROOT_CONTAINER_ID) === BUTCHERING_STORAGE_PARENT_ID) {
+    return getItemsArray(items).filter(item => {
+      if (!isInventoryManagedItem(item)) return false;
+      return isItemInButcheringStorage(item);
     });
   }
 

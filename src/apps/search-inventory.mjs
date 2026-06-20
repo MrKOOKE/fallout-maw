@@ -14,6 +14,7 @@ import {
   INFINITE_ROOT_INVENTORY_EMPTY_ROWS,
   LOCKED_STORAGE_PARENT_ID,
   LOCKED_STORAGE_PLACEMENT_MODE,
+  BUTCHERING_STORAGE_PLACEMENT_MODE,
   buildInventoryCellStyle,
   createInventoryPlacement,
   createStoredPlacement,
@@ -26,12 +27,14 @@ import {
   getItemActorLoadWeight,
   getItemContainerParentId,
   getItemFootprint,
+  getItemId,
   getItemMaxStack,
   getItemQuantity,
   getItemTotalWeight,
   hasContainerCycle,
   inventoryPlacementsOverlap,
   isContainerItem,
+  isItemInButcheringStorage,
   isItemLocked,
   isInventoryPlacementAvailable,
   normalizeInventoryPlacement,
@@ -65,6 +68,8 @@ import { toInteger } from "../utils/numbers.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints } from "../combat/weapon-switching.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
+import { requestSkillCheckBatch } from "../rolls/skill-check.mjs";
+import { getButcheringConfig, hasConfiguredButchering } from "./butchering-config.mjs";
 
 const { ApplicationV2, DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
@@ -83,6 +88,7 @@ const TRADE_ROLE_PARTICIPANT = "participant";
 const TRADE_ROLE_OBSERVER = "observer";
 const TRADE_OFFER_DEFAULT_COLUMNS = 12;
 const TRADE_OFFER_MAX_ROWS = 60;
+const BUTCHERING_CONTAINER_FLAG = "butcheringContainer";
 
 let searchInventoryWindow = null;
 const pendingSearchInventorySocketRequests = new Map();
@@ -92,6 +98,10 @@ const activeSearchInventoryTradeSessions = new Map();
 
 export function registerSearchInventorySocket() {
   game.socket.on(SEARCH_INVENTORY_SOCKET, handleSearchInventorySocketMessage);
+  if (game.user?.isGM) {
+    void migrateLegacyButcheringStorages();
+    Hooks.on("canvasReady", () => void migrateLegacyButcheringStorages());
+  }
 }
 
 export function openSearchInventoryWindow({ searcherActor, searchedActor } = {}) {
@@ -220,6 +230,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #draggedTradeOfferKey = "";
   #dragDrop = null;
   #bulkTransferInProgress = false;
+  #butcheringInProgress = false;
   #hoverPreviewInputKey = "";
   #hoverPreviewKey = "";
   #hookIds = [];
@@ -399,6 +410,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
 
     const canInteract = this.#canInteract();
     const isTrade = this.#isTradeMode();
+    const canButcher = !isTrade
+      && canInteract
+      && canStartActorButchering(this.#searchedActor);
     const tradeSideBarterValues = isTrade ? this.#getTradeSideBarterValues() : null;
     const tradeContext = isTrade ? this.#prepareTradeContext(tradeSideBarterValues) : null;
     const searcherSelector = isTrade ? this.#prepareTradeActorSelector("searcher") : null;
@@ -410,6 +424,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     return {
       ...context,
       canInteract,
+      canButcher,
       isTrade,
       isObserver: isTrade && this.#tradeRole === TRADE_ROLE_OBSERVER,
       trade: tradeContext,
@@ -1895,6 +1910,12 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       return;
     }
 
+    const butcheringButton = event.target?.closest?.("[data-search-butchering]");
+    if (butcheringButton && this.element?.contains(butcheringButton)) {
+      await this.#onButcheringClick(event, butcheringButton);
+      return;
+    }
+
     const tradeReadyButton = event.target?.closest?.("[data-trade-ready]");
     if (tradeReadyButton && this.element?.contains(tradeReadyButton)) {
       await this.#onTradeReadyClick(event, tradeReadyButton);
@@ -1992,34 +2013,37 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const isSlottedItem = isSlottedEquipment || isSlottedWeapon;
     const isEquipped = Boolean(item.system?.equipped);
     const isContainer = isContainerItem(item);
+    const isButcheringItem = isItemInButcheringStorage(item);
     const canRotate = canShowInventoryRotateAction(item);
     const rotationResolution = canRotate ? this.#resolveSearchItemRotation(actor, item) : null;
     const menuOptions = [];
 
-    if (game.user?.isGM) {
+    if (isButcheringItem) {
+      menuOptions.push(["takeButchering", "fa-hand", "Забрать"]);
+    } else if (game.user?.isGM) {
       menuOptions.push(["edit", "fa-pen-to-square", game.i18n.localize("FALLOUTMAW.Common.Edit")]);
     }
-    if (isContainer) {
+    if (!isButcheringItem && isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
     }
-    if (canUseActiveItem(item)) {
+    if (!isButcheringItem && canUseActiveItem(item)) {
       menuOptions.push(["use", "fa-play", "Применить"]);
     }
-    if (canRotate) {
+    if (!isButcheringItem && canRotate) {
       menuOptions.push(["rotate", "fa-rotate", game.i18n.localize("FALLOUTMAW.Item.Rotate"), !rotationResolution, rotationResolution ? "" : getInventoryRotationUnavailableLabel()]);
     }
-    if (isSlottedItem || isEquipped) {
+    if (!isButcheringItem && (isSlottedItem || isEquipped)) {
       menuOptions.push(["unequip", "fa-hand", game.i18n.localize("FALLOUTMAW.Item.Unequip")]);
-    } else {
+    } else if (!isButcheringItem) {
       menuOptions.push(["equip", "fa-shirt", game.i18n.localize("FALLOUTMAW.Item.Equip")]);
     }
-    if (getItemQuantity(item) > 1) {
+    if (!isButcheringItem && getItemQuantity(item) > 1) {
       menuOptions.push(["split", "fa-code-branch", "Разделить"]);
     }
-    if (game.user?.isGM && !isSlottedItem) {
+    if (!isButcheringItem && game.user?.isGM && !isSlottedItem) {
       menuOptions.push(["copy", "fa-copy", game.i18n.localize("FALLOUTMAW.Common.Copy")]);
     }
-    if (game.user?.isGM) {
+    if (!isButcheringItem && game.user?.isGM) {
       menuOptions.push(["delete", "fa-trash", game.i18n.localize("FALLOUTMAW.Common.Delete")]);
     }
 
@@ -2037,6 +2061,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (!action) return;
       clickEvent.preventDefault();
       menu.remove();
+      if (action === "takeButchering") return this.#takeButcheringItem(actor, item);
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openSearchContainerSheet(item);
       if (action === "use") return useActiveItem({ actor, item, application: this });
@@ -2435,6 +2460,31 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       allItems: actor.items,
       excludeItemIds: [item.id],
       options: getActorInventoryContextOptions(actor, parentId)
+    });
+  }
+
+  async #takeButcheringItem(sourceActor, item) {
+    if (!isItemInButcheringStorage(item) || sourceActor?.uuid !== this.#searchedActorUuid) return;
+    const targetActor = this.#searcherActor;
+    const targetParentId = getQuickTransferTargetParentId({ sourceActor, targetActor, sourceItem: item });
+    if (!targetActor || targetParentId === null) {
+      ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
+      return;
+    }
+    return this.#executeSearchTransfer({
+      searcherActorUuid: this.#searcherActorUuid,
+      searchedActorUuid: this.#searchedActorUuid,
+      sourceActorUuid: sourceActor.uuid,
+      targetActorUuid: targetActor.uuid,
+      itemId: item.id,
+      targetMode: "inventory",
+      targetParentId,
+      targetEquipmentSlot: "",
+      targetWeaponSet: "",
+      targetWeaponSlot: "",
+      targetX: null,
+      targetY: null,
+      targetItemId: ""
     });
   }
 
@@ -2990,6 +3040,39 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
   }
 
+  async #onButcheringClick(event, button) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!this.#canInteract() || this.#isTradeMode() || this.#butcheringInProgress) return;
+    if (!canStartActorButchering(this.#searchedActor)) return;
+
+    this.#butcheringInProgress = true;
+    button.disabled = true;
+    try {
+      const payload = {
+        searcherActorUuid: this.#searcherActorUuid,
+        searchedActorUuid: this.#searchedActorUuid
+      };
+      const responsibleGM = getResponsibleGM();
+      if (responsibleGM && responsibleGM.id !== game.user?.id) {
+        await requestSearchInventorySocket("butcherActor", payload, responsibleGM);
+      } else if (game.user?.isGM) {
+        await enqueueSearchInventoryOperation(
+          () => performActorButchering(payload, game.user?.id ?? "")
+        );
+      } else {
+        await requestSearchInventorySocket("butcherActor", payload, responsibleGM);
+      }
+      ui.notifications.info(`${this.#searchedActor?.name ?? "Цель"}: разделка завершена.`);
+    } catch (error) {
+      console.error(`${SYSTEM_ID} | Butchering failed`, error);
+      ui.notifications.warn(error.message || "Не удалось выполнить разделку.");
+    } finally {
+      this.#butcheringInProgress = false;
+      if (button.isConnected) button.disabled = !canStartActorButchering(this.#searchedActor);
+    }
+  }
+
   #syncInventoryTooltipLayer({ bringToFront = false } = {}) {
     if (bringToFront) this.bringToFront?.();
     const baseZIndex = getOverlayBaseZIndex(this.element);
@@ -3194,6 +3277,15 @@ function decorateInventoryForSearch(inventory, actor, canInteract, { isTrade = f
         items: (container.grid?.items ?? []).map(decorateItem)
       }
     })),
+    butcheringStorage: !isTrade && inventory.butcheringStorage
+      ? {
+        ...inventory.butcheringStorage,
+        grid: {
+          ...inventory.butcheringStorage.grid,
+          items: (inventory.butcheringStorage.grid?.items ?? []).map(decorateItem)
+        }
+      }
+      : null,
     lockedStorage: inventory.lockedStorage
       ? {
         ...inventory.lockedStorage,
@@ -3204,6 +3296,328 @@ function decorateInventoryForSearch(inventory, actor, canInteract, { isTrade = f
       }
       : null
   };
+}
+
+async function performActorButchering(payload = {}, requesterUserId = "") {
+  const searcherActor = await resolveActor(payload.searcherActorUuid);
+  const searchedActor = await resolveActor(payload.searchedActorUuid);
+  if (!searcherActor || !searchedActor) throw new Error("Актёр разделки не найден.");
+
+  validateSearchOrTradeRequester(payload, requesterUserId, searcherActor, searchedActor);
+  if (!isActorDeadForButchering(searchedActor)) throw new Error("Разделывать можно только мёртвую цель.");
+
+  const config = getButcheringConfig(searchedActor);
+  if (!hasConfiguredButchering(config)) throw new Error("Разделка для этой цели не настроена.");
+  if (config.completed) throw new Error("Эта цель уже разделана.");
+
+  const rewardDocuments = await resolveButcheringRewardDocuments(config);
+  const worstCaseRewards = selectWorstCaseButcheringRewards(config, rewardDocuments);
+  createButcheringInventoryPlan(searchedActor, worstCaseRewards);
+
+  const batch = await requestSkillCheckBatch({
+    actor: searcherActor,
+    skillKey: config.skillKey,
+    entries: config.stages.map(stage => ({
+      data: {
+        difficulty: stage.difficulty
+      }
+    })),
+    animate: false,
+    createMessage: true,
+    requester: requesterUserId,
+    title: `Разделка: ${searchedActor.name}`
+  });
+  if (!batch || batch.outcomes?.length !== config.stages.length) {
+    throw new Error("Не удалось выполнить проверки разделки.");
+  }
+
+  const rewards = [];
+  for (const [index, stage] of config.stages.entries()) {
+    const outcomeKey = String(batch.outcomes[index]?.result?.key ?? "failure");
+    for (const reward of stage.outcomes?.[outcomeKey] ?? []) {
+      const document = rewardDocuments.get(reward.uuid);
+      if (!document) throw new Error(`Предмет награды «${reward.name}» недоступен.`);
+      rewards.push({
+        itemData: document.toObject(),
+        quantity: reward.quantity
+      });
+    }
+  }
+
+  const plan = createButcheringInventoryPlan(searchedActor, rewards);
+  await applyButcheringInventoryPlan(searchedActor, plan, config);
+  return {
+    ok: true,
+    stages: batch.outcomes.map(outcome => outcome.result?.key ?? "failure"),
+    rewards: rewards.length
+  };
+}
+
+function canStartActorButchering(actor) {
+  if (!actor || !isActorDeadForButchering(actor)) return false;
+  const config = getButcheringConfig(actor);
+  return hasConfiguredButchering(config) && !config.completed;
+}
+
+function isActorDeadForButchering(actor) {
+  if (!actor) return false;
+  const defeatedStatus = CONFIG.specialStatusEffects.DEFEATED;
+  if (
+    actor.statuses?.has?.("dead")
+    || (defeatedStatus && actor.statuses?.has?.(defeatedStatus))
+  ) return true;
+
+  return Boolean(game.combat?.combatants?.some(combatant => (
+    combatant.defeated
+    && combatant.actor?.uuid === actor.uuid
+  )));
+}
+
+async function resolveButcheringRewardDocuments(config = {}) {
+  const documents = new Map();
+  for (const stage of config.stages ?? []) {
+    for (const rewards of Object.values(stage.outcomes ?? {})) {
+      for (const reward of rewards ?? []) {
+        if (documents.has(reward.uuid)) continue;
+        const document = await fromUuid(String(reward.uuid ?? ""));
+        if (!(document instanceof Item)) {
+          throw new Error(`Предмет награды «${reward.name}» недоступен.`);
+        }
+        documents.set(reward.uuid, document);
+      }
+    }
+  }
+  return documents;
+}
+
+function selectWorstCaseButcheringRewards(config = {}, documents = new Map()) {
+  const rewards = [];
+  for (const stage of config.stages ?? []) {
+    let selected = [];
+    let selectedScore = { area: -1, weight: -1, stacks: -1 };
+    for (const outcomeRewards of Object.values(stage.outcomes ?? {})) {
+      const candidate = (outcomeRewards ?? []).map(reward => ({
+        itemData: documents.get(reward.uuid)?.toObject(),
+        quantity: reward.quantity
+      })).filter(entry => entry.itemData);
+      const score = getButcheringRewardDemand(candidate);
+      if (compareButcheringRewardDemand(score, selectedScore) <= 0) continue;
+      selected = candidate;
+      selectedScore = score;
+    }
+    rewards.push(...selected);
+  }
+  return rewards;
+}
+
+function getButcheringRewardDemand(rewards = []) {
+  return rewards.reduce((score, reward) => {
+    const maxStack = Math.max(1, getItemMaxStack(reward.itemData));
+    const quantity = Math.max(1, toInteger(reward.quantity));
+    const stacks = Math.ceil(quantity / maxStack);
+    const footprint = getItemFootprint(reward.itemData);
+    score.area += Math.max(1, footprint.width * footprint.height) * stacks;
+    score.weight += Math.max(0, Number(reward.itemData?.system?.weight) || 0) * quantity;
+    score.stacks += stacks;
+    return score;
+  }, { area: 0, weight: 0, stacks: 0 });
+}
+
+function compareButcheringRewardDemand(left, right) {
+  return (left.area - right.area)
+    || (left.weight - right.weight)
+    || (left.stacks - right.stacks);
+}
+
+function createButcheringInventoryPlan(actor, rewards = []) {
+  const legacyContainers = actor.items.contents.filter(item => item.getFlag?.(SYSTEM_ID, BUTCHERING_CONTAINER_FLAG) === true);
+  const legacyContainerIds = new Set(legacyContainers.map(item => item.id));
+  const projected = new Map(
+    actor.items.contents
+      .filter(item => !legacyContainerIds.has(item.id))
+      .map(item => [item.id, item.toObject()])
+  );
+  const updates = new Map();
+  const createData = [];
+
+  for (const item of projected.values()) {
+    if (!legacyContainerIds.has(getItemContainerParentId(item))) continue;
+    foundry.utils.setProperty(item, "system.container.parentId", ROOT_CONTAINER_ID);
+    foundry.utils.setProperty(item, "system.placement.mode", BUTCHERING_STORAGE_PLACEMENT_MODE);
+  }
+
+  for (const reward of rewards) {
+    const sourceData = foundry.utils.deepClone(reward.itemData);
+    delete sourceData._id;
+    delete sourceData.id;
+    delete sourceData.folder;
+    foundry.utils.setProperty(sourceData, "system.equipped", false);
+    foundry.utils.setProperty(sourceData, "system.locked", false);
+    let remaining = Math.max(1, toInteger(reward.quantity));
+
+    for (const target of Array.from(projected.values())) {
+      if (remaining <= 0) break;
+      if (!isItemInButcheringStorage(target) || !canStackItems(sourceData, target)) continue;
+      const available = Math.max(0, getItemMaxStack(target) - getItemQuantity(target));
+      const amount = Math.min(remaining, available);
+      if (!amount) continue;
+      const nextQuantity = getItemQuantity(target) + amount;
+      foundry.utils.setProperty(target, "system.quantity", nextQuantity);
+      const targetId = getItemId(target);
+      if (actor.items?.has(targetId)) {
+        mergeButcheringItemUpdate(updates, targetId, { "system.quantity": nextQuantity });
+      }
+      remaining -= amount;
+    }
+
+    const maxStack = Math.max(1, getItemMaxStack(sourceData));
+    while (remaining > 0) {
+      const quantity = Math.min(remaining, maxStack);
+      const stackData = foundry.utils.deepClone(sourceData);
+      foundry.utils.setProperty(stackData, "system.quantity", quantity);
+      const created = foundry.utils.deepClone(stackData);
+      const syntheticId = foundry.utils.randomID();
+      created._id = syntheticId;
+      created.id = syntheticId;
+      foundry.utils.setProperty(created, "system.container.parentId", ROOT_CONTAINER_ID);
+      foundry.utils.setProperty(created, "system.placement.mode", BUTCHERING_STORAGE_PLACEMENT_MODE);
+      createData.push(created);
+      projected.set(syntheticId, created);
+      remaining -= quantity;
+    }
+  }
+
+  const projectedItems = Array.from(projected.values());
+  const specialItems = projectedItems.filter(item => isItemInButcheringStorage(item));
+  const placedItems = [];
+  const columns = specialItems.reduce(
+    (maximum, item) => Math.max(maximum, getItemFootprint(item, specialItems).width),
+    Math.max(1, getActorInventoryContextDimensions(actor, ROOT_CONTAINER_ID).columns)
+  );
+  for (const item of specialItems) {
+    let placement = findFirstAvailableInventoryPlacement(
+      placedItems,
+      columns,
+      1,
+      item,
+      specialItems,
+      [],
+      [],
+      {
+        allowOverflowRows: true,
+        placementMode: BUTCHERING_STORAGE_PLACEMENT_MODE,
+        preferredPlacementModes: [BUTCHERING_STORAGE_PLACEMENT_MODE]
+      }
+    );
+    if (!placement) {
+      const nextRow = placedItems.reduce((row, placedItem) => {
+        const placed = normalizeInventoryPlacement(placedItem.system?.placement ?? {}, placedItem, specialItems);
+        return Math.max(row, placed.y + placed.height);
+      }, 1);
+      placement = createInventoryPlacement(1, nextRow, item, specialItems);
+    }
+    const storedPlacement = createStoredPlacement({
+      ...placement,
+      mode: BUTCHERING_STORAGE_PLACEMENT_MODE
+    }, item);
+    foundry.utils.setProperty(item, "system.container.parentId", ROOT_CONTAINER_ID);
+    foundry.utils.setProperty(item, "system.placement", storedPlacement);
+    placedItems.push(item);
+    const itemId = getItemId(item);
+    if (actor.items?.has(itemId)) {
+      mergeButcheringItemUpdate(updates, itemId, {
+        "system.container.parentId": ROOT_CONTAINER_ID,
+        "system.placement": storedPlacement
+      });
+    }
+  }
+
+  const updateData = Array.from(updates.values());
+  const deleteIds = Array.from(legacyContainerIds);
+  return {
+    updates: updateData,
+    creates: createData,
+    deletes: deleteIds,
+    rollbackUpdates: createButcheringRollbackUpdates(actor, updateData)
+  };
+}
+
+async function migrateLegacyButcheringStorages() {
+  const actors = new Map();
+  for (const actor of game.actors?.contents ?? []) {
+    if (actor?.uuid) actors.set(actor.uuid, actor);
+  }
+  for (const tokenDocument of canvas.scene?.tokens ?? []) {
+    const actor = tokenDocument.actor;
+    if (actor?.uuid) actors.set(actor.uuid, actor);
+  }
+
+  for (const actor of actors.values()) {
+    if (!actor.items?.some(item => item.getFlag?.(SYSTEM_ID, BUTCHERING_CONTAINER_FLAG) === true)) continue;
+    try {
+      await enqueueSearchInventoryOperation(async () => {
+        const plan = createButcheringInventoryPlan(actor, []);
+        if (plan.updates.length) await actor.updateEmbeddedDocuments("Item", plan.updates, { render: false });
+        if (plan.deletes.length) await actor.deleteEmbeddedDocuments("Item", plan.deletes, { render: false });
+      });
+    } catch (error) {
+      console.warn(`${SYSTEM_ID} | Legacy butchering storage migration failed for ${actor.uuid}`, error);
+    }
+  }
+}
+
+function mergeButcheringItemUpdate(updates, itemId, data = {}) {
+  const current = updates.get(itemId) ?? { _id: itemId };
+  updates.set(itemId, {
+    ...current,
+    ...data
+  });
+}
+
+function createButcheringRollbackUpdates(actor, updates = []) {
+  return updates.map(update => {
+    const item = actor.items?.get(update._id);
+    if (!item) return null;
+    const rollback = { _id: item.id };
+    for (const key of Object.keys(update)) {
+      if (key === "_id") continue;
+      foundry.utils.setProperty(rollback, key, foundry.utils.deepClone(foundry.utils.getProperty(item, key)));
+    }
+    return rollback;
+  }).filter(Boolean);
+}
+
+async function applyButcheringInventoryPlan(actor, plan, config) {
+  const createdIds = plan.creates.map(data => String(data._id ?? "")).filter(Boolean);
+  try {
+    if (plan.updates.length) await actor.updateEmbeddedDocuments("Item", plan.updates, { render: false });
+    if (plan.creates.length) {
+      await actor.createEmbeddedDocuments("Item", plan.creates, {
+        keepId: true,
+        render: false
+      });
+    }
+    await actor.setFlag(SYSTEM_ID, "butchering", {
+      ...config,
+      completed: true
+    });
+    if (plan.deletes.length) {
+      await actor.deleteEmbeddedDocuments("Item", plan.deletes, { render: false }).catch(error => {
+        console.warn(`${SYSTEM_ID} | Legacy butchering container cleanup failed`, error);
+      });
+    }
+  } catch (error) {
+    if (createdIds.length) {
+      const existingCreatedIds = createdIds.filter(id => actor.items?.has(id));
+      if (existingCreatedIds.length) {
+        await actor.deleteEmbeddedDocuments("Item", existingCreatedIds, { render: false }).catch(() => undefined);
+      }
+    }
+    if (plan.rollbackUpdates.length) {
+      await actor.updateEmbeddedDocuments("Item", plan.rollbackUpdates, { render: false }).catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 async function performSearchInventoryTransfer(payload = {}, requesterUserId = "") {
@@ -3222,7 +3636,14 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
 
   const item = sourceActor.items?.get(String(payload.itemId ?? ""));
   if (!item) throw new Error("Item not found.");
-  assertSearchTransferableItem(item);
+  if (isItemInButcheringStorage(item) && (
+    isTradePayload(payload)
+    || sourceActor.uuid !== searchedActor.uuid
+    || targetActor.uuid !== searcherActor.uuid
+  )) {
+    throw new Error("Предметы разделки можно только забирать у обыскиваемой цели.");
+  }
+  assertSearchTransferableItem(item, { allowButchering: true });
   const quantity = getTransferItemQuantity(item, payload.quantity);
   const targetParentId = String(payload.targetParentId ?? ROOT_CONTAINER_ID);
   validateTargetParent(targetActor, targetParentId);
@@ -3250,7 +3671,8 @@ async function performSearchInventoryTransfer(payload = {}, requesterUserId = ""
     targetX: payload.targetX,
     targetY: payload.targetY,
     targetItemId: String(payload.targetItemId ?? ""),
-    quantity
+    quantity,
+    allowButchering: isItemInButcheringStorage(item)
   });
   if (tradePayment) await applyTradeItemPayment(tradePayment);
   return result;
@@ -3269,6 +3691,7 @@ async function performSearchInventorySplit(payload = {}, requesterUserId = "") {
 
   const item = actor.items?.get(String(payload.itemId ?? ""));
   if (!item) throw new Error("Item not found.");
+  if (isItemInButcheringStorage(item)) throw new Error("Предмет разделки нельзя разделять в хранилище.");
   assertSearchTransferableItem(item);
   return splitActorInventoryItem(actor, item, toInteger(payload.amount));
 }
@@ -3286,6 +3709,7 @@ async function performSearchInventoryRotate(payload = {}, requesterUserId = "") 
 
   const item = actor.items?.get(String(payload.itemId ?? ""));
   if (!item) throw new Error("Item not found.");
+  if (isItemInButcheringStorage(item)) throw new Error("Предмет разделки нельзя поворачивать в хранилище.");
   assertSearchTransferableItem(item, { allowLocked: true });
   const parentId = item.system?.placement?.mode === LOCKED_STORAGE_PLACEMENT_MODE
     ? LOCKED_STORAGE_PARENT_ID
@@ -3325,7 +3749,14 @@ async function performSearchInventoryStack(payload = {}, requesterUserId = "") {
   const sourceItem = sourceActor.items?.get(String(payload.itemId ?? ""));
   const targetItem = targetActor.items?.get(String(payload.targetItemId ?? ""));
   if (!sourceItem || !targetItem) throw new Error("Item not found.");
-  assertSearchTransferableItem(sourceItem);
+  if (isItemInButcheringStorage(sourceItem) && (
+    isTradePayload(payload)
+    || sourceActor.uuid !== searchedActor.uuid
+    || targetActor.uuid !== searcherActor.uuid
+  )) {
+    throw new Error("Предметы разделки можно только забирать у обыскиваемой цели.");
+  }
+  assertSearchTransferableItem(sourceItem, { allowButchering: true });
   assertSearchTransferableItem(targetItem);
   const quantity = toInteger(payload.quantity);
   const tradePayment = getTradePaymentRequest({
@@ -4552,9 +4983,10 @@ export async function transferItemBetweenActors({
   targetItemId = "",
   quantity = 0,
   allowLocked = false,
+  allowButchering = false,
   spendWeaponSwitchCost = true
 } = {}) {
-  assertSearchTransferableItem(sourceItem, { allowLocked });
+  assertSearchTransferableItem(sourceItem, { allowLocked, allowButchering });
   const itemData = sourceItem.toObject();
   const transferQuantity = getTransferItemQuantity(sourceItem, quantity);
   foundry.utils.setProperty(itemData, "system.quantity", transferQuantity);
@@ -5265,7 +5697,7 @@ function getQuickTransferParentCandidates(actor) {
 }
 
 function getBulkTransferSourceItemIds(actor) {
-  const items = (actor?.items?.contents ?? []).filter(item => isSearchTransferableItem(item));
+  const items = (actor?.items?.contents ?? []).filter(item => isSearchTransferableItem(item, { allowButchering: true }));
   const itemMap = new Map(items.map(item => [item.id, item]));
   const selectedIds = new Set(items.map(item => item.id));
   return items
@@ -5273,12 +5705,21 @@ function getBulkTransferSourceItemIds(actor) {
     .map(item => item.id);
 }
 
-function isSearchTransferableItem(item, { allowLocked = false } = {}) {
-  return Boolean(item && item.type !== "trauma" && item.type !== "disease" && !isNaturalRaceItem(item) && (allowLocked || !isItemLocked(item)));
+function isSearchTransferableItem(item, { allowLocked = false, allowButchering = false } = {}) {
+  return Boolean(
+    item
+    && item.type !== "trauma"
+    && item.type !== "disease"
+    && !isNaturalRaceItem(item)
+    && (allowLocked || !isItemLocked(item))
+    && (allowButchering || !isItemInButcheringStorage(item))
+  );
 }
 
-function assertSearchTransferableItem(item, { allowLocked = false } = {}) {
-  if (!isSearchTransferableItem(item, { allowLocked })) throw new Error("This item cannot be moved through search or trade.");
+function assertSearchTransferableItem(item, { allowLocked = false, allowButchering = false } = {}) {
+  if (!isSearchTransferableItem(item, { allowLocked, allowButchering })) {
+    throw new Error("This item cannot be moved through search or trade.");
+  }
 }
 
 function hasBulkTransferSelectedAncestor(item, itemMap, selectedIds) {
@@ -5568,7 +6009,7 @@ async function stackActorInventoryItem({
   targetParentId = ROOT_CONTAINER_ID,
   quantity = 0
 } = {}) {
-  assertSearchTransferableItem(sourceItem);
+  assertSearchTransferableItem(sourceItem, { allowButchering: isItemInButcheringStorage(sourceItem) });
   assertSearchTransferableItem(targetItem);
   if (!canStackItems(sourceItem?.toObject?.(), targetItem)) throw new Error("Items cannot be stacked.");
   if (getItemContainerParentId(targetItem) !== targetParentId) throw new Error("Invalid stack target.");
@@ -6187,6 +6628,10 @@ async function handleSearchInventorySocketMessage(message = {}) {
     } else if (message.action === "transferCurrency") {
       result = await enqueueSearchInventoryOperation(
         () => performSearchCurrencyTransfer(message.payload ?? {}, message.requesterUserId ?? "")
+      );
+    } else if (message.action === "butcherActor") {
+      result = await enqueueSearchInventoryOperation(
+        () => performActorButchering(message.payload ?? {}, message.requesterUserId ?? "")
       );
     } else if (message.action === "completeTrade") {
       result = await enqueueSearchInventoryOperation(
