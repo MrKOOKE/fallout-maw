@@ -14439,3 +14439,24 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-global-map-editor .fallout-maw-global-map-form button.danger {
   color: var(--color-level-error);
 }
+
+.fallout-maw-global-map-dropzone {
+  align-items: center;
+  border: 1px dashed var(--color-border-light-2);
+  border-radius: 4px;
+  color: var(--color-text-light-6);
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0.5rem;
+  text-align: center;
+  width: 100%;
+}
+
+.fallout-maw-global-map-dropzone:hover,
+.fallout-maw-global-map-dropzone.has-scene {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--color-border-highlight);
+  color: var(--color-text-light-highlight);
+}

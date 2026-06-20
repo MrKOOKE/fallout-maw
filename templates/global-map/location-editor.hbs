@@ -9,21 +9,26 @@
   </div>
   <div class="form-group">
     <label>Иконка</label>
-    <div class="form-fields"><input type="text" name="location.image" value="{{location.image}}"></div>
+    <div class="form-fields">
+      <file-picker name="location.image" value="{{location.image}}" type="image"></file-picker>
+    </div>
   </div>
-  <div class="form-group">
-    <label>Фон создаваемой сцены</label>
-    <div class="form-fields"><input type="text" name="location.mapImage" value="{{location.mapImage}}"></div>
-  </div>
-  {{#if isNew}}
+  {{#if canConnectExistingScene}}
   <div class="form-group">
     <label>Подключить существующую сцену</label>
     <div class="form-fields">
-      <select name="location.existingSceneId">
-        <option value="">— Не подключать —</option>
-        {{#each sceneOptions}}<option value="{{id}}">{{name}}</option>{{/each}}
-      </select>
+      <input type="hidden" name="location.existingSceneId" value="">
+      <div class="fallout-maw-global-map-dropzone" data-global-map-location-scene-drop>
+        <i class="fa-solid fa-arrow-down-to-bracket"></i>
+        <span data-global-map-location-scene-name>Перетащите сюда сцену из правой панели</span>
+      </div>
     </div>
+    <p class="hint">Сцена будет встроена в папку этой локации и получит стабильные flags.</p>
+  </div>
+  {{else}}
+  <div class="form-group">
+    <label>Подключённая сцена</label>
+    <div class="form-fields"><input type="text" value="{{linkedSceneName}}" disabled></div>
   </div>
   {{/if}}
   <div class="form-group">

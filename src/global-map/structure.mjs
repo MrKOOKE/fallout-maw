@@ -111,12 +111,15 @@ export async function ensureLocationStructure(parentScene, location, {
         }
       }
     });
+  } else if (location.name && folder.name !== location.name) {
+    await folder.update({ name: location.name }, { [GLOBAL_MAP_BYPASS_OPTION]: true });
   }
 
   let linkedScene = existingSceneId ? game.scenes?.get(existingSceneId) : getManagedSceneByNode(location.id, [
     GLOBAL_MAP_ROLES.LOCATION_SCENE
   ]);
   if (existingSceneId && !linkedScene) throw new Error("Selected Scene was not found.");
+  if (existingSceneId && getGlobalMapFlag(linkedScene)) throw new Error("Selected Scene is already managed by the global map.");
   if (linkedScene) {
     const oldFlag = getGlobalMapFlag(linkedScene);
     const originalFolderId = oldFlag?.originalFolderId ?? documentFolderId(linkedScene);

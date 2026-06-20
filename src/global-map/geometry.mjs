@@ -4,6 +4,14 @@ export function isSupportedGrid(scene = canvas?.scene) {
   return Boolean(scene?.grid && Number(scene.grid.type) !== GRIDLESS);
 }
 
+export function isHexGrid(scene = canvas?.scene) {
+  const type = Number(scene?.grid?.type);
+  const gridTypes = globalThis.CONST?.GRID_TYPES;
+  if (scene?.grid?.isHexagonal) return true;
+  if (!gridTypes) return type >= 2 && type <= 5;
+  return type >= gridTypes.HEXODDR && type <= gridTypes.HEXEVENQ;
+}
+
 export function assertSupportedGrid(scene = canvas?.scene) {
   if (isSupportedGrid(scene)) return true;
   ui.notifications?.warn?.("Глобальная карта не поддерживает сцены без сетки.");
@@ -58,6 +66,7 @@ export function getCellVertices(scene, cell) {
 export function getCellCluster(scene, centerCell, radius = 1) {
   if (!isSupportedGrid(scene) || !centerCell) return [];
   const limit = Math.max(1, Math.round(Number(radius) || 1));
+  if (!isHexGrid(scene)) return getSquareCellCluster(centerCell, limit);
   const cells = [{ i: centerCell.i, j: centerCell.j }];
   const visited = new Set([cellKey(centerCell)]);
   let frontier = [...cells];
@@ -77,6 +86,26 @@ export function getCellCluster(scene, centerCell, radius = 1) {
     if (!frontier.length) break;
   }
   return cells;
+}
+
+export function getCellPath(scene, fromCell, toCell) {
+  if (!isSupportedGrid(scene) || !fromCell || !toCell) return [];
+  if (cellKey(fromCell) === cellKey(toCell)) return [normalizeCell(toCell)];
+  try {
+    const direct = scene.grid.getDirectPath?.([fromCell, toCell]);
+    if (Array.isArray(direct) && direct.length) return direct.map(normalizeCell).filter(Boolean);
+  } catch (_error) {
+    // Fallback below.
+  }
+  const fromPoint = cellToPoint(scene, fromCell);
+  const toPoint = cellToPoint(scene, toCell);
+  try {
+    const direct = scene.grid.getDirectPath?.([fromPoint, toPoint]);
+    if (Array.isArray(direct) && direct.length) return direct.map(normalizeCell).filter(Boolean);
+  } catch (_error) {
+    // Fallback below.
+  }
+  return getFallbackCellPath(fromCell, toCell);
 }
 
 export function getLocationCells(scene, location) {
@@ -198,4 +227,39 @@ export function cellsIntersect(cellsA = [], cellsB = []) {
 
 function pointKey(point) {
   return `${Math.round(Number(point?.x) * 1000)},${Math.round(Number(point?.y) * 1000)}`;
+}
+
+function getSquareCellCluster(centerCell, radius) {
+  const cells = [];
+  const spread = radius - 1;
+  for (let di = -spread; di <= spread; di += 1) {
+    for (let dj = -spread; dj <= spread; dj += 1) {
+      cells.push({ i: Number(centerCell.i) + di, j: Number(centerCell.j) + dj });
+    }
+  }
+  return cells;
+}
+
+function getFallbackCellPath(fromCell, toCell) {
+  const from = normalizeCell(fromCell);
+  const to = normalizeCell(toCell);
+  if (!from || !to) return [];
+  const cells = [];
+  const di = to.i - from.i;
+  const dj = to.j - from.j;
+  const steps = Math.max(Math.abs(di), Math.abs(dj), 1);
+  for (let step = 0; step <= steps; step += 1) {
+    const i = Math.round(from.i + (di * step / steps));
+    const j = Math.round(from.j + (dj * step / steps));
+    const cell = { i, j };
+    if (cells.at(-1) && cellKey(cells.at(-1)) === cellKey(cell)) continue;
+    cells.push(cell);
+  }
+  return cells;
+}
+
+function normalizeCell(cell) {
+  const i = Number(cell?.i);
+  const j = Number(cell?.j);
+  return Number.isFinite(i) && Number.isFinite(j) ? { i, j } : null;
 }

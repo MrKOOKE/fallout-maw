@@ -44,7 +44,7 @@ class GlobalMapEditorBase extends FalloutMaWFormApplicationV2 {
     this.form?.addEventListener("change", () => this.#syncLivePreview());
     if (this.#initialPositionApplied) return;
     this.#initialPositionApplied = true;
-    positionGlobalMapApplication(this);
+    queueGlobalMapApplicationPosition(this);
   }
 
   _applyLiveValues(_values) {}
@@ -56,7 +56,10 @@ class GlobalMapEditorBase extends FalloutMaWFormApplicationV2 {
   _onClose(options) {
     super._onClose(options);
     const layer = canvas.falloutMaWGlobalMap;
-    if (layer?.editor === this) layer.editor = null;
+    if (layer?.editor === this) {
+      layer.editor = null;
+      layer.clearPendingAreaOverwrites?.();
+    }
     void layer?.refresh?.();
   }
 
@@ -71,6 +74,8 @@ class GlobalMapEditorBase extends FalloutMaWFormApplicationV2 {
 }
 
 export class LocationEditor extends GlobalMapEditorBase {
+  #dragDrop = null;
+
   constructor(scene, data, options = {}) {
     super(scene, { ...DEFAULT_LOCATION, ...data }, options);
     this.isNew = Boolean(options.isNew);
@@ -86,15 +91,33 @@ export class LocationEditor extends GlobalMapEditorBase {
     form: { template: `${TEMPLATE_ROOT}/location-editor.hbs` }
   };
 
+  get _dragDrop() {
+    return this.#dragDrop ??= new foundry.applications.ux.DragDrop.implementation({
+      dragSelector: null,
+      dropSelector: "[data-global-map-location-scene-drop]",
+      permissions: {
+        drop: () => game.user?.isGM === true
+      },
+      callbacks: {
+        drop: this.#onDropExistingScene.bind(this)
+      }
+    });
+  }
+
   async _prepareContext() {
+    const linkedScene = this.data.linkedSceneId ? game.scenes?.get(this.data.linkedSceneId) : null;
     return {
       location: this.data,
       isNew: this.isNew,
       canDelete: !this.isNew,
-      sceneOptions: (game.scenes?.contents ?? [])
-        .filter(scene => !getGlobalMapFlag(scene))
-        .map(scene => ({ id: scene.id, name: scene.name }))
+      canConnectExistingScene: !linkedScene,
+      linkedSceneName: linkedScene?.name ?? ""
     };
+  }
+
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    this._dragDrop.bind(this.element);
   }
 
   async _processFormData(_event, _form, formData) {
@@ -111,15 +134,14 @@ export class LocationEditor extends GlobalMapEditorBase {
       strokeWidth: Math.max(1, Number(values.strokeWidth) || 3),
       fontSize: Math.max(8, Number(values.fontSize) || 28),
       alwaysDiscovered: readCheckboxValue(values.alwaysDiscovered),
-      mapImage: String(values.mapImage ?? "").trim(),
+      mapImage: "",
       image: String(values.image ?? "").trim()
     };
     delete location.radius;
     delete location.existingSceneId;
-    const shouldCreate = Boolean(location.mapImage) && !existingSceneId;
     const structure = await ensureLocationStructure(this.scene, location, {
       existingSceneId,
-      createScene: shouldCreate
+      createScene: false
     });
     if (structure.scene) {
       location.linkedSceneId = structure.scene.id;
@@ -130,13 +152,33 @@ export class LocationEditor extends GlobalMapEditorBase {
     canvas.falloutMaWGlobalMap?.refresh?.();
   }
 
+  async #onDropExistingScene(event) {
+    event.preventDefault();
+    const dropzone = event.target?.closest?.("[data-global-map-location-scene-drop]");
+    if (!dropzone) return;
+    const scene = await getSceneFromDropEvent(event);
+    if (!scene) {
+      ui.notifications.warn("Перетащите сюда сцену из списка сцен.");
+      return;
+    }
+    if (getGlobalMapFlag(scene)) {
+      ui.notifications.warn("Эта сцена уже встроена в глобальную карту.");
+      return;
+    }
+    const input = this.form?.querySelector("[name='location.existingSceneId']");
+    if (input) input.value = scene.id;
+    const name = dropzone.querySelector("[data-global-map-location-scene-name]");
+    if (name) name.textContent = scene.name;
+    dropzone.classList.add("has-scene");
+  }
+
   _applyLiveValues(values) {
     const location = values.location ?? {};
     Object.assign(this.data, {
       name: String(location.name ?? this.data.name),
       size: Math.max(1, Math.round(Number(location.size) || 1)),
       image: String(location.image ?? ""),
-      mapImage: String(location.mapImage ?? ""),
+      mapImage: "",
       strokeColor: String(location.strokeColor || "#ffffff"),
       strokeWidth: Math.max(1, Number(location.strokeWidth) || 3),
       textColor: String(location.textColor || "#ffffff"),
@@ -156,6 +198,32 @@ export class LocationEditor extends GlobalMapEditorBase {
     await this.close();
     canvas.falloutMaWGlobalMap?.refresh?.();
   }
+}
+
+async function getSceneFromDropEvent(event) {
+  const data = getDropEventData(event);
+  const document = data.uuid ? await fromUuid(String(data.uuid)) : null;
+  if (document?.documentName === "Scene") return document;
+  const id = String(data.id ?? data._id ?? data.sceneId ?? "").trim();
+  if (data.type === "Scene" && id) return game.scenes?.get(id) ?? null;
+  return null;
+}
+
+function getDropEventData(event) {
+  try {
+    return TextEditor.getDragEventData(event) ?? {};
+  } catch (_error) {
+    // Fallback below.
+  }
+  for (const type of ["application/json", "text/plain"]) {
+    try {
+      const raw = event.dataTransfer?.getData(type);
+      if (raw) return JSON.parse(raw);
+    } catch (_error) {
+      // Continue with the next payload type.
+    }
+  }
+  return {};
 }
 
 export class TerrainEditor extends GlobalMapEditorBase {
@@ -194,6 +262,7 @@ export class TerrainEditor extends GlobalMapEditorBase {
       ui.notifications.warn("Нарисуйте хотя бы одну клетку местности.");
       return;
     }
+    await canvas.falloutMaWGlobalMap?.applyPendingAreaOverwrites?.("terrains", terrain.id);
     await saveCollectionEntry(this.scene, "terrains", terrain);
     this.data = terrain;
     canvas.falloutMaWGlobalMap?.refresh?.();
@@ -272,6 +341,7 @@ export class TransitionEditor extends GlobalMapEditorBase {
       ui.notifications.warn("Выберите целевую сцену или укажите фон для новой сцены.");
       return;
     }
+    await canvas.falloutMaWGlobalMap?.applyPendingAreaOverwrites?.("transitions", transition.id);
     await saveCollectionEntry(this.scene, "transitions", transition);
     this.data = transition;
     canvas.falloutMaWGlobalMap?.refresh?.();
@@ -369,7 +439,7 @@ export class GlobalMapManager extends FalloutMaWFormApplicationV2 {
     await super._onRender(context, options);
     if (this.#initialPositionApplied) return;
     this.#initialPositionApplied = true;
-    positionGlobalMapApplication(this);
+    queueGlobalMapApplicationPosition(this);
   }
 
   static async #open() {
@@ -386,16 +456,27 @@ export class GlobalMapManager extends FalloutMaWFormApplicationV2 {
   }
 }
 
+function queueGlobalMapApplicationPosition(application) {
+  const view = application.element?.ownerDocument?.defaultView ?? globalThis;
+  view.requestAnimationFrame?.(() => positionGlobalMapApplication(application))
+    ?? positionGlobalMapApplication(application);
+}
+
 function positionGlobalMapApplication(application) {
   const element = application.element;
   if (!element) return;
-  const sidebar = element.ownerDocument.querySelector("#sidebar");
-  const viewportWidth = element.ownerDocument.documentElement.clientWidth;
+  const document = element.ownerDocument;
+  const sidebar = document.querySelector("#sidebar");
+  const viewportWidth = document.defaultView?.innerWidth ?? document.documentElement.clientWidth;
   const sidebarLeft = sidebar?.getBoundingClientRect().left;
   const rightBoundary = Number.isFinite(sidebarLeft) && sidebarLeft > 0 ? sidebarLeft : viewportWidth;
-  const width = element.getBoundingClientRect().width || Number(application.position?.width) || 440;
+  const width = element.getBoundingClientRect().width
+    || Number(application.position?.width)
+    || Number(application.options?.position?.width)
+    || 440;
+  const left = Math.max(8, Math.round(rightBoundary - width - 12));
   application.setPosition({
-    left: Math.max(8, Math.round(rightBoundary - width - 12)),
+    left,
     top: 16
   });
 }
