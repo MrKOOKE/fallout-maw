@@ -387,7 +387,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     }));
     craft.activeRecipeId = this.#craftRecipeId;
     craft.canDeleteActiveRecipe = this.#craftRecipeId !== DEFAULT_CRAFT_RECIPE_ID;
-    const weaponFunctionSections = buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, proficiencySettings, characteristicSettings, hasConditionFunction);
+    const weaponFunctionSections = buildWeaponFunctionSections(
+      item,
+      damageTypeSettings,
+      skillSettings,
+      proficiencySettings,
+      characteristicSettings,
+      hasConditionFunction,
+      hasEnergyConsumerFunction
+    );
     this.#activeWeaponFunctionTab = resolveActiveWeaponFunctionTab(this.#activeWeaponFunctionTab, weaponFunctionSections);
     for (const section of weaponFunctionSections) section.active = section.tabId === this.#activeWeaponFunctionTab;
 
@@ -467,7 +475,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       weaponDamageTypeChoices: buildWeaponDamageTypeChoices(item, damageTypeSettings),
       weaponDamageTypeRows: buildWeaponDamageTypeRows(item, damageTypeSettings),
       weaponSkillChoices: buildWeaponSkillChoices(item, skillSettings),
-      weaponResourceCosts: buildWeaponResourceCostRows(item, hasConditionFunction),
+      weaponResourceCosts: buildWeaponResourceCostRows(item, hasConditionFunction, hasEnergyConsumerFunction),
       weaponActionChoices: buildWeaponActionChoices(item, damageTypeSettings),
       containerLoadReduction,
       canAddItemFunction: availableFunctionChoices.some(choice => choice.value && !choice.disabled),
@@ -2946,10 +2954,22 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       });
     }
     if (functionKey === ITEM_FUNCTIONS.energyConsumer) {
+      const additionalWeapons = removeWeaponResourceCostTypeFromEntries(
+        getAdditionalWeaponFunctionEntries(this.item),
+        "energyConsumer"
+      );
+      const moduleWeapons = removeWeaponResourceCostTypeFromEntries(
+        getModuleWeaponFunctionEntries(this.item),
+        "energyConsumer"
+      );
       return this.item.update({
         "system.functions.energyConsumer": createDefaultEnergyConsumerFunctionData({ enabled: false }),
         "system.functions.lightSource.resourceCosts": (this.item.system?.functions?.lightSource?.resourceCosts ?? [])
-          .filter(cost => cost.type !== "energyConsumer")
+          .filter(cost => cost.type !== "energyConsumer"),
+        "system.functions.weapon.resourceCosts": (this.item.system?.functions?.weapon?.resourceCosts ?? [])
+          .filter(cost => cost.type !== "energyConsumer"),
+        "system.functions.additionalWeapons": additionalWeapons,
+        "system.functions.module.additionalWeapons": moduleWeapons
       });
     }
     if (functionKey === ITEM_FUNCTIONS.freeSettings) {
@@ -3235,7 +3255,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const path = getWeaponFunctionPath(getWeaponFunctionSection(event.currentTarget));
     const weaponData = foundry.utils.getProperty(this.item, path) ?? {};
     const costs = [...(weaponData?.resourceCosts ?? [])];
-    const type = getDefaultNewWeaponResourceCostType(weaponData, hasItemFunction(this.item, ITEM_FUNCTIONS.condition, { ignoreBroken: true }));
+    const type = getDefaultNewWeaponResourceCostType(
+      weaponData,
+      hasItemFunction(this.item, ITEM_FUNCTIONS.condition, { ignoreBroken: true }),
+      hasItemFunction(this.item, ITEM_FUNCTIONS.energyConsumer, { ignoreBroken: true })
+    );
     costs.push({ type, amount: 0 });
     return this.item.update({ [`${path}.resourceCosts`]: costs });
   }
@@ -5522,7 +5546,15 @@ function normalizeSubmittedWeaponFunctionSpecialProperties(weaponData = null) {
   weaponData.specialProperties = normalizeWeaponSpecialProperties(weaponData.specialProperties);
 }
 
-function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, proficiencySettings, characteristicSettings, hasConditionFunction) {
+function buildWeaponFunctionSections(
+  item,
+  damageTypeSettings,
+  skillSettings,
+  proficiencySettings,
+  characteristicSettings,
+  hasConditionFunction,
+  hasEnergyConsumerFunction
+) {
   const sections = [];
   if (hasItemFunction(item, ITEM_FUNCTIONS.weapon, { ignoreBroken: true })) {
     const primaryWeapon = item.system?.functions?.weapon ?? {};
@@ -5540,6 +5572,7 @@ function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, pr
       proficiencySettings,
       characteristicSettings,
       hasConditionFunction,
+      hasEnergyConsumerFunction,
       isPrimary: true,
       canAddAdditional: true,
       canHaveModuleSlots: true
@@ -5555,6 +5588,7 @@ function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, pr
       proficiencySettings,
       characteristicSettings,
       hasConditionFunction,
+      hasEnergyConsumerFunction,
       isAdditional: true,
       isNamed: true,
       id,
@@ -5575,6 +5609,7 @@ function buildWeaponFunctionSections(item, damageTypeSettings, skillSettings, pr
       proficiencySettings,
       characteristicSettings,
       hasConditionFunction,
+      hasEnergyConsumerFunction,
       isModuleWeapon: true,
       isNamed: true,
       id,
@@ -5620,6 +5655,7 @@ function buildWeaponFunctionSection({
   proficiencySettings = [],
   characteristicSettings = [],
   hasConditionFunction = false,
+  hasEnergyConsumerFunction = false,
   isPrimary = false,
   canAddAdditional = false,
   canHaveModuleSlots = false,
@@ -5654,7 +5690,7 @@ function buildWeaponFunctionSection({
     damageTypeRows: buildWeaponDamageTypeRowsForData(effectiveWeaponData, damageTypeSettings, formWeaponData),
     skillChoices: buildWeaponSkillChoicesForData(formWeaponData, skillSettings),
     proficiencyChoices: buildWeaponProficiencyChoicesForData(formWeaponData, proficiencySettings),
-    resourceCosts: buildWeaponResourceCostRowsForData(formWeaponData, hasConditionFunction),
+    resourceCosts: buildWeaponResourceCostRowsForData(formWeaponData, hasConditionFunction, hasEnergyConsumerFunction),
     specialProperties: buildWeaponSpecialPropertyRowsForData(formWeaponData),
     requirements: buildWeaponRequirementRowsForData(formWeaponData, characteristicSettings, skillSettings),
     actionChoices: buildWeaponActionChoicesForData(effectiveWeaponData, formWeaponData, damageTypeSettings)
@@ -5732,11 +5768,15 @@ function buildWeaponModuleSlotChoices(selected = "", excludedKeys = new Set()) {
   ];
 }
 
-function buildWeaponResourceCostRows(item, hasConditionFunction) {
-  return buildWeaponResourceCostRowsForData(item.system?.functions?.weapon ?? {}, hasConditionFunction);
+function buildWeaponResourceCostRows(item, hasConditionFunction, hasEnergyConsumerFunction) {
+  return buildWeaponResourceCostRowsForData(
+    item.system?.functions?.weapon ?? {},
+    hasConditionFunction,
+    hasEnergyConsumerFunction
+  );
 }
 
-function buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction) {
+function buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction, hasEnergyConsumerFunction) {
   const costs = Array.isArray(weaponData?.resourceCosts)
     ? weaponData.resourceCosts
     : Object.values(weaponData?.resourceCosts ?? {});
@@ -5750,7 +5790,7 @@ function buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction) {
       amount: Number(cost.amount) || 0,
       locked,
       type,
-      typeChoices: buildWeaponResourceTypeChoices(type, hasConditionFunction)
+      typeChoices: buildWeaponResourceTypeChoices(type, hasConditionFunction, hasEnergyConsumerFunction)
     };
   });
   if (isSourceDamageMode(weaponData) && !lockedMagazineUsed) {
@@ -5759,7 +5799,7 @@ function buildWeaponResourceCostRowsForData(weaponData, hasConditionFunction) {
       amount: 1,
       locked: true,
       type: "magazine",
-      typeChoices: buildWeaponResourceTypeChoices("magazine", hasConditionFunction)
+      typeChoices: buildWeaponResourceTypeChoices("magazine", hasConditionFunction, hasEnergyConsumerFunction)
     });
   }
   return rows;
@@ -5771,9 +5811,14 @@ function isLockedWeaponMagazineResourceCost(weaponData = {}, costs = [], index =
   return !costs.slice(0, index).some(cost => String(cost?.type ?? "") === "magazine");
 }
 
-function getDefaultNewWeaponResourceCostType(weaponData = {}, hasConditionFunction = false) {
+function getDefaultNewWeaponResourceCostType(
+  weaponData = {},
+  hasConditionFunction = false,
+  hasEnergyConsumerFunction = false
+) {
   const used = new Set((weaponData?.resourceCosts ?? []).map(cost => String(cost?.type ?? "")));
   if (isSourceDamageMode(weaponData)) used.add("magazine");
+  if (hasEnergyConsumerFunction && !used.has("energyConsumer")) return "energyConsumer";
   if (hasConditionFunction && !used.has("condition")) return "condition";
   if (!used.has("quantity")) return "quantity";
   if (!used.has("magazine")) return "magazine";
@@ -5918,6 +5963,7 @@ function getAvailableWeaponResourceTypes(weaponData = {}) {
 function getWeaponResourceTypeLabel(type = "") {
   if (type === "magazine") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostMagazine");
   if (type === "condition") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostCondition");
+  if (type === "energyConsumer") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostEnergy");
   if (type === "quantity") return game.i18n.localize("FALLOUTMAW.Item.WeaponCostQuantity");
   return String(type || "-");
 }
@@ -6340,11 +6386,14 @@ function hasWeaponResourceCostData(weaponData, type) {
   return (weaponData?.resourceCosts ?? []).some(cost => cost.type === type);
 }
 
-function buildWeaponResourceTypeChoices(selected, hasConditionFunction) {
+function buildWeaponResourceTypeChoices(selected, hasConditionFunction, hasEnergyConsumerFunction) {
   const choices = [
     { value: "magazine", label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostMagazine") },
     { value: "quantity", label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostQuantity") }
   ];
+  if (hasEnergyConsumerFunction) {
+    choices.push({ value: "energyConsumer", label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostEnergy") });
+  }
   if (hasConditionFunction) {
     choices.push({ value: "condition", label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostCondition") });
   }
@@ -6352,6 +6401,16 @@ function buildWeaponResourceTypeChoices(selected, hasConditionFunction) {
     ...choice,
     selected: choice.value === selected
   }));
+}
+
+function removeWeaponResourceCostTypeFromEntries(entries = [], type = "") {
+  return Object.fromEntries(entries.map(({ id, data }) => [
+    id,
+    {
+      ...foundry.utils.deepClone(data),
+      resourceCosts: (data?.resourceCosts ?? []).filter(cost => cost.type !== type)
+    }
+  ]));
 }
 
 function buildWeaponActionChoices(item, damageTypeSettings = []) {

@@ -10,7 +10,22 @@ import {
   deleteDelayedThrownItemDocuments
 } from "../canvas/thrown-items.mjs";
 import { getActorPostureWeaponActionPointCostBonus } from "../canvas/posture-movement.mjs";
-import { ITEM_FUNCTIONS, WEAPON_SPECIAL_PROPERTIES, createWeaponFunctionUpdateData, getConditionFunction, getConditionWeakeningData, getDamageSourceFunction, getWeaponAttackPowerState, getWeaponFunctionById, getWeaponFunctionModuleSlots, hasItemFunction, hasWeaponSpecialPropertyData } from "../utils/item-functions.mjs";
+import {
+  ITEM_FUNCTIONS,
+  WEAPON_SPECIAL_PROPERTIES,
+  createWeaponFunctionUpdateData,
+  getActorInstalledModuleItems,
+  getConditionFunction,
+  getConditionWeakeningData,
+  getDamageSourceFunction,
+  getEnergyConsumerFunction,
+  getWeaponAttackPowerState,
+  getWeaponFunctionById,
+  getWeaponFunctionModuleSlots,
+  hasItemFunction,
+  hasWeaponSpecialPropertyData,
+  parseModuleWeaponFunctionId
+} from "../utils/item-functions.mjs";
 import { getCoverSettings, getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import { ABILITY_FIXED_FUNCTION_KEYS } from "../settings/abilities.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
@@ -44,6 +59,7 @@ import {
   normalizeWeaponAttackModifier
 } from "./weapon-attack-modifiers.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
+import { energySourceMatchesConsumer, getActiveEnergySourceItem, getEnergySourceReserveState } from "../items/light-source.mjs";
 
 const WEAPON_ATTACK_SOCKET = `system.${SYSTEM_ID}`;
 const WEAPON_ATTACK_SOCKET_SCOPE = "weaponAttackPreview";
@@ -4314,6 +4330,15 @@ export function getMissingWeaponResourceCost(weapon, multiplier = 1, weaponFunct
         required: amount
       };
     }
+    if (cost.type === "energyConsumer") {
+      const state = getWeaponEnergyResourceState(weapon, weaponFunctionId);
+      if (state.current < amount) return {
+        type: "energyConsumer",
+        label: game.i18n.localize("FALLOUTMAW.Item.WeaponCostEnergy"),
+        current: state.current,
+        required: amount
+      };
+    }
     if (cost.type === "quantity") {
       const current = toInteger(weapon.system?.quantity);
       if (current < amount) return {
@@ -4375,6 +4400,8 @@ async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "
   const updateData = {};
   let deleteWeapon = false;
   let magazineValue = Math.max(0, toInteger(weaponData?.magazine?.value));
+  let energyConsumerItem = null;
+  let energyValue = null;
   const costs = [
     ...getWeaponResourceCosts(weaponData, { modifierState }).map(cost => ({
       type: cost.type,
@@ -4398,6 +4425,13 @@ async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "
         ? toInteger(updateData["system.functions.condition.value"])
         : toInteger(weapon.system?.functions?.condition?.value);
       updateData["system.functions.condition.value"] = Math.max(0, current - amount);
+    } else if (cost.type === "energyConsumer") {
+      if (energyValue === null) {
+        const state = getWeaponEnergyResourceState(weapon, weaponFunctionId);
+        energyConsumerItem = state.item;
+        energyValue = state.current;
+      }
+      energyValue = Math.max(0, energyValue - amount);
     } else if (cost.type === "quantity") {
       const current = Object.hasOwn(updateData, "system.quantity")
         ? toInteger(updateData["system.quantity"])
@@ -4412,8 +4446,42 @@ async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "
       }
     }
   }
+  if (energyConsumerItem === weapon) {
+    updateData["system.functions.energyConsumer.installedSource.reserve.value"] = energyValue;
+  }
   if (Object.keys(updateData).length) await weapon.update(updateData);
+  if (energyConsumerItem && energyConsumerItem !== weapon) {
+    await energyConsumerItem.update({
+      "system.functions.energyConsumer.installedSource.reserve.value": energyValue
+    });
+  }
   if (deleteWeapon && weapon.id) await weapon.delete();
+}
+
+function getWeaponEnergyResourceState(weapon = null, weaponFunctionId = "") {
+  const item = getWeaponEnergyConsumerItem(weapon, weaponFunctionId);
+  const consumer = getEnergyConsumerFunction(item);
+  const source = getActiveEnergySourceItem(getWeaponOwnerActor(weapon), consumer);
+  if (!item || !source || !hasItemFunction(source, ITEM_FUNCTIONS.energySource, { ignoreBroken: true })) {
+    return { item, current: 0, max: 0 };
+  }
+  if (!energySourceMatchesConsumer(source, consumer)) return { item, current: 0, max: 0 };
+  const reserve = getEnergySourceReserveState(source);
+  return {
+    item,
+    current: Math.max(0, Number(reserve.value) || 0),
+    max: Math.max(0, Number(reserve.max) || 0)
+  };
+}
+
+function getWeaponEnergyConsumerItem(weapon = null, weaponFunctionId = "") {
+  const moduleFunction = parseModuleWeaponFunctionId(weaponFunctionId);
+  if (!moduleFunction) return weapon;
+  const actor = getWeaponOwnerActor(weapon);
+  return getActorInstalledModuleItems(actor).find(item => (
+    String(item.system?.placement?.parentItemId ?? "") === String(weapon?.id ?? "")
+    && String(item.system?.placement?.moduleSlotId ?? "") === moduleFunction.slotId
+  )) ?? null;
 }
 
 function getSpentQuantityItemData(weapon, multiplier = 1, weaponFunctionId = "", { modifierState = null } = {}) {

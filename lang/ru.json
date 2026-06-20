@@ -471,6 +471,7 @@
       "WeaponCostMagazine": "Магазин",
       "WeaponCostQuantity": "Штучность предмета",
       "WeaponCostCondition": "Расход состояния",
+      "WeaponCostEnergy": "Энергия",
       "WeaponAvailableActions": "Доступные действия",
       "WeaponActionAimedShot": "Прицельный выстрел",
       "WeaponActionSnapshot": "Выстрел на вскидку",
