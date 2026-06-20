@@ -19,19 +19,29 @@ const ABILITY_EFFECT_FLAG_KEY = "abilityEffect";
 const ITEM_EFFECT_FLAG_KEY = "itemEffect";
 const ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL = 1;
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
+const ACTOR_EFFECT_SYNC_DELAY_MS = 40;
+const AURA_STATE_SYNC_DELAY_MS = 40;
 const processingActors = new Set();
+const actorSyncTimers = new Map();
+const queuedActorSyncs = new Map();
 const coverSyncTimers = new Map();
 let auraStateSyncTimer = null;
 let processingAuraEffects = false;
 
 export function registerAbilityEffectHooks() {
   Hooks.on("createItem", item => {
-    if (item?.type === "ability" || isEquipmentItem(item) || hasItemFreeSettingsFunction(item)) void syncActorAbilityEffects(item.parent);
-    if (item?.type === "ability" || hasItemFreeSettingsFunction(item)) queueAuraStateSync();
+    if (item?.type === "ability" || isEquipmentItem(item) || hasItemFreeSettingsFunction(item)) {
+      queueActorAbilityEffectSync(item.parent, {}, {
+        aura: item?.type === "ability" || hasItemFreeSettingsFunction(item)
+      });
+    }
   });
   Hooks.on("updateItem", (item, changes) => {
-    if (item?.type === "ability" || isEquipmentItem(item) || isEquipmentItemUpdate(changes) || isItemFreeSettingsUpdate(item, changes)) void syncActorAbilityEffects(item.parent);
-    if (item?.type === "ability" || isItemFreeSettingsUpdate(item, changes)) queueAuraStateSync();
+    if (item?.type === "ability" || isEquipmentItem(item) || isEquipmentItemUpdate(changes) || isItemFreeSettingsUpdate(item, changes)) {
+      queueActorAbilityEffectSync(item.parent, {}, {
+        aura: item?.type === "ability" || isItemFreeSettingsUpdate(item, changes)
+      });
+    }
   });
   Hooks.on("deleteItem", item => {
     if (item?.type === "ability") {
@@ -40,18 +50,20 @@ export function registerAbilityEffectHooks() {
       return;
     }
     if (item?.type === "gear") void deleteItemFreeSettingsEffects(item.parent, item.id);
-    if (isEquipmentItem(item)) void syncActorAbilityEffects(item.parent);
-    if (item?.type === "gear") queueAuraStateSync();
+    if (isEquipmentItem(item)) queueActorAbilityEffectSync(item.parent, {}, { aura: item?.type === "gear" });
+    else if (item?.type === "gear") queueAuraStateSync();
   });
   Hooks.on("updateActor", (actor, changes) => {
     if (!isAbilityEffectSyncRelevant(changes)) return;
-    void syncActorAbilityEffects(actor);
-    queueAuraStateSync();
+    queueActorAbilityEffectSync(actor, {}, { aura: true });
   });
   Hooks.on("updateToken", (tokenDocument, changes) => {
     const relevant = isAuraTokenUpdateRelevant(changes);
-    if (foundry.utils.hasProperty(changes, "movementAction")) void syncActorAbilityEffects(tokenDocument?.actor, { actorToken: tokenDocument });
-    if (relevant) queueAuraStateSync();
+    const movementActionChanged = foundry.utils.hasProperty(changes, "movementAction");
+    if (movementActionChanged) {
+      queueActorAbilityEffectSync(tokenDocument?.actor, { actorToken: tokenDocument }, { aura: relevant });
+    }
+    if (relevant && !movementActionChanged) queueAuraStateSync();
   });
   Hooks.on("createToken", () => queueAuraStateSync());
   Hooks.on("deleteToken", () => queueAuraStateSync());
@@ -61,21 +73,20 @@ export function registerAbilityEffectHooks() {
   });
   Hooks.on("updateActiveEffect", effect => {
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
-    if (!getAuraGeneratedEffectFlag(effect)) queueAuraStateSync();
-    if (!effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) && !effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)) return;
-    void syncActorAbilityEffects(effect.parent);
-    queueAuraStateSync();
+    const managed = Boolean(effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) || effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY));
+    if (!getAuraGeneratedEffectFlag(effect) && !managed) queueAuraStateSync();
+    if (!managed) return;
+    queueActorAbilityEffectSync(effect.parent, {}, { aura: true });
   });
   Hooks.on("deleteActiveEffect", effect => {
     if (isCoverEffect(effect)) queueCoverAbilityEffectSync(effect.parent);
-    if (!getAuraGeneratedEffectFlag(effect)) queueAuraStateSync();
-    if (!effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) && !effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY)) return;
-    void syncActorAbilityEffects(effect.parent);
-    queueAuraStateSync();
+    const managed = Boolean(effect?.getFlag?.(SYSTEM_ID, ABILITY_EFFECT_FLAG_KEY) || effect?.getFlag?.(SYSTEM_ID, ITEM_EFFECT_FLAG_KEY));
+    if (!getAuraGeneratedEffectFlag(effect) && !managed) queueAuraStateSync();
+    if (!managed) return;
+    queueActorAbilityEffectSync(effect.parent, {}, { aura: true });
   });
   Hooks.on("fallout-maw.energyConsumptionChanged", actor => {
-    void syncActorAbilityEffects(actor);
-    queueAuraStateSync();
+    queueActorAbilityEffectSync(actor, {}, { aura: true });
   });
   Hooks.on("canvasReady", () => void syncLoadedActorAbilityEffects());
   Hooks.on("createCombat", () => queueAuraStateSync());
@@ -111,8 +122,35 @@ function queueCoverAbilityEffectSync(actor) {
   globalThis.clearTimeout(coverSyncTimers.get(actor.uuid));
   coverSyncTimers.set(actor.uuid, globalThis.setTimeout(() => {
     coverSyncTimers.delete(actor.uuid);
-    void syncActorAbilityEffects(actor);
+    queueActorAbilityEffectSync(actor);
   }, 20));
+}
+
+function queueActorAbilityEffectSync(actor, context = {}, { aura = false } = {}) {
+  const actorUuid = actor?.uuid;
+  if (!actorUuid || !game.user?.isActiveGM) return;
+
+  const queued = queuedActorSyncs.get(actorUuid) ?? { actor, context: {}, aura: false };
+  queued.actor = actor;
+  queued.context = { ...queued.context, ...context };
+  queued.aura = queued.aura || aura;
+  queuedActorSyncs.set(actorUuid, queued);
+
+  globalThis.clearTimeout(actorSyncTimers.get(actorUuid));
+  actorSyncTimers.set(actorUuid, globalThis.setTimeout(async () => {
+    actorSyncTimers.delete(actorUuid);
+    const entry = queuedActorSyncs.get(actorUuid);
+    queuedActorSyncs.delete(actorUuid);
+    if (!entry) return;
+
+    const freshActor = fromUuidSync(actorUuid) ?? entry.actor;
+    if (processingActors.has(actorUuid)) {
+      queueActorAbilityEffectSync(freshActor, entry.context, { aura: entry.aura });
+      return;
+    }
+    await syncActorAbilityEffects(freshActor, entry.context);
+    if (entry.aura) queueAuraStateSync();
+  }, ACTOR_EFFECT_SYNC_DELAY_MS));
 }
 
 export async function syncActorAbilityEffects(actor, context = {}) {
@@ -224,8 +262,8 @@ function queueAuraStateSync() {
   globalThis.clearTimeout(auraStateSyncTimer);
   auraStateSyncTimer = globalThis.setTimeout(() => {
     auraStateSyncTimer = null;
-    void syncLoadedActorAbilityEffects();
-  }, 40);
+    void syncAuraGeneratedEffects();
+  }, AURA_STATE_SYNC_DELAY_MS);
 }
 
 export async function syncAuraGeneratedEffects() {
