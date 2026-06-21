@@ -1,5 +1,7 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, TEMPLATES } from "../constants.mjs";
+import { TRAVEL_GROUP_FLAG } from "../global-map/constants.mjs";
+import { moveTravelCarrierPassenger } from "../global-map/travel-groups.mjs";
 import { AdvancementApplication } from "../advancement/application.mjs";
 import {
   getCharacteristicSettings,
@@ -63,7 +65,14 @@ import {
   prepareInventoryContext as prepareDisplayInventoryContext
 } from "../utils/actor-display-data.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
-import { moveActorContainerPassenger, resolveActorContainerPassengerActor } from "../utils/actor-containers.mjs";
+import {
+  getActorContainerFlag,
+  hasActorContainer,
+  moveActorContainerPassenger,
+  prepareActorContainerGridContext,
+  prepareActorContainerInventoryContext,
+  resolveActorContainerPassengerActor
+} from "../utils/actor-containers.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { openPersonalGenerator } from "../apps/personal-generator.mjs";
 import { openHackingSettings } from "../apps/hacking-dialog.mjs";
@@ -291,6 +300,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   _getHeaderControls() {
     const controls = super._getHeaderControls();
+    if (isTravelGroupCarrierActor(this.actor)) return controls;
     if (game.user?.isGM) {
       controls.unshift({
         action: "openHackingSettings",
@@ -350,6 +360,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   async _prepareContext(options) {
+    if (isTravelGroupCarrierActor(this.actor)) this.tabGroups.primary = "inventory";
     const context = await super._prepareContext(options);
     const actor = this.actor;
     const isConstruct = actor.type === "construct";
@@ -513,6 +524,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         damageTypeSettings,
         limbs
       }),
+      travelGroup: await prepareTravelGroupSheetContext(actor),
       inventory,
       effectCategories: prepareEffectCategories(getActorEffectsForDisplay(actor))
     }, { inplace: false });
@@ -520,6 +532,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.element?.classList.toggle("fallout-maw-travel-carrier-sheet", isTravelGroupCarrierActor(this.actor));
     this.#hoverPreviewKey = "";
     this.setPosition();
     this.#bindViewportResize();
@@ -613,10 +626,13 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const passenger = event.currentTarget?.closest?.("[data-actor-container-passenger]");
     if (passenger) {
       const passengerId = String(passenger.dataset.passengerId ?? "");
-      if (!passengerId || !this.actor?.isOwner) return;
+      const vehicleActorUuid = String(passenger.dataset.vehicleActorUuid ?? this.actor.uuid ?? "");
+      const travelUnitId = String(passenger.dataset.travelUnitId ?? "");
+      if (!passengerId || (!vehicleActorUuid && !travelUnitId) || !this.actor?.isOwner) return;
       const dragData = {
         type: "ActorContainerPassenger",
-        vehicleActorUuid: this.actor.uuid,
+        vehicleActorUuid,
+        travelUnitId,
         passengerId
       };
       event.dataTransfer?.setData("application/json", JSON.stringify(dragData));
@@ -650,23 +666,49 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   async #onDropActorContainerPassenger(event, data) {
     this.#clearActorContainerDropPreview();
-    if (!this.actor?.isOwner || String(data.vehicleActorUuid ?? "") !== this.actor.uuid) return null;
     const cell = this.#getActorContainerCellAtPointer(event);
     if (!cell) return null;
-    const moved = await moveActorContainerPassenger(this.actor, String(data.passengerId ?? ""), {
+    const sourceUnitId = String(data.travelUnitId ?? "");
+    const targetUnitId = String(cell.dataset.travelUnitId ?? "");
+    if (sourceUnitId || targetUnitId) {
+      if (!isTravelGroupCarrierActor(this.actor) || !sourceUnitId || sourceUnitId !== targetUnitId) return null;
+      return moveTravelCarrierPassenger({
+        carrierActorId: this.actor.id,
+        unitId: sourceUnitId,
+        passengerId: String(data.passengerId ?? ""),
+        target: {
+          slotId: cell.dataset.slotId,
+          slotIndex: Number(cell.dataset.slotIndex),
+          x: Number(cell.dataset.x),
+          y: Number(cell.dataset.y)
+        }
+      });
+    }
+    const sourceVehicleUuid = String(data.vehicleActorUuid ?? "");
+    const targetVehicleUuid = String(cell.dataset.vehicleActorUuid ?? this.actor.uuid ?? "");
+    if (!sourceVehicleUuid || sourceVehicleUuid !== targetVehicleUuid) return null;
+    const vehicleActor = await resolveActorByUuid(sourceVehicleUuid);
+    if (!vehicleActor?.isOwner) return null;
+    const moved = await moveActorContainerPassenger(vehicleActor, String(data.passengerId ?? ""), {
       slotId: cell.dataset.slotId,
       slotIndex: cell.dataset.slotIndex,
       x: cell.dataset.x,
       y: cell.dataset.y
     });
     if (!moved) ui.notifications.warn("Пассажир не помещается в выбранную область.");
+    else this.render({ parts: ["inventory"] });
     return moved;
   }
 
   async #onDropItemOnActorContainerPassenger(data, passengerElement) {
     const dropped = await this.#getDroppedItemFromData(data);
     if (!dropped?.item || !isActorContainerUsableItem(dropped.item)) return null;
-    const targetActor = await resolveActorContainerPassengerActor(this.actor, String(passengerElement.dataset.passengerId ?? ""));
+    const vehicleActor = await resolveActorByUuid(String(passengerElement.dataset.vehicleActorUuid ?? this.actor.uuid ?? ""));
+    if (!vehicleActor) {
+      ui.notifications.warn("Не удалось найти транспорт пассажира.");
+      return false;
+    }
+    const targetActor = await resolveActorContainerPassengerActor(vehicleActor, String(passengerElement.dataset.passengerId ?? ""));
     if (!targetActor) {
       ui.notifications.warn("Не удалось найти актера пассажира.");
       return false;
@@ -818,6 +860,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #syncFreeEditHeaderButton() {
     const header = this.element?.querySelector(".window-header");
+    if (isTravelGroupCarrierActor(this.actor)) {
+      header?.querySelector(".fallout-maw-window-free-edit-toggle")?.remove();
+      return;
+    }
     if (!header || !this.isEditable) return;
 
     let button = header.querySelector(".fallout-maw-window-free-edit-toggle");
@@ -3380,6 +3426,114 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 function isActorContainerUsableItem(itemOrData = null) {
   return hasItemFunction(itemOrData, ITEM_FUNCTIONS.firstAid)
     || hasItemFunction(itemOrData, ITEM_FUNCTIONS.needChange);
+}
+
+function isTravelGroupCarrierActor(actor = null) {
+  return Boolean(actor?.getFlag?.(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG)?.groupId);
+}
+
+async function prepareTravelGroupSheetContext(actor = null) {
+  const group = actor?.getFlag?.(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG);
+  if (!group?.groupId) return { visible: false, vehicles: [], walkers: [] };
+  const units = normalizeTravelGroupSheetUnits(group.units);
+  const sourceUnits = units.length ? units : normalizeTravelGroupSheetUnits(getActorContainerFlag(actor).passengers);
+  const vehicles = [];
+  const walkers = [];
+  for (const unit of sourceUnits) {
+    const unitActor = await resolveTravelGroupSheetUnitActor(unit);
+    const useLiveActorContainer = unit.tokenData?.actorLink !== false
+      && unitActor
+      && hasActorContainer(unitActor);
+    const actorContainers = useLiveActorContainer
+      ? prepareActorContainerInventoryContext(unitActor)
+      : prepareActorContainerSnapshotContext(unit.actorContainer);
+    const entry = {
+      id: unit.id,
+      actorUuid: unit.actorUuid || unitActor?.uuid || "",
+      name: unit.actorName || unitActor?.name || unit.tokenData?.name || "Участник путешествия",
+      img: unit.actorImg || unitActor?.img || unit.tokenData?.texture?.src || "icons/svg/mystery-man.svg",
+      missing: !unitActor && !actorContainers.visible
+    };
+    if (actorContainers.visible) {
+      vehicles.push({
+        ...entry,
+        seatGroups: actorContainers.groups,
+        occupied: actorContainers.occupied ?? 0,
+        hasSeats: actorContainers.visible
+      });
+    } else {
+      walkers.push(entry);
+    }
+  }
+  return {
+    visible: true,
+    groupId: String(group.groupId ?? ""),
+    vehicles,
+    walkers,
+    hasVehicles: vehicles.length > 0,
+    hasWalkers: walkers.length > 0,
+    empty: vehicles.length === 0 && walkers.length === 0
+  };
+}
+
+function normalizeTravelGroupSheetUnits(units = []) {
+  return (Array.isArray(units) ? units : [])
+    .map(unit => ({
+      id: String(unit?.id ?? unit?.actorUuid ?? foundry.utils.randomID()),
+      actorUuid: String(unit?.actorUuid ?? ""),
+      actorName: String(unit?.actorName ?? unit?.name ?? ""),
+      actorImg: String(unit?.actorImg ?? unit?.img ?? ""),
+      tokenData: unit?.tokenData && typeof unit.tokenData === "object"
+        ? foundry.utils.deepClone(unit.tokenData)
+        : null,
+      actorContainer: normalizeTravelGroupSheetActorContainer(unit?.actorContainer)
+    }))
+    .filter(unit => unit.actorUuid || unit.tokenData);
+}
+
+function normalizeTravelGroupSheetActorContainer(value = null) {
+  if (!value || typeof value !== "object") return null;
+  const seats = Array.isArray(value.seats) ? foundry.utils.deepClone(value.seats) : [];
+  const passengers = Array.isArray(value.passengers) ? foundry.utils.deepClone(value.passengers) : [];
+  return seats.length || passengers.length ? { seats, passengers } : null;
+}
+
+function prepareActorContainerSnapshotContext(snapshot = null) {
+  if (!snapshot) return { visible: false, groups: [] };
+  return prepareActorContainerGridContext(snapshot.seats, snapshot.passengers);
+}
+
+async function resolveTravelGroupSheetUnitActor(unit = {}) {
+  const actorId = String(unit.tokenData?.actorId ?? "").trim();
+  if (actorId) {
+    const actor = game.actors?.get(actorId);
+    if (actor) return actor;
+  }
+  if (unit.actorUuid) {
+    if (unit.actorUuid.startsWith("Actor.")) {
+      const actor = game.actors?.get(unit.actorUuid.slice("Actor.".length));
+      if (actor) return actor;
+    }
+    const fromUuid = globalThis.fromUuid ?? foundry.utils.fromUuid;
+    const actor = await fromUuid?.(unit.actorUuid);
+    if (actor) return actor;
+  }
+  const name = String(unit.actorName ?? unit.tokenData?.name ?? "").trim();
+  if (!name) return null;
+  const matches = (game.actors?.contents ?? []).filter(actor => actor.name === name);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+async function resolveActorByUuid(uuid = "") {
+  const normalized = String(uuid ?? "").trim();
+  if (!normalized) return null;
+  if (normalized.startsWith("Actor.")) {
+    const actor = game.actors?.get(normalized.slice("Actor.".length));
+    if (actor) return actor;
+  }
+  const fromUuid = globalThis.fromUuid ?? foundry.utils.fromUuid;
+  const resolved = await fromUuid?.(normalized);
+  return resolved instanceof Actor ? resolved : null;
 }
 
 export function getInventoryTooltipCompareActor() {

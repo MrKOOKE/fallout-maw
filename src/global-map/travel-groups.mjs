@@ -4,7 +4,8 @@ import {
   ACTOR_CONTAINER_FLAG,
   getActorContainerFlag,
   getActorContainerSeatDefinitions,
-  hasActorContainer
+  hasActorContainer,
+  moveActorContainerPassengerData
 } from "../utils/actor-containers.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
 import {
@@ -154,6 +155,10 @@ export function cancelTravelAssembly(assemblyId, sceneId = canvas.scene?.id) {
   return submitTravelGroupRequest("travelGroup.assembly.cancel", { assemblyId, sceneId });
 }
 
+export function moveTravelCarrierPassenger(payload = {}) {
+  return submitTravelGroupRequest("travelGroup.carrier.movePassenger", payload);
+}
+
 export function openTravelAssembly(assemblyId, sceneId = canvas.scene?.id) {
   const key = `${sceneId}:${assemblyId}`;
   let app = assemblyApps.get(key);
@@ -233,10 +238,16 @@ class TravelAssemblyApplication extends FalloutMaWFormApplicationV2 {
       canDrag: Boolean(!member.vehicle && (user?.isGM || member.actor?.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER))),
       canRemove: Boolean(canManage)
     }));
-    const vehicles = model.vehicles.map(vehicle => ({
-      ...vehicle,
-      seatGroups: buildVehicleSeatGroups(vehicle, members)
-    }));
+    const vehicles = model.vehicles.map(vehicle => {
+      const vehicleMember = members.find(member => member.id === vehicle.memberId);
+      return {
+        ...vehicle,
+        ready: vehicleMember?.ready ?? true,
+        canReady: vehicleMember?.canReady ?? false,
+        canRemove: Boolean(canManage),
+        seatGroups: buildVehicleSeatGroups(vehicle, members)
+      };
+    });
     return {
       missing: false,
       assembly,
@@ -395,6 +406,7 @@ async function handleResponsibleGMRequest(payload) {
       case "travelGroup.assembly.remove": return handleRemoveRequest(payload);
       case "travelGroup.assembly.depart": return handleDepartRequest(payload);
       case "travelGroup.assembly.cancel": return handleCancelRequest(payload);
+      case "travelGroup.carrier.movePassenger": return handleCarrierMovePassengerRequest(payload);
       case "travelGroup.arrival.request": return handleArrivalRequest(payload);
       case "travelGroup.arrival.select": return handleArrivalSelectRequest(payload);
       default: return false;
@@ -704,7 +716,7 @@ async function performDeparture({ scene, zone, tokenDocuments, model = null, req
     throw new Error("Каждый транспорт каравана должен использовать отдельного актёра.");
   }
   const vehiclePlans = await buildVehiclePlans(activeModel, scene);
-  const topUnits = buildTopTravelUnits(activeModel);
+  let topUnits = buildTopTravelUnits(activeModel);
   if (!topUnits.length) throw new Error("В группе нет участников.");
   const originalTokenData = new Map(tokenDocuments.map(token => [token.id, token.toObject()]));
   let carrierActor = null;
@@ -718,6 +730,7 @@ async function performDeparture({ scene, zone, tokenDocuments, model = null, req
       }, { [TRAVEL_BYPASS_OPTION]: true });
       appliedPlans.push(plan);
     }
+    topUnits = buildTopTravelUnits(activeModel);
     carrierActor = await createTravelCarrier({
       originScene: scene,
       targetScene: parentScene,
@@ -804,64 +817,68 @@ async function createTravelCarrier({ originScene, targetScene, topUnits, allActo
           ownerUserIds,
           effectiveSpeedKmh: Number.isFinite(speedKmh) ? speedKmh : 0,
           memberActorUuids: allActors.map(actor => actor?.uuid).filter(Boolean),
+          units: topUnits.map(prepareTravelGroupUnitForStorage),
           createdAt: Date.now()
         }
       }
     }
   }, { renderSheet: false, [TRAVEL_BYPASS_OPTION]: true });
   if (!actor) throw new Error("Не удалось создать временного актёра группы.");
-  try {
-    const slots = topUnits.map(unit => ({
-      id: foundry.utils.randomID(),
-      width: Math.max(1, Math.ceil(Number(unit.width) || 1)),
-      height: Math.max(1, Math.ceil(Number(unit.height) || 1)),
-      quantity: 1
-    }));
-    const [containerItem] = await actor.createEmbeddedDocuments("Item", [{
-      name: "Участники путешествия",
-      type: "gear",
-      system: {
-        quantity: 1,
-        maxStack: 1,
-        functions: { actorContainer: { enabled: true, slots } }
-      },
-      flags: { [FALLOUT_MAW.id]: { travelGroupContainer: { version: GLOBAL_MAP_VERSION, groupId } } }
-    }], { [TRAVEL_BYPASS_OPTION]: true });
-    if (!containerItem) throw new Error("Не удалось создать контейнер группы.");
-    const passengers = topUnits.map((unit, index) => ({
-      id: foundry.utils.randomID(),
-      actorUuid: unit.actorUuid,
-      actorName: unit.name,
-      actorImg: unit.img,
-      sceneId: originScene.id,
-      tokenData: foundry.utils.deepClone(unit.tokenData),
-      slotId: `${containerItem.id}:${slots[index].id}`,
-      slotIndex: 0,
-      x: 1,
-      y: 1,
-      width: slots[index].width,
-      height: slots[index].height,
-      temporaryOwnerUserIds: [],
-      temporaryOwnerLevels: {}
-    }));
-    await actor.update({ [`flags.${FALLOUT_MAW.id}.${ACTOR_CONTAINER_FLAG}.passengers`]: passengers }, { [TRAVEL_BYPASS_OPTION]: true });
-    return actor;
-  } catch (error) {
-    await actor.delete({ [TRAVEL_BYPASS_OPTION]: true }).catch(() => {});
-    throw error;
+  return actor;
+}
+
+async function handleCarrierMovePassengerRequest(payload) {
+  const carrierActor = game.actors?.get(payload.carrierActorId);
+  const user = game.users?.get(payload.requestingUserId);
+  const group = foundry.utils.deepClone(carrierActor?.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG) ?? null);
+  if (!carrierActor || !group?.groupId || !user) throw new Error("Группа путешествия не найдена.");
+  if (!user.isGM && !carrierActor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) {
+    throw new Error("Нет прав на изменение состава путешествия.");
   }
+  const units = Array.isArray(group.units) ? group.units : [];
+  const unit = units.find(entry => String(entry?.id ?? "") === String(payload.unitId ?? ""));
+  const snapshot = normalizeTravelGroupActorContainerSnapshot(unit?.actorContainer);
+  if (!unit || !snapshot) throw new Error("Транспорт путешествия не найден.");
+  const passengers = moveActorContainerPassengerData(
+    snapshot.seats,
+    snapshot.passengers,
+    String(payload.passengerId ?? ""),
+    payload.target ?? {}
+  );
+  if (!passengers) throw new Error("Пассажир не помещается в выбранную область.");
+
+  unit.actorContainer = { seats: snapshot.seats, passengers };
+  if (unit.tokenData?.actorLink) {
+    const vehicleActor = game.actors?.get(unit.tokenData.actorId);
+    if (!vehicleActor) throw new Error("Связанный транспорт не найден.");
+    await vehicleActor.update({
+      [`flags.${FALLOUT_MAW.id}.${ACTOR_CONTAINER_FLAG}.passengers`]: passengers
+    }, { [TRAVEL_BYPASS_OPTION]: true });
+  } else {
+    unit.tokenData.delta ??= {};
+    unit.tokenData.delta.flags ??= {};
+    foundry.utils.setProperty(
+      unit,
+      `tokenData.delta.flags.${FALLOUT_MAW.id}.${ACTOR_CONTAINER_FLAG}.passengers`,
+      foundry.utils.deepClone(passengers)
+    );
+  }
+  await carrierActor.update({
+    [`flags.${FALLOUT_MAW.id}.${TRAVEL_GROUP_FLAG}.units`]: units
+  }, { [TRAVEL_BYPASS_OPTION]: true });
+  return true;
 }
 
 async function performArrival(originScene, carrierToken, targetScene, zone, pending) {
   const carrierActor = game.actors?.get(carrierToken.actorId) ?? carrierToken.actor;
   const viewerUserIds = getTravelGroupViewerUserIds(carrierActor);
-  const passengers = getActorContainerFlag(carrierActor).passengers;
-  if (!passengers.length) throw new Error("В группе нет участников для размещения.");
+  const units = getTravelCarrierUnits(carrierActor);
+  if (!units.length) throw new Error("В группе нет участников для размещения.");
   const createData = [];
   const reserved = [];
-  for (const passenger of passengers) {
-    if (!passenger.tokenData) continue;
-    const data = foundry.utils.deepClone(passenger.tokenData);
+  for (const unit of units) {
+    if (!unit.tokenData) continue;
+    const data = foundry.utils.deepClone(unit.tokenData);
     delete data._id;
     delete data.id;
     data.hidden = false;
@@ -895,6 +912,60 @@ async function performArrival(originScene, carrierToken, targetScene, zone, pend
   await restoreTokenControlsAfterArrival(closedPayload);
   notifyTravelComplete(targetScene.id, viewerUserIds, { activateTokenControls: true });
   return true;
+}
+
+function prepareTravelGroupUnitForStorage(unit) {
+  return {
+    id: foundry.utils.randomID(),
+    actorUuid: String(unit.actorUuid ?? ""),
+    actorName: String(unit.name ?? ""),
+    actorImg: String(unit.img ?? ""),
+    tokenData: foundry.utils.deepClone(unit.tokenData ?? null),
+    actorContainer: prepareTravelGroupActorContainerSnapshot(unit.actor),
+    width: Math.max(1, Math.ceil(Number(unit.width) || 1)),
+    height: Math.max(1, Math.ceil(Number(unit.height) || 1))
+  };
+}
+
+function prepareTravelGroupActorContainerSnapshot(actor = null) {
+  const seats = getActorContainerSeatDefinitions(actor);
+  const passengers = getActorContainerFlag(actor).passengers;
+  if (!seats.length && !passengers.length) return null;
+  return {
+    seats: foundry.utils.deepClone(seats),
+    passengers: foundry.utils.deepClone(passengers)
+  };
+}
+
+function getTravelCarrierUnits(actor = null) {
+  const group = actor?.getFlag?.(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG) ?? {};
+  const units = normalizeTravelCarrierUnits(group.units);
+  if (units.length) return units;
+  return normalizeTravelCarrierUnits(getActorContainerFlag(actor).passengers);
+}
+
+function normalizeTravelCarrierUnits(units = []) {
+  return (Array.isArray(units) ? units : [])
+    .map(unit => ({
+      id: String(unit?.id ?? unit?.actorUuid ?? foundry.utils.randomID()),
+      actorUuid: String(unit?.actorUuid ?? ""),
+      actorName: String(unit?.actorName ?? unit?.name ?? ""),
+      actorImg: String(unit?.actorImg ?? unit?.img ?? ""),
+      tokenData: unit?.tokenData && typeof unit.tokenData === "object"
+        ? foundry.utils.deepClone(unit.tokenData)
+        : null,
+      actorContainer: normalizeTravelGroupActorContainerSnapshot(unit?.actorContainer),
+      width: Math.max(1, Math.ceil(Number(unit?.width) || 1)),
+      height: Math.max(1, Math.ceil(Number(unit?.height) || 1))
+    }))
+    .filter(unit => unit.actorUuid && unit.tokenData);
+}
+
+function normalizeTravelGroupActorContainerSnapshot(value = null) {
+  if (!value || typeof value !== "object") return null;
+  const seats = Array.isArray(value.seats) ? foundry.utils.deepClone(value.seats) : [];
+  const passengers = Array.isArray(value.passengers) ? foundry.utils.deepClone(value.passengers) : [];
+  return seats.length || passengers.length ? { seats, passengers } : null;
 }
 
 async function buildSoloAssemblyModel(scene, token) {
@@ -1008,13 +1079,16 @@ function buildTopTravelUnits(model) {
   const units = [];
   for (const member of model.members) {
     if (member.vehicle || (!member.vehicle && !member.placement)) {
+      const tokenData = member.tokenId
+        ? model.scene?.tokens?.get(member.tokenId)?.toObject?.() ?? member.tokenData
+        : member.tokenData;
       if (!member.actor || !member.tokenData) throw new Error(`${member.name}: отсутствуют данные для путешествия.`);
       units.push({
         actor: member.actor,
         actorUuid: member.actorUuid,
         name: member.name,
         img: member.img,
-        tokenData: foundry.utils.deepClone(member.tokenData),
+        tokenData: foundry.utils.deepClone(tokenData),
         width: member.width,
         height: member.height
       });
@@ -1630,10 +1704,10 @@ async function chooseRandomArrival(sceneId, tokenId) {
   const token = originScene?.tokens?.get(tokenId);
   const pending = token?.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.pendingArrival;
   const targetScene = pending ? game.scenes?.get(pending.targetSceneId) : null;
-  const passengers = token?.actor ? getActorContainerFlag(token.actor).passengers : [];
+  const units = token?.actor ? getTravelCarrierUnits(token.actor) : [];
   const zones = getSceneState(targetScene).locationExitZones
     .filter(zone => zone.cells?.length)
-    .filter(zone => canPlaceTravelPassengers(targetScene, zone, passengers));
+    .filter(zone => canPlaceTravelPassengers(targetScene, zone, units));
   if (!originScene || !token || !pending || !targetScene) return;
   if (!zones.length) {
     await token.update({ [`flags.${FALLOUT_MAW.id}.${TRAVEL_GROUP_TOKEN_FLAG}.pendingArrival`]: null });
@@ -1746,7 +1820,8 @@ function isTravelGroupRequestAction(action) {
     "travelGroup.assembly.place",
     "travelGroup.assembly.remove",
     "travelGroup.assembly.depart",
-    "travelGroup.assembly.cancel"
+    "travelGroup.assembly.cancel",
+    "travelGroup.carrier.movePassenger"
   ]).has(action);
 }
 

@@ -12484,6 +12484,156 @@ label.fallout-maw-mitigation-cell {
   overflow: hidden;
 }
 
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-sheet {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0.9rem 0;
+  min-height: 0;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-travel-carrier-sheet .window-content > .tab:not([data-tab="inventory"]) {
+  display: none !important;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-travel-carrier-sheet .window-content > .tab[data-tab="inventory"] {
+  display: flex !important;
+  flex: 1 1 auto;
+  overflow: auto !important;
+  padding: 0;
+}
+
+.application.fallout-maw-actor-sheet.fallout-maw-travel-carrier-sheet .fallout-maw-travel-group-sheet {
+  flex: 1 0 auto;
+  margin: 0;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-sheet-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-walkers,
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-vehicles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-walkers > h3,
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-seat-group > h3 {
+  border: 0;
+  color: var(--fallout-maw-actor-text-strong);
+  font-family: var(--fallout-maw-actor-heading-font);
+  font-size: calc(var(--fallout-maw-actor-text-size) * 0.9);
+  margin: 0;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-walker-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-walker,
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-vehicle {
+  background: rgba(5, 8, 6, 0.56);
+  border: 1px solid var(--fallout-maw-terminal-line);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55);
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-walker {
+  align-items: center;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: 42px minmax(8rem, 1fr);
+  min-width: 13rem;
+  padding: 0.35rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-walker > img,
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-vehicle-header > img {
+  border: 1px solid var(--fallout-maw-terminal-border);
+  height: 42px;
+  object-fit: contain;
+  width: 42px;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-walker > strong,
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-vehicle-header > strong {
+  color: var(--fallout-maw-actor-text-strong);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-walker.missing,
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-vehicle.missing {
+  border-color: var(--fallout-maw-terminal-red);
+  opacity: 0.75;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-vehicles {
+  align-items: flex-start;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-vehicle {
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 20rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-vehicle-header {
+  align-items: center;
+  border-bottom: 1px solid var(--fallout-maw-terminal-line);
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: 42px minmax(10rem, 1fr);
+  padding: 0.45rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-vehicle-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.55rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-seat-row {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.35rem;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-grid {
+  width: max-content;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-cell {
+  background: rgba(0, 0, 0, 0.34);
+  border-color: rgba(199, 178, 95, 0.36);
+  border-radius: 0;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-cell.occupied {
+  background: transparent;
+  border-color: transparent;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-travel-group-passenger {
+  background: rgba(8, 11, 7, 0.94);
+  border-color: var(--fallout-maw-terminal-border);
+}
+
 .application.fallout-maw-actor-sheet.fallout-maw-world-sidebar-peek .fallout-maw-inventory-layout {
   grid-template-columns: 38rem minmax(0, 1fr);
 }

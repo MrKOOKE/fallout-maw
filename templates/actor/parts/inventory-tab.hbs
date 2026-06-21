@@ -1,4 +1,68 @@
 <section class="tab {{tabs.inventory.cssClass}}" data-group="{{tabs.inventory.group}}" data-tab="{{tabs.inventory.id}}">
+  {{#if travelGroup.visible}}
+  <section class="fallout-maw-panel fallout-maw-travel-group-sheet">
+    <h2>Состав путешествия</h2>
+    {{#if travelGroup.empty}}
+    <p class="fallout-maw-empty-list">В группе нет участников.</p>
+    {{else}}
+    <div class="fallout-maw-travel-group-sheet-layout">
+      {{#if travelGroup.hasWalkers}}
+      <section class="fallout-maw-travel-group-walkers">
+        <h3>Пешие участники</h3>
+        <div class="fallout-maw-travel-group-walker-list">
+          {{#each travelGroup.walkers}}
+          <article class="fallout-maw-travel-group-walker {{#if missing}}missing{{/if}}" title="{{name}}">
+            <img src="{{img}}" alt="{{name}}">
+            <strong>{{name}}</strong>
+          </article>
+          {{/each}}
+        </div>
+      </section>
+      {{/if}}
+
+      {{#if travelGroup.hasVehicles}}
+      <section class="fallout-maw-travel-group-vehicles">
+        {{#each travelGroup.vehicles}}
+        <article class="fallout-maw-travel-group-vehicle {{#if missing}}missing{{/if}}">
+          <header class="fallout-maw-travel-group-vehicle-header">
+            <img src="{{img}}" alt="{{name}}">
+            <strong>{{name}}</strong>
+          </header>
+          <div class="fallout-maw-travel-group-vehicle-body">
+            {{#if hasSeats}}
+            {{#each seatGroups}}
+            <div class="fallout-maw-actor-container-group fallout-maw-travel-group-seat-group">
+              <h3>{{name}}</h3>
+              {{#each rows}}
+              <div class="fallout-maw-actor-container-row fallout-maw-travel-group-seat-row">
+                {{#each instances}}
+                <div class="fallout-maw-inventory-grid fallout-maw-actor-container-grid fallout-maw-travel-group-grid" style="--fallout-maw-inventory-columns: {{columns}};">
+                  {{#each cells}}
+                  <div class="fallout-maw-inventory-cell fallout-maw-actor-container-cell fallout-maw-travel-group-cell {{#if occupied}}occupied{{/if}}" data-actor-container-cell data-travel-unit-id="{{../../../../id}}" data-vehicle-actor-uuid="{{../../../../actorUuid}}" data-slot-id="{{slotId}}" data-slot-index="{{slotIndex}}" data-x="{{x}}" data-y="{{y}}" style="{{style}}"></div>
+                  {{/each}}
+                  {{#each passengers}}
+                  <article class="draggable fallout-maw-inventory-item fallout-maw-inventory-grid-item fallout-maw-actor-container-passenger fallout-maw-travel-group-passenger equipped" data-actor-container-passenger data-travel-unit-id="{{../../../../id}}" data-vehicle-actor-uuid="{{../../../../actorUuid}}" data-passenger-id="{{id}}" title="{{actorName}}" style="{{gridStyle}}">
+                    <img src="{{actorImg}}" alt="{{actorName}}">
+                  </article>
+                  {{/each}}
+                </div>
+                {{/each}}
+              </div>
+              {{/each}}
+            </div>
+            {{/each}}
+            {{else}}
+            <p class="fallout-maw-empty-list">У транспорта нет настроенных мест.</p>
+            {{/if}}
+          </div>
+        </article>
+        {{/each}}
+      </section>
+      {{/if}}
+    </div>
+    {{/if}}
+  </section>
+  {{else}}
   <section class="fallout-maw-inventory-summary">
     <section class="fallout-maw-panel">
       <h2>{{localize "FALLOUTMAW.Common.Currencies"}}</h2>
@@ -20,7 +84,6 @@
       </div>
     </section>
   </section>
-
   <div class="fallout-maw-inventory-layout" data-inventory-drop-surface data-inventory-parent-id="">
     <section class="fallout-maw-panel fallout-maw-equipment-pane" data-equipment-drop-surface>
       <h2>{{inventory.equipmentHeading}}</h2>
@@ -247,4 +310,5 @@
       </section>
     </div>
   </div>
+  {{/if}}
 </section>

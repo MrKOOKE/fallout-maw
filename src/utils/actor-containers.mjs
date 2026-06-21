@@ -106,8 +106,12 @@ export function isActorInActorContainer(actor = null) {
 
 export function prepareActorContainerInventoryContext(actor = null) {
   const seats = getActorContainerSeatDefinitions(actor);
-  if (!seats.length) return { visible: false, groups: [] };
   const passengers = getActorContainerFlag(actor).passengers;
+  return prepareActorContainerGridContext(seats, passengers);
+}
+
+export function prepareActorContainerGridContext(seats = [], passengers = []) {
+  if (!seats.length) return { visible: false, groups: [] };
   const groups = new Map();
   for (const seat of seats) {
     let group = groups.get(seat.itemId);
@@ -148,9 +152,21 @@ export function prepareActorContainerInventoryContext(actor = null) {
 export async function moveActorContainerPassenger(actor = null, passengerId = "", target = {}) {
   if (!actor?.isOwner) return false;
   const passengers = getActorContainerFlag(actor).passengers;
+  const updated = moveActorContainerPassengerData(
+    getActorContainerSeatDefinitions(actor),
+    passengers,
+    passengerId,
+    target
+  );
+  if (!updated) return false;
+  await actor.update({ [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: updated });
+  return true;
+}
+
+export function moveActorContainerPassengerData(seats = [], passengers = [], passengerId = "", target = {}) {
   const passenger = passengers.find(entry => entry.id === passengerId);
-  if (!passenger) return false;
-  const seat = getActorContainerSeatDefinitions(actor).find(entry => entry.slotId === String(target.slotId ?? ""));
+  if (!passenger) return null;
+  const seat = seats.find(entry => entry.slotId === String(target.slotId ?? ""));
   const slotIndex = Math.max(0, toInteger(target.slotIndex));
   const placement = {
     x: Math.max(1, toInteger(target.x) || 1),
@@ -158,15 +174,13 @@ export async function moveActorContainerPassenger(actor = null, passengerId = ""
     width: passenger.width,
     height: passenger.height
   };
-  if (!seat || slotIndex >= seat.quantity) return false;
-  if ((placement.x + placement.width - 1) > seat.width || (placement.y + placement.height - 1) > seat.height) return false;
+  if (!seat || slotIndex >= seat.quantity) return null;
+  if ((placement.x + placement.width - 1) > seat.width || (placement.y + placement.height - 1) > seat.height) return null;
   const occupants = passengers.filter(entry => entry.id !== passenger.id && entry.slotId === seat.slotId && entry.slotIndex === slotIndex);
-  if (occupants.some(occupant => actorPlacementsOverlap(placement, occupant))) return false;
-  const updated = passengers.map(entry => entry.id === passenger.id
+  if (occupants.some(occupant => actorPlacementsOverlap(placement, occupant))) return null;
+  return passengers.map(entry => entry.id === passenger.id
     ? { ...entry, slotId: seat.slotId, slotIndex, x: placement.x, y: placement.y }
     : entry);
-  await actor.update({ [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: updated });
-  return true;
 }
 
 export async function resolveActorContainerPassengerActor(vehicleActor = null, passengerId = "") {
