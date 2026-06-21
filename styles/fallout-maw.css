@@ -14525,134 +14525,190 @@ label.fallout-maw-mitigation-cell {
   color: var(--color-text-light-highlight);
 }
 
-.fallout-maw-travel-assembly-body {
-  min-width: 0;
+.application.fallout-maw-travel-assembly {
+  --fallout-maw-terminal-bg: #10130d;
+  --fallout-maw-terminal-bg-2: #1b1d16;
+  --fallout-maw-terminal-border: rgba(199, 178, 95, 0.72);
+  --fallout-maw-terminal-line: rgba(216, 192, 94, 0.42);
+  --fallout-maw-terminal-text: #fff1b6;
+  --fallout-maw-terminal-muted: #d5c98b;
+  --fallout-maw-terminal-accent: #f0cf55;
+  --fallout-maw-terminal-green: #79c65d;
+  --fallout-maw-terminal-red: #e65345;
+  --fallout-maw-inventory-cell-size: 3.25rem;
+  --fallout-maw-inventory-grid-gap: 0.25rem;
+  background:
+    repeating-linear-gradient(180deg, rgba(235, 218, 132, 0.035) 0 1px, transparent 1px 4px),
+    radial-gradient(circle at 18% 12%, rgba(224, 190, 69, 0.1), transparent 45%),
+    linear-gradient(180deg, var(--fallout-maw-terminal-bg-2), var(--fallout-maw-terminal-bg));
+  border: 2px solid var(--fallout-maw-terminal-border);
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 1px rgba(224, 190, 69, 0.22),
+    0 0 14px rgba(224, 190, 69, 0.18),
+    inset 0 0 18px rgba(0, 0, 0, 0.45),
+    0 12px 28px rgba(0, 0, 0, 0.68);
+  color: var(--fallout-maw-terminal-text);
+  max-width: calc(100vw - 24px);
+  width: max-content;
 }
 
-.fallout-maw-travel-assembly-header {
-  align-items: baseline;
-  border-bottom: 1px solid var(--color-border-light-2);
-  display: flex;
-  gap: 0.5rem;
-  padding: 0.15rem 0.25rem 0.65rem;
+.application.fallout-maw-travel-assembly .window-header {
+  background: rgba(16, 19, 13, 0.96);
+  border-bottom: 1px solid var(--fallout-maw-terminal-line);
+  color: var(--fallout-maw-terminal-accent);
+}
+
+.application.fallout-maw-travel-assembly .window-title {
+  color: var(--fallout-maw-terminal-accent);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.application.fallout-maw-travel-assembly .window-content {
+  background: transparent;
+  color: var(--fallout-maw-terminal-text);
+  overflow: auto;
+  padding: 0;
+}
+
+.fallout-maw-travel-assembly-body {
+  min-width: 0;
+  padding: 0.75rem;
+  width: max-content;
 }
 
 .fallout-maw-travel-layout {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: minmax(0, 1fr) 260px;
-  min-height: 240px;
+  align-items: start;
+  display: flex;
+  gap: 0.35rem;
+  width: max-content;
 }
 
 .fallout-maw-travel-vehicles {
   align-items: flex-start;
   display: flex;
-  gap: 0.75rem;
-  min-width: 0;
-  overflow-x: auto;
-  padding: 0.1rem 0.1rem 0.5rem;
+  flex-direction: row-reverse;
+  gap: 0.35rem;
+}
+
+.fallout-maw-travel-vehicle,
+.fallout-maw-travel-roster,
+.fallout-maw-travel-empty-panel {
+  background:
+    repeating-linear-gradient(180deg, rgba(235, 218, 132, 0.025) 0 1px, transparent 1px 4px),
+    rgba(5, 8, 6, 0.82);
+  border: 2px solid var(--fallout-maw-terminal-border);
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.72),
+    inset 0 0 0 4px rgba(216, 192, 94, 0.12);
 }
 
 .fallout-maw-travel-vehicle {
-  border: 1px solid var(--color-border-light-2);
-  border-radius: 5px;
   flex: 0 0 auto;
-  min-width: 300px;
-  padding: 0.5rem;
-}
-
-.fallout-maw-travel-vehicle.ready,
-.fallout-maw-travel-member.ready {
-  border-color: #39b86b;
-  box-shadow: 0 0 0 1px rgba(57, 184, 107, 0.24);
+  min-width: 320px;
 }
 
 .fallout-maw-travel-vehicle-header {
   align-items: center;
+  border-bottom: 1px solid var(--fallout-maw-terminal-line);
   display: grid;
-  gap: 0.5rem;
-  grid-template-columns: 42px minmax(110px, 1fr) auto;
-  margin-bottom: 0.55rem;
+  gap: 0.55rem;
+  grid-template-columns: 42px minmax(110px, 1fr);
+  padding: 0.5rem;
 }
 
 .fallout-maw-travel-vehicle-header > img,
 .fallout-maw-travel-member > img {
-  border: 0;
+  border: 1px solid var(--fallout-maw-terminal-border);
   height: 42px;
   object-fit: contain;
   width: 42px;
 }
 
-.fallout-maw-travel-decks {
+.fallout-maw-travel-vehicle-header > strong {
+  color: var(--fallout-maw-terminal-accent);
+}
+
+.fallout-maw-travel-vehicle-content {
+  padding: 0.65rem;
+}
+
+.fallout-maw-travel-vehicle-content > h2,
+.fallout-maw-travel-roster > h2 {
+  border: 0;
+  color: var(--fallout-maw-terminal-accent);
+  font-size: 1.2rem;
+  margin: 0 0 0.55rem;
+}
+
+.fallout-maw-travel-seat-group + .fallout-maw-travel-seat-group {
+  border-top: 1px solid var(--fallout-maw-terminal-line);
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+}
+
+.fallout-maw-travel-seat-group > h3 {
+  border: 0;
+  color: var(--fallout-maw-terminal-text);
+  font-size: 1rem;
+  margin: 0 0 0.4rem;
+}
+
+.fallout-maw-travel-seat-row {
   align-items: flex-start;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
 }
 
-.fallout-maw-travel-deck {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.fallout-maw-travel-deck-name {
-  color: var(--color-text-light-6);
-  font-size: var(--font-size-12);
+.fallout-maw-travel-seat-row:last-child {
+  margin-bottom: 0;
 }
 
 .fallout-maw-travel-grid {
-  display: grid;
-  grid-template-columns: repeat(var(--travel-columns), 34px);
-  grid-template-rows: repeat(var(--travel-rows), 34px);
-  position: relative;
+  width: max-content;
 }
 
 .fallout-maw-travel-cell {
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  min-height: 34px;
-  min-width: 34px;
+  background: rgba(0, 0, 0, 0.34);
+  border-color: rgba(199, 178, 95, 0.36);
+  border-radius: 0;
 }
 
 .fallout-maw-travel-cell.occupied {
-  background: rgba(255, 255, 255, 0.06);
+  background: transparent;
+  border-color: transparent;
 }
 
 .fallout-maw-travel-cell.drop-preview,
 .fallout-maw-travel-roster.drop-preview {
-  background: rgba(57, 255, 136, 0.16);
-  border-color: #39ff88;
+  background: rgba(121, 198, 93, 0.16);
+  border-color: var(--fallout-maw-terminal-green);
+  box-shadow: inset 0 0 0 1px rgba(121, 198, 93, 0.35);
 }
 
 .fallout-maw-travel-grid-occupant {
-  align-items: center;
-  background: rgba(10, 10, 10, 0.78);
-  border: 1px solid #39b86b;
-  display: flex;
-  justify-content: center;
-  margin: 2px;
-  pointer-events: none;
-  position: relative;
-  z-index: 2;
+  background: rgba(8, 11, 7, 0.94);
+  border-color: var(--fallout-maw-terminal-border);
 }
 
-.fallout-maw-travel-grid-occupant > img {
-  border: 0;
-  height: 100%;
-  object-fit: contain;
-  width: 100%;
+.fallout-maw-travel-grid-occupant[data-can-drag="true"],
+.fallout-maw-travel-member[data-can-drag="true"] {
+  cursor: grab;
+}
+
+.fallout-maw-travel-grid-occupant.dragging,
+.fallout-maw-travel-member.dragging {
+  cursor: grabbing;
+  opacity: 0.45;
 }
 
 .fallout-maw-travel-roster {
-  border: 1px dashed var(--color-border-light-2);
-  border-radius: 5px;
+  flex: 0 0 280px;
   min-width: 0;
-  padding: 0.5rem;
-}
-
-.fallout-maw-travel-roster > h3 {
-  margin: 0 0 0.5rem;
+  padding: 0.65rem;
 }
 
 .fallout-maw-travel-member-list {
@@ -14663,29 +14719,26 @@ label.fallout-maw-mitigation-cell {
 
 .fallout-maw-travel-member {
   align-items: center;
-  border: 1px solid var(--color-border-light-2);
-  border-radius: 4px;
+  background: rgba(16, 19, 13, 0.66);
+  border: 1px solid var(--fallout-maw-terminal-line);
   display: grid;
-  gap: 0.45rem;
-  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 0.5rem;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
   padding: 0.4rem;
 }
 
-.fallout-maw-travel-member[data-can-drag="true"] {
-  cursor: grab;
-}
-
-.fallout-maw-travel-member.dragging {
-  cursor: grabbing;
-  opacity: 0.45;
+.fallout-maw-travel-member.ready {
+  border-color: var(--fallout-maw-terminal-green);
+  box-shadow: inset 0 0 0 1px rgba(121, 198, 93, 0.18);
 }
 
 .fallout-maw-travel-member.missing {
-  border-color: var(--color-level-error);
+  border-color: var(--fallout-maw-terminal-red);
   opacity: 0.7;
 }
 
 .fallout-maw-travel-member > strong {
+  color: var(--fallout-maw-terminal-text);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -14695,28 +14748,62 @@ label.fallout-maw-mitigation-cell {
 .fallout-maw-travel-member-actions {
   display: flex;
   gap: 0.35rem;
-  grid-column: 1 / -1;
 }
 
 .fallout-maw-travel-member-actions > button {
+  height: 34px;
   margin: 0;
-  min-width: 0;
+  min-width: 34px;
 }
 
-.fallout-maw-travel-member-actions > button:first-child {
-  flex: 1 1 auto;
+.fallout-maw-travel-ready-button {
+  color: var(--fallout-maw-terminal-muted);
+  padding: 0;
+  width: 34px;
+}
+
+.fallout-maw-travel-ready-button.ready {
+  border-color: var(--fallout-maw-terminal-green);
+  box-shadow:
+    inset 0 0 0 1px rgba(121, 198, 93, 0.28),
+    0 0 7px rgba(121, 198, 93, 0.18);
+  color: var(--fallout-maw-terminal-green);
 }
 
 .fallout-maw-travel-member-actions > button.danger {
-  flex: 0 0 38px;
-  width: 38px;
+  padding: 0;
+  width: 34px;
 }
 
-.fallout-maw-travel-no-vehicles {
-  align-items: center;
-  border: 1px dashed var(--color-border-light-2);
-  display: flex;
-  justify-content: center;
-  min-height: 180px;
-  width: 100%;
+.fallout-maw-travel-empty-panel {
+  color: var(--fallout-maw-terminal-muted);
+  padding: 0.75rem;
+}
+
+.application.fallout-maw-travel-assembly button {
+  background: rgba(16, 19, 13, 0.92);
+  border: 1px solid var(--fallout-maw-terminal-line);
+  border-radius: 2px;
+  color: var(--fallout-maw-terminal-text);
+}
+
+.application.fallout-maw-travel-assembly button:hover:not(:disabled) {
+  border-color: var(--fallout-maw-terminal-accent);
+  box-shadow: 0 0 8px rgba(240, 207, 85, 0.2);
+}
+
+.application.fallout-maw-travel-assembly button.danger {
+  color: var(--fallout-maw-terminal-red);
+}
+
+@media (max-width: 760px) {
+  .fallout-maw-travel-layout {
+    align-items: stretch;
+    flex-direction: column-reverse;
+    width: 100%;
+  }
+
+  .fallout-maw-travel-roster {
+    flex-basis: auto;
+  }
 }

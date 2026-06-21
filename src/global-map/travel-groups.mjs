@@ -188,13 +188,11 @@ class TravelAssemblyApplication extends FalloutMaWFormApplicationV2 {
     ...super.DEFAULT_OPTIONS,
     id: "fallout-maw-travel-assembly",
     classes: [...super.DEFAULT_OPTIONS.classes, "standard-form", "fallout-maw-global-map-editor", "fallout-maw-travel-assembly"],
-    position: { width: 920, height: "auto" },
+    position: { width: "auto", height: "auto" },
     window: { title: "Сбор группы", resizable: true },
     actions: {
       toggleReady: TravelAssemblyApplication.#toggleReady,
-      removeMember: TravelAssemblyApplication.#removeMember,
-      depart: TravelAssemblyApplication.#depart,
-      cancelAssembly: TravelAssemblyApplication.#cancel
+      removeMember: TravelAssemblyApplication.#removeMember
     },
     form: {
       handler: TravelAssemblyApplication.handleFormSubmit,
@@ -228,29 +226,24 @@ class TravelAssemblyApplication extends FalloutMaWFormApplicationV2 {
     const canManage = canUserManageAssembly(scene, assembly, user, model);
     const members = model.members.map(member => ({
       ...member,
-      ready: model.readyMemberIds.has(member.id),
-      canReady: Boolean(user?.isGM || member.actor?.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)),
+      requiresReady: memberRequiresReady(member),
+      ready: !memberRequiresReady(member) || model.readyMemberIds.has(member.id),
+      canReady: memberRequiresReady(member)
+        && Boolean(user?.isGM || member.actor?.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)),
       canDrag: Boolean(!member.vehicle && (user?.isGM || member.actor?.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER))),
       canRemove: Boolean(canManage)
     }));
     const vehicles = model.vehicles.map(vehicle => ({
       ...vehicle,
-      ready: model.readyMemberIds.has(vehicle.memberId),
-      canReady: Boolean(user?.isGM || vehicle.actor?.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)),
-      canRemove: canManage,
-      decks: buildVehicleDecks(vehicle, members)
+      seatGroups: buildVehicleSeatGroups(vehicle, members)
     }));
-    const leader = model.membersById.get(model.leaderMemberId);
     return {
       missing: false,
       assembly,
       members: members.filter(member => !member.vehicle),
       vehicles,
       hasVehicles: vehicles.length > 0,
-      leaderName: leader?.name ?? "Нет лидера",
-      canManage,
-      canDepart: canManage && model.members.length > 0
-        && model.members.every(member => !member.missing && model.readyMemberIds.has(member.id))
+      canManage
     };
   }
 
@@ -268,6 +261,9 @@ class TravelAssemblyApplication extends FalloutMaWFormApplicationV2 {
   _onClose(options) {
     super._onClose(options);
     assemblyApps.delete(`${this.sceneId}:${this.assemblyId}`);
+    if (!options?.falloutMaWAssemblyClosed && getAssembly(game.scenes?.get(this.sceneId), this.assemblyId)) {
+      void cancelTravelAssembly(this.assemblyId, this.sceneId);
+    }
   }
 
   static #toggleReady(_event, target) {
@@ -284,17 +280,6 @@ class TravelAssemblyApplication extends FalloutMaWFormApplicationV2 {
       assemblyId: this.assemblyId,
       memberId: target.dataset.memberId
     });
-  }
-
-  static #depart() {
-    return submitTravelGroupRequest("travelGroup.assembly.depart", {
-      sceneId: this.sceneId,
-      assemblyId: this.assemblyId
-    });
-  }
-
-  static #cancel() {
-    return cancelTravelAssembly(this.assemblyId, this.sceneId);
   }
 
   #onDragStart(event) {
@@ -382,7 +367,7 @@ async function handleTravelGroupSocket(payload) {
     await handleAssemblyChanged(payload);
   } else if (payload.action === "travelGroup.assembly.closed") {
     const app = assemblyApps.get(`${payload.sceneId}:${payload.assemblyId}`);
-    await app?.close?.();
+    await app?.close?.({ falloutMaWAssemblyClosed: true });
   } else if (payload.action === "travelGroup.arrival.open") {
     if (!(payload.viewerUserIds ?? []).includes(game.user?.id)) return;
     const target = game.scenes?.get(payload.targetSceneId);
@@ -460,6 +445,7 @@ async function handleReadyRequest(payload) {
   const model = await buildAssemblyModel(scene, assembly);
   const member = model.membersById.get(payload.memberId);
   if (!member?.actor) throw new Error("Участник не найден.");
+  if (!memberRequiresReady(member)) throw new Error("Этот участник не требует подтверждения готовности.");
   if (!user.isGM && !member.actor.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) {
     throw new Error("Нет прав на подтверждение этого участника.");
   }
@@ -471,6 +457,7 @@ async function handleReadyRequest(payload) {
   assembly.updatedAt = Date.now();
   await storeAssembly(scene, assembly);
   broadcastAssemblyChanged(scene, assembly);
+  await departAssemblyWhenReady(scene, assembly);
   return true;
 }
 
@@ -606,9 +593,28 @@ async function handleDepartRequest(payload) {
   const { scene, assembly, user } = getAssemblyRequestContext(payload);
   const model = await buildAssemblyModel(scene, assembly);
   requireAssemblyManager(scene, assembly, user, model);
+  return performAssemblyDeparture(scene, assembly, model, user.id);
+}
+
+async function departAssemblyWhenReady(scene, assembly) {
+  const model = await buildAssemblyModel(scene, assembly);
+  const required = model.members.filter(memberRequiresReady);
+  if (!required.length
+    || model.members.some(member => member.missing)
+    || required.some(member => !model.readyMemberIds.has(member.id))) return false;
+  return performAssemblyDeparture(
+    scene,
+    assembly,
+    model,
+    assembly.leaderUserId || game.users?.activeGM?.id
+  );
+}
+
+async function performAssemblyDeparture(scene, assembly, model, requestingUserId) {
   const tokenDocuments = assembly.memberTokenIds.map(id => scene.tokens?.get(id)).filter(Boolean);
   if (tokenDocuments.length !== assembly.memberTokenIds.length) throw new Error("Один из участников больше недоступен.");
-  if (model.members.some(member => member.missing || !model.readyMemberIds.has(member.id))) {
+  if (model.members.some(member => member.missing)
+    || model.members.filter(memberRequiresReady).some(member => !model.readyMemberIds.has(member.id))) {
     throw new Error("Не все участники подтвердили готовность.");
   }
   const zone = getSceneState(scene).locationExitZones.find(entry => entry.id === assembly.exitZoneId);
@@ -618,7 +624,7 @@ async function handleDepartRequest(payload) {
     zone,
     tokenDocuments,
     model,
-    requestingUserId: user.id,
+    requestingUserId,
     assemblyId: assembly.id
   });
   if (result) await closeAssembly(scene, assembly.id);
@@ -1218,15 +1224,28 @@ async function buildAssemblyModel(scene, assembly) {
       ? assembly.readyMemberIds
       : (assembly.readyTokenIds ?? []).map(tokenMemberId)
   );
+  for (const id of readyMemberIds) {
+    if (!memberRequiresReady(membersById.get(id))) readyMemberIds.delete(id);
+  }
   const leaderMemberId = membersById.has(assembly.leaderMemberId)
     ? assembly.leaderMemberId
     : members.find(member => member.id === tokenMemberId(assembly.memberTokenIds?.[0]))?.id ?? members[0]?.id ?? "";
   return { scene, assembly, members, membersById, vehicles, readyMemberIds, leaderMemberId };
 }
 
-function buildVehicleDecks(vehicle, members) {
-  const decks = [];
+function memberRequiresReady(member) {
+  return Boolean(member && !member.vehicle);
+}
+
+function buildVehicleSeatGroups(vehicle, members) {
+  const groups = new Map();
   for (const seat of vehicle.seats) {
+    let group = groups.get(seat.itemId);
+    if (!group) {
+      group = { id: seat.itemId, name: seat.itemName, rows: [] };
+      groups.set(seat.itemId, group);
+    }
+    const instances = [];
     for (let slotIndex = 0; slotIndex < seat.quantity; slotIndex += 1) {
       const occupants = members
         .filter(member => member.placement?.vehicleTokenId === vehicle.tokenId
@@ -1257,17 +1276,17 @@ function buildVehicleDecks(vehicle, members) {
           });
         }
       }
-      decks.push({
+      instances.push({
         id: `${seat.slotId}:${slotIndex}`,
-        name: seat.quantity > 1 ? `${seat.itemName} ${slotIndex + 1}` : seat.itemName,
         columns: seat.width,
         rows: seat.height,
         cells,
         occupants
       });
     }
+    group.rows.push({ id: seat.slotId, instances });
   }
-  return decks;
+  return Array.from(groups.values());
 }
 
 function normalizeAssemblyPlacement(value) {
@@ -1361,7 +1380,7 @@ async function closeAssembly(scene, assemblyId) {
   });
   game.socket.emit(GLOBAL_MAP_SOCKET, { action: "travelGroup.assembly.closed", sceneId: scene.id, assemblyId });
   const app = assemblyApps.get(`${scene.id}:${assemblyId}`);
-  await app?.close?.();
+  await app?.close?.({ falloutMaWAssemblyClosed: true });
   return true;
 }
 

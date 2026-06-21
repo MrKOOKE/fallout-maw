@@ -2,43 +2,33 @@
   {{#if missing}}
   <p class="notification warning">Сбор группы больше не существует.</p>
   {{else}}
-  <header class="fallout-maw-travel-assembly-header">
-    <span>Лидер группы</span>
-    <strong>{{leaderName}}</strong>
-  </header>
-
   <div class="fallout-maw-travel-layout">
     <div class="fallout-maw-travel-vehicles">
       {{#each vehicles}}
-      <section class="fallout-maw-travel-vehicle {{#if ready}}ready{{/if}}">
+      <section class="fallout-maw-travel-vehicle">
         <header class="fallout-maw-travel-vehicle-header">
           <img src="{{img}}" alt="{{name}}">
           <strong>{{name}}</strong>
-          <div class="fallout-maw-travel-member-actions">
-            {{#if canReady}}
-            <button type="button" data-action="toggleReady" data-member-id="{{memberId}}">
-              <i class="fa-solid {{#if ready}}fa-check{{else}}fa-hourglass{{/if}}"></i>
-              {{#if ready}}Готов{{else}}Подтвердить{{/if}}
-            </button>
-            {{/if}}
-            {{#if canRemove}}
-            <button type="button" data-action="removeMember" data-member-id="{{memberId}}" class="danger" title="Исключить транспорт">
-              <i class="fa-solid fa-user-minus"></i>
-            </button>
-            {{/if}}
-          </div>
         </header>
-        <div class="fallout-maw-travel-decks">
-          {{#each decks}}
-          <div class="fallout-maw-travel-deck">
-            <span class="fallout-maw-travel-deck-name">{{name}}</span>
-            <div class="fallout-maw-travel-grid" style="--travel-columns: {{columns}}; --travel-rows: {{rows}};">
+
+        <div class="fallout-maw-travel-vehicle-content">
+          <h2>Пассажирские места</h2>
+          {{#each seatGroups}}
+          <div class="fallout-maw-travel-seat-group">
+            <h3>{{name}}</h3>
+            {{#each rows}}
+            <div class="fallout-maw-actor-container-row fallout-maw-travel-seat-row">
+              {{#each instances}}
+            <div
+              class="fallout-maw-inventory-grid fallout-maw-actor-container-grid fallout-maw-travel-grid"
+              style="--fallout-maw-inventory-columns: {{columns}};"
+            >
               {{#each cells}}
               <div
-                class="fallout-maw-travel-cell {{#if occupied}}occupied{{/if}}"
+                class="fallout-maw-inventory-cell fallout-maw-actor-container-cell fallout-maw-travel-cell {{#if occupied}}occupied{{/if}}"
                 data-travel-drop
                 data-drop-kind="vehicle-cell"
-                data-vehicle-token-id="{{../../tokenId}}"
+                data-vehicle-token-id="{{../../../../tokenId}}"
                 data-slot-id="{{slotId}}"
                 data-slot-index="{{slotIndex}}"
                 data-x="{{x}}"
@@ -47,26 +37,36 @@
               ></div>
               {{/each}}
               {{#each occupants}}
-              <div class="fallout-maw-travel-grid-occupant" style="{{gridStyle}}" title="{{name}}">
+              <article
+                class="draggable fallout-maw-inventory-item fallout-maw-inventory-grid-item fallout-maw-actor-container-passenger equipped fallout-maw-travel-grid-occupant"
+                data-travel-member-drag
+                data-member-id="{{id}}"
+                data-can-drag="{{canDrag}}"
+                title="{{name}}"
+                style="{{gridStyle}}"
+              >
                 <img src="{{img}}" alt="{{name}}">
-              </div>
+              </article>
               {{/each}}
             </div>
+              {{/each}}
+            </div>
+            {{/each}}
           </div>
           {{/each}}
         </div>
       </section>
       {{else}}
-      <div class="fallout-maw-travel-no-vehicles">В сборе нет транспорта.</div>
+      <section class="fallout-maw-travel-empty-panel">В сборе нет транспорта.</section>
       {{/each}}
     </div>
 
     <aside class="fallout-maw-travel-roster" data-travel-drop data-drop-kind="roster">
-      <h3>Участники</h3>
+      <h2>Участники</h2>
       <div class="fallout-maw-travel-member-list">
         {{#each members}}
         <section
-          class="fallout-maw-travel-member {{#if ready}}ready{{/if}} {{#if missing}}missing{{/if}}"
+          class="fallout-maw-travel-member {{#if requiresReady}}{{#if ready}}ready{{/if}}{{/if}} {{#if missing}}missing{{/if}}"
           data-travel-member-drag
           data-member-id="{{id}}"
           data-can-drag="{{canDrag}}"
@@ -75,9 +75,15 @@
           <strong>{{name}}</strong>
           <div class="fallout-maw-travel-member-actions">
             {{#if canReady}}
-            <button type="button" data-action="toggleReady" data-member-id="{{id}}">
-              <i class="fa-solid {{#if ready}}fa-check{{else}}fa-hourglass{{/if}}"></i>
-              {{#if ready}}Готов{{else}}Подтвердить{{/if}}
+            <button
+              type="button"
+              data-action="toggleReady"
+              data-member-id="{{id}}"
+              class="fallout-maw-travel-ready-button {{#if ready}}ready{{/if}}"
+              title="{{#if ready}}Готовность подтверждена{{else}}Подтвердить готовность{{/if}}"
+              aria-label="{{#if ready}}Готовность подтверждена{{else}}Подтвердить готовность{{/if}}"
+            >
+              <i class="fa-solid {{#if ready}}fa-xmark{{else}}fa-check{{/if}}"></i>
             </button>
             {{/if}}
             {{#if canRemove}}
@@ -92,15 +98,5 @@
     </aside>
   </div>
 
-  <footer class="form-footer">
-    {{#if canManage}}
-    <button type="button" data-action="depart" {{#unless canDepart}}disabled{{/unless}}>
-      <i class="fa-solid fa-route"></i> Отправиться
-    </button>
-    <button type="button" data-action="cancelAssembly" class="danger">
-      <i class="fa-solid fa-ban"></i> Отменить сбор
-    </button>
-    {{/if}}
-  </footer>
   {{/if}}
 </div>
