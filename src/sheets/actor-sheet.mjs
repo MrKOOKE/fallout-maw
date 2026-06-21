@@ -2,6 +2,7 @@ import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY, TEMPLATES } from "../constants.mjs";
 import { TRAVEL_GROUP_FLAG } from "../global-map/constants.mjs";
 import { moveTravelCarrierPassenger } from "../global-map/travel-groups.mjs";
+import { getTravelGroupUnits, resolveTravelGroupUnitActor } from "../global-map/travel-group-data.mjs";
 import { AdvancementApplication } from "../advancement/application.mjs";
 import {
   getCharacteristicSettings,
@@ -3435,12 +3436,11 @@ function isTravelGroupCarrierActor(actor = null) {
 async function prepareTravelGroupSheetContext(actor = null) {
   const group = actor?.getFlag?.(FALLOUT_MAW.id, TRAVEL_GROUP_FLAG);
   if (!group?.groupId) return { visible: false, vehicles: [], walkers: [] };
-  const units = normalizeTravelGroupSheetUnits(group.units);
-  const sourceUnits = units.length ? units : normalizeTravelGroupSheetUnits(getActorContainerFlag(actor).passengers);
+  const sourceUnits = getTravelGroupUnits(actor);
   const vehicles = [];
   const walkers = [];
   for (const unit of sourceUnits) {
-    const unitActor = await resolveTravelGroupSheetUnitActor(unit);
+    const unitActor = await resolveTravelGroupUnitActor(unit);
     const useLiveActorContainer = unit.tokenData?.actorLink !== false
       && unitActor
       && hasActorContainer(unitActor);
@@ -3476,52 +3476,9 @@ async function prepareTravelGroupSheetContext(actor = null) {
   };
 }
 
-function normalizeTravelGroupSheetUnits(units = []) {
-  return (Array.isArray(units) ? units : [])
-    .map(unit => ({
-      id: String(unit?.id ?? unit?.actorUuid ?? foundry.utils.randomID()),
-      actorUuid: String(unit?.actorUuid ?? ""),
-      actorName: String(unit?.actorName ?? unit?.name ?? ""),
-      actorImg: String(unit?.actorImg ?? unit?.img ?? ""),
-      tokenData: unit?.tokenData && typeof unit.tokenData === "object"
-        ? foundry.utils.deepClone(unit.tokenData)
-        : null,
-      actorContainer: normalizeTravelGroupSheetActorContainer(unit?.actorContainer)
-    }))
-    .filter(unit => unit.actorUuid || unit.tokenData);
-}
-
-function normalizeTravelGroupSheetActorContainer(value = null) {
-  if (!value || typeof value !== "object") return null;
-  const seats = Array.isArray(value.seats) ? foundry.utils.deepClone(value.seats) : [];
-  const passengers = Array.isArray(value.passengers) ? foundry.utils.deepClone(value.passengers) : [];
-  return seats.length || passengers.length ? { seats, passengers } : null;
-}
-
 function prepareActorContainerSnapshotContext(snapshot = null) {
   if (!snapshot) return { visible: false, groups: [] };
   return prepareActorContainerGridContext(snapshot.seats, snapshot.passengers);
-}
-
-async function resolveTravelGroupSheetUnitActor(unit = {}) {
-  const actorId = String(unit.tokenData?.actorId ?? "").trim();
-  if (actorId) {
-    const actor = game.actors?.get(actorId);
-    if (actor) return actor;
-  }
-  if (unit.actorUuid) {
-    if (unit.actorUuid.startsWith("Actor.")) {
-      const actor = game.actors?.get(unit.actorUuid.slice("Actor.".length));
-      if (actor) return actor;
-    }
-    const fromUuid = globalThis.fromUuid ?? foundry.utils.fromUuid;
-    const actor = await fromUuid?.(unit.actorUuid);
-    if (actor) return actor;
-  }
-  const name = String(unit.actorName ?? unit.tokenData?.name ?? "").trim();
-  if (!name) return null;
-  const matches = (game.actors?.contents ?? []).filter(actor => actor.name === name);
-  return matches.length === 1 ? matches[0] : null;
 }
 
 async function resolveActorByUuid(uuid = "") {

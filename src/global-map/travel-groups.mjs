@@ -25,6 +25,7 @@ import {
 } from "./geometry.mjs";
 import { findLocation, getGlobalMapFlag, getSceneState, setDiscovered, updateSceneState } from "./storage.mjs";
 import { getTravelGroupImage, getTravelGroupPrototypeToken } from "./travel-settings.mjs";
+import { createTravelFormulaSnapshot, evaluateTravelSpeed } from "./travel-speed.mjs";
 import { queueGlobalMapApplicationPosition } from "./window-position.mjs";
 
 const { DialogV2 } = foundry.applications.api;
@@ -797,7 +798,8 @@ async function createTravelCarrier({ originScene, targetScene, topUnits, allActo
   const ownership = { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.NONE };
   for (const userId of ownerUserIds) ownership[userId] = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
   const groupId = foundry.utils.randomID();
-  const speedKmh = Math.min(...topUnits.map(unit => Math.max(0, Number(unit.actor?.system?.resources?.movementPoints?.max) || 0) / 2));
+  const storedUnits = topUnits.map(prepareTravelGroupUnitForStorage);
+  const speedKmh = Math.min(...storedUnits.map(unit => unit.speedKmh));
   const actor = await Actor.create({
     name: "Путешествие",
     type: "character",
@@ -817,7 +819,7 @@ async function createTravelCarrier({ originScene, targetScene, topUnits, allActo
           ownerUserIds,
           effectiveSpeedKmh: Number.isFinite(speedKmh) ? speedKmh : 0,
           memberActorUuids: allActors.map(actor => actor?.uuid).filter(Boolean),
-          units: topUnits.map(prepareTravelGroupUnitForStorage),
+          units: storedUnits,
           createdAt: Date.now()
         }
       }
@@ -915,6 +917,8 @@ async function performArrival(originScene, carrierToken, targetScene, zone, pend
 }
 
 function prepareTravelGroupUnitForStorage(unit) {
+  const travelFormulaData = createTravelFormulaSnapshot(unit.actor);
+  const speedKmh = evaluateTravelSpeed(unit.actor, travelFormulaData);
   return {
     id: foundry.utils.randomID(),
     actorUuid: String(unit.actorUuid ?? ""),
@@ -922,6 +926,8 @@ function prepareTravelGroupUnitForStorage(unit) {
     actorImg: String(unit.img ?? ""),
     tokenData: foundry.utils.deepClone(unit.tokenData ?? null),
     actorContainer: prepareTravelGroupActorContainerSnapshot(unit.actor),
+    travelFormulaData,
+    speedKmh,
     width: Math.max(1, Math.ceil(Number(unit.width) || 1)),
     height: Math.max(1, Math.ceil(Number(unit.height) || 1))
   };

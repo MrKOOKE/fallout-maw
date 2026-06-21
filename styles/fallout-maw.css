@@ -12484,6 +12484,259 @@ label.fallout-maw-mitigation-cell {
   overflow: hidden;
 }
 
+/* Travel group HUD */
+.fallout-maw-travel-group-hud {
+  --fallout-maw-token-hud-tile: 115px;
+  --fallout-maw-token-hud-action-label-height: 18px;
+  bottom: 12px;
+  color: #ded2ab;
+  left: 12px;
+  max-width: calc(100vw - 24px);
+  pointer-events: none;
+  position: fixed;
+  transform: scale(var(--fallout-maw-token-action-hud-scale, 1));
+  transform-origin: left bottom;
+  width: max-content;
+  z-index: calc(var(--z-index-app, 30) + 3);
+}
+
+.fallout-maw-travel-hud-layout {
+  display: block;
+  max-width: calc(100vw - 24px);
+  pointer-events: none;
+  position: relative;
+  width: max-content;
+}
+
+.fallout-maw-travel-hud-strip {
+  align-items: flex-end;
+  display: grid;
+  gap: 7px;
+  grid-auto-columns: max-content;
+  grid-auto-flow: column;
+  grid-template-rows: max-content;
+  max-width: calc(100vw - 24px);
+  pointer-events: none;
+  width: max-content;
+}
+
+.fallout-maw-travel-hud-block-wrap {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 150px;
+  grid-template-rows: minmax(27px, max-content) 115px;
+  pointer-events: auto;
+  position: relative;
+  width: 150px;
+}
+
+.fallout-maw-travel-hud-toggle {
+  align-items: center;
+  background: linear-gradient(180deg, rgba(48, 51, 42, 0.98), rgba(16, 17, 14, 0.98));
+  border: 1px solid rgba(212, 181, 93, 0.42);
+  color: #e7d7a5;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.72rem;
+  gap: 5px;
+  justify-content: center;
+  min-height: 27px;
+  padding: 3px 5px;
+  width: 100%;
+}
+
+.fallout-maw-travel-hud-toggle span {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-travel-hud-toggle.active,
+.fallout-maw-travel-hud-toggle:hover,
+.fallout-maw-travel-hud-toggle:focus-visible {
+  border-color: rgba(255, 219, 105, 0.82);
+  color: #fff0b3;
+  outline: 0;
+}
+
+.fallout-maw-travel-hud-toggle.active .fa-caret-up {
+  transform: rotate(180deg);
+}
+
+.fallout-maw-travel-hud-group-card {
+  background: linear-gradient(180deg, rgba(48, 51, 42, 0.98), rgba(12, 13, 11, 0.98));
+  border: 1px solid rgba(220, 191, 118, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(255, 238, 170, 0.05), 0 6px 18px rgba(0, 0, 0, 0.44);
+  height: 115px;
+  overflow: hidden;
+  position: relative;
+  width: 150px;
+}
+
+.fallout-maw-travel-hud-group-card > img {
+  border: 0;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.fallout-maw-travel-hud-group-caption {
+  background: rgba(2, 3, 2, 0.9);
+  border-top: 1px solid rgba(237, 209, 129, 0.34);
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  left: 0;
+  padding: 3px 5px;
+  position: absolute;
+  right: 0;
+  text-align: center;
+}
+
+.fallout-maw-travel-hud-group-caption strong,
+.fallout-maw-travel-hud-group-caption span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-travel-hud-group-caption strong { font-size: 0.82rem; }
+.fallout-maw-travel-hud-group-caption span { color: #cdbf91; font-size: 0.7rem; }
+
+.fallout-maw-travel-hud-member-panel {
+  background: linear-gradient(180deg, rgba(30, 32, 26, 0.99), rgba(7, 8, 7, 0.99));
+  border: 1px solid rgba(226, 199, 119, 0.62);
+  bottom: calc(100% + 6px);
+  box-shadow: inset 0 0 0 1px rgba(255, 238, 170, 0.06), 0 9px 24px rgba(0, 0, 0, 0.58);
+  left: 0;
+  max-height: min(62vh, 560px);
+  max-width: calc((100vw - 24px) / var(--fallout-maw-token-action-hud-scale, 1));
+  overflow: auto;
+  padding: 8px;
+  position: absolute;
+  width: max-content;
+  z-index: 5;
+}
+
+.fallout-maw-travel-hud-member-list {
+  align-items: stretch;
+  display: flex;
+  gap: 8px;
+  width: max-content;
+}
+
+.fallout-maw-travel-hud-member {
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(218, 192, 113, 0.5);
+  box-sizing: border-box;
+  flex: 0 0 310px;
+  padding: 8px;
+  width: 310px;
+}
+
+.fallout-maw-travel-hud-member.missing { opacity: 0.62; }
+
+.fallout-maw-travel-hud-member > header {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+  margin-bottom: 7px;
+  min-width: 0;
+}
+
+.fallout-maw-travel-hud-member > header img {
+  border: 1px solid rgba(224, 198, 119, 0.56);
+  flex: 0 0 36px;
+  height: 36px;
+  object-fit: cover;
+  width: 36px;
+}
+
+.fallout-maw-travel-hud-member > header strong {
+  color: #eadba9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-travel-hud-member-meters {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fallout-maw-travel-hud-meter > div:first-child {
+  align-items: baseline;
+  display: flex;
+  font-size: 0.68rem;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.fallout-maw-travel-hud-meter > div:first-child strong { color: #e2d39f; }
+.fallout-maw-travel-hud-meter .fallout-maw-resource-meter { height: 9px; }
+
+.fallout-maw-travel-hud-movement {
+  align-self: end;
+  flex: 0 0 var(--fallout-maw-token-hud-tile, 115px);
+  pointer-events: auto;
+}
+
+.fallout-maw-travel-hud-movement > strong {
+  background: rgba(5, 8, 5, 0.88);
+  border: 1px solid rgba(237, 209, 129, 0.38);
+  color: #f0dfa7;
+  font-size: 0.68rem;
+  padding: 2px 4px;
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  z-index: 2;
+}
+
+.fallout-maw-travel-hud-movement.active {
+  box-shadow: inset 0 0 18px rgba(232, 190, 62, 0.2), 0 0 12px rgba(232, 190, 62, 0.45);
+}
+
+.fallout-maw-travel-hud-empty {
+  background: rgba(5, 6, 5, 0.92);
+  border: 1px solid rgba(220, 191, 118, 0.34);
+  color: #bdb18b;
+  padding: 12px;
+  pointer-events: auto;
+}
+
+.waypoint-label.fallout-maw-travel-waypoint-label {
+  background: transparent;
+  display: block;
+  padding: 0;
+}
+
+.fallout-maw-travel-ruler-table {
+  background: rgba(8, 10, 8, 0.94);
+  border: 1px solid rgba(222, 193, 108, 0.72);
+  color: #f0dfa7;
+  display: grid;
+  font-size: 0.82rem;
+  gap: 2px;
+  min-width: max-content;
+  padding: 4px 7px;
+}
+
+.fallout-maw-travel-ruler-table span {
+  align-items: center;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: 14px auto;
+}
+
+.fallout-maw-travel-ruler-table.blocked {
+  border-color: rgba(220, 74, 61, 0.9);
+  color: #ffb0a7;
+}
+
 .application.fallout-maw-actor-sheet .fallout-maw-travel-group-sheet {
   display: flex;
   flex: none;

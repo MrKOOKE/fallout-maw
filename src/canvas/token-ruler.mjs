@@ -7,8 +7,11 @@ import {
   isCombatMovementTracked,
   publishCombatMovementResourcePreview
 } from "../combat/movement-resources.mjs";
+import { getTravelMovementPreview } from "../global-map/travel-movement.mjs";
 
 export class FalloutMaWTokenRuler extends foundry.canvas.placeables.tokens.TokenRuler {
+  static WAYPOINT_LABEL_TEMPLATE = "systems/fallout-maw/templates/hud/travel-waypoint-label.hbs";
+
   refresh(rulerData) {
     super.refresh(rulerData);
     syncCombatMovementResourcePreview(this.token, rulerData);
@@ -24,6 +27,13 @@ export class FalloutMaWTokenRuler extends foundry.canvas.placeables.tokens.Token
 
   _getGridHighlightStyle(waypoint, offset) {
     return applyCombatMovementStyle(this.token, waypoint, super._getGridHighlightStyle(waypoint, offset));
+  }
+
+  _getWaypointLabelContext(waypoint, state) {
+    const context = super._getWaypointLabelContext(waypoint, state);
+    if (!context || waypoint.next) return context;
+    context.travel = getTravelMovementPreview(this.token, waypoint);
+    return context;
   }
 }
 

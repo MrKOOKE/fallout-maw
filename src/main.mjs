@@ -32,6 +32,8 @@ import {
   registerTokenActionHudSocket,
   syncTokenActionHud
 } from "./apps/token-action-hud.mjs";
+import { registerTravelGroupHudHooks, syncTravelGroupHud } from "./apps/travel-group-hud.mjs";
+import { registerTravelMovementHooks, registerTravelMovementSocket } from "./global-map/travel-movement.mjs";
 import { initializeCombatCarousel, registerCombatCarouselHooks } from "./apps/combat-carousel.mjs";
 import { registerAnimationLibraryBrowserHooks } from "./apps/animation-library-browser.mjs";
 import { registerTrapPlacementControlHooks } from "./apps/trap-placement-control.mjs";
@@ -130,6 +132,8 @@ Hooks.once("init", () => {
   registerEnergyConsumptionHooks();
   registerSkillCheckControlHooks();
   registerTokenActionHudHooks();
+  registerTravelGroupHudHooks();
+  registerTravelMovementHooks();
   registerCombatCarouselHooks();
   registerWorldTimeControlHooks();
   registerPersonalGeneratorHooks();
@@ -226,9 +230,11 @@ Hooks.once("ready", async () => {
   registerHackingSocket();
   registerFirstAidSocket();
   registerTokenActionHudSocket();
+  registerTravelMovementSocket();
   registerFixedAbilityFunctionSocket();
   refreshTokenActionHudControlButton();
   syncTokenActionHud();
+  syncTravelGroupHud();
   initializeCombatCarousel();
   await syncLoadedActorNaturalRaceItems();
   await syncLoadedActorAbilityEffects();

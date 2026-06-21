@@ -1,4 +1,5 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
+import { isTravelGroupCarrierActor } from "../global-map/travel-group-data.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import {
   getCreatureOptions,
@@ -235,7 +236,7 @@ export function syncTokenActionHud() {
   }
 
   const token = getSelectedTokenForHud();
-  if (!token) {
+  if (!token || isTravelGroupCarrierActor(token.actor)) {
     closeTokenActionHud();
     return;
   }

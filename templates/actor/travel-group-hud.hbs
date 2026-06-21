@@ -1,0 +1,51 @@
+<div class="fallout-maw-travel-hud-layout">
+<div class="fallout-maw-travel-hud-strip">
+  {{#each blocks}}
+  <section class="fallout-maw-travel-hud-block-wrap {{#if walkers}}walkers{{/if}}">
+    {{#if open}}
+    <div class="fallout-maw-travel-hud-member-panel" data-travel-member-panel>
+      <div class="fallout-maw-travel-hud-member-list">
+        {{#each members}}
+        <article class="fallout-maw-travel-hud-member {{#if missing}}missing{{/if}}">
+          <header><img src="{{img}}" alt="{{name}}" onerror="this.src='{{../../fallbackIcon}}'"><strong>{{name}}</strong></header>
+          {{#if missing}}
+          <p>Актёр недоступен</p>
+          {{else}}
+          <div class="fallout-maw-travel-hud-member-meters">
+            {{#each meters}}
+            <div class="fallout-maw-travel-hud-meter">
+              <div><span>{{label}}</span><strong>{{valueLabel}} / {{maxLabel}}</strong></div>
+              <div class="fallout-maw-resource-meter" style="{{meterStyle}}"><span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span></div>
+            </div>
+            {{/each}}
+          </div>
+          {{/if}}
+        </article>
+        {{else}}
+        <div class="fallout-maw-travel-hud-empty">Нет участников</div>
+        {{/each}}
+      </div>
+    </div>
+    {{/if}}
+    <button type="button" class="fallout-maw-travel-hud-toggle {{#if open}}active{{/if}}" data-action="toggleGroup" data-group-id="{{id}}" aria-expanded="{{open}}">
+      <i class="fa-solid fa-chart-simple"></i><span>Показатели группы</span><i class="fa-solid fa-caret-up"></i>
+    </button>
+    <div class="fallout-maw-travel-hud-group-card">
+      <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../fallbackIcon}}'">
+      <div class="fallout-maw-travel-hud-group-caption">
+        <strong>{{name}}</strong>
+        <span>{{countLabel}} · {{speedLabel}}</span>
+      </div>
+    </div>
+  </section>
+  {{else}}
+  <div class="fallout-maw-travel-hud-empty">В группе нет участников</div>
+  {{/each}}
+
+  <button type="button" class="fallout-maw-token-hud-main-action fallout-maw-travel-hud-movement" data-action="toggleMovement" title="Скорость группы: {{groupSpeedLabel}}">
+    <img src="icons/svg/walk.svg" alt="Перемещение">
+    <span>Перемещение</span>
+    <strong>{{groupSpeedLabel}}</strong>
+  </button>
+</div>
+</div>

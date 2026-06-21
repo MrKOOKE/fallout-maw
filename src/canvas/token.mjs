@@ -26,6 +26,53 @@ let middleClickGuardRegistered = false;
  * System token implementation with readable Active Effect icon tooltips.
  */
 export class FalloutMaWToken extends foundry.canvas.placeables.Token {
+  /**
+   * Put the token into Foundry's native left-drag workflow after movement
+   * planning was started from a DOM control instead of from the canvas.
+   */
+  startMovementPlanningDrag() {
+    const manager = this.mouseInteractionManager;
+    const eventSystem = canvas?.app?.renderer?.events;
+    const boundary = eventSystem?.rootBoundary;
+    if (!manager || !boundary || !eventSystem?.pointer) return false;
+
+    if (manager.state > manager.states.HOVER) manager.cancel();
+    if (manager.state === manager.states.NONE) {
+      const hoverEvent = boundary.createPointerEvent(eventSystem.pointer, "pointerover", this);
+      hoverEvent.path = null;
+      hoverEvent.nativeEvent = null;
+      hoverEvent.buttons = 0;
+      try {
+        manager.handleEvent(hoverEvent);
+      } finally {
+        boundary.freeEvent(hoverEvent);
+      }
+    }
+    if (manager.state !== manager.states.HOVER) return false;
+
+    // Do not let a recent canvas click turn this synthetic press into a double-click.
+    manager.lcTime = 0;
+    const downEvent = boundary.createPointerEvent(eventSystem.pointer, "pointerdown", this);
+    downEvent.path = null;
+    downEvent.nativeEvent = null;
+    downEvent.button = 0;
+    downEvent.buttons = 1;
+    downEvent.defaultPrevented = false;
+    try {
+      manager.handleEvent(downEvent);
+    } finally {
+      boundary.freeEvent(downEvent);
+    }
+    if (manager.state !== manager.states.GRABBED) return false;
+
+    // Cross the drag-resistance threshold immediately. The normal Foundry
+    // pointermove/pointerup listeners take over from this point onward.
+    const resistance = Number(manager.options?.dragResistance) || 10;
+    manager.interactionData.screenOrigin.x -= resistance + 1;
+    foundry.canvas.interaction.MouseInteractionManager.emulateMoveEvent();
+    return true;
+  }
+
   /** @override */
   _drawBar(index, bar, data) {
     if (HEALTH_BAR_ATTRIBUTES.has(String(data?.attribute ?? ""))) return this._drawHealthBar(index, bar, data);
