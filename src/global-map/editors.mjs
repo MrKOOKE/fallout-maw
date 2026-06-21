@@ -7,7 +7,6 @@ import {
 } from "./constants.mjs";
 import { deleteCollectionEntry, getGlobalMapFlag, getSceneState, saveCollectionEntry, updateSceneState } from "./storage.mjs";
 import {
-  createZoneScene,
   deleteLocationTree,
   ensureLocationStructure,
   getOrCreateGlobalMap,
@@ -383,6 +382,8 @@ export class LocationExitEditor extends GlobalMapEditorBase {
 }
 
 export class TransitionEditor extends GlobalMapEditorBase {
+  #dragDrop = null;
+
   constructor(scene, data, options = {}) {
     super(scene, { ...DEFAULT_TRANSITION, ...data }, options);
     this.isNew = Boolean(options.isNew);
@@ -398,15 +399,31 @@ export class TransitionEditor extends GlobalMapEditorBase {
     form: { template: `${TEMPLATE_ROOT}/transition-editor.hbs` }
   };
 
+  get _dragDrop() {
+    return this.#dragDrop ??= new foundry.applications.ux.DragDrop.implementation({
+      dragSelector: null,
+      dropSelector: "[data-global-map-transition-scene-drop]",
+      permissions: {
+        drop: () => game.user?.isGM === true
+      },
+      callbacks: {
+        drop: this.#onDropTargetScene.bind(this)
+      }
+    });
+  }
+
   async _prepareContext() {
-    const currentMapId = getGlobalMapFlag(this.scene)?.mapId;
+    const targetScene = this.data.targetSceneId ? game.scenes?.get(this.data.targetSceneId) : null;
     return {
       transition: this.data,
       canDelete: !this.isNew,
-      sceneOptions: (game.scenes?.contents ?? [])
-        .filter(scene => getGlobalMapFlag(scene)?.mapId === currentMapId && scene.id !== this.scene.id)
-        .map(scene => ({ id: scene.id, name: scene.name }))
+      targetSceneName: targetScene?.name ?? ""
     };
+  }
+
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    this._dragDrop.bind(this.element);
   }
 
   async _processFormData(_event, _form, formData) {
@@ -421,19 +438,14 @@ export class TransitionEditor extends GlobalMapEditorBase {
       cells: Array.from(new Set(this.data.cells ?? [])),
       entryCells: Array.from(new Set(this.data.entryCells ?? [])),
       targetSceneId: String(values.targetSceneId ?? "").trim() || null,
-      mapImage: String(values.mapImage ?? "").trim()
+      mapImage: ""
     };
     if (!transition.cells.length) {
       ui.notifications.warn("Нарисуйте хотя бы одну клетку перехода.");
       return;
     }
-    if (!transition.targetSceneId && transition.mapImage) {
-      const target = await createZoneScene(this.scene, transition);
-      transition.targetSceneId = target.id;
-      transition.targetOwned = true;
-    }
     if (!transition.targetSceneId) {
-      ui.notifications.warn("Выберите целевую сцену или укажите фон для новой сцены.");
+      ui.notifications.warn("Перетащите целевую сцену в поле перехода.");
       return;
     }
     await canvas.falloutMaWGlobalMap?.applyPendingAreaOverwrites?.("transitions", transition.id);
@@ -450,8 +462,31 @@ export class TransitionEditor extends GlobalMapEditorBase {
       hidden: readCheckboxValue(transition.hidden),
       brushRadius: Math.max(1, Math.round(Number(transition.brushRadius) || 1)),
       targetSceneId: String(transition.targetSceneId ?? "").trim() || null,
-      mapImage: String(transition.mapImage ?? "")
+      mapImage: ""
     });
+  }
+
+  async #onDropTargetScene(event) {
+    event.preventDefault();
+    const dropzone = event.target?.closest?.("[data-global-map-transition-scene-drop]");
+    if (!dropzone) return;
+    const scene = await getSceneFromDropEvent(event);
+    if (!scene) {
+      ui.notifications.warn("Перетащите сюда сцену из списка сцен.");
+      return;
+    }
+    if (scene.id === this.scene.id) {
+      ui.notifications.warn("Переход не может вести в ту же сцену.");
+      return;
+    }
+    const input = this.form?.querySelector("[name='transition.targetSceneId']");
+    if (input) input.value = scene.id;
+    const name = dropzone.querySelector("[data-global-map-transition-scene-name]");
+    if (name) name.textContent = scene.name;
+    dropzone.classList.add("has-scene");
+    if (this.data.targetSceneId !== scene.id) this.data.targetOwned = false;
+    this.data.targetSceneId = scene.id;
+    this.data.mapImage = "";
   }
 
   async _deleteEntry() {

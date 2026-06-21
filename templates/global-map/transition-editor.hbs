@@ -13,13 +13,16 @@
   <div class="form-group">
     <label>Целевая сцена</label>
     <div class="form-fields">
-      <select name="transition.targetSceneId">
-        <option value="">— Создать из фона —</option>
-        {{#each sceneOptions}}<option value="{{id}}" {{#if (eq id ../transition.targetSceneId)}}selected{{/if}}>{{name}}</option>{{/each}}
-      </select>
+      <input type="hidden" name="transition.targetSceneId" value="{{transition.targetSceneId}}">
+      <div class="fallout-maw-global-map-dropzone {{#if targetSceneName}}has-scene{{/if}}" data-global-map-transition-scene-drop>
+        <i class="fa-solid fa-arrow-down-to-bracket"></i>
+        <span data-global-map-transition-scene-name>
+          {{#if targetSceneName}}{{targetSceneName}}{{else}}Перетащите сюда сцену из правой панели{{/if}}
+        </span>
+      </div>
     </div>
+    <p class="hint">Перетащите сцену из списка сцен, чтобы назначить её целью перехода.</p>
   </div>
-  <div class="form-group"><label>Фон новой сцены</label><div class="form-fields"><input type="text" name="transition.mapImage" value="{{transition.mapImage}}"></div></div>
   <div class="hint">
     <div>ЛКМ добавляет клетки.</div>
     <div>Shift+ЛКМ удаляет клетки.</div>

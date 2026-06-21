@@ -29,6 +29,7 @@ const BLOCKED_CANVAS_EVENT_TYPES = Object.freeze([
 let activeBoardingMode = null;
 let activeExitPlacement = null;
 const pendingRequests = new Map();
+let actorContainerRequestQueue = Promise.resolve();
 
 export function registerActorContainerHooks() {
   Hooks.on("canvasReady", () => {
@@ -516,11 +517,21 @@ async function performBoardPassenger({ sceneId = "", passengerActorUuid = "", pa
     temporaryOwnerLevels: ownershipUpdate.previousLevels
   };
   const passengers = [...getActorContainerFlag(vehicleActor).passengers, passenger];
-  await vehicleActor.update({
-    ...ownershipUpdate.update,
-    [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: passengers
-  });
-  await scene.deleteEmbeddedDocuments("Token", [passengerToken.id]);
+  const originalOwnership = foundry.utils.deepClone(vehicleActor.ownership ?? {});
+  const originalPassengers = getActorContainerFlag(vehicleActor).passengers;
+  try {
+    await vehicleActor.update({
+      ...ownershipUpdate.update,
+      [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: passengers
+    });
+    await scene.deleteEmbeddedDocuments("Token", [passengerToken.id]);
+  } catch (error) {
+    await vehicleActor.update({
+      ownership: originalOwnership,
+      [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: originalPassengers
+    }).catch(() => {});
+    throw error;
+  }
   return { ok: true };
 }
 
@@ -540,14 +551,20 @@ async function performExitPassenger({ sceneId = "", vehicleActorUuid = "", passe
   tokenData.x = Math.round(Number(placement.x) || 0);
   tokenData.y = Math.round(Number(placement.y) || 0);
   tokenData.hidden = false;
-  await scene.createEmbeddedDocuments("Token", [tokenData]);
-
   const remaining = passengers.filter(entry => entry.id !== passengerId);
   const ownershipUpdate = getTemporaryOwnershipCleanupUpdate(vehicleActor, passenger, remaining);
-  await vehicleActor.update({
-    ...ownershipUpdate,
-    [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: remaining
-  });
+  let createdToken = null;
+  try {
+    [createdToken] = await scene.createEmbeddedDocuments("Token", [tokenData]);
+    if (!createdToken) throw new Error("Не удалось создать токен пассажира.");
+    await vehicleActor.update({
+      ...ownershipUpdate,
+      [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: remaining
+    });
+  } catch (error) {
+    if (createdToken) await scene.deleteEmbeddedDocuments("Token", [createdToken.id]).catch(() => {});
+    throw error;
+  }
   return { ok: true };
 }
 
@@ -566,7 +583,7 @@ function getTemporaryOwnershipUpdate(vehicleActor, passengerActor) {
       ?? ownership.default
       ?? CONST.DOCUMENT_OWNERSHIP_LEVELS.NONE;
     if (current >= ownerLevel) {
-      const temporarySource = existingPassengers.find(passenger => passenger.temporaryOwnerUserIds?.includes(user.id));
+      const temporarySource = findTemporaryOwnershipSource(existingPassengers, user.id);
       if (!temporarySource) continue;
       userIds.push(user.id);
       if (Object.hasOwn(temporarySource.temporaryOwnerLevels ?? {}, user.id)) {
@@ -593,6 +610,11 @@ function getTemporaryOwnershipCleanupUpdate(vehicleActor, removedPassenger, rema
   }
   update.ownership = ownership;
   return update;
+}
+
+function findTemporaryOwnershipSource(passengers, userId) {
+  const sources = (passengers ?? []).filter(passenger => passenger.temporaryOwnerUserIds?.includes(userId));
+  return sources.find(passenger => Object.hasOwn(passenger.temporaryOwnerLevels ?? {}, userId)) ?? sources[0] ?? null;
 }
 
 function createCanvasInputShield(cursor = "pointer") {
@@ -653,7 +675,7 @@ function stopCanvasInputEvent(event) {
 }
 
 async function requestActorContainerSocket(action, payload = {}, gm = getResponsibleGM()) {
-  if (game.user?.isGM) return handleActorContainerSocketRequest(action, payload, game.user.id);
+  if (game.user?.isGM) return queueActorContainerSocketRequest(action, payload, game.user.id);
   if (!gm) throw new Error("Нет активного GM.");
   const requestId = foundry.utils.randomID();
   const requesterUserId = game.user?.id ?? "";
@@ -691,7 +713,7 @@ async function handleActorContainerSocketMessage(message = {}) {
   if (message.type !== "request") return;
   if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
   try {
-    const result = await handleActorContainerSocketRequest(message.action, message.payload ?? {}, message.requesterUserId ?? "");
+    const result = await queueActorContainerSocketRequest(message.action, message.payload ?? {}, message.requesterUserId ?? "");
     game.socket.emit(ACTOR_CONTAINER_SOCKET, {
       scope: ACTOR_CONTAINER_SOCKET_SCOPE,
       type: "response",
@@ -711,6 +733,12 @@ async function handleActorContainerSocketMessage(message = {}) {
       error: error.message
     });
   }
+}
+
+function queueActorContainerSocketRequest(action, payload = {}, requesterUserId = "") {
+  const task = actorContainerRequestQueue.then(() => handleActorContainerSocketRequest(action, payload, requesterUserId));
+  actorContainerRequestQueue = task.catch(() => {});
+  return task;
 }
 
 async function handleActorContainerSocketRequest(action, payload = {}, requesterUserId = "") {

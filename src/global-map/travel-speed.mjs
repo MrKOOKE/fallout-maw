@@ -11,6 +11,9 @@ import {
 export const TRAVEL_SPEED_FORMULA_VARIABLES = Object.freeze([
   Object.freeze({ key: "movementPoints", abbr: "mov", label: "Максимум очков передвижения" })
 ]);
+const TRAVEL_SPEED_FORMULA_ALIASES = Object.freeze(
+  TRAVEL_SPEED_FORMULA_VARIABLES.flatMap(variable => [variable.key, variable.abbr].filter(Boolean))
+);
 
 export function getTravelSpeedFormula() {
   try {
@@ -26,13 +29,14 @@ export function validateTravelSpeedFormula(formula) {
     allowSkills: true,
     characteristics: getCharacteristicSettings(),
     skills: getSkillSettings(),
-    variables: TRAVEL_SPEED_FORMULA_VARIABLES
+    variables: TRAVEL_SPEED_FORMULA_ALIASES
   });
 }
 
 export function createTravelFormulaSnapshot(actor = null) {
   return {
-    characteristics: Object.fromEntries(Object.entries(actor?.system?.characteristics ?? {}).map(([key, value]) => [key, toInteger(value)])),
+    characteristics: Object.fromEntries(Object.entries(actor?.system?.characteristics ?? {})
+      .map(([key, value]) => [key, toInteger(value?.value ?? value)])),
     skills: Object.fromEntries(Object.entries(actor?.system?.skills ?? {}).map(([key, value]) => [key, toInteger(value?.value ?? value)])),
     movementPointsMax: Math.max(0, Number(actor?.system?.resources?.movementPoints?.max) || 0)
   };
@@ -53,8 +57,8 @@ export function evaluateTravelSpeed(actor = null, snapshot = null, { fallback = 
   try {
     return Math.max(0, evaluateFormula(formula, {
       ...data,
-      variables: TRAVEL_SPEED_FORMULA_VARIABLES,
-      formulaVariables: { movementPoints: movementPointsMax }
+      variables: TRAVEL_SPEED_FORMULA_ALIASES,
+      formulaVariables: { movementPoints: movementPointsMax, mov: movementPointsMax }
     }));
   } catch (error) {
     console.warn(`${FALLOUT_MAW.id} | Travel speed formula failed: ${error.message}`);

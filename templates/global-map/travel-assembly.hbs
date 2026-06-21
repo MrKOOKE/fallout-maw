@@ -95,6 +95,17 @@
         </section>
         {{/each}}
       </div>
+      {{#if canDepart}}
+      <button
+        type="button"
+        class="fallout-maw-travel-depart-button"
+        data-action="depart"
+        {{#unless readyToDepart}}disabled{{/unless}}
+      >
+        <i class="fa-solid fa-route"></i>
+        <span>Отправиться</span>
+      </button>
+      {{/if}}
     </aside>
   </div>
 

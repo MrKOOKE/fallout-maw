@@ -199,7 +199,8 @@ class TravelAssemblyApplication extends FalloutMaWFormApplicationV2 {
     window: { title: "Сбор группы", resizable: true },
     actions: {
       toggleReady: TravelAssemblyApplication.#toggleReady,
-      removeMember: TravelAssemblyApplication.#removeMember
+      removeMember: TravelAssemblyApplication.#removeMember,
+      depart: TravelAssemblyApplication.#depart
     },
     form: {
       handler: TravelAssemblyApplication.handleFormSubmit,
@@ -231,6 +232,10 @@ class TravelAssemblyApplication extends FalloutMaWFormApplicationV2 {
     const user = game.user;
     const model = await buildAssemblyModel(scene, assembly);
     const canManage = canUserManageAssembly(scene, assembly, user, model);
+    const requiredMembers = model.members.filter(memberRequiresReady);
+    const readyToDepart = requiredMembers.length > 0
+      && !model.members.some(member => member.missing)
+      && requiredMembers.every(member => model.readyMemberIds.has(member.id));
     const members = model.members.map(member => ({
       ...member,
       requiresReady: memberRequiresReady(member),
@@ -256,7 +261,9 @@ class TravelAssemblyApplication extends FalloutMaWFormApplicationV2 {
       members: members.filter(member => !member.vehicle),
       vehicles,
       hasVehicles: vehicles.length > 0,
-      canManage
+      canManage,
+      canDepart: canManage,
+      readyToDepart
     };
   }
 
@@ -292,6 +299,13 @@ class TravelAssemblyApplication extends FalloutMaWFormApplicationV2 {
       sceneId: this.sceneId,
       assemblyId: this.assemblyId,
       memberId: target.dataset.memberId
+    });
+  }
+
+  static #depart() {
+    return submitTravelGroupRequest("travelGroup.assembly.depart", {
+      sceneId: this.sceneId,
+      assemblyId: this.assemblyId
     });
   }
 
@@ -471,7 +485,6 @@ async function handleReadyRequest(payload) {
   assembly.updatedAt = Date.now();
   await storeAssembly(scene, assembly);
   broadcastAssemblyChanged(scene, assembly);
-  await departAssemblyWhenReady(scene, assembly);
   return true;
 }
 
@@ -608,20 +621,6 @@ async function handleDepartRequest(payload) {
   const model = await buildAssemblyModel(scene, assembly);
   requireAssemblyManager(scene, assembly, user, model);
   return performAssemblyDeparture(scene, assembly, model, user.id);
-}
-
-async function departAssemblyWhenReady(scene, assembly) {
-  const model = await buildAssemblyModel(scene, assembly);
-  const required = model.members.filter(memberRequiresReady);
-  if (!required.length
-    || model.members.some(member => member.missing)
-    || required.some(member => !model.readyMemberIds.has(member.id))) return false;
-  return performAssemblyDeparture(
-    scene,
-    assembly,
-    model,
-    assembly.leaderUserId || game.users?.activeGM?.id
-  );
 }
 
 async function performAssemblyDeparture(scene, assembly, model, requestingUserId) {
@@ -1036,7 +1035,10 @@ function reconcileRemovedPassengerOwnership(plan) {
   const originalSources = new Map();
   for (const passenger of plan.originalPassengers) {
     for (const userId of passenger.temporaryOwnerUserIds ?? []) {
-      if (!originalSources.has(userId)) originalSources.set(userId, passenger);
+      const current = originalSources.get(userId);
+      const hasLevel = Object.hasOwn(passenger.temporaryOwnerLevels ?? {}, userId);
+      const currentHasLevel = Object.hasOwn(current?.temporaryOwnerLevels ?? {}, userId);
+      if (!current || (hasLevel && !currentHasLevel)) originalSources.set(userId, passenger);
     }
   }
   for (const [userId, source] of originalSources) {
@@ -1059,7 +1061,7 @@ function buildPassengerForVehicle(plan, member, scene) {
       ?? plan.actor.getUserLevel?.(user)
       ?? 0;
     if (current >= CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER) {
-      const temporarySource = plan.nextPassengers.find(passenger => passenger.temporaryOwnerUserIds?.includes(user.id));
+      const temporarySource = findTemporaryOwnershipSource(plan.nextPassengers, user.id);
       if (!temporarySource) continue;
       temporaryOwnerUserIds.push(user.id);
       if (Object.hasOwn(temporarySource.temporaryOwnerLevels ?? {}, user.id)) {
@@ -1087,6 +1089,11 @@ function buildPassengerForVehicle(plan, member, scene) {
     temporaryOwnerUserIds,
     temporaryOwnerLevels
   };
+}
+
+function findTemporaryOwnershipSource(passengers, userId) {
+  const sources = (passengers ?? []).filter(passenger => passenger.temporaryOwnerUserIds?.includes(userId));
+  return sources.find(passenger => Object.hasOwn(passenger.temporaryOwnerLevels ?? {}, userId)) ?? sources[0] ?? null;
 }
 
 function buildTopTravelUnits(model) {
@@ -1822,8 +1829,16 @@ function protectTravelTokenDelete(token, options, userId) {
 function protectTravelTokenUpdate(token, changes, options, userId) {
   if (!token.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.groupId || options?.[TRAVEL_BYPASS_OPTION]) return;
   if (game.users?.get(userId)?.isGM) return;
-  const allowed = new Set(["x", "y", "elevation", "rotation", "sort"]);
-  if (Object.keys(changes ?? {}).every(key => allowed.has(key))) return;
+  const movement = options?._movement?.[token.id] ?? options?.movement?.[token.id];
+  const positionFields = new Set(["x", "y", "elevation", "rotation", "sort"]);
+  const movementFields = new Set([
+    ...(token.constructor?.MOVEMENT_FIELDS ?? ["x", "y", "elevation"]),
+    "_movementHistory",
+    "rotation",
+    "sort"
+  ]);
+  if (movement && Object.keys(changes ?? {}).every(key => movementFields.has(key))) return;
+  if (Object.keys(changes ?? {}).every(key => positionFields.has(key))) return;
   ui.notifications.warn("У токена путешествующей группы можно изменять только положение.");
   return false;
 }

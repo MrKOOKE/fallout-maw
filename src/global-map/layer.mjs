@@ -357,11 +357,15 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       .reverse()
       .find(entry => entry.cells?.includes(key));
     if (!zone) return false;
-    return game.falloutMaW?.globalMap?.selectArrivalZone?.({
-      originSceneId: this.arrivalSelection.originSceneId,
-      tokenId: this.arrivalSelection.tokenId,
+    const selection = foundry.utils.deepClone(this.arrivalSelection);
+    await this.clearArrivalSelection(selection.groupId);
+    const submitted = await game.falloutMaW?.globalMap?.selectArrivalZone?.({
+      originSceneId: selection.originSceneId,
+      tokenId: selection.tokenId,
       exitZoneId: zone.id
     });
+    if (submitted === false) await this.startArrivalSelection(selection);
+    return submitted;
   }
 
   #getRenderableLocations() {
