@@ -23,7 +23,7 @@ import {
   tokenCenter
 } from "./geometry.mjs";
 import { findLocation, getGlobalMapFlag, getSceneState, setDiscovered, updateSceneState } from "./storage.mjs";
-import { getTravelGroupImage } from "./travel-settings.mjs";
+import { getTravelGroupImage, getTravelGroupPrototypeToken } from "./travel-settings.mjs";
 import { queueGlobalMapApplicationPosition } from "./window-position.mjs";
 
 const { DialogV2 } = foundry.applications.api;
@@ -726,11 +726,7 @@ async function performDeparture({ scene, zone, tokenDocuments, model = null, req
       requestingUserId,
       assemblyId
     });
-    const prototype = await carrierActor.getTokenDocument({
-      name: "Путешествие",
-      hidden: false,
-      texture: { src: getTravelGroupImage() }
-    }, { parent: parentScene });
+    const prototype = await carrierActor.getTokenDocument({}, { parent: parentScene });
     const carrierData = prototype.toObject();
     delete carrierData._id;
     const position = findFreePlacement(parentScene, carrierData, getLocationCells(parentScene, location));
@@ -773,7 +769,17 @@ async function performDeparture({ scene, zone, tokenDocuments, model = null, req
 
 async function createTravelCarrier({ originScene, targetScene, topUnits, allActors, requestingUserId, assemblyId }) {
   const folder = await ensureTravelGroupFolder();
+  const configuredPrototype = foundry.utils.deepClone(getTravelGroupPrototypeToken());
   const image = getTravelGroupImage();
+  const prototypeToken = foundry.utils.mergeObject({
+    name: "Путешествие",
+    actorLink: true,
+    texture: { src: image },
+    width: 1,
+    height: 1
+  }, configuredPrototype, { inplace: false });
+  prototypeToken.actorLink = true;
+  prototypeToken.name = "Путешествие";
   const ownerUserIds = await collectTravelOwnerUserIds(allActors);
   const ownership = { default: CONST.DOCUMENT_OWNERSHIP_LEVELS.NONE };
   for (const userId of ownerUserIds) ownership[userId] = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
@@ -785,13 +791,7 @@ async function createTravelCarrier({ originScene, targetScene, topUnits, allActo
     img: image,
     folder: folder.id,
     ownership,
-    prototypeToken: {
-      name: "Путешествие",
-      actorLink: true,
-      texture: { src: image },
-      width: 1,
-      height: 1
-    },
+    prototypeToken,
     flags: {
       [FALLOUT_MAW.id]: {
         [TRAVEL_GROUP_FLAG]: {
@@ -853,7 +853,7 @@ async function createTravelCarrier({ originScene, targetScene, topUnits, allActo
 }
 
 async function performArrival(originScene, carrierToken, targetScene, zone, pending) {
-  const carrierActor = carrierToken.actor;
+  const carrierActor = game.actors?.get(carrierToken.actorId) ?? carrierToken.actor;
   const viewerUserIds = getTravelGroupViewerUserIds(carrierActor);
   const passengers = getActorContainerFlag(carrierActor).passengers;
   if (!passengers.length) throw new Error("В группе нет участников для размещения.");

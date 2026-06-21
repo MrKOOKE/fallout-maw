@@ -15,7 +15,7 @@ import { registerGlobalMapTravelHooks, registerGlobalMapTravelSocket, requestTra
 import { registerGlobalMapFogHooks, registerGlobalMapFogSocket } from "./fog.mjs";
 import { registerGlobalMapGridHooks } from "./grid-reprojection.mjs";
 import { GlobalMapManager } from "./editors.mjs";
-import { GlobalMapTravelSettings, syncTravelGroupImages } from "./travel-settings.mjs";
+import { GlobalMapTravelSettings } from "./travel-settings.mjs";
 import {
   cancelTravelAssembly,
   openTravelAssembly,
@@ -40,13 +40,11 @@ export function registerGlobalMapSystem() {
     scope: "world",
     config: false,
     type: String,
-    default: TRAVEL_GROUP_IMAGE_DEFAULT,
-    onChange: value => void syncTravelGroupImages(value)
+    default: TRAVEL_GROUP_IMAGE_DEFAULT
   });
   game.settings.registerMenu(FALLOUT_MAW.id, "globalMapTravel", {
     name: "Путешествие",
     label: "Настроить путешествие",
-    hint: "Изображение временного актёра путешествующей группы.",
     icon: "fa-solid fa-people-group",
     type: GlobalMapTravelSettings,
     restricted: true
@@ -54,7 +52,6 @@ export function registerGlobalMapSystem() {
   game.settings.registerMenu(FALLOUT_MAW.id, "globalMapManager", {
     name: "Глобальная карта",
     label: "Открыть управление",
-    hint: "Создание, открытие и проверка структуры глобальной карты.",
     icon: "fa-solid fa-map-location-dot",
     type: GlobalMapManager,
     restricted: true

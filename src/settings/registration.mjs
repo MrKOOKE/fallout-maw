@@ -30,7 +30,8 @@ import { ToolSettingsConfig } from "../apps/tool-settings-config.mjs";
 import { TokenActionHudSettings } from "../apps/token-action-hud-settings-config.mjs";
 import {
   CharacterTokenPrototypeDefaultsConfig,
-  ConstructTokenPrototypeDefaultsConfig
+  ConstructTokenPrototypeDefaultsConfig,
+  GroupTokenPrototypeDefaultsConfig
 } from "../apps/token-prototype-defaults-config.mjs";
 import { TraumaSettingsConfig } from "../apps/trauma-settings-config.mjs";
 import { PersonalNameRandomizerConfig, registerPersonalGeneratorSettings } from "../apps/personal-generator.mjs";
@@ -543,6 +544,14 @@ export function registerSystemSettings() {
     label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-robot",
     type: ConstructTokenPrototypeDefaultsConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "groupTokenPrototypeDefaultsMenu", {
+    name: "Базовый прототип токена: Группа",
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-people-group",
+    type: GroupTokenPrototypeDefaultsConfig,
     restricted: true
   });
 

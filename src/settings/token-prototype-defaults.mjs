@@ -30,10 +30,12 @@ const PROTOTYPE_TOKEN_FIELDS = Object.freeze([
   "prependAdjective"
 ]);
 
+const TOKEN_PROTOTYPE_PROFILE_KEYS = Object.freeze([...ACTOR_TYPES, "group"]);
+
 export function createDefaultTokenPrototypeDefaults() {
   return {
     base: {},
-    types: Object.fromEntries(ACTOR_TYPES.map(type => [type, {}]))
+    types: Object.fromEntries(TOKEN_PROTOTYPE_PROFILE_KEYS.map(type => [type, {}]))
   };
 }
 
@@ -43,7 +45,7 @@ export function normalizeTokenPrototypeDefaults(value = {}) {
 
   normalized.base = sanitizePrototypeTokenData(value.base ?? {});
   const types = value.types && typeof value.types === "object" ? value.types : value;
-  for (const actorType of ACTOR_TYPES) {
+  for (const actorType of TOKEN_PROTOTYPE_PROFILE_KEYS) {
     normalized.types[actorType] = sanitizePrototypeTokenData(types?.[actorType] ?? {});
   }
   return normalized;
@@ -60,7 +62,7 @@ export async function setTokenPrototypeDefaults(value = {}) {
 }
 
 export function getTokenPrototypeDefaultForActorType(actorType) {
-  if (!ACTOR_TYPES.includes(actorType)) return {};
+  if (!TOKEN_PROTOTYPE_PROFILE_KEYS.includes(actorType)) return {};
   const settings = getTokenPrototypeDefaults();
   return foundry.utils.mergeObject(
     foundry.utils.deepClone(settings.base ?? {}),
@@ -70,7 +72,7 @@ export function getTokenPrototypeDefaultForActorType(actorType) {
 }
 
 export async function setTokenPrototypeDefault(actorType, prototypeTokenData = {}, { merge = false, includeName = false } = {}) {
-  if (!ACTOR_TYPES.includes(actorType)) throw new Error(`Unsupported actor type: ${actorType}`);
+  if (!TOKEN_PROTOTYPE_PROFILE_KEYS.includes(actorType)) throw new Error(`Unsupported actor type: ${actorType}`);
 
   const settings = getTokenPrototypeDefaults();
   const current = merge ? settings.types[actorType] ?? {} : {};
@@ -107,7 +109,7 @@ export async function setTokenPrototypeDefaultFromToken(tokenOrDocument, { actor
 }
 
 export async function clearTokenPrototypeDefault(actorType) {
-  if (!ACTOR_TYPES.includes(actorType)) throw new Error(`Unsupported actor type: ${actorType}`);
+  if (!TOKEN_PROTOTYPE_PROFILE_KEYS.includes(actorType)) throw new Error(`Unsupported actor type: ${actorType}`);
   const settings = getTokenPrototypeDefaults();
   settings.types[actorType] = {};
   await game.settings.set(FALLOUT_MAW.id, TOKEN_PROTOTYPE_DEFAULTS_SETTING, settings);

@@ -5,13 +5,14 @@ import {
 
 const ACTOR_TYPE_LABELS = Object.freeze({
   character: "Персонаж",
-  construct: "Конструкт"
+  construct: "Конструкт",
+  group: "Группа"
 });
 
 class TokenPrototypeDefaultsConfig extends foundry.applications.sheets.PrototypeTokenConfig {
   constructor(options = {}) {
     const actorType = options.actorType ?? new.target.actorType;
-    const actor = createSyntheticActor(actorType);
+    const actor = createSyntheticActor(actorType, new.target.documentActorType ?? actorType);
     super({ ...options, prototype: actor.prototypeToken });
     this.actorType = actorType;
   }
@@ -60,18 +61,23 @@ export class ConstructTokenPrototypeDefaultsConfig extends TokenPrototypeDefault
   static actorType = "construct";
 }
 
+export class GroupTokenPrototypeDefaultsConfig extends TokenPrototypeDefaultsConfig {
+  static actorType = "group";
+  static documentActorType = "character";
+}
+
 async function saveDefaults(app, tokenData) {
   await setTokenPrototypeDefault(app.actorType, tokenData);
   const defaults = getTokenPrototypeDefaultForActorType(app.actorType);
   app.actor.updateSource({ prototypeToken: { ...defaults, name: app.actor.name } });
 }
 
-function createSyntheticActor(actorType) {
+function createSyntheticActor(actorType, documentActorType = actorType) {
   const label = ACTOR_TYPE_LABELS[actorType] ?? actorType;
   return new Actor.implementation({
     _id: foundry.utils.randomID(),
     name: `Базовый прототип токена: ${label}`,
-    type: actorType,
+    type: documentActorType,
     prototypeToken: {
       ...getTokenPrototypeDefaultForActorType(actorType),
       name: `Базовый прототип токена: ${label}`
