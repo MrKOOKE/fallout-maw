@@ -24486,13 +24486,15 @@ export const SETTINGS_BASELINE = Object.freeze({
           "items": "systems/fallout-maw/assets/HUD/Fo4%20Strong%20Back.webp",
           "abilities": "systems/fallout-maw/assets/HUD/Fo4%20Inspirational.webp",
           "skills": "icons/svg/d20-highlight.svg",
+          "passengers": "icons/svg/group.svg",
           "actions": "systems/fallout-maw/assets/HUD/Well-Rested%20colored.webp",
           "settings": "icons/tools/hand/wrench-double.webp"
         },
         "activeActions": {
           "grapple": "icons/svg/sword.svg",
           "dragGrappled": "icons/svg/wingfoot.svg",
-          "push": "icons/svg/impact.svg"
+          "push": "icons/svg/impact.svg",
+          "boardTransport": "icons/svg/mystery-man.svg"
         },
         "weaponActions": {
           "aimedShot": "icons/svg/target.svg",

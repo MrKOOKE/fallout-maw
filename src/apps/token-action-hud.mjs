@@ -51,6 +51,12 @@ import {
   startWeaponAttack
 } from "../combat/weapon-attack-controller.mjs";
 import { startTrapInteractionMode, startTrapPlacement } from "../canvas/traps.mjs";
+import {
+  openActorContainerPassengerSheet,
+  prepareHudActorContainerPassengers,
+  startActorContainerBoardingMode,
+  startActorContainerPassengerExitPlacement
+} from "../canvas/actor-containers.mjs";
 import { useActiveItem } from "../items/active-item-use.mjs";
 import {
   canActivateLightSource,
@@ -164,6 +170,7 @@ const HUD_ACTIONS = Object.freeze([
   { key: "items", label: "Предметы", icon: "icons/svg/item-bag.svg" },
   { key: "abilities", label: "Способности", icon: "icons/svg/aura.svg" },
   { key: "skills", label: "Испытания", icon: "icons/svg/dice-target.svg" },
+  { key: "passengers", label: "Пассажиры", icon: "icons/svg/group.svg" },
   { key: "actions", label: "Действия", icon: "icons/svg/aura.svg" },
   { key: "settings", label: "Настройки", icon: "icons/svg/lever.svg" }
 ]);
@@ -495,6 +502,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       useAbility: { handler: TokenActionHud.#onUseAbility, buttons: [0, 1] },
       useActiveAction: TokenActionHud.#onUseActiveAction,
       dragGrappledTarget: TokenActionHud.#onDragGrappledTarget,
+      exitActorContainerPassenger: { handler: TokenActionHud.#onExitActorContainerPassenger, buttons: [0, 2] },
       useSystemAction: TokenActionHud.#onUseSystemAction
     }
   };
@@ -553,11 +561,12 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const skills = prepareSkillButtons(actor, hudIcons);
     const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg", { activeOnly: true, weaponSet });
     const abilities = prepareOwnedAbilityButtons(actor, "icons/svg/aura.svg");
+    const passengers = prepareHudActorContainerPassengers(actor);
     const systemActions = prepareSystemActionButtons(hudIcons);
     const activeActions = prepareActiveActionButtons(this.#token, actor, weaponSet, selectedWeapon, selectedWeaponDisabled, hudIcons);
     const actionGroups = prepareActionGroups(activeActions, systemActions);
-    const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, actionGroups, hudIcons);
-    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet, weaponSets, weaponEquipChoices);
+    const actions = prepareActions(this.#activeTray, selectedWeapon, items, abilities, actionGroups, passengers, hudIcons);
+    const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet, weaponSets, weaponEquipChoices, passengers);
     const meterSections = prepareMeterSectionStates(this.#editableMeterSections);
     const displayLimbs = prepareDisplayLimbs(actor, this.#limbDisplayLayer);
     const limbSilhouette = createLimbSilhouetteHud(race?.limbSilhouette, displayLimbs);
@@ -1171,11 +1180,30 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     return this.render({ force: true });
   }
 
+  static #onExitActorContainerPassenger(event, target) {
+    event.preventDefault();
+    const passengerId = String(target.dataset.passengerId ?? "");
+    if (!passengerId) return undefined;
+    if (event.button === 2) {
+      return openActorContainerPassengerSheet({
+        vehicleActor: this.actor,
+        passengerId
+      });
+    }
+    if (isHudActionBlockedByReactionLock() || !this.actor?.isOwner) return undefined;
+    this.#activeTray = "";
+    void this.render({ force: true });
+    return startActorContainerPassengerExitPlacement({
+      vehicleActor: this.actor,
+      passengerId
+    });
+  }
+
   static #onUseSystemAction(event, target) {
     event.preventDefault();
     if (isHudActionBlockedByReactionLock()) return undefined;
     const key = String(target.dataset.systemActionKey ?? "");
-    if (!["advancement", "medicine", "repair", "search", "trade", "craft", "stealth", "traps"].includes(key)) return undefined;
+    if (!["advancement", "medicine", "repair", "search", "trade", "craft", "stealth", "traps", "boardTransport"].includes(key)) return undefined;
 
     if (key === "advancement") {
       if (!this.actor?.isOwner) return undefined;
@@ -1183,7 +1211,9 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       void this.render({ force: true });
       return new AdvancementApplication(this.actor).render(true);
     }
+    this.#activeTray = "";
     void this.render({ force: true });
+    if (key === "boardTransport") return startActorContainerBoardingMode({ actor: this.actor, token: this.token });
     if (key === "craft") return openCraftWindow({ actor: this.actor });
     if (key === "stealth") return openStealthWindow(this.token);
     if (key === "traps") return startTrapInteractionMode({ actor: this.actor, token: this.token });
@@ -2499,11 +2529,16 @@ function prepareSystemActionButtons(hudIcons = {}) {
     label: "Повышение уровня",
     img: normalizeImagePath(hudIcons.levelUpIcon, "icons/svg/upgrade.svg")
   };
+  const boardTransportAction = {
+    key: "boardTransport",
+    label: "Сесть в транспорт",
+    img: normalizeImagePath(hudIcons.activeActions?.boardTransport, "icons/svg/mystery-man.svg")
+  };
   const configuredActions = getSystemActionSettings().map(action => ({
     ...action,
     img: normalizeImagePath(action.img, "icons/svg/aura.svg")
   }));
-  return [advancementAction, ...configuredActions];
+  return [advancementAction, boardTransportAction, ...configuredActions];
 }
 
 function prepareActiveActionButtons(token, actor, weaponSet = null, selectedWeapon = null, selectedWeaponDisabled = false, hudIcons = {}) {
@@ -2555,7 +2590,7 @@ function prepareActionGroups(activeActions = [], systemActions = []) {
   ];
 }
 
-function prepareTrayContext(activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet = null, weaponSets = [], weaponEquipChoices = []) {
+function prepareTrayContext(activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet = null, weaponSets = [], weaponEquipChoices = [], passengers = []) {
   const weaponActionGroups = prepareWeaponActionGroups(weaponActionRows);
   const trayItems = activeTray === "skills"
     ? skills
@@ -2571,6 +2606,8 @@ function prepareTrayContext(activeTray, skills, items, abilities, activeActions,
               ? weaponSets
               : activeTray === "weaponEquip"
                 ? weaponEquipChoices
+                : activeTray === "passengers"
+                  ? passengers
                 : [];
   return {
     skills,
@@ -2586,6 +2623,7 @@ function prepareTrayContext(activeTray, skills, items, abilities, activeActions,
     weaponSet,
     weaponSets,
     weaponEquipChoices,
+    passengers,
     metrics: prepareTrayMetrics(trayItems),
     visible: Boolean(activeTray)
   };
@@ -2618,12 +2656,17 @@ function prepareWeaponActionGroups(rows = []) {
   return groups;
 }
 
-function prepareActions(activeTray, selectedWeapon, items, abilities, actionGroups, hudIcons = {}) {
-  return HUD_ACTIONS.filter(action => action.key !== "weapon").map(action => {
+function prepareActions(activeTray, selectedWeapon, items, abilities, actionGroups, passengers = [], hudIcons = {}) {
+  return HUD_ACTIONS
+    .filter(action => action.key !== "weapon")
+    .filter(action => action.key !== "passengers" || passengers.length > 0)
+    .map(action => {
     const count = action.key === "items"
       ? items.length
       : action.key === "abilities"
         ? abilities.length
+        : action.key === "passengers"
+          ? passengers.length
         : action.key === "actions"
           ? actionGroups.reduce((total, group) => total + (group.actions?.length ?? 0), 0)
           : 0;
@@ -2635,7 +2678,7 @@ function prepareActions(activeTray, selectedWeapon, items, abilities, actionGrou
       caption: action.label,
       count
     };
-  });
+    });
 }
 
 function prepareHudWeaponSet(actor, weaponSets = [], activeSetKey = "", selectedWeaponId = "", hudIcons = {}) {

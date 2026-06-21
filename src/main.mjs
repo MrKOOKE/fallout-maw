@@ -6,6 +6,7 @@ import { registerPostureMovementHooks } from "./canvas/posture-movement.mjs";
 import { registerCoverHooks, registerCoverSocket } from "./canvas/cover.mjs";
 import { registerThrownItemHooks } from "./canvas/thrown-items.mjs";
 import { registerTrapHooks } from "./canvas/traps.mjs";
+import { registerActorContainerHooks, registerActorContainerSocket } from "./canvas/actor-containers.mjs";
 import { registerMovementInterruptionHooks } from "./canvas/movement-interruptions.mjs";
 import {
   registerPeriodicDamageRegionHooks,
@@ -136,6 +137,7 @@ Hooks.once("init", () => {
   registerHackingHooks();
   registerAnimationLibraryBrowserHooks();
   registerTrapPlacementControlHooks();
+  registerActorContainerHooks();
   registerStealthHooks();
   registerGlobalMapSystem();
 });
@@ -217,6 +219,7 @@ Hooks.once("ready", async () => {
   registerWeaponAttackSocket();
   registerThrownItemHooks();
   registerTrapHooks();
+  registerActorContainerSocket();
   registerMedicineSocket();
   registerRepairSocket();
   registerSearchInventorySocket();

@@ -1,6 +1,7 @@
 import { resolveWorldItemSync } from "./world-items.mjs";
 
 export const ITEM_FUNCTIONS = {
+  actorContainer: "actorContainer",
   container: "container",
   damageMitigation: "damageMitigation",
   damageSource: "damageSource",

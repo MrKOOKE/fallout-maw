@@ -64,6 +64,7 @@ export class GearDataModel extends BaseItemDataModel {
       ...super.defineSchema(),
       itemFunction: new StringField({ required: true, blank: true, initial: "" }),
       functions: new SchemaField({
+        actorContainer: actorContainerFunctionField(),
         container: containerFunctionField(),
         condition: conditionFunctionField(),
         constructPart: constructPartFunctionField(),
@@ -262,6 +263,22 @@ function itemFreeSettingsFunctionField() {
     enabled: new BooleanField({ required: true, initial: false }),
     useConditionWeakening: new BooleanField({ required: true, initial: false }),
     entries: new ArrayField(abilityFunctionField(), { required: true, initial: [] })
+  });
+}
+
+function actorContainerFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    slots: new ArrayField(actorContainerSlotField(), { required: true, initial: [] })
+  });
+}
+
+function actorContainerSlotField() {
+  return new SchemaField({
+    id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
+    width: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+    height: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+    quantity: new NumberField({ required: true, integer: true, min: 0, initial: 1 })
   });
 }
 

@@ -9,7 +9,7 @@ export function canUseActiveItem(item = null) {
   return Boolean(item?.actor?.isOwner && isActiveItem(item));
 }
 
-export async function useActiveItem({ actor = null, token = null, item = null, application = null } = {}) {
+export async function useActiveItem({ actor = null, token = null, item = null, application = null, targetActor = null, targetToken = null } = {}) {
   if (isReactionSystemLocked()) {
     ui.notifications.warn("Ожидание реакций: предмет временно заблокирован.");
     return false;
@@ -42,7 +42,9 @@ export async function useActiveItem({ actor = null, token = null, item = null, a
     });
   }
 
-  const target = resolveActiveItemTarget(sourceActor, sourceToken);
+  const target = targetActor
+    ? { actor: targetActor, token: targetToken?.document ?? targetToken ?? null }
+    : resolveActiveItemTarget(sourceActor, sourceToken);
   const used = hasItemFunction(freshItem, ITEM_FUNCTIONS.firstAid)
     ? await useFirstAidItem({
       sourceActor,

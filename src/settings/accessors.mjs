@@ -88,13 +88,15 @@ export const DEFAULT_TOKEN_ACTION_HUD_ICONS = Object.freeze({
     items: "icons/svg/item-bag.svg",
     abilities: "icons/svg/aura.svg",
     skills: "icons/svg/dice-target.svg",
+    passengers: "icons/svg/group.svg",
     actions: "icons/svg/aura.svg",
     settings: "icons/svg/lever.svg"
   }),
   activeActions: Object.freeze({
     grapple: "icons/svg/sword.svg",
     dragGrappled: "icons/svg/wingfoot.svg",
-    push: "icons/svg/impact.svg"
+    push: "icons/svg/impact.svg",
+    boardTransport: "icons/svg/mystery-man.svg"
   }),
   weaponActions: Object.freeze({
     aimedShot: "icons/svg/target.svg",

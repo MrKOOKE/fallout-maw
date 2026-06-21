@@ -63,6 +63,7 @@ import {
   prepareInventoryContext as prepareDisplayInventoryContext
 } from "../utils/actor-display-data.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
+import { moveActorContainerPassenger, resolveActorContainerPassengerActor } from "../utils/actor-containers.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { openPersonalGenerator } from "../apps/personal-generator.mjs";
 import { openHackingSettings } from "../apps/hacking-dialog.mjs";
@@ -544,7 +545,14 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   async _onDrop(event) {
     const data = this.#getDragEventData(event);
+    if (data?.type === "ActorContainerPassenger") return this.#onDropActorContainerPassenger(event, data);
     if (data?.type !== "Item") return super._onDrop(event);
+
+    const passengerElement = event.target?.closest?.("[data-actor-container-passenger]");
+    if (passengerElement) {
+      const used = await this.#onDropItemOnActorContainerPassenger(data, passengerElement);
+      if (used !== null) return used;
+    }
 
     this.#clearDragPreviewCache();
     this.#clearInventoryDropPreview();
@@ -578,6 +586,22 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   _onDragOver(event) {
+    const data = this.#getDragEventData(event);
+    if (data?.type === "ActorContainerPassenger") {
+      const cell = this.#getActorContainerCellAtPointer(event);
+      this.#clearActorContainerDropPreview();
+      cell?.classList.add("drop-preview");
+      if (event.dataTransfer) event.dataTransfer.dropEffect = cell ? "move" : "none";
+      return;
+    }
+    const passengerElement = event.target?.closest?.("[data-actor-container-passenger]");
+    const previewItem = data?.type === "Item" ? this.#getPreviewItemData(event) : null;
+    if (passengerElement && previewItem && isActorContainerUsableItem(previewItem)) {
+      this.#clearActorContainerDropPreview();
+      passengerElement.classList.add("drop-preview");
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "link";
+      return;
+    }
     const zone = this.#getDropZone(event);
     if (!zone) return;
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
@@ -586,6 +610,21 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   async _onDragStart(event) {
+    const passenger = event.currentTarget?.closest?.("[data-actor-container-passenger]");
+    if (passenger) {
+      const passengerId = String(passenger.dataset.passengerId ?? "");
+      if (!passengerId || !this.actor?.isOwner) return;
+      const dragData = {
+        type: "ActorContainerPassenger",
+        vehicleActorUuid: this.actor.uuid,
+        passengerId
+      };
+      event.dataTransfer?.setData("application/json", JSON.stringify(dragData));
+      event.dataTransfer?.setData("text/plain", JSON.stringify(dragData));
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+      passenger.classList.add("dragging");
+      return;
+    }
     await super._onDragStart(event);
     this.#clearInventoryTooltip({ force: true });
     this.#clearInventoryDropPreview();
@@ -603,9 +642,68 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   _onDragEnd() {
+    this.#clearActorContainerDropPreview();
     this.#clearDragPreviewCache();
     this.#clearInventoryDropPreview();
     this.#clearInventoryDraggingState();
+  }
+
+  async #onDropActorContainerPassenger(event, data) {
+    this.#clearActorContainerDropPreview();
+    if (!this.actor?.isOwner || String(data.vehicleActorUuid ?? "") !== this.actor.uuid) return null;
+    const cell = this.#getActorContainerCellAtPointer(event);
+    if (!cell) return null;
+    const moved = await moveActorContainerPassenger(this.actor, String(data.passengerId ?? ""), {
+      slotId: cell.dataset.slotId,
+      slotIndex: cell.dataset.slotIndex,
+      x: cell.dataset.x,
+      y: cell.dataset.y
+    });
+    if (!moved) ui.notifications.warn("Пассажир не помещается в выбранную область.");
+    return moved;
+  }
+
+  async #onDropItemOnActorContainerPassenger(data, passengerElement) {
+    const dropped = await this.#getDroppedItemFromData(data);
+    if (!dropped?.item || !isActorContainerUsableItem(dropped.item)) return null;
+    const targetActor = await resolveActorContainerPassengerActor(this.actor, String(passengerElement.dataset.passengerId ?? ""));
+    if (!targetActor) {
+      ui.notifications.warn("Не удалось найти актера пассажира.");
+      return false;
+    }
+    if (!targetActor.testUserPermission?.(game.user, "OBSERVER")) {
+      ui.notifications.warn("Нет прав наблюдателя на этого пассажира.");
+      return false;
+    }
+    this.#clearDragPreviewCache();
+    this.#clearInventoryDropPreview();
+    this.#clearActorContainerDropPreview();
+    return useActiveItem({
+      actor: dropped.item.actor ?? this.actor,
+      item: dropped.item,
+      application: this,
+      targetActor
+    });
+  }
+
+  #getActorContainerCellAtPointer(event) {
+    const target = event?.target;
+    const direct = target?.closest?.("[data-actor-container-cell]");
+    if (direct && this.element?.contains(direct)) return direct;
+    const grid = target?.closest?.(".fallout-maw-actor-container-grid");
+    if (!grid || !this.element?.contains(grid)) return null;
+    const clientX = Number(event?.clientX);
+    const clientY = Number(event?.clientY);
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+    return Array.from(grid.querySelectorAll("[data-actor-container-cell]")).find(cell => {
+      const rect = cell.getBoundingClientRect();
+      return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+    }) ?? null;
+  }
+
+  #clearActorContainerDropPreview() {
+    this.element?.querySelectorAll("[data-actor-container-cell].drop-preview, [data-actor-container-passenger].drop-preview")
+      .forEach(element => element.classList.remove("drop-preview"));
   }
 
   static #onToggleFreeEdit(event) {
@@ -1019,6 +1117,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const hoveredSheet = hoveredElement?.closest?.(".fallout-maw-actor-sheet");
     if (hoveredSheet === this.element) return;
 
+    this.#clearActorContainerDropPreview();
     this.#clearDragPreviewCache();
     this.#clearInventoryDropPreview();
   }
@@ -3276,6 +3375,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     view.removeEventListener("resize", this.#viewportResizeHandler);
     this.#viewportResizeHandler = null;
   }
+}
+
+function isActorContainerUsableItem(itemOrData = null) {
+  return hasItemFunction(itemOrData, ITEM_FUNCTIONS.firstAid)
+    || hasItemFunction(itemOrData, ITEM_FUNCTIONS.needChange);
 }
 
 export function getInventoryTooltipCompareActor() {

@@ -21,6 +21,7 @@ const MAIN_ACTION_ICON_ROWS = Object.freeze([
   { key: "items", label: "Предметы" },
   { key: "abilities", label: "Способности" },
   { key: "skills", label: "Испытания" },
+  { key: "passengers", label: "Пассажиры" },
   { key: "actions", label: "Действия" },
   { key: "settings", label: "Настройки" }
 ]);
@@ -36,6 +37,10 @@ const ADVANCEMENT_ACTION_ICON_ROW = Object.freeze({
   key: "levelUpIcon",
   label: "Повышение уровня"
 });
+
+const ACTOR_CONTAINER_ACTION_ICON_ROWS = Object.freeze([
+  { section: "activeActions", key: "boardTransport", label: "Сесть в транспорт" }
+]);
 
 const WEAPON_ACTION_ICON_ROWS = Object.freeze([
   { key: "aimedShot", labelKey: "FALLOUTMAW.Item.WeaponActionAimedShot" },
@@ -183,6 +188,10 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
         ...ADVANCEMENT_ACTION_ICON_ROW,
         img: this.#getIconValue(ADVANCEMENT_ACTION_ICON_ROW.section, ADVANCEMENT_ACTION_ICON_ROW.key)
       },
+      ...ACTOR_CONTAINER_ACTION_ICON_ROWS.map(row => ({
+        ...row,
+        img: this.#getIconValue(row.section, row.key)
+      })),
       ...this.systemActions.map(action => ({
         section: "systemActions",
         key: action.key,

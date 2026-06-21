@@ -218,6 +218,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const equipmentSlotSelections = new Map();
     const weaponSlotSelections = new Map();
     const sheetHasItemFunction = functionKey => hasItemFunction(item, functionKey, { ignoreBroken: true });
+    const hasActorContainerFunction = sheetHasItemFunction(ITEM_FUNCTIONS.actorContainer);
     const hasContainerFunction = sheetHasItemFunction(ITEM_FUNCTIONS.container);
     const hasDamageMitigationFunction = sheetHasItemFunction(ITEM_FUNCTIONS.damageMitigation);
     const hasDamageSourceFunction = sheetHasItemFunction(ITEM_FUNCTIONS.damageSource);
@@ -252,6 +253,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         value: ITEM_FUNCTIONS.container,
         label: game.i18n.localize("FALLOUTMAW.Item.FunctionContainer"),
         disabled: hasContainerFunction
+      },
+      {
+        value: ITEM_FUNCTIONS.actorContainer,
+        label: "Контейнер актеров",
+        disabled: hasActorContainerFunction
       },
       {
         value: ITEM_FUNCTIONS.damageMitigation,
@@ -413,6 +419,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       traumaHealingSkillLabel: getHealingSkillLabel(item),
       healingSkillLabel: getHealingSkillLabel(item),
       isContainerFunction: hasContainerFunction,
+      hasActorContainerFunction,
+      actorContainerSlotRows: buildActorContainerSlotRows(item),
       hasDamageMitigationFunction,
       hasDamageSourceFunction,
       hasEnergyConsumerFunction,
@@ -839,6 +847,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-container-load-reduction]").forEach(input => {
       input.addEventListener("input", event => this.#onContainerLoadReductionInput(event));
       input.addEventListener("change", event => this.#onContainerLoadReductionChange(event));
+    });
+    this.element?.querySelector("[data-add-actor-container-slot]")?.addEventListener("click", event => this.#onAddActorContainerSlot(event));
+    this.element?.querySelectorAll("[data-delete-actor-container-slot]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteActorContainerSlot(event));
     });
     this.element?.querySelectorAll("[data-remove-item-function]").forEach(button => {
       button.addEventListener("click", event => this.#onRemoveItemFunction(event));
@@ -2684,6 +2696,18 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const functionKey = String(event.currentTarget?.value ?? "");
     if (!functionKey) return undefined;
 
+    if (functionKey === ITEM_FUNCTIONS.actorContainer) {
+      this.#functionPickerActive = false;
+      return this.item.update({
+        "system.functions.actorContainer.enabled": true,
+        "system.functions.actorContainer.slots": [
+          createActorContainerSlotData()
+        ],
+        "system.quantity": 1,
+        "system.maxStack": 1
+      });
+    }
+
     if (functionKey === ITEM_FUNCTIONS.container) {
       this.#functionPickerActive = false;
       return this.item.update({
@@ -2855,6 +2879,22 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return undefined;
   }
 
+  #onAddActorContainerSlot(event) {
+    event.preventDefault();
+    const slots = getActorContainerSlotData(this.item);
+    slots.push(createActorContainerSlotData());
+    return this.item.update({ "system.functions.actorContainer.slots": slots });
+  }
+
+  #onDeleteActorContainerSlot(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteActorContainerSlot);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const slots = getActorContainerSlotData(this.item);
+    slots.splice(index, 1);
+    return this.item.update({ "system.functions.actorContainer.slots": slots });
+  }
+
   #onAddProsthesisLimb(event) {
     event.preventDefault();
     const current = this.#getSubmittedProsthesisLimbKeys();
@@ -2931,6 +2971,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       modal: true
     });
     if (!confirmed) return undefined;
+
+    if (functionKey === ITEM_FUNCTIONS.actorContainer) {
+      return this.item.update({
+        "system.functions.actorContainer.enabled": false,
+        "system.functions.actorContainer.slots": []
+      });
+    }
 
     if (functionKey === ITEM_FUNCTIONS.container) {
       return this.item.update({
@@ -4332,7 +4379,40 @@ function getHealingSkillLabel(item) {
   return getSkillSettings().find(skill => skill.key === key)?.label ?? key;
 }
 
+function buildActorContainerSlotRows(item) {
+  return getActorContainerSlotData(item).map((slot, index) => ({
+    ...slot,
+    index
+  }));
+}
+
+function getActorContainerSlotData(itemOrData) {
+  return (Array.isArray(itemOrData?.system?.functions?.actorContainer?.slots)
+    ? itemOrData.system.functions.actorContainer.slots
+    : [])
+    .map(slot => normalizeActorContainerSlotData(slot));
+}
+
+function createActorContainerSlotData() {
+  return normalizeActorContainerSlotData({
+    id: foundry.utils.randomID(),
+    width: 1,
+    height: 1,
+    quantity: 1
+  });
+}
+
+function normalizeActorContainerSlotData(slot = {}) {
+  return {
+    id: String(slot?.id ?? "").trim() || foundry.utils.randomID(),
+    width: Math.max(1, toInteger(slot?.width) || 1),
+    height: Math.max(1, toInteger(slot?.height) || 1),
+    quantity: Math.max(0, toInteger(slot?.quantity))
+  };
+}
+
 function getItemFunctionLabel(functionKey = "") {
+  if (functionKey === ITEM_FUNCTIONS.actorContainer) return "Контейнер актеров";
   if (functionKey === ITEM_FUNCTIONS.container) return game.i18n.localize("FALLOUTMAW.Item.FunctionContainer");
   if (functionKey === ITEM_FUNCTIONS.damageMitigation) return game.i18n.localize("FALLOUTMAW.Item.FunctionDamageMitigation");
   if (functionKey === ITEM_FUNCTIONS.damageSource) return game.i18n.localize("FALLOUTMAW.Item.FunctionDamageSource");

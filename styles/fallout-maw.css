@@ -3465,6 +3465,70 @@ body #prosemirror-dropdown {
   width: max-content;
 }
 
+.fallout-maw-actor-container-slot-table {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.fallout-maw-actor-container-slot-table .fallout-maw-settings-row {
+  align-items: end;
+  grid-template-columns: minmax(12rem, 1.4fr) minmax(8rem, 0.8fr) 2.5rem;
+}
+
+.fallout-maw-actor-container-slot-table .fallout-maw-square-delete-button {
+  align-self: end;
+  height: 2.15rem;
+  min-width: 2.5rem;
+}
+
+.fallout-maw-actor-container-group + .fallout-maw-actor-container-group {
+  border-top: 1px solid rgba(131, 119, 74, 0.3);
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.fallout-maw-actor-container-group > h3 {
+  border: 0;
+  font-size: 1rem;
+  margin: 0 0 0.45rem;
+}
+
+.fallout-maw-actor-container-row {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.fallout-maw-actor-container-row:last-child {
+  margin-bottom: 0;
+}
+
+.fallout-maw-actor-container-grid {
+  flex: 0 0 auto;
+}
+
+.fallout-maw-actor-container-passenger {
+  cursor: grab;
+}
+
+.fallout-maw-actor-container-passenger.dragging {
+  cursor: grabbing;
+  opacity: 0.45;
+}
+
+.fallout-maw-actor-container-passenger.drop-preview {
+  border-color: rgba(235, 190, 80, 0.9);
+  box-shadow: inset 0 0 0 2px rgba(235, 190, 80, 0.34), 0 0 12px rgba(235, 190, 80, 0.28);
+}
+
+@media (max-width: 720px) {
+  .fallout-maw-actor-container-slot-table .fallout-maw-settings-row {
+    grid-template-columns: minmax(10rem, 1.4fr) minmax(7rem, 0.8fr) 2.5rem;
+  }
+}
+
 .fallout-maw-inventory-cell {
   aspect-ratio: 1 / 1;
   background: rgba(0, 0, 0, 0.16);

@@ -1987,6 +1987,37 @@
   {{/each}}
   {{/if}}
 
+  {{#if hasActorContainerFunction}}
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>Контейнер актеров</h2>
+      <div class="fallout-maw-inline-controls">
+        <button type="button" data-add-actor-container-slot><i class="fa-solid fa-plus"></i> Добавить</button>
+        <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-remove-item-function="actorContainer" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+    </div>
+    <div class="fallout-maw-settings-table fallout-maw-actor-container-slot-table">
+    {{#each actorContainerSlotRows}}
+    <div class="fallout-maw-settings-row">
+      <input type="hidden" name="system.functions.actorContainer.slots.{{index}}.id" value="{{id}}">
+      <label class="fallout-maw-stacked-field fallout-maw-ratio-field">
+        <span>Размер места</span>
+        <div class="fallout-maw-ratio-control">
+          <input type="number" name="system.functions.actorContainer.slots.{{index}}.width" value="{{width}}" min="1" step="1" aria-label="Ширина места">
+          <b>/</b>
+          <input type="number" name="system.functions.actorContainer.slots.{{index}}.height" value="{{height}}" min="1" step="1" aria-label="Длина места">
+        </div>
+      </label>
+      <label class="fallout-maw-stacked-field"><span>Количество мест</span><input type="number" name="system.functions.actorContainer.slots.{{index}}.quantity" value="{{quantity}}" min="0" step="1"></label>
+      <button type="button" class="fallout-maw-icon-button fallout-maw-square-delete-button" data-delete-actor-container-slot="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    {{else}}
+    <p class="fallout-maw-empty-list">Пассажирские места не настроены.</p>
+    {{/each}}
+    </div>
+  </section>
+  {{/if}}
+
   {{#if isContainerFunction}}
   <section class="fallout-maw-panel">
     <div class="fallout-maw-panel-header">

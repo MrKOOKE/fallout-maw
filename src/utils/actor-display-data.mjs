@@ -30,6 +30,7 @@ import {
   prepareInventoryGridContext
 } from "./inventory-containers.mjs";
 import { getActiveItemChargesData, getConstructPartFunction, hasItemFunction, isItemBrokenByCondition, ITEM_FUNCTIONS } from "./item-functions.mjs";
+import { prepareActorContainerInventoryContext } from "./actor-containers.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem } from "../races/natural-items.mjs";
 import { toInteger } from "./numbers.mjs";
 
@@ -273,6 +274,7 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
 
   return {
     equipmentHeading: actor?.type === "construct" ? "Строение" : game.i18n.localize("FALLOUTMAW.Common.Equipment"),
+    actorContainers: prepareActorContainerInventoryContext(actor),
     equipmentSlots,
     prosthesisSlots,
     weaponSets,

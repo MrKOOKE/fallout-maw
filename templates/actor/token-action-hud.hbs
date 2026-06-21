@@ -126,7 +126,7 @@
 
   <section class="fallout-maw-token-hud-actions-wrap">
     {{#if tray.visible}}
-    <div class="fallout-maw-token-hud-popup {{#if (eq activeTray "actions")}}actions{{/if}} {{#if (eq activeTray "abilities")}}abilities{{/if}} {{#if (eq activeTray "weaponActions")}}weapon-actions{{/if}} {{#if (eq activeTray "weaponSets")}}weapon-sets{{/if}} {{#if (eq activeTray "weaponEquip")}}weapon-equip{{/if}}" data-token-action-hud-popup style="{{tray.metrics.style}}">
+    <div class="fallout-maw-token-hud-popup {{#if (eq activeTray "actions")}}actions{{/if}} {{#if (eq activeTray "abilities")}}abilities{{/if}} {{#if (eq activeTray "weaponActions")}}weapon-actions{{/if}} {{#if (eq activeTray "weaponSets")}}weapon-sets{{/if}} {{#if (eq activeTray "weaponEquip")}}weapon-equip{{/if}} {{#if (eq activeTray "passengers")}}passengers{{/if}}" data-token-action-hud-popup style="{{tray.metrics.style}}">
       {{#if (eq activeTray "skills")}}
       {{#each tray.skills}}
       <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="rollSkill" data-skill-key="{{key}}" title="{{label}}">
@@ -147,6 +147,18 @@
       </button>
       {{else}}
       <div class="fallout-maw-token-hud-empty">Нет предметов</div>
+      {{/each}}
+      {{/if}}
+
+      {{#if (eq activeTray "passengers")}}
+      {{#each tray.passengers}}
+      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile variable-width" data-action="exitActorContainerPassenger" data-passenger-id="{{id}}" title="Высадить: {{name}}">
+        <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../fallbackIcon}}'">
+        <span>{{name}}</span>
+        <strong>{{sizeLabel}}</strong>
+      </button>
+      {{else}}
+      <div class="fallout-maw-token-hud-empty">Пассажиров нет</div>
       {{/each}}
       {{/if}}
 
