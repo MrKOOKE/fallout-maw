@@ -523,7 +523,9 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       graphic.zIndex = 20;
       const cuts = pending.get(transition.id);
       const cells = (transition.cells ?? []).filter(key => !cuts?.has(key)).map(parseCellKey).filter(Boolean);
-      drawCellArea(graphic, cells, transition.color, transition.color, 0.28, 3);
+      const isEditMode = this.mode === "transitionEdit";
+      const lineColor = isEditMode ? "#39ff88" : transition.color;
+      drawCellArea(graphic, cells, lineColor, transition.color, 0.28, isEditMode ? 4 : 3);
       this.container.addChild(graphic);
     }
   }
@@ -576,17 +578,20 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       : this.editor instanceof LocationExitEditor
       ? (this.editor.data?.color || DEFAULT_LOCATION_EXIT.color)
       : (this.editor?.data?.color ?? "#ffffff");
+    const lineColor = this.mode === "transitionEdit" && this.editor instanceof TransitionEditor
+      ? "#39ff88"
+      : color;
     if (workingCells?.length) {
       const graphic = new PIXI.LegacyGraphics();
       graphic.zIndex = 100;
       const cells = workingCells.map(parseCellKey).filter(Boolean);
-      drawCellArea(graphic, cells, color, color, 0.38, 4);
+      drawCellArea(graphic, cells, lineColor, color, 0.38, 4);
       this.container.addChild(graphic);
     }
     if (this.brushPreviewCells.length) {
       const brush = new PIXI.LegacyGraphics();
       brush.zIndex = 101;
-      drawCellBoundary(brush, this.brushPreviewCells, color, 2, 0.9);
+      drawCellBoundary(brush, this.brushPreviewCells, lineColor, 2, 0.9);
       this.container.addChild(brush);
     }
   }
