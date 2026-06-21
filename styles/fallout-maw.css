@@ -12494,7 +12494,7 @@ label.fallout-maw-mitigation-cell {
   max-width: calc(100vw - 24px);
   pointer-events: none;
   position: fixed;
-  transform: scale(var(--fallout-maw-token-action-hud-scale, 1));
+  transform: scale(var(--fallout-maw-token-action-hud-scale, 1)) scale(1.5);
   transform-origin: left bottom;
   width: max-content;
   z-index: calc(var(--z-index-app, 30) + 3);

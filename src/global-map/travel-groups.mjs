@@ -9,6 +9,7 @@ import {
 } from "../utils/actor-containers.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
 import {
+  GLOBAL_MAP_LAYER,
   GLOBAL_MAP_SOCKET,
   GLOBAL_MAP_VERSION,
   TRAVEL_GROUP_FLAG,
@@ -382,9 +383,9 @@ async function handleTravelGroupSocket(payload) {
     await app?.close?.({ falloutMaWAssemblyClosed: true });
   } else if (payload.action === "travelGroup.arrival.open") {
     if (!(payload.viewerUserIds ?? []).includes(game.user?.id)) return;
-    const target = game.scenes?.get(payload.targetSceneId);
-    if (target && canvas.scene?.id !== target.id) await target.view();
-    canvas.falloutMaWGlobalMap?.startArrivalSelection?.(payload);
+    runWhenCanvasSceneReady(payload.targetSceneId, () => (
+      canvas.falloutMaWGlobalMap?.startArrivalSelection?.(payload)
+    ));
   } else if (payload.action === "travelGroup.arrival.closed") {
     await restoreTokenControlsAfterArrival(payload);
   } else if (payload.action === "travelGroup.error" && payload.requestingUserId === game.user?.id) {
@@ -674,6 +675,7 @@ async function handleArrivalRequest(payload) {
   };
   await token.update({ [`flags.${FALLOUT_MAW.id}.${TRAVEL_GROUP_TOKEN_FLAG}.pendingArrival`]: pending });
   const viewerUserIds = getTravelGroupViewerUserIds(token.actor);
+  if (!targetScene.active) await targetScene.activate();
   game.socket.emit(GLOBAL_MAP_SOCKET, {
     action: "travelGroup.arrival.open",
     originSceneId: originScene.id,
@@ -682,8 +684,12 @@ async function handleArrivalRequest(payload) {
     viewerUserIds
   });
   if (viewerUserIds.includes(game.user.id)) {
-    if (canvas.scene?.id !== targetScene.id) await targetScene.view();
-    canvas.falloutMaWGlobalMap?.startArrivalSelection?.({ originSceneId: originScene.id, tokenId: token.id, ...pending, viewerUserIds });
+    runWhenCanvasSceneReady(targetScene.id, () => canvas.falloutMaWGlobalMap?.startArrivalSelection?.({
+      originSceneId: originScene.id,
+      tokenId: token.id,
+      ...pending,
+      viewerUserIds
+    }));
   }
   scheduleArrivalTimer(originScene.id, token.id, pending.deadline);
   return true;
@@ -777,6 +783,7 @@ async function performDeparture({ scene, zone, tokenDocuments, model = null, req
     throw error;
   }
   const viewerUserIds = getTravelGroupViewerUserIds(carrierActor);
+  if (!parentScene.active) await parentScene.activate();
   notifyTravelComplete(parentScene.id, viewerUserIds);
   return true;
 }
@@ -904,6 +911,7 @@ async function performArrival(originScene, carrierToken, targetScene, zone, pend
   });
   await setDiscovered(targetScene, "exit", zone.id, true);
   clearArrivalTimer(originScene.id, carrierToken.id);
+  if (!targetScene.active) await targetScene.activate();
   const closedPayload = {
     action: "travelGroup.arrival.closed",
     groupId: pending.groupId,
@@ -1659,9 +1667,11 @@ function getTravelGroupViewerUserIds(actor) {
 }
 
 async function restoreTokenControlsAfterArrival({ groupId, targetSceneId, viewerUserIds = [] } = {}) {
-  if (!viewerUserIds.includes(game.user?.id) || canvas.scene?.id !== targetSceneId) return false;
-  await canvas.falloutMaWGlobalMap?.clearArrivalSelection?.(groupId);
-  canvas.tokens?.activate?.({ tool: "select" });
+  if (!viewerUserIds.includes(game.user?.id)) return false;
+  runWhenCanvasSceneReady(targetSceneId, async () => {
+    await canvas.falloutMaWGlobalMap?.clearArrivalSelection?.(groupId);
+    canvas.tokens?.activate?.({ tool: "select" });
+  });
   return true;
 }
 
@@ -1674,10 +1684,27 @@ function notifyTravelComplete(targetSceneId, viewerUserIds, { activateTokenContr
     activateTokenControls
   });
   if (!viewerUserIds.includes(game.user.id)) return;
-  void (async () => {
-    if (canvas.scene?.id !== targetSceneId) await game.scenes?.get(targetSceneId)?.view?.();
-    if (activateTokenControls && canvas.scene?.id === targetSceneId) canvas.tokens?.activate?.({ tool: "select" });
-  })();
+  if (activateTokenControls) {
+    runWhenCanvasSceneReady(targetSceneId, () => canvas.tokens?.activate?.({ tool: "select" }));
+  }
+}
+
+function runWhenCanvasSceneReady(sceneId, callback) {
+  const isReady = () => Boolean(
+    canvas?.ready
+    && !canvas.loading
+    && canvas.scene?.id === sceneId
+    && canvas[GLOBAL_MAP_LAYER]
+  );
+  if (isReady()) {
+    void callback();
+    return;
+  }
+  const hookId = Hooks.on("canvasReady", () => {
+    if (!isReady()) return;
+    Hooks.off("canvasReady", hookId);
+    void callback();
+  });
 }
 
 function scheduleArrivalTimer(sceneId, tokenId, deadline) {

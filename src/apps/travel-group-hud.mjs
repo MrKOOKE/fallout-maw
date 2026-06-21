@@ -269,6 +269,6 @@ function positionMemberPanel(element) {
   const overflowRight = rect.right - (window.innerWidth - 12);
   if (overflowRight <= 0) return;
   const scale = Math.max(0.01, Number(getComputedStyle(document.documentElement)
-    .getPropertyValue("--fallout-maw-token-action-hud-scale")) || 1);
+    .getPropertyValue("--fallout-maw-token-action-hud-scale")) || 1) * 1.5;
   panel.style.transform = `translateX(${-Math.ceil(overflowRight / scale)}px)`;
 }

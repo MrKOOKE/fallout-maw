@@ -242,7 +242,6 @@ async function handleTravelSocket(payload) {
   } else if (payload.action === "globalMap.travel.complete") {
     if (!(payload.viewerUserIds ?? []).includes(game.user?.id)) return;
     const scene = game.scenes?.get(payload.targetSceneId);
-    if (scene && canvas.scene?.id !== scene.id) await scene.view();
     if (payload.activateTokenControls && canvas.scene?.id === scene?.id) {
       canvas.tokens?.activate?.({ tool: "select" });
     }
@@ -322,13 +321,13 @@ async function performTravel({ originScene, targetScene, tokenIds, requestingUse
       }
     }
   }
+  if (!targetScene.active) await targetScene.activate();
   game.socket.emit(GLOBAL_MAP_SOCKET, {
     action: "globalMap.travel.complete",
     requestId,
     targetSceneId: targetScene.id,
     viewerUserIds: Array.from(viewerUserIds)
   });
-  if (viewerUserIds.has(game.user.id) && canvas.scene?.id !== targetScene.id) await targetScene.view();
   return true;
 }
 
