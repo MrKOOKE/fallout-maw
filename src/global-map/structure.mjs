@@ -63,7 +63,7 @@ export async function getOrCreateGlobalMap() {
     backgroundColor: "#1a1a2e",
     grid: { type: CONST.GRID_TYPES.SQUARE, size: 100 },
     tokenVision: true,
-    fogExploration: true,
+    fog: { mode: CONST.FOG_EXPLORATION_MODES.INDIVIDUAL },
     globalLight: true,
     flags: {
       [FALLOUT_MAW.id]: {
@@ -149,7 +149,7 @@ export async function ensureLocationStructure(parentScene, location, {
         size: parentScene.grid?.size ?? 100
       },
       tokenVision: true,
-      fogExploration: true,
+      fog: { mode: CONST.FOG_EXPLORATION_MODES.INDIVIDUAL },
       flags: {
         [FALLOUT_MAW.id]: {
           [GLOBAL_MAP_FLAG]: createManagedFlag({
@@ -186,7 +186,7 @@ export async function createZoneScene(parentScene, transition) {
       size: parentScene.grid?.size ?? 100
     },
     tokenVision: true,
-    fogExploration: true,
+    fog: { mode: CONST.FOG_EXPLORATION_MODES.INDIVIDUAL },
     flags: {
       [FALLOUT_MAW.id]: {
         [GLOBAL_MAP_FLAG]: createManagedFlag({

@@ -76,7 +76,9 @@ export const DEFAULT_SCENE_STATE = Object.freeze({
   discoveredExitZoneIds: [],
   fog: {
     mode: "native",
-    cellRadius: 2
+    cellRadius: 2,
+    nativeMode: null,
+    exploredCellKeys: []
   }
 });
 

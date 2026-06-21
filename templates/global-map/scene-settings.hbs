@@ -12,6 +12,15 @@
     <label>Радиус раскрытия</label>
     <div class="form-fields"><input type="number" name="fog.cellRadius" value="{{fog.cellRadius}}" min="1" max="20" step="1"></div>
   </div>
-  <p class="hint">Клеточный режим формирует штатную область vision из клеток и передаёт её стандартному FogManager V14.</p>
+  {{#if isCellMode}}
+  <div class="form-group">
+    <label>Общая разведка</label>
+    <div class="form-fields">
+      <button type="button" data-action="resetCellFog" class="danger">
+        <i class="fa-solid fa-cloud-arrow-down"></i> Сбросить
+      </button>
+    </div>
+  </div>
+  {{/if}}
   <footer class="form-footer"><button type="submit"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button></footer>
 </div>

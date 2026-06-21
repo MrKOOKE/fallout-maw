@@ -13,6 +13,7 @@ import {
   validateGlobalMapStructure
 } from "./structure.mjs";
 import { queueGlobalMapApplicationPosition } from "./window-position.mjs";
+import { resetCellFog } from "./fog.mjs";
 
 const TEMPLATE_ROOT = "systems/fallout-maw/templates/global-map";
 
@@ -595,7 +596,9 @@ export class GlobalMapSceneSettings extends GlobalMapEditorBase {
     ...super.DEFAULT_OPTIONS,
     id: "fallout-maw-global-map-scene-settings",
     window: { title: "Настройки глобальной карты", resizable: false },
-    actions: {}
+    actions: {
+      resetCellFog: GlobalMapSceneSettings.#resetCellFog
+    }
   };
 
   static PARTS = {
@@ -603,18 +606,52 @@ export class GlobalMapSceneSettings extends GlobalMapEditorBase {
   };
 
   async _prepareContext() {
-    return { fog: this.data };
+    return {
+      fog: this.data,
+      isCellMode: this.data.mode === "cells"
+    };
   }
 
   async _processFormData(_event, _form, formData) {
     const values = getExpandedFormData(formData).fog ?? {};
+    const mode = values.mode === "cells" ? "cells" : "native";
+    const current = getSceneState(this.scene).fog;
+    let nativeMode = current.nativeMode;
+    if (mode === "cells" && this.scene.fog.mode !== CONST.FOG_EXPLORATION_MODES.DISABLED) {
+      nativeMode = this.scene.fog.mode;
+    }
     await updateSceneState(this.scene, state => {
       state.fog = {
-        mode: values.mode === "cells" ? "cells" : "native",
-        cellRadius: Math.max(1, Math.round(Number(values.cellRadius) || 2))
+        ...state.fog,
+        mode,
+        cellRadius: Math.max(1, Math.round(Number(values.cellRadius) || 2)),
+        nativeMode
       };
       return state;
     });
+    const desiredNativeMode = mode === "cells"
+      ? CONST.FOG_EXPLORATION_MODES.DISABLED
+      : (Number.isInteger(nativeMode) ? nativeMode : CONST.FOG_EXPLORATION_MODES.INDIVIDUAL);
+    if (this.scene.fog.mode !== desiredNativeMode) {
+      await this.scene.update({ "fog.mode": desiredNativeMode });
+    }
+    if (this.scene.id === canvas.scene?.id) {
+      canvas.perception?.initialize?.();
+      canvas.perception?.update?.({ refreshVision: true });
+    }
+  }
+
+  static async #resetCellFog() {
+    const confirmed = await foundry.applications.api.DialogV2.confirm({
+      window: { title: "Сбросить клеточный туман?" },
+      content: "<p>Удалить всю общую разведку клеток, а также обнаруженные локации и переходы этой сцены?</p>",
+      yes: { label: "Сбросить" },
+      no: { label: "Отмена" }
+    });
+    if (!confirmed) return;
+    await resetCellFog(this.scene);
+    this.data = getSceneState(this.scene).fog;
+    this.render();
   }
 }
 

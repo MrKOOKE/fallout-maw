@@ -61,6 +61,8 @@ export function normalizeSceneState(value) {
   state.discoveredExitZoneIds = uniqueStrings(state.discoveredExitZoneIds);
   state.fog.mode = state.fog?.mode === "cells" ? "cells" : "native";
   state.fog.cellRadius = Math.max(1, Math.round(Number(state.fog?.cellRadius) || 2));
+  state.fog.nativeMode = Number.isInteger(state.fog?.nativeMode) ? state.fog.nativeMode : null;
+  state.fog.exploredCellKeys = uniqueStrings(state.fog?.exploredCellKeys);
   return state;
 }
 

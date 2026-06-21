@@ -39,6 +39,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
   brushStroke = null;
   brushPreviewCells = [];
   arrivalSelection = null;
+  locationDiscoveryOverlay = null;
   pendingAreaOverwrites = {
     terrains: new Map(),
     transitions: new Map(),
@@ -109,7 +110,13 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     this.#drawIncomingTransitionZones();
     this.#drawLocationExitZones(state.locationExitZones, state.discoveredExitZoneIds);
     this.#drawLocations(state.locations, state.discoveredLocationIds);
+    this.#drawDiscoveredLocationOverlay(state.locations, state.discoveredLocationIds);
     this.#drawWorkingData();
+  }
+
+  async _tearDown(options) {
+    this.#destroyDiscoveredLocationOverlay();
+    return super._tearDown(options);
   }
 
   async setMode(mode) {
@@ -487,6 +494,60 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       this.container.addChild(text);
     }
     if (this.dragPreviewLocation) this.#drawLocationGhost(this.dragPreviewLocation);
+  }
+
+  #drawDiscoveredLocationOverlay(locations, discoveredIds) {
+    this.#destroyDiscoveredLocationOverlay();
+    if (!canvas?.interface) return;
+    const discovered = new Set(discoveredIds ?? []);
+    const visible = locations.filter(location => location.alwaysDiscovered || discovered.has(location.id));
+    if (!visible.length) return;
+    const overlay = new PIXI.Container();
+    overlay.name = "fallout-maw-discovered-locations";
+    overlay.eventMode = "none";
+    overlay.interactiveChildren = false;
+    overlay.sortableChildren = true;
+    overlay.zIndex = (CONFIG.Canvas.groups.interface.zIndexDrawings ?? 500) + 1;
+    canvas.interface.addChild(overlay);
+    this.locationDiscoveryOverlay = overlay;
+    for (const location of visible) this.#drawLocationOverlayEntry(overlay, location);
+  }
+
+  #drawLocationOverlayEntry(container, location) {
+    const cells = getLocationCells(canvas.scene, location);
+    if (!cells.length) return;
+    const graphic = new PIXI.LegacyGraphics();
+    graphic.zIndex = 1;
+    drawCellBoundary(
+      graphic,
+      cells,
+      location.strokeColor || "#ffffff",
+      Math.max(1, Number(location.strokeWidth) || 3),
+      1
+    );
+    container.addChild(graphic);
+    const bounds = getBoundaryBounds(getCellsBoundaryLoops(canvas.scene, cells));
+    const text = new PIXI.Text(location.name ?? "", {
+      fill: location.textColor || "#ffffff",
+      fontSize: Math.max(8, Number(location.fontSize) || 28),
+      stroke: "#000000",
+      strokeThickness: 4,
+      align: "center"
+    });
+    text.anchor.set(0.5);
+    text.position.set(
+      bounds ? (bounds.minX + bounds.maxX) / 2 : location.x,
+      bounds ? bounds.minY - Math.max(8, Number(location.fontSize) * 0.7) : location.y
+    );
+    text.zIndex = 2;
+    container.addChild(text);
+  }
+
+  #destroyDiscoveredLocationOverlay() {
+    if (this.locationDiscoveryOverlay && !this.locationDiscoveryOverlay.destroyed) {
+      this.locationDiscoveryOverlay.destroy({ children: true });
+    }
+    this.locationDiscoveryOverlay = null;
   }
 
   #drawLocationGhost(location) {
