@@ -242,6 +242,7 @@ async function handleTravelSocket(payload) {
   } else if (payload.action === "globalMap.travel.complete") {
     if (!(payload.viewerUserIds ?? []).includes(game.user?.id)) return;
     const scene = game.scenes?.get(payload.targetSceneId);
+    if (scene && canvas.scene?.id !== scene.id) await scene.view();
     if (payload.activateTokenControls && canvas.scene?.id === scene?.id) {
       canvas.tokens?.activate?.({ tool: "select" });
     }
@@ -313,21 +314,14 @@ async function performTravel({ originScene, targetScene, tokenIds, requestingUse
     return emitTravelError({ requestingUserId, requestId }, "Перенос токенов не завершён; исходные токены сохранены.");
   }
 
-  const viewerUserIds = new Set([requestingUserId]);
-  for (const token of tokenDocuments) {
-    for (const user of game.users?.contents ?? []) {
-      if (user.active && token.actor?.testUserPermission(user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)) {
-        viewerUserIds.add(user.id);
-      }
-    }
-  }
-  if (!targetScene.active) await targetScene.activate();
+  const viewerUserIds = [requestingUserId].filter(Boolean);
   game.socket.emit(GLOBAL_MAP_SOCKET, {
     action: "globalMap.travel.complete",
     requestId,
     targetSceneId: targetScene.id,
-    viewerUserIds: Array.from(viewerUserIds)
+    viewerUserIds
   });
+  if (viewerUserIds.includes(game.user?.id) && canvas.scene?.id !== targetScene.id) await targetScene.view();
   return true;
 }
 

@@ -52,6 +52,7 @@ export const DEFAULT_TRANSITION = Object.freeze({
   mapImage: "",
   targetSceneId: null,
   targetOwned: false,
+  entryColor: null,
   entryCells: []
 });
 

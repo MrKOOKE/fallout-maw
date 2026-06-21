@@ -23,11 +23,19 @@
     </div>
     <p class="hint">Перетащите сцену из списка сцен, чтобы назначить её целью перехода.</p>
   </div>
+  {{#if canConfigureEntry}}
+  <div class="form-group">
+    <button type="button" data-action="configureEntryZone">
+      <i class="fa-solid fa-person-walking-arrow-right"></i> Нарисовать зону выхода
+    </button>
+    <p class="hint">Откроет целевую сцену и отдельный редактор зоны выхода этого перехода.</p>
+  </div>
+  {{/if}}
   <div class="hint">
     <div>ЛКМ добавляет клетки.</div>
     <div>Shift+ЛКМ удаляет клетки.</div>
     <div>Ctrl+ЛКМ перезаписывает клетки других переходов.</div>
-    <div>Область входа на целевой сцене можно задать инструментом «Вход».</div>
+    <div>Зона выхода на целевой сцене настраивается кнопкой выше.</div>
   </div>
   <footer class="form-footer">
     <button type="submit"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>

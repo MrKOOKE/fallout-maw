@@ -22,6 +22,7 @@ import {
 } from "./geometry.mjs";
 import {
   GlobalMapSceneSettings,
+  TransitionEntryEditor,
   LocationEditor,
   LocationExitEditor,
   TerrainEditor,
@@ -75,14 +76,6 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
         terrainEdit: tool("terrainEdit", 5, "Редактировать местность", "fa-solid fa-paintbrush"),
         transitionDraw: tool("transitionDraw", 6, "Новая зона перехода", "fa-solid fa-route"),
         transitionEdit: tool("transitionEdit", 7, "Редактировать переход", "fa-solid fa-signs-post"),
-        entryDraw: {
-          name: "entryDraw",
-          order: 8,
-          title: "Нарисовать область входа",
-          icon: "fa-solid fa-right-to-bracket",
-          button: true,
-          onChange: () => canvas[GLOBAL_MAP_LAYER]?.startEntryDrawing?.()
-        },
         ...(isLocationScene ? {
           locationExitDraw: tool("locationExitDraw", 9, "Новая зона выхода", "fa-solid fa-person-walking-arrow-right"),
           locationExitEdit: tool("locationExitEdit", 10, "Редактировать зону выхода", "fa-solid fa-pen-ruler")
@@ -113,6 +106,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     const state = getSceneState(canvas.scene);
     this.#drawTerrains(state.terrains);
     this.#drawTransitions(state.transitions, state.discoveredTransitionIds);
+    this.#drawIncomingTransitionZones();
     this.#drawLocationExitZones(state.locationExitZones, state.discoveredExitZoneIds);
     this.#drawLocations(state.locations, state.discoveredLocationIds);
     this.#drawWorkingData();
@@ -170,39 +164,23 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     await this.refresh();
   }
 
-  async startEntryDrawing() {
+  async startEntryDrawingFor(sourceSceneId, transitionId) {
     if (!assertSupportedGrid()) return;
-    const candidates = [];
-    for (const scene of game.scenes?.contents ?? []) {
-      for (const transition of getSceneState(scene).transitions) {
-        if (transition.targetSceneId === canvas.scene?.id) candidates.push({ scene, transition });
-      }
-    }
-    if (!candidates.length) {
-      ui.notifications.warn("На эту сцену не ведёт ни один переход.");
+    const sourceScene = game.scenes?.get(sourceSceneId);
+    const transition = sourceScene
+      ? getSceneState(sourceScene).transitions.find(entry => entry.id === transitionId)
+      : null;
+    if (!sourceScene || !transition || transition.targetSceneId !== canvas.scene?.id) {
+      ui.notifications.warn("Переход для этой сцены не найден.");
       return;
     }
-    const result = await foundry.applications.api.DialogV2.input({
-      window: { title: "Область входа" },
-      content: `
-        <label>Переход
-          <select name="candidate">
-            ${candidates.map((entry, index) => `<option value="${index}">${foundry.utils.escapeHTML(entry.scene.name)} → ${foundry.utils.escapeHTML(entry.transition.name)}</option>`).join("")}
-          </select>
-        </label>
-      `,
-      ok: {
-        label: "Редактировать",
-        callback: (_event, button) => new foundry.applications.ux.FormDataExtended(button.form).object
-      },
-      rejectClose: false
-    });
-    if (!result) return;
-    const selected = candidates[Math.max(0, Number(result.candidate) || 0)];
-    if (!selected) return;
     await this.editor?.close?.();
     this.mode = "entryDraw";
-    this.editor = new TransitionEditor(selected.scene, selected.transition, { isNew: false });
+    this.editor = new TransitionEntryEditor(sourceScene, {
+      ...transition,
+      entryColor: transition.entryColor
+        || (transition.entryCells?.length ? transition.color : DEFAULT_LOCATION_EXIT.color)
+    });
     this.editor.render(true);
     await this.refresh();
   }
@@ -561,16 +539,43 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       graphic.zIndex = this.arrivalSelection ? 120 : 24;
       const cuts = pending.get(exit.id);
       const cells = (exit.cells ?? []).filter(key => !cuts?.has(key)).map(parseCellKey).filter(Boolean);
-      const color = this.arrivalSelection ? "#39ff88" : exit.color;
+      const color = this.arrivalSelection ? "#39ff88" : (exit.color || DEFAULT_LOCATION_EXIT.color);
       drawCellArea(graphic, cells, color, color, this.arrivalSelection ? 0.32 : 0.2, this.arrivalSelection ? 5 : 3);
       this.container.addChild(graphic);
+    }
+  }
+
+  #drawIncomingTransitionZones() {
+    const targetSceneId = canvas.scene?.id;
+    if (!targetSceneId) return;
+    const activeSourceSceneId = this.mode === "entryDraw" && this.editor instanceof TransitionEntryEditor
+      ? this.editor.scene?.id
+      : null;
+    const activeTransitionId = activeSourceSceneId ? this.editor.data?.id : null;
+    for (const sourceScene of game.scenes?.contents ?? []) {
+      for (const transition of getSceneState(sourceScene).transitions) {
+        if (transition.targetSceneId !== targetSceneId || !transition.entryCells?.length) continue;
+        if (!game.user.isGM && transition.hidden) continue;
+        if (sourceScene.id === activeSourceSceneId && transition.id === activeTransitionId) continue;
+        const cells = transition.entryCells.map(parseCellKey).filter(Boolean);
+        if (!cells.length) continue;
+        const graphic = new PIXI.LegacyGraphics();
+        graphic.zIndex = 23;
+        const color = transition.entryColor || transition.color || DEFAULT_LOCATION_EXIT.color;
+        drawCellArea(graphic, cells, color, color, 0.2, 3);
+        this.container.addChild(graphic);
+      }
     }
   }
 
   #drawWorkingData() {
     const workingCells = this.mode === "entryDraw" ? this.editor?.data?.entryCells : this.editor?.data?.cells;
     if (!workingCells?.length && !this.brushPreviewCells.length) return;
-    const color = this.editor?.data?.color ?? "#ffffff";
+    const color = this.mode === "entryDraw"
+      ? (this.editor?.data?.entryColor || this.editor?.data?.color || DEFAULT_LOCATION_EXIT.color)
+      : this.editor instanceof LocationExitEditor
+      ? (this.editor.data?.color || DEFAULT_LOCATION_EXIT.color)
+      : (this.editor?.data?.color ?? "#ffffff");
     if (workingCells?.length) {
       const graphic = new PIXI.LegacyGraphics();
       graphic.zIndex = 100;
@@ -581,7 +586,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     if (this.brushPreviewCells.length) {
       const brush = new PIXI.LegacyGraphics();
       brush.zIndex = 101;
-      drawCellBoundary(brush, this.brushPreviewCells, "#ffffff", 2, 0.75);
+      drawCellBoundary(brush, this.brushPreviewCells, color, 2, 0.9);
       this.container.addChild(brush);
     }
   }

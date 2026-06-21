@@ -392,7 +392,11 @@ export class TransitionEditor extends GlobalMapEditorBase {
   static DEFAULT_OPTIONS = {
     ...super.DEFAULT_OPTIONS,
     id: "fallout-maw-transition-editor",
-    window: { title: "Зона перехода", resizable: true }
+    window: { title: "Зона перехода", resizable: true },
+    actions: {
+      ...super.DEFAULT_OPTIONS.actions,
+      configureEntryZone: TransitionEditor.#configureEntryZone
+    }
   };
 
   static PARTS = {
@@ -417,6 +421,7 @@ export class TransitionEditor extends GlobalMapEditorBase {
     return {
       transition: this.data,
       canDelete: !this.isNew,
+      canConfigureEntry: !this.isNew && Boolean(targetScene),
       targetSceneName: targetScene?.name ?? ""
     };
   }
@@ -489,6 +494,26 @@ export class TransitionEditor extends GlobalMapEditorBase {
     this.data.mapImage = "";
   }
 
+  static async #configureEntryZone() {
+    const target = this.data.targetSceneId ? game.scenes?.get(this.data.targetSceneId) : null;
+    if (this.isNew || !target) {
+      ui.notifications.warn("Сначала сохраните переход и назначьте целевую сцену.");
+      return;
+    }
+    const stored = getSceneState(this.scene).transitions.find(entry => entry.id === this.data.id);
+    if (!stored) {
+      ui.notifications.warn("Сначала сохраните переход.");
+      return;
+    }
+    const sourceSceneId = this.scene.id;
+    const transitionId = stored.id;
+    await this.close();
+    await target.view();
+    const layer = canvas.falloutMaWGlobalMap;
+    layer?.activate?.();
+    await layer?.startEntryDrawingFor?.(sourceSceneId, transitionId);
+  }
+
   async _deleteEntry() {
     if (!this.data.id) return this.close();
     if (this.data.targetOwned && this.data.targetSceneId) {
@@ -496,6 +521,66 @@ export class TransitionEditor extends GlobalMapEditorBase {
       await target?.delete?.({ falloutMaWGlobalMapBypass: true });
     }
     await deleteCollectionEntry(this.scene, "transitions", this.data.id);
+    await this.close();
+    canvas.falloutMaWGlobalMap?.refresh?.();
+  }
+}
+
+export class TransitionEntryEditor extends GlobalMapEditorBase {
+  constructor(scene, data, options = {}) {
+    super(scene, { ...DEFAULT_TRANSITION, ...data }, options);
+  }
+
+  static DEFAULT_OPTIONS = {
+    ...super.DEFAULT_OPTIONS,
+    id: "fallout-maw-transition-entry-editor",
+    window: { title: "Зона выхода перехода", resizable: true },
+    actions: {
+      ...super.DEFAULT_OPTIONS.actions,
+      clear: TransitionEntryEditor.#clear
+    }
+  };
+
+  static PARTS = {
+    form: { template: `${TEMPLATE_ROOT}/transition-entry-editor.hbs` }
+  };
+
+  async _prepareContext() {
+    return { entry: this.data, hasCells: Boolean(this.data.entryCells?.length) };
+  }
+
+  async _processFormData(_event, _form, formData) {
+    const values = getExpandedFormData(formData).entry ?? {};
+    const stored = getSceneState(this.scene).transitions.find(entry => entry.id === this.data.id);
+    if (!stored) return ui.notifications.warn("Исходный переход не найден.");
+    const transition = {
+      ...stored,
+      entryColor: String(values.color || this.data.entryColor || stored.color || DEFAULT_LOCATION_EXIT.color),
+      brushRadius: Math.max(1, Math.round(Number(values.brushRadius) || 1)),
+      entryCells: Array.from(new Set(this.data.entryCells ?? []))
+    };
+    if (!transition.entryCells.length) {
+      ui.notifications.warn("Нарисуйте хотя бы одну клетку зоны выхода.");
+      return;
+    }
+    await saveCollectionEntry(this.scene, "transitions", transition);
+    this.data = transition;
+    canvas.falloutMaWGlobalMap?.refresh?.();
+  }
+
+  _applyLiveValues(values) {
+    const entry = values.entry ?? {};
+    Object.assign(this.data, {
+      entryColor: String(entry.color || this.data.color || DEFAULT_LOCATION_EXIT.color),
+      brushRadius: Math.max(1, Math.round(Number(entry.brushRadius) || 1))
+    });
+  }
+
+  static async #clear() {
+    const stored = getSceneState(this.scene).transitions.find(entry => entry.id === this.data.id);
+    if (!stored) return;
+    await saveCollectionEntry(this.scene, "transitions", { ...stored, entryCells: [] });
+    this.data.entryCells = [];
     await this.close();
     canvas.falloutMaWGlobalMap?.refresh?.();
   }
