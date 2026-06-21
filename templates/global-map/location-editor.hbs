@@ -56,6 +56,7 @@
   </div>
   <footer class="form-footer">
     <button type="submit"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
+    {{#if canConfigureExitZones}}<button type="button" data-action="configureExitZones"><i class="fa-solid fa-person-walking-arrow-right"></i> Установить точки выхода</button>{{/if}}
     {{#if canDelete}}<button type="button" data-action="delete" class="danger"><i class="fa-solid fa-trash"></i> Удалить</button>{{/if}}
   </footer>
 </div>

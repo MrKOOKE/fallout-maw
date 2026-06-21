@@ -1,13 +1,26 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { GLOBAL_MAP_SOCKET } from "./constants.mjs";
-import { cellKey, pointToCell, tokenCenter, tokenTopLeftAtCell } from "./geometry.mjs";
-import { findLocation, getSceneState } from "./storage.mjs";
+import { cellKey, getLocationCells, pointToCell, tokenCenter, tokenTopLeftAtCell } from "./geometry.mjs";
+import { getSceneState } from "./storage.mjs";
+import {
+  promptLocationEntry,
+  promptLocationExit,
+  travelToLocation as travelGroupToLocation
+} from "./travel-groups.mjs";
 
 const { DialogV2 } = foundry.applications.api;
-const runtimeCells = new Map();
+const runtimeMembership = new Map();
+const activeTriggerPrompts = new Set();
 
 export function registerGlobalMapTravelHooks() {
-  Hooks.on("updateToken", onTokenUpdated);
+  Hooks.on("moveToken", onTokenMoved);
+  Hooks.on("createToken", seedTokenMembership);
+  Hooks.on("deleteToken", clearTokenMembership);
+  Hooks.on("canvasReady", seedCanvasMembership);
+  Hooks.on("canvasTearDown", () => {
+    runtimeMembership.clear();
+    activeTriggerPrompts.clear();
+  });
 }
 
 export function registerGlobalMapTravelSocket() {
@@ -38,20 +51,7 @@ export async function requestTransitionTravel({
 }
 
 export async function travelToLocation(locationId, { tokenIds = null } = {}) {
-  const found = findLocation(locationId);
-  const targetScene = found?.location?.linkedSceneId ? game.scenes?.get(found.location.linkedSceneId) : null;
-  if (!found || !targetScene) {
-    ui.notifications.warn("У локации нет связанной сцены.");
-    return false;
-  }
-  const ids = tokenIds ?? getDefaultTravelTokenIds();
-  return requestDirectTravel({
-    originSceneId: canvas.scene?.id,
-    targetSceneId: targetScene.id,
-    tokenIds: ids,
-    requestingUserId: game.user?.id,
-    anchorCells: []
-  });
+  return travelGroupToLocation(locationId, { tokenIds });
 }
 
 export async function requestDirectTravel(payload = {}) {
@@ -70,54 +70,167 @@ export async function requestDirectTravel(payload = {}) {
   return true;
 }
 
-async function onTokenUpdated(tokenDocument, changes, _options, userId) {
-  if (userId !== game.user?.id || !canvas?.ready || tokenDocument.parent?.id !== canvas.scene?.id) return;
-  if (changes.x === undefined && changes.y === undefined) return;
-  const state = getSceneState(canvas.scene);
-  const center = tokenCenter(tokenDocument, canvas.scene);
-  const currentCell = pointToCell(canvas.scene, center);
-  if (!currentCell) return;
-  const runtimeKey = `${canvas.scene.id}:${tokenDocument.id}`;
-  const key = cellKey(currentCell);
-  const previous = runtimeCells.get(runtimeKey);
-  runtimeCells.set(runtimeKey, key);
-  if (previous === key) return;
+function seedCanvasMembership() {
+  runtimeMembership.clear();
+  for (const token of canvas.scene?.tokens?.contents ?? []) seedTokenMembership(token);
+}
 
-  const transition = state.transitions.find(entry =>
-    !entry.hidden && Array.isArray(entry.cells) && entry.cells.includes(key)
-  );
-  if (!transition) {
-    const incoming = findIncomingTransition(tokenDocument, key);
-    if (!incoming) return;
+function seedTokenMembership(tokenDocument) {
+  const scene = tokenDocument?.parent;
+  if (!scene) return;
+  runtimeMembership.set(getRuntimeKey(scene.id, tokenDocument.id), getCandidateKeys(scene, tokenDocument));
+}
+
+function clearTokenMembership(tokenDocument) {
+  const sceneId = tokenDocument?.parent?.id;
+  if (!sceneId) return;
+  const runtimeKey = getRuntimeKey(sceneId, tokenDocument.id);
+  runtimeMembership.delete(runtimeKey);
+  activeTriggerPrompts.delete(runtimeKey);
+}
+
+async function onTokenMoved(tokenDocument, movement, _operation, user) {
+  if (user?.id !== game.user?.id || !canvas?.ready || tokenDocument.parent?.id !== canvas.scene?.id) return;
+  const destination = movement?.passed?.waypoints?.at(-1);
+  if (!destination) return;
+  const scene = canvas.scene;
+  const runtimeKey = getRuntimeKey(scene.id, tokenDocument.id);
+  const previous = new Set(runtimeMembership.get(runtimeKey) ?? []);
+  const candidates = getCandidatesAtToken(scene, tokenDocument, destination);
+  runtimeMembership.set(runtimeKey, candidates.map(candidate => candidate.key));
+  const entered = candidates.filter(candidate => !previous.has(candidate.key));
+  if (!entered.length || activeTriggerPrompts.has(runtimeKey)) return;
+  activeTriggerPrompts.add(runtimeKey);
+  try {
+    await movement.animation?.ended;
+    if (!canvas?.ready || canvas.scene?.id !== scene.id) return;
+    const currentMembership = new Set(runtimeMembership.get(runtimeKey) ?? []);
+    const activeEntered = entered.filter(candidate => currentMembership.has(candidate.key));
+    if (!activeEntered.length) return;
+    const selected = await chooseCandidate(activeEntered);
+    if (selected) await executeCandidate(selected, tokenDocument, user.id);
+  } finally {
+    activeTriggerPrompts.delete(runtimeKey);
+  }
+}
+
+async function chooseCandidate(candidates) {
+  if (candidates.length === 1) return candidates[0];
+  const result = await DialogV2.input({
+    window: { title: "Выберите переход" },
+    content: `<label>Действие<select name="candidate">${candidates.map((entry, index) => `<option value="${index}">${foundry.utils.escapeHTML(entry.label)}</option>`).join("")}</select></label>`,
+    ok: { label: "Продолжить" },
+    rejectClose: false
+  });
+  if (!result) return null;
+  return candidates[Math.max(0, Number(result.candidate) || 0)] ?? candidates[0];
+}
+
+async function executeCandidate(selected, tokenDocument, userId) {
+  if (selected.kind === "locationExit") {
+    return promptLocationExit({
+      sceneId: canvas.scene.id,
+      exitZoneId: selected.exit.id,
+      tokenId: tokenDocument.id,
+      userId
+    });
+  }
+  if (selected.kind === "location") {
+    return promptLocationEntry({
+      sceneId: canvas.scene.id,
+      locationId: selected.location.id,
+      tokenId: tokenDocument.id,
+      userId
+    });
+  }
+  if (selected.kind === "incoming") {
     const confirmedReturn = await DialogV2.confirm({
       window: { title: "Вернуться?" },
-      content: `<p>Вернуться через <strong>${foundry.utils.escapeHTML(incoming.transition.name)}</strong>?</p>`,
+      content: `<p>Вернуться через <strong>${foundry.utils.escapeHTML(selected.incoming.transition.name)}</strong>?</p>`,
       yes: { label: "Вернуться" },
       no: { label: "Остаться" }
     });
-    if (!confirmedReturn) return;
-    await requestDirectTravel({
+    if (!confirmedReturn) return false;
+    return requestDirectTravel({
       originSceneId: canvas.scene.id,
-      targetSceneId: incoming.scene.id,
+      targetSceneId: selected.incoming.scene.id,
       tokenIds: getTriggeredTravelTokenIds(tokenDocument),
       requestingUserId: userId,
-      anchorCells: incoming.transition.cells ?? []
+      anchorCells: selected.incoming.transition.cells ?? []
     });
-    return;
   }
   const confirmed = await DialogV2.confirm({
     window: { title: "Переход" },
-    content: `<p>Перейти в <strong>${foundry.utils.escapeHTML(transition.name)}</strong>?</p>`,
+    content: `<p>Перейти в <strong>${foundry.utils.escapeHTML(selected.transition.name)}</strong>?</p>`,
     yes: { label: "Перейти" },
     no: { label: "Остаться" }
   });
-  if (!confirmed) return;
-  await requestTransitionTravel({
+  if (!confirmed) return false;
+  return requestTransitionTravel({
     originSceneId: canvas.scene.id,
-    transitionId: transition.id,
+    transitionId: selected.transition.id,
     tokenIds: getTriggeredTravelTokenIds(tokenDocument),
     requestingUserId: userId
   });
+}
+
+function getCandidateKeys(scene, tokenDocument) {
+  return getCandidatesAtToken(scene, tokenDocument).map(candidate => candidate.key);
+}
+
+function getCandidatesAtToken(scene, tokenDocument, position = tokenDocument) {
+  const currentCell = pointToCell(scene, tokenCenter({
+    x: position.x,
+    y: position.y,
+    width: position.width ?? tokenDocument.width,
+    height: position.height ?? tokenDocument.height
+  }, scene));
+  if (!currentCell) return [];
+  const key = cellKey(currentCell);
+  const state = getSceneState(scene);
+  const candidates = [];
+  for (const transition of state.transitions) {
+    if (!transition.hidden && transition.cells?.includes(key)) {
+      candidates.push({
+        key: `transition:${transition.id}`,
+        kind: "transition",
+        label: `Переход: ${transition.name}`,
+        transition
+      });
+    }
+  }
+  const incoming = findIncomingTransition(tokenDocument, key);
+  if (incoming) {
+    candidates.push({
+      key: `incoming:${incoming.scene.id}:${incoming.transition.id}`,
+      kind: "incoming",
+      label: `Вернуться: ${incoming.transition.name}`,
+      incoming
+    });
+  }
+  for (const exit of state.locationExitZones) {
+    if (!exit.cells?.includes(key)) continue;
+    candidates.push({
+      key: `locationExit:${exit.id}`,
+      kind: "locationExit",
+      label: `Выход: ${exit.name}`,
+      exit
+    });
+  }
+  for (const location of state.locations) {
+    if (!location.linkedSceneId || !getLocationCells(scene, location).some(cell => cellKey(cell) === key)) continue;
+    candidates.push({
+      key: `location:${location.id}`,
+      kind: "location",
+      label: `Локация: ${location.name}`,
+      location
+    });
+  }
+  return candidates;
+}
+
+function getRuntimeKey(sceneId, tokenId) {
+  return `${sceneId}:${tokenId}`;
 }
 
 async function handleTravelSocket(payload) {
@@ -130,6 +243,9 @@ async function handleTravelSocket(payload) {
     if (!(payload.viewerUserIds ?? []).includes(game.user?.id)) return;
     const scene = game.scenes?.get(payload.targetSceneId);
     if (scene && canvas.scene?.id !== scene.id) await scene.view();
+    if (payload.activateTokenControls && canvas.scene?.id === scene?.id) {
+      canvas.tokens?.activate?.({ tool: "select" });
+    }
   } else if (payload.action === "globalMap.travel.error" && payload.requestingUserId === game.user?.id) {
     ui.notifications.error(payload.message || "Не удалось выполнить переход.");
   }
@@ -224,11 +340,6 @@ function getTriggeredTravelTokenIds(triggerToken) {
   return [triggerToken.id];
 }
 
-function getDefaultTravelTokenIds() {
-  const controlled = canvas.tokens?.controlled ?? [];
-  return controlled.length ? controlled.map(token => token.id) : [];
-}
-
 function selectAnchorCell(keys, index, scene) {
   const parsed = keys.map(key => {
     const [i, j] = String(key).split(",").map(Number);
@@ -257,7 +368,6 @@ function findIncomingTransition(tokenDocument, key) {
 
 function isAuthorizedDirectTarget(originScene, targetScene, tokenIds) {
   const state = getSceneState(originScene);
-  if (state.locations.some(entry => entry.linkedSceneId === targetScene.id)) return true;
   if (state.transitions.some(entry => entry.targetSceneId === targetScene.id && !entry.hidden)) return true;
   return (tokenIds ?? []).every(id => {
     const token = originScene.tokens?.get(id);

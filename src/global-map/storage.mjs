@@ -3,6 +3,7 @@ import {
   DEFAULT_SCENE_STATE,
   GLOBAL_MAP_FLAG,
   GLOBAL_MAP_ROOT_SCENE_SETTING,
+  GLOBAL_MAP_VERSION,
   GLOBAL_MAP_ROLES
 } from "./constants.mjs";
 
@@ -32,6 +33,7 @@ export async function updateSceneState(scene, updater, options = {}) {
     : foundry.utils.mergeObject(current, updater ?? {}, { inplace: false, recursive: true });
   const flag = {
     ...(getGlobalMapFlag(scene) ?? {}),
+    version: GLOBAL_MAP_VERSION,
     state: normalizeSceneState(next)
   };
   if (options && Object.keys(options).length) {
@@ -51,8 +53,12 @@ export function normalizeSceneState(value) {
   state.locations = Array.isArray(state.locations) ? state.locations : [];
   state.terrains = Array.isArray(state.terrains) ? state.terrains : [];
   state.transitions = Array.isArray(state.transitions) ? state.transitions : [];
+  state.locationExitZones = Array.isArray(state.locationExitZones) ? state.locationExitZones : [];
+  state.travelAssemblies = Array.isArray(state.travelAssemblies) ? state.travelAssemblies : [];
+  state.version = GLOBAL_MAP_VERSION;
   state.discoveredLocationIds = uniqueStrings(state.discoveredLocationIds);
   state.discoveredTransitionIds = uniqueStrings(state.discoveredTransitionIds);
+  state.discoveredExitZoneIds = uniqueStrings(state.discoveredExitZoneIds);
   state.fog.mode = state.fog?.mode === "cells" ? "cells" : "native";
   state.fog.cellRadius = Math.max(1, Math.round(Number(state.fog?.cellRadius) || 2));
   return state;
@@ -113,7 +119,11 @@ export async function deleteCollectionEntry(scene, collection, id) {
 }
 
 export async function setDiscovered(scene, type, id, discovered = true) {
-  const key = type === "transition" ? "discoveredTransitionIds" : "discoveredLocationIds";
+  const key = type === "transition"
+    ? "discoveredTransitionIds"
+    : type === "exit"
+      ? "discoveredExitZoneIds"
+      : "discoveredLocationIds";
   return updateSceneState(scene, state => {
     const values = new Set(state[key] ?? []);
     if (discovered) values.add(String(id));

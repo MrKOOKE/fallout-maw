@@ -14524,3 +14524,199 @@ label.fallout-maw-mitigation-cell {
   border-color: var(--color-border-highlight);
   color: var(--color-text-light-highlight);
 }
+
+.fallout-maw-travel-assembly-body {
+  min-width: 0;
+}
+
+.fallout-maw-travel-assembly-header {
+  align-items: baseline;
+  border-bottom: 1px solid var(--color-border-light-2);
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.15rem 0.25rem 0.65rem;
+}
+
+.fallout-maw-travel-layout {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  min-height: 240px;
+}
+
+.fallout-maw-travel-vehicles {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.75rem;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0.1rem 0.1rem 0.5rem;
+}
+
+.fallout-maw-travel-vehicle {
+  border: 1px solid var(--color-border-light-2);
+  border-radius: 5px;
+  flex: 0 0 auto;
+  min-width: 300px;
+  padding: 0.5rem;
+}
+
+.fallout-maw-travel-vehicle.ready,
+.fallout-maw-travel-member.ready {
+  border-color: #39b86b;
+  box-shadow: 0 0 0 1px rgba(57, 184, 107, 0.24);
+}
+
+.fallout-maw-travel-vehicle-header {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: 42px minmax(110px, 1fr) auto;
+  margin-bottom: 0.55rem;
+}
+
+.fallout-maw-travel-vehicle-header > img,
+.fallout-maw-travel-member > img {
+  border: 0;
+  height: 42px;
+  object-fit: contain;
+  width: 42px;
+}
+
+.fallout-maw-travel-decks {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.fallout-maw-travel-deck {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fallout-maw-travel-deck-name {
+  color: var(--color-text-light-6);
+  font-size: var(--font-size-12);
+}
+
+.fallout-maw-travel-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--travel-columns), 34px);
+  grid-template-rows: repeat(var(--travel-rows), 34px);
+  position: relative;
+}
+
+.fallout-maw-travel-cell {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  min-height: 34px;
+  min-width: 34px;
+}
+
+.fallout-maw-travel-cell.occupied {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.fallout-maw-travel-cell.drop-preview,
+.fallout-maw-travel-roster.drop-preview {
+  background: rgba(57, 255, 136, 0.16);
+  border-color: #39ff88;
+}
+
+.fallout-maw-travel-grid-occupant {
+  align-items: center;
+  background: rgba(10, 10, 10, 0.78);
+  border: 1px solid #39b86b;
+  display: flex;
+  justify-content: center;
+  margin: 2px;
+  pointer-events: none;
+  position: relative;
+  z-index: 2;
+}
+
+.fallout-maw-travel-grid-occupant > img {
+  border: 0;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.fallout-maw-travel-roster {
+  border: 1px dashed var(--color-border-light-2);
+  border-radius: 5px;
+  min-width: 0;
+  padding: 0.5rem;
+}
+
+.fallout-maw-travel-roster > h3 {
+  margin: 0 0 0.5rem;
+}
+
+.fallout-maw-travel-member-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.fallout-maw-travel-member {
+  align-items: center;
+  border: 1px solid var(--color-border-light-2);
+  border-radius: 4px;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: 42px minmax(0, 1fr);
+  padding: 0.4rem;
+}
+
+.fallout-maw-travel-member[data-can-drag="true"] {
+  cursor: grab;
+}
+
+.fallout-maw-travel-member.dragging {
+  cursor: grabbing;
+  opacity: 0.45;
+}
+
+.fallout-maw-travel-member.missing {
+  border-color: var(--color-level-error);
+  opacity: 0.7;
+}
+
+.fallout-maw-travel-member > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-travel-member-actions {
+  display: flex;
+  gap: 0.35rem;
+  grid-column: 1 / -1;
+}
+
+.fallout-maw-travel-member-actions > button {
+  margin: 0;
+  min-width: 0;
+}
+
+.fallout-maw-travel-member-actions > button:first-child {
+  flex: 1 1 auto;
+}
+
+.fallout-maw-travel-member-actions > button.danger {
+  flex: 0 0 38px;
+  width: 38px;
+}
+
+.fallout-maw-travel-no-vehicles {
+  align-items: center;
+  border: 1px dashed var(--color-border-light-2);
+  display: flex;
+  justify-content: center;
+  min-height: 180px;
+  width: 100%;
+}

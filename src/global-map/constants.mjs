@@ -1,11 +1,16 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 
 export const GLOBAL_MAP_FLAG = "globalMap";
-export const GLOBAL_MAP_VERSION = 1;
+export const GLOBAL_MAP_VERSION = 2;
 export const GLOBAL_MAP_ROOT_SCENE_SETTING = "globalMapRootSceneId";
+export const GLOBAL_MAP_TRAVEL_IMAGE_SETTING = "globalMapTravelImage";
 export const GLOBAL_MAP_LAYER = "falloutMaWGlobalMap";
 export const GLOBAL_MAP_SOCKET = `system.${FALLOUT_MAW.id}`;
 export const GLOBAL_MAP_BYPASS_OPTION = "falloutMaWGlobalMapBypass";
+export const TRAVEL_GROUP_FLAG = "travelGroup";
+export const TRAVEL_GROUP_FOLDER_FLAG = "travelGroupFolder";
+export const TRAVEL_GROUP_TOKEN_FLAG = "travelGroupToken";
+export const TRAVEL_GROUP_IMAGE_DEFAULT = "icons/svg/group.svg";
 
 export const GLOBAL_MAP_ROLES = Object.freeze({
   ROOT_FOLDER: "rootFolder",
@@ -48,13 +53,24 @@ export const DEFAULT_TRANSITION = Object.freeze({
   entryCells: []
 });
 
+export const DEFAULT_LOCATION_EXIT = Object.freeze({
+  name: "Новая зона выхода",
+  color: "#ffb703",
+  brushRadius: 1,
+  alwaysDiscovered: false,
+  cells: []
+});
+
 export const DEFAULT_SCENE_STATE = Object.freeze({
   version: GLOBAL_MAP_VERSION,
   locations: [],
   terrains: [],
   transitions: [],
+  locationExitZones: [],
+  travelAssemblies: [],
   discoveredLocationIds: [],
   discoveredTransitionIds: [],
+  discoveredExitZoneIds: [],
   fog: {
     mode: "native",
     cellRadius: 2

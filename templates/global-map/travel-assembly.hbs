@@ -1,0 +1,106 @@
+<div class="fallout-maw-global-map-form fallout-maw-travel-assembly-body">
+  {{#if missing}}
+  <p class="notification warning">Сбор группы больше не существует.</p>
+  {{else}}
+  <header class="fallout-maw-travel-assembly-header">
+    <span>Лидер группы</span>
+    <strong>{{leaderName}}</strong>
+  </header>
+
+  <div class="fallout-maw-travel-layout">
+    <div class="fallout-maw-travel-vehicles">
+      {{#each vehicles}}
+      <section class="fallout-maw-travel-vehicle {{#if ready}}ready{{/if}}">
+        <header class="fallout-maw-travel-vehicle-header">
+          <img src="{{img}}" alt="{{name}}">
+          <strong>{{name}}</strong>
+          <div class="fallout-maw-travel-member-actions">
+            {{#if canReady}}
+            <button type="button" data-action="toggleReady" data-member-id="{{memberId}}">
+              <i class="fa-solid {{#if ready}}fa-check{{else}}fa-hourglass{{/if}}"></i>
+              {{#if ready}}Готов{{else}}Подтвердить{{/if}}
+            </button>
+            {{/if}}
+            {{#if canRemove}}
+            <button type="button" data-action="removeMember" data-member-id="{{memberId}}" class="danger" title="Исключить транспорт">
+              <i class="fa-solid fa-user-minus"></i>
+            </button>
+            {{/if}}
+          </div>
+        </header>
+        <div class="fallout-maw-travel-decks">
+          {{#each decks}}
+          <div class="fallout-maw-travel-deck">
+            <span class="fallout-maw-travel-deck-name">{{name}}</span>
+            <div class="fallout-maw-travel-grid" style="--travel-columns: {{columns}}; --travel-rows: {{rows}};">
+              {{#each cells}}
+              <div
+                class="fallout-maw-travel-cell {{#if occupied}}occupied{{/if}}"
+                data-travel-drop
+                data-drop-kind="vehicle-cell"
+                data-vehicle-token-id="{{../../tokenId}}"
+                data-slot-id="{{slotId}}"
+                data-slot-index="{{slotIndex}}"
+                data-x="{{x}}"
+                data-y="{{y}}"
+                style="{{style}}"
+              ></div>
+              {{/each}}
+              {{#each occupants}}
+              <div class="fallout-maw-travel-grid-occupant" style="{{gridStyle}}" title="{{name}}">
+                <img src="{{img}}" alt="{{name}}">
+              </div>
+              {{/each}}
+            </div>
+          </div>
+          {{/each}}
+        </div>
+      </section>
+      {{else}}
+      <div class="fallout-maw-travel-no-vehicles">В сборе нет транспорта.</div>
+      {{/each}}
+    </div>
+
+    <aside class="fallout-maw-travel-roster" data-travel-drop data-drop-kind="roster">
+      <h3>Участники</h3>
+      <div class="fallout-maw-travel-member-list">
+        {{#each members}}
+        <section
+          class="fallout-maw-travel-member {{#if ready}}ready{{/if}} {{#if missing}}missing{{/if}}"
+          data-travel-member-drag
+          data-member-id="{{id}}"
+          data-can-drag="{{canDrag}}"
+        >
+          <img src="{{img}}" alt="{{name}}">
+          <strong>{{name}}</strong>
+          <div class="fallout-maw-travel-member-actions">
+            {{#if canReady}}
+            <button type="button" data-action="toggleReady" data-member-id="{{id}}">
+              <i class="fa-solid {{#if ready}}fa-check{{else}}fa-hourglass{{/if}}"></i>
+              {{#if ready}}Готов{{else}}Подтвердить{{/if}}
+            </button>
+            {{/if}}
+            {{#if canRemove}}
+            <button type="button" data-action="removeMember" data-member-id="{{id}}" class="danger" title="Исключить участника">
+              <i class="fa-solid fa-user-minus"></i>
+            </button>
+            {{/if}}
+          </div>
+        </section>
+        {{/each}}
+      </div>
+    </aside>
+  </div>
+
+  <footer class="form-footer">
+    {{#if canManage}}
+    <button type="button" data-action="depart" {{#unless canDepart}}disabled{{/unless}}>
+      <i class="fa-solid fa-route"></i> Отправиться
+    </button>
+    <button type="button" data-action="cancelAssembly" class="danger">
+      <i class="fa-solid fa-ban"></i> Отменить сбор
+    </button>
+    {{/if}}
+  </footer>
+  {{/if}}
+</div>

@@ -1,0 +1,21 @@
+<div class="fallout-maw-global-map-form">
+  <div class="form-group"><label>Название</label><div class="form-fields"><input type="text" name="exit.name" value="{{exit.name}}" required></div></div>
+  <div class="form-group"><label>Цвет</label><div class="form-fields"><input type="color" name="exit.color" value="{{exit.color}}"></div></div>
+  <div class="form-group"><label>Радиус кисти</label><div class="form-fields"><input type="number" name="exit.brushRadius" value="{{exit.brushRadius}}" min="1" max="12"></div></div>
+  <div class="form-group">
+    <label>Всегда обнаружена</label>
+    <div class="form-fields">
+      <input type="hidden" name="exit.alwaysDiscovered" value="false">
+      <input type="checkbox" name="exit.alwaysDiscovered" value="true" {{checked exit.alwaysDiscovered}}>
+    </div>
+  </div>
+  <div class="form-group stacked">
+    <p class="hint">ЛКМ добавляет клетки.</p>
+    <p class="hint">Shift+ЛКМ удаляет клетки.</p>
+    <p class="hint">Ctrl+ЛКМ перехватывает клетки другой зоны выхода.</p>
+  </div>
+  <footer class="form-footer">
+    <button type="submit"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
+    {{#if canDelete}}<button type="button" data-action="delete" class="danger"><i class="fa-solid fa-trash"></i> Удалить</button>{{/if}}
+  </footer>
+</div>

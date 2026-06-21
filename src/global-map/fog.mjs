@@ -65,16 +65,21 @@ async function discoverVisibleObjects() {
     .filter(transition => !transition.hidden && isCellsVisible(scene, state, transition.cells))
     .map(transition => transition.id)
     .filter(id => !state.discoveredTransitionIds.includes(id));
-  if (!locationIds.length && !transitionIds.length) return;
+  const exitZoneIds = state.locationExitZones
+    .filter(exit => exit.alwaysDiscovered || isCellsVisible(scene, state, exit.cells))
+    .map(exit => exit.id)
+    .filter(id => !state.discoveredExitZoneIds.includes(id));
+  if (!locationIds.length && !transitionIds.length && !exitZoneIds.length) return;
   if (game.user?.isGM && isResponsibleGM()) {
-    await applyDiscoveries(scene, locationIds, transitionIds);
+    await applyDiscoveries(scene, locationIds, transitionIds, exitZoneIds);
   } else {
     game.socket.emit(GLOBAL_MAP_SOCKET, {
       action: "globalMap.discovery.request",
       sceneId: scene.id,
       userId: game.user?.id,
       locationIds,
-      transitionIds
+      transitionIds,
+      exitZoneIds
     });
   }
 }
@@ -87,6 +92,7 @@ async function handleFogSocket(payload) {
     if (!scene || !user) return;
     const allowedLocationIds = [];
     const allowedTransitionIds = [];
+    const allowedExitZoneIds = [];
     const state = getSceneState(scene);
     for (const id of payload.locationIds ?? []) {
       const location = state.locations.find(entry => entry.id === id);
@@ -100,17 +106,24 @@ async function handleFogSocket(payload) {
         allowedTransitionIds.push(id);
       }
     }
-    await applyDiscoveries(scene, allowedLocationIds, allowedTransitionIds);
+    for (const id of payload.exitZoneIds ?? []) {
+      const exit = state.locationExitZones.find(entry => entry.id === id);
+      if (exit?.alwaysDiscovered || (exit && userHasNearbyOwnedToken(user, scene, state, exit, "exit"))) {
+        allowedExitZoneIds.push(id);
+      }
+    }
+    await applyDiscoveries(scene, allowedLocationIds, allowedTransitionIds, allowedExitZoneIds);
   } else if (payload.action === "globalMap.discovery.changed" && payload.sceneId === canvas.scene?.id) {
     canvas.falloutMaWGlobalMap?.refresh?.();
   }
 }
 
-async function applyDiscoveries(scene, locationIds, transitionIds) {
-  if (!locationIds.length && !transitionIds.length) return;
+async function applyDiscoveries(scene, locationIds, transitionIds, exitZoneIds = []) {
+  if (!locationIds.length && !transitionIds.length && !exitZoneIds.length) return;
   await updateSceneState(scene, state => {
     state.discoveredLocationIds = Array.from(new Set([...state.discoveredLocationIds, ...locationIds]));
     state.discoveredTransitionIds = Array.from(new Set([...state.discoveredTransitionIds, ...transitionIds]));
+    state.discoveredExitZoneIds = Array.from(new Set([...state.discoveredExitZoneIds, ...exitZoneIds]));
     return state;
   });
   game.socket.emit(GLOBAL_MAP_SOCKET, {
@@ -178,7 +191,7 @@ async function onFogReset() {
   if (!game.user?.isGM || !isResponsibleGM() || !getGlobalMapFlag(canvas?.scene)) return;
   const confirmed = await foundry.applications.api.DialogV2.confirm({
     window: { title: "Сбросить обнаружение карты?" },
-    content: "<p>Туман сброшен. Также скрыть все обнаруженные локации и переходы этой сцены?</p>",
+    content: "<p>Туман сброшен. Также скрыть все обнаруженные локации, переходы и зоны выхода этой сцены?</p>",
     yes: { label: "Сбросить обнаружение" },
     no: { label: "Сохранить обнаружение" }
   });
@@ -186,6 +199,7 @@ async function onFogReset() {
   await updateSceneState(canvas.scene, state => {
     state.discoveredLocationIds = state.locations.filter(entry => entry.alwaysDiscovered).map(entry => entry.id);
     state.discoveredTransitionIds = [];
+    state.discoveredExitZoneIds = state.locationExitZones.filter(entry => entry.alwaysDiscovered).map(entry => entry.id);
     return state;
   });
   game.socket.emit(GLOBAL_MAP_SOCKET, {

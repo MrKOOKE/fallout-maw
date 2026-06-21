@@ -1,4 +1,11 @@
-import { DEFAULT_LOCATION, DEFAULT_TERRAIN, DEFAULT_TRANSITION, GLOBAL_MAP_LAYER } from "./constants.mjs";
+import {
+  DEFAULT_LOCATION,
+  DEFAULT_LOCATION_EXIT,
+  DEFAULT_TERRAIN,
+  DEFAULT_TRANSITION,
+  GLOBAL_MAP_LAYER,
+  GLOBAL_MAP_ROLES
+} from "./constants.mjs";
 import {
   assertSupportedGrid,
   cellKey,
@@ -13,7 +20,13 @@ import {
   pointToCell,
   snapPoint
 } from "./geometry.mjs";
-import { GlobalMapSceneSettings, LocationEditor, TerrainEditor, TransitionEditor } from "./editors.mjs";
+import {
+  GlobalMapSceneSettings,
+  LocationEditor,
+  LocationExitEditor,
+  TerrainEditor,
+  TransitionEditor
+} from "./editors.mjs";
 import { getGlobalMapFlag, getSceneState, saveCollectionEntry, updateSceneState } from "./storage.mjs";
 
 const InteractionLayer = foundry.canvas.layers.InteractionLayer;
@@ -24,9 +37,11 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
   dragPreviewLocation = null;
   brushStroke = null;
   brushPreviewCells = [];
+  arrivalSelection = null;
   pendingAreaOverwrites = {
     terrains: new Map(),
-    transitions: new Map()
+    transitions: new Map(),
+    locationExitZones: new Map()
   };
 
   static get layerOptions() {
@@ -38,6 +53,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
 
   static prepareSceneControls() {
     if (!game.user?.isGM || !getGlobalMapFlag(canvas?.scene)) return null;
+    const isLocationScene = getGlobalMapFlag(canvas.scene)?.role === GLOBAL_MAP_ROLES.LOCATION_SCENE;
     return {
       name: "falloutMaWGlobalMap",
       order: 9,
@@ -67,9 +83,13 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
           button: true,
           onChange: () => canvas[GLOBAL_MAP_LAYER]?.startEntryDrawing?.()
         },
+        ...(isLocationScene ? {
+          locationExitDraw: tool("locationExitDraw", 9, "Новая зона выхода", "fa-solid fa-person-walking-arrow-right"),
+          locationExitEdit: tool("locationExitEdit", 10, "Редактировать зону выхода", "fa-solid fa-pen-ruler")
+        } : {}),
         settings: {
           name: "settings",
-          order: 9,
+          order: 11,
           title: "Настройки карты",
           icon: "fa-solid fa-gear",
           button: true,
@@ -93,6 +113,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     const state = getSceneState(canvas.scene);
     this.#drawTerrains(state.terrains);
     this.#drawTransitions(state.transitions, state.discoveredTransitionIds);
+    this.#drawLocationExitZones(state.locationExitZones, state.discoveredExitZoneIds);
     this.#drawLocations(state.locations, state.discoveredLocationIds);
     this.#drawWorkingData();
   }
@@ -117,7 +138,35 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
         cells: []
       }, { isNew: true });
       this.editor.render(true);
+    } else if (this.mode === "locationExitDraw") {
+      if (!assertSupportedGrid()) return this.setMode("select");
+      if (getGlobalMapFlag(canvas.scene)?.role !== GLOBAL_MAP_ROLES.LOCATION_SCENE) {
+        ui.notifications.warn("Зоны выхода создаются только на сцене локации.");
+        return this.setMode("select");
+      }
+      this.editor = new LocationExitEditor(canvas.scene, {
+        ...DEFAULT_LOCATION_EXIT,
+        id: foundry.utils.randomID(),
+        cells: []
+      }, { isNew: true });
+      this.editor.render(true);
     }
+    await this.refresh();
+  }
+
+  async startArrivalSelection(payload) {
+    if (!payload?.groupId || payload.targetSceneId !== canvas.scene?.id) return false;
+    this.arrivalSelection = foundry.utils.deepClone(payload);
+    this.mode = "arrivalSelect";
+    this.activate();
+    await this.refresh();
+    return true;
+  }
+
+  async clearArrivalSelection(groupId = null) {
+    if (groupId && this.arrivalSelection?.groupId !== groupId) return;
+    this.arrivalSelection = null;
+    if (this.mode === "arrivalSelect") this.mode = "select";
     await this.refresh();
   }
 
@@ -159,13 +208,16 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
   }
 
   async _onClickLeft(event) {
-    if (!game.user?.isGM || !canvas?.scene) return;
+    if (!canvas?.scene) return;
     const point = event.getLocalPosition?.(this) ?? event.global;
+    if (this.arrivalSelection) return this.#selectArrivalZoneAt(point);
+    if (!game.user?.isGM) return;
     if (this.mode === "locationPlace") return this.#placeLocation(point);
     if (this.mode === "locationEdit") return this.#editLocationAt(point);
     if (this.#isPaintMode()) return this.#paintWorkingCells(point, event);
     if (this.mode === "terrainEdit") return this.#editAreaAt("terrain", point);
     if (this.mode === "transitionEdit") return this.#editAreaAt("transition", point);
+    if (this.mode === "locationExitEdit") return this.#editAreaAt("locationExit", point);
   }
 
   _canDragLeftStart(_user, event) {
@@ -266,6 +318,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     else {
       this.pendingAreaOverwrites?.terrains?.clear();
       this.pendingAreaOverwrites?.transitions?.clear();
+      this.pendingAreaOverwrites?.locationExitZones?.clear();
     }
   }
 
@@ -297,6 +350,20 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       .find(location => locationContainsPoint(canvas.scene, location, point)) ?? null;
   }
 
+  async #selectArrivalZoneAt(point) {
+    if (!this.arrivalSelection) return false;
+    const key = cellKey(pointToCell(canvas.scene, point));
+    const zone = [...getSceneState(canvas.scene).locationExitZones]
+      .reverse()
+      .find(entry => entry.cells?.includes(key));
+    if (!zone) return false;
+    return game.falloutMaW?.globalMap?.selectArrivalZone?.({
+      originSceneId: this.arrivalSelection.originSceneId,
+      tokenId: this.arrivalSelection.tokenId,
+      exitZoneId: zone.id
+    });
+  }
+
   #getRenderableLocations() {
     const locations = new Map(getSceneState(canvas.scene).locations.map(location => [location.id, location]));
     if (this.editor instanceof LocationEditor && this.editor.data?.id) {
@@ -309,13 +376,19 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     if (!assertSupportedGrid()) return;
     const key = cellKey(pointToCell(canvas.scene, point));
     const state = getSceneState(canvas.scene);
-    const collection = kind === "terrain" ? state.terrains : state.transitions;
+    const collection = kind === "terrain"
+      ? state.terrains
+      : kind === "transition"
+        ? state.transitions
+        : state.locationExitZones;
     const entry = [...collection].reverse().find(candidate => candidate.cells?.includes(key));
     if (!entry) return;
     await this.editor?.close?.();
     this.editor = kind === "terrain"
       ? new TerrainEditor(canvas.scene, entry, { isNew: false })
-      : new TransitionEditor(canvas.scene, entry, { isNew: false });
+      : kind === "transition"
+        ? new TransitionEditor(canvas.scene, entry, { isNew: false })
+        : new LocationExitEditor(canvas.scene, entry, { isNew: false });
     this.editor.render(true);
   }
 
@@ -357,9 +430,10 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
   }
 
   #isPaintMode() {
-    return ["terrainDraw", "transitionDraw", "entryDraw"].includes(this.mode)
+    return ["terrainDraw", "transitionDraw", "entryDraw", "locationExitDraw"].includes(this.mode)
       || (this.mode === "terrainEdit" && this.editor instanceof TerrainEditor)
-      || (this.mode === "transitionEdit" && this.editor instanceof TransitionEditor);
+      || (this.mode === "transitionEdit" && this.editor instanceof TransitionEditor)
+      || (this.mode === "locationExitEdit" && this.editor instanceof LocationExitEditor);
   }
 
   #shouldRemoveCells(event) {
@@ -376,6 +450,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     if (property !== "cells") return null;
     if (this.editor instanceof TerrainEditor) return "terrains";
     if (this.editor instanceof TransitionEditor) return "transitions";
+    if (this.editor instanceof LocationExitEditor) return "locationExitZones";
     return null;
   }
 
@@ -467,6 +542,23 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       const cuts = pending.get(transition.id);
       const cells = (transition.cells ?? []).filter(key => !cuts?.has(key)).map(parseCellKey).filter(Boolean);
       drawCellArea(graphic, cells, transition.color, transition.color, 0.28, 3);
+      this.container.addChild(graphic);
+    }
+  }
+
+  #drawLocationExitZones(exits, discoveredIds) {
+    const discovered = new Set(discoveredIds ?? []);
+    const activeId = this.editor instanceof LocationExitEditor ? this.editor.data?.id : null;
+    const pending = this.pendingAreaOverwrites.locationExitZones;
+    for (const exit of exits) {
+      if (exit.id === activeId) continue;
+      if (!this.arrivalSelection && !game.user.isGM && !exit.alwaysDiscovered && !discovered.has(exit.id)) continue;
+      const graphic = new PIXI.LegacyGraphics();
+      graphic.zIndex = this.arrivalSelection ? 120 : 24;
+      const cuts = pending.get(exit.id);
+      const cells = (exit.cells ?? []).filter(key => !cuts?.has(key)).map(parseCellKey).filter(Boolean);
+      const color = this.arrivalSelection ? "#39ff88" : exit.color;
+      drawCellArea(graphic, cells, color, color, this.arrivalSelection ? 0.32 : 0.2, this.arrivalSelection ? 5 : 3);
       this.container.addChild(graphic);
     }
   }

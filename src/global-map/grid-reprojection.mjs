@@ -25,6 +25,10 @@ function captureGridSnapshot(scene, changes, options) {
       id: entry.id,
       points: keysToPoints(scene.grid, entry.cells)
     })),
+    locationExitZones: state.locationExitZones.map(entry => ({
+      id: entry.id,
+      points: keysToPoints(scene.grid, entry.cells)
+    })),
     incoming: Array.from(game.scenes ?? []).flatMap(sourceScene =>
       getSceneState(sourceScene).transitions
         .filter(entry => entry.targetSceneId === scene.id)
@@ -58,6 +62,11 @@ async function reprojectGridData(scene, changes, options) {
     state.transitions = state.transitions.map(entry => ({
       ...entry,
       cells: pointsToKeys(scene.grid, transitions.get(entry.id)?.points)
+    }));
+    const locationExitZones = new Map((snapshot.locationExitZones ?? []).map(entry => [entry.id, entry]));
+    state.locationExitZones = state.locationExitZones.map(entry => ({
+      ...entry,
+      cells: pointsToKeys(scene.grid, locationExitZones.get(entry.id)?.points)
     }));
     return state;
   }, { [GLOBAL_MAP_BYPASS_OPTION]: true });

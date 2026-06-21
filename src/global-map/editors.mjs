@@ -1,5 +1,10 @@
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "../apps/base-form-application-v2.mjs";
-import { DEFAULT_LOCATION, DEFAULT_TERRAIN, DEFAULT_TRANSITION } from "./constants.mjs";
+import {
+  DEFAULT_LOCATION,
+  DEFAULT_LOCATION_EXIT,
+  DEFAULT_TERRAIN,
+  DEFAULT_TRANSITION
+} from "./constants.mjs";
 import { deleteCollectionEntry, getGlobalMapFlag, getSceneState, saveCollectionEntry, updateSceneState } from "./storage.mjs";
 import {
   createZoneScene,
@@ -8,6 +13,7 @@ import {
   getOrCreateGlobalMap,
   validateGlobalMapStructure
 } from "./structure.mjs";
+import { queueGlobalMapApplicationPosition } from "./window-position.mjs";
 
 const TEMPLATE_ROOT = "systems/fallout-maw/templates/global-map";
 
@@ -84,7 +90,11 @@ export class LocationEditor extends GlobalMapEditorBase {
   static DEFAULT_OPTIONS = {
     ...super.DEFAULT_OPTIONS,
     id: "fallout-maw-location-editor",
-    window: { title: "Локация", resizable: true }
+    window: { title: "Локация", resizable: true },
+    actions: {
+      ...super.DEFAULT_OPTIONS.actions,
+      configureExitZones: LocationEditor.#configureExitZones
+    }
   };
 
   static PARTS = {
@@ -111,6 +121,7 @@ export class LocationEditor extends GlobalMapEditorBase {
       isNew: this.isNew,
       canDelete: !this.isNew,
       canConnectExistingScene: !linkedScene,
+      canConfigureExitZones: Boolean(linkedScene),
       linkedSceneName: linkedScene?.name ?? ""
     };
   }
@@ -170,6 +181,20 @@ export class LocationEditor extends GlobalMapEditorBase {
     const name = dropzone.querySelector("[data-global-map-location-scene-name]");
     if (name) name.textContent = scene.name;
     dropzone.classList.add("has-scene");
+  }
+
+  static async #configureExitZones() {
+    const target = this.data.linkedSceneId ? game.scenes?.get(this.data.linkedSceneId) : null;
+    if (!target) {
+      ui.notifications.warn("Сначала подключите сцену к локации.");
+      return;
+    }
+    await target.view();
+    const layer = canvas.falloutMaWGlobalMap;
+    if (!layer) return;
+    layer.activate();
+    const hasZones = getSceneState(target).locationExitZones.length > 0;
+    await layer.setMode(hasZones ? "locationExitEdit" : "locationExitDraw");
   }
 
   _applyLiveValues(values) {
@@ -282,6 +307,76 @@ export class TerrainEditor extends GlobalMapEditorBase {
   async _deleteEntry() {
     if (!this.data.id) return this.close();
     await deleteCollectionEntry(this.scene, "terrains", this.data.id);
+    await this.close();
+    canvas.falloutMaWGlobalMap?.refresh?.();
+  }
+}
+
+export class LocationExitEditor extends GlobalMapEditorBase {
+  constructor(scene, data, options = {}) {
+    super(scene, { ...DEFAULT_LOCATION_EXIT, ...data }, options);
+    this.isNew = Boolean(options.isNew);
+  }
+
+  static DEFAULT_OPTIONS = {
+    ...super.DEFAULT_OPTIONS,
+    id: "fallout-maw-location-exit-editor",
+    window: { title: "Зона выхода", resizable: true }
+  };
+
+  static PARTS = {
+    form: { template: `${TEMPLATE_ROOT}/location-exit-editor.hbs` }
+  };
+
+  async _prepareContext() {
+    return { exit: this.data, canDelete: !this.isNew };
+  }
+
+  async _processFormData(_event, _form, formData) {
+    const values = getExpandedFormData(formData).exit ?? {};
+    const exit = {
+      ...this.data,
+      ...values,
+      id: this.data.id || foundry.utils.randomID(),
+      name: String(values.name || DEFAULT_LOCATION_EXIT.name).trim(),
+      color: String(values.color || DEFAULT_LOCATION_EXIT.color),
+      brushRadius: Math.max(1, Math.round(Number(values.brushRadius) || 1)),
+      alwaysDiscovered: readCheckboxValue(values.alwaysDiscovered),
+      cells: Array.from(new Set(this.data.cells ?? []))
+    };
+    if (!exit.cells.length) {
+      ui.notifications.warn("Нарисуйте хотя бы одну клетку зоны выхода.");
+      return;
+    }
+    await canvas.falloutMaWGlobalMap?.applyPendingAreaOverwrites?.("locationExitZones", exit.id);
+    await saveCollectionEntry(this.scene, "locationExitZones", exit);
+    this.data = exit;
+    canvas.falloutMaWGlobalMap?.refresh?.();
+  }
+
+  _applyLiveValues(values) {
+    const exit = values.exit ?? {};
+    Object.assign(this.data, {
+      name: String(exit.name ?? this.data.name),
+      color: String(exit.color || DEFAULT_LOCATION_EXIT.color),
+      brushRadius: Math.max(1, Math.round(Number(exit.brushRadius) || 1)),
+      alwaysDiscovered: readCheckboxValue(exit.alwaysDiscovered)
+    });
+  }
+
+  async _deleteEntry() {
+    if (!this.data.id) return this.close();
+    const assemblyIds = getSceneState(this.scene).travelAssemblies
+      .filter(entry => entry.exitZoneId === this.data.id)
+      .map(entry => entry.id);
+    for (const assemblyId of assemblyIds) {
+      await game.falloutMaW?.globalMap?.cancelTravelAssembly?.(assemblyId, this.scene.id);
+    }
+    await updateSceneState(this.scene, state => {
+      state.locationExitZones = state.locationExitZones.filter(entry => entry.id !== this.data.id);
+      state.discoveredExitZoneIds = state.discoveredExitZoneIds.filter(id => id !== this.data.id);
+      return state;
+    });
     await this.close();
     canvas.falloutMaWGlobalMap?.refresh?.();
   }
@@ -454,31 +549,6 @@ export class GlobalMapManager extends FalloutMaWFormApplicationV2 {
     else ui.notifications.warn(result.issues.join(" "));
     this.render();
   }
-}
-
-function queueGlobalMapApplicationPosition(application) {
-  const view = application.element?.ownerDocument?.defaultView ?? globalThis;
-  view.requestAnimationFrame?.(() => positionGlobalMapApplication(application))
-    ?? positionGlobalMapApplication(application);
-}
-
-function positionGlobalMapApplication(application) {
-  const element = application.element;
-  if (!element) return;
-  const document = element.ownerDocument;
-  const sidebar = document.querySelector("#sidebar");
-  const viewportWidth = document.defaultView?.innerWidth ?? document.documentElement.clientWidth;
-  const sidebarLeft = sidebar?.getBoundingClientRect().left;
-  const rightBoundary = Number.isFinite(sidebarLeft) && sidebarLeft > 0 ? sidebarLeft : viewportWidth;
-  const width = element.getBoundingClientRect().width
-    || Number(application.position?.width)
-    || Number(application.options?.position?.width)
-    || 440;
-  const left = Math.max(8, Math.round(rightBoundary - width - 12));
-  application.setPosition({
-    left,
-    top: 16
-  });
 }
 
 function readCheckboxValue(value) {

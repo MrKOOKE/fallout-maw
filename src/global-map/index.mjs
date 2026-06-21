@@ -1,15 +1,31 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import {
+  GLOBAL_MAP_BYPASS_OPTION,
+  GLOBAL_MAP_FLAG,
   GLOBAL_MAP_LAYER,
-  GLOBAL_MAP_ROOT_SCENE_SETTING
+  GLOBAL_MAP_ROOT_SCENE_SETTING,
+  GLOBAL_MAP_TRAVEL_IMAGE_SETTING,
+  GLOBAL_MAP_VERSION,
+  TRAVEL_GROUP_IMAGE_DEFAULT
 } from "./constants.mjs";
 import { FalloutMaWGlobalMapLayer } from "./layer.mjs";
 import { registerGlobalMapStructureHooks, getOrCreateGlobalMap, validateGlobalMapStructure } from "./structure.mjs";
-import { getRootScene } from "./storage.mjs";
-import { registerGlobalMapTravelHooks, registerGlobalMapTravelSocket, requestDirectTravel, requestTransitionTravel, travelToLocation } from "./travel.mjs";
+import { getGlobalMapFlag, getRootScene, updateSceneState } from "./storage.mjs";
+import { registerGlobalMapTravelHooks, registerGlobalMapTravelSocket, requestTransitionTravel } from "./travel.mjs";
 import { registerGlobalMapFogHooks, registerGlobalMapFogSocket } from "./fog.mjs";
 import { registerGlobalMapGridHooks } from "./grid-reprojection.mjs";
 import { GlobalMapManager } from "./editors.mjs";
+import { GlobalMapTravelSettings, syncTravelGroupImages } from "./travel-settings.mjs";
+import {
+  cancelTravelAssembly,
+  openTravelAssembly,
+  registerTravelGroupHooks,
+  registerTravelGroupSocket,
+  requestLocationEntry,
+  requestLocationExit,
+  selectArrivalZone,
+  travelToLocation
+} from "./travel-groups.mjs";
 
 export function registerGlobalMapSystem() {
   game.settings.register(FALLOUT_MAW.id, GLOBAL_MAP_ROOT_SCENE_SETTING, {
@@ -18,6 +34,22 @@ export function registerGlobalMapSystem() {
     config: false,
     type: String,
     default: ""
+  });
+  game.settings.register(FALLOUT_MAW.id, GLOBAL_MAP_TRAVEL_IMAGE_SETTING, {
+    name: "Изображение путешествующей группы",
+    scope: "world",
+    config: false,
+    type: String,
+    default: TRAVEL_GROUP_IMAGE_DEFAULT,
+    onChange: value => void syncTravelGroupImages(value)
+  });
+  game.settings.registerMenu(FALLOUT_MAW.id, "globalMapTravel", {
+    name: "Путешествие",
+    label: "Настроить путешествие",
+    hint: "Изображение временного актёра путешествующей группы.",
+    icon: "fa-solid fa-people-group",
+    type: GlobalMapTravelSettings,
+    restricted: true
   });
   game.settings.registerMenu(FALLOUT_MAW.id, "globalMapManager", {
     name: "Глобальная карта",
@@ -33,17 +65,36 @@ export function registerGlobalMapSystem() {
   };
   registerGlobalMapStructureHooks();
   registerGlobalMapTravelHooks();
+  registerTravelGroupHooks();
   registerGlobalMapFogHooks();
   registerGlobalMapGridHooks();
   registerGlobalMapKeybinding();
   Hooks.on("canvasReady", refreshGlobalMapUi);
+  Hooks.once("ready", () => void migrateGlobalMapVersion());
   Hooks.on("updateScene", scene => {
     if (scene.id === canvas.scene?.id) canvas[GLOBAL_MAP_LAYER]?.refresh?.();
   });
 }
 
+async function migrateGlobalMapVersion() {
+  if (game.users?.activeGM?.id !== game.user?.id) return;
+  for (const scene of game.scenes?.contents ?? []) {
+    const flag = getGlobalMapFlag(scene);
+    if (!flag?.mapId || Number(flag.version) >= GLOBAL_MAP_VERSION) continue;
+    await updateSceneState(scene, state => state, { [GLOBAL_MAP_BYPASS_OPTION]: true });
+  }
+  for (const folder of game.folders?.contents ?? []) {
+    const flag = getGlobalMapFlag(folder);
+    if (!flag?.mapId || Number(flag.version) >= GLOBAL_MAP_VERSION) continue;
+    await folder.update({
+      [`flags.${FALLOUT_MAW.id}.${GLOBAL_MAP_FLAG}`]: { ...flag, version: GLOBAL_MAP_VERSION }
+    }, { [GLOBAL_MAP_BYPASS_OPTION]: true });
+  }
+}
+
 export function initializeGlobalMapRuntime() {
   registerGlobalMapTravelSocket();
+  registerTravelGroupSocket();
   registerGlobalMapFogSocket();
   game.falloutMaW ??= {};
   game.falloutMaW.globalMap = {
@@ -52,8 +103,12 @@ export function initializeGlobalMapRuntime() {
     getOrCreate: getOrCreateGlobalMap,
     validateStructure: validateGlobalMapStructure,
     requestTransitionTravel,
-    requestDirectTravel,
-    travelToLocation
+    travelToLocation,
+    requestLocationEntry,
+    requestLocationExit,
+    openTravelAssembly,
+    cancelTravelAssembly,
+    selectArrivalZone
   };
 }
 
