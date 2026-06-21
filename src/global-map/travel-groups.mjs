@@ -42,7 +42,6 @@ export function registerTravelGroupHooks() {
   Hooks.on("preUpdateActor", protectTravelActorUpdate);
   Hooks.on("preDeleteActor", protectTravelActorDelete);
   Hooks.on("preDeleteToken", protectTravelTokenDelete);
-  Hooks.on("preUpdateToken", protectTravelTokenUpdate);
   Hooks.on("preCreateItem", (item, _data, options, userId) => protectTravelEmbeddedItem(item, options, userId));
   Hooks.on("preUpdateItem", (item, _changes, options, userId) => protectTravelEmbeddedItem(item, options, userId));
   Hooks.on("preDeleteItem", (item, options, userId) => protectTravelEmbeddedItem(item, options, userId));
@@ -1823,23 +1822,6 @@ function protectTravelTokenDelete(token, options, userId) {
   if (!token.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.groupId || options?.[TRAVEL_BYPASS_OPTION]) return;
   if (game.users?.get(userId)?.isGM) return;
   ui.notifications.warn("Токен путешествующей группы удаляется только при завершении путешествия.");
-  return false;
-}
-
-function protectTravelTokenUpdate(token, changes, options, userId) {
-  if (!token.getFlag(FALLOUT_MAW.id, TRAVEL_GROUP_TOKEN_FLAG)?.groupId || options?.[TRAVEL_BYPASS_OPTION]) return;
-  if (game.users?.get(userId)?.isGM) return;
-  const movement = options?._movement?.[token.id] ?? options?.movement?.[token.id];
-  const positionFields = new Set(["x", "y", "elevation", "rotation", "sort"]);
-  const movementFields = new Set([
-    ...(token.constructor?.MOVEMENT_FIELDS ?? ["x", "y", "elevation"]),
-    "_movementHistory",
-    "rotation",
-    "sort"
-  ]);
-  if (movement && Object.keys(changes ?? {}).every(key => movementFields.has(key))) return;
-  if (Object.keys(changes ?? {}).every(key => positionFields.has(key))) return;
-  ui.notifications.warn("У токена путешествующей группы можно изменять только положение.");
   return false;
 }
 
