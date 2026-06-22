@@ -46,17 +46,23 @@ export function registerReactionResourceHooks() {
     void convertInTurnReactionPoints(actor, value);
   });
 
-  Hooks.on("combatTurnChange", combat => {
+  Hooks.on("combatTurnChange", async (combat, prior, current) => {
     if (!game.user?.isActiveGM || !combat?.started) return undefined;
-    return prepareActorTurnStart(combat.combatant?.actor);
+    const previousActor = combat.combatants?.get(prior?.combatantId)?.actor ?? null;
+    const currentActor = combat.combatants?.get(current?.combatantId)?.actor ?? combat.combatant?.actor ?? null;
+    if (previousActor?.uuid && previousActor.uuid !== currentActor?.uuid) {
+      await restoreActorReactionResource(previousActor);
+    }
+    return prepareActorTurnStart(currentActor);
   });
 
-  Hooks.on("combatStart", combat => resetCombatReactionResources(combat));
+  Hooks.on("combatStart", (combat, updateData) => initializeCombatReactionResources(combat, updateData));
   Hooks.on("deleteCombat", combat => resetCombatReactionResources(combat));
   Hooks.on("createCombatant", combatant => {
     const combat = combatant?.combat;
     if (!game.user?.isActiveGM || !combat?.started) return undefined;
-    return resetActorReactionResources(combatant.actor);
+    const isCurrentActor = combatant.actor?.uuid === combat.combatant?.actor?.uuid;
+    return resetActorReactionResources(combatant.actor, { restore: !isCurrentActor });
   });
 }
 
@@ -92,7 +98,19 @@ export async function prepareActorTurnEnd(actor, { conversionMode = TURN_CONVERS
     }
     await zeroTurnResources(actor);
   }
+  await restoreActorReactionResource(actor);
   await deleteOneTimeActionPointEffects(actor, { source: IN_TURN_REACTION_SOURCE });
+}
+
+export async function restoreActorReactionResource(actor) {
+  if (!actor?.isOwner) return;
+  const reaction = actor.system?.resources?.[REACTION_RESOURCE_KEY];
+  if (!reaction) return;
+  const max = Math.max(0, toInteger(reaction.max));
+  await actor.update({
+    [`system.resources.${REACTION_RESOURCE_KEY}.value`]: max,
+    [`system.resources.${REACTION_RESOURCE_KEY}.spent`]: 0
+  }, { [REACTION_UPDATE_OPTION]: true });
 }
 
 export function getNormalActionPointValue(actor) {
@@ -233,15 +251,29 @@ async function resetCombatReactionResources(combat) {
   for (const actor of actors.values()) await resetActorReactionResources(actor);
 }
 
-async function resetActorReactionResources(actor) {
+async function initializeCombatReactionResources(combat, updateData = {}) {
+  if (!game.user?.isActiveGM) return;
+  const initialTurn = Number.isInteger(updateData?.turn) ? updateData.turn : combat?.turn;
+  const currentActorUuid = combat?.turns?.[initialTurn]?.actor?.uuid ?? combat?.combatant?.actor?.uuid ?? "";
+  const actors = new Map();
+  for (const combatant of combat?.combatants ?? []) {
+    if (combatant.actor) actors.set(combatant.actor.uuid, combatant.actor);
+  }
+  for (const actor of actors.values()) {
+    await resetActorReactionResources(actor, { restore: actor.uuid !== currentActorUuid });
+  }
+}
+
+async function resetActorReactionResources(actor, { restore = false } = {}) {
   if (!actor?.isOwner) return;
   await deleteReactionDodgeEffects(actor);
   await deleteReactionPointEffects(actor);
   const updates = {};
   const reaction = actor.system?.resources?.[REACTION_RESOURCE_KEY];
   if (reaction) {
-    updates[`system.resources.${REACTION_RESOURCE_KEY}.value`] = 0;
-    updates[`system.resources.${REACTION_RESOURCE_KEY}.spent`] = Math.max(0, toInteger(reaction.max));
+    const max = Math.max(0, toInteger(reaction.max));
+    updates[`system.resources.${REACTION_RESOURCE_KEY}.value`] = restore ? max : 0;
+    updates[`system.resources.${REACTION_RESOURCE_KEY}.spent`] = restore ? 0 : max;
   }
   if (Object.keys(updates).length) await actor.update(updates, { [REACTION_UPDATE_OPTION]: true });
 }
@@ -261,10 +293,6 @@ async function convertInTurnReactionPoints(actor, rawValue) {
 async function convertActionPointsToReactionPoints(actor, amount) {
   const value = Math.max(0, toInteger(amount));
   await createOrUpdateReactionPointEffect(actor, value);
-  await actor.update({
-    [`system.resources.${REACTION_RESOURCE_KEY}.value`]: value,
-    [`system.resources.${REACTION_RESOURCE_KEY}.spent`]: 0
-  }, { [REACTION_UPDATE_OPTION]: true });
 }
 
 async function zeroTurnResources(actor) {
