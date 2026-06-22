@@ -33,9 +33,11 @@ const { DialogV2 } = foundry.applications.api;
 const TEMPLATE = `systems/${FALLOUT_MAW.id}/templates/global-map/travel-assembly.hbs`;
 const TRAVEL_BYPASS_OPTION = "falloutMaWTravelGroupBypass";
 const ARRIVAL_TIMEOUT_MS = 60_000;
+const REQUEST_TIMEOUT_MS = 8_000;
 const assemblyApps = new Map();
 const pendingExitPrompts = new Map();
 const arrivalTimers = new Map();
+const pendingRequests = new Map();
 let responsibleRequestQueue = Promise.resolve();
 
 export function registerTravelGroupHooks() {
@@ -375,21 +377,35 @@ async function submitTravelGroupRequest(action, payload = {}) {
     ...payload
   };
   if (game.user?.isGM && isResponsibleGM()) return queueResponsibleGMRequest(request);
-  if (!getResponsibleGM()) {
+  const responsibleGM = getResponsibleGM();
+  if (!responsibleGM) {
     ui.notifications.warn("Путешествие недоступно: нет активного GM.");
     return false;
   }
-  game.socket.emit(GLOBAL_MAP_SOCKET, request);
-  return true;
+  return new Promise(resolve => {
+    const timeout = setTimeout(() => {
+      pendingRequests.delete(request.requestId);
+      ui.notifications.error("GM не подтвердил запрос перехода. Обновите клиент GM и повторите попытку.");
+      resolve(false);
+    }, REQUEST_TIMEOUT_MS);
+    pendingRequests.set(request.requestId, { resolve, timeout });
+    game.socket.emit(GLOBAL_MAP_SOCKET, request, { recipients: [responsibleGM.id] });
+  });
 }
 
-async function handleTravelGroupSocket(payload) {
+async function handleTravelGroupSocket(payload, senderUserId = null) {
   if (!payload || typeof payload !== "object" || !String(payload.action ?? "").startsWith("travelGroup.")) return;
   if (isTravelGroupRequestAction(payload.action)) {
-    if (game.user?.isGM && isResponsibleGM()) await queueResponsibleGMRequest(payload);
+    if (senderUserId && payload.requestingUserId !== senderUserId) return;
+    if (game.user?.isGM && isResponsibleGM()) {
+      const result = await queueResponsibleGMRequest(payload);
+      if (result !== false) emitGroupRequestComplete(payload);
+    }
     return;
   }
-  if (payload.action === "travelGroup.assembly.changed") {
+  if (payload.action === "travelGroup.request.complete" && payload.requestingUserId === game.user?.id) {
+    resolvePendingRequest(payload.requestId, true);
+  } else if (payload.action === "travelGroup.assembly.changed") {
     await handleAssemblyChanged(payload);
   } else if (payload.action === "travelGroup.assembly.closed") {
     const app = assemblyApps.get(`${payload.sceneId}:${payload.assemblyId}`);
@@ -402,8 +418,25 @@ async function handleTravelGroupSocket(payload) {
   } else if (payload.action === "travelGroup.arrival.closed") {
     await restoreTokenControlsAfterArrival(payload);
   } else if (payload.action === "travelGroup.error" && payload.requestingUserId === game.user?.id) {
+    resolvePendingRequest(payload.requestId, false);
     ui.notifications.error(payload.message || "Не удалось выполнить путешествие.");
   }
+}
+
+function resolvePendingRequest(requestId, result) {
+  const pending = pendingRequests.get(requestId);
+  if (!pending) return;
+  clearTimeout(pending.timeout);
+  pendingRequests.delete(requestId);
+  pending.resolve(result);
+}
+
+function emitGroupRequestComplete(payload) {
+  game.socket.emit(GLOBAL_MAP_SOCKET, {
+    action: "travelGroup.request.complete",
+    requestId: payload.requestId,
+    requestingUserId: payload.requestingUserId
+  }, { recipients: [payload.requestingUserId] });
 }
 
 function queueResponsibleGMRequest(payload) {
@@ -1861,7 +1894,7 @@ function emitGroupError(payload, message) {
     requestId: payload.requestId,
     requestingUserId: payload.requestingUserId,
     message
-  });
+  }, { recipients: [payload.requestingUserId] });
   if (payload.requestingUserId === game.user?.id) ui.notifications.error(message);
   return false;
 }

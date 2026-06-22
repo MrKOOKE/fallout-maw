@@ -209,6 +209,8 @@ Hooks.on("openDetachedWindow", (_id, win) => {
   registerFormFocusDragGuard(win?.document);
 });
 
+Hooks.once("ready", initializeGlobalMapRuntime);
+
 Hooks.once("ready", async () => {
   await finalizeSystemSettings();
   registerSkillCheckControlSocket();
@@ -239,7 +241,6 @@ Hooks.once("ready", async () => {
   await syncLoadedActorNaturalRaceItems();
   await syncLoadedActorAbilityEffects();
   await syncPeriodicDamageRegionEffects();
-  initializeGlobalMapRuntime();
 });
 
 Hooks.on("dropCanvasData", async (canvas, data, event) => {

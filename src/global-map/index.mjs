@@ -29,6 +29,8 @@ import {
   travelToLocation
 } from "./travel-groups.mjs";
 
+let globalMapRuntimeInitialized = false;
+
 export function registerGlobalMapSystem() {
   game.settings.register(FALLOUT_MAW.id, GLOBAL_MAP_ROOT_SCENE_SETTING, {
     name: "Global Map Root Scene ID",
@@ -99,6 +101,8 @@ async function migrateGlobalMapVersion() {
 }
 
 export function initializeGlobalMapRuntime() {
+  if (globalMapRuntimeInitialized) return;
+  globalMapRuntimeInitialized = true;
   registerGlobalMapTravelSocket();
   registerTravelGroupSocket();
   registerGlobalMapFogSocket();
