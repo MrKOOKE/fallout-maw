@@ -12,6 +12,58 @@ import { getGlobalMapFlag, getSceneState, updateSceneState } from "./storage.mjs
 let discoveryQueued = false;
 let cellExplorationQueued = false;
 let cellExplorationGraphic = null;
+let nativeVisibilityFilter = null;
+let cellVisibilityFilter = null;
+
+class CellFogVisibilityFilter extends PIXI.Filter {
+  constructor(visionTexture) {
+    super(CellFogVisibilityFilter.vertexShader, CellFogVisibilityFilter.fragmentShader, {
+      visionTexture,
+      primaryTexture: canvas.primary?.renderTexture ?? PIXI.Texture.EMPTY,
+      exploredColor: [1, 1, 1],
+      unexploredColor: [0, 0, 0],
+      backgroundColor: [0, 0, 0],
+      screenDimensions: [1, 1]
+    });
+    this.blendMode = PIXI.BLEND_MODES.NORMAL;
+  }
+
+  apply(filterManager, input, output, clear) {
+    this.uniforms.screenDimensions = canvas.screenDimensions;
+    filterManager.applyFilter(this, input, output, clear);
+  }
+
+  static vertexShader = `
+    attribute vec2 aVertexPosition;
+    uniform mat3 projectionMatrix;
+    uniform vec2 screenDimensions;
+    uniform vec4 inputSize;
+    uniform vec4 outputFrame;
+    varying vec2 vTextureCoord;
+    varying vec2 vMaskTextureCoord;
+
+    void main() {
+      vec2 position = aVertexPosition * max(outputFrame.zw, vec2(0.0)) + outputFrame.xy;
+      gl_Position = vec4((projectionMatrix * vec3(position, 1.0)).xy, 0.0, 1.0);
+      vTextureCoord = aVertexPosition * (outputFrame.zw * inputSize.zw);
+      vMaskTextureCoord = (vTextureCoord * inputSize.xy + outputFrame.xy) / screenDimensions;
+    }
+  `;
+
+  static fragmentShader = `
+    varying vec2 vTextureCoord;
+    varying vec2 vMaskTextureCoord;
+    uniform sampler2D uSampler;
+    uniform sampler2D visionTexture;
+
+    void main() {
+      float explored = texture2D(uSampler, vTextureCoord).r;
+      float visible = texture2D(visionTexture, vMaskTextureCoord).r;
+      float fog = 1.0 - max(explored, visible);
+      gl_FragColor = vec4(0.0, 0.0, 0.0, fog);
+    }
+  `;
+}
 
 export function registerGlobalMapFogHooks() {
   Hooks.on("visibilityRefresh", applyCellVision);
@@ -34,7 +86,10 @@ export function registerGlobalMapFogHooks() {
     syncCellExplorationDisplay();
     canvas.perception?.update?.({ refreshVision: true });
   });
-  Hooks.on("canvasTearDown", clearCellExplorationDisplay);
+  Hooks.on("canvasTearDown", () => {
+    restoreNativeVisibilityFilter();
+    clearCellExplorationDisplay();
+  });
   Hooks.on("resetFog", onFogReset);
 }
 
@@ -115,6 +170,8 @@ function syncCellExplorationDisplay() {
   if (!scene || !explored || !getGlobalMapFlag(scene)) return;
   const state = getSceneState(scene);
   const isCellMode = state.fog.mode === "cells";
+  if (isCellMode) installCellVisibilityFilter();
+  else restoreNativeVisibilityFilter();
   const nativeSprite = canvas.fog?.sprite;
   if (nativeSprite) nativeSprite.visible = !isCellMode;
   if (!isCellMode) {
@@ -137,6 +194,34 @@ function syncCellExplorationDisplay() {
     }).filter(Boolean)
   );
   cellExplorationGraphic.endFill();
+}
+
+function installCellVisibilityFilter() {
+  const visibility = canvas?.visibility;
+  const visionTexture = canvas?.masks?.vision?.renderTexture;
+  if (!visibility?.filter || !visionTexture) return;
+  if (cellVisibilityFilter && !cellVisibilityFilter.destroyed) {
+    if (visibility.filter !== cellVisibilityFilter) {
+      visibility.filter = cellVisibilityFilter;
+      visibility.filters = [cellVisibilityFilter];
+    }
+    return;
+  }
+  nativeVisibilityFilter = visibility.filter;
+  cellVisibilityFilter = new CellFogVisibilityFilter(visionTexture);
+  visibility.filter = cellVisibilityFilter;
+  visibility.filters = [cellVisibilityFilter];
+}
+
+function restoreNativeVisibilityFilter() {
+  const visibility = canvas?.visibility;
+  if (visibility && nativeVisibilityFilter && visibility.filter === cellVisibilityFilter) {
+    visibility.filter = nativeVisibilityFilter;
+    visibility.filters = [nativeVisibilityFilter];
+  }
+  if (cellVisibilityFilter && !cellVisibilityFilter.destroyed) cellVisibilityFilter.destroy();
+  cellVisibilityFilter = null;
+  nativeVisibilityFilter = null;
 }
 
 function clearCellExplorationDisplay() {

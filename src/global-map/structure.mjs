@@ -71,7 +71,14 @@ export async function getOrCreateGlobalMap() {
           mapId,
           role: GLOBAL_MAP_ROLES.ROOT_SCENE,
           nodeId: mapId,
-          state: {}
+          state: {
+            fog: {
+              mode: "cells",
+              cellRadius: 2,
+              nativeMode: CONST.FOG_EXPLORATION_MODES.INDIVIDUAL,
+              exploredCellKeys: []
+            }
+          }
         })
       }
     }
