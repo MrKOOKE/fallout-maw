@@ -48,6 +48,45 @@ export const SETTINGS_BASELINE = Object.freeze({
                 }
               },
               {
+                "id": "fixed-oversight",
+                "name": "Надзор",
+                "img": "icons/svg/eye.svg",
+                "visible": true,
+                "description": "<p>Активная боевая способность: цель проверяет Скрытность против 50 + Натуралист. При провале получает метку и снижение восстановления уклонения; каждые потраченные 5 ОП/ОД/ОР открывают реакционную атаку.</p>",
+                "system": {
+                  "cost": 0,
+                  "formula": "",
+                  "acquisition": {
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "naturalist",
+                    "difficulty": 60
+                  },
+                  "acquisitionRequirements": [],
+                  "functions": [
+                    {
+                      "id": "fixed-oversight-function",
+                      "type": "fixed",
+                      "fixedKey": "oversight",
+                      "fixedSettings": {
+                        "energyCost": 20,
+                        "overloadEnergyCost": 100,
+                        "overloadDurationSeconds": 60,
+                        "difficultyBase": 50,
+                        "sourceSkillKey": "naturalist",
+                        "targetSkillKey": "stealth",
+                        "dodgeRecoveryDivisor": 10,
+                        "resourceThreshold": 5
+                      },
+                      "changes": [],
+                      "conditions": [],
+                      "penalties": [],
+                      "sort": 0
+                    }
+                  ]
+                }
+              },
+              {
                 "id": "lBaJVF6DzKnhNhwy",
                 "name": "Четыре глаза",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/chetyre-glaza.webp",

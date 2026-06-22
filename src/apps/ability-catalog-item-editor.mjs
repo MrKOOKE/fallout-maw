@@ -21,6 +21,7 @@ import {
   createAbilityFunction,
   normalizeAbilityEntry,
   normalizeCounterAttackSettings,
+  normalizeOversightSettings,
   normalizeCounterSniperSettings,
   normalizeCurseAndBlessingSettings,
   normalizeAllOrNothingSettings,
@@ -854,6 +855,21 @@ function readFixedFunctionSettings(row) {
       requiredSkillKey: row.querySelector("[data-field='fixed.counterAttack.requiredSkillKey']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.oversight) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.oversight.energyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.oversight.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.oversight.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.oversight.overloadDurationUnit']")?.value
+      ),
+      difficultyBase: row.querySelector("[data-field='fixed.oversight.difficultyBase']")?.value,
+      sourceSkillKey: row.querySelector("[data-field='fixed.oversight.sourceSkillKey']")?.value,
+      targetSkillKey: row.querySelector("[data-field='fixed.oversight.targetSkillKey']")?.value,
+      dodgeRecoveryDivisor: row.querySelector("[data-field='fixed.oversight.dodgeRecoveryDivisor']")?.value,
+      resourceThreshold: row.querySelector("[data-field='fixed.oversight.resourceThreshold']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper) {
     return {
       reactionEnergyCost: row.querySelector("[data-field='fixed.counterSniper.reactionEnergyCost']")?.value,
@@ -1070,6 +1086,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedCounterAttackSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack
     ? prepareCounterAttackSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedOversightSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.oversight
+    ? prepareOversightSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedCounterSniperSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper
     ? normalizeCounterSniperSettings(normalized.fixedSettings)
     : null;
@@ -1118,6 +1137,7 @@ function prepareFunctionForDisplay(entry) {
     fixedLungeSettings,
     fixedDoubleAttackSettings,
     fixedCounterAttackSettings,
+    fixedOversightSettings,
     fixedCounterSniperSettings,
     fixedFullForceSettings,
     fixedTwoHandsSettings,
@@ -1250,6 +1270,19 @@ function prepareCounterAttackSettingsForDisplay(settings = {}) {
     reactionOverloadDurationAmount: overloadDuration.amount,
     reactionOverloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
     skillChoices: buildSkillChoices(normalized.requiredSkillKey, getSkillSettings())
+  };
+}
+
+function prepareOversightSettingsForDisplay(settings = {}) {
+  const normalized = normalizeOversightSettings(settings);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  const skills = getSkillSettings();
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
+    sourceSkillChoices: buildSkillChoices(normalized.sourceSkillKey, skills),
+    targetSkillChoices: buildSkillChoices(normalized.targetSkillKey, skills)
   };
 }
 

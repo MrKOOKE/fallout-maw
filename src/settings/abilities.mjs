@@ -36,6 +36,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   lunge: "lunge",
   doubleAttack: "doubleAttack",
   counterAttack: "counterAttack",
+  oversight: "oversight",
   counterSniper: "counterSniper",
   whereAreYouGoing: "whereAreYouGoing",
   fullForce: "fullForce",
@@ -109,7 +110,7 @@ export function createDefaultAbilityCatalog(skillSettings = createDefaultSkillSe
         id: LOCKED_FEATURES_CATEGORY_ID,
         name: "Особенности",
         locked: true,
-        abilities: [createTwoHandsAbilityCatalogEntry()]
+        abilities: [createTwoHandsAbilityCatalogEntry(), createOversightAbilityCatalogEntry()]
       }),
       createAbilityCategory({
         id: GENERAL_ABILITY_CATEGORY_ID,
@@ -719,6 +720,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     return normalizeCounterAttackSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.oversight) {
+    return normalizeOversightSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper) {
     return normalizeCounterSniperSettings(value);
   }
@@ -879,6 +883,29 @@ export function normalizeKeepAwaySettings(value = {}) {
   };
 }
 
+export function createOversightAbilityCatalogEntry() {
+  return normalizeAbilityEntry({
+    id: "fixed-oversight",
+    name: "Надзор",
+    img: "icons/svg/eye.svg",
+    visible: true,
+    description: "<p>Активная боевая способность: цель проверяет Скрытность против 50 + Натуралист. При провале получает метку и снижение восстановления уклонения; каждые потраченные 5 ОП/ОД/ОР открывают реакционную атаку.</p>",
+    system: {
+      cost: 0,
+      formula: "",
+      acquisition: { onlyFree: false, onlyManual: false, skillKey: "naturalist", difficulty: 60 },
+      acquisitionRequirements: [],
+      functions: [{
+        id: "fixed-oversight-function",
+        type: ABILITY_FUNCTION_TYPES.fixed,
+        fixedKey: ABILITY_FIXED_FUNCTION_KEYS.oversight,
+        fixedSettings: normalizeOversightSettings(),
+        changes: [], conditions: [], penalties: []
+      }]
+    }
+  });
+}
+
 export function normalizeRicochetSettings(value = {}) {
   return {
     activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? 20)),
@@ -932,6 +959,19 @@ export function normalizeCounterAttackSettings(value = {}) {
     reactionOverloadEnergyCost: Math.max(0, toInteger(value?.reactionOverloadEnergyCost ?? value?.overloadEnergyCost ?? 20)),
     reactionOverloadDurationSeconds: Math.max(0, toInteger(value?.reactionOverloadDurationSeconds ?? value?.overloadDurationSeconds ?? 18)),
     requiredSkillKey: String(value?.requiredSkillKey ?? "meleeCombat").trim() || "meleeCombat"
+  };
+}
+
+export function normalizeOversightSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 20)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 100)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 60)),
+    difficultyBase: toInteger(value?.difficultyBase ?? 50),
+    sourceSkillKey: String(value?.sourceSkillKey ?? "naturalist").trim() || "naturalist",
+    targetSkillKey: String(value?.targetSkillKey ?? "stealth").trim() || "stealth",
+    dodgeRecoveryDivisor: Math.max(1, toInteger(value?.dodgeRecoveryDivisor ?? 10)),
+    resourceThreshold: Math.max(1, toInteger(value?.resourceThreshold ?? 5))
   };
 }
 

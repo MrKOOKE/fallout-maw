@@ -890,6 +890,20 @@
       </div>
     </div>
     {{/if}}
+
+    {{#if fixedOversightSettings}}
+      <fieldset class="fallout-maw-ability-fixed-settings">
+        <legend>Надзор</legend>
+        <div class="form-group"><label>Стоимость активации, энергия</label><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.energyCost" value="{{fixedOversightSettings.energyCost}}" min="0" step="1"></div>
+        <div class="form-group"><label>Перегрузка, энергия</label><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.overloadEnergyCost" value="{{fixedOversightSettings.overloadEnergyCost}}" min="0" step="1"></div>
+        <div class="form-group"><label>Длительность перегрузки</label><div class="form-fields"><input type="number" value="{{fixedOversightSettings.overloadDurationAmount}}" min="0" step="1" data-fixed-oversight-overload-duration-amount><select data-fixed-oversight-overload-duration-unit>{{#each fixedOversightSettings.overloadDurationUnitChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></div></div>
+        <div class="form-group"><label>Базовая сложность</label><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.difficultyBase" value="{{fixedOversightSettings.difficultyBase}}" step="1"></div>
+        <div class="form-group"><label>Навык владельца</label><select name="{{functionPath}}.{{functionIndex}}.fixedSettings.sourceSkillKey">{{#each fixedOversightSettings.sourceSkillChoices}}<option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></div>
+        <div class="form-group"><label>Навык цели</label><select name="{{functionPath}}.{{functionIndex}}.fixedSettings.targetSkillKey">{{#each fixedOversightSettings.targetSkillChoices}}<option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></div>
+        <div class="form-group"><label>Делитель снижения восстановления</label><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.dodgeRecoveryDivisor" value="{{fixedOversightSettings.dodgeRecoveryDivisor}}" min="1" step="1"></div>
+        <div class="form-group"><label>Порог ОП/ОД/ОР</label><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.resourceThreshold" value="{{fixedOversightSettings.resourceThreshold}}" min="1" step="1"></div>
+      </fieldset>
+    {{/if}}
     {{#if fixedCounterSniperSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header"><h3>Настройки: Контр-снайпер</h3></div>

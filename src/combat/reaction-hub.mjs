@@ -9,7 +9,8 @@ export const REACTION_EVENT_KEYS = Object.freeze({
   weaponAttackTargeted: "weaponAttackTargeted",
   aimedAttackLimbSelected: "aimedAttackLimbSelected",
   weaponAttackResolved: "weaponAttackResolved",
-  tokenLeavingAdjacency: "tokenLeavingAdjacency"
+  tokenLeavingAdjacency: "tokenLeavingAdjacency",
+  oversightThreshold: "oversightThreshold"
 });
 
 export const REACTION_RESULT = Object.freeze({

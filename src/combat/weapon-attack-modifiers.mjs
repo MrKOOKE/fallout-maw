@@ -56,9 +56,10 @@ export function createLungeAttackModifier({
   });
 }
 
-export function createCounterSniperAttackModifier({ onDestroy = null } = {}) {
+export function createCounterSniperAttackModifier({ onDestroy = null, label = "Контр-снайпер" } = {}) {
   return normalizeWeaponAttackModifier({
     key: WEAPON_ATTACK_MODIFIER_KEYS.counterSniper,
+    label,
     onDestroy
   });
 }

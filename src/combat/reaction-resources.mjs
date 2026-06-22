@@ -1,6 +1,7 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { getTokenActionHudIcons } from "../settings/accessors.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { notifyCombatResourcesSpent } from "./resource-spending.mjs";
 import {
   ACTION_RESOURCE_KEY,
   MOVEMENT_RESOURCE_KEY,
@@ -185,7 +186,7 @@ export function canSpendCombatActionPoints(actor, amount = 0, { label = "" } = {
   return false;
 }
 
-export async function spendCombatActionPoints(actor, amount = 0) {
+export async function spendCombatActionPoints(actor, amount = 0, context = {}) {
   if (!game.combat?.started) return;
   const cost = Math.max(0, toInteger(amount));
   if (!actor?.isOwner || cost <= 0) return;
@@ -197,7 +198,8 @@ export async function spendCombatActionPoints(actor, amount = 0) {
       [`system.resources.${REACTION_RESOURCE_KEY}.value`]: Math.max(0, state.current - cost),
       [`system.resources.${REACTION_RESOURCE_KEY}.spent`]: Math.max(0, toInteger(actor.system?.resources?.[REACTION_RESOURCE_KEY]?.max) - Math.max(0, state.current - cost))
     }, { [REACTION_UPDATE_OPTION]: true });
-    return;
+    if (context?.suppressResourceNotification) return [];
+    return notifyCombatResourcesSpent(actor, { [REACTION_RESOURCE_KEY]: cost }, context);
   }
 
   const normalSpend = Math.min(cost, state.normal);
@@ -206,6 +208,8 @@ export async function spendCombatActionPoints(actor, amount = 0) {
   if (normalSpend) updates[`system.resources.${ACTION_RESOURCE_KEY}.value`] = Math.max(0, state.normal - normalSpend);
   if (Object.keys(updates).length) await actor.update(updates);
   if (onceSpend) await spendOneTimeActionPoints(actor, onceSpend);
+  if (context?.suppressResourceNotification) return [];
+  return notifyCombatResourcesSpent(actor, { [ACTION_RESOURCE_KEY]: cost }, context);
 }
 
 export async function promptEndTurnConversion(actor) {

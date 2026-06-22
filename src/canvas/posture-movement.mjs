@@ -6,6 +6,7 @@ import {
   spendCombatActionPoints
 } from "../combat/reaction-resources.mjs";
 import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
+import { notifyCombatResourcesSpent } from "../combat/resource-spending.mjs";
 
 export const POSTURE_CHANGE_ACTION_POINT_COST = 3;
 export const POSTURE_EFFECT_CHANGE_ROOT = "system.postures";
@@ -369,7 +370,11 @@ async function spendPostureChangeResources(tokenDocument, amount, pending = {}) 
     })
   ].slice(-POSTURE_RESOURCE_SPENDING_LIMIT);
   await actor.update(updates);
-  if (actionSpend) await spendCombatActionPoints(actor, actionSpend);
+  if (actionSpend) await spendCombatActionPoints(actor, actionSpend, { suppressResourceNotification: true });
+  await notifyCombatResourcesSpent(actor, {
+    [MOVEMENT_RESOURCE_KEY]: movementSpend,
+    [state.action.key]: actionSpend
+  }, { type: "posture", tokenDocument, pending });
 }
 
 async function restoreLastPostureChangeResources(tokenDocument) {

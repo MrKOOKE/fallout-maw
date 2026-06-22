@@ -10,6 +10,7 @@ import {
   normalizeAimingSettings,
   normalizeAtRandomSettings,
   normalizeCounterAttackSettings,
+  normalizeOversightSettings,
   normalizeCounterSniperSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
@@ -51,6 +52,8 @@ import {
   hasRequiredWeaponResources,
   isWeaponAttackModeEnabled,
   canPerformAimedAttackAgainstToken,
+  canPerformWeaponActionAgainstToken,
+  canTokenPhysicallySeeTarget,
   executeWeaponAttackAgainstToken,
   startForcedAimedAttackSelection,
   startWeaponAttack,
@@ -76,6 +79,7 @@ import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
 import {
   ABILITY_FREE_MOVEMENT_OPTION,
   ACTION_RESOURCE_KEY,
+  applyCombatMovementCostModifier,
   hasActorCombatMovementInCurrentTurn
 } from "../combat/movement-resources.mjs";
 import {
@@ -91,8 +95,9 @@ import {
   getPendingOneTimeSkillModifierEffects
 } from "../rolls/one-time-skill-modifiers.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
-import { REACTION_EVENT_KEYS, REACTION_RESULT, isReactionSystemLocked, registerReactionProvider, requestReactionEvent } from "../combat/reaction-hub.mjs";
+import { REACTION_EVENT_KEYS, REACTION_RESULT, isActorUnableToAct, isReactionSystemLocked, registerReactionProvider, requestReactionEvent } from "../combat/reaction-hub.mjs";
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "../combat/reaction-resources.mjs";
+import { registerCombatResourceSpendingProvider, waitForCombatResourceSpending } from "../combat/resource-spending.mjs";
 import {
   ENERGY_RESOURCE_KEY,
   canActorSpendEnergy,
@@ -133,6 +138,10 @@ const DEFENSIVE_TACTICS_EFFECT_FLAG_KEY = "defensiveTactics";
 const RAGE_EFFECT_FLAG_KEY = "rage";
 const DISARM_REACTION_PROVIDER_ID = "disarm";
 const COUNTER_ATTACK_REACTION_PROVIDER_ID = "counterAttack";
+const OVERSIGHT_REACTION_PROVIDER_ID = "oversight";
+const OVERSIGHT_MOVEMENT_PROVIDER_ID = "oversightMovement";
+const OVERSIGHT_QUERY_NAME = "falloutMawOversightAttack";
+const OVERSIGHT_EFFECT_FLAG_KEY = "oversight";
 const COUNTER_SNIPER_REACTION_PROVIDER_ID = "counterSniper";
 const COUNTER_SNIPER_AIM_QUERY_NAME = "falloutMawCounterSniperAim";
 const WHERE_ARE_YOU_GOING_REACTION_PROVIDER_ID = "whereAreYouGoing";
@@ -332,6 +341,14 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.oversight,
+    label: "Надзор",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.oversight
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.counterSniper,
     label: "Контр-снайпер",
     passive: true,
@@ -370,9 +387,21 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
 export function registerFixedAbilityFunctionHooks() {
   registerDisarmReactionProvider();
   registerCounterAttackReactionProvider();
+  registerOversightReactionProvider();
   registerCounterSniperReactionProvider();
   registerWhereAreYouGoingReactionProvider();
   registerWhereAreYouGoingMovementProvider();
+  registerOversightMovementProvider();
+  CONFIG.queries[OVERSIGHT_QUERY_NAME] = handleOversightAttackQuery;
+  registerCombatResourceSpendingProvider({
+    id: OVERSIGHT_REACTION_PROVIDER_ID,
+    execute: processOversightResourceSpending
+  });
+  Hooks.on("sightRefresh", () => scheduleOversightVisibilityRefresh());
+  Hooks.on("canvasReady", () => scheduleOversightVisibilityRefresh());
+  Hooks.on("deleteToken", token => {
+    void cleanupOversightToken(token);
+  });
   registerActorTurnEndHandler(context => applyDefensiveTacticsAtTurnEnd(context));
   registerActorTurnStartPreparedHandler(context => deleteDefensiveTacticsEffects(context?.actor));
   registerLethalDamagePreventionHandler(context => processLastChanceLethalDamage(context));
@@ -690,6 +719,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
     return true;
   }
 
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.oversight) {
+    const used = await useOversight(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochet) {
     const used = await useRicochet(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
@@ -704,6 +739,461 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
 
   ui.notifications.warn("Фиксированная функция пока не имеет обработчика применения.");
   return true;
+}
+
+const OVERSIGHT_ACTIONS = Object.freeze([
+  { key: "aimedShot", label: "Прицельный выстрел" },
+  { key: "snapshot", label: "Неприцельный выстрел" },
+  { key: "aimedMeleeAttack", label: "Прицельный удар" },
+  { key: "meleeAttack", label: "Неприцельный удар" }
+]);
+let oversightVisibilityRefreshTimeout = 0;
+const pendingOversightVisibilityChecks = new Set();
+
+async function useOversight(actor, abilityItem, abilityFunction) {
+  const settings = normalizeOversightSettings(abilityFunction.fixedSettings);
+  const combat = game.combat;
+  const sourceToken = getActorSceneToken(actor);
+  const targetToken = getSingleUserTarget();
+  const abilityName = getAbilityDisplayName(abilityItem);
+  if (!combat?.started || !sourceToken || !isTokenActiveCombatant(combat, sourceToken.document)) {
+    ui.notifications.warn(`${abilityName}: способность применяется только участником активного боя.`);
+    return false;
+  }
+  if (!targetToken || !isTokenActiveCombatant(combat, targetToken.document)) {
+    ui.notifications.warn(`${abilityName}: выберите одну цель — участника боя.`);
+    return false;
+  }
+  if (targetToken.actor?.uuid === actor.uuid) {
+    ui.notifications.warn(`${abilityName}: нельзя выбрать себя.`);
+    return false;
+  }
+  if (!canTokenPhysicallySeeTarget(sourceToken, targetToken)) {
+    ui.notifications.warn(`${abilityName}: цель не видна.`);
+    return false;
+  }
+  if (findOversightTrackingEffects(targetToken.actor).some(effect => {
+    const data = effect.getFlag(SYSTEM_ID, OVERSIGHT_EFFECT_FLAG_KEY) ?? {};
+    return data.sourceActorUuid === actor.uuid;
+  })) {
+    ui.notifications.warn(`${abilityName}: эта цель уже находится под вашим Надзором.`);
+    return false;
+  }
+
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  await spendEnergy(actor, energyCost);
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+
+  const sourceSkillValue = getActorSkillValue(actor, settings.sourceSkillKey);
+  const difficulty = settings.difficultyBase + sourceSkillValue;
+  const recoveryPenalty = Math.max(0, Math.floor(sourceSkillValue / settings.dodgeRecoveryDivisor));
+  const outcome = await requestOversightStealthCheck(targetToken.actor, settings.targetSkillKey, difficulty, abilityName);
+  if (isSuccessfulSkillCheck(outcome)) {
+    await createAbilityChatMessage(actor, abilityItem, `${targetToken.actor.name} избежал Надзора.`);
+    return true;
+  }
+
+  const activationId = foundry.utils.randomID();
+  await createOversightTrackingEffect(targetToken.actor, {
+    activationId,
+    combatId: combat.id,
+    sourceActorUuid: actor.uuid,
+    sourceTokenUuid: sourceToken.document.uuid,
+    targetTokenUuid: targetToken.document.uuid,
+    abilityItemUuid: abilityItem.uuid,
+    abilityItemId: abilityItem.id,
+    abilityFunctionId: abilityFunction.id,
+    abilityName,
+    abilityImg: abilityItem.img,
+    targetSkillKey: settings.targetSkillKey,
+    difficulty,
+    recoveryPenalty,
+    resourceThreshold: settings.resourceThreshold,
+    accumulatedSpend: 0
+  });
+  await createAbilityChatMessage(actor, abilityItem, `${targetToken.actor.name} отмечен Надзором.`);
+  return true;
+}
+
+async function requestOversightStealthCheck(actor, skillKey, difficulty, abilityName) {
+  return requestSkillCheck({
+    actor,
+    skillKey,
+    data: { difficulty },
+    animate: false,
+    prompt: false,
+    requester: "oversight",
+    messageData: { flavor: abilityName }
+  });
+}
+
+function isSuccessfulSkillCheck(outcome) {
+  return ["success", "criticalSuccess"].includes(String(outcome?.result?.key ?? outcome?.result ?? ""));
+}
+
+async function createOversightTrackingEffect(actor, data) {
+  await actor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: `${data.abilityName}: метка`,
+    img: data.abilityImg || "icons/svg/eye.svg",
+    origin: data.abilityItemUuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    duration: { expiry: "combatEnd" },
+    system: {
+      changes: data.recoveryPenalty > 0 ? [{
+        key: DODGE_ROUND_RECOVERY_MODIFIER_EFFECT_KEY,
+        type: "add",
+        value: String(-data.recoveryPenalty),
+        phase: "initial",
+        priority: null
+      }] : []
+    },
+    flags: { [SYSTEM_ID]: { kind: "temporary", [OVERSIGHT_EFFECT_FLAG_KEY]: data } }
+  }], { animate: false });
+}
+
+function findOversightTrackingEffects(actor) {
+  return Array.from(actor?.effects ?? []).filter(effect => Boolean(effect.getFlag?.(SYSTEM_ID, OVERSIGHT_EFFECT_FLAG_KEY)));
+}
+
+function scheduleOversightVisibilityRefresh() {
+  if (!game.user?.isActiveGM) return;
+  window.clearTimeout(oversightVisibilityRefreshTimeout);
+  oversightVisibilityRefreshTimeout = window.setTimeout(() => {
+    void refreshOversightVisibility();
+  }, 100);
+}
+
+async function refreshOversightVisibility() {
+  if (!game.user?.isActiveGM || !canvas?.ready) return;
+  for (const actor of getOversightActors()) {
+    for (const effect of findOversightTrackingEffects(actor)) {
+      if (pendingOversightVisibilityChecks.has(effect.uuid)) continue;
+      pendingOversightVisibilityChecks.add(effect.uuid);
+      try {
+        await refreshOversightEffectVisibility(effect);
+      } finally {
+        pendingOversightVisibilityChecks.delete(effect.uuid);
+      }
+    }
+  }
+}
+
+async function refreshOversightEffectVisibility(effect) {
+  const data = effect.getFlag(SYSTEM_ID, OVERSIGHT_EFFECT_FLAG_KEY) ?? {};
+  if (!game.combat?.started || data.combatId !== game.combat.id) return;
+  const sourceDocument = await fromUuid(String(data.sourceTokenUuid ?? ""));
+  const targetDocument = await fromUuid(String(data.targetTokenUuid ?? ""));
+  if (!sourceDocument || !targetDocument) {
+    await deleteOversightActivation(effect.parent, data.activationId);
+    return;
+  }
+  const visible = canTokenPhysicallySeeTarget(sourceDocument.object ?? sourceDocument, targetDocument.object ?? targetDocument);
+  const iconVisible = Number(effect.showIcon ?? effect._source?.showIcon) === ACTIVE_EFFECT_SHOW_ICON_ALWAYS;
+  if (!visible) {
+    if (iconVisible || effect.name !== `${data.abilityName}: метка`) {
+      await effect.update({ name: `${data.abilityName}: метка`, showIcon: 0 });
+    }
+    return;
+  }
+  if (iconVisible) return;
+  const outcome = await requestOversightStealthCheck(effect.parent, data.targetSkillKey, data.difficulty, data.abilityName);
+  if (isSuccessfulSkillCheck(outcome)) {
+    await deleteOversightActivation(effect.parent, data.activationId);
+    return;
+  }
+  await effect.update({ name: `${data.abilityName}: метка`, showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS });
+}
+
+async function deleteOversightActivation(actor, activationId) {
+  const ids = findOversightTrackingEffects(actor)
+    .filter(effect => effect.getFlag(SYSTEM_ID, OVERSIGHT_EFFECT_FLAG_KEY)?.activationId === activationId)
+    .map(effect => effect.id);
+  if (ids.length) await actor.deleteEmbeddedDocuments("ActiveEffect", ids, { animate: false });
+}
+
+async function cleanupOversightToken(token) {
+  if (!game.user?.isActiveGM) return;
+  for (const actor of getOversightActors()) {
+    for (const effect of findOversightTrackingEffects(actor)) {
+      const data = effect.getFlag(SYSTEM_ID, OVERSIGHT_EFFECT_FLAG_KEY) ?? {};
+      if ([data.sourceTokenUuid, data.targetTokenUuid].includes(token?.uuid)) {
+        await deleteOversightActivation(actor, data.activationId);
+      }
+    }
+  }
+}
+
+function getOversightActors() {
+  const actors = new Map();
+  for (const actor of game.actors?.contents ?? []) if (actor?.uuid) actors.set(actor.uuid, actor);
+  for (const token of canvas?.tokens?.placeables ?? []) if (token.actor?.uuid) actors.set(token.actor.uuid, token.actor);
+  return [...actors.values()];
+}
+
+async function processOversightResourceSpending({ actor, resources, context } = {}) {
+  if (!game.combat?.started || !actor) return;
+  const spent = Object.values(resources ?? {}).reduce((total, value) => total + Math.max(0, toInteger(value)), 0);
+  if (spent <= 0) return;
+  for (const effect of findOversightTrackingEffects(actor)) {
+    const data = foundry.utils.deepClone(effect.getFlag(SYSTEM_ID, OVERSIGHT_EFFECT_FLAG_KEY) ?? {});
+    const threshold = Math.max(1, toInteger(data.resourceThreshold));
+    const total = Math.max(0, toInteger(data.accumulatedSpend)) + spent;
+    const triggerCount = Math.floor(total / threshold);
+    data.accumulatedSpend = total % threshold;
+    await effect.update({ [`flags.${SYSTEM_ID}.${OVERSIGHT_EFFECT_FLAG_KEY}`]: data });
+    for (let index = 0; index < triggerCount; index += 1) {
+      await requestReactionEvent(REACTION_EVENT_KEYS.oversightThreshold, {
+        activationId: data.activationId,
+        targetActorUuid: actor.uuid,
+        targetTokenUuid: data.targetTokenUuid,
+        sourceActorUuid: data.sourceActorUuid,
+        sourceTokenUuid: data.sourceTokenUuid,
+        spendingContext: context,
+        title: data.abilityName,
+        message: `${actor.name} потратил ${threshold} ОП/ОД/ОР.`
+      });
+    }
+  }
+}
+
+function registerOversightMovementProvider() {
+  registerMovementInterruptionProvider({
+    id: OVERSIGHT_MOVEMENT_PROVIDER_ID,
+    collect: collectOversightMovementInterruptions,
+    execute: resumeOversightMovement
+  });
+}
+
+function collectOversightMovementInterruptions({ tokenDocument, movement } = {}) {
+  const effects = findOversightTrackingEffects(tokenDocument?.actor);
+  if (!effects.length || !movement) return [];
+  const needed = Math.min(...effects.map(effect => {
+    const data = effect.getFlag(SYSTEM_ID, OVERSIGHT_EFFECT_FLAG_KEY) ?? {};
+    const threshold = Math.max(1, toInteger(data.resourceThreshold));
+    return Math.max(1, threshold - Math.max(0, toInteger(data.accumulatedSpend)));
+  }));
+  const passedWaypoints = Array.from(movement.passed?.waypoints ?? []);
+  if (!passedWaypoints.length) return [];
+  let rawCost = 0;
+  for (const [index, waypoint] of passedWaypoints.entries()) {
+    rawCost += Math.max(0, Number(waypoint?.cost) || 0);
+    const cost = applyCombatMovementCostModifier(tokenDocument.actor, Math.ceil(rawCost));
+    if (cost < needed) continue;
+    const remainingWaypoints = [
+      ...passedWaypoints.slice(index + 1),
+      ...(movement.pending?.waypoints ?? [])
+    ].map(entry => ({ ...entry, checkpoint: true }));
+    return [{
+      type: REACTION_EVENT_KEYS.oversightThreshold,
+      eventId: `${movement.id ?? foundry.utils.randomID()}:${index}`,
+      routeOrder: index,
+      priority: -90,
+      waypoint,
+      remainingWaypoints
+    }];
+  }
+  return [];
+}
+
+async function resumeOversightMovement({ tokenDocument, movement, event } = {}) {
+  const waypoints = Array.isArray(event?.remainingWaypoints) ? event.remainingWaypoints : [];
+  await waitForCombatResourceSpending(tokenDocument?.actor);
+  if (!tokenDocument || !waypoints.length || isActorUnableToAct(tokenDocument.actor)) return false;
+  return tokenDocument.move(waypoints, {
+    method: movement?.method,
+    autoRotate: Boolean(movement?.autoRotate),
+    showRuler: Boolean(movement?.showRuler),
+    terrainOptions: movement?.terrainOptions,
+    constrainOptions: movement?.constrainOptions,
+    measureOptions: movement?.measureOptions
+  });
+}
+
+function registerOversightReactionProvider() {
+  registerReactionProvider({
+    id: OVERSIGHT_REACTION_PROVIDER_ID,
+    collect: collectOversightReactionOffers,
+    execute: executeOversightReaction
+  });
+}
+
+async function collectOversightReactionOffers({ eventKey, context } = {}) {
+  if (eventKey !== REACTION_EVENT_KEYS.oversightThreshold) return [];
+  const sourceActor = await fromUuid(String(context.sourceActorUuid ?? ""));
+  const sourceToken = await fromUuid(String(context.sourceTokenUuid ?? ""));
+  const targetToken = await fromUuid(String(context.targetTokenUuid ?? ""));
+  const targetActor = targetToken?.actor;
+  if (!sourceActor || !sourceToken || !targetToken || !targetActor) return [];
+  const tracking = findOversightTrackingEffects(targetActor).find(effect => (
+    effect.getFlag(SYSTEM_ID, OVERSIGHT_EFFECT_FLAG_KEY)?.activationId === context.activationId
+  ));
+  if (!tracking) return [];
+  const candidates = getOversightAttackCandidates(sourceActor, sourceToken, targetToken);
+  if (!candidates.length) return [];
+  const data = tracking.getFlag(SYSTEM_ID, OVERSIGHT_EFFECT_FLAG_KEY) ?? {};
+  return [{
+    actorUuid: sourceActor.uuid,
+    reactionId: OVERSIGHT_REACTION_PROVIDER_ID,
+    offerId: `${OVERSIGHT_REACTION_PROVIDER_ID}:${data.activationId}:${foundry.utils.randomID()}`,
+    label: data.abilityName || "Надзор",
+    description: `Атаковать ${targetActor.name}.`,
+    img: data.abilityImg || "icons/svg/eye.svg",
+    activationId: data.activationId,
+    sourceTokenUuid: sourceToken.uuid,
+    targetTokenUuid: targetToken.uuid
+  }];
+}
+
+async function executeOversightReaction({ offer } = {}) {
+  const sourceActor = await fromUuid(String(offer.actorUuid ?? ""));
+  const sourceToken = await fromUuid(String(offer.sourceTokenUuid ?? ""));
+  const targetToken = await fromUuid(String(offer.targetTokenUuid ?? ""));
+  if (!sourceActor || !sourceToken || !targetToken) return { handled: false };
+  const candidates = getOversightAttackCandidates(sourceActor, sourceToken, targetToken);
+  if (!candidates.length) return { handled: false };
+  const selected = candidates.length === 1 ? candidates[0] : await queryOversightAttackOwner(sourceActor, targetToken, candidates);
+  if (!selected) return { handled: true, status: REACTION_RESULT.declined };
+  if (!canPerformWeaponActionAgainstToken({
+    attackerToken: sourceToken,
+    targetToken,
+    weapon: selected.weapon,
+    actionKey: selected.actionKey,
+    weaponFunctionId: selected.weaponFunctionId
+  })) return { handled: true, status: REACTION_RESULT.failed };
+  let used = false;
+  if (["aimedShot", "aimedMeleeAttack"].includes(selected.actionKey)) {
+    const owner = game.users?.get(getActorResponsibleUserId(sourceActor));
+    if (!owner) return { handled: true, status: REACTION_RESULT.failed };
+    used = await queryOversightOwner(owner, {
+      mode: "aim",
+      sourceTokenUuid: sourceToken.uuid,
+      targetTokenUuid: targetToken.uuid,
+      weaponUuid: selected.weapon.uuid,
+      weaponFunctionId: selected.weaponFunctionId,
+      actionKey: selected.actionKey
+    }, 120000);
+  } else {
+    used = await executeWeaponAttackAgainstToken({
+      attackerToken: sourceToken.object ?? sourceToken,
+      targetToken: targetToken.object ?? targetToken,
+      weapon: selected.weapon,
+      actionKey: selected.actionKey,
+      weaponFunctionId: selected.weaponFunctionId,
+      skipActionPointCost: true,
+      ignoreReactionLock: true
+    });
+  }
+  return { handled: true, status: used ? REACTION_RESULT.success : REACTION_RESULT.failed };
+}
+
+function getOversightAttackCandidates(actor, sourceToken, targetToken) {
+  const candidates = [];
+  for (const weapon of actor?.items?.contents ?? []) {
+    if (weapon.type !== "gear" || weapon.system?.placement?.mode !== "weapon" || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) continue;
+    for (const weaponFunctionId of getWhirlwindWeaponFunctionIds(weapon)) {
+      for (const action of OVERSIGHT_ACTIONS) {
+        if (!hasWeaponAction(weapon, action.key, weaponFunctionId)) continue;
+        if (!canPerformWeaponActionAgainstToken({ attackerToken: sourceToken, targetToken, weapon, actionKey: action.key, weaponFunctionId })) continue;
+        candidates.push({ weapon, weaponFunctionId, actionKey: action.key, actionLabel: action.label });
+      }
+    }
+  }
+  return candidates;
+}
+
+async function queryOversightAttackOwner(actor, targetToken, candidates) {
+  const user = game.users?.get(getActorResponsibleUserId(actor));
+  if (!user) return null;
+  try {
+    const weapons = Array.from(new Map(candidates.map(candidate => [candidate.weapon.id, {
+      weaponId: candidate.weapon.id,
+      weaponName: candidate.weapon.name,
+      img: normalizeImagePath(candidate.weapon.img, "icons/svg/sword.svg")
+    }])).values());
+    const weaponResponse = await queryOversightOwner(user, {
+      mode: "weapon",
+      targetName: targetToken.actor?.name ?? "",
+      weapons
+    });
+    const weaponId = String(weaponResponse?.weaponId ?? "");
+    if (!weaponId) return null;
+
+    const weaponCandidates = candidates.filter(candidate => candidate.weapon.id === weaponId);
+    const actions = Array.from(new Map(weaponCandidates.map(candidate => [candidate.actionKey, {
+      actionKey: candidate.actionKey,
+      actionLabel: candidate.actionLabel
+    }])).values());
+    const actionResponse = await queryOversightOwner(user, {
+      mode: "action",
+      targetName: targetToken.actor?.name ?? "",
+      weaponName: weapons.find(weapon => weapon.weaponId === weaponId)?.weaponName ?? "",
+      actions
+    });
+    const actionKey = String(actionResponse?.actionKey ?? "");
+    return weaponCandidates.find(candidate => candidate.actionKey === actionKey) ?? null;
+  } catch (error) {
+    console.warn(`${SYSTEM_ID} | Oversight attack query failed`, error);
+    return null;
+  }
+}
+
+function queryOversightOwner(user, data, timeout = 30000) {
+  return user.isSelf
+    ? handleOversightAttackQuery(data)
+    : user.query(OVERSIGHT_QUERY_NAME, data, { timeout });
+}
+
+async function handleOversightAttackQuery(data = {}) {
+  if (data.mode === "aim") {
+    const sourceTokenDocument = await fromUuid(String(data.sourceTokenUuid ?? ""));
+    const targetTokenDocument = await fromUuid(String(data.targetTokenUuid ?? ""));
+    const weapon = await fromUuid(String(data.weaponUuid ?? ""));
+    if (!sourceTokenDocument?.actor?.isOwner || !targetTokenDocument?.actor || !weapon) return false;
+    return startForcedAimedAttackSelection({
+      attackerToken: sourceTokenDocument.object ?? sourceTokenDocument,
+      targetToken: targetTokenDocument.object ?? targetTokenDocument,
+      weapon,
+      weaponFunctionId: String(data.weaponFunctionId ?? ""),
+      actionKey: String(data.actionKey ?? ""),
+      label: "Надзор"
+    });
+  }
+  const weaponMode = data.mode === "weapon";
+  const entries = weaponMode
+    ? (Array.isArray(data.weapons) ? data.weapons : [])
+    : (Array.isArray(data.actions) ? data.actions : []);
+  if (!entries.length) return null;
+  const options = entries.map((entry, index) => weaponMode ? `
+    <label class="fallout-maw-radio-card fallout-maw-weapon-choice-card">
+      <input type="radio" name="weaponId" value="${escapeAttribute(entry.weaponId)}" ${index === 0 ? "checked" : ""}>
+      <img src="${escapeAttribute(entry.img)}" alt="">
+      <span><strong>${escapeHTML(entry.weaponName)}</strong></span>
+    </label>` : `
+    <label class="fallout-maw-radio-card">
+      <input type="radio" name="actionKey" value="${escapeAttribute(entry.actionKey)}" ${index === 0 ? "checked" : ""}>
+      <span><strong>${escapeHTML(entry.actionLabel)}</strong></span>
+    </label>`).join("");
+  const formData = await DialogV2.input({
+    window: { title: weaponMode ? "Надзор: выбор оружия" : "Надзор: выбор действия" },
+    content: `<div class="fallout-maw-disarm-choice-grid"><p>Цель: <strong>${escapeHTML(data.targetName)}</strong></p>${weaponMode ? "" : `<p>Оружие: <strong>${escapeHTML(data.weaponName)}</strong></p>`}${options}</div>`,
+    ok: { label: weaponMode ? "Далее" : "Атаковать", icon: weaponMode ? "fa-solid fa-arrow-right" : "fa-solid fa-crosshairs", callback: (_event, button) => new FormDataExtended(button.form).object },
+    buttons: [{ action: "cancel", label: game.i18n.localize("FALLOUTMAW.Common.Cancel") }],
+    position: { width: 520 },
+    rejectClose: false
+  });
+  if (weaponMode) return formData?.weaponId ? { weaponId: String(formData.weaponId) } : null;
+  return formData?.actionKey ? { actionKey: String(formData.actionKey) } : null;
 }
 
 async function useAllOrNothing(actor, abilityItem, abilityFunction) {
@@ -2340,7 +2830,9 @@ function getActorSkillValue(actor, skillKey = "") {
 }
 
 function getActorSceneToken(actor) {
-  return canvas.tokens?.placeables?.find(token => token?.actor?.uuid === actor?.uuid) ?? null;
+  return canvas.tokens?.controlled?.find(token => token?.actor?.uuid === actor?.uuid)
+    ?? canvas.tokens?.placeables?.find(token => token?.actor?.uuid === actor?.uuid)
+    ?? null;
 }
 
 function getSingleUserTarget() {

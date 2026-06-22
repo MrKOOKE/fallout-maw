@@ -738,6 +738,20 @@
       </div>
     </div>
     {{/if}}
+
+    {{#if fixedOversightSettings}}
+      <fieldset class="fallout-maw-ability-fixed-settings">
+        <legend>Надзор</legend>
+        <div class="form-group"><label>Стоимость активации, энергия</label><input type="number" data-field="fixed.oversight.energyCost" value="{{fixedOversightSettings.energyCost}}" min="0" step="1"></div>
+        <div class="form-group"><label>Перегрузка, энергия</label><input type="number" data-field="fixed.oversight.overloadEnergyCost" value="{{fixedOversightSettings.overloadEnergyCost}}" min="0" step="1"></div>
+        <div class="form-group"><label>Длительность перегрузки</label><div class="form-fields"><input type="number" data-field="fixed.oversight.overloadDurationAmount" value="{{fixedOversightSettings.overloadDurationAmount}}" min="0" step="1"><select data-field="fixed.oversight.overloadDurationUnit">{{#each fixedOversightSettings.overloadDurationUnitChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></div></div>
+        <div class="form-group"><label>Базовая сложность</label><input type="number" data-field="fixed.oversight.difficultyBase" value="{{fixedOversightSettings.difficultyBase}}" step="1"></div>
+        <div class="form-group"><label>Навык владельца</label><select data-field="fixed.oversight.sourceSkillKey">{{#each fixedOversightSettings.sourceSkillChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></div>
+        <div class="form-group"><label>Навык цели</label><select data-field="fixed.oversight.targetSkillKey">{{#each fixedOversightSettings.targetSkillChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></div>
+        <div class="form-group"><label>Делитель снижения восстановления</label><input type="number" data-field="fixed.oversight.dodgeRecoveryDivisor" value="{{fixedOversightSettings.dodgeRecoveryDivisor}}" min="1" step="1"></div>
+        <div class="form-group"><label>Порог ОП/ОД/ОР</label><input type="number" data-field="fixed.oversight.resourceThreshold" value="{{fixedOversightSettings.resourceThreshold}}" min="1" step="1"></div>
+      </fieldset>
+    {{/if}}
     {{#if fixedCounterSniperSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Контр-снайпер</h3>

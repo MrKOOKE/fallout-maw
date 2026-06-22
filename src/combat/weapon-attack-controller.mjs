@@ -490,11 +490,14 @@ export async function startForcedAimedAttackSelection({
   attackerToken = null,
   targetToken = null,
   weapon = null,
-  weaponFunctionId = ""
+  weaponFunctionId = "",
+  actionKey = "aimedShot",
+  label = "Контр-снайпер"
 } = {}) {
+  const normalizedActionKey = ["aimedShot", "aimedMeleeAttack"].includes(actionKey) ? actionKey : "";
   if (!attackerToken?.actor || !targetToken?.actor || !weapon || isActorUnableToAct(attackerToken.actor)) return false;
-  if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon) || !hasWeaponAction(weapon, "aimedShot", weaponFunctionId)) return false;
-  if (isWeaponActionBlocked(attackerToken.actor, "aimedShot")) return false;
+  if (!normalizedActionKey || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon) || !hasWeaponAction(weapon, normalizedActionKey, weaponFunctionId)) return false;
+  if (isWeaponActionBlocked(attackerToken.actor, normalizedActionKey)) return false;
   if (isWeaponPlacementDisabled(attackerToken.actor, weapon)) return false;
   const suspendedAttack = activeAttack;
   suspendedAttack?.suppressPreview();
@@ -513,13 +516,14 @@ export async function startForcedAimedAttackSelection({
       resolve(Boolean(value));
     };
     const modifier = createCounterSniperAttackModifier({
+      label,
       onDestroy: ({ controller }) => finish(controller?.attackCheckCount > 0)
     });
-    const controller = new WeaponAttackController(attackerToken, weapon, "aimedShot", weaponFunctionId, modifier, {
+    const controller = new WeaponAttackController(attackerToken, weapon, normalizedActionKey, weaponFunctionId, modifier, {
       skipActionPointCost: true,
       ignoreReactionLock: true
     });
-    if (!controller.hasRequiredWeaponResources(getActionAttackCount(weapon, "aimedShot", weaponFunctionId))) {
+    if (!controller.hasRequiredWeaponResources(getActionAttackCount(weapon, normalizedActionKey, weaponFunctionId))) {
       finish(false);
       return;
     }
@@ -556,17 +560,19 @@ export function canPerformAimedAttackAgainstToken({
   attackerToken = null,
   targetToken = null,
   weapon = null,
-  weaponFunctionId = ""
+  weaponFunctionId = "",
+  actionKey = "aimedShot"
 } = {}) {
+  const normalizedActionKey = ["aimedShot", "aimedMeleeAttack"].includes(actionKey) ? actionKey : "";
   const attacker = attackerToken?.object ?? attackerToken;
   const target = targetToken?.object ?? targetToken;
   if (!attacker?.actor || !target?.actor || !weapon || isActorUnableToAct(attacker.actor)) return false;
-  if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon) || !hasWeaponAction(weapon, "aimedShot", weaponFunctionId)) return false;
+  if (!normalizedActionKey || !hasItemFunction(weapon, ITEM_FUNCTIONS.weapon) || !hasWeaponAction(weapon, normalizedActionKey, weaponFunctionId)) return false;
   if (isWeaponPlacementDisabled(attacker.actor, weapon)) return false;
-  if (getMissingWeaponResourceCost(weapon, getActionAttackCount(weapon, "aimedShot", weaponFunctionId), weaponFunctionId)) return false;
+  if (getMissingWeaponResourceCost(weapon, getActionAttackCount(weapon, normalizedActionKey, weaponFunctionId), weaponFunctionId)) return false;
   const origin = getTokenAimPoint(attacker);
   const targetPoint = getTokenAimPoint(target);
-  const geometry = getAttackGeometry(weapon, "aimedShot", attacker, origin, targetPoint, weaponFunctionId);
+  const geometry = getAttackGeometry(weapon, normalizedActionKey, attacker, origin, targetPoint, weaponFunctionId);
   if (!geometry || !selectTargetTrajectoryAimPoint(attacker, target, geometry)) return false;
   return canTokenPhysicallySeeTarget(attacker, target);
 }
@@ -1006,6 +1012,7 @@ class WeaponAttackController {
       emitActionResolved: !this.attackCanceledByReaction,
       spendActionPoints: !this.skipActionPointCost
     });
+    this.interruptForIncapacitation();
     return true;
   }
 
@@ -1384,7 +1391,7 @@ class WeaponAttackController {
         delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
       });
     }
-    if (damageRequests.length) {
+    if (!this.attackCanceledByReaction && damageRequests.length) {
       damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
     }
     this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
@@ -1483,7 +1490,7 @@ class WeaponAttackController {
         delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
       });
     }
-    if (damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
+    if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
     this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
@@ -1556,7 +1563,7 @@ class WeaponAttackController {
         delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
       });
     }
-    if (damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
+    if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
     this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
@@ -1770,7 +1777,7 @@ class WeaponAttackController {
         delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
       });
     }
-    if (damageRequests.length) {
+    if (!this.attackCanceledByReaction && damageRequests.length) {
       damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
     }
     this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
@@ -1889,7 +1896,7 @@ class WeaponAttackController {
         delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
       });
     }
-    if (damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
+    if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
     this.notifyAttackResolved({ damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
@@ -2011,7 +2018,7 @@ class WeaponAttackController {
         delayMs: getWeaponAttackAnimationDelay(this.weapon, this.weaponFunctionId)
       });
     }
-    if (damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
+    if (!this.attackCanceledByReaction && damageRequests.length) damageResults.push(...flattenDamageResults(await applyQueuedDamageRequests(damageRequests)));
 
     this.notifyAttackResolved({ attempted, damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
@@ -2520,7 +2527,9 @@ class WeaponAttackController {
     }
 
     if (playEffects) await this.playVolleyAttackEffects(finalGeometries);
-    const damageResults = flattenDamageResults(await applyQueuedDamageAndRegionRequests(damageRequests, regionRequests));
+    const damageResults = this.attackCanceledByReaction
+      ? []
+      : flattenDamageResults(await applyQueuedDamageAndRegionRequests(damageRequests, regionRequests));
 
     this.notifyAttackResolved({ damageResults, killedTargetUuids: collectKilledTargetUuidsFromDamageResults(damageResults) });
     this.completeProcessingCycle();
@@ -4458,6 +4467,26 @@ async function spendWeaponResources(weapon, multiplier = 1, weaponFunctionId = "
   if (deleteWeapon && weapon.id) await weapon.delete();
 }
 
+export function canPerformWeaponActionAgainstToken({
+  attackerToken = null,
+  targetToken = null,
+  weapon = null,
+  actionKey = "",
+  weaponFunctionId = ""
+} = {}) {
+  const attacker = attackerToken?.object ?? attackerToken;
+  const target = targetToken?.object ?? targetToken;
+  if (!attacker?.actor || !target?.actor || !weapon || isActorUnableToAct(attacker.actor)) return false;
+  if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon) || !hasWeaponAction(weapon, actionKey, weaponFunctionId)) return false;
+  if (isWeaponActionBlocked(attacker.actor, actionKey) || isWeaponPlacementDisabled(attacker.actor, weapon)) return false;
+  if (getMissingWeaponResourceCost(weapon, getActionAttackCount(weapon, actionKey, weaponFunctionId), weaponFunctionId)) return false;
+  const origin = getTokenAimPoint(attacker);
+  const targetPoint = getTokenAimPoint(target);
+  const geometry = getAttackGeometry(weapon, actionKey, attacker, origin, targetPoint, weaponFunctionId);
+  if (!geometry || !getPotentialTargets(attacker, geometry).includes(target)) return false;
+  return canTokenPhysicallySeeTarget(attacker, target);
+}
+
 function getWeaponEnergyResourceState(weapon = null, weaponFunctionId = "") {
   const item = getWeaponEnergyConsumerItem(weapon, weaponFunctionId);
   const consumer = getEnergyConsumerFunction(item);
@@ -4920,7 +4949,7 @@ function hasLineOfSight(attackerToken, destination, origin) {
   });
 }
 
-function canTokenPhysicallySeeTarget(attackerToken, targetToken) {
+export function canTokenPhysicallySeeTarget(attackerToken, targetToken) {
   if (!canvas?.ready || !attackerToken || !targetToken) return false;
   if (!canvas.visibility?.tokenVision) return true;
   const tokenDocument = attackerToken.document ?? attackerToken;

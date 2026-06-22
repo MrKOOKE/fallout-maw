@@ -3,6 +3,7 @@ import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { getActorPostureMovementCostMultiplier } from "../canvas/posture-movement.mjs";
 import { getDamageCostModifierState, getResourceLimitState } from "./damage-hub.mjs";
 import { REACTION_RESOURCE_KEY, getCombatActionPointState, spendCombatActionPoints } from "./reaction-resources.mjs";
+import { beginCombatResourceSpending, notifyCombatResourcesSpent } from "./resource-spending.mjs";
 
 export const MOVEMENT_RESOURCE_KEY = "movementPoints";
 export const ACTION_RESOURCE_KEY = "actionPoints";
@@ -206,28 +207,36 @@ async function spendCombatMovementResources(tokenDocument, movement, operation, 
 
   const cost = getCombatMovementCost(movement, tokenDocument.actor);
   if (cost <= 0) return;
-
-  await waitForMovementAnimation(movement);
-
   const actor = tokenDocument.actor;
-  const state = getCombatMovementResourceState(actor);
-  if (!state || cost > state.total) return;
+  const finishSpending = beginCombatResourceSpending(actor);
+  try {
+    await waitForMovementAnimation(movement);
 
-  const movementSpend = Math.min(cost, state.movement.value);
-  const actionSpend = cost - movementSpend;
-  if (!movementSpend && !actionSpend) return;
+    const state = getCombatMovementResourceState(actor);
+    if (!state || cost > state.total) return;
 
-  const updates = {};
-  if (movementSpend) updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = Math.max(0, state.movement.current - movementSpend);
-  updates[`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`] = [
-    ...getMovementResourceSpendingStack(actor),
-    createMovementResourceSpendingEntry(tokenDocument, movement, {
+    const movementSpend = Math.min(cost, state.movement.value);
+    const actionSpend = cost - movementSpend;
+    if (!movementSpend && !actionSpend) return;
+
+    const updates = {};
+    if (movementSpend) updates[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = Math.max(0, state.movement.current - movementSpend);
+    updates[`flags.${FALLOUT_MAW.id}.${MOVEMENT_RESOURCE_SPENDING_FLAG}`] = [
+      ...getMovementResourceSpendingStack(actor),
+      createMovementResourceSpendingEntry(tokenDocument, movement, {
+        [MOVEMENT_RESOURCE_KEY]: movementSpend,
+        [state.action.key]: actionSpend
+      })
+    ].slice(-MOVEMENT_RESOURCE_SPENDING_LIMIT);
+    await actor.update(updates);
+    if (actionSpend) await spendCombatActionPoints(actor, actionSpend, { suppressResourceNotification: true });
+    await notifyCombatResourcesSpent(actor, {
       [MOVEMENT_RESOURCE_KEY]: movementSpend,
       [state.action.key]: actionSpend
-    })
-  ].slice(-MOVEMENT_RESOURCE_SPENDING_LIMIT);
-  await actor.update(updates);
-  if (actionSpend) await spendCombatActionPoints(actor, actionSpend);
+    }, { type: "movement", tokenDocument, movement, operation });
+  } finally {
+    finishSpending();
+  }
 }
 
 async function restoreLastMovementResourceSpending(tokenDocument) {

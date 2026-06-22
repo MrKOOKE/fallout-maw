@@ -6,6 +6,7 @@ import { canSpendCombatActionPoints, spendCombatActionPoints } from "./reaction-
 import { POSTURE_CHANGE_ACTION_POINT_COST, setActorTokensPosture } from "../canvas/posture-movement.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { isActorUnableToAct } from "./reaction-hub.mjs";
+import { notifyCombatResourcesSpent } from "./resource-spending.mjs";
 
 export const GRAPPLE_TARGET_FLAG = "grappleTargetTokenId";
 export const GRAPPLE_GRAPPLER_FLAG = "grappleGrapplerTokenId";
@@ -119,6 +120,7 @@ export async function startGrappleReposition(token) {
   const cost = getGrappleDragCost(grapplerDocument, targetDocument, destination);
   if (!canSpendMovementThenAction(actor, cost)) return undefined;
   await spendMovementThenAction(actor, cost);
+  if (isActorUnableToAct(actor)) return undefined;
   return requestMoveGrappledTarget(targetDocument, destination);
 }
 
@@ -228,6 +230,7 @@ async function attemptGrapple(grapplerDocument, targetDocument) {
 
   const uncontested = isUnableToResist(targetDocument) || await requestOwnerGrappleConsent(grapplerDocument, targetDocument);
   await spendActionPoints(grapplerDocument.actor, GRAPPLE_ACTION_POINT_COST);
+  if (isActorUnableToAct(grapplerDocument.actor)) return false;
   if (uncontested) return linkGrappleAndAnnounce(grapplerDocument, targetDocument);
 
   const attackerAthletics = getActorSkillValue(grapplerDocument.actor, "ath");
@@ -255,6 +258,7 @@ async function escapeGrapple(targetDocument, grapplerDocument) {
   if (!targetDocument?.actor || !grapplerDocument?.actor) return requestUnlinkGrapple(grapplerDocument, targetDocument);
   if (!canSpendActionPoints(targetDocument.actor, POSTURE_CHANGE_ACTION_POINT_COST)) return undefined;
   await spendActionPoints(targetDocument.actor, POSTURE_CHANGE_ACTION_POINT_COST);
+  if (isActorUnableToAct(targetDocument.actor)) return false;
 
   const size = getGrappleEscapeSizeModifiers(grapplerDocument, targetDocument);
   const outcome = await requestSkillCheck({
@@ -692,7 +696,11 @@ async function spendMovementThenAction(actor, amount = 0) {
   const update = {};
   if (movementSpend) update[`system.resources.${MOVEMENT_RESOURCE_KEY}.value`] = Math.max(0, state.movement.current - movementSpend);
   if (Object.keys(update).length) await actor.update(update);
-  if (actionSpend) await spendCombatActionPoints(actor, actionSpend);
+  if (actionSpend) await spendCombatActionPoints(actor, actionSpend, { suppressResourceNotification: true });
+  await notifyCombatResourcesSpent(actor, {
+    [MOVEMENT_RESOURCE_KEY]: movementSpend,
+    [state.action.key]: actionSpend
+  }, { type: "activeAction" });
 }
 
 function getGrappleDragCost(grapplerDocument, targetDocument, destination) {
