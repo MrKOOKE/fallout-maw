@@ -50,22 +50,28 @@ export async function openCampFromHud(actors = []) {
   localCampActorUuid = actorUuids[0];
 
   const state = getCampState();
-  const confirmed = state.active
-    ? await DialogV2.confirm({
-      window: { title: "Лагерь" },
-      content: "<p>Хотите присоединиться к лагерю?</p>",
-      yes: { label: "Присоединиться", icon: "fa-solid fa-campground" },
-      no: { label: game.i18n.localize("FALLOUTMAW.Common.Cancel") },
-      rejectClose: false
-    })
-    : await DialogV2.confirm({
+  if (state.active && game.user?.isGM) {
+    const action = await promptGmCampEntry();
+    if (action === "observe") return openCampWindow();
+    if (action !== "join") return null;
+  } else {
+    const confirmed = state.active
+      ? await DialogV2.confirm({
+        window: { title: "Лагерь" },
+        content: "<p>Хотите присоединиться к лагерю?</p>",
+        yes: { label: "Присоединиться", icon: "fa-solid fa-campground" },
+        no: { label: game.i18n.localize("FALLOUTMAW.Common.Cancel") },
+        rejectClose: false
+      })
+      : await DialogV2.confirm({
       window: { title: "Лагерь" },
       content: "<p>Вы хотите разбить лагерь?</p>",
       yes: { label: "Разбить лагерь", icon: "fa-solid fa-campground" },
       no: { label: game.i18n.localize("FALLOUTMAW.Common.Cancel") },
       rejectClose: false
     });
-  if (!confirmed) return null;
+    if (!confirmed) return null;
+  }
 
   const result = await runCampOperation("createOrJoin", {
     actorUuids: state.active ? actorUuids.slice(0, 1) : actorUuids
@@ -79,9 +85,39 @@ export function openCampWindow() {
   return campWindow.render({ force: true });
 }
 
+async function promptGmCampEntry() {
+  return DialogV2.wait({
+    window: { title: "Лагерь" },
+    content: "<p>Хотите присоединиться к лагерю?</p>",
+    buttons: [
+      {
+        action: "join",
+        label: "Присоединиться",
+        icon: "fa-solid fa-campground",
+        default: true,
+        callback: () => "join"
+      },
+      {
+        action: "observe",
+        label: "Зайти как наблюдатель",
+        icon: "fa-solid fa-eye",
+        callback: () => "observe"
+      },
+      {
+        action: "cancel",
+        label: game.i18n.localize("FALLOUTMAW.Common.Cancel"),
+        icon: "fa-solid fa-xmark",
+        callback: () => "cancel"
+      }
+    ],
+    rejectClose: false
+  });
+}
+
 class CampWindow extends FalloutMaWFormApplicationV2 {
   #suppressCampClose = false;
   #changeHandler = event => void this.#onChange(event);
+  #clickHandler = event => void this.#onParticipantClick(event);
 
   static DEFAULT_OPTIONS = {
     id: "fallout-maw-camp-window",
@@ -124,6 +160,12 @@ class CampWindow extends FalloutMaWFormApplicationV2 {
     const localParticipant = participants.find(participant => participant.actorUuid === localCampActorUuid)
       ?? participants.find(participant => participant.canEdit)
       ?? null;
+    const canEditWatch = Boolean(game.user?.isGM || participants.some(participant => participant.canEdit));
+    if (localParticipant) {
+      localCampActorUuid = localParticipant.actorUuid;
+      localParticipant.canEditWatch = canEditWatch;
+      for (const participant of participants) participant.selected = participant.actorUuid === localParticipant.actorUuid;
+    }
     return {
       ...context,
       active: state.active,
@@ -138,6 +180,8 @@ class CampWindow extends FalloutMaWFormApplicationV2 {
     await super._onRender(context, options);
     this.element?.removeEventListener("change", this.#changeHandler);
     this.element?.addEventListener("change", this.#changeHandler);
+    this.element?.removeEventListener("click", this.#clickHandler);
+    this.element?.addEventListener("click", this.#clickHandler);
   }
 
   async _processFormData() {
@@ -177,6 +221,17 @@ class CampWindow extends FalloutMaWFormApplicationV2 {
         ready: target.checked
       });
     }
+  }
+
+  async #onParticipantClick(event) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.closest("input, select, button, label")) return;
+    const row = target.closest("[data-camp-participant-row]");
+    const actorUuid = row?.dataset.actorUuid ?? "";
+    if (!actorUuid || actorUuid === localCampActorUuid) return;
+    localCampActorUuid = actorUuid;
+    await this.render({ force: true });
   }
 
   static async #onRest(event) {
@@ -379,7 +434,8 @@ async function updateCampRestSeconds({ restSeconds = 0 } = {}, requesterUserId =
 async function updateCampParticipant({ actorUuid = "", watchSeconds, restPlaceId, ready } = {}, requesterUserId = "") {
   const current = getCampState();
   if (!current.active) return current;
-  await assertUserOwnsActor(actorUuid, requesterUserId);
+  if (watchSeconds !== undefined) await assertUserIsCampParticipant(current, requesterUserId);
+  if (restPlaceId !== undefined || ready !== undefined) await assertUserOwnsActor(actorUuid, requesterUserId);
   const next = normalizeCampState({
     ...current,
     participants: current.participants.map(participant => {

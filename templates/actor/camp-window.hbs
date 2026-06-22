@@ -8,7 +8,7 @@
     {{#if localParticipant}}
     <label class="fallout-maw-camp-time-field">
       <span>Время караула, ч.</span>
-      <input type="number" value="{{localParticipant.watchHours}}" min="0" step="0.25" data-camp-local-watch data-actor-uuid="{{localParticipant.actorUuid}}" {{#unless localParticipant.canEdit}}disabled{{/unless}}>
+      <input type="number" value="{{localParticipant.watchHours}}" min="0" step="0.25" data-camp-local-watch data-actor-uuid="{{localParticipant.actorUuid}}" {{#unless localParticipant.canEditWatch}}disabled{{/unless}}>
     </label>
     {{/if}}
   </section>
@@ -21,7 +21,7 @@
       <span></span>
     </div>
     {{#each participants}}
-    <div class="fallout-maw-camp-member {{#if readyChecked}}ready{{/if}} {{#if missing}}missing{{/if}}" data-camp-participant-row data-actor-uuid="{{actorUuid}}">
+    <div class="fallout-maw-camp-member {{#if selected}}selected{{/if}} {{#if missing}}missing{{/if}}" data-camp-participant-row data-actor-uuid="{{actorUuid}}">
       <div class="fallout-maw-camp-member-name">
         <img src="{{img}}" alt="">
         <strong>{{name}}</strong>

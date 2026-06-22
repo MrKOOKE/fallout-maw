@@ -15297,10 +15297,12 @@ label.fallout-maw-mitigation-cell {
 
 .fallout-maw-camp-member {
   padding: 8px;
+  cursor: pointer;
 }
 
-.fallout-maw-camp-member.ready {
-  border-color: var(--fallout-maw-terminal-green);
+.fallout-maw-camp-member.selected {
+  border-color: var(--fallout-maw-terminal-accent);
+  box-shadow: 0 0 8px rgba(240, 207, 85, 0.22);
 }
 
 .fallout-maw-camp-member.missing {
@@ -15312,6 +15314,13 @@ label.fallout-maw-mitigation-cell {
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.fallout-maw-camp-member input,
+.fallout-maw-camp-member select,
+.fallout-maw-camp-member button,
+.fallout-maw-camp-member label {
+  cursor: auto;
 }
 
 .fallout-maw-camp-member-name img {
@@ -15379,6 +15388,14 @@ label.fallout-maw-mitigation-cell {
   color: var(--fallout-maw-terminal-accent);
   font-size: 16px;
   font-weight: 700;
+}
+
+.application.fallout-maw-camp-window .fallout-maw-camp-rest-button:disabled {
+  border-color: var(--fallout-maw-terminal-line);
+  color: var(--fallout-maw-terminal-muted);
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.42;
 }
 
 .fallout-maw-camp-empty {
