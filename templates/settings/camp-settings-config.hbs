@@ -1,0 +1,32 @@
+<div class="fallout-maw-config-body">
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>Лагерь</h2>
+      <div class="fallout-maw-button-row">
+        <button type="button" data-action="addRestPlace"><i class="fa-solid fa-plus"></i> Добавить место</button>
+        <button type="button" data-action="resetDefaults"><i class="fa-solid fa-rotate-left"></i> {{localize "FALLOUTMAW.Common.ResetDefaults"}}</button>
+      </div>
+    </header>
+
+    <div class="fallout-maw-settings-table fallout-maw-camp-settings-table">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>Ключ</span>
+        <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
+        <span></span>
+        <span></span>
+      </div>
+      {{#each restPlaces}}
+      <div class="fallout-maw-settings-row" data-camp-rest-place-row data-place-id="{{id}}">
+        <input type="text" data-field="id" value="{{id}}">
+        <input type="text" data-field="label" value="{{label}}">
+        <button type="button" class="fallout-maw-icon-button fallout-maw-square-icon-button" data-action="openPlaceSettings" title="Доп. настройки"><i class="fa-solid fa-gear"></i></button>
+        <button type="button" class="fallout-maw-icon-button fallout-maw-square-icon-button" data-action="deleteRestPlace" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{/each}}
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  </footer>
+</div>

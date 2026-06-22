@@ -1,10 +1,11 @@
 import { SYSTEM_ID, SYSTEM_TITLE, TEMPLATES } from "../constants.mjs";
-import { MIGRATION_STATE_SETTING } from "./constants.mjs";
+import { CAMP_STATE_SETTING, MIGRATION_STATE_SETTING } from "./constants.mjs";
 import { SETTINGS_BASELINE } from "./baseline-data.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 const BASELINE_INTERNAL_KEYS = new Set([
+  `${SYSTEM_ID}.${CAMP_STATE_SETTING}`,
   `${SYSTEM_ID}.${MIGRATION_STATE_SETTING}`
 ]);
 

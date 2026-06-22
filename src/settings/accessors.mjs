@@ -20,6 +20,8 @@ import { ITEM_FUNCTIONS, getConstructPartFunction, hasItemFunction } from "../ut
 import { createDefaultCurrencySettings, normalizeCurrencySettings } from "./currency-settings.mjs";
 import {
   ABILITIES_CATALOG_SETTING,
+  CAMP_SETTINGS_SETTING,
+  CAMP_STATE_SETTING,
   CHARACTERISTICS_SETTING,
   COMBAT_SETTINGS_SETTING,
   COVER_SETTINGS_SETTING,
@@ -38,10 +40,12 @@ import {
   SYSTEM_ACTION_SETTINGS_SETTING,
   TIME_MECHANICS_IGNORED_SETTING,
   TIME_NEEDS_PLAYERS_ONLY_SETTING,
+  TIME_REST_MODE_SETTING,
   TOOL_SETTINGS_SETTING,
   TRAUMA_SETTINGS_SETTING,
   TOKEN_ACTION_HUD_DAMAGE_ICONS_SETTING
 } from "./constants.mjs";
+import { createDefaultCampSettings, createEmptyCampState, normalizeCampSettings, normalizeCampState } from "./camp.mjs";
 import { createDefaultCombatSettings, normalizeCombatSettings } from "./combat.mjs";
 import { createDefaultCoverSettings, normalizeCoverSettings } from "./cover.mjs";
 import { createDefaultAbilityCatalog, normalizeAbilityCatalog } from "./abilities.mjs";
@@ -443,6 +447,43 @@ export function getTimeNeedsPlayersOnly() {
 export async function setTimeNeedsPlayersOnly(value) {
   await game.settings.set(FALLOUT_MAW.id, TIME_NEEDS_PLAYERS_ONLY_SETTING, Boolean(value));
   return Boolean(value);
+}
+
+export function getTimeRestMode() {
+  return Boolean(game.settings.get(FALLOUT_MAW.id, TIME_REST_MODE_SETTING));
+}
+
+export async function setTimeRestMode(value) {
+  await game.settings.set(FALLOUT_MAW.id, TIME_REST_MODE_SETTING, Boolean(value));
+  return Boolean(value);
+}
+
+export function getCampSettings() {
+  try {
+    return normalizeCampSettings(game.settings.get(FALLOUT_MAW.id, CAMP_SETTINGS_SETTING));
+  } catch (_error) {
+    return createDefaultCampSettings();
+  }
+}
+
+export async function setCampSettings(value) {
+  const normalized = normalizeCampSettings(value);
+  await game.settings.set(FALLOUT_MAW.id, CAMP_SETTINGS_SETTING, normalized);
+  return normalized;
+}
+
+export function getCampState() {
+  try {
+    return normalizeCampState(game.settings.get(FALLOUT_MAW.id, CAMP_STATE_SETTING));
+  } catch (_error) {
+    return createEmptyCampState();
+  }
+}
+
+export async function setCampState(value) {
+  const normalized = normalizeCampState(value);
+  await game.settings.set(FALLOUT_MAW.id, CAMP_STATE_SETTING, normalized);
+  return normalized;
 }
 
 export function getDiseaseSettings() {

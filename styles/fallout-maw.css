@@ -15225,6 +15225,195 @@ label.fallout-maw-mitigation-cell {
   color: var(--fallout-maw-terminal-red);
 }
 
+.application.fallout-maw-camp-window {
+  --fallout-maw-terminal-bg: #10130d;
+  --fallout-maw-terminal-bg-2: #1b1d16;
+  --fallout-maw-terminal-border: rgba(199, 178, 95, 0.72);
+  --fallout-maw-terminal-line: rgba(216, 192, 94, 0.42);
+  --fallout-maw-terminal-text: #fff1b6;
+  --fallout-maw-terminal-muted: #d5c98b;
+  --fallout-maw-terminal-accent: #f0cf55;
+  --fallout-maw-terminal-green: #79c65d;
+  --fallout-maw-terminal-red: #e65345;
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 5px),
+    linear-gradient(180deg, var(--fallout-maw-terminal-bg-2), var(--fallout-maw-terminal-bg));
+  border: 2px solid var(--fallout-maw-terminal-border);
+  box-shadow: 0 0 18px rgba(240, 207, 85, 0.22);
+  color: var(--fallout-maw-terminal-text);
+}
+
+.application.fallout-maw-camp-window .window-header {
+  border-bottom: 1px solid var(--fallout-maw-terminal-line);
+  color: var(--fallout-maw-terminal-accent);
+}
+
+.application.fallout-maw-camp-window .window-content {
+  background: transparent;
+  color: var(--fallout-maw-terminal-text);
+}
+
+.fallout-maw-camp-body,
+.fallout-maw-camp-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fallout-maw-camp-summary,
+.fallout-maw-camp-member,
+.fallout-maw-camp-empty {
+  border: 1px solid var(--fallout-maw-terminal-line);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.fallout-maw-camp-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
+  align-items: end;
+  gap: 12px;
+  padding: 12px;
+}
+
+.fallout-maw-camp-time-field {
+  display: grid;
+  gap: 4px;
+  min-width: 160px;
+}
+
+.fallout-maw-camp-roster-header,
+.fallout-maw-camp-member {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) minmax(180px, 1fr) 64px 42px;
+  align-items: center;
+  gap: 8px;
+}
+
+.fallout-maw-camp-roster-header {
+  color: var(--fallout-maw-terminal-accent);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.fallout-maw-camp-member {
+  padding: 8px;
+}
+
+.fallout-maw-camp-member.ready {
+  border-color: var(--fallout-maw-terminal-green);
+}
+
+.fallout-maw-camp-member.missing {
+  border-color: var(--fallout-maw-terminal-red);
+}
+
+.fallout-maw-camp-member-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.fallout-maw-camp-member-name img {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  border: 1px solid var(--fallout-maw-terminal-border);
+}
+
+.fallout-maw-camp-member-name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.application.fallout-maw-camp-window input,
+.application.fallout-maw-camp-window select {
+  border: 1px solid var(--fallout-maw-terminal-line);
+  background: rgba(0, 0, 0, 0.34);
+  color: var(--fallout-maw-terminal-text);
+}
+
+.application.fallout-maw-camp-window select {
+  color-scheme: dark;
+}
+
+.application.fallout-maw-camp-window select option {
+  background: var(--fallout-maw-terminal-bg-2);
+  color: var(--fallout-maw-terminal-text);
+}
+
+.application.fallout-maw-camp-window button {
+  border: 1px solid var(--fallout-maw-terminal-line);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--fallout-maw-terminal-text);
+}
+
+.application.fallout-maw-camp-window button:hover:not(:disabled) {
+  border-color: var(--fallout-maw-terminal-accent);
+}
+
+.application.fallout-maw-camp-window button.danger {
+  color: var(--fallout-maw-terminal-red);
+}
+
+.fallout-maw-camp-ready {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
+}
+
+.fallout-maw-camp-ready input[type="checkbox"] {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--fallout-maw-terminal-accent);
+}
+
+.application.fallout-maw-camp-window .fallout-maw-camp-rest-button {
+  width: 100%;
+  min-height: 42px;
+  border-color: var(--fallout-maw-terminal-accent);
+  color: var(--fallout-maw-terminal-accent);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.fallout-maw-camp-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--fallout-maw-terminal-muted);
+}
+
+.fallout-maw-camp-empty i {
+  color: var(--fallout-maw-terminal-accent);
+  font-size: 28px;
+}
+
+.fallout-maw-camp-settings-table .fallout-maw-settings-row {
+  grid-template-columns: 160px 1fr 36px 36px;
+}
+
+.fallout-maw-camp-place-effect-table .fallout-maw-settings-row {
+  grid-template-columns: 1fr 120px 36px;
+}
+
+@media (max-width: 760px) {
+  .fallout-maw-camp-summary,
+  .fallout-maw-camp-roster-header,
+  .fallout-maw-camp-member {
+    grid-template-columns: 1fr;
+  }
+
+  .fallout-maw-camp-summary {
+    align-items: stretch;
+  }
+}
+
 @media (max-width: 760px) {
   .fallout-maw-travel-layout {
     align-items: stretch;

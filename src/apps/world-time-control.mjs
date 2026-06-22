@@ -2,8 +2,10 @@ import { TEMPLATES } from "../constants.mjs";
 import {
   getTimeMechanicsIgnored,
   getTimeNeedsPlayersOnly,
+  getTimeRestMode,
   setTimeMechanicsIgnored,
-  setTimeNeedsPlayersOnly
+  setTimeNeedsPlayersOnly,
+  setTimeRestMode
 } from "../settings/accessors.mjs";
 import { FalloutMaWFormApplicationV2 } from "./base-form-application-v2.mjs";
 
@@ -118,6 +120,7 @@ export class WorldTimeControl extends FalloutMaWFormApplicationV2 {
       combatActive: isCombatActive(),
       ignoreTimeMechanics: getTimeMechanicsIgnored(),
       needsPlayersOnly: getTimeNeedsPlayersOnly(),
+      restMode: getTimeRestMode(),
       unitOptions: getUnitOptions(selectedUnit)
     };
   }
@@ -138,6 +141,7 @@ export class WorldTimeControl extends FalloutMaWFormApplicationV2 {
     selectedUnit = Object.hasOwn(UNIT_SECONDS, unit) ? unit : "hours";
     await setTimeMechanicsIgnored(Boolean(formData.object?.ignoreTimeMechanics));
     await setTimeNeedsPlayersOnly(Boolean(formData.object?.needsPlayersOnly));
+    await setTimeRestMode(Boolean(formData.object?.restMode));
     return undefined;
   }
 
@@ -253,10 +257,20 @@ function isCombatActive() {
   return Array.from(game.combats ?? []).some(combat => combat?.started);
 }
 
-async function advanceWorldTime(seconds) {
+export async function advanceWorldTime(seconds, {
+  restMode = getTimeRestMode(),
+  campRest = null,
+  forceTimeMechanics = false
+} = {}) {
   const amount = Math.trunc(Number(seconds) || 0);
   if (!amount || !game.user?.isGM) return;
-  const advance = worldTimeAdvanceQueue.then(() => game.time.advance(amount));
+  const advance = worldTimeAdvanceQueue.then(() => game.time.advance(amount, {
+    falloutMaw: {
+      restMode: Boolean(restMode),
+      forceTimeMechanics: Boolean(forceTimeMechanics),
+      ...(campRest ? { campRest } : {})
+    }
+  }));
   worldTimeAdvanceQueue = advance.catch(error => {
     console.error("Fallout MaW | Queued world time advance failed", error);
   });

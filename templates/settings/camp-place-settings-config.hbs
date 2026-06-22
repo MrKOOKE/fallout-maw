@@ -1,0 +1,33 @@
+<div class="fallout-maw-config-body">
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>{{place.label}}</h2>
+      <div class="fallout-maw-button-row">
+        <button type="button" data-action="addEffect"><i class="fa-solid fa-plus"></i> Добавить влияние</button>
+      </div>
+    </header>
+
+    <div class="fallout-maw-settings-table fallout-maw-camp-place-effect-table">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>Потребность</span>
+        <span>В час</span>
+        <span></span>
+      </div>
+      {{#each effects}}
+      <div class="fallout-maw-settings-row" data-camp-place-effect-row>
+        <select data-field="needKey">
+          {{#each ../needOptions}}
+          <option value="{{value}}" {{#if (eq value ../needKey)}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="number" data-field="perHour" value="{{perHour}}" step="1">
+        <button type="button" class="fallout-maw-icon-button fallout-maw-square-icon-button" data-action="deleteEffect" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{/each}}
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
+  </footer>
+</div>

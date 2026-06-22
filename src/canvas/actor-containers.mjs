@@ -520,13 +520,13 @@ async function performBoardPassenger({ sceneId = "", passengerActorUuid = "", pa
   const originalOwnership = foundry.utils.deepClone(vehicleActor.ownership ?? {});
   const originalPassengers = getActorContainerFlag(vehicleActor).passengers;
   try {
-    await vehicleActor.update({
+    await updateActorContainerActor(vehicleActor, {
       ...ownershipUpdate.update,
       [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: passengers
     });
     await scene.deleteEmbeddedDocuments("Token", [passengerToken.id]);
   } catch (error) {
-    await vehicleActor.update({
+    await updateActorContainerActor(vehicleActor, {
       ownership: originalOwnership,
       [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: originalPassengers
     }).catch(() => {});
@@ -557,7 +557,7 @@ async function performExitPassenger({ sceneId = "", vehicleActorUuid = "", passe
   try {
     [createdToken] = await scene.createEmbeddedDocuments("Token", [tokenData]);
     if (!createdToken) throw new Error("Не удалось создать токен пассажира.");
-    await vehicleActor.update({
+    await updateActorContainerActor(vehicleActor, {
       ...ownershipUpdate,
       [`flags.${SYSTEM_ID}.${ACTOR_CONTAINER_FLAG}.passengers`]: remaining
     });
@@ -615,6 +615,23 @@ function getTemporaryOwnershipCleanupUpdate(vehicleActor, removedPassenger, rema
 function findTemporaryOwnershipSource(passengers, userId) {
   const sources = (passengers ?? []).filter(passenger => passenger.temporaryOwnerUserIds?.includes(userId));
   return sources.find(passenger => Object.hasOwn(passenger.temporaryOwnerLevels ?? {}, userId)) ?? sources[0] ?? null;
+}
+
+async function updateActorContainerActor(actor, update = {}, options = {}) {
+  const data = { ...update };
+  if (Object.hasOwn(data, "ownership")) data.ownership = forceReplaceData(data.ownership ?? {});
+  if (actor?.isToken && actor.token && !actor.token.actorLink) {
+    const tokenUpdate = {};
+    for (const [key, value] of Object.entries(data)) {
+      tokenUpdate[`delta.${key}`] = value;
+    }
+    return actor.token.update(tokenUpdate, options);
+  }
+  return actor.update(data, options);
+}
+
+function forceReplaceData(value) {
+  return foundry.data?.operators?.ForcedReplacement?.create?.(value) ?? globalThis._replace?.(value) ?? value;
 }
 
 function createCanvasInputShield(cursor = "pointer") {

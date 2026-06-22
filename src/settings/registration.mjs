@@ -11,6 +11,7 @@ import {
 import { createDefaultCurrencySettings } from "./currency-settings.mjs";
 import { localize } from "../utils/i18n.mjs";
 import { AbilitySettingsConfig } from "../apps/ability-settings-config.mjs";
+import { CampSettingsConfig } from "../apps/camp-settings-config.mjs";
 import { CharacteristicsConfig } from "../apps/characteristics-config.mjs";
 import { CombatSettingsConfig } from "../apps/combat-settings-config.mjs";
 import { CoverSettingsConfig } from "../apps/cover-settings-config.mjs";
@@ -43,6 +44,8 @@ import {
 } from "./baseline.mjs";
 import {
   ABILITIES_CATALOG_SETTING,
+  CAMP_SETTINGS_SETTING,
+  CAMP_STATE_SETTING,
   CHARACTERISTICS_SETTING,
   COMBAT_CAROUSEL_ENABLED_SETTING,
   COMBAT_CAROUSEL_SIZE_SETTING,
@@ -66,6 +69,7 @@ import {
   SYSTEM_ACTION_SETTINGS_SETTING,
   TIME_MECHANICS_IGNORED_SETTING,
   TIME_NEEDS_PLAYERS_ONLY_SETTING,
+  TIME_REST_MODE_SETTING,
   TOOL_SETTINGS_SETTING,
   TRAUMA_SETTINGS_SETTING,
   TOKEN_ACTION_HUD_COLLAPSED_SECTIONS_SETTING,
@@ -75,6 +79,7 @@ import {
   TOKEN_PROTOTYPE_DEFAULTS_SETTING
 } from "./constants.mjs";
 import { createDefaultAbilityCatalog } from "./abilities.mjs";
+import { createDefaultCampSettings, createEmptyCampState } from "./camp.mjs";
 import { createDefaultCombatSettings } from "./combat.mjs";
 import { createDefaultCoverSettings } from "./cover.mjs";
 import { createEmptyCreatureOptions } from "./creature-options.mjs";
@@ -281,6 +286,22 @@ export function registerSystemSettings() {
     default: getBaselineDefault(COVER_SETTINGS_SETTING, createDefaultCoverSettings())
   });
 
+  game.settings.register(FALLOUT_MAW.id, CAMP_SETTINGS_SETTING, {
+    name: "Лагерь",
+    scope: "world",
+    config: false,
+    type: Object,
+    default: getBaselineDefault(CAMP_SETTINGS_SETTING, createDefaultCampSettings())
+  });
+
+  game.settings.register(FALLOUT_MAW.id, CAMP_STATE_SETTING, {
+    name: "Camp State",
+    scope: "world",
+    config: false,
+    type: Object,
+    default: createEmptyCampState()
+  });
+
   game.settings.register(FALLOUT_MAW.id, FACTION_SETTINGS_SETTING, {
     name: localize("FALLOUTMAW.Factions.SettingsTitle"),
     scope: "world",
@@ -311,6 +332,14 @@ export function registerSystemSettings() {
     config: false,
     type: Boolean,
     default: getBaselineDefault(TIME_NEEDS_PLAYERS_ONLY_SETTING, true)
+  });
+
+  game.settings.register(FALLOUT_MAW.id, TIME_REST_MODE_SETTING, {
+    name: "Отдых",
+    scope: "world",
+    config: false,
+    type: Boolean,
+    default: getBaselineDefault(TIME_REST_MODE_SETTING, false)
   });
 
   game.settings.register(FALLOUT_MAW.id, TOKEN_ACTION_HUD_ENABLED_SETTING, {
@@ -480,6 +509,14 @@ export function registerSystemSettings() {
     label: localize("FALLOUTMAW.Settings.Open"),
     icon: "fa-solid fa-shield-halved",
     type: CoverSettingsConfig,
+    restricted: true
+  });
+
+  game.settings.registerMenu(FALLOUT_MAW.id, "campSettingsMenu", {
+    name: "Лагерь",
+    label: localize("FALLOUTMAW.Settings.Open"),
+    icon: "fa-solid fa-campground",
+    type: CampSettingsConfig,
     restricted: true
   });
 

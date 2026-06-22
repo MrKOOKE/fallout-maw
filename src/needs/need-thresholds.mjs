@@ -6,6 +6,12 @@ import {
   getTimeNeedsPlayersOnly
 } from "../settings/accessors.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
+import {
+  applyRestTimeMultiplier,
+  getActorTimeSegments,
+  isCampRestParticipant,
+  isTimeMechanicsForced
+} from "../time/rest-context.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const NEED_EFFECT_FLAG_KEY = "needEffect";
@@ -58,10 +64,10 @@ async function processSingleNeed(actor, need) {
   if (active?.diseaseLevel > 0) await ensureDiseaseForNeedLevel(actor, need, active);
 }
 
-async function processDiseaseWorldTime(worldTime, deltaTime) {
+async function processDiseaseWorldTime(worldTime, deltaTime, options) {
   const dtIn = Number(deltaTime) || 0;
   if (!game.user?.isActiveGM || dtIn <= 0) return;
-  if (getTimeMechanicsIgnored()) {
+  if (getTimeMechanicsIgnored() && !isTimeMechanicsForced(options)) {
     await preserveDiseaseTimedEffects(dtIn);
     return;
   }
@@ -76,20 +82,28 @@ async function processDiseaseWorldTime(worldTime, deltaTime) {
   const elapsedSeconds = dt;
   for (const actor of getLoadedActors()) {
     if (!actor?.isOwner) continue;
-    if (!getTimeNeedsPlayersOnly() || hasPlayerOwner(actor)) {
-      await processActorNeedAccumulation(actor, elapsedSeconds);
+    if (!getTimeNeedsPlayersOnly() || hasPlayerOwner(actor) || isCampRestParticipant(actor, options)) {
+      for (const segment of getActorTimeSegments(actor, elapsedSeconds, options)) {
+        await processActorNeedAccumulation(actor, segment.seconds, {
+          restMode: segment.restMode,
+          effects: segment.effects
+        });
+      }
     }
     await processActorDiseaseWorsening(actor, now);
     await processActorNeedThresholds(actor);
   }
 }
 
-async function processActorNeedAccumulation(actor, elapsedSeconds) {
+async function processActorNeedAccumulation(actor, elapsedSeconds, { restMode = false, effects = [] } = {}) {
   const updateData = {};
   const remainders = foundry.utils.deepClone(actor.getFlag(SYSTEM_ID, NEED_ACCUMULATION_REMAINDER_FLAG_KEY) ?? {});
   const initialRemainders = JSON.stringify(remainders);
+  const effectRates = collectNeedEffectRates(effects);
   for (const need of getActorNeedSettings(actor)) {
-    const perHour = Math.max(0, Number(need.settings?.accumulation?.perHour) || 0);
+    const basePerHour = Math.max(0, Number(need.settings?.accumulation?.perHour) || 0);
+    const perHour = applyRestTimeMultiplier(basePerHour, restMode)
+      + (effectRates.get(need.key) ?? []).reduce((total, rate) => total + applyRestTimeMultiplier(rate, restMode), 0);
     if (!perHour) continue;
     const resource = actor.system?.needs?.[need.key];
     if (!resource) continue;
@@ -97,24 +111,37 @@ async function processActorNeedAccumulation(actor, elapsedSeconds) {
     const min = toInteger(resource.min);
     const max = Math.max(min, toInteger(resource.max));
     const current = Math.min(max, Math.max(min, toInteger(resource.value)));
-    if (current >= max) {
+    if ((perHour > 0 && current >= max) || (perHour < 0 && current <= min)) {
       remainders[need.key] = 0;
       continue;
     }
 
-    const accumulated = Math.max(0, Number(remainders[need.key]) || 0) + ((perHour * elapsedSeconds) / 3600);
-    const whole = Math.floor(accumulated);
+    const accumulated = (Number(remainders[need.key]) || 0) + ((perHour * elapsedSeconds) / 3600);
+    const whole = accumulated >= 0 ? Math.floor(accumulated) : Math.ceil(accumulated);
     remainders[need.key] = accumulated - whole;
     if (!whole) continue;
 
-    const next = Math.min(max, current + whole);
-    if (next >= max) remainders[need.key] = 0;
+    const next = Math.min(max, Math.max(min, current + whole));
+    if ((whole > 0 && next >= max) || (whole < 0 && next <= min)) remainders[need.key] = 0;
     if (next !== current) updateData[`system.needs.${need.key}.value`] = next;
   }
   if (JSON.stringify(remainders) !== initialRemainders) {
     updateData[`flags.${SYSTEM_ID}.${NEED_ACCUMULATION_REMAINDER_FLAG_KEY}`] = remainders;
   }
   if (Object.keys(updateData).length) await actor.update(updateData);
+}
+
+function collectNeedEffectRates(effects = []) {
+  const rates = new Map();
+  for (const effect of effects) {
+    const needKey = String(effect?.needKey ?? effect?.key ?? "").trim();
+    if (!needKey) continue;
+    const perHour = Number(effect?.perHour ?? effect?.value) || 0;
+    if (!perHour) continue;
+    if (!rates.has(needKey)) rates.set(needKey, []);
+    rates.get(needKey).push(perHour);
+  }
+  return rates;
 }
 
 async function preserveDiseaseTimedEffects(deltaTime) {

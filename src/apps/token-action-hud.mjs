@@ -76,6 +76,7 @@ import { requestMedicineTarget } from "./medicine-dialog.mjs";
 import { requestRepairTarget } from "./repair-dialog.mjs";
 import { openSearchInventoryWindow, requestTradeInventoryWindow } from "./search-inventory.mjs";
 import { openCraftWindow } from "./craft-window.mjs";
+import { openCampFromHud } from "./camp-window.mjs";
 import { openStealthWindow } from "../stealth/index.mjs";
 import {
   getActorAtRandomActionPointCostReduction,
@@ -1192,8 +1193,6 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       });
     }
     if (isHudActionBlockedByReactionLock() || !this.actor?.isOwner) return undefined;
-    this.#activeTray = "";
-    void this.render({ force: true });
     return startActorContainerPassengerExitPlacement({
       vehicleActor: this.actor,
       passengerId
@@ -1204,16 +1203,13 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     event.preventDefault();
     if (isHudActionBlockedByReactionLock()) return undefined;
     const key = String(target.dataset.systemActionKey ?? "");
-    if (!["advancement", "medicine", "repair", "search", "trade", "craft", "stealth", "traps", "boardTransport"].includes(key)) return undefined;
+    if (!["advancement", "medicine", "repair", "search", "trade", "craft", "stealth", "traps", "boardTransport", "camp"].includes(key)) return undefined;
 
     if (key === "advancement") {
       if (!this.actor?.isOwner) return undefined;
-      this.#activeTray = "";
-      void this.render({ force: true });
       return new AdvancementApplication(this.actor).render(true);
     }
-    this.#activeTray = "";
-    void this.render({ force: true });
+    if (key === "camp") return openCampFromHud(getSelectedHudActors());
     if (key === "boardTransport") return startActorContainerBoardingMode({ actor: this.actor, token: this.token });
     if (key === "craft") return openCraftWindow({ actor: this.actor });
     if (key === "stealth") return openStealthWindow(this.token);
@@ -2535,11 +2531,16 @@ function prepareSystemActionButtons(hudIcons = {}) {
     label: "Сесть в транспорт",
     img: normalizeImagePath(hudIcons.activeActions?.boardTransport, "icons/svg/mystery-man.svg")
   };
+  const campAction = {
+    key: "camp",
+    label: "Лагерь",
+    img: "icons/environment/settlement/tent.webp"
+  };
   const configuredActions = getSystemActionSettings().map(action => ({
     ...action,
     img: normalizeImagePath(action.img, "icons/svg/aura.svg")
   }));
-  return [advancementAction, boardTransportAction, ...configuredActions];
+  return [advancementAction, boardTransportAction, campAction, ...configuredActions];
 }
 
 function prepareActiveActionButtons(token, actor, weaponSet = null, selectedWeapon = null, selectedWeaponDisabled = false, hudIcons = {}) {

@@ -1,0 +1,48 @@
+<div class="fallout-maw-camp-body">
+  {{#if active}}
+  <section class="fallout-maw-camp-summary">
+    <label class="fallout-maw-camp-time-field">
+      <span>Время отдыха, ч.</span>
+      <input type="number" value="{{restHours}}" min="0" step="0.25" data-camp-rest-hours>
+    </label>
+    {{#if localParticipant}}
+    <label class="fallout-maw-camp-time-field">
+      <span>Время караула, ч.</span>
+      <input type="number" value="{{localParticipant.watchHours}}" min="0" step="0.25" data-camp-local-watch data-actor-uuid="{{localParticipant.actorUuid}}" {{#unless localParticipant.canEdit}}disabled{{/unless}}>
+    </label>
+    {{/if}}
+  </section>
+
+  <section class="fallout-maw-camp-roster">
+    <div class="fallout-maw-camp-roster-header">
+      <span>Участник</span>
+      <span>Место отдыха</span>
+      <span>Готов</span>
+      <span></span>
+    </div>
+    {{#each participants}}
+    <div class="fallout-maw-camp-member {{#if readyChecked}}ready{{/if}} {{#if missing}}missing{{/if}}" data-camp-participant-row data-actor-uuid="{{actorUuid}}">
+      <div class="fallout-maw-camp-member-name">
+        <img src="{{img}}" alt="">
+        <strong>{{name}}</strong>
+      </div>
+      <select data-camp-rest-place {{#unless canEdit}}disabled{{/unless}}>
+        {{#each restPlaceOptions}}
+        <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+        {{/each}}
+      </select>
+      <label class="fallout-maw-camp-ready">
+        <input type="checkbox" data-camp-ready {{#if readyChecked}}checked{{/if}} {{#unless canEdit}}disabled{{/unless}}>
+      </label>
+      <button type="button" data-action="leave" title="Покинуть лагерь" {{#unless canRemove}}disabled{{/unless}}><i class="fa-solid fa-right-from-bracket"></i></button>
+    </div>
+    {{/each}}
+  </section>
+  <button type="button" class="fallout-maw-camp-rest-button" data-action="rest" {{#unless canRest}}disabled{{/unless}}><i class="fa-solid fa-bed"></i> Отдыхать</button>
+  {{else}}
+  <section class="fallout-maw-camp-empty">
+    <i class="fa-solid fa-campground"></i>
+    <p>Активного лагеря нет.</p>
+  </section>
+  {{/if}}
+</div>

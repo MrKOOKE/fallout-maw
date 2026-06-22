@@ -9,6 +9,11 @@ import {
   getTimeMechanicsIgnored
 } from "../settings/accessors.mjs";
 import { DEFAULT_REGENERATION_FORMULA } from "../settings/creature-options.mjs";
+import {
+  getActorTimeSegments,
+  isRestModeTime,
+  isTimeMechanicsForced
+} from "../time/rest-context.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
@@ -18,16 +23,17 @@ export function registerRegenerationHooks() {
   registerQueuedWorldTimeProcessor(processRegenerationWorldTime, { priority: -10 });
 }
 
-async function processRegenerationWorldTime(worldTime, deltaTime) {
+async function processRegenerationWorldTime(worldTime, deltaTime, options) {
   if (!game.user?.isActiveGM) return;
-  if (getTimeMechanicsIgnored()) return;
+  if (getTimeMechanicsIgnored() && !isTimeMechanicsForced(options)) return;
 
   const tickCount = countCrossedHourTicks(worldTime, deltaTime);
   if (tickCount <= 0) return;
 
   for (const actor of getLoadedActors()) {
     if (!actor?.isOwner) continue;
-    await applyActorRegeneration(actor, tickCount);
+    const actorTickCount = getActorRegenerationTickCount(actor, worldTime, deltaTime, options, tickCount);
+    if (actorTickCount > 0) await applyActorRegeneration(actor, actorTickCount);
   }
 }
 
@@ -38,6 +44,21 @@ function countCrossedHourTicks(worldTime, deltaTime) {
 
   const start = end - delta;
   return Math.max(0, Math.floor(end / REGENERATION_HOUR_SECONDS) - Math.floor(start / REGENERATION_HOUR_SECONDS));
+}
+
+function getActorRegenerationTickCount(actor, worldTime, deltaTime, options, defaultTickCount) {
+  const segments = getActorTimeSegments(actor, deltaTime, options);
+  if (segments.length === 1 && !segments[0]?.effects?.length) {
+    return Math.max(0, toInteger(defaultTickCount)) * (isRestModeTime(options) ? 2 : 1);
+  }
+  return segments.reduce((total, segment) => {
+    const ticks = countWholeHourTicks(segment.seconds);
+    return total + (segment.restMode ? ticks * 2 : ticks);
+  }, 0);
+}
+
+function countWholeHourTicks(seconds) {
+  return Math.max(0, Math.floor((Number(seconds) || 0) / REGENERATION_HOUR_SECONDS));
 }
 
 async function applyActorRegeneration(actor, tickCount) {
