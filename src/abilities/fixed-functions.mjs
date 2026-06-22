@@ -11,6 +11,7 @@ import {
   normalizeAtRandomSettings,
   normalizeCounterAttackSettings,
   normalizeOversightSettings,
+  normalizeWatchOutSettings,
   normalizeCounterSniperSettings,
   normalizeCurseAndBlessingSettings,
   normalizeDeusExMachinaSettings,
@@ -142,6 +143,7 @@ const OVERSIGHT_REACTION_PROVIDER_ID = "oversight";
 const OVERSIGHT_MOVEMENT_PROVIDER_ID = "oversightMovement";
 const OVERSIGHT_QUERY_NAME = "falloutMawOversightAttack";
 const OVERSIGHT_EFFECT_FLAG_KEY = "oversight";
+const WATCH_OUT_REACTION_PROVIDER_ID = "watchOut";
 const COUNTER_SNIPER_REACTION_PROVIDER_ID = "counterSniper";
 const COUNTER_SNIPER_AIM_QUERY_NAME = "falloutMawCounterSniperAim";
 const WHERE_ARE_YOU_GOING_REACTION_PROVIDER_ID = "whereAreYouGoing";
@@ -349,6 +351,14 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     })
   }),
   Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.watchOut,
+    label: "Берегись!",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.watchOut
+    })
+  }),
+  Object.freeze({
     key: ABILITY_FIXED_FUNCTION_KEYS.counterSniper,
     label: "Контр-снайпер",
     passive: true,
@@ -388,6 +398,7 @@ export function registerFixedAbilityFunctionHooks() {
   registerDisarmReactionProvider();
   registerCounterAttackReactionProvider();
   registerOversightReactionProvider();
+  registerWatchOutReactionProvider();
   registerCounterSniperReactionProvider();
   registerWhereAreYouGoingReactionProvider();
   registerWhereAreYouGoingMovementProvider();
@@ -725,6 +736,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
     return true;
   }
 
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.watchOut) {
+    const used = await configureWatchOut(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochet) {
     const used = await useRicochet(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
@@ -739,6 +756,141 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
 
   ui.notifications.warn("Фиксированная функция пока не имеет обработчика применения.");
   return true;
+}
+
+async function configureWatchOut(actor, abilityItem, abilityFunction) {
+  const settings = normalizeWatchOutSettings(abilityFunction.fixedSettings);
+  const state = foundry.utils.deepClone(getFixedAbilityState(abilityItem));
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  const current = Math.max(1, Math.min(100, toInteger(
+    state[stateKey]?.minimumHitChancePercent ?? settings.defaultMinimumHitChancePercent
+  )));
+  const formData = await DialogV2.input({
+    window: { title: `${getAbilityDisplayName(abilityItem)}: настройка` },
+    content: `
+      <form>
+        <div class="form-group stacked">
+          <label>Минимальный исходный шанс попадания, %</label>
+          <div class="form-fields">
+            <input type="number" name="minimumHitChancePercent" value="${current}" min="1" max="100" step="1">
+          </div>
+        </div>
+      </form>
+    `,
+    ok: {
+      label: "Сохранить",
+      icon: "fa-solid fa-floppy-disk",
+      callback: (_event, button) => new FormDataExtended(button.form).object
+    },
+    buttons: [{ action: "cancel", label: "Отмена" }],
+    rejectClose: false
+  });
+  if (!formData) return false;
+  const minimumHitChancePercent = Math.max(1, Math.min(100, toInteger(formData.minimumHitChancePercent)));
+  state[stateKey] = {
+    ...state[stateKey],
+    fixedKey: abilityFunction.fixedKey,
+    minimumHitChancePercent
+  };
+  await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
+  ui.notifications.info(`${getAbilityDisplayName(abilityItem)}: порог реакции ${minimumHitChancePercent}%.`);
+  return true;
+}
+
+function registerWatchOutReactionProvider() {
+  registerReactionProvider({
+    id: WATCH_OUT_REACTION_PROVIDER_ID,
+    collect: collectWatchOutReactionOffers,
+    execute: executeWatchOutReaction
+  });
+}
+
+async function collectWatchOutReactionOffers({ eventKey = "", context = {} } = {}) {
+  if (eventKey !== REACTION_EVENT_KEYS.weaponAttackCommitted) return [];
+  const attacker = await fromUuid(String(context.attackerActorUuid ?? ""));
+  const attackerToken = await fromUuid(String(context.attackerTokenUuid ?? ""));
+  const target = await fromUuid(String(context.targetActorUuid ?? ""));
+  const targetToken = await fromUuid(String(context.targetTokenUuid ?? ""));
+  const originalHitChance = Math.max(0, Math.min(100, toInteger(context.originalHitChance)));
+  if (!attacker || !attackerToken || !target || !targetToken || attacker.uuid === target.uuid) return [];
+
+  const offers = [];
+  const seenActors = new Set();
+  for (const reactorToken of attackerToken.parent?.tokens?.contents ?? []) {
+    const reactor = reactorToken?.actor;
+    if (!reactor || seenActors.has(reactor.uuid)) continue;
+    if ([attacker.uuid, target.uuid].includes(reactor.uuid)) continue;
+    if (!areCounterSniperActorsAllied(reactor, target)) continue;
+    const entry = getActorWatchOutEntry(reactor);
+    if (!entry || entry.minimumHitChancePercent > originalHitChance) continue;
+    const reactorTokenObject = reactorToken.object ?? reactorToken;
+    if (!canTokenPhysicallySeeTarget(reactorTokenObject, attackerToken.object ?? attackerToken)) continue;
+    if (!canTokenPhysicallySeeTarget(reactorTokenObject, targetToken.object ?? targetToken)) continue;
+    const energyCost = getAbilityEnergyCost(reactor, entry.abilityItem, entry.abilityFunction, entry.settings.reactionEnergyCost);
+    if (!hasEnergy(reactor, energyCost)) continue;
+    seenActors.add(reactor.uuid);
+    offers.push({
+      actorUuid: reactor.uuid,
+      offerId: `${WATCH_OUT_REACTION_PROVIDER_ID}:${reactor.uuid}:${context.attackId ?? foundry.utils.randomID()}`,
+      label: getAbilityDisplayName(entry.abilityItem),
+      description: `Предупредить ${target.name} об атаке ${attacker.name}. Исходный шанс: ${originalHitChance}%.`,
+      img: entry.abilityItem.img || "icons/svg/shield.svg",
+      costLines: [`Энергия: ${entry.settings.reactionEnergyCost} базовая / ${energyCost} итоговая`],
+      abilityItemId: entry.abilityItem.id,
+      abilityFunctionId: entry.abilityFunction.id,
+      reactorTokenUuid: reactorToken.uuid,
+      attackerTokenUuid: attackerToken.uuid,
+      targetTokenUuid: targetToken.uuid,
+      originalHitChance,
+      energyCost
+    });
+  }
+  return offers;
+}
+
+async function executeWatchOutReaction({ context = {}, offer = {} } = {}) {
+  const reactor = await fromUuid(String(offer.actorUuid ?? ""));
+  const reactorToken = await fromUuid(String(offer.reactorTokenUuid ?? ""));
+  const attackerToken = await fromUuid(String(offer.attackerTokenUuid ?? context.attackerTokenUuid ?? ""));
+  const targetToken = await fromUuid(String(offer.targetTokenUuid ?? context.targetTokenUuid ?? ""));
+  const entry = getActorWatchOutEntry(reactor, offer);
+  const originalHitChance = Math.max(0, Math.min(100, toInteger(context.originalHitChance ?? offer.originalHitChance)));
+  if (!reactor || !reactorToken || !attackerToken || !targetToken || !entry) return { handled: false };
+  if (entry.minimumHitChancePercent > originalHitChance) return { handled: false };
+  if (!areCounterSniperActorsAllied(reactor, targetToken.actor)) return { handled: false };
+  if (!canTokenPhysicallySeeTarget(reactorToken.object ?? reactorToken, attackerToken.object ?? attackerToken)) return { handled: false };
+  if (!canTokenPhysicallySeeTarget(reactorToken.object ?? reactorToken, targetToken.object ?? targetToken)) return { handled: false };
+  const energyCost = getAbilityEnergyCost(reactor, entry.abilityItem, entry.abilityFunction, entry.settings.reactionEnergyCost);
+  if (!hasEnergy(reactor, energyCost)) return { handled: false };
+
+  await spendEnergy(reactor, energyCost);
+  await applyAbilityOverloadEffect(reactor, entry.abilityItem, entry.abilityFunction, {
+    name: getAbilityOverloadName(entry.abilityItem),
+    energyCost: entry.settings.reactionOverloadEnergyCost,
+    durationSeconds: entry.settings.reactionOverloadDurationSeconds
+  });
+  const difficultyBonus = entry.settings.difficultyBase
+    + Math.floor(getActorSkillValue(reactor, entry.settings.sourceSkillKey) / entry.settings.skillDivisor);
+  await createAbilityChatMessage(reactor, entry.abilityItem, `Сложность текущей атаки увеличена на ${difficultyBonus}.`);
+  return { handled: true, status: REACTION_RESULT.success, difficultyBonus };
+}
+
+function getActorWatchOutEntry(actor, offer = null) {
+  const abilityItemId = String(offer?.abilityItemId ?? "");
+  const abilityFunctionId = String(offer?.abilityFunctionId ?? "");
+  for (const abilityItem of actor?.items?.filter(item => item.type === "ability") ?? []) {
+    if (abilityItemId && abilityItem.id !== abilityItemId) continue;
+    const abilityFunction = normalizeAbilityFunctions(abilityItem.system?.functions ?? [])
+      .find(entry => entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.watchOut && (!abilityFunctionId || entry.id === abilityFunctionId));
+    if (!abilityFunction) continue;
+    const settings = normalizeWatchOutSettings(abilityFunction.fixedSettings);
+    const state = getFixedAbilityState(abilityItem);
+    const minimumHitChancePercent = Math.max(1, Math.min(100, toInteger(
+      state[getFixedFunctionStateKey(abilityFunction)]?.minimumHitChancePercent ?? settings.defaultMinimumHitChancePercent
+    )));
+    return { abilityItem, abilityFunction, settings, minimumHitChancePercent };
+  }
+  return null;
 }
 
 const OVERSIGHT_ACTIONS = Object.freeze([

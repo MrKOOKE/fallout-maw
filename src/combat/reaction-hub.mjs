@@ -7,6 +7,7 @@ const FormDataExtended = foundry.applications.ux.FormDataExtended;
 
 export const REACTION_EVENT_KEYS = Object.freeze({
   weaponAttackTargeted: "weaponAttackTargeted",
+  weaponAttackCommitted: "weaponAttackCommitted",
   aimedAttackLimbSelected: "aimedAttackLimbSelected",
   weaponAttackResolved: "weaponAttackResolved",
   tokenLeavingAdjacency: "tokenLeavingAdjacency",
@@ -295,6 +296,7 @@ function createReactionHubResult(data = {}) {
     status: String(data.status ?? REACTION_RESULT.declined),
     cancelCurrent: Boolean(data.cancelCurrent),
     cancelRemaining: Boolean(data.cancelRemaining),
+    difficultyBonus: toInteger(data.difficultyBonus),
     reason: String(data.reason ?? "")
   };
 }
@@ -315,6 +317,7 @@ function mergeReactionHubResults(current = {}, next = {}) {
     status,
     cancelCurrent: left.cancelCurrent || right.cancelCurrent,
     cancelRemaining: left.cancelRemaining || right.cancelRemaining,
+    difficultyBonus: left.difficultyBonus + right.difficultyBonus,
     reason: right.reason || left.reason
   });
 }

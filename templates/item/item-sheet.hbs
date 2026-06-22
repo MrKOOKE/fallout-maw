@@ -904,6 +904,18 @@
         <div class="form-group"><label>Порог ОП/ОД/ОР</label><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.resourceThreshold" value="{{fixedOversightSettings.resourceThreshold}}" min="1" step="1"></div>
       </fieldset>
     {{/if}}
+    {{#if fixedWatchOutSettings}}
+      <fieldset class="fallout-maw-ability-fixed-settings">
+        <legend>Берегись!</legend>
+        <div class="form-group"><label>Стоимость реакции, энергия</label><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.reactionEnergyCost" value="{{fixedWatchOutSettings.reactionEnergyCost}}" min="0" step="1"></div>
+        <div class="form-group"><label>Перегрузка, энергия</label><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.reactionOverloadEnergyCost" value="{{fixedWatchOutSettings.reactionOverloadEnergyCost}}" min="0" step="1"></div>
+        <div class="form-group"><label>Длительность перегрузки</label><div class="form-fields"><input type="number" value="{{fixedWatchOutSettings.reactionOverloadDurationAmount}}" min="0" step="1" data-fixed-watch-out-overload-duration-amount><select data-fixed-watch-out-overload-duration-unit>{{#each fixedWatchOutSettings.reactionOverloadDurationUnitChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></div></div>
+        <div class="form-group"><label>Базовый бонус сложности</label><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.difficultyBase" value="{{fixedWatchOutSettings.difficultyBase}}" step="1"></div>
+        <div class="form-group"><label>Навык владельца</label><select name="{{functionPath}}.{{functionIndex}}.fixedSettings.sourceSkillKey">{{#each fixedWatchOutSettings.sourceSkillChoices}}<option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></div>
+        <div class="form-group"><label>Делитель навыка</label><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.skillDivisor" value="{{fixedWatchOutSettings.skillDivisor}}" min="1" step="1"></div>
+        <div class="form-group"><label>Порог шанса по умолчанию, %</label><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.defaultMinimumHitChancePercent" value="{{fixedWatchOutSettings.defaultMinimumHitChancePercent}}" min="1" max="100" step="1"></div>
+      </fieldset>
+    {{/if}}
     {{#if fixedCounterSniperSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header"><h3>Настройки: Контр-снайпер</h3></div>

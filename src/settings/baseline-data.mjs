@@ -87,6 +87,44 @@ export const SETTINGS_BASELINE = Object.freeze({
                 }
               },
               {
+                "id": "fixed-watch-out",
+                "name": "Берегись!",
+                "img": "icons/svg/shield.svg",
+                "visible": true,
+                "description": "<p>Реакция на атаку по другому союзнику: если вы видите атакующего и цель, повышает сложность всех проверок попадания текущей атаки на 10 + Натуралист / 10. Активация способности настраивает минимальный исходный шанс попадания.</p>",
+                "system": {
+                  "cost": 0,
+                  "formula": "",
+                  "acquisition": {
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "naturalist",
+                    "difficulty": 60
+                  },
+                  "acquisitionRequirements": [],
+                  "functions": [
+                    {
+                      "id": "fixed-watch-out-function",
+                      "type": "fixed",
+                      "fixedKey": "watchOut",
+                      "fixedSettings": {
+                        "reactionEnergyCost": 10,
+                        "reactionOverloadEnergyCost": 30,
+                        "reactionOverloadDurationSeconds": 6,
+                        "difficultyBase": 10,
+                        "sourceSkillKey": "naturalist",
+                        "skillDivisor": 10,
+                        "defaultMinimumHitChancePercent": 1
+                      },
+                      "changes": [],
+                      "conditions": [],
+                      "penalties": [],
+                      "sort": 0
+                    }
+                  ]
+                }
+              },
+              {
                 "id": "lBaJVF6DzKnhNhwy",
                 "name": "Четыре глаза",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/chetyre-glaza.webp",

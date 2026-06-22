@@ -761,6 +761,7 @@ class WeaponAttackController {
     this.lastBroadcastPreviewState = null;
     this.lastTargetMarkerRenderState = null;
     this.attackCanceledByReaction = false;
+    this.attackCommitted = false;
     this.attackCheckCount = 0;
     this.reactionTargetKeys = new Set();
     this.attackedTargetActorUuids = new Set();
@@ -876,6 +877,73 @@ class WeaponAttackController {
   getWeaponActionModifierState() {
     this.weaponActionModifierState ??= collectWeaponActionModifierState(this.createWeaponActionModifierContext());
     return this.weaponActionModifierState;
+  }
+
+  getWatchOutDifficultyBonus() {
+    return Math.max(0, this.getWeaponActionModifierState().getCombatValueBonus("watchOutDifficulty"));
+  }
+
+  getOriginalHitChance(target, { limbKey = "", direction = null } = {}) {
+    const rangeDifficultyBonus = getEffectiveRangeDifficultyBonus(this.weapon, this.token, target, this.weaponFunctionId);
+    if (direction) {
+      return getDirectedAttackHitChance(this.token.actor, this.weapon, target.actor, {
+        actionKey: this.actionKey,
+        mode: direction.mode,
+        limbKey,
+        difficultyBonus: rangeDifficultyBonus,
+        weaponFunctionId: this.weaponFunctionId,
+        accuracyBonus: getWeaponAttackModifierAccuracyModifier(this.attackModifier)
+      });
+    }
+    if (this.aimedShot) {
+      const targetSelection = resolveAimedTargetSelection(target.actor, limbKey);
+      const resolvedLimbKey = targetSelection?.limbKey ?? limbKey;
+      const geometry = deserializeGeometry(this.lockedGeometry) ?? this.geometry;
+      const aimPoint = geometry ? (selectTargetTrajectoryAimPoint(this.token, target, geometry) ?? getTokenAimPoint(target)) : null;
+      const trajectory = geometry && aimPoint ? buildTrajectoryThroughPoint(this.token, geometry, aimPoint) : null;
+      const blockerCount = this.ignoreAimedObstructions || !trajectory ? 0 : getAimedTargetBlockers(this.token, target, trajectory).length;
+      return getAimedAttackHitChance(
+        this.token.actor,
+        this.weapon,
+        target.actor,
+        resolvedLimbKey,
+        getAimedTargetBlockerBonus(blockerCount) + rangeDifficultyBonus,
+        this.weaponFunctionId,
+        this.actionKey,
+        {
+          innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent"),
+          ignoreCover: this.ignoreAimedObstructions,
+          accuracyBonus: getWeaponAttackModifierAccuracyModifier(this.attackModifier)
+        }
+      );
+    }
+    return getGeneralAttackHitChance(this.token.actor, this.weapon, target.actor, {
+      difficultyBonus: rangeDifficultyBonus
+        + getBurstShotDifficultyBonus(this.weapon, this.actionKey, 0, this.weaponFunctionId, this.token.actor),
+      actionKey: this.actionKey,
+      weaponFunctionId: this.weaponFunctionId,
+      accuracyBonus: getWeaponAttackModifierAccuracyModifier(this.attackModifier)
+    });
+  }
+
+  async commitWeaponAttack(target, options = {}) {
+    if (this.attackCommitted || !target?.actor || !target?.document?.uuid) return;
+    this.attackCommitted = true;
+    const originalHitChance = this.getOriginalHitChance(target, options);
+    const result = await this.requestReaction(REACTION_EVENT_KEYS.weaponAttackCommitted, {
+      attackId: this.attackId,
+      attackerActorUuid: this.token?.actor?.uuid ?? "",
+      attackerTokenUuid: this.token?.document?.uuid ?? "",
+      targetActorUuid: target.actor.uuid,
+      targetTokenUuid: target.document.uuid,
+      weaponUuid: this.weapon?.uuid ?? "",
+      actionKey: this.actionKey,
+      weaponFunctionId: this.weaponFunctionId,
+      originalHitChance,
+      title: "Берегись!",
+      message: `${this.token?.actor?.name ?? ""} атакует ${target.actor.name}: ${this.weapon?.name ?? ""}. Исходный шанс попадания: ${originalHitChance}%.`
+    });
+    if (result?.difficultyBonus) this.getWeaponActionModifierState().addCombatValue("watchOutDifficulty", result.difficultyBonus);
   }
 
   createWeaponDamageContext(extra = {}) {
@@ -1335,13 +1403,19 @@ class WeaponAttackController {
     if (!this.hasRequiredWeaponResources(attackCount)) return;
     if (!this.skipActionPointCost && !hasRequiredWeaponActionPoints(this.token.actor, this.weapon, this.actionKey, this.weaponFunctionId)) return;
     if (this.captureOnly) return this.captureAttackSelection({ mode: "current" });
+    this.refresh(true);
+    const originalTarget = this.trajectoryAimTarget;
     if (hasWeaponSpecialProperty(this.weapon, WEAPON_SPECIAL_PROPERTIES.hitAllConeTargets, this.weaponFunctionId)) {
       return this.performConeTargetsAttack({ attackCount, pelletCount });
     }
-    if (this.actionKey === "burst") return this.performBurstAttack({ attackCount, pelletCount });
+    if (this.actionKey === "burst") {
+      if (originalTarget) await this.commitWeaponAttack(originalTarget);
+      return this.performBurstAttack({ attackCount, pelletCount });
+    }
 
     this.processing = true;
     if (!(await this.runBeforeExecute())) return this.completeProcessingCycle();
+    if (originalTarget) await this.commitWeaponAttack(originalTarget);
     this.pendingCriticalFailureResourceCosts = [];
     this.refresh(true);
     const duplicatePlan = await this.prepareDuplicateAttackPlan({ attackCount });
@@ -1839,6 +1913,7 @@ class WeaponAttackController {
       if (this.interruptForIncapacitation()) return this.completeProcessingCycle();
     }
     if (!(await this.runBeforeExecute())) return this.completeProcessingCycle();
+    await this.commitWeaponAttack(target, { limbKey });
     this.refresh(true);
     const duplicatePlan = await this.prepareDuplicateAttackPlan({ attackCount });
     const totalAttackCount = duplicatePlan.totalAttackCount;
@@ -1960,6 +2035,7 @@ class WeaponAttackController {
     this.pendingCriticalFailureResourceCosts = [];
     this.removeLimbMenu();
     if (!(await this.runBeforeExecute())) return this.completeProcessingCycle();
+    await this.commitWeaponAttack(this.selectedTarget, { limbKey: this.selectedLimbKey, direction });
     this.refresh(true);
     const duplicatePlan = await this.prepareDuplicateAttackPlan({ attackCount });
     const totalAttackCount = duplicatePlan.totalAttackCount;
@@ -2140,7 +2216,7 @@ class WeaponAttackController {
       actor: this.token.actor,
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
-        difficulty: getDirectedAttackDifficulty(target.actor, resolvedLimbKey, Boolean(limbKey), difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus),
+        difficulty: getDirectedAttackDifficulty(target.actor, resolvedLimbKey, Boolean(limbKey), difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus + this.getWatchOutDifficultyBonus()),
         situationalModifier: this.getAccuracyModifier(getAttackModeAccuracyModifier(this.weapon, this.actionKey, mode, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target))),
         ...getAttackModeCriticalCheckModifiers(this.weapon, this.actionKey, mode, this.weaponFunctionId, this.createWeaponAttackSkillCheckContext(target)),
         ...this.createWeaponAttackSkillCheckContext(target)
@@ -2369,7 +2445,7 @@ class WeaponAttackController {
       actor: this.token.actor,
       skillKey: String(getWeaponAttackData(this.weapon, this.weaponFunctionId)?.skillKey ?? ""),
       data: {
-        difficulty: getDodgeDifficulty(target.actor) + difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus,
+        difficulty: getDodgeDifficulty(target.actor) + difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus + this.getWatchOutDifficultyBonus(),
         situationalModifier: this.getAccuracyModifier(getWeaponAccuracyModifier(this.weapon, this.weaponFunctionId, attackContext))
           + getRicochetAccuracyBonus(attackContext.weaponActionModifierState, reflectionCount),
         ...getWeaponCriticalCheckModifiers(this.weapon, this.weaponFunctionId, attackContext),
@@ -2661,7 +2737,7 @@ class WeaponAttackController {
         difficulty: getAimedAttackDifficulty(
           target.actor,
           limbKey,
-          difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus,
+          difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus + this.getWatchOutDifficultyBonus(),
           {
             innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent"),
             ignoreCover: this.ignoreAimedObstructions
@@ -2720,7 +2796,7 @@ class WeaponAttackController {
         difficulty: getAimedAttackDifficulty(
           target.actor,
           holdingLimbKey,
-          difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus,
+          difficultyBonus + rangeDifficultyBonus + requirementDifficultyBonus + this.getWatchOutDifficultyBonus(),
           {
             innateDifficultyIgnorePercent: this.getWeaponActionModifierState().getOption("innateAimedDifficultyIgnorePercent"),
             ignoreCover: this.ignoreAimedObstructions
@@ -7690,12 +7766,13 @@ function getDirectedAttackDifficulty(targetActor, limbKey = "", aimed = false, d
   return base + Math.max(0, toInteger(difficultyBonus));
 }
 
-function getGeneralAttackHitChance(attackerActor, weapon, targetActor, { difficultyBonus = 0, actionKey = "", weaponFunctionId = "" } = {}) {
+function getGeneralAttackHitChance(attackerActor, weapon, targetActor, { difficultyBonus = 0, actionKey = "", weaponFunctionId = "", accuracyBonus = 0 } = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
   const context = { targetActor, weaponData, weaponActionKey: String(actionKey ?? "").trim() };
   const finalSkillValue = getContextualAttackSkillValue(attackerActor, skillKey, context)
-    + getWeaponAccuracyModifier(weapon, weaponFunctionId, context);
+    + getWeaponAccuracyModifier(weapon, weaponFunctionId, context)
+    + toInteger(accuracyBonus);
   const difficulty = getDodgeDifficulty(targetActor)
     + Math.max(0, toInteger(difficultyBonus))
     + getWeaponRequirementDifficultyPenalty(attackerActor, weapon, weaponFunctionId);
@@ -7724,7 +7801,8 @@ function getAimedAttackHitChance(attackerActor, weapon, targetActor, limbKey = "
   const skillKey = String(weaponData?.skillKey ?? "");
   const context = { targetActor, weaponData, weaponActionKey: String(actionKey ?? "").trim() };
   const finalSkillValue = getContextualAttackSkillValue(attackerActor, skillKey, context)
-    + getWeaponAccuracyModifier(weapon, weaponFunctionId, context);
+    + getWeaponAccuracyModifier(weapon, weaponFunctionId, context)
+    + toInteger(options.accuracyBonus);
   const difficulty = getAimedAttackDifficulty(
     targetActor,
     limbKey,
@@ -7734,12 +7812,13 @@ function getAimedAttackHitChance(attackerActor, weapon, targetActor, limbKey = "
   return getSkillCheckSuccessChance(attackerActor, finalSkillValue, difficulty);
 }
 
-function getDirectedAttackHitChance(attackerActor, weapon, targetActor, { actionKey = "", mode = "thrust", limbKey = "", difficultyBonus = 0, weaponFunctionId = "" } = {}) {
+function getDirectedAttackHitChance(attackerActor, weapon, targetActor, { actionKey = "", mode = "thrust", limbKey = "", difficultyBonus = 0, weaponFunctionId = "", accuracyBonus = 0 } = {}) {
   const weaponData = getWeaponAttackData(weapon, weaponFunctionId);
   const skillKey = String(weaponData?.skillKey ?? "");
   const context = { targetActor, weaponData, weaponActionKey: String(actionKey ?? "").trim() };
   const finalSkillValue = getContextualAttackSkillValue(attackerActor, skillKey, context)
-    + getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId, context);
+    + getAttackModeAccuracyModifier(weapon, actionKey, mode, weaponFunctionId, context)
+    + toInteger(accuracyBonus);
   const difficulty = getDirectedAttackDifficulty(
     targetActor,
     limbKey,
