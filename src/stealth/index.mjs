@@ -29,6 +29,7 @@ const STEALTH_STATUS_ID = "invisible";
 const STEALTH_TARGET_TOOLTIP_ID = "fallout-maw-stealth-target-tooltip";
 const STEALTH_DETECTION_PROVIDER_ID = "stealthDetection";
 const STEALTH_DETECTION_LAYER = "falloutMawStealthDetectionZones";
+const STEALTH_DETECTION_HOVER_LAYER = "falloutMawStealthDetectionHoverZone";
 const STEALTH_DETECTION_PRIORITY = 3;
 const STEALTH_HIDDEN_OBSERVER_DIFFICULTY_MODIFIER = -50;
 const STEALTH_DETECTION_CACHE_LIMIT = 750;
@@ -42,6 +43,7 @@ const detectionZoneCache = new Map();
 const detectionPointCache = new Map();
 const detectionVisualizationMovementKeys = new Map();
 const detectionVisualizationMovementTrackers = new Map();
+let detectionHoverTokenId = null;
 let targetMode = null;
 let hooksRegistered = false;
 let refreshAllStealthWindowsTimeout = null;
@@ -69,6 +71,7 @@ export function registerStealthHooks() {
   Hooks.on("deleteWall", refreshAllStealthWindowsWithInvalidation);
   Hooks.on("lightingRefresh", refreshAllStealthWindowsWithInvalidation);
   Hooks.on("sightRefresh", queueSightStealthVisualizationRefresh);
+  Hooks.on("hoverToken", onTokenHoverForDetectionZone);
   Hooks.on(`${SYSTEM_ID}.stealthSettingsChanged`, refreshAllStealthWindowsWithInvalidation);
   hooksRegistered = true;
 }
@@ -510,6 +513,8 @@ function cleanupAllStealthUi() {
   for (const app of stealthWindows.values()) void app.close();
   stealthWindows.clear();
   for (const tokenId of detectionVisualizations.keys()) removeDetectionVisualization(tokenId);
+  clearDetectionHoverFill();
+  detectionHoverTokenId = null;
   detectionMovementState.clear();
   detectionVisualizationMovementKeys.clear();
   for (const tokenId of [...detectionVisualizationMovementTrackers.keys()]) {
@@ -950,13 +955,18 @@ function updateDetectionVisualization(token) {
 
   const layer = getDetectionLayer();
   const container = new PIXI.Container();
+  container.eventMode = "none";
+  container.interactiveChildren = false;
   for (const zone of zones) {
     const graphics = new PIXI.Graphics();
+    graphics.eventMode = "none";
+    graphics.interactiveChildren = false;
     drawGridZoneOutline(graphics, zone);
     container.addChild(graphics);
   }
   layer.addChild(container);
-  detectionVisualizations.set(token.id, { container });
+  detectionVisualizations.set(token.id, { container, zones });
+  refreshDetectionHoverFill();
 }
 
 function removeDetectionVisualization(tokenId) {
@@ -964,11 +974,61 @@ function removeDetectionVisualization(tokenId) {
   if (!visualization) return;
   visualization.container?.destroy?.({ children: true });
   detectionVisualizations.delete(tokenId);
+  refreshDetectionHoverFill();
 }
 
 function getDetectionLayer() {
   canvas.controls[STEALTH_DETECTION_LAYER] ??= canvas.controls.addChild(new PIXI.Container());
+  canvas.controls[STEALTH_DETECTION_LAYER].eventMode = "none";
+  canvas.controls[STEALTH_DETECTION_LAYER].interactiveChildren = false;
   return canvas.controls[STEALTH_DETECTION_LAYER];
+}
+
+function onTokenHoverForDetectionZone(token, hovered) {
+  if (!token?.id) return;
+  if (hovered) detectionHoverTokenId = token.id;
+  else if (detectionHoverTokenId === token.id) detectionHoverTokenId = null;
+  refreshDetectionHoverFill();
+}
+
+function refreshDetectionHoverFill() {
+  clearDetectionHoverFill();
+  if (!detectionHoverTokenId || !detectionVisualizations.size || !canvas?.interface?.grid || canvas.grid?.isGridless) return;
+
+  const zones = [];
+  for (const visualization of detectionVisualizations.values()) {
+    for (const zone of visualization.zones ?? []) {
+      if (zone.observerToken?.id === detectionHoverTokenId) zones.push(zone);
+    }
+  }
+  if (!zones.length) return;
+
+  const layer = canvas.interface.grid.addHighlightLayer(STEALTH_DETECTION_HOVER_LAYER);
+  layer.eventMode = "none";
+  layer.interactiveChildren = false;
+  for (const zone of zones) {
+    for (const offset of zone.offsets) drawGridCellHighlight(layer, offset);
+  }
+}
+
+function clearDetectionHoverFill() {
+  canvas?.interface?.grid?.clearHighlightLayer?.(STEALTH_DETECTION_HOVER_LAYER);
+}
+
+function drawGridCellHighlight(layer, offset) {
+  const key = `${Math.round(Number(offset?.i) || 0)},${Math.round(Number(offset?.j) || 0)}`;
+  if (layer.positions?.has(key)) return;
+  const vertices = canvas.grid?.getVertices?.(offset) ?? [];
+  if (vertices.length < 3) return;
+  layer.beginTextureFill({
+    texture: PIXI.Texture.WHITE,
+    color: 0xff3b3b,
+    alpha: 0.14,
+    smooth: !canvas.grid?.isSquare
+  });
+  layer.drawPolygon(vertices);
+  layer.endFill();
+  layer.positions?.add(key);
 }
 
 function drawGridZoneOutline(graphics, zone) {
