@@ -11,8 +11,10 @@ import {
 } from "../combat/movement-resources.mjs";
 import {
   CONTROLLED_MOVEMENT_INTERRUPTION_OPTION,
+  createSnappedWaypointAtTokenCenter,
   getMovementRouteSamples,
   getMovementSegmentSamples,
+  getTokenCenterAt,
   registerMovementInterruptionProvider
 } from "../canvas/movement-interruptions.mjs";
 import { canTokenPhysicallySeeTarget } from "../combat/weapon-attack-controller.mjs";
@@ -46,21 +48,33 @@ const detectionVisualizationMovementTrackers = new Map();
 let detectionHoverTokenId = null;
 let targetMode = null;
 let hooksRegistered = false;
+let stealthAllyVisibilityPatchRegistered = false;
 let refreshAllStealthWindowsTimeout = null;
 let refreshDetectionVisualizationsTimeout = null;
+let refreshStealthedTokenVisibilityTimeout = null;
 
 export function registerStealthHooks() {
   if (hooksRegistered) return;
+  patchStealthAllyVisibilityDetection();
   registerMovementInterruptionProvider({
     id: STEALTH_DETECTION_PROVIDER_ID,
     collect: collectStealthMovementInterruptions,
     execute: executeStealthMovementInterruption
   });
-  Hooks.on("updateActor", actor => refreshStealthWindowsForActor(actor));
-  Hooks.on("updateActiveEffect", effect => refreshStealthWindowsForActor(effect?.parent));
+  Hooks.on("updateActor", actor => {
+    refreshStealthWindowsForActor(actor);
+    queueStealthedTokenVisibilityRefresh();
+  });
+  Hooks.on("updateActiveEffect", effect => {
+    refreshStealthWindowsForActor(effect?.parent);
+    queueStealthedTokenVisibilityRefresh();
+  });
   Hooks.on("updateToken", onTokenUpdated);
   Hooks.on("deleteToken", tokenDocument => cleanupTokenStealth(tokenDocument?.id));
-  Hooks.on("canvasReady", refreshAllStealthWindowsWithInvalidation);
+  Hooks.on("canvasReady", () => {
+    refreshAllStealthWindowsWithInvalidation();
+    queueStealthedTokenVisibilityRefresh();
+  });
   Hooks.on("canvasTearDown", cleanupAllStealthUi);
   Hooks.on("updateScene", refreshAllStealthWindowsWithInvalidation);
   Hooks.on("createAmbientLight", refreshAllStealthWindowsWithInvalidation);
@@ -74,6 +88,53 @@ export function registerStealthHooks() {
   Hooks.on("hoverToken", onTokenHoverForDetectionZone);
   Hooks.on(`${SYSTEM_ID}.stealthSettingsChanged`, refreshAllStealthWindowsWithInvalidation);
   hooksRegistered = true;
+}
+
+function patchStealthAllyVisibilityDetection() {
+  if (stealthAllyVisibilityPatchRegistered) return;
+  const detectionModes = CONFIG?.Canvas?.detectionModes;
+  patchStealthAllyVisibilityDetectionMode(detectionModes?.basicSight);
+  patchStealthAllyVisibilityDetectionMode(detectionModes?.lightPerception);
+  stealthAllyVisibilityPatchRegistered = true;
+}
+
+function patchStealthAllyVisibilityDetectionMode(mode) {
+  if (!mode || mode._falloutMawStealthAllyVisibilityPatched) return;
+  const originalCanDetect = mode._canDetect;
+  if (typeof originalCanDetect !== "function") return;
+
+  Object.defineProperty(mode, "_canDetect", {
+    value(visionSource, target, level) {
+      if (originalCanDetect.call(this, visionSource, target, level)) return true;
+      return canVisionSourceDetectStealthedAlly(visionSource, target, this);
+    },
+    configurable: true,
+    writable: true
+  });
+  Object.defineProperty(mode, "_falloutMawStealthAllyVisibilityPatched", {
+    value: true,
+    configurable: true
+  });
+}
+
+function canVisionSourceDetectStealthedAlly(visionSource, target, mode) {
+  const targetDocument = target?.document;
+  const targetActor = target?.actor ?? targetDocument?.actor;
+  const sourceDocument = visionSource?.object?.document;
+  const sourceActor = visionSource?.object?.actor ?? sourceDocument?.actor;
+  if (!targetDocument || !targetActor || !sourceDocument || !sourceActor) return false;
+
+  const invisible = CONFIG?.specialStatusEffects?.INVISIBLE ?? STEALTH_STATUS_ID;
+  if (!targetDocument.hasStatusEffect?.(invisible) || !isActorStealthed(targetActor)) return false;
+
+  const burrow = CONFIG?.specialStatusEffects?.BURROW;
+  const blind = CONFIG?.specialStatusEffects?.BLIND;
+  if (burrow && (targetDocument.hasStatusEffect?.(burrow) || sourceDocument.hasStatusEffect?.(burrow))) return false;
+  if (blind && sourceDocument.hasStatusEffect?.(blind)) return false;
+  if (mode?.walls && visionSource?.blinded?.darkness) return false;
+
+  if (sourceActor.uuid === targetActor.uuid) return true;
+  return areActorsStealthAllies(targetActor, sourceActor);
 }
 
 export function openStealthWindow(token) {
@@ -483,6 +544,22 @@ function queueDetectionVisualizationRefresh() {
   }, 50);
 }
 
+function queueStealthedTokenVisibilityRefresh() {
+  if (!canvas?.ready || refreshStealthedTokenVisibilityTimeout) return;
+  const schedule = globalThis.window?.setTimeout ?? globalThis.setTimeout;
+  refreshStealthedTokenVisibilityTimeout = schedule(() => {
+    refreshStealthedTokenVisibilityTimeout = null;
+    refreshStealthedTokenVisibility();
+  }, 25);
+}
+
+function refreshStealthedTokenVisibility() {
+  const tokens = canvas?.tokens?.placeables ?? [];
+  for (const token of tokens) {
+    if (token?.actor && isActorStealthed(token.actor)) token.renderFlags?.set?.({ refreshVisibility: true });
+  }
+}
+
 function invalidateStealthDetectionCaches() {
   detectionZoneCache.clear();
   detectionPointCache.clear();
@@ -508,6 +585,11 @@ function cleanupAllStealthUi() {
     const clear = globalThis.window?.clearTimeout ?? globalThis.clearTimeout;
     clear(refreshDetectionVisualizationsTimeout);
     refreshDetectionVisualizationsTimeout = null;
+  }
+  if (refreshStealthedTokenVisibilityTimeout) {
+    const clear = globalThis.window?.clearTimeout ?? globalThis.clearTimeout;
+    clear(refreshStealthedTokenVisibilityTimeout);
+    refreshStealthedTokenVisibilityTimeout = null;
   }
   stopTargetingMode();
   for (const app of stealthWindows.values()) void app.close();
@@ -535,8 +617,9 @@ function collectStealthMovementInterruptions({ tokenDocument, movement, options 
 
   let routeOrder = 0;
   let skipUntilKey = String(options?.[STEALTH_DETECTION_SKIP_UNTIL_OPTION] ?? "");
+  const routeInsideState = new Map();
   for (let index = 1; index < samples.length; index += 1) {
-    const segmentSamples = getMovementSegmentSamples(tokenDocument, samples[index - 1], samples[index]);
+    const segmentSamples = getStealthMovementSegmentSamples(tokenDocument, samples[index - 1], samples[index]);
     for (let segmentIndex = 1; segmentIndex < segmentSamples.length; segmentIndex += 1) {
       routeOrder += 1;
       const previous = segmentSamples[segmentIndex - 1];
@@ -549,9 +632,12 @@ function collectStealthMovementInterruptions({ tokenDocument, movement, options 
       const movementCost = getStealthMovementSegmentCost(tokenDocument, previous, current);
 
       for (const pair of pairs) {
-        const wasInside = isPointInsideObserverZone(pair.previous.hiddenPoint, pair.observerToken, pair.previous.observerOrigin);
-        const isInside = isPointInsideObserverZone(pair.current.hiddenPoint, pair.observerToken, pair.current.observerOrigin);
         const stateKey = getDetectionMovementStateKey(pair);
+        const wasInside = routeInsideState.has(stateKey)
+          ? routeInsideState.get(stateKey)
+          : isPointInsideObserverZone(pair.previous.hiddenPoint, pair.observerToken, pair.previous.observerOrigin);
+        const isInside = isPointInsideObserverZone(pair.current.hiddenPoint, pair.observerToken, pair.current.observerOrigin);
+        routeInsideState.set(stateKey, isInside);
         const hadState = detectionMovementState.has(stateKey);
 
         if (!isInside) {
@@ -574,6 +660,29 @@ function collectStealthMovementInterruptions({ tokenDocument, movement, options 
     }
   }
   return [];
+}
+
+function getStealthMovementSegmentSamples(tokenDocument, previous, current) {
+  const start = previous?.point;
+  const end = current?.point;
+  if (!start || !end || canvas.grid?.isGridless || typeof canvas.grid?.getDirectPath !== "function") {
+    return getMovementSegmentSamples(tokenDocument, previous, current);
+  }
+
+  const path = canvas.grid.getDirectPath([start, end]);
+  if (!Array.isArray(path) || path.length < 2) return [previous, current].filter(Boolean);
+
+  const samples = [previous];
+  const seen = new Set([getMovementWaypointKey(previous.waypoint)]);
+  for (const offset of path.slice(1)) {
+    const point = normalizePoint(canvas.grid.getCenterPoint(offset), tokenDocument.elevation);
+    const waypoint = createSnappedWaypointAtTokenCenter(tokenDocument, point, current.waypoint);
+    const key = getMovementWaypointKey(waypoint);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    samples.push({ waypoint, point: getTokenCenterAt(tokenDocument, waypoint) ?? point });
+  }
+  return samples.filter(sample => sample?.point);
 }
 
 async function executeStealthMovementInterruption({ tokenDocument, movement, event } = {}) {

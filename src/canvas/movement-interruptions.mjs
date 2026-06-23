@@ -182,7 +182,7 @@ async function waitForMovementAnimation(tokenDocument) {
   }
 }
 
-function createSnappedWaypointAtTokenCenter(tokenDocument, point, sourceWaypoint = {}) {
+export function createSnappedWaypointAtTokenCenter(tokenDocument, point, sourceWaypoint = {}) {
   const document = tokenDocument?.document ?? tokenDocument;
   const width = sourceWaypoint?.width ?? document?._source?.width ?? document?.width;
   const height = sourceWaypoint?.height ?? document?._source?.height ?? document?.height;
@@ -220,7 +220,7 @@ function createSnappedWaypointAtTokenCenter(tokenDocument, point, sourceWaypoint
   };
 }
 
-function getTokenCenterAt(tokenDocument, data = {}) {
+export function getTokenCenterAt(tokenDocument, data = {}) {
   const document = tokenDocument?.document ?? tokenDocument;
   if (typeof document?.getCenterPoint === "function") {
     const center = document.getCenterPoint(data);
