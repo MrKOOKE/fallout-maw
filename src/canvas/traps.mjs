@@ -13,6 +13,7 @@ import { applyWeaponModuleModifiers } from "../utils/weapon-modules.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { isActorUnableToAct } from "../combat/reaction-hub.mjs";
 import { analyzeLightingPoint } from "../stealth/index.mjs";
+import { notifyDangerSenseWarning } from "../abilities/danger-sense.mjs";
 import {
   getMovementRouteSamples,
   getMovementSegmentSamples,
@@ -370,7 +371,10 @@ async function handleTrapDetectionForToken(tile, token) {
     prompt: false,
     requester: "trapDetection"
   });
-  if (!isSkillCheckSuccess(outcome)) return false;
+  if (!isSkillCheckSuccess(outcome)) {
+    notifyDangerSenseWarning(actor);
+    return false;
+  }
 
   await revealTrapToActor(tile, actor, { shareWithFaction: true });
   ui.notifications.info(`${actor.name}: ловушка обнаружена.`);

@@ -38,6 +38,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   counterAttack: "counterAttack",
   oversight: "oversight",
   watchOut: "watchOut",
+  dangerSense: "dangerSense",
   counterSniper: "counterSniper",
   whereAreYouGoing: "whereAreYouGoing",
   fullForce: "fullForce",
@@ -111,7 +112,7 @@ export function createDefaultAbilityCatalog(skillSettings = createDefaultSkillSe
         id: LOCKED_FEATURES_CATEGORY_ID,
         name: "Особенности",
         locked: true,
-        abilities: [createTwoHandsAbilityCatalogEntry(), createOversightAbilityCatalogEntry(), createWatchOutAbilityCatalogEntry()]
+        abilities: [createTwoHandsAbilityCatalogEntry(), createOversightAbilityCatalogEntry(), createWatchOutAbilityCatalogEntry(), createDangerSenseAbilityCatalogEntry()]
       }),
       createAbilityCategory({
         id: GENERAL_ABILITY_CATEGORY_ID,
@@ -927,6 +928,29 @@ export function createWatchOutAbilityCatalogEntry() {
         type: ABILITY_FUNCTION_TYPES.fixed,
         fixedKey: ABILITY_FIXED_FUNCTION_KEYS.watchOut,
         fixedSettings: normalizeWatchOutSettings(),
+        changes: [], conditions: [], penalties: []
+      }]
+    }
+  });
+}
+
+export function createDangerSenseAbilityCatalogEntry() {
+  return normalizeAbilityEntry({
+    id: "fixed-danger-sense",
+    name: "Чутье",
+    img: "icons/svg/aura.svg",
+    visible: true,
+    description: "<p>Пассивная способность: при провале обнаружения ловушки или скрытого противника владелец получает предупреждение, что рядом есть опасность.</p>",
+    system: {
+      cost: 0,
+      formula: "",
+      acquisition: { onlyFree: false, onlyManual: false, skillKey: "naturalist", difficulty: 60 },
+      acquisitionRequirements: [],
+      functions: [{
+        id: "fixed-danger-sense-function",
+        type: ABILITY_FUNCTION_TYPES.fixed,
+        fixedKey: ABILITY_FIXED_FUNCTION_KEYS.dangerSense,
+        fixedSettings: {},
         changes: [], conditions: [], penalties: []
       }]
     }

@@ -1,6 +1,7 @@
 import { TEMPLATES } from "../constants.mjs";
 import { getStealthSettings } from "../settings/accessors.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
+import { notifyDangerSenseWarning } from "../abilities/danger-sense.mjs";
 import { STEALTH_LIGHT_LEVELS } from "./settings.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -281,14 +282,28 @@ async function rollStealthCheck(sourceToken, targetToken, app = null) {
     data: {
       difficulty: difficulty.difficulty,
       situationalModifier: 0
-    }
+    },
+    messageData: result => isStealthCheckSuccess(result) ? createStealthSuccessMessageData() : {}
   });
   const resultKey = String(outcome?.result?.key ?? "");
   if (["failure", "criticalFailure"].includes(resultKey) || outcome?.result?.autoFailure) {
     await toggleActorStealth(sourceToken.actor, false);
+  } else if (isStealthCheckSuccess(outcome)) {
+    notifyDangerSenseWarning(targetToken.actor);
   }
   await app?.render({ force: true });
   return outcome;
+}
+
+function isStealthCheckSuccess(outcome) {
+  const resultKey = String(outcome?.result?.key ?? "");
+  return ["success", "criticalSuccess"].includes(resultKey) || outcome?.result?.autoSuccess;
+}
+
+function createStealthSuccessMessageData() {
+  const whisper = new Set(ChatMessage.getWhisperRecipients("GM").map(user => user.id));
+  if (game.user?.id) whisper.add(game.user.id);
+  return { whisper: Array.from(whisper) };
 }
 
 function onTokenUpdated(tokenDocument, changes) {

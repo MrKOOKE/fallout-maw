@@ -57,6 +57,7 @@ import { registerAbilityEffectHooks, syncLoadedActorAbilityEffects } from "./abi
 import { registerAbilityCooldownHooks } from "./abilities/cooldowns.mjs";
 import { registerAbilityItemUseHooks } from "./abilities/item-use-triggers.mjs";
 import { registerFixedAbilityFunctionHooks, registerFixedAbilityFunctionSocket } from "./abilities/fixed-functions.mjs";
+import { registerDangerSenseSocket } from "./abilities/danger-sense.mjs";
 import { registerDescriptionFormulaEnrichment } from "./formulas/description-formulas.mjs";
 import { registerNeedThresholdHooks } from "./needs/need-thresholds.mjs";
 import { registerRegenerationHooks } from "./needs/regeneration.mjs";
@@ -236,6 +237,7 @@ Hooks.once("ready", async () => {
   registerTokenActionHudSocket();
   registerTravelMovementSocket();
   registerFixedAbilityFunctionSocket();
+  registerDangerSenseSocket();
   registerCampSocket();
   refreshTokenActionHudControlButton();
   syncTokenActionHud();

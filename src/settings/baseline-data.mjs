@@ -125,6 +125,36 @@ export const SETTINGS_BASELINE = Object.freeze({
                 }
               },
               {
+                "id": "fixed-danger-sense",
+                "name": "Чутье",
+                "img": "icons/svg/aura.svg",
+                "visible": true,
+                "description": "<p>Пассивная способность: при провале обнаружения ловушки или скрытого противника владелец получает предупреждение, что рядом есть опасность.</p>",
+                "system": {
+                  "cost": 0,
+                  "formula": "",
+                  "acquisition": {
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "naturalist",
+                    "difficulty": 60
+                  },
+                  "acquisitionRequirements": [],
+                  "functions": [
+                    {
+                      "id": "fixed-danger-sense-function",
+                      "type": "fixed",
+                      "fixedKey": "dangerSense",
+                      "fixedSettings": {},
+                      "changes": [],
+                      "conditions": [],
+                      "penalties": [],
+                      "sort": 0
+                    }
+                  ]
+                }
+              },
+              {
                 "id": "lBaJVF6DzKnhNhwy",
                 "name": "Четыре глаза",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/chetyre-glaza.webp",
