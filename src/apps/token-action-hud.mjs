@@ -2536,10 +2536,12 @@ function prepareSystemActionButtons(hudIcons = {}) {
     label: "Лагерь",
     img: "icons/environment/settlement/tent.webp"
   };
-  const configuredActions = getSystemActionSettings().map(action => ({
-    ...action,
-    img: normalizeImagePath(action.img, "icons/svg/aura.svg")
-  }));
+  const configuredActions = getSystemActionSettings()
+    .filter(action => action.key !== "stealth")
+    .map(action => ({
+      ...action,
+      img: normalizeImagePath(action.img, "icons/svg/aura.svg")
+    }));
   return [advancementAction, boardTransportAction, campAction, ...configuredActions];
 }
 
@@ -2573,6 +2575,14 @@ function prepareActiveActionButtons(token, actor, weaponSet = null, selectedWeap
       action: "useActiveAction",
       datasetKey: "activeActionKey",
       disabled: !push || !actor?.isOwner
+    },
+    {
+      key: "stealth",
+      label: getSystemActionSettings().find(action => action.key === "stealth")?.label ?? "Скрытность",
+      img: normalizeImagePath(hudIcons.activeActions?.stealth, normalizeImagePath(getSystemActionSettings().find(action => action.key === "stealth")?.img, "icons/svg/invisible.svg")),
+      action: "useSystemAction",
+      datasetKey: "systemActionKey",
+      disabled: !actor?.isOwner
     }
   ];
 }

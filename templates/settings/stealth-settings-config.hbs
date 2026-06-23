@@ -10,51 +10,85 @@
     <div class="fallout-maw-settings-grid">
       <label>
         <span>Расчет сложности</span>
-        <select name="difficultyMode">
-          <option value="perception" {{#if (eq settings.difficultyMode "perception")}}selected{{/if}}>Восприятие</option>
-          <option value="naturalist" {{#if (eq settings.difficultyMode "naturalist")}}selected{{/if}}>Натуралист / 10</option>
+        <select name="difficulty.skillKey">
+          {{#each difficultySkillChoices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
         </select>
       </label>
+      <label>
+        <span>Автоматическое обнаружение скрытности</span>
+        <input type="hidden" name="autoDetection.enabled" value="false">
+        <input type="checkbox" name="autoDetection.enabled" value="true" {{#if settings.autoDetection.enabled}}checked{{/if}}>
+      </label>
+      <label>
+        <span>Повторная проверка внутри зоны</span>
+        <input type="text" name="autoDetection.movementThresholdFormula" value="{{settings.autoDetection.movementThresholdFormula}}" data-formula-autocomplete="all">
+      </label>
     </div>
   </section>
 
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Пороги освещения</h2>
+      <h2>Максимальная дальность обнаружения скрытых целей</h2>
     </header>
-    <div class="fallout-maw-settings-grid three-columns">
+    <div class="fallout-maw-settings-grid">
       <label>
-        <span>Очень яркий максимум</span>
-        <input type="number" name="thresholds.veryBrightMax" value="{{settings.thresholds.veryBrightMax}}" min="0" max="1" step="0.01">
+        <span>Навык</span>
+        <select name="detection.skillKey">
+          {{#each detectionSkillChoices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
       </label>
       <label>
-        <span>Яркий максимум</span>
-        <input type="number" name="thresholds.brightMax" value="{{settings.thresholds.brightMax}}" min="0" max="1" step="0.01">
-      </label>
-      <label>
-        <span>Тусклый максимум</span>
-        <input type="number" name="thresholds.dimMax" value="{{settings.thresholds.dimMax}}" min="0" max="1" step="0.01">
+        <span>Формула, м</span>
+        <input type="text" name="detection.rangeFormula" value="{{settings.detection.rangeFormula}}" data-formula-autocomplete="all">
       </label>
     </div>
   </section>
 
   <section class="fallout-maw-panel">
     <header class="fallout-maw-panel-header">
-      <h2>Модификаторы света</h2>
+      <h2>Ослабление дальности обнаружения</h2>
+      <div class="fallout-maw-button-row">
+        <button type="button" data-action="addAttenuationLevel"><i class="fa-solid fa-plus"></i> Добавить</button>
+      </div>
     </header>
     <div class="fallout-maw-settings-table fallout-maw-stealth-settings-table">
       <div class="fallout-maw-settings-row fallout-maw-grid-header">
-        <span>Уровень</span>
-        <span>Бонус СЛ</span>
-        <span>Множитель восприятия</span>
-        <span>Радиус</span>
+        <span>Порог темноты</span>
+        <span>Ослабление, %</span>
+        <span></span>
       </div>
-      {{#each levels}}
+      {{#each attenuationLevels}}
       <div class="fallout-maw-settings-row">
-        <strong>{{label}}</strong>
-        <input type="number" name="{{key}}.difficultyBonus" value="{{settings.difficultyBonus}}" step="1">
-        <input type="number" name="{{key}}.perceptionMultiplier" value="{{settings.perceptionMultiplier}}" min="1" step="1">
-        <input type="number" name="{{key}}.radius" value="{{settings.radius}}" min="0" step="1">
+        <input type="number" name="attenuationLevels.{{index}}.threshold" value="{{threshold}}" min="0" max="1" step="0.01">
+        <input type="number" name="attenuationLevels.{{index}}.penaltyPercent" value="{{penaltyPercent}}" min="0" max="100" step="1">
+        <button class="fallout-maw-icon-button" type="button" data-action="removeAttenuationLevel" data-index="{{index}}" title="Удалить" aria-label="Удалить"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>Бонус сложности от освещения цели</h2>
+      <div class="fallout-maw-button-row">
+        <button type="button" data-action="addDifficultyLevel"><i class="fa-solid fa-plus"></i> Добавить</button>
+      </div>
+    </header>
+    <div class="fallout-maw-settings-table fallout-maw-stealth-settings-table">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span>Порог темноты</span>
+        <span>Бонус СЛ</span>
+        <span></span>
+      </div>
+      {{#each difficultyLevels}}
+      <div class="fallout-maw-settings-row">
+        <input type="number" name="difficultyLevels.{{index}}.threshold" value="{{threshold}}" min="0" max="1" step="0.01">
+        <input type="number" name="difficultyLevels.{{index}}.difficultyBonus" value="{{difficultyBonus}}" step="1">
+        <button class="fallout-maw-icon-button" type="button" data-action="removeDifficultyLevel" data-index="{{index}}" title="Удалить" aria-label="Удалить"><i class="fa-solid fa-trash"></i></button>
       </div>
       {{/each}}
     </div>

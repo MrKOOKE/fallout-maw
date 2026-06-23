@@ -1,31 +1,75 @@
-import { TEMPLATES } from "../constants.mjs";
+import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
 import { getStealthSettings } from "../settings/accessors.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { notifyDangerSenseWarning } from "../abilities/danger-sense.mjs";
 import { STEALTH_LIGHT_LEVELS } from "./settings.mjs";
+import { evaluateFormula, evaluateFormulaVariables } from "../formulas/evaluation.mjs";
+import {
+  ACTION_RESOURCE_KEY,
+  MOVEMENT_RESOURCE_KEY,
+  applyCombatMovementCostModifier
+} from "../combat/movement-resources.mjs";
+import {
+  CONTROLLED_MOVEMENT_INTERRUPTION_OPTION,
+  getMovementRouteSamples,
+  getMovementSegmentSamples,
+  registerMovementInterruptionProvider
+} from "../canvas/movement-interruptions.mjs";
+import { canTokenPhysicallySeeTarget } from "../combat/weapon-attack-controller.mjs";
+import {
+  DEFAULT_FACTION_NAME,
+  getActorFactionBelongs,
+  getFactionScore,
+  getRelationFromScore,
+  getRelationTo
+} from "../settings/factions.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const STEALTH_STATUS_ID = "invisible";
 const STEALTH_TARGET_TOOLTIP_ID = "fallout-maw-stealth-target-tooltip";
+const STEALTH_DETECTION_PROVIDER_ID = "stealthDetection";
+const STEALTH_DETECTION_LAYER = "falloutMawStealthDetectionZones";
+const STEALTH_DETECTION_PRIORITY = 3;
+const STEALTH_HIDDEN_OBSERVER_DIFFICULTY_MODIFIER = -50;
+const STEALTH_DETECTION_CACHE_LIMIT = 750;
+const STEALTH_DETECTION_SKIP_UNTIL_OPTION = "falloutMawSkipStealthDetectionUntil";
+const STEALTH_RANGE_FORMULA_VARIABLES = Object.freeze(["skill", "навык"]);
 
 const stealthWindows = new Map();
-const radiusVisualizations = new Map();
+const detectionVisualizations = new Map();
+const detectionMovementState = new Map();
+const detectionZoneCache = new Map();
+const detectionPointCache = new Map();
+const detectionVisualizationMovementKeys = new Map();
+const detectionVisualizationMovementTrackers = new Map();
 let targetMode = null;
 let hooksRegistered = false;
+let refreshAllStealthWindowsTimeout = null;
+let refreshDetectionVisualizationsTimeout = null;
 
 export function registerStealthHooks() {
   if (hooksRegistered) return;
+  registerMovementInterruptionProvider({
+    id: STEALTH_DETECTION_PROVIDER_ID,
+    collect: collectStealthMovementInterruptions,
+    execute: executeStealthMovementInterruption
+  });
   Hooks.on("updateActor", actor => refreshStealthWindowsForActor(actor));
   Hooks.on("updateActiveEffect", effect => refreshStealthWindowsForActor(effect?.parent));
   Hooks.on("updateToken", onTokenUpdated);
   Hooks.on("deleteToken", tokenDocument => cleanupTokenStealth(tokenDocument?.id));
-  Hooks.on("canvasReady", refreshAllStealthWindows);
+  Hooks.on("canvasReady", refreshAllStealthWindowsWithInvalidation);
   Hooks.on("canvasTearDown", cleanupAllStealthUi);
-  Hooks.on("updateScene", refreshAllStealthWindows);
-  Hooks.on("createAmbientLight", refreshAllStealthWindows);
-  Hooks.on("updateAmbientLight", refreshAllStealthWindows);
-  Hooks.on("deleteAmbientLight", refreshAllStealthWindows);
-  Hooks.on("lightingRefresh", refreshAllStealthWindows);
+  Hooks.on("updateScene", refreshAllStealthWindowsWithInvalidation);
+  Hooks.on("createAmbientLight", refreshAllStealthWindowsWithInvalidation);
+  Hooks.on("updateAmbientLight", refreshAllStealthWindowsWithInvalidation);
+  Hooks.on("deleteAmbientLight", refreshAllStealthWindowsWithInvalidation);
+  Hooks.on("createWall", refreshAllStealthWindowsWithInvalidation);
+  Hooks.on("updateWall", refreshAllStealthWindowsWithInvalidation);
+  Hooks.on("deleteWall", refreshAllStealthWindowsWithInvalidation);
+  Hooks.on("lightingRefresh", refreshAllStealthWindowsWithInvalidation);
+  Hooks.on("sightRefresh", queueSightStealthVisualizationRefresh);
+  Hooks.on(`${SYSTEM_ID}.stealthSettingsChanged`, refreshAllStealthWindowsWithInvalidation);
   hooksRegistered = true;
 }
 
@@ -66,6 +110,10 @@ export async function toggleActorStealth(actor, active = !isActorStealthed(actor
   await actor.toggleStatusEffect(STEALTH_STATUS_ID, { active: Boolean(active) });
   if (!active) {
     stopTargetingMode();
+    clearDetectionMovementStateForActor(actor);
+    for (const token of canvas?.tokens?.placeables ?? []) {
+      if (token.actor?.uuid === actor.uuid) removeDetectionVisualization(token.id);
+    }
   }
   refreshStealthWindowsForActor(actor);
   return true;
@@ -79,24 +127,26 @@ export function computeStealthDifficulty(sourceToken, targetToken) {
   const settings = getStealthSettings();
   const lighting = analyzeTokenLighting(sourceToken);
   const modifiers = lighting.modifiers;
-  const rawTargetBase = settings.difficultyMode === "naturalist"
-    ? Math.floor(getActorSkillValue(targetActor, "naturalist") / 10)
-    : getActorCharacteristicValue(targetActor, "perception");
-  const targetBase = Math.max(5, rawTargetBase);
+  const difficultySkillKey = String(settings.difficulty?.skillKey ?? "naturalist");
+  const targetBase = Math.max(0, getActorSkillValue(targetActor, difficultySkillKey));
   const distance = measureTokenDistance(sourceToken, targetToken);
-  const blended = applyDistanceFalloff(modifiers, distance, settings);
-  const baseDifficulty = Math.round(targetBase * blended.perceptionMultiplier);
-  const difficulty = Math.round(baseDifficulty + blended.difficultyBonus);
+  const baseDifficulty = Math.round(targetBase);
+  const hiddenObserver = isActorStealthed(targetActor);
+  const hiddenObserverModifier = hiddenObserver ? STEALTH_HIDDEN_OBSERVER_DIFFICULTY_MODIFIER : 0;
+  const difficulty = Math.round(baseDifficulty + modifiers.difficultyBonus + hiddenObserverModifier);
 
   return {
     difficulty,
     baseDifficulty,
     targetBase,
-    difficultyMode: settings.difficultyMode,
+    difficultySkillKey,
     distance,
+    hiddenObserver,
+    hiddenObserverModifier,
+    advantageCount: hiddenObserver ? 1 : 0,
     lighting: {
       ...lighting,
-      modifiers: blended
+      modifiers
     }
   };
 }
@@ -156,7 +206,7 @@ class StealthWindow extends HandlebarsApplicationMixin(ApplicationV2) {
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
     const lighting = analyzeTokenLighting(this.token);
-    const radius = calculateStealthRadius(lighting.effectiveDarkness, getStealthSettings());
+    const radius = calculateStealthRadius(lighting.effectiveDarkness, getStealthSettings(), this.actor);
     return {
       ...context,
       actor: this.actor,
@@ -170,14 +220,14 @@ class StealthWindow extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _onRender(context, options) {
     await super._onRender(context, options);
-    if (context.stealthed) updateRadiusVisualization(this.token, context.radius);
-    else removeRadiusVisualization(this.token?.id);
+    if (context.stealthed) updateDetectionVisualization(this.token);
+    else removeDetectionVisualization(this.token?.id);
   }
 
   async _onClose(options) {
     await super._onClose(options);
     if (targetMode?.sourceTokenId === this.token?.id) stopTargetingMode();
-    removeRadiusVisualization(this.token?.id);
+    removeDetectionVisualization(this.token?.id);
     stealthWindows.delete(this.token?.id);
   }
 
@@ -272,21 +322,23 @@ async function onTargetPointerDown(event) {
   if (!event.shiftKey) stopTargetingMode();
 }
 
-async function rollStealthCheck(sourceToken, targetToken, app = null) {
+async function rollStealthCheck(sourceToken, targetToken, app = null, { animate = true } = {}) {
   const difficulty = computeStealthDifficulty(sourceToken, targetToken);
   if (!difficulty) return undefined;
   const outcome = await requestSkillCheck({
     actor: sourceToken.actor,
     skillKey: "stealth",
     requester: "stealth",
+    animate,
     data: {
       difficulty: difficulty.difficulty,
-      situationalModifier: 0
+      situationalModifier: 0,
+      advantage: difficulty.advantageCount > 0,
+      advantageCount: difficulty.advantageCount
     },
     messageData: result => isStealthCheckSuccess(result) ? createStealthSuccessMessageData() : {}
   });
-  const resultKey = String(outcome?.result?.key ?? "");
-  if (["failure", "criticalFailure"].includes(resultKey) || outcome?.result?.autoFailure) {
+  if (isStealthCheckFailure(outcome)) {
     await toggleActorStealth(sourceToken.actor, false);
   } else if (isStealthCheckSuccess(outcome)) {
     notifyDangerSenseWarning(targetToken.actor);
@@ -300,6 +352,11 @@ function isStealthCheckSuccess(outcome) {
   return ["success", "criticalSuccess"].includes(resultKey) || outcome?.result?.autoSuccess;
 }
 
+function isStealthCheckFailure(outcome) {
+  const resultKey = String(outcome?.result?.key ?? "");
+  return ["failure", "criticalFailure"].includes(resultKey) || outcome?.result?.autoFailure;
+}
+
 function createStealthSuccessMessageData() {
   const whisper = new Set(ChatMessage.getWhisperRecipients("GM").map(user => user.id));
   if (game.user?.id) whisper.add(game.user.id);
@@ -311,11 +368,14 @@ function onTokenUpdated(tokenDocument, changes) {
   const moved = Boolean(foundry.utils.hasProperty(changes, "x")
     || foundry.utils.hasProperty(changes, "y")
     || foundry.utils.hasProperty(changes, "elevation"));
-  if (token && radiusVisualizations.has(token.id)) {
-    const radius = radiusVisualizations.get(token.id)?.radius ?? calculateStealthRadius(analyzeTokenLighting(token).effectiveDarkness);
-    updateRadiusVisualization(token, radius);
+  const visionChanged = Boolean(foundry.utils.hasProperty(changes, "sight")
+    || foundry.utils.hasProperty(changes, "detectionModes")
+    || foundry.utils.hasProperty(changes, "light"));
+  if (visionChanged) {
+    refreshAllStealthWindowsWithInvalidation();
+    return;
   }
-  if (moved) refreshAllStealthWindows();
+  if (moved) trackDetectionVisualizationMovement(token);
 }
 
 function refreshStealthWindowsForActor(actor) {
@@ -337,18 +397,391 @@ function refreshAllStealthWindows() {
   }
 }
 
+function refreshDetectionVisualizations() {
+  for (const tokenId of [...detectionVisualizations.keys()]) {
+    const token = canvas?.tokens?.get(tokenId);
+    if (!token?.actor || !isActorStealthed(token.actor)) removeDetectionVisualization(tokenId);
+    else updateDetectionVisualization(token);
+  }
+}
+
+function trackDetectionVisualizationMovement(token) {
+  if (!token?.id || !isTokenRelevantToDetectionVisualization(token)) return;
+  updateDetectionVisualizationForTokenCell(token, { renderWindows: false });
+
+  const animation = token.document?.movement?.animation?.ended ?? token.movementAnimationPromise;
+  if (!animation || typeof animation.then !== "function") return;
+
+  const existing = detectionVisualizationMovementTrackers.get(token.id);
+  if (existing?.animation === animation) return;
+  stopDetectionVisualizationMovementTracking(token.id);
+
+  const tick = () => updateDetectionVisualizationForTokenCell(token, { renderWindows: false });
+  detectionVisualizationMovementTrackers.set(token.id, { animation, tick });
+  canvas?.app?.ticker?.add?.(tick);
+  void animation.finally(() => {
+    stopDetectionVisualizationMovementTracking(token.id);
+    updateDetectionVisualizationForTokenCell(token, { force: true, renderWindows: true });
+  }).catch(() => {});
+}
+
+function updateDetectionVisualizationForTokenCell(token, { force = false, renderWindows = false } = {}) {
+  const key = getTokenVisualizationGridKey(token);
+  if (!key) return false;
+  if (!force && detectionVisualizationMovementKeys.get(token.id) === key) return false;
+  detectionVisualizationMovementKeys.set(token.id, key);
+  if (renderWindows) refreshAllStealthWindows();
+  else refreshDetectionVisualizations();
+  return true;
+}
+
+function stopDetectionVisualizationMovementTracking(tokenId) {
+  const tracker = detectionVisualizationMovementTrackers.get(tokenId);
+  if (!tracker) return;
+  canvas?.app?.ticker?.remove?.(tracker.tick);
+  detectionVisualizationMovementTrackers.delete(tokenId);
+}
+
+function isTokenRelevantToDetectionVisualization(token) {
+  if (!token?.actor || !detectionVisualizations.size) return false;
+  if (detectionVisualizations.has(token.id)) return true;
+  for (const hiddenTokenId of detectionVisualizations.keys()) {
+    const hiddenToken = canvas?.tokens?.get(hiddenTokenId);
+    if (hiddenToken && isValidStealthObserver(hiddenToken, token)) return true;
+  }
+  return false;
+}
+
+function refreshAllStealthWindowsWithInvalidation() {
+  invalidateStealthDetectionCaches();
+  refreshAllStealthWindows();
+}
+
+function queueRefreshAllStealthWindows() {
+  if (refreshAllStealthWindowsTimeout) return;
+  const schedule = globalThis.window?.setTimeout ?? globalThis.setTimeout;
+  refreshAllStealthWindowsTimeout = schedule(() => {
+    refreshAllStealthWindowsTimeout = null;
+    refreshAllStealthWindows();
+  }, 50);
+}
+
+function queueSightStealthVisualizationRefresh() {
+  if (detectionVisualizationMovementTrackers.size) return;
+  queueDetectionVisualizationRefresh();
+}
+
+function queueDetectionVisualizationRefresh() {
+  if (refreshDetectionVisualizationsTimeout) return;
+  const schedule = globalThis.window?.setTimeout ?? globalThis.setTimeout;
+  refreshDetectionVisualizationsTimeout = schedule(() => {
+    refreshDetectionVisualizationsTimeout = null;
+    refreshDetectionVisualizations();
+  }, 50);
+}
+
+function invalidateStealthDetectionCaches() {
+  detectionZoneCache.clear();
+  detectionPointCache.clear();
+}
+
 function cleanupTokenStealth(tokenId) {
   const app = stealthWindows.get(tokenId);
   if (app) void app.close();
-  removeRadiusVisualization(tokenId);
+  removeDetectionVisualization(tokenId);
+  clearDetectionMovementStateForToken(tokenId);
+  detectionVisualizationMovementKeys.delete(tokenId);
+  stopDetectionVisualizationMovementTracking(tokenId);
   if (targetMode?.sourceTokenId === tokenId) stopTargetingMode();
 }
 
 function cleanupAllStealthUi() {
+  if (refreshAllStealthWindowsTimeout) {
+    const clear = globalThis.window?.clearTimeout ?? globalThis.clearTimeout;
+    clear(refreshAllStealthWindowsTimeout);
+    refreshAllStealthWindowsTimeout = null;
+  }
+  if (refreshDetectionVisualizationsTimeout) {
+    const clear = globalThis.window?.clearTimeout ?? globalThis.clearTimeout;
+    clear(refreshDetectionVisualizationsTimeout);
+    refreshDetectionVisualizationsTimeout = null;
+  }
   stopTargetingMode();
   for (const app of stealthWindows.values()) void app.close();
   stealthWindows.clear();
-  for (const tokenId of radiusVisualizations.keys()) removeRadiusVisualization(tokenId);
+  for (const tokenId of detectionVisualizations.keys()) removeDetectionVisualization(tokenId);
+  detectionMovementState.clear();
+  detectionVisualizationMovementKeys.clear();
+  for (const tokenId of [...detectionVisualizationMovementTrackers.keys()]) {
+    stopDetectionVisualizationMovementTracking(tokenId);
+  }
+  invalidateStealthDetectionCaches();
+}
+
+function collectStealthMovementInterruptions({ tokenDocument, movement, options } = {}) {
+  const settings = getStealthSettings();
+  if (!settings.autoDetection?.enabled || !tokenDocument?.actor || !movement || !canvas?.ready) return [];
+
+  const samples = getMovementRouteSamples(tokenDocument, movement);
+  if (samples.length < 2) return [];
+  const pairDescriptors = getMovementStealthPairDescriptors(tokenDocument);
+  if (!pairDescriptors.length) return [];
+  const movementThreshold = evaluateAutoDetectionMovementThreshold(tokenDocument.actor, settings);
+
+  let routeOrder = 0;
+  let skipUntilKey = String(options?.[STEALTH_DETECTION_SKIP_UNTIL_OPTION] ?? "");
+  for (let index = 1; index < samples.length; index += 1) {
+    const segmentSamples = getMovementSegmentSamples(tokenDocument, samples[index - 1], samples[index]);
+    for (let segmentIndex = 1; segmentIndex < segmentSamples.length; segmentIndex += 1) {
+      routeOrder += 1;
+      const previous = segmentSamples[segmentIndex - 1];
+      const current = segmentSamples[segmentIndex];
+      if (skipUntilKey) {
+        if (getMovementWaypointKey(current.waypoint) === skipUntilKey) skipUntilKey = "";
+        continue;
+      }
+      const pairs = getMovementStealthPairs(tokenDocument, previous, current, pairDescriptors);
+      const movementCost = getStealthMovementSegmentCost(tokenDocument, previous, current);
+
+      for (const pair of pairs) {
+        const wasInside = isPointInsideObserverZone(pair.previous.hiddenPoint, pair.observerToken, pair.previous.observerOrigin);
+        const isInside = isPointInsideObserverZone(pair.current.hiddenPoint, pair.observerToken, pair.current.observerOrigin);
+        const stateKey = getDetectionMovementStateKey(pair);
+        const hadState = detectionMovementState.has(stateKey);
+
+        if (!isInside) {
+          detectionMovementState.delete(stateKey);
+          continue;
+        }
+
+        if (!wasInside && !hadState) {
+          detectionMovementState.set(stateKey, 0);
+          return [createStealthMovementEvent(pair, current, segmentSamples, segmentIndex, samples, index, routeOrder, "enter")];
+        }
+
+        const accumulated = Math.max(0, Number(detectionMovementState.get(stateKey)) || 0) + movementCost;
+        if (accumulated >= movementThreshold) {
+          detectionMovementState.set(stateKey, accumulated % movementThreshold);
+          return [createStealthMovementEvent(pair, current, segmentSamples, segmentIndex, samples, index, routeOrder, "inside")];
+        }
+        detectionMovementState.set(stateKey, accumulated);
+      }
+    }
+  }
+  return [];
+}
+
+async function executeStealthMovementInterruption({ tokenDocument, movement, event } = {}) {
+  const hiddenTokenDocument = await fromUuid(String(event?.hiddenTokenUuid ?? ""));
+  const observerTokenDocument = await fromUuid(String(event?.observerTokenUuid ?? ""));
+  const hiddenToken = hiddenTokenDocument?.object ?? hiddenTokenDocument;
+  const observerToken = observerTokenDocument?.object ?? observerTokenDocument;
+  if (!hiddenToken?.actor || !observerToken?.actor || !isActorStealthed(hiddenToken.actor)) {
+    return resumeUninterruptedStealthMovement(tokenDocument, movement, event);
+  }
+
+  const outcome = await rollStealthCheck(hiddenToken, observerToken, null, { animate: false });
+  const revealed = !isActorStealthed(hiddenToken.actor) || isStealthCheckFailure(outcome);
+  if (revealed) {
+    await moveTokenToStealthInterruption(tokenDocument, event.waypoint, movement);
+    pauseGameForStealthDetection();
+    return false;
+  }
+  return resumeUninterruptedStealthMovement(tokenDocument, movement, event);
+}
+
+async function resumeStealthInterruptedMovement(tokenDocument, movement, event = {}) {
+  const waypoints = Array.isArray(event.remainingWaypoints) ? event.remainingWaypoints : [];
+  if (!tokenDocument || !waypoints.length) return false;
+  const options = {
+    method: movement?.method,
+    autoRotate: Boolean(movement?.autoRotate),
+    showRuler: Boolean(movement?.showRuler),
+    terrainOptions: movement?.terrainOptions,
+    constrainOptions: movement?.constrainOptions,
+    measureOptions: movement?.measureOptions
+  };
+  if (event.skipStealthDetectionUntil) {
+    options[STEALTH_DETECTION_SKIP_UNTIL_OPTION] = getMovementWaypointKey(event.skipStealthDetectionUntil);
+  }
+  return tokenDocument.move(waypoints, options);
+}
+
+async function resumeUninterruptedStealthMovement(tokenDocument, movement, event = {}) {
+  const waypoints = getOriginalMovementWaypoints(movement);
+  if (!waypoints.length) return false;
+  return resumeStealthInterruptedMovement(tokenDocument, movement, {
+    remainingWaypoints: waypoints,
+    skipStealthDetectionUntil: event.waypoint
+  });
+}
+
+function getOriginalMovementWaypoints(movement = {}) {
+  const waypoints = [
+    ...(movement.passed?.waypoints ?? []),
+    movement.destination
+  ].filter(Boolean);
+  const result = [];
+  const seen = new Set();
+  for (const waypoint of waypoints) {
+    if (waypoint.intermediate) continue;
+    const key = getMovementWaypointKey(waypoint);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ ...waypoint });
+  }
+  return result;
+}
+
+async function moveTokenToStealthInterruption(tokenDocument, waypoint = {}, movement = {}) {
+  if (!tokenDocument || !waypoint) return false;
+  await tokenDocument.move([{ ...waypoint, checkpoint: true }], {
+    [CONTROLLED_MOVEMENT_INTERRUPTION_OPTION]: true,
+    method: movement?.method,
+    autoRotate: Boolean(movement?.autoRotate),
+    showRuler: false
+  });
+  try {
+    await (tokenDocument?.movement?.animation?.ended ?? tokenDocument?.object?.movementAnimationPromise);
+  } catch (_error) {
+    // Movement can be superseded by another controlled interruption.
+  }
+  return true;
+}
+
+function pauseGameForStealthDetection() {
+  if (!game.user?.isGM || game.paused) return;
+  game.togglePause(true, { broadcast: true });
+}
+
+function getMovementStealthPairDescriptors(tokenDocument) {
+  const movingToken = tokenDocument?.object;
+  if (!movingToken?.actor) return [];
+  const descriptors = [];
+
+  if (isActorStealthed(movingToken.actor)) {
+    for (const observerToken of canvas.tokens?.placeables ?? []) {
+      if (!isValidStealthObserver(movingToken, observerToken)) continue;
+      descriptors.push({
+        mode: "hiddenMoving",
+        hiddenToken: movingToken,
+        observerToken
+      });
+    }
+  }
+
+  for (const hiddenToken of canvas.tokens?.placeables ?? []) {
+    if (hiddenToken.id === movingToken.id || !isActorStealthed(hiddenToken.actor)) continue;
+    if (!isValidStealthObserver(hiddenToken, movingToken)) continue;
+    descriptors.push({
+      mode: "observerMoving",
+      hiddenToken,
+      observerToken: movingToken
+    });
+  }
+
+  return descriptors;
+}
+
+function getMovementStealthPairs(tokenDocument, previous, current, descriptors = []) {
+  const pairs = [];
+  const previousPoint = normalizePoint(previous?.point, tokenDocument.elevation);
+  const currentPoint = normalizePoint(current?.point, tokenDocument.elevation);
+
+  for (const descriptor of descriptors) {
+    if (descriptor.mode === "hiddenMoving") {
+      const observerOrigin = getTokenCenter(descriptor.observerToken);
+      pairs.push({
+        ...descriptor,
+        previous: { hiddenPoint: previousPoint, observerOrigin },
+        current: { hiddenPoint: currentPoint, observerOrigin }
+      });
+    } else if (descriptor.mode === "observerMoving") {
+      const hiddenPoint = getTokenCenter(descriptor.hiddenToken);
+      pairs.push({
+        ...descriptor,
+        previous: { hiddenPoint, observerOrigin: previousPoint },
+        current: { hiddenPoint, observerOrigin: currentPoint }
+      });
+    }
+  }
+
+  return pairs;
+}
+
+function createStealthMovementEvent(pair, current, segmentSamples, segmentIndex, routeSamples, routeIndex, routeOrder, type) {
+  return {
+    type,
+    eventId: `${type}:${pair.hiddenToken.id}:${pair.observerToken.id}:${routeOrder}`,
+    routeOrder,
+    priority: STEALTH_DETECTION_PRIORITY,
+    mode: pair.mode,
+    moveToWaypoint: false,
+    waypoint: current.waypoint,
+    hiddenTokenUuid: pair.hiddenToken.document?.uuid ?? pair.hiddenToken.uuid,
+    observerTokenUuid: pair.observerToken.document?.uuid ?? pair.observerToken.uuid,
+    remainingWaypoints: buildRemainingMovementWaypoints(segmentSamples, segmentIndex, routeSamples, routeIndex)
+  };
+}
+
+function buildRemainingMovementWaypoints(segmentSamples = [], segmentIndex = 0, routeSamples = [], routeIndex = 0) {
+  const waypoints = [
+    ...segmentSamples.slice(segmentIndex + 1).map(sample => sample?.waypoint),
+    ...routeSamples.slice(routeIndex + 1).map(sample => sample?.waypoint)
+  ].filter(Boolean);
+  const result = [];
+  const seen = new Set();
+  for (const waypoint of waypoints) {
+    const key = getMovementWaypointKey(waypoint);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ ...waypoint, checkpoint: true });
+  }
+  return result;
+}
+
+function getMovementWaypointKey(waypoint = {}) {
+  return [
+    Math.round(Number(waypoint.x) || 0),
+    Math.round(Number(waypoint.y) || 0),
+    Math.round(Number(waypoint.elevation) || 0)
+  ].join(":");
+}
+
+function isPointInsideObserverZone(point, observerToken, observerOrigin) {
+  return testStealthDetectionPoint(observerToken, observerOrigin, point);
+}
+
+function getStealthMovementSegmentCost(tokenDocument, previous, current) {
+  const start = previous?.point;
+  const end = current?.point;
+  if (!start || !end) return 0;
+  const distance = pixelsToSceneDistance(Math.hypot(end.x - start.x, end.y - start.y));
+  return applyCombatMovementCostModifier(tokenDocument?.actor, Math.ceil(distance));
+}
+
+function evaluateAutoDetectionMovementThreshold(actor, settings = getStealthSettings()) {
+  const resources = actor?.system?.resources ?? {};
+  const variables = {
+    actionPointsMax: Math.max(0, Number(resources[ACTION_RESOURCE_KEY]?.max) || 0),
+    movementPointsMax: Math.max(0, Number(resources[MOVEMENT_RESOURCE_KEY]?.max) || 0)
+  };
+  variables["ОД"] = variables.actionPointsMax;
+  variables["ОП"] = variables.movementPointsMax;
+  try {
+    return Math.max(1, evaluateFormulaVariables(settings.autoDetection?.movementThresholdFormula ?? "1", variables));
+  } catch (error) {
+    console.warn(`${SYSTEM_ID} | Stealth auto-detection movement threshold formula failed: ${error.message}`);
+    return 1;
+  }
+}
+
+function getDetectionMovementStateKey(pair) {
+  return [
+    canvas?.scene?.id ?? "",
+    pair.hiddenToken?.id ?? "",
+    pair.observerToken?.id ?? ""
+  ].join(":");
 }
 
 function analyzeTokenLighting(token) {
@@ -389,9 +822,9 @@ export function analyzeLightingPoint(point) {
   };
 }
 
-function calculateLightingModifiers(effectiveDarkness, settings = getStealthSettings()) {
-  const level = getLightLevelKey(effectiveDarkness, settings);
-  const entry = settings[level] ?? settings.dark;
+function calculateLightingModifiersLegacy(effectiveDarkness, settings = getStealthSettings()) {
+  const entry = getStealthDifficultyLevel(effectiveDarkness, settings);
+  const level = getLightLevelKeyLegacy(effectiveDarkness, settings);
   return {
     difficultyBonus: Number(entry?.difficultyBonus) || 0,
     perceptionMultiplier: Math.max(1, Number(entry?.perceptionMultiplier) || 1),
@@ -400,17 +833,41 @@ function calculateLightingModifiers(effectiveDarkness, settings = getStealthSett
   };
 }
 
-function calculateStealthRadius(effectiveDarkness, settings = getStealthSettings()) {
+function calculateStealthRadiusLegacy(effectiveDarkness, settings = getStealthSettings()) {
   const key = getLightLevelKey(effectiveDarkness, settings);
   return Math.max(0, Number(settings[key]?.radius) || 0);
 }
 
-function getLightLevelKey(effectiveDarkness, settings = getStealthSettings()) {
+function getLightLevelKeyLegacy(effectiveDarkness, settings = getStealthSettings()) {
   const thresholds = settings.thresholds;
   if (effectiveDarkness <= thresholds.veryBrightMax) return "veryBright";
   if (effectiveDarkness <= thresholds.brightMax) return "bright";
   if (effectiveDarkness <= thresholds.dimMax) return "dim";
   return "dark";
+}
+
+function calculateLightingModifiers(effectiveDarkness, settings = getStealthSettings()) {
+  const entry = getStealthDifficultyLevel(effectiveDarkness, settings);
+  return {
+    difficultyBonus: Number(entry?.difficultyBonus) || 0,
+    perceptionMultiplier: 1,
+    radius: 0,
+    threshold: Number(entry?.threshold) || 0,
+    condition: `Темнота ${Number(entry?.threshold ?? 0).toFixed(2)}`
+  };
+}
+
+function calculateStealthRadius(_effectiveDarkness, settings = getStealthSettings(), actor = null) {
+  return evaluateStealthDetectionRange(actor, settings);
+}
+
+function getLightLevelKey(effectiveDarkness, settings = getStealthSettings()) {
+  const threshold = Number(getStealthDifficultyLevel(effectiveDarkness, settings)?.threshold) || 0;
+  if (threshold >= 1) return "blackout";
+  if (threshold >= 0.75) return "dark";
+  if (threshold >= 0.5) return "dim";
+  if (threshold >= 0.2) return "shadow";
+  return "normal";
 }
 
 function applyDistanceFalloff(modifiers, distance, settings = getStealthSettings()) {
@@ -485,31 +942,274 @@ function isGlobalLightSource(source) {
   return source?.constructor?.name === "GlobalLightSource" || source?.name === "GlobalLight";
 }
 
-function updateRadiusVisualization(token, radius) {
+function updateDetectionVisualization(token) {
   if (!token?.id || !canvas?.controls) return;
-  removeRadiusVisualization(token.id);
-  const layer = getRadiusLayer();
-  const graphics = new PIXI.Graphics();
-  const radiusPixels = sceneDistanceToPixels(radius);
-  graphics.lineStyle(2, 0xff3b3b, 0.85);
-  graphics.beginFill(0xff3b3b, 0.08);
-  graphics.drawCircle(0, 0, radiusPixels);
-  graphics.endFill();
-  graphics.position.set(token.center.x, token.center.y);
-  layer.addChild(graphics);
-  radiusVisualizations.set(token.id, { graphics, radius });
+  removeDetectionVisualization(token.id);
+  const zones = getStealthObserverZones(token, { visibleOnly: true });
+  if (!zones.length) return;
+
+  const layer = getDetectionLayer();
+  const container = new PIXI.Container();
+  for (const zone of zones) {
+    const graphics = new PIXI.Graphics();
+    drawGridZoneOutline(graphics, zone);
+    container.addChild(graphics);
+  }
+  layer.addChild(container);
+  detectionVisualizations.set(token.id, { container });
 }
 
-function removeRadiusVisualization(tokenId) {
-  const visualization = radiusVisualizations.get(tokenId);
+function removeDetectionVisualization(tokenId) {
+  const visualization = detectionVisualizations.get(tokenId);
   if (!visualization) return;
-  visualization.graphics?.destroy?.({ children: true });
-  radiusVisualizations.delete(tokenId);
+  visualization.container?.destroy?.({ children: true });
+  detectionVisualizations.delete(tokenId);
 }
 
-function getRadiusLayer() {
-  canvas.controls.falloutMawStealthRadius ??= canvas.controls.addChild(new PIXI.Container());
-  return canvas.controls.falloutMawStealthRadius;
+function getDetectionLayer() {
+  canvas.controls[STEALTH_DETECTION_LAYER] ??= canvas.controls.addChild(new PIXI.Container());
+  return canvas.controls[STEALTH_DETECTION_LAYER];
+}
+
+function drawGridZoneOutline(graphics, zone) {
+  graphics.lineStyle(2, 0xff3b3b, 0.85);
+  for (const offset of zone.offsets) {
+    for (const edge of getExposedGridCellEdges(offset, zone.cells)) {
+      graphics.moveTo(edge.start.x, edge.start.y);
+      graphics.lineTo(edge.end.x, edge.end.y);
+    }
+  }
+}
+
+function getExposedGridCellEdges(offset, cells) {
+  const vertices = canvas.grid.getVertices(offset);
+  if (vertices.length !== 4 || !canvas.grid?.isSquare) return getGenericExposedGridCellEdges(offset, vertices, cells);
+  const { i, j } = offset;
+  return [
+    { key: getGridOffsetKey({ i: i - 1, j }), start: vertices[0], end: vertices[1] },
+    { key: getGridOffsetKey({ i, j: j + 1 }), start: vertices[1], end: vertices[2] },
+    { key: getGridOffsetKey({ i: i + 1, j }), start: vertices[2], end: vertices[3] },
+    { key: getGridOffsetKey({ i, j: j - 1 }), start: vertices[3], end: vertices[0] }
+  ].filter(edge => !cells.has(edge.key));
+}
+
+function getGenericExposedGridCellEdges(offset, vertices, cells) {
+  const adjacent = new Set((canvas.grid?.getAdjacentOffsets?.(offset) ?? []).map(getGridOffsetKey));
+  if ([...adjacent].some(key => cells.has(key))) return [];
+  const edges = [];
+  for (let index = 0; index < vertices.length; index += 1) {
+    edges.push({
+      start: vertices[index],
+      end: vertices[(index + 1) % vertices.length]
+    });
+  }
+  return edges;
+}
+
+function getStealthObserverZones(hiddenToken, { visibleOnly = false } = {}) {
+  if (!hiddenToken?.actor || !canvas?.ready) return [];
+  const zones = [];
+  for (const observerToken of canvas.tokens?.placeables ?? []) {
+    if (!isValidStealthObserver(hiddenToken, observerToken)) continue;
+    if (visibleOnly && !canTokenPhysicallySeeTarget(hiddenToken, observerToken)) continue;
+    const zone = buildObserverDetectionZone(observerToken);
+    if (!zone?.cells?.size) continue;
+    zones.push({ hiddenToken, observerToken, ...zone });
+  }
+  return zones;
+}
+
+function buildObserverDetectionZone(observerToken, { origin = null } = {}) {
+  if (!observerToken?.actor || !canvas?.ready) return null;
+  if (canvas.grid?.isGridless) return null;
+  const settings = getStealthSettings();
+  const maxRange = evaluateStealthDetectionRange(observerToken.actor, settings);
+  const maxPixels = sceneDistanceToPixels(maxRange);
+  if (maxPixels <= 0) return null;
+
+  const center = normalizePoint(origin ?? getTokenCenter(observerToken), observerToken.document?.elevation);
+  const cacheKey = getDetectionZoneCacheKey(observerToken, center, settings, maxRange);
+  const cached = detectionZoneCache.get(cacheKey);
+  if (cached) return cached;
+
+  const bounds = new PIXI.Rectangle(center.x - maxPixels, center.y - maxPixels, maxPixels * 2, maxPixels * 2)
+    .fit(canvas.dimensions?.rect ?? new PIXI.Rectangle(0, 0, canvas.dimensions?.width ?? Infinity, canvas.dimensions?.height ?? Infinity));
+  const [i0, j0, i1, j1] = canvas.grid.getOffsetRange(bounds);
+  const offsets = [];
+  const cells = new Set();
+
+  for (let i = i0; i < i1; i += 1) {
+    for (let j = j0; j < j1; j += 1) {
+      const offset = { i, j };
+      const point = normalizePoint(canvas.grid.getCenterPoint(offset), center.elevation);
+      if (Math.hypot(point.x - center.x, point.y - center.y) > maxPixels + (canvas.grid.size / 2)) continue;
+      if (observerToken.checkCollision?.(point, { origin: center, type: "sight", mode: "any" })) continue;
+      if (computeDetectionPathCost(observerToken, center, point, settings) > maxRange) continue;
+      offsets.push(offset);
+      cells.add(getGridOffsetKey(offset));
+    }
+  }
+
+  const zone = { cells, offsets, origin: center, range: maxRange };
+  detectionZoneCache.set(cacheKey, zone);
+  trimCacheMap(detectionZoneCache, STEALTH_DETECTION_CACHE_LIMIT);
+  return zone;
+}
+
+function computeDetectionPathCost(observerToken, origin, destination, settings) {
+  const distancePixels = Math.hypot(destination.x - origin.x, destination.y - origin.y);
+  if (distancePixels <= 0) return 0;
+  const unaidedSightRange = getObserverUnaidedSightRange(observerToken);
+  if (unaidedSightRange === Infinity) return pixelsToSceneDistance(distancePixels);
+  const stepPixels = Math.max(1, Number(canvas.grid?.size) || 100);
+  const steps = Math.max(1, Math.ceil(distancePixels / stepPixels));
+  let consumed = 0;
+  let last = origin;
+
+  for (let index = 1; index <= steps; index += 1) {
+    const ratio = index / steps;
+    const point = {
+      x: origin.x + ((destination.x - origin.x) * ratio),
+      y: origin.y + ((destination.y - origin.y) * ratio),
+      elevation: origin.elevation
+    };
+    const segmentPixels = Math.hypot(point.x - last.x, point.y - last.y);
+    const startDistance = pixelsToSceneDistance(Math.hypot(last.x - origin.x, last.y - origin.y));
+    const endDistance = pixelsToSceneDistance(Math.hypot(point.x - origin.x, point.y - origin.y));
+    const distanceDelta = Math.max(0.0001, endDistance - startDistance);
+    const unaidedRatio = clampNumber((unaidedSightRange - startDistance) / distanceDelta, 0, 1);
+    const unaidedPixels = segmentPixels * unaidedRatio;
+    const attenuatedPixels = Math.max(0, segmentPixels - unaidedPixels);
+    consumed += pixelsToSceneDistance(unaidedPixels);
+    if (attenuatedPixels > 0) {
+      const factor = getDetectionRangeFactor(analyzeLightingPoint(point).effectiveDarkness, settings);
+      consumed += pixelsToSceneDistance(attenuatedPixels) / Math.max(0.01, factor);
+    }
+    last = point;
+  }
+  return consumed;
+}
+
+function testStealthDetectionPoint(observerToken, observerOrigin, targetPoint) {
+  if (!observerToken?.actor || !targetPoint || !canvas?.ready) return false;
+  const settings = getStealthSettings();
+  const origin = normalizePoint(observerOrigin ?? getTokenCenter(observerToken), observerToken.document?.elevation);
+  let point = normalizePoint(targetPoint, origin.elevation);
+  if (!canvas.grid?.isGridless && canvas.grid?.getOffset && canvas.grid?.getCenterPoint) {
+    point = normalizePoint(canvas.grid.getCenterPoint(canvas.grid.getOffset(point)), origin.elevation);
+  }
+  const maxRange = evaluateStealthDetectionRange(observerToken.actor, settings);
+  if (maxRange <= 0) return false;
+  const cacheKey = getDetectionPointCacheKey(observerToken, origin, point, settings, maxRange);
+  if (detectionPointCache.has(cacheKey)) return detectionPointCache.get(cacheKey);
+  const maxPixels = sceneDistanceToPixels(maxRange);
+  let result = true;
+  if (Math.hypot(point.x - origin.x, point.y - origin.y) > maxPixels + (Number(canvas.grid?.size) || 0)) result = false;
+  else if (observerToken.checkCollision?.(point, { origin, type: "sight", mode: "any" })) result = false;
+  else result = computeDetectionPathCost(observerToken, origin, point, settings) <= maxRange;
+  detectionPointCache.set(cacheKey, result);
+  trimCacheMap(detectionPointCache, STEALTH_DETECTION_CACHE_LIMIT * 4);
+  return result;
+}
+
+function getDetectionRangeFactor(effectiveDarkness, settings = getStealthSettings()) {
+  const levels = Array.isArray(settings.attenuationLevels) ? settings.attenuationLevels : [];
+  const level = levels.find(entry => effectiveDarkness >= Number(entry.threshold));
+  const penalty = clampNumber(level?.penaltyPercent ?? 0, 0, 100);
+  return Math.max(0.01, 1 - (penalty / 100));
+}
+
+function getStealthDifficultyLevel(effectiveDarkness, settings = getStealthSettings()) {
+  const levels = Array.isArray(settings.difficultyLevels) ? settings.difficultyLevels : [];
+  return levels.find(entry => effectiveDarkness >= Number(entry.threshold))
+    ?? levels.at(-1)
+    ?? { threshold: 0, difficultyBonus: 0 };
+}
+
+function getDetectionZoneCacheKey(observerToken, origin, settings, maxRange) {
+  const offset = canvas.grid?.getOffset?.(origin) ?? { i: Math.round(origin.y), j: Math.round(origin.x) };
+  return [
+    canvas.scene?.id ?? "",
+    observerToken.id ?? "",
+    getGridOffsetKey(offset),
+    Math.round(Number(origin.elevation) || 0),
+    Math.round(maxRange * 100),
+    normalizeRangeCachePart(getObserverUnaidedSightRange(observerToken)),
+    JSON.stringify(settings.attenuationLevels ?? [])
+  ].join(":");
+}
+
+function getDetectionPointCacheKey(observerToken, origin, point, settings, maxRange) {
+  const originOffset = canvas.grid?.getOffset?.(origin) ?? { i: Math.round(origin.y), j: Math.round(origin.x) };
+  const pointOffset = canvas.grid?.getOffset?.(point) ?? { i: Math.round(point.y), j: Math.round(point.x) };
+  return [
+    canvas.scene?.id ?? "",
+    observerToken.id ?? "",
+    getGridOffsetKey(originOffset),
+    getGridOffsetKey(pointOffset),
+    Math.round(Number(origin.elevation) || 0),
+    Math.round(Number(point.elevation) || 0),
+    Math.round(maxRange * 100),
+    normalizeRangeCachePart(getObserverUnaidedSightRange(observerToken)),
+    JSON.stringify(settings.attenuationLevels ?? [])
+  ].join(":");
+}
+
+function getObserverUnaidedSightRange(observerToken) {
+  const document = observerToken?.document ?? observerToken;
+  if (!observerToken?.hasSight || document?.sight?.enabled === false) return 0;
+  const basicSight = document?.detectionModes?.basicSight;
+  if (basicSight?.enabled === false) return 0;
+  return normalizeSceneRange(basicSight?.range, normalizeSceneRange(document?.sight?.range, 0));
+}
+
+function normalizeSceneRange(value, fallback = 0) {
+  if (value === null) return Infinity;
+  const number = Number(value);
+  if (number === Infinity) return Infinity;
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(0, number);
+}
+
+function normalizeRangeCachePart(value) {
+  return value === Infinity ? "inf" : Math.round((Number(value) || 0) * 100);
+}
+
+function trimCacheMap(map, limit) {
+  while (map.size > limit) {
+    const firstKey = map.keys().next().value;
+    if (firstKey === undefined) break;
+    map.delete(firstKey);
+  }
+}
+
+function getGridOffsetKey(offset = {}) {
+  return `${Math.round(Number(offset.i) || 0)}:${Math.round(Number(offset.j) || 0)}`;
+}
+
+function getTokenVisualizationGridKey(token) {
+  const center = getTokenCenter(token);
+  const offset = canvas.grid?.getOffset?.(center) ?? { i: Math.round(center.y), j: Math.round(center.x) };
+  return [
+    canvas.scene?.id ?? "",
+    token?.id ?? "",
+    getGridOffsetKey(offset),
+    Math.round(Number(center.elevation) || 0)
+  ].join(":");
+}
+
+function evaluateStealthDetectionRange(actor, settings = getStealthSettings()) {
+  const skillKey = String(settings.detection?.skillKey ?? "naturalist");
+  const skill = getActorSkillValue(actor, skillKey);
+  try {
+    return Math.max(0, evaluateFormula(settings.detection?.rangeFormula ?? "0", {
+      variables: STEALTH_RANGE_FORMULA_VARIABLES,
+      formulaVariables: { skill, навык: skill }
+    }));
+  } catch (error) {
+    console.warn(`${SYSTEM_ID} | Stealth detection range formula failed: ${error.message}`);
+    return 0;
+  }
 }
 
 function sceneDistanceToPixels(distance) {
@@ -554,6 +1254,56 @@ function getTokenLightingPoints(token) {
   const points = token?.document?.getVisibilityTestPoints?.();
   if (Array.isArray(points) && points.length) return points;
   return [getTokenCenter(token)];
+}
+
+function isValidStealthObserver(hiddenToken, observerToken) {
+  if (!hiddenToken?.actor || !observerToken?.actor) return false;
+  if (hiddenToken.id === observerToken.id) return false;
+  if (hiddenToken.actor.uuid === observerToken.actor.uuid) return false;
+  return !areActorsStealthAllies(hiddenToken.actor, observerToken.actor);
+}
+
+function areActorsStealthAllies(hiddenActor, observerActor) {
+  const hiddenFactions = getEffectiveActorFactions(hiddenActor);
+  const observerFactions = getEffectiveActorFactions(observerActor);
+  if (hiddenFactions.some(faction => observerFactions.includes(faction))) return true;
+
+  for (const hiddenFaction of hiddenFactions) {
+    if (hiddenFaction === DEFAULT_FACTION_NAME) continue;
+    if (getRelationTo(observerActor, hiddenFaction) === "ally") return true;
+    for (const observerFaction of observerFactions) {
+      if (observerFaction === DEFAULT_FACTION_NAME) continue;
+      if (getRelationFromScore(getFactionScore(observerFaction, hiddenFaction)) === "ally") return true;
+    }
+  }
+  return false;
+}
+
+function getEffectiveActorFactions(actor) {
+  return getActorFactionBelongs(actor).filter(faction => faction && faction !== DEFAULT_FACTION_NAME);
+}
+
+function clearDetectionMovementStateForActor(actor) {
+  if (!actor?.uuid) return;
+  const tokenIds = new Set((canvas?.tokens?.placeables ?? [])
+    .filter(token => token.actor?.uuid === actor.uuid)
+    .map(token => token.id));
+  for (const tokenId of tokenIds) clearDetectionMovementStateForToken(tokenId);
+}
+
+function clearDetectionMovementStateForToken(tokenId) {
+  if (!tokenId) return;
+  for (const key of [...detectionMovementState.keys()]) {
+    if (key.includes(`:${tokenId}:`) || key.endsWith(`:${tokenId}`)) detectionMovementState.delete(key);
+  }
+}
+
+function normalizePoint(point, elevation = 0) {
+  return {
+    x: Number(point?.x) || 0,
+    y: Number(point?.y) || 0,
+    elevation: Number(point?.elevation ?? elevation) || 0
+  };
 }
 
 function getTargetTooltip() {

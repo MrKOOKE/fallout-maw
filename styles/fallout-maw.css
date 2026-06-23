@@ -9144,7 +9144,16 @@ label.fallout-maw-mitigation-cell {
 }
 
 .fallout-maw-stealth-settings-table .fallout-maw-settings-row {
-  grid-template-columns: minmax(8rem, 1fr) minmax(5rem, 0.6fr) minmax(8rem, 0.8fr) minmax(5rem, 0.6fr);
+  align-items: center;
+  grid-template-columns: minmax(8rem, 1fr) minmax(8rem, 0.8fr) 2.5rem;
+}
+
+.fallout-maw-stealth-settings-table .fallout-maw-settings-row > .fallout-maw-icon-button {
+  height: 2.25rem;
+  justify-self: center;
+  min-width: 2.25rem;
+  padding: 0;
+  width: 2.25rem;
 }
 
 .fallout-maw-cover-settings-table .fallout-maw-settings-row {

@@ -114,8 +114,10 @@ async function runMovementInterruption(tokenDocument, movement, event) {
   if (!tokenDocument || pendingMovementKeys.has(key)) return;
   pendingMovementKeys.add(key);
   try {
-    const reached = await moveTokenToInterruption(tokenDocument, event.waypoint, movement);
-    if (!reached) return;
+    if (event.moveToWaypoint !== false) {
+      const reached = await moveTokenToInterruption(tokenDocument, event.waypoint, movement);
+      if (!reached) return;
+    }
     const provider = providers.get(event.providerId);
     if (provider) await provider.execute({ tokenDocument, movement, event });
   } catch (error) {

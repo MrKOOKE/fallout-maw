@@ -1,11 +1,23 @@
 import { TEMPLATES } from "../constants.mjs";
 import {
   getStealthSettings,
+  getSkillSettings,
   resetStealthSettings,
   setStealthSettings
 } from "../settings/accessors.mjs";
-import { STEALTH_LIGHT_LEVELS } from "../stealth/settings.mjs";
+import { DEFAULT_STEALTH_SETTINGS } from "../stealth/settings.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
+import { activateFormulaAutocomplete } from "./formula-autocomplete.mjs";
+
+const DETECTION_RANGE_FORMULA_VARIABLES = Object.freeze([
+  { key: "skill", abbr: "skill", label: "Навык обнаружения" },
+  { key: "skill", abbr: "навык", label: "Навык обнаружения" }
+]);
+
+const AUTO_DETECTION_FORMULA_VARIABLES = Object.freeze([
+  { key: "actionPointsMax", abbr: "ОД", label: "Максимум ОД" },
+  { key: "movementPointsMax", abbr: "ОП", label: "Максимум ОП" }
+]);
 
 export class StealthSettingsConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
@@ -24,7 +36,11 @@ export class StealthSettingsConfig extends FalloutMaWFormApplicationV2 {
       resizable: true
     },
     actions: {
-      resetDefaults: this.#onResetDefaults
+      resetDefaults: this.#onResetDefaults,
+      addAttenuationLevel: this.#onAddAttenuationLevel,
+      removeAttenuationLevel: this.#onRemoveAttenuationLevel,
+      addDifficultyLevel: this.#onAddDifficultyLevel,
+      removeDifficultyLevel: this.#onRemoveDifficultyLevel
     }
   };
 
@@ -39,14 +55,31 @@ export class StealthSettingsConfig extends FalloutMaWFormApplicationV2 {
   }
 
   async _prepareContext(options) {
+    const skills = getSkillSettings();
     return {
       ...(await super._prepareContext(options)),
       settings: this.settings,
-      levels: STEALTH_LIGHT_LEVELS.map(level => ({
-        ...level,
-        settings: this.settings[level.key]
-      }))
+      difficultySkillChoices: skills.map(skill => ({
+        key: skill.key,
+        label: skill.label,
+        selected: skill.key === this.settings.difficulty.skillKey
+      })),
+      detectionSkillChoices: skills.map(skill => ({
+        key: skill.key,
+        label: skill.label,
+        selected: skill.key === this.settings.detection.skillKey
+      })),
+      attenuationLevels: this.settings.attenuationLevels.map((level, index) => ({ ...level, index })),
+      difficultyLevels: this.settings.difficultyLevels.map((level, index) => ({ ...level, index }))
     };
+  }
+
+  async _onRender(context, options) {
+    await super._onRender(context, options);
+    activateFormulaAutocomplete(this.element, {
+      skills: getSkillSettings(),
+      variables: [...DETECTION_RANGE_FORMULA_VARIABLES, ...AUTO_DETECTION_FORMULA_VARIABLES]
+    });
   }
 
   async _processFormData(_event, _form, formData) {
@@ -62,5 +95,47 @@ export class StealthSettingsConfig extends FalloutMaWFormApplicationV2 {
     await resetStealthSettings();
     this.settings = getStealthSettings();
     return this.forceRender();
+  }
+
+  static async #onAddAttenuationLevel(event) {
+    event.preventDefault();
+    this.#syncSettingsFromForm();
+    this.settings.attenuationLevels.push({ threshold: 0, penaltyPercent: 0 });
+    return this.forceRender();
+  }
+
+  static async #onRemoveAttenuationLevel(event, target) {
+    event.preventDefault();
+    this.#syncSettingsFromForm();
+    this.settings.attenuationLevels.splice(Math.max(0, Number(target?.dataset?.index) || 0), 1);
+    if (!this.settings.attenuationLevels.length) {
+      this.settings.attenuationLevels = foundry.utils.deepClone(DEFAULT_STEALTH_SETTINGS.attenuationLevels);
+    }
+    return this.forceRender();
+  }
+
+  static async #onAddDifficultyLevel(event) {
+    event.preventDefault();
+    this.#syncSettingsFromForm();
+    this.settings.difficultyLevels.push({ threshold: 0, difficultyBonus: 0 });
+    return this.forceRender();
+  }
+
+  static async #onRemoveDifficultyLevel(event, target) {
+    event.preventDefault();
+    this.#syncSettingsFromForm();
+    this.settings.difficultyLevels.splice(Math.max(0, Number(target?.dataset?.index) || 0), 1);
+    if (!this.settings.difficultyLevels.length) {
+      this.settings.difficultyLevels = foundry.utils.deepClone(DEFAULT_STEALTH_SETTINGS.difficultyLevels);
+    }
+    return this.forceRender();
+  }
+
+  #syncSettingsFromForm() {
+    const form = this.element?.querySelector?.("form") ?? this.element;
+    if (!form) return;
+    this.settings = getExpandedFormData(new FormDataExtended(form));
+    if (!Array.isArray(this.settings.attenuationLevels)) this.settings.attenuationLevels = Object.values(this.settings.attenuationLevels ?? {});
+    if (!Array.isArray(this.settings.difficultyLevels)) this.settings.difficultyLevels = Object.values(this.settings.difficultyLevels ?? {});
   }
 }

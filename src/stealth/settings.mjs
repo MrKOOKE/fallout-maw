@@ -1,24 +1,37 @@
 export const STEALTH_LIGHT_LEVELS = Object.freeze([
-  { key: "veryBright", label: "Очень яркий свет" },
-  { key: "bright", label: "Яркий свет" },
-  { key: "dim", label: "Тусклый свет" },
-  { key: "dark", label: "Темнота" }
+  { key: "normal", label: "Обычный свет" },
+  { key: "shadow", label: "Тень" },
+  { key: "dim", label: "Тускло" },
+  { key: "dark", label: "Темно" },
+  { key: "blackout", label: "Темнота" }
 ]);
 
 export const DEFAULT_STEALTH_SETTINGS = Object.freeze({
-  difficultyMode: "perception",
-  thresholds: Object.freeze({
-    veryBrightMax: 0.09,
-    brightMax: 0.39,
-    dimMax: 0.85
+  difficulty: Object.freeze({
+    skillKey: "naturalist"
   }),
-  veryBright: Object.freeze({ difficultyBonus: 100, perceptionMultiplier: 10, radius: 30 }),
-  bright: Object.freeze({ difficultyBonus: 40, perceptionMultiplier: 8, radius: 20 }),
-  dim: Object.freeze({ difficultyBonus: 20, perceptionMultiplier: 6, radius: 15 }),
-  dark: Object.freeze({ difficultyBonus: 0, perceptionMultiplier: 5, radius: 10 })
+  detection: Object.freeze({
+    skillKey: "naturalist",
+    rangeFormula: "5 + навык / 10"
+  }),
+  attenuationLevels: Object.freeze([
+    Object.freeze({ threshold: 1, penaltyPercent: 90 }),
+    Object.freeze({ threshold: 0.75, penaltyPercent: 70 }),
+    Object.freeze({ threshold: 0.5, penaltyPercent: 50 }),
+    Object.freeze({ threshold: 0.2, penaltyPercent: 20 })
+  ]),
+  difficultyLevels: Object.freeze([
+    Object.freeze({ threshold: 1, difficultyBonus: 0 }),
+    Object.freeze({ threshold: 0.75, difficultyBonus: 20 }),
+    Object.freeze({ threshold: 0.5, difficultyBonus: 40 }),
+    Object.freeze({ threshold: 0.2, difficultyBonus: 80 }),
+    Object.freeze({ threshold: 0, difficultyBonus: 120 })
+  ]),
+  autoDetection: Object.freeze({
+    enabled: true,
+    movementThresholdFormula: "(ОД + ОП) / 5"
+  })
 });
-
-const DIFFICULTY_MODES = new Set(["perception", "naturalist"]);
 
 export function createDefaultStealthSettings() {
   return foundry.utils.deepClone(DEFAULT_STEALTH_SETTINGS);
@@ -31,44 +44,61 @@ export function normalizeStealthSettings(value = {}) {
     { inplace: false }
   );
 
-  const thresholds = normalizeThresholds(source.thresholds);
   return {
-    difficultyMode: DIFFICULTY_MODES.has(source.difficultyMode) ? source.difficultyMode : DEFAULT_STEALTH_SETTINGS.difficultyMode,
-    thresholds,
-    veryBright: normalizeLightLevel(source.veryBright, DEFAULT_STEALTH_SETTINGS.veryBright),
-    bright: normalizeLightLevel(source.bright, DEFAULT_STEALTH_SETTINGS.bright),
-    dim: normalizeLightLevel(source.dim, DEFAULT_STEALTH_SETTINGS.dim),
-    dark: normalizeLightLevel(source.dark, DEFAULT_STEALTH_SETTINGS.dark)
+    difficulty: normalizeDifficultySettings(source.difficulty, source.difficultyMode),
+    detection: normalizeDetectionSettings(source.detection),
+    attenuationLevels: normalizeThresholdRows(source.attenuationLevels, DEFAULT_STEALTH_SETTINGS.attenuationLevels, "penaltyPercent", 0, 100),
+    difficultyLevels: normalizeThresholdRows(source.difficultyLevels, DEFAULT_STEALTH_SETTINGS.difficultyLevels, "difficultyBonus", -999, 999),
+    autoDetection: normalizeAutoDetection(source.autoDetection)
   };
 }
 
-function normalizeThresholds(value = {}) {
-  const defaults = DEFAULT_STEALTH_SETTINGS.thresholds;
-  const thresholds = {
-    veryBrightMax: clampNumber(value.veryBrightMax, defaults.veryBrightMax, 0, 1),
-    brightMax: clampNumber(value.brightMax, defaults.brightMax, 0, 1),
-    dimMax: clampNumber(value.dimMax, defaults.dimMax, 0, 1)
+function normalizeDifficultySettings(value = {}, legacyMode = "") {
+  const defaults = DEFAULT_STEALTH_SETTINGS.difficulty;
+  const legacySkillKey = legacyMode === "naturalist" ? "naturalist" : "";
+  return {
+    skillKey: String(value?.skillKey ?? legacySkillKey ?? defaults.skillKey).trim() || defaults.skillKey
   };
-  thresholds.brightMax = Math.max(thresholds.veryBrightMax, thresholds.brightMax);
-  thresholds.dimMax = Math.max(thresholds.brightMax, thresholds.dimMax);
-  return thresholds;
 }
 
-function normalizeLightLevel(value = {}, defaults = {}) {
+function normalizeDetectionSettings(value = {}) {
+  const defaults = DEFAULT_STEALTH_SETTINGS.detection;
   return {
-    difficultyBonus: toInteger(value.difficultyBonus, defaults.difficultyBonus),
-    perceptionMultiplier: Math.max(1, toInteger(value.perceptionMultiplier, defaults.perceptionMultiplier)),
-    radius: Math.max(0, toInteger(value.radius, defaults.radius))
+    skillKey: String(value?.skillKey ?? defaults.skillKey).trim() || defaults.skillKey,
+    rangeFormula: normalizeFormula(value?.rangeFormula, defaults.rangeFormula)
   };
+}
+
+function normalizeThresholdRows(value = [], defaults = [], key = "", min = -Infinity, max = Infinity) {
+  const source = Array.isArray(value)
+    ? value
+    : Object.values(value && typeof value === "object" ? value : {});
+  const rows = source
+    .map(entry => ({
+      threshold: clampNumber(entry?.threshold, NaN, 0, 1),
+      [key]: clampNumber(entry?.[key], NaN, min, max)
+    }))
+    .filter(entry => Number.isFinite(entry.threshold) && Number.isFinite(entry[key]));
+  const normalized = rows.length ? rows : foundry.utils.deepClone(defaults);
+  return normalized.sort((left, right) => right.threshold - left.threshold);
+}
+
+function normalizeAutoDetection(value = {}) {
+  const defaults = DEFAULT_STEALTH_SETTINGS.autoDetection;
+  const enabled = Array.isArray(value?.enabled) ? value.enabled.at(-1) : value?.enabled;
+  return {
+    enabled: enabled === true || enabled === "true" || enabled === "on",
+    movementThresholdFormula: normalizeFormula(value?.movementThresholdFormula, defaults.movementThresholdFormula)
+  };
+}
+
+function normalizeFormula(value, fallback = "0") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
 }
 
 function clampNumber(value, fallback, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
   return Math.min(max, Math.max(min, number));
-}
-
-function toInteger(value, fallback = 0) {
-  const number = Number(value);
-  return Number.isFinite(number) ? Math.trunc(number) : fallback;
 }

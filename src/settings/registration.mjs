@@ -267,7 +267,8 @@ export function registerSystemSettings() {
     scope: "world",
     config: false,
     type: Object,
-    default: getBaselineDefault(STEALTH_SETTINGS_SETTING, createDefaultStealthSettings())
+    default: getBaselineDefault(STEALTH_SETTINGS_SETTING, createDefaultStealthSettings()),
+    onChange: () => Hooks.callAll(`${FALLOUT_MAW.id}.stealthSettingsChanged`)
   });
 
   game.settings.register(FALLOUT_MAW.id, COMBAT_SETTINGS_SETTING, {

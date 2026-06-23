@@ -24527,31 +24527,56 @@ export const SETTINGS_BASELINE = Object.freeze({
     "fallout-maw.stealthSettings": {
       "scope": "world",
       "value": {
-        "difficultyMode": "perception",
-        "thresholds": {
-          "veryBrightMax": 0.09,
-          "brightMax": 0.39,
-          "dimMax": 0.85
+        "difficulty": {
+          "skillKey": "naturalist"
         },
-        "veryBright": {
-          "difficultyBonus": 100,
-          "perceptionMultiplier": 10,
-          "radius": 30
+        "detection": {
+          "skillKey": "naturalist",
+          "rangeFormula": "5 + навык / 10"
         },
-        "bright": {
-          "difficultyBonus": 40,
-          "perceptionMultiplier": 8,
-          "radius": 20
-        },
-        "dim": {
-          "difficultyBonus": 20,
-          "perceptionMultiplier": 6,
-          "radius": 5
-        },
-        "dark": {
-          "difficultyBonus": 0,
-          "perceptionMultiplier": 5,
-          "radius": 2
+        "attenuationLevels": [
+          {
+            "threshold": 1,
+            "penaltyPercent": 90
+          },
+          {
+            "threshold": 0.75,
+            "penaltyPercent": 70
+          },
+          {
+            "threshold": 0.5,
+            "penaltyPercent": 50
+          },
+          {
+            "threshold": 0.2,
+            "penaltyPercent": 20
+          }
+        ],
+        "difficultyLevels": [
+          {
+            "threshold": 1,
+            "difficultyBonus": 0
+          },
+          {
+            "threshold": 0.75,
+            "difficultyBonus": 20
+          },
+          {
+            "threshold": 0.5,
+            "difficultyBonus": 40
+          },
+          {
+            "threshold": 0.2,
+            "difficultyBonus": 80
+          },
+          {
+            "threshold": 0,
+            "difficultyBonus": 120
+          }
+        ],
+        "autoDetection": {
+          "enabled": true,
+          "movementThresholdFormula": "(ОД + ОП) / 5"
         }
       }
     },
