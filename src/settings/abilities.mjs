@@ -39,6 +39,7 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   oversight: "oversight",
   watchOut: "watchOut",
   dangerSense: "dangerSense",
+  fullControl: "fullControl",
   counterSniper: "counterSniper",
   whereAreYouGoing: "whereAreYouGoing",
   fullForce: "fullForce",
@@ -112,7 +113,7 @@ export function createDefaultAbilityCatalog(skillSettings = createDefaultSkillSe
         id: LOCKED_FEATURES_CATEGORY_ID,
         name: "Особенности",
         locked: true,
-        abilities: [createTwoHandsAbilityCatalogEntry(), createOversightAbilityCatalogEntry(), createWatchOutAbilityCatalogEntry(), createDangerSenseAbilityCatalogEntry()]
+        abilities: [createTwoHandsAbilityCatalogEntry(), createOversightAbilityCatalogEntry(), createWatchOutAbilityCatalogEntry(), createDangerSenseAbilityCatalogEntry(), createFullControlAbilityCatalogEntry()]
       }),
       createAbilityCategory({
         id: GENERAL_ABILITY_CATEGORY_ID,
@@ -728,6 +729,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.watchOut) {
     return normalizeWatchOutSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.fullControl) {
+    return normalizeFullControlSettings(value);
+  }
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper) {
     return normalizeCounterSniperSettings(value);
   }
@@ -957,6 +961,29 @@ export function createDangerSenseAbilityCatalogEntry() {
   });
 }
 
+export function createFullControlAbilityCatalogEntry() {
+  return normalizeAbilityEntry({
+    id: "fixed-full-control",
+    name: "Полный контроль",
+    img: "icons/svg/upgrade.svg",
+    visible: true,
+    description: "<p>Активная способность: на 24 часа перераспределяет характеристики в максимум энергии и обратно. Общий лимит изменений зависит от Контроля энергии.</p>",
+    system: {
+      cost: 0,
+      formula: "",
+      acquisition: { onlyFree: false, onlyManual: false, skillKey: "energy", difficulty: 60 },
+      acquisitionRequirements: [],
+      functions: [{
+        id: "fixed-full-control-function",
+        type: ABILITY_FUNCTION_TYPES.fixed,
+        fixedKey: ABILITY_FIXED_FUNCTION_KEYS.fullControl,
+        fixedSettings: normalizeFullControlSettings(),
+        changes: [], conditions: [], penalties: []
+      }]
+    }
+  });
+}
+
 export function normalizeRicochetSettings(value = {}) {
   return {
     activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? 20)),
@@ -1035,6 +1062,16 @@ export function normalizeWatchOutSettings(value = {}) {
     sourceSkillKey: String(value?.sourceSkillKey ?? "naturalist").trim() || "naturalist",
     skillDivisor: Math.max(1, toInteger(value?.skillDivisor ?? 10)),
     defaultMinimumHitChancePercent: Math.max(1, Math.min(100, toInteger(value?.defaultMinimumHitChancePercent ?? 1)))
+  };
+}
+
+export function normalizeFullControlSettings(value = {}) {
+  return {
+    limitSkillKey: String(value?.limitSkillKey ?? "energy").trim() || "energy",
+    baseChangeLimit: Math.max(0, toInteger(value?.baseChangeLimit ?? 4)),
+    skillDivisor: Math.max(1, toInteger(value?.skillDivisor ?? 50)),
+    energyPerCharacteristicPoint: Math.max(0, toInteger(value?.energyPerCharacteristicPoint ?? 20)),
+    durationSeconds: Math.max(0, toInteger(value?.durationSeconds ?? 86400))
   };
 }
 

@@ -42,6 +42,7 @@ import {
   normalizeDeusExMachinaSettings,
   normalizeDisarmSettings,
   normalizeDoubleAttackSettings,
+  normalizeFullControlSettings,
   normalizeFullForceSettings,
   normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
@@ -885,6 +886,18 @@ function readFixedFunctionSettings(row) {
       defaultMinimumHitChancePercent: row.querySelector("[data-field='fixed.watchOut.defaultMinimumHitChancePercent']")?.value
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullControl) {
+    return {
+      limitSkillKey: row.querySelector("[data-field='fixed.fullControl.limitSkillKey']")?.value,
+      baseChangeLimit: row.querySelector("[data-field='fixed.fullControl.baseChangeLimit']")?.value,
+      skillDivisor: row.querySelector("[data-field='fixed.fullControl.skillDivisor']")?.value,
+      energyPerCharacteristicPoint: row.querySelector("[data-field='fixed.fullControl.energyPerCharacteristicPoint']")?.value,
+      durationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.fullControl.durationAmount']")?.value,
+        row.querySelector("[data-field='fixed.fullControl.durationUnit']")?.value
+      )
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper) {
     return {
       reactionEnergyCost: row.querySelector("[data-field='fixed.counterSniper.reactionEnergyCost']")?.value,
@@ -1107,6 +1120,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedWatchOutSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.watchOut
     ? prepareWatchOutSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedFullControlSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullControl
+    ? prepareFullControlSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedCounterSniperSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper
     ? normalizeCounterSniperSettings(normalized.fixedSettings)
     : null;
@@ -1157,6 +1173,7 @@ function prepareFunctionForDisplay(entry) {
     fixedCounterAttackSettings,
     fixedOversightSettings,
     fixedWatchOutSettings,
+    fixedFullControlSettings,
     fixedCounterSniperSettings,
     fixedFullForceSettings,
     fixedTwoHandsSettings,
@@ -1313,6 +1330,17 @@ function prepareWatchOutSettingsForDisplay(settings = {}) {
     reactionOverloadDurationAmount: overloadDuration.amount,
     reactionOverloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
     sourceSkillChoices: buildSkillChoices(normalized.sourceSkillKey, getSkillSettings())
+  };
+}
+
+function prepareFullControlSettingsForDisplay(settings = {}) {
+  const normalized = normalizeFullControlSettings(settings);
+  const duration = splitDurationSeconds(normalized.durationSeconds);
+  return {
+    ...normalized,
+    durationAmount: duration.amount,
+    durationUnitChoices: buildDurationUnitChoices(duration.unit),
+    limitSkillChoices: buildSkillChoices(normalized.limitSkillKey, getSkillSettings())
   };
 }
 

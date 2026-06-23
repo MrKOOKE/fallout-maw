@@ -155,6 +155,42 @@ export const SETTINGS_BASELINE = Object.freeze({
                 }
               },
               {
+                "id": "fixed-full-control",
+                "name": "Полный контроль",
+                "img": "icons/svg/upgrade.svg",
+                "visible": true,
+                "description": "<p>Активная способность: на 24 часа перераспределяет характеристики в максимум энергии и обратно. Общий лимит изменений зависит от Контроля энергии.</p>",
+                "system": {
+                  "cost": 0,
+                  "formula": "",
+                  "acquisition": {
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "energy",
+                    "difficulty": 60
+                  },
+                  "acquisitionRequirements": [],
+                  "functions": [
+                    {
+                      "id": "fixed-full-control-function",
+                      "type": "fixed",
+                      "fixedKey": "fullControl",
+                      "fixedSettings": {
+                        "limitSkillKey": "energy",
+                        "baseChangeLimit": 4,
+                        "skillDivisor": 50,
+                        "energyPerCharacteristicPoint": 20,
+                        "durationSeconds": 86400
+                      },
+                      "changes": [],
+                      "conditions": [],
+                      "penalties": [],
+                      "sort": 0
+                    }
+                  ]
+                }
+              },
+              {
                 "id": "lBaJVF6DzKnhNhwy",
                 "name": "Четыре глаза",
                 "img": "systems/fallout-maw/assets/icons/osobennosti/chetyre-glaza.webp",

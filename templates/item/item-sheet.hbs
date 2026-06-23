@@ -916,6 +916,16 @@
         <div class="form-group"><label>Порог шанса по умолчанию, %</label><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.defaultMinimumHitChancePercent" value="{{fixedWatchOutSettings.defaultMinimumHitChancePercent}}" min="1" max="100" step="1"></div>
       </fieldset>
     {{/if}}
+    {{#if fixedFullControlSettings}}
+      <fieldset class="fallout-maw-ability-fixed-settings">
+        <legend>Полный контроль</legend>
+        <div class="form-group"><label>Навык лимита</label><select name="{{functionPath}}.{{functionIndex}}.fixedSettings.limitSkillKey">{{#each fixedFullControlSettings.limitSkillChoices}}<option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></div>
+        <div class="form-group"><label>Базовый лимит изменений</label><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.baseChangeLimit" value="{{fixedFullControlSettings.baseChangeLimit}}" min="0" step="1"></div>
+        <div class="form-group"><label>Делитель навыка</label><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.skillDivisor" value="{{fixedFullControlSettings.skillDivisor}}" min="1" step="1"></div>
+        <div class="form-group"><label>Энергия за пункт характеристики</label><input type="number" name="{{functionPath}}.{{functionIndex}}.fixedSettings.energyPerCharacteristicPoint" value="{{fixedFullControlSettings.energyPerCharacteristicPoint}}" min="0" step="1"></div>
+        <div class="form-group"><label>Длительность эффекта</label><div class="form-fields"><input type="number" value="{{fixedFullControlSettings.durationAmount}}" min="0" step="1" data-fixed-full-control-duration-amount><select data-fixed-full-control-duration-unit>{{#each fixedFullControlSettings.durationUnitChoices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></div></div>
+      </fieldset>
+    {{/if}}
     {{#if fixedCounterSniperSettings}}
     <div class="fallout-maw-ability-subsection">
       <div class="fallout-maw-ability-subsection-header"><h3>Настройки: Контр-снайпер</h3></div>

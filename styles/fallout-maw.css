@@ -1359,6 +1359,58 @@ body #prosemirror-dropdown {
   gap: 0.5rem;
 }
 
+.fallout-maw-full-control-dialog {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.fallout-maw-full-control-dialog p {
+  margin: 0;
+}
+
+.fallout-maw-full-control-base {
+  color: var(--fallout-maw-muted);
+  font-weight: normal;
+}
+
+.fallout-maw-full-control-rows {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.fallout-maw-full-control-row {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(10rem, 1fr) auto;
+}
+
+.fallout-maw-full-control-label {
+  font-weight: 600;
+}
+
+.fallout-maw-full-control-label small {
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.fallout-maw-full-control-controls {
+  align-items: center;
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: 2.25rem 2.25rem 2.25rem;
+  justify-items: center;
+}
+
+.fallout-maw-full-control-controls button {
+  height: 2rem;
+  min-height: 2rem;
+  min-width: 2rem;
+  padding: 0;
+  width: 2rem;
+}
+
 .fallout-maw-fixed-settings {
   display: grid;
   gap: 0.75rem;

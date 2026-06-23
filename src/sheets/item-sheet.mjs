@@ -55,6 +55,7 @@ import {
   normalizeDefensiveTacticsSettings,
   normalizeDisarmSettings,
   normalizeDoubleAttackSettings,
+  normalizeFullControlSettings,
   normalizeFullForceSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
@@ -4619,6 +4620,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedWatchOutSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.watchOut
     ? prepareWatchOutSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedFullControlSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullControl
+    ? prepareFullControlSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const fixedCounterSniperSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper
     ? normalizeCounterSniperSettings(entry?.fixedSettings)
     : null;
@@ -4667,6 +4671,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedCounterAttackSettings,
     fixedOversightSettings,
     fixedWatchOutSettings,
+    fixedFullControlSettings,
     fixedCounterSniperSettings,
     fixedWhereAreYouGoingSettings,
     fixedFullForceSettings,
@@ -4840,6 +4845,17 @@ function prepareWatchOutSettingsForDisplay(settings = {}) {
     reactionOverloadDurationAmount: overloadDuration.amount,
     reactionOverloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
     sourceSkillChoices: buildSkillChoices(normalized.sourceSkillKey, getSkillSettings())
+  };
+}
+
+function prepareFullControlSettingsForDisplay(settings = {}) {
+  const normalized = normalizeFullControlSettings(settings);
+  const duration = splitAbilityDurationSeconds(normalized.durationSeconds);
+  return {
+    ...normalized,
+    durationAmount: duration.amount,
+    durationUnitChoices: buildAbilityDurationUnitChoices(duration.unit),
+    limitSkillChoices: buildSkillChoices(normalized.limitSkillKey, getSkillSettings())
   };
 }
 
@@ -5625,6 +5641,15 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
         row.querySelector("[data-fixed-watch-out-overload-duration-unit]")?.value
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.reactionOverloadDurationSeconds`, overloadDurationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullControl) {
+      const durationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-full-control-duration-amount]")?.value,
+        row.querySelector("[data-fixed-full-control-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.durationSeconds`, durationSeconds);
       continue;
     }
 

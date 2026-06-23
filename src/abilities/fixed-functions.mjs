@@ -1,5 +1,5 @@
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
-import { getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
+import { getCharacteristicSettings, getCreatureOptions, getCurrencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import {
   ABILITY_FIXED_FUNCTION_KEYS,
   ABILITY_FUNCTION_TYPES,
@@ -19,6 +19,7 @@ import {
   normalizeDisarmSettings,
   normalizeDoubleAttackSettings,
   normalizeFourLeafCloverSettings,
+  normalizeFullControlSettings,
   normalizeFullForceSettings,
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
@@ -144,6 +145,7 @@ const OVERSIGHT_MOVEMENT_PROVIDER_ID = "oversightMovement";
 const OVERSIGHT_QUERY_NAME = "falloutMawOversightAttack";
 const OVERSIGHT_EFFECT_FLAG_KEY = "oversight";
 const WATCH_OUT_REACTION_PROVIDER_ID = "watchOut";
+const FULL_CONTROL_EFFECT_FLAG_KEY = "fullControl";
 const COUNTER_SNIPER_REACTION_PROVIDER_ID = "counterSniper";
 const COUNTER_SNIPER_AIM_QUERY_NAME = "falloutMawCounterSniperAim";
 const WHERE_ARE_YOU_GOING_REACTION_PROVIDER_ID = "whereAreYouGoing";
@@ -364,6 +366,14 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     passive: true,
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.dangerSense
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.fullControl,
+    label: "Полный контроль",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.fullControl
     })
   }),
   Object.freeze({
@@ -750,6 +760,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
     return true;
   }
 
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullControl) {
+    const used = await useFullControl(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
   if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.ricochet) {
     const used = await useRicochet(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
@@ -803,6 +819,263 @@ async function configureWatchOut(actor, abilityItem, abilityFunction) {
   await abilityItem.setFlag(SYSTEM_ID, ABILITY_FIXED_FUNCTION_STATE_FLAG_KEY, state);
   ui.notifications.info(`${getAbilityDisplayName(abilityItem)}: порог реакции ${minimumHitChancePercent}%.`);
   return true;
+}
+
+async function useFullControl(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeFullControlSettings(abilityFunction.fixedSettings);
+  if (findFullControlEffect(actor, abilityItem, abilityFunction)) {
+    ui.notifications.warn(`${abilityName}: эффект уже активен.`);
+    return false;
+  }
+
+  const distribution = await promptFullControlDistribution(actor, abilityItem, settings);
+  if (!distribution) return false;
+  if (findFullControlEffect(actor, abilityItem, abilityFunction)) {
+    ui.notifications.warn(`${abilityName}: эффект уже активен.`);
+    return false;
+  }
+
+  const applied = await applyFullControlEffect(actor, abilityItem, abilityFunction, settings, distribution);
+  if (!applied) return false;
+  await createAbilityChatMessage(actor, abilityItem, `Эффект активен на ${formatDuration(settings.durationSeconds)}.`);
+  return true;
+}
+
+async function promptFullControlDistribution(actor, abilityItem, settings) {
+  const rows = getFullControlCharacteristicRows(actor);
+  if (!rows.length) {
+    ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: не настроены характеристики.`);
+    return null;
+  }
+
+  const currentEnergyMax = getActorEnergyMax(actor);
+  const skillValue = getActorSkillValue(actor, settings.limitSkillKey);
+  const maxChanges = Math.max(0, toInteger(settings.baseChangeLimit) + Math.floor(skillValue / Math.max(1, toInteger(settings.skillDivisor))));
+  const deltas = Object.fromEntries(rows.map(row => [row.key, 0]));
+  const content = `
+    <div class="fallout-maw-full-control-dialog">
+      <p><strong>Энергия: <span data-full-control-energy>${currentEnergyMax}</span> <span class="fallout-maw-full-control-base">(базовое: ${currentEnergyMax})</span></strong></p>
+      <p>Изменения: <span data-full-control-used>0</span> / <span>${maxChanges}</span></p>
+      <div class="fallout-maw-full-control-rows">
+        ${rows.map(row => `
+          <div class="fallout-maw-full-control-row" data-full-control-row="${escapeAttribute(row.key)}">
+            <span class="fallout-maw-full-control-label">${escapeHTML(row.label)} <small>(${row.current})</small></span>
+            <div class="fallout-maw-full-control-controls">
+              <button type="button" data-full-control-minus="${escapeAttribute(row.key)}"><i class="fa-solid fa-minus"></i></button>
+              <strong data-full-control-delta="${escapeAttribute(row.key)}">0</strong>
+              <button type="button" data-full-control-plus="${escapeAttribute(row.key)}"><i class="fa-solid fa-plus"></i></button>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+      <p class="notes" data-full-control-message></p>
+    </div>
+  `;
+
+  const result = await DialogV2.wait({
+    window: { title: getAbilityDisplayName(abilityItem) },
+    content,
+    buttons: [
+      {
+        action: "apply",
+        label: "Применить",
+        icon: "fa-solid fa-check",
+        default: true,
+        disabled: true,
+        callback: () => {
+          const validation = validateFullControlDistribution(rows, deltas, currentEnergyMax, settings, maxChanges);
+          if (!validation.valid) {
+            ui.notifications.warn(validation.reason || `${getAbilityDisplayName(abilityItem)}: распределение недопустимо.`);
+            return null;
+          }
+          return {
+            deltas: Object.fromEntries(Object.entries(deltas).filter(([, value]) => toInteger(value) !== 0)),
+            energyDelta: validation.energyDelta
+          };
+        }
+      },
+      {
+        action: "cancel",
+        label: game.i18n.localize("FALLOUTMAW.Common.Cancel")
+      }
+    ],
+    position: { width: 520 },
+    rejectClose: false,
+    render: (_event, dialog) => activateFullControlDialog(dialog, {
+      rows,
+      deltas,
+      currentEnergyMax,
+      settings,
+      maxChanges
+    })
+  });
+
+  return result && typeof result === "object" ? result : null;
+}
+
+function activateFullControlDialog(dialog, state) {
+  const form = dialog?.element?.querySelector?.("form");
+  if (!form) return;
+  const update = () => syncFullControlDialog(form, state);
+
+  for (const button of form.querySelectorAll("[data-full-control-minus]")) {
+    button.addEventListener("click", event => {
+      const key = String(event.currentTarget?.dataset?.fullControlMinus ?? "");
+      if (!key || !Object.hasOwn(state.deltas, key)) return;
+      state.deltas[key] = toInteger(state.deltas[key]) - 1;
+      update();
+    });
+  }
+
+  for (const button of form.querySelectorAll("[data-full-control-plus]")) {
+    button.addEventListener("click", event => {
+      const key = String(event.currentTarget?.dataset?.fullControlPlus ?? "");
+      if (!key || !Object.hasOwn(state.deltas, key)) return;
+      state.deltas[key] = toInteger(state.deltas[key]) + 1;
+      update();
+    });
+  }
+
+  update();
+}
+
+function syncFullControlDialog(form, state) {
+  const validation = validateFullControlDistribution(
+    state.rows,
+    state.deltas,
+    state.currentEnergyMax,
+    state.settings,
+    state.maxChanges
+  );
+  const energy = form.querySelector("[data-full-control-energy]");
+  const used = form.querySelector("[data-full-control-used]");
+  const message = form.querySelector("[data-full-control-message]");
+  const applyButton = form.querySelector('button[data-action="apply"]');
+  if (energy) energy.textContent = String(validation.finalEnergyMax);
+  if (used) used.textContent = String(validation.usedChanges);
+  if (message) message.textContent = validation.valid ? "" : validation.reason;
+  if (applyButton) applyButton.disabled = !validation.valid;
+
+  for (const row of state.rows) {
+    const delta = toInteger(state.deltas[row.key]);
+    const escapedKey = CSS.escape(row.key);
+    const deltaElement = form.querySelector(`[data-full-control-delta="${escapedKey}"]`);
+    if (deltaElement) deltaElement.textContent = String(delta);
+
+    const minusButton = form.querySelector(`[data-full-control-minus="${escapedKey}"]`);
+    const plusButton = form.querySelector(`[data-full-control-plus="${escapedKey}"]`);
+    const canSpendMoreMinus = delta > 0 || validation.usedChanges < state.maxChanges;
+    const canSpendMorePlus = delta < 0 || validation.usedChanges < state.maxChanges;
+    if (minusButton) minusButton.disabled = row.current + delta <= 0 || !canSpendMoreMinus;
+    if (plusButton) plusButton.disabled = validation.finalEnergyMax - state.settings.energyPerCharacteristicPoint < 0 || !canSpendMorePlus;
+  }
+}
+
+function validateFullControlDistribution(rows, deltas, currentEnergyMax, settings, maxChanges) {
+  const usedChanges = Object.values(deltas).reduce((total, value) => total + Math.abs(toInteger(value)), 0);
+  const totalCharacteristicDelta = Object.values(deltas).reduce((total, value) => total + toInteger(value), 0);
+  const energyDelta = -totalCharacteristicDelta * Math.max(0, toInteger(settings.energyPerCharacteristicPoint));
+  const finalEnergyMax = currentEnergyMax + energyDelta;
+  if (usedChanges <= 0) return { valid: false, reason: "Выберите хотя бы одно изменение.", usedChanges, energyDelta, finalEnergyMax };
+  if (usedChanges > maxChanges) return { valid: false, reason: `Превышен лимит изменений: ${usedChanges} / ${maxChanges}.`, usedChanges, energyDelta, finalEnergyMax };
+  for (const row of rows) {
+    const finalValue = row.current + toInteger(deltas[row.key]);
+    if (finalValue < 0) return { valid: false, reason: `${row.label}: итоговая характеристика ниже 0.`, usedChanges, energyDelta, finalEnergyMax };
+  }
+  if (finalEnergyMax < 0) return { valid: false, reason: "Итоговый максимум энергии ниже 0.", usedChanges, energyDelta, finalEnergyMax };
+  return { valid: true, reason: "", usedChanges, energyDelta, finalEnergyMax };
+}
+
+function getFullControlCharacteristicRows(actor) {
+  const configured = getCharacteristicSettings()
+    .map(entry => ({
+      key: String(entry?.key ?? "").trim(),
+      label: String(entry?.label || entry?.key || "").trim()
+    }))
+    .filter(entry => entry.key);
+  const configuredKeys = new Set(configured.map(entry => entry.key));
+  const fallback = Object.keys(actor?.system?.characteristics ?? {})
+    .filter(key => !configuredKeys.has(key))
+    .map(key => ({ key, label: key }));
+  return [...configured, ...fallback].map(entry => ({
+    ...entry,
+    current: Math.max(0, toInteger(actor?.system?.characteristics?.[entry.key]))
+  }));
+}
+
+function getActorEnergyMax(actor) {
+  return Math.max(0, toInteger(actor?.system?.resources?.[ENERGY_RESOURCE_KEY]?.max));
+}
+
+async function applyFullControlEffect(actor, abilityItem, abilityFunction, settings, distribution) {
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return false;
+  const deltas = distribution?.deltas && typeof distribution.deltas === "object" ? distribution.deltas : {};
+  const changes = Object.entries(deltas)
+    .map(([key, value]) => [String(key ?? "").trim(), toInteger(value)])
+    .filter(([key, value]) => key && value !== 0)
+    .map(([key, value]) => ({
+      key: `system.characteristics.${key}`,
+      type: "add",
+      value: String(value),
+      phase: "initial",
+      priority: null
+    }));
+  const energyDelta = toInteger(distribution?.energyDelta);
+  if (energyDelta !== 0) {
+    changes.push({
+      key: `system.resources.${ENERGY_RESOURCE_KEY}.bonus`,
+      type: "add",
+      value: String(energyDelta),
+      phase: "initial",
+      priority: null
+    });
+  }
+  if (!changes.length) return false;
+
+  const startTime = Number(game.time?.worldTime) || 0;
+  await actor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: getAbilityDisplayName(abilityItem),
+    img: abilityItem.img || "icons/svg/upgrade.svg",
+    origin: abilityItem.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    duration: {
+      seconds: Math.max(0, toInteger(settings.durationSeconds)),
+      startTime
+    },
+    system: { changes },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "temporary",
+        [FULL_CONTROL_EFFECT_FLAG_KEY]: {
+          fixedKey: ABILITY_FIXED_FUNCTION_KEYS.fullControl,
+          abilityItemId: abilityItem.id,
+          abilitySourceId: getAbilitySourceId(abilityItem),
+          functionId: abilityFunction.id,
+          deltas: foundry.utils.deepClone(deltas),
+          energyDelta,
+          createdAt: startTime
+        }
+      }
+    }
+  }], { animate: false });
+  return true;
+}
+
+function findFullControlEffect(actor, abilityItem, abilityFunction) {
+  if (!actor || !abilityItem || !abilityFunction) return null;
+  const abilityItemId = String(abilityItem.id ?? "").trim();
+  const functionId = String(abilityFunction.id ?? "").trim();
+  return Array.from(actor.effects ?? []).find(effect => {
+    if (effect?.disabled || effect?.isExpired) return false;
+    const data = effect.getFlag?.(SYSTEM_ID, FULL_CONTROL_EFFECT_FLAG_KEY);
+    if (!data || data.fixedKey !== ABILITY_FIXED_FUNCTION_KEYS.fullControl) return false;
+    return String(data.abilityItemId ?? "").trim() === abilityItemId
+      && String(data.functionId ?? "").trim() === functionId;
+  }) ?? null;
 }
 
 function registerWatchOutReactionProvider() {
