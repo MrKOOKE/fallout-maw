@@ -448,15 +448,15 @@ function queueResponsibleGMRequest(payload) {
 async function handleResponsibleGMRequest(payload) {
   try {
     switch (payload.action) {
-      case "travelGroup.exit.request": return handleExitRequest(payload);
-      case "travelGroup.assembly.ready": return handleReadyRequest(payload);
-      case "travelGroup.assembly.place": return handlePlaceRequest(payload);
-      case "travelGroup.assembly.remove": return handleRemoveRequest(payload);
-      case "travelGroup.assembly.depart": return handleDepartRequest(payload);
-      case "travelGroup.assembly.cancel": return handleCancelRequest(payload);
-      case "travelGroup.carrier.movePassenger": return handleCarrierMovePassengerRequest(payload);
-      case "travelGroup.arrival.request": return handleArrivalRequest(payload);
-      case "travelGroup.arrival.select": return handleArrivalSelectRequest(payload);
+      case "travelGroup.exit.request": return await handleExitRequest(payload);
+      case "travelGroup.assembly.ready": return await handleReadyRequest(payload);
+      case "travelGroup.assembly.place": return await handlePlaceRequest(payload);
+      case "travelGroup.assembly.remove": return await handleRemoveRequest(payload);
+      case "travelGroup.assembly.depart": return await handleDepartRequest(payload);
+      case "travelGroup.assembly.cancel": return await handleCancelRequest(payload);
+      case "travelGroup.carrier.movePassenger": return await handleCarrierMovePassengerRequest(payload);
+      case "travelGroup.arrival.request": return await handleArrivalRequest(payload);
+      case "travelGroup.arrival.select": return await handleArrivalSelectRequest(payload);
       default: return false;
     }
   } catch (error) {
@@ -1151,6 +1151,7 @@ function buildTopTravelUnits(model) {
 }
 
 function findFreePlacement(scene, tokenData, preferredCells = [], reserved = []) {
+  const bounds = getPlacementBounds(scene);
   const source = preferredCells
     .map(cell => typeof cell === "string" ? parseCellKey(cell) : cell)
     .filter(cell => Number.isFinite(cell?.i) && Number.isFinite(cell?.j));
@@ -1182,7 +1183,7 @@ function findFreePlacement(scene, tokenData, preferredCells = [], reserved = [])
   const queue = [];
   const visited = new Set();
   const enqueue = cell => {
-    if (!isCellCenterInsideScene(scene, cell)) return;
+    if (!isCellCenterInsidePlacementBounds(scene, cell, bounds)) return;
     const key = cellKey(cell);
     if (visited.has(key)) return;
     visited.add(key);
@@ -1204,20 +1205,21 @@ function findFreePlacement(scene, tokenData, preferredCells = [], reserved = [])
       width: size.width,
       height: size.height
     };
-    if (!occupied.some(other => rectanglesOverlap(rect, other)) && rectInsideScene(scene, rect)) return position;
+    if (!occupied.some(other => rectanglesOverlap(rect, other)) && rectInsidePlacementBounds(rect, bounds)) return position;
     for (const adjacent of scene.grid.getAdjacentOffsets(cell)) enqueue(adjacent);
   }
   throw new Error("На сцене нет свободного места для размещения группы.");
 }
 
-function isCellCenterInsideScene(scene, cell) {
+function getPlacementBounds(scene) {
+  return scene.getDimensions?.().rect ?? new PIXI.Rectangle(0, 0, scene.width, scene.height);
+}
+
+function isCellCenterInsidePlacementBounds(scene, cell, bounds) {
   const center = scene.grid.getCenterPoint(cell);
   return Number.isFinite(center?.x)
     && Number.isFinite(center?.y)
-    && center.x >= 0
-    && center.y >= 0
-    && center.x < Number(scene.width)
-    && center.y < Number(scene.height);
+    && bounds.contains(center.x, center.y);
 }
 
 function tokenRect(scene, token) {
@@ -1238,8 +1240,11 @@ function rectanglesOverlap(left, right) {
     || left.y + left.height <= right.y || right.y + right.height <= left.y);
 }
 
-function rectInsideScene(scene, rect) {
-  return rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= scene.width && rect.y + rect.height <= scene.height;
+function rectInsidePlacementBounds(rect, bounds) {
+  return rect.x >= bounds.x
+    && rect.y >= bounds.y
+    && rect.x + rect.width <= bounds.x + bounds.width
+    && rect.y + rect.height <= bounds.y + bounds.height;
 }
 
 async function ensureTravelGroupFolder() {

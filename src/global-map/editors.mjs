@@ -6,6 +6,7 @@ import {
   DEFAULT_TRANSITION
 } from "./constants.mjs";
 import { deleteCollectionEntry, getGlobalMapFlag, getSceneState, saveCollectionEntry, updateSceneState } from "./storage.mjs";
+import { getConnectedCellKeyGroups } from "./geometry.mjs";
 import {
   deleteLocationTree,
   ensureLocationStructure,
@@ -189,12 +190,15 @@ export class LocationEditor extends GlobalMapEditorBase {
       ui.notifications.warn("Сначала подключите сцену к локации.");
       return;
     }
+    await this.close();
     await target.view();
-    const layer = canvas.falloutMaWGlobalMap;
-    if (!layer) return;
+    const layer = await waitForGlobalMapLayer(target.id);
+    if (!layer) {
+      ui.notifications.warn("Слой глобальной карты на целевой сцене ещё не готов.");
+      return;
+    }
     layer.activate();
-    const hasZones = getSceneState(target).locationExitZones.length > 0;
-    await layer.setMode(hasZones ? "locationExitEdit" : "locationExitDraw");
+    await layer.startLocationExitEditing();
   }
 
   _applyLiveValues(values) {
@@ -316,6 +320,7 @@ export class LocationExitEditor extends GlobalMapEditorBase {
   constructor(scene, data, options = {}) {
     super(scene, { ...DEFAULT_LOCATION_EXIT, ...data }, options);
     this.isNew = Boolean(options.isNew);
+    this.replaceIds = Array.from(new Set(options.replaceIds ?? [this.data.id].filter(Boolean)));
   }
 
   static DEFAULT_OPTIONS = {
@@ -348,9 +353,13 @@ export class LocationExitEditor extends GlobalMapEditorBase {
       ui.notifications.warn("Нарисуйте хотя бы одну клетку зоны выхода.");
       return;
     }
-    await canvas.falloutMaWGlobalMap?.applyPendingAreaOverwrites?.("locationExitZones", exit.id);
-    await saveCollectionEntry(this.scene, "locationExitZones", exit);
-    this.data = exit;
+    await canvas.falloutMaWGlobalMap?.applyPendingAreaOverwrites?.("locationExitZones", this.replaceIds);
+    const savedEntries = await saveLocationExitEntries(this.scene, exit, this.replaceIds);
+    this.data = savedEntries[0] ?? exit;
+    this.replaceIds = savedEntries.map(entry => entry.id);
+    if (savedEntries.length > 1) {
+      ui.notifications.info(`Несвязанные участки сохранены как отдельные зоны: ${savedEntries.length}.`);
+    }
     canvas.falloutMaWGlobalMap?.refresh?.();
   }
 
@@ -366,20 +375,88 @@ export class LocationExitEditor extends GlobalMapEditorBase {
 
   async _deleteEntry() {
     if (!this.data.id) return this.close();
+    const replaceIds = new Set(this.replaceIds?.length ? this.replaceIds : [this.data.id]);
     const assemblyIds = getSceneState(this.scene).travelAssemblies
-      .filter(entry => entry.exitZoneId === this.data.id)
+      .filter(entry => replaceIds.has(entry.exitZoneId))
       .map(entry => entry.id);
     for (const assemblyId of assemblyIds) {
       await game.falloutMaW?.globalMap?.cancelTravelAssembly?.(assemblyId, this.scene.id);
     }
     await updateSceneState(this.scene, state => {
-      state.locationExitZones = state.locationExitZones.filter(entry => entry.id !== this.data.id);
-      state.discoveredExitZoneIds = state.discoveredExitZoneIds.filter(id => id !== this.data.id);
+      state.locationExitZones = state.locationExitZones.filter(entry => !replaceIds.has(entry.id));
+      state.discoveredExitZoneIds = state.discoveredExitZoneIds.filter(id => !replaceIds.has(id));
       return state;
     });
     await this.close();
     canvas.falloutMaWGlobalMap?.refresh?.();
   }
+}
+
+async function saveLocationExitEntries(scene, exit, replaceIds = [exit.id]) {
+  const groups = getConnectedCellKeyGroups(scene, exit.cells);
+  const replaceIdSet = new Set((replaceIds ?? [exit.id]).filter(Boolean));
+  let savedEntries = [];
+  await updateSceneState(scene, state => {
+    const currentEntries = Array.isArray(state.locationExitZones) ? [...state.locationExitZones] : [];
+    const replacedEntries = currentEntries.filter(entry => replaceIdSet.has(entry.id));
+    const entries = buildLocationExitEntries(exit, groups, replacedEntries);
+    savedEntries = entries.map(entry => foundry.utils.deepClone(entry));
+    const replacedIndexes = currentEntries
+      .map((entry, index) => replaceIdSet.has(entry.id) ? index : -1)
+      .filter(index => index >= 0);
+    const existingIndex = replacedIndexes.length ? Math.min(...replacedIndexes) : currentEntries.findIndex(entry => entry.id === exit.id);
+    const nextEntries = currentEntries.filter(entry => !replaceIdSet.has(entry.id));
+    const insertIndex = existingIndex >= 0 ? existingIndex : nextEntries.length;
+    nextEntries.splice(insertIndex, 0, ...savedEntries.map(entry => foundry.utils.deepClone(entry)));
+    state.locationExitZones = nextEntries;
+    const knownExitIds = new Set(nextEntries.map(entry => entry.id));
+    const previousDiscoveredIds = state.discoveredExitZoneIds ?? [];
+    const discovered = new Set(previousDiscoveredIds.filter(id => knownExitIds.has(id) && !replaceIdSet.has(id)));
+    const replacedWasDiscovered = previousDiscoveredIds.some(id => replaceIdSet.has(id));
+    if (replacedWasDiscovered || exit.alwaysDiscovered) {
+      for (const entry of savedEntries) discovered.add(entry.id);
+    }
+    state.discoveredExitZoneIds = Array.from(discovered);
+    return state;
+  });
+  return savedEntries;
+}
+
+function buildLocationExitEntries(exit, groups, replacedEntries) {
+  const usedIds = new Set();
+  return groups.map((cells, index) => {
+    const cellSet = new Set(cells);
+    const matched = replacedEntries.find(entry =>
+      !usedIds.has(entry.id)
+      && (entry.cells ?? []).some(key => cellSet.has(key))
+    );
+    const id = matched?.id ?? (!index && exit.id && !usedIds.has(exit.id) ? exit.id : foundry.utils.randomID());
+    usedIds.add(id);
+    return { ...exit, id, cells };
+  });
+}
+
+function waitForGlobalMapLayer(sceneId) {
+  const isReady = () => Boolean(
+    canvas?.ready
+    && !canvas.loading
+    && canvas.scene?.id === sceneId
+    && canvas.falloutMaWGlobalMap
+  );
+  if (isReady()) return Promise.resolve(canvas.falloutMaWGlobalMap);
+  return new Promise(resolve => {
+    let hookId = null;
+    const timeout = window.setTimeout(() => {
+      if (hookId) Hooks.off("canvasReady", hookId);
+      resolve(null);
+    }, 5000);
+    hookId = Hooks.on("canvasReady", () => {
+      if (!isReady()) return;
+      window.clearTimeout(timeout);
+      Hooks.off("canvasReady", hookId);
+      resolve(canvas.falloutMaWGlobalMap);
+    });
+  });
 }
 
 export class TransitionEditor extends GlobalMapEditorBase {
@@ -510,9 +587,13 @@ export class TransitionEditor extends GlobalMapEditorBase {
     const transitionId = stored.id;
     await this.close();
     await target.view();
-    const layer = canvas.falloutMaWGlobalMap;
-    layer?.activate?.();
-    await layer?.startEntryDrawingFor?.(sourceSceneId, transitionId);
+    const layer = await waitForGlobalMapLayer(target.id);
+    if (!layer) {
+      ui.notifications.warn("Слой глобальной карты на целевой сцене ещё не готов.");
+      return;
+    }
+    layer.activate();
+    await layer.startEntryDrawingFor(sourceSceneId, transitionId);
   }
 
   async _deleteEntry() {
@@ -535,7 +616,7 @@ export class TransitionEntryEditor extends GlobalMapEditorBase {
   static DEFAULT_OPTIONS = {
     ...super.DEFAULT_OPTIONS,
     id: "fallout-maw-transition-entry-editor",
-    window: { title: "Зона выхода перехода", resizable: true },
+    window: { title: "Связанная зона перехода", resizable: true },
     actions: {
       ...super.DEFAULT_OPTIONS.actions,
       clear: TransitionEntryEditor.#clear
@@ -561,7 +642,7 @@ export class TransitionEntryEditor extends GlobalMapEditorBase {
       entryCells: Array.from(new Set(this.data.entryCells ?? []))
     };
     if (!transition.entryCells.length) {
-      ui.notifications.warn("Нарисуйте хотя бы одну клетку зоны выхода.");
+      ui.notifications.warn("Нарисуйте хотя бы одну клетку связанной зоны.");
       return;
     }
     await saveCollectionEntry(this.scene, "transitions", transition);

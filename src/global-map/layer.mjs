@@ -40,6 +40,8 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
   brushPreviewCells = [];
   arrivalSelection = null;
   locationDiscoveryOverlay = null;
+  hoverLocationId = null;
+  locationHoverOverlay = null;
   pendingAreaOverwrites = {
     terrains: new Map(),
     transitions: new Map(),
@@ -97,12 +99,15 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
   async _draw() {
     this.eventMode = "passive";
     this.container = this.addChild(new PIXI.Container());
+    this.container.eventMode = "passive";
+    this.container.interactiveChildren = true;
     this.container.sortableChildren = true;
     await this.refresh();
   }
 
   async refresh() {
     if (!this.container || !canvas?.scene) return;
+    this.#clearLocationHover();
     for (const child of this.container.removeChildren()) child.destroy?.({ children: true });
     const state = getSceneState(canvas.scene);
     this.#drawTerrains(state.terrains);
@@ -112,15 +117,20 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     this.#drawLocations(state.locations, state.discoveredLocationIds);
     this.#drawDiscoveredLocationOverlay(state.locations, state.discoveredLocationIds);
     this.#drawWorkingData();
+    if (this.mode === "locationEdit" && game.user?.isGM) {
+      foundry.canvas.interaction.MouseInteractionManager.emulateMoveEvent();
+    }
   }
 
   async _tearDown(options) {
+    this.#clearLocationHover();
     this.#destroyDiscoveredLocationOverlay();
     return super._tearDown(options);
   }
 
   async setMode(mode) {
     this.mode = mode || "select";
+    this.#clearLocationHover();
     await this.editor?.close?.();
     this.editor = null;
     if (this.mode === "terrainDraw") {
@@ -153,6 +163,36 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
       this.editor.render(true);
     }
     await this.refresh();
+  }
+
+  async startLocationExitEditing() {
+    if (!assertSupportedGrid()) return false;
+    if (getGlobalMapFlag(canvas.scene)?.role !== GLOBAL_MAP_ROLES.LOCATION_SCENE) {
+      ui.notifications.warn("Зоны выхода редактируются только на сцене локации.");
+      return false;
+    }
+    const exits = getSceneState(canvas.scene).locationExitZones.filter(entry => entry.cells?.length);
+    const base = exits[0] ?? {
+      ...DEFAULT_LOCATION_EXIT,
+      id: foundry.utils.randomID(),
+      cells: []
+    };
+    const cells = Array.from(new Set(exits.flatMap(entry => entry.cells ?? [])));
+    await this.editor?.close?.();
+    this.mode = "locationExitDraw";
+    this.brushStroke = null;
+    this.brushPreviewCells = [];
+    this.editor = new LocationExitEditor(canvas.scene, {
+      ...DEFAULT_LOCATION_EXIT,
+      ...base,
+      cells
+    }, {
+      isNew: !exits.length,
+      replaceIds: exits.map(entry => entry.id)
+    });
+    this.editor.render(true);
+    await this.refresh();
+    return true;
   }
 
   async startArrivalSelection(payload) {
@@ -277,17 +317,42 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     this.brushStroke = null;
     this.brushPreviewCells = [];
     this.dragPreviewLocation = null;
+    this.#clearLocationHover();
     void this.refresh();
+  }
+
+  #setLocationHover(locationId, cells) {
+    const nextId = locationId ?? null;
+    if (this.hoverLocationId === nextId) return;
+    this.hoverLocationId = nextId;
+    this.#destroyLocationHoverOverlay();
+    if (!nextId || !cells?.length || !canvas?.interface) return;
+    const overlay = new PIXI.Container();
+    overlay.name = "fallout-maw-location-hover";
+    overlay.eventMode = "none";
+    overlay.interactiveChildren = false;
+    overlay.sortableChildren = true;
+    overlay.zIndex = (CONFIG.Canvas.groups.interface.zIndexDrawings ?? 500) + 3;
+    canvas.interface.addChild(overlay);
+    this.locationHoverOverlay = overlay;
+    this.#drawLocationHoverBoundary(cells, 1, overlay);
+  }
+
+  #clearLocationHover() {
+    if (!this.hoverLocationId && !this.locationHoverOverlay) return;
+    this.hoverLocationId = null;
+    this.#destroyLocationHoverOverlay();
   }
 
   async applyPendingAreaOverwrites(collection, activeId) {
     const pending = this.pendingAreaOverwrites?.[collection];
     if (!pending?.size) return;
+    const activeIds = normalizeActiveIds(activeId);
     const cuts = new Map(Array.from(pending.entries(), ([id, cells]) => [id, new Set(cells)]));
     await updateSceneState(canvas.scene, state => {
       state[collection] = (state[collection] ?? []).map(entry => {
         const remove = cuts.get(entry.id);
-        if (!remove?.size || entry.id === activeId) return entry;
+        if (!remove?.size || activeIds.has(entry.id)) return entry;
         return {
           ...entry,
           cells: (entry.cells ?? []).filter(key => !remove.has(key))
@@ -325,6 +390,10 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
   async #editLocationAt(point) {
     const location = this.#findLocationAt(point);
     if (!location) return;
+    return this.#editLocation(location);
+  }
+
+  async #editLocation(location) {
     await this.editor?.close?.();
     this.editor = new LocationEditor(canvas.scene, location, { isNew: false });
     this.editor.render(true);
@@ -396,6 +465,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     const cells = new Set(this.editor.data[property] ?? []);
     const remove = this.brushStroke?.remove ?? this.#shouldRemoveCells(event);
     const overwrite = this.brushStroke?.overwrite ?? this.#shouldOverwriteCells(event);
+    const activeIds = collection ? this.#getActiveAreaIds(collection) : new Set();
     for (const pathCell of centers) {
       const keys = getCellCluster(canvas.scene, pathCell, radius).map(cellKey);
       for (const key of keys) {
@@ -403,7 +473,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
           cells.delete(key);
           continue;
         }
-        const owner = collection ? this.#findAreaOwner(collection, key, this.editor.data.id) : null;
+        const owner = collection ? this.#findAreaOwner(collection, key, activeIds) : null;
         if (owner && !overwrite) continue;
         if (owner && overwrite) this.#recordPendingAreaOverwrite(collection, owner.id, key);
         cells.add(key);
@@ -443,11 +513,19 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     return null;
   }
 
-  #findAreaOwner(collection, key, activeId) {
+  #getActiveAreaIds(collection) {
+    if (collection === "locationExitZones" && this.editor instanceof LocationExitEditor) {
+      return normalizeActiveIds(this.editor.replaceIds?.length ? this.editor.replaceIds : this.editor.data?.id);
+    }
+    return normalizeActiveIds(this.editor?.data?.id);
+  }
+
+  #findAreaOwner(collection, key, activeIds = new Set()) {
+    const ignoredIds = normalizeActiveIds(activeIds);
     const pending = this.pendingAreaOverwrites?.[collection];
     const entries = getSceneState(canvas.scene)[collection] ?? [];
     return [...entries].reverse().find(entry => {
-      if (!entry?.id || entry.id === activeId) return false;
+      if (!entry?.id || ignoredIds.has(entry.id)) return false;
       if (pending?.get(entry.id)?.has(key)) return false;
       return (entry.cells ?? []).includes(key);
     }) ?? null;
@@ -499,13 +577,20 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
   #drawDiscoveredLocationOverlay(locations, discoveredIds) {
     this.#destroyDiscoveredLocationOverlay();
     if (!canvas?.interface) return;
+    const renderedLocations = new Map(locations.map(location => [location.id, location]));
+    if (this.editor instanceof LocationEditor && this.editor.data?.id) {
+      renderedLocations.set(this.editor.data.id, this.editor.data);
+    }
     const discovered = new Set(discoveredIds ?? []);
-    const visible = locations.filter(location => location.alwaysDiscovered || discovered.has(location.id));
+    const editLocations = this.mode === "locationEdit" && game.user?.isGM;
+    const visible = editLocations
+      ? Array.from(renderedLocations.values())
+      : Array.from(renderedLocations.values()).filter(location => location.alwaysDiscovered || discovered.has(location.id));
     if (!visible.length) return;
     const overlay = new PIXI.Container();
     overlay.name = "fallout-maw-discovered-locations";
-    overlay.eventMode = "none";
-    overlay.interactiveChildren = false;
+    overlay.eventMode = editLocations ? "passive" : "none";
+    overlay.interactiveChildren = editLocations;
     overlay.sortableChildren = true;
     overlay.zIndex = (CONFIG.Canvas.groups.interface.zIndexDrawings ?? 500) + 1;
     canvas.interface.addChild(overlay);
@@ -518,12 +603,16 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     if (!cells.length) return;
     const graphic = new PIXI.LegacyGraphics();
     graphic.zIndex = 1;
+    const isEditMode = this.mode === "locationEdit";
+    const isActive = this.editor instanceof LocationEditor && this.editor.data.id === location.id;
+    const lineColor = isEditMode ? "#39ff88" : (location.strokeColor || "#ffffff");
+    const lineWidth = isEditMode ? Math.max(3, Number(location.strokeWidth) || 3) : Math.max(1, Number(location.strokeWidth) || 3);
     drawCellBoundary(
       graphic,
       cells,
-      location.strokeColor || "#ffffff",
-      Math.max(1, Number(location.strokeWidth) || 3),
-      1
+      lineColor,
+      lineWidth,
+      isEditMode && !isActive ? 0.9 : 1
     );
     container.addChild(graphic);
     const bounds = getBoundaryBounds(getCellsBoundaryLoops(canvas.scene, cells));
@@ -541,6 +630,7 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     );
     text.zIndex = 2;
     container.addChild(text);
+    this.#drawLocationInteractionArea(container, cells, location);
   }
 
   #destroyDiscoveredLocationOverlay() {
@@ -550,6 +640,13 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     this.locationDiscoveryOverlay = null;
   }
 
+  #destroyLocationHoverOverlay() {
+    if (this.locationHoverOverlay && !this.locationHoverOverlay.destroyed) {
+      this.locationHoverOverlay.destroy({ children: true });
+    }
+    this.locationHoverOverlay = null;
+  }
+
   #drawLocationGhost(location) {
     const cells = getLocationCells(canvas.scene, location);
     const graphic = new PIXI.LegacyGraphics();
@@ -557,6 +654,32 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
     graphic.alpha = 0.65;
     drawCellBoundary(graphic, cells, "#39ff88", 5, 1);
     this.container.addChild(graphic);
+  }
+
+  #drawLocationHoverBoundary(cells, zIndex, container) {
+    const hover = new PIXI.LegacyGraphics();
+    hover.zIndex = zIndex;
+    drawCellBoundary(hover, cells, "#fff06a", 6, 1);
+    container.addChild(hover);
+  }
+
+  #drawLocationInteractionArea(container, cells, location) {
+    if (this.mode !== "locationEdit" || !game.user?.isGM || !cells.length) return;
+    const locationId = location?.id;
+    if (!locationId) return;
+    const hitArea = new PIXI.LegacyGraphics();
+    hitArea.name = `fallout-maw-location-hit-${locationId}`;
+    hitArea.zIndex = 10;
+    hitArea.eventMode = "static";
+    hitArea.interactiveChildren = false;
+    hitArea.hitArea = createCellHitArea(cells);
+    hitArea.cursor = "pointer";
+    hitArea.on("pointerover", () => this.#setLocationHover(locationId, cells));
+    hitArea.on("pointerout", () => {
+      if (this.hoverLocationId === locationId) this.#clearLocationHover();
+    });
+    drawCellHitArea(hitArea, cells);
+    container.addChild(hitArea);
   }
 
   #drawTerrains(terrains) {
@@ -593,10 +716,12 @@ export class FalloutMaWGlobalMapLayer extends InteractionLayer {
 
   #drawLocationExitZones(exits, discoveredIds) {
     const discovered = new Set(discoveredIds ?? []);
-    const activeId = this.editor instanceof LocationExitEditor ? this.editor.data?.id : null;
+    const activeIds = this.editor instanceof LocationExitEditor
+      ? normalizeActiveIds(this.editor.replaceIds?.length ? this.editor.replaceIds : this.editor.data?.id)
+      : new Set();
     const pending = this.pendingAreaOverwrites.locationExitZones;
     for (const exit of exits) {
-      if (exit.id === activeId) continue;
+      if (activeIds.has(exit.id)) continue;
       if (!this.arrivalSelection && !game.user.isGM && !exit.alwaysDiscovered && !discovered.has(exit.id)) continue;
       const graphic = new PIXI.LegacyGraphics();
       graphic.zIndex = this.arrivalSelection ? 120 : 24;
@@ -662,6 +787,12 @@ function tool(name, order, title, icon) {
   return { name, order, title, icon, interaction: true, control: true };
 }
 
+function normalizeActiveIds(value) {
+  if (value instanceof Set) return value;
+  if (Array.isArray(value)) return new Set(value.filter(Boolean));
+  return new Set([value].filter(Boolean));
+}
+
 function drawCell(graphic, cell, lineColor, fillColor, alpha = 0.2, width = 2) {
   const vertices = getCellVertices(canvas.scene, cell);
   if (vertices.length < 3) return;
@@ -688,6 +819,29 @@ function drawCellArea(graphic, cells, lineColor, fillColor, alpha = 0.2, width =
     graphic.endFill();
   }
   drawCellBoundary(graphic, cells, lineColor, width, 0.95);
+}
+
+function drawCellHitArea(graphic, cells) {
+  for (const cell of cells) {
+    const vertices = getCellVertices(canvas.scene, cell);
+    if (vertices.length < 3) continue;
+    graphic.lineStyle({ width: 0, alpha: 0 });
+    graphic.beginFill(0xffffff, 0.001);
+    graphic.moveTo(vertices[0].x, vertices[0].y);
+    for (const vertex of vertices.slice(1)) graphic.lineTo(vertex.x, vertex.y);
+    graphic.closePath();
+    graphic.endFill();
+  }
+}
+
+function createCellHitArea(cells) {
+  const keys = new Set(cells.map(cellKey));
+  return {
+    contains: (x, y) => {
+      const cell = pointToCell(canvas.scene, { x, y });
+      return Boolean(cell && keys.has(cellKey(cell)));
+    }
+  };
 }
 
 function drawCellBoundary(graphic, cells, lineColor, width = 3, alpha = 1) {

@@ -88,6 +88,35 @@ export function getCellCluster(scene, centerCell, radius = 1) {
   return cells;
 }
 
+export function getConnectedCellKeyGroups(scene, keys = []) {
+  const remaining = new Map();
+  for (const key of keys ?? []) {
+    const cell = typeof key === "string" ? parseCellKey(key) : normalizeCell(key);
+    if (!cell) continue;
+    remaining.set(cellKey(cell), cell);
+  }
+  const groups = [];
+  while (remaining.size) {
+    const [startKey, startCell] = remaining.entries().next().value;
+    const queue = [startCell];
+    const group = [];
+    remaining.delete(startKey);
+    for (let index = 0; index < queue.length; index += 1) {
+      const cell = queue[index];
+      group.push(cellKey(cell));
+      for (const adjacent of getAdjacentCells(scene, cell)) {
+        const adjacentKey = cellKey(adjacent);
+        const next = remaining.get(adjacentKey);
+        if (!next) continue;
+        remaining.delete(adjacentKey);
+        queue.push(next);
+      }
+    }
+    groups.push(group);
+  }
+  return groups;
+}
+
 export function getCellPath(scene, fromCell, toCell) {
   if (!isSupportedGrid(scene) || !fromCell || !toCell) return [];
   if (cellKey(fromCell) === cellKey(toCell)) return [normalizeCell(toCell)];
@@ -238,6 +267,18 @@ function getSquareCellCluster(centerCell, radius) {
     }
   }
   return cells;
+}
+
+function getAdjacentCells(scene, cell) {
+  if (isHexGrid(scene)) {
+    return (scene?.grid?.getAdjacentOffsets?.(cell) ?? []).map(normalizeCell).filter(Boolean);
+  }
+  return [
+    { i: cell.i - 1, j: cell.j },
+    { i: cell.i + 1, j: cell.j },
+    { i: cell.i, j: cell.j - 1 },
+    { i: cell.i, j: cell.j + 1 }
+  ];
 }
 
 function getFallbackCellPath(fromCell, toCell) {
