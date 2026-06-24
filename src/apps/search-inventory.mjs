@@ -28,6 +28,7 @@ import {
   getItemContainerParentId,
   getItemFootprint,
   getItemId,
+  getItemsArray,
   getItemMaxStack,
   getItemQuantity,
   getItemTotalWeight,
@@ -69,6 +70,7 @@ import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-lay
 import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints } from "../combat/weapon-switching.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import { requestSkillCheckBatch } from "../rolls/skill-check.mjs";
+import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { getButcheringConfig, hasConfiguredButchering } from "./butchering-config.mjs";
 import { requestActorHacking } from "./hacking-dialog.mjs";
 
@@ -4222,16 +4224,73 @@ async function applyTradeItemPayment({ buyerActor, sellerActor, item, currencyKe
   return { price, currencyKey };
 }
 
-function calculateItemTradePrice(item, currencyKey = "", quantity = 1, { sellerActor = null, barterAdjustmentPercent = null } = {}) {
+function calculateItemTradePrice(item, currencyKey = "", quantity = 1, {
+  sellerActor = null,
+  barterAdjustmentPercent = null,
+  itemCollection = null,
+  containedItems = []
+} = {}) {
   if (!sellerActor) throw new Error("Seller actor is required for trade price calculation.");
   const barterPercent = Number(barterAdjustmentPercent);
   if (!Number.isFinite(barterPercent)) throw new Error("Trade barter adjustment percent is required.");
+  const currencies = getCurrencySettings();
+  const targetCurrency = currencies.find(entry => entry.key === currencyKey) ?? currencies.find(entry => entry.primaryTrade) ?? currencies.at(0);
+  const markupPercent = Number(sellerActor.system.trade.markupPercent);
+  if (!Number.isFinite(markupPercent)) throw new Error("Seller trade markup must be numeric.");
+  const percentMultiplier = 1 + ((markupPercent + barterPercent) / 100);
+  return calculateItemTradePriceTree(item, {
+    targetCurrency,
+    currencies,
+    quantity: Math.max(1, toInteger(quantity)),
+    percentMultiplier,
+    itemCollection: itemCollection ?? sellerActor?.items ?? null,
+    containedItems
+  });
+}
+
+function calculateItemTradePriceTree(item, {
+  targetCurrency = null,
+  currencies = getCurrencySettings(),
+  quantity = null,
+  percentMultiplier = 1,
+  itemCollection = null,
+  containedItems = [],
+  visitedIds = new Set(),
+  visitedObjects = new WeakSet()
+} = {}) {
+  if (!item || typeof item !== "object") return 0;
+  const itemId = getItemId(item);
+  if (itemId) {
+    if (visitedIds.has(itemId)) return 0;
+    visitedIds.add(itemId);
+  } else {
+    if (visitedObjects.has(item)) return 0;
+    visitedObjects.add(item);
+  }
+
+  const itemQuantity = quantity === null
+    ? Math.max(1, getItemQuantity(item))
+    : Math.max(1, toInteger(quantity));
+  let price = calculateSingleItemTradePrice(item, targetCurrency, currencies, itemQuantity, percentMultiplier);
+  for (const child of getItemTradePriceChildren(item, itemCollection, containedItems)) {
+    price += calculateItemTradePriceTree(child, {
+      targetCurrency,
+      currencies,
+      percentMultiplier,
+      itemCollection,
+      containedItems,
+      visitedIds,
+      visitedObjects
+    });
+  }
+  return price;
+}
+
+function calculateSingleItemTradePrice(item, targetCurrency = null, currencies = getCurrencySettings(), quantity = 1, percentMultiplier = 1) {
   const unitPrice = Math.max(0, Number(item?.system?.price ?? item?.price) || 0);
   const itemQuantity = Math.max(1, toInteger(quantity));
   if (!unitPrice) return 0;
 
-  const currencies = getCurrencySettings();
-  const targetCurrency = currencies.find(entry => entry.key === currencyKey) ?? currencies.find(entry => entry.primaryTrade) ?? currencies.at(0);
   const sourceCurrencyKey = String(item?.system?.priceCurrency ?? item?.priceCurrency ?? "");
   const sourceCurrency = currencies.find(entry => entry.key === sourceCurrencyKey) ?? targetCurrency;
   const sourceValue = Math.max(0, Number(sourceCurrency?.value) || 0);
@@ -4239,10 +4298,7 @@ function calculateItemTradePrice(item, currencyKey = "", quantity = 1, { sellerA
   const basePrice = !sourceValue || !targetValue
     ? unitPrice * itemQuantity
     : (unitPrice * itemQuantity * sourceValue) / targetValue;
-  const markupPercent = Number(sellerActor.system.trade.markupPercent);
-  if (!Number.isFinite(markupPercent)) throw new Error("Seller trade markup must be numeric.");
   const functionMultiplier = getItemTradeFunctionPriceMultiplier(item);
-  const percentMultiplier = 1 + ((markupPercent + barterPercent) / 100);
   return Math.max(0, Math.ceil(basePrice * functionMultiplier * percentMultiplier));
 }
 
@@ -4250,6 +4306,126 @@ function formatItemTradePrice(item, currencyKey = "", sellerActor = null, { bart
   const price = calculateItemTradePrice(item, currencyKey, 1, { sellerActor, barterAdjustmentPercent });
   if (price <= 0) return "";
   return price;
+}
+
+function getItemTradePriceChildren(item, itemCollection = null, containedItems = []) {
+  if (item?.__falloutMawTradeReference) return [];
+  const children = [];
+  const seenIds = new Set();
+  const seenObjects = new WeakSet();
+  const parentId = getItemId(item);
+  if (parentId) {
+    for (const candidate of getTradePriceItemCollection(itemCollection, containedItems)) {
+      if (!candidate || getItemId(candidate) === parentId) continue;
+      const containerParentId = getItemContainerParentId(candidate);
+      const attachedParentId = String(candidate?.system?.placement?.parentItemId ?? "");
+      if (containerParentId !== parentId && attachedParentId !== parentId) continue;
+      addTradePriceChild(children, candidate, seenIds, seenObjects);
+    }
+  }
+  for (const embedded of getEmbeddedTradeItemDataChildren(item)) {
+    addTradePriceChild(children, embedded, seenIds, seenObjects);
+  }
+  for (const referenced of getReferencedTradeItemDataChildren(item)) {
+    addTradePriceChild(children, referenced, seenIds, seenObjects);
+  }
+  return children;
+}
+
+function getTradePriceItemCollection(itemCollection = null, containedItems = []) {
+  const items = [];
+  if (itemCollection) items.push(...getItemsArray(itemCollection));
+  if (containedItems) items.push(...getItemsArray(containedItems));
+  return items.filter(Boolean);
+}
+
+function addTradePriceChild(children = [], item = null, seenIds = new Set(), seenObjects = new WeakSet()) {
+  if (!item || typeof item !== "object") return;
+  const id = getItemId(item);
+  if (id) {
+    if (seenIds.has(id)) return;
+    seenIds.add(id);
+  } else {
+    if (seenObjects.has(item)) return;
+    seenObjects.add(item);
+  }
+  children.push(item);
+}
+
+function getEmbeddedTradeItemDataChildren(item = null) {
+  const rootData = item?.toObject ? item.toObject() : item;
+  const results = [];
+  const visited = new WeakSet();
+  collectEmbeddedTradeItemData(rootData?.system ?? rootData, results, visited);
+  return results;
+}
+
+function collectEmbeddedTradeItemData(value = null, results = [], visited = new WeakSet()) {
+  if (!value || typeof value !== "object") return;
+  if (visited.has(value)) return;
+  visited.add(value);
+  for (const child of Object.values(value)) {
+    if (!child || typeof child !== "object") continue;
+    if (isEmbeddedTradeItemData(child)) {
+      results.push(child);
+      continue;
+    }
+    collectEmbeddedTradeItemData(child, results, visited);
+  }
+}
+
+function isEmbeddedTradeItemData(value = null) {
+  return Boolean(
+    value
+    && typeof value === "object"
+    && value.system
+    && typeof value.system === "object"
+    && (
+      value.name !== undefined
+      || value.type !== undefined
+      || value.img !== undefined
+      || value.id !== undefined
+      || value._id !== undefined
+    )
+  );
+}
+
+function getReferencedTradeItemDataChildren(item = null) {
+  const rootData = item?.toObject ? item.toObject() : item;
+  const results = [];
+  const visited = new WeakSet();
+  collectReferencedTradeItemData(rootData?.system ?? rootData, results, visited);
+  return results;
+}
+
+function collectReferencedTradeItemData(value = null, results = [], visited = new WeakSet()) {
+  if (!value || typeof value !== "object") return;
+  if (visited.has(value)) return;
+  visited.add(value);
+  const referenced = createTradeReferenceItemData(value);
+  if (referenced) {
+    results.push(referenced);
+    return;
+  }
+  for (const child of Object.values(value)) {
+    if (!child || typeof child !== "object") continue;
+    if (isEmbeddedTradeItemData(child)) continue;
+    collectReferencedTradeItemData(child, results, visited);
+  }
+}
+
+function createTradeReferenceItemData(value = null) {
+  const uuid = String(value?.sourceItemUuid ?? "").trim();
+  const quantity = Math.max(0, toInteger(value?.value));
+  if (!uuid || !quantity) return null;
+  const item = resolveWorldItemSync(uuid);
+  if (!item) return null;
+  const data = item.toObject?.() ?? foundry.utils.deepClone(item);
+  delete data._id;
+  delete data.id;
+  foundry.utils.setProperty(data, "system.quantity", quantity);
+  data.__falloutMawTradeReference = true;
+  return data;
 }
 
 function getActorCurrencyAmount(actor, currencyKey = "") {
@@ -4538,8 +4714,14 @@ function prepareTradeOfferSideContext(offer = {}, actor = null, side = "", trade
     const sourceQuantity = offer.completed ? Math.max(1, toInteger(entry.quantity)) : Math.max(1, getItemQuantity(liveItem ?? itemData));
     const quantity = Math.max(1, Math.min(sourceQuantity, toInteger(entry.quantity)));
     foundry.utils.setProperty(itemData, "system.quantity", quantity);
-    const price = calculateItemTradePrice(liveItem ?? itemData, tradeCurrencyKey, quantity, { sellerActor: sourceActor, barterAdjustmentPercent });
-    const footprint = getItemFootprint(liveItem ?? itemData, sourceActor?.items);
+    const priceItemCollection = liveItem ? sourceActor?.items : entry.containedItems ?? [];
+    const price = calculateItemTradePrice(liveItem ?? itemData, tradeCurrencyKey, quantity, {
+      sellerActor: sourceActor,
+      barterAdjustmentPercent,
+      itemCollection: priceItemCollection,
+      containedItems: entry.containedItems ?? []
+    });
+    const footprint = getItemFootprint(liveItem ?? itemData, priceItemCollection);
     const placement = resolveTradeOfferEntryPlacement(entry.placement, footprint, occupiedPlacements, columns);
     placement.rotated = Boolean(entry.placement?.rotated ?? (liveItem ?? itemData)?.system?.placement?.rotated);
     const offerKey = getTradeOfferEntryKey(entry, "item");
