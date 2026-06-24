@@ -561,7 +561,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       : prepareWeaponActionRows(actor, selectedWeapon, selectedWeaponDisabled, hudIcons, selectedWeaponSlot, this.token);
     const weaponEquipChoices = prepareHudWeaponEquipChoices(actor, this.#weaponEquipTarget, hudIcons);
     const skills = prepareSkillButtons(actor, hudIcons);
-    const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg", { activeOnly: true, weaponSet });
+    const items = prepareOwnedItemButtons(actor, "gear", "icons/svg/item-bag.svg", { activeOnly: true, weaponSet, token: this.token });
     const abilities = prepareOwnedAbilityButtons(actor, "icons/svg/aura.svg");
     const passengers = prepareHudActorContainerPassengers(actor);
     const systemActions = prepareSystemActionButtons(hudIcons);
@@ -2438,7 +2438,8 @@ function prepareSkillButtons(actor, hudIcons = {}) {
   });
 }
 
-function prepareOwnedItemButtons(actor, type, fallbackIcon, { activeOnly = false, weaponSet = null } = {}) {
+function prepareOwnedItemButtons(actor, type, fallbackIcon, { activeOnly = false, weaponSet = null, token = null } = {}) {
+  const tokenDocument = token?.document ?? token ?? null;
   const activeItems = actor.items
     .filter(item => item.type === type)
     .filter(item => !activeOnly || isActiveItem(item))
@@ -2446,6 +2447,7 @@ function prepareOwnedItemButtons(actor, type, fallbackIcon, { activeOnly = false
     .map(item => {
       const firstAidCharges = getActiveItemChargesData(item);
       const isLightSource = hasItemFunction(item, ITEM_FUNCTIONS.lightSource, { ignoreBroken: true });
+      const toggled = isLightSource && isLightSourceActive(tokenDocument, item);
       return {
         id: item.id,
         itemId: item.id,
@@ -2456,7 +2458,9 @@ function prepareOwnedItemButtons(actor, type, fallbackIcon, { activeOnly = false
         quantity: toInteger(item.system?.quantity),
         showQuantity: toInteger(item.system?.maxStack) > 1,
         firstAidCharges,
-        showFirstAidCharges: !isLightSource && isActiveItem(item) && firstAidCharges.max > 1
+        showFirstAidCharges: !isLightSource && isActiveItem(item) && firstAidCharges.max > 1,
+        toggleable: isLightSource,
+        toggled
       };
     });
   if (!activeOnly || type !== "gear") return activeItems;
@@ -3282,6 +3286,8 @@ function prepareLightSourceActionRow(item = null, token = null, forceDisabled = 
       label: game.i18n.localize(active ? "FALLOUTMAW.Item.LightSourceToggleOff" : "FALLOUTMAW.Item.LightSourceToggleOn"),
       itemId: item.id,
       isLightToggleControl: true,
+      toggleable: true,
+      toggled: active,
       disabled: forceDisabled || !canToggleOn,
       img: normalizeImagePath(hudIcons.weaponActions?.[active ? "lightOff" : "lightOn"], "icons/svg/light.svg")
     }

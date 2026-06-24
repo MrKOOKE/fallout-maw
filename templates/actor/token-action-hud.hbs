@@ -138,7 +138,7 @@
 
       {{#if (eq activeTray "items")}}
       {{#each tray.items}}
-      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile {{#if active}}active{{/if}}" data-action="{{action}}" data-item-id="{{itemId}}" data-condition-id="{{conditionId}}" data-hud-tooltip-item="{{itemId}}" aria-label="{{name}}" {{#if disabled}}disabled{{/if}}>
+      <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile {{#if active}}active{{/if}}{{#if toggleable}} toggleable{{/if}}{{#if toggled}} toggled{{/if}}" data-action="{{action}}" data-item-id="{{itemId}}" data-condition-id="{{conditionId}}" data-hud-tooltip-item="{{itemId}}" aria-label="{{name}}" {{#if toggleable}}aria-pressed="{{#if toggled}}true{{else}}false{{/if}}"{{/if}} {{#if disabled}}disabled{{/if}}>
         <img src="{{img}}" alt="{{name}}" onerror="this.src='{{../fallbackIcon}}'">
         <span>{{name}}</span>
         {{#if showFirstAidCharges}}<strong class="fallout-maw-token-hud-item-charges">{{firstAidCharges.value}}/{{firstAidCharges.max}}</strong>{{else}}
@@ -254,7 +254,7 @@
           </button>
           {{else}}
           {{#if isLightToggleControl}}
-          <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile" data-action="toggleLightSource" data-item-id="{{itemId}}" aria-label="{{label}}" {{#if disabled}}disabled{{/if}}>
+          <button type="button" class="fallout-maw-token-hud-tile fallout-maw-token-hud-action-tile{{#if toggleable}} toggleable{{/if}}{{#if toggled}} toggled{{/if}}" data-action="toggleLightSource" data-item-id="{{itemId}}" aria-label="{{label}}" {{#if toggleable}}aria-pressed="{{#if toggled}}true{{else}}false{{/if}}"{{/if}} {{#if disabled}}disabled{{/if}}>
             <img src="{{img}}" alt="{{label}}" onerror="this.src='{{../../fallbackIcon}}'">
             <span>{{label}}</span>
           </button>

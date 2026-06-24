@@ -72,6 +72,8 @@ export function getEnergyConsumptionControlEntries(actor = null, options = {}) {
         name: getEnergyConsumptionDisplayName(item, condition),
         img: normalizeImagePath(item.img, FALLBACK_ICON),
         active,
+        toggleable: true,
+        toggled: active,
         disabled: false
       };
     }));
