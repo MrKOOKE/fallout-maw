@@ -125,6 +125,24 @@
         </div>
         {{/if}}
 
+        {{#if inventory.implantSlots.length}}
+        <h2>Импланты</h2>
+        <div class="fallout-maw-equipment-slot-list fallout-maw-implant-slot-list">
+          {{#each inventory.implantSlots}}
+          <div class="fallout-maw-slot-card">
+            <div class="fallout-maw-slot-card-label">{{label}}</div>
+            <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-implant-slot" data-implant-limb="{{limbKey}}">
+              <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item equipped {{#if item.locked}}locked{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+                <img src="{{item.img}}" alt="{{item.name}}">
+                {{#if item.showFirstAidCharges}}<span class="fallout-maw-inventory-item-charges">{{item.firstAidCharges.value}}/{{item.firstAidCharges.max}}</span>{{/if}}
+                {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
+              </article>
+            </div>
+          </div>
+          {{/each}}
+        </div>
+        {{/if}}
+
         <h2>{{localize "FALLOUTMAW.Common.Weapon"}}</h2>
         <div class="fallout-maw-weapon-set-list">
           {{#if inventory.naturalWeaponSet}}

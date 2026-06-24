@@ -2716,6 +2716,50 @@
   </section>
   {{/if}}
 
+  {{#if hasImplantFunction}}
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Item.FunctionImplant"}}</h2>
+      <button type="button" data-remove-item-function="implant" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.ImplantInstallation"}}</h3>
+    </div>
+    <div class="fallout-maw-list-grid two-columns">
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.ImplantDifficulty"}}</span>
+        <input type="number" name="system.functions.implant.difficulty" value="{{system.functions.implant.difficulty}}" min="0" step="1">
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.ImplantSkill"}}</span>
+        <select name="system.functions.implant.skillKey">
+          {{#each implantSkillChoices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.ImplantLimbs"}}</h3>
+      <button type="button" data-add-implant-limb {{#unless canAddImplantLimb}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Common.Add"}}</button>
+    </div>
+    <div class="fallout-maw-prosthesis-limb-row-list" data-implant-limb-key-list>
+      {{#each implantLimbRows}}
+      <div class="fallout-maw-prosthesis-limb-row">
+        <select name="system.functions.implant.limbKeys.{{@index}}">
+          {{#each choices}}
+          <option value="{{key}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <button type="button" data-delete-implant-limb="{{@index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.ImplantNoLimbs"}}</p>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+
   {{#if hasProsthesisFunction}}
   <section class="fallout-maw-panel">
     <div class="fallout-maw-panel-header">

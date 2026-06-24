@@ -13,6 +13,7 @@ const ITEM_EFFECT_FLAG_KEY = "itemEffect";
 export const ALL_SKILLS_BONUS_EFFECT_KEY = "system.skills.all.bonus";
 export const ALL_SKILLS_ADVANTAGE_EFFECT_KEY = "system.skills.all.advantage";
 export const ALL_SKILLS_DISADVANTAGE_EFFECT_KEY = "system.skills.all.disadvantage";
+export const ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY = "system.limbs.all.implantLimitBonus";
 export const ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY = "fallout-maw.ability.overload.energyCost";
 export const ONE_TIME_SKILL_MODIFIER_EFFECT_KEY = "fallout-maw.skillCheck.nextSkillModifier";
 export const SMART_FUDGE_RESULT_EFFECT_KEYS = Object.freeze({
@@ -28,9 +29,29 @@ const ALL_SKILLS_EFFECT_FIELDS = Object.freeze({
   [ALL_SKILLS_ADVANTAGE_EFFECT_KEY]: "advantage",
   [ALL_SKILLS_DISADVANTAGE_EFFECT_KEY]: "disadvantage"
 });
+const LEGACY_ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY = "system.limbs.all.implantLimit";
+const LEGACY_LIMB_IMPLANT_LIMIT_EFFECT_KEY_PATTERN = /^system\.limbs\.([^.]+)\.implantLimit$/;
 
 export function expandActorEffectChangeKeys(actor, change = {}) {
-  const field = ALL_SKILLS_EFFECT_FIELDS[String(change?.key ?? "")];
+  const key = String(change?.key ?? "");
+  if ((key === ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY) || (key === LEGACY_ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY)) {
+    return Object.keys(actor?.system?.limbs ?? {})
+      .filter(key => key && key !== "all")
+      .map(limbKey => ({
+        ...change,
+        key: `system.limbs.${limbKey}.implantLimitBonus`
+      }));
+  }
+
+  const implantLimitMatch = key.match(LEGACY_LIMB_IMPLANT_LIMIT_EFFECT_KEY_PATTERN);
+  if (implantLimitMatch?.[1] && implantLimitMatch[1] !== "all") {
+    return [{
+      ...change,
+      key: `system.limbs.${implantLimitMatch[1]}.implantLimitBonus`
+    }];
+  }
+
+  const field = ALL_SKILLS_EFFECT_FIELDS[key];
   if (!field) return [change];
   const skillKeys = new Set([
     ...getSkillSettings().map(skill => String(skill?.key ?? "").trim()),

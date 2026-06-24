@@ -9612,6 +9612,14 @@ label.fallout-maw-mitigation-cell {
   background: rgba(220, 197, 110, 0.12);
 }
 
+.application.fallout-maw-medicine-dialog .fallout-maw-action-cell--button > button.fallout-maw-icon-action-button {
+  display: inline-grid;
+  min-width: 2.35rem;
+  padding: 0;
+  place-items: center;
+  width: 2.35rem;
+}
+
 .fallout-maw-split-number-field > div {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -11016,6 +11024,24 @@ label.fallout-maw-mitigation-cell {
     minmax(7rem, 0.65fr)
     minmax(3.5rem, 0.3fr)
     minmax(7rem, 0.5fr);
+}
+
+.fallout-maw-action-row--implant-installed {
+  grid-template-columns:
+    4.25rem
+    minmax(13rem, 1fr)
+    minmax(6rem, 0.45fr)
+    minmax(5.5rem, 0.3fr);
+}
+
+.fallout-maw-action-row--implant-candidate {
+  grid-template-columns:
+    4.25rem
+    minmax(12rem, 1.2fr)
+    minmax(6rem, 0.55fr)
+    minmax(7rem, 0.65fr)
+    minmax(3.5rem, 0.3fr)
+    minmax(6rem, 0.35fr);
 }
 
 .fallout-maw-disease-stage-header {

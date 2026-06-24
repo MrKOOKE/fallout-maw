@@ -5,7 +5,7 @@ import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { getCreatureOptions, getSkillSettings, getSystemActionSettings, getToolSettings } from "../settings/accessors.mjs";
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
-import { getConditionFunction, getProsthesisFunction, getToolFunction, hasItemFunction, hasToolFunction, isProsthesisForLimb, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
+import { getConditionFunction, getImplantFunction, getProsthesisFunction, getToolFunction, hasItemFunction, hasToolFunction, isImplantForLimb, isProsthesisForLimb, ITEM_FUNCTIONS } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -49,6 +49,7 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
   #activeTreatmentType = "trauma";
   #activeTreatmentId = "";
   #activeTab = "trauma";
+  #activeImplantLimbKey = "";
   #activeProsthesisLimbKey = "";
   #targetRefreshTimeout = null;
   #targetRefreshInFlight = false;
@@ -76,8 +77,11 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
     },
     actions: {
       startTreatment: this.#onStartTreatment,
+      installImplant: this.#onInstallImplant,
       installProsthesis: this.#onInstallProsthesis,
+      removeImplant: this.#onRemoveImplant,
       removeProsthesis: this.#onRemoveProsthesis,
+      setImplantLimb: this.#onSetImplantLimb,
       setProsthesisLimb: this.#onSetProsthesisLimb,
       setMedicineTab: this.#onSetMedicineTab,
       treatWithInstrument: this.#onTreatWithInstrument
@@ -102,7 +106,9 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
     const instruments = prepareMedicalInstruments(this.#sourceActor, this.#toolKey);
     const traumas = prepareTargetTreatments(this.#targetContext?.traumas ?? [], instruments, this.#activeTreatmentType === "trauma" ? this.#activeTreatmentId : "");
     const diseases = prepareTargetTreatments(this.#targetContext?.diseases ?? [], instruments, this.#activeTreatmentType === "disease" ? this.#activeTreatmentId : "");
+    const implants = prepareImplantMedicineContext(this.#sourceActor, this.#targetContext, this.#activeImplantLimbKey);
     const prostheses = prepareProsthesisMedicineContext(this.#sourceActor, this.#targetContext, this.#activeProsthesisLimbKey);
+    this.#activeImplantLimbKey = implants.activeLimbKey;
     this.#activeProsthesisLimbKey = prostheses.activeLimbKey;
     return {
       ...context,
@@ -115,6 +121,7 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
       toolLabel: getToolSettings().find(tool => tool.key === this.#toolKey)?.label ?? this.#toolKey,
       traumas,
       diseases,
+      implants,
       prostheses,
       hasTraumas: traumas.length > 0,
       hasDiseases: diseases.length > 0,
@@ -126,6 +133,10 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
         disease: {
           active: this.#activeTab === "disease",
           cssClass: this.#activeTab === "disease" ? "active" : ""
+        },
+        implant: {
+          active: this.#activeTab === "implant",
+          cssClass: this.#activeTab === "implant" ? "active" : ""
         },
         prosthesis: {
           active: this.#activeTab === "prosthesis",
@@ -155,8 +166,17 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
   static #onSetMedicineTab(event, target) {
     event.preventDefault();
     const tab = String(target.dataset.medicineTab ?? "trauma");
-    if (!["trauma", "disease", "prosthesis"].includes(tab)) return undefined;
+    if (!["trauma", "disease", "implant", "prosthesis"].includes(tab)) return undefined;
     this.#activeTab = tab;
+    return this.render({ force: true });
+  }
+
+  static #onSetImplantLimb(event, target) {
+    event.preventDefault();
+    const limbKey = String(target.dataset.limbKey ?? "");
+    if (!limbKey) return undefined;
+    this.#activeImplantLimbKey = limbKey;
+    this.#activeTab = "implant";
     return this.render({ force: true });
   }
 
@@ -262,6 +282,26 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
     return this.render({ force: true });
   }
 
+  static async #onInstallImplant(event, target) {
+    event.preventDefault();
+    const limbKey = String(target.dataset.limbKey ?? "");
+    const source = String(target.dataset.implantSource ?? "");
+    const itemId = String(target.dataset.implantItemId ?? "");
+    if (!limbKey || !source || !itemId) return undefined;
+
+    const result = await performImplantInstallation({
+      sourceActor: this.#sourceActor,
+      targetContext: this.#targetContext,
+      limbKey,
+      implantSource: source,
+      itemId
+    });
+    if (result?.targetContext) this.#targetContext = result.targetContext;
+    this.#activeImplantLimbKey = limbKey;
+    this.#activeTab = "implant";
+    return this.render({ force: true });
+  }
+
   static async #onInstallProsthesis(event, target) {
     event.preventDefault();
     const limbKey = String(target.dataset.limbKey ?? "");
@@ -279,6 +319,24 @@ class MedicineTreatmentDialog extends HandlebarsApplicationMixin(ApplicationV2) 
     if (result?.targetContext) this.#targetContext = result.targetContext;
     this.#activeProsthesisLimbKey = limbKey;
     this.#activeTab = "prosthesis";
+    return this.render({ force: true });
+  }
+
+  static async #onRemoveImplant(event, target) {
+    event.preventDefault();
+    const limbKey = String(target.dataset.limbKey ?? "");
+    const itemId = String(target.dataset.implantItemId ?? "");
+    if (!limbKey || !itemId) return undefined;
+
+    const updatedTargetContext = await applyImplantRemoval({
+      sourceActor: this.#sourceActor,
+      targetContext: this.#targetContext,
+      limbKey,
+      itemId
+    });
+    if (updatedTargetContext) this.#targetContext = updatedTargetContext;
+    this.#activeImplantLimbKey = limbKey;
+    this.#activeTab = "implant";
     return this.render({ force: true });
   }
 
@@ -441,6 +499,73 @@ function prepareProsthesisMedicineContext(sourceActor, targetContext, activeLimb
   };
 }
 
+function prepareImplantMedicineContext(sourceActor, targetContext, activeLimbKey = "") {
+  const targetLimbs = (targetContext?.limbs ?? []).filter(limb => (
+    Math.max(0, toInteger(limb?.implantLimit)) > 0
+    || (limb?.implants ?? []).length > 0
+  ));
+  const active = targetLimbs.some(limb => limb.key === activeLimbKey)
+    ? activeLimbKey
+    : targetLimbs[0]?.key ?? "";
+  const sourceItems = sourceActor?.uuid === targetContext?.actorUuid
+    ? []
+    : snapshotImplantItems(sourceActor, "source")
+      .filter(item => !item.installed);
+  const targetItems = (targetContext?.implantItems ?? [])
+    .filter(item => !item.installed);
+  const candidateItems = [...sourceItems, ...targetItems];
+  const limbs = targetLimbs.map(limb => {
+    const installed = Array.isArray(limb.implants) ? limb.implants : [];
+    const implantLimit = Math.max(0, toInteger(limb.implantLimit));
+    const slotsAvailable = installed.length < implantLimit;
+    const candidates = candidateItems
+      .filter(item => item.limbKeys.includes(limb.key))
+      .map(item => ({
+        ...item,
+        usable: slotsAvailable && isImplantSnapshotInstallable(item),
+        skillRequirement: item.skillLabel
+      }));
+    const fillRatio = implantLimit > 0 ? Math.max(0, Math.min(1, installed.length / implantLimit)) : 1;
+    return {
+      ...limb,
+      active: limb.key === active,
+      cssClass: limb.key === active ? "active" : "",
+      candidates,
+      hasCandidates: candidates.length > 0,
+      installedCount: installed.length,
+      implantLimit,
+      slotsAvailable,
+      statusLabel: `Импланты: ${installed.length} / ${implantLimit}`,
+      displayValue: installed.length,
+      displayMax: implantLimit,
+      fill: installed.length ? mixRgb([40, 80, 56], [130, 230, 165], fillRatio) : "rgba(6, 8, 8, 0.96)"
+    };
+  });
+  const activeLimb = limbs.find(limb => limb.key === active) ?? null;
+  const interactiveLimbs = new Map(limbs.map(limb => [limb.key, limb]));
+  const silhouetteLimbs = Object.fromEntries((targetContext?.limbs ?? []).map(limb => {
+    const interactive = interactiveLimbs.get(limb.key);
+    return [limb.key, interactive ?? {
+      ...limb,
+      displayValue: limb.value,
+      displayMax: limb.max,
+      popoverRows: []
+    }];
+  }));
+  const silhouette = createLimbSilhouetteHud(targetContext?.limbSilhouette, silhouetteLimbs);
+  for (const part of silhouette?.parts ?? []) {
+    part.active = part.limbKey === active;
+    part.interactive = interactiveLimbs.has(part.limbKey);
+  }
+  return {
+    activeLimbKey: active,
+    activeLimb,
+    limbs,
+    hasLimbs: limbs.length > 0,
+    silhouette
+  };
+}
+
 async function performTreatment({ sourceActor, targetContext, treatmentType = "trauma", treatmentId, instrumentId, toolKey }) {
   if (!sourceActor?.isOwner && !game.user?.isGM) {
     ui.notifications.warn(`Нет прав на использование инструментов ${sourceActor?.name ?? ""}.`);
@@ -513,6 +638,389 @@ async function performTreatment({ sourceActor, targetContext, treatmentType = "t
     completed
   });
   return { targetContext: updatedTargetContext };
+}
+
+async function performImplantInstallation({ sourceActor, targetContext, limbKey = "", implantSource = "", itemId = "" } = {}) {
+  if (!sourceActor?.isOwner && !game.user?.isGM) {
+    ui.notifications.warn(`Нет прав на использование инвентаря ${sourceActor?.name ?? ""}.`);
+    return undefined;
+  }
+  const targetActorUuid = String(targetContext?.actorUuid ?? "");
+  if (!targetActorUuid || !limbKey || !itemId) return undefined;
+
+  const targetLimb = (targetContext?.limbs ?? []).find(limb => limb.key === limbKey);
+  if (!targetLimb) {
+    ui.notifications.warn("Часть тела для установки импланта не найдена.");
+    return undefined;
+  }
+  const implantLimit = Math.max(0, toInteger(targetLimb.implantLimit));
+  if ((targetLimb.implants ?? []).length >= implantLimit) {
+    ui.notifications.warn("На выбранной части тела нет свободного места для импланта.");
+    return undefined;
+  }
+
+  const implant = await resolveImplantInstallItem({ sourceActor, targetActorUuid, implantSource, itemId })
+    ?? createImplantPseudoItem((targetContext?.implantItems ?? []).find(item => item.id === itemId && item.source === implantSource));
+  if (!implant || !isImplantForLimb(implant, limbKey)) {
+    ui.notifications.warn("Имплант не найден или не подходит к выбранной части тела.");
+    return undefined;
+  }
+  if (!isImplantItemInstallable(implant)) {
+    ui.notifications.warn("Этот имплант сломан и не может быть установлен.");
+    return undefined;
+  }
+
+  const data = getImplantFunction(implant);
+  const skillKey = String(data.skillKey ?? "doctor") || "doctor";
+  const difficulty = Math.max(0, toInteger(data.difficulty ?? 60));
+  const outcome = skillKey
+    ? await requestSkillCheck({
+      actor: sourceActor,
+      skillKey,
+      data: { difficulty },
+      animate: false,
+      createMessage: true,
+      prompt: false,
+      requester: "medicineImplant"
+    })
+    : { result: { key: "success" } };
+  if (!outcome) return undefined;
+
+  const resultKey = String(outcome.result?.key ?? "failure");
+  if (resultKey !== "success" && resultKey !== "criticalSuccess") {
+    if (resultKey === "criticalFailure") {
+      const updatedTargetContext = await applyImplantCriticalFailure({
+        sourceActor,
+        targetActorUuid,
+        limbKey,
+        implantSource,
+        itemId
+      });
+      await postMedicineChat(sourceActor, {
+        title: `Установка импланта: ${implant.name}`,
+        tone: "failure",
+        lines: ["Критический провал. Имплант повреждён и не установлен."]
+      });
+      return { targetContext: updatedTargetContext ?? targetContext };
+    }
+    await postMedicineChat(sourceActor, {
+      title: `Установка импланта: ${implant.name}`,
+      tone: "failure",
+      lines: ["Проверка провалена. Имплант не установлен."]
+    });
+    return undefined;
+  }
+
+  const updatedTargetContext = await applyImplantInstall({
+    sourceActor,
+    targetActorUuid,
+    limbKey,
+    implantSource,
+    itemId
+  });
+  await postMedicineChat(sourceActor, {
+    title: `Установка импланта: ${implant.name}`,
+    tone: "success",
+    lines: [`${targetContext?.name ?? "Цель"}: ${getTargetLimbLabel(targetContext, limbKey)} получила имплант.`]
+  });
+  return { targetContext: updatedTargetContext ?? targetContext };
+}
+
+async function resolveImplantInstallItem({ sourceActor, targetActorUuid = "", implantSource = "", itemId = "" } = {}) {
+  if (implantSource === "source") return sourceActor?.items?.get(itemId) ?? null;
+  const targetActor = await fromUuid(targetActorUuid);
+  if (targetActor && canUseActorLocally(targetActor)) return targetActor.items?.get(itemId) ?? null;
+  if (sourceActor?.uuid === targetActorUuid) return sourceActor.items?.get(itemId) ?? null;
+  return null;
+}
+
+function createImplantPseudoItem(snapshot = null) {
+  if (!snapshot) return null;
+  return {
+    id: snapshot.id,
+    name: snapshot.name,
+    system: {
+      functions: {
+        condition: {
+          enabled: Boolean(snapshot.hasCondition),
+          value: snapshot.conditionValue ?? 0,
+          max: snapshot.conditionMax ?? 0
+        },
+        implant: {
+          enabled: true,
+          limbKeys: snapshot.limbKeys ?? [],
+          difficulty: snapshot.difficulty,
+          skillKey: snapshot.skillKey
+        }
+      }
+    }
+  };
+}
+
+async function applyImplantInstall({ sourceActor, targetActorUuid = "", limbKey = "", implantSource = "", itemId = "" } = {}) {
+  const targetActor = await fromUuid(targetActorUuid);
+  const sourceActorUuid = sourceActor?.uuid ?? "";
+  if (targetActor && canUseActorLocally(targetActor) && (implantSource === "target" || sourceActor?.isOwner || game.user?.isGM)) {
+    return applyImplantInstallLocally({ sourceActor, targetActor, limbKey, implantSource, itemId });
+  }
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для установки импланта.");
+    return null;
+  }
+  const result = await requestMedicineSocket("installImplant", {
+    sourceActorUuid,
+    targetActorUuid,
+    limbKey,
+    implantSource,
+    itemId
+  }, gm);
+  return result?.targetContext ?? null;
+}
+
+async function applyImplantCriticalFailure({ sourceActor, targetActorUuid = "", limbKey = "", implantSource = "", itemId = "" } = {}) {
+  const targetActor = await fromUuid(targetActorUuid);
+  const sourceActorUuid = sourceActor?.uuid ?? "";
+  if (targetActor && canUseActorLocally(targetActor) && (implantSource === "target" || sourceActor?.isOwner || game.user?.isGM)) {
+    return applyImplantCriticalFailureLocally({ sourceActor, targetActor, limbKey, implantSource, itemId });
+  }
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для повреждения импланта.");
+    return null;
+  }
+  const result = await requestMedicineSocket("implantCriticalFailure", {
+    sourceActorUuid,
+    targetActorUuid,
+    limbKey,
+    implantSource,
+    itemId
+  }, gm);
+  return result?.targetContext ?? null;
+}
+
+async function applyImplantRemoval({ sourceActor, targetContext, limbKey = "", itemId = "" } = {}) {
+  const targetActorUuid = String(targetContext?.actorUuid ?? "");
+  const targetActor = await fromUuid(targetActorUuid);
+  const sourceActorUuid = sourceActor?.uuid ?? "";
+  const sourceActorDocument = sourceActorUuid ? await fromUuid(sourceActorUuid) : sourceActor;
+  if (
+    targetActor
+    && sourceActorDocument
+    && canUseActorLocally(targetActor)
+    && canUseActorLocally(sourceActorDocument)
+  ) {
+    return applyImplantRemovalLocally({ sourceActor: sourceActorDocument, targetActor, limbKey, itemId });
+  }
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для снятия импланта.");
+    return null;
+  }
+  const result = await requestMedicineSocket("removeImplant", {
+    sourceActorUuid,
+    targetActorUuid,
+    limbKey,
+    itemId
+  }, gm);
+  return result?.targetContext ?? null;
+}
+
+async function applyImplantInstallLocally({ sourceActor, targetActor, limbKey = "", implantSource = "", itemId = "" } = {}) {
+  const sourceContainer = implantSource === "source" ? sourceActor : targetActor;
+  const item = sourceContainer?.items?.get(itemId);
+  if (!item || item.type !== "gear" || !isImplantForLimb(item, limbKey)) return buildTargetContext(targetActor);
+  if (!isImplantItemInstallable(item)) return buildTargetContext(targetActor);
+
+  const implantLimit = getActorLimbImplantLimit(targetActor, limbKey);
+  if (getInstalledTargetImplants(targetActor, limbKey).length >= implantLimit) return buildTargetContext(targetActor);
+
+  if (sourceContainer?.uuid === targetActor.uuid) {
+    const quantity = Math.max(1, toInteger(item.system?.quantity) || 1);
+    if (quantity > 1) {
+      await targetActor.updateEmbeddedDocuments("Item", [{
+        _id: item.id,
+        "system.quantity": quantity - 1
+      }]);
+      await targetActor.createEmbeddedDocuments("Item", [createImplantItemData(item, limbKey)]);
+    } else {
+      await targetActor.updateEmbeddedDocuments("Item", [createInstallImplantUpdate(item, limbKey)]);
+    }
+  } else {
+    await targetActor.createEmbeddedDocuments("Item", [createImplantItemData(item, limbKey)]);
+    const quantity = Math.max(1, toInteger(item.system?.quantity) || 1);
+    if (quantity > 1) await item.update({ "system.quantity": quantity - 1 });
+    else await item.delete();
+  }
+
+  return buildTargetContext(targetActor);
+}
+
+async function applyImplantRemovalLocally({ sourceActor, targetActor, limbKey = "", itemId = "" } = {}) {
+  const item = targetActor?.items?.get(itemId);
+  if (!item || item.type !== "gear") return buildTargetContext(targetActor);
+  if (String(item.system?.placement?.mode ?? "") !== "implant") return buildTargetContext(targetActor);
+  if (String(item.system?.placement?.limbKey ?? "") !== limbKey) return buildTargetContext(targetActor);
+
+  if (sourceActor && sourceActor.uuid !== targetActor.uuid) {
+    await sourceActor.createEmbeddedDocuments("Item", [createReturnedImplantItemData(item)]);
+    await targetActor.deleteEmbeddedDocuments("Item", [item.id]);
+  } else {
+    await targetActor.updateEmbeddedDocuments("Item", [createReturnImplantUpdate(item)]);
+  }
+  return buildTargetContext(targetActor);
+}
+
+async function applyImplantCriticalFailureLocally({ sourceActor, targetActor, limbKey = "", implantSource = "", itemId = "" } = {}) {
+  const sourceContainer = implantSource === "source" ? sourceActor : targetActor;
+  const item = sourceContainer?.items?.get(itemId);
+  if (!item) return buildTargetContext(targetActor);
+
+  const applied = await damageImplantForCriticalFailure(item);
+  if (applied > 0) {
+    await requestDamageApplication({
+      actor: targetActor,
+      amount: applied,
+      mode: "damage",
+      scope: "health",
+      applyMitigation: false,
+      processDamageTypeSettings: false,
+      source: {
+        requester: "medicineImplantCriticalFailure",
+        limbKey
+      }
+    });
+  }
+  return buildTargetContext(targetActor);
+}
+
+async function damageImplantForCriticalFailure(item) {
+  if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.condition)) return 0;
+  const condition = getConditionFunction(item);
+  const max = Math.max(0, toInteger(condition.max));
+  const current = Math.max(0, toInteger(condition.value));
+  const loss = Math.min(current, Math.ceil(max * 0.2));
+  if (loss <= 0) return 0;
+  await item.update({ "system.functions.condition.value": Math.max(0, current - loss) });
+  return loss;
+}
+
+function createInstallImplantUpdate(item, limbKey = "") {
+  const placement = item.system?.placement ?? {};
+  return {
+    _id: item.id,
+    "system.equipped": true,
+    "system.container.parentId": "",
+    "system.placement.mode": "implant",
+    "system.placement.equipmentSlot": "",
+    "system.placement.weaponSet": "",
+    "system.placement.weaponSlot": "",
+    "system.placement.limbKey": limbKey,
+    "system.placement.x": 1,
+    "system.placement.y": 1,
+    "system.placement.width": Math.max(1, toInteger(placement.width) || 1),
+    "system.placement.height": Math.max(1, toInteger(placement.height) || 1),
+    "system.placement.rotated": Boolean(placement.rotated)
+  };
+}
+
+function createImplantItemData(item, limbKey = "") {
+  const itemData = item.toObject();
+  delete itemData._id;
+  delete itemData.id;
+  const placement = item.system?.placement ?? {};
+  foundry.utils.mergeObject(itemData, {
+    system: {
+      quantity: 1,
+      equipped: true,
+      container: { parentId: "" },
+      placement: {
+        mode: "implant",
+        equipmentSlot: "",
+        weaponSet: "",
+        weaponSlot: "",
+        limbKey,
+        x: 1,
+        y: 1,
+        width: Math.max(1, toInteger(placement.width) || 1),
+        height: Math.max(1, toInteger(placement.height) || 1),
+        rotated: Boolean(placement.rotated)
+      }
+    }
+  });
+  return itemData;
+}
+
+function createReturnImplantUpdate(item) {
+  const placement = item.system?.placement ?? {};
+  return {
+    _id: item.id,
+    "system.equipped": false,
+    "system.container.parentId": "",
+    "system.placement.mode": "inventory",
+    "system.placement.equipmentSlot": "",
+    "system.placement.weaponSet": "",
+    "system.placement.weaponSlot": "",
+    "system.placement.limbKey": "",
+    "system.placement.x": 1,
+    "system.placement.y": 10000,
+    "system.placement.width": Math.max(1, toInteger(placement.width) || 1),
+    "system.placement.height": Math.max(1, toInteger(placement.height) || 1),
+    "system.placement.rotated": Boolean(placement.rotated)
+  };
+}
+
+function createReturnedImplantItemData(item) {
+  const itemData = item.toObject();
+  delete itemData._id;
+  delete itemData.id;
+  const placement = item.system?.placement ?? {};
+  foundry.utils.mergeObject(itemData, {
+    system: {
+      quantity: 1,
+      equipped: false,
+      container: { parentId: "" },
+      placement: {
+        mode: "inventory",
+        equipmentSlot: "",
+        weaponSet: "",
+        weaponSlot: "",
+        limbKey: "",
+        x: 1,
+        y: 10000,
+        width: Math.max(1, toInteger(placement.width) || 1),
+        height: Math.max(1, toInteger(placement.height) || 1),
+        rotated: Boolean(placement.rotated)
+      }
+    }
+  });
+  return itemData;
+}
+
+function getInstalledTargetImplants(actor, limbKey = "") {
+  return (actor?.items?.contents ?? Array.from(actor?.items ?? []))
+    .filter(item => (
+      item.type === "gear"
+      && item.system?.equipped
+      && hasItemFunction(item, ITEM_FUNCTIONS.implant)
+      && String(item.system?.placement?.mode ?? "") === "implant"
+      && String(item.system?.placement?.limbKey ?? "") === limbKey
+    ));
+}
+
+function getActorLimbImplantLimit(actor, limbKey = "") {
+  return Math.max(0, toInteger(actor?.system?.limbs?.[limbKey]?.implantLimit ?? 0));
+}
+
+function isImplantItemInstallable(item) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.condition)) return true;
+  const condition = getConditionFunction(item);
+  return Math.max(0, toInteger(condition.max)) > 0 && Math.max(0, toInteger(condition.value)) > 0;
+}
+
+function isImplantSnapshotInstallable(item) {
+  if (!item?.hasCondition) return true;
+  return Math.max(0, toInteger(item.conditionMax)) > 0 && Math.max(0, toInteger(item.conditionValue)) > 0;
 }
 
 async function performProsthesisInstallation({ sourceActor, targetContext, limbKey = "", prosthesisSource = "", itemId = "" } = {}) {
@@ -1069,6 +1577,7 @@ function buildTargetContext(actor, token = null) {
     incomingHealingPercent: getActorHealingModifierPercent(actor, "incoming"),
     limbs: snapshotActorLimbs(actor),
     limbSilhouette: race?.limbSilhouette ?? null,
+    implantItems: snapshotImplantItems(actor, "target"),
     prosthesisItems: snapshotProsthesisItems(actor, "target"),
     traumas: actor.items
       .filter(item => item.type === "trauma")
@@ -1080,8 +1589,10 @@ function buildTargetContext(actor, token = null) {
 }
 
 function snapshotActorLimbs(actor) {
+  const installedImplants = getInstalledImplantsByLimb(actor);
   const installed = getInstalledProsthesesByLimb(actor);
   return Object.entries(actor.system?.limbs ?? {}).map(([key, limb]) => {
+    const implants = installedImplants.get(key) ?? [];
     const prosthesis = installed.get(key) ?? null;
     const missing = Boolean(limb?.missing);
     return {
@@ -1090,10 +1601,42 @@ function snapshotActorLimbs(actor) {
       value: toInteger(limb?.value),
       min: toInteger(limb?.min),
       max: toInteger(limb?.max),
+      implantLimit: Math.max(0, toInteger(limb?.implantLimit ?? 1)),
+      implants: implants.map(item => snapshotImplantItem(item, "target")),
       missing,
       prosthesis: prosthesis ? snapshotProsthesisItem(prosthesis, "target") : null
     };
   });
+}
+
+function snapshotImplantItems(actor, source = "target") {
+  return actor.items
+    .filter(item => item.type === "gear" && hasItemFunction(item, ITEM_FUNCTIONS.implant))
+    .map(item => snapshotImplantItem(item, source));
+}
+
+function snapshotImplantItem(item, source = "target") {
+  const implant = getImplantFunction(item);
+  const condition = getConditionFunction(item);
+  const hasCondition = hasItemFunction(item, ITEM_FUNCTIONS.condition);
+  return {
+    id: item.id,
+    actorUuid: item.actor?.uuid ?? item.parent?.uuid ?? "",
+    source,
+    name: item.name,
+    img: normalizeImagePath(item.img, "icons/svg/cyber-eye.svg"),
+    limbKeys: (implant.limbKeys ?? []).map(key => String(key ?? "").trim()).filter(Boolean),
+    difficulty: Math.max(0, toInteger(implant.difficulty ?? 60)),
+    skillKey: String(implant.skillKey ?? "doctor") || "doctor",
+    skillLabel: getHealingSkillLabel(implant.skillKey ?? "doctor"),
+    hasCondition,
+    conditionValue: hasCondition ? Math.max(0, toInteger(condition.value)) : null,
+    conditionMax: hasCondition ? Math.max(0, toInteger(condition.max)) : null,
+    conditionLabel: hasCondition ? `${Math.max(0, toInteger(condition.value))} / ${Math.max(0, toInteger(condition.max))}` : "∞",
+    installed: String(item.system?.placement?.mode ?? "") === "implant",
+    installedLimbKey: String(item.system?.placement?.limbKey ?? ""),
+    quantity: Math.max(1, toInteger(item.system?.quantity) || 1)
+  };
 }
 
 function snapshotProsthesisItems(actor, source = "target") {
@@ -1125,6 +1668,21 @@ function snapshotProsthesisItem(item, source = "target") {
     installedLimbKey: String(item.system?.placement?.limbKey ?? ""),
     quantity: Math.max(1, toInteger(item.system?.quantity) || 1)
   };
+}
+
+function getInstalledImplantsByLimb(actor) {
+  const map = new Map();
+  for (const item of actor.items?.contents ?? Array.from(actor.items ?? [])) {
+    if (item.type !== "gear" || !item.system?.equipped) continue;
+    if (!hasItemFunction(item, ITEM_FUNCTIONS.implant)) continue;
+    if (String(item.system?.placement?.mode ?? "") !== "implant") continue;
+    const limbKey = String(item.system?.placement?.limbKey ?? "");
+    if (!limbKey) continue;
+    const items = map.get(limbKey) ?? [];
+    items.push(item);
+    map.set(limbKey, items);
+  }
+  return map;
 }
 
 function getInstalledProsthesesByLimb(actor) {
@@ -1286,6 +1844,44 @@ async function handleMedicineSocketRequest(action, payload = {}) {
         treatmentId: payload.treatmentId ?? payload.traumaId,
         finalProgress: payload.finalProgress,
         completed: payload.completed
+      })
+    };
+  }
+
+  if (action === "installImplant") {
+    const sourceActor = await fromUuid(String(payload.sourceActorUuid ?? "")) ?? actor;
+    return {
+      targetContext: await applyImplantInstallLocally({
+        sourceActor,
+        targetActor: actor,
+        limbKey: payload.limbKey,
+        implantSource: payload.implantSource,
+        itemId: payload.itemId
+      })
+    };
+  }
+
+  if (action === "implantCriticalFailure") {
+    const sourceActor = await fromUuid(String(payload.sourceActorUuid ?? "")) ?? actor;
+    return {
+      targetContext: await applyImplantCriticalFailureLocally({
+        sourceActor,
+        targetActor: actor,
+        limbKey: payload.limbKey,
+        implantSource: payload.implantSource,
+        itemId: payload.itemId
+      })
+    };
+  }
+
+  if (action === "removeImplant") {
+    const sourceActor = await fromUuid(String(payload.sourceActorUuid ?? "")) ?? actor;
+    return {
+      targetContext: await applyImplantRemovalLocally({
+        sourceActor,
+        targetActor: actor,
+        limbKey: payload.limbKey,
+        itemId: payload.itemId
       })
     };
   }

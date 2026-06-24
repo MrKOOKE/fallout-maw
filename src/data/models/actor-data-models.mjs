@@ -374,6 +374,9 @@ function limbField() {
     damageMultiplier: new NumberField({ required: true, initial: 1, persisted: false }),
     aimedDifficultyPercent: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
     aimedDifficultyBonus: new NumberField({ required: true, integer: true, initial: 0, persisted: false }),
+    implantLimitBase: new NumberField({ required: true, integer: true, min: 0, initial: 1, persisted: false }),
+    implantLimitBonus: new NumberField({ required: true, integer: true, initial: 0 }),
+    implantLimit: new NumberField({ required: true, integer: true, min: 0, initial: 1, persisted: false }),
     critical: new BooleanField({ required: true, initial: false, persisted: false }),
     missing: new BooleanField({ required: true, initial: false }),
     min: new NumberField({ required: true, integer: true, initial: -100, persisted: false }),
@@ -565,11 +568,16 @@ function normalizeLimbMap(currentLimbs = {}, settings = [], maximums = {}, sourc
       const spent = normalizeLimbSpent(current, source, min, max);
       const value = Math.min(Math.max(max - spent, min), max);
       const missing = Boolean(source?.missing ?? current?.missing);
+      const implantLimitBase = Math.max(0, toInteger(setting?.implantLimit ?? 1));
+      const implantLimitBonus = toInteger(current?.implantLimitBonus ?? source?.implantLimitBonus);
       return [setting.key, {
         label: String(setting?.label ?? setting?.name ?? setting?.key ?? ""),
         damageMultiplier: toDecimal(setting?.damageMultiplier, 1),
         aimedDifficultyPercent: toInteger(setting?.aimedDifficultyPercent),
         aimedDifficultyBonus: toInteger(setting?.aimedDifficultyBonus),
+        implantLimitBase,
+        implantLimitBonus,
+        implantLimit: Math.max(0, implantLimitBase + implantLimitBonus),
         critical: Boolean(setting?.critical),
         missing,
         min,
@@ -742,6 +750,9 @@ function getConstructPartLimbData(items) {
       damageMultiplier: 1,
       aimedDifficultyPercent: toInteger(part.aimedDifficultyPercent),
       aimedDifficultyBonus: toInteger(part.aimedDifficultyBonus),
+      implantLimitBase: 0,
+      implantLimitBonus: 0,
+      implantLimit: 0,
       critical: Boolean(part.critical)
     });
     source[key] = {

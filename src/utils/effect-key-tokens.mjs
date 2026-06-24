@@ -8,6 +8,7 @@ import {
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_BONUS_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
+  ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
   ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
   SMART_FUDGE_RESULT_EFFECT_KEYS
@@ -95,6 +96,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
       group: game.i18n.localize("FALLOUTMAW.Common.Inventory")
     }),
     ...buildDamageMitigationEffectKeyTokens(),
+    ...buildImplantLimitEffectKeyTokens(),
     createEffectKeyToken({
       code: "blind",
       key: "blind",
@@ -477,6 +479,32 @@ export function buildDamageMitigationEffectKeyTokens() {
         }));
       }
     }
+  }
+
+  return tokens.filter(Boolean);
+}
+
+export function buildImplantLimitEffectKeyTokens() {
+  const group = "Изменение доступных имплантов";
+  const allLimbsLabel = "Все части тела";
+  const tokens = [
+    createEffectKeyToken({
+      code: "implantLimit:all",
+      key: "all",
+      label: `${group}: ${allLimbsLabel}`,
+      path: ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY,
+      group
+    })
+  ];
+
+  for (const limb of getEffectKeyLimbs()) {
+    tokens.push(createEffectKeyToken({
+      code: `implantLimit:${limb.key}`,
+      key: limb.key,
+      label: `${group}: ${limb.label}`,
+      path: `system.limbs.${limb.key}.implantLimitBonus`,
+      group
+    }));
   }
 
   return tokens.filter(Boolean);

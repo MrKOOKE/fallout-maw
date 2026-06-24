@@ -189,6 +189,7 @@ function normalizeLimbs(limbs) {
         stateMax,
         damageMultiplier: toDecimal(limb?.damageMultiplier ?? defaultLimb?.damageMultiplier ?? 1, 1),
         aimedDifficultyPercent: toInteger(limb?.aimedDifficultyPercent ?? defaultLimb?.aimedDifficultyPercent ?? 0),
+        implantLimit: Math.max(0, toInteger(limb?.implantLimit ?? defaultLimb?.implantLimit ?? 1)),
         critical,
         lossEffects: critical
           ? []

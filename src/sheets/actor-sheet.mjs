@@ -39,6 +39,7 @@ import {
 } from "../utils/equipment-slots.mjs";
 import { buildDamageMitigationTables, buildDamageTypeIconClass, buildDamageTypeIconStyle } from "../utils/damage-mitigation-display.mjs";
 import {
+  ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY,
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_BONUS_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
@@ -5873,6 +5874,16 @@ function buildEffectPathLabelMap({
     value: valueLabel,
     max: maximumLabel
   });
+  const implantLimitLabel = "Изменение доступных имплантов";
+  map.set(ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY, `${implantLimitLabel}: Все части тела`);
+  map.set("system.limbs.all.implantLimit", `${implantLimitLabel}: Все части тела`);
+  for (const limb of limbs) {
+    const limbKey = String(limb?.key ?? "").trim();
+    if (!limbKey) continue;
+    const limbLabel = String(limb?.label ?? limbKey).trim() || limbKey;
+    map.set(`system.limbs.${limbKey}.implantLimitBonus`, `${implantLimitLabel}: ${limbLabel}`);
+    map.set(`system.limbs.${limbKey}.implantLimit`, `${implantLimitLabel}: ${limbLabel}`);
+  }
   addDamageEffectPathLabels(map, "system.damageDefenseBonuses", localizeOrFallback("FALLOUTMAW.Effects.DamageDefenseBonuses", "Бонус защиты от урона"), limbs, damageTypeSettings);
   addDamageEffectPathLabels(map, "system.damageResistanceBonuses", localizeOrFallback("FALLOUTMAW.Effects.DamageResistanceBonuses", "Бонус сопротивлений урону"), limbs, damageTypeSettings);
   map.set("system.combat.burstStability", "Стабильность стрельбы очередью");

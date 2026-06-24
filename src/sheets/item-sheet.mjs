@@ -228,6 +228,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const hasEnergyConsumerFunction = sheetHasItemFunction(ITEM_FUNCTIONS.energyConsumer);
     const hasEnergySourceFunction = sheetHasItemFunction(ITEM_FUNCTIONS.energySource);
     const hasFreeSettingsFunction = sheetHasItemFunction(ITEM_FUNCTIONS.freeSettings);
+    const hasImplantFunction = sheetHasItemFunction(ITEM_FUNCTIONS.implant);
     const hasModuleFunction = sheetHasItemFunction(ITEM_FUNCTIONS.module);
     const hasProsthesisFunction = sheetHasItemFunction(ITEM_FUNCTIONS.prosthesis);
     const hasConditionFunction = sheetHasItemFunction(ITEM_FUNCTIONS.condition);
@@ -326,6 +327,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         value: ITEM_FUNCTIONS.module,
         label: game.i18n.localize("FALLOUTMAW.Item.FunctionModule"),
         disabled: hasModuleFunction
+      },
+      {
+        value: ITEM_FUNCTIONS.implant,
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionImplant"),
+        disabled: hasImplantFunction
       },
       {
         value: ITEM_FUNCTIONS.prosthesis,
@@ -432,6 +438,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       itemFreeSettingsFunctionPath: "system.functions.freeSettings.entries",
       itemFreeSettingsFunctions: normalizeAbilityFunctions(item.system?.functions?.freeSettings?.entries ?? [])
         .map((entry, index) => prepareAbilityFunctionRowsForDisplay(entry, index, "system.functions.freeSettings.entries")),
+      hasImplantFunction,
+      implantLimbRows: buildImplantLimbRows(item, creatureOptions),
+      canAddImplantLimb: canAddImplantLimb(item, creatureOptions),
+      implantSkillChoices: buildSkillChoices(item.system?.functions?.implant?.skillKey, skillSettings),
       hasModuleFunction,
       weaponModuleTargetChoices: buildWeaponModuleTargetChoices(item.system?.functions?.module?.targetFunction),
       hasProsthesisFunction,
@@ -539,6 +549,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   }
 
   async _processSubmitData(event, form, submitData, options = {}) {
+    if (form?.querySelector?.("[data-implant-limb-key-list]")) {
+      const limbKeys = Array.from(form.querySelectorAll("[data-implant-limb-key-list] select"))
+        .map(input => String(input.value ?? "").trim())
+        .filter(Boolean);
+      foundry.utils.setProperty(submitData, "system.functions.implant.limbKeys", Array.from(new Set(limbKeys)));
+    }
     if (form?.querySelector?.("[data-prosthesis-limb-key-list]")) {
       const limbKeys = Array.from(form.querySelectorAll("[data-prosthesis-limb-key-list] select"))
         .map(input => String(input.value ?? "").trim())
@@ -718,6 +734,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelector("[data-add-prosthesis-limb]")?.addEventListener("click", event => this.#onAddProsthesisLimb(event));
     this.element?.querySelectorAll("[data-delete-prosthesis-limb]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteProsthesisLimb(event));
+    });
+    this.element?.querySelector("[data-add-implant-limb]")?.addEventListener("click", event => this.#onAddImplantLimb(event));
+    this.element?.querySelectorAll("[data-delete-implant-limb]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteImplantLimb(event));
     });
     this.element?.querySelector("[data-add-prosthesis-blocked-effect]")?.addEventListener("click", event => this.#onAddProsthesisBlockedEffect(event));
     this.element?.querySelectorAll("[data-delete-prosthesis-blocked-effect]").forEach(button => {
@@ -2929,6 +2949,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       });
     }
 
+    if (functionKey === ITEM_FUNCTIONS.implant) {
+      this.#functionPickerActive = false;
+      return this.item.update({
+        "system.functions.implant.enabled": true,
+        "system.functions.implant.limbKeys": [],
+        "system.functions.implant.difficulty": 60,
+        "system.functions.implant.skillKey": "doctor"
+      });
+    }
+
     if (functionKey === ITEM_FUNCTIONS.prosthesis) {
       this.#functionPickerActive = false;
       return this.item.update({
@@ -2974,6 +3004,24 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.item.update({ "system.functions.actorContainer.slots": slots });
   }
 
+  #onAddImplantLimb(event) {
+    event.preventDefault();
+    const current = this.#getSubmittedImplantLimbKeys();
+    const choices = buildImplantLimbChoiceEntries(getCreatureOptions(), current);
+    const nextKey = choices.find(choice => !current.includes(choice.key))?.key ?? "";
+    if (!nextKey) return undefined;
+    return this.item.update({ "system.functions.implant.limbKeys": [...current, nextKey] });
+  }
+
+  #onDeleteImplantLimb(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteImplantLimb);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const current = this.#getSubmittedImplantLimbKeys();
+    current.splice(index, 1);
+    return this.item.update({ "system.functions.implant.limbKeys": current });
+  }
+
   #onAddProsthesisLimb(event) {
     event.preventDefault();
     const current = this.#getSubmittedProsthesisLimbKeys();
@@ -3008,6 +3056,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const current = this.#getSubmittedProsthesisBlockedEffects();
     current.splice(index, 1);
     return this.item.update({ "system.functions.prosthesis.blockedPeriodicEffects": current });
+  }
+
+  #getSubmittedImplantLimbKeys() {
+    if (!this.form) return normalizeImplantLimbKeys(this.item.system?.functions?.implant?.limbKeys);
+    const formData = new FormDataExtended(this.form);
+    const submitData = this._processFormData(null, this.form, formData);
+    return normalizeImplantLimbKeys(
+      foundry.utils.getProperty(submitData, "system.functions.implant.limbKeys")
+        ?? this.item.system?.functions?.implant?.limbKeys
+    );
   }
 
   #getSubmittedProsthesisLimbKeys() {
@@ -3191,6 +3249,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.module.name": "",
         "system.functions.module.targetFunction": "weapon",
         "system.functions.module.additionalWeapons": {}
+      });
+    }
+    if (functionKey === ITEM_FUNCTIONS.implant) {
+      return this.item.update({
+        "system.functions.implant.enabled": false,
+        "system.functions.implant.limbKeys": [],
+        "system.functions.implant.difficulty": 60,
+        "system.functions.implant.skillKey": "doctor",
+        "system.placement.limbKey": ""
       });
     }
     if (functionKey === ITEM_FUNCTIONS.prosthesis) {
@@ -4506,6 +4573,7 @@ function getItemFunctionLabel(functionKey = "") {
   if (functionKey === ITEM_FUNCTIONS.trap) return game.i18n.localize("FALLOUTMAW.Item.FunctionTrap");
   if (functionKey === ITEM_FUNCTIONS.weapon) return game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon");
   if (functionKey === ITEM_FUNCTIONS.module) return game.i18n.localize("FALLOUTMAW.Item.FunctionModule");
+  if (functionKey === ITEM_FUNCTIONS.implant) return game.i18n.localize("FALLOUTMAW.Item.FunctionImplant");
   if (functionKey === ITEM_FUNCTIONS.prosthesis) return game.i18n.localize("FALLOUTMAW.Item.FunctionProsthesis");
   if (functionKey === ITEM_FUNCTIONS.tool) return game.i18n.localize("FALLOUTMAW.Item.FunctionTool");
   const toolKey = getToolKeyFromFunctionKey(functionKey);
@@ -8826,6 +8894,23 @@ function buildToolClassChoices(selectedClass = "D") {
   }));
 }
 
+function buildImplantLimbRows(item, creatureOptions) {
+  const selected = normalizeImplantLimbKeys(item.system?.functions?.implant?.limbKeys);
+  const choices = buildImplantLimbChoiceEntries(creatureOptions, selected);
+  return selected.map((selectedKey, index) => {
+    const usedByOtherRows = new Set(selected.filter((_, usedIndex) => usedIndex !== index));
+    return {
+      key: selectedKey,
+      choices: choices
+        .filter(choice => choice.key === selectedKey || !usedByOtherRows.has(choice.key))
+        .map(choice => ({
+          ...choice,
+          selected: choice.key === selectedKey
+        }))
+    };
+  });
+}
+
 function buildProsthesisLimbRows(item, creatureOptions) {
   const selected = normalizeProsthesisLimbKeys(item.system?.functions?.prosthesis?.limbKeys);
   const choices = buildProsthesisLimbChoiceEntries(creatureOptions, selected);
@@ -8878,6 +8963,24 @@ function buildProsthesisBlockedEffectChoiceEntries(damageTypeSettings = [], extr
 }
 
 function normalizeProsthesisBlockedEffects(value) {
+  const source = Array.isArray(value)
+    ? value
+    : value && typeof value === "object" ? Object.values(value) : [];
+  return Array.from(new Set(source
+    .map(key => String(key ?? "").trim())
+    .filter(Boolean)));
+}
+
+function canAddImplantLimb(item, creatureOptions) {
+  const selected = normalizeImplantLimbKeys(item.system?.functions?.implant?.limbKeys);
+  return buildImplantLimbChoiceEntries(creatureOptions, selected).some(choice => !selected.includes(choice.key));
+}
+
+function buildImplantLimbChoiceEntries(creatureOptions, extraKeys = []) {
+  return buildProsthesisLimbChoiceEntries(creatureOptions, normalizeImplantLimbKeys(extraKeys));
+}
+
+function normalizeImplantLimbKeys(value) {
   const source = Array.isArray(value)
     ? value
     : value && typeof value === "object" ? Object.values(value) : [];

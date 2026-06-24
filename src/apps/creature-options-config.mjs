@@ -29,7 +29,7 @@ import {
   normalizeNaturalRaceItemData,
   NATURAL_RACE_ITEM_KINDS
 } from "../races/natural-items.mjs";
-import { buildActionCostEffectKeyTokens, buildAllSkillsAdvantageEffectKeyToken, buildAllSkillsDisadvantageEffectKeyToken, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildWeaponSwitchCostEffectKeyToken } from "../utils/effect-key-tokens.mjs";
+import { buildActionCostEffectKeyTokens, buildAllSkillsAdvantageEffectKeyToken, buildAllSkillsDisadvantageEffectKeyToken, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildImplantLimitEffectKeyTokens, buildWeaponSwitchCostEffectKeyToken } from "../utils/effect-key-tokens.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { FalloutMaWFormApplicationV2, getExpandedFormData } from "./base-form-application-v2.mjs";
 import { activateEffectKeyAutocomplete, createEffectKeyToken } from "./effect-key-autocomplete.mjs";
@@ -304,6 +304,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
       stateMax: "100 + con * 5",
       damageMultiplier: 1,
       aimedDifficultyPercent: 0,
+      implantLimit: 1,
       critical: false,
       lossEffects: []
     });
@@ -742,6 +743,7 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
         stateMax: String(existing.stateMax ?? "100").trim() || "100",
         damageMultiplier: toDecimal(existing.damageMultiplier, 1),
         aimedDifficultyPercent: toInteger(existing.aimedDifficultyPercent),
+        implantLimit: Math.max(0, toInteger(existing.implantLimit ?? 1)),
         critical: parseBoolean(existing.critical),
         lossEffects: normalizeLimbLossEffects(existing.lossEffects)
       };
@@ -1065,6 +1067,7 @@ function normalizeLimbSettings(limb = {}, { keepEmptyLossEffects = false } = {})
     stateMax: String(limb?.stateMax ?? "100").trim() || "100",
     damageMultiplier: toDecimal(limb?.damageMultiplier, 1),
     aimedDifficultyPercent: toInteger(limb?.aimedDifficultyPercent),
+    implantLimit: Math.max(0, toInteger(limb?.implantLimit ?? 1)),
     critical,
     lossEffects: critical ? [] : normalizeLimbLossEffects(limb?.lossEffects, { keepEmpty: keepEmptyLossEffects })
   };
@@ -1108,6 +1111,7 @@ function buildEffectKeyTokens() {
     ...getNeedSettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.needs.${entry.key}.bonus`, group: "Потребности" })),
     ...getProficiencySettings().map(entry => createEffectKeyToken({ code: entry.abbr || entry.key, key: entry.key, label: entry.label, path: `system.proficiencies.${entry.key}.bonus`, group: "Владения" })),
     ...buildDamageMitigationEffectKeyTokens(),
+    ...buildImplantLimitEffectKeyTokens(),
     createEffectKeyToken({ code: "blind", key: "blind", label: "Слепота", path: "status.blind", group: "Статусы" }),
     createEffectKeyToken({ code: "moveCost", key: "movement", label: "Стоимость перемещения", path: "system.costs.movement", group: "Стоимость" }),
     createEffectKeyToken({ code: "actionCost", key: "action", label: "Стоимость действий", path: "system.costs.action", group: "Стоимость" }),

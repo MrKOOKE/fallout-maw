@@ -72,6 +72,7 @@ export class GearDataModel extends BaseItemDataModel {
         energyConsumer: energyConsumerFunctionField(),
         energySource: energySourceFunctionField(),
         freeSettings: itemFreeSettingsFunctionField(),
+        implant: implantFunctionField(),
         lightSource: lightSourceFunctionField(),
         module: moduleFunctionField(),
         prosthesis: prosthesisFunctionField(),
@@ -582,6 +583,18 @@ function constructPartWeaponSetField() {
     id: new StringField({ required: true, blank: true, initial: () => foundry.utils.randomID() }),
     label: new StringField({ required: true, blank: true, initial: "" }),
     quantity: new NumberField({ required: true, integer: true, min: 0, initial: 1 })
+  });
+}
+
+function implantFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    limbKeys: new ArrayField(new StringField({ required: true, blank: false, initial: "" }), {
+      required: true,
+      initial: []
+    }),
+    difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
+    skillKey: new StringField({ required: true, blank: false, initial: "doctor" })
   });
 }
 

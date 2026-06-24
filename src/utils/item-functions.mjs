@@ -16,6 +16,7 @@ export const ITEM_FUNCTIONS = {
   trap: "trap",
   weapon: "weapon",
   module: "module",
+  implant: "implant",
   prosthesis: "prosthesis",
   tool: "tool",
   toolPrefix: "tool:"
@@ -32,6 +33,7 @@ export const WEAPON_SPECIAL_PROPERTIES = Object.freeze({
 const BROKEN_ITEM_FUNCTION_EXCEPTIONS = new Set([
   ITEM_FUNCTIONS.condition,
   ITEM_FUNCTIONS.constructPart,
+  ITEM_FUNCTIONS.implant,
   ITEM_FUNCTIONS.prosthesis
 ]);
 
@@ -137,6 +139,32 @@ function getFunctionChargesData(itemFunction = {}) {
 
 export function getModuleFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.module] ?? {};
+}
+
+export function getImplantFunction(itemOrSystem = null) {
+  return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.implant] ?? {};
+}
+
+export function getImplantLimbKeys(itemOrSystem = null) {
+  return new Set(
+    (getImplantFunction(itemOrSystem).limbKeys ?? [])
+      .map(key => String(key ?? "").trim())
+      .filter(Boolean)
+  );
+}
+
+export function isImplantForLimb(itemOrSystem = null, limbKey = "") {
+  const key = String(limbKey ?? "").trim();
+  if (!key || !hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.implant)) return false;
+  return getImplantLimbKeys(itemOrSystem).has(key);
+}
+
+export function isInstalledImplant(itemOrSystem = null, limbKey = "") {
+  const system = getItemSystem(itemOrSystem);
+  if (!hasItemFunction(system, ITEM_FUNCTIONS.implant)) return false;
+  if (String(system.placement?.mode ?? "") !== "implant") return false;
+  const key = String(limbKey ?? "").trim();
+  return !key || String(system.placement?.limbKey ?? "").trim() === key;
 }
 
 export function getProsthesisFunction(itemOrSystem = null) {

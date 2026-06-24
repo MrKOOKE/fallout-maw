@@ -181,6 +181,25 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
       })
       .filter(Boolean);
 
+  const implantSlots = actor?.type === "construct"
+    ? []
+    : Object.entries(actor.system?.limbs ?? {})
+      .flatMap(([key, limb]) => {
+        const items = topLevelItems.filter(candidate => (
+          candidate.placement?.mode === "implant"
+          && candidate.placement?.limbKey === key
+        ));
+        return items.map((item, index) => {
+          assignedItemIds.add(item.id);
+          return {
+            key: `${key}:${item.id}`,
+            limbKey: key,
+            label: items.length > 1 ? `${String(limb?.label ?? key)} ${index + 1}` : String(limb?.label ?? key),
+            item
+          };
+        });
+      });
+
   const weaponSets = [
     ...(race?.weaponSets ?? []).map(set => prepareWeaponSetContext(set, race, topLevelItems, assignedItemIds, actor)),
     ...prepareConstructPartWeaponSets(actor, topLevelItems, assignedItemIds),
@@ -277,6 +296,7 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
     actorContainers: prepareActorContainerInventoryContext(actor),
     equipmentSlots,
     prosthesisSlots,
+    implantSlots,
     weaponSets,
     naturalWeaponSet,
     containers,
