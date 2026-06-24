@@ -804,6 +804,7 @@ function craftNodeField() {
     height: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     quantity: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
     blockId: new StringField({ required: true, blank: true, initial: "" }),
+    blockLimit: new NumberField({ required: false, nullable: true, integer: true, min: 0, initial: null }),
     root: new BooleanField({ required: true, initial: false })
   });
 }

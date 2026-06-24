@@ -186,7 +186,7 @@
           <div class="fallout-maw-craft-block readonly" data-craft-block-id="{{id}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" style="{{style}}" aria-label="{{label}}"></div>
           {{/each}}
           {{#each craft.nodes}}
-          <div class="fallout-maw-craft-node readonly {{#if root}}root{{/if}} {{#if isToolRequirement}}tool-requirement{{/if}} {{#if toolPickerOpen}}selected{{/if}} {{#if missing}}missing{{/if}} {{pulseClass}}" data-craft-node-id="{{id}}" data-craft-block-id="{{blockId}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" {{#if isToolRequirement}}data-craft-tool-node="true" data-search-actor-uuid="{{tooltipActorUuid}}" data-tooltip-item="{{tooltipItemId}}"{{else}}data-tooltip-uuid="{{tooltipUuid}}"{{/if}} style="{{style}}">
+          <div class="fallout-maw-craft-node readonly {{#if root}}root{{/if}} {{#if isToolRequirement}}tool-requirement{{/if}} {{#if toolPickerOpen}}selected{{/if}} {{#if missing}}missing{{/if}}" data-craft-node-id="{{id}}" data-craft-block-id="{{blockId}}" data-craft-x="{{x}}" data-craft-y="{{y}}" data-craft-width="{{width}}" data-craft-height="{{height}}" {{#if isToolRequirement}}data-craft-tool-node="true" data-search-actor-uuid="{{tooltipActorUuid}}" data-tooltip-item="{{tooltipItemId}}"{{else}}data-tooltip-uuid="{{tooltipUuid}}"{{/if}} style="{{style}}">
             <span class="fallout-maw-craft-node-image">
               <img src="{{img}}" alt="{{name}}">
               <span class="fallout-maw-craft-node-quantity">{{quantityLabel}}</span>

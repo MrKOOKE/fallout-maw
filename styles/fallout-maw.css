@@ -2002,6 +2002,10 @@ body #prosemirror-dropdown {
   z-index: 4;
 }
 
+.fallout-maw-craft-node.selected {
+  z-index: 20;
+}
+
 .fallout-maw-craft-node.root .fallout-maw-craft-node-image {
   border-color: rgba(238, 214, 135, 0.95);
   box-shadow:

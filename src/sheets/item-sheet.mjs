@@ -989,6 +989,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     workspace.querySelector("[data-craft-cancel-attach]")?.addEventListener("click", event => this.#onCraftCancelAttach(event));
     workspace.querySelector("[data-craft-node-quantity]")?.addEventListener("change", event => this.#onCraftNodeQuantityChange(event));
     workspace.querySelector("[data-craft-node-tool-use-as-item]")?.addEventListener("change", event => this.#onCraftNodeToolUseAsItemChange(event));
+    workspace.querySelector("[data-craft-block-limit]")?.addEventListener("change", event => this.#onCraftBlockLimitChange(event));
     workspace.querySelector("[data-craft-link-skill]")?.addEventListener("change", event => this.#onCraftLinkSkillChange(event));
     workspace.querySelector("[data-craft-link-difficulty]")?.addEventListener("change", event => this.#onCraftLinkDifficultyChange(event));
     workspace.querySelector("[data-craft-link-no-check]")?.addEventListener("change", event => this.#onCraftLinkNoCheckChange(event));
@@ -1018,6 +1019,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 
   #onCraftWorkspacePointerDown(event) {
     if (event.target?.closest?.(".fallout-maw-craft-popover")) return;
+    const committedBlockLimit = this.#commitFocusedCraftBlockLimitInput({ clearSelection: event.button === 0 });
+    if (committedBlockLimit) {
+      event.preventDefault();
+      event.stopPropagation();
+      return committedBlockLimit;
+    }
     if (event.button === 0) {
       if (this.#craftAttachSourceNodeId) {
         const workspace = event.currentTarget;
@@ -1046,6 +1053,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       startClientY: event.clientY,
       startX: viewport.x,
       startY: viewport.y,
+      contextBlockId: "",
       moved: false
     };
     const onMove = moveEvent => this.#onCraftPanMove(moveEvent);
@@ -1062,6 +1070,9 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const drag = this.#craftPanDrag;
     if (!drag || event.pointerId !== drag.pointerId) return;
     event.preventDefault();
+    const deltaX = event.clientX - drag.startClientX;
+    const deltaY = event.clientY - drag.startClientY;
+    if (!drag.moved && Math.hypot(deltaX, deltaY) < 4) return;
     const nextX = drag.startX + (event.clientX - drag.startClientX);
     const nextY = drag.startY + (event.clientY - drag.startClientY);
     drag.moved = true;
@@ -1071,7 +1082,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   #onCraftPanEnd(event) {
     const drag = this.#craftPanDrag;
     this.#craftPanDrag = null;
-    if (!drag || event.pointerId !== drag.pointerId || !drag.moved) return;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    if (!drag.moved) {
+      if (drag.contextBlockId) {
+        this.#craftSelection = { type: "block", id: drag.contextBlockId };
+        this.#craftAttachSourceNodeId = "";
+        return this.render();
+      }
+      return undefined;
+    }
     const nextX = Math.round(drag.startX + (event.clientX - drag.startClientX));
     const nextY = Math.round(drag.startY + (event.clientY - drag.startClientY));
     const viewport = this.#setCraftViewportStyle(nextX, nextY);
@@ -1281,12 +1300,21 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   }
 
   #onCraftNodePointerDown(event) {
-    if (event.button !== 0) return;
     const nodeElement = event.currentTarget;
     const nodeId = String(nodeElement.dataset.craftNodeId ?? "");
     if (!nodeId) return;
+    if (![0, 2].includes(event.button)) return;
     event.preventDefault();
     event.stopPropagation();
+
+    const nodes = getCraftNodesWithRoot(this.item);
+    const node = nodes.find(entry => entry.id === nodeId);
+    if (!node) return;
+    const blockId = String(node.blockId ?? "");
+    if (event.button === 2) {
+      this.#startCraftPanDrag(event, blockId);
+      return undefined;
+    }
 
     if (this.#craftAttachSourceNodeId) {
       if (nodeId !== this.#craftAttachSourceNodeId) return this.#createCraftLink(this.#craftAttachSourceNodeId, nodeId, event);
@@ -1294,10 +1322,6 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       return this.render();
     }
 
-    const nodes = getCraftNodesWithRoot(this.item);
-    const node = nodes.find(entry => entry.id === nodeId);
-    if (!node) return;
-    const blockId = String(node.blockId ?? "");
     const movingNodeIds = blockId && !event.shiftKey
       ? nodes.filter(entry => entry.blockId === blockId).map(entry => entry.id)
       : [nodeId];
@@ -1332,12 +1356,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   }
 
   #onCraftBlockPointerDown(event) {
-    if (event.button !== 0 || this.#craftAttachSourceNodeId) return;
+    if (![0, 2].includes(event.button) || this.#craftAttachSourceNodeId) return;
     const blockElement = event.currentTarget;
     const blockId = String(blockElement.dataset.craftBlockId ?? "");
     if (!blockId) return;
     event.preventDefault();
     event.stopPropagation();
+    if (event.button === 2) {
+      this.#startCraftPanDrag(event, blockId);
+      return undefined;
+    }
     const nodes = getCraftNodesWithRoot(this.item);
     const movingNodeIds = nodes.filter(node => node.blockId === blockId).map(node => node.id);
     if (!movingNodeIds.length) return;
@@ -1370,6 +1398,27 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerup", onUp);
       this.#onCraftNodeEnd(upEvent);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp, { once: true });
+  }
+
+  #startCraftPanDrag(event, contextBlockId = "") {
+    const viewport = this.#getCraftViewport();
+    this.#craftPanDrag = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: viewport.x,
+      startY: viewport.y,
+      contextBlockId: String(contextBlockId ?? ""),
+      moved: false
+    };
+    const onMove = moveEvent => this.#onCraftPanMove(moveEvent);
+    const onUp = upEvent => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      this.#onCraftPanEnd(upEvent);
     };
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp, { once: true });
@@ -1656,6 +1705,29 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const nodes = getCraftNodesWithRoot(this.item).map(node => (
       node.id === nodeId ? { ...node, quantity } : node
     ));
+    return this.#updateCraftRecipe({ nodes });
+  }
+
+  #onCraftBlockLimitChange(event) {
+    return this.#commitCraftBlockLimitInput(event.currentTarget);
+  }
+
+  #commitFocusedCraftBlockLimitInput({ clearSelection = false } = {}) {
+    const input = document.activeElement;
+    if (!input?.matches?.("[data-craft-block-limit]") || !this.element?.contains(input)) return null;
+    return this.#commitCraftBlockLimitInput(input, { clearSelection });
+  }
+
+  #commitCraftBlockLimitInput(input, { clearSelection = false } = {}) {
+    if (!input) return null;
+    const blockId = String(input.dataset.craftBlockLimit ?? "");
+    if (!blockId) return undefined;
+    const blockLimit = normalizeCraftBlockLimit(input.value);
+    input.value = Number.isInteger(blockLimit) && blockLimit > 0 ? String(blockLimit) : "";
+    const nodes = getCraftNodesWithRoot(this.item).map(node => (
+      String(node.blockId ?? "") === blockId ? { ...node, blockLimit } : node
+    ));
+    this.#craftSelection = clearSelection ? null : { type: "block", id: blockId };
     return this.#updateCraftRecipe({ nodes });
   }
 
@@ -2191,6 +2263,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
   #getCraftPopoverTargetElement(workspace) {
     if (this.#craftSelection?.type === "node") {
       return workspace.querySelector(`[data-craft-node-id="${CSS.escape(this.#craftSelection.id)}"]`);
+    }
+    if (this.#craftSelection?.type === "block") {
+      return workspace.querySelector(`[data-craft-block-frame-id="${CSS.escape(this.#craftSelection.id)}"]`)
+        ?? workspace.querySelector(`[data-craft-block-id="${CSS.escape(this.#craftSelection.id)}"]`);
     }
     if (this.#craftSelection?.type === "link") {
       return workspace.querySelector(`[data-craft-link-id="${CSS.escape(this.#craftSelection.id)}"]`);
@@ -6917,6 +6993,9 @@ function prepareCraftContext(item, skillSettings = [], selection = null, attachS
   const selectedNode = selectedNodeIndex >= 0
     ? prepareCraftNodeForDisplay(nodes[selectedNodeIndex], selectedNodeIndex, links)
     : null;
+  const selectedBlock = selection?.type === "block"
+    ? blocks.find(block => block.id === selection.id) ?? null
+    : null;
   const selectedLinkIndex = selection?.type === "link"
     ? links.findIndex(link => link.id === selection.id)
     : -1;
@@ -6957,9 +7036,10 @@ function prepareCraftContext(item, skillSettings = [], selection = null, attachS
     viewport,
     viewportStyle: `--craft-pan-x: ${Math.round(viewport.x)}px; --craft-pan-y: ${Math.round(viewport.y)}px; --craft-zoom: ${viewport.zoom};`,
     selectedNode,
+    selectedBlock,
     selectedLink,
     attachSourceNode,
-    hasPopover: Boolean(selectedNode || selectedLink)
+    hasPopover: Boolean(selectedNode || selectedBlock || selectedLink)
   };
 }
 
@@ -7295,7 +7375,6 @@ function createDefaultWeaponPushActionData() {
 }
 
 function getCraftNodeToolRequirements(node = {}) {
-  if (String(node.blockId ?? "").trim()) return [];
   const toolFunction = getCraftNodeToolFunction(node);
   if (!toolFunction || toolFunction.useAsItem) return [];
   return [{
@@ -7311,7 +7390,7 @@ function getCraftNodeToolFunction(node = {}) {
 }
 
 function isCraftNodeToolRequirement(node = {}, toolFunction = getCraftNodeToolFunction(node)) {
-  return Boolean(!node.root && !String(node.blockId ?? "").trim() && toolFunction && !toolFunction.useAsItem);
+  return Boolean(!node.root && toolFunction && !toolFunction.useAsItem);
 }
 
 function resolveCraftNodeSourceItem(node = {}) {
@@ -7330,8 +7409,23 @@ function formatCraftToolRequirementLabel(requirements = []) {
 
 function getCraftBlocks(nodes = []) {
   return Array.from(groupCraftNodesByBlock(nodes).entries())
-    .map(([id, blockNodes]) => ({ id, nodeIds: blockNodes.map(node => node.id), ...getCraftNodesBounds(blockNodes) }))
+    .map(([id, blockNodes]) => ({
+      id,
+      nodeIds: blockNodes.map(node => node.id),
+      nodeCount: blockNodes.length,
+      blockLimit: getCraftBlockLimit(blockNodes),
+      isToolBlock: blockNodes.length > 0 && blockNodes.every(node => isCraftNodeToolRequirement(node)),
+      ...getCraftNodesBounds(blockNodes)
+    }))
     .filter(block => block.nodeIds.length > 1 && block.width > 0 && block.height > 0);
+}
+
+function getCraftBlockLimit(nodes = []) {
+  for (const node of nodes) {
+    const limit = normalizeCraftBlockLimit(node.blockLimit);
+    if (Number.isInteger(limit) && limit > 0) return limit;
+  }
+  return null;
 }
 
 function prepareCraftLinkForDisplay(link, index, nodes, skillSettings = []) {
@@ -7428,6 +7522,7 @@ function createCraftRootNode(item, source = {}) {
     height,
     quantity: Math.max(1, toInteger(source.quantity) || 1),
     blockId: String(source.blockId ?? ""),
+    blockLimit: normalizeCraftBlockLimit(source.blockLimit),
     root: true
   });
 }
@@ -7465,8 +7560,15 @@ function normalizeCraftNode(node = {}) {
     height,
     quantity: Math.max(1, toInteger(node.quantity) || 1),
     blockId: String(node.blockId ?? ""),
+    blockLimit: normalizeCraftBlockLimit(node.blockLimit),
     root: Boolean(node.root)
   };
+}
+
+function normalizeCraftBlockLimit(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const limit = Math.max(0, toInteger(value));
+  return limit > 0 ? limit : null;
 }
 
 function getCraftItemFootprint(item) {
@@ -7531,7 +7633,7 @@ function getCraftFallbackLinkId(link = {}) {
 }
 
 function normalizeCraftRecipeParts(nodes = [], links = []) {
-  const normalizedNodes = normalizeCraftBlockMembership(nodes.map(normalizeCraftNode));
+  const normalizedNodes = normalizeCraftBlockData(nodes.map(normalizeCraftNode));
   return {
     nodes: normalizedNodes,
     links: normalizeCraftLinksForNodes(links, normalizedNodes)
@@ -7602,15 +7704,29 @@ function mirrorCraftVerticalAnchorSide(side) {
   return normalized;
 }
 
-function normalizeCraftBlockMembership(nodes = []) {
+function normalizeCraftBlockData(nodes = []) {
   const blockCounts = new Map();
   for (const node of nodes) {
     if (!node.blockId) continue;
     blockCounts.set(node.blockId, (blockCounts.get(node.blockId) ?? 0) + 1);
   }
-  return nodes.map(node => (
-    node.blockId && (blockCounts.get(node.blockId) ?? 0) > 1 ? node : { ...node, blockId: "" }
+  const normalized = nodes.map(node => (
+    node.blockId && (blockCounts.get(node.blockId) ?? 0) > 1 ? node : { ...node, blockId: "", blockLimit: null }
   ));
+  return normalizeCraftBlockLimits(normalized);
+}
+
+function normalizeCraftBlockLimits(nodes = []) {
+  const limits = new Map();
+  for (const node of nodes) {
+    const blockId = String(node.blockId ?? "");
+    if (!blockId || limits.has(blockId)) continue;
+    limits.set(blockId, normalizeCraftBlockLimit(node.blockLimit));
+  }
+  return nodes.map(node => {
+    const blockId = String(node.blockId ?? "");
+    return blockId ? { ...node, blockLimit: limits.get(blockId) ?? null } : { ...node, blockLimit: null };
+  });
 }
 
 function normalizeCraftLinksForNodes(links = [], nodes = []) {

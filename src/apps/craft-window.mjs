@@ -118,7 +118,6 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
   #pendingOperation = null;
   #startedOperationId = "";
   #animatingOperationId = "";
-  #pulse = null;
   #dragDrop = null;
   #draggedItemData = null;
   #draggedItemId = "";
@@ -178,7 +177,6 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#selectedRecipe = null;
       this.#craftViewportOverride = null;
       this.#craftToolPickerNodeId = "";
-      this.#pulse = null;
       this.#pendingOperation = null;
       this.#startedOperationId = "";
       this.#animatingOperationId = "";
@@ -238,7 +236,6 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       ? prepareCraftContext(selectedRecipe, this.#actor, {
         busy: this.#busy,
         mode: this.#craftMode,
-        pulse: this.#pulse?.recipeUuid === this.#selectedRecipeUuid && this.#pulse?.mode === this.#craftMode ? this.#pulse : null,
         recipeId: this.#selectedRecipeId,
         toolPickerNodeId: this.#craftToolPickerNodeId,
         toolSelections: this.#getCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode)
@@ -440,7 +437,6 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         this.#selectedRecipe = null;
         this.#craftViewportOverride = null;
         this.#craftToolPickerNodeId = "";
-        this.#pulse = null;
         void this.#renderPreservingWindowStack();
       });
       button.addEventListener("keydown", event => {
@@ -459,7 +455,6 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         this.#selectedRecipe = null;
         this.#craftViewportOverride = null;
         this.#craftToolPickerNodeId = "";
-        this.#pulse = null;
         this.#captureScrollPositions();
         void this.#renderPreservingWindowStack();
       });
@@ -1427,9 +1422,6 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     this.#storeCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, validation.toolSelections);
 
     this.#busy = true;
-    this.#pulse = null;
-    this.#captureScrollPositions();
-    await this.#renderPreservingWindowStack();
 
     const linkResults = [];
     for (const link of validation.links) {
@@ -1453,8 +1445,6 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       });
       if (!outcome) {
         this.#busy = false;
-        this.#captureScrollPositions();
-        await this.#renderPreservingWindowStack();
         ui.notifications.warn("Проверка крафта не выполнена.");
         return undefined;
       }
@@ -1468,7 +1458,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     const operationId = foundry.utils.randomID();
-    this.#pendingOperation = {
+    const operation = {
       id: operationId,
       actorUuid: actor.uuid,
       recipeUuid: recipe.uuid,
@@ -1480,11 +1470,13 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       toolRequirements: validation.toolRequirements,
       toolSelections: validation.toolSelections,
       outputs: validation.outputs,
+      outputNodeIds: validation.outputNodeIds,
       outputPlan: validation.outputPlan,
       linkResults
     };
-    this.#captureScrollPositions();
-    await this.#renderPreservingWindowStack();
+    this.#pendingOperation = operation;
+    this.#startedOperationId = operation.id;
+    await this.#runCraftOperationAnimation(operation);
     return undefined;
   }
 
@@ -1509,11 +1501,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       if (this.#pendingOperation?.id !== operation.id) return;
       try {
         await applyCraftOperation(operation);
-        this.#pulse = {
-          recipeUuid: operation.recipeSelectionUuid ?? operation.recipeUuid,
-          mode: normalizeCraftMode(operation.mode),
-          success: operation.success
-        };
+        await animateCraftCompletionNodes(this.element, operation);
       } catch (error) {
         console.error(`${SYSTEM_ID} | Craft operation failed`, error);
         ui.notifications.warn(error.message || "Крафт не завершен.");
@@ -1678,13 +1666,12 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const svg = workspace?.querySelector("[data-craft-links]");
     if (!workspace || !svg || !this.#selectedRecipeUuid) return;
     if (!workspace.getClientRects().length || !svg.getClientRects().length) return;
-    svg.replaceChildren();
-
     const mode = operation?.mode ?? this.#craftMode;
     const craft = this.#craftLinkData;
     const nodeData = new Map((craft.nodes ?? []).map(node => [node.id, node]));
     const resultByLink = createCraftLinkResultMap(operation?.linkResults ?? []);
     const flowByLink = getCraftLinkFlowMap(craft.links ?? [], craft.nodes ?? [], mode);
+    const fragment = document.createDocumentFragment();
 
     for (const [linkIndex, link] of (craft.links ?? []).entries()) {
       const fromNode = nodeData.get(link.fromNodeId);
@@ -1701,7 +1688,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         ? { from: getCraftLinkAnchor(link, "to"), to: getCraftLinkAnchor(link, "from") }
         : getCraftLinkAnchors(link);
       const geometry = getCraftConnectorGeometry(from, to, svg, getCraftLinkBend(link, svg), anchors);
-      appendCraftLinkPath(svg, geometry, link, {
+      appendCraftLinkPath(fragment, geometry, link, {
         result: resultByLink.get(`id:${link.id}`)
           ?? resultByLink.get(`key:${linkKey}`)
           ?? resultByLink.get(`index:${linkIndex}`),
@@ -1712,6 +1699,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
         flowToKey
       });
     }
+    svg.replaceChildren(fragment);
   }
 }
 
@@ -1719,7 +1707,7 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
   mode = normalizeCraftMode(mode);
   if (!actor?.isOwner) return { valid: false, message: "Нет прав на крафт этим актером." };
   if (!recipe) return { valid: false, message: "Рецепт не выбран." };
-  const craft = getCraftRenderData(recipe, actor, mode, { toolSelections, recipeId });
+  const craft = getCraftRenderData(recipe, actor, mode, { toolSelections, recipeId, randomizeBlocks: true });
   if (!craft.links.length) return { valid: false, message: "В рецепте нет связей для проверок." };
   if (!craft.requirements.length && !craft.toolRequirements.length) {
     return {
@@ -1764,7 +1752,8 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
   }));
   const outputs = craft.outputs.map(output => ({
     sourceUuid: output.sourceUuid,
-    quantity: output.quantity
+    quantity: output.quantity,
+    nodeIds: output.nodeIds
   }));
   const spendPlan = createCraftRequirementSpendPlan(actor, requirements);
   const outputPlan = await createCraftOutputPlan(actor, recipe, mode, outputs, spendPlan, recipeId);
@@ -1776,6 +1765,7 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
     toolRequirements,
     toolSelections: resolvedToolSelections,
     outputs,
+    outputNodeIds: outputs.flatMap(output => Array.from(output.nodeIds ?? [])),
     outputPlan,
     links: craft.links.map((link, index) => ({
       id: link.id,
@@ -1816,6 +1806,7 @@ async function spendCraftRequirements(actor, requirements = [], plan = null) {
 
 async function spendCraftToolRequirements(actor, plan = null) {
   if (plan?.updates?.length) await actor.updateEmbeddedDocuments("Item", plan.updates);
+  if (plan?.deletes?.length) await actor.deleteEmbeddedDocuments("Item", plan.deletes);
 }
 
 function createCraftRequirementSpendPlan(actor, requirements = []) {
@@ -1848,6 +1839,7 @@ function createCraftRequirementSpendPlan(actor, requirements = []) {
 
 function createCraftToolRequirementSpendPlan(actor, requirements = [], selections = {}) {
   const updatesByItemId = new Map();
+  const depletedItemIds = new Set();
   const supplyByItemTool = new Map();
   const ownedByRequirement = new Map();
   const selectedByRequirement = new Map();
@@ -1882,9 +1874,12 @@ function createCraftToolRequirementSpendPlan(actor, requirements = [], selection
       selected.supplyValue -= spend;
       remaining -= spend;
       supplyByItemTool.set(selected.supplyKey, selected.supplyValue);
-      const update = updatesByItemId.get(selected.item.id) ?? { _id: selected.item.id };
-      update[`system.functions.tools.${selected.toolKey}.supply.value`] = selected.supplyValue;
-      updatesByItemId.set(selected.item.id, update);
+      if (selected.supplyValue <= 0) depletedItemIds.add(selected.item.id);
+      else {
+        const update = updatesByItemId.get(selected.item.id) ?? { _id: selected.item.id };
+        update[`system.functions.tools.${selected.toolKey}.supply.value`] = selected.supplyValue;
+        updatesByItemId.set(selected.item.id, update);
+      }
     }
 
     if (remaining > 0) missingKeys.add(requirement.key);
@@ -1895,7 +1890,10 @@ function createCraftToolRequirementSpendPlan(actor, requirements = [], selection
     message: unavailableSelectedKeys.size
       ? "Выбранный инструмент больше недоступен для крафта."
       : (missingKeys.size ? "Недостаточно зарядов подходящих инструментов для крафта." : ""),
-    updates: Array.from(updatesByItemId.values()),
+    updates: Array.from(updatesByItemId.entries())
+      .filter(([itemId]) => !depletedItemIds.has(itemId))
+      .map(([, update]) => update),
+    deletes: Array.from(depletedItemIds),
     missingKeys,
     ownedByRequirement,
     selectedByRequirement
@@ -2206,7 +2204,7 @@ async function applyCraftOutputPlan(actor, outputPlan = {}) {
   if (outputPlan.creates?.length) await actor.createEmbeddedDocuments("Item", outputPlan.creates);
 }
 
-function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CREATE, pulse = null, recipeId = DEFAULT_CRAFT_RECIPE_ID, toolPickerNodeId = "", toolSelections = {} } = {}) {
+function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CREATE, recipeId = DEFAULT_CRAFT_RECIPE_ID, toolPickerNodeId = "", toolSelections = {} } = {}) {
   mode = normalizeCraftMode(mode);
   const data = getCraftRenderData(recipe, actor, mode, { toolSelections, recipeId });
   const missingCount = data.requirements.filter(requirement => requirement.owned < requirement.quantity).length
@@ -2221,8 +2219,7 @@ function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CR
     actionIcon: mode === CRAFT_MODE_DISASSEMBLY ? "fa-screwdriver-wrench" : "fa-hammer",
     nodes: data.nodes.map(node => ({
       ...node,
-      toolPickerOpen: toolPickerNode?.id === node.id,
-      pulseClass: shouldPulseCraftNode(node, mode, pulse) ? (pulse.success ? "craft-pulse-success" : "craft-pulse-failure") : ""
+      toolPickerOpen: toolPickerNode?.id === node.id
     })),
     toolPicker: null,
     checks,
@@ -2231,11 +2228,6 @@ function prepareCraftContext(recipe, actor, { busy = false, mode = CRAFT_MODE_CR
       ? (mode === CRAFT_MODE_DISASSEMBLY ? "Нет предмета для разбора" : `Не хватает компонентов/инструментов: ${missingCount}`)
       : (mode === CRAFT_MODE_DISASSEMBLY ? `Результаты: ${data.outputs.length}` : `Компоненты: ${data.requirements.length}, инструменты: ${data.toolRequirements.length}`)
   };
-}
-
-function shouldPulseCraftNode(node, mode = CRAFT_MODE_CREATE, pulse = null) {
-  if (!pulse) return false;
-  return normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY ? !node.root : node.root;
 }
 
 function createEmptyCraftContext(busy = false) {
@@ -2283,15 +2275,15 @@ function getCraftCheckLabel(check) {
   return `${check.skillLabel}: Сложность ${check.difficulty}${suffix}`;
 }
 
-function getCraftRenderData(recipe, actor, mode = CRAFT_MODE_CREATE, { toolSelections = {}, recipeId = DEFAULT_CRAFT_RECIPE_ID } = {}) {
+function getCraftRenderData(recipe, actor, mode = CRAFT_MODE_CREATE, { toolSelections = {}, recipeId = DEFAULT_CRAFT_RECIPE_ID, randomizeBlocks = false } = {}) {
   mode = normalizeCraftMode(mode);
   const nodes = getCraftNodesWithRoot(recipe, mode, recipeId);
   const links = getCraftLinks(recipe, mode, recipeId);
   const requirements = mode === CRAFT_MODE_DISASSEMBLY
     ? getCraftRequirements(nodes.filter(node => node.root), { includeRoot: true })
-    : getCraftRequirements(nodes);
-  const toolRequirements = mode === CRAFT_MODE_CREATE ? getCraftToolRequirements(nodes) : [];
-  const outputs = mode === CRAFT_MODE_DISASSEMBLY ? getCraftOutputs(nodes) : [];
+    : getCraftRequirements(getCraftBlockLimitedNodes(nodes, { randomize: randomizeBlocks }));
+  const toolRequirements = getCraftToolRequirements(nodes, { actor });
+  const outputs = mode === CRAFT_MODE_DISASSEMBLY ? getCraftOutputs(nodes, { randomize: randomizeBlocks }) : [];
   const requirementByNodeId = new Map(requirements.flatMap(requirement => requirement.nodeIds.map(nodeId => [nodeId, requirement])));
   const ownedByRequirement = getActorOwnedCraftRequirements(actor, requirements);
   const toolSpendPlan = createCraftToolRequirementSpendPlan(actor, toolRequirements, toolSelections);
@@ -2408,11 +2400,12 @@ function getCraftRequirements(nodes = [], { includeRoot = false } = {}) {
   return requirements;
 }
 
-function getCraftToolRequirements(nodes = []) {
+function getCraftToolRequirements(nodes = [], { actor = null, index = null } = {}) {
   const requirements = [];
   const toolLabels = new Map(getToolSettings().map(tool => [tool.key, tool.label]));
-  for (const node of nodes) {
-    if (node.root || String(node.blockId ?? "").trim()) continue;
+  const toolNodes = getCraftToolRequirementNodes(nodes, { actor, index });
+  for (const node of toolNodes) {
+    if (node.root) continue;
     const quantity = Math.max(1, toInteger(node.quantity) || 1);
     for (const tool of getCraftNodeToolRequirements(node)) {
       const key = getCraftToolRequirementKey(tool);
@@ -2435,6 +2428,99 @@ function getCraftToolRequirements(nodes = []) {
   return requirements;
 }
 
+function getCraftToolRequirementNodes(nodes = [], { actor = null, index = null } = {}) {
+  const output = [];
+  const groupedIds = new Set();
+  for (const [blockId, blockNodes] of groupCraftNodesByBlock(nodes).entries()) {
+    groupedIds.add(blockId);
+    const toolNodes = blockNodes.filter(node => isCraftNodeToolRequirement(node));
+    if (!toolNodes.length) continue;
+    const isToolBlock = toolNodes.length === blockNodes.length;
+    const limit = isToolBlock ? normalizeCraftBlockLimit(getCraftBlockLimit(blockNodes)) : null;
+    if (!Number.isInteger(limit) || limit <= 0 || limit >= toolNodes.length) {
+      output.push(...toolNodes);
+      continue;
+    }
+    output.push(...selectAvailableCraftToolBlockNodes(toolNodes, limit, { actor, index }));
+  }
+  for (const node of nodes) {
+    const blockId = String(node.blockId ?? "");
+    if (blockId && groupedIds.has(blockId)) continue;
+    if (isCraftNodeToolRequirement(node)) output.push(node);
+  }
+  return output;
+}
+
+function selectAvailableCraftToolBlockNodes(nodes = [], limit = 1, { actor = null, index = null } = {}) {
+  const selected = [];
+  const selectedIds = new Set();
+  const supplyByItemTool = new Map();
+  const requiredCount = Math.min(nodes.length, Math.max(1, toInteger(limit) || 1));
+
+  while (selected.length < requiredCount) {
+    let best = null;
+    for (const node of nodes) {
+      if (selectedIds.has(node.id)) continue;
+      const score = getCraftToolNodeAvailabilityScore(node, { actor, index, supplyByItemTool });
+      if (!best || score.available > best.score.available || (score.available === best.score.available && score.supply > best.score.supply)) {
+        best = { node, score };
+      }
+    }
+    if (!best) break;
+    selected.push(best.node);
+    selectedIds.add(best.node.id);
+    reserveCraftToolNodeAvailability(best.node, { actor, index, supplyByItemTool });
+  }
+
+  if (selected.length >= requiredCount) return selected;
+  for (const node of nodes) {
+    if (selectedIds.has(node.id)) continue;
+    selected.push(node);
+    selectedIds.add(node.id);
+    if (selected.length >= requiredCount) break;
+  }
+  return selected;
+}
+
+function getCraftToolNodeAvailabilityScore(node = {}, { actor = null, index = null, supplyByItemTool = new Map() } = {}) {
+  let available = 1;
+  let supply = 0;
+  for (const tool of getCraftNodeToolRequirements(node)) {
+    const requirement = {
+      key: getCraftToolRequirementKey(tool),
+      toolKey: tool.toolKey,
+      toolClass: tool.toolClass,
+      quantity: Math.max(1, toInteger(node.quantity) || 1)
+    };
+    const candidates = index
+      ? getIndexedActorCraftToolCandidates(index, requirement, supplyByItemTool)
+      : getActorCraftToolCandidates(actor, requirement, supplyByItemTool);
+    const selected = getDefaultCraftToolCandidate(candidates, requirement);
+    const enough = (selected?.supplyValue ?? 0) >= requirement.quantity;
+    if (!enough) available = 0;
+    supply += selected?.supplyValue ?? 0;
+  }
+  return { available, supply };
+}
+
+function reserveCraftToolNodeAvailability(node = {}, { actor = null, index = null, supplyByItemTool = new Map() } = {}) {
+  for (const tool of getCraftNodeToolRequirements(node)) {
+    const requirement = {
+      key: getCraftToolRequirementKey(tool),
+      toolKey: tool.toolKey,
+      toolClass: tool.toolClass,
+      quantity: Math.max(1, toInteger(node.quantity) || 1)
+    };
+    const candidates = index
+      ? getIndexedActorCraftToolCandidates(index, requirement, supplyByItemTool)
+      : getActorCraftToolCandidates(actor, requirement, supplyByItemTool);
+    const selected = getDefaultCraftToolCandidate(candidates, requirement);
+    if (!selected) continue;
+    const remaining = Math.max(0, Math.max(0, toInteger(selected.supplyValue)) - requirement.quantity);
+    supplyByItemTool.set(selected.supplyKey, remaining);
+  }
+}
+
 function getCraftNodeToolRequirements(node = {}) {
   const sourceItem = resolveWorldItemSync(getCraftNodeSourceUuid(node));
   if (!sourceItem) return [];
@@ -2448,20 +2534,56 @@ function getCraftNodeToolRequirements(node = {}) {
 }
 
 function isCraftNodeToolRequirement(node = {}) {
-  return Boolean(!node.root && !String(node.blockId ?? "").trim() && getCraftNodeToolRequirements(node).length);
+  return Boolean(!node.root && getCraftNodeToolRequirements(node).length);
 }
 
 function getCraftToolRequirementKey({ toolKey = "", toolClass = "D" } = {}) {
   return `tool:${toolKey}:${normalizeToolClass(toolClass)}`;
 }
 
-function getCraftOutputs(nodes = []) {
-  return nodes
+function getCraftOutputs(nodes = [], { randomize = false } = {}) {
+  return getCraftBlockLimitedNodes(nodes, { randomize })
     .filter(node => !node.root)
+    .filter(node => !isCraftNodeToolRequirement(node))
     .map(node => ({
       sourceUuid: getCraftNodeSourceUuid(node),
-      quantity: Math.max(1, toInteger(node.quantity) || 1)
+      quantity: Math.max(1, toInteger(node.quantity) || 1),
+      nodeIds: [node.id]
     }));
+}
+
+function getCraftBlockLimitedNodes(nodes = [], { toolsOnly = false, randomize = false } = {}) {
+  const output = [];
+  const groupedIds = new Set();
+  for (const [blockId, blockNodes] of groupCraftNodesByBlock(nodes).entries()) {
+    groupedIds.add(blockId);
+    const candidates = blockNodes.filter(node => toolsOnly ? isCraftNodeToolRequirement(node) : !isCraftNodeToolRequirement(node));
+    const limit = normalizeCraftBlockLimit(getCraftBlockLimit(blockNodes));
+    const selected = Number.isInteger(limit) && limit > 0
+      ? selectCraftBlockVariantNodes(candidates, limit, { randomize })
+      : candidates;
+    output.push(...selected);
+  }
+  for (const node of nodes) {
+    const blockId = String(node.blockId ?? "");
+    if (blockId && groupedIds.has(blockId)) continue;
+    if (toolsOnly && !isCraftNodeToolRequirement(node)) continue;
+    if (!toolsOnly && isCraftNodeToolRequirement(node)) continue;
+    output.push(node);
+  }
+  return output;
+}
+
+function selectCraftBlockVariantNodes(nodes = [], limit = 1, { randomize = false } = {}) {
+  const count = Math.min(nodes.length, Math.max(1, toInteger(limit) || 1));
+  if (count >= nodes.length) return [...nodes];
+  if (!randomize) return nodes.slice(0, count);
+  const pool = [...nodes];
+  for (let index = pool.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [pool[index], pool[swapIndex]] = [pool[swapIndex], pool[index]];
+  }
+  return pool.slice(0, count);
 }
 
 function getActorOwnedCraftRequirements(actor, requirements = []) {
@@ -2902,6 +3024,7 @@ function createCraftRootNode(item, source = {}) {
     height,
     quantity: Math.max(1, toInteger(source.quantity) || toInteger(item?.system?.quantity) || 1),
     blockId: String(source.blockId ?? ""),
+    blockLimit: normalizeCraftBlockLimit(source.blockLimit),
     root: true
   });
 }
@@ -2921,8 +3044,15 @@ function normalizeCraftNode(node = {}) {
     height,
     quantity: Math.max(1, toInteger(node.quantity) || 1),
     blockId: String(node.blockId ?? ""),
+    blockLimit: normalizeCraftBlockLimit(node.blockLimit),
     root: Boolean(node.root)
   };
+}
+
+function normalizeCraftBlockLimit(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const limit = Math.max(0, toInteger(value));
+  return limit > 0 ? limit : null;
 }
 
 function normalizeCraftLink(link = {}) {
@@ -3010,8 +3140,23 @@ function getCraftResolvedEndpointId(node) {
 
 function getCraftBlocks(nodes = []) {
   return Array.from(groupCraftNodesByBlock(nodes).entries())
-    .map(([id, blockNodes]) => ({ id, nodeIds: blockNodes.map(node => node.id), ...getCraftNodesBounds(blockNodes) }))
+    .map(([id, blockNodes]) => ({
+      id,
+      nodeIds: blockNodes.map(node => node.id),
+      nodeCount: blockNodes.length,
+      blockLimit: getCraftBlockLimit(blockNodes),
+      isToolBlock: blockNodes.length > 0 && blockNodes.every(node => isCraftNodeToolRequirement(node)),
+      ...getCraftNodesBounds(blockNodes)
+    }))
     .filter(block => block.nodeIds.length > 1 && block.width > 0 && block.height > 0);
+}
+
+function getCraftBlockLimit(nodes = []) {
+  for (const node of nodes) {
+    const limit = normalizeCraftBlockLimit(node.blockLimit);
+    if (Number.isInteger(limit) && limit > 0) return limit;
+  }
+  return null;
 }
 
 function groupCraftNodesByBlock(nodes = []) {
@@ -3589,6 +3734,47 @@ async function animateCraftLinks(element, operation) {
   await Promise.all(routes.map(route => animateCraftLinkRoute(route)));
 }
 
+async function animateCraftCompletionNodes(element, operation = {}) {
+  const workspace = element?.querySelector("[data-craft-workspace]");
+  if (!workspace) return;
+  const mode = normalizeCraftMode(operation.mode);
+  const outputNodeIds = new Set(Array.from(operation.outputNodeIds ?? []).map(id => String(id ?? "")).filter(Boolean));
+  const nodes = mode === CRAFT_MODE_DISASSEMBLY && outputNodeIds.size
+    ? Array.from(outputNodeIds)
+      .map(nodeId => workspace.querySelector(`[data-craft-node-id="${CSS.escape(nodeId)}"]`))
+      .filter(Boolean)
+    : Array.from(workspace.querySelectorAll(mode === CRAFT_MODE_DISASSEMBLY
+      ? ".fallout-maw-craft-node:not(.root)"
+      : ".fallout-maw-craft-node.root"));
+  if (!nodes.length) return;
+  const className = operation.success ? "craft-pulse-success" : "craft-pulse-failure";
+  await Promise.all(nodes.map(node => runCraftCompletionNodePulse(node, className)));
+}
+
+async function runCraftCompletionNodePulse(node, className = "craft-pulse-success") {
+  if (!node?.classList) return;
+  const image = node.querySelector(".fallout-maw-craft-node-image") ?? node;
+  node.classList.remove(className);
+  void node.offsetWidth;
+  node.classList.add(className);
+  await waitForAnimationFrame();
+  if (typeof image.getAnimations === "function") {
+    const animations = image.getAnimations()
+      .filter(animation => String(animation.animationName ?? "").startsWith("fallout-maw-craft-pulse"));
+    if (animations.length) await Promise.allSettled(animations.map(animation => animation.finished));
+  } else {
+    await new Promise(resolve => {
+      const onEnd = event => {
+        if (event.target !== image) return;
+        image.removeEventListener("animationend", onEnd);
+        resolve();
+      };
+      image.addEventListener("animationend", onEnd, { once: true });
+    });
+  }
+  node.classList.remove(className);
+}
+
 async function animateCraftLinkRoute(route = []) {
   if (!route.length) return;
   const duration = Math.max(1, CRAFT_FLOW_DURATION_MS / route.length);
@@ -3850,9 +4036,9 @@ function getCraftRecipeMissingCount(recipe, actor, mode = CRAFT_MODE_CREATE, ava
   const nodes = getCraftNodesWithRoot(recipe, mode, recipe?.recipeId ?? DEFAULT_CRAFT_RECIPE_ID);
   const requirements = mode === CRAFT_MODE_DISASSEMBLY
     ? getCraftRequirements(nodes.filter(node => node.root), { includeRoot: true })
-    : getCraftRequirements(nodes);
-  const toolRequirements = mode === CRAFT_MODE_CREATE ? getCraftToolRequirements(nodes) : [];
+    : getCraftRequirements(getCraftBlockLimitedNodes(nodes));
   const index = availability ?? createCraftAvailabilityIndex(actor);
+  const toolRequirements = getCraftToolRequirements(nodes, { index });
   const ownedByRequirement = getActorOwnedCraftRequirementsFromIndex(index, requirements);
   const toolAvailability = createCraftToolRequirementAvailabilityPlan(index, toolRequirements);
   return requirements.filter(requirement => (ownedByRequirement.get(requirement.key) ?? 0) < requirement.quantity).length
