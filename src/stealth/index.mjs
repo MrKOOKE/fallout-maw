@@ -45,6 +45,7 @@ const detectionVisualizations = new Map();
 const detectionMovementState = new Map();
 const detectionZoneCache = new Map();
 const detectionPointCache = new Map();
+const stealthAllyVisibilityCache = new Map();
 const detectionVisualizationMovementKeys = new Map();
 const detectionVisualizationMovementTrackers = new Map();
 let detectionHoverTokenId = null;
@@ -55,6 +56,8 @@ let stealthAllyVisibilityPatchRegistered = false;
 let refreshAllStealthWindowsTimeout = null;
 let refreshDetectionVisualizationsTimeout = null;
 let refreshStealthedTokenVisibilityTimeout = null;
+let pendingAllStealthRefreshAfterMovement = false;
+let pendingDetectionVisualizationRefreshAfterMovement = false;
 
 export function registerStealthHooks() {
   if (hooksRegistered) return;
@@ -67,10 +70,12 @@ export function registerStealthHooks() {
     execute: executeStealthMovementInterruption
   });
   Hooks.on("updateActor", actor => {
+    stealthAllyVisibilityCache.clear();
     refreshStealthWindowsForActor(actor);
     queueStealthedTokenVisibilityRefresh();
   });
   Hooks.on("updateActiveEffect", effect => {
+    stealthAllyVisibilityCache.clear();
     refreshStealthWindowsForActor(effect?.parent);
     queueStealthedTokenVisibilityRefresh();
   });
@@ -91,6 +96,7 @@ export function registerStealthHooks() {
   Hooks.on("lightingRefresh", refreshAllStealthWindowsWithInvalidation);
   Hooks.on("sightRefresh", queueSightStealthVisualizationRefresh);
   Hooks.on("hoverToken", onTokenHoverForDetectionZone);
+  Hooks.on("moveToken", onTokenMoved);
   Hooks.on(`${SYSTEM_ID}.stealthSettingsChanged`, refreshAllStealthWindowsWithInvalidation);
   hooksRegistered = true;
 }
@@ -152,7 +158,7 @@ function canVisionSourceDetectStealthedAlly(visionSource, target, mode) {
   if (mode?.walls && visionSource?.blinded?.darkness) return false;
 
   if (sourceActor.uuid === targetActor.uuid) return true;
-  return areActorsStealthAllies(targetActor, sourceActor);
+  return areActorsStealthAlliesCached(targetActor, sourceActor);
 }
 
 export function openStealthWindow(token) {
@@ -502,6 +508,10 @@ function onTokenUpdated(tokenDocument, changes) {
   if (moved) trackDetectionVisualizationMovement(token);
 }
 
+function onTokenMoved(tokenDocument, movement = {}) {
+  trackDetectionVisualizationMovement(tokenDocument?.object, movement?.animation?.ended);
+}
+
 function refreshStealthWindowsForActor(actor) {
   if (!actor) return;
   for (const [tokenId, app] of stealthWindows) {
@@ -529,23 +539,24 @@ function refreshDetectionVisualizations() {
   }
 }
 
-function trackDetectionVisualizationMovement(token) {
+function trackDetectionVisualizationMovement(token, animationOverride = null) {
   if (!token?.id || !isTokenRelevantToDetectionVisualization(token)) return;
-  updateDetectionVisualizationForTokenCell(token, { renderWindows: false });
 
-  const animation = token.document?.movement?.animation?.ended ?? token.movementAnimationPromise;
-  if (!animation || typeof animation.then !== "function") return;
+  const animation = animationOverride ?? token.document?.movement?.animation?.ended ?? token.movementAnimationPromise;
+  if (!animation || typeof animation.then !== "function") {
+    updateDetectionVisualizationForTokenCell(token, { force: true, renderWindows: true });
+    return;
+  }
 
   const existing = detectionVisualizationMovementTrackers.get(token.id);
   if (existing?.animation === animation) return;
   stopDetectionVisualizationMovementTracking(token.id);
 
-  const tick = () => updateDetectionVisualizationForTokenCell(token, { renderWindows: false });
-  detectionVisualizationMovementTrackers.set(token.id, { animation, tick });
-  canvas?.app?.ticker?.add?.(tick);
+  detectionVisualizationMovementTrackers.set(token.id, { animation });
   void animation.finally(() => {
     stopDetectionVisualizationMovementTracking(token.id);
     updateDetectionVisualizationForTokenCell(token, { force: true, renderWindows: true });
+    flushPendingStealthRefreshAfterMovement();
   }).catch(() => {});
 }
 
@@ -562,8 +573,21 @@ function updateDetectionVisualizationForTokenCell(token, { force = false, render
 function stopDetectionVisualizationMovementTracking(tokenId) {
   const tracker = detectionVisualizationMovementTrackers.get(tokenId);
   if (!tracker) return;
-  canvas?.app?.ticker?.remove?.(tracker.tick);
   detectionVisualizationMovementTrackers.delete(tokenId);
+}
+
+function flushPendingStealthRefreshAfterMovement() {
+  if (detectionVisualizationMovementTrackers.size) return;
+  if (pendingAllStealthRefreshAfterMovement) {
+    pendingAllStealthRefreshAfterMovement = false;
+    pendingDetectionVisualizationRefreshAfterMovement = false;
+    refreshAllStealthWindowsWithInvalidation();
+    return;
+  }
+  if (pendingDetectionVisualizationRefreshAfterMovement) {
+    pendingDetectionVisualizationRefreshAfterMovement = false;
+    queueDetectionVisualizationRefresh();
+  }
 }
 
 function isTokenRelevantToDetectionVisualization(token) {
@@ -577,6 +601,10 @@ function isTokenRelevantToDetectionVisualization(token) {
 }
 
 function refreshAllStealthWindowsWithInvalidation() {
+  if (detectionVisualizationMovementTrackers.size) {
+    pendingAllStealthRefreshAfterMovement = true;
+    return;
+  }
   invalidateStealthDetectionCaches();
   refreshAllStealthWindows();
 }
@@ -591,7 +619,10 @@ function queueRefreshAllStealthWindows() {
 }
 
 function queueSightStealthVisualizationRefresh() {
-  if (detectionVisualizationMovementTrackers.size) return;
+  if (detectionVisualizationMovementTrackers.size) {
+    pendingDetectionVisualizationRefreshAfterMovement = true;
+    return;
+  }
   queueDetectionVisualizationRefresh();
 }
 
@@ -623,6 +654,7 @@ function refreshStealthedTokenVisibility() {
 function invalidateStealthDetectionCaches() {
   detectionZoneCache.clear();
   detectionPointCache.clear();
+  stealthAllyVisibilityCache.clear();
 }
 
 function cleanupTokenStealth(tokenId) {
@@ -659,6 +691,8 @@ function cleanupAllStealthUi() {
   detectionHoverTokenId = null;
   detectionMovementState.clear();
   detectionVisualizationMovementKeys.clear();
+  pendingAllStealthRefreshAfterMovement = false;
+  pendingDetectionVisualizationRefreshAfterMovement = false;
   for (const tokenId of [...detectionVisualizationMovementTrackers.keys()]) {
     stopDetectionVisualizationMovementTracking(tokenId);
   }
@@ -1511,7 +1545,16 @@ function isValidStealthObserver(hiddenToken, observerToken) {
   if (!hiddenToken?.actor || !observerToken?.actor) return false;
   if (hiddenToken.id === observerToken.id) return false;
   if (hiddenToken.actor.uuid === observerToken.actor.uuid) return false;
-  return !areActorsStealthAllies(hiddenToken.actor, observerToken.actor);
+  return !areActorsStealthAlliesCached(hiddenToken.actor, observerToken.actor);
+}
+
+function areActorsStealthAlliesCached(hiddenActor, observerActor) {
+  const key = `${hiddenActor?.uuid ?? ""}|${observerActor?.uuid ?? ""}`;
+  if (stealthAllyVisibilityCache.has(key)) return stealthAllyVisibilityCache.get(key);
+  const result = areActorsStealthAllies(hiddenActor, observerActor);
+  stealthAllyVisibilityCache.set(key, result);
+  trimCacheMap(stealthAllyVisibilityCache, STEALTH_DETECTION_CACHE_LIMIT * 4);
+  return result;
 }
 
 function areActorsStealthAllies(hiddenActor, observerActor) {
