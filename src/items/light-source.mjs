@@ -119,7 +119,6 @@ export async function openLightSourceEnergyDialog({ actor = null, token = null, 
     selectedSourceUuid = "";
     await syncTokenLightSources(token?.document ?? token);
     refreshDialogContent(dialog);
-    await application?.render({ force: true });
   };
   const extractSource = async dialog => {
     const freshItem = resolveActorItemOrInstalledModule(actor, item.id);
@@ -128,14 +127,12 @@ export async function openLightSourceEnergyDialog({ actor = null, token = null, 
     if (!extracted) ui.notifications?.warn?.(game.i18n.localize("FALLOUTMAW.Item.LightSourceNoEnergySource"));
     await syncTokenLightSources(token?.document ?? token);
     refreshDialogContent(dialog);
-    await application?.render({ force: true });
   };
   const toggleFromDialog = async dialog => {
     const freshItem = resolveActorItemOrInstalledModule(actor, item.id);
     if (!freshItem) return;
     await toggleLightSource(token?.document ?? token, freshItem);
     refreshDialogContent(dialog);
-    await application?.render({ force: true });
   };
 
   if (usesEnergy && !sourceItems.length) {
@@ -234,6 +231,10 @@ export async function setLightSourceActive(tokenOrDocument = null, item = null, 
   if (entries.length) await tokenDocument.setFlag(SYSTEM_ID, ACTIVE_LIGHT_SOURCES_FLAG, entries);
   else await tokenDocument.unsetFlag(SYSTEM_ID, ACTIVE_LIGHT_SOURCES_FLAG);
   await syncTokenLightSources(tokenDocument);
+  tokenDocument.actor?.render(false, {
+    renderContext: "fallout-maw.lightSourceState",
+    renderData: { itemId: item.id, active: Boolean(active), tokenId: tokenDocument.id }
+  });
   if (active) {
     Hooks.callAll("fallout-maw.itemUsed", {
       actor: tokenDocument.actor,

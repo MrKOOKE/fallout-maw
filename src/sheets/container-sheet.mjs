@@ -31,6 +31,11 @@ import { isItemBrokenByCondition } from "../utils/item-functions.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
+import { openItemInteractionDialog } from "../items/item-interaction-dialogs.mjs";
+import {
+  getItemInteractionState,
+  resolveActorInteractionToken
+} from "../items/item-interactions.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -91,6 +96,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     const context = await super._prepareContext(options);
     const actor = this.actor;
     const allItems = actor?.items?.contents ?? [];
+    const actorInteractionToken = resolveActorInteractionToken(actor);
     const dimensions = getContainerDimensions(this.item);
     const grid = prepareInventoryGridContext(
       getContextInventoryItems(this.item.id, allItems),
@@ -98,7 +104,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
       dimensions.rows,
       allItems,
       (item, placement) => ({
-        ...createInventoryItemData(item, allItems, placement),
+        ...createInventoryItemData(item, allItems, placement, { actor, token: actorInteractionToken }),
         gridStyle: buildInventoryCellStyle(placement.x, placement.y, placement)
       })
     );
@@ -752,6 +758,9 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     if (isContainerItem(item)) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
     }
+    if (getItemInteractionState(this.actor, item).hasInteraction) {
+      menuOptions.push(["interact", "fa-hand-pointer", "Взаимодействие"]);
+    }
     if (canUseActiveItem(item)) {
       menuOptions.push(["use", "fa-play", "Применить"]);
     }
@@ -786,6 +795,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
         app.bringToFront();
         return app;
       }
+      if (action === "interact") return openItemInteractionDialog({ actor: this.actor, item, application: this });
       if (action === "use") return useActiveItem({ actor: this.actor, item, application: this });
       if (action === "rotate") return this.#rotateInventoryItem(item);
       if (action === "split") return this.#splitInventoryItem(item);
@@ -951,8 +961,9 @@ function formatWeight(value) {
   return numeric.toFixed(1).replace(/\.0$/, "");
 }
 
-function createInventoryItemData(item, allItems, placement = null) {
+function createInventoryItemData(item, allItems, placement = null, { actor = null, token = null } = {}) {
   const resolvedPlacement = placement ?? normalizeInventoryPlacement(item.system?.placement ?? {}, item, allItems);
+  const interactionState = getItemInteractionState(actor ?? item?.actor, item, { token });
   return {
     id: item.id,
     name: item.name,
@@ -964,6 +975,8 @@ function createInventoryItemData(item, allItems, placement = null) {
     totalWeight: Number(getItemTotalWeight(item, allItems).toFixed(1)),
     equipped: Boolean(item.system?.equipped),
     brokenCondition: isItemBrokenByCondition(item),
+    interactionToggleable: interactionState.toggleable,
+    interactionToggled: interactionState.toggled,
     isContainer: isContainerItem(item),
     parentId: getItemContainerParentId(item),
     placement: resolvedPlacement

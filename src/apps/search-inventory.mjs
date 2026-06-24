@@ -69,6 +69,8 @@ import { toInteger } from "../utils/numbers.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints } from "../combat/weapon-switching.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
+import { openItemInteractionDialog } from "../items/item-interaction-dialogs.mjs";
+import { getItemInteractionState } from "../items/item-interactions.mjs";
 import { requestSkillCheckBatch } from "../rolls/skill-check.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { getButcheringConfig, hasConfiguredButchering } from "./butchering-config.mjs";
@@ -2039,6 +2041,9 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (!isButcheringItem && isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
     }
+    if (!isButcheringItem && getItemInteractionState(actor, item).hasInteraction) {
+      menuOptions.push(["interact", "fa-hand-pointer", "Взаимодействие"]);
+    }
     if (!isButcheringItem && canUseActiveItem(item)) {
       menuOptions.push(["use", "fa-play", "Применить"]);
     }
@@ -2077,6 +2082,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       if (action === "takeButchering") return this.#takeButcheringItem(actor, item);
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openSearchContainerSheet(item);
+      if (action === "interact") return openItemInteractionDialog({ actor, item, application: this });
       if (action === "use") return useActiveItem({ actor, item, application: this });
       if (action === "rotate") return this.#rotateSearchItem(actor, item);
       if (action === "equip") return this.#equipSearchItem(actor, item);
@@ -4725,6 +4731,7 @@ function prepareTradeOfferSideContext(offer = {}, actor = null, side = "", trade
     const placement = resolveTradeOfferEntryPlacement(entry.placement, footprint, occupiedPlacements, columns);
     placement.rotated = Boolean(entry.placement?.rotated ?? (liveItem ?? itemData)?.system?.placement?.rotated);
     const offerKey = getTradeOfferEntryKey(entry, "item");
+    const interactionState = getItemInteractionState(sourceActor, liveItem ?? itemData);
     occupiedPlacements.push({ kind: "item", key: offerKey, placement });
     total += price;
     items.push({
@@ -4738,6 +4745,8 @@ function prepareTradeOfferSideContext(offer = {}, actor = null, side = "", trade
       quantity,
       showQuantity: getItemMaxStack(liveItem ?? itemData) > 1 || quantity > 1,
       price: price > 0 ? price : "",
+      interactionToggleable: interactionState.toggleable,
+      interactionToggled: interactionState.toggled,
       placement,
       gridStyle: buildInventoryCellStyle(placement.x, placement.y, placement)
     });

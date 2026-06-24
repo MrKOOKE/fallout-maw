@@ -64,6 +64,8 @@ import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-lay
 import { getEnabledToolFunctions } from "../utils/item-functions.mjs";
 import { isCompendiumUuid, resolveWorldItemSync } from "../utils/world-items.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
+import { openItemInteractionDialog } from "../items/item-interaction-dialogs.mjs";
+import { getItemInteractionState } from "../items/item-interactions.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -1212,6 +1214,9 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
     }
+    if (getItemInteractionState(this.#actor, item).hasInteraction) {
+      menuOptions.push(["interact", "fa-hand-pointer", "Взаимодействие"]);
+    }
     if (canUseActiveItem(item)) {
       menuOptions.push(["use", "fa-play", "Применить"]);
     }
@@ -1251,6 +1256,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       menu.remove();
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openCraftContainerSheet(item);
+      if (action === "interact") return openItemInteractionDialog({ actor: this.#actor, item, application: this });
       if (action === "use") return useActiveItem({ actor: this.#actor, item, application: this });
       if (action === "rotate") return this.#rotateCraftItem(item);
       if (action === "equip") return this.#equipCraftItem(item);

@@ -1,5 +1,4 @@
 import { SYSTEM_ID } from "../constants.mjs";
-import { ABILITY_CONDITION_TYPES, ABILITY_FUNCTION_TYPES, normalizeAbilityFunctions } from "../settings/abilities.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { FALLBACK_ICON, escapeHTML, normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { getActorItemsWithActiveHudModules } from "../utils/hud-active-items.mjs";
@@ -19,6 +18,10 @@ import {
   getEnergySourceReserveState,
   installEnergyConsumerSource
 } from "./light-source.mjs";
+import {
+  getItemEnergyConsumptionConditions,
+  isItemEnergyConsumptionConditionActive
+} from "./item-interactions.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const EPSILON = 0.000001;
@@ -34,20 +37,7 @@ export function registerEnergyConsumptionHooks() {
 }
 
 export function getEnergyConsumptionConditions(item = null) {
-  if (!item || !hasItemFunction(item, ITEM_FUNCTIONS.energyConsumer, { ignoreBroken: true })) return [];
-  const seen = new Set();
-  const conditions = [];
-  for (const entry of normalizeAbilityFunctions(item.system?.functions?.freeSettings?.entries ?? [])) {
-    if (entry.type !== ABILITY_FUNCTION_TYPES.effectChanges) continue;
-    for (const condition of entry.conditions ?? []) {
-      if (condition?.type !== ABILITY_CONDITION_TYPES.energyConsumption) continue;
-      const id = String(condition?.id ?? "").trim();
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      conditions.push(normalizeEnergyConsumptionCondition(condition, item));
-    }
-  }
-  return conditions;
+  return getItemEnergyConsumptionConditions(item);
 }
 
 export function hasEnergyConsumptionConditions(item = null) {
@@ -91,9 +81,7 @@ export function energyConsumptionConditionApplies(actor = null, condition = {}, 
 }
 
 export function isEnergyConsumptionActive(item = null, conditionId = "") {
-  const key = String(conditionId ?? "").trim();
-  if (!key) return false;
-  return Boolean(getEnergyConsumerFunction(item)?.activeConditions?.[key]);
+  return isItemEnergyConsumptionConditionActive(item, conditionId);
 }
 
 export async function toggleEnergyConsumption(actor = null, item = null, conditionId = "") {
@@ -161,7 +149,6 @@ export async function openEnergyConsumptionDialog({ actor = null, item = null, c
     selectedSourceUuid = "";
     Hooks.callAll("fallout-maw.energyConsumptionChanged", actor);
     refreshDialogContent(dialog);
-    await application?.render({ force: true });
   };
 
   const extractSource = async dialog => {
@@ -171,7 +158,6 @@ export async function openEnergyConsumptionDialog({ actor = null, item = null, c
     if (!extracted) ui.notifications?.warn?.("Нет установленного источника энергии.");
     await disableInvalidEnergyConsumption(actor, freshItem);
     refreshDialogContent(dialog);
-    await application?.render({ force: true });
   };
 
   const dialog = new DialogV2({
@@ -213,7 +199,6 @@ export async function openEnergyConsumptionDialog({ actor = null, item = null, c
         const freshItem = resolveActorItemOrInstalledModule(actor, item.id);
         await toggleEnergyConsumption(actor, freshItem, toggle.dataset.energyConsumptionToggle);
         refreshDialogContent(dialog);
-        await application?.render({ force: true });
         return;
       }
       const condition = event.target?.closest?.("[data-energy-consumption-condition]");
@@ -367,14 +352,6 @@ function renderEnergySourceCards(sourceItems = [], selectedSourceUuid = "") {
       </div>
     `;
   }).join("");
-}
-
-function normalizeEnergyConsumptionCondition(condition = {}, item = null) {
-  return {
-    id: String(condition?.id ?? "").trim(),
-    name: String(condition?.name ?? "").trim() || item?.name || "Потребление энергии",
-    amountPerHour: Math.max(0, Number(condition?.amountPerHour) || 0)
-  };
 }
 
 function isActiveEnergyConsumptionCarrier(actor = null, item = null) {

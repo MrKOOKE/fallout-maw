@@ -3696,6 +3696,16 @@ body #prosemirror-dropdown {
     0 0 12px rgba(215, 54, 48, 0.22);
 }
 
+.fallout-maw-inventory-item.toggleable.toggled,
+.fallout-maw-container-overview.toggleable.toggled {
+  isolation: isolate;
+  position: relative;
+}
+
+.fallout-maw-container-overview.toggleable.toggled {
+  overflow: hidden;
+}
+
 .fallout-maw-draggable-item.dragging,
 .fallout-maw-inventory-item.dragging {
   opacity: 0.45;
@@ -10108,7 +10118,9 @@ label.fallout-maw-mitigation-cell {
   initial-value: 0deg;
 }
 
-.fallout-maw-token-hud-action-tile.toggleable.toggled::before {
+.fallout-maw-token-hud-action-tile.toggleable.toggled::before,
+.fallout-maw-inventory-item.toggleable.toggled::before,
+.fallout-maw-container-overview.toggleable.toggled::before {
   background: conic-gradient(
     from var(--fallout-maw-toggle-outline-angle),
     transparent 0deg 210deg,
@@ -10118,6 +10130,7 @@ label.fallout-maw-mitigation-cell {
     rgba(255, 207, 52, 0.18) 320deg,
     transparent 345deg 360deg
   );
+  border-radius: inherit;
   content: "";
   inset: 0;
   padding: 3px;
@@ -10147,7 +10160,9 @@ label.fallout-maw-mitigation-cell {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .fallout-maw-token-hud-action-tile.toggleable.toggled::before {
+  .fallout-maw-token-hud-action-tile.toggleable.toggled::before,
+  .fallout-maw-inventory-item.toggleable.toggled::before,
+  .fallout-maw-container-overview.toggleable.toggled::before {
     animation: none;
   }
 }

@@ -94,7 +94,7 @@
             <div class="fallout-maw-slot-card-label" {{#if fullLabel}}title="{{fullLabel}}"{{/if}}>{{label}}</div>
             <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large {{#if locked}}locked{{/if}} {{#if (eq item.occupiedSlotMode "oneOf")}}one-of{{/if}}" data-equipment-slot="{{key}}" {{#unless locked}}data-drop-zone{{/unless}}>
               {{#if item}}
-              <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}} {{#if item.locked}}locked{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+              <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}} {{#if item.locked}}locked{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}{{#if item.interactionToggleable}} toggleable{{/if}}{{#if item.interactionToggled}} toggled{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
                 <img src="{{item.img}}" alt="{{item.name}}">
                 {{#if item.showFirstAidCharges}}<span class="fallout-maw-inventory-item-charges">{{item.firstAidCharges.value}}/{{item.firstAidCharges.max}}</span>{{/if}}
                 {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
@@ -114,7 +114,7 @@
           <div class="fallout-maw-slot-card">
             <div class="fallout-maw-slot-card-label">{{label}}</div>
             <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-prosthesis-slot" data-prosthesis-limb="{{key}}">
-              <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item equipped {{#if item.locked}}locked{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+              <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item equipped {{#if item.locked}}locked{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}{{#if item.interactionToggleable}} toggleable{{/if}}{{#if item.interactionToggled}} toggled{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
                 <img src="{{item.img}}" alt="{{item.name}}">
                 {{#if item.showFirstAidCharges}}<span class="fallout-maw-inventory-item-charges">{{item.firstAidCharges.value}}/{{item.firstAidCharges.max}}</span>{{/if}}
                 {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
@@ -132,7 +132,7 @@
           <div class="fallout-maw-slot-card">
             <div class="fallout-maw-slot-card-label">{{label}}</div>
             <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-implant-slot" data-implant-limb="{{limbKey}}">
-              <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item equipped {{#if item.locked}}locked{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+              <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item equipped {{#if item.locked}}locked{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}{{#if item.interactionToggleable}} toggleable{{/if}}{{#if item.interactionToggled}} toggled{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
                 <img src="{{item.img}}" alt="{{item.name}}">
                 {{#if item.showFirstAidCharges}}<span class="fallout-maw-inventory-item-charges">{{item.firstAidCharges.value}}/{{item.firstAidCharges.max}}</span>{{/if}}
                 {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
@@ -154,7 +154,7 @@
                 <div class="fallout-maw-slot-card-label">{{label}}</div>
                 <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-weapon-slot fallout-maw-natural-weapon-slot" data-natural-weapon-slot="{{key}}">
                   {{#if item}}
-                  <article class="fallout-maw-inventory-item fallout-maw-draggable-item equipped {{#if item.brokenCondition}}broken-condition{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+                  <article class="fallout-maw-inventory-item fallout-maw-draggable-item equipped {{#if item.brokenCondition}}broken-condition{{/if}}{{#if item.interactionToggleable}} toggleable{{/if}}{{#if item.interactionToggled}} toggled{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
                     <img src="{{item.img}}" alt="{{item.name}}">
                   </article>
                   {{/if}}
@@ -174,13 +174,13 @@
                 <div class="fallout-maw-equipment-slot fallout-maw-equipment-slot--large fallout-maw-weapon-slot" data-weapon-set="{{../key}}" data-weapon-slot="{{key}}" data-drop-zone>
                   {{#if item}}
                   {{#if phantom}}
-                  <article class="fallout-maw-inventory-item fallout-maw-draggable-item phantom {{#if useDisabled}}unusable{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+                  <article class="fallout-maw-inventory-item fallout-maw-draggable-item phantom {{#if useDisabled}}unusable{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}{{#if item.interactionToggleable}} toggleable{{/if}}{{#if item.interactionToggled}} toggled{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
                     <img src="{{item.img}}" alt="{{item.name}}">
                     {{#if item.showFirstAidCharges}}<span class="fallout-maw-inventory-item-charges">{{item.firstAidCharges.value}}/{{item.firstAidCharges.max}}</span>{{/if}}
                     {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
                   </article>
                   {{else}}
-                  <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}} {{#if item.locked}}locked{{/if}} {{#if phantom}}phantom{{/if}} {{#if useDisabled}}unusable{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
+                  <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item {{#if item.equipped}}equipped{{/if}} {{#if item.locked}}locked{{/if}} {{#if phantom}}phantom{{/if}} {{#if useDisabled}}unusable{{/if}} {{#if item.brokenCondition}}broken-condition{{/if}}{{#if item.interactionToggleable}} toggleable{{/if}}{{#if item.interactionToggled}} toggled{{/if}}" data-item-id="{{item.id}}" data-tooltip-item="{{item.id}}">
                     <img src="{{item.img}}" alt="{{item.name}}">
                     {{#if item.showFirstAidCharges}}<span class="fallout-maw-inventory-item-charges">{{item.firstAidCharges.value}}/{{item.firstAidCharges.max}}</span>{{/if}}
                     {{#if item.showQuantity}}<strong>{{item.quantity}}</strong>{{/if}}
@@ -246,7 +246,7 @@
           <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}} {{#if phantom}}phantom{{/if}}" data-inventory-cell data-inventory-parent-id="{{../id}}" data-x="{{x}}" data-y="{{y}}" style="{{style}}"></div>
           {{/each}}
           {{#each grid.items}}
-          <article class="fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
+          <article class="fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}{{#if interactionToggleable}} toggleable{{/if}}{{#if interactionToggled}} toggled{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
             <img src="{{img}}" alt="{{name}}">
             {{#if showFirstAidCharges}}<span class="fallout-maw-inventory-item-charges">{{firstAidCharges.value}}/{{firstAidCharges.max}}</span>{{/if}}
             {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
@@ -265,7 +265,7 @@
             <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}} {{#if phantom}}phantom{{/if}}" data-inventory-cell data-inventory-parent-id="" data-x="{{x}}" data-y="{{y}}" data-drop-zone style="{{style}}"></div>
             {{/each}}
             {{#each inventory.grid.items}}
-            <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if equipped}}equipped{{/if}} {{#if locked}}locked{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
+            <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if equipped}}equipped{{/if}} {{#if locked}}locked{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}{{#if interactionToggleable}} toggleable{{/if}}{{#if interactionToggled}} toggled{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
               <img src="{{img}}" alt="{{name}}">
               {{#if showFirstAidCharges}}<span class="fallout-maw-inventory-item-charges">{{firstAidCharges.value}}/{{firstAidCharges.max}}</span>{{/if}}
               {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
@@ -276,7 +276,7 @@
           {{#each inventory.containers}}
           <section class="fallout-maw-container-section" data-container-drop-surface data-container-id="{{id}}" data-inventory-parent-id="{{id}}">
             <div class="fallout-maw-panel-header fallout-maw-container-header">
-              <div class="fallout-maw-container-overview draggable fallout-maw-draggable-item" data-item-id="{{id}}" data-tooltip-item="{{id}}">
+              <div class="fallout-maw-container-overview draggable fallout-maw-draggable-item{{#if interactionToggleable}} toggleable{{/if}}{{#if interactionToggled}} toggled{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}">
                 <strong class="fallout-maw-container-overview-name">{{name}}</strong>
                 <div class="fallout-maw-load-meter fallout-maw-load-meter--{{load.trend}} fallout-maw-load-meter--{{load.state}}" aria-label="{{localize 'FALLOUTMAW.Item.ContainerCurrentLoad'}}">
                   <div class="fallout-maw-load-meter-track">
@@ -291,7 +291,7 @@
               <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}} {{#if phantom}}phantom{{/if}}" data-inventory-cell data-inventory-parent-id="{{../id}}" data-x="{{x}}" data-y="{{y}}" data-drop-zone style="{{style}}"></div>
               {{/each}}
               {{#each grid.items}}
-              <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if equipped}}equipped{{/if}} {{#if locked}}locked{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
+              <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if equipped}}equipped{{/if}} {{#if locked}}locked{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}{{#if interactionToggleable}} toggleable{{/if}}{{#if interactionToggled}} toggled{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
                 <img src="{{img}}" alt="{{name}}">
                 {{#if showFirstAidCharges}}<span class="fallout-maw-inventory-item-charges">{{firstAidCharges.value}}/{{firstAidCharges.max}}</span>{{/if}}
                 {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}
@@ -314,7 +314,7 @@
               <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}} {{#if phantom}}phantom{{/if}}" data-inventory-cell data-inventory-parent-id="{{../id}}" data-x="{{x}}" data-y="{{y}}" data-drop-zone style="{{style}}"></div>
               {{/each}}
               {{#each grid.items}}
-              <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item locked {{#if placement.rotated}}rotated{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
+              <article class="draggable fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item locked {{#if placement.rotated}}rotated{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}{{#if interactionToggleable}} toggleable{{/if}}{{#if interactionToggled}} toggled{{/if}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
                 <img src="{{img}}" alt="{{name}}">
                 {{#if showFirstAidCharges}}<span class="fallout-maw-inventory-item-charges">{{firstAidCharges.value}}/{{firstAidCharges.max}}</span>{{/if}}
                 {{#if showQuantity}}<strong>{{quantity}}</strong>{{/if}}

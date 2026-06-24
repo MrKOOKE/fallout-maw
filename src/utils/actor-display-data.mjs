@@ -32,6 +32,10 @@ import {
 import { getActiveItemChargesData, getConstructPartFunction, hasItemFunction, isItemBrokenByCondition, ITEM_FUNCTIONS } from "./item-functions.mjs";
 import { prepareActorContainerInventoryContext } from "./actor-containers.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem } from "../races/natural-items.mjs";
+import {
+  getItemInteractionState,
+  resolveActorInteractionToken
+} from "../items/item-interactions.mjs";
 import { toInteger } from "./numbers.mjs";
 
 export const FALLBACK_ICON = "icons/svg/d20-grey.svg";
@@ -135,13 +139,15 @@ export function getActorRootInventoryGridOptions(actor, parentId = "") {
 
 export function prepareInventoryContext(actor, race, { includeLocked = true } = {}) {
   const currencies = getCurrencySettings();
+  const actorInteractionToken = resolveActorInteractionToken(actor);
+  const itemDisplayOptions = { actor, token: actorInteractionToken };
   const { columns, rows } = getActorInventoryGridDimensions(actor, race);
   const allItems = actor.items.contents.filter(item => (
     !["ability", "trauma", "disease"].includes(item.type)
     && !isNaturalRaceItem(item)
     && (includeLocked || !isItemLocked(item))
   ));
-  const allItemData = allItems.map(item => createInventoryItemData(item, allItems, currencies));
+  const allItemData = allItems.map(item => createInventoryItemData(item, allItems, currencies, null, itemDisplayOptions));
   const naturalWeaponSet = actor?.type === "construct"
     ? getConstructNaturalWeaponSetContext(actor, allItemData)
     : getNaturalWeaponSetContext(actor, race, currencies);
@@ -228,7 +234,7 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
         mode: BUTCHERING_STORAGE_PLACEMENT_MODE
       };
       return {
-        ...createInventoryItemData(item, allItems, currencies, normalizedPlacement),
+        ...createInventoryItemData(item, allItems, currencies, normalizedPlacement, itemDisplayOptions),
         gridStyle: buildInventoryCellStyle(normalizedPlacement.x, normalizedPlacement.y, normalizedPlacement)
       };
     }, {
@@ -250,7 +256,7 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
         mode: LOCKED_STORAGE_PLACEMENT_MODE
       };
       return {
-        ...createInventoryItemData(item, allItems, currencies, normalizedPlacement),
+        ...createInventoryItemData(item, allItems, currencies, normalizedPlacement, itemDisplayOptions),
         gridStyle: buildInventoryCellStyle(normalizedPlacement.x, normalizedPlacement.y, normalizedPlacement)
       };
     }, {
@@ -263,7 +269,7 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
     })
   };
   const grid = prepareInventoryGridContext(inventoryItems, columns, rows, allItems, (item, placement) => ({
-    ...createInventoryItemData(item, allItems, currencies, placement),
+    ...createInventoryItemData(item, allItems, currencies, placement, itemDisplayOptions),
     gridStyle: buildInventoryCellStyle(placement.x, placement.y, placement)
   }), getActorRootInventoryGridOptions(actor, ""));
   const containers = topLevelItems
@@ -278,7 +284,7 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
       return {
         ...item,
         grid: prepareInventoryGridContext(contents, dimensions.columns, dimensions.rows, allItems, (childItem, placement) => ({
-          ...createInventoryItemData(childItem, allItems, currencies, placement),
+          ...createInventoryItemData(childItem, allItems, currencies, placement, itemDisplayOptions),
           gridStyle: buildInventoryCellStyle(placement.x, placement.y, placement)
         })),
         load: {
@@ -588,10 +594,11 @@ function getContainerWeaponSlotKey(index = 0) {
   return `extraWeaponSlot${Math.max(1, toInteger(index) + 1)}`;
 }
 
-export function createInventoryItemData(item, allItems, currencies = [], placement = null) {
+export function createInventoryItemData(item, allItems, currencies = [], placement = null, { actor = null, token = null } = {}) {
   const resolvedPlacement = placement ?? normalizeInventoryPlacement(item.system?.placement ?? {}, item, allItems);
   const container = item.system?.container ?? {};
   const firstAidCharges = getActiveItemChargesData(item);
+  const interactionState = getItemInteractionState(actor ?? item?.actor, item, { token });
   const showFirstAidCharges = (
     hasItemFunction(item, ITEM_FUNCTIONS.firstAid, { ignoreBroken: true })
     || hasItemFunction(item, ITEM_FUNCTIONS.needChange, { ignoreBroken: true })
@@ -615,6 +622,11 @@ export function createInventoryItemData(item, allItems, currencies = [], placeme
     equipped: Boolean(item.system?.equipped),
     locked: Boolean(item.system?.locked),
     brokenCondition: isItemBrokenByCondition(item),
+    interactionToggleable: interactionState.toggleable,
+    interactionToggled: interactionState.toggled,
+    interactionHasEnergyConsumption: interactionState.hasEnergyConsumption,
+    interactionHasLightSource: interactionState.hasLightSource,
+    interactionPrimaryEnergyConditionId: interactionState.primaryEnergyConditionId,
     occupiedSlots: item.system?.occupiedSlots ?? {},
     occupiedSlotMode: item.system?.occupiedSlotMode ?? "all",
     weaponSlotRequirement: item.system?.weaponSlotRequirement ?? { mode: "oneOf", slots: {} },

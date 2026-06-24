@@ -167,6 +167,11 @@ import {
   normalizeWhereAreYouGoingSettings
 } from "../settings/abilities.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
+import { openItemInteractionDialog } from "../items/item-interaction-dialogs.mjs";
+import {
+  getItemInteractionState,
+  resolveActorInteractionToken
+} from "../items/item-interactions.mjs";
 import {
   applyWeaponModuleModifiers,
   WEAPON_MODULE_ACTION_KEYS,
@@ -2510,6 +2515,10 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (isContainer) {
       menuOptions.push(["open", "fa-box-open", game.i18n.localize("FALLOUTMAW.Item.Open")]);
     }
+    const interactionState = getItemInteractionState(this.actor, item, { token: resolveActorInteractionToken(this.actor) });
+    if (interactionState.hasInteraction) {
+      menuOptions.push(["interact", "fa-hand-pointer", "Взаимодействие"]);
+    }
     if (canUseActiveItem(item)) {
       menuOptions.push(["use", "fa-play", "Применить"]);
     }
@@ -2544,6 +2553,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       this.#closeInventoryContextMenu();
       if (action === "edit" && game.user?.isGM) return item.sheet?.render(true);
       if (action === "open") return this.#openContainerSheet(item);
+      if (action === "interact") return openItemInteractionDialog({ actor: this.actor, item, application: this });
       if (action === "use") return useActiveItem({ actor: this.actor, item, application: this });
       if (action === "rotate") return this.#rotateInventoryItem(item);
       if (action === "equip") return this.#equipInventoryItem(item);
