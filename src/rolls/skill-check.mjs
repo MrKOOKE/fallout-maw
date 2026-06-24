@@ -323,7 +323,8 @@ function normalizeSkillCheckMessageData(messageData = {}) {
   return {
     ...(Array.isArray(messageData.whisper) ? { whisper: messageData.whisper } : {}),
     ...(messageData.blind !== undefined ? { blind: Boolean(messageData.blind) } : {}),
-    ...(messageData.type !== undefined ? { type: messageData.type } : {})
+    ...(messageData.type !== undefined ? { type: messageData.type } : {}),
+    ...(messageData.includeRolls === false ? { rolls: [] } : {})
   };
 }
 

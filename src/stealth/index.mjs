@@ -27,6 +27,8 @@ import {
 } from "../settings/factions.mjs";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const STEALTH_SOCKET = `system.${SYSTEM_ID}`;
+const STEALTH_SOCKET_SCOPE = "fallout-maw.stealth";
 const STEALTH_STATUS_ID = "invisible";
 const STEALTH_TARGET_TOOLTIP_ID = "fallout-maw-stealth-target-tooltip";
 const STEALTH_DETECTION_PROVIDER_ID = "stealthDetection";
@@ -48,6 +50,7 @@ const detectionVisualizationMovementTrackers = new Map();
 let detectionHoverTokenId = null;
 let targetMode = null;
 let hooksRegistered = false;
+let stealthSocketRegistered = false;
 let stealthAllyVisibilityPatchRegistered = false;
 let refreshAllStealthWindowsTimeout = null;
 let refreshDetectionVisualizationsTimeout = null;
@@ -56,6 +59,8 @@ let refreshStealthedTokenVisibilityTimeout = null;
 export function registerStealthHooks() {
   if (hooksRegistered) return;
   patchStealthAllyVisibilityDetection();
+  if (game.ready) registerStealthSocket();
+  else Hooks.once("ready", registerStealthSocket);
   registerMovementInterruptionProvider({
     id: STEALTH_DETECTION_PROVIDER_ID,
     collect: collectStealthMovementInterruptions,
@@ -88,6 +93,19 @@ export function registerStealthHooks() {
   Hooks.on("hoverToken", onTokenHoverForDetectionZone);
   Hooks.on(`${SYSTEM_ID}.stealthSettingsChanged`, refreshAllStealthWindowsWithInvalidation);
   hooksRegistered = true;
+}
+
+function registerStealthSocket() {
+  if (stealthSocketRegistered) return;
+  game.socket?.on?.(STEALTH_SOCKET, handleStealthSocketMessage);
+  stealthSocketRegistered = true;
+}
+
+function handleStealthSocketMessage(message = {}) {
+  if (message?.scope !== STEALTH_SOCKET_SCOPE) return;
+  if (message.action !== "pauseDetection") return;
+  if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+  pauseGameForStealthDetection({ localOnly: true });
 }
 
 function patchStealthAllyVisibilityDetection() {
@@ -172,13 +190,16 @@ export async function toggleActorStealth(actor, active = !isActorStealthed(actor
   }
   if (isActorStealthed(actor) === Boolean(active)) return true;
   await actor.toggleStatusEffect(STEALTH_STATUS_ID, { active: Boolean(active) });
-  if (!active) {
+  if (active) {
+    await resolveStealthEntryDetection(actor);
+  } else {
     stopTargetingMode();
     clearDetectionMovementStateForActor(actor);
     for (const token of canvas?.tokens?.placeables ?? []) {
       if (token.actor?.uuid === actor.uuid) removeDetectionVisualization(token.id);
     }
   }
+  queueStealthedTokenVisibilityRefresh();
   refreshStealthWindowsForActor(actor);
   return true;
 }
@@ -400,7 +421,7 @@ async function rollStealthCheck(sourceToken, targetToken, app = null, { animate 
       advantage: difficulty.advantageCount > 0,
       advantageCount: difficulty.advantageCount
     },
-    messageData: result => isStealthCheckSuccess(result) ? createStealthSuccessMessageData() : {}
+    messageData: result => isStealthCheckSuccess(result) ? createStealthSuccessMessageData(sourceToken.actor) : {}
   });
   if (isStealthCheckFailure(outcome)) {
     await toggleActorStealth(sourceToken.actor, false);
@@ -409,6 +430,39 @@ async function rollStealthCheck(sourceToken, targetToken, app = null, { animate 
   }
   await app?.render({ force: true });
   return outcome;
+}
+
+async function resolveStealthEntryDetection(actor) {
+  const settings = getStealthSettings();
+  if (!settings.autoDetection?.enabled || !canvas?.ready || !isActorStealthed(actor)) return false;
+  for (const token of getSceneTokensForActor(actor)) {
+    if (!isActorStealthed(actor)) return true;
+    if (await resolveStealthEntryDetectionForToken(token)) return true;
+  }
+  return false;
+}
+
+async function resolveStealthEntryDetectionForToken(hiddenToken) {
+  if (!hiddenToken?.actor || !isActorStealthed(hiddenToken.actor)) return false;
+  const hiddenPoint = getTokenCenter(hiddenToken);
+  for (const observerToken of canvas.tokens?.placeables ?? []) {
+    if (!isActorStealthed(hiddenToken.actor)) return true;
+    if (!isValidStealthObserver(hiddenToken, observerToken)) continue;
+    const observerOrigin = getTokenCenter(observerToken);
+    if (!isPointInsideObserverZone(hiddenPoint, observerToken, observerOrigin)) continue;
+
+    const outcome = await rollStealthCheck(hiddenToken, observerToken, null, { animate: false });
+    if (!isActorStealthed(hiddenToken.actor) || isStealthCheckFailure(outcome)) {
+      pauseGameForStealthDetection();
+      return true;
+    }
+  }
+  return false;
+}
+
+function getSceneTokensForActor(actor) {
+  if (!actor?.uuid) return [];
+  return (canvas?.tokens?.placeables ?? []).filter(token => token.actor?.uuid === actor.uuid);
 }
 
 function isStealthCheckSuccess(outcome) {
@@ -421,10 +475,16 @@ function isStealthCheckFailure(outcome) {
   return ["failure", "criticalFailure"].includes(resultKey) || outcome?.result?.autoFailure;
 }
 
-function createStealthSuccessMessageData() {
+function createStealthSuccessMessageData(actor = null) {
   const whisper = new Set(ChatMessage.getWhisperRecipients("GM").map(user => user.id));
-  if (game.user?.id) whisper.add(game.user.id);
-  return { whisper: Array.from(whisper) };
+  for (const user of game.users?.contents ?? []) {
+    if (actor?.testUserPermission?.(user, "OWNER")) whisper.add(user.id);
+  }
+  if (!whisper.size && game.user?.id) whisper.add(game.user.id);
+  return {
+    whisper: Array.from(whisper),
+    includeRolls: false
+  };
 }
 
 function onTokenUpdated(tokenDocument, changes) {
@@ -763,9 +823,31 @@ async function moveTokenToStealthInterruption(tokenDocument, waypoint = {}, move
   return true;
 }
 
-function pauseGameForStealthDetection() {
-  if (!game.user?.isGM || game.paused) return;
+function pauseGameForStealthDetection({ localOnly = false } = {}) {
+  if (game.paused) return;
+  if (!game.user?.isGM) {
+    if (!localOnly) requestStealthDetectionPause();
+    return;
+  }
   game.togglePause(true, { broadcast: true });
+}
+
+function requestStealthDetectionPause() {
+  const gm = getResponsibleGM();
+  if (!gm) return;
+  game.socket?.emit?.(STEALTH_SOCKET, {
+    scope: STEALTH_SOCKET_SCOPE,
+    action: "pauseDetection",
+    gmUserId: gm.id,
+    senderUserId: game.user?.id ?? ""
+  });
+}
+
+function getResponsibleGM() {
+  return game.users?.activeGM ?? (game.users?.contents ?? [])
+    .filter(user => user.active && user.isGM)
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .at(0) ?? null;
 }
 
 function getMovementStealthPairDescriptors(tokenDocument) {
