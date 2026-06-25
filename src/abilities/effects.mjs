@@ -14,7 +14,6 @@ import {
   getAuraGeneratedTargetTokens
 } from "./aura-conditions.mjs";
 import { prepareEffectChangeForApplication } from "../utils/effect-change-values.mjs";
-import { recordSubsystemWork } from "../debug/perf-log.mjs";
 import { deferAbilityEffectSync, deferAuraStateSync, registerBulkOperationFlusher } from "../utils/bulk-operation.mjs";
 
 const ABILITY_EFFECT_FLAG_KEY = "abilityEffect";
@@ -218,7 +217,6 @@ export async function syncActorAbilityEffects(actor, context = {}) {
   if (!["character", "construct"].includes(actor.type)) return;
   if (processingActors.has(actor.uuid)) return;
 
-  recordSubsystemWork("abilityEffectSync", { actorUuid: actor.uuid });
   processingActors.add(actor.uuid);
   try {
     const abilityItems = actor.items?.filter(item => item.type === "ability") ?? [];
@@ -336,7 +334,6 @@ export async function syncAuraGeneratedEffects() {
     return;
   }
 
-  recordSubsystemWork("auraStateSync");
   processingAuraEffects = true;
   try {
     do {

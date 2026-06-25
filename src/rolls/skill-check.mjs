@@ -4,7 +4,6 @@ import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
 import { normalizeImagePath } from "../utils/actor-display-data.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { getActorSmartFudgeResult } from "../utils/active-effect-changes.mjs";
-import { recordPerfEvent } from "../debug/perf-log.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -50,18 +49,6 @@ export async function requestSkillCheck({
   const resolvedSkill = resolveSkill(actor, skillKey);
   if (!resolvedSkill) return undefined;
 
-  // #region agent log
-  if (createMessage) {
-    recordPerfEvent("skill-check.mjs:requestSkillCheck", "single skill check requested", {
-      actorUuid: actor?.uuid,
-      skillKey,
-      requester,
-      difficulty: toInteger(data?.difficulty),
-      animate,
-      createMessage
-    }, "H-skill-check-card");
-  }
-  // #endregion
   const requestData = prompt ? await promptSkillCheckData(actor, resolvedSkill) : data;
   if (!requestData) return undefined;
 
@@ -90,17 +77,6 @@ export async function requestSkillCheckBatch({
   const preparedEntries = prepareSkillCheckBatchEntries({ actor, skillKey, entries });
   if (!preparedEntries) return undefined;
 
-  // #region agent log
-  recordPerfEvent("skill-check.mjs:requestSkillCheckBatch", "batch skill check requested", {
-    fallbackActorUuid: actor?.uuid,
-    skillKey,
-    entryCount: entries.length,
-    preparedCount: preparedEntries.length,
-    createMessage,
-    title,
-    requester
-  }, "H-skill-check-card");
-  // #endregion
   const outcomes = [];
   for (const entry of preparedEntries) {
     const outcome = await performSkillCheck(entry.actor, entry.skill, normalizeRequestData(entry.data, requester));
@@ -148,14 +124,6 @@ async function publishSkillCheckBatchMessage(outcomes = [], { requester = "", ti
   const normalizedOutcomes = outcomes.filter(Boolean);
   if (!normalizedOutcomes.length) return undefined;
 
-  // #region agent log
-  recordPerfEvent("skill-check.mjs:publishSkillCheckBatchMessage", "skill check batch chat create", {
-    outcomeCount: normalizedOutcomes.length,
-    requester,
-    title,
-    actorUuids: normalizedOutcomes.map(outcome => outcome.actor?.uuid)
-  }, "H-skill-check-card");
-  // #endregion
   const context = buildSkillCheckBatchViewContext(normalizedOutcomes, { title });
   const content = await renderTemplate(TEMPLATES.skillCheckBatchChatCard, context);
   return ChatMessage.create({
@@ -328,16 +296,6 @@ async function publishSkillCheckMessage(outcome, { requester = "", messageData =
   const { actor, check, rolls, result, total } = outcome;
   const cardContext = buildSkillCheckViewContext(outcome);
 
-  // #region agent log
-  recordPerfEvent("skill-check.mjs:publishSkillCheckMessage", "single skill check chat create", {
-    actorUuid: actor?.uuid,
-    skillKey: check?.skill?.key,
-    requester,
-    difficulty: toInteger(check?.difficulty),
-    result: result?.key,
-    total
-  }, "H-skill-check-card");
-  // #endregion
   const content = await renderTemplate(TEMPLATES.skillCheckChatCard, cardContext);
   return ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ actor }),

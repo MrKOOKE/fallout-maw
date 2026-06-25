@@ -13,8 +13,6 @@ import {
   isTimeMechanicsForced
 } from "../time/rest-context.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-import { recordSubsystemWork } from "../debug/perf-log.mjs";
-
 const NEED_EFFECT_FLAG_KEY = "needEffect";
 const NEED_ACCUMULATION_REMAINDER_FLAG_KEY = "needAccumulationRemainder";
 const DISEASE_FLAG_KEY = "disease";
@@ -37,7 +35,6 @@ export function registerNeedThresholdHooks() {
 export async function processActorNeedThresholds(actor) {
   if (!actor || !game.user?.isActiveGM) return;
   if (processingActors.has(actor.uuid)) return;
-  recordSubsystemWork("needThresholdProcess", { actorUuid: actor.uuid });
   processingActors.add(actor.uuid);
   try {
     const needSettings = getActorNeedSettings(actor);

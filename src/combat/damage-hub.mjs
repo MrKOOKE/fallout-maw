@@ -27,17 +27,6 @@ import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { evaluateActorEffectChangeNumber } from "../utils/active-effect-changes.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
-import {
-  beginActorDamageOp,
-  beginDamageCycle,
-  endActorDamageOp,
-  endDamageCycle,
-  isActorDamageOpActive,
-  measurePerfTiming,
-  recordPerfEvent,
-  recordPerfMetric,
-  recordSubsystemWork
-} from "../debug/perf-log.mjs";
 import { beginBulkOperation, endBulkOperation } from "../utils/bulk-operation.mjs";
 
 const DAMAGE_SOCKET = `system.${SYSTEM_ID}`;
@@ -429,20 +418,6 @@ async function applyDamageCycleNow(requests = []) {
   }
   if (!grouped.size) return [];
 
-  // #region agent log
-  recordPerfEvent("damage-hub.mjs:applyDamageCycleNow", "damage cycle requests grouped", {
-    requestCount: requests.length,
-    actorCount: grouped.size,
-    actorRequestCounts: Array.from(grouped, ([actorUuid, actorRequests]) => ({
-      actorUuid,
-      requestCount: actorRequests.length
-    }))
-  }, "H-card-cycle");
-  // #endregion
-  beginDamageCycle("damageCycle", {
-    requestCount: requests.length,
-    actorCount: grouped.size
-  });
   beginBulkOperation();
 
   const results = [];
@@ -458,20 +433,11 @@ async function applyDamageCycleNow(requests = []) {
     }
 
     await resolveDeferredShockChecks(deferredShockChecks);
-    // #region agent log
-    recordPerfEvent("damage-hub.mjs:applyDamageCycleNow", "damage cycle results complete before summary", {
-      requestCount: requests.length,
-      actorCount: grouped.size,
-      resultCount: results.length,
-      deferredShockCheckCount: deferredShockChecks.length
-    }, "H-card-cycle");
-    // #endregion
     await publishDamageSummaryMessage(results);
     notifyDamageApplied(results);
     return results;
   } finally {
     await endBulkOperation();
-    endDamageCycle({ resultCount: results.length });
   }
 }
 
@@ -543,10 +509,7 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
   const actor = await fromUuid(data.actorUuid);
   if (!actor) return undefined;
   if (!game.user?.isGM && !actor.isOwner) return undefined;
-  const trackActorOp = !isActorDamageOpActive();
-  if (trackActorOp) beginActorDamageOp(actor.uuid, { requestCount: 1, mode: data.mode ?? MODE_DAMAGE });
 
-  try {
   const mode = data.mode === MODE_HEALING ? MODE_HEALING : MODE_DAMAGE;
   const scope = normalizeScope(data.scope, data.limbKey);
   if (mode === MODE_DAMAGE && scope === SCOPE_ITEM_CONDITION) {
@@ -683,9 +646,6 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
     notifyDamageApplied([result]);
   }
   return result;
-  } finally {
-    if (trackActorOp) endActorDamageOp(actor.uuid, { mode: data.mode ?? MODE_DAMAGE });
-  }
 }
 
 async function applyItemConditionDamageApplicationNow(actor, data = {}, { createSummary = false } = {}) {
@@ -849,9 +809,7 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
   const actor = await fromUuid(actorUuid);
   if (!actor) return undefined;
   if (!game.user?.isGM && !actor.isOwner) return undefined;
-  beginActorDamageOp(actor.uuid, { requestCount: requests.length, mode: "batch" });
   let results = [];
-  try {
   const resourceHealthBefore = calculateAggregateHealth(actor).value;
 
   const batchRequests = [];
@@ -860,24 +818,22 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
   const resistanceOverheats = [];
   const pendingPeriodicDamageEffects = [];
   const equipmentConditionDamageState = createEquipmentConditionDamageState(actor);
-  await measurePerfTiming("prepareRequests", async () => {
-    for (const request of requests) {
-      const data = normalizeDamageRequest({ ...request, actorUuid });
-      if (data.mode !== MODE_DAMAGE) {
-        singleResults.push(await applyDamageApplicationNow(data, { createSummary: false }));
-        continue;
-      }
-      if (data.scope === SCOPE_ITEM_CONDITION) {
-        singleResults.push(await applyItemConditionDamageApplicationNow(actor, data));
-        continue;
-      }
-
-      const entry = await prepareDamageBatchEntry(actor, data, { equipmentConditionDamageState, pendingPeriodicDamageEffects });
-      if (entry?.damageMitigationDisplay) mitigationDisplays.push(entry.damageMitigationDisplay);
-      if (entry?.resistanceOverheat) resistanceOverheats.push(entry.resistanceOverheat);
-      if (entry?.amount > 0) batchRequests.push(entry);
+  for (const request of requests) {
+    const data = normalizeDamageRequest({ ...request, actorUuid });
+    if (data.mode !== MODE_DAMAGE) {
+      singleResults.push(await applyDamageApplicationNow(data, { createSummary: false }));
+      continue;
     }
-  });
+    if (data.scope === SCOPE_ITEM_CONDITION) {
+      singleResults.push(await applyItemConditionDamageApplicationNow(actor, data));
+      continue;
+    }
+
+    const entry = await prepareDamageBatchEntry(actor, data, { equipmentConditionDamageState, pendingPeriodicDamageEffects });
+    if (entry?.damageMitigationDisplay) mitigationDisplays.push(entry.damageMitigationDisplay);
+    if (entry?.resistanceOverheat) resistanceOverheats.push(entry.resistanceOverheat);
+    if (entry?.amount > 0) batchRequests.push(entry);
+  }
 
   const mitigationDisplay = combineDamageMitigationDisplays(mitigationDisplays);
   if (mitigationDisplay) broadcastDamageMitigationIcon(actor, mitigationDisplay);
@@ -906,32 +862,28 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
       source: batchSource
     }
     : batchRequests.length
-      ? await measurePerfTiming("applyDamageEntriesBatch", () => applyDamageEntriesBatch(actor, batchRequests, { deferredShockChecks }))
+      ? await applyDamageEntriesBatch(actor, batchRequests, { deferredShockChecks })
       : undefined;
   if (!batchPrevented) {
-    await measurePerfTiming("equipmentCondition", () => applyEquipmentConditionDamage(actor, getEquipmentConditionDamageStateEntries(equipmentConditionDamageState)));
-    await measurePerfTiming("resistanceOverheats", () => applyResistanceOverheats(actor, resistanceOverheats));
-    await measurePerfTiming("periodicEffects", async () => {
-      for (const entry of combinePendingPeriodicDamageEffects(pendingPeriodicDamageEffects)) {
-        await createPeriodicDamageEffect(actor, entry);
-      }
-    });
+    await applyEquipmentConditionDamage(actor, getEquipmentConditionDamageStateEntries(equipmentConditionDamageState));
+    await applyResistanceOverheats(actor, resistanceOverheats);
+    for (const entry of combinePendingPeriodicDamageEffects(pendingPeriodicDamageEffects)) {
+      await createPeriodicDamageEffect(actor, entry);
+    }
   }
   if (batchResult?.resourceLimitEntries?.length) {
-    await measurePerfTiming("resourceLimitEffects", async () => {
-      for (const entry of batchResult.resourceLimitEntries) {
-        const damageType = getDamageTypeSettings().find(type => type.key === entry.damageTypeKey);
-        await createResourceLimitEffect(actor, {
-          damageType,
-          healthDelta: entry.amount,
-          source: entry.source,
-          worldTime: getDamageApplicationWorldTime(entry.source)
-        });
-      }
-    });
+    for (const entry of batchResult.resourceLimitEntries) {
+      const damageType = getDamageTypeSettings().find(type => type.key === entry.damageTypeKey);
+      await createResourceLimitEffect(actor, {
+        damageType,
+        healthDelta: entry.amount,
+        source: entry.source,
+        worldTime: getDamageApplicationWorldTime(entry.source)
+      });
+    }
   }
   if (batchResult?.bleedingEntries?.length) {
-    await measurePerfTiming("bleedingEffects", () => createCombinedBleedingDamageEffect(actor, batchResult.bleedingEntries));
+    await createCombinedBleedingDamageEffect(actor, batchResult.bleedingEntries);
   }
   if (batchResult) {
     const resourceHealthAfter = calculateAggregateHealth(actor).value;
@@ -946,9 +898,6 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
     notifyDamageApplied(results);
   }
   return results;
-  } finally {
-    endActorDamageOp(actor.uuid, { resultCount: results?.length ?? 0 });
-  }
 }
 
 async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDamageState = null, pendingPeriodicDamageEffects = null } = {}) {
@@ -1105,7 +1054,6 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
   }
   if (Object.keys(updateData).length) {
     await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
-    recordSpentOnlyLimbValueValidation(actor, limbStates);
   }
   if (actor?.type === "construct" && limbStates.size) await syncConstructPartConditionValues(actor, limbStates);
 
@@ -1596,7 +1544,6 @@ function queueActorDamageStatusSync(actor) {
     .catch(() => undefined)
     .then(async () => {
       const freshActor = fromUuidSync(actorUuid) ?? actor;
-      recordSubsystemWork("damageStatusSync", { actorUuid });
       await synchronizeActorVitalStatuses(freshActor);
     })
     .finally(() => {
@@ -1662,9 +1609,6 @@ async function applyDestroyedLimbConsequencesNow(actor, limbKeys = [], { ignoreI
       if (effectData) limbLossEffectData.push(effectData);
     }
   }
-  recordPerfMetric("destroyedLimbCount", destroyed.size);
-  recordPerfMetric("destroyedLimbMissingUpdateCount", Object.keys(missingUpdates).length);
-  recordPerfMetric("destroyedLimbLossEffectCreateCount", limbLossEffectData.length);
   if (Object.keys(missingUpdates).length) await actor.update(missingUpdates, { falloutMawSkipDamageStatusSync: true });
   if (destroyedLimbKeys.length) {
     await deleteLimbTraumasBatch(actor, destroyedLimbKeys);
@@ -1690,7 +1634,6 @@ async function deleteLimbTraumasBatch(actor, limbKeys = []) {
     .filter(item => keys.has(item.system?.limbKey))
     .map(item => item.id)
     .filter(Boolean);
-  recordPerfMetric("destroyedLimbTraumaDeleteCount", ids.length);
   return deleteActorItems(actor, ids);
 }
 
@@ -1711,7 +1654,6 @@ async function deleteLimbLossEffectsBatch(actor, limbKeys = []) {
     .filter(effect => getDamageEffectChanges(effect).some(data => data.kind === LIMB_LOSS_EFFECT_KIND && keys.has(data.limbKey)))
     .map(effect => effect.id)
     .filter(Boolean);
-  recordPerfMetric("destroyedLimbLossEffectDeleteCount", ids.length);
   return deleteActorActiveEffects(actor, ids);
 }
 
@@ -1725,7 +1667,6 @@ async function deleteLimbTimedDamageEffectsBatch(actor, limbKeys = []) {
   const keys = new Set(limbKeys.filter(Boolean));
   if (!keys.size) return [];
   const results = await removeDamageEffectChanges(actor, data => isLimbTimedDamageEffect(data) && keys.has(data.limbKey));
-  recordPerfMetric("destroyedLimbTimedDamageEffectChangeDeleteCount", results.reduce((sum, result) => sum + (result.removed ?? 0), 0));
   return results;
 }
 
@@ -2218,17 +2159,6 @@ async function synchronizeActorVitalStatuses(actor) {
   const dead = hasDestroyedCriticalLimb(actor);
   const health = actor.health;
   const unconscious = !dead && (hasShockUnconscious(actor) || (health && toInteger(health.value) <= toInteger(health.min)));
-  // #region agent log
-  if (dead || unconscious || actor.statuses?.has?.(STATUS_EFFECTS.dead) || actor.statuses?.has?.(STATUS_EFFECTS.unconscious)) {
-    recordPerfEvent("damage-hub.mjs:synchronizeActorVitalStatuses", "vital status sync decision", {
-      actorUuid: actor.uuid,
-      dead,
-      unconscious,
-      statuses: Array.from(actor.statuses ?? []),
-      overlays: getActorOverlayEffectSummary(actor)
-    }, "H-status-order");
-  }
-  // #endregion
   if (dead) {
     await knockdownActorForIncapacitation(actor, STATUS_EFFECTS.dead);
     if (hasShockUnconscious(actor)) await actor.unsetFlag(SYSTEM_ID, SHOCK_UNCONSCIOUS_FLAG_KEY);
@@ -2244,29 +2174,11 @@ async function synchronizeActorVitalStatuses(actor) {
 
 async function knockdownActorForIncapacitation(actor, state = "") {
   if (!actor || !state) return;
-  // #region agent log
-  recordPerfEvent("damage-hub.mjs:knockdownActorForIncapacitation", "request knocked posture", {
-    actorUuid: actor.uuid,
-    state,
-    statuses: Array.from(actor.statuses ?? []),
-    overlays: getActorOverlayEffectSummary(actor)
-  }, "H-status-order");
-  // #endregion
   await setActorTokensPosture(actor, "knocked");
 }
 
 async function performNegativeLimbShockCheck(actor, shockCheck = null) {
   if (!actor || !shockCheck || shockCheck.difficulty <= 0 || hasShockUnconscious(actor) || isActorDead(actor)) return undefined;
-  // #region agent log
-  recordPerfEvent("damage-hub.mjs:performNegativeLimbShockCheck", "negative limb shock skill check", {
-    actorUuid: actor.uuid,
-    difficulty: shockCheck.difficulty,
-    damage: shockCheck.damage,
-    limbKey: shockCheck.limbKey ?? "",
-    limbKeys: shockCheck.limbKeys ?? [],
-    requester: getNegativeLimbShockRequester(actor, shockCheck)
-  }, "H-skill-check-card");
-  // #endregion
   const outcome = await requestSkillCheck({
     actor,
     skillKey: "resilience",
@@ -2299,14 +2211,6 @@ async function queueOrPerformNegativeLimbShockCheck(actor, shockCheck = null, de
 async function resolveDeferredShockChecks(entries = []) {
   const queued = entries.filter(entry => entry?.actorUuid && entry?.shockCheck);
   if (!queued.length) return [];
-  // #region agent log
-  recordPerfEvent("damage-hub.mjs:resolveDeferredShockChecks", "deferred shock checks resolving", {
-    count: queued.length,
-    actorUuids: queued.map(entry => entry.actorUuid),
-    reasons: queued.map(entry => entry.reason),
-    difficulties: queued.map(entry => entry.shockCheck?.difficulty)
-  }, "H-skill-check-card");
-  // #endregion
   const batch = createSkillCheckBatchCollector({
     requester: "damageShock",
     title: "Проверки стойкости: шок"
@@ -2454,18 +2358,7 @@ async function setActorStatusEffect(actor, statusId = "", active = false, option
   const animationOptions = getStatusAnimationOptions(statusId, options);
 
   const existing = getActorStatusEffectIds(actor, status);
-  // #region agent log
-  if (statusId === STATUS_EFFECTS.dead || statusId === STATUS_EFFECTS.unconscious) {
-    recordPerfEvent("damage-hub.mjs:setActorStatusEffect", "status effect operation", {
-      actorUuid: actor.uuid,
-      statusId,
-      active,
-      existing,
-      statuses: Array.from(actor.statuses ?? []),
-      overlays: getActorOverlayEffectSummary(actor)
-    }, "H-status-order");
-  }
-  // #endregion
+
   if (existing.length) {
     if (active) {
       await ensureActorStatusOverlay(actor, existing, statusId, options);
@@ -2523,17 +2416,6 @@ function getActorStatusEffectIds(actor, status) {
     if (statuses?.size === 1 && statuses.has(status.id)) existing.push(effect.id);
   }
   return existing;
-}
-
-function getActorOverlayEffectSummary(actor) {
-  return Array.from(actor?.effects ?? [])
-    .filter(effect => effect?.flags?.core?.overlay)
-    .map(effect => ({
-      id: effect.id,
-      name: effect.name,
-      statuses: Array.from(effect.statuses ?? []),
-      posture: effect.getFlag?.(SYSTEM_ID, "postureMovement")?.action ?? ""
-    }));
 }
 
 function splitSpecialEffectChanges(effectChanges = []) {
@@ -3904,27 +3786,20 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
     updateData[`system.limbs.${limbKey}.damageAccumulation`] = replaceDamageAccumulation(accumulation);
   }
 
-  const actorUpdatePaths = Object.keys(foundry.utils.flattenObject(updateData));
-  recordPerfMetric("actorUpdatePathCount", actorUpdatePaths.length);
-  recordPerfMetric("limbStateCount", limbStates.size);
-  recordPerfMetric("damageAccumulationCount", damageAccumulation.size);
   if (Object.keys(updateData).length) {
-    await measurePerfTiming("actorDamageUpdate", () => actor.update(updateData, { falloutMawSkipDamageStatusSync: true }));
-    recordSpentOnlyLimbValueValidation(actor, limbStates);
+    await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
   }
   if (actor?.type === "construct" && limbStates.size) {
-    await measurePerfTiming("constructPartSync", () => syncConstructPartConditionValues(actor, limbStates));
+    await syncConstructPartConditionValues(actor, limbStates);
   }
-  const destroyedLimbKeys = await measurePerfTiming("destroyedLimbConsequences", () => (
-    applyDestroyedLimbConsequences(actor, Array.from(limbStates.keys()))
-  ));
+  const destroyedLimbKeys = await applyDestroyedLimbConsequences(actor, Array.from(limbStates.keys()));
   const shockCheck = aggregateNegativeLimbShockChecks(actor, shockChecks);
-  if (shockCheck) await measurePerfTiming("shockCheck", () => queueOrPerformNegativeLimbShockCheck(actor, shockCheck, deferredShockChecks, "damage"));
+  if (shockCheck) await queueOrPerformNegativeLimbShockCheck(actor, shockCheck, deferredShockChecks, "damage");
   const destroyedLimbShockCheck = aggregateNegativeLimbShockChecks(actor, buildDestroyedLimbShockChecks(actor, destroyedLimbKeys));
   if (destroyedLimbShockCheck) {
-    await measurePerfTiming("destroyedLimbShockCheck", () => queueOrPerformNegativeLimbShockCheck(actor, destroyedLimbShockCheck, deferredShockChecks, "destroyedLimb"));
+    await queueOrPerformNegativeLimbShockCheck(actor, destroyedLimbShockCheck, deferredShockChecks, "destroyedLimb");
   }
-  await measurePerfTiming("damageStatusSync", () => queueActorDamageStatusSync(actor));
+  await queueActorDamageStatusSync(actor);
   const requestedHealthDamage = normalizedEntries.reduce((sum, entry) => sum + entry.amount, 0);
   const healthDeltasByType = buildBatchDamageNumberEntries(normalizedEntries, actualHealthDelta, requestedHealthDamage);
   const resourceLimitEntries = buildBatchDamageNumberEntries(
@@ -3962,10 +3837,7 @@ async function applyDamageEntriesBatch(actor, entries = [], { deferredShockCheck
     });
     if (plan.createData.length || plan.deleteIds.length) traumaPlans.push(plan);
   }
-  recordPerfMetric("traumaPlanCount", traumaPlans.length);
-  recordPerfMetric("traumaCreateCount", traumaPlans.reduce((sum, plan) => sum + plan.createData.length, 0));
-  recordPerfMetric("traumaDeleteCount", traumaPlans.reduce((sum, plan) => sum + plan.deleteIds.length, 0));
-  createdTraumas.push(...await measurePerfTiming("traumaCommit", () => commitTriggeredTraumaPlans(actor, traumaPlans)));
+  createdTraumas.push(...await commitTriggeredTraumaPlans(actor, traumaPlans));
 
   const finishingBlowSource = selectBatchFinishingBlowSource(normalizedEntries);
   const totalLimbDelta = Array.from(limbStates.values()).reduce((sum, state) => sum + state.totalDelta, 0);
@@ -4187,15 +4059,6 @@ function buildBatchLimbDeltaEntries(actor, limbStates = new Map()) {
 
 async function publishDamageSummaryMessage(results = []) {
   const context = buildDamageSummaryViewContext(results);
-  // #region agent log
-  recordPerfEvent("damage-hub.mjs:publishDamageSummaryMessage", "damage summary publish requested", {
-    inputResultCount: results.flat(Infinity).filter(Boolean).length,
-    victimCount: context.victims.length,
-    totalHealthDamage: context.totalHealthDamage,
-    totalLimbDamage: context.totalLimbDamage,
-    victimNames: context.victims.map(victim => victim.name)
-  }, "H-card-summary");
-  // #endregion
   if (!context.victims.length) return undefined;
 
   const content = await renderTemplate(TEMPLATES.damageSummaryChatCard, context);
@@ -5632,19 +5495,6 @@ function setLimbValueUpdate(updateData, actor, limbKey, value, { persistValue = 
   setUpdatePath(updateData, `system.limbs.${limbKey}.spent`, calculateLimbSpentFromValue(limb, value));
 }
 
-function recordSpentOnlyLimbValueValidation(actor, limbStates = new Map()) {
-  let checked = 0;
-  let mismatches = 0;
-  for (const [limbKey, state] of limbStates) {
-    if (!state?.totalDelta) continue;
-    if (isConstructPartLimb(actor, limbKey)) continue;
-    checked += 1;
-    if (toInteger(actor.system?.limbs?.[limbKey]?.value) !== toInteger(state.nextValue)) mismatches += 1;
-  }
-  recordPerfMetric("spentOnlyLimbValueChecked", checked);
-  recordPerfMetric("spentOnlyLimbValueMismatches", mismatches);
-}
-
 function calculateLimbSpentFromValue(limb, value) {
   const max = Math.max(0, toInteger(limb?.max));
   const min = -max;
@@ -6229,8 +6079,6 @@ async function applyEquipmentConditionDamage(actor, entries = []) {
     });
   }
 
-  recordPerfMetric("equipmentConditionUpdateCount", updates.length);
-  recordPerfMetric("equipmentConditionBrokenProstheses", brokenProstheses.length);
   if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
   if (prosthesisHealthChanged) await queueActorDamageStatusSync(actor);
   for (const item of brokenProstheses) {

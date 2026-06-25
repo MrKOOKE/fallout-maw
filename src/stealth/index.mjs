@@ -18,7 +18,6 @@ import {
   registerMovementInterruptionProvider
 } from "../canvas/movement-interruptions.mjs";
 import { canTokenPhysicallySeeTarget } from "../combat/weapon-attack-controller.mjs";
-import { recordSubsystemWork } from "../debug/perf-log.mjs";
 import {
   deferStealthActorRefresh,
   deferStealthedTokenVisibilityRefresh,
@@ -522,7 +521,6 @@ function onTokenMoved(tokenDocument, movement = {}) {
 function refreshStealthWindowsForActor(actor) {
   if (!actor) return;
   if (deferStealthActorRefresh(actor)) return;
-  recordSubsystemWork("stealthActorRefresh", { actorUuid: actor.uuid });
   for (const [tokenId, app] of stealthWindows) {
     const token = canvas?.tokens?.get(tokenId);
     if (!token || token.actor?.uuid !== actor.uuid) continue;
@@ -647,7 +645,6 @@ function queueDetectionVisualizationRefresh() {
 function queueStealthedTokenVisibilityRefresh() {
   if (!canvas?.ready || refreshStealthedTokenVisibilityTimeout) return;
   if (deferStealthedTokenVisibilityRefresh()) return;
-  recordSubsystemWork("stealthVisibilityRefresh");
   const schedule = globalThis.window?.setTimeout ?? globalThis.setTimeout;
   refreshStealthedTokenVisibilityTimeout = schedule(() => {
     refreshStealthedTokenVisibilityTimeout = null;
