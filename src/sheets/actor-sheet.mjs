@@ -255,6 +255,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       editEffect: this.#onEditEffect,
       toggleEffect: this.#onToggleEffect,
       deleteEffect: this.#onDeleteEffect,
+      selectHudWeaponSet: this.#onSelectHudWeaponSet,
       rollSkill: this.#onRollSkill
     }
   };
@@ -409,6 +410,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#activeLimbKey = activeLimbKey;
 
     const inventory = prepareDisplayInventoryContext(actor, race);
+    markActiveHudWeaponSet(actor, inventory);
     const level = Math.max(1, toInteger(actor.system?.attributes?.level));
     const currentExperience = Math.max(0, toInteger(actor.system?.development?.experience));
     const maxLevel = levelSettings[levelSettings.length - 1]?.level ?? 100;
@@ -1043,6 +1045,25 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       prompt: true,
       requester: "actorSheet"
     });
+  }
+
+  static async #onSelectHudWeaponSet(event, target) {
+    event.preventDefault();
+    const actor = this.actor;
+    if (!actor?.isOwner) return undefined;
+    const weaponSetKey = String(target.dataset.weaponSet ?? "");
+    if (!weaponSetKey) return undefined;
+
+    const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
+    const inventory = prepareDisplayInventoryContext(actor, race);
+    const weaponSets = getSheetHudWeaponSets(inventory);
+    const set = weaponSets.find(entry => entry.key === weaponSetKey) ?? null;
+    if (!set) return undefined;
+
+    await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
+    const firstWeaponId = getUniqueWeaponSetSlots(set.slots).at(0)?.item?.id ?? "";
+    if (firstWeaponId) await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, firstWeaponId);
+    return this.render({ parts: ["inventory"] });
   }
 
   #relocateEffectsAddButton() {
@@ -3588,8 +3609,9 @@ function findComparableEquippedWeaponItems(item, actor) {
   if (!getWeaponSlotRequirement(item).selectedKeys.size && !hasItemFunction(item, ITEM_FUNCTIONS.weapon)) return [];
   const race = getTooltipActorRace(actor);
   const inventory = prepareDisplayInventoryContext(actor, race);
-  const activeSetKey = getActiveTooltipHudWeaponSetKey(actor, inventory.weaponSets);
-  const activeSet = (inventory.weaponSets ?? []).find(set => set.key === activeSetKey) ?? null;
+  const weaponSets = getSheetHudWeaponSets(inventory);
+  const activeSetKey = getActiveTooltipHudWeaponSetKey(actor, weaponSets);
+  const activeSet = weaponSets.find(set => set.key === activeSetKey) ?? null;
   if (!activeSet) return [];
 
   const matchingSlots = (activeSet.slots ?? []).filter(slot => (
@@ -3607,6 +3629,35 @@ function findComparableEquippedWeaponItems(item, actor) {
     items.push(candidate);
   }
   return items;
+}
+
+function markActiveHudWeaponSet(actor, inventory = {}) {
+  const weaponSets = getSheetHudWeaponSets(inventory);
+  const activeSetKey = getActiveTooltipHudWeaponSetKey(actor, weaponSets);
+  if (inventory.naturalWeaponSet) {
+    inventory.naturalWeaponSet.active = inventory.naturalWeaponSet.key === activeSetKey;
+  }
+  for (const set of inventory.weaponSets ?? []) set.active = set.key === activeSetKey;
+  return activeSetKey;
+}
+
+function getSheetHudWeaponSets(inventory = {}) {
+  return [
+    ...(inventory.naturalWeaponSet ? [inventory.naturalWeaponSet] : []),
+    ...(inventory.weaponSets ?? [])
+  ];
+}
+
+function getUniqueWeaponSetSlots(slots = []) {
+  const seen = new Set();
+  const result = [];
+  for (const slot of slots ?? []) {
+    const id = String(slot.item?.id ?? "");
+    if (!id || slot.phantom || seen.has(id)) continue;
+    seen.add(id);
+    result.push(slot);
+  }
+  return result;
 }
 
 function getActiveTooltipHudWeaponSetKey(actor, weaponSets = []) {

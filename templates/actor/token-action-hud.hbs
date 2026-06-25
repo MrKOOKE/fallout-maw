@@ -327,7 +327,7 @@
 
     <div class="fallout-maw-token-hud-actions" data-token-action-hud-actions>
       {{#if weaponSet}}
-      <button type="button" class="fallout-maw-token-hud-main-action fallout-maw-token-hud-weapon-set-toggle {{#if (eq activeTray "weaponSets")}}active{{/if}}" data-action="toggleTray" data-tray="weaponSets" title="{{weaponSet.label}}">
+      <button type="button" class="fallout-maw-token-hud-main-action fallout-maw-token-hud-weapon-set-toggle {{#if weaponSet.active}}selected{{/if}} {{#if (eq activeTray "weaponSets")}}active{{/if}}" data-action="toggleTray" data-tray="weaponSets" title="{{weaponSet.label}}">
         <span>Наборы</span>
         <i class="fa-solid fa-caret-up" inert></i>
       </button>

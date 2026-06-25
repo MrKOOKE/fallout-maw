@@ -146,7 +146,7 @@
         <h2>{{localize "FALLOUTMAW.Common.Weapon"}}</h2>
         <div class="fallout-maw-weapon-set-list">
           {{#if inventory.naturalWeaponSet}}
-          <section class="fallout-maw-weapon-set fallout-maw-natural-weapon-set">
+          <section class="fallout-maw-weapon-set fallout-maw-natural-weapon-set {{#if inventory.naturalWeaponSet.active}}active{{/if}}" data-action="selectHudWeaponSet" data-weapon-set="{{inventory.naturalWeaponSet.key}}" role="button" tabindex="0" aria-pressed="{{inventory.naturalWeaponSet.active}}" title="{{inventory.naturalWeaponSet.label}}">
             <h3>{{inventory.naturalWeaponSet.label}}</h3>
             <div class="fallout-maw-weapon-slot-list">
               {{#each inventory.naturalWeaponSet.slots}}
@@ -165,7 +165,7 @@
           </section>
           {{/if}}
           {{#each inventory.weaponSets}}
-          <section class="fallout-maw-weapon-set">
+          <section class="fallout-maw-weapon-set {{#if active}}active{{/if}}" data-action="selectHudWeaponSet" data-weapon-set="{{key}}" role="button" tabindex="0" aria-pressed="{{active}}" title="{{label}}">
             <h3>{{label}}</h3>
             <div class="fallout-maw-weapon-slot-list">
               {{#each slots}}
