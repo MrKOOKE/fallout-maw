@@ -61,7 +61,7 @@
         <span class="fallout-maw-advancement-name" title="{{abbr}} / {{key}}">{{label}}</span>
         <div class="fallout-maw-advancement-controls">
           <button type="button" class="fallout-maw-advancement-control-button" data-repeat-action="decreaseCharacteristic" data-characteristic-key="{{key}}" {{#unless canDecrease}}disabled{{/unless}}><i class="fa-solid fa-minus"></i></button>
-          <strong>{{value}}</strong>
+          <strong data-advancement-characteristic-value="{{key}}">{{value}}</strong>
           <button type="button" class="fallout-maw-advancement-control-button" data-repeat-action="increaseCharacteristic" data-characteristic-key="{{key}}" {{#unless canIncrease}}disabled{{/unless}}><i class="fa-solid fa-plus"></i></button>
         </div>
       </div>
@@ -72,7 +72,7 @@
       <div></div>
       <div class="fallout-maw-advancement-meter">
         <span>{{localize "FALLOUTMAW.Advancement.CharacteristicPoints"}}</span>
-        <strong>{{characteristicPointsDisplay}}</strong>
+        <strong data-advancement-point-display="characteristics">{{characteristicPointsDisplay}}</strong>
       </div>
     </div>
     {{/unless}}
@@ -100,7 +100,7 @@
 
         <div class="fallout-maw-advancement-controls">
           <button type="button" class="fallout-maw-advancement-control-button" data-repeat-action="decreaseSkill" data-skill-key="{{key}}" {{#unless canDecrease}}disabled{{/unless}}><i class="fa-solid fa-minus"></i></button>
-          <strong>{{value}}</strong>
+          <strong data-advancement-skill-value="{{key}}">{{value}}</strong>
           <button type="button" class="fallout-maw-advancement-control-button" data-repeat-action="increaseSkill" data-skill-key="{{key}}" data-skill-cost-tooltip="{{tooltipHTML}}" aria-disabled="{{#if canIncrease}}false{{else}}true{{/if}}"><i class="fa-solid fa-plus"></i></button>
         </div>
       </div>
@@ -110,11 +110,11 @@
     <div class="fallout-maw-advancement-section-footer fallout-maw-advancement-skills-footer">
       <div class="fallout-maw-advancement-meter">
         <span>{{localize "FALLOUTMAW.Advancement.SignatureSkillPoints"}}</span>
-        <strong>{{signatureSkillPointsDisplay}}</strong>
+        <strong data-advancement-point-display="signatureSkills">{{signatureSkillPointsDisplay}}</strong>
       </div>
       <div class="fallout-maw-advancement-meter">
         <span>{{localize "FALLOUTMAW.Advancement.SkillPoints"}}</span>
-        <strong>{{skillPointsDisplay}}</strong>
+        <strong data-advancement-point-display="skills">{{skillPointsDisplay}}</strong>
       </div>
     </div>
     {{/unless}}

@@ -38,6 +38,9 @@ import { FalloutMaWFormApplicationV2 } from "../apps/base-form-application-v2.mj
 const { DialogV2 } = foundry.applications.api;
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
 const ADVANCEMENT_COMMIT_FLAG = "advancementCommit";
+const ADVANCEMENT_UPDATE_SOURCE_OPTION = "falloutMawAdvancementApplicationId";
+const REPEAT_INITIAL_DELAY_MS = 180;
+const REPEAT_INTERVAL_MS = 45;
 
 export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #activeEffectHooks = [];
@@ -54,19 +57,25 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #gmMode = false;
   #isClosing = false;
   #page = "development";
+  #repeatCommitPromise = Promise.resolve();
+  #repeatCommitTimer = null;
+  #repeatClickSuppression = null;
   #researchPointSessionSpent = 0;
   #repeatState = null;
   #selectedAbilitySourceId = "";
   #skillCostTooltipAnchor = null;
   #skillCostTooltipElement = null;
+  #skillCostTooltipRestoreKey = "";
   #skillCostTooltipTimer = null;
-  #suppressNextRepeatClick = false;
   #snapshot = null;
 
   constructor(actor, options = {}) {
     super(options);
     this.actor = actor;
-    this.#actorUpdateHookId = Hooks.on("updateActor", (updatedActor, changes) => this.#onActorUpdated(updatedActor, changes));
+    this.#actorUpdateHookId = Hooks.on(
+      "updateActor",
+      (updatedActor, changes, updateOptions) => this.#onActorUpdated(updatedActor, changes, updateOptions)
+    );
     this.#activeEffectHooks = [
       { event: "createActiveEffect", id: Hooks.on("createActiveEffect", effect => this.#onActiveEffectChanged(effect)) },
       { event: "updateActiveEffect", id: Hooks.on("updateActiveEffect", effect => this.#onActiveEffectChanged(effect)) },
@@ -119,6 +128,13 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
   get title() {
     return this.actor?.name || localize("FALLOUTMAW.Advancement.Title");
+  }
+
+  render(options = {}) {
+    this.#skillCostTooltipRestoreKey = (this.#skillCostTooltipElement || this.#skillCostTooltipTimer)
+      ? String(this.#skillCostTooltipAnchor?.dataset?.skillKey ?? "")
+      : "";
+    return super.render(options);
   }
 
   _getFrameButtons(options) {
@@ -247,8 +263,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
           ...skill,
           value: totalValue,
           signature,
-          canIncrease: this.#gmMode || (remaining.skills >= cost && totalValue < skillDevelopmentLimit),
-          canDecrease: this.#gmMode ? totalValue > 0 : toInteger(currentSkill.points) > toInteger(floorSkill.points),
+          canIncrease: this.#gmMode
+            ? totalValue < skillDevelopmentLimit
+            : remaining.skills >= cost && totalValue < skillDevelopmentLimit,
+          canDecrease: this.#gmMode
+            ? toInteger(currentSkill.points) > 0
+            : toInteger(currentSkill.points) > toInteger(floorSkill.points),
           canToggleSignature: Boolean(currentSkill.signature)
             ? (this.#gmMode || canUnsetSignature)
             : (this.#gmMode || remaining.signatureSkills > 0),
@@ -286,6 +306,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#activateAbilitySearch();
     this.#activateAbilityDescriptionTooltips();
     this.#activateSkillCostTooltips();
+    this.#restoreSkillCostTooltip();
   }
 
   #syncPageClass() {
@@ -307,7 +328,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#clearSkillCostTooltip();
     this.#abilityTooltipDocumentAbortController?.abort();
     this.#abilityTooltipDocumentAbortController = null;
-    this.#stopRepeat();
+    await this.#stopRepeat({ flush: true });
     if (this.#actorUpdateHookId !== null) {
       Hooks.off("updateActor", this.#actorUpdateHookId);
       this.#actorUpdateHookId = null;
@@ -482,8 +503,6 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     for (const button of this.element?.querySelectorAll?.("[data-repeat-action]") ?? []) {
       button.addEventListener("click", event => this.#onRepeatButtonClick(event));
       button.addEventListener("pointerdown", event => this.#onRepeatButtonPointerDown(event));
-      button.addEventListener("pointerup", () => this.#stopRepeat());
-      button.addEventListener("pointercancel", () => this.#stopRepeat());
     }
   }
 
@@ -615,6 +634,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #onSkillCostPointerOver(event) {
     const anchor = event.target?.closest?.("[data-skill-cost-tooltip]");
     if (!anchor || anchor.contains(event.relatedTarget)) return;
+    const key = String(anchor.dataset.skillKey ?? "");
+    if (key) this.#refreshSkillCostPreview(key);
     const html = String(anchor.dataset.skillCostTooltip ?? "").trim();
     if (!html) return;
 
@@ -626,6 +647,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #onSkillCostPointerOut(event) {
     const anchor = event.target?.closest?.("[data-skill-cost-tooltip]");
     if (!anchor || anchor.contains(event.relatedTarget)) return;
+    if (this.#skillCostTooltipRestoreKey === anchor.dataset.skillKey) return;
     if (this.#skillCostTooltipElement?.contains(event.relatedTarget)) return;
     this.#clearSkillCostTooltip();
   }
@@ -660,6 +682,31 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#skillCostTooltipAnchor = null;
   }
 
+  #restoreSkillCostTooltip() {
+    const key = this.#skillCostTooltipRestoreKey;
+    this.#skillCostTooltipRestoreKey = "";
+    if (!key || this.#gmMode) return;
+
+    const anchor = this.element?.querySelector?.(
+      `[data-repeat-action="increaseSkill"][data-skill-key="${CSS.escape(key)}"][data-skill-cost-tooltip]`
+    );
+    const html = String(anchor?.dataset?.skillCostTooltip ?? "").trim();
+    if (!anchor || !html) {
+      this.#clearSkillCostTooltip();
+      return;
+    }
+
+    this.#skillCostTooltipAnchor = anchor;
+    if (!this.#skillCostTooltipElement) {
+      this.#showSkillCostTooltip(anchor, html);
+      return;
+    }
+
+    this.#skillCostTooltipElement.innerHTML = `<div class="content">${html}</div>`;
+    this.#positionAdvancementTooltip(this.#skillCostTooltipElement, anchor);
+    requestAnimationFrame(() => this.#positionAdvancementTooltip(this.#skillCostTooltipElement, anchor));
+  }
+
   #positionAdvancementTooltip(tooltip, anchor) {
     positionAbilityDescriptionTooltip(tooltip, anchor, {
       layerElement: this.element
@@ -670,23 +717,23 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     return undefined;
   }
 
-  static #onToggleGMMode(event) {
+  static async #onToggleGMMode(event) {
     event.preventDefault();
     event.stopPropagation();
     if (!game.user?.isGM) return undefined;
+    await this.#stopRepeat({ flush: true });
     this.#gmMode = !this.#gmMode;
-    this.#stopRepeat();
     return this.forceRender();
   }
 
-  async #changeCharacteristic(key, delta) {
+  async #changeCharacteristic(key, delta, { persist = true } = {}) {
     await this.#ensureDraft();
     this.#syncDraftFromForm();
 
     if (this.#gmMode) {
-      if (delta < 0 && toInteger(this.actor.system?.characteristics?.[key]) <= 0) return false;
+      if (delta < 0 && this.#getPreviewCharacteristicValue(key) <= 0) return false;
       this.#draft.characteristics[key] = toInteger(this.#draft.characteristics[key]) + delta;
-      await this.#applyDraftToActor();
+      if (persist) await this.#applyDraftToActor();
       return true;
     }
 
@@ -696,7 +743,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
       this.#draft.development.characteristics[key] = toInteger(this.#draft.development.characteristics[key]) + 1;
       this.#draft.development.points.characteristics = available - 1;
-      await this.#applyDraftToActor();
+      if (persist) await this.#applyDraftToActor();
       return true;
     }
 
@@ -706,21 +753,20 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
     this.#draft.development.characteristics[key] = currentPoints - 1;
     this.#draft.development.points.characteristics = Math.max(0, toInteger(this.#draft.development.points.characteristics)) + 1;
-    await this.#applyDraftToActor();
+    if (persist) await this.#applyDraftToActor();
     return true;
   }
 
-  async #changeSkill(key, delta) {
+  async #changeSkill(key, delta, { persist = true } = {}) {
     await this.#ensureDraft();
     this.#syncDraftFromForm();
 
     if (this.#gmMode) {
-      if (delta < 0 && toInteger(this.actor.system?.skills?.[key]?.value) <= 0) return false;
-      const sourceBonus = toInteger(
-        this.actor.system?._source?.skills?.[key]?.bonus
-        ?? this.actor.system?.skills?.[key]?.bonus
-      );
-      await this.actor.update({ [`system.skills.${key}.bonus`]: sourceBonus + delta });
+      const currentPoints = toInteger(this.#draft.development.skills[key]?.points);
+      if (delta < 0 && currentPoints <= 0) return false;
+      if (delta > 0 && this.#getPreviewSkillValue(key) >= this.#getSkillDevelopmentLimit()) return false;
+      this.#draft.development.skills[key].points = currentPoints + delta;
+      if (persist) await this.#applyDraftToActor();
       return true;
     }
 
@@ -732,7 +778,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
       this.#draft.development.skills[key].points = toInteger(this.#draft.development.skills[key]?.points) + 1;
       this.#draft.development.points.skills = available - cost;
-      await this.#applyDraftToActor();
+      if (persist) await this.#applyDraftToActor();
       return true;
     }
 
@@ -742,7 +788,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
     this.#draft.development.skills[key].points = currentPoints - 1;
     this.#draft.development.points.skills = Math.max(0, toInteger(this.#draft.development.points.skills)) + this.#getSkillRefundCost(key, currentPoints - 1);
-    await this.#applyDraftToActor();
+    if (persist) await this.#applyDraftToActor();
     return true;
   }
 
@@ -877,6 +923,39 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const characteristicSettings = getCharacteristicSettings();
     const skillSettings = getSkillSettings();
     return Math.max(0, toInteger(getSkillAdvancementSettings(characteristicSettings, skillSettings).developmentLimit));
+  }
+
+  #getPreviewCharacteristicValue(key) {
+    const sourceValue = toInteger(
+      this.actor.system?._source?.characteristics?.[key]
+      ?? this.actor.system?.characteristics?.[key]
+    );
+    const liveValue = toInteger(this.actor.system?.characteristics?.[key]);
+    const liveDevelopment = toInteger(this.actor.system?.development?.characteristics?.[key]);
+    const draftSource = toInteger(this.#draft?.characteristics?.[key]);
+    const draftDevelopment = toInteger(this.#draft?.development?.characteristics?.[key]);
+    return liveValue + (draftSource - sourceValue) + (draftDevelopment - liveDevelopment);
+  }
+
+  #getPreviewSkillValue(key) {
+    const characteristicSettings = getCharacteristicSettings();
+    const skillSettings = getSkillSettings();
+    const advancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
+    const characteristics = this.#getCleanCharacteristics(characteristicSettings);
+    const baseBonuses = getAbilitySkillAdvancementBaseBonuses(this.actor, skillSettings);
+    const liveSkill = this.actor.system?.skills?.[key] ?? {};
+    const pureValue = this.#getPureSkillValue(key, {
+      characteristicSettings,
+      skillSettings,
+      skillAdvancementSettings: advancementSettings,
+      characteristics,
+      baseBonuses
+    });
+    const limit = Math.max(0, toInteger(advancementSettings.developmentLimit));
+    return Math.max(
+      0,
+      Math.min(limit, pureValue + toInteger(liveSkill.bonus) + toInteger(liveSkill.abilityBonus))
+    );
   }
 
   #preparePointDisplays(remaining = {}) {
@@ -1120,11 +1199,11 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     };
   }
 
-  async #applyRepeatAction(action, key) {
-    if (action === "increaseCharacteristic") return this.#changeCharacteristic(key, 1);
-    if (action === "decreaseCharacteristic") return this.#changeCharacteristic(key, -1);
-    if (action === "increaseSkill") return this.#changeSkill(key, 1);
-    if (action === "decreaseSkill") return this.#changeSkill(key, -1);
+  async #applyRepeatAction(action, key, { persist = true } = {}) {
+    if (action === "increaseCharacteristic") return this.#changeCharacteristic(key, 1, { persist });
+    if (action === "decreaseCharacteristic") return this.#changeCharacteristic(key, -1, { persist });
+    if (action === "increaseSkill") return this.#changeSkill(key, 1, { persist });
+    if (action === "decreaseSkill") return this.#changeSkill(key, -1, { persist });
     return false;
   }
 
@@ -1132,8 +1211,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     event.preventDefault();
     event.stopPropagation();
 
-    if (this.#suppressNextRepeatClick) {
-      this.#suppressNextRepeatClick = false;
+    if (this.#repeatClickSuppression?.target === event.currentTarget) {
+      this.#repeatClickSuppression = null;
       return;
     }
     const target = event.currentTarget;
@@ -1143,8 +1222,9 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const key = target.dataset.characteristicKey ?? target.dataset.skillKey ?? "";
     if (!action || !key) return;
 
-    if (!(await this.#applyRepeatAction(action, key))) return;
-    return this.forceRender();
+    if (!(await this.#applyRepeatAction(action, key, { persist: false }))) return;
+    this.#refreshRepeatPreview(action, key);
+    this.#scheduleRepeatCommit();
   }
 
   async #onRepeatButtonPointerDown(event) {
@@ -1158,46 +1238,244 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const key = target.dataset.characteristicKey ?? target.dataset.skillKey ?? "";
     if (!action || !key) return;
 
-    this.#stopRepeat();
+    void this.#stopRepeat();
+    const clickSuppression = { target };
+    this.#repeatClickSuppression = clickSuppression;
     const controller = new AbortController();
     const state = {
       action,
       key,
       controller,
-      hasRepeated: false,
-      timer: window.setTimeout(() => this.#runRepeatTick(state), 300)
+      dirty: false,
+      pending: null,
+      stopping: false,
+      stopPromise: null,
+      timer: null
     };
 
     this.#repeatState = state;
-    window.addEventListener("pointerup", () => this.#stopRepeat(), { signal: controller.signal });
-    window.addEventListener("pointercancel", () => this.#stopRepeat(), { signal: controller.signal });
-    window.addEventListener("blur", () => this.#stopRepeat(), { signal: controller.signal });
+    window.addEventListener("pointerup", () => {
+      void this.#stopRepeat();
+      window.setTimeout(() => {
+        if (this.#repeatClickSuppression === clickSuppression) this.#repeatClickSuppression = null;
+      }, 0);
+    }, { signal: controller.signal });
+    window.addEventListener("pointercancel", () => {
+      if (this.#repeatClickSuppression === clickSuppression) this.#repeatClickSuppression = null;
+      void this.#stopRepeat();
+    }, { signal: controller.signal });
+    window.addEventListener("blur", () => {
+      if (this.#repeatClickSuppression === clickSuppression) this.#repeatClickSuppression = null;
+      void this.#stopRepeat();
+    }, { signal: controller.signal });
+
+    state.pending = this.#runRepeatStep(state);
+    if (!(await state.pending) || state.stopping || this.#repeatState !== state) return;
+    state.timer = window.setTimeout(() => this.#runRepeatTick(state), REPEAT_INITIAL_DELAY_MS);
   }
 
   async #runRepeatTick(state) {
-    if (this.#repeatState !== state) return;
-    if (!(await this.#applyRepeatAction(state.action, state.key))) {
-      this.#stopRepeat();
+    if (this.#repeatState !== state || state.stopping) return;
+    state.pending = this.#runRepeatStep(state);
+    if (!(await state.pending)) {
+      void this.#stopRepeat();
       return;
     }
 
-    state.hasRepeated = true;
-    this.#suppressNextRepeatClick = true;
-    await this.forceRender();
-    if (this.#repeatState !== state) return;
-    state.timer = window.setTimeout(() => this.#runRepeatTick(state), 70);
+    if (this.#repeatState !== state || state.stopping) return;
+    state.timer = window.setTimeout(() => this.#runRepeatTick(state), REPEAT_INTERVAL_MS);
   }
 
-  #stopRepeat() {
-    if (!this.#repeatState) return;
-    window.clearTimeout(this.#repeatState.timer);
-    this.#repeatState.controller.abort();
-    this.#repeatState = null;
+  async #runRepeatStep(state) {
+    if (this.#repeatState !== state || state.stopping) return false;
+    const changed = await this.#applyRepeatAction(state.action, state.key, { persist: false });
+    if (!changed) return false;
+
+    state.dirty = true;
+    if (!state.stopping && this.#repeatState === state) this.#refreshRepeatPreview(state.action, state.key);
+    return true;
   }
 
-  async #onActorUpdated(updatedActor, changes) {
+  async #stopRepeat({ flush = false } = {}) {
+    const state = this.#repeatState;
+    if (!state) {
+      if (flush) await this.#flushRepeatCommit();
+      return false;
+    }
+    if (state.stopPromise) return state.stopPromise;
+
+    state.stopping = true;
+    window.clearTimeout(state.timer);
+    state.controller.abort();
+    if (this.#repeatState === state) this.#repeatState = null;
+    state.stopPromise = (async () => {
+      await state.pending;
+      if (state.dirty) {
+        this.#scheduleRepeatCommit();
+        if (flush) await this.#flushRepeatCommit();
+      }
+      return state.dirty;
+    })();
+    return state.stopPromise;
+  }
+
+  #refreshRepeatPreview(action, key) {
+    const isSkill = action.endsWith("Skill");
+    if (isSkill) {
+      const valueElement = this.element?.querySelector?.(
+        `[data-advancement-skill-value="${CSS.escape(key)}"]`
+      );
+      if (valueElement) valueElement.textContent = String(this.#getPreviewSkillValue(key));
+    } else {
+      const valueElement = this.element?.querySelector?.(
+        `[data-advancement-characteristic-value="${CSS.escape(key)}"]`
+      );
+      if (valueElement) valueElement.textContent = String(this.#getPreviewCharacteristicValue(key));
+
+      for (const skill of getSkillSettings()) {
+        const skillValueElement = this.element?.querySelector?.(
+          `[data-advancement-skill-value="${CSS.escape(skill.key)}"]`
+        );
+        if (skillValueElement) skillValueElement.textContent = String(this.#getPreviewSkillValue(skill.key));
+      }
+    }
+
+    const remaining = calculateRemainingDevelopmentPoints(this.#draft?.development);
+    const pointDisplays = this.#preparePointDisplays(remaining);
+    for (const [pointType, display] of Object.entries(pointDisplays)) {
+      const element = this.element?.querySelector?.(
+        `[data-advancement-point-display="${CSS.escape(pointType)}"]`
+      );
+      if (element) element.textContent = display;
+    }
+
+    this.#refreshRepeatControlStates(remaining);
+    if (isSkill) this.#refreshSkillCostPreview(key, remaining);
+    else {
+      const activeSkillKey = String(this.#skillCostTooltipAnchor?.dataset?.skillKey ?? "");
+      if (activeSkillKey) this.#refreshSkillCostPreview(activeSkillKey, remaining);
+    }
+  }
+
+  #refreshRepeatControlStates(remaining = calculateRemainingDevelopmentPoints(this.#draft?.development)) {
+    for (const characteristic of getCharacteristicSettings()) {
+      const escapedKey = CSS.escape(characteristic.key);
+      const increase = this.element?.querySelector?.(
+        `[data-repeat-action="increaseCharacteristic"][data-characteristic-key="${escapedKey}"]`
+      );
+      const decrease = this.element?.querySelector?.(
+        `[data-repeat-action="decreaseCharacteristic"][data-characteristic-key="${escapedKey}"]`
+      );
+      const currentPoints = toInteger(this.#draft?.development?.characteristics?.[characteristic.key]);
+      const floorPoints = toInteger(this.#floor?.development?.characteristics?.[characteristic.key]);
+      increase?.toggleAttribute("disabled", !this.#gmMode && remaining.characteristics <= 0);
+      decrease?.toggleAttribute(
+        "disabled",
+        this.#gmMode
+          ? this.#getPreviewCharacteristicValue(characteristic.key) <= 0
+          : currentPoints <= floorPoints
+      );
+    }
+
+    const developmentLimit = this.#getSkillDevelopmentLimit();
+    for (const skill of getSkillSettings()) {
+      const escapedKey = CSS.escape(skill.key);
+      const increase = this.element?.querySelector?.(
+        `[data-repeat-action="increaseSkill"][data-skill-key="${escapedKey}"]`
+      );
+      const decrease = this.element?.querySelector?.(
+        `[data-repeat-action="decreaseSkill"][data-skill-key="${escapedKey}"]`
+      );
+      const currentPoints = toInteger(this.#draft?.development?.skills?.[skill.key]?.points);
+      const floorPoints = toInteger(this.#floor?.development?.skills?.[skill.key]?.points);
+      const canIncrease = this.#gmMode
+        ? this.#getPreviewSkillValue(skill.key) < developmentLimit
+        : remaining.skills >= this.#getSkillUpgradeCost(skill.key)
+          && this.#getPreviewSkillValue(skill.key) < developmentLimit;
+      increase?.setAttribute("aria-disabled", String(!canIncrease));
+      decrease?.toggleAttribute(
+        "disabled",
+        this.#gmMode ? currentPoints <= 0 : currentPoints <= floorPoints
+      );
+    }
+  }
+
+  #refreshSkillCostPreview(key, remaining = calculateRemainingDevelopmentPoints(this.#draft?.development)) {
+    const anchor = this.element?.querySelector?.(
+      `[data-repeat-action="increaseSkill"][data-skill-key="${CSS.escape(key)}"]`
+    );
+    if (!anchor) return;
+
+    if (this.#gmMode) {
+      anchor.dataset.skillCostTooltip = "";
+      anchor.setAttribute(
+        "aria-disabled",
+        String(this.#getPreviewSkillValue(key) >= this.#getSkillDevelopmentLimit())
+      );
+      return;
+    }
+
+    const characteristicSettings = getCharacteristicSettings();
+    const skillSettings = getSkillSettings();
+    const skill = skillSettings.find(entry => entry.key === key);
+    if (!skill) return;
+
+    const advancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
+    const characteristics = this.#getCleanCharacteristics(characteristicSettings);
+    const baseBonuses = getAbilitySkillAdvancementBaseBonuses(this.actor, skillSettings);
+    const developmentCostSettings = getSkillDevelopmentCostSettings();
+    const pureValue = this.#getPureSkillValue(key, {
+      characteristicSettings,
+      skillSettings,
+      skillAdvancementSettings: advancementSettings,
+      characteristics,
+      baseBonuses
+    });
+    const cost = getSkillDevelopmentCostForValue(pureValue, developmentCostSettings);
+    const totalValue = this.#getPreviewSkillValue(key);
+    const currentSkill = this.#draft.development.skills?.[key] ?? {};
+    const signature = Boolean(currentSkill.signature);
+    const html = renderSkillCostTooltipHTML({
+      skill,
+      totalValue,
+      pureValue,
+      investedPoints: toInteger(currentSkill.points),
+      cost,
+      gain: calculateSkillDevelopmentGain({
+        skill,
+        characteristics,
+        advancementSettings,
+        baseBonuses,
+        signature
+      }),
+      multiplierLabel: formatSkillDevelopmentMultiplier({
+        skill,
+        characteristics,
+        characteristicSettings,
+        advancementSettings,
+        baseBonuses,
+        signature
+      }),
+      nextThreshold: getNextSkillDevelopmentCostThreshold(pureValue, developmentCostSettings),
+      remainingSkillPoints: remaining.skills
+    });
+
+    anchor.dataset.skillCostTooltip = html;
+    anchor.setAttribute(
+      "aria-disabled",
+      String(!(remaining.skills >= cost && totalValue < this.#getSkillDevelopmentLimit()))
+    );
+    if (this.#skillCostTooltipAnchor?.dataset?.skillKey !== key || !this.#skillCostTooltipElement) return;
+
+    this.#skillCostTooltipAnchor = anchor;
+    this.#skillCostTooltipElement.innerHTML = `<div class="content">${html}</div>`;
+    this.#positionAdvancementTooltip(this.#skillCostTooltipElement, anchor);
+  }
+
+  async #onActorUpdated(updatedActor, changes, updateOptions = {}) {
     if (this.#isClosing) return;
     if (updatedActor?.id !== this.actor?.id) return;
+    if (updateOptions?.[ADVANCEMENT_UPDATE_SOURCE_OPTION] === this.id) return;
     if (!this.rendered) return;
 
     const affectsDraft = [
@@ -1240,12 +1518,41 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   }
 
   async #applyDraftToActor(updateData = {}) {
-    await this.actor.update({
+    window.clearTimeout(this.#repeatCommitTimer);
+    this.#repeatCommitTimer = null;
+    const actorUpdate = {
       "system.attributes.level": this.#draft.level,
       "system.characteristics": foundry.utils.deepClone(this.#draft.characteristics),
       "system.development": foundry.utils.deepClone(this.#draft.development),
       ...updateData
-    });
+    };
+    const commit = this.#repeatCommitPromise
+      .catch(error => {
+        console.error(`${FALLOUT_MAW.id} | Failed to commit advancement repeat update`, error);
+      })
+      .then(() => this.actor.update(actorUpdate, {
+        [ADVANCEMENT_UPDATE_SOURCE_OPTION]: this.id
+      }));
+    this.#repeatCommitPromise = commit;
+    return commit;
+  }
+
+  #scheduleRepeatCommit() {
+    window.clearTimeout(this.#repeatCommitTimer);
+    this.#repeatCommitTimer = window.setTimeout(() => {
+      this.#repeatCommitTimer = null;
+      void this.#applyDraftToActor();
+    }, 60);
+  }
+
+  async #flushRepeatCommit() {
+    if (this.#repeatCommitTimer) {
+      window.clearTimeout(this.#repeatCommitTimer);
+      this.#repeatCommitTimer = null;
+      await this.#applyDraftToActor();
+      return;
+    }
+    await this.#repeatCommitPromise;
   }
 
   #syncDraftFromActor() {
