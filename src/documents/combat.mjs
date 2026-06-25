@@ -2,6 +2,7 @@ import {
   TURN_CONVERSION_MODES,
   prepareActorTurnEnd
 } from "../combat/reaction-resources.mjs";
+import { isActorUnableToAct } from "../combat/reaction-hub.mjs";
 
 const TURN_END_PROCESSED_OPTION = "falloutMawTurnEndProcessed";
 
@@ -49,7 +50,9 @@ export class FalloutMaWCombat extends Combat {
     if (this.#processingFalloutMawTurnEnd) return true;
     if (!game.user?.isActiveGM && !this.combatant?.isOwner) return false;
     if (!this.started || !this.combatant?.actor) return false;
-    const conversionMode = options?.falloutMawConversionMode ?? TURN_CONVERSION_MODES.dodge;
+    const conversionMode = this.combatant.isDefeated || isActorUnableToAct(this.combatant.actor)
+      ? TURN_CONVERSION_MODES.skip
+      : (options?.falloutMawConversionMode ?? TURN_CONVERSION_MODES.dodge);
     this.#processingFalloutMawTurnEnd = true;
     await prepareActorTurnEnd(this.combatant.actor, { conversionMode });
     return true;

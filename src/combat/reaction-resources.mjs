@@ -2,6 +2,7 @@ import { SYSTEM_ID } from "../constants.mjs";
 import { getTokenActionHudIcons } from "../settings/accessors.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { notifyCombatResourcesSpent } from "./resource-spending.mjs";
+import { actorHasIncapacitatingStatus } from "./reaction-hub.mjs";
 import {
   ACTION_RESOURCE_KEY,
   MOVEMENT_RESOURCE_KEY,
@@ -28,6 +29,7 @@ const REACTION_UPDATE_OPTION = "falloutMawReactionResourceUpdate";
 const REACTION_DODGE_EFFECT_FLAG = "reactionDodgeConversion";
 const REACTION_POINTS_EFFECT_FLAG = "reactionPointsConversion";
 const ONE_TIME_ACTION_EFFECT_FLAG = "oneTimeActionPoints";
+const COMBATANT_DEFEATED_SYNC_FLAG = "incapacitatedDefeated";
 const IN_TURN_REACTION_SOURCE = "inTurnReaction";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
 const DODGE_CONVERSION_MULTIPLIER = 5;
@@ -38,6 +40,9 @@ const CLEAR_EFFECT_DURATION_UPDATE = Object.freeze({
   "duration.expiry": null,
   "duration.expired": false
 });
+const INCAPACITATING_COMBATANT_STATUSES = new Set(["dead", "unconscious", "stunned"]);
+
+let advancingDefeatedTurnKey = "";
 
 export function registerReactionResourceHooks() {
   Hooks.on("updateActor", (actor, changes, options) => {
@@ -54,16 +59,27 @@ export function registerReactionResourceHooks() {
     if (previousActor?.uuid && previousActor.uuid !== currentActor?.uuid) {
       await restoreActorReactionResource(previousActor);
     }
-    return prepareActorTurnStart(currentActor);
+    await prepareActorTurnStart(currentActor);
+    return syncActorDefeatedCombatants(currentActor, { advanceCurrent: false });
   });
 
-  Hooks.on("combatStart", (combat, updateData) => initializeCombatReactionResources(combat, updateData));
+  Hooks.on("createActiveEffect", effect => queueActorDefeatedCombatantSyncForEffect(effect));
+  Hooks.on("updateActiveEffect", effect => queueActorDefeatedCombatantSyncForEffect(effect));
+  Hooks.on("deleteActiveEffect", effect => queueActorDefeatedCombatantSyncForEffect(effect));
+  Hooks.on("combatStart", (combat, updateData) => {
+    prepareCombatStartDefeatedTurn(combat, updateData);
+    void initializeCombatReactionResources(combat, updateData);
+    globalThis.setTimeout(() => {
+      void syncCombatDefeatedCombatants(combat, { advanceCurrent: true });
+    }, 0);
+  });
   Hooks.on("deleteCombat", combat => resetCombatReactionResources(combat));
-  Hooks.on("createCombatant", combatant => {
+  Hooks.on("createCombatant", async combatant => {
     const combat = combatant?.combat;
     if (!game.user?.isActiveGM || !combat?.started) return undefined;
     const isCurrentActor = combatant.actor?.uuid === combat.combatant?.actor?.uuid;
-    return resetActorReactionResources(combatant.actor, { restore: !isCurrentActor });
+    await resetActorReactionResources(combatant.actor, { restore: !isCurrentActor });
+    return syncActorDefeatedCombatants(combatant.actor, { advanceCurrent: isCurrentActor });
   });
 }
 
@@ -85,6 +101,104 @@ export async function prepareActorTurnStart(actor) {
   await callActorTurnStartPreparedHandlers({ actor, combat: game.combat });
 }
 
+async function syncCombatDefeatedCombatants(combat, { advanceCurrent = false } = {}) {
+  if (!game.user?.isActiveGM || !combat) return false;
+  const actors = new Map();
+  for (const combatant of combat.combatants ?? []) {
+    if (combatant.actor) actors.set(combatant.actor.uuid, combatant.actor);
+  }
+  let changed = false;
+  for (const actor of actors.values()) {
+    changed = (await syncActorDefeatedCombatants(actor, { combat, advanceCurrent })) || changed;
+  }
+  return changed;
+}
+
+async function syncActorDefeatedCombatants(actor, { combat = game.combat, advanceCurrent = false } = {}) {
+  if (!game.user?.isActiveGM || !combat || !actor?.uuid) return false;
+  const freshActor = fromUuidSync(actor.uuid) ?? actor;
+  const defeated = actorHasIncapacitatingStatus(freshActor);
+  const combatants = Array.from(combat.combatants ?? [])
+    .filter(combatant => combatant.actor?.uuid === freshActor.uuid);
+  let changed = false;
+  for (const combatant of combatants) {
+    changed = (await syncCombatantDefeatedState(combatant, defeated)) || changed;
+  }
+  if (defeated && advanceCurrent) {
+    changed = (await advanceCurrentDefeatedTurn(combat, freshActor)) || changed;
+  }
+  return changed;
+}
+
+async function syncCombatantDefeatedState(combatant, defeated) {
+  const syncData = combatant.getFlag?.(SYSTEM_ID, COMBATANT_DEFEATED_SYNC_FLAG);
+  const hasSyncFlag = Boolean(syncData);
+  if (defeated) {
+    if (combatant.defeated && hasSyncFlag) return false;
+    const previousDefeated = hasSyncFlag
+      ? Boolean(syncData?.previousDefeated)
+      : Boolean(combatant.defeated);
+    const update = {
+      [`flags.${SYSTEM_ID}.${COMBATANT_DEFEATED_SYNC_FLAG}`]: { previousDefeated }
+    };
+    if (!combatant.defeated) update.defeated = true;
+    await combatant.update(update);
+    return true;
+  }
+
+  if (!hasSyncFlag) return false;
+  const update = {
+    [`flags.${SYSTEM_ID}.-=${COMBATANT_DEFEATED_SYNC_FLAG}`]: null
+  };
+  if (combatant.defeated && !syncData?.previousDefeated) update.defeated = false;
+  await combatant.update(update);
+  return true;
+}
+
+async function advanceCurrentDefeatedTurn(combat, actor) {
+  if (!game.user?.isActiveGM || !combat?.started || !combat.settings?.skipDefeated || !actor?.uuid) return false;
+  const combatant = combat.combatant;
+  if (!combatant || combatant.actor?.uuid !== actor.uuid || !combatant.isDefeated) return false;
+  const advanceKey = `${combat.id}:${combat.round}:${combat.turn}:${combatant.id}`;
+  if (advancingDefeatedTurnKey === advanceKey) return false;
+  advancingDefeatedTurnKey = advanceKey;
+  try {
+    await combat.nextTurn({ falloutMawConversionMode: TURN_CONVERSION_MODES.skip });
+  } finally {
+    if (advancingDefeatedTurnKey === advanceKey) advancingDefeatedTurnKey = "";
+  }
+  return true;
+}
+
+function prepareCombatStartDefeatedTurn(combat, updateData) {
+  if (!game.user?.isActiveGM || !combat?.settings?.skipDefeated || !Number.isInteger(updateData?.turn)) return;
+  const nextTurn = combat.turns.findIndex(combatant => !combatantShouldBeSkippedByDefeatedState(combatant));
+  if (nextTurn === -1) return;
+  updateData.turn = nextTurn;
+}
+
+function combatantShouldBeSkippedByDefeatedState(combatant) {
+  return Boolean(combatant?.defeated || actorHasIncapacitatingStatus(combatant?.actor));
+}
+
+function queueActorDefeatedCombatantSyncForEffect(effect) {
+  const actor = effect?.parent;
+  if (!actor?.uuid) return;
+  if (!effectHasIncapacitatingCombatantStatus(effect) && !actorHasIncapacitatingStatus(actor)) return;
+  globalThis.setTimeout(() => {
+    const combat = game.combat;
+    const isCurrentActor = combat?.combatant?.actor?.uuid === actor.uuid;
+    void syncActorDefeatedCombatants(actor, { combat, advanceCurrent: isCurrentActor });
+  }, 0);
+}
+
+function effectHasIncapacitatingCombatantStatus(effect) {
+  for (const status of effect?.statuses ?? []) {
+    if (INCAPACITATING_COMBATANT_STATUSES.has(status)) return true;
+  }
+  return false;
+}
+
 export async function prepareActorTurnEnd(actor, { conversionMode = TURN_CONVERSION_MODES.dodge } = {}) {
   if (!actor?.isOwner) return;
   await callActorTurnEndHandlers({ actor, combat: game.combat, conversionMode });
@@ -97,8 +211,8 @@ export async function prepareActorTurnEnd(actor, { conversionMode = TURN_CONVERS
         await createOrUpdateReactionDodgeEffect(actor, remainingActionPoints * DODGE_CONVERSION_MULTIPLIER);
       }
     }
-    await zeroTurnResources(actor);
   }
+  await zeroTurnResources(actor);
   await restoreActorReactionResource(actor);
   await deleteOneTimeActionPointEffects(actor, { source: IN_TURN_REACTION_SOURCE });
 }

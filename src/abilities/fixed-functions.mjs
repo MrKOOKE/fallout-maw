@@ -3545,6 +3545,7 @@ async function collectCounterSniperReactionOffers({ eventKey = "", context = {} 
   for (const reactorToken of attackerToken.parent?.tokens?.contents ?? []) {
     const reactor = reactorToken?.actor;
     if (!reactor || reactor.uuid === attacker.uuid || seenActors.has(reactor.uuid)) continue;
+    if (reactor.uuid === defendedActor.uuid) continue;
     if (!isCounterSniperAlly(reactor, defendedActor) || !isCounterSniperEnemy(reactor, attacker)) continue;
     const entry = getActorCounterSniperEntry(reactor);
     if (!entry) continue;
@@ -3576,12 +3577,13 @@ async function collectCounterSniperReactionOffers({ eventKey = "", context = {} 
   return offers;
 }
 
-async function executeCounterSniperReaction({ offer = {} } = {}) {
+async function executeCounterSniperReaction({ context = {}, offer = {} } = {}) {
   const reactor = await fromUuid(String(offer.actorUuid ?? ""));
   const reactorToken = await fromUuid(String(offer.reactorTokenUuid ?? ""));
   const attackerToken = await fromUuid(String(offer.attackerTokenUuid ?? ""));
   const entry = getActorCounterSniperEntry(reactor, offer);
   if (!reactor || !reactorToken || !attackerToken || !entry) return { handled: false };
+  if (reactor.uuid === String(context.targetActorUuid ?? "")) return { handled: false };
   const energyCost = getAbilityEnergyCost(reactor, entry.abilityItem, entry.abilityFunction, entry.settings.reactionEnergyCost);
   if (!hasEnergy(reactor, energyCost) || !hasRequiredWeaponResources(entry.weapon, 1, entry.weaponFunctionId)) return { handled: false };
 

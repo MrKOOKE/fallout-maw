@@ -25,6 +25,7 @@ const REACTION_SOCKET_SCOPE = "fallout-maw.reactionHub";
 const REACTION_QUERY_NAME = "falloutMawReaction";
 const REACTION_TIMEOUT_MS = 20000;
 export const REACTION_LOCK_BYPASS_OPTION = "falloutMawReactionLockBypass";
+const UNABLE_TO_ACT_STATUSES = new Set(["dead", "unconscious", "stunned"]);
 const pendingReactionSocketRequests = new Map();
 const reactionProviders = new Map();
 const activeReactionLocks = new Map();
@@ -52,11 +53,14 @@ export function isReactionSystemLocked() {
 }
 
 export function isActorUnableToAct(actor = null) {
-  if (!actor) return true;
+  return !actor || actorHasIncapacitatingStatus(actor);
+}
+
+export function actorHasIncapacitatingStatus(actor = null) {
+  if (!actor) return false;
   const defeatedStatus = CONFIG.specialStatusEffects.DEFEATED;
   return Boolean(
-    actor.statuses?.has?.("dead")
-    || actor.statuses?.has?.("unconscious")
+    Array.from(UNABLE_TO_ACT_STATUSES).some(status => actor.statuses?.has?.(status))
     || (defeatedStatus && actor.statuses?.has?.(defeatedStatus))
   );
 }
