@@ -169,6 +169,12 @@ function summarizeSpecialUpdateValues(update = {}) {
   return values.join(",");
 }
 
+function isDamageSummaryMessageData(data = {}) {
+  if (!data || typeof data !== "object") return false;
+  if (foundry.utils.getProperty(data, "flags.fallout-maw.damageSummary")) return true;
+  return String(data.content ?? "").includes("fallout-maw-damage-summary-card");
+}
+
 function summarizeEmbeddedUpdatePaths(updates = []) {
   const first = Array.isArray(updates) ? updates.find(Boolean) : null;
   return summarizeUpdatePaths(first);
@@ -191,6 +197,10 @@ export function recordPerfMetric(name = "", value = 0) {
   const key = String(name ?? "").trim();
   if (!bucket || !key) return;
   bucket[key] = Math.round(Number(value) || 0);
+}
+
+export function recordPerfEvent(location = "", message = "", data = {}, hypothesisId = "H-status-order") {
+  postDebugLog(location, message, data, hypothesisId);
 }
 
 export async function measurePerfTiming(name = "", operation) {
@@ -335,6 +345,14 @@ export function installDocumentUpdatePatches() {
   const originalUpdate = proto.update;
   proto.update = async function patchedDocumentUpdate(changes, ...rest) {
     const started = performance.now();
+    if (this.documentName === "ChatMessage" && isDamageSummaryMessageData(changes)) {
+      recordPerfEvent("perf-log.mjs:Document.update", "damage summary chat update", {
+        messageId: this.id,
+        paths: summarizeUpdatePaths(changes),
+        options: summarizeOperationOptions(rest[0] ?? {}),
+        contentLength: String(foundry.utils.getProperty(changes, "content") ?? "").length
+      }, "H-card-chat-message");
+    }
     recordDocumentUpdate(this.documentName, "Document.update", {
       parentDocumentName: this.parent?.documentName ?? "",
       options: summarizeOperationOptions(rest[0] ?? {}),
@@ -432,6 +450,23 @@ export function installDocumentUpdatePatches() {
         recordPerfTiming("foundry:ActorDelta.updateSyntheticActor", performance.now() - started);
       }
     };
+  }
+
+  const ChatMessageClass = globalThis.ChatMessage ?? foundry.documents?.ChatMessage;
+  if (ChatMessageClass?.create && !ChatMessageClass.create.__falloutMawPerfPatched) {
+    const originalChatMessageCreate = ChatMessageClass.create;
+    const patchedChatMessageCreate = async function patchedChatMessageCreate(data, ...rest) {
+      if (isDamageSummaryMessageData(data)) {
+        recordPerfEvent("perf-log.mjs:ChatMessage.create", "damage summary chat create", {
+          hasDamageSummaryFlag: Boolean(foundry.utils.getProperty(data, "flags.fallout-maw.damageSummary")),
+          contentLength: String(data?.content ?? "").length,
+          options: summarizeOperationOptions(rest[0] ?? {})
+        }, "H-card-chat-message");
+      }
+      return originalChatMessageCreate.call(this, data, ...rest);
+    };
+    patchedChatMessageCreate.__falloutMawPerfPatched = true;
+    ChatMessageClass.create = patchedChatMessageCreate;
   }
 }
 

@@ -10,7 +10,7 @@ import {
   getTraumaSettings
 } from "../settings/accessors.mjs";
 import { getTraumaGroupForActor } from "../settings/traumas.mjs";
-import { requestSkillCheck } from "../rolls/skill-check.mjs";
+import { createSkillCheckBatchCollector, requestSkillCheck } from "../rolls/skill-check.mjs";
 import { registerQueuedWorldTimeProcessor } from "../time/world-time-queue.mjs";
 import { setActorTokensPosture } from "../canvas/posture-movement.mjs";
 import {
@@ -34,6 +34,7 @@ import {
   endDamageCycle,
   isActorDamageOpActive,
   measurePerfTiming,
+  recordPerfEvent,
   recordPerfMetric,
   recordSubsystemWork
 } from "../debug/perf-log.mjs";
@@ -428,6 +429,16 @@ async function applyDamageCycleNow(requests = []) {
   }
   if (!grouped.size) return [];
 
+  // #region agent log
+  recordPerfEvent("damage-hub.mjs:applyDamageCycleNow", "damage cycle requests grouped", {
+    requestCount: requests.length,
+    actorCount: grouped.size,
+    actorRequestCounts: Array.from(grouped, ([actorUuid, actorRequests]) => ({
+      actorUuid,
+      requestCount: actorRequests.length
+    }))
+  }, "H-card-cycle");
+  // #endregion
   beginDamageCycle("damageCycle", {
     requestCount: requests.length,
     actorCount: grouped.size
@@ -435,16 +446,26 @@ async function applyDamageCycleNow(requests = []) {
   beginBulkOperation();
 
   const results = [];
+  const deferredShockChecks = [];
   try {
     for (const [actorUuid, actorRequests] of grouped) {
       const actor = await fromUuid(actorUuid);
       if (!actor || (!game.user?.isGM && !actor.isOwner)) continue;
       const actorResults = await queueActorDamageMutation(actorUuid, () => (
-        applyDamageApplicationsNow({ actorUuid, requests: actorRequests }, { createSummary: false })
+        applyDamageApplicationsNow({ actorUuid, requests: actorRequests }, { createSummary: false, deferredShockChecks })
       ));
       if (Array.isArray(actorResults)) results.push(...actorResults);
     }
 
+    await resolveDeferredShockChecks(deferredShockChecks);
+    // #region agent log
+    recordPerfEvent("damage-hub.mjs:applyDamageCycleNow", "damage cycle results complete before summary", {
+      requestCount: requests.length,
+      actorCount: grouped.size,
+      resultCount: results.length,
+      deferredShockCheckCount: deferredShockChecks.length
+    }, "H-card-cycle");
+    // #endregion
     await publishDamageSummaryMessage(results);
     notifyDamageApplied(results);
     return results;
@@ -824,7 +845,7 @@ export async function applyDamageApplications({ actorUuid = "", requests = [] } 
   ));
 }
 
-async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}, { createSummary = true } = {}) {
+async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}, { createSummary = true, deferredShockChecks = null } = {}) {
   const actor = await fromUuid(actorUuid);
   if (!actor) return undefined;
   if (!game.user?.isGM && !actor.isOwner) return undefined;
@@ -885,7 +906,7 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
       source: batchSource
     }
     : batchRequests.length
-      ? await measurePerfTiming("applyDamageEntriesBatch", () => applyDamageEntriesBatch(actor, batchRequests))
+      ? await measurePerfTiming("applyDamageEntriesBatch", () => applyDamageEntriesBatch(actor, batchRequests, { deferredShockChecks }))
       : undefined;
   if (!batchPrevented) {
     await measurePerfTiming("equipmentCondition", () => applyEquipmentConditionDamage(actor, getEquipmentConditionDamageStateEntries(equipmentConditionDamageState)));
@@ -1622,6 +1643,9 @@ export async function applyDestroyedLimbConsequences(actor, limbKeys = [], optio
 
 async function applyDestroyedLimbConsequencesNow(actor, limbKeys = [], { ignoreInstalledProsthesis = false } = {}) {
   const destroyed = new Set();
+  const missingUpdates = {};
+  const destroyedLimbKeys = [];
+  const limbLossEffectData = [];
   for (const limbKey of Array.from(new Set(limbKeys.filter(Boolean)))) {
     const limb = actor?.system?.limbs?.[limbKey];
     if (!limb) continue;
@@ -1630,15 +1654,24 @@ async function applyDestroyedLimbConsequencesNow(actor, limbKeys = [], { ignoreI
     const reachedDestruction = constructPart ? missing : toInteger(limb.value) <= toInteger(limb.min);
     if (!missing && !reachedDestruction) continue;
     destroyed.add(limbKey);
-    if (!missing) {
-      await actor.update({ [`system.limbs.${limbKey}.missing`]: true }, { falloutMawSkipDamageStatusSync: true });
-    }
-    await deleteLimbTraumas(actor, limbKey);
-    await deleteLimbLossEffects(actor, limbKey);
-    await deleteLimbTimedDamageEffects(actor, limbKey);
+    destroyedLimbKeys.push(limbKey);
+    if (!missing) missingUpdates[`system.limbs.${limbKey}.missing`] = true;
     if (!ignoreInstalledProsthesis && hasInstalledProsthesis(actor, limbKey)) continue;
-    if (!isCriticalLimb(actor, limbKey)) await createLimbLossEffect(actor, limbKey);
+    if (!isCriticalLimb(actor, limbKey)) {
+      const effectData = prepareLimbLossEffectData(actor, limbKey);
+      if (effectData) limbLossEffectData.push(effectData);
+    }
   }
+  recordPerfMetric("destroyedLimbCount", destroyed.size);
+  recordPerfMetric("destroyedLimbMissingUpdateCount", Object.keys(missingUpdates).length);
+  recordPerfMetric("destroyedLimbLossEffectCreateCount", limbLossEffectData.length);
+  if (Object.keys(missingUpdates).length) await actor.update(missingUpdates, { falloutMawSkipDamageStatusSync: true });
+  if (destroyedLimbKeys.length) {
+    await deleteLimbTraumasBatch(actor, destroyedLimbKeys);
+    await deleteLimbLossEffectsBatch(actor, destroyedLimbKeys);
+    await deleteLimbTimedDamageEffectsBatch(actor, destroyedLimbKeys);
+  }
+  if (limbLossEffectData.length) await actor.createEmbeddedDocuments("ActiveEffect", limbLossEffectData, { animate: false });
   return destroyed;
 }
 
@@ -1648,6 +1681,17 @@ async function deleteLimbTraumas(actor, limbKey = "") {
     .map(item => item.id)
     .filter(Boolean);
   await deleteActorItems(actor, ids);
+}
+
+async function deleteLimbTraumasBatch(actor, limbKeys = []) {
+  const keys = new Set(limbKeys.filter(Boolean));
+  if (!keys.size) return [];
+  const ids = getActorTraumas(actor)
+    .filter(item => keys.has(item.system?.limbKey))
+    .map(item => item.id)
+    .filter(Boolean);
+  recordPerfMetric("destroyedLimbTraumaDeleteCount", ids.length);
+  return deleteActorItems(actor, ids);
 }
 
 async function deleteLimbLossEffects(actor, limbKey = "") {
@@ -1660,10 +1704,29 @@ async function deleteLimbLossEffects(actor, limbKey = "") {
   await deleteActorActiveEffects(actor, ids);
 }
 
+async function deleteLimbLossEffectsBatch(actor, limbKeys = []) {
+  const keys = new Set(limbKeys.filter(Boolean));
+  if (!keys.size) return [];
+  const ids = Array.from(actor?.effects ?? [])
+    .filter(effect => getDamageEffectChanges(effect).some(data => data.kind === LIMB_LOSS_EFFECT_KIND && keys.has(data.limbKey)))
+    .map(effect => effect.id)
+    .filter(Boolean);
+  recordPerfMetric("destroyedLimbLossEffectDeleteCount", ids.length);
+  return deleteActorActiveEffects(actor, ids);
+}
+
 async function deleteLimbTimedDamageEffects(actor, limbKey = "") {
   const key = String(limbKey ?? "").trim();
   if (!key) return [];
   return removeDamageEffectChanges(actor, data => isLimbTimedDamageEffect(data) && data.limbKey === key);
+}
+
+async function deleteLimbTimedDamageEffectsBatch(actor, limbKeys = []) {
+  const keys = new Set(limbKeys.filter(Boolean));
+  if (!keys.size) return [];
+  const results = await removeDamageEffectChanges(actor, data => isLimbTimedDamageEffect(data) && keys.has(data.limbKey));
+  recordPerfMetric("destroyedLimbTimedDamageEffectChangeDeleteCount", results.reduce((sum, result) => sum + (result.removed ?? 0), 0));
+  return results;
 }
 
 async function deleteDamageStateItems(actor) {
@@ -1964,17 +2027,23 @@ function isFullRestoreConditionBypassItem(item) {
 }
 
 async function createLimbLossEffect(actor, limbKey = "") {
+  const effectData = prepareLimbLossEffectData(actor, limbKey);
+  if (!effectData) return [];
+  return actor.createEmbeddedDocuments("ActiveEffect", [effectData], { animate: false });
+}
+
+function prepareLimbLossEffectData(actor, limbKey = "") {
   const limb = actor?.system?.limbs?.[limbKey];
   const effectEntries = getLimbLossEffects(actor, limbKey).map(prepareEffectChange).filter(change => change.key);
   const { changes, statuses } = splitSpecialEffectChanges(effectEntries);
-  if (!changes.length && !statuses.length) return [];
+  if (!changes.length && !statuses.length) return null;
 
   const label = String(limb?.label ?? limbKey);
   changes.unshift(createDamageEffectChange(
     buildDamageEffectChangeKey("limbLoss", limbKey),
     { kind: LIMB_LOSS_EFFECT_KIND, limbKey }
   ));
-  return actor.createEmbeddedDocuments("ActiveEffect", [{
+  return {
     type: "base",
     name: `${label}: ${getDestroyedLimbStateLabel(actor, limbKey).toLocaleLowerCase(game.i18n?.lang ?? "ru")}`,
     img: "icons/svg/blood.svg",
@@ -1987,7 +2056,7 @@ async function createLimbLossEffect(actor, limbKey = "") {
       }
     },
     system: { changes }
-  }], { animate: false });
+  };
 }
 
 function getLimbLossEffects(actor, limbKey = "") {
@@ -2147,6 +2216,19 @@ function isActorDead(actor) {
 async function synchronizeActorVitalStatuses(actor) {
   if (!actor?.toggleStatusEffect) return;
   const dead = hasDestroyedCriticalLimb(actor);
+  const health = actor.health;
+  const unconscious = !dead && (hasShockUnconscious(actor) || (health && toInteger(health.value) <= toInteger(health.min)));
+  // #region agent log
+  if (dead || unconscious || actor.statuses?.has?.(STATUS_EFFECTS.dead) || actor.statuses?.has?.(STATUS_EFFECTS.unconscious)) {
+    recordPerfEvent("damage-hub.mjs:synchronizeActorVitalStatuses", "vital status sync decision", {
+      actorUuid: actor.uuid,
+      dead,
+      unconscious,
+      statuses: Array.from(actor.statuses ?? []),
+      overlays: getActorOverlayEffectSummary(actor)
+    }, "H-status-order");
+  }
+  // #endregion
   if (dead) {
     await knockdownActorForIncapacitation(actor, STATUS_EFFECTS.dead);
     if (hasShockUnconscious(actor)) await actor.unsetFlag(SYSTEM_ID, SHOCK_UNCONSCIOUS_FLAG_KEY);
@@ -2155,8 +2237,6 @@ async function synchronizeActorVitalStatuses(actor) {
     return;
   }
 
-  const health = actor.health;
-  const unconscious = hasShockUnconscious(actor) || (health && toInteger(health.value) <= toInteger(health.min));
   if (unconscious) await knockdownActorForIncapacitation(actor, STATUS_EFFECTS.unconscious);
   await setActorStatus(actor, STATUS_EFFECTS.dead, false);
   await setActorStatus(actor, STATUS_EFFECTS.unconscious, Boolean(unconscious));
@@ -2164,11 +2244,29 @@ async function synchronizeActorVitalStatuses(actor) {
 
 async function knockdownActorForIncapacitation(actor, state = "") {
   if (!actor || !state) return;
+  // #region agent log
+  recordPerfEvent("damage-hub.mjs:knockdownActorForIncapacitation", "request knocked posture", {
+    actorUuid: actor.uuid,
+    state,
+    statuses: Array.from(actor.statuses ?? []),
+    overlays: getActorOverlayEffectSummary(actor)
+  }, "H-status-order");
+  // #endregion
   await setActorTokensPosture(actor, "knocked");
 }
 
 async function performNegativeLimbShockCheck(actor, shockCheck = null) {
   if (!actor || !shockCheck || shockCheck.difficulty <= 0 || hasShockUnconscious(actor) || isActorDead(actor)) return undefined;
+  // #region agent log
+  recordPerfEvent("damage-hub.mjs:performNegativeLimbShockCheck", "negative limb shock skill check", {
+    actorUuid: actor.uuid,
+    difficulty: shockCheck.difficulty,
+    damage: shockCheck.damage,
+    limbKey: shockCheck.limbKey ?? "",
+    limbKeys: shockCheck.limbKeys ?? [],
+    requester: getNegativeLimbShockRequester(actor, shockCheck)
+  }, "H-skill-check-card");
+  // #endregion
   const outcome = await requestSkillCheck({
     actor,
     skillKey: "resilience",
@@ -2183,6 +2281,58 @@ async function performNegativeLimbShockCheck(actor, shockCheck = null) {
   if (!["failure", "criticalFailure"].includes(resultKey)) return outcome;
   await createShockUnconsciousState(actor);
   return outcome;
+}
+
+async function queueOrPerformNegativeLimbShockCheck(actor, shockCheck = null, deferredShockChecks = null, reason = "") {
+  if (!Array.isArray(deferredShockChecks)) return performNegativeLimbShockCheck(actor, shockCheck);
+  if (!actor || !shockCheck || shockCheck.difficulty <= 0 || hasShockUnconscious(actor) || isActorDead(actor)) return undefined;
+  deferredShockChecks.push({
+    actorUuid: actor.uuid,
+    actor,
+    shockCheck,
+    reason,
+    requester: getNegativeLimbShockRequester(actor, shockCheck)
+  });
+  return undefined;
+}
+
+async function resolveDeferredShockChecks(entries = []) {
+  const queued = entries.filter(entry => entry?.actorUuid && entry?.shockCheck);
+  if (!queued.length) return [];
+  // #region agent log
+  recordPerfEvent("damage-hub.mjs:resolveDeferredShockChecks", "deferred shock checks resolving", {
+    count: queued.length,
+    actorUuids: queued.map(entry => entry.actorUuid),
+    reasons: queued.map(entry => entry.reason),
+    difficulties: queued.map(entry => entry.shockCheck?.difficulty)
+  }, "H-skill-check-card");
+  // #endregion
+  const batch = createSkillCheckBatchCollector({
+    requester: "damageShock",
+    title: "Проверки стойкости: шок"
+  });
+  const outcomes = [];
+  for (const entry of queued) {
+    const actor = fromUuidSync(entry.actorUuid) ?? entry.actor;
+    if (!actor || hasShockUnconscious(actor) || isActorDead(actor)) continue;
+    const shockCheck = entry.shockCheck;
+    const outcome = await requestSkillCheck({
+      actor,
+      skillKey: "resilience",
+      data: {
+        difficulty: shockCheck.difficulty
+      },
+      animate: false,
+      createMessage: false,
+      requester: entry.requester
+    });
+    batch.add(outcome);
+    if (outcome) outcomes.push(outcome);
+    const resultKey = String(outcome?.result?.key ?? "");
+    if (["failure", "criticalFailure"].includes(resultKey)) await createShockUnconsciousState(actor);
+  }
+  if (batch.size) await batch.publish({ forceBatch: true });
+  return outcomes;
 }
 
 function aggregateNegativeLimbShockChecks(actor, shockChecks = []) {
@@ -2304,6 +2454,18 @@ async function setActorStatusEffect(actor, statusId = "", active = false, option
   const animationOptions = getStatusAnimationOptions(statusId, options);
 
   const existing = getActorStatusEffectIds(actor, status);
+  // #region agent log
+  if (statusId === STATUS_EFFECTS.dead || statusId === STATUS_EFFECTS.unconscious) {
+    recordPerfEvent("damage-hub.mjs:setActorStatusEffect", "status effect operation", {
+      actorUuid: actor.uuid,
+      statusId,
+      active,
+      existing,
+      statuses: Array.from(actor.statuses ?? []),
+      overlays: getActorOverlayEffectSummary(actor)
+    }, "H-status-order");
+  }
+  // #endregion
   if (existing.length) {
     if (active) {
       await ensureActorStatusOverlay(actor, existing, statusId, options);
@@ -2361,6 +2523,17 @@ function getActorStatusEffectIds(actor, status) {
     if (statuses?.size === 1 && statuses.has(status.id)) existing.push(effect.id);
   }
   return existing;
+}
+
+function getActorOverlayEffectSummary(actor) {
+  return Array.from(actor?.effects ?? [])
+    .filter(effect => effect?.flags?.core?.overlay)
+    .map(effect => ({
+      id: effect.id,
+      name: effect.name,
+      statuses: Array.from(effect.statuses ?? []),
+      posture: effect.getFlag?.(SYSTEM_ID, "postureMovement")?.action ?? ""
+    }));
 }
 
 function splitSpecialEffectChanges(effectChanges = []) {
@@ -3672,7 +3845,7 @@ async function distributeManualHealthValueUpdate(actor, changes = {}, options = 
   return true;
 }
 
-async function applyDamageEntriesBatch(actor, entries = []) {
+async function applyDamageEntriesBatch(actor, entries = [], { deferredShockChecks = null } = {}) {
   const normalizedEntries = entries
     .map(entry => ({
       ...entry,
@@ -3746,10 +3919,10 @@ async function applyDamageEntriesBatch(actor, entries = []) {
     applyDestroyedLimbConsequences(actor, Array.from(limbStates.keys()))
   ));
   const shockCheck = aggregateNegativeLimbShockChecks(actor, shockChecks);
-  if (shockCheck) await measurePerfTiming("shockCheck", () => performNegativeLimbShockCheck(actor, shockCheck));
+  if (shockCheck) await measurePerfTiming("shockCheck", () => queueOrPerformNegativeLimbShockCheck(actor, shockCheck, deferredShockChecks, "damage"));
   const destroyedLimbShockCheck = aggregateNegativeLimbShockChecks(actor, buildDestroyedLimbShockChecks(actor, destroyedLimbKeys));
   if (destroyedLimbShockCheck) {
-    await measurePerfTiming("destroyedLimbShockCheck", () => performNegativeLimbShockCheck(actor, destroyedLimbShockCheck));
+    await measurePerfTiming("destroyedLimbShockCheck", () => queueOrPerformNegativeLimbShockCheck(actor, destroyedLimbShockCheck, deferredShockChecks, "destroyedLimb"));
   }
   await measurePerfTiming("damageStatusSync", () => queueActorDamageStatusSync(actor));
   const requestedHealthDamage = normalizedEntries.reduce((sum, entry) => sum + entry.amount, 0);
@@ -4014,6 +4187,15 @@ function buildBatchLimbDeltaEntries(actor, limbStates = new Map()) {
 
 async function publishDamageSummaryMessage(results = []) {
   const context = buildDamageSummaryViewContext(results);
+  // #region agent log
+  recordPerfEvent("damage-hub.mjs:publishDamageSummaryMessage", "damage summary publish requested", {
+    inputResultCount: results.flat(Infinity).filter(Boolean).length,
+    victimCount: context.victims.length,
+    totalHealthDamage: context.totalHealthDamage,
+    totalLimbDamage: context.totalLimbDamage,
+    victimNames: context.victims.map(victim => victim.name)
+  }, "H-card-summary");
+  // #endregion
   if (!context.victims.length) return undefined;
 
   const content = await renderTemplate(TEMPLATES.damageSummaryChatCard, context);

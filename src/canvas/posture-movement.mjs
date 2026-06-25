@@ -8,6 +8,7 @@ import {
 import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 import { notifyCombatResourcesSpent } from "../combat/resource-spending.mjs";
 import { deferActorPosture, registerBulkOperationFlusher } from "../utils/bulk-operation.mjs";
+import { recordPerfEvent } from "../debug/perf-log.mjs";
 
 export const POSTURE_CHANGE_ACTION_POINT_COST = 3;
 export const POSTURE_EFFECT_CHANGE_ROOT = "system.postures";
@@ -22,6 +23,7 @@ const POSTURE_RESOURCE_SPENDING_FLAG = "postureResourceSpending";
 const POSTURE_RESOURCE_SPENDING_LIMIT = 50;
 const AUTOMATIC_POSTURE_OPTION = "falloutMawAutomaticPosture";
 const SUPPRESSED_POSTURE_EFFECT_ACTIONS = new Set(["knocked"]);
+const VITAL_OVERLAY_STATUSES = new Set(["dead", "unconscious"]);
 
 const POSTURE_ACTION_CONFIGS = Object.freeze({
   walk: Object.freeze({
@@ -107,6 +109,15 @@ export async function setActorTokensPosture(actor, action = "walk") {
 async function flushDeferredActorPostures(context) {
   const entries = Array.from(context?.postureActors?.values?.() ?? []);
   if (!entries.length) return;
+  // #region agent log
+  recordPerfEvent("posture-movement.mjs:flushDeferredActorPostures", "flush deferred postures", {
+    entries: entries.map(({ actor, action }) => ({
+      actorUuid: actor?.uuid,
+      action,
+      statuses: Array.from(actor?.statuses ?? [])
+    }))
+  }, "H-bulk-posture-order");
+  // #endregion
   const updatesByScene = new Map();
   for (const { actor, action } of entries) {
     const freshActor = fromUuidSync(actor?.uuid ?? "") ?? actor;
@@ -235,6 +246,18 @@ async function syncTokenPostureEffect(tokenDocument) {
   const action = normalizeMovementAction(tokenDocument?._source?.movementAction);
   const posture = isPostureEffectAction(action) ? POSTURE_ACTION_CONFIGS[action] : null;
   const existing = actor.effects.filter(effect => effect.getFlag(SYSTEM_ID, POSTURE_MOVEMENT_FLAG));
+  // #region agent log
+  if (action === "knocked" || existing.length) {
+    recordPerfEvent("posture-movement.mjs:syncTokenPostureEffect", "posture effect sync", {
+      actorUuid: actor.uuid,
+      tokenUuid: tokenDocument.uuid,
+      action,
+      statuses: Array.from(actor.statuses ?? []),
+      postureEffectIds: existing.map(effect => effect.id),
+      overlays: getActorOverlayEffectSummary(actor)
+    }, "H-posture-overlay");
+  }
+  // #endregion
 
   if (!posture) {
     await deleteExistingPostureEffects(actor, existing.map(effect => effect.id));
@@ -247,6 +270,18 @@ async function syncTokenPostureEffect(tokenDocument) {
   await deleteExistingPostureEffects(actor, obsolete);
 
   const data = buildPostureEffectData(tokenDocument, action, posture, signature);
+  // #region agent log
+  if (action === "knocked") {
+    recordPerfEvent("posture-movement.mjs:syncTokenPostureEffect", "posture overlay decision", {
+      actorUuid: actor.uuid,
+      tokenUuid: tokenDocument.uuid,
+      action,
+      overlay: data.flags?.core?.overlay === true,
+      statuses: Array.from(actor.statuses ?? []),
+      overlays: getActorOverlayEffectSummary(actor)
+    }, "H-posture-overlay-fix");
+  }
+  // #endregion
   if (current && hasActorEffect(actor, current.id)) {
     const update = getEffectUpdateData(current, data);
     if (Object.keys(update).length) await updatePostureEffect(current, update);
@@ -298,6 +333,7 @@ function getPostureEffectAction(effect) {
 }
 
 function buildPostureEffectData(tokenDocument, action, posture, signature) {
+  const overlay = shouldUsePostureOverlay(tokenDocument?.actor);
   return {
     type: "base",
     name: game.i18n.localize(posture.label),
@@ -311,7 +347,7 @@ function buildPostureEffectData(tokenDocument, action, posture, signature) {
     },
     flags: {
       core: {
-        overlay: true
+        overlay
       },
       [SYSTEM_ID]: {
         kind: "posture",
@@ -323,6 +359,13 @@ function buildPostureEffectData(tokenDocument, action, posture, signature) {
       }
     }
   };
+}
+
+function shouldUsePostureOverlay(actor) {
+  for (const statusId of VITAL_OVERLAY_STATUSES) {
+    if (actor?.statuses?.has?.(statusId)) return false;
+  }
+  return true;
 }
 
 function buildPostureEffectChanges(action, posture) {
@@ -362,8 +405,20 @@ function getEffectUpdateData(effect, data) {
   if (JSON.stringify(currentData) !== JSON.stringify(nextData)) {
     update[`flags.${SYSTEM_ID}.${POSTURE_MOVEMENT_FLAG}`] = nextData;
   }
-  if (effect.getFlag("core", "overlay") !== true) update["flags.core.overlay"] = true;
+  const overlay = data.flags?.core?.overlay === true;
+  if (effect.getFlag("core", "overlay") !== overlay) update["flags.core.overlay"] = overlay;
   return update;
+}
+
+function getActorOverlayEffectSummary(actor) {
+  return Array.from(actor?.effects ?? [])
+    .filter(effect => effect?.flags?.core?.overlay)
+    .map(effect => ({
+      id: effect.id,
+      name: effect.name,
+      statuses: Array.from(effect.statuses ?? []),
+      posture: effect.getFlag?.(SYSTEM_ID, POSTURE_MOVEMENT_FLAG)?.action ?? ""
+    }));
 }
 
 async function spendPendingPostureChangeCost(tokenDocument) {
