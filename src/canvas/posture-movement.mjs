@@ -20,6 +20,7 @@ const MOVEMENT_RESOURCE_PREVIEW_HOOK = "falloutMawMovementResourcePreview";
 const POSTURE_RESOURCE_SPENDING_FLAG = "postureResourceSpending";
 const POSTURE_RESOURCE_SPENDING_LIMIT = 50;
 const AUTOMATIC_POSTURE_OPTION = "falloutMawAutomaticPosture";
+const SUPPRESSED_POSTURE_EFFECT_ACTIONS = new Set(["knocked"]);
 
 const POSTURE_ACTION_CONFIGS = Object.freeze({
   walk: Object.freeze({
@@ -217,15 +218,25 @@ async function syncTokenPostureEffect(tokenDocument) {
     return;
   }
 
-  await actor.createEmbeddedDocuments("ActiveEffect", [data]);
+  await actor.createEmbeddedDocuments("ActiveEffect", [data], getPostureEffectOperationOptions(action));
 }
 
 async function deleteExistingPostureEffects(actor, ids = []) {
-  const existingIds = ids.filter(id => hasActorEffect(actor, id));
-  if (!existingIds.length) return;
+  const effects = ids.map(id => actor?.effects?.get?.(id)).filter(Boolean);
+  if (!effects.length) return;
+
+  const suppressedIds = effects
+    .filter(effect => shouldSuppressPostureEffectAnimation(getPostureEffectAction(effect)))
+    .map(effect => effect.id);
+  const animatedIds = effects
+    .filter(effect => !shouldSuppressPostureEffectAnimation(getPostureEffectAction(effect)))
+    .map(effect => effect.id);
 
   try {
-    await actor.deleteEmbeddedDocuments("ActiveEffect", existingIds);
+    if (animatedIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", animatedIds);
+    if (suppressedIds.length) {
+      await actor.deleteEmbeddedDocuments("ActiveEffect", suppressedIds, getPostureEffectOperationOptions("knocked"));
+    }
   } catch (error) {
     if (!isMissingDocumentError(error)) throw error;
   }
@@ -233,10 +244,22 @@ async function deleteExistingPostureEffects(actor, ids = []) {
 
 async function updatePostureEffect(effect, update = {}) {
   try {
-    await effect.update(update);
+    await effect.update(update, getPostureEffectOperationOptions(getPostureEffectAction(effect)));
   } catch (error) {
     if (!isMissingDocumentError(error)) throw error;
   }
+}
+
+function getPostureEffectOperationOptions(action = "") {
+  return shouldSuppressPostureEffectAnimation(action) ? { animate: false } : {};
+}
+
+function shouldSuppressPostureEffectAnimation(action = "") {
+  return SUPPRESSED_POSTURE_EFFECT_ACTIONS.has(normalizeMovementAction(action));
+}
+
+function getPostureEffectAction(effect) {
+  return normalizeMovementAction(effect?.getFlag?.(SYSTEM_ID, POSTURE_MOVEMENT_FLAG)?.action);
 }
 
 function buildPostureEffectData(tokenDocument, action, posture, signature) {
@@ -532,23 +555,9 @@ function getPostureChangeResourcePreviewResources(actor, amount) {
 }
 
 function getActorTokenDocuments(actor) {
-  if (typeof actor?.getActiveTokens === "function") {
-    const tokens = actor.getActiveTokens(false, true);
-    if (tokens.length) return tokens;
-  }
-
-  const documents = [];
-  for (const token of canvas?.tokens?.placeables ?? []) {
-    const tokenDocument = token?.document;
-    if (isTokenForActor(tokenDocument, actor)) documents.push(tokenDocument);
-  }
-  return documents;
-}
-
-function isTokenForActor(tokenDocument, actor) {
-  if (!tokenDocument?.actor || !actor) return false;
-  if (tokenDocument.actor.uuid === actor.uuid) return true;
-  return Boolean(tokenDocument.actor.isToken && tokenDocument.actor.token === actor.token);
+  return typeof actor?.getActiveTokens === "function"
+    ? actor.getActiveTokens(false, true)
+    : [];
 }
 
 function hasActorEffect(actor, effectId) {

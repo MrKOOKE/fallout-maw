@@ -74,6 +74,10 @@ const OVERLAY_STATUS_EFFECTS = new Set([
   STATUS_EFFECTS.dead,
   STATUS_EFFECTS.unconscious
 ]);
+const SUPPRESSED_STATUS_EFFECT_ANIMATIONS = new Set([
+  STATUS_EFFECTS.dead,
+  STATUS_EFFECTS.unconscious
+]);
 const COST_EFFECT_KEYS = Object.freeze({
   movement: "system.costs.movement",
   action: "system.costs.action",
@@ -1762,10 +1766,10 @@ function serializeDamageEffectChangeData(data = {}) {
 
 async function upsertManagedTimedDamageEffect(actor, effectData = {}, kinds = []) {
   const newChanges = getDamageEffectChanges(effectData).filter(data => kinds.includes(data.kind));
-  if (!newChanges.length) return actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+  if (!newChanges.length) return actor.createEmbeddedDocuments("ActiveEffect", [effectData], getDamageActiveEffectOperationOptions());
 
   const existing = findStackableManagedTimedDamageEffect(actor, effectData, newChanges, kinds);
-  if (!existing) return actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+  if (!existing) return actor.createEmbeddedDocuments("ActiveEffect", [effectData], getDamageActiveEffectOperationOptions());
 
   const mergedChanges = mergeManagedTimedDamageEffectChanges(
     getEffectChangeSource(existing),
@@ -2119,8 +2123,8 @@ async function synchronizeActorVitalStatuses(actor) {
 async function knockdownActorForIncapacitation(actor, state = "") {
   if (!actor || !state) return;
   const current = getActorPostureKnockdownState(actor);
-  if (current === state) return;
   await setActorTokensPosture(actor, "knocked");
+  if (current === state) return;
   await actor.setFlag(SYSTEM_ID, POSTURE_KNOCKDOWN_FLAG_KEY, {
     state,
     createdAt: Number(game.time?.worldTime) || 0
@@ -2314,6 +2318,7 @@ function isOverlayStatusEffect(statusId = "") {
 }
 
 function getStatusAnimationOptions(statusId = "", { animate = null } = {}) {
+  if (SUPPRESSED_STATUS_EFFECT_ANIMATIONS.has(statusId)) return { animate: false };
   if (animate === false) return { animate: false };
   if (animate === true) return {};
   return isOverlayStatusEffect(statusId) ? {} : { animate: false };
@@ -2644,7 +2649,7 @@ async function createResourceLimitEffect(actor, { damageType = {}, healthDelta =
       }
     },
     system: { changes: [] }
-  }]);
+  }], getDamageActiveEffectOperationOptions());
 }
 
 async function createFirstAidEffect(actor, request = {}) {
@@ -2698,7 +2703,7 @@ async function createFirstAidEffect(actor, request = {}) {
     flags,
     system: { changes: data.changes }
   };
-  return actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+  return actor.createEmbeddedDocuments("ActiveEffect", [effectData], getDamageActiveEffectOperationOptions());
 }
 
 function normalizeFirstAidEffectRequest(request = {}) {
@@ -3573,10 +3578,14 @@ function collectFirstAidTemporaryEffectTicks(effect, data, now) {
 async function updatePeriodicEffect(effect, updateData = {}) {
   try {
     if (!effect?.parent?.effects?.has(effect.id)) return;
-    await effect.update(updateData);
+    await effect.update(updateData, getDamageActiveEffectOperationOptions());
   } catch (error) {
     if (!isMissingDocumentError(error)) throw error;
   }
+}
+
+function getDamageActiveEffectOperationOptions() {
+  return { animate: false };
 }
 
 async function deletePeriodicEffects(actor, effectIds = []) {
