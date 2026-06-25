@@ -164,6 +164,16 @@ class WeaponActionModifierState {
     this.spendRequirements.push(requirement);
   }
 
+  getEnergyCost(context = {}) {
+    let total = 0;
+    for (const requirement of this.spendRequirements) {
+      const cost = requirement.energyCost ?? requirement.getEnergyCost;
+      if (typeof cost === "function") total += Math.max(0, toInteger(cost({ ...this.context, ...context })));
+      else total += Math.max(0, toInteger(cost));
+    }
+    return total;
+  }
+
   canSpend(context = {}) {
     for (const requirement of this.spendRequirements) {
       if (typeof requirement.canSpend !== "function") continue;
@@ -207,6 +217,39 @@ function collectWeaponActionModifierState(context = {}) {
     addSpendRequirement: requirement => state.addSpendRequirement(requirement)
   });
   return state;
+}
+
+export function getWeaponActionModifierEnergyCost({
+  attackerToken = null,
+  token = null,
+  actor = null,
+  weapon = null,
+  actionKey = "",
+  weaponFunctionId = "",
+  attackModifier = null,
+  attackCount = null
+} = {}) {
+  const resolvedToken = token ?? attackerToken?.object ?? attackerToken ?? null;
+  const resolvedActor = actor ?? resolvedToken?.actor ?? weapon?.actor ?? null;
+  const normalizedActionKey = String(actionKey ?? "").trim();
+  if (!resolvedActor || !weapon || !normalizedActionKey) return 0;
+  const normalizedAttackCount = attackCount === null || attackCount === undefined
+    ? getActionAttackCount(weapon, normalizedActionKey, weaponFunctionId)
+    : Math.max(1, toInteger(attackCount));
+  const context = {
+    actor: resolvedActor,
+    actorToken: resolvedToken,
+    token: resolvedToken,
+    weapon,
+    actionKey: normalizedActionKey,
+    weaponActionKey: normalizedActionKey,
+    weaponFunctionId,
+    weaponData: getWeaponAttackData(weapon, weaponFunctionId),
+    attackModifier,
+    controller: null,
+    attackCount: normalizedAttackCount
+  };
+  return collectWeaponActionModifierState(context).getEnergyCost({ attackCount: normalizedAttackCount });
 }
 
 export function registerWeaponAttackSocket() {

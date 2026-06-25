@@ -57,6 +57,7 @@ import {
   canPerformWeaponActionAgainstToken,
   canTokenPhysicallySeeTarget,
   executeWeaponAttackAgainstToken,
+  getWeaponActionModifierEnergyCost,
   startForcedAimedAttackSelection,
   startWeaponAttack,
   WEAPON_ACTION_MODIFIER_REQUEST_HOOK,
@@ -2268,16 +2269,18 @@ function collectWhereAreYouGoingMovementInterruptions({ tokenDocument, movement,
     .filter(other => isTokenActiveCombatant(combat, other))
     .filter(other => canUseWhereAreYouGoingReaction(other.actor))
     .filter(other => isWhereAreYouGoingOpponent(other.actor, mover))
-    .filter(other => getActorWhereAreYouGoingEntries(other.actor).some(entry => (
-      hasEnergy(other.actor, getAbilityEnergyCost(
+    .filter(other => getActorWhereAreYouGoingEntries(other.actor).some(entry => {
+      const reactionEnergyCost = getAbilityEnergyCost(
         other.actor,
         entry.abilityItem,
         entry.abilityFunction,
         entry.settings.reactionEnergyCost
-      ))
-      && getWhereAreYouGoingWeaponCandidates(other.actor)
-        .some(candidate => hasRequiredWeaponResources(candidate.weapon, 1, candidate.weaponFunctionId))
-    )));
+      );
+      return getAvailableWhereAreYouGoingWeaponCandidates(other.actor, {
+        token: other,
+        reactionEnergyCost
+      }).length > 0;
+    }));
   if (!reactors.length) return [];
 
   const samples = getMovementRouteSamples(tokenDocument, movement);
@@ -2344,22 +2347,31 @@ async function collectWhereAreYouGoingReactionOffers({ eventKey = "", context = 
       || !isWhereAreYouGoingOpponent(reactor, mover)
     ) continue;
     const entry = getActorWhereAreYouGoingEntries(reactor).find(candidateEntry => {
-      const candidateEnergyCost = getAbilityEnergyCost(
+      const reactionEnergyCost = getAbilityEnergyCost(
         reactor,
         candidateEntry.abilityItem,
         candidateEntry.abilityFunction,
         candidateEntry.settings.reactionEnergyCost
       );
-      return hasEnergy(reactor, candidateEnergyCost)
-        && getAvailableWhereAreYouGoingWeaponCandidates(reactor).length > 0;
+      return getAvailableWhereAreYouGoingWeaponCandidates(reactor, {
+        token: reactorToken,
+        reactionEnergyCost
+      }).length > 0;
     });
     if (!entry) continue;
-    const energyCost = getAbilityEnergyCost(
+    const reactionEnergyCost = getAbilityEnergyCost(
       reactor,
       entry.abilityItem,
       entry.abilityFunction,
       entry.settings.reactionEnergyCost
     );
+    const candidates = getAvailableWhereAreYouGoingWeaponCandidates(reactor, {
+      token: reactorToken,
+      reactionEnergyCost
+    });
+    if (!candidates.length) continue;
+    const attackEnergyCost = Math.min(...candidates.map(candidate => Math.max(0, toInteger(candidate.attackEnergyCost))));
+    const energyCost = getCombinedReactionEnergyCost(reactionEnergyCost, attackEnergyCost);
     offers.push({
       actorUuid: reactor.uuid,
       reactionId: WHERE_ARE_YOU_GOING_REACTION_PROVIDER_ID,
@@ -2372,13 +2384,13 @@ async function collectWhereAreYouGoingReactionOffers({ eventKey = "", context = 
       label: getAbilityDisplayName(entry.abilityItem),
       description: `Остановить ${mover.name} и нанести неприцельный удар.`,
       img: entry.abilityItem.img || "icons/svg/sword.svg",
-      costLines: [
-        `Энергия: ${entry.settings.reactionEnergyCost} базовая / ${energyCost} итоговая`
-      ],
+      costLines: buildReactionEnergyCostLines(entry.settings.reactionEnergyCost, reactionEnergyCost, attackEnergyCost),
       abilityItemId: entry.abilityItem.id,
       abilityFunctionId: entry.abilityFunction.id,
       reactorTokenUuid: reactorToken.uuid,
       moverTokenUuid: moverToken.uuid,
+      reactionEnergyCost,
+      attackEnergyCost,
       energyCost
     });
   }
@@ -2395,17 +2407,17 @@ async function executeWhereAreYouGoingReaction({ offer = {} } = {}) {
   }
   if (!areTokensAdjacent(reactorToken, moverToken)) return { handled: false };
 
-  const energyCost = getAbilityEnergyCost(
+  const reactionEnergyCost = getAbilityEnergyCost(
     reactor,
     entry.abilityItem,
     entry.abilityFunction,
     entry.settings.reactionEnergyCost
   );
-  if (!hasEnergy(reactor, energyCost)) {
-    return { handled: false };
-  }
 
-  const candidates = getAvailableWhereAreYouGoingWeaponCandidates(reactor);
+  const candidates = getAvailableWhereAreYouGoingWeaponCandidates(reactor, {
+    token: reactorToken,
+    reactionEnergyCost
+  });
   if (!candidates.length) return { handled: true, status: REACTION_RESULT.failed };
   const selectedCandidate = candidates.length === 1
     ? candidates[0]
@@ -2415,11 +2427,21 @@ async function executeWhereAreYouGoingReaction({ offer = {} } = {}) {
     });
   if (!selectedCandidate) return { handled: true, status: REACTION_RESULT.declined };
   const { weapon, weaponFunctionId } = selectedCandidate;
+  const attackEnergyCost = getReactionWeaponActionEnergyCost({
+    actor: reactor,
+    token: reactorToken,
+    weapon,
+    actionKey: "meleeAttack",
+    weaponFunctionId
+  });
+  if (!hasEnergy(reactor, getCombinedReactionEnergyCost(reactionEnergyCost, attackEnergyCost))) {
+    return { handled: false };
+  }
   if (!hasRequiredWeaponResources(weapon, 1, weaponFunctionId)) {
     return { handled: true, status: REACTION_RESULT.failed };
   }
 
-  await spendEnergy(reactor, energyCost);
+  await spendEnergy(reactor, reactionEnergyCost);
   await applyAbilityOverloadEffect(reactor, entry.abilityItem, entry.abilityFunction, {
     name: getAbilityOverloadName(entry.abilityItem),
     energyCost: entry.settings.reactionOverloadEnergyCost,
@@ -2588,7 +2610,15 @@ async function collectCounterAttackReactionOffers({ eventKey = "", context = {} 
     const entry = getActorCounterAttackEntry(defender);
     if (!entry) continue;
     const settings = entry.settings;
-    const energyCost = getAbilityEnergyCost(defender, entry.abilityItem, entry.abilityFunction, settings.reactionEnergyCost);
+    const reactionEnergyCost = getAbilityEnergyCost(defender, entry.abilityItem, entry.abilityFunction, settings.reactionEnergyCost);
+    const attackEnergyCost = getReactionWeaponActionEnergyCost({
+      actor: defender,
+      token: defenderToken,
+      weapon: entry.weapon,
+      actionKey: "meleeAttack",
+      weaponFunctionId: entry.weaponFunctionId
+    });
+    const energyCost = getCombinedReactionEnergyCost(reactionEnergyCost, attackEnergyCost);
     if (!hasEnergy(defender, energyCost)) continue;
     if (getMissingWeaponResourceCost(entry.weapon, 1, entry.weaponFunctionId)) continue;
     offers.push({
@@ -2598,15 +2628,15 @@ async function collectCounterAttackReactionOffers({ eventKey = "", context = {} 
       label: getAbilityDisplayName(entry.abilityItem),
       description: `Ответить ${entry.weapon.name}: ${attacker.name}.`,
       img: entry.abilityItem.img || entry.weapon.img || "icons/svg/sword.svg",
-      costLines: [
-        `Энергия: ${settings.reactionEnergyCost} базовая / ${energyCost} итоговая`
-      ],
+      costLines: buildReactionEnergyCostLines(settings.reactionEnergyCost, reactionEnergyCost, attackEnergyCost),
       abilityItemId: entry.abilityItem.id,
       abilityFunctionId: entry.abilityFunction.id,
       weaponId: entry.weapon.id,
       weaponFunctionId: entry.weaponFunctionId,
       defenderTokenUuid: defenderToken.uuid,
       attackerTokenUuid: attackerToken.uuid,
+      reactionEnergyCost,
+      attackEnergyCost,
       energyCost
     });
   }
@@ -2620,12 +2650,19 @@ async function executeCounterAttackReaction({ offer = {} } = {}) {
   const entry = getActorCounterAttackEntry(defender, offer);
   if (!defender || !defenderTokenDocument || !attackerTokenDocument || !entry) return { handled: false };
   const settings = entry.settings;
-  const energyCost = getAbilityEnergyCost(defender, entry.abilityItem, entry.abilityFunction, settings.reactionEnergyCost);
+  const reactionEnergyCost = getAbilityEnergyCost(defender, entry.abilityItem, entry.abilityFunction, settings.reactionEnergyCost);
+  const attackEnergyCost = getReactionWeaponActionEnergyCost({
+    actor: defender,
+    token: defenderTokenDocument,
+    weapon: entry.weapon,
+    actionKey: "meleeAttack",
+    weaponFunctionId: entry.weaponFunctionId
+  });
   if (!areTokensAdjacent(defenderTokenDocument, attackerTokenDocument)) return { handled: false };
-  if (!hasEnergy(defender, energyCost)) return { handled: false };
+  if (!hasEnergy(defender, getCombinedReactionEnergyCost(reactionEnergyCost, attackEnergyCost))) return { handled: false };
   if (!hasRequiredWeaponResources(entry.weapon, 1, entry.weaponFunctionId)) return { handled: false };
 
-  await spendEnergy(defender, energyCost);
+  await spendEnergy(defender, reactionEnergyCost);
   await applyAbilityOverloadEffect(defender, entry.abilityItem, entry.abilityFunction, {
     name: getAbilityOverloadName(entry.abilityItem),
     energyCost: settings.reactionOverloadEnergyCost,
@@ -3127,9 +3164,20 @@ function getWhereAreYouGoingWeaponCandidates(actor) {
   return rows;
 }
 
-function getAvailableWhereAreYouGoingWeaponCandidates(actor) {
+function getAvailableWhereAreYouGoingWeaponCandidates(actor, { token = null, reactionEnergyCost = 0 } = {}) {
   return getWhereAreYouGoingWeaponCandidates(actor)
-    .filter(candidate => hasRequiredWeaponResources(candidate.weapon, 1, candidate.weaponFunctionId));
+    .map(candidate => ({
+      ...candidate,
+      attackEnergyCost: getReactionWeaponActionEnergyCost({
+        actor,
+        token,
+        weapon: candidate.weapon,
+        actionKey: "meleeAttack",
+        weaponFunctionId: candidate.weaponFunctionId
+      })
+    }))
+    .filter(candidate => !getMissingWeaponResourceCost(candidate.weapon, 1, candidate.weaponFunctionId))
+    .filter(candidate => hasEnergy(actor, getCombinedReactionEnergyCost(reactionEnergyCost, candidate.attackEnergyCost)));
 }
 
 function getWhereAreYouGoingWeaponCandidateId(candidate = {}) {
@@ -3549,7 +3597,15 @@ async function collectCounterSniperReactionOffers({ eventKey = "", context = {} 
     if (!isCounterSniperAlly(reactor, defendedActor) || !isCounterSniperEnemy(reactor, attacker)) continue;
     const entry = getActorCounterSniperEntry(reactor);
     if (!entry) continue;
-    const energyCost = getAbilityEnergyCost(reactor, entry.abilityItem, entry.abilityFunction, entry.settings.reactionEnergyCost);
+    const reactionEnergyCost = getAbilityEnergyCost(reactor, entry.abilityItem, entry.abilityFunction, entry.settings.reactionEnergyCost);
+    const attackEnergyCost = getReactionWeaponActionEnergyCost({
+      actor: reactor,
+      token: reactorToken,
+      weapon: entry.weapon,
+      actionKey: "aimedShot",
+      weaponFunctionId: entry.weaponFunctionId
+    });
+    const energyCost = getCombinedReactionEnergyCost(reactionEnergyCost, attackEnergyCost);
     if (!hasEnergy(reactor, energyCost)) continue;
     if (!canPerformAimedAttackAgainstToken({
       attackerToken: reactorToken,
@@ -3564,13 +3620,15 @@ async function collectCounterSniperReactionOffers({ eventKey = "", context = {} 
       label: getAbilityDisplayName(entry.abilityItem),
       description: `Прицельный выстрел по ${attacker.name}: ${entry.weapon.name}.`,
       img: entry.abilityItem.img || entry.weapon.img || "icons/svg/target.svg",
-      costLines: [`Энергия: ${entry.settings.reactionEnergyCost} базовая / ${energyCost} итоговая`],
+      costLines: buildReactionEnergyCostLines(entry.settings.reactionEnergyCost, reactionEnergyCost, attackEnergyCost),
       abilityItemId: entry.abilityItem.id,
       abilityFunctionId: entry.abilityFunction.id,
       weaponId: entry.weapon.id,
       weaponFunctionId: entry.weaponFunctionId,
       reactorTokenUuid: reactorToken.uuid,
       attackerTokenUuid: attackerToken.uuid,
+      reactionEnergyCost,
+      attackEnergyCost,
       energyCost
     });
   }
@@ -3584,10 +3642,17 @@ async function executeCounterSniperReaction({ context = {}, offer = {} } = {}) {
   const entry = getActorCounterSniperEntry(reactor, offer);
   if (!reactor || !reactorToken || !attackerToken || !entry) return { handled: false };
   if (reactor.uuid === String(context.targetActorUuid ?? "")) return { handled: false };
-  const energyCost = getAbilityEnergyCost(reactor, entry.abilityItem, entry.abilityFunction, entry.settings.reactionEnergyCost);
-  if (!hasEnergy(reactor, energyCost) || !hasRequiredWeaponResources(entry.weapon, 1, entry.weaponFunctionId)) return { handled: false };
+  const reactionEnergyCost = getAbilityEnergyCost(reactor, entry.abilityItem, entry.abilityFunction, entry.settings.reactionEnergyCost);
+  const attackEnergyCost = getReactionWeaponActionEnergyCost({
+    actor: reactor,
+    token: reactorToken,
+    weapon: entry.weapon,
+    actionKey: "aimedShot",
+    weaponFunctionId: entry.weaponFunctionId
+  });
+  if (!hasEnergy(reactor, getCombinedReactionEnergyCost(reactionEnergyCost, attackEnergyCost)) || !hasRequiredWeaponResources(entry.weapon, 1, entry.weaponFunctionId)) return { handled: false };
 
-  await spendEnergy(reactor, energyCost);
+  await spendEnergy(reactor, reactionEnergyCost);
   await applyAbilityOverloadEffect(reactor, entry.abilityItem, entry.abilityFunction, {
     name: getAbilityOverloadName(entry.abilityItem),
     energyCost: entry.settings.reactionOverloadEnergyCost,
@@ -3773,17 +3838,21 @@ function requestFullForceWeaponActionModifiers(context = {}) {
       if (weaponSkillKey !== settings.requiredSkillKey) continue;
       context.modifierState.addCombatValue("damagePercent", settings.damagePercentBonus);
       context.modifierState.multiplyResourceCost("condition", settings.conditionCostMultiplier);
+      const getEnergyCost = ({ attackCount = 1 } = {}) => (
+        getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(attackCount))
+      );
       context.modifierState.addSpendRequirement({
         source: "fullForce",
         label: getAbilityDisplayName(abilityItem),
-        canSpend: ({ attackCount = 1 } = {}) => {
-          const cost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(attackCount));
+        energyCost: getEnergyCost,
+        canSpend: context => {
+          const cost = getEnergyCost(context);
           if (hasEnergy(actor, cost)) return true;
           ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
           return false;
         },
-        spend: async ({ attackCount = 1 } = {}) => {
-          const cost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(attackCount));
+        spend: async context => {
+          const cost = getEnergyCost(context);
           return spendFullForceEnergy(actor, abilityItem, abilityFunction, cost);
         }
       });
@@ -3809,17 +3878,21 @@ function requestAimingWeaponActionModifiers(context = {}) {
           settings.innateDifficultyIgnorePercent
         )
       );
+      const getEnergyCost = ({ attackCount = 1 } = {}) => (
+        getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(attackCount))
+      );
       context.modifierState.addSpendRequirement({
         source: "aiming",
         label: getAbilityDisplayName(abilityItem),
-        canSpend: ({ attackCount = 1 } = {}) => {
-          const cost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(attackCount));
+        energyCost: getEnergyCost,
+        canSpend: context => {
+          const cost = getEnergyCost(context);
           if (hasEnergy(actor, cost)) return true;
           ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
           return false;
         },
-        spend: async ({ attackCount = 1 } = {}) => {
-          const cost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost) * Math.max(1, toInteger(attackCount));
+        spend: async context => {
+          const cost = getEnergyCost(context);
           return spendEnergy(actor, cost);
         }
       });
@@ -5031,6 +5104,32 @@ function hasCurseAndBlessingEnergy(actor, cost = 0) {
 
 function hasEnergy(actor, cost = 0) {
   return canActorSpendEnergy(actor, cost);
+}
+
+function getReactionWeaponActionEnergyCost({ actor = null, token = null, weapon = null, actionKey = "", weaponFunctionId = "", attackCount = null } = {}) {
+  return getWeaponActionModifierEnergyCost({
+    actor,
+    token: token?.object ?? token,
+    weapon,
+    actionKey,
+    weaponFunctionId,
+    attackCount
+  });
+}
+
+function getCombinedReactionEnergyCost(reactionEnergyCost = 0, attackEnergyCost = 0) {
+  return Math.max(0, toInteger(reactionEnergyCost)) + Math.max(0, toInteger(attackEnergyCost));
+}
+
+function buildReactionEnergyCostLines(baseReactionEnergyCost = 0, reactionEnergyCost = 0, attackEnergyCost = 0) {
+  const reactionCost = Math.max(0, toInteger(reactionEnergyCost));
+  const attackCost = Math.max(0, toInteger(attackEnergyCost));
+  if (!attackCost) return [`Энергия: ${Math.max(0, toInteger(baseReactionEnergyCost))} базовая / ${reactionCost} итоговая`];
+  return [
+    `Энергия реакции: ${Math.max(0, toInteger(baseReactionEnergyCost))} базовая / ${reactionCost} итоговая`,
+    `Энергия атаки: ${attackCost}`,
+    `Энергия всего: ${reactionCost + attackCost}`
+  ];
 }
 
 function getResponsibleGM() {
