@@ -196,6 +196,7 @@ const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
 
 export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
   #freeEdit = false;
+  #actorNameDraft = null;
   #activeLimbKey = "";
   #draggedItemData = null;
   #draggedItemId = "";
@@ -242,6 +243,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         openFactionConfig: this.#onOpenFactionConfig,
         openDevelopment: this.#onOpenDevelopment,
         toggleFreeEdit: this.#onToggleFreeEdit,
+        editActorImage: this.#onEditActorImage,
         selectLimb: this.#onSelectLimb,
         openLimbControl: this.#onOpenLimbControl,
         deleteTrauma: this.#onDeleteTrauma,
@@ -435,6 +437,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       editable: this.isEditable,
       freeEdit: this.#freeEdit,
       editLockAttribute: this.#freeEdit ? "" : "disabled",
+      actorName: this.#actorNameDraft ?? actor.name,
       load: {
         value: formatWeight(loadValue),
         max: formatWeight(loadMax),
@@ -547,6 +550,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     this.#bindViewportResize();
     this.#relocateEffectsAddButton();
     this.#activateCreatureSelectors();
+    this.#activateActorNameInput();
     this.#activateInventoryInteractions();
     this.#activateWeaponSlotAspectSizing();
     this.#activateLimbControlClicks();
@@ -759,8 +763,43 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   static #onToggleFreeEdit(event) {
     event.preventDefault();
+    this.#actorNameDraft = null;
     this.#freeEdit = !this.#freeEdit;
     return this.render({ force: true });
+  }
+
+  static async #onEditActorImage(event, target) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!this.#freeEdit || !this.actor?.isOwner || !this.isEditable) return undefined;
+    if (target.nodeName !== "IMG") return undefined;
+
+    const attr = target.dataset.edit || "img";
+    const current = foundry.utils.getProperty(this.actor._source, attr) ?? target.getAttribute("src") ?? "";
+    const defaultArtwork = this.actor.constructor.getDefaultArtwork?.(this.actor._source) ?? {};
+    const defaultImage = foundry.utils.getProperty(defaultArtwork, attr);
+    const picker = new foundry.applications.apps.FilePicker.implementation({
+      current,
+      type: "image",
+      redirectToRoot: defaultImage ? [defaultImage] : [],
+      callback: path => {
+        const previous = target.getAttribute("src") ?? "";
+        target.src = path;
+        const updateData = { [attr]: path };
+        syncActorTokenIdentity(this.actor, updateData);
+        return this.actor.update(updateData).catch(error => {
+          target.src = previous;
+          console.error(error);
+          ui.notifications?.error(error?.message ?? "Не удалось изменить портрет актера.");
+        });
+      },
+      position: {
+        top: this.position.top + 40,
+        left: this.position.left + 10
+      },
+      document: this.actor
+    });
+    return picker.browse();
   }
 
   static #onOpenDevelopment(event) {
@@ -860,6 +899,64 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     }, { capture: true });
   }
 
+  #activateActorNameInput() {
+    const root = this.element;
+    if (!root || root.dataset.actorNameInputBound === "true") return;
+    root.dataset.actorNameInputBound = "true";
+
+    root.addEventListener("input", event => {
+      const input = event.target?.closest?.("[data-actor-name-input]");
+      if (!input || !this.element?.contains(input)) return;
+      if (!this.#freeEdit || !this.isEditable) return;
+      this.#actorNameDraft = String(input.value ?? "");
+    }, { capture: true });
+
+    root.addEventListener("change", event => {
+      const input = event.target?.closest?.("[data-actor-name-input]");
+      if (!input || !this.element?.contains(input)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void this.#commitActorNameInput(input);
+    }, { capture: true });
+
+    root.addEventListener("keydown", event => {
+      const input = event.target?.closest?.("[data-actor-name-input]");
+      if (!input || !this.element?.contains(input)) return;
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      event.stopPropagation();
+      input.blur();
+    }, { capture: true });
+  }
+
+  async #commitActorNameInput(input) {
+    if (!this.#freeEdit || !this.isEditable) {
+      this.#actorNameDraft = null;
+      input.value = this.actor.name;
+      return undefined;
+    }
+
+    const name = String(input.value ?? "");
+    this.#actorNameDraft = name;
+    if (name === this.actor.name) {
+      this.#actorNameDraft = null;
+      return undefined;
+    }
+
+    const updateData = { name };
+    syncActorTokenIdentity(this.actor, updateData);
+    try {
+      await this.actor.update(updateData);
+      this.#actorNameDraft = null;
+    } catch (error) {
+      this.#actorNameDraft = null;
+      input.value = this.actor.name;
+      console.error(error);
+      ui.notifications?.error(error?.message ?? "Не удалось изменить имя актера.");
+    }
+    return undefined;
+  }
+
   async #onDevelopmentPointInputChange(input) {
     if (!this.#freeEdit) return undefined;
     const key = String(input.dataset.developmentPointInput ?? "");
@@ -883,6 +980,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       button.innerHTML = `<i class="fa-solid fa-lock" inert></i>`;
       button.addEventListener("click", event => {
         event.preventDefault();
+        this.#actorNameDraft = null;
         this.#freeEdit = !this.#freeEdit;
         return this.render({ force: true });
       });
@@ -2363,6 +2461,11 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   async _processSubmitData(event, form, submitData, options = {}) {
     syncActorTokenIdentity(this.actor, submitData);
     return super._processSubmitData(event, form, submitData, options);
+  }
+
+  _onChangeForm(formConfig, event) {
+    if (event?.target?.closest?.("[data-actor-name-input]")) return undefined;
+    return super._onChangeForm(formConfig, event);
   }
 
   #getWeaponConflictingItems(itemData, placement = {}, excludeItemIds = []) {

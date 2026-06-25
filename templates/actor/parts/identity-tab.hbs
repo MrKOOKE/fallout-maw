@@ -1,9 +1,9 @@
 <section class="tab {{tabs.identity.cssClass}}" data-group="{{tabs.identity.group}}" data-tab="{{tabs.identity.id}}">
   <header class="sheet-header fallout-maw-sheet-header">
-    <img class="profile-img" src="{{actor.img}}" data-action="editImage" data-edit="img" title="{{actor.name}}" height="96" width="96">
+    <img class="profile-img{{#if freeEdit}} fallout-maw-profile-img-editable{{/if}}" src="{{actor.img}}" {{#if freeEdit}}data-action="editActorImage" data-edit="img"{{/if}} title="{{actor.name}}" height="96" width="96">
     <div class="fallout-maw-header-fields">
       {{#if freeEdit}}
-      <input class="fallout-maw-title-input" name="name" type="text" value="{{actor.name}}" placeholder="{{localize 'DOCUMENT.FIELDS.name.label'}}">
+      <input class="fallout-maw-title-input" data-actor-name-input type="text" value="{{actorName}}" placeholder="{{localize 'DOCUMENT.FIELDS.name.label'}}">
       {{else}}
       <div class="fallout-maw-title-display">{{actor.name}}</div>
       {{/if}}

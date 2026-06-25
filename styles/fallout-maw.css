@@ -11914,6 +11914,11 @@ label.fallout-maw-mitigation-cell {
   object-position: center center;
   padding: 0.45rem;
   width: 7rem;
+  cursor: default;
+}
+
+.application.fallout-maw-actor-sheet .fallout-maw-sheet-header .profile-img.fallout-maw-profile-img-editable {
+  cursor: pointer;
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-header-fields {
