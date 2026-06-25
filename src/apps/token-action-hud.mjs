@@ -146,6 +146,7 @@ const TOKEN_ACTION_HUD_SOCKET_SCOPE = "fallout-maw.tokenActionHud";
 const TOKEN_ACTION_HUD_SOCKET_TIMEOUT = 10000;
 const ABILITY_OVERLOAD_EFFECT_FLAG_KEY = "abilityOverload";
 const ACTION_POINT_COST_TOOLTIP_DELAY_MS = 200;
+const HUD_WEAPON_DISABLED_NOTIFICATION = "Поврежденные конечности не позволяют использовать данное оружие.";
 const SELECTED_HUD_WEAPON_FLAG = "selectedHudWeaponItemId";
 const SELECTED_HUD_WEAPON_SET_FLAG = "selectedHudWeaponSetKey";
 const DUAL_WEAPON_ACTION_KEYS = new Set(["aimedShot", "snapshot", "burst", "volley", "meleeAttack", "aimedMeleeAttack", "push"]);
@@ -820,6 +821,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!itemId || !item) return undefined;
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
+    if (isHudWeaponDisabled(actor, item)) {
+      notifyHudWeaponDisabled();
+      return undefined;
+    }
     await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, itemId);
     const weaponSetKey = String(target.dataset.weaponSet ?? "");
     if (weaponSetKey) await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
@@ -889,11 +894,16 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (isHudActionBlockedByReactionLock()) return undefined;
     const itemId = String(target.dataset.itemId ?? "");
     if (!itemId) return undefined;
+    const item = this.actor?.items.get(itemId);
+    if (!item) return undefined;
     if (isMiddleMouseClick(event)) {
-      const item = this.actor?.items.get(itemId);
       return item?.sheet?.render(true);
     }
     if (event.button !== 0) return undefined;
+    if (isHudWeaponDisabled(this.actor, item)) {
+      notifyHudWeaponDisabled();
+      return undefined;
+    }
     const currentItemId = String(this.actor?.getFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG) ?? "");
     const wasOpenForItem = this.#activeTray === "weaponActions" && currentItemId === itemId;
     if (itemId) await this.actor?.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, itemId);
@@ -921,7 +931,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       ui.notifications.warn(`${this.actor?.name ?? ""}: невозможно совершать боевые действия без сознания или после смерти.`);
       return undefined;
     }
-    if (isHudWeaponDisabled(this.actor, item)) return undefined;
+    if (isHudWeaponDisabled(this.actor, item)) {
+      notifyHudWeaponDisabled();
+      return undefined;
+    }
     if (isWeaponActionBrokenForHud(item, weaponFunctionId)) {
       ui.notifications.warn("Предмет сломан.");
       return undefined;
@@ -1024,7 +1037,11 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!item) return undefined;
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
-    if (target.disabled || isHudWeaponDisabled(this.actor, item)) return undefined;
+    if (target.disabled) return undefined;
+    if (isHudWeaponDisabled(this.actor, item)) {
+      notifyHudWeaponDisabled();
+      return undefined;
+    }
     await toggleLightSource(this.token?.document ?? this.token, item);
     return this.render({ force: true });
   }
@@ -1074,7 +1091,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!item) return undefined;
     if (isMiddleMouseClick(event)) return item.sheet?.render(true);
     if (event.button !== 0) return undefined;
-    if (isHudWeaponDisabled(this.actor, item)) return undefined;
+    if (isHudWeaponDisabled(this.actor, item)) {
+      notifyHudWeaponDisabled();
+      return undefined;
+    }
     if (isWeaponActionBrokenForHud(item, weaponFunctionId)) {
       ui.notifications.warn("Предмет сломан.");
       return undefined;
@@ -3079,6 +3099,10 @@ function isHudWeaponDisabled(actor, weapon) {
   const set = getHudWeaponSets(inventory).find(entry => entry.key === placement.weaponSet);
   const slot = (set?.slots ?? []).find(entry => entry.item?.id === weapon?.id && !entry.phantom);
   return Boolean(slot?.useDisabled);
+}
+
+function notifyHudWeaponDisabled() {
+  ui.notifications.warn(HUD_WEAPON_DISABLED_NOTIFICATION);
 }
 
 function getActiveHudWeaponSetKey(actor, weaponSets = []) {

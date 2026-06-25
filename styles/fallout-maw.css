@@ -9728,9 +9728,27 @@ label.fallout-maw-mitigation-cell {
   opacity: 0.48;
 }
 
+.fallout-maw-token-hud-main-action.fallout-maw-token-hud-weapon-button.unusable,
 .fallout-maw-token-hud-weapon-slot.unusable,
 .fallout-maw-token-hud-set-slot-preview.unusable {
-  border-color: rgba(200, 70, 61, 0.78);
+  border-color: rgba(255, 55, 43, 0.98);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 55, 43, 0.78),
+    inset 0 1px 0 rgba(255, 190, 170, 0.18),
+    0 0 18px rgba(255, 55, 43, 0.48),
+    0 3px 9px rgba(0, 0, 0, 0.44);
+}
+
+.fallout-maw-token-hud-main-action.fallout-maw-token-hud-weapon-button.unusable:hover,
+.fallout-maw-token-hud-main-action.fallout-maw-token-hud-weapon-button.unusable:focus-visible,
+.fallout-maw-token-hud-set-slot-preview.unusable:hover,
+.fallout-maw-token-hud-set-slot-preview.unusable:focus-visible {
+  border-color: rgba(255, 84, 70, 1);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 84, 70, 0.9),
+    inset 0 1px 0 rgba(255, 205, 190, 0.22),
+    0 0 22px rgba(255, 55, 43, 0.58),
+    0 3px 9px rgba(0, 0, 0, 0.44);
 }
 
 .fallout-maw-token-hud-tile:disabled {

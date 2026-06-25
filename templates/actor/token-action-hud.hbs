@@ -332,7 +332,7 @@
         <i class="fa-solid fa-caret-up" inert></i>
       </button>
       {{#each weaponSet.weapons}}
-      <button type="button" class="fallout-maw-token-hud-main-action fallout-maw-token-hud-weapon-button {{#if selected}}active{{/if}} {{#if useDisabled}}unusable{{/if}} variable-width" data-action="toggleWeaponActions" data-item-id="{{item.id}}" data-weapon-set="{{weaponSetKey}}" title="{{item.name}}" {{#if hudAspectStyle}}style="{{hudAspectStyle}}"{{/if}} {{#if useDisabled}}disabled{{/if}}>
+      <button type="button" class="fallout-maw-token-hud-main-action fallout-maw-token-hud-weapon-button {{#if selected}}active{{/if}} {{#if useDisabled}}unusable{{/if}} variable-width" data-action="toggleWeaponActions" data-item-id="{{item.id}}" data-weapon-set="{{weaponSetKey}}" title="{{item.name}}" {{#if hudAspectStyle}}style="{{hudAspectStyle}}"{{/if}} {{#if useDisabled}}aria-disabled="true"{{/if}}>
         <img src="{{item.img}}" alt="{{item.name}}" onerror="this.src='{{../fallbackIcon}}'">
         {{#if hudStatusBadges.magazine}}<strong class="fallout-maw-token-hud-weapon-badge magazine">{{hudStatusBadges.magazine.label}}</strong>{{/if}}
         {{#if hudStatusBadges.condition}}<strong class="fallout-maw-token-hud-weapon-badge condition {{hudStatusBadges.condition.tone}}">{{hudStatusBadges.condition.label}}</strong>{{/if}}
