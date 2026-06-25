@@ -27,6 +27,17 @@ import { selectRandomWeightedLimbKey } from "../utils/limb-randomization.mjs";
 import { evaluateActorEffectChangeNumber } from "../utils/active-effect-changes.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import {
+  beginActorDamageOp,
+  beginDamageCycle,
+  endActorDamageOp,
+  endDamageCycle,
+  isActorDamageOpActive,
+  measurePerfTiming,
+  recordPerfMetric,
+  recordSubsystemWork
+} from "../debug/perf-log.mjs";
+import { beginBulkOperation, endBulkOperation } from "../utils/bulk-operation.mjs";
 
 const DAMAGE_SOCKET = `system.${SYSTEM_ID}`;
 export const DAMAGE_APPLIED_HOOK = "fallout-maw.damageApplied";
@@ -36,7 +47,6 @@ const TRAUMA_FLAG_KEY = "trauma";
 const DAMAGE_EFFECT_FLAG_KEY = "damageEffect";
 const LIMB_LOSS_EFFECT_KIND = "limbLoss";
 const SHOCK_UNCONSCIOUS_FLAG_KEY = "shockUnconscious";
-const POSTURE_KNOCKDOWN_FLAG_KEY = "postureKnockdown";
 const FIRST_AID_TEMPORARY_EFFECT_KIND = "firstAidTemporary";
 const BLEEDING_DAMAGE_EFFECT_KIND = "bleedingDamage";
 const PERIODIC_DAMAGE_EFFECT_KIND = "periodicDamage";
@@ -418,19 +428,30 @@ async function applyDamageCycleNow(requests = []) {
   }
   if (!grouped.size) return [];
 
-  const results = [];
-  for (const [actorUuid, actorRequests] of grouped) {
-    const actor = await fromUuid(actorUuid);
-    if (!actor || (!game.user?.isGM && !actor.isOwner)) continue;
-    const actorResults = await queueActorDamageMutation(actorUuid, () => (
-      applyDamageApplicationsNow({ actorUuid, requests: actorRequests }, { createSummary: false })
-    ));
-    if (Array.isArray(actorResults)) results.push(...actorResults);
-  }
+  beginDamageCycle("damageCycle", {
+    requestCount: requests.length,
+    actorCount: grouped.size
+  });
+  beginBulkOperation();
 
-  await publishDamageSummaryMessage(results);
-  notifyDamageApplied(results);
-  return results;
+  const results = [];
+  try {
+    for (const [actorUuid, actorRequests] of grouped) {
+      const actor = await fromUuid(actorUuid);
+      if (!actor || (!game.user?.isGM && !actor.isOwner)) continue;
+      const actorResults = await queueActorDamageMutation(actorUuid, () => (
+        applyDamageApplicationsNow({ actorUuid, requests: actorRequests }, { createSummary: false })
+      ));
+      if (Array.isArray(actorResults)) results.push(...actorResults);
+    }
+
+    await publishDamageSummaryMessage(results);
+    notifyDamageApplied(results);
+    return results;
+  } finally {
+    await endBulkOperation();
+    endDamageCycle({ resultCount: results.length });
+  }
 }
 
 function stampDamageRequestsLogicalWorldTime(requests = [], logicalWorldTime) {
@@ -501,7 +522,10 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
   const actor = await fromUuid(data.actorUuid);
   if (!actor) return undefined;
   if (!game.user?.isGM && !actor.isOwner) return undefined;
+  const trackActorOp = !isActorDamageOpActive();
+  if (trackActorOp) beginActorDamageOp(actor.uuid, { requestCount: 1, mode: data.mode ?? MODE_DAMAGE });
 
+  try {
   const mode = data.mode === MODE_HEALING ? MODE_HEALING : MODE_DAMAGE;
   const scope = normalizeScope(data.scope, data.limbKey);
   if (mode === MODE_DAMAGE && scope === SCOPE_ITEM_CONDITION) {
@@ -638,6 +662,9 @@ async function applyDamageApplicationNow(request = {}, { createSummary = true } 
     notifyDamageApplied([result]);
   }
   return result;
+  } finally {
+    if (trackActorOp) endActorDamageOp(actor.uuid, { mode: data.mode ?? MODE_DAMAGE });
+  }
 }
 
 async function applyItemConditionDamageApplicationNow(actor, data = {}, { createSummary = false } = {}) {
@@ -801,6 +828,9 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
   const actor = await fromUuid(actorUuid);
   if (!actor) return undefined;
   if (!game.user?.isGM && !actor.isOwner) return undefined;
+  beginActorDamageOp(actor.uuid, { requestCount: requests.length, mode: "batch" });
+  let results = [];
+  try {
   const resourceHealthBefore = calculateAggregateHealth(actor).value;
 
   const batchRequests = [];
@@ -809,22 +839,24 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
   const resistanceOverheats = [];
   const pendingPeriodicDamageEffects = [];
   const equipmentConditionDamageState = createEquipmentConditionDamageState(actor);
-  for (const request of requests) {
-    const data = normalizeDamageRequest({ ...request, actorUuid });
-    if (data.mode !== MODE_DAMAGE) {
-      singleResults.push(await applyDamageApplicationNow(data, { createSummary: false }));
-      continue;
-    }
-    if (data.scope === SCOPE_ITEM_CONDITION) {
-      singleResults.push(await applyItemConditionDamageApplicationNow(actor, data));
-      continue;
-    }
+  await measurePerfTiming("prepareRequests", async () => {
+    for (const request of requests) {
+      const data = normalizeDamageRequest({ ...request, actorUuid });
+      if (data.mode !== MODE_DAMAGE) {
+        singleResults.push(await applyDamageApplicationNow(data, { createSummary: false }));
+        continue;
+      }
+      if (data.scope === SCOPE_ITEM_CONDITION) {
+        singleResults.push(await applyItemConditionDamageApplicationNow(actor, data));
+        continue;
+      }
 
-    const entry = await prepareDamageBatchEntry(actor, data, { equipmentConditionDamageState, pendingPeriodicDamageEffects });
-    if (entry?.damageMitigationDisplay) mitigationDisplays.push(entry.damageMitigationDisplay);
-    if (entry?.resistanceOverheat) resistanceOverheats.push(entry.resistanceOverheat);
-    if (entry?.amount > 0) batchRequests.push(entry);
-  }
+      const entry = await prepareDamageBatchEntry(actor, data, { equipmentConditionDamageState, pendingPeriodicDamageEffects });
+      if (entry?.damageMitigationDisplay) mitigationDisplays.push(entry.damageMitigationDisplay);
+      if (entry?.resistanceOverheat) resistanceOverheats.push(entry.resistanceOverheat);
+      if (entry?.amount > 0) batchRequests.push(entry);
+    }
+  });
 
   const mitigationDisplay = combineDamageMitigationDisplays(mitigationDisplays);
   if (mitigationDisplay) broadcastDamageMitigationIcon(actor, mitigationDisplay);
@@ -853,28 +885,32 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
       source: batchSource
     }
     : batchRequests.length
-      ? await applyDamageEntriesBatch(actor, batchRequests)
+      ? await measurePerfTiming("applyDamageEntriesBatch", () => applyDamageEntriesBatch(actor, batchRequests))
       : undefined;
   if (!batchPrevented) {
-    await applyEquipmentConditionDamage(actor, getEquipmentConditionDamageStateEntries(equipmentConditionDamageState));
-    await applyResistanceOverheats(actor, resistanceOverheats);
-    for (const entry of combinePendingPeriodicDamageEffects(pendingPeriodicDamageEffects)) {
-      await createPeriodicDamageEffect(actor, entry);
-    }
+    await measurePerfTiming("equipmentCondition", () => applyEquipmentConditionDamage(actor, getEquipmentConditionDamageStateEntries(equipmentConditionDamageState)));
+    await measurePerfTiming("resistanceOverheats", () => applyResistanceOverheats(actor, resistanceOverheats));
+    await measurePerfTiming("periodicEffects", async () => {
+      for (const entry of combinePendingPeriodicDamageEffects(pendingPeriodicDamageEffects)) {
+        await createPeriodicDamageEffect(actor, entry);
+      }
+    });
   }
   if (batchResult?.resourceLimitEntries?.length) {
-    for (const entry of batchResult.resourceLimitEntries) {
-      const damageType = getDamageTypeSettings().find(type => type.key === entry.damageTypeKey);
-      await createResourceLimitEffect(actor, {
-        damageType,
-        healthDelta: entry.amount,
-        source: entry.source,
-        worldTime: getDamageApplicationWorldTime(entry.source)
-      });
-    }
+    await measurePerfTiming("resourceLimitEffects", async () => {
+      for (const entry of batchResult.resourceLimitEntries) {
+        const damageType = getDamageTypeSettings().find(type => type.key === entry.damageTypeKey);
+        await createResourceLimitEffect(actor, {
+          damageType,
+          healthDelta: entry.amount,
+          source: entry.source,
+          worldTime: getDamageApplicationWorldTime(entry.source)
+        });
+      }
+    });
   }
   if (batchResult?.bleedingEntries?.length) {
-    await createCombinedBleedingDamageEffect(actor, batchResult.bleedingEntries);
+    await measurePerfTiming("bleedingEffects", () => createCombinedBleedingDamageEffect(actor, batchResult.bleedingEntries));
   }
   if (batchResult) {
     const resourceHealthAfter = calculateAggregateHealth(actor).value;
@@ -883,12 +919,15 @@ async function applyDamageApplicationsNow({ actorUuid = "", requests = [] } = {}
       resourceHealthDelta: Math.max(0, roundDamageAmount(resourceHealthBefore - resourceHealthAfter))
     };
   }
-  const results = [batchResult, ...singleResults].filter(Boolean);
+  results = [batchResult, ...singleResults].filter(Boolean);
   if (createSummary) {
     await publishDamageSummaryMessage(results);
     notifyDamageApplied(results);
   }
   return results;
+  } finally {
+    endActorDamageOp(actor.uuid, { resultCount: results?.length ?? 0 });
+  }
 }
 
 async function prepareDamageBatchEntry(actor, data = {}, { equipmentConditionDamageState = null, pendingPeriodicDamageEffects = null } = {}) {
@@ -1037,13 +1076,16 @@ async function applyDirectDamageApplication(actor, data = {}, damageType = null)
   for (const [limbKey, state] of limbStates) {
     if (!state.totalDelta) continue;
     if (isConstructPartLimb(actor, limbKey)) continue;
-    setLimbValueUpdate(updateData, actor, limbKey, state.nextValue);
+    setLimbValueUpdate(updateData, actor, limbKey, state.nextValue, { persistValue: false });
   }
   for (const [limbKey, accumulation] of damageAccumulation) {
     if (isConstructPartLimb(actor, limbKey)) continue;
     updateData[`system.limbs.${limbKey}.damageAccumulation`] = replaceDamageAccumulation(accumulation);
   }
-  if (Object.keys(updateData).length) await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
+  if (Object.keys(updateData).length) {
+    await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
+    recordSpentOnlyLimbValueValidation(actor, limbStates);
+  }
   if (actor?.type === "construct" && limbStates.size) await syncConstructPartConditionValues(actor, limbStates);
 
   if (mode === MODE_HEALING && actualHealthDelta > 0) await advanceShockUnconsciousRecovery(actor, actualHealthDelta);
@@ -1533,6 +1575,7 @@ function queueActorDamageStatusSync(actor) {
     .catch(() => undefined)
     .then(async () => {
       const freshActor = fromUuidSync(actorUuid) ?? actor;
+      recordSubsystemWork("damageStatusSync", { actorUuid });
       await synchronizeActorVitalStatuses(freshActor);
     })
     .finally(() => {
@@ -2115,33 +2158,13 @@ async function synchronizeActorVitalStatuses(actor) {
   const health = actor.health;
   const unconscious = hasShockUnconscious(actor) || (health && toInteger(health.value) <= toInteger(health.min));
   if (unconscious) await knockdownActorForIncapacitation(actor, STATUS_EFFECTS.unconscious);
-  else await clearActorPostureKnockdownState(actor);
   await setActorStatus(actor, STATUS_EFFECTS.dead, false);
   await setActorStatus(actor, STATUS_EFFECTS.unconscious, Boolean(unconscious));
 }
 
 async function knockdownActorForIncapacitation(actor, state = "") {
   if (!actor || !state) return;
-  const current = getActorPostureKnockdownState(actor);
   await setActorTokensPosture(actor, "knocked");
-  if (current === state) return;
-  await actor.setFlag(SYSTEM_ID, POSTURE_KNOCKDOWN_FLAG_KEY, {
-    state,
-    createdAt: Number(game.time?.worldTime) || 0
-  });
-}
-
-async function clearActorPostureKnockdownState(actor) {
-  if (!actor?.getFlag?.(SYSTEM_ID, POSTURE_KNOCKDOWN_FLAG_KEY)) return;
-  await actor.unsetFlag(SYSTEM_ID, POSTURE_KNOCKDOWN_FLAG_KEY);
-}
-
-function getActorPostureKnockdownState(actor) {
-  const data = actor?.getFlag?.(SYSTEM_ID, POSTURE_KNOCKDOWN_FLAG_KEY)
-    ?? actor?.flags?.[SYSTEM_ID]?.[POSTURE_KNOCKDOWN_FLAG_KEY];
-  if (typeof data === "string") return data;
-  if (data && typeof data === "object") return String(data.state ?? "");
-  return "";
 }
 
 async function performNegativeLimbShockCheck(actor, shockCheck = null) {
@@ -3701,21 +3724,34 @@ async function applyDamageEntriesBatch(actor, entries = []) {
   for (const [limbKey, state] of limbStates) {
     if (!state.totalDelta) continue;
     if (isConstructPartLimb(actor, limbKey)) continue;
-    setLimbValueUpdate(updateData, actor, limbKey, state.nextValue);
+    setLimbValueUpdate(updateData, actor, limbKey, state.nextValue, { persistValue: false });
   }
   for (const [limbKey, accumulation] of damageAccumulation) {
     if (isConstructPartLimb(actor, limbKey)) continue;
     updateData[`system.limbs.${limbKey}.damageAccumulation`] = replaceDamageAccumulation(accumulation);
   }
 
-  if (Object.keys(updateData).length) await actor.update(updateData, { falloutMawSkipDamageStatusSync: true });
-  if (actor?.type === "construct" && limbStates.size) await syncConstructPartConditionValues(actor, limbStates);
-  const destroyedLimbKeys = await applyDestroyedLimbConsequences(actor, Array.from(limbStates.keys()));
+  const actorUpdatePaths = Object.keys(foundry.utils.flattenObject(updateData));
+  recordPerfMetric("actorUpdatePathCount", actorUpdatePaths.length);
+  recordPerfMetric("limbStateCount", limbStates.size);
+  recordPerfMetric("damageAccumulationCount", damageAccumulation.size);
+  if (Object.keys(updateData).length) {
+    await measurePerfTiming("actorDamageUpdate", () => actor.update(updateData, { falloutMawSkipDamageStatusSync: true }));
+    recordSpentOnlyLimbValueValidation(actor, limbStates);
+  }
+  if (actor?.type === "construct" && limbStates.size) {
+    await measurePerfTiming("constructPartSync", () => syncConstructPartConditionValues(actor, limbStates));
+  }
+  const destroyedLimbKeys = await measurePerfTiming("destroyedLimbConsequences", () => (
+    applyDestroyedLimbConsequences(actor, Array.from(limbStates.keys()))
+  ));
   const shockCheck = aggregateNegativeLimbShockChecks(actor, shockChecks);
-  if (shockCheck) await performNegativeLimbShockCheck(actor, shockCheck);
+  if (shockCheck) await measurePerfTiming("shockCheck", () => performNegativeLimbShockCheck(actor, shockCheck));
   const destroyedLimbShockCheck = aggregateNegativeLimbShockChecks(actor, buildDestroyedLimbShockChecks(actor, destroyedLimbKeys));
-  if (destroyedLimbShockCheck) await performNegativeLimbShockCheck(actor, destroyedLimbShockCheck);
-  await queueActorDamageStatusSync(actor);
+  if (destroyedLimbShockCheck) {
+    await measurePerfTiming("destroyedLimbShockCheck", () => performNegativeLimbShockCheck(actor, destroyedLimbShockCheck));
+  }
+  await measurePerfTiming("damageStatusSync", () => queueActorDamageStatusSync(actor));
   const requestedHealthDamage = normalizedEntries.reduce((sum, entry) => sum + entry.amount, 0);
   const healthDeltasByType = buildBatchDamageNumberEntries(normalizedEntries, actualHealthDelta, requestedHealthDamage);
   const resourceLimitEntries = buildBatchDamageNumberEntries(
@@ -3736,21 +3772,27 @@ async function applyDamageEntriesBatch(actor, entries = []) {
   }
 
   const createdTraumas = [];
+  const traumaPlans = [];
   for (const [limbKey, state] of limbStates) {
     if (!state.totalDelta) continue;
     if (destroyedLimbKeys.has(limbKey)) continue;
     const [damageTypeKey, latestDamage] = Object.entries(state.damageByType)
       .sort((left, right) => right[1] - left[1])
       .at(0) ?? ["untyped", state.totalDelta];
-    createdTraumas.push(...await createTriggeredTraumas(actor, {
+    const plan = prepareTriggeredTraumaPlan(actor, {
       limbKey,
       damageTypeKey,
       previousValue: state.previousValue,
       nextValue: state.nextValue,
       latestDamage,
       damageSnapshot: state.damageAccumulationSnapshot
-    }));
+    });
+    if (plan.createData.length || plan.deleteIds.length) traumaPlans.push(plan);
   }
+  recordPerfMetric("traumaPlanCount", traumaPlans.length);
+  recordPerfMetric("traumaCreateCount", traumaPlans.reduce((sum, plan) => sum + plan.createData.length, 0));
+  recordPerfMetric("traumaDeleteCount", traumaPlans.reduce((sum, plan) => sum + plan.deleteIds.length, 0));
+  createdTraumas.push(...await measurePerfTiming("traumaCommit", () => commitTriggeredTraumaPlans(actor, traumaPlans)));
 
   const finishingBlowSource = selectBatchFinishingBlowSource(normalizedEntries);
   const totalLimbDelta = Array.from(limbStates.values()).reduce((sum, state) => sum + state.totalDelta, 0);
@@ -5402,10 +5444,23 @@ function synchronizeManualLimbValueUpdates(actor, changes = {}) {
   }
 }
 
-function setLimbValueUpdate(updateData, actor, limbKey, value) {
+function setLimbValueUpdate(updateData, actor, limbKey, value, { persistValue = true } = {}) {
   const limb = actor?.system?.limbs?.[limbKey];
-  setUpdatePath(updateData, `system.limbs.${limbKey}.value`, value);
+  if (persistValue) setUpdatePath(updateData, `system.limbs.${limbKey}.value`, value);
   setUpdatePath(updateData, `system.limbs.${limbKey}.spent`, calculateLimbSpentFromValue(limb, value));
+}
+
+function recordSpentOnlyLimbValueValidation(actor, limbStates = new Map()) {
+  let checked = 0;
+  let mismatches = 0;
+  for (const [limbKey, state] of limbStates) {
+    if (!state?.totalDelta) continue;
+    if (isConstructPartLimb(actor, limbKey)) continue;
+    checked += 1;
+    if (toInteger(actor.system?.limbs?.[limbKey]?.value) !== toInteger(state.nextValue)) mismatches += 1;
+  }
+  recordPerfMetric("spentOnlyLimbValueChecked", checked);
+  recordPerfMetric("spentOnlyLimbValueMismatches", mismatches);
 }
 
 function calculateLimbSpentFromValue(limb, value) {
@@ -5992,6 +6047,8 @@ async function applyEquipmentConditionDamage(actor, entries = []) {
     });
   }
 
+  recordPerfMetric("equipmentConditionUpdateCount", updates.length);
+  recordPerfMetric("equipmentConditionBrokenProstheses", brokenProstheses.length);
   if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
   if (prosthesisHealthChanged) await queueActorDamageStatusSync(actor);
   for (const item of brokenProstheses) {
@@ -6281,15 +6338,29 @@ function diluteDamageAccumulation(accumulation, healingAmount) {
 }
 
 async function createTriggeredTraumas(actor, { limbKey, damageTypeKey, previousValue, nextValue, latestDamage, damageSnapshot = null } = {}) {
+  return commitTriggeredTraumaPlans(actor, [
+    prepareTriggeredTraumaPlan(actor, {
+      limbKey,
+      damageTypeKey,
+      previousValue,
+      nextValue,
+      latestDamage,
+      damageSnapshot
+    })
+  ]);
+}
+
+function prepareTriggeredTraumaPlan(actor, { limbKey, damageTypeKey, previousValue, nextValue, latestDamage, damageSnapshot = null } = {}) {
   const limb = actor.system?.limbs?.[limbKey];
-  if (!limb || toInteger(limb.max) <= 0) return [];
+  const empty = { createData: [], deleteIds: [] };
+  if (!limb || toInteger(limb.max) <= 0) return empty;
 
   const creatureOptions = getCreatureOptions();
   const damageTypes = getDamageTypeSettings();
   const traumaSettings = getTraumaSettings(creatureOptions, damageTypes);
   const traumaGroup = getTraumaGroupForActor(actor, traumaSettings, creatureOptions, damageTypes);
   const stages = traumaGroup.config?.limbs?.[limbKey]?.stages ?? [];
-  if (!stages.length) return [];
+  if (!stages.length) return empty;
 
   const max = toInteger(limb.max);
   const previousPercent = (previousValue / max) * 100;
@@ -6301,7 +6372,7 @@ async function createTriggeredTraumas(actor, { limbKey, damageTypeKey, previousV
     && nextPercent <= Number(stage.thresholdPercent)
     && !existingLimbTraumas.some(item => hasTraumaStageEntry(item, stage, limbKey, damageTypes))
   )).sort((left, right) => Number(right.thresholdPercent) - Number(left.thresholdPercent));
-  if (!triggeredStages.length) return [];
+  if (!triggeredStages.length) return empty;
 
   const snapshot = normalizeDamageAccumulation(damageSnapshot ?? actor.system?.limbs?.[limbKey]?.damageAccumulation ?? {});
 
@@ -6319,7 +6390,7 @@ async function createTriggeredTraumas(actor, { limbKey, damageTypeKey, previousV
     }))
     .filter(Boolean);
 
-  if (!progressionData.length) return [];
+  if (!progressionData.length) return empty;
   const finalTraumaData = mergeEscalatedTraumaData({
     finalTraumaData: progressionData.at(-1),
     previousTraumas: existingLimbTraumas,
@@ -6327,13 +6398,24 @@ async function createTriggeredTraumas(actor, { limbKey, damageTypeKey, previousV
     damageTypes
   });
 
-  const created = await actor.createEmbeddedDocuments("Item", [finalTraumaData], {
+  return {
+    createData: [finalTraumaData],
+    deleteIds: existingLimbTraumas.map(item => item.id)
+  };
+}
+
+async function commitTriggeredTraumaPlans(actor, plans = []) {
+  const createData = plans.flatMap(plan => plan?.createData ?? []);
+  const deleteIds = Array.from(new Set(plans.flatMap(plan => plan?.deleteIds ?? [])));
+  if (!createData.length && !deleteIds.length) return [];
+
+  const created = createData.length
+    ? await actor.createEmbeddedDocuments("Item", createData, {
     [TRAUMA_CREATE_OPTION]: true,
     animate: false
-  });
-  if (existingLimbTraumas.length) {
-    await actor.deleteEmbeddedDocuments("Item", existingLimbTraumas.map(item => item.id), { animate: false });
-  }
+  })
+    : [];
+  if (deleteIds.length) await actor.deleteEmbeddedDocuments("Item", deleteIds, { animate: false });
   return created;
 }
 

@@ -82,6 +82,7 @@ import {
 } from "./utils/inventory-containers.mjs";
 import { escapeHTML, getActorInventoryGridDimensions, getActorRootInventoryGridOptions } from "./utils/actor-display-data.mjs";
 import { toInteger } from "./utils/numbers.mjs";
+import { registerPerfProfiler } from "./debug/perf-log.mjs";
 import { resolveWorldItemSync } from "./utils/world-items.mjs";
 
 const { DialogV2 } = foundry.applications.api;
@@ -92,6 +93,7 @@ let worldSceneReferenceRepairTimeout = 0;
 
 Hooks.once("init", () => {
   console.log(`${FALLOUT_MAW.title} | Initializing system`);
+  registerPerfProfiler();
 
   CONFIG.FalloutMaW = syncSystemConfig();
   CONFIG.Actor.documentClass = FalloutMaWActor;

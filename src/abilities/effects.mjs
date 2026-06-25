@@ -14,6 +14,8 @@ import {
   getAuraGeneratedTargetTokens
 } from "./aura-conditions.mjs";
 import { prepareEffectChangeForApplication } from "../utils/effect-change-values.mjs";
+import { recordSubsystemWork } from "../debug/perf-log.mjs";
+import { deferAbilityEffectSync, deferAuraStateSync, registerBulkOperationFlusher } from "../utils/bulk-operation.mjs";
 
 const ABILITY_EFFECT_FLAG_KEY = "abilityEffect";
 const ITEM_EFFECT_FLAG_KEY = "itemEffect";
@@ -31,6 +33,7 @@ let processingAuraEffects = false;
 let auraStateSyncRequested = false;
 
 export function registerAbilityEffectHooks() {
+  registerBulkOperationFlusher(flushDeferredAbilityEffectSyncs);
   Hooks.on("createItem", item => {
     if (item?.type === "ability" || isEquipmentItem(item) || hasItemFreeSettingsFunction(item)) {
       queueActorAbilityEffectSync(item.parent, {}, {
@@ -177,6 +180,7 @@ function queueCoverAbilityEffectSync(actor) {
 function queueActorAbilityEffectSync(actor, context = {}, { aura = false } = {}) {
   const actorUuid = actor?.uuid;
   if (!actorUuid || !game.user?.isActiveGM) return;
+  if (deferAbilityEffectSync(actor, context, { aura })) return;
 
   const queued = queuedActorSyncs.get(actorUuid) ?? { actor, context: {}, aura: false };
   queued.actor = actor;
@@ -201,11 +205,20 @@ function queueActorAbilityEffectSync(actor, context = {}, { aura = false } = {})
   }, ACTOR_EFFECT_SYNC_DELAY_MS));
 }
 
+function flushDeferredAbilityEffectSyncs(context) {
+  for (const entry of context?.abilityActors?.values?.() ?? []) {
+    const freshActor = fromUuidSync(entry.actor?.uuid ?? "") ?? entry.actor;
+    queueActorAbilityEffectSync(freshActor, entry.context, { aura: entry.aura });
+  }
+  if (context?.auraState) queueAuraStateSync();
+}
+
 export async function syncActorAbilityEffects(actor, context = {}) {
   if (!actor || !game.user?.isActiveGM) return;
   if (!["character", "construct"].includes(actor.type)) return;
   if (processingActors.has(actor.uuid)) return;
 
+  recordSubsystemWork("abilityEffectSync", { actorUuid: actor.uuid });
   processingActors.add(actor.uuid);
   try {
     const abilityItems = actor.items?.filter(item => item.type === "ability") ?? [];
@@ -307,6 +320,7 @@ async function syncSingleItemFreeSettingsEffect(actor, item, context = {}) {
 
 function queueAuraStateSync() {
   if (!game.user?.isActiveGM) return;
+  if (deferAuraStateSync()) return;
   auraStateSyncRequested = true;
   globalThis.clearTimeout(auraStateSyncTimer);
   auraStateSyncTimer = globalThis.setTimeout(() => {
@@ -322,6 +336,7 @@ export async function syncAuraGeneratedEffects() {
     return;
   }
 
+  recordSubsystemWork("auraStateSync");
   processingAuraEffects = true;
   try {
     do {

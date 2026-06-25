@@ -7,6 +7,7 @@ import {
 } from "../combat/reaction-resources.mjs";
 import { prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 import { notifyCombatResourcesSpent } from "../combat/resource-spending.mjs";
+import { deferActorPosture, registerBulkOperationFlusher } from "../utils/bulk-operation.mjs";
 
 export const POSTURE_CHANGE_ACTION_POINT_COST = 3;
 export const POSTURE_EFFECT_CHANGE_ROOT = "system.postures";
@@ -69,6 +70,7 @@ const SELECTABLE_MOVEMENT_ACTIONS = new Set([...Object.keys(POSTURE_ACTION_CONFI
 
 export function registerPostureMovementHooks() {
   configureTokenMovementActions();
+  registerBulkOperationFlusher(flushDeferredActorPostures);
   Hooks.on("preUpdateToken", onPreUpdateTokenPostureMovement);
   Hooks.on("updateToken", onUpdateTokenPostureMovement);
   Hooks.on("renderTokenHUD", decorateTokenHudPosturePalette);
@@ -98,10 +100,43 @@ export function getActorPostureAction(actor) {
 
 export async function setActorTokensPosture(actor, action = "walk") {
   const nextAction = POSTURE_ACTION_CONFIGS[normalizeMovementAction(action)] ? normalizeMovementAction(action) : "walk";
+  if (deferActorPosture(actor, nextAction)) return;
+  return applyActorTokensPosture(actor, nextAction);
+}
+
+async function flushDeferredActorPostures(context) {
+  const entries = Array.from(context?.postureActors?.values?.() ?? []);
+  if (!entries.length) return;
+  const updatesByScene = new Map();
+  for (const { actor, action } of entries) {
+    const freshActor = fromUuidSync(actor?.uuid ?? "") ?? actor;
+    collectActorPostureUpdates(updatesByScene, freshActor, action);
+  }
+  await applyScenePostureUpdates(updatesByScene);
+}
+
+async function applyActorTokensPosture(actor, action = "walk") {
+  const updatesByScene = new Map();
+  collectActorPostureUpdates(updatesByScene, actor, action);
+  await applyScenePostureUpdates(updatesByScene);
+}
+
+function collectActorPostureUpdates(updatesByScene, actor, action = "walk") {
+  const nextAction = POSTURE_ACTION_CONFIGS[normalizeMovementAction(action)] ? normalizeMovementAction(action) : "walk";
   for (const tokenDocument of getActorTokenDocuments(actor)) {
     if (normalizeMovementAction(tokenDocument?._source?.movementAction) === nextAction) continue;
-    await tokenDocument.update({ movementAction: nextAction }, { [AUTOMATIC_POSTURE_OPTION]: true });
+    const scene = tokenDocument?.parent;
+    if (!scene || !tokenDocument.id) continue;
+    const updates = updatesByScene.get(scene) ?? [];
+    updates.push({ _id: tokenDocument.id, movementAction: nextAction });
+    updatesByScene.set(scene, updates);
   }
+}
+
+async function applyScenePostureUpdates(updatesByScene) {
+  await Promise.all(Array.from(updatesByScene, ([scene, updates]) => (
+    scene.updateEmbeddedDocuments("Token", updates, { [AUTOMATIC_POSTURE_OPTION]: true })
+  )));
 }
 
 function configureTokenMovementActions() {

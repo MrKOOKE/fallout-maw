@@ -18,6 +18,12 @@ import {
   registerMovementInterruptionProvider
 } from "../canvas/movement-interruptions.mjs";
 import { canTokenPhysicallySeeTarget } from "../combat/weapon-attack-controller.mjs";
+import { recordSubsystemWork } from "../debug/perf-log.mjs";
+import {
+  deferStealthActorRefresh,
+  deferStealthedTokenVisibilityRefresh,
+  registerBulkOperationFlusher
+} from "../utils/bulk-operation.mjs";
 import {
   DEFAULT_FACTION_NAME,
   getActorFactionBelongs,
@@ -61,6 +67,7 @@ let pendingDetectionVisualizationRefreshAfterMovement = false;
 
 export function registerStealthHooks() {
   if (hooksRegistered) return;
+  registerBulkOperationFlusher(flushDeferredStealthRefreshes);
   patchStealthAllyVisibilityDetection();
   if (game.ready) registerStealthSocket();
   else Hooks.once("ready", registerStealthSocket);
@@ -514,6 +521,8 @@ function onTokenMoved(tokenDocument, movement = {}) {
 
 function refreshStealthWindowsForActor(actor) {
   if (!actor) return;
+  if (deferStealthActorRefresh(actor)) return;
+  recordSubsystemWork("stealthActorRefresh", { actorUuid: actor.uuid });
   for (const [tokenId, app] of stealthWindows) {
     const token = canvas?.tokens?.get(tokenId);
     if (!token || token.actor?.uuid !== actor.uuid) continue;
@@ -637,11 +646,21 @@ function queueDetectionVisualizationRefresh() {
 
 function queueStealthedTokenVisibilityRefresh() {
   if (!canvas?.ready || refreshStealthedTokenVisibilityTimeout) return;
+  if (deferStealthedTokenVisibilityRefresh()) return;
+  recordSubsystemWork("stealthVisibilityRefresh");
   const schedule = globalThis.window?.setTimeout ?? globalThis.setTimeout;
   refreshStealthedTokenVisibilityTimeout = schedule(() => {
     refreshStealthedTokenVisibilityTimeout = null;
     refreshStealthedTokenVisibility();
   }, 25);
+}
+
+function flushDeferredStealthRefreshes(context) {
+  for (const actor of context?.stealthActors?.values?.() ?? []) {
+    const freshActor = fromUuidSync(actor?.uuid ?? "") ?? actor;
+    refreshStealthWindowsForActor(freshActor);
+  }
+  if (context?.stealthVisibility) queueStealthedTokenVisibilityRefresh();
 }
 
 function refreshStealthedTokenVisibility() {

@@ -24,17 +24,36 @@ const EPSILON = 0.000001;
 
 export function registerLightSourceHooks() {
   registerQueuedWorldTimeProcessor(processLightSourceWorldTime, { priority: -20 });
-  Hooks.on("updateItem", item => {
+  Hooks.on("updateItem", (item, changes) => {
     if (!item?.parent) return;
+    if (!isLightSourceItemUpdateRelevant(item, changes)) return;
     void syncActorLightSourceTokens(item.parent);
   });
   Hooks.on("deleteItem", item => {
     if (!item?.parent) return;
+    if (!isLightSourceRelevantItem(item)) return;
     void syncActorLightSourceTokens(item.parent);
   });
   Hooks.on("canvasReady", () => {
     void syncSceneLightSources(canvas?.scene);
   });
+}
+
+function isLightSourceItemUpdateRelevant(item = null, changes = {}) {
+  if (isLightSourceRelevantItem(item)) return true;
+  return Object.keys(foundry.utils.flattenObject(changes ?? {})).some(path => (
+    path.startsWith("system.functions.lightSource")
+    || path.startsWith("system.functions.energyConsumer")
+    || path.startsWith("system.functions.energySource")
+  ));
+}
+
+function isLightSourceRelevantItem(item = null) {
+  return Boolean(
+    hasItemFunction(item, ITEM_FUNCTIONS.lightSource, { ignoreBroken: true })
+    || hasItemFunction(item, ITEM_FUNCTIONS.energyConsumer, { ignoreBroken: true })
+    || hasItemFunction(item, ITEM_FUNCTIONS.energySource, { ignoreBroken: true })
+  );
 }
 
 export function getLightSourceDisplayName(item = null) {

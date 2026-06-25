@@ -1,6 +1,7 @@
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { isTravelGroupCarrierActor } from "../global-map/travel-group-data.mjs";
 import { SYSTEM_ID, TEMPLATES } from "../constants.mjs";
+import { recordSubsystemWork } from "../debug/perf-log.mjs";
 import {
   getCreatureOptions,
   getActorNeedSettings,
@@ -252,6 +253,7 @@ export function refreshTokenActionHudForActor(actor) {
 }
 
 function scheduleTokenActionHudRefresh() {
+  recordSubsystemWork("tokenActionHudRefresh");
   tokenActionHudRefresh?.();
 }
 
