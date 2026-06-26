@@ -5820,6 +5820,7 @@ label.fallout-maw-mitigation-cell {
 .application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-advancement-section-title,
 .application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-advancement-row,
 .application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-advancement-skill-row,
+.application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-advancement-proficiency-row,
 .application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-advancement-talents-details,
 .application.fallout-maw-advancement-app.fallout-maw-advancement-gm-mode .fallout-maw-advancement-talent-details-name {
   border-color: rgba(74, 164, 230, 0.24);
@@ -6216,6 +6217,80 @@ label.fallout-maw-mitigation-cell {
   border-color: rgba(231, 198, 120, 0.44);
   color: var(--fallout-maw-adv-accent-strong);
   box-shadow: inset 0 0 0 1px rgba(241, 214, 151, 0.06);
+}
+
+.fallout-maw-advancement-proficiencies-section {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.fallout-maw-advancement-proficiency-points {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.fallout-maw-advancement-proficiencies {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fallout-maw-advancement-proficiency-row {
+  background: rgba(10, 10, 8, 0.62);
+  border: 1px solid rgba(212, 181, 93, 0.18);
+  display: grid;
+  gap: 0.52rem;
+  min-width: 0;
+  padding: 0.65rem;
+}
+
+.fallout-maw-advancement-proficiency-row:hover {
+  background: rgba(212, 181, 93, 0.045);
+  border-color: rgba(212, 181, 93, 0.28);
+}
+
+.fallout-maw-advancement-proficiency-row .fallout-maw-resource-card-header {
+  min-height: 1.55rem;
+}
+
+.fallout-maw-advancement-proficiency-row .fallout-maw-resource-value {
+  color: var(--fallout-maw-adv-accent-strong);
+  font-family: var(--fallout-maw-adv-mono-font);
+  font-size: 0.95rem;
+}
+
+.fallout-maw-advancement-proficiency-meter {
+  height: 0.9rem;
+}
+
+.fallout-maw-advancement-proficiency-phantom {
+  background: linear-gradient(180deg, rgba(246, 221, 148, 0.62), rgba(176, 138, 74, 0.48));
+  bottom: 1px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 12px rgba(246, 221, 148, 0.18);
+  display: block;
+  pointer-events: none;
+  position: absolute;
+  top: 1px;
+  z-index: 2;
+}
+
+.fallout-maw-advancement-proficiency-phantom[hidden] {
+  display: none;
+}
+
+.fallout-maw-advancement-proficiency-slider {
+  accent-color: var(--fallout-maw-adv-accent);
+  cursor: pointer;
+  margin: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.fallout-maw-advancement-proficiency-slider:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .fallout-maw-advancement-footer {
@@ -14857,6 +14932,7 @@ html.fallout-maw-token-action-hud-open #hotbar {
   .fallout-maw-advancement-skills-footer,
   .fallout-maw-advancement-characteristics,
   .fallout-maw-advancement-skills,
+  .fallout-maw-advancement-proficiencies,
   .fallout-maw-advancement-skill-row,
   .fallout-maw-advancement-row,
   .fallout-maw-advancement-details-row,

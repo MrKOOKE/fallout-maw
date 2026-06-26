@@ -1,6 +1,6 @@
 import { toInteger } from "../utils/numbers.mjs";
 
-export function createDefaultActorDevelopment(characteristicSettings = [], skillSettings = []) {
+export function createDefaultActorDevelopment(characteristicSettings = [], skillSettings = [], proficiencySettings = []) {
   return {
     initialized: false,
     experience: 0,
@@ -14,12 +14,13 @@ export function createDefaultActorDevelopment(characteristicSettings = [], skill
     },
     characteristics: Object.fromEntries(characteristicSettings.map(entry => [entry.key, 0])),
     traits: {},
+    proficiencies: Object.fromEntries(proficiencySettings.map(entry => [entry.key, 0])),
     skills: Object.fromEntries(skillSettings.map(entry => [entry.key, { points: 0, signature: false }]))
   };
 }
 
-export function normalizeActorDevelopment(development = {}, characteristicSettings = [], skillSettings = []) {
-  const defaults = createDefaultActorDevelopment(characteristicSettings, skillSettings);
+export function normalizeActorDevelopment(development = {}, characteristicSettings = [], skillSettings = [], proficiencySettings = []) {
+  const defaults = createDefaultActorDevelopment(characteristicSettings, skillSettings, proficiencySettings);
 
   return {
     initialized: Boolean(development?.initialized),
@@ -36,14 +37,17 @@ export function normalizeActorDevelopment(development = {}, characteristicSettin
       characteristicSettings.map(entry => [entry.key, Math.max(0, toInteger(development?.characteristics?.[entry.key]))])
     ),
     traits: normalizeTraitSpending(development?.traits),
+    proficiencies: Object.fromEntries(
+      proficiencySettings.map(entry => [entry.key, Math.max(0, toInteger(development?.proficiencies?.[entry.key]))])
+    ),
     skills: Object.fromEntries(
       skillSettings.map(entry => [entry.key, normalizeSkillDevelopment(development?.skills?.[entry.key])])
     )
   };
 }
 
-export function cloneActorDevelopment(development = {}, characteristicSettings = [], skillSettings = []) {
-  return foundry.utils.deepClone(normalizeActorDevelopment(development, characteristicSettings, skillSettings));
+export function cloneActorDevelopment(development = {}, characteristicSettings = [], skillSettings = [], proficiencySettings = []) {
+  return foundry.utils.deepClone(normalizeActorDevelopment(development, characteristicSettings, skillSettings, proficiencySettings));
 }
 
 function normalizeSkillDevelopment(entry = {}) {

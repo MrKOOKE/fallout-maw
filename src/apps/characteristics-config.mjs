@@ -21,6 +21,9 @@ export class CharacteristicsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       createCharacteristic: this.#onCreateCharacteristic,
       deleteCharacteristic: this.#onDeleteCharacteristic,

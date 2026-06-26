@@ -165,6 +165,9 @@ export class PersonalNameRandomizerConfig extends FalloutMaWFormApplicationV2 {
     id: "fallout-maw-personal-name-randomizer",
     classes: ["fallout-maw", "fallout-maw-config-form", "fallout-maw-personal-name-randomizer"],
     position: { width: 760, height: "auto" },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       createBlock: this.#onCreateBlock,
       deleteBlock: this.#onDeleteBlock,

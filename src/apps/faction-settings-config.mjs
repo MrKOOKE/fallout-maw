@@ -34,6 +34,9 @@ export class FactionSettingsConfig extends FalloutMaWFormApplicationV2 {
       width: 620,
       height: "auto"
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       createFaction: this.#onCreateFaction,
       deleteFaction: this.#onDeleteFaction,
@@ -123,6 +126,9 @@ export class ActorFactionConfig extends FalloutMaWFormApplicationV2 {
     position: {
       width: 780,
       height: "auto"
+    },
+    form: {
+      closeOnSubmit: true
     }
   };
 

@@ -34,6 +34,9 @@ export class DiseaseSettingsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       addDisease: this.#onAddDisease,
       deleteDisease: this.#onDeleteDisease,

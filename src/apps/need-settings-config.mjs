@@ -34,6 +34,9 @@ export class NeedSettingsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       createNeed: this.#onCreateNeed,
       deleteNeed: this.#onDeleteNeed,

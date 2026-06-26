@@ -33,6 +33,9 @@ export class SkillFormulasConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       createSkill: this.#onCreateSkill,
       createSkillCostThreshold: this.#onCreateSkillCostThreshold,

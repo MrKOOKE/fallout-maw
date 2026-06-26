@@ -5,6 +5,7 @@ import {
   DEFAULT_LIMBS,
   DEFAULT_LOAD_FORMULA,
   DEFAULT_LOAD_LIMIT_PERCENT,
+  DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA,
   DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
   DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA,
   DEFAULT_WEAPON_SETS
@@ -38,7 +39,8 @@ export function createRaceDefaults(characteristics = [], damageTypes = []) {
     needSettings: createDefaultNeedSettings(),
     progression: {
       skillPointsPerLevel: DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA,
-      researchPointsPerLevel: DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA
+      researchPointsPerLevel: DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
+      proficiencyPointsPerLevel: DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
     }
   };
 }
@@ -118,6 +120,10 @@ export function normalizeCreatureOptions(options = {}, characteristics = [], dam
           researchPointsPerLevel: normalizeProgressionFormula(
             race.progression?.researchPointsPerLevel,
             DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA
+          ),
+          proficiencyPointsPerLevel: normalizeProgressionFormula(
+            race.progression?.proficiencyPointsPerLevel,
+            DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
           )
         }
       };

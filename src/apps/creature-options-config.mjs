@@ -1,4 +1,5 @@
 import { TEMPLATES } from "../constants.mjs";
+import { DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA } from "../config/defaults.mjs";
 import { IDENTIFIER_PATTERN, validateFormula } from "../formulas/index.mjs";
 import {
   getAbilityCatalog,
@@ -62,6 +63,9 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     },
     window: {
       resizable: true
+    },
+    form: {
+      closeOnSubmit: true
     },
     actions: {
       selectType: this.#onSelectType,
@@ -727,7 +731,9 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
     race.needSettings = this.#readRaceNeedsFromForm();
     race.progression = {
       skillPointsPerLevel: String(formData.race?.progression?.skillPointsPerLevel ?? "10 + int").trim() || "10 + int",
-      researchPointsPerLevel: String(formData.race?.progression?.researchPointsPerLevel ?? "1000").trim() || "1000"
+      researchPointsPerLevel: String(formData.race?.progression?.researchPointsPerLevel ?? "1000").trim() || "1000",
+      proficiencyPointsPerLevel: String(formData.race?.progression?.proficiencyPointsPerLevel ?? DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA).trim()
+        || DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
     };
   }
 
@@ -867,7 +873,8 @@ export class CreatureOptionsConfig extends FalloutMaWFormApplicationV2 {
 
       for (const [key, label] of [
         ["skillPointsPerLevel", localize("FALLOUTMAW.Settings.CreatureOptions.SkillPointsPerLevel")],
-        ["researchPointsPerLevel", localize("FALLOUTMAW.Settings.CreatureOptions.ResearchPointsPerLevel")]
+        ["researchPointsPerLevel", localize("FALLOUTMAW.Settings.CreatureOptions.ResearchPointsPerLevel")],
+        ["proficiencyPointsPerLevel", localize("FALLOUTMAW.Settings.CreatureOptions.ProficiencyPointsPerLevel")]
       ]) {
         try {
           validateFormula(race.progression?.[key] ?? "0", { characteristics });

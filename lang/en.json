@@ -175,6 +175,7 @@
       "Progression": "Level Up",
       "Race": "Race",
       "Subtype": "Subtype",
+      "ProficiencyPointsPerLevel": "Proficiency Points per Level",
       "ResearchPointsPerLevel": "Research Points per Level",
       "SkillPointsPerLevel": "Skill Points per Level",
       "UnlockCoreFields": "Unlock Core Fields"
@@ -727,6 +728,7 @@
         "NoWeaponSets": "No weapon sets.",
         "NoWeaponSlots": "No weapon slots.",
         "ProficiencyPoints": "Proficiency points",
+        "ProficiencyPointsPerLevel": "Proficiency points per level",
         "Progression": "Level Up",
         "RaceNamePlaceholder": "Race name",
         "RaceSection": "Race",

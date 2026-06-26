@@ -18,6 +18,9 @@ export class ActorTradeSettingsConfig extends FalloutMaWFormApplicationV2 {
     },
     window: {
       resizable: true
+    },
+    form: {
+      closeOnSubmit: true
     }
   };
 

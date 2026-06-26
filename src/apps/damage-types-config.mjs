@@ -29,6 +29,9 @@ export class DamageTypesConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       createDamageType: this.#onCreateDamageType,
       deleteDamageType: this.#onDeleteDamageType,

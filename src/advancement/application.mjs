@@ -10,12 +10,14 @@ import {
   getCreatureOptions,
   getAbilityCatalog,
   getLevelSettings,
+  getProficiencySettings,
   getSkillAdvancementSettings,
   getSkillDevelopmentCostSettings,
   getSkillSettings
 } from "../settings/accessors.mjs";
 import { evaluateFormula } from "../formulas/index.mjs";
 import {
+  DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA,
   DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
   DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
 } from "../config/defaults.mjs";
@@ -32,6 +34,7 @@ import { TEMPLATES } from "../constants.mjs";
 import { localize } from "../utils/i18n.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
+import { prepareIndicatorEntry as prepareDisplayIndicatorEntry } from "../utils/actor-display-data.mjs";
 import { getOverlayBaseZIndex } from "../utils/overlay-layer.mjs";
 import { FalloutMaWFormApplicationV2 } from "../apps/base-form-application-v2.mjs";
 
@@ -39,6 +42,7 @@ const { DialogV2 } = foundry.applications.api;
 const TextEditor = foundry.applications.ux.TextEditor.implementation;
 const ADVANCEMENT_COMMIT_FLAG = "advancementCommit";
 const ADVANCEMENT_UPDATE_SOURCE_OPTION = "falloutMawAdvancementApplicationId";
+const ADVANCEMENT_PAGES = ["development", "abilities", "proficiencies"];
 const REPEAT_INITIAL_DELAY_MS = 180;
 const REPEAT_INTERVAL_MS = 45;
 
@@ -153,6 +157,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     await this.#ensureDraft();
 
     const characteristicSettings = getCharacteristicSettings();
+    const proficiencySettings = getProficiencySettings();
     const skillSettings = getSkillSettings();
     const skillAdvancementSettings = getSkillAdvancementSettings(characteristicSettings, skillSettings);
     const skillAdvancementBaseBonuses = getAbilitySkillAdvancementBaseBonuses(this.actor, skillSettings);
@@ -188,6 +193,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const abilityCategories = await this.#prepareAbilityCategories(remaining, skillSettings, abilityRequirementContext);
     const selectedAbility = this.#prepareSelectedAbility(abilityCategories);
     const pointDisplays = this.#preparePointDisplays(remaining);
+    const pageIndex = this.#getPageIndex();
 
     return {
       ...(await super._prepareContext(options)),
@@ -211,14 +217,24 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
         characteristicSettings,
         DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA
       ),
+      proficiencyPointsPerLevel: evaluateProgressionFormula(
+        this.actor.system?.progression?.proficiencyPointsPerLevel,
+        liveCharacteristics,
+        characteristicSettings,
+        DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
+      ),
       characteristicPointsDisplay: pointDisplays.characteristics,
       skillPointsDisplay: pointDisplays.skills,
       signatureSkillPointsDisplay: pointDisplays.signatureSkills,
       traitPointsDisplay: pointDisplays.traits,
       researchPointsDisplay: pointDisplays.researches,
+      proficiencyPointsDisplay: pointDisplays.proficiencies,
       page: this.#page,
       isDevelopmentPage: this.#page === "development",
+      isProficienciesPage: this.#page === "proficiencies",
       isAbilitiesPage: this.#page === "abilities",
+      isFirstPage: pageIndex <= 0,
+      isLastPage: pageIndex >= (ADVANCEMENT_PAGES.length - 1),
       characteristics: characteristicSettings.map(characteristic => {
         const floorPoints = toInteger(this.#floor.development.characteristics?.[characteristic.key]);
         const currentPoints = toInteger(this.#draft.development.characteristics?.[characteristic.key]);
@@ -287,6 +303,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
           })
         };
       }),
+      proficiencies: proficiencySettings.map(proficiency => this.#prepareProficiencyEntry(proficiency, remaining)),
       abilityCategories,
       selectedAbility
     };
@@ -303,6 +320,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     this.#syncGMModeFrame();
     this.#clearAbilityDescriptionTooltip();
     this.#activateRepeatButtons();
+    this.#activateProficiencySliders();
     this.#activateAbilitySearch();
     this.#activateAbilityDescriptionTooltips();
     this.#activateSkillCostTooltips();
@@ -311,6 +329,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
   #syncPageClass() {
     this.element?.classList.toggle("fallout-maw-advancement-page-abilities", this.#page === "abilities");
+    this.element?.classList.toggle("fallout-maw-advancement-page-proficiencies", this.#page === "proficiencies");
   }
 
   #syncGMModeFrame() {
@@ -434,6 +453,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       getCharacteristicSettings(),
       DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA
     );
+    this.#draft.development.points.proficiencies += evaluateProgressionFormula(
+      this.actor.system?.progression?.proficiencyPointsPerLevel,
+      this.actor.system?.characteristics,
+      getCharacteristicSettings(),
+      DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
+    );
     await this.#applyDraftToActor();
     return this.forceRender();
   }
@@ -458,18 +483,18 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
 
     this.#draft.level = 1;
     this.#draft.characteristics = foundry.utils.deepClone(resetData.characteristics);
+    this.#draft.proficiencies = this.#getProficiencyValuesFromResourceMap(resetData.proficiencies, getProficiencySettings());
     this.#draft.development = foundry.utils.deepClone(resetData.development);
     this.#researchPointSessionSpent = 0;
     const abilityItemIds = this.actor.items
       .filter(item => item.type === "ability")
       .map(item => item.id);
     if (abilityItemIds.length) await this.actor.deleteEmbeddedDocuments("Item", abilityItemIds);
-    await this.#applyDraftToActor({
-      "system.proficiencies": foundry.utils.deepClone(resetData.proficiencies)
-    });
+    await this.#applyDraftToActor();
     await this.actor.setFlag(FALLOUT_MAW.id, ADVANCEMENT_COMMIT_FLAG, {
       level: this.#draft.level,
       characteristics: foundry.utils.deepClone(this.#draft.characteristics),
+      proficiencies: foundry.utils.deepClone(this.#draft.proficiencies),
       development: foundry.utils.deepClone(this.#draft.development)
     });
     this.#snapshot = foundry.utils.deepClone(this.#draft);
@@ -482,17 +507,19 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (this.#draft) return;
 
     const characteristicSettings = getCharacteristicSettings();
+    const proficiencySettings = getProficiencySettings();
     const skillSettings = getSkillSettings();
     const development = await this.actor.ensureDevelopmentInitialized();
-    const normalized = cloneActorDevelopment(development, characteristicSettings, skillSettings);
+    const normalized = cloneActorDevelopment(development, characteristicSettings, skillSettings, proficiencySettings);
     const currentState = {
       level: Math.max(1, toInteger(this.actor.system?.attributes?.level)),
       characteristics: Object.fromEntries(
         characteristicSettings.map(characteristic => [characteristic.key, toInteger(this.actor.system?._source?.characteristics?.[characteristic.key] ?? this.actor.system?.characteristics?.[characteristic.key])])
       ),
-      development: cloneActorDevelopment(normalized, characteristicSettings, skillSettings)
+      proficiencies: this.#getActorProficiencyValues(proficiencySettings),
+      development: cloneActorDevelopment(normalized, characteristicSettings, skillSettings, proficiencySettings)
     };
-    const committed = this.#readCommittedState(characteristicSettings, skillSettings) ?? currentState;
+    const committed = this.#readCommittedState(characteristicSettings, skillSettings, proficiencySettings) ?? currentState;
 
     this.#snapshot = foundry.utils.deepClone(committed);
     this.#draft = foundry.utils.deepClone(currentState);
@@ -504,6 +531,33 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       button.addEventListener("click", event => this.#onRepeatButtonClick(event));
       button.addEventListener("pointerdown", event => this.#onRepeatButtonPointerDown(event));
     }
+  }
+
+  #activateProficiencySliders() {
+    for (const input of this.element?.querySelectorAll?.("[data-proficiency-slider]") ?? []) {
+      input.addEventListener("input", event => {
+        void this.#onProficiencySliderInput(event);
+      });
+      input.addEventListener("change", event => {
+        void this.#onProficiencySliderInput(event, { flush: true });
+      });
+    }
+  }
+
+  async #onProficiencySliderInput(event, { flush = false } = {}) {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+
+    await this.#ensureDraft();
+    const key = target.dataset.proficiencyKey ?? "";
+    if (!key) return;
+
+    const changed = this.#setProficiencyValue(key, target.value);
+    this.#refreshProficiencyPreview(key);
+    if (!changed) return;
+
+    this.#scheduleRepeatCommit();
+    if (flush) await this.#flushRepeatCommit();
   }
 
   #activateAbilitySearch() {
@@ -714,6 +768,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   }
 
   #syncDraftFromForm() {
+    for (const input of this.form?.querySelectorAll?.("[data-proficiency-slider]") ?? []) {
+      if (!(input instanceof HTMLInputElement)) continue;
+      const key = input.dataset.proficiencyKey ?? "";
+      if (!key) continue;
+      this.#setProficiencyValue(key, input.value);
+    }
     return undefined;
   }
 
@@ -792,16 +852,28 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     return true;
   }
 
+  async #goToPageOffset(offset) {
+    await this.#stopRepeat({ flush: true });
+    this.#syncDraftFromForm();
+    const currentIndex = this.#getPageIndex();
+    const nextIndex = Math.max(0, Math.min(ADVANCEMENT_PAGES.length - 1, currentIndex + offset));
+    this.#page = ADVANCEMENT_PAGES[nextIndex];
+    return this.forceRender();
+  }
+
+  #getPageIndex() {
+    const index = ADVANCEMENT_PAGES.indexOf(this.#page);
+    return index >= 0 ? index : 0;
+  }
+
   static #onNextPage(event) {
     event.preventDefault();
-    this.#page = "abilities";
-    return this.forceRender();
+    return this.#goToPageOffset(1);
   }
 
   static #onPreviousPage(event) {
     event.preventDefault();
-    this.#page = "development";
-    return this.forceRender();
+    return this.#goToPageOffset(-1);
   }
 
   static #onToggleAbilityCategory(event, target) {
@@ -958,12 +1030,197 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     );
   }
 
+  #prepareProficiencyEntry(proficiency, remaining = calculateRemainingDevelopmentPoints(this.#draft?.development)) {
+    const key = String(proficiency?.key ?? "");
+    const max = this.#getProficiencyMaximum(proficiency);
+    const floorValue = Math.min(max, Math.max(0, toInteger(this.#floor?.proficiencies?.[key])));
+    const value = Math.min(max, Math.max(0, toInteger(this.#draft?.proficiencies?.[key])));
+    const baseValue = value >= floorValue ? floorValue : value;
+    const baseEntry = prepareDisplayIndicatorEntry({
+      ...proficiency,
+      color: "#b08a4a",
+      data: {
+        min: 0,
+        value: baseValue,
+        max
+      }
+    });
+    const floorPercent = max > 0 ? Math.max(0, Math.min(100, (floorValue / max) * 100)) : 0;
+    const valuePercent = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
+    const phantomWidth = Math.max(0, valuePercent - floorPercent);
+    const sliderMin = 0;
+    const sliderMax = max;
+    const canMove = this.#gmMode
+      ? max > 0
+      : value > floorValue || (Math.max(0, toInteger(remaining.proficiencies)) > 0 && floorValue < max);
+
+    return {
+      ...baseEntry,
+      value,
+      floorValue,
+      max,
+      sliderMin,
+      sliderMax,
+      sliderDisabled: !canMove,
+      hasPhantom: phantomWidth > 0,
+      phantomStyle: `left: ${floorPercent.toFixed(2)}%; width: ${phantomWidth.toFixed(2)}%;`
+    };
+  }
+
+  #setProficiencyValue(key, rawValue) {
+    if (!this.#draft) return false;
+
+    const proficiency = getProficiencySettings().find(entry => entry.key === key);
+    if (!proficiency) return false;
+
+    const max = this.#getProficiencyMaximum(proficiency);
+    const currentValue = Math.min(max, Math.max(0, toInteger(this.#draft.proficiencies?.[key])));
+    const floorValue = this.#gmMode ? 0 : Math.min(max, Math.max(0, toInteger(this.#floor?.proficiencies?.[key])));
+    const requestedValue = Math.min(max, Math.max(floorValue, toInteger(rawValue)));
+    const available = Math.max(0, toInteger(this.#draft.development?.points?.proficiencies));
+    const nextValue = this.#gmMode
+      ? requestedValue
+      : requestedValue > currentValue
+        ? currentValue + Math.min(requestedValue - currentValue, available)
+        : requestedValue;
+    const delta = nextValue - currentValue;
+
+    this.#draft.proficiencies ??= {};
+    this.#draft.development.proficiencies ??= {};
+    this.#draft.proficiencies[key] = nextValue;
+    if (!delta) return false;
+
+    const floorPoints = this.#gmMode ? 0 : toInteger(this.#floor?.development?.proficiencies?.[key]);
+    this.#draft.development.proficiencies[key] = Math.max(
+      floorPoints,
+      toInteger(this.#draft.development.proficiencies?.[key]) + delta
+    );
+
+    if (!this.#gmMode) {
+      this.#draft.development.points.proficiencies = Math.max(0, available - delta);
+    }
+
+    return true;
+  }
+
+  #refreshProficiencyPreview(key) {
+    const proficiency = getProficiencySettings().find(entry => entry.key === key);
+    if (!proficiency) return;
+
+    const remaining = calculateRemainingDevelopmentPoints(this.#draft?.development);
+    const entry = this.#prepareProficiencyEntry(proficiency, remaining);
+    const row = this.element?.querySelector?.(`[data-advancement-proficiency-row="${CSS.escape(key)}"]`);
+    if (!row) return;
+
+    const valueElement = row.querySelector("[data-proficiency-value]");
+    if (valueElement) valueElement.textContent = `${entry.value} / ${entry.max}`;
+
+    const meter = row.querySelector("[data-proficiency-meter]");
+    if (meter instanceof HTMLElement) {
+      meter.setAttribute("style", entry.meterStyle);
+      meter.setAttribute("aria-valuenow", String(entry.value));
+      meter.setAttribute("aria-valuemax", String(entry.max));
+    }
+
+    const fill = row.querySelector("[data-proficiency-fill]");
+    if (fill instanceof HTMLElement) fill.setAttribute("style", entry.fillStyle);
+
+    const phantom = row.querySelector("[data-proficiency-phantom]");
+    if (phantom instanceof HTMLElement) {
+      phantom.hidden = !entry.hasPhantom;
+      phantom.setAttribute("style", entry.phantomStyle);
+    }
+
+    const slider = row.querySelector("[data-proficiency-slider]");
+    if (slider instanceof HTMLInputElement) {
+      slider.min = String(entry.sliderMin);
+      slider.max = String(entry.sliderMax);
+      slider.value = String(entry.value);
+      slider.disabled = entry.sliderDisabled;
+    }
+
+    this.#refreshProficiencySliderLimits(remaining);
+    this.#refreshPointDisplays(remaining);
+  }
+
+  #refreshProficiencySliderLimits(remaining = calculateRemainingDevelopmentPoints(this.#draft?.development)) {
+    for (const proficiency of getProficiencySettings()) {
+      const entry = this.#prepareProficiencyEntry(proficiency, remaining);
+      const slider = this.element?.querySelector?.(
+        `[data-proficiency-slider][data-proficiency-key="${CSS.escape(proficiency.key)}"]`
+      );
+      if (!(slider instanceof HTMLInputElement)) continue;
+      slider.min = String(entry.sliderMin);
+      slider.max = String(entry.sliderMax);
+      slider.disabled = entry.sliderDisabled;
+    }
+  }
+
+  #refreshPointDisplays(remaining = calculateRemainingDevelopmentPoints(this.#draft?.development)) {
+    const pointDisplays = this.#preparePointDisplays(remaining);
+    for (const [pointType, display] of Object.entries(pointDisplays)) {
+      const element = this.element?.querySelector?.(
+        `[data-advancement-point-display="${CSS.escape(pointType)}"]`
+      );
+      if (element) element.textContent = display;
+    }
+  }
+
+  #getActorProficiencyValues(proficiencySettings = getProficiencySettings()) {
+    return this.#getProficiencyValuesFromResourceMap(
+      this.actor.system?._source?.proficiencies ?? this.actor.system?.proficiencies,
+      proficiencySettings
+    );
+  }
+
+  #getCommittedProficiencyValues(committed = {}, proficiencySettings = getProficiencySettings()) {
+    if (committed?.proficiencies && typeof committed.proficiencies === "object") {
+      return Object.fromEntries(
+        proficiencySettings.map(proficiency => {
+          const max = this.#getProficiencyMaximum(proficiency);
+          const value = toInteger(committed.proficiencies?.[proficiency.key]);
+          return [proficiency.key, Math.min(max, Math.max(0, value))];
+        })
+      );
+    }
+    return this.#getActorProficiencyValues(proficiencySettings);
+  }
+
+  #getProficiencyValuesFromResourceMap(proficiencies = {}, proficiencySettings = getProficiencySettings()) {
+    return Object.fromEntries(
+      proficiencySettings.map(proficiency => {
+        const max = this.#getProficiencyMaximum(proficiency);
+        const value = toInteger(proficiencies?.[proficiency.key]?.value);
+        return [proficiency.key, Math.min(max, Math.max(0, value))];
+      })
+    );
+  }
+
+  #getProficiencyMaximum(proficiency) {
+    const key = String(proficiency?.key ?? "");
+    const live = this.actor.system?.proficiencies?.[key] ?? {};
+    const source = this.actor.system?._source?.proficiencies?.[key] ?? {};
+    const bonus = toInteger(live.bonus ?? source.bonus);
+    const settingMax = Math.max(0, toInteger(proficiency?.max));
+    return Math.max(0, toInteger(live.max ?? source.max ?? settingMax + bonus));
+  }
+
+  #getProficiencyActorUpdateData() {
+    return Object.fromEntries(
+      Object.entries(this.#draft?.proficiencies ?? {}).map(([key, value]) => [
+        `system.proficiencies.${key}.value`,
+        Math.max(0, toInteger(value))
+      ])
+    );
+  }
+
   #preparePointDisplays(remaining = {}) {
     return {
       characteristics: this.#formatSessionPointDisplay(remaining.characteristics, this.#getCharacteristicSessionSpent()),
       signatureSkills: this.#formatSessionPointDisplay(remaining.signatureSkills, this.#getSignatureSkillSessionSpent()),
       skills: this.#formatSessionPointDisplay(remaining.skills, this.#getSkillSessionSpent()),
       traits: this.#formatSessionPointDisplay(remaining.traits, this.#getTraitSessionSpent()),
+      proficiencies: this.#formatSessionPointDisplay(remaining.proficiencies, this.#getProficiencySessionSpent()),
       researches: this.#formatSessionPointDisplay(remaining.researches, this.#researchPointSessionSpent)
     };
   }
@@ -1077,6 +1334,13 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     const floorTraits = this.#floor?.development?.traits ?? {};
     return Object.entries(this.#draft?.development?.traits ?? {})
       .reduce((total, [key, selected]) => total + (selected && !floorTraits[key] ? 1 : 0), 0);
+  }
+
+  #getProficiencySessionSpent() {
+    return Object.entries(this.#draft?.proficiencies ?? {}).reduce((total, [key, value]) => {
+      const floorValue = toInteger(this.#floor?.proficiencies?.[key]);
+      return total + Math.max(0, toInteger(value) - floorValue);
+    }, 0);
   }
 
   async #prepareAbilityCategories(remaining = {}, skillSettings = [], requirementContext = {}) {
@@ -1482,6 +1746,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       "system.attributes.level",
       "system.characteristics",
       "system.development",
+      "system.proficiencies",
       "system.creature.raceId",
       "system.progression",
       "name"
@@ -1502,11 +1767,14 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
     if (!this.#draft) return false;
 
     this.#syncDraftFromForm();
+    await this.#flushRepeatCommit();
     if (!this.#hasDraftChanges()) return false;
 
+    await this.#applyDraftToActor();
     await this.actor.setFlag(FALLOUT_MAW.id, ADVANCEMENT_COMMIT_FLAG, {
       level: this.#draft.level,
       characteristics: foundry.utils.deepClone(this.#draft.characteristics),
+      proficiencies: foundry.utils.deepClone(this.#draft.proficiencies),
       development: foundry.utils.deepClone(this.#draft.development)
     });
 
@@ -1524,6 +1792,7 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       "system.attributes.level": this.#draft.level,
       "system.characteristics": foundry.utils.deepClone(this.#draft.characteristics),
       "system.development": foundry.utils.deepClone(this.#draft.development),
+      ...this.#getProficiencyActorUpdateData(),
       ...updateData
     };
     const commit = this.#repeatCommitPromise
@@ -1558,7 +1827,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
   #syncDraftFromActor() {
     const characteristicSettings = getCharacteristicSettings();
     const skillSettings = getSkillSettings();
-    const development = cloneActorDevelopment(this.actor.getDevelopment(), characteristicSettings, skillSettings);
+    const proficiencySettings = getProficiencySettings();
+    const development = cloneActorDevelopment(this.actor.getDevelopment(), characteristicSettings, skillSettings, proficiencySettings);
 
     this.#draft = {
       level: Math.max(1, toInteger(this.actor.system?.attributes?.level)),
@@ -1568,11 +1838,12 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
           toInteger(this.actor.system?._source?.characteristics?.[characteristic.key] ?? this.actor.system?.characteristics?.[characteristic.key])
         ])
       ),
+      proficiencies: this.#getActorProficiencyValues(proficiencySettings),
       development
     };
   }
 
-  #readCommittedState(characteristicSettings, skillSettings) {
+  #readCommittedState(characteristicSettings, skillSettings, proficiencySettings = getProficiencySettings()) {
     const committed = this.actor.getFlag(FALLOUT_MAW.id, ADVANCEMENT_COMMIT_FLAG);
     if (!committed || (typeof committed !== "object")) return null;
 
@@ -1581,7 +1852,8 @@ export class AdvancementApplication extends FalloutMaWFormApplicationV2 {
       characteristics: Object.fromEntries(
         characteristicSettings.map(characteristic => [characteristic.key, toInteger(committed.characteristics?.[characteristic.key])])
       ),
-      development: cloneActorDevelopment(committed.development, characteristicSettings, skillSettings)
+      proficiencies: this.#getCommittedProficiencyValues(committed, proficiencySettings),
+      development: cloneActorDevelopment(committed.development, characteristicSettings, skillSettings, proficiencySettings)
     };
   }
 

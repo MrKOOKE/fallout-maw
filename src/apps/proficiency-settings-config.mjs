@@ -28,6 +28,9 @@ export class ProficiencySettingsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       createProficiency: this.#onCreateProficiency,
       deleteProficiency: this.#onDeleteProficiency,

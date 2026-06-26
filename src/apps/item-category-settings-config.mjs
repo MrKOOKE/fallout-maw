@@ -19,6 +19,9 @@ export class ItemCategorySettingsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       createCategory: this.#onCreateCategory,
       deleteCategory: this.#onDeleteCategory,

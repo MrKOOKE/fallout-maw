@@ -21,6 +21,9 @@ export class CurrencySettingsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       browseCurrencyImage: this.#onBrowseCurrencyImage,
       createCurrency: this.#onCreateCurrency,

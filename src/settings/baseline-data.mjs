@@ -22031,7 +22031,8 @@ export const SETTINGS_BASELINE = Object.freeze({
             ],
             "progression": {
               "skillPointsPerLevel": "10+int",
-              "researchPointsPerLevel": "1000"
+              "researchPointsPerLevel": "1000",
+              "proficiencyPointsPerLevel": "50"
             }
           },
           {
@@ -22670,7 +22671,8 @@ export const SETTINGS_BASELINE = Object.freeze({
             ],
             "progression": {
               "skillPointsPerLevel": "0",
-              "researchPointsPerLevel": "0"
+              "researchPointsPerLevel": "0",
+              "proficiencyPointsPerLevel": "0"
             }
           }
         ]

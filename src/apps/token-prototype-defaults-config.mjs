@@ -23,7 +23,8 @@ class TokenPrototypeDefaultsConfig extends foundry.applications.sheets.Prototype
       assignToken: TokenPrototypeDefaultsConfig.onAssignToken
     },
     form: {
-      handler: TokenPrototypeDefaultsConfig.onSubmit
+      handler: TokenPrototypeDefaultsConfig.onSubmit,
+      closeOnSubmit: true
     }
   };
 

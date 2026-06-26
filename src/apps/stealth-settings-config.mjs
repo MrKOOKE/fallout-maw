@@ -35,6 +35,9 @@ export class StealthSettingsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       resetDefaults: this.#onResetDefaults,
       addAttenuationLevel: this.#onAddAttenuationLevel,

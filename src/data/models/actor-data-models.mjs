@@ -26,6 +26,7 @@ import {
 } from "../../settings/accessors.mjs";
 import { BLEEDING_DAMAGE_TYPE_KEY } from "../../constants.mjs";
 import {
+  DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA,
   DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
   DEFAULT_SKILL_DEVELOPMENT_LIMIT,
   DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
@@ -131,7 +132,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       ),
       progression: new SchemaField({
         skillPointsPerLevel: new StringField({ required: true, blank: true, initial: DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA }),
-        researchPointsPerLevel: new StringField({ required: true, blank: true, initial: DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA })
+        researchPointsPerLevel: new StringField({ required: true, blank: true, initial: DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA }),
+        proficiencyPointsPerLevel: new StringField({ required: true, blank: true, initial: DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA })
       }),
       development: developmentField()
     };
@@ -201,9 +203,10 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     if (race?.progression) {
       this.progression.skillPointsPerLevel = String(race.progression.skillPointsPerLevel ?? DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA);
       this.progression.researchPointsPerLevel = String(race.progression.researchPointsPerLevel ?? DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA);
+      this.progression.proficiencyPointsPerLevel = String(race.progression.proficiencyPointsPerLevel ?? DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA);
     }
 
-    replaceObjectContents(this.development, normalizeActorDevelopment(this.development, characteristicSettings, skillSettings));
+    replaceObjectContents(this.development, normalizeActorDevelopment(this.development, characteristicSettings, skillSettings, proficiencySettings));
 
     const skillBases = evaluateSkillFormulas(skillSettings, characteristicSettings, this.characteristics);
     const skillAdvancementBaseBonuses = getAbilitySkillAdvancementBaseBonuses(this.parent, skillSettings);
@@ -466,6 +469,10 @@ function developmentField() {
     ),
     traits: new TypedObjectField(
       new BooleanField({ required: true, initial: false }),
+      { required: true, initial: {} }
+    ),
+    proficiencies: new TypedObjectField(
+      new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
       { required: true, initial: {} }
     ),
     skills: new TypedObjectField(

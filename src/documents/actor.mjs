@@ -18,6 +18,7 @@ import {
 import { applyTokenPrototypeDefaults } from "../settings/token-prototype-defaults.mjs";
 import { getLevelThreshold } from "../settings/levels.mjs";
 import {
+  DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA,
   DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
   DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA
 } from "../config/defaults.mjs";
@@ -191,7 +192,7 @@ export class FalloutMaWActor extends Actor {
   }
 
   getDevelopment() {
-    return normalizeActorDevelopment(this.system?.development, getCharacteristicSettings(), getSkillSettings());
+    return normalizeActorDevelopment(this.system?.development, getCharacteristicSettings(), getSkillSettings(), getProficiencySettings());
   }
 
   prepareDevelopmentResetData({
@@ -221,16 +222,23 @@ export class FalloutMaWActor extends Actor {
       characteristicSettings,
       DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA
     );
+    const proficiencyPointsPerLevel = evaluateProgressionFormula(
+      race?.progression?.proficiencyPointsPerLevel ?? this.system?.progression?.proficiencyPointsPerLevel,
+      characteristics,
+      characteristicSettings,
+      DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
+    );
 
-    const development = cloneActorDevelopment({}, characteristicSettings, skillSettings);
+    const development = cloneActorDevelopment({}, characteristicSettings, skillSettings, getProficiencySettings());
     development.initialized = true;
     development.experience = Math.max(0, toInteger(experience));
     development.points.characteristics = Math.max(0, toInteger(race?.baseParameters?.characteristicDistributionPoints));
     development.points.signatureSkills = Math.max(0, toInteger(race?.baseParameters?.signatureSkillPoints));
     development.points.traits = Math.max(0, toInteger(race?.baseParameters?.traitPoints));
-    development.points.proficiencies = Math.max(0, toInteger(race?.baseParameters?.proficiencyPoints));
     development.points.skills = skillPointsPerLevel * Math.max(0, normalizedLevel - 1);
     development.points.researches = researchPointsPerLevel * Math.max(0, normalizedLevel - 1);
+    development.points.proficiencies = Math.max(0, toInteger(race?.baseParameters?.proficiencyPoints))
+      + (proficiencyPointsPerLevel * Math.max(0, normalizedLevel - 1));
 
     const proficiencies = resetProficiencyMap(this.system?.proficiencies, getProficiencySettings());
 

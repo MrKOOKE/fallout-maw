@@ -39,6 +39,9 @@ export class TraumaSettingsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       openGroup: this.#onOpenGroup,
       resetDefaults: this.#onResetDefaults
@@ -107,6 +110,9 @@ export class TraumaGroupSettingsConfig extends FalloutMaWFormApplicationV2 {
     },
     window: {
       resizable: true
+    },
+    form: {
+      closeOnSubmit: true
     },
     actions: {
       addThreshold: this.#onAddThreshold,

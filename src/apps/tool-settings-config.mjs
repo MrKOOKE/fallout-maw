@@ -21,6 +21,9 @@ export class ToolSettingsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       createTool: this.#onCreateTool,
       deleteTool: this.#onDeleteTool,

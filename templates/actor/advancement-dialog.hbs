@@ -1,4 +1,4 @@
-<div class="fallout-maw-config-body fallout-maw-advancement-body{{#if isAbilitiesPage}} fallout-maw-advancement-body-abilities{{/if}}">
+<div class="fallout-maw-config-body fallout-maw-advancement-body{{#if isProficienciesPage}} fallout-maw-advancement-body-proficiencies{{/if}}{{#if isAbilitiesPage}} fallout-maw-advancement-body-abilities{{/if}}">
   {{#if isDevelopmentPage}}
   <section class="fallout-maw-panel fallout-maw-advancement-hero">
     <div class="fallout-maw-advancement-hero-layout">
@@ -40,8 +40,12 @@
           <strong>{{skillPointsPerLevel}}</strong>
         </div>
         <div class="fallout-maw-advancement-side-stat">
-          <span>ОИ за уровень</span>
+          <span>{{localize "FALLOUTMAW.Actor.ResearchPointsPerLevel"}}</span>
           <strong>{{researchPointsPerLevel}}</strong>
+        </div>
+        <div class="fallout-maw-advancement-side-stat">
+          <span>{{localize "FALLOUTMAW.Actor.ProficiencyPointsPerLevel"}}</span>
+          <strong>{{proficiencyPointsPerLevel}}</strong>
         </div>
         <button type="button" class="fallout-maw-advancement-action-button fallout-maw-advancement-reset-button" data-action="resetDevelopment">
           <i class="fa-solid fa-rotate-left"></i>
@@ -118,6 +122,49 @@
       </div>
     </div>
     {{/unless}}
+  </section>
+  {{/if}}
+
+  {{#if isProficienciesPage}}
+  <section class="fallout-maw-panel fallout-maw-advancement-section fallout-maw-advancement-proficiencies-section">
+    <div class="fallout-maw-advancement-section-title">
+      <h2>{{localize "FALLOUTMAW.Common.Proficiencies"}}</h2>
+    </div>
+
+    <div class="fallout-maw-advancement-proficiency-points">
+      <div class="fallout-maw-advancement-meter">
+        <span>{{localize "FALLOUTMAW.Advancement.ProficiencyPoints"}}</span>
+        <strong data-advancement-point-display="proficiencies">{{proficiencyPointsDisplay}}</strong>
+      </div>
+    </div>
+
+    <div class="fallout-maw-advancement-proficiencies">
+      {{#each proficiencies}}
+      <div class="fallout-maw-advancement-proficiency-row" data-advancement-proficiency-row="{{key}}">
+        <div class="fallout-maw-resource-card-header">
+          <span class="fallout-maw-resource-name fallout-maw-advancement-name" title="{{abbr}} / {{key}}">{{label}}</span>
+          <span class="fallout-maw-resource-value"><strong data-proficiency-value>{{value}} / {{max}}</strong></span>
+        </div>
+        <div class="fallout-maw-resource-meter fallout-maw-advancement-proficiency-meter" style="{{meterStyle}}" data-proficiency-meter role="meter" aria-valuemin="{{min}}" aria-valuenow="{{value}}" aria-valuemax="{{max}}">
+          <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}" data-proficiency-fill></span>
+          <span class="fallout-maw-advancement-proficiency-phantom" style="{{phantomStyle}}" data-proficiency-phantom {{#unless hasPhantom}}hidden{{/unless}}></span>
+        </div>
+        <input
+          type="range"
+          class="fallout-maw-advancement-proficiency-slider"
+          data-proficiency-slider
+          data-proficiency-key="{{key}}"
+          value="{{value}}"
+          min="{{sliderMin}}"
+          max="{{sliderMax}}"
+          step="1"
+          {{#if sliderDisabled}}disabled{{/if}}
+        >
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Settings.Proficiencies.Empty"}}</p>
+      {{/each}}
+    </div>
   </section>
   {{/if}}
 
@@ -219,8 +266,8 @@
   {{/if}}
 
   <footer class="sheet-footer flexrow fallout-maw-advancement-footer">
-    <button type="button" class="fallout-maw-advancement-page-button" data-action="previousPage" {{#if isDevelopmentPage}}disabled{{/if}}><i class="fa-solid fa-chevron-left"></i></button>
+    <button type="button" class="fallout-maw-advancement-page-button" data-action="previousPage" {{#if isFirstPage}}disabled{{/if}}><i class="fa-solid fa-chevron-left"></i></button>
     <button type="submit" class="fallout-maw-advancement-save-button"><i class="fa-solid fa-save"></i> {{localize "FALLOUTMAW.Common.SaveChanges"}}</button>
-    <button type="button" class="fallout-maw-advancement-page-button" data-action="nextPage" {{#if isAbilitiesPage}}disabled{{/if}}><i class="fa-solid fa-chevron-right"></i></button>
+    <button type="button" class="fallout-maw-advancement-page-button" data-action="nextPage" {{#if isLastPage}}disabled{{/if}}><i class="fa-solid fa-chevron-right"></i></button>
   </footer>
 </div>

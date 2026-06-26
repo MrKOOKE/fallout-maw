@@ -74,6 +74,9 @@ class ButcheringConfigApplication extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       addStage: this.#onAddStage,
       deleteStage: this.#onDeleteStage,

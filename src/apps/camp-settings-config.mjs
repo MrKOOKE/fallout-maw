@@ -27,6 +27,9 @@ export class CampSettingsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       addRestPlace: this.#onAddRestPlace,
       deleteRestPlace: this.#onDeleteRestPlace,
@@ -137,6 +140,9 @@ class CampPlaceSettingsConfig extends FalloutMaWFormApplicationV2 {
     },
     window: {
       resizable: true
+    },
+    form: {
+      closeOnSubmit: true
     },
     actions: {
       addEffect: this.#onAddEffect,

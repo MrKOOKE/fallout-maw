@@ -42,6 +42,9 @@ export class CombatSettingsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       resetDefaults: this.#onResetDefaults
     }

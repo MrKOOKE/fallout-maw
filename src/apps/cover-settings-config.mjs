@@ -34,6 +34,9 @@ export class CoverSettingsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       addCoverEntry: this.#onAddCoverEntry,
       deleteCoverEntry: this.#onDeleteCoverEntry,

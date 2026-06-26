@@ -22,6 +22,9 @@ export class SystemActionSettingsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       browseActionImage: this.#onBrowseActionImage,
       resetDefaults: this.#onResetDefaults

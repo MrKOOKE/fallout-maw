@@ -186,6 +186,7 @@
       "Progression": "Повышение уровня",
       "Race": "Раса",
       "Subtype": "Подтип",
+      "ProficiencyPointsPerLevel": "Очки владений за уровень",
       "ResearchPointsPerLevel": "Очки исследований за уровень",
       "SkillPointsPerLevel": "Очки навыков за уровень",
       "UnlockCoreFields": "Разблокировать основу"
@@ -786,6 +787,7 @@
         "NoWeaponSets": "Оружейные наборы не созданы.",
         "NoWeaponSlots": "Слоты оружия не созданы.",
         "ProficiencyPoints": "Очков владений",
+        "ProficiencyPointsPerLevel": "Очков владений за уровень",
         "Progression": "Повышение уровня",
         "RaceNamePlaceholder": "Название расы",
         "RaceSection": "Раса",

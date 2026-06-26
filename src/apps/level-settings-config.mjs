@@ -21,6 +21,9 @@ export class LevelSettingsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       createLevel: this.#onCreateLevel,
       deleteLevel: this.#onDeleteLevel,

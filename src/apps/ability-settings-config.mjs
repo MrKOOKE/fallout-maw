@@ -27,6 +27,9 @@ export class AbilitySettingsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       addCategory: this.#onAddCategory,
       deleteCategory: this.#onDeleteCategory,

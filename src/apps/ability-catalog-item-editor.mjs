@@ -90,6 +90,9 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       editAbilityImage: this.#onEditAbilityImage,
       selectTab: this.#onSelectTab,

@@ -32,6 +32,9 @@ export class ResourceSettingsConfig extends FalloutMaWFormApplicationV2 {
     window: {
       resizable: true
     },
+    form: {
+      closeOnSubmit: true
+    },
     actions: {
       createResource: this.#onCreateResource,
       deleteResource: this.#onDeleteResource,
