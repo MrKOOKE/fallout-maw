@@ -3848,7 +3848,7 @@ function requestFullForceWeaponActionModifiers(context = {}) {
         canSpend: context => {
           const cost = getEnergyCost(context);
           if (hasEnergy(actor, cost)) return true;
-          ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
+          if (!context?.silent) ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
           return false;
         },
         spend: async context => {
@@ -3888,7 +3888,7 @@ function requestAimingWeaponActionModifiers(context = {}) {
         canSpend: context => {
           const cost = getEnergyCost(context);
           if (hasEnergy(actor, cost)) return true;
-          ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
+          if (!context?.silent) ui.notifications.warn(`${getAbilityDisplayName(abilityItem)}: недостаточно энергии (${getActorEnergy(actor)} / ${cost}).`);
           return false;
         },
         spend: async context => {

@@ -1081,9 +1081,32 @@ class WeaponAttackController {
     this.refresh(true);
   }
 
+  canContinueAfterProcessing() {
+    const actor = this.token?.actor ?? null;
+    const weapon = actor?.items?.get?.(this.weapon?.id) ?? null;
+    if (!actor || !weapon || isActorUnableToAct(actor)) return false;
+    if (!hasItemFunction(weapon, ITEM_FUNCTIONS.weapon)) return false;
+    if (!getWeaponAttackData(weapon, this.weaponFunctionId)?.enabled) return false;
+    if (!hasWeaponAction(weapon, this.actionKey, this.weaponFunctionId)) return false;
+    if (getWeaponActionBlockState(actor, this.actionKey).blocked) return false;
+    if (isWeaponPlacementDisabled(actor, weapon)) return false;
+
+    this.weapon = weapon;
+    this.weaponActionModifierState = null;
+    const attackCount = getActionAttackCount(weapon, this.actionKey, this.weaponFunctionId);
+    const modifierState = this.getWeaponActionModifierState();
+    if (getMissingWeaponResourceCost(weapon, attackCount, this.weaponFunctionId, { modifierState })) return false;
+    if (!modifierState.canSpend(this.createWeaponActionModifierContext({ attackCount, silent: true }))) return false;
+    if (!this.skipActionPointCost && !canSpendRequiredWeaponActionPoints(actor, weapon, this.actionKey, this.weaponFunctionId)) return false;
+    return true;
+  }
+
   completeProcessingCycle({ refresh = true } = {}) {
     this.processing = false;
     if (this.attackModifier?.finishAfterAttack) this.finishRequested = true;
+    if (!this.finishRequested && !this.attackCanceledByReaction && !this.canContinueAfterProcessing()) {
+      this.finishRequested = true;
+    }
     if (this.finishRequested || this.attackCanceledByReaction) {
       if (activeAttack === this) activeAttack = null;
       this.destroy();
@@ -4500,6 +4523,14 @@ function hasRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionI
   const cost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId);
   if (cost <= 0) return true;
   return canSpendCombatActionPoints(actor, cost, { label: "действия" });
+}
+
+function canSpendRequiredWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "") {
+  if (!game.combat?.started) return true;
+  const cost = getWeaponActionPointCost(actor, weapon, actionKey, weaponFunctionId);
+  if (cost <= 0) return true;
+  const state = getCombatActionPointState(actor);
+  return !state || cost <= state.value;
 }
 
 async function spendWeaponActionPoints(actor, weapon, actionKey, weaponFunctionId = "", { emitActionResolved = true, spendActionPoints = true } = {}) {
