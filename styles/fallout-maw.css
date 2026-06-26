@@ -8448,6 +8448,10 @@ label.fallout-maw-mitigation-cell {
   z-index: calc(var(--z-index-app, 30) + 3);
 }
 
+html.fallout-maw-token-action-hud-open #hotbar {
+  display: none !important;
+}
+
 .fallout-maw-token-action-hud button {
   font-family: inherit;
 }

@@ -153,6 +153,7 @@ const DUAL_WEAPON_ACTION_KEYS = new Set(["aimedShot", "snapshot", "burst", "voll
 const TOKEN_ACTION_HUD_SCALE_DEFAULT = 50;
 const TOKEN_ACTION_HUD_SCALE_MIN = 25;
 const TOKEN_ACTION_HUD_SCALE_MAX = 100;
+const TOKEN_ACTION_HUD_OPEN_CLASS = "fallout-maw-token-action-hud-open";
 const HUD_METER_SECTION_KEYS = Object.freeze(["resources", "needs"]);
 const HUD_LIMB_LAYER_KEYS = Object.freeze(["state", "defense", "resistance"]);
 const HUD_LIMB_LAYERS = Object.freeze([
@@ -600,6 +601,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    setTokenActionHudInterfaceOpen(true);
     this.#clearDetachedHudTooltips();
     this.#activateLimbControlClicks();
     const silhouette = this.element?.querySelector("[data-limb-popover-root]");
@@ -647,6 +649,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _onClose(options) {
     await super._onClose(options);
+    setTokenActionHudInterfaceOpen(false);
     cancelWeaponAttack();
     if (this.#layoutFrame) cancelAnimationFrame(this.#layoutFrame);
     this.#layoutFrame = null;
@@ -4881,12 +4884,14 @@ function getActiveTokenActionHudScaleFactor() {
   return tokenActionHudScaleFactor(tokenActionHudPreviewPercent ?? getTokenActionHudScalePercent());
 }
 
+function setTokenActionHudInterfaceOpen(open) {
+  document.documentElement?.classList?.toggle(TOKEN_ACTION_HUD_OPEN_CLASS, Boolean(open));
+}
+
 function getSafeRight(margin) {
   const candidates = [window.innerWidth - margin];
-  for (const selector of ["#ui-right", "#sidebar", "#chat-notifications", ".chat-sidebar .chat-form"]) {
-    const element = document.querySelector(selector);
-    const rect = element?.getBoundingClientRect();
-    if (rect && rect.width > 0 && rect.left > (window.innerWidth * 0.45)) candidates.push(rect.left - margin);
-  }
+  const sidebar = document.querySelector("#sidebar");
+  const rect = sidebar?.getBoundingClientRect();
+  if (rect && rect.width > 0 && rect.left > (window.innerWidth * 0.45)) candidates.push(rect.left - margin);
   return Math.max(margin + 120, Math.min(...candidates));
 }
