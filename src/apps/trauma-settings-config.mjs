@@ -7,7 +7,6 @@ import {
   getDamageTypeSettings,
   getNeedSettings,
   getProficiencySettings,
-  getResourceSettings,
   getSkillSettings,
   getTraumaSettings,
   resetTraumaSettings,
@@ -19,7 +18,7 @@ import {
   getUniqueLimbSets,
   normalizeTraumaSettings
 } from "../settings/traumas.mjs";
-import { buildActionCostEffectKeyTokens, buildAllSkillsAdvantageEffectKeyToken, buildAllSkillsDisadvantageEffectKeyToken, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildWeaponSwitchCostEffectKeyToken } from "../utils/effect-key-tokens.mjs";
+import { buildActionCostEffectKeyTokens, buildAllSkillsAdvantageEffectKeyToken, buildAllSkillsDisadvantageEffectKeyToken, buildAllSkillsEffectKeyToken, buildCombatEffectKeyTokens, buildDamageMitigationEffectKeyTokens, buildLimbMaxBonusEffectKeyTokens, buildResourceBonusEffectKeyTokens, buildWeaponSwitchCostEffectKeyToken } from "../utils/effect-key-tokens.mjs";
 
 export class TraumaSettingsConfig extends FalloutMaWFormApplicationV2 {
   constructor(options = {}) {
@@ -472,13 +471,7 @@ function buildEffectKeyTokens() {
     buildAllSkillsEffectKeyToken(),
     buildAllSkillsAdvantageEffectKeyToken(),
     buildAllSkillsDisadvantageEffectKeyToken(),
-    ...getResourceSettings().map(entry => createEffectKeyToken({
-      code: entry.abbr || entry.key,
-      key: entry.key,
-      label: entry.label,
-      path: `system.resources.${entry.key}.bonus`,
-      group: "Ресурсы"
-    })),
+    ...buildResourceBonusEffectKeyTokens("Ресурсы"),
     ...getNeedSettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
       key: entry.key,
@@ -494,6 +487,7 @@ function buildEffectKeyTokens() {
       group: "Владения"
     })),
     ...buildDamageMitigationEffectKeyTokens(),
+    ...buildLimbMaxBonusEffectKeyTokens(),
     createEffectKeyToken({ code: "blind", key: "blind", label: "Слепота", path: "status.blind", group: "Статусы" }),
     createEffectKeyToken({ code: "moveCost", key: "movement", label: "Стоимость перемещения", path: "system.costs.movement", group: "Стоимость" }),
     createEffectKeyToken({ code: "actionCost", key: "action", label: "Стоимость действий", path: "system.costs.action", group: "Стоимость" }),

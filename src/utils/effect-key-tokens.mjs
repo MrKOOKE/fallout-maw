@@ -8,6 +8,7 @@ import {
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_BONUS_EFFECT_KEY,
   ALL_SKILLS_DISADVANTAGE_EFFECT_KEY,
+  ALL_LIMB_MAX_BONUS_EFFECT_KEY,
   ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
   ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
@@ -46,13 +47,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
     buildAllSkillsEffectKeyToken(),
     buildAllSkillsAdvantageEffectKeyToken(),
     buildAllSkillsDisadvantageEffectKeyToken(),
-    ...getResourceSettings().map(entry => createEffectKeyToken({
-      code: entry.abbr || entry.key,
-      key: entry.key,
-      label: entry.label,
-      path: `system.resources.${entry.key}.bonus`,
-      group: game.i18n.localize("FALLOUTMAW.Common.Resources")
-    })),
+    ...buildResourceBonusEffectKeyTokens(),
     createEffectKeyToken({
       code: "rea",
       key: "reactionPoints",
@@ -96,6 +91,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
       group: game.i18n.localize("FALLOUTMAW.Common.Inventory")
     }),
     ...buildDamageMitigationEffectKeyTokens(),
+    ...buildLimbMaxBonusEffectKeyTokens(),
     ...buildImplantLimitEffectKeyTokens(),
     createEffectKeyToken({
       code: "blind",
@@ -219,6 +215,19 @@ export function buildSkillDisadvantageEffectKeyTokens() {
     path: `system.skills.${entry.key}.disadvantage`,
     group: game.i18n.localize("FALLOUTMAW.Common.Skills")
   })).filter(Boolean);
+}
+
+export function buildResourceBonusEffectKeyTokens(group = game.i18n.localize("FALLOUTMAW.Common.Resources")) {
+  return getResourceSettings()
+    .filter(entry => String(entry?.key ?? "").trim() !== "health")
+    .map(entry => createEffectKeyToken({
+      code: entry.abbr || entry.key,
+      key: entry.key,
+      label: entry.label,
+      path: `system.resources.${entry.key}.bonus`,
+      group
+    }))
+    .filter(Boolean);
 }
 
 export function buildActionCostEffectKeyTokens() {
@@ -479,6 +488,32 @@ export function buildDamageMitigationEffectKeyTokens() {
         }));
       }
     }
+  }
+
+  return tokens.filter(Boolean);
+}
+
+export function buildLimbMaxBonusEffectKeyTokens() {
+  const group = "Максимальное ОЗ частей тела";
+  const allLimbsLabel = "Все части тела";
+  const tokens = [
+    createEffectKeyToken({
+      code: "limbMax:all",
+      key: "all",
+      label: `${group}: ${allLimbsLabel}`,
+      path: ALL_LIMB_MAX_BONUS_EFFECT_KEY,
+      group
+    })
+  ];
+
+  for (const limb of getEffectKeyLimbs()) {
+    tokens.push(createEffectKeyToken({
+      code: `limbMax:${limb.key}`,
+      key: limb.key,
+      label: `${group}: ${limb.label}`,
+      path: `system.limbs.${limb.key}.maxBonus`,
+      group
+    }));
   }
 
   return tokens.filter(Boolean);

@@ -3,7 +3,7 @@ import { activateDescriptionFormulaAutocomplete } from "../apps/description-form
 import { activateFormulaAutocomplete } from "../apps/formula-autocomplete.mjs";
 import { TEMPLATES } from "../constants.mjs";
 import { getCharacteristicSettings, getSkillSettings } from "../settings/accessors.mjs";
-import { buildEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
+import { buildEffectKeyTokens, buildResourceBonusEffectKeyTokens } from "../utils/effect-key-tokens.mjs";
 
 const { ActiveEffectConfig } = foundry.applications.sheets;
 const FormDataExtended = foundry.applications.ux.FormDataExtended;
@@ -177,13 +177,7 @@ function buildLegacyEffectKeyTokens() {
       path: `system.skills.${entry.key}.bonus`,
       group: game.i18n.localize("FALLOUTMAW.Common.Skills")
     })),
-    ...getResourceSettings().map(entry => createEffectKeyToken({
-      code: entry.abbr || entry.key,
-      key: entry.key,
-      label: entry.label,
-      path: `system.resources.${entry.key}.bonus`,
-      group: game.i18n.localize("FALLOUTMAW.Common.Resources")
-    })),
+    ...buildResourceBonusEffectKeyTokens(),
     ...getNeedSettings().map(entry => createEffectKeyToken({
       code: entry.abbr || entry.key,
       key: entry.key,

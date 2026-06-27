@@ -234,7 +234,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     );
     replaceObjectContents(
       this.limbs,
-      normalizeLimbMap(constructLimbData?.source ?? this.limbs, limbSettings, limbMaximums, limbSource)
+      normalizeLimbMap(this.limbs, limbSettings, limbMaximums, limbSource)
     );
 
     const resourceMaximums = isConstruct
@@ -382,6 +382,7 @@ function limbField() {
     implantLimit: new NumberField({ required: true, integer: true, min: 0, initial: 1, persisted: false }),
     critical: new BooleanField({ required: true, initial: false, persisted: false }),
     missing: new BooleanField({ required: true, initial: false }),
+    maxBonus: new NumberField({ required: true, integer: true, initial: 0 }),
     min: new NumberField({ required: true, integer: true, initial: -100, persisted: false }),
     spent: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
     value: new NumberField({ required: true, integer: true, initial: 0 }),
@@ -567,9 +568,11 @@ function ensureReactionResource(resources = {}, currentResource = resources[REAC
 function normalizeLimbMap(currentLimbs = {}, settings = [], maximums = {}, sourceLimbs = {}) {
   return Object.fromEntries(
     settings.map(setting => {
-      const current = currentLimbs?.[setting.key];
+      const current = currentLimbs?.[setting.key] ?? sourceLimbs?.[setting.key];
       const source = sourceLimbs?.[setting.key];
-      const max = Math.max(0, toInteger(maximums?.[setting.key] ?? setting?.stateMax));
+      const baseMax = Math.max(0, toInteger(maximums?.[setting.key] ?? setting?.stateMax));
+      const maxBonus = toInteger(current?.maxBonus ?? source?.maxBonus);
+      const max = Math.max(0, baseMax + maxBonus);
       const configuredMin = Number(setting?.min);
       const min = Number.isFinite(configuredMin) ? Math.trunc(configuredMin) : -max;
       const spent = normalizeLimbSpent(current, source, min, max);
@@ -587,6 +590,7 @@ function normalizeLimbMap(currentLimbs = {}, settings = [], maximums = {}, sourc
         implantLimit: Math.max(0, implantLimitBase + implantLimitBonus),
         critical: Boolean(setting?.critical),
         missing,
+        maxBonus,
         min,
         spent,
         value,
@@ -766,6 +770,7 @@ function getConstructPartLimbData(items) {
       label,
       value,
       max,
+      maxBonus: 0,
       spent: Math.max(0, max - value),
       missing,
       damageAccumulation: {}

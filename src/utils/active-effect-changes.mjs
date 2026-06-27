@@ -13,6 +13,7 @@ const ITEM_EFFECT_FLAG_KEY = "itemEffect";
 export const ALL_SKILLS_BONUS_EFFECT_KEY = "system.skills.all.bonus";
 export const ALL_SKILLS_ADVANTAGE_EFFECT_KEY = "system.skills.all.advantage";
 export const ALL_SKILLS_DISADVANTAGE_EFFECT_KEY = "system.skills.all.disadvantage";
+export const ALL_LIMB_MAX_BONUS_EFFECT_KEY = "system.limbs.all.maxBonus";
 export const ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY = "system.limbs.all.implantLimitBonus";
 export const ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY = "fallout-maw.ability.overload.energyCost";
 export const ONE_TIME_SKILL_MODIFIER_EFFECT_KEY = "fallout-maw.skillCheck.nextSkillModifier";
@@ -34,6 +35,15 @@ const LEGACY_LIMB_IMPLANT_LIMIT_EFFECT_KEY_PATTERN = /^system\.limbs\.([^.]+)\.i
 
 export function expandActorEffectChangeKeys(actor, change = {}) {
   const key = String(change?.key ?? "");
+  if (key === ALL_LIMB_MAX_BONUS_EFFECT_KEY) {
+    return Object.keys(actor?.system?.limbs ?? {})
+      .filter(key => key && key !== "all")
+      .map(limbKey => ({
+        ...change,
+        key: `system.limbs.${limbKey}.maxBonus`
+      }));
+  }
+
   if ((key === ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY) || (key === LEGACY_ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY)) {
     return Object.keys(actor?.system?.limbs ?? {})
       .filter(key => key && key !== "all")

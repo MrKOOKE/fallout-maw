@@ -39,6 +39,7 @@ import {
 } from "../utils/equipment-slots.mjs";
 import { buildDamageMitigationTables, buildDamageTypeIconClass, buildDamageTypeIconStyle } from "../utils/damage-mitigation-display.mjs";
 import {
+  ALL_LIMB_MAX_BONUS_EFFECT_KEY,
   ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY,
   ALL_SKILLS_ADVANTAGE_EFFECT_KEY,
   ALL_SKILLS_BONUS_EFFECT_KEY,
@@ -6024,7 +6025,9 @@ function buildEffectPathLabelMap({
   map.set(SMART_FUDGE_RESULT_EFFECT_KEYS.criticalFailure, "Подтасовка: критический провал");
   addEffectPathLabels(map, "system.resources", resourceSettings, {
     value: valueLabel,
-    max: maximumLabel,
+    max: maximumLabel
+  });
+  addEffectPathLabels(map, "system.resources", resourceSettings.filter(entry => String(entry?.key ?? "").trim() !== "health"), {
     bonus: bonusLabel
   });
   map.set("system.resources.reactionPoints.value", `Очки реакции: ${valueLabel}`);
@@ -6042,8 +6045,11 @@ function buildEffectPathLabelMap({
   });
   addEffectPathLabels(map, "system.limbs", limbs, {
     value: valueLabel,
-    max: maximumLabel
+    max: maximumLabel,
+    maxBonus: bonusLabel
   });
+  const limbMaxBonusLabel = "Максимальное ОЗ частей тела";
+  map.set(ALL_LIMB_MAX_BONUS_EFFECT_KEY, `${limbMaxBonusLabel}: Все части тела`);
   const implantLimitLabel = "Изменение доступных имплантов";
   map.set(ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY, `${implantLimitLabel}: Все части тела`);
   map.set("system.limbs.all.implantLimit", `${implantLimitLabel}: Все части тела`);
@@ -6051,6 +6057,7 @@ function buildEffectPathLabelMap({
     const limbKey = String(limb?.key ?? "").trim();
     if (!limbKey) continue;
     const limbLabel = String(limb?.label ?? limbKey).trim() || limbKey;
+    map.set(`system.limbs.${limbKey}.maxBonus`, `${limbMaxBonusLabel}: ${limbLabel}`);
     map.set(`system.limbs.${limbKey}.implantLimitBonus`, `${implantLimitLabel}: ${limbLabel}`);
     map.set(`system.limbs.${limbKey}.implantLimit`, `${implantLimitLabel}: ${limbLabel}`);
   }
