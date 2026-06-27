@@ -4,6 +4,7 @@ import { getOverlayBaseZIndex } from "../utils/overlay-layer.mjs";
 
 const DESCRIPTION_EDITOR_SELECTOR = "prose-mirror .ProseMirror, .editor-content.ProseMirror, .ProseMirror[contenteditable='true']";
 const FORMULA_CONTEXT_PATTERN = /\[\[[^\]\r\n]*?([\p{L}_][\p{L}\p{N}_]*)$/u;
+const IDENTIFIER_CHARACTER = /[\p{L}\p{N}_]/u;
 const MAX_SUGGESTIONS = 10;
 const MENU_VIEWPORT_PADDING = 12;
 
@@ -133,16 +134,20 @@ class DescriptionFormulaAutocomplete {
     if (!this.editor.contains(range.startContainer)) return null;
     if (range.startContainer.nodeType !== Node.TEXT_NODE) return null;
 
-    const beforeCaret = String(range.startContainer.textContent ?? "").slice(0, range.startOffset);
+    const text = String(range.startContainer.textContent ?? "");
+    const beforeCaret = text.slice(0, range.startOffset);
     const match = beforeCaret.match(FORMULA_CONTEXT_PATTERN);
     if (!match) return null;
 
     const token = match[1] ?? "";
+    const tokenStart = range.startOffset - token.length;
+    const tokenEnd = findIdentifierEnd(text, range.startOffset);
+    const fullToken = text.slice(tokenStart, tokenEnd);
     const tokenRange = document.createRange();
-    tokenRange.setStart(range.startContainer, range.startOffset - token.length);
-    tokenRange.setEnd(range.startContainer, range.startOffset);
+    tokenRange.setStart(range.startContainer, tokenStart);
+    tokenRange.setEnd(range.startContainer, tokenEnd);
     return {
-      query: normalizeSearchText(token),
+      query: normalizeSearchText(fullToken),
       range: tokenRange
     };
   }
@@ -239,4 +244,10 @@ function buildSearchValues(...values) {
     }
   }
   return Array.from(matches);
+}
+
+function findIdentifierEnd(value = "", start = 0) {
+  let index = Math.max(0, Math.min(String(value).length, start));
+  while (index < value.length && IDENTIFIER_CHARACTER.test(value[index])) index += 1;
+  return index;
 }

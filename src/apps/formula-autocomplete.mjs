@@ -3,6 +3,7 @@ import { getOverlayBaseZIndex } from "../utils/overlay-layer.mjs";
 
 const FORMULA_INPUT_SELECTOR = "input[data-formula-autocomplete]";
 const IDENTIFIER_BEFORE_CARET = /[\p{L}_][\p{L}\p{N}_]*$/u;
+const IDENTIFIER_CHARACTER = /[\p{L}\p{N}_]/u;
 const MAX_SUGGESTIONS = 10;
 const MENU_VIEWPORT_PADDING = 12;
 
@@ -52,6 +53,7 @@ class FormulaAutocomplete {
     this.matches = [];
     this.activeIndex = 0;
     this.tokenStart = 0;
+    this.tokenEnd = 0;
     this.menu = null;
     this.abortController = new AbortController();
     const { signal } = this.abortController;
@@ -73,6 +75,7 @@ class FormulaAutocomplete {
     }
 
     this.tokenStart = context.start;
+    this.tokenEnd = context.end;
     this.matches = this.#findMatches(context.query);
     this.activeIndex = 0;
 
@@ -129,12 +132,17 @@ class FormulaAutocomplete {
 
   #getTokenContext() {
     const caret = this.input.selectionStart ?? this.input.value.length;
-    const beforeCaret = this.input.value.slice(0, caret);
+    const value = this.input.value;
+    const beforeCaret = value.slice(0, caret);
     const match = beforeCaret.match(IDENTIFIER_BEFORE_CARET);
     if (!match) return null;
+    const start = caret - match[0].length;
+    const end = findIdentifierEnd(value, caret);
+    const token = value.slice(start, end);
     return {
-      query: normalizeSearchText(match[0]),
-      start: caret - match[0].length
+      query: normalizeSearchText(token),
+      start,
+      end
     };
   }
 
@@ -202,9 +210,8 @@ class FormulaAutocomplete {
   #insert(token) {
     if (!token) return;
 
-    const caret = this.input.selectionStart ?? this.input.value.length;
     const before = this.input.value.slice(0, this.tokenStart);
-    const after = this.input.value.slice(caret);
+    const after = this.input.value.slice(this.tokenEnd);
     this.input.value = `${before}${token.code}${after}`;
 
     const nextCaret = this.tokenStart + token.code.length;
@@ -230,4 +237,10 @@ function buildSearchValues(...values) {
     }
   }
   return Array.from(matches);
+}
+
+function findIdentifierEnd(value = "", start = 0) {
+  let index = Math.max(0, Math.min(String(value).length, start));
+  while (index < value.length && IDENTIFIER_CHARACTER.test(value[index])) index += 1;
+  return index;
 }

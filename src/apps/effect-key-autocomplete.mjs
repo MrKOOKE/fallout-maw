@@ -39,7 +39,6 @@ class EffectKeyAutocomplete {
     this.tokens = tokens;
     this.matches = [];
     this.activeIndex = 0;
-    this.tokenStart = 0;
     this.menu = null;
     this.abortController = new AbortController();
     const { signal } = this.abortController;
@@ -60,7 +59,6 @@ class EffectKeyAutocomplete {
       return;
     }
 
-    this.tokenStart = context.start;
     this.matches = this.#findMatches(context.query);
     this.activeIndex = 0;
 
@@ -121,8 +119,7 @@ class EffectKeyAutocomplete {
     const match = beforeCaret.match(TOKEN_BEFORE_CARET);
     if (!match) return null;
     return {
-      query: normalizeSearchText(match[0]),
-      start: caret - match[0].length
+      query: normalizeSearchText(match[0])
     };
   }
 
@@ -199,12 +196,9 @@ class EffectKeyAutocomplete {
   #insert(token) {
     if (!token) return;
 
-    const caret = this.input.selectionStart ?? this.input.value.length;
-    const before = this.input.value.slice(0, this.tokenStart);
-    const after = this.input.value.slice(caret);
-    this.input.value = `${before}${token.path}${after}`;
+    this.input.value = token.path;
 
-    const nextCaret = this.tokenStart + token.path.length;
+    const nextCaret = token.path.length;
     this.input.setSelectionRange(nextCaret, nextCaret);
     this.input.dispatchEvent(new Event("input", { bubbles: true }));
     this.input.dispatchEvent(new Event("change", { bubbles: true }));
