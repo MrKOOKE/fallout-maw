@@ -155,6 +155,7 @@ const WHERE_ARE_YOU_GOING_WEAPON_QUERY_NAME = "falloutMawWhereAreYouGoingWeapon"
 const WHERE_ARE_YOU_GOING_RESUME_OPTION = "falloutMawWhereAreYouGoingResume";
 const DISARM_QUERY_NAME = "falloutMawDisarm";
 const DISARM_SOCKET_TIMEOUT_MS = 60000;
+const DEUS_EX_MACHINA_SOCKET_TIMEOUT_MS = 60000;
 const FIXED_ABILITY_SOCKET = `system.${SYSTEM_ID}`;
 const FIXED_ABILITY_SOCKET_SCOPE = "fallout-maw.fixedAbilityFunctions";
 const ACTIVE_EFFECT_SHOW_ICON_ALWAYS = 2;
@@ -4206,6 +4207,11 @@ function handleFixedAbilitySocketMessage(message = {}) {
     void processDisarmSocketRequest(message);
     return;
   }
+  if (message.action === "performDeusExMachinaDisintegrate") {
+    if (!game.user?.isGM || message.gmUserId !== game.user.id) return;
+    void processDeusExMachinaDisintegrateSocketRequest(message);
+    return;
+  }
   if (message.action === "disarmResult") {
     if (message.targetUserId !== game.user?.id) return;
     const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
@@ -4213,6 +4219,14 @@ function handleFixedAbilitySocketMessage(message = {}) {
     window.clearTimeout(pending.timeout);
     pendingFixedAbilitySocketRequests.delete(message.requestId);
     pending.resolve(Boolean(message.result?.used));
+  }
+  if (message.action === "deusExMachinaDisintegrateResult") {
+    if (message.targetUserId !== game.user?.id) return;
+    const pending = pendingFixedAbilitySocketRequests.get(message.requestId);
+    if (!pending) return;
+    window.clearTimeout(pending.timeout);
+    pendingFixedAbilitySocketRequests.delete(message.requestId);
+    pending.resolve(Boolean(message.result?.applied));
   }
 }
 
@@ -5218,7 +5232,7 @@ async function useDeusExMachina(actor, abilityItem, abilityFunction) {
 
   let applied = false;
   if (choice === "insight") applied = await applyDeusExMachinaInsight(actor, abilityItem, abilityFunction, settings);
-  else if (choice === "disintegrate") applied = await applyDeusExMachinaDisintegrate(actor, settings, abilityItem);
+  else if (choice === "disintegrate") applied = await applyDeusExMachinaDisintegrate(actor, abilityItem, abilityFunction);
   else if (choice === "luckyFind") applied = await applyDeusExMachinaLuckyFind(actor, settings, abilityItem);
   else if (choice === "rescue") applied = await applyDeusExMachinaRescue(actor, settings, abilityItem);
 
@@ -5382,17 +5396,84 @@ async function applyDeusExMachinaInsight(actor, abilityItem, abilityFunction, se
   return true;
 }
 
-async function applyDeusExMachinaDisintegrate(actor, settings, abilityItem) {
+async function applyDeusExMachinaDisintegrate(actor, abilityItem, abilityFunction) {
   const targets = Array.from(game.user?.targets ?? []).filter(token => token?.actor);
   if (targets.length !== 1) {
     ui.notifications.warn("Для Забавного случая нужна ровно одна цель.");
     return false;
   }
-  const targetActor = targets[0].actor;
-  if (!targetActor?.isOwner && !game.user?.isGM) {
-    ui.notifications.warn(`Нет прав на изменение цели ${targetActor?.name ?? ""}.`);
+  const targetToken = targets[0];
+  const applied = await requestDeusExMachinaDisintegrateOperation({
+    actorUuid: actor?.uuid ?? "",
+    abilityItemId: abilityItem?.id ?? "",
+    abilityFunctionId: abilityFunction?.id ?? "",
+    targetTokenUuid: targetToken?.document?.uuid ?? targetToken?.uuid ?? "",
+    targetActorUuid: targetToken?.actor?.uuid ?? "",
+    senderUserId: game.user?.id ?? ""
+  });
+  if (!applied) {
+    ui.notifications.warn("Не удалось применить Забавный случай.");
     return false;
   }
+  return true;
+}
+
+async function requestDeusExMachinaDisintegrateOperation(payload = {}) {
+  if (game.user?.isGM) return processDeusExMachinaDisintegrateOperation(payload);
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("Нет активного GM для выполнения способности.");
+    return false;
+  }
+  const requestId = foundry.utils.randomID();
+  return new Promise(resolve => {
+    const timeout = window.setTimeout(() => {
+      pendingFixedAbilitySocketRequests.delete(requestId);
+      resolve(false);
+    }, DEUS_EX_MACHINA_SOCKET_TIMEOUT_MS);
+    pendingFixedAbilitySocketRequests.set(requestId, { resolve, timeout });
+    game.socket.emit(FIXED_ABILITY_SOCKET, {
+      scope: FIXED_ABILITY_SOCKET_SCOPE,
+      action: "performDeusExMachinaDisintegrate",
+      requestId,
+      gmUserId: gm.id,
+      senderUserId: game.user?.id ?? "",
+      payload
+    });
+  });
+}
+
+async function processDeusExMachinaDisintegrateSocketRequest(message = {}) {
+  const result = await processDeusExMachinaDisintegrateOperation({
+    ...(message.payload ?? {}),
+    senderUserId: message.senderUserId ?? message.payload?.senderUserId ?? ""
+  });
+  game.socket.emit(FIXED_ABILITY_SOCKET, {
+    scope: FIXED_ABILITY_SOCKET_SCOPE,
+    action: "deusExMachinaDisintegrateResult",
+    requestId: message.requestId,
+    targetUserId: message.senderUserId ?? "",
+    result: { applied: Boolean(result) }
+  });
+}
+
+async function processDeusExMachinaDisintegrateOperation(payload = {}) {
+  const actor = await fromUuid(String(payload.actorUuid ?? ""));
+  const targetTokenUuid = String(payload.targetTokenUuid ?? "").trim();
+  const targetActorUuid = String(payload.targetActorUuid ?? "").trim();
+  const targetTokenDocument = targetTokenUuid ? await fromUuid(targetTokenUuid) : null;
+  const targetActor = targetTokenDocument?.actor ?? (targetActorUuid ? await fromUuid(targetActorUuid) : null);
+  const abilityItem = actor?.items?.get(String(payload.abilityItemId ?? ""));
+  const abilityFunction = normalizeAbilityFunctions(abilityItem?.system?.functions ?? [])
+    .find(entry => entry.id === payload.abilityFunctionId && entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.deusExMachina);
+  const sender = game.users?.get(String(payload.senderUserId ?? ""));
+  if (!actor || !targetActor || !abilityItem || !abilityFunction) return false;
+  if (sender && !sender.isGM && !actor.testUserPermission(sender, "OWNER")) return false;
+
+  const settings = normalizeDeusExMachinaSettings(abilityFunction.fixedSettings);
+  const state = getFixedAbilityState(abilityItem);
+  const stateKey = getFixedFunctionStateKey(abilityFunction);
+  if (Math.max(0, toInteger(state[stateKey]?.damage)) < settings.damageRequired) return false;
 
   const criticalLimbKeys = getCriticalLimbKeys(targetActor);
   for (const limbKey of criticalLimbKeys) await setLimbMissingState(targetActor, limbKey, { syncStatus: false });
