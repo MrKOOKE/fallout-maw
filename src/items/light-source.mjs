@@ -21,6 +21,9 @@ const BASE_LIGHT_FLAG = "lightSourceBaseLight";
 const RESOURCE_REMAINDERS_FLAG = "lightSourceResourceRemainders";
 const ENERGY_SOURCE_PROTOTYPE_FLAG = "energySourcePrototypeUuid";
 const EPSILON = 0.000001;
+const RESERVE_PERSISTENCE_STEP = 0.01;
+const lightSourceResourceRemainderCache = new Map();
+const lightSourceEnergyReserveCache = new Map();
 
 export function registerLightSourceHooks() {
   registerQueuedWorldTimeProcessor(processLightSourceWorldTime, { priority: -20 });
@@ -505,19 +508,23 @@ async function consumeLightSourceResources(actor = null, item = null, deltaSecon
 async function prepareConditionConsumption(item = null, cost = {}, amount = 0) {
   const condition = getConditionFunction(item);
   const current = Math.max(0, toInteger(condition.value));
-  const remainders = foundry.utils.deepClone(item.getFlag(SYSTEM_ID, RESOURCE_REMAINDERS_FLAG) ?? {});
+  const remainders = getCachedLightSourceResourceRemainders(item);
   const key = `condition.${cost.index}`;
   const total = Math.max(0, Number(remainders[key]) || 0) + amount;
   const spend = Math.floor(total + EPSILON);
   const remainder = total - spend;
   if (current <= 0 && total > 0) return { available: false };
   if (spend > current) return { available: false };
+  remainders[key] = remainder > EPSILON ? remainder : 0;
   return {
     available: true,
     spend: async () => {
-      remainders[key] = remainder > EPSILON ? remainder : 0;
-      await item.update({ "system.functions.condition.value": Math.max(0, current - spend) });
-      await item.setFlag(SYSTEM_ID, RESOURCE_REMAINDERS_FLAG, remainders);
+      rememberLightSourceResourceRemainders(item, remainders);
+      if (spend <= 0) return;
+      await item.update({
+        "system.functions.condition.value": Math.max(0, current - spend),
+        [`flags.${SYSTEM_ID}.${RESOURCE_REMAINDERS_FLAG}`]: remainders
+      });
     }
   };
 }
@@ -528,13 +535,70 @@ function prepareEnergyConsumption(actor = null, item = null, amount = 0) {
   if (!source || !hasItemFunction(source, ITEM_FUNCTIONS.energySource, { ignoreBroken: true })) return { available: false };
   if (!energySourceMatchesConsumer(source, consumer)) return { available: false };
   const reserve = getEnergySourceReserveState(source);
-  if (reserve.value + EPSILON < amount) return { available: false };
+  const cachedValue = getCachedLightSourceReserveValue(item, consumer, reserve.value);
+  if (cachedValue + EPSILON < amount) return { available: false };
+  const next = Math.max(0, cachedValue - amount);
   return {
     available: true,
-    spend: () => item.update({
-      "system.functions.energyConsumer.installedSource.reserve.value": Math.max(0, reserve.value - amount)
-    })
+    spend: async () => {
+      rememberLightSourceReserveValue(item, consumer, next);
+      const persistedNext = roundReserveValueForUpdate(next);
+      if (next > EPSILON && persistedNext === roundReserveValueForUpdate(reserve.value)) return;
+      await item.update({ "system.functions.energyConsumer.installedSource.reserve.value": persistedNext });
+    }
   };
+}
+
+function getCachedLightSourceResourceRemainders(item = null) {
+  const key = getDocumentCacheKey(item);
+  if (key && lightSourceResourceRemainderCache.has(key)) {
+    return foundry.utils.deepClone(lightSourceResourceRemainderCache.get(key));
+  }
+  return normalizeLightSourceResourceRemainders(item?.getFlag?.(SYSTEM_ID, RESOURCE_REMAINDERS_FLAG) ?? {});
+}
+
+function rememberLightSourceResourceRemainders(item = null, remainders = {}) {
+  const key = getDocumentCacheKey(item);
+  if (!key) return;
+  lightSourceResourceRemainderCache.set(key, normalizeLightSourceResourceRemainders(remainders));
+}
+
+function normalizeLightSourceResourceRemainders(remainders = {}) {
+  const normalized = {};
+  for (const [key, value] of Object.entries(remainders ?? {})) {
+    const number = Number(value) || 0;
+    normalized[key] = Math.abs(number) > EPSILON ? number : 0;
+  }
+  return normalized;
+}
+
+function getCachedLightSourceReserveValue(item = null, consumer = {}, fallback = 0) {
+  const key = getInstalledReserveCacheKey(item, consumer);
+  const persisted = Math.max(0, Number(fallback) || 0);
+  if (!key || !lightSourceEnergyReserveCache.has(key)) return persisted;
+  const cached = Math.max(0, Number(lightSourceEnergyReserveCache.get(key)) || 0);
+  if (Math.abs(roundReserveValueForUpdate(cached) - roundReserveValueForUpdate(persisted)) > RESERVE_PERSISTENCE_STEP) return persisted;
+  return cached;
+}
+
+function rememberLightSourceReserveValue(item = null, consumer = {}, value = 0) {
+  const key = getInstalledReserveCacheKey(item, consumer);
+  if (!key) return;
+  lightSourceEnergyReserveCache.set(key, Math.max(0, Number(value) || 0));
+}
+
+function getInstalledReserveCacheKey(item = null, consumer = {}) {
+  const itemKey = getDocumentCacheKey(item);
+  const sourceKey = String(consumer?.installedSource?.sourceItemUuid ?? "").trim();
+  return itemKey && sourceKey ? `${itemKey}:${sourceKey}:installedReserve` : "";
+}
+
+function getDocumentCacheKey(document = null) {
+  return String(document?.uuid ?? document?.id ?? "").trim();
+}
+
+function roundReserveValueForUpdate(value = 0) {
+  return Math.max(0, Math.round((Number(value) || 0) * 100) / 100);
 }
 
 async function syncSceneLightSources(scene = null) {

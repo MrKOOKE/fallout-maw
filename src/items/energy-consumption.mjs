@@ -25,6 +25,8 @@ import {
 
 const { DialogV2 } = foundry.applications.api;
 const EPSILON = 0.000001;
+const RESERVE_PERSISTENCE_STEP = 0.01;
+const energyConsumptionReserveCache = new Map();
 
 export function registerEnergyConsumptionHooks() {
   registerQueuedWorldTimeProcessor(processEnergyConsumptionWorldTime, { priority: -15 });
@@ -257,13 +259,46 @@ async function consumeEnergyCondition(actor = null, item = null, condition = {},
   }
   const source = getActiveEnergySourceItem(actor, getEnergyConsumerFunction(item));
   const reserve = getEnergySourceReserveState(source);
-  const spend = Math.min(reserve.value, amount);
-  const next = Math.max(0, reserve.value - spend);
-  await item.update({ "system.functions.energyConsumer.installedSource.reserve.value": next });
-  if (reserve.value + EPSILON < amount || next <= EPSILON) {
-    await setEnergyConsumptionActive(actor, item, condition.id, false);
+  const cachedValue = getCachedEnergyConsumptionReserveValue(item, source, reserve.value);
+  const spend = Math.min(cachedValue, amount);
+  const next = Math.max(0, cachedValue - spend);
+  let changed = false;
+  rememberEnergyConsumptionReserveValue(item, source, next);
+  const persistedNext = roundReserveValueForUpdate(next);
+  if (next <= EPSILON || persistedNext !== roundReserveValueForUpdate(reserve.value)) {
+    await item.update({ "system.functions.energyConsumer.installedSource.reserve.value": persistedNext });
+    changed = true;
   }
-  return { changed: true };
+  if (cachedValue + EPSILON < amount || next <= EPSILON) {
+    await setEnergyConsumptionActive(actor, item, condition.id, false);
+    changed = true;
+  }
+  return { changed };
+}
+
+function getCachedEnergyConsumptionReserveValue(item = null, source = null, fallback = 0) {
+  const key = getEnergyConsumptionReserveCacheKey(item, source);
+  const persisted = Math.max(0, Number(fallback) || 0);
+  if (!key || !energyConsumptionReserveCache.has(key)) return persisted;
+  const cached = Math.max(0, Number(energyConsumptionReserveCache.get(key)) || 0);
+  if (Math.abs(roundReserveValueForUpdate(cached) - roundReserveValueForUpdate(persisted)) > RESERVE_PERSISTENCE_STEP) return persisted;
+  return cached;
+}
+
+function rememberEnergyConsumptionReserveValue(item = null, source = null, value = 0) {
+  const key = getEnergyConsumptionReserveCacheKey(item, source);
+  if (!key) return;
+  energyConsumptionReserveCache.set(key, Math.max(0, Number(value) || 0));
+}
+
+function getEnergyConsumptionReserveCacheKey(item = null, source = null) {
+  const itemKey = String(item?.uuid ?? item?.id ?? "").trim();
+  const sourceKey = String(source?.uuid ?? source?.id ?? "").trim();
+  return itemKey && sourceKey ? `${itemKey}:${sourceKey}:installedReserve` : "";
+}
+
+function roundReserveValueForUpdate(value = 0) {
+  return Math.max(0, Math.round((Number(value) || 0) * 100) / 100);
 }
 
 async function disableInvalidEnergyConsumption(actor = null, item = null) {

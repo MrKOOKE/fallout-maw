@@ -20,7 +20,9 @@ export const DISEASE_IMMUNITY_FLAG_KEY = "diseaseImmunity";
 const DISEASE_WORSENING_PROGRESS_MAX = 100;
 const DEFAULT_DISEASE_WORSENING_SECONDS = 24 * 60 * 60;
 const DISEASE_IMMUNITY_SECONDS = 24 * 60 * 60;
+const NEED_REMAINDER_EPSILON = 0.000001;
 const processingActors = new Set();
+const needAccumulationRemainderCache = new Map();
 
 export function registerNeedThresholdHooks() {
   Hooks.on("updateActor", (actor, changes) => {
@@ -96,7 +98,7 @@ async function processDiseaseWorldTime(worldTime, deltaTime, options) {
 
 async function processActorNeedAccumulation(actor, elapsedSeconds, { restMode = false, effects = [] } = {}) {
   const updateData = {};
-  const remainders = foundry.utils.deepClone(actor.getFlag(SYSTEM_ID, NEED_ACCUMULATION_REMAINDER_FLAG_KEY) ?? {});
+  const remainders = getNeedAccumulationRemainders(actor);
   const initialRemainders = JSON.stringify(remainders);
   const effectRates = collectNeedEffectRates(effects);
   for (const need of getActorNeedSettings(actor)) {
@@ -125,9 +127,33 @@ async function processActorNeedAccumulation(actor, elapsedSeconds, { restMode = 
     if (next !== current) updateData[`system.needs.${need.key}.value`] = next;
   }
   if (JSON.stringify(remainders) !== initialRemainders) {
-    updateData[`flags.${SYSTEM_ID}.${NEED_ACCUMULATION_REMAINDER_FLAG_KEY}`] = remainders;
+    rememberNeedAccumulationRemainders(actor, remainders);
   }
+  if (Object.keys(updateData).length) updateData[`flags.${SYSTEM_ID}.${NEED_ACCUMULATION_REMAINDER_FLAG_KEY}`] = remainders;
   if (Object.keys(updateData).length) await actor.update(updateData);
+}
+
+function getNeedAccumulationRemainders(actor) {
+  const key = String(actor?.uuid ?? actor?.id ?? "").trim();
+  if (key && needAccumulationRemainderCache.has(key)) {
+    return foundry.utils.deepClone(needAccumulationRemainderCache.get(key));
+  }
+  return normalizeNeedAccumulationRemainders(actor?.getFlag?.(SYSTEM_ID, NEED_ACCUMULATION_REMAINDER_FLAG_KEY) ?? {});
+}
+
+function rememberNeedAccumulationRemainders(actor, remainders = {}) {
+  const key = String(actor?.uuid ?? actor?.id ?? "").trim();
+  if (!key) return;
+  needAccumulationRemainderCache.set(key, normalizeNeedAccumulationRemainders(remainders));
+}
+
+function normalizeNeedAccumulationRemainders(remainders = {}) {
+  const normalized = {};
+  for (const [key, value] of Object.entries(remainders ?? {})) {
+    const number = Number(value) || 0;
+    normalized[key] = Math.abs(number) > NEED_REMAINDER_EPSILON ? number : 0;
+  }
+  return normalized;
 }
 
 function collectNeedEffectRates(effects = []) {
@@ -373,16 +399,16 @@ async function processSingleDiseaseWorsening(actor, item, diseaseSettings, now) 
     stageChanged = true;
   }
 
-  const updateData = {
-    "system.worseningProgress": normalizeProgress(progress),
-    "system.worseningProgressMax": DISEASE_WORSENING_PROGRESS_MAX,
-    "system.worseningBaseSeconds": getStageWorseningSeconds(stage, item.system?.worseningBaseSeconds),
-    "system.lastWorseningTime": now,
-    "system.worseningMultiplier": multiplier
-  };
+  const updateData = buildDiseaseWorseningUpdateData(item, {
+    progress: normalizeProgress(progress),
+    baseSeconds: getStageWorseningSeconds(stage, item.system?.worseningBaseSeconds),
+    multiplier,
+    now,
+    force: stageChanged
+  });
 
   if (!stageChanged) {
-    await item.update(updateData);
+    if (Object.keys(updateData).length) await item.update(updateData);
     return;
   }
 
@@ -391,6 +417,23 @@ async function processSingleDiseaseWorsening(actor, item, diseaseSettings, now) 
   const oldIds = item.effects.map(effect => effect.id);
   if (oldIds.length) await item.deleteEmbeddedDocuments("ActiveEffect", oldIds);
   if (stageData.effects.length) await item.createEmbeddedDocuments("ActiveEffect", stageData.effects);
+}
+
+function buildDiseaseWorseningUpdateData(item, { progress = 0, baseSeconds = DEFAULT_DISEASE_WORSENING_SECONDS, multiplier = 1, now = 0, force = false } = {}) {
+  const updateData = {};
+  if (force || normalizeProgress(item.system?.worseningProgress) !== progress) updateData["system.worseningProgress"] = progress;
+  if (force || toInteger(item.system?.worseningProgressMax) !== DISEASE_WORSENING_PROGRESS_MAX) {
+    updateData["system.worseningProgressMax"] = DISEASE_WORSENING_PROGRESS_MAX;
+  }
+  if (force || toInteger(item.system?.worseningBaseSeconds) !== baseSeconds) {
+    updateData["system.worseningBaseSeconds"] = baseSeconds;
+  }
+  if (force || Number(item.system?.worseningMultiplier) !== multiplier) updateData["system.worseningMultiplier"] = multiplier;
+  if (force || Object.keys(updateData).length) {
+    updateData["system.worseningProgress"] ??= progress;
+    updateData["system.lastWorseningTime"] = now;
+  }
+  return updateData;
 }
 
 function buildDiseaseStageUpdateData(actor, item, disease, stage, baseUpdate = {}) {
