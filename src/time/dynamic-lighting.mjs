@@ -1,10 +1,9 @@
-import { registerQueuedWorldTimeProcessor } from "./world-time-queue.mjs";
-
 const DAY_SECONDS = 24 * 60 * 60;
 const HOUR_SECONDS = 60 * 60;
 const MAX_DARKNESS_ANIMATION_MS = 1500;
 const MIN_DARKNESS_ANIMATION_MS = 500;
 const DARKNESS_UPDATE_EPSILON = 0.01;
+const DARKNESS_ANIMATION_SETTLE_MS = 50;
 const NIGHT_DARKNESS_SCHEDULE = Object.freeze([
   Object.freeze({ hour: 0, darkness: 1 }),
   Object.freeze({ hour: 4, darkness: 1 }),
@@ -15,41 +14,108 @@ const NIGHT_DARKNESS_SCHEDULE = Object.freeze([
 ]);
 
 let hooksRegistered = false;
+let processingTransitions = false;
+let lastQueuedSceneId = "";
+let lastQueuedDarkness = null;
+const pendingTransitions = [];
 
 export function registerDynamicLightingHooks() {
   if (hooksRegistered) return;
-  registerQueuedWorldTimeProcessor(processDynamicLightingWorldTime, { priority: -50 });
-  Hooks.on("canvasReady", () => void syncCurrentSceneDarkness());
+  Hooks.on("updateWorldTime", enqueueDynamicLightingWorldTime);
+  Hooks.on("canvasReady", () => {
+    resetDynamicLightingTransitions();
+    enqueueDynamicLightingWorldTime(Number(game.time?.worldTime) || 0);
+  });
+  Hooks.on("updateScene", (scene, changes, options) => {
+    if (options?.falloutMawDynamicLighting) return;
+    if (foundry.utils.hasProperty(changes ?? {}, "environment.darknessLevel")) resetDynamicLightingTransitions(scene?.id);
+  });
   hooksRegistered = true;
 }
 
-async function processDynamicLightingWorldTime(worldTime) {
-  await syncCurrentSceneDarkness(worldTime);
-}
-
-async function syncCurrentSceneDarkness(worldTime = Number(game.time?.worldTime) || 0) {
+function enqueueDynamicLightingWorldTime(worldTime) {
   if (!game.user?.isActiveGM) return;
   const scene = getCurrentScene();
-  if (!scene) return;
-  if (scene.environment?.darknessLock) return;
-  if (!scene.canUserModify?.(game.user, "update")) return;
+  if (!canControlSceneDarkness(scene)) return;
 
   const targetDarkness = calculateWorldTimeDarkness(worldTime);
-  const currentDarkness = clampAlpha(scene.environment?.darknessLevel);
-  const difference = Math.abs(targetDarkness - currentDarkness);
-  if (difference <= DARKNESS_UPDATE_EPSILON) return;
+  const referenceDarkness = getQueuedReferenceDarkness(scene);
+  if (Math.abs(targetDarkness - referenceDarkness) <= DARKNESS_UPDATE_EPSILON) return;
 
-  await scene.update(
-    { environment: { darknessLevel: targetDarkness } },
-    {
-      animateDarkness: getDarknessAnimationDuration(difference),
-      falloutMawDynamicLighting: true
+  pendingTransitions.push({
+    sceneId: scene.id,
+    targetDarkness
+  });
+  lastQueuedSceneId = scene.id;
+  lastQueuedDarkness = targetDarkness;
+  void processDynamicLightingTransitions();
+}
+
+async function processDynamicLightingTransitions() {
+  if (processingTransitions) return;
+  processingTransitions = true;
+  try {
+    while (pendingTransitions.length) {
+      try {
+        const transition = pendingTransitions.shift();
+        const scene = getCurrentScene();
+        if (!scene || scene.id !== transition.sceneId) continue;
+        if (!canControlSceneDarkness(scene)) continue;
+
+        const targetDarkness = clampAlpha(transition.targetDarkness);
+        const currentDarkness = getDisplayedDarkness(scene);
+        const difference = Math.abs(targetDarkness - currentDarkness);
+        if (difference <= DARKNESS_UPDATE_EPSILON) continue;
+
+        const duration = getDarknessAnimationDuration(difference);
+        await scene.update(
+          { environment: { darknessLevel: targetDarkness } },
+          {
+            animateDarkness: duration,
+            falloutMawDynamicLighting: true
+          }
+        );
+        await waitForDarknessAnimation(duration);
+      } catch (error) {
+        console.error("Fallout MaW | Dynamic lighting transition failed", error);
+      }
     }
-  );
+  } finally {
+    processingTransitions = false;
+    const scene = getCurrentScene();
+    if (!pendingTransitions.length && scene) {
+      lastQueuedSceneId = scene.id;
+      lastQueuedDarkness = getDisplayedDarkness(scene);
+    }
+    if (pendingTransitions.length) void processDynamicLightingTransitions();
+  }
 }
 
 function getCurrentScene() {
   return canvas?.scene ?? game.scenes?.active ?? null;
+}
+
+function canControlSceneDarkness(scene = null) {
+  if (!scene) return false;
+  if (scene.environment?.darknessLock) return false;
+  return scene.canUserModify?.(game.user, "update") ?? false;
+}
+
+function getQueuedReferenceDarkness(scene = null) {
+  if (lastQueuedSceneId === scene?.id && Number.isFinite(Number(lastQueuedDarkness))) return clampAlpha(lastQueuedDarkness);
+  return getDisplayedDarkness(scene);
+}
+
+function getDisplayedDarkness(scene = null) {
+  return clampAlpha(canvas?.scene?.id === scene?.id ? canvas?.environment?.darknessLevel : scene?.environment?.darknessLevel);
+}
+
+function resetDynamicLightingTransitions(sceneId = "") {
+  if (!sceneId || sceneId === lastQueuedSceneId) {
+    pendingTransitions.length = 0;
+    lastQueuedSceneId = "";
+    lastQueuedDarkness = null;
+  }
 }
 
 export function calculateWorldTimeDarkness(worldTime = 0) {
@@ -73,6 +139,10 @@ function getWorldTimeDayHour(worldTime = 0) {
 function getDarknessAnimationDuration(difference = 0) {
   const scaled = MIN_DARKNESS_ANIMATION_MS + Math.floor(clampAlpha(difference) * MAX_DARKNESS_ANIMATION_MS);
   return Math.min(scaled, MAX_DARKNESS_ANIMATION_MS);
+}
+
+function waitForDarknessAnimation(duration = 0) {
+  return new Promise(resolve => globalThis.setTimeout(resolve, Math.max(0, Number(duration) || 0) + DARKNESS_ANIMATION_SETTLE_MS));
 }
 
 function lerp(start, end, progress) {
