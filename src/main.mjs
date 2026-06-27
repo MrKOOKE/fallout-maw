@@ -39,6 +39,7 @@ import { registerAnimationLibraryBrowserHooks } from "./apps/animation-library-b
 import { registerTrapPlacementControlHooks } from "./apps/trap-placement-control.mjs";
 import { registerWorldTimeControlHooks } from "./apps/world-time-control.mjs";
 import { registerCampHooks, registerCampSocket } from "./apps/camp-window.mjs";
+import { registerDynamicLightingHooks } from "./time/dynamic-lighting.mjs";
 import { registerPersonalGeneratorHooks } from "./apps/personal-generator.mjs";
 import { registerButcheringConfigHooks } from "./apps/butchering-config.mjs";
 import { registerHackingHooks, registerHackingSocket } from "./apps/hacking-dialog.mjs";
@@ -138,6 +139,7 @@ Hooks.once("init", () => {
   registerTravelMovementHooks();
   registerCombatCarouselHooks();
   registerWorldTimeControlHooks();
+  registerDynamicLightingHooks();
   registerCampHooks();
   registerPersonalGeneratorHooks();
   registerButcheringConfigHooks();
