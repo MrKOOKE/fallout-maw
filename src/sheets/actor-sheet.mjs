@@ -2989,8 +2989,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       this.#clearNestedInventoryTooltip({ force: true });
       this.#tooltipElement.innerHTML = tooltipHTML;
       this.#tooltipElement.classList.remove("pinned");
-      this.#tooltipElement.style.pointerEvents = "none";
       this.#tooltipPinned = false;
+      this.#syncInventoryTooltipPointerEvents();
       this.#tooltipItemId = item.id;
       this.#bindInventoryTooltipKeyMode();
       this.#syncInventoryOverlayLayer();
@@ -3008,9 +3008,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const tooltip = document.createElement("aside");
     tooltip.className = "fallout-maw-inventory-tooltip";
     tooltip.classList.toggle("pinned", Boolean(pinned));
-    tooltip.style.pointerEvents = pinned ? "auto" : "none";
     this.#applyOverlayUiScale(tooltip);
     tooltip.innerHTML = tooltipHTML;
+    this.#syncInventoryTooltipPointerEvents(tooltip, { pinned });
     tooltip.addEventListener("pointerdown", () => this.#syncInventoryOverlayLayer({ bringToFront: true }));
     tooltip.addEventListener("pointerenter", () => this.#cancelInventoryTooltipClose());
     tooltip.addEventListener("click", event => this.#onInventoryTooltipClick(event));
@@ -3124,7 +3124,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (!this.#tooltipElement || this.#tooltipItemId !== item.id) return;
     this.#tooltipElement.innerHTML = tooltipHTML;
     this.#tooltipElement.classList.toggle("pinned", this.#tooltipPinned);
-    this.#tooltipElement.style.pointerEvents = this.#tooltipPinned ? "auto" : "none";
+    this.#syncInventoryTooltipPointerEvents();
     this.#syncInventoryOverlayLayer({ bringToFront: this.#tooltipPinned });
     if (!this.#tooltipPinned && this.#resolveInventoryTooltipAnchor(this.#tooltipItemId)) this.#positionInventoryTooltip();
     else this.#clampInventoryTooltipToViewport(this.#tooltipElement);
@@ -3230,9 +3230,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   #pinInventoryTooltip() {
     this.#tooltipPinned = true;
     this.#tooltipElement?.classList.add("pinned");
-    if (this.#tooltipElement) this.#tooltipElement.style.pointerEvents = "auto";
+    this.#syncInventoryTooltipPointerEvents();
     this.#bindInventoryTooltipDocumentClose();
     this.#syncInventoryOverlayLayer({ bringToFront: true });
+  }
+
+  #syncInventoryTooltipPointerEvents(tooltip = this.#tooltipElement, { pinned = this.#tooltipPinned } = {}) {
+    if (!tooltip) return;
+    const hasDescriptionFormula = Boolean(tooltip.querySelector(".fallout-maw-description-formula-result"));
+    tooltip.style.pointerEvents = (pinned || hasDescriptionFormula) ? "auto" : "none";
   }
 
   #clearNestedInventoryTooltip() {

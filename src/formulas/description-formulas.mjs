@@ -179,6 +179,15 @@ function positionDescriptionFormulaTooltip(element, target) {
   const top = below + tooltipRect.height <= viewportHeight - margin
     ? below
     : Math.max(margin, rect.top - tooltipRect.height - gap);
+  syncDescriptionFormulaTooltipLayer(element, target);
   element.style.left = `${Math.round(left)}px`;
   element.style.top = `${Math.round(top)}px`;
+}
+
+function syncDescriptionFormulaTooltipLayer(element, target) {
+  const host = target?.closest?.(".fallout-maw-inventory-tooltip, .fallout-maw-ability-description-tooltip, #tooltip, .application");
+  if (!host) return;
+  const zIndex = Number.parseInt(window.getComputedStyle(host).zIndex, 10);
+  if (!Number.isFinite(zIndex)) return;
+  element.style.zIndex = String(zIndex + 1);
 }

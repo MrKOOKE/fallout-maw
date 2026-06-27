@@ -1572,10 +1572,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     if (refresh && this.#itemTooltipElement && !this.#itemTooltipPinned && !pinned) {
       this.#itemTooltipElement.innerHTML = tooltipHTML;
       this.#itemTooltipElement.classList.remove("pinned");
-      this.#itemTooltipElement.style.pointerEvents = "none";
       this.#itemTooltipAnchorElement = anchor;
       this.#itemTooltipItemId = item.id;
       this.#itemTooltipPinned = false;
+      this.#syncHudItemTooltipPointerEvents();
       this.#syncHudItemTooltipLayer();
       this.#positionHudItemTooltip();
       requestAnimationFrame(() => {
@@ -1593,8 +1593,8 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     tooltip.className = "fallout-maw-inventory-tooltip";
     tooltip.classList.toggle("pinned", Boolean(pinned));
     tooltip.style.setProperty("--fallout-maw-ui-scale", String(tokenActionHudScaleFactor(getTokenActionHudScalePercent())));
-    tooltip.style.pointerEvents = pinned ? "auto" : "none";
     tooltip.innerHTML = tooltipHTML;
+    this.#syncHudItemTooltipPointerEvents(tooltip, { pinned });
     tooltip.addEventListener("pointerdown", () => this.#syncHudItemTooltipLayer({ bringToFront: true }));
     tooltip.addEventListener("click", event => this.#onHudItemTooltipClick(event));
     tooltip.addEventListener("auxclick", event => this.#onHudItemTooltipAuxClick(event));
@@ -1642,7 +1642,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
       this.#queueHudItemTooltipHoverValidation();
     }
     this.#itemTooltipElement.innerHTML = tooltipHTML;
-    this.#itemTooltipElement.style.pointerEvents = this.#itemTooltipPinned ? "auto" : "none";
+    this.#syncHudItemTooltipPointerEvents();
     this.#syncHudItemTooltipLayer({ bringToFront: this.#itemTooltipPinned });
     this.#clampHudItemTooltipToViewport(this.#itemTooltipElement);
     requestAnimationFrame(() => {
@@ -1810,9 +1810,15 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
   #pinHudItemTooltip() {
     this.#itemTooltipPinned = true;
     this.#itemTooltipElement?.classList.add("pinned");
-    if (this.#itemTooltipElement) this.#itemTooltipElement.style.pointerEvents = "auto";
+    this.#syncHudItemTooltipPointerEvents();
     this.#bindHudItemTooltipDocumentListeners();
     this.#syncHudItemTooltipLayer({ bringToFront: true });
+  }
+
+  #syncHudItemTooltipPointerEvents(tooltip = this.#itemTooltipElement, { pinned = this.#itemTooltipPinned } = {}) {
+    if (!tooltip) return;
+    const hasDescriptionFormula = Boolean(tooltip.querySelector(".fallout-maw-description-formula-result"));
+    tooltip.style.pointerEvents = (pinned || hasDescriptionFormula) ? "auto" : "none";
   }
 
   #scheduleHudItemTooltipClose() {
