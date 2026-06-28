@@ -12,6 +12,7 @@
   <a class="item {{tabs.functions.cssClass}}" data-action="selectTab" data-group="{{tabs.functions.group}}" data-tab="{{tabs.functions.id}}">Функции</a>
 </nav>
 
+{{#if isDetailsTab}}
 <section class="tab {{tabs.details.cssClass}}" data-group="{{tabs.details.group}}" data-tab="{{tabs.details.id}}">
   <section class="fallout-maw-panel">
     <div class="fallout-maw-panel-header">
@@ -125,7 +126,9 @@
     </prose-mirror>
   </section>
 </section>
+{{/if}}
 
+{{#if isFunctionsTab}}
 <section class="tab {{tabs.functions.cssClass}}" data-group="{{tabs.functions.group}}" data-tab="{{tabs.functions.id}}">
   <section class="fallout-maw-panel">
     <div class="fallout-maw-panel-header">
@@ -1364,5 +1367,6 @@
   </section>
   {{/each}}
 </section>
+{{/if}}
 
 </div>

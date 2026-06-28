@@ -145,18 +145,20 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
   }
 
   async _prepareContext(options) {
+    const isDetailsTab = this.#activeTab === "details";
+    const isFunctionsTab = this.#activeTab === "functions";
     const characteristics = getCharacteristicSettings();
     const skills = getSkillSettings();
-    const descriptionHTML = await TextEditor.enrichHTML(this.ability.description ?? "", {
+    const descriptionHTML = isDetailsTab ? await TextEditor.enrichHTML(this.ability.description ?? "", {
       secrets: game.user?.isGM ?? false
-    });
+    }) : "";
     return {
       ...(await super._prepareContext(options)),
       ability: this.ability,
       system: this.ability.system,
       isFeature: this.#isFeature,
-      isDetailsTab: this.#activeTab === "details",
-      isFunctionsTab: this.#activeTab === "functions",
+      isDetailsTab,
+      isFunctionsTab,
       tabs: {
         details: {
           id: "details",
@@ -177,17 +179,17 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       fixedFunctionChoices: getFixedAbilityFunctionChoices(),
       onlyFree: Boolean(this.ability.system?.acquisition?.onlyFree),
       onlyManual: Boolean(this.ability.system?.acquisition?.onlyManual),
-      acquisitionRequirements: (this.ability.system?.acquisitionRequirements ?? []).map(requirement => prepareAcquisitionRequirementForDisplay(requirement, {
+      acquisitionRequirements: isDetailsTab ? (this.ability.system?.acquisitionRequirements ?? []).map(requirement => prepareAcquisitionRequirementForDisplay(requirement, {
         characteristicSettings: characteristics,
         skillSettings: skills
-      })),
+      })) : [],
       researchDifficulty: Math.max(0, toInteger(this.ability.system?.acquisition?.difficulty ?? 60)),
-      researchSkillChoices: skills.map((skill, index) => ({
+      researchSkillChoices: isDetailsTab ? skills.map((skill, index) => ({
         key: skill.key,
         label: skill.label,
         selected: skill.key === this.ability.system?.acquisition?.skillKey || (!this.ability.system?.acquisition?.skillKey && index === 0)
-      })),
-      functions: normalizeAbilityFunctions(this.ability.system?.functions ?? []).map(prepareFunctionForDisplay)
+      })) : [],
+      functions: isFunctionsTab ? normalizeAbilityFunctions(this.ability.system?.functions ?? []).map(prepareFunctionForDisplay) : []
     };
   }
 
@@ -691,7 +693,13 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
 
   #syncFromForm() {
     if (!this.form) return;
-    const onlyFree = Boolean(this.form.querySelector("[data-field='onlyFree']")?.checked);
+    const acquisition = this.ability.system?.acquisition ?? {};
+    const onlyFreeInput = this.form.querySelector("[data-field='onlyFree']");
+    const onlyManualInput = this.form.querySelector("[data-field='onlyManual']");
+    const researchSkillInput = this.form.querySelector("[data-field='researchSkillKey']");
+    const researchDifficultyInput = this.form.querySelector("[data-field='researchDifficulty']");
+    const acquisitionRequirementsRoot = this.form.querySelector("[data-acquisition-requirements]");
+    const onlyFree = onlyFreeInput ? Boolean(onlyFreeInput.checked) : Boolean(acquisition.onlyFree);
     this.ability = normalizeAbilityEntry({
       ...this.ability,
       name: this.form.querySelector("[data-field='name']")?.value ?? this.ability.name,
@@ -701,13 +709,13 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
         ...(this.ability.system ?? {}),
         acquisition: {
           onlyFree,
-          onlyManual: onlyFree ? false : Boolean(this.form.querySelector("[data-field='onlyManual']")?.checked),
-          skillKey: this.form.querySelector("[data-field='researchSkillKey']")?.value ?? this.ability.system?.acquisition?.skillKey,
-          difficulty: this.form.querySelector("[data-field='researchDifficulty']")?.value ?? this.ability.system?.acquisition?.difficulty
+          onlyManual: onlyFree ? false : (onlyManualInput ? Boolean(onlyManualInput.checked) : Boolean(acquisition.onlyManual)),
+          skillKey: researchSkillInput?.value ?? acquisition.skillKey,
+          difficulty: researchDifficultyInput?.value ?? acquisition.difficulty
         },
         cost: this.#isFeature ? 0 : this.form.querySelector("[data-field='cost']")?.value ?? this.ability.system?.cost,
-        acquisitionRequirements: readAcquisitionRequirements(this.form.querySelector("[data-acquisition-requirements]")),
-        functions: readAbilityFunctions(this.form)
+        acquisitionRequirements: acquisitionRequirementsRoot ? readAcquisitionRequirements(acquisitionRequirementsRoot) : this.ability.system?.acquisitionRequirements,
+        functions: this.#activeTab === "functions" ? readAbilityFunctions(this.form) : this.ability.system?.functions
       }
     });
   }

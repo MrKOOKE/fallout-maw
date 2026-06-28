@@ -215,7 +215,7 @@ export function registerSystemSettings() {
     config: false,
     type: Object,
     default: getBaselineDefault(ABILITIES_CATALOG_SETTING, createDefaultAbilityCatalog(createDefaultSkillSettings())),
-    onChange: refreshPreparedActors
+    onChange: () => Hooks.callAll(`${FALLOUT_MAW.id}.abilityCatalogChanged`)
   });
 
   game.settings.register(FALLOUT_MAW.id, SKILL_CHECK_CONTROL_SETTING, {
