@@ -3639,9 +3639,7 @@ body #prosemirror-dropdown {
 .fallout-maw-inventory-grid {
   --fallout-maw-inventory-grid-step: calc(var(--fallout-maw-inventory-cell-size) + var(--fallout-maw-inventory-grid-gap));
   --fallout-maw-inventory-grid-line-size: 1px;
-  --fallout-maw-inventory-grid-shadow-size: calc(var(--fallout-maw-inventory-grid-line-size) + var(--fallout-maw-inventory-grid-line-size) + var(--fallout-maw-inventory-grid-line-size));
   --fallout-maw-inventory-grid-line-color: rgba(120, 120, 120, 0.24);
-  --fallout-maw-inventory-grid-cell-shadow: rgba(0, 0, 0, 0.16);
   --fallout-maw-inventory-grid-background: rgba(0, 0, 0, 0.16);
   --fallout-maw-inventory-grid-texture: linear-gradient(transparent, transparent);
   display: grid;
@@ -3658,6 +3656,7 @@ body #prosemirror-dropdown {
 .fallout-maw-inventory-grid::after,
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-offer-grid::before,
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-offer-grid::after {
+  box-sizing: border-box;
   content: "";
   inset: 0;
   pointer-events: none;
@@ -3677,38 +3676,20 @@ body #prosemirror-dropdown {
   background-image:
     linear-gradient(
       90deg,
-      var(--fallout-maw-inventory-grid-line-color) 0 var(--fallout-maw-inventory-grid-line-size),
-      transparent var(--fallout-maw-inventory-grid-line-size) 100%
-    ),
-    linear-gradient(
-      90deg,
-      transparent 0 calc(var(--fallout-maw-inventory-cell-size) - var(--fallout-maw-inventory-grid-line-size)),
-      var(--fallout-maw-inventory-grid-line-color) calc(var(--fallout-maw-inventory-cell-size) - var(--fallout-maw-inventory-grid-line-size)) var(--fallout-maw-inventory-cell-size),
-      transparent var(--fallout-maw-inventory-cell-size) var(--fallout-maw-inventory-grid-step)
+      transparent 0 var(--fallout-maw-inventory-cell-size),
+      var(--fallout-maw-inventory-grid-line-color) var(--fallout-maw-inventory-cell-size) calc(var(--fallout-maw-inventory-cell-size) + var(--fallout-maw-inventory-grid-line-size)),
+      transparent calc(var(--fallout-maw-inventory-cell-size) + var(--fallout-maw-inventory-grid-line-size)) 100%
     ),
     linear-gradient(
       180deg,
-      var(--fallout-maw-inventory-grid-line-color) 0 var(--fallout-maw-inventory-grid-line-size),
-      transparent var(--fallout-maw-inventory-grid-line-size) 100%
-    ),
-    linear-gradient(
-      180deg,
-      transparent 0 calc(var(--fallout-maw-inventory-cell-size) - var(--fallout-maw-inventory-grid-line-size)),
-      var(--fallout-maw-inventory-grid-line-color) calc(var(--fallout-maw-inventory-cell-size) - var(--fallout-maw-inventory-grid-line-size)) var(--fallout-maw-inventory-cell-size),
-      transparent var(--fallout-maw-inventory-cell-size) var(--fallout-maw-inventory-grid-step)
-    ),
-    linear-gradient(
-      90deg,
-      var(--fallout-maw-inventory-grid-cell-shadow) 0 var(--fallout-maw-inventory-grid-line-size),
-      transparent var(--fallout-maw-inventory-grid-shadow-size) 100%
-    ),
-    linear-gradient(
-      180deg,
-      var(--fallout-maw-inventory-grid-cell-shadow) 0 var(--fallout-maw-inventory-grid-line-size),
-      transparent var(--fallout-maw-inventory-grid-shadow-size) 100%
+      transparent 0 var(--fallout-maw-inventory-cell-size),
+      var(--fallout-maw-inventory-grid-line-color) var(--fallout-maw-inventory-cell-size) calc(var(--fallout-maw-inventory-cell-size) + var(--fallout-maw-inventory-grid-line-size)),
+      transparent calc(var(--fallout-maw-inventory-cell-size) + var(--fallout-maw-inventory-grid-line-size)) 100%
     );
   background-repeat: repeat;
   background-size: var(--fallout-maw-inventory-grid-step) var(--fallout-maw-inventory-grid-step);
+  border-left: var(--fallout-maw-inventory-grid-line-size) solid var(--fallout-maw-inventory-grid-line-color);
+  border-top: var(--fallout-maw-inventory-grid-line-size) solid var(--fallout-maw-inventory-grid-line-color);
 }
 
 .fallout-maw-actor-container-slot-table {
@@ -13543,9 +13524,8 @@ html.fallout-maw-token-action-hud-open #hotbar {
 }
 
 .application.fallout-maw-actor-sheet .fallout-maw-inventory-grid {
-  --fallout-maw-inventory-grid-line-size: 2px;
-  --fallout-maw-inventory-grid-line-color: rgba(131, 119, 74, 0.52);
-  --fallout-maw-inventory-grid-cell-shadow: rgba(0, 0, 0, 0.82);
+  --fallout-maw-inventory-grid-line-size: 1px;
+  --fallout-maw-inventory-grid-line-color: rgb(70, 64, 40);
   --fallout-maw-inventory-grid-background: linear-gradient(180deg, rgba(3, 5, 4, 0.98), rgba(8, 10, 7, 0.97));
   --fallout-maw-inventory-grid-texture: repeating-linear-gradient(180deg, rgba(171, 224, 132, 0.016) 0 1px, transparent 1px 5px);
 }
@@ -14061,10 +14041,8 @@ html.fallout-maw-token-action-hud-open #hotbar {
 
 .application.fallout-maw-actor-sheet.fallout-maw-search-inventory .fallout-maw-trade-offer-grid {
   --fallout-maw-inventory-grid-step: calc(var(--fallout-maw-inventory-cell-size) + var(--fallout-maw-inventory-grid-gap));
-  --fallout-maw-inventory-grid-line-size: 2px;
-  --fallout-maw-inventory-grid-shadow-size: calc(var(--fallout-maw-inventory-grid-line-size) + var(--fallout-maw-inventory-grid-line-size) + var(--fallout-maw-inventory-grid-line-size));
-  --fallout-maw-inventory-grid-line-color: rgba(131, 119, 74, 0.52);
-  --fallout-maw-inventory-grid-cell-shadow: rgba(0, 0, 0, 0.82);
+  --fallout-maw-inventory-grid-line-size: 1px;
+  --fallout-maw-inventory-grid-line-color: rgb(70, 64, 40);
   --fallout-maw-inventory-grid-background: linear-gradient(180deg, rgba(3, 5, 4, 0.98), rgba(8, 10, 7, 0.97));
   --fallout-maw-inventory-grid-texture: repeating-linear-gradient(180deg, rgba(171, 224, 132, 0.016) 0 1px, transparent 1px 5px);
   box-sizing: border-box;
