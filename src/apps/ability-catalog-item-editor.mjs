@@ -69,7 +69,10 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
   #activeTab = "details";
   #functionPickerActive = false;
   #fixedFunctionPickerActive = false;
-  #saveDebounced;
+  #autosaveDebounced;
+  #autosaveDirty = false;
+  #autosaveInFlight = false;
+  #autosavePromise = Promise.resolve(null);
 
   constructor(catalogApp, categoryId, abilityId, options = {}) {
     super(options);
@@ -77,7 +80,7 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     this.categoryId = categoryId;
     this.abilityId = abilityId;
     this.ability = normalizeAbilityEntry(catalogApp.getAbility(categoryId, abilityId));
-    this.#saveDebounced = foundry.utils.debounce(() => void this.#persist(), 250);
+    this.#autosaveDebounced = foundry.utils.debounce(() => void this.#flushAutosave(), 600);
   }
 
   static DEFAULT_OPTIONS = {
@@ -91,7 +94,8 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
       resizable: true
     },
     form: {
-      closeOnSubmit: true
+      submitOnChange: false,
+      closeOnSubmit: false
     },
     actions: {
       editAbilityImage: this.#onEditAbilityImage,
@@ -190,7 +194,6 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
   async _onRender(context, options) {
     await super._onRender(context, options);
     this.form?.addEventListener("input", this.#onAutosaveInput);
-    this.form?.addEventListener("change", this.#onAutosaveChange);
     this.element?.querySelector?.("[data-choose-ability-function]")?.addEventListener("change", event => this.#onChooseFunction(event));
     this.element?.querySelector?.("[data-choose-fixed-ability-function]")?.addEventListener("change", event => this.#onChooseFixedFunction(event));
     this.element?.querySelector?.("[data-fixed-ability-function-search]")?.addEventListener("input", event => this.#onFixedFunctionSearch(event));
@@ -219,18 +222,27 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
   }
 
   async _processFormData(_event, _form, _formData) {
-    return this.#persist();
+    this.#syncFromForm();
+    this.#queueAutosave();
+    return this.#flushAutosave({ force: true });
   }
 
   #onAutosaveInput = event => {
     if (!event.target?.closest?.("[data-field]")) return;
-    this.#saveDebounced();
+    this.#queueAutosave();
   };
 
-  #onAutosaveChange = event => {
+  _onChangeForm(formConfig, event) {
+    super._onChangeForm(formConfig, event);
     if (!event.target?.closest?.("[data-field]")) return;
-    return this.#persist();
-  };
+    this.#queueAutosave();
+  }
+
+  async close(options = {}) {
+    if (this.form) this.#syncFromForm();
+    if (this.#autosaveDirty) await this.#flushAutosave({ force: true });
+    return super.close(options);
+  }
 
   static #onSelectTab(event, target) {
     event.preventDefault();
@@ -642,12 +654,39 @@ export class AbilityCatalogItemEditor extends FalloutMaWFormApplicationV2 {
     return this.#persist({ render: true, sync: false });
   }
 
-  async #persist({ render = false, sync = true } = {}) {
+  #persist({ render = false, sync = true } = {}) {
     if (sync) this.#syncFromForm();
-    const saved = await this.catalogApp.saveAbility(this.categoryId, this.ability);
-    if (saved) this.ability = saved;
+    this.#queueAutosave();
     if (render) return this.render();
-    return saved;
+    return this.ability;
+  }
+
+  #queueAutosave() {
+    this.#autosaveDirty = true;
+    this.#autosaveDebounced();
+  }
+
+  async #flushAutosave({ force = false } = {}) {
+    this.#autosaveDebounced.cancel?.();
+    if (this.#autosaveInFlight) {
+      await this.#autosavePromise;
+      return this.#flushAutosave({ force });
+    }
+    if (!force && !this.#autosaveDirty) return this.ability;
+
+    if (this.form) this.#syncFromForm();
+    this.#autosaveDirty = false;
+    this.#autosaveInFlight = true;
+    this.#autosavePromise = this.catalogApp.saveAbility(this.categoryId, this.ability);
+
+    try {
+      const saved = await this.#autosavePromise;
+      if (saved) this.ability = saved;
+      return this.ability;
+    } finally {
+      this.#autosaveInFlight = false;
+      if (this.#autosaveDirty) this.#autosaveDebounced();
+    }
   }
 
   #syncFromForm() {
