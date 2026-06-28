@@ -1,0 +1,50 @@
+<form class="fallout-maw-config-body fallout-maw-combat-initiative-surprise-form" data-surprise-form>
+  <section class="fallout-maw-panel">
+    <header class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.CombatCarousel.RollInitiativeTitle"}}</h2>
+    </header>
+
+    <p class="hint">{{localize "FALLOUTMAW.CombatCarousel.SurpriseHint"}}</p>
+
+    <div class="fallout-maw-combat-initiative-surprise-table">
+      <div class="fallout-maw-combat-initiative-surprise-header">
+        <span></span>
+        <span></span>
+        <span>{{localize "FALLOUTMAW.CombatCarousel.Surprised"}}</span>
+      </div>
+
+      <div class="fallout-maw-combat-initiative-surprise-list">
+        {{#each groups}}
+        <details class="fallout-maw-combat-initiative-surprise-faction" data-surprise-faction data-faction-index="{{index}}">
+          <summary>
+            <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+            <span class="fallout-maw-combat-initiative-surprise-name">
+              <strong>{{name}}</strong>
+              <span>{{count}}</span>
+            </span>
+            <label class="fallout-maw-combat-initiative-surprise-toggle" data-surprise-toggle-container title="{{localize 'FALLOUTMAW.CombatCarousel.Surprised'}}">
+              <input type="checkbox" data-surprise-faction-toggle aria-label="{{localize 'FALLOUTMAW.CombatCarousel.Surprised'}}">
+            </label>
+          </summary>
+
+          <div class="fallout-maw-combat-initiative-surprise-members">
+            {{#each combatants}}
+            <label class="fallout-maw-combat-initiative-surprise-member">
+              <span>{{name}}</span>
+              <input type="checkbox" value="{{id}}" data-surprise-combatant title="{{localize 'FALLOUTMAW.CombatCarousel.Surprised'}}" aria-label="{{localize 'FALLOUTMAW.CombatCarousel.Surprised'}}">
+            </label>
+            {{/each}}
+          </div>
+        </details>
+        {{else}}
+        <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.CombatCarousel.NoInitiativeCombatants"}}</p>
+        {{/each}}
+      </div>
+    </div>
+  </section>
+
+  <footer class="sheet-footer flexrow">
+    <button type="submit"><i class="fa-solid fa-check"></i> {{localize "FALLOUTMAW.CombatCarousel.Check"}}</button>
+    <button type="button" data-surprise-cancel><i class="fa-solid fa-xmark"></i> {{localize "FALLOUTMAW.Common.Cancel"}}</button>
+  </footer>
+</form>

@@ -1,5 +1,9 @@
 import { MODULE_ID } from "./main.mjs";
 import { AddEvent } from "./add-event.mjs";
+import {
+    getRollAllInitiativeCombatantIds,
+    promptCombatInitiativeSurprise
+} from "./combat-initiative-surprise-dialog.mjs";
 import { HandlebarsApplication, mergeClone, mergeObject } from "./utils.mjs";
 
 export class CombatDock extends HandlebarsApplication {
@@ -327,7 +331,7 @@ export class CombatDock extends HandlebarsApplication {
         this.setupCombatants();
         this.appendHtml();
         this.element.querySelectorAll(".buttons-container button").forEach((i) => {
-            i.addEventListener("click", (e) => {
+            i.addEventListener("click", async (e) => {
                 const action = e.currentTarget.dataset.action;
                 switch (action) {
                     case "previous-turn":
@@ -345,12 +349,13 @@ export class CombatDock extends HandlebarsApplication {
                     case "end-combat":
                         this.combat.endCombat();
                         break;
-                    case "roll-all":
-                        this.combat.rollAll({ event: e });
+                    case "roll-all": {
+                        const surprisedIds = await promptCombatInitiativeSurprise(this.combat);
+                        if (!surprisedIds) break;
+                        const ids = getRollAllInitiativeCombatantIds(this.combat);
+                        await this.combat.rollInitiative(ids, { event: e, falloutMawSurprisedCombatantIds: surprisedIds });
                         break;
-                    case "roll-npc":
-                        this.combat.rollNPC({ event: e });
-                        break;
+                    }
                     case "reset":
                         this.combat.resetAll();
                         break;

@@ -3042,6 +3042,130 @@ body #prosemirror-dropdown {
   box-shadow: 0 -10px 16px rgba(0, 0, 0, 0.18);
 }
 
+.fallout-maw-combat-initiative-surprise-table {
+  --fallout-maw-surprise-arrow-column: 1.25rem;
+  --fallout-maw-surprise-check-column: 7.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.fallout-maw-combat-initiative-surprise-header {
+  align-items: end;
+  display: grid;
+  font-weight: 700;
+  gap: 0.55rem;
+  grid-template-columns: var(--fallout-maw-surprise-arrow-column) minmax(0, 1fr) var(--fallout-maw-surprise-check-column);
+  padding: 0 0.6rem;
+}
+
+.fallout-maw-combat-initiative-surprise-header span:last-child {
+  text-align: center;
+}
+
+.fallout-maw-combat-initiative-surprise-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: 55vh;
+  overflow: auto;
+}
+
+.fallout-maw-combat-initiative-surprise-faction {
+  border: 1px solid var(--fallout-maw-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.fallout-maw-combat-initiative-surprise-faction summary {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: var(--fallout-maw-surprise-arrow-column) minmax(0, 1fr) var(--fallout-maw-surprise-check-column);
+  list-style: none;
+  padding: 0.55rem 0.6rem;
+}
+
+.fallout-maw-combat-initiative-surprise-faction summary::marker,
+.fallout-maw-combat-initiative-surprise-faction summary::-webkit-details-marker {
+  display: none;
+  content: "";
+}
+
+.fallout-maw-combat-initiative-surprise-faction summary > i {
+  color: var(--fallout-maw-text);
+  font-size: 0.8rem;
+  opacity: 0.82;
+  transition: transform 120ms ease;
+}
+
+.fallout-maw-combat-initiative-surprise-faction[open] summary > i {
+  transform: rotate(90deg);
+}
+
+.fallout-maw-combat-initiative-surprise-name {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.fallout-maw-combat-initiative-surprise-name strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-combat-initiative-surprise-name span {
+  opacity: 0.72;
+}
+
+.fallout-maw-combat-initiative-surprise-toggle,
+.fallout-maw-combat-initiative-surprise-member {
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.fallout-maw-combat-initiative-surprise-toggle {
+  display: flex;
+  justify-self: center;
+}
+
+.fallout-maw-combat-initiative-surprise-toggle input,
+.fallout-maw-combat-initiative-surprise-member input {
+  margin: 0;
+}
+
+.fallout-maw-combat-initiative-surprise-members {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0 0 0.45rem;
+}
+
+.fallout-maw-combat-initiative-surprise-member {
+  cursor: pointer;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: var(--fallout-maw-surprise-arrow-column) minmax(0, 1fr) var(--fallout-maw-surprise-check-column);
+  padding: 0.25rem 0.6rem;
+}
+
+.fallout-maw-combat-initiative-surprise-member:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.fallout-maw-combat-initiative-surprise-member span {
+  grid-column: 2;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fallout-maw-combat-initiative-surprise-member input {
+  grid-column: 3;
+  justify-self: center;
+}
+
 .fallout-maw-toggle-edit {
   height: 2.1rem;
   min-width: 2.25rem;

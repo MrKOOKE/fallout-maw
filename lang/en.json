@@ -829,8 +829,13 @@
     "CombatCarousel": {
       "AddEvent": "Add Event",
       "AddEventError": "Event name, image, and initiative are required.",
+      "Check": "Check",
       "Duration": "Duration (rounds)",
-      "EventExpired": "Event %n has expired."
+      "EventExpired": "Event %n has expired.",
+      "NoInitiativeCombatants": "No combatants without initiative.",
+      "RollInitiativeTitle": "Initiative Check",
+      "SurpriseHint": "Mark factions or individual combatants caught by surprise. They roll initiative with disadvantage and -10.",
+      "Surprised": "Surprised"
     },
     "Formula": {
       "ClosingParenthesisExpected": "Expected a closing parenthesis",
