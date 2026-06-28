@@ -479,15 +479,17 @@ class CombatEndResolutionApplication extends HandlebarsApplicationMixin(Applicat
   static DEFAULT_OPTIONS = {
     classes: ["fallout-maw", "fallout-maw-combat-end-resolution"],
     position: {
-      width: 360,
+      width: 244,
       height: "auto"
     },
     window: {
-      resizable: false
+      resizable: false,
+      contentClasses: ["standard-form"]
     },
     actions: {
       search: this.#onSearch,
-      finish: this.#onFinish
+      finish: this.#onFinish,
+      dismiss: this.#onDismiss
     }
   };
 
@@ -557,8 +559,6 @@ class CombatEndResolutionApplication extends HandlebarsApplicationMixin(Applicat
             : "Добить";
     return {
       ...entry,
-      statusLabel: entry.status === STATUS_DEAD ? "Мертв" : "Без сознания",
-      statusClass: entry.status === STATUS_DEAD ? "is-dead" : "is-unconscious",
       searchDisabled: missingActor || !hasActionActor,
       searchTitle: missingActor
         ? "Цель недоступна"
@@ -613,6 +613,11 @@ class CombatEndResolutionApplication extends HandlebarsApplicationMixin(Applicat
     }
   }
 
+  static async #onDismiss(event) {
+    event.preventDefault();
+    await this.close();
+  }
+
   #getEntryFromTarget(target) {
     const row = target?.closest?.("[data-combat-end-entry-id]");
     const entryId = row?.dataset.combatEndEntryId ?? "";
@@ -643,7 +648,7 @@ class CombatEndResolutionApplication extends HandlebarsApplicationMixin(Applicat
     const width = element.getBoundingClientRect().width
       || Number(this.position?.width)
       || Number(this.options?.position?.width)
-      || 360;
+      || 244;
     this.setPosition({
       left: Math.max(WINDOW_MARGIN, Math.round(rightBoundary - width - WINDOW_MARGIN)),
       top: WINDOW_TOP
