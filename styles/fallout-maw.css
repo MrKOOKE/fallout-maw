@@ -3688,7 +3688,9 @@ body #prosemirror-dropdown {
     );
   background-repeat: repeat;
   background-size: var(--fallout-maw-inventory-grid-step) var(--fallout-maw-inventory-grid-step);
+  border-bottom: var(--fallout-maw-inventory-grid-line-size) solid var(--fallout-maw-inventory-grid-line-color);
   border-left: var(--fallout-maw-inventory-grid-line-size) solid var(--fallout-maw-inventory-grid-line-color);
+  border-right: var(--fallout-maw-inventory-grid-line-size) solid var(--fallout-maw-inventory-grid-line-color);
   border-top: var(--fallout-maw-inventory-grid-line-size) solid var(--fallout-maw-inventory-grid-line-color);
 }
 

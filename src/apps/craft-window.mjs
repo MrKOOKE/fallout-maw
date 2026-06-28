@@ -731,19 +731,11 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     return item.toObject();
   }
 
-  async #getCraftStackQuantity(sourceItem, targetItem, event) {
+  async #getCraftStackQuantity(sourceItem, targetItem, _event) {
     const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
     const availableSpace = Math.max(0, getItemMaxStack(targetItem) - getItemQuantity(targetItem));
     const maxTransfer = Math.min(sourceQuantity, availableSpace);
-    if (maxTransfer <= 0) return 0;
-    if (event?.shiftKey || maxTransfer <= 1) return maxTransfer;
-    return promptSearchItemStackQuantity({
-      item: sourceItem,
-      title: "Сложить предметы",
-      actionLabel: "Сложить",
-      max: maxTransfer,
-      value: maxTransfer
-    });
+    return maxTransfer > 0 ? maxTransfer : 0;
   }
 
   #setInventoryHoverPreview(zone = null, event = null) {

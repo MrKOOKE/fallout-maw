@@ -927,16 +927,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const placementRequest = getDropZonePlacementRequest(zone);
     const parentId = placementRequest.mode === "inventory" ? getDropZoneParentId(zone) : ROOT_CONTAINER_ID;
     const targetItem = this.#getTargetStackItem(zone, targetActor, String(data.itemId ?? ""), parentId);
-    const quantity = available > 1 && !event?.shiftKey
-      ? await promptSearchItemStackQuantity({
-        item: itemData,
-        title: "Перенести купленное",
-        actionLabel: "Перенести",
-        max: available,
-        value: available
-      })
-      : available;
-    if (!quantity) return null;
+    const quantity = available;
 
     const pointerPlacement = placementRequest.mode === "inventory"
       ? getSearchDropPlacementForPointer({
@@ -1040,33 +1031,16 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
   }
 
-  async #getSearchStackQuantity(sourceItem, targetItem, event, { sourceActor = null, targetActor = null } = {}) {
+  async #getSearchStackQuantity(sourceItem, targetItem, _event, _options = {}) {
     const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
     const availableSpace = Math.max(0, getItemMaxStack(targetItem) - getItemQuantity(targetItem));
     const maxTransfer = Math.min(sourceQuantity, availableSpace);
-    if (maxTransfer <= 0) return 0;
-    if (event?.shiftKey || maxTransfer <= 1) return maxTransfer;
-    return promptSearchItemStackQuantity({
-      item: sourceItem,
-      title: "Сложить предметы",
-      actionLabel: "Сложить",
-      max: maxTransfer,
-      value: maxTransfer,
-      trade: this.#getTradeQuantityPromptData(sourceActor, targetActor)
-    });
+    return maxTransfer > 0 ? maxTransfer : 0;
   }
 
-  async #getSearchTransferQuantity(sourceItem, event, { sourceActor = null, targetActor = null } = {}) {
+  async #getSearchTransferQuantity(sourceItem, _event, _options = {}) {
     const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
-    if (event?.shiftKey || sourceQuantity <= 1 || isContainerItem(sourceItem)) return sourceQuantity;
-    return promptSearchItemStackQuantity({
-      item: sourceItem,
-      title: "Перенести предметы",
-      actionLabel: "Перенести",
-      max: sourceQuantity,
-      value: sourceQuantity,
-      trade: this.#getTradeQuantityPromptData(sourceActor, targetActor)
-    });
+    return sourceQuantity;
   }
 
   #getTradeQuantityPromptData(sourceActor = null, targetActor = null) {
@@ -1104,7 +1078,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
       ui.notifications.info("Вся штучность предмета уже в предложении.");
       return null;
     }
-    const quantity = event?.shiftKey || remaining <= 1 || isContainerItem(item)
+    const quantity = event?.type === "drop" || remaining <= 1 || isContainerItem(item)
       ? remaining
       : await promptSearchItemStackQuantity({
         item,
@@ -1142,7 +1116,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const side = this.#getTradeSideForActor(offerActorUuid);
     if (!this.#canDepositCompletedTradeHub(side, sourceActor)) return null;
     const sourceQuantity = getTransferItemQuantity(item, getItemQuantity(item));
-    const quantity = event?.shiftKey || sourceQuantity <= 1 || isContainerItem(item)
+    const quantity = event?.type === "drop" || sourceQuantity <= 1 || isContainerItem(item)
       ? sourceQuantity
       : await promptSearchItemStackQuantity({
         item,
@@ -2151,7 +2125,18 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     const entry = findTradeOfferEntry(this.#tradeOffers?.[side], kind, key);
     if (!TRADE_OFFER_SIDES.includes(side) || kind !== "item" || !key || !targetActor || !this.#canClaimCompletedTradeSide(side)) return;
     const itemData = getTradeOfferEntryItemData(entry, null);
-    const quantity = Math.max(1, toInteger(entry?.quantity));
+    if (!itemData) return;
+    const available = Math.max(1, toInteger(entry?.quantity));
+    const quantity = available > 1 && !isContainerItem(itemData)
+      ? await promptSearchItemStackQuantity({
+        item: itemData,
+        title: "Забрать купленное",
+        actionLabel: "Забрать",
+        max: available,
+        value: available
+      })
+      : available;
+    if (!quantity) return;
     const target = getCompletedTradeClaimTarget(targetActor, itemData, entry?.containedItems ?? [], { quantity });
     if (!target) {
       ui.notifications.warn(game.i18n.localize("FALLOUTMAW.Messages.InventoryNoSpace"));
@@ -2197,21 +2182,36 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     }
     if (this.#tradeSessionSnapshot) {
       let amount = 0;
+      let quantity = 0;
       if (kind === "currency") {
         amount = await this.#promptTradeCurrencyRemoval(side, key);
         if (!amount) return;
+      } else if (kind === "item") {
+        quantity = await this.#promptTradeItemRemoval(side, key);
+        if (!quantity) return;
       }
       const result = await requestTradeSessionAction("removeTradeOfferEntry", this.#prepareTradeSessionActionPayload({
         side,
         kind,
         key,
         actorUuid: this.#getActorForTradeSide(side)?.uuid ?? "",
-        amount
+        amount,
+        quantity
       }));
       if (result?.snapshot) this.#applyTradeSessionSnapshot(result.snapshot, { render: true });
       return;
     }
-    this.#tradeOffers = removeTradeOfferEntry(this.#tradeOffers, side, kind, key);
+    if (kind === "item") {
+      const quantity = await this.#promptTradeItemRemoval(side, key);
+      if (!quantity) return;
+      this.#tradeOffers = reduceTradeOfferEntryQuantity(this.#tradeOffers, side, kind, key, quantity);
+    } else if (kind === "currency") {
+      const amount = await this.#promptTradeCurrencyRemoval(side, key);
+      if (!amount) return;
+      this.#tradeOffers = reduceTradeOfferEntryQuantity(this.#tradeOffers, side, kind, key, amount);
+    } else {
+      this.#tradeOffers = removeTradeOfferEntry(this.#tradeOffers, side, kind, key);
+    }
     if (!this.#tradeOffers.completed) this.#resetTradeReady();
     this.#broadcastTradeOffers();
     this.#captureScrollPositions();
@@ -2338,6 +2338,21 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     this.#broadcastTradeOffers();
     this.#captureScrollPositions();
     await this.#renderPreservingWindowStack();
+  }
+
+  async #promptTradeItemRemoval(side = "", key = "") {
+    const entry = findTradeOfferEntry(this.#tradeOffers?.[side], "item", key);
+    const itemData = getTradeOfferEntryItemData(entry, this.#getActorByUuid(String(entry?.sourceActorUuid ?? "")));
+    if (!entry || !itemData) return 0;
+    const quantity = Math.max(1, toInteger(entry.quantity));
+    if (quantity <= 1 || isContainerItem(itemData)) return quantity;
+    return promptSearchItemStackQuantity({
+      item: itemData,
+      title: "Убрать из предложения",
+      actionLabel: "Убрать",
+      max: quantity,
+      value: quantity
+    });
   }
 
   async #promptTradeCurrencyRemoval(side = "", currencyKey = "") {
@@ -5591,15 +5606,7 @@ function getCompatibleStackTarget(actor, itemData, preferredTarget = null, exclu
     && preferredTarget.system?.placement?.mode === placementMode
     && areStackable(itemData, preferredTarget)
     && getItemQuantity(preferredTarget) < getItemMaxStack(preferredTarget);
-  const targets = canUsePreferredTarget ? [preferredTarget] : [];
-  for (const item of getContextInventoryItems(parentId, actor.items)) {
-    if (!item || excluded.has(item.id) || targets.some(target => target.id === item.id)) continue;
-    if (item.system?.placement?.mode !== placementMode) continue;
-    if (!canMaybeStackItems(itemData, item)) continue;
-    if (!areStackable(itemData, item) || getItemQuantity(item) >= getItemMaxStack(item)) continue;
-    targets.push(item);
-  }
-  return targets;
+  return canUsePreferredTarget ? [preferredTarget] : [];
 }
 
 function getSourcePlacement(actor, sourceItem, itemData, preferredPlacement = null, targetItem = null, parentId = ROOT_CONTAINER_ID, reservedPlacements = []) {
@@ -7180,6 +7187,11 @@ function removeTradeSessionOfferEntry(session = {}, payload = {}, requesterUserI
       const entry = session.offers?.[side]?.items?.find(candidate => getTradeOfferEntryKey(candidate, "item") === key);
       if (entry?.sourceActorUuid) ensureTradeSessionActorOfferMutation(session, entry.sourceActorUuid, requesterUserId);
       else ensureTradeSessionParticipant(session, requesterUserId);
+      const quantity = Math.max(0, toInteger(payload.quantity));
+      if (quantity) {
+        session.offers = reduceTradeOfferEntryQuantity(session.offers, side, kind, key, quantity);
+        return;
+      }
     }
     session.offers = removeTradeOfferEntry(session.offers, side, kind, key);
     return;

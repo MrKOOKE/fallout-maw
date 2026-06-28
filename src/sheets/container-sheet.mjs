@@ -477,19 +477,11 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     );
   }
 
-  async #getDroppedStackQuantity(dropped, targetItem, event) {
+  async #getDroppedStackQuantity(dropped, targetItem, _event) {
     const sourceQuantity = Math.max(1, getItemQuantity(dropped?.item ?? dropped?.itemData));
     const availableSpace = Math.max(0, getItemMaxStack(targetItem) - getItemQuantity(targetItem));
     const maxTransfer = Math.min(sourceQuantity, availableSpace);
-    if (maxTransfer <= 0) return 0;
-    if (event?.shiftKey || maxTransfer <= 1) return maxTransfer;
-    return promptItemStackQuantity({
-      item: dropped?.item ?? dropped?.itemData,
-      title: "Сложить предметы",
-      actionLabel: "Сложить",
-      max: maxTransfer,
-      value: maxTransfer
-    });
+    return maxTransfer > 0 ? maxTransfer : 0;
   }
 
   async #stackDroppedItemQuantity(sourceItem, itemData, targetItem, quantity) {
