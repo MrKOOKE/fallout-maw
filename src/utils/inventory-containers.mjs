@@ -463,6 +463,19 @@ export function buildInventoryCellStyle(x, y, placement = null) {
   return `grid-column: ${x}; grid-row: ${y};`;
 }
 
+export function buildInventoryGridStyle(columns, rows, { baseColumns = columns, baseRows = rows } = {}) {
+  columns = Math.max(1, toInteger(columns) || 1);
+  rows = Math.max(1, toInteger(rows) || 1);
+  baseColumns = Math.max(1, toInteger(baseColumns) || columns);
+  baseRows = Math.max(1, toInteger(baseRows) || rows);
+  return [
+    `--fallout-maw-inventory-columns: ${columns};`,
+    `--fallout-maw-inventory-rows: ${rows};`,
+    `--fallout-maw-inventory-base-columns: ${baseColumns};`,
+    `--fallout-maw-inventory-base-rows: ${baseRows};`
+  ].join(" ");
+}
+
 function buildInventorySpanLengthStyle(span) {
   span = Math.max(1, toInteger(span) || 1);
   const cells = Array.from({ length: span }, () => "var(--fallout-maw-inventory-cell-size)");
@@ -473,7 +486,6 @@ function buildInventorySpanLengthStyle(span) {
 export function prepareInventoryGridContext(contextItems, columns, rows, allItems, mapItem, options = {}) {
   const resolved = resolveInventoryGridPlacements(contextItems, columns, rows, allItems, options);
   const reservedPlacements = resolved.placements;
-  const occupiedCells = createOccupiedInventoryCellSet(reservedPlacements);
   const placedItems = [];
 
   for (const entry of resolved.items) {
@@ -484,16 +496,19 @@ export function prepareInventoryGridContext(contextItems, columns, rows, allItem
   }
 
   const cells = [];
-  for (let y = 1; y <= resolved.rows; y += 1) {
-    for (let x = 1; x <= resolved.columns; x += 1) {
-      const phantom = !options.allowOverflowRows && (y > rows || x > columns);
-      cells.push({
-        x,
-        y,
-        phantom,
-        occupied: occupiedCells.has(getInventoryCellKey(x, y)),
-        style: buildInventoryCellStyle(x, y)
-      });
+  if (options.includeCells) {
+    const occupiedCells = createOccupiedInventoryCellSet(reservedPlacements);
+    for (let y = 1; y <= resolved.rows; y += 1) {
+      for (let x = 1; x <= resolved.columns; x += 1) {
+        const phantom = !options.allowOverflowRows && (y > rows || x > columns);
+        cells.push({
+          x,
+          y,
+          phantom,
+          occupied: occupiedCells.has(getInventoryCellKey(x, y)),
+          style: buildInventoryCellStyle(x, y)
+        });
+      }
     }
   }
 
@@ -502,6 +517,7 @@ export function prepareInventoryGridContext(contextItems, columns, rows, allItem
     rows: resolved.rows,
     baseColumns: columns,
     baseRows: rows,
+    style: buildInventoryGridStyle(resolved.columns, resolved.rows, { baseColumns: columns, baseRows: rows }),
     hasPhantomItems: resolved.items.some(item => item.phantom),
     cells,
     items: placedItems

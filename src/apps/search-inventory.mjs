@@ -16,6 +16,7 @@ import {
   LOCKED_STORAGE_PLACEMENT_MODE,
   BUTCHERING_STORAGE_PLACEMENT_MODE,
   buildInventoryCellStyle,
+  buildInventoryGridStyle,
   createInventoryPlacement,
   createStoredPlacement,
   findFirstAvailableInventoryPlacement,
@@ -48,6 +49,13 @@ import {
   getInventoryRotationUnavailableLabel,
   resolveInventoryItemRotation
 } from "../utils/inventory-rotation.mjs";
+import {
+  clearInventoryPlacementPreviews,
+  clearInventoryVirtualCells,
+  getInventoryGridPointerPosition as getInventoryGridPointerPositionFromElement,
+  renderInventoryPlacementPreview,
+  syncInventoryVirtualCell
+} from "../utils/inventory-grid-dom.mjs";
 import {
   canUseWeaponSlotForItem,
   doesItemOccupyEquipmentSlot,
@@ -1413,12 +1421,7 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     );
     const styles = grid ? getComputedStyle(grid) : null;
     const gap = parseFloat(styles?.columnGap) || parseFloat(styles?.gap) || 0;
-    const firstCell = grid?.querySelector?.("[data-trade-offer-cell]");
-    const secondCell = grid?.querySelector?.('[data-trade-offer-cell][data-y="1"][data-x="2"]');
-    const firstWidth = Number(firstCell?.offsetWidth) || 0;
-    const cellSize = firstWidth
-      ? (secondCell ? Math.max(1, Number(secondCell.offsetLeft) - Number(firstCell.offsetLeft) - gap) : firstWidth)
-      : (parseFloat(styles?.getPropertyValue("--fallout-maw-inventory-cell-size")) || 80);
+    const cellSize = resolveCssLengthPixels(grid, styles?.getPropertyValue("--fallout-maw-inventory-cell-size"), 80);
     if (!width || !cellSize) return TRADE_OFFER_DEFAULT_COLUMNS;
     const pitch = Math.max(1, cellSize + gap);
     let columns = Math.max(1, Math.floor((width + gap) / pitch));
@@ -1564,7 +1567,11 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (!pointer) return null;
     const x = Math.round(pointer.x);
     const y = Math.round(pointer.y);
-    return grid.querySelector(`[data-inventory-cell][data-x="${x}"][data-y="${y}"]`) ?? null;
+    return syncInventoryVirtualCell(grid, { x, y }, {
+      inventoryParentId: getDropZoneParentId(grid),
+      searchDropZone: "",
+      searchActorUuid: String(grid.dataset.searchActorUuid ?? "")
+    });
   }
 
   #getPreviewItemData(event) {
@@ -1725,15 +1732,11 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (this.#hoverPreviewKey === previewKey) return;
     this.#clearInventoryHoverPreviewClasses();
     this.#hoverPreviewKey = previewKey;
-    const escapedUuid = CSS.escape(actor.uuid);
-    const escapedParentId = CSS.escape(parentId ?? ROOT_CONTAINER_ID);
-    for (let y = placement.y; y < placement.y + placement.height; y += 1) {
-      for (let x = placement.x; x < placement.x + placement.width; x += 1) {
-        this.element?.querySelector(
-          `[data-inventory-cell][data-search-actor-uuid="${escapedUuid}"][data-inventory-parent-id="${escapedParentId}"][data-x="${x}"][data-y="${y}"]`
-        )?.classList.add("drop-preview");
-      }
-    }
+    renderInventoryPlacementPreview(
+      this.#getInventoryGridElement(actor.uuid, parentId),
+      placement,
+      { className: "drop-preview", kind: "placement" }
+    );
   }
 
   #applyInventoryStackPreview(actor, parentId, targetItem) {
@@ -1751,13 +1754,19 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     )?.classList.add("drop-stack-preview");
 
     const placement = normalizeInventoryPlacement(targetItem.system?.placement ?? {}, targetItem, actor.items);
-    for (let y = placement.y; y < placement.y + placement.height; y += 1) {
-      for (let x = placement.x; x < placement.x + placement.width; x += 1) {
-        this.element?.querySelector(
-          `[data-inventory-cell][data-search-actor-uuid="${escapedUuid}"][data-inventory-parent-id="${escapedParentId}"][data-x="${x}"][data-y="${y}"]`
-        )?.classList.add("drop-stack-preview");
-      }
-    }
+    renderInventoryPlacementPreview(
+      this.#getInventoryGridElement(actor.uuid, parentId),
+      placement,
+      { className: "drop-stack-preview", kind: "stack" }
+    );
+  }
+
+  #getInventoryGridElement(actorUuid = "", parentId = ROOT_CONTAINER_ID) {
+    const escapedUuid = CSS.escape(String(actorUuid ?? ""));
+    const escapedParentId = CSS.escape(String(parentId ?? ROOT_CONTAINER_ID));
+    return this.element?.querySelector(
+      `[data-inventory-grid][data-search-actor-uuid="${escapedUuid}"][data-inventory-parent-id="${escapedParentId}"]`
+    ) ?? null;
   }
 
   #applyTradeOfferPreview(zone = null, event = null) {
@@ -1783,48 +1792,21 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
     if (this.#hoverPreviewKey === previewKey) return;
     this.#clearInventoryHoverPreviewClasses();
     this.#hoverPreviewKey = previewKey;
-    this.#ensureTradeOfferPreviewRows(grid, placement.y + placement.height - 1, placement.columns);
-    for (let y = placement.y; y < placement.y + placement.height; y += 1) {
-      for (let x = placement.x; x < placement.x + placement.width; x += 1) {
-        const cell = grid?.querySelector(`[data-trade-offer-cell][data-x="${x}"][data-y="${y}"]`)
-          ?? this.#createTradeOfferPreviewCell(grid, x, y);
-        cell?.classList.add("drop-preview");
-      }
-    }
-  }
-
-  #ensureTradeOfferPreviewRows(grid = null, requiredRows = 1, columns = TRADE_OFFER_DEFAULT_COLUMNS) {
-    if (!grid) return;
-    const currentRows = Math.max(0, ...Array.from(grid.querySelectorAll("[data-trade-offer-cell]:not(.fallout-maw-trade-offer-preview-cell)"), cell => toInteger(cell.dataset.y)));
-    const rowCount = Math.max(currentRows, toInteger(requiredRows));
-    if (rowCount <= currentRows) return;
-    const columnCount = Math.max(1, toInteger(columns) || TRADE_OFFER_DEFAULT_COLUMNS);
-    for (let y = currentRows + 1; y <= rowCount; y += 1) {
-      for (let x = 1; x <= columnCount; x += 1) {
-        if (grid.querySelector(`[data-trade-offer-cell][data-x="${x}"][data-y="${y}"]`)) continue;
-        this.#createTradeOfferPreviewCell(grid, x, y);
-      }
-    }
-  }
-
-  #createTradeOfferPreviewCell(grid = null, x = 1, y = 1) {
-    if (!grid) return null;
-    const cell = document.createElement("div");
-    cell.className = "fallout-maw-inventory-cell fallout-maw-trade-offer-cell fallout-maw-trade-offer-preview-cell";
-    cell.dataset.searchDropZone = "";
-    cell.dataset.searchActorUuid = String(grid.dataset.searchActorUuid ?? "");
-    cell.dataset.tradeOfferActorUuid = String(grid.dataset.tradeOfferActorUuid ?? "");
-    cell.dataset.tradeOfferCell = "";
-    cell.dataset.x = String(x);
-    cell.dataset.y = String(y);
-    cell.setAttribute("style", buildInventoryCellStyle(x, y));
-    grid.append(cell);
-    return cell;
+    const requiredRows = Math.max(
+      toInteger(grid.style.getPropertyValue("--fallout-maw-inventory-rows")) || 1,
+      placement.y + placement.height - 1
+    );
+    grid.style.setProperty("--fallout-maw-inventory-rows", String(requiredRows));
+    renderInventoryPlacementPreview(grid, placement, {
+      className: "drop-preview",
+      kind: "trade-offer"
+    });
   }
 
   #clearInventoryDropPreview() {
     this.#clearInventoryHoverPreview();
     this.#clearTradeOfferPreviewCells();
+    clearInventoryVirtualCells(this.element);
     this.element?.querySelectorAll(".drop-match-preview").forEach(element => element.classList.remove("drop-match-preview"));
   }
 
@@ -1836,15 +1818,17 @@ class SearchInventoryApplication extends HandlebarsApplicationMixin(ApplicationV
   #clearInventoryHoverPreviewClasses() {
     this.#hoverPreviewKey = "";
     this.#clearTradeOfferPreviewCells();
-    this.element?.querySelectorAll(".drop-preview, .drop-stack-preview, .trade-offer-drop-preview").forEach(element => {
-      element.classList.remove("drop-preview", "drop-stack-preview", "trade-offer-drop-preview");
-      element.style?.removeProperty("--fallout-maw-trade-preview-width");
-      element.style?.removeProperty("--fallout-maw-trade-preview-height");
+    clearInventoryPlacementPreviews(this.element);
+    this.element?.querySelectorAll(".drop-preview, .drop-stack-preview").forEach(element => {
+      element.classList.remove("drop-preview", "drop-stack-preview");
     });
   }
 
   #clearTradeOfferPreviewCells() {
-    this.element?.querySelectorAll(".fallout-maw-trade-offer-preview-cell").forEach(element => element.remove());
+    for (const grid of this.element?.querySelectorAll("[data-trade-offer-grid]") ?? []) {
+      const rows = Math.max(1, toInteger(grid.dataset.tradeOfferRows) || toInteger(grid.style.getPropertyValue("--fallout-maw-inventory-base-rows")) || 1);
+      grid.style.setProperty("--fallout-maw-inventory-rows", String(rows));
+    }
   }
 
   #highlightEquipmentSlotsForItem(itemData) {
@@ -4778,17 +4762,10 @@ function prepareTradeOfferSideContext(offer = {}, actor = null, side = "", trade
   }
 
   const rows = Math.max(1, occupiedPlacements.reduce((max, entry) => Math.max(max, entry.placement.y + entry.placement.height - 1), 1));
-  const cells = [];
-  for (let y = 1; y <= rows; y += 1) {
-    for (let x = 1; x <= columns; x += 1) {
-      cells.push({
-        x,
-        y,
-        occupied: occupiedPlacements.some(entry => tradeOfferPlacementContainsCell(entry.placement, x, y)),
-        style: buildInventoryCellStyle(x, y)
-      });
-    }
-  }
+  const style = [
+    buildInventoryGridStyle(columns, rows),
+    `--fallout-maw-trade-offer-columns: ${columns};`
+  ].join(" ");
 
   return {
     side,
@@ -4796,7 +4773,7 @@ function prepareTradeOfferSideContext(offer = {}, actor = null, side = "", trade
     total,
     items,
     currencies,
-    grid: { columns, rows, cells },
+    grid: { columns, rows, style },
     empty: !items.length && !currencies.length
   };
 }
@@ -4841,29 +4818,30 @@ function getTradeOfferOccupiedPlacements(offer = {}, { excludeKind = "", exclude
 }
 
 function getTradeOfferGridPointerPosition(grid = null, event = null, { columns = TRADE_OFFER_DEFAULT_COLUMNS } = {}) {
-  const clientX = Number(event?.clientX);
-  const clientY = Number(event?.clientY);
-  if (!grid || !Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+  return getInventoryGridPointerPositionFromElement(event, grid, {
+    columns: Math.max(1, toInteger(columns) || TRADE_OFFER_DEFAULT_COLUMNS),
+    allowOverflowRows: true,
+    clamp: true
+  });
+}
 
-  const gridRect = grid.getBoundingClientRect();
-  if (clientX < gridRect.left || clientX > gridRect.right || clientY < gridRect.top || clientY > gridRect.bottom) return null;
-
-  const firstCell = grid.querySelector('[data-trade-offer-cell][data-x="1"][data-y="1"]') ?? grid.querySelector("[data-trade-offer-cell]");
-  if (!firstCell) return null;
-
-  const firstRect = firstCell.getBoundingClientRect();
-  const secondColumnRect = grid.querySelector('[data-trade-offer-cell][data-y="1"][data-x="2"]')?.getBoundingClientRect();
-  const secondRowRect = grid.querySelector('[data-trade-offer-cell][data-x="1"][data-y="2"]')?.getBoundingClientRect();
-  const pitchX = secondColumnRect ? Math.max(1, secondColumnRect.left - firstRect.left) : Math.max(1, firstRect.width);
-  const pitchY = secondRowRect ? Math.max(1, secondRowRect.top - firstRect.top) : pitchX;
-  const firstCenterX = firstRect.left + (firstRect.width / 2);
-  const firstCenterY = firstRect.top + (firstRect.height / 2);
-  const columnCount = Math.max(1, toInteger(columns) || TRADE_OFFER_DEFAULT_COLUMNS);
-
-  return {
-    x: Math.max(1, Math.min(columnCount, ((clientX - firstCenterX) / pitchX) + 1)),
-    y: Math.max(1, ((clientY - firstCenterY) / pitchY) + 1)
-  };
+function resolveCssLengthPixels(parent = null, value = "", fallback = 0) {
+  const text = String(value ?? "").trim();
+  const numeric = Number.parseFloat(text);
+  if (Number.isFinite(numeric) && text.endsWith("px")) return numeric;
+  if (!parent || !text) return Number.isFinite(numeric) ? numeric : fallback;
+  const probe = document.createElement("div");
+  Object.assign(probe.style, {
+    position: "absolute",
+    visibility: "hidden",
+    pointerEvents: "none",
+    width: text,
+    height: "0"
+  });
+  parent.append(probe);
+  const pixels = probe.getBoundingClientRect().width;
+  probe.remove();
+  return pixels > 0 ? pixels : (Number.isFinite(numeric) ? numeric : fallback);
 }
 
 function getTradeOfferGridPointerPlacement(pointer = null, { columns = TRADE_OFFER_DEFAULT_COLUMNS, width = 1, height = 1 } = {}) {
@@ -4931,15 +4909,6 @@ function tradeOfferPlacementsOverlap(left = null, right = null) {
     || a.y + a.height <= b.y
     || b.y + b.height <= a.y
   );
-}
-
-function tradeOfferPlacementContainsCell(placement = null, x = 1, y = 1) {
-  const normalized = normalizeTradeOfferPlacement(placement);
-  if (!normalized) return false;
-  return x >= normalized.x
-    && x < normalized.x + normalized.width
-    && y >= normalized.y
-    && y < normalized.y + normalized.height;
 }
 
 function isTradeItemFullyOffered(item = null, tradeOffer = null) {
@@ -5759,31 +5728,11 @@ export function getSearchDropPlacementForPointer({ actor, itemData, sourceActor,
 }
 
 export function getSearchInventoryGridPointerPosition(event = null, grid = null, actor = null, parentId = ROOT_CONTAINER_ID) {
-  const clientX = Number(event?.clientX);
-  const clientY = Number(event?.clientY);
-  if (!grid || !actor || !Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
-
-  const gridRect = grid.getBoundingClientRect();
-  if (clientX < gridRect.left || clientX > gridRect.right || clientY < gridRect.top || clientY > gridRect.bottom) return null;
-
-  const firstCell = grid.querySelector('[data-inventory-cell][data-x="1"][data-y="1"]') ?? grid.querySelector("[data-inventory-cell]");
-  if (!firstCell) return null;
-  const firstRect = firstCell.getBoundingClientRect();
-  const secondColumnRect = grid.querySelector('[data-inventory-cell][data-y="1"][data-x="2"]')?.getBoundingClientRect();
-  const secondRowRect = grid.querySelector('[data-inventory-cell][data-x="1"][data-y="2"]')?.getBoundingClientRect();
-  const pitchX = secondColumnRect ? Math.max(1, secondColumnRect.left - firstRect.left) : Math.max(1, firstRect.width);
-  const pitchY = secondRowRect ? Math.max(1, secondRowRect.top - firstRect.top) : Math.max(1, firstRect.height);
-  const firstCenterX = firstRect.left + (firstRect.width / 2);
-  const firstCenterY = firstRect.top + (firstRect.height / 2);
-  const dimensions = getActorInventoryContextDimensions(actor, parentId);
-  const allowOverflowRows = getActorInventoryContextOptions(actor, parentId).allowOverflowRows;
-
-  return {
-    x: Math.max(1, Math.min(dimensions.columns, ((clientX - firstCenterX) / pitchX) + 1)),
-    y: allowOverflowRows
-      ? Math.max(1, ((clientY - firstCenterY) / pitchY) + 1)
-      : Math.max(1, Math.min(dimensions.rows, ((clientY - firstCenterY) / pitchY) + 1))
-  };
+  if (!grid || !actor) return null;
+  return getInventoryGridPointerPositionFromElement(event, grid, {
+    allowOverflowRows: getActorInventoryContextOptions(actor, parentId).allowOverflowRows,
+    clamp: true
+  });
 }
 
 export function resolveActorPlacement(

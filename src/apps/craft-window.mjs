@@ -59,6 +59,12 @@ import {
   getInventoryRotationUnavailableLabel,
   resolveInventoryItemRotation
 } from "../utils/inventory-rotation.mjs";
+import {
+  clearInventoryPlacementPreviews,
+  clearInventoryVirtualCells,
+  renderInventoryPlacementPreview,
+  syncInventoryVirtualCell
+} from "../utils/inventory-grid-dom.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { getEnabledToolFunctions } from "../utils/item-functions.mjs";
@@ -689,7 +695,11 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!pointer) return null;
     const x = Math.round(pointer.x);
     const y = Math.round(pointer.y);
-    return grid.querySelector(`[data-inventory-cell][data-x="${x}"][data-y="${y}"]`) ?? null;
+    return syncInventoryVirtualCell(grid, { x, y }, {
+      inventoryParentId: getDropZoneParentId(grid),
+      searchDropZone: "",
+      searchActorUuid: String(grid.dataset.searchActorUuid ?? "")
+    });
   }
 
   #getTargetStackItem(target, sourceItem, parentId = ROOT_CONTAINER_ID) {
@@ -819,15 +829,11 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (this.#hoverPreviewKey === previewKey) return;
     this.#clearInventoryHoverPreviewClasses();
     this.#hoverPreviewKey = previewKey;
-    const escapedUuid = CSS.escape(actor.uuid);
-    const escapedParentId = CSS.escape(parentId ?? ROOT_CONTAINER_ID);
-    for (let y = placement.y; y < placement.y + placement.height; y += 1) {
-      for (let x = placement.x; x < placement.x + placement.width; x += 1) {
-        this.element?.querySelector(
-          `[data-inventory-cell][data-search-actor-uuid="${escapedUuid}"][data-inventory-parent-id="${escapedParentId}"][data-x="${x}"][data-y="${y}"]`
-        )?.classList.add("drop-preview");
-      }
-    }
+    renderInventoryPlacementPreview(
+      this.#getInventoryGridElement(actor.uuid, parentId),
+      placement,
+      { className: "drop-preview", kind: "placement" }
+    );
   }
 
   #applyInventoryStackPreview(actor, parentId, targetItem) {
@@ -845,17 +851,24 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     )?.classList.add("drop-stack-preview");
 
     const placement = normalizeInventoryPlacement(targetItem.system?.placement ?? {}, targetItem, actor.items);
-    for (let y = placement.y; y < placement.y + placement.height; y += 1) {
-      for (let x = placement.x; x < placement.x + placement.width; x += 1) {
-        this.element?.querySelector(
-          `[data-inventory-cell][data-search-actor-uuid="${escapedUuid}"][data-inventory-parent-id="${escapedParentId}"][data-x="${x}"][data-y="${y}"]`
-        )?.classList.add("drop-stack-preview");
-      }
-    }
+    renderInventoryPlacementPreview(
+      this.#getInventoryGridElement(actor.uuid, parentId),
+      placement,
+      { className: "drop-stack-preview", kind: "stack" }
+    );
+  }
+
+  #getInventoryGridElement(actorUuid = "", parentId = ROOT_CONTAINER_ID) {
+    const escapedUuid = CSS.escape(String(actorUuid ?? ""));
+    const escapedParentId = CSS.escape(String(parentId ?? ROOT_CONTAINER_ID));
+    return this.element?.querySelector(
+      `[data-inventory-grid][data-search-actor-uuid="${escapedUuid}"][data-inventory-parent-id="${escapedParentId}"]`
+    ) ?? null;
   }
 
   #clearInventoryDropPreview() {
     this.#clearInventoryHoverPreview();
+    clearInventoryVirtualCells(this.element);
     this.element?.querySelectorAll(".drop-match-preview").forEach(element => element.classList.remove("drop-match-preview"));
   }
 
@@ -866,6 +879,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   #clearInventoryHoverPreviewClasses() {
     this.#hoverPreviewKey = "";
+    clearInventoryPlacementPreviews(this.element);
     this.element?.querySelectorAll(".drop-preview, .drop-stack-preview").forEach(element => {
       element.classList.remove("drop-preview", "drop-stack-preview");
     });

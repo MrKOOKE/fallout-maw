@@ -7,6 +7,8 @@ import {
   hasActorContainer,
   moveActorContainerPassengerData
 } from "../utils/actor-containers.mjs";
+import { getInventoryGridPointerPosition } from "../utils/inventory-grid-dom.mjs";
+import { buildInventoryGridStyle } from "../utils/inventory-containers.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction } from "../utils/item-functions.mjs";
 import {
   GLOBAL_MAP_LAYER,
@@ -351,13 +353,17 @@ class TravelAssemblyApplication extends FalloutMaWFormApplicationV2 {
       || data.sceneId !== this.sceneId
       || data.assemblyId !== this.assemblyId
       || !target) return false;
+    const pointer = target.dataset.dropKind === "vehicle-cell"
+      ? getInventoryGridPointerPosition(event, target)
+      : null;
+    if (target.dataset.dropKind === "vehicle-cell" && !pointer) return false;
     const placement = target.dataset.dropKind === "vehicle-cell"
       ? {
           vehicleTokenId: target.dataset.vehicleTokenId,
           slotId: target.dataset.slotId,
           slotIndex: Number(target.dataset.slotIndex),
-          x: Number(target.dataset.x),
-          y: Number(target.dataset.y)
+          x: pointer.x,
+          y: pointer.y
         }
       : null;
     return submitTravelGroupRequest("travelGroup.assembly.place", {
@@ -1390,29 +1396,11 @@ function buildVehicleSeatGroups(vehicle, members) {
             `grid-row: ${member.placement.y} / span ${member.height};`
           ].join(" ")
         }));
-      const cells = [];
-      for (let y = 1; y <= seat.height; y += 1) {
-        for (let x = 1; x <= seat.width; x += 1) {
-          cells.push({
-            x,
-            y,
-            slotId: seat.slotId,
-            slotIndex,
-            occupied: occupants.some(member =>
-              x >= member.placement.x
-              && x < member.placement.x + member.width
-              && y >= member.placement.y
-              && y < member.placement.y + member.height
-            ),
-            style: `grid-column: ${x}; grid-row: ${y};`
-          });
-        }
-      }
       instances.push({
         id: `${seat.slotId}:${slotIndex}`,
         columns: seat.width,
         rows: seat.height,
-        cells,
+        style: buildInventoryGridStyle(seat.width, seat.height),
         occupants
       });
     }

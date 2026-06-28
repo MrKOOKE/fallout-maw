@@ -100,10 +100,7 @@
                 {{/if}}
               </div>
             </header>
-            <div class="fallout-maw-trade-offer-grid" data-search-drop-zone data-search-actor-uuid="{{uuid}}" data-trade-offer-grid data-trade-offer-actor-uuid="{{uuid}}" style="--fallout-maw-trade-offer-columns: {{tradeOffer.grid.columns}};">
-              {{#each tradeOffer.grid.cells}}
-              <div class="fallout-maw-inventory-cell fallout-maw-trade-offer-cell {{#if occupied}}occupied{{/if}}" data-search-drop-zone data-search-actor-uuid="{{../uuid}}" data-trade-offer-actor-uuid="{{../uuid}}" data-trade-offer-cell data-x="{{x}}" data-y="{{y}}" style="{{style}}"></div>
-              {{/each}}
+            <div class="fallout-maw-trade-offer-grid" data-search-drop-zone data-search-actor-uuid="{{uuid}}" data-trade-offer-grid data-trade-offer-actor-uuid="{{uuid}}" style="{{tradeOffer.grid.style}}">
               {{#each tradeOffer.items}}
               <article class="{{#if ../tradeOffer.canControl}}draggable fallout-maw-draggable-item{{/if}} fallout-maw-inventory-item fallout-maw-inventory-grid-item fallout-maw-trade-offer-item {{#if placement.rotated}}rotated{{/if}} {{#if brokenCondition}}broken-condition{{/if}}{{#if interactionToggleable}} toggleable{{/if}}{{#if interactionToggled}} toggled{{/if}}" draggable="{{#if ../tradeOffer.canControl}}true{{else}}false{{/if}}" style="{{gridStyle}}" data-trade-offer-entry data-trade-offer-kind="item" data-trade-offer-side="{{side}}" data-trade-offer-key="{{offerKey}}" data-trade-offer-actor-uuid="{{../uuid}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-x="{{placement.x}}" data-y="{{placement.y}}">
                 <img src="{{img}}" alt="{{name}}">
@@ -217,10 +214,7 @@
             {{#if grid.items.length}}
             <section class="fallout-maw-panel fallout-maw-butchering-storage-section">
               <h2>Разделка</h2>
-              <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}}" data-inventory-grid data-inventory-parent-id="{{id}}" style="--fallout-maw-inventory-columns: {{grid.columns}};">
-                {{#each grid.cells}}
-                <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}} {{#if phantom}}phantom{{/if}}" data-inventory-cell data-inventory-parent-id="{{../id}}" data-x="{{x}}" data-y="{{y}}" style="{{style}}"></div>
-                {{/each}}
+              <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}}" data-inventory-grid data-inventory-parent-id="{{id}}" style="{{grid.style}}">
                 {{#each grid.items}}
                 <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}{{#if interactionToggleable}} toggleable{{/if}}{{#if interactionToggled}} toggled{{/if}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" style="{{gridStyle}}">
                   <img src="{{img}}" alt="{{name}}">
@@ -235,10 +229,7 @@
             <section class="fallout-maw-panel fallout-maw-inventory-pane">
               <h2>{{localize "FALLOUTMAW.Common.Inventory"}}</h2>
               <div class="fallout-maw-pane-scroll fallout-maw-inventory-scroll">
-                <div class="fallout-maw-inventory-grid {{#if inventory.grid.hasPhantomItems}}has-phantom-items{{/if}}" data-search-drop-zone data-search-actor-uuid="{{uuid}}" data-inventory-grid data-inventory-parent-id="" style="--fallout-maw-inventory-columns: {{inventory.grid.columns}};">
-                  {{#each inventory.grid.cells}}
-                  <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}} {{#if phantom}}phantom{{/if}}" data-search-drop-zone data-search-actor-uuid="{{../uuid}}" data-inventory-cell data-inventory-parent-id="" data-x="{{x}}" data-y="{{y}}" style="{{style}}"></div>
-                  {{/each}}
+                <div class="fallout-maw-inventory-grid {{#if inventory.grid.hasPhantomItems}}has-phantom-items{{/if}}" data-search-drop-zone data-search-actor-uuid="{{uuid}}" data-inventory-grid data-inventory-parent-id="" style="{{inventory.grid.style}}">
                   {{#each inventory.grid.items}}
                   <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if equipped}}equipped{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}{{#if interactionToggleable}} toggleable{{/if}}{{#if interactionToggled}} toggled{{/if}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="" data-x="{{placement.x}}" data-y="{{placement.y}}" {{#if tradePrice}}data-trade-price="{{tradePrice}}"{{/if}} style="{{gridStyle}}">
                     <img src="{{img}}" alt="{{name}}">
@@ -261,10 +252,7 @@
                       </div>
                     </div>
                   </div>
-                  <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}}" data-search-drop-zone data-search-actor-uuid="{{actorUuid}}" data-inventory-grid data-inventory-parent-id="{{id}}" style="--fallout-maw-inventory-columns: {{grid.columns}};">
-                    {{#each grid.cells}}
-                    <div class="fallout-maw-inventory-cell {{#if occupied}}occupied{{/if}} {{#if phantom}}phantom{{/if}}" data-search-drop-zone data-search-actor-uuid="{{../actorUuid}}" data-inventory-cell data-inventory-parent-id="{{../id}}" data-x="{{x}}" data-y="{{y}}" style="{{style}}"></div>
-                    {{/each}}
+                  <div class="fallout-maw-inventory-grid {{#if grid.hasPhantomItems}}has-phantom-items{{/if}}" data-search-drop-zone data-search-actor-uuid="{{actorUuid}}" data-inventory-grid data-inventory-parent-id="{{id}}" style="{{grid.style}}">
                     {{#each grid.items}}
                     <article class="{{draggableClass}} fallout-maw-inventory-item fallout-maw-draggable-item fallout-maw-inventory-grid-item {{#if placement.rotated}}rotated{{/if}} {{#if equipped}}equipped{{/if}} {{#if phantom}}phantom{{/if}} {{#if brokenCondition}}broken-condition{{/if}}{{#if interactionToggleable}} toggleable{{/if}}{{#if interactionToggled}} toggled{{/if}}" data-search-actor-uuid="{{actorUuid}}" data-item-id="{{id}}" data-tooltip-item="{{id}}" data-inventory-grid-item data-inventory-parent-id="{{../id}}" data-x="{{placement.x}}" data-y="{{placement.y}}" {{#if tradePrice}}data-trade-price="{{tradePrice}}"{{/if}} style="{{gridStyle}}">
                       <img src="{{img}}" alt="{{name}}">

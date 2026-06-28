@@ -183,6 +183,13 @@ import {
   isModuleItemCompatibleWithSlot
 } from "../utils/weapon-modules.mjs";
 import { FalloutMaWContainerSheet } from "./container-sheet.mjs";
+import {
+  clearInventoryPlacementPreviews,
+  clearInventoryVirtualCells,
+  getInventoryGridPointerPosition as getInventoryGridPointerPositionFromElement,
+  renderInventoryPlacementPreview,
+  syncInventoryVirtualCell
+} from "../utils/inventory-grid-dom.mjs";
 
 const { ActorSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -746,15 +753,22 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const target = event?.target;
     const direct = target?.closest?.("[data-actor-container-cell]");
     if (direct && this.element?.contains(direct)) return direct;
-    const grid = target?.closest?.(".fallout-maw-actor-container-grid");
-    if (!grid || !this.element?.contains(grid)) return null;
     const clientX = Number(event?.clientX);
     const clientY = Number(event?.clientY);
     if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
-    return Array.from(grid.querySelectorAll("[data-actor-container-cell]")).find(cell => {
-      const rect = cell.getBoundingClientRect();
-      return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
-    }) ?? null;
+    const pointedElement = document.elementFromPoint(clientX, clientY);
+    const grid = target?.closest?.(".fallout-maw-actor-container-grid")
+      ?? pointedElement?.closest?.(".fallout-maw-actor-container-grid");
+    if (!grid || !this.element?.contains(grid)) return null;
+    const pointer = getInventoryGridPointerPositionFromElement(event, grid);
+    if (!pointer) return null;
+    return syncInventoryVirtualCell(grid, pointer, {
+      actorContainerCell: "",
+      travelUnitId: String(grid.dataset.travelUnitId ?? ""),
+      vehicleActorUuid: String(grid.dataset.vehicleActorUuid ?? ""),
+      slotId: String(grid.dataset.slotId ?? ""),
+      slotIndex: String(grid.dataset.slotIndex ?? "")
+    });
   }
 
   #clearActorContainerDropPreview() {
@@ -1462,10 +1476,9 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     const pointer = this.#getInventoryGridPointerPosition(eventOrTarget, grid);
     if (!pointer) return null;
 
-    const parentId = CSS.escape(String(grid.dataset.inventoryParentId ?? ROOT_CONTAINER_ID));
-    return grid.querySelector(
-      `[data-inventory-cell][data-inventory-parent-id="${parentId}"][data-x="${pointer.x}"][data-y="${pointer.y}"]`
-    ) ?? null;
+    return syncInventoryVirtualCell(grid, pointer, {
+      inventoryParentId: String(grid.dataset.inventoryParentId ?? ROOT_CONTAINER_ID)
+    });
   }
 
   #getInventoryContextParentId(zone = null) {
@@ -1598,14 +1611,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     if (this.#hoverPreviewKey === previewKey) return;
     this.#clearInventoryHoverPreviewClasses();
     this.#hoverPreviewKey = previewKey;
-    const escapedParentId = CSS.escape(parentId);
-    for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
-      for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
-        this.element?.querySelector(
-          `[data-inventory-cell][data-inventory-parent-id="${escapedParentId}"][data-x="${x}"][data-y="${y}"]`
-        )?.classList.add("drop-preview");
-      }
-    }
+    const grid = this.#getInventoryGridElement(parentId);
+    renderInventoryPlacementPreview(grid, placement, { className: "drop-preview", kind: "placement" });
   }
 
   #applyInventoryStackPreview(targetItem, parentId = ROOT_CONTAINER_ID) {
@@ -1621,13 +1628,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
     )?.classList.add("drop-stack-preview");
 
     const placement = normalizeInventoryPlacement(targetItem.system?.placement ?? {}, targetItem, this.actor.items);
-    for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
-      for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
-        this.element?.querySelector(
-          `[data-inventory-cell][data-inventory-parent-id="${escapedParentId}"][data-x="${x}"][data-y="${y}"]`
-        )?.classList.add("drop-stack-preview");
-      }
-    }
+    const grid = this.#getInventoryGridElement(parentId);
+    renderInventoryPlacementPreview(grid, placement, { className: "drop-stack-preview", kind: "stack" });
   }
 
   #clearInventoryHoverPreview() {
@@ -1637,6 +1639,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #clearInventoryHoverPreviewClasses() {
     this.#hoverPreviewKey = "";
+    clearInventoryPlacementPreviews(this.element);
     this.element?.querySelectorAll(".drop-preview, .drop-stack-preview").forEach(element => {
       element.classList.remove("drop-preview", "drop-stack-preview");
     });
@@ -1644,6 +1647,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
   #clearInventoryDropPreview() {
     this.#clearInventoryHoverPreview();
+    clearInventoryVirtualCells(this.element);
     this.element?.querySelectorAll(".drop-match-preview").forEach(element => {
       element.classList.remove("drop-match-preview");
     });
@@ -1749,32 +1753,15 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   }
 
   #getInventoryGridPointerPosition(event, grid) {
-    const clientX = Number(event?.clientX);
-    const clientY = Number(event?.clientY);
-    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
+    const parentId = String(grid?.dataset?.inventoryParentId ?? ROOT_CONTAINER_ID);
+    return getInventoryGridPointerPositionFromElement(event, grid, {
+      allowOverflowRows: this.#getInventoryGridOptions(parentId).allowOverflowRows
+    });
+  }
 
-    const firstCell = grid.querySelector("[data-inventory-cell]");
-    if (!firstCell) return null;
-    const gridRect = grid.getBoundingClientRect();
-    const cellRect = firstCell.getBoundingClientRect();
-    const cellWidth = cellRect.width;
-    const cellHeight = cellRect.height;
-    if (cellWidth <= 0 || cellHeight <= 0) return null;
-
-    const columns = Math.max(1, toInteger(grid.style.getPropertyValue("--fallout-maw-inventory-columns")) || 1);
-    const gapX = columns > 1
-      ? Math.max(0, (gridRect.width - (cellWidth * columns)) / (columns - 1))
-      : 0;
-    const stepX = cellWidth + gapX;
-    const stepY = cellHeight + gapX;
-    const x = Math.floor((clientX - gridRect.left) / stepX) + 1;
-    const y = Math.floor((clientY - gridRect.top) / stepY) + 1;
-    if (x < 1 || y < 1) return null;
-
-    return {
-      x,
-      y
-    };
+  #getInventoryGridElement(parentId = ROOT_CONTAINER_ID) {
+    const escapedParentId = CSS.escape(String(parentId ?? ROOT_CONTAINER_ID));
+    return this.element?.querySelector(`[data-inventory-grid][data-inventory-parent-id="${escapedParentId}"]`) ?? null;
   }
 
   #getNearestInventoryCellInGrid(originX, originY, itemData = null, excludeItemIds = [], parentId = ROOT_CONTAINER_ID, columns = 1, rows = 1) {

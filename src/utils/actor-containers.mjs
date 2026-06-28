@@ -1,5 +1,6 @@
 import { SYSTEM_ID } from "../constants.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction } from "./item-functions.mjs";
+import { buildInventoryGridStyle } from "./inventory-containers.mjs";
 import { toInteger } from "./numbers.mjs";
 
 export const ACTOR_CONTAINER_FLAG = "actorContainer";
@@ -128,11 +129,7 @@ export function prepareActorContainerGridContext(seats = [], passengers = []) {
         slotIndex: index,
         columns: seat.width,
         rows: seat.height,
-        cells: buildActorContainerCells(seat.width, seat.height, occupants).map(cell => ({
-          ...cell,
-          slotId: seat.slotId,
-          slotIndex: index
-        })),
+        style: buildInventoryGridStyle(seat.width, seat.height),
         passengers: occupants.map(passenger => ({
           ...passenger,
           gridStyle: buildActorContainerPassengerStyle(passenger)
@@ -222,26 +219,6 @@ function actorPlacementsOverlap(left, right) {
     || left.y + left.height <= right.y
     || right.y + right.height <= left.y
   );
-}
-
-function buildActorContainerCells(columns, rows, occupants = []) {
-  const cells = [];
-  for (let y = 1; y <= rows; y += 1) {
-    for (let x = 1; x <= columns; x += 1) {
-      cells.push({
-        x,
-        y,
-        occupied: occupants.some(passenger => (
-          x >= passenger.x
-          && x < passenger.x + passenger.width
-          && y >= passenger.y
-          && y < passenger.y + passenger.height
-        )),
-        style: `grid-column: ${x}; grid-row: ${y};`
-      });
-    }
-  }
-  return cells;
 }
 
 function buildActorContainerPassengerStyle(passenger) {

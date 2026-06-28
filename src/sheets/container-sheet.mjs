@@ -36,6 +36,13 @@ import {
   getItemInteractionState,
   resolveActorInteractionToken
 } from "../items/item-interactions.mjs";
+import {
+  clearInventoryPlacementPreviews,
+  clearInventoryVirtualCells,
+  getInventoryGridPointerPosition as getInventoryGridPointerPositionFromElement,
+  renderInventoryPlacementPreview,
+  syncInventoryVirtualCell
+} from "../utils/inventory-grid-dom.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -234,33 +241,11 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
 
     const pointer = this.#getInventoryGridPointerPosition(eventOrTarget, grid);
     if (!pointer) return null;
-    return grid.querySelector(`[data-inventory-cell][data-x="${pointer.x}"][data-y="${pointer.y}"]`) ?? null;
+    return syncInventoryVirtualCell(grid, pointer);
   }
 
   #getInventoryGridPointerPosition(event, grid) {
-    const clientX = Number(event?.clientX);
-    const clientY = Number(event?.clientY);
-    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return null;
-
-    const firstCell = grid.querySelector("[data-inventory-cell]");
-    if (!firstCell) return null;
-    const gridRect = grid.getBoundingClientRect();
-    const cellRect = firstCell.getBoundingClientRect();
-    const cellWidth = cellRect.width;
-    const cellHeight = cellRect.height;
-    if (cellWidth <= 0 || cellHeight <= 0) return null;
-
-    const columns = Math.max(1, toInteger(grid.style.getPropertyValue("--fallout-maw-inventory-columns")) || 1);
-    const gapX = columns > 1
-      ? Math.max(0, (gridRect.width - (cellWidth * columns)) / (columns - 1))
-      : 0;
-    const stepX = cellWidth + gapX;
-    const stepY = cellHeight + gapX;
-    const x = Math.floor((clientX - gridRect.left) / stepX) + 1;
-    const y = Math.floor((clientY - gridRect.top) / stepY) + 1;
-    if (x < 1 || y < 1) return null;
-
-    return { x, y };
+    return getInventoryGridPointerPositionFromElement(event, grid);
   }
 
   async #getDroppedItemFromData(data) {
@@ -437,13 +422,10 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     if (this.#hoverPreviewKey === previewKey) return;
     this.#clearInventoryHoverPreview();
     this.#hoverPreviewKey = previewKey;
-    for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
-      for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
-        this.element?.querySelector(
-          `[data-inventory-cell][data-x="${x}"][data-y="${y}"]`
-        )?.classList.add("drop-preview");
-      }
-    }
+    renderInventoryPlacementPreview(this.element?.querySelector("[data-inventory-grid]"), placement, {
+      className: "drop-preview",
+      kind: "placement"
+    });
   }
 
   #applyInventoryStackPreview(targetItem) {
@@ -458,17 +440,15 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
     )?.classList.add("drop-stack-preview");
 
     const placement = normalizeInventoryPlacement(targetItem.system?.placement ?? {}, targetItem, this.actor.items);
-    for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
-      for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
-        this.element?.querySelector(
-          `[data-inventory-cell][data-x="${x}"][data-y="${y}"]`
-        )?.classList.add("drop-stack-preview");
-      }
-    }
+    renderInventoryPlacementPreview(this.element?.querySelector("[data-inventory-grid]"), placement, {
+      className: "drop-stack-preview",
+      kind: "stack"
+    });
   }
 
   #clearInventoryHoverPreview() {
     this.#hoverPreviewKey = "";
+    clearInventoryPlacementPreviews(this.element);
     this.element?.querySelectorAll(".drop-preview, .drop-stack-preview").forEach(element => {
       element.classList.remove("drop-preview", "drop-stack-preview");
     });
@@ -476,6 +456,7 @@ export class FalloutMaWContainerSheet extends HandlebarsApplicationMixin(ItemShe
 
   #clearInventoryDropPreview() {
     this.#clearInventoryHoverPreview();
+    clearInventoryVirtualCells(this.element);
   }
 
   #clearInventoryDraggingState() {
