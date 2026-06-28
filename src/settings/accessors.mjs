@@ -122,6 +122,10 @@ export const DEFAULT_TOKEN_ACTION_HUD_ICONS = Object.freeze({
     burrow: "icons/svg/down.svg",
     knocked: "icons/svg/falling.svg"
   }),
+  combatEnd: Object.freeze({
+    search: `systems/${FALLOUT_MAW.id}/assets/Komandy%20dlya%20upravleniya%20tokenom/obysk.webp`,
+    finish: "icons/svg/skull.svg"
+  }),
   skillIcons: Object.freeze(Object.fromEntries(
     createDefaultSkillSettings().map(skill => [skill.key, normalizeImageSettingPath(skill.img, "icons/svg/d20-grey.svg")])
   )),
@@ -166,6 +170,7 @@ export function normalizeTokenActionHudIcons(value = {}) {
     activeActions: normalizeImageSettingMap(source.activeActions, defaults.activeActions),
     weaponActions: normalizeImageSettingMap(source.weaponActions, defaults.weaponActions),
     postures: normalizeImageSettingMap(source.postures, defaults.postures),
+    combatEnd: normalizeImageSettingMap(source.combatEnd, defaults.combatEnd),
     skillIcons: normalizeImageSettingMap(source.skillIcons, defaults.skillIcons),
     emptyWeaponSlotIcon: normalizeImageSettingPath(source.emptyWeaponSlotIcon, defaults.emptyWeaponSlotIcon)
   };

@@ -15680,3 +15680,112 @@ html.fallout-maw-token-action-hud-open #hotbar {
     flex-basis: auto;
   }
 }
+
+.application.fallout-maw-combat-end-resolution {
+  min-width: 320px;
+  max-width: min(420px, calc(100vw - 24px));
+}
+
+.application.fallout-maw-combat-end-resolution .window-content {
+  padding: 0;
+  overflow: hidden;
+}
+
+.fallout-maw-combat-end-panel {
+  padding: 8px;
+}
+
+.fallout-maw-combat-end-list {
+  display: grid;
+  gap: 6px;
+  max-height: calc(100vh - 120px);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.fallout-maw-combat-end-entry {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 6px;
+  border: 1px solid var(--fallout-maw-terminal-line);
+  background: color-mix(in srgb, var(--fallout-maw-terminal-bg) 88%, black);
+}
+
+.fallout-maw-combat-end-entry.is-finishing {
+  opacity: 0.72;
+}
+
+.fallout-maw-combat-end-portrait {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--fallout-maw-terminal-line);
+  object-fit: cover;
+}
+
+.fallout-maw-combat-end-identity {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fallout-maw-combat-end-identity strong,
+.fallout-maw-combat-end-identity span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallout-maw-combat-end-identity strong {
+  color: var(--fallout-maw-terminal-text);
+  font-size: 13px;
+}
+
+.fallout-maw-combat-end-identity span {
+  color: var(--fallout-maw-terminal-muted);
+  font-size: 11px;
+}
+
+.fallout-maw-combat-end-entry.is-dead .fallout-maw-combat-end-identity span {
+  color: var(--fallout-maw-terminal-red);
+}
+
+.fallout-maw-combat-end-entry.is-unconscious .fallout-maw-combat-end-identity span {
+  color: var(--fallout-maw-terminal-accent);
+}
+
+.fallout-maw-combat-end-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fallout-maw-combat-end-action {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 4px;
+}
+
+.fallout-maw-combat-end-action img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.fallout-maw-combat-end-action.danger {
+  border-color: var(--fallout-maw-terminal-red);
+}
+
+.fallout-maw-combat-end-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}

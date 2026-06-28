@@ -1,0 +1,23 @@
+<section class="fallout-maw-combat-end-panel">
+  <ol class="fallout-maw-combat-end-list">
+    {{#each entries}}
+    <li class="fallout-maw-combat-end-entry {{statusClass}} {{#if pendingFinish}}is-finishing{{/if}}" data-combat-end-entry-id="{{id}}">
+      <img class="fallout-maw-combat-end-portrait" src="{{img}}" alt="">
+      <div class="fallout-maw-combat-end-identity">
+        <strong>{{name}}</strong>
+        <span>{{statusLabel}}</span>
+      </div>
+      <div class="fallout-maw-combat-end-actions">
+        <button type="button" class="fallout-maw-combat-end-action" data-action="search" title="{{searchTitle}}" aria-label="Обыскать" {{#if searchDisabled}}disabled{{/if}}>
+          <img src="{{../actionIcons.search}}" alt="">
+        </button>
+        {{#if showFinish}}
+        <button type="button" class="fallout-maw-combat-end-action danger" data-action="finish" title="{{finishTitle}}" aria-label="Добить" {{#if finishDisabled}}disabled{{/if}}>
+          <img src="{{../actionIcons.finish}}" alt="">
+        </button>
+        {{/if}}
+      </div>
+    </li>
+    {{/each}}
+  </ol>
+</section>

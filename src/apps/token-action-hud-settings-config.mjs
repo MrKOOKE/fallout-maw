@@ -42,6 +42,11 @@ const ACTOR_CONTAINER_ACTION_ICON_ROWS = Object.freeze([
   { section: "activeActions", key: "boardTransport", label: "Сесть в транспорт" }
 ]);
 
+const COMBAT_END_ICON_ROWS = Object.freeze([
+  { key: "search", label: "Обыскать" },
+  { key: "finish", label: "Добить" }
+]);
+
 const WEAPON_ACTION_ICON_ROWS = Object.freeze([
   { key: "aimedShot", labelKey: "FALLOUTMAW.Item.WeaponActionAimedShot" },
   { key: "snapshot", labelKey: "FALLOUTMAW.Item.WeaponActionSnapshot" },
@@ -101,6 +106,7 @@ export class TokenActionHudSettings extends FalloutMaWFormApplicationV2 {
       mainActionIconRows: this.#prepareIconRows("mainActions", MAIN_ACTION_ICON_ROWS),
       activeActionIconRows: this.#prepareIconRows("activeActions", ACTIVE_ACTION_ICON_ROWS),
       serviceActionIconRows: this.#prepareServiceActionIconRows(),
+      combatEndIconRows: this.#prepareIconRows("combatEnd", COMBAT_END_ICON_ROWS),
       weaponActionIconRows: this.#prepareIconRows("weaponActions", WEAPON_ACTION_ICON_ROWS.map(row => ({
         ...row,
         label: row.label ?? game.i18n.localize(row.labelKey)

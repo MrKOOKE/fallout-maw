@@ -62,6 +62,20 @@
       </section>
 
       <section>
+        <h3>Завершение боя</h3>
+        <div class="fallout-maw-settings-table fallout-maw-token-action-hud-icon-table">
+          {{#each combatEndIconRows}}
+          <div class="fallout-maw-settings-row" data-hud-icon-section="{{section}}" data-hud-icon-key="{{key}}">
+            <span>{{label}}</span>
+            <img class="fallout-maw-token-action-hud-icon-preview" src="{{img}}" alt="" data-hud-icon-preview>
+            <input type="text" data-hud-icon-input value="{{img}}">
+            <button type="button" data-action="browseHudImage" title="{{localize 'FALLOUTMAW.Common.Image'}}"><i class="fa-solid fa-image"></i></button>
+          </div>
+          {{/each}}
+        </div>
+      </section>
+
+      <section>
         <h3>Кнопки действий оружия</h3>
         <div class="fallout-maw-settings-table fallout-maw-token-action-hud-icon-table">
           {{#each weaponActionIconRows}}

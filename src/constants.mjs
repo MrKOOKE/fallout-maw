@@ -28,6 +28,7 @@ export const TEMPLATES = Object.freeze({
   worldTimeControl: `systems/${SYSTEM_ID}/templates/actor/world-time-control.hbs`,
   skillCheckAnimation: `systems/${SYSTEM_ID}/templates/actor/skill-check-animation.hbs`,
   tokenActionHud: `systems/${SYSTEM_ID}/templates/actor/token-action-hud.hbs`,
+  combatEndResolution: `systems/${SYSTEM_ID}/templates/actor/combat-end-resolution.hbs`,
   travelGroupHud: `systems/${SYSTEM_ID}/templates/actor/travel-group-hud.hbs`,
   tokenActionHudScaleSettings: `systems/${SYSTEM_ID}/templates/actor/token-action-hud-scale-settings.hbs`,
   stealthWindow: `systems/${SYSTEM_ID}/templates/actor/stealth-window.hbs`,

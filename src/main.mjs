@@ -15,6 +15,7 @@ import {
 import { registerCombatDodgeHooks, registerCombatDodgeSocket } from "./combat/dodge-resource.mjs";
 import { registerCombatMovementHooks } from "./combat/movement-resources.mjs";
 import { registerReactionResourceHooks } from "./combat/reaction-resources.mjs";
+import { registerCombatEndResolutionHooks, registerCombatEndResolutionSocket } from "./combat/combat-end-resolution.mjs";
 import { registerReactionHubConfig, registerReactionHubSocket } from "./combat/reaction-hub.mjs";
 import { registerActiveActionHooks, registerActiveActionSocket } from "./combat/active-actions.mjs";
 import { registerDataModels, registerTrackableAttributes } from "./data/index.mjs";
@@ -122,6 +123,7 @@ Hooks.once("init", () => {
   registerCombatDodgeHooks();
   registerCombatMovementHooks();
   registerReactionResourceHooks();
+  registerCombatEndResolutionHooks();
   registerActiveActionHooks();
   registerAbilityEffectHooks();
   registerAbilityCooldownHooks();
@@ -225,6 +227,7 @@ Hooks.once("ready", async () => {
   registerReactionHubSocket();
   registerAttackAnimationSocket();
   registerCombatDodgeSocket();
+  registerCombatEndResolutionSocket();
   registerCoverSocket();
   registerActiveActionSocket();
   registerWeaponAttackSocket();
