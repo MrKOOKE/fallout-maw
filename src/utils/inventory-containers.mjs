@@ -138,18 +138,31 @@ export function hasContainerCycle(itemOrId, targetParentId, items) {
   return getContainerAncestorIds(targetParentId, items).includes(itemId);
 }
 
-export function getAllContainedItems(containerOrId, items, visited = new Set()) {
+export function getAllContainedItems(containerOrId, items, visited = new Set(), childrenByParent = null) {
   const containerId = typeof containerOrId === "string" ? containerOrId : getItemId(containerOrId);
   if (!containerId || visited.has(containerId)) return [];
   visited.add(containerId);
 
-  const contents = getContainerContents(containerId, items);
+  childrenByParent ??= buildContainerChildrenMap(items);
+  const contents = childrenByParent.get(containerId) ?? [];
   const allContents = [...contents];
   for (const item of contents) {
     if (!isContainerItem(item)) continue;
-    allContents.push(...getAllContainedItems(item, items, visited));
+    allContents.push(...getAllContainedItems(item, items, visited, childrenByParent));
   }
   return allContents;
+}
+
+function buildContainerChildrenMap(items) {
+  const childrenByParent = new Map();
+  for (const item of getItemsArray(items)) {
+    const parentId = getItemContainerParentId(item);
+    if (!parentId) continue;
+    const children = childrenByParent.get(parentId) ?? [];
+    children.push(item);
+    childrenByParent.set(parentId, children);
+  }
+  return childrenByParent;
 }
 
 export function getItemTotalWeight(itemOrSystem = null, items = null, memo = new Map(), visiting = new Set()) {
@@ -205,9 +218,9 @@ export function getItemActorLoadWeight(itemOrSystem = null, items = null, memo =
   return actorLoadWeight;
 }
 
-export function getContainerContentsWeight(containerOrId, items) {
+export function getContainerContentsWeight(containerOrId, items, memo = new Map()) {
   return getContainerContents(containerOrId, items).reduce(
-    (total, item) => total + getItemTotalWeight(item, items),
+    (total, item) => total + getItemTotalWeight(item, items, memo),
     0
   );
 }
@@ -515,13 +528,15 @@ function getInventoryCellKey(x, y) {
 export function validateInventoryTree(items, rootDimensions, options = {}) {
   const itemsArray = getItemsArray(items).filter(isInventoryManagedItem);
   const itemMap = new Map(itemsArray.map(item => [getItemId(item), item]));
+  const contextItemsByParent = buildInventoryContextItemsByParent(itemsArray);
+  const contentsWeightMemo = new Map();
 
   for (const item of itemsArray) {
     const itemId = getItemId(item);
     const parentId = getItemContainerParentId(item);
     if (!parentId) continue;
 
-    if (parentId === itemId || hasContainerCycle(itemId, parentId, itemsArray)) {
+    if (parentId === itemId || hasContainerCycleInMap(itemId, parentId, itemMap)) {
       return { valid: false, reason: "recursive", itemId, parentId };
     }
 
@@ -535,7 +550,7 @@ export function validateInventoryTree(items, rootDimensions, options = {}) {
     }
   }
 
-  const rootItems = getContextInventoryItems(ROOT_CONTAINER_ID, itemsArray);
+  const rootItems = contextItemsByParent.get(ROOT_CONTAINER_ID) ?? [];
   const rootOptions = options.rootOptions ?? {
     allowOverflowRows: Boolean(rootDimensions?.allowOverflowRows),
     extraRows: 0
@@ -544,14 +559,15 @@ export function validateInventoryTree(items, rootDimensions, options = {}) {
     return { valid: false, reason: "no-space", parentId: ROOT_CONTAINER_ID };
   }
 
-  for (const container of itemsArray.filter(item => isContainerItem(item))) {
+  for (const container of itemsArray) {
+    if (!isContainerItem(container)) continue;
     const { columns, rows } = getContainerDimensions(container);
-    const contents = getContextInventoryItems(container.id, itemsArray);
+    const contents = contextItemsByParent.get(container.id) ?? [];
     if (!validateContextPlacements(contents, columns, rows, itemsArray)) {
       return { valid: false, reason: "no-space", parentId: container.id, itemId: container.id };
     }
 
-    if (getContainerContentsWeight(container, itemsArray) > getContainerMaxLoad(container)) {
+    if (getContainerContentsWeight(container, itemsArray, contentsWeightMemo) > getContainerMaxLoad(container)) {
       return { valid: false, reason: "max-load", parentId: container.id, itemId: container.id };
     }
   }
@@ -565,7 +581,67 @@ function isInventoryManagedItem(itemOrSystem = null) {
 }
 
 function validateContextPlacements(contextItems, columns, rows, allItems, options = {}) {
+  if (validateStoredContextPlacements(contextItems, columns, rows, allItems, options)) return true;
   return Boolean(resolveInventoryGridPlacements(contextItems, columns, rows, allItems, options));
+}
+
+function buildInventoryContextItemsByParent(items = []) {
+  const contexts = new Map();
+  for (const item of getItemsArray(items)) {
+    if (!isInventoryManagedItem(item)) continue;
+    const placement = item.system?.placement ?? {};
+    if (String(placement.mode ?? "inventory") !== "inventory") continue;
+    const parentId = getItemContainerParentId(item);
+    const contextItems = contexts.get(parentId) ?? [];
+    contextItems.push(item);
+    contexts.set(parentId, contextItems);
+  }
+  return contexts;
+}
+
+function hasContainerCycleInMap(itemId, parentId, itemMap) {
+  if (!itemId || !parentId) return false;
+  const visited = new Set();
+  let currentParentId = parentId;
+
+  while (currentParentId) {
+    if (currentParentId === itemId) return true;
+    if (visited.has(currentParentId)) return false;
+    visited.add(currentParentId);
+    currentParentId = getItemContainerParentId(itemMap.get(currentParentId));
+  }
+
+  return false;
+}
+
+function validateStoredContextPlacements(contextItems, columns, rows, allItems, options = {}) {
+  columns = Math.max(1, toInteger(columns) || 1);
+  rows = Math.max(1, toInteger(rows) || 1);
+
+  const items = getItemsArray(contextItems);
+  const placementMode = String(options.placementMode ?? "inventory");
+  const preferredPlacementModes = new Set(options.preferredPlacementModes ?? [placementMode]);
+  const occupiedCells = new Set();
+  const footprintMemo = new Map();
+
+  for (const item of items) {
+    const rawPlacement = item.system?.placement ?? item.placement ?? {};
+    const rawMode = String(rawPlacement.mode ?? "inventory");
+    if (!preferredPlacementModes.has(rawMode)) return false;
+
+    const placement = normalizeInventoryPlacement(rawPlacement, item, allItems, footprintMemo);
+    if (!isInventoryPlacementWithinBounds(placement, columns, rows, options)) return false;
+
+    for (let y = placement.y; y < (placement.y + placement.height); y += 1) {
+      for (let x = placement.x; x < (placement.x + placement.width); x += 1) {
+        const key = getInventoryCellKey(x, y);
+        if (occupiedCells.has(key)) return false;
+        occupiedCells.add(key);
+      }
+    }
+  }
+
+  return true;
 }
 
 function resolveInventoryGridPlacements(contextItems, columns, rows, allItems, options = {}) {
@@ -593,7 +669,8 @@ function resolveInventoryGridPlacements(contextItems, columns, rows, allItems, o
       if (yDifference !== 0) return yDifference;
       return toInteger(leftPlacement.x) - toInteger(rightPlacement.x);
     });
-  const deferredItems = items.filter(item => !preferredItems.includes(item));
+  const preferredItemSet = new Set(preferredItems);
+  const deferredItems = items.filter(item => !preferredItemSet.has(item));
   const unresolvedItems = [];
 
   for (const item of preferredItems) {

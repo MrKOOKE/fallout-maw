@@ -35,6 +35,8 @@ import { migrateActorData } from "../migrations/documents.mjs";
 import { expandActorEffectChangeKeys, prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 import { stampPrototypeUuid } from "../utils/document-references.mjs";
 
+const actorLoadPreparationCache = new WeakMap();
+
 export class FalloutMaWActor extends Actor {
   static migrateData(source) {
     source = super.migrateData(source);
@@ -364,6 +366,13 @@ function prepareActorLoadData(actor) {
   const characteristics = actor.system?.characteristics ?? {};
   const skills = getSkillValues(actor.system?.skills ?? {});
   const bonus = Math.trunc(Number(actor.system?.load?.bonus) || 0);
+  const signature = getActorLoadPreparationSignature(actor, race, characteristics, skills, bonus);
+  const cached = actorLoadPreparationCache.get(actor);
+  if (cached?.signature === signature) {
+    actor.system.load = { ...cached.load };
+    return;
+  }
+
   const baseMax = race?.baseParameters?.loadFormula
     ? Math.max(0, evaluateFormula(race.baseParameters.loadFormula, {
       characteristicSettings: getCharacteristicSettings(),
@@ -377,14 +386,49 @@ function prepareActorLoadData(actor) {
   const limit = max > 0 && limitPercent > 0
     ? Number(((max * limitPercent) / 100).toFixed(1))
     : 0;
+  const itemList = actor.items;
+  const loadWeightMemo = new Map();
   const value = Number(
     actor.items.reduce((total, item) => (
       isNaturalRaceItem(item) || getItemContainerParentId(item) || String(item.system?.placement?.mode ?? "") === ITEM_FUNCTIONS.constructPart
         ? total
-        : total + (Number(getItemActorLoadWeight(item, actor.items)) || 0)
+        : total + (Number(getItemActorLoadWeight(item, itemList, loadWeightMemo)) || 0)
     ), 0).toFixed(1)
   );
-  actor.system.load = { min: 0, spent: 0, bonus, value, max, limit, limitPercent };
+  const load = { min: 0, spent: 0, bonus, value, max, limit, limitPercent };
+  actor.system.load = load;
+  actorLoadPreparationCache.set(actor, {
+    signature,
+    load: { ...load }
+  });
+}
+
+function getActorLoadPreparationSignature(actor, race, characteristics = {}, skills = {}, bonus = 0) {
+  const actorSignature = JSON.stringify({
+    raceId: race?.id ?? "",
+    loadFormula: race?.baseParameters?.loadFormula ?? "",
+    loadLimitPercent: race?.baseParameters?.loadLimitPercent ?? 0,
+    bonus,
+    characteristics,
+    skills
+  });
+  const itemSignature = actor.items.map(item => {
+    const system = item.system ?? {};
+    const placement = system.placement ?? {};
+    const container = system.functions?.container ?? {};
+    return [
+      item.id,
+      item.type,
+      Number(system.quantity) || 0,
+      Number(system.weight) || 0,
+      getItemContainerParentId(item),
+      String(placement.mode ?? ""),
+      Boolean(system.equipped) ? 1 : 0,
+      Number(container.loadReduction) || 0,
+      isNaturalRaceItem(item) ? 1 : 0
+    ].join(":");
+  }).join("|");
+  return `${actorSignature}#${itemSignature}`;
 }
 
 function clearCreatureSelection(actor) {

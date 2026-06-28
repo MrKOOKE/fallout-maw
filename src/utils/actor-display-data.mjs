@@ -140,7 +140,7 @@ export function getActorRootInventoryGridOptions(actor, parentId = "") {
 export function prepareInventoryContext(actor, race, { includeLocked = true } = {}) {
   const currencies = getCurrencySettings();
   const actorInteractionToken = resolveActorInteractionToken(actor);
-  const itemDisplayOptions = { actor, token: actorInteractionToken };
+  const itemDisplayOptions = { actor, token: actorInteractionToken, weightMemo: new Map() };
   const { columns, rows } = getActorInventoryGridDimensions(actor, race);
   const allItems = actor.items.contents.filter(item => (
     !["ability", "trauma", "disease"].includes(item.type)
@@ -594,7 +594,7 @@ function getContainerWeaponSlotKey(index = 0) {
   return `extraWeaponSlot${Math.max(1, toInteger(index) + 1)}`;
 }
 
-export function createInventoryItemData(item, allItems, currencies = [], placement = null, { actor = null, token = null } = {}) {
+export function createInventoryItemData(item, allItems, currencies = [], placement = null, { actor = null, token = null, weightMemo = null } = {}) {
   const resolvedPlacement = placement ?? normalizeInventoryPlacement(item.system?.placement ?? {}, item, allItems);
   const container = item.system?.container ?? {};
   const firstAidCharges = getActiveItemChargesData(item);
@@ -615,7 +615,7 @@ export function createInventoryItemData(item, allItems, currencies = [], placeme
     firstAidCharges,
     showFirstAidCharges,
     weight: Number(item.system?.weight) || 0,
-    totalWeight: Number(getItemTotalWeight(item, allItems).toFixed(1)),
+    totalWeight: Number(getItemTotalWeight(item, allItems, weightMemo ?? new Map()).toFixed(1)),
     price: Number(item.system?.price) || 0,
     priceCurrency: item.system?.priceCurrency ?? "",
     priceCurrencyLabel: currencies.find(currency => currency.key === item.system?.priceCurrency)?.label ?? "",

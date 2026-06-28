@@ -5119,30 +5119,18 @@ async function createCompletedTradeContainerTree(targetActor, rootItemData, cont
   const validationCreates = buildCompletedContainerTreeValidationCreates(rootCreateData, rootItemData, containedItems);
   if (!validateActorProjectedInventoryState(targetActor, { updates: displacementUpdates, creates: validationCreates })) throwInventoryNoSpace();
 
-  if (displacementUpdates.length) await targetActor.updateEmbeddedDocuments("Item", displacementUpdates);
-  const [createdRoot] = await targetActor.createEmbeddedDocuments("Item", [rootCreateData]);
   const oldRootId = String(rootItemData?._id ?? rootItemData?.id ?? "");
-  const idMap = new Map([[oldRootId, createdRoot.id]]);
-  for (const childDataRaw of containedItems) {
-    const oldParentId = getItemContainerParentId(childDataRaw);
-    const newParentId = idMap.get(oldParentId);
-    if (!newParentId) continue;
-    const oldChildId = String(childDataRaw?._id ?? childDataRaw?.id ?? "");
-    const childData = foundry.utils.deepClone(childDataRaw);
-    delete childData._id;
-    delete childData.id;
-    foundry.utils.mergeObject(childData, {
-      system: {
-        equipped: false,
-        container: {
-          parentId: newParentId
-        }
-      }
-    });
-    const [createdChild] = await targetActor.createEmbeddedDocuments("Item", [childData]);
-    if (oldChildId) idMap.set(oldChildId, createdChild.id);
-  }
-  return createdRoot;
+  const treeCreateData = buildContainerTreeCreateData({
+    targetActor,
+    rootCreateData,
+    rootOldId: oldRootId,
+    containedItems,
+    getChildData: child => child,
+    getChildOldId: child => String(child?._id ?? child?.id ?? "")
+  });
+  if (displacementUpdates.length) await targetActor.updateEmbeddedDocuments("Item", displacementUpdates);
+  const createdItems = await targetActor.createEmbeddedDocuments("Item", treeCreateData.creates, { keepId: true });
+  return createdItems.find(item => item.id === treeCreateData.rootId) ?? createdItems.at(0) ?? null;
 }
 
 function buildCompletedContainerTreeValidationCreates(rootCreateData, rootItemData, containedItems = []) {
@@ -5178,6 +5166,56 @@ function buildCompletedContainerTreeValidationCreates(rootCreateData, rootItemDa
     if (oldChildId) syntheticIdMap.set(oldChildId, syntheticId);
   }
   return creates;
+}
+
+function buildContainerTreeCreateData({
+  targetActor = null,
+  rootCreateData = {},
+  rootOldId = "",
+  containedItems = [],
+  getChildData = child => child,
+  getChildOldId = (_child, childData) => String(childData?._id ?? childData?.id ?? "")
+} = {}) {
+  const reservedIds = new Set();
+  const rootId = createUniqueEmbeddedItemId(targetActor, reservedIds);
+  const idMap = new Map([[String(rootOldId ?? ""), rootId]]);
+  const rootData = foundry.utils.deepClone(rootCreateData);
+  rootData._id = rootId;
+  delete rootData.id;
+  const creates = [rootData];
+
+  for (const child of containedItems) {
+    const childDataRaw = getChildData(child);
+    const oldParentId = getItemContainerParentId(childDataRaw);
+    const newParentId = idMap.get(oldParentId);
+    if (!newParentId) continue;
+    const childId = createUniqueEmbeddedItemId(targetActor, reservedIds);
+    const childData = foundry.utils.deepClone(childDataRaw);
+    childData._id = childId;
+    delete childData.id;
+    foundry.utils.mergeObject(childData, {
+      system: {
+        equipped: false,
+        container: {
+          parentId: newParentId
+        }
+      }
+    });
+    creates.push(childData);
+    const oldChildId = String(getChildOldId(child, childDataRaw) ?? "");
+    if (oldChildId) idMap.set(oldChildId, childId);
+  }
+
+  return { creates, rootId };
+}
+
+function createUniqueEmbeddedItemId(actor = null, reservedIds = new Set()) {
+  let id = "";
+  do {
+    id = foundry.utils.randomID();
+  } while (!id || reservedIds.has(id) || actor?.items?.has?.(id));
+  reservedIds.add(id);
+  return id;
 }
 
 export async function transferItemBetweenActors({
@@ -5228,6 +5266,12 @@ export async function transferItemBetweenActors({
   }
 
   if (sourceActor.uuid === targetActor.uuid) {
+    const moved = await moveOwnedInventoryItemInInventoryFast(targetActor, sourceItem, preferredPlacement, {
+      parentId: targetParentId,
+      quantity: transferQuantity,
+      targetItem
+    });
+    if (moved) return moved;
     return insertItemIntoActorInventory(targetActor, itemData, preferredPlacement, {
       sourceItem,
       targetItem,
@@ -5350,26 +5394,56 @@ async function insertItemIntoActorInventory(actor, itemData, requestedPlacement,
     nextPlacement = null;
   }
 
+  const updates = mergeItemUpdates(
+    targetUpdates,
+    displacementUpdates,
+    sourceUpdate ? [sourceUpdate] : [],
+    partialSourceTransfer ? [{ _id: sourceItem.id, "system.quantity": sourceOriginalQuantity - transferQuantity }] : []
+  );
+  const deletes = (!partialSourceTransfer && !sourceUpdate && deleteSource && sourceItem) ? [sourceItem.id] : [];
+
   if (!validateActorProjectedInventoryState(actor, {
-    updates: [
-      ...targetUpdates,
-      ...displacementUpdates,
-      ...(sourceUpdate ? [sourceUpdate] : []),
-      ...(partialSourceTransfer ? [{ _id: sourceItem.id, "system.quantity": sourceOriginalQuantity - transferQuantity }] : [])
-    ],
-    deletes: (!partialSourceTransfer && !sourceUpdate && deleteSource && sourceItem) ? [sourceItem.id] : [],
+    updates,
+    deletes,
     creates: createData
   })) {
     throwInventoryNoSpace();
   }
 
-  if (targetUpdates.length) await actor.updateEmbeddedDocuments("Item", targetUpdates);
-  if (displacementUpdates.length) await actor.updateEmbeddedDocuments("Item", displacementUpdates);
-  if (sourceUpdate) await actor.updateEmbeddedDocuments("Item", [sourceUpdate]);
-  else if (partialSourceTransfer) await actor.updateEmbeddedDocuments("Item", [{ _id: sourceItem.id, "system.quantity": sourceOriginalQuantity - transferQuantity }]);
-  else if (deleteSource && sourceItem) await actor.deleteEmbeddedDocuments("Item", [sourceItem.id]);
+  if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
+  if (deletes.length) await actor.deleteEmbeddedDocuments("Item", deletes);
   if (createData.length) return actor.createEmbeddedDocuments("Item", createData);
   return null;
+}
+
+async function moveOwnedInventoryItemInInventoryFast(actor, sourceItem, requestedPlacement, {
+  parentId = ROOT_CONTAINER_ID,
+  quantity = 0,
+  targetItem = null
+} = {}) {
+  if (!actor || !sourceItem || targetItem) return null;
+  if (!isInventoryContextPlacementMode(requestedPlacement?.mode)) return null;
+  if (isItemInButcheringStorage(sourceItem)) return null;
+
+  const sourceQuantity = Math.max(1, getItemQuantity(sourceItem));
+  if (Math.max(1, toInteger(quantity) || sourceQuantity) !== sourceQuantity) return null;
+
+  const itemData = sourceItem.toObject();
+  if (isContainerItem(sourceItem)) {
+    if (String(parentId ?? ROOT_CONTAINER_ID) === sourceItem.id) return null;
+    if (getAllContainedItems(sourceItem.id, actor.items).some(item => item.id === String(parentId ?? ROOT_CONTAINER_ID))) return null;
+  }
+
+  const placement = createContextInventoryPlacement(
+    normalizeInventoryPlacement(requestedPlacement, itemData, actor.items),
+    parentId
+  );
+  if (!isActorInventoryPlacementAvailable(actor, parentId, placement, [sourceItem.id], [], { allowLockedDisplacement: false })) return null;
+  if (!canFitItemWeightInActorParent(actor, sourceItem, parentId, [], [sourceItem.id])) return null;
+
+  const updateData = createInventoryItemUpdate(sourceItem.id, sourceQuantity, parentId, placement, sourceItem);
+  await actor.updateEmbeddedDocuments("Item", [updateData], { render: false });
+  return actor.items.get(sourceItem.id) ?? sourceItem;
 }
 
 async function insertExternalItemIntoActorInventory(actor, itemData, requestedPlacement, {
@@ -5420,15 +5494,13 @@ async function insertExternalItemIntoActorInventory(actor, itemData, requestedPl
     nextPlacement = null;
   }
 
-  if (!validateActorProjectedInventoryState(actor, {
-    updates: [...targetUpdates, ...displacementUpdates],
-    creates: createData
-  })) {
+  const updates = mergeItemUpdates(targetUpdates, displacementUpdates);
+
+  if (!validateActorProjectedInventoryState(actor, { updates, creates: createData })) {
     throwInventoryNoSpace();
   }
 
-  if (targetUpdates.length) await actor.updateEmbeddedDocuments("Item", targetUpdates);
-  if (displacementUpdates.length) await actor.updateEmbeddedDocuments("Item", displacementUpdates);
+  if (updates.length) await actor.updateEmbeddedDocuments("Item", updates);
   if (createData.length) await actor.createEmbeddedDocuments("Item", createData);
   await removeTransferredItemQuantity(sourceActor, sourceItem, getItemQuantity(itemData));
   return null;
@@ -5467,28 +5539,19 @@ async function transferContainerTree({ sourceActor, targetActor, sourceItem, tar
     throwInventoryNoSpace();
   }
 
-  if (replacementUpdates.length) await targetActor.updateEmbeddedDocuments("Item", replacementUpdates);
-  if (displacementUpdates.length) await targetActor.updateEmbeddedDocuments("Item", displacementUpdates);
-  const [createdRoot] = await targetActor.createEmbeddedDocuments("Item", [createData]);
-  const idMap = new Map([[sourceItem.id, createdRoot.id]]);
-  for (const child of containedItems) {
-    const childData = child.toObject();
-    const oldParentId = getItemContainerParentId(child);
-    const newParentId = idMap.get(oldParentId);
-    if (!newParentId) continue;
-    delete childData._id;
-    delete childData.id;
-    foundry.utils.mergeObject(childData, {
-      system: {
-        equipped: false,
-        container: {
-          parentId: newParentId
-        }
-      }
-    });
-    const [createdChild] = await targetActor.createEmbeddedDocuments("Item", [childData]);
-    idMap.set(child.id, createdChild.id);
-  }
+  const targetUpdates = mergeItemUpdates(replacementUpdates, displacementUpdates);
+  const treeCreateData = buildContainerTreeCreateData({
+    targetActor,
+    rootCreateData: createData,
+    rootOldId: sourceItem.id,
+    containedItems,
+    getChildData: child => child.toObject(),
+    getChildOldId: child => child.id
+  });
+
+  if (targetUpdates.length) await targetActor.updateEmbeddedDocuments("Item", targetUpdates);
+  const createdItems = await targetActor.createEmbeddedDocuments("Item", treeCreateData.creates, { keepId: true });
+  const createdRoot = createdItems.find(item => item.id === treeCreateData.rootId) ?? createdItems.at(0) ?? null;
 
   await sourceActor.deleteEmbeddedDocuments("Item", [sourceItem.id, ...containedItems.map(item => item.id)]);
   if (spendsWeaponSwitch) await spendWeaponSwitchActionPoints(targetActor);
@@ -5542,6 +5605,7 @@ function findCompatibleStackTargets(actor, itemData, preferredTarget = null, exc
 
   for (const item of getContextInventoryItems(parentId, actor.items)) {
     if (!item || excluded.has(item.id) || targets.some(target => target.id === item.id)) continue;
+    if (!canMaybeStackItems(itemData, item)) continue;
     if (!areStackable(itemData, item) || getItemQuantity(item) >= getItemMaxStack(item)) continue;
     targets.push(item);
   }
@@ -5562,6 +5626,7 @@ function getCompatibleStackTarget(actor, itemData, preferredTarget = null, exclu
   for (const item of getContextInventoryItems(parentId, actor.items)) {
     if (!item || excluded.has(item.id) || targets.some(target => target.id === item.id)) continue;
     if (item.system?.placement?.mode !== placementMode) continue;
+    if (!canMaybeStackItems(itemData, item)) continue;
     if (!areStackable(itemData, item) || getItemQuantity(item) >= getItemMaxStack(item)) continue;
     targets.push(item);
   }
@@ -6324,6 +6389,22 @@ function createInventoryItemUpdate(itemId, quantity, parentId, placement, itemDa
   return createPlacementItemUpdate(itemId, quantity, parentId, placement, itemData, { equipped: false });
 }
 
+function mergeItemUpdates(...groups) {
+  const updates = new Map();
+  for (const group of groups) {
+    for (const update of group ?? []) {
+      const id = String(update?._id ?? "");
+      if (!id) continue;
+      updates.set(id, {
+        ...(updates.get(id) ?? {}),
+        ...update,
+        _id: id
+      });
+    }
+  }
+  return Array.from(updates.values());
+}
+
 function createPlacementItemUpdate(itemId, quantity, parentId, placement, itemData, { equipped = false } = {}) {
   const placementForStorage = (placement?.mode === "inventory" || placement?.mode === LOCKED_STORAGE_PLACEMENT_MODE)
     ? createContextInventoryPlacement(placement, parentId)
@@ -6511,6 +6592,27 @@ function areStackable(sourceData, targetItem) {
     && serializeWeaponSlotRequirement(sourceSystem, creatureOptions) === serializeWeaponSlotRequirement(targetSystem, creatureOptions)
     && serializeItemFunctions(sourceSystem.functions) === serializeItemFunctions(targetSystem.functions)
   );
+}
+
+function canMaybeStackItems(sourceData, targetItem) {
+  if (!sourceData || !targetItem) return false;
+  if (sourceData?.type !== targetItem?.type) return false;
+  if (isContainerItem(sourceData) || isContainerItem(targetItem)) return false;
+  if (sourceData?.name !== targetItem?.name) return false;
+  if (sourceData?.img !== targetItem?.img) return false;
+  if (isItemLocked(sourceData) !== isItemLocked(targetItem)) return false;
+  if (getItemQuantity(targetItem) >= getItemMaxStack(targetItem)) return false;
+
+  const sourceSystem = sourceData?.system ?? {};
+  const targetSystem = targetItem?.system ?? {};
+  if (Number(sourceSystem.weight) !== Number(targetSystem.weight)) return false;
+  if (Number(sourceSystem.price) !== Number(targetSystem.price)) return false;
+  if (String(sourceSystem.priceCurrency ?? "") !== String(targetSystem.priceCurrency ?? "")) return false;
+  if (getItemMaxStack(sourceSystem) !== getItemMaxStack(targetSystem)) return false;
+
+  const sourceFootprint = getItemFootprint(sourceSystem);
+  const targetFootprint = getItemFootprint(targetSystem);
+  return sourceFootprint.width === targetFootprint.width && sourceFootprint.height === targetFootprint.height;
 }
 
 function serializeSet(set) {
