@@ -106,7 +106,8 @@ export class FalloutMaWActor extends Actor {
   prepareDerivedData() {
     super.prepareDerivedData();
     if (this.system?.attributes) {
-      this.system.attributes.initiative = toInteger(this.system?.characteristics?.perception);
+      this.system.attributes.initiativeBonus = toInteger(this.system.attributes.initiativeBonus);
+      this.system.attributes.initiative = toInteger(this.system?.characteristics?.perception) + this.system.attributes.initiativeBonus;
     }
 
     const resources = this.system?.resources;

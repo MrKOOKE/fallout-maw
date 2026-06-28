@@ -66,6 +66,7 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       ),
       attributes: new SchemaField({
         level: new NumberField({ required: true, integer: true, min: 1, initial: 1 }),
+        initiativeBonus: new NumberField({ required: true, integer: true, initial: 0 }),
         initiative: new NumberField({ required: true, integer: true, initial: 0, persisted: false })
       }),
       combat: new SchemaField({
@@ -190,7 +191,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       characteristicSettings,
       mergeNumberMaps(characteristicBonuses, abilityBonuses.characteristics)
     ));
-    this.attributes.initiative = toInteger(this.characteristics.perception);
+    this.attributes.initiativeBonus = toInteger(this.attributes.initiativeBonus);
+    this.attributes.initiative = toInteger(this.characteristics.perception) + this.attributes.initiativeBonus;
     replaceObjectContents(this.currencies, normalizeNumberMap(this.currencies, currencySettings));
 
     const race = isConstruct

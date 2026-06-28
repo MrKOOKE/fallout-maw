@@ -48,6 +48,7 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
     buildAllSkillsAdvantageEffectKeyToken(),
     buildAllSkillsDisadvantageEffectKeyToken(),
     ...buildResourceBonusEffectKeyTokens(),
+    buildInitiativeBonusEffectKeyToken(),
     createEffectKeyToken({
       code: "rea",
       key: "reactionPoints",
@@ -228,6 +229,17 @@ export function buildResourceBonusEffectKeyTokens(group = game.i18n.localize("FA
       group
     }))
     .filter(Boolean);
+}
+
+export function buildInitiativeBonusEffectKeyToken() {
+  const label = localizeOrFallback("FALLOUTMAW.Actor.Initiative", "Initiative");
+  return createEffectKeyToken({
+    code: "init",
+    key: "initiative",
+    label,
+    path: "system.attributes.initiativeBonus",
+    group: label
+  });
 }
 
 export function buildActionCostEffectKeyTokens() {
