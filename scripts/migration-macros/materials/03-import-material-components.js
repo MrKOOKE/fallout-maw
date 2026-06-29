@@ -12166,8 +12166,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.5EGKKTEJV9GMF45r",
+              "name": "Компонент заживления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 3,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "doctor",
+              "difficulty": 180,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -12232,8 +12278,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.5EGKKTEJV9GMF45r",
+                  "name": "Компонент заживления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 3,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "doctor",
+                  "difficulty": 180,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -12334,8 +12426,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.MhGmXIs87fZzzCTb",
+              "name": "Компонент компенсации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 3,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "doctor",
+              "difficulty": 220,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -12400,8 +12538,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.MhGmXIs87fZzzCTb",
+                  "name": "Компонент компенсации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 3,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "doctor",
+                  "difficulty": 220,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -12502,8 +12686,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+              "name": "Компонент лечения",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 4,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "doctor",
+              "difficulty": 180,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -12568,8 +12798,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+                  "name": "Компонент лечения",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 4,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "doctor",
+                  "difficulty": 180,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -12670,8 +12946,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+              "name": "Компонент оздоровления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 3,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "doctor",
+              "difficulty": 220,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -12736,8 +13058,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+                  "name": "Компонент оздоровления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 3,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "doctor",
+                  "difficulty": 220,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -12838,8 +13206,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.mx16djE5V353aRJk",
+              "name": "Компонент связывания",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 3,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "doctor",
+              "difficulty": 180,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -12904,8 +13318,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.mx16djE5V353aRJk",
+                  "name": "Компонент связывания",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 3,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "doctor",
+                  "difficulty": 180,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -13006,8 +13466,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.COWS7PuQH4raSn3q",
+              "name": "Компонент стабилизации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 3,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "doctor",
+              "difficulty": 180,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -13072,8 +13578,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.COWS7PuQH4raSn3q",
+                  "name": "Компонент стабилизации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 3,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "doctor",
+                  "difficulty": 180,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -13174,8 +13726,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.NyrppY603btfY9dz",
+              "name": "Компонент стимуляции",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 3,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "doctor",
+              "difficulty": 220,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -13240,8 +13838,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.NyrppY603btfY9dz",
+                  "name": "Компонент стимуляции",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 3,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "doctor",
+                  "difficulty": 220,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -13342,8 +13986,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+              "name": "Компонент укрепления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "doctor",
+              "difficulty": 220,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -13408,8 +14098,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+                  "name": "Компонент укрепления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "doctor",
+                  "difficulty": 220,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,

@@ -191,21 +191,23 @@ async function main() {
     }
   }
 
+  const buildStamp = new Date().toISOString();
   for (const group of MACRO_GROUPS) {
     const records = recordsByGroup.get(group.key);
     await fs.writeFile(
       path.join(MACRO_OUTPUT_DIR, group.file),
-      buildFoundryMacro(group.label, records),
+      buildFoundryMacro(group.label, records, buildStamp),
       "utf8"
     );
   }
+  const allRecords = Array.from(recordsByGroup.values()).flat();
   await fs.writeFile(
     path.join(MACRO_OUTPUT_DIR, "00-import-all-materials.js"),
-    buildFoundryMacro("00. Import all materials", Array.from(recordsByGroup.values()).flat()),
+    buildFoundryMacro("00. Import all materials", allRecords, buildStamp),
     "utf8"
   );
 
-  const oneClickMacro = buildOneClickMacro();
+  const oneClickMacro = buildOneClickMacro(buildStamp);
   await fs.writeFile(path.join(MACRO_OUTPUT_DIR, "00-ONE-MACRO-IMPORT-ALL-MATERIALS.js"), oneClickMacro, "utf8");
   await fs.writeFile(path.join(MACRO_OUTPUT_DIR, "00-PASTE-INTO-FOUNDRY-MACRO.js"), oneClickMacro, "utf8");
 
@@ -320,8 +322,135 @@ function normalizeMaterialFolderPath(folderPath) {
 }
 
 function buildCraftData(item, migratedImg, oldCraft, itemById) {
-  const empty = emptyCraftData();
-  const resourceSets = (oldCraft?.resources?.sets ?? [])
+  if (!oldCraft) return emptyCraftData();
+
+  const recipeSources = collectOldCraftRecipeSources(oldCraft, itemById);
+  if (!recipeSources.length) return emptyCraftData();
+
+  const recipeVariants = recipeSources.map((source, index) => {
+    const creation = source.resourceSet.items.length
+      ? buildRecipeVariant(item, migratedImg, source, index)
+      : emptyCraftLayout();
+    const disassembly = buildDisassemblyVariant(item, migratedImg, source.disassemblySource, itemById, index);
+    return {
+      id: `recipe${index + 1}`,
+      name: `Рецепт ${index + 1}`,
+      ...creation,
+      disassembly
+    };
+  });
+
+  const first = recipeVariants[0] ?? emptyCraftLayout();
+  return {
+    mode: "craft",
+    nodes: first.nodes ?? [],
+    links: first.links ?? [],
+    viewport: first.viewport ?? defaultViewport(),
+    disassembly: first.disassembly ?? emptyCraftLayout(),
+    recipes: recipeVariants
+  };
+}
+
+function collectOldCraftRecipeSources(oldCraft = {}, itemById = new Map()) {
+  const pages = Array.isArray(oldCraft.pages) ? oldCraft.pages.filter(Boolean) : [];
+  if (pages.length) {
+    return pages.map(page => {
+      const resourceSet = pickOldResourceSet(page.resources, itemById);
+      return {
+        resourceSet,
+        resultQty: page.resultQty,
+        difficultySets: page.difficultySets,
+        disassemblySource: resolveDisassemblySourceForRecipe(oldCraft, page.disassembly, resourceSet, 0, itemById)
+      };
+    });
+  }
+
+  const resourceSets = normalizeOldResourceSets(oldCraft.resources, itemById);
+  if (resourceSets.length) {
+    return resourceSets.map((set, index) => ({
+      resourceSet: set,
+      resultQty: oldCraft.resultQty,
+      difficultySets: oldCraft.difficultySets,
+      disassemblySource: resolveDisassemblySourceForRecipe(oldCraft, oldCraft.disassembly, set, index, itemById)
+    }));
+  }
+
+  if (hasOldDisassemblyOutputs(oldCraft.disassembly)) {
+    return [{
+      resourceSet: { mode: "ALL", items: [] },
+      resultQty: oldCraft.resultQty,
+      difficultySets: oldCraft.difficultySets,
+      disassemblySource: oldCraft.disassembly
+    }];
+  }
+
+  return [];
+}
+
+/** Только `craft.disassembly.outputs` из flags предмета старого мира — без синтетического зеркала. */
+function resolveDisassemblySourceForRecipe(craftRoot, oldDisassembly, resourceSet, recipeIndex, itemById = new Map()) {
+  const explicitSets = normalizeOldDisassemblyOutputSets(oldDisassembly, itemById);
+  if (!explicitSets.some(set => set.items.length)) return null;
+
+  const matchedSet = explicitSets[recipeIndex]?.items?.length
+    ? explicitSets[recipeIndex]
+    : explicitSets.find(set => set.items.length);
+  if (!matchedSet) return null;
+
+  return {
+    disassemblyQty: Math.max(1, toInteger(oldDisassembly?.disassemblyQty ?? craftRoot.resultQty, 1)),
+    requiredPoints: oldDisassembly?.requiredPoints ?? craftRoot.requiredPoints,
+    attemptsCount: oldDisassembly?.attemptsCount ?? craftRoot.attemptsCount,
+    difficultySets: oldDisassembly?.difficultySets?.sets?.length
+      ? oldDisassembly.difficultySets
+      : craftRoot.difficultySets,
+    skills: oldDisassembly?.skills ?? craftRoot.skills,
+    tools: oldDisassembly?.tools ?? craftRoot.tools,
+    outputs: {
+      sets: [{
+        mode: matchedSet.mode,
+        items: matchedSet.items.map(toOldCraftResourceItem)
+      }]
+    }
+  };
+}
+
+function normalizeOldDisassemblyOutputSets(disassembly = {}, itemById = new Map()) {
+  return (disassembly?.outputs?.sets ?? [])
+    .map(set => ({
+      mode: String(set?.mode ?? "ALL"),
+      items: (set?.items ?? []).map(resource => normalizeResource(resource, itemById)).filter(Boolean)
+    }));
+}
+
+function toOldCraftResourceItem(resource) {
+  return {
+    uuid: `Item.${resource.oldId}`,
+    name: resource.name,
+    qty: resource.quantity
+  };
+}
+
+function normalizeOldResourceSets(resources = {}, itemById = new Map()) {
+  return (resources?.sets ?? [])
+    .map(set => ({
+      mode: String(set?.mode ?? "ALL"),
+      items: (set?.items ?? []).map(resource => normalizeResource(resource, itemById)).filter(Boolean)
+    }))
+    .filter(set => set.items.length);
+}
+
+function pickOldResourceSet(resources = {}, itemById = new Map()) {
+  const sets = normalizeOldResourceSets(resources, itemById);
+  return sets[0] ?? { mode: "ALL", items: [] };
+}
+
+function hasOldDisassemblyOutputs(disassembly = {}) {
+  return (disassembly?.outputs?.sets ?? []).some(set => (set?.items ?? []).length);
+}
+
+function buildDisassemblyVariant(item, migratedImg, oldDisassembly, itemById, index) {
+  const outputSets = (oldDisassembly?.outputs?.sets ?? [])
     .map(set => ({
       mode: String(set?.mode ?? "ALL"),
       items: (set?.items ?? [])
@@ -330,27 +459,83 @@ function buildCraftData(item, migratedImg, oldCraft, itemById) {
     }))
     .filter(set => set.items.length);
 
-  if (!resourceSets.length) return empty;
+  if (!outputSets.length) return emptyCraftLayout();
 
-  const recipeVariants = resourceSets.map((set, index) => {
-    const recipe = buildRecipeVariant(item, migratedImg, oldCraft, set, index);
+  const set = outputSets[0];
+  const outputs = set.items;
+  const blockId = outputs.length > 1 ? `block-${index + 1}-disassembly` : "";
+  const blockLimit = set.mode === "ONE_OF" ? 1 : null;
+  const rootQuantity = Math.max(1, toInteger(oldDisassembly?.disassemblyQty ?? 1, 1));
+  const nodes = [
+    {
+      id: "root",
+      itemUuid: `Item.${item._id}`,
+      name: item.name,
+      img: migratedImg,
+      type: "gear",
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1,
+      quantity: rootQuantity,
+      blockId: "",
+      blockLimit: null,
+      root: true
+    },
+    ...layoutDisassemblyOutputNodes(outputs, blockId, blockLimit)
+  ];
+
+  const check = chooseCraftCheck(oldDisassembly);
+  const firstOutputNode = nodes.find(node => !node.root);
+  const links = firstOutputNode
+    ? [{
+      id: `link-recipe${index + 1}-disassembly-root`,
+      fromNodeId: "root",
+      toNodeId: firstOutputNode.id,
+      skillKey: check.skillKey,
+      difficulty: check.difficulty,
+      noCheck: check.noCheck,
+      bendX: null,
+      bendY: null,
+      fromAnchorSide: "bottom",
+      fromAnchorOffset: 0.5,
+      toAnchorSide: "top",
+      toAnchorOffset: 0.5
+    }]
+    : [];
+
+  return {
+    nodes,
+    links,
+    viewport: defaultViewport()
+  };
+}
+
+function layoutDisassemblyOutputNodes(outputs, blockId, blockLimit) {
+  const columns = Math.min(5, Math.max(1, outputs.length));
+  const rows = Math.ceil(outputs.length / columns);
+  return outputs.map((output, index) => {
+    const row = Math.floor(index / columns);
+    const column = index % columns;
+    const countInRow = row === rows - 1 ? outputs.length - (row * columns) : columns;
+    const x = column - ((countInRow - 1) / 2);
+    const y = 3 + (rows - 1 - row);
     return {
-      id: `recipe${index + 1}`,
-      name: `Рецепт ${index + 1}`,
-      ...recipe,
-      disassembly: emptyCraftLayout()
+      id: `node-dis-${output.oldId}-${index + 1}`,
+      itemUuid: `Item.${output.oldId}`,
+      name: output.name,
+      img: output.img,
+      type: "gear",
+      x,
+      y,
+      width: 1,
+      height: 1,
+      quantity: output.quantity,
+      blockId,
+      blockLimit,
+      root: false
     };
   });
-
-  const first = recipeVariants[0] ?? { nodes: [], links: [], viewport: defaultViewport() };
-  return {
-    mode: "craft",
-    nodes: first.nodes,
-    links: first.links,
-    viewport: first.viewport,
-    disassembly: emptyCraftLayout(),
-    recipes: recipeVariants
-  };
 }
 
 function normalizeResource(resource, itemById) {
@@ -366,10 +551,10 @@ function normalizeResource(resource, itemById) {
   };
 }
 
-function buildRecipeVariant(item, migratedImg, oldCraft, set, index) {
-  const resources = set.items;
+function buildRecipeVariant(item, migratedImg, source, index) {
+  const resources = source.resourceSet.items;
   const blockId = resources.length > 1 ? `block-${index + 1}-resources` : "";
-  const blockLimit = set.mode === "ONE_OF" ? 1 : null;
+  const blockLimit = source.resourceSet.mode === "ONE_OF" ? 1 : null;
   const nodes = [
     {
       id: "root",
@@ -381,7 +566,7 @@ function buildRecipeVariant(item, migratedImg, oldCraft, set, index) {
       y: 0,
       width: 1,
       height: 1,
-      quantity: Math.max(1, toInteger(oldCraft?.resultQty ?? item.system?.quantity, 1)),
+      quantity: Math.max(1, toInteger(source.resultQty ?? item.system?.quantity, 1)),
       blockId: "",
       blockLimit: null,
       root: true
@@ -389,7 +574,7 @@ function buildRecipeVariant(item, migratedImg, oldCraft, set, index) {
     ...layoutResourceNodes(resources, blockId, blockLimit)
   ];
 
-  const check = chooseCraftCheck(oldCraft);
+  const check = chooseCraftCheck(source);
   const firstResourceNode = nodes.find(node => !node.root);
   const links = firstResourceNode
     ? [{
@@ -587,8 +772,16 @@ function decodePath(value) {
 function collectReferencedIds(records) {
   const ids = new Set();
   for (const record of records) {
+    for (const node of record.system?.craft?.disassembly?.nodes ?? []) {
+      const oldId = String(node.itemUuid ?? "").replace(/^Item\./, "");
+      if (oldId && oldId !== record.id) ids.add(oldId);
+    }
     for (const recipe of record.system?.craft?.recipes ?? []) {
       for (const node of recipe.nodes ?? []) {
+        const oldId = String(node.itemUuid ?? "").replace(/^Item\./, "");
+        if (oldId && oldId !== record.id) ids.add(oldId);
+      }
+      for (const node of recipe.disassembly?.nodes ?? []) {
         const oldId = String(node.itemUuid ?? "").replace(/^Item\./, "");
         if (oldId && oldId !== record.id) ids.add(oldId);
       }

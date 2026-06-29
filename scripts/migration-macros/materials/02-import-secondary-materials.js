@@ -4077,8 +4077,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.NSAiD9LVesJTicxy",
+              "name": "Сталь",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Steel.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-rEUC4bqwmzmPi2hi-1",
+              "itemUuid": "Item.rEUC4bqwmzmPi2hi",
+              "name": "Компонент армирования D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-rEUC4bqwmzmPi2hi-1",
+              "skillKey": "repair",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -4173,8 +4219,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.NSAiD9LVesJTicxy",
+                  "name": "Сталь",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Steel.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-rEUC4bqwmzmPi2hi-1",
+                  "itemUuid": "Item.rEUC4bqwmzmPi2hi",
+                  "name": "Компонент армирования D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-rEUC4bqwmzmPi2hi-1",
+                  "skillKey": "repair",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -4254,8 +4346,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.NSAiD9LVesJTicxy",
+                  "name": "Сталь",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Steel.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-rEUC4bqwmzmPi2hi-1",
+                  "itemUuid": "Item.rEUC4bqwmzmPi2hi",
+                  "name": "Компонент армирования D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe2-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-rEUC4bqwmzmPi2hi-1",
+                  "skillKey": "repair",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -4335,8 +4473,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.NSAiD9LVesJTicxy",
+                  "name": "Сталь",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Steel.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-rEUC4bqwmzmPi2hi-1",
+                  "itemUuid": "Item.rEUC4bqwmzmPi2hi",
+                  "name": "Компонент армирования D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe3-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-rEUC4bqwmzmPi2hi-1",
+                  "skillKey": "repair",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -12761,15 +12945,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.j7kuAyH8r2MUJAtz",
+              "name": "Плотная ткань",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/tkan.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-UhDyQveK3maAhqeO-1",
+              "itemUuid": "Item.UhDyQveK3maAhqeO",
+              "name": "Компонент текстиля C класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/tkan.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-UhDyQveK3maAhqeO-1",
+              "skillKey": "repair",
+              "difficulty": 80,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.j7kuAyH8r2MUJAtz",
+                  "name": "Плотная ткань",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/tkan.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-UhDyQveK3maAhqeO-1",
+                  "itemUuid": "Item.UhDyQveK3maAhqeO",
+                  "name": "Компонент текстиля C класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/tkan.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-UhDyQveK3maAhqeO-1",
+                  "skillKey": "repair",
+                  "difficulty": 80,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -13097,15 +13394,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.ITTmWv7kuMcuD4Ba",
+              "name": "Хлопок",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Cotton.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-nwE7te3ncMZ27x1g-1",
+              "itemUuid": "Item.nwE7te3ncMZ27x1g",
+              "name": "Компонент текстиля D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/tkan.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-nwE7te3ncMZ27x1g-1",
+              "skillKey": "repair",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.ITTmWv7kuMcuD4Ba",
+                  "name": "Хлопок",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Cotton.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-nwE7te3ncMZ27x1g-1",
+                  "itemUuid": "Item.nwE7te3ncMZ27x1g",
+                  "name": "Компонент текстиля D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/tkan.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-nwE7te3ncMZ27x1g-1",
+                  "skillKey": "repair",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },

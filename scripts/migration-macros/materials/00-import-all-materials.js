@@ -46,15 +46,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.PfPJunWv8L6xtBi3",
+              "name": "Белый гриб",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/King%20Bolete.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-OQ13NB7SKY2l5wZm-1",
+              "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+              "name": "Компонент лечения",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-OQ13NB7SKY2l5wZm-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.PfPJunWv8L6xtBi3",
+                  "name": "Белый гриб",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/King%20Bolete.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-OQ13NB7SKY2l5wZm-1",
+                  "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+                  "name": "Компонент лечения",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-OQ13NB7SKY2l5wZm-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -102,15 +215,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.Wln581MCnGY9WxP6",
+              "name": "Блевины",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Blewits.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-5EGKKTEJV9GMF45r-1",
+              "itemUuid": "Item.5EGKKTEJV9GMF45r",
+              "name": "Компонент заживления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-8IQYsTFsjKsjpTmW-2",
+              "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+              "name": "Компонент оздоровления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.Wln581MCnGY9WxP6",
+                  "name": "Блевины",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Blewits.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "itemUuid": "Item.5EGKKTEJV9GMF45r",
+                  "name": "Компонент заживления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-8IQYsTFsjKsjpTmW-2",
+                  "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+                  "name": "Компонент оздоровления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -158,15 +414,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.mNAKFrH7wpCpQdHn",
+              "name": "Винная шляпка",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Questionable%20stropharia.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-COWS7PuQH4raSn3q-1",
+              "itemUuid": "Item.COWS7PuQH4raSn3q",
+              "name": "Компонент стабилизации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-fVmCRjJwsrRJOtHB-2",
+              "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+              "name": "Компонент укрепления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-COWS7PuQH4raSn3q-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.mNAKFrH7wpCpQdHn",
+                  "name": "Винная шляпка",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Questionable%20stropharia.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-COWS7PuQH4raSn3q-1",
+                  "itemUuid": "Item.COWS7PuQH4raSn3q",
+                  "name": "Компонент стабилизации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-fVmCRjJwsrRJOtHB-2",
+                  "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+                  "name": "Компонент укрепления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-COWS7PuQH4raSn3q-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -214,15 +613,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.9uBH0fQ0hKV7dfnG",
+              "name": "Галерина окаймлённая",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Funeral%20Bell.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-MhGmXIs87fZzzCTb-1",
+              "itemUuid": "Item.MhGmXIs87fZzzCTb",
+              "name": "Компонент компенсации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-MhGmXIs87fZzzCTb-1",
+              "skillKey": "doctor",
+              "difficulty": 20,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.9uBH0fQ0hKV7dfnG",
+                  "name": "Галерина окаймлённая",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Funeral%20Bell.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-MhGmXIs87fZzzCTb-1",
+                  "itemUuid": "Item.MhGmXIs87fZzzCTb",
+                  "name": "Компонент компенсации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-MhGmXIs87fZzzCTb-1",
+                  "skillKey": "doctor",
+                  "difficulty": 20,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -270,15 +782,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.1bpUtSlEIE6BwWUQ",
+              "name": "Голубая лисичка",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Blue%20Chanterelle.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-NyrppY603btfY9dz-1",
+              "itemUuid": "Item.NyrppY603btfY9dz",
+              "name": "Компонент стимуляции",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-NyrppY603btfY9dz-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.1bpUtSlEIE6BwWUQ",
+                  "name": "Голубая лисичка",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Blue%20Chanterelle.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-NyrppY603btfY9dz-1",
+                  "itemUuid": "Item.NyrppY603btfY9dz",
+                  "name": "Компонент стимуляции",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-NyrppY603btfY9dz-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -326,15 +951,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.Ah6EXvl7fv9MGqZ9",
+              "name": "Голубой млечник",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/indigomilkcap.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-mx16djE5V353aRJk-1",
+              "itemUuid": "Item.mx16djE5V353aRJk",
+              "name": "Компонент связывания",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-fVmCRjJwsrRJOtHB-2",
+              "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+              "name": "Компонент укрепления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-mx16djE5V353aRJk-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.Ah6EXvl7fv9MGqZ9",
+                  "name": "Голубой млечник",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/indigomilkcap.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-mx16djE5V353aRJk-1",
+                  "itemUuid": "Item.mx16djE5V353aRJk",
+                  "name": "Компонент связывания",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-fVmCRjJwsrRJOtHB-2",
+                  "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+                  "name": "Компонент укрепления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-mx16djE5V353aRJk-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -382,15 +1150,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.KRzK9XCtPeE2LyGQ",
+              "name": "Гриб навозник",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Desert%20Shaggy%20Mane.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-5EGKKTEJV9GMF45r-1",
+              "itemUuid": "Item.5EGKKTEJV9GMF45r",
+              "name": "Компонент заживления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.KRzK9XCtPeE2LyGQ",
+                  "name": "Гриб навозник",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Desert%20Shaggy%20Mane.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "itemUuid": "Item.5EGKKTEJV9GMF45r",
+                  "name": "Компонент заживления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -438,15 +1319,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.FUFO07VmpitjXPd9",
+              "name": "Гриб-лобстер",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Lobster%20m.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-COWS7PuQH4raSn3q-1",
+              "itemUuid": "Item.COWS7PuQH4raSn3q",
+              "name": "Компонент стабилизации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-fVmCRjJwsrRJOtHB-2",
+              "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+              "name": "Компонент укрепления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-COWS7PuQH4raSn3q-1",
+              "skillKey": "doctor",
+              "difficulty": 60,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.FUFO07VmpitjXPd9",
+                  "name": "Гриб-лобстер",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Lobster%20m.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-COWS7PuQH4raSn3q-1",
+                  "itemUuid": "Item.COWS7PuQH4raSn3q",
+                  "name": "Компонент стабилизации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-fVmCRjJwsrRJOtHB-2",
+                  "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+                  "name": "Компонент укрепления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-COWS7PuQH4raSn3q-1",
+                  "skillKey": "doctor",
+                  "difficulty": 60,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -494,15 +1518,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.uD6F4zkQxqblEul0",
+              "name": "Желтокожий шампиньон",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Yellow%20Stainer.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-MhGmXIs87fZzzCTb-1",
+              "itemUuid": "Item.MhGmXIs87fZzzCTb",
+              "name": "Компонент компенсации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-MhGmXIs87fZzzCTb-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.uD6F4zkQxqblEul0",
+                  "name": "Желтокожий шампиньон",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Yellow%20Stainer.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-MhGmXIs87fZzzCTb-1",
+                  "itemUuid": "Item.MhGmXIs87fZzzCTb",
+                  "name": "Компонент компенсации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-MhGmXIs87fZzzCTb-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -550,15 +1687,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.LGqIOwQwB8XfXe5X",
+              "name": "Золотистый млечник",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Gold-drop%20milkcap.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-OQ13NB7SKY2l5wZm-1",
+              "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+              "name": "Компонент лечения",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-fVmCRjJwsrRJOtHB-2",
+              "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+              "name": "Компонент укрепления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-OQ13NB7SKY2l5wZm-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.LGqIOwQwB8XfXe5X",
+                  "name": "Золотистый млечник",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Gold-drop%20milkcap.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-OQ13NB7SKY2l5wZm-1",
+                  "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+                  "name": "Компонент лечения",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-fVmCRjJwsrRJOtHB-2",
+                  "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+                  "name": "Компонент укрепления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-OQ13NB7SKY2l5wZm-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -606,15 +1886,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.QEJYhAVLUOB74yHa",
+              "name": "Красная поганка",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Toadstool.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-mx16djE5V353aRJk-1",
+              "itemUuid": "Item.mx16djE5V353aRJk",
+              "name": "Компонент связывания",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-mx16djE5V353aRJk-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.QEJYhAVLUOB74yHa",
+                  "name": "Красная поганка",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Toadstool.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-mx16djE5V353aRJk-1",
+                  "itemUuid": "Item.mx16djE5V353aRJk",
+                  "name": "Компонент связывания",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-mx16djE5V353aRJk-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -662,15 +2055,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.ZjADuMnCJGPwRnFo",
+              "name": "Ложный зонтик",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/green-spored%20parasol.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-5EGKKTEJV9GMF45r-1",
+              "itemUuid": "Item.5EGKKTEJV9GMF45r",
+              "name": "Компонент заживления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-NyrppY603btfY9dz-2",
+              "itemUuid": "Item.NyrppY603btfY9dz",
+              "name": "Компонент стимуляции",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.ZjADuMnCJGPwRnFo",
+                  "name": "Ложный зонтик",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/green-spored%20parasol.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "itemUuid": "Item.5EGKKTEJV9GMF45r",
+                  "name": "Компонент заживления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-NyrppY603btfY9dz-2",
+                  "itemUuid": "Item.NyrppY603btfY9dz",
+                  "name": "Компонент стимуляции",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -718,15 +2254,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.j45uI7n5NteCI55G",
+              "name": "Лопастник курчавый",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Elfin%20saddle.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-fVmCRjJwsrRJOtHB-1",
+              "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+              "name": "Компонент укрепления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-fVmCRjJwsrRJOtHB-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.j45uI7n5NteCI55G",
+                  "name": "Лопастник курчавый",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Elfin%20saddle.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-fVmCRjJwsrRJOtHB-1",
+                  "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+                  "name": "Компонент укрепления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-fVmCRjJwsrRJOtHB-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -774,15 +2423,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.wYKhzwTi1AA3eDEp",
+              "name": "Мацутакэ",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Matsutake.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-8IQYsTFsjKsjpTmW-1",
+              "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+              "name": "Компонент оздоровления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-8IQYsTFsjKsjpTmW-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.wYKhzwTi1AA3eDEp",
+                  "name": "Мацутакэ",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Matsutake.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-8IQYsTFsjKsjpTmW-1",
+                  "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+                  "name": "Компонент оздоровления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-8IQYsTFsjKsjpTmW-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -886,15 +2648,188 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.fWOqiDhe7LbPBusc",
+              "name": "Мутировавший гриб",
+              "img": "systems/fallout-maw/assets/Predmety/Pisha/mutirovavshij-grib.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-NyrppY603btfY9dz-1",
+              "itemUuid": "Item.NyrppY603btfY9dz",
+              "name": "Компонент стимуляции",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+              "type": "gear",
+              "x": -1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-fVmCRjJwsrRJOtHB-2",
+              "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+              "name": "Компонент укрепления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-8IQYsTFsjKsjpTmW-3",
+              "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+              "name": "Компонент оздоровления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+              "type": "gear",
+              "x": 1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-NyrppY603btfY9dz-1",
+              "skillKey": "doctor",
+              "difficulty": 60,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.fWOqiDhe7LbPBusc",
+                  "name": "Мутировавший гриб",
+                  "img": "systems/fallout-maw/assets/Predmety/Pisha/mutirovavshij-grib.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-NyrppY603btfY9dz-1",
+                  "itemUuid": "Item.NyrppY603btfY9dz",
+                  "name": "Компонент стимуляции",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-fVmCRjJwsrRJOtHB-2",
+                  "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+                  "name": "Компонент укрепления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-8IQYsTFsjKsjpTmW-3",
+                  "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+                  "name": "Компонент оздоровления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-NyrppY603btfY9dz-1",
+                  "skillKey": "doctor",
+                  "difficulty": 60,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -942,15 +2877,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.rfHl8OcL5a9PqtgU",
+              "name": "Мухомор",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Fly%20Agaric.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-mx16djE5V353aRJk-1",
+              "itemUuid": "Item.mx16djE5V353aRJk",
+              "name": "Компонент связывания",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-NyrppY603btfY9dz-2",
+              "itemUuid": "Item.NyrppY603btfY9dz",
+              "name": "Компонент стимуляции",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-mx16djE5V353aRJk-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.rfHl8OcL5a9PqtgU",
+                  "name": "Мухомор",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Fly%20Agaric.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-mx16djE5V353aRJk-1",
+                  "itemUuid": "Item.mx16djE5V353aRJk",
+                  "name": "Компонент связывания",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-NyrppY603btfY9dz-2",
+                  "itemUuid": "Item.NyrppY603btfY9dz",
+                  "name": "Компонент стимуляции",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-mx16djE5V353aRJk-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -998,15 +3076,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.XrZo65mVup9Ec7m2",
+              "name": "Омфалот маслиновый",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Jackolantern%20mushroom.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-OQ13NB7SKY2l5wZm-1",
+              "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+              "name": "Компонент лечения",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-COWS7PuQH4raSn3q-2",
+              "itemUuid": "Item.COWS7PuQH4raSn3q",
+              "name": "Компонент стабилизации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-OQ13NB7SKY2l5wZm-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.XrZo65mVup9Ec7m2",
+                  "name": "Омфалот маслиновый",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Jackolantern%20mushroom.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-OQ13NB7SKY2l5wZm-1",
+                  "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+                  "name": "Компонент лечения",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-COWS7PuQH4raSn3q-2",
+                  "itemUuid": "Item.COWS7PuQH4raSn3q",
+                  "name": "Компонент стабилизации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-OQ13NB7SKY2l5wZm-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -1054,15 +3275,218 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.aJUFKnEMferUEhS5",
+              "name": "Пещерный гриб",
+              "img": "systems/fallout-maw/assets/Predmety/Pisha/peshernyj-grib.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-5EGKKTEJV9GMF45r-1",
+              "itemUuid": "Item.5EGKKTEJV9GMF45r",
+              "name": "Компонент заживления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+              "type": "gear",
+              "x": -1.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-mx16djE5V353aRJk-2",
+              "itemUuid": "Item.mx16djE5V353aRJk",
+              "name": "Компонент связывания",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-fVmCRjJwsrRJOtHB-3",
+              "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+              "name": "Компонент укрепления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-8IQYsTFsjKsjpTmW-4",
+              "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+              "name": "Компонент оздоровления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+              "type": "gear",
+              "x": 1.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+              "skillKey": "doctor",
+              "difficulty": 80,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.aJUFKnEMferUEhS5",
+                  "name": "Пещерный гриб",
+                  "img": "systems/fallout-maw/assets/Predmety/Pisha/peshernyj-grib.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "itemUuid": "Item.5EGKKTEJV9GMF45r",
+                  "name": "Компонент заживления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -1.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-mx16djE5V353aRJk-2",
+                  "itemUuid": "Item.mx16djE5V353aRJk",
+                  "name": "Компонент связывания",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-fVmCRjJwsrRJOtHB-3",
+                  "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+                  "name": "Компонент укрепления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-8IQYsTFsjKsjpTmW-4",
+                  "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+                  "name": "Компонент оздоровления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 1.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "skillKey": "doctor",
+                  "difficulty": 80,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -1110,15 +3534,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.bOP5fefqeAdnd7dk",
+              "name": "Поганка",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Death%20Cap.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-COWS7PuQH4raSn3q-1",
+              "itemUuid": "Item.COWS7PuQH4raSn3q",
+              "name": "Компонент стабилизации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-MhGmXIs87fZzzCTb-2",
+              "itemUuid": "Item.MhGmXIs87fZzzCTb",
+              "name": "Компонент компенсации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-COWS7PuQH4raSn3q-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.bOP5fefqeAdnd7dk",
+                  "name": "Поганка",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Death%20Cap.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-COWS7PuQH4raSn3q-1",
+                  "itemUuid": "Item.COWS7PuQH4raSn3q",
+                  "name": "Компонент стабилизации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-MhGmXIs87fZzzCTb-2",
+                  "itemUuid": "Item.MhGmXIs87fZzzCTb",
+                  "name": "Компонент компенсации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-COWS7PuQH4raSn3q-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -1166,15 +3733,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.OXA40g8ud93vFe4w",
+              "name": "Рвотный гриб",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/The%20Sickener.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-5EGKKTEJV9GMF45r-1",
+              "itemUuid": "Item.5EGKKTEJV9GMF45r",
+              "name": "Компонент заживления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-OQ13NB7SKY2l5wZm-2",
+              "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+              "name": "Компонент лечения",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+              "skillKey": "doctor",
+              "difficulty": 60,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.OXA40g8ud93vFe4w",
+                  "name": "Рвотный гриб",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/The%20Sickener.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "itemUuid": "Item.5EGKKTEJV9GMF45r",
+                  "name": "Компонент заживления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-OQ13NB7SKY2l5wZm-2",
+                  "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+                  "name": "Компонент лечения",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "skillKey": "doctor",
+                  "difficulty": 60,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -1222,15 +3932,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.xvAJdomwW0bKG1ut",
+              "name": "Рядовка скученная",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Clustered%20Domecap.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-fVmCRjJwsrRJOtHB-1",
+              "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+              "name": "Компонент укрепления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-8IQYsTFsjKsjpTmW-2",
+              "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+              "name": "Компонент оздоровления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-fVmCRjJwsrRJOtHB-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.xvAJdomwW0bKG1ut",
+                  "name": "Рядовка скученная",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Clustered%20Domecap.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-fVmCRjJwsrRJOtHB-1",
+                  "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+                  "name": "Компонент укрепления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-8IQYsTFsjKsjpTmW-2",
+                  "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+                  "name": "Компонент оздоровления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-fVmCRjJwsrRJOtHB-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -1278,15 +4131,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.Mb7LLMiLMpRp4XCq",
+              "name": "Скользкий Джек",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Slippery%20Jack.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-OQ13NB7SKY2l5wZm-1",
+              "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+              "name": "Компонент лечения",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-NyrppY603btfY9dz-2",
+              "itemUuid": "Item.NyrppY603btfY9dz",
+              "name": "Компонент стимуляции",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-OQ13NB7SKY2l5wZm-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.Mb7LLMiLMpRp4XCq",
+                  "name": "Скользкий Джек",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Slippery%20Jack.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-OQ13NB7SKY2l5wZm-1",
+                  "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+                  "name": "Компонент лечения",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-NyrppY603btfY9dz-2",
+                  "itemUuid": "Item.NyrppY603btfY9dz",
+                  "name": "Компонент стимуляции",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-OQ13NB7SKY2l5wZm-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -1334,15 +4330,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.GY4lhsPHmx7q84yk",
+              "name": "фиолетовая сыроежка",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Purple%20Brittlegill.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-mx16djE5V353aRJk-1",
+              "itemUuid": "Item.mx16djE5V353aRJk",
+              "name": "Компонент связывания",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-MhGmXIs87fZzzCTb-2",
+              "itemUuid": "Item.MhGmXIs87fZzzCTb",
+              "name": "Компонент компенсации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-mx16djE5V353aRJk-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.GY4lhsPHmx7q84yk",
+                  "name": "фиолетовая сыроежка",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Purple%20Brittlegill.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-mx16djE5V353aRJk-1",
+                  "itemUuid": "Item.mx16djE5V353aRJk",
+                  "name": "Компонент связывания",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-MhGmXIs87fZzzCTb-2",
+                  "itemUuid": "Item.MhGmXIs87fZzzCTb",
+                  "name": "Компонент компенсации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-mx16djE5V353aRJk-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -1390,15 +4529,188 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.AG3nkktNils6zwPi",
+              "name": "Шампиньон",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Field%20mushroom.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-5EGKKTEJV9GMF45r-1",
+              "itemUuid": "Item.5EGKKTEJV9GMF45r",
+              "name": "Компонент заживления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+              "type": "gear",
+              "x": -1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-OQ13NB7SKY2l5wZm-2",
+              "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+              "name": "Компонент лечения",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-COWS7PuQH4raSn3q-3",
+              "itemUuid": "Item.COWS7PuQH4raSn3q",
+              "name": "Компонент стабилизации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+              "type": "gear",
+              "x": 1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+              "skillKey": "doctor",
+              "difficulty": 60,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.AG3nkktNils6zwPi",
+                  "name": "Шампиньон",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Field%20mushroom.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "itemUuid": "Item.5EGKKTEJV9GMF45r",
+                  "name": "Компонент заживления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-OQ13NB7SKY2l5wZm-2",
+                  "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+                  "name": "Компонент лечения",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-COWS7PuQH4raSn3q-3",
+                  "itemUuid": "Item.COWS7PuQH4raSn3q",
+                  "name": "Компонент стабилизации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "skillKey": "doctor",
+                  "difficulty": 60,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -1446,15 +4758,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.RJHUKviORpmQ68ZI",
+              "name": "Древесина",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Aspen.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-vByBBvvQ2lPbrxjE-1",
+              "itemUuid": "Item.vByBBvvQ2lPbrxjE",
+              "name": "Доска",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Aspen%20Lumber.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-vByBBvvQ2lPbrxjE-1",
+              "skillKey": "repair",
+              "difficulty": 20,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.RJHUKviORpmQ68ZI",
+                  "name": "Древесина",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Aspen.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-vByBBvvQ2lPbrxjE-1",
+                  "itemUuid": "Item.vByBBvvQ2lPbrxjE",
+                  "name": "Доска",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Aspen%20Lumber.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-vByBBvvQ2lPbrxjE-1",
+                  "skillKey": "repair",
+                  "difficulty": 20,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -1502,15 +4927,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.iZSYXzcqrjbircfE",
+              "name": "Железная древесина",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Mahogany.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-BLuXiDmTjKHZc8mv-1",
+              "itemUuid": "Item.BLuXiDmTjKHZc8mv",
+              "name": "Доска из железного дерева",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Mohagany%20Lumber.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-BLuXiDmTjKHZc8mv-1",
+              "skillKey": "repair",
+              "difficulty": 60,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.iZSYXzcqrjbircfE",
+                  "name": "Железная древесина",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Mahogany.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-BLuXiDmTjKHZc8mv-1",
+                  "itemUuid": "Item.BLuXiDmTjKHZc8mv",
+                  "name": "Доска из железного дерева",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Mohagany%20Lumber.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-BLuXiDmTjKHZc8mv-1",
+                  "skillKey": "repair",
+                  "difficulty": 60,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -1558,15 +5096,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.SF93H1ThtEqZES7w",
+              "name": "Качественная древесина",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Ironwood%20Log.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-LxZuiqyAhrcrjUea-1",
+              "itemUuid": "Item.LxZuiqyAhrcrjUea",
+              "name": "Качественная доска",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Redwood%20Plank.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-LxZuiqyAhrcrjUea-1",
+              "skillKey": "repair",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.SF93H1ThtEqZES7w",
+                  "name": "Качественная древесина",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Ironwood%20Log.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-LxZuiqyAhrcrjUea-1",
+                  "itemUuid": "Item.LxZuiqyAhrcrjUea",
+                  "name": "Качественная доска",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Redwood%20Plank.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-LxZuiqyAhrcrjUea-1",
+                  "skillKey": "repair",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7046,15 +10697,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.Fggy3y4Ihm9XkIoR",
+              "name": "Уксус",
+              "img": "systems/fallout-maw/assets/Predmety/Pisha/vino.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "repair",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.Fggy3y4Ihm9XkIoR",
+                  "name": "Уксус",
+                  "img": "systems/fallout-maw/assets/Predmety/Pisha/vino.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "repair",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7102,15 +10866,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.3XBeBIwTWN8A2omB",
+              "name": "Адеантум",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Maidenhair.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-5EGKKTEJV9GMF45r-1",
+              "itemUuid": "Item.5EGKKTEJV9GMF45r",
+              "name": "Компонент заживления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-8IQYsTFsjKsjpTmW-2",
+              "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+              "name": "Компонент оздоровления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.3XBeBIwTWN8A2omB",
+                  "name": "Адеантум",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Maidenhair.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "itemUuid": "Item.5EGKKTEJV9GMF45r",
+                  "name": "Компонент заживления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-8IQYsTFsjKsjpTmW-2",
+                  "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+                  "name": "Компонент оздоровления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7158,15 +11065,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.YFVHhUFPVI9nN0zT",
+              "name": "Амарант",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Amaranth.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-OQ13NB7SKY2l5wZm-1",
+              "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+              "name": "Компонент лечения",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-OQ13NB7SKY2l5wZm-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.YFVHhUFPVI9nN0zT",
+                  "name": "Амарант",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Amaranth.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-OQ13NB7SKY2l5wZm-1",
+                  "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+                  "name": "Компонент лечения",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-OQ13NB7SKY2l5wZm-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7214,15 +11234,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.1TSwpFyU8yiK5Jhb",
+              "name": "Бадьян",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Star%20Anise.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-COWS7PuQH4raSn3q-1",
+              "itemUuid": "Item.COWS7PuQH4raSn3q",
+              "name": "Компонент стабилизации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-MhGmXIs87fZzzCTb-2",
+              "itemUuid": "Item.MhGmXIs87fZzzCTb",
+              "name": "Компонент компенсации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-COWS7PuQH4raSn3q-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.1TSwpFyU8yiK5Jhb",
+                  "name": "Бадьян",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Star%20Anise.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-COWS7PuQH4raSn3q-1",
+                  "itemUuid": "Item.COWS7PuQH4raSn3q",
+                  "name": "Компонент стабилизации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-MhGmXIs87fZzzCTb-2",
+                  "itemUuid": "Item.MhGmXIs87fZzzCTb",
+                  "name": "Компонент компенсации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-COWS7PuQH4raSn3q-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7270,15 +11433,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.OClA5FmQ01wHD3kU",
+              "name": "Белена черная",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Henbane.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-NyrppY603btfY9dz-1",
+              "itemUuid": "Item.NyrppY603btfY9dz",
+              "name": "Компонент стимуляции",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-NyrppY603btfY9dz-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.OClA5FmQ01wHD3kU",
+                  "name": "Белена черная",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Henbane.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-NyrppY603btfY9dz-1",
+                  "itemUuid": "Item.NyrppY603btfY9dz",
+                  "name": "Компонент стимуляции",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-NyrppY603btfY9dz-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7326,15 +11602,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.c22OQDcwVafubi4Q",
+              "name": "Восковица",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Myrica%20Gale.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-5EGKKTEJV9GMF45r-1",
+              "itemUuid": "Item.5EGKKTEJV9GMF45r",
+              "name": "Компонент заживления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-OQ13NB7SKY2l5wZm-2",
+              "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+              "name": "Компонент лечения",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.c22OQDcwVafubi4Q",
+                  "name": "Восковица",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Myrica%20Gale.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "itemUuid": "Item.5EGKKTEJV9GMF45r",
+                  "name": "Компонент заживления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-OQ13NB7SKY2l5wZm-2",
+                  "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+                  "name": "Компонент лечения",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7382,15 +11801,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.WiBLLeu1NgBc4re1",
+              "name": "Гвоздика",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Carnation.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-fVmCRjJwsrRJOtHB-1",
+              "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+              "name": "Компонент укрепления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-fVmCRjJwsrRJOtHB-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.WiBLLeu1NgBc4re1",
+                  "name": "Гвоздика",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Carnation.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-fVmCRjJwsrRJOtHB-1",
+                  "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+                  "name": "Компонент укрепления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-fVmCRjJwsrRJOtHB-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7438,15 +11970,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.IuNf0xDNLO7uIqfv",
+              "name": "Гиацинт",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Hyacinth.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-MhGmXIs87fZzzCTb-1",
+              "itemUuid": "Item.MhGmXIs87fZzzCTb",
+              "name": "Компонент компенсации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-MhGmXIs87fZzzCTb-1",
+              "skillKey": "doctor",
+              "difficulty": 20,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.IuNf0xDNLO7uIqfv",
+                  "name": "Гиацинт",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Hyacinth.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-MhGmXIs87fZzzCTb-1",
+                  "itemUuid": "Item.MhGmXIs87fZzzCTb",
+                  "name": "Компонент компенсации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-MhGmXIs87fZzzCTb-1",
+                  "skillKey": "doctor",
+                  "difficulty": 20,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7494,15 +12139,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.BZZF1DvHGwnUTnIC",
+              "name": "Горький корень",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Bitterroot.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-OQ13NB7SKY2l5wZm-1",
+              "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+              "name": "Компонент лечения",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-mx16djE5V353aRJk-2",
+              "itemUuid": "Item.mx16djE5V353aRJk",
+              "name": "Компонент связывания",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-OQ13NB7SKY2l5wZm-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.BZZF1DvHGwnUTnIC",
+                  "name": "Горький корень",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Bitterroot.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-OQ13NB7SKY2l5wZm-1",
+                  "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+                  "name": "Компонент лечения",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-mx16djE5V353aRJk-2",
+                  "itemUuid": "Item.mx16djE5V353aRJk",
+                  "name": "Компонент связывания",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-OQ13NB7SKY2l5wZm-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7550,15 +12338,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.mZfsQkFYzs2g4025",
+              "name": "Зверобой",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Wolf%20Bane's%20Leafs.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-5EGKKTEJV9GMF45r-1",
+              "itemUuid": "Item.5EGKKTEJV9GMF45r",
+              "name": "Компонент заживления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-COWS7PuQH4raSn3q-2",
+              "itemUuid": "Item.COWS7PuQH4raSn3q",
+              "name": "Компонент стабилизации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.mZfsQkFYzs2g4025",
+                  "name": "Зверобой",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Wolf%20Bane's%20Leafs.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "itemUuid": "Item.5EGKKTEJV9GMF45r",
+                  "name": "Компонент заживления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-COWS7PuQH4raSn3q-2",
+                  "itemUuid": "Item.COWS7PuQH4raSn3q",
+                  "name": "Компонент стабилизации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7606,15 +12537,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.uZACWXmtjW6T8Iyn",
+              "name": "Крапива",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Nettle.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-NyrppY603btfY9dz-1",
+              "itemUuid": "Item.NyrppY603btfY9dz",
+              "name": "Компонент стимуляции",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-8IQYsTFsjKsjpTmW-2",
+              "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+              "name": "Компонент оздоровления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-NyrppY603btfY9dz-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.uZACWXmtjW6T8Iyn",
+                  "name": "Крапива",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Nettle.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-NyrppY603btfY9dz-1",
+                  "itemUuid": "Item.NyrppY603btfY9dz",
+                  "name": "Компонент стимуляции",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-8IQYsTFsjKsjpTmW-2",
+                  "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+                  "name": "Компонент оздоровления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-NyrppY603btfY9dz-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7662,15 +12736,188 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.CsB435yy1fARJkOJ",
+              "name": "Лавр",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Laurel.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-OQ13NB7SKY2l5wZm-1",
+              "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+              "name": "Компонент лечения",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+              "type": "gear",
+              "x": -1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-mx16djE5V353aRJk-2",
+              "itemUuid": "Item.mx16djE5V353aRJk",
+              "name": "Компонент связывания",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-fVmCRjJwsrRJOtHB-3",
+              "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+              "name": "Компонент укрепления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+              "type": "gear",
+              "x": 1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-OQ13NB7SKY2l5wZm-1",
+              "skillKey": "doctor",
+              "difficulty": 60,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.CsB435yy1fARJkOJ",
+                  "name": "Лавр",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Laurel.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-OQ13NB7SKY2l5wZm-1",
+                  "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+                  "name": "Компонент лечения",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+                  "type": "gear",
+                  "x": -1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-mx16djE5V353aRJk-2",
+                  "itemUuid": "Item.mx16djE5V353aRJk",
+                  "name": "Компонент связывания",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-fVmCRjJwsrRJOtHB-3",
+                  "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+                  "name": "Компонент укрепления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+                  "type": "gear",
+                  "x": 1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-OQ13NB7SKY2l5wZm-1",
+                  "skillKey": "doctor",
+                  "difficulty": 60,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7718,15 +12965,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.1SrJkJ3vRC9F2wsO",
+              "name": "Лилия",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Wood%20Lily.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-5EGKKTEJV9GMF45r-1",
+              "itemUuid": "Item.5EGKKTEJV9GMF45r",
+              "name": "Компонент заживления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-MhGmXIs87fZzzCTb-2",
+              "itemUuid": "Item.MhGmXIs87fZzzCTb",
+              "name": "Компонент компенсации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.1SrJkJ3vRC9F2wsO",
+                  "name": "Лилия",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Wood%20Lily.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "itemUuid": "Item.5EGKKTEJV9GMF45r",
+                  "name": "Компонент заживления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-MhGmXIs87fZzzCTb-2",
+                  "itemUuid": "Item.MhGmXIs87fZzzCTb",
+                  "name": "Компонент компенсации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7774,15 +13164,188 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.I5wDNwQ0hVS3QBut",
+              "name": "Лилия Звездочёт",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Stargazer%20Lily.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-mx16djE5V353aRJk-1",
+              "itemUuid": "Item.mx16djE5V353aRJk",
+              "name": "Компонент связывания",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+              "type": "gear",
+              "x": -1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-COWS7PuQH4raSn3q-2",
+              "itemUuid": "Item.COWS7PuQH4raSn3q",
+              "name": "Компонент стабилизации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-8IQYsTFsjKsjpTmW-3",
+              "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+              "name": "Компонент оздоровления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+              "type": "gear",
+              "x": 1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-mx16djE5V353aRJk-1",
+              "skillKey": "doctor",
+              "difficulty": 60,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.I5wDNwQ0hVS3QBut",
+                  "name": "Лилия Звездочёт",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Stargazer%20Lily.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-mx16djE5V353aRJk-1",
+                  "itemUuid": "Item.mx16djE5V353aRJk",
+                  "name": "Компонент связывания",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-COWS7PuQH4raSn3q-2",
+                  "itemUuid": "Item.COWS7PuQH4raSn3q",
+                  "name": "Компонент стабилизации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-8IQYsTFsjKsjpTmW-3",
+                  "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+                  "name": "Компонент оздоровления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-mx16djE5V353aRJk-1",
+                  "skillKey": "doctor",
+                  "difficulty": 60,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7830,15 +13393,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.iQQlDULsjFJEonLk",
+              "name": "Мак",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Breadseed%20Poppy.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-NyrppY603btfY9dz-1",
+              "itemUuid": "Item.NyrppY603btfY9dz",
+              "name": "Компонент стимуляции",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-fVmCRjJwsrRJOtHB-2",
+              "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+              "name": "Компонент укрепления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-NyrppY603btfY9dz-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.iQQlDULsjFJEonLk",
+                  "name": "Мак",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Breadseed%20Poppy.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-NyrppY603btfY9dz-1",
+                  "itemUuid": "Item.NyrppY603btfY9dz",
+                  "name": "Компонент стимуляции",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-fVmCRjJwsrRJOtHB-2",
+                  "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+                  "name": "Компонент укрепления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-NyrppY603btfY9dz-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7886,15 +13592,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.hUS5WIXVRe6uNSTU",
+              "name": "Мята",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Pennyroyal.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-OQ13NB7SKY2l5wZm-1",
+              "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+              "name": "Компонент лечения",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-8IQYsTFsjKsjpTmW-2",
+              "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+              "name": "Компонент оздоровления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-OQ13NB7SKY2l5wZm-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.hUS5WIXVRe6uNSTU",
+                  "name": "Мята",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Pennyroyal.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-OQ13NB7SKY2l5wZm-1",
+                  "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+                  "name": "Компонент лечения",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-8IQYsTFsjKsjpTmW-2",
+                  "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+                  "name": "Компонент оздоровления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-OQ13NB7SKY2l5wZm-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7942,15 +13791,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.9Dm3I9pbbayPkh8V",
+              "name": "Норичник",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Figworts.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-5EGKKTEJV9GMF45r-1",
+              "itemUuid": "Item.5EGKKTEJV9GMF45r",
+              "name": "Компонент заживления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.9Dm3I9pbbayPkh8V",
+                  "name": "Норичник",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Figworts.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "itemUuid": "Item.5EGKKTEJV9GMF45r",
+                  "name": "Компонент заживления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -7998,15 +13960,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.poz8ExJX3hRjQJZy",
+              "name": "Одуванчик",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Dandelion.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-mx16djE5V353aRJk-1",
+              "itemUuid": "Item.mx16djE5V353aRJk",
+              "name": "Компонент связывания",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-8IQYsTFsjKsjpTmW-2",
+              "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+              "name": "Компонент оздоровления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-mx16djE5V353aRJk-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.poz8ExJX3hRjQJZy",
+                  "name": "Одуванчик",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Dandelion.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-mx16djE5V353aRJk-1",
+                  "itemUuid": "Item.mx16djE5V353aRJk",
+                  "name": "Компонент связывания",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-8IQYsTFsjKsjpTmW-2",
+                  "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+                  "name": "Компонент оздоровления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-mx16djE5V353aRJk-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -8054,15 +14159,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.dmJlcKDQnohb36MZ",
+              "name": "Олеандр",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Nerium.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-COWS7PuQH4raSn3q-1",
+              "itemUuid": "Item.COWS7PuQH4raSn3q",
+              "name": "Компонент стабилизации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-MhGmXIs87fZzzCTb-2",
+              "itemUuid": "Item.MhGmXIs87fZzzCTb",
+              "name": "Компонент компенсации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-COWS7PuQH4raSn3q-1",
+              "skillKey": "doctor",
+              "difficulty": 60,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.dmJlcKDQnohb36MZ",
+                  "name": "Олеандр",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Nerium.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-COWS7PuQH4raSn3q-1",
+                  "itemUuid": "Item.COWS7PuQH4raSn3q",
+                  "name": "Компонент стабилизации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-MhGmXIs87fZzzCTb-2",
+                  "itemUuid": "Item.MhGmXIs87fZzzCTb",
+                  "name": "Компонент компенсации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-COWS7PuQH4raSn3q-1",
+                  "skillKey": "doctor",
+                  "difficulty": 60,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -8110,15 +14358,188 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.Q6uXkUXXxy7cQn52",
+              "name": "Полевой хвощ",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Horsetail.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-5EGKKTEJV9GMF45r-1",
+              "itemUuid": "Item.5EGKKTEJV9GMF45r",
+              "name": "Компонент заживления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+              "type": "gear",
+              "x": -1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-OQ13NB7SKY2l5wZm-2",
+              "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+              "name": "Компонент лечения",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-mx16djE5V353aRJk-3",
+              "itemUuid": "Item.mx16djE5V353aRJk",
+              "name": "Компонент связывания",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+              "type": "gear",
+              "x": 1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+              "skillKey": "doctor",
+              "difficulty": 60,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.Q6uXkUXXxy7cQn52",
+                  "name": "Полевой хвощ",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Horsetail.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "itemUuid": "Item.5EGKKTEJV9GMF45r",
+                  "name": "Компонент заживления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-OQ13NB7SKY2l5wZm-2",
+                  "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+                  "name": "Компонент лечения",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-mx16djE5V353aRJk-3",
+                  "itemUuid": "Item.mx16djE5V353aRJk",
+                  "name": "Компонент связывания",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "skillKey": "doctor",
+                  "difficulty": 60,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -8166,15 +14587,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.EMhzprMVTd8segvc",
+              "name": "Полынь",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Mugwort.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-mx16djE5V353aRJk-1",
+              "itemUuid": "Item.mx16djE5V353aRJk",
+              "name": "Компонент связывания",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-mx16djE5V353aRJk-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.EMhzprMVTd8segvc",
+                  "name": "Полынь",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Mugwort.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-mx16djE5V353aRJk-1",
+                  "itemUuid": "Item.mx16djE5V353aRJk",
+                  "name": "Компонент связывания",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-mx16djE5V353aRJk-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -8222,15 +14756,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.tMvyD6L9USd9om7v",
+              "name": "Прянолистник",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Spicebush.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-8IQYsTFsjKsjpTmW-1",
+              "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+              "name": "Компонент оздоровления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-8IQYsTFsjKsjpTmW-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.tMvyD6L9USd9om7v",
+                  "name": "Прянолистник",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Spicebush.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-8IQYsTFsjKsjpTmW-1",
+                  "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+                  "name": "Компонент оздоровления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-8IQYsTFsjKsjpTmW-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -8278,15 +14925,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.85yBwSD6g3npICgr",
+              "name": "Рами",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Ramie.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-NyrppY603btfY9dz-1",
+              "itemUuid": "Item.NyrppY603btfY9dz",
+              "name": "Компонент стимуляции",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-MhGmXIs87fZzzCTb-2",
+              "itemUuid": "Item.MhGmXIs87fZzzCTb",
+              "name": "Компонент компенсации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-NyrppY603btfY9dz-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.85yBwSD6g3npICgr",
+                  "name": "Рами",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Ramie.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-NyrppY603btfY9dz-1",
+                  "itemUuid": "Item.NyrppY603btfY9dz",
+                  "name": "Компонент стимуляции",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-MhGmXIs87fZzzCTb-2",
+                  "itemUuid": "Item.MhGmXIs87fZzzCTb",
+                  "name": "Компонент компенсации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-NyrppY603btfY9dz-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -8334,15 +15124,188 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.CGfPxKBHVRj95xdd",
+              "name": "Роза",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rose.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-5EGKKTEJV9GMF45r-1",
+              "itemUuid": "Item.5EGKKTEJV9GMF45r",
+              "name": "Компонент заживления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+              "type": "gear",
+              "x": -1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-OQ13NB7SKY2l5wZm-2",
+              "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+              "name": "Компонент лечения",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-8IQYsTFsjKsjpTmW-3",
+              "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+              "name": "Компонент оздоровления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+              "type": "gear",
+              "x": 1,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+              "skillKey": "doctor",
+              "difficulty": 60,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.CGfPxKBHVRj95xdd",
+                  "name": "Роза",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rose.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "itemUuid": "Item.5EGKKTEJV9GMF45r",
+                  "name": "Компонент заживления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-OQ13NB7SKY2l5wZm-2",
+                  "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+                  "name": "Компонент лечения",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-8IQYsTFsjKsjpTmW-3",
+                  "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+                  "name": "Компонент оздоровления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 1,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "skillKey": "doctor",
+                  "difficulty": 60,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -8390,15 +15353,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.3XvT3xR5gEJv4K07",
+              "name": "Ромашка",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Chamomile.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-COWS7PuQH4raSn3q-1",
+              "itemUuid": "Item.COWS7PuQH4raSn3q",
+              "name": "Компонент стабилизации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-COWS7PuQH4raSn3q-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.3XvT3xR5gEJv4K07",
+                  "name": "Ромашка",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Chamomile.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-COWS7PuQH4raSn3q-1",
+                  "itemUuid": "Item.COWS7PuQH4raSn3q",
+                  "name": "Компонент стабилизации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-COWS7PuQH4raSn3q-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -8446,15 +15522,158 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.GndBelro5jWgTRae",
+              "name": "Тюлпан",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Tulip.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-5EGKKTEJV9GMF45r-1",
+              "itemUuid": "Item.5EGKKTEJV9GMF45r",
+              "name": "Компонент заживления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+              "type": "gear",
+              "x": -0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            },
+            {
+              "id": "node-dis-NyrppY603btfY9dz-2",
+              "itemUuid": "Item.NyrppY603btfY9dz",
+              "name": "Компонент стимуляции",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+              "type": "gear",
+              "x": 0.5,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "block-1-disassembly",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+              "skillKey": "doctor",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.GndBelro5jWgTRae",
+                  "name": "Тюлпан",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Tulip.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "itemUuid": "Item.5EGKKTEJV9GMF45r",
+                  "name": "Компонент заживления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": -0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                },
+                {
+                  "id": "node-dis-NyrppY603btfY9dz-2",
+                  "itemUuid": "Item.NyrppY603btfY9dz",
+                  "name": "Компонент стимуляции",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0.5,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "block-1-disassembly",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-5EGKKTEJV9GMF45r-1",
+                  "skillKey": "doctor",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -13485,8 +20704,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.NSAiD9LVesJTicxy",
+              "name": "Сталь",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Steel.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-rEUC4bqwmzmPi2hi-1",
+              "itemUuid": "Item.rEUC4bqwmzmPi2hi",
+              "name": "Компонент армирования D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-rEUC4bqwmzmPi2hi-1",
+              "skillKey": "repair",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -13581,8 +20846,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.NSAiD9LVesJTicxy",
+                  "name": "Сталь",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Steel.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-rEUC4bqwmzmPi2hi-1",
+                  "itemUuid": "Item.rEUC4bqwmzmPi2hi",
+                  "name": "Компонент армирования D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-rEUC4bqwmzmPi2hi-1",
+                  "skillKey": "repair",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -13662,8 +20973,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.NSAiD9LVesJTicxy",
+                  "name": "Сталь",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Steel.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-rEUC4bqwmzmPi2hi-1",
+                  "itemUuid": "Item.rEUC4bqwmzmPi2hi",
+                  "name": "Компонент армирования D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe2-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-rEUC4bqwmzmPi2hi-1",
+                  "skillKey": "repair",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -13743,8 +21100,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.NSAiD9LVesJTicxy",
+                  "name": "Сталь",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Steel.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-rEUC4bqwmzmPi2hi-1",
+                  "itemUuid": "Item.rEUC4bqwmzmPi2hi",
+                  "name": "Компонент армирования D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Bronya/bronezhilet-armejskij.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe3-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-rEUC4bqwmzmPi2hi-1",
+                  "skillKey": "repair",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -22169,15 +29572,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.j7kuAyH8r2MUJAtz",
+              "name": "Плотная ткань",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/tkan.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-UhDyQveK3maAhqeO-1",
+              "itemUuid": "Item.UhDyQveK3maAhqeO",
+              "name": "Компонент текстиля C класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/tkan.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-UhDyQveK3maAhqeO-1",
+              "skillKey": "repair",
+              "difficulty": 80,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.j7kuAyH8r2MUJAtz",
+                  "name": "Плотная ткань",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/tkan.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-UhDyQveK3maAhqeO-1",
+                  "itemUuid": "Item.UhDyQveK3maAhqeO",
+                  "name": "Компонент текстиля C класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/tkan.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-UhDyQveK3maAhqeO-1",
+                  "skillKey": "repair",
+                  "difficulty": 80,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -22505,15 +30021,128 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.ITTmWv7kuMcuD4Ba",
+              "name": "Хлопок",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Cotton.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-nwE7te3ncMZ27x1g-1",
+              "itemUuid": "Item.nwE7te3ncMZ27x1g",
+              "name": "Компонент текстиля D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/tkan.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-nwE7te3ncMZ27x1g-1",
+              "skillKey": "repair",
+              "difficulty": 40,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
             "zoom": 1
           }
         },
-        "recipes": []
+        "recipes": [
+          {
+            "id": "recipe1",
+            "name": "Рецепт 1",
+            "nodes": [],
+            "links": [],
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "zoom": 1
+            },
+            "disassembly": {
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.ITTmWv7kuMcuD4Ba",
+                  "name": "Хлопок",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Cotton.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-nwE7te3ncMZ27x1g-1",
+                  "itemUuid": "Item.nwE7te3ncMZ27x1g",
+                  "name": "Компонент текстиля D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/tkan.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-nwE7te3ncMZ27x1g-1",
+                  "skillKey": "repair",
+                  "difficulty": 40,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
+              "viewport": {
+                "x": 0,
+                "y": 0,
+                "zoom": 1
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -34793,8 +42422,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.5EGKKTEJV9GMF45r",
+              "name": "Компонент заживления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 3,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "doctor",
+              "difficulty": 180,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -34859,8 +42534,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.5EGKKTEJV9GMF45r",
+                  "name": "Компонент заживления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zelenyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 3,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "doctor",
+                  "difficulty": 180,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -34961,8 +42682,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.MhGmXIs87fZzzCTb",
+              "name": "Компонент компенсации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 3,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "doctor",
+              "difficulty": 220,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -35027,8 +42794,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.MhGmXIs87fZzzCTb",
+                  "name": "Компонент компенсации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Goluboj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 3,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "doctor",
+                  "difficulty": 220,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -35129,8 +42942,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+              "name": "Компонент лечения",
+              "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 4,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "doctor",
+              "difficulty": 180,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -35195,8 +43054,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.OQ13NB7SKY2l5wZm",
+                  "name": "Компонент лечения",
+                  "img": "systems/fallout-maw/assets/Materialy/kctg-5e-fallout/Rutile%20Powder.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 4,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "doctor",
+                  "difficulty": 180,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -35297,8 +43202,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+              "name": "Компонент оздоровления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 3,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "doctor",
+              "difficulty": 220,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -35363,8 +43314,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.8IQYsTFsjKsjpTmW",
+                  "name": "Компонент оздоровления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Oranzhevyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 3,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "doctor",
+                  "difficulty": 220,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -35465,8 +43462,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.mx16djE5V353aRJk",
+              "name": "Компонент связывания",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 3,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "doctor",
+              "difficulty": 180,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -35531,8 +43574,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.mx16djE5V353aRJk",
+                  "name": "Компонент связывания",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Zheltyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 3,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "doctor",
+                  "difficulty": 180,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -35633,8 +43722,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.COWS7PuQH4raSn3q",
+              "name": "Компонент стабилизации",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 3,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "doctor",
+              "difficulty": 180,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -35699,8 +43834,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.COWS7PuQH4raSn3q",
+                  "name": "Компонент стабилизации",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Fioletovyj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 3,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "doctor",
+                  "difficulty": 180,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -35801,8 +43982,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.NyrppY603btfY9dz",
+              "name": "Компонент стимуляции",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 3,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "doctor",
+              "difficulty": 220,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -35867,8 +44094,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.NyrppY603btfY9dz",
+                  "name": "Компонент стимуляции",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Seryj%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 3,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "doctor",
+                  "difficulty": 220,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
@@ -35969,8 +44242,54 @@ const MATERIALS = [
           "zoom": 1
         },
         "disassembly": {
-          "nodes": [],
-          "links": [],
+          "nodes": [
+            {
+              "id": "root",
+              "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+              "name": "Компонент укрепления",
+              "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 0,
+              "width": 1,
+              "height": 1,
+              "quantity": 2,
+              "blockId": "",
+              "blockLimit": null,
+              "root": true
+            },
+            {
+              "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+              "name": "Компонент химиката D класса",
+              "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+              "type": "gear",
+              "x": 0,
+              "y": 3,
+              "width": 1,
+              "height": 1,
+              "quantity": 1,
+              "blockId": "",
+              "blockLimit": null,
+              "root": false
+            }
+          ],
+          "links": [
+            {
+              "id": "link-recipe1-disassembly-root",
+              "fromNodeId": "root",
+              "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+              "skillKey": "doctor",
+              "difficulty": 220,
+              "noCheck": false,
+              "bendX": null,
+              "bendY": null,
+              "fromAnchorSide": "bottom",
+              "fromAnchorOffset": 0.5,
+              "toAnchorSide": "top",
+              "toAnchorOffset": 0.5
+            }
+          ],
           "viewport": {
             "x": 0,
             "y": 0,
@@ -36035,8 +44354,54 @@ const MATERIALS = [
               "zoom": 1
             },
             "disassembly": {
-              "nodes": [],
-              "links": [],
+              "nodes": [
+                {
+                  "id": "root",
+                  "itemUuid": "Item.fVmCRjJwsrRJOtHB",
+                  "name": "Компонент укрепления",
+                  "img": "systems/fallout-maw/assets/Predmety/Medicina/Poroshki/Sinij%20poroshok.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 0,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 2,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": true
+                },
+                {
+                  "id": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "itemUuid": "Item.2hcMMq5Mt3THg1ll",
+                  "name": "Компонент химиката D класса",
+                  "img": "systems/fallout-maw/assets/Predmety/Barahlo/Obychnoe/skipidar.webp",
+                  "type": "gear",
+                  "x": 0,
+                  "y": 3,
+                  "width": 1,
+                  "height": 1,
+                  "quantity": 1,
+                  "blockId": "",
+                  "blockLimit": null,
+                  "root": false
+                }
+              ],
+              "links": [
+                {
+                  "id": "link-recipe1-disassembly-root",
+                  "fromNodeId": "root",
+                  "toNodeId": "node-dis-2hcMMq5Mt3THg1ll-1",
+                  "skillKey": "doctor",
+                  "difficulty": 220,
+                  "noCheck": false,
+                  "bendX": null,
+                  "bendY": null,
+                  "fromAnchorSide": "bottom",
+                  "fromAnchorOffset": 0.5,
+                  "toAnchorSide": "top",
+                  "toAnchorOffset": 0.5
+                }
+              ],
               "viewport": {
                 "x": 0,
                 "y": 0,
