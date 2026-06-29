@@ -831,6 +831,7 @@ function craftLinkField() {
     skillKey: new StringField({ required: true, blank: true, initial: "repair" }),
     difficulty: new NumberField({ required: true, integer: true, min: 0, initial: 60 }),
     noCheck: new BooleanField({ required: true, initial: false }),
+    failureResult: new BooleanField({ required: true, initial: false }),
     bendX: new NumberField({ required: false, nullable: true, initial: null }),
     bendY: new NumberField({ required: false, nullable: true, initial: null }),
     fromAnchorSide: new StringField({ required: true, blank: true, initial: "" }),
@@ -918,7 +919,27 @@ function needChangeFunctionField() {
       value: new NumberField({ required: true, integer: true, min: 0, initial: 1 }),
       max: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
     }),
-    needs: new ArrayField(needChangeEntryField(), { required: true, initial: [] })
+    needs: new ArrayField(needChangeEntryField(), { required: true, initial: [] }),
+    damages: new ArrayField(needChangeDamageEntryField(), { required: true, initial: [] }),
+    organismDevelopment: new ArrayField(needChangeOrganismDevelopmentEntryField(), { required: true, initial: [] }),
+    healthRecovery: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    durationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    intervalSeconds: new NumberField({ required: true, integer: true, min: 1, initial: 6 }),
+    changes: new ArrayField(traumaEffectField(), { required: true, initial: [] })
+  });
+}
+
+function needChangeOrganismDevelopmentEntryField() {
+  return new SchemaField({
+    characteristicKey: new StringField({ required: true, blank: true, initial: "" }),
+    value: new NumberField({ required: true, initial: 0 })
+  });
+}
+
+function needChangeDamageEntryField() {
+  return new SchemaField({
+    damageTypeKey: new StringField({ required: true, blank: true, initial: "" }),
+    value: new NumberField({ required: true, integer: true, min: 0, initial: 0 })
   });
 }
 

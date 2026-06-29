@@ -58,6 +58,7 @@ import { DELAYED_THROWN_ITEM_FLAG } from "../canvas/thrown-items.mjs";
     openResearchTimeDialog,
   prepareResearchesForDisplay
 } from "../research/index.mjs";
+import { prepareOrganismDevelopmentForDisplay } from "../races/organism-development.mjs";
 import { requestSkillCheck } from "../rolls/skill-check.mjs";
 import { applyDamageCostModifier, getActorTraumas, getDamageCostModifierState, getDestroyedLimbStateLabel, getLimbHealingCap, isLimbDestroyed } from "../combat/damage-hub.mjs";
 import { canSpendWeaponSwitchActionPoints, spendWeaponSwitchActionPoints, WEAPON_SWITCH_COST_KEY } from "../combat/weapon-switching.mjs";
@@ -528,6 +529,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       }),
       developmentPointEntries: prepareDevelopmentPointEntries(actor.system?.development, actor.system?.proficiencies),
       researches: prepareResearchesForDisplay(actor.system?.researches, skillSettings, actor.system?.skills),
+      organismDevelopment: prepareOrganismDevelopmentForDisplay(actor),
       damageResistances: damageTypeSettings.map(damageType => ({
         ...damageType,
         value: toInteger(actor.system.damageResistances?.[activeLimbKey]?.[damageType.key])
@@ -4162,7 +4164,48 @@ function buildNeedChangeTooltipSection(item, actor = null) {
     [game.i18n.localize("FALLOUTMAW.Item.FirstAidCharges"), renderTooltipMeterValue(charges.value, charges.max)]
   ];
   rows.push(...getConfiguredNeedTooltipRows(needChange.needs, actor));
+  rows.push(...getNeedChangeDamageTooltipRows(needChange.damages));
+  rows.push(...getNeedChangeOrganismDevelopmentTooltipRows(needChange.organismDevelopment));
+  const healthRecovery = Math.max(0, toInteger(needChange.healthRecovery));
+  if (healthRecovery > 0) {
+    rows.push([[game.i18n.localize("FALLOUTMAW.Item.NeedChangeHealthRecovery"), String(healthRecovery)]]);
+  }
+  const changeRows = getFirstAidEffectChangeTooltipRows(needChange.changes, actor, "FALLOUTMAW.Item.FirstAidEffectChanges");
+  const durationSeconds = Math.max(0, toInteger(needChange.durationSeconds));
+  if (durationSeconds && changeRows.length) {
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidDuration"), formatDurationShort(durationSeconds)]);
+  }
+  rows.push(...changeRows);
   return renderTooltipFunctionSection("Изменение потребностей", rows);
+}
+
+function getNeedChangeOrganismDevelopmentTooltipRows(entries = []) {
+  const labels = new Map(getCharacteristicSettings().map(entry => [entry.key, entry.label ?? entry.key]));
+  const values = (Array.isArray(entries) ? entries : [])
+    .map(entry => {
+      const key = String(entry?.characteristicKey ?? "").trim();
+      const value = Number(entry?.value);
+      if (!key || !Number.isFinite(value) || value <= 0) return "";
+      const formatted = Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "");
+      return `${labels.get(key) ?? key}: +${formatted}`;
+    })
+    .filter(Boolean);
+  return values.length
+    ? [[game.i18n.localize("FALLOUTMAW.Item.NeedChangeOrganismDevelopment"), values.join(", ")]]
+    : [];
+}
+
+function getNeedChangeDamageTooltipRows(damages = []) {
+  const labels = new Map(getDamageTypeSettings().map(entry => [entry.key, entry.label ?? entry.key]));
+  const values = (Array.isArray(damages) ? damages : [])
+    .map(entry => {
+      const key = String(entry?.damageTypeKey ?? "").trim();
+      const value = Math.max(0, toInteger(entry?.value));
+      if (!key || !value) return "";
+      return `${labels.get(key) ?? key}: ${value}`;
+    })
+    .filter(Boolean);
+  return values.length ? [["Получение урона", values.join(", ")]] : [];
 }
 
 function buildOneTimeUseTooltipSection(item, actor = null) {

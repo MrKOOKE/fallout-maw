@@ -494,6 +494,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       firstAidWithdrawalEffectRows: buildFirstAidWithdrawalEffectRows(item),
       firstAidNeedRows: buildFirstAidNeedRows(item),
       needChangeNeedRows: buildNeedChangeNeedRows(item),
+      needChangeDamageRows: buildNeedChangeDamageRows(item, damageTypeSettings),
+      needChangeOrganismDevelopmentRows: buildNeedChangeOrganismDevelopmentRows(item, characteristicSettings),
+      needChangeEffectRows: buildFirstAidEffectRowsFromChanges(item.system?.functions?.needChange?.changes),
+      needChangeDuration: buildDurationPartsContext(item.system?.functions?.needChange?.durationSeconds),
       oneTimeUseEffectRows: buildFirstAidEffectRowsFromChanges(item.system?.functions?.oneTimeUse?.changes),
       firstAidRemoveEffectRows: buildFirstAidRemoveEffectRows(item, damageTypeSettings),
       firstAidDuration: buildDurationPartsContext(item.system?.functions?.firstAid?.durationSeconds),
@@ -624,6 +628,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
     normalizeSubmittedFixedAbilityFunctions(form, submitData);
     normalizeSubmittedFirstAidDurations(form, submitData);
+    normalizeSubmittedNeedChangeDurations(form, submitData);
+    preserveNeedChangeChangesOnSubmit(form, submitData, this.item);
     return super._processSubmitData(event, form, submitData, options);
   }
 
@@ -633,6 +639,8 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
     normalizeSubmittedFixedAbilityFunctions(form, submitData);
     normalizeSubmittedFirstAidDurations(form, submitData);
+    normalizeSubmittedNeedChangeDurations(form, submitData);
+    preserveNeedChangeChangesOnSubmit(form, submitData, this.item);
     return submitData;
   }
 
@@ -936,6 +944,18 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelectorAll("[data-delete-need-change-need]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteNeedChangeNeed(event));
     });
+    this.element?.querySelector("[data-add-need-change-damage]")?.addEventListener("click", event => this.#onAddNeedChangeDamage(event));
+    this.element?.querySelectorAll("[data-delete-need-change-damage]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteNeedChangeDamage(event));
+    });
+    this.element?.querySelector("[data-add-need-change-organism-development]")?.addEventListener("click", event => this.#onAddNeedChangeOrganismDevelopment(event));
+    this.element?.querySelectorAll("[data-delete-need-change-organism-development]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteNeedChangeOrganismDevelopment(event));
+    });
+    this.element?.querySelector("[data-add-need-change-effect]")?.addEventListener("click", event => this.#onAddNeedChangeEffect(event));
+    this.element?.querySelectorAll("[data-delete-need-change-effect]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteNeedChangeEffect(event));
+    });
     this.element?.querySelector("[data-add-one-time-use-effect]")?.addEventListener("click", event => this.#onAddOneTimeUseEffect(event));
     this.element?.querySelectorAll("[data-delete-one-time-use-effect]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteOneTimeUseEffect(event));
@@ -1040,6 +1060,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     workspace.querySelector("[data-craft-link-skill]")?.addEventListener("change", event => this.#onCraftLinkSkillChange(event));
     workspace.querySelector("[data-craft-link-difficulty]")?.addEventListener("change", event => this.#onCraftLinkDifficultyChange(event));
     workspace.querySelector("[data-craft-link-no-check]")?.addEventListener("change", event => this.#onCraftLinkNoCheckChange(event));
+    workspace.querySelector("[data-craft-link-failure-result]")?.addEventListener("change", event => this.#onCraftLinkFailureResultChange(event));
     this.element?.querySelector("[data-craft-recipe-select]")?.addEventListener("change", event => this.#onCraftRecipeSelect(event));
     this.element?.querySelector("[data-craft-add-recipe]")?.addEventListener("click", event => this.#onCraftAddRecipe(event));
     this.element?.querySelector("[data-craft-delete-recipe]")?.addEventListener("click", event => this.#onCraftDeleteRecipe(event));
@@ -1802,6 +1823,16 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     return this.#updateCraftRecipe({ links });
   }
 
+  #onCraftLinkFailureResultChange(event) {
+    const linkId = String(event.currentTarget.dataset.craftLinkFailureResult ?? "");
+    if (!linkId) return undefined;
+    const failureResult = Boolean(event.currentTarget.checked);
+    const links = getCraftLinks(this.item).map(link => (
+      link.id === linkId ? { ...link, failureResult, noCheck: failureResult ? true : link.noCheck } : link
+    ));
+    return this.#updateCraftRecipe({ links });
+  }
+
   #onCraftLinkSkillChange(event) {
     const linkId = String(event.currentTarget.dataset.craftLinkSkill ?? "");
     if (!linkId) return undefined;
@@ -2039,6 +2070,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     if (!geometry?.centerPath) return;
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.classList.add("fallout-maw-craft-link");
+    if (isCraftLinkFailureResult(link)) group.classList.add("failure-result");
     if (link.id === selectedLinkId) group.classList.add("selected");
     group.dataset.craftLinkId = link.id;
     for (const [className, pathData] of [
@@ -2951,7 +2983,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.needChange.enabled": true,
         "system.functions.needChange.charges.value": 1,
         "system.functions.needChange.charges.max": 1,
-        "system.functions.needChange.needs": []
+        "system.functions.needChange.needs": [],
+        "system.functions.needChange.damages": [],
+        "system.functions.needChange.organismDevelopment": [],
+        "system.functions.needChange.healthRecovery": 0,
+        "system.functions.needChange.durationSeconds": 0,
+        "system.functions.needChange.intervalSeconds": 6,
+        "system.functions.needChange.changes": []
       });
     }
 
@@ -3264,7 +3302,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.needChange.enabled": false,
         "system.functions.needChange.charges.value": 1,
         "system.functions.needChange.charges.max": 1,
-        "system.functions.needChange.needs": []
+        "system.functions.needChange.needs": [],
+        "system.functions.needChange.damages": [],
+        "system.functions.needChange.organismDevelopment": [],
+        "system.functions.needChange.healthRecovery": 0,
+        "system.functions.needChange.durationSeconds": 0,
+        "system.functions.needChange.intervalSeconds": 6,
+        "system.functions.needChange.changes": []
       });
     }
     if (functionKey === ITEM_FUNCTIONS.oneTimeUse) {
@@ -3715,6 +3759,62 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const current = getNeedChangeNeeds(this.item);
     current.splice(index, 1);
     return this.item.update({ "system.functions.needChange.needs": current });
+  }
+
+  #onAddNeedChangeDamage(event) {
+    event.preventDefault();
+    const current = getNeedChangeDamages(this.item);
+    const existing = new Set(current.map(entry => String(entry?.damageTypeKey ?? "")));
+    const damageType = getDamageTypeSettings()
+      .find(entry => !existing.has(entry.key));
+    if (!damageType) return undefined;
+    current.push({ damageTypeKey: damageType.key, value: 0 });
+    return this.item.update({ "system.functions.needChange.damages": current });
+  }
+
+  #onDeleteNeedChangeDamage(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteNeedChangeDamage);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const current = getNeedChangeDamages(this.item);
+    current.splice(index, 1);
+    return this.item.update({ "system.functions.needChange.damages": current });
+  }
+
+  #onAddNeedChangeOrganismDevelopment(event) {
+    event.preventDefault();
+    const current = getNeedChangeOrganismDevelopment(this.item);
+    const existing = new Set(current.map(entry => String(entry?.characteristicKey ?? "")));
+    const characteristic = getCharacteristicSettings()
+      .find(entry => !existing.has(entry.key));
+    if (!characteristic) return undefined;
+    current.push({ characteristicKey: characteristic.key, value: 0 });
+    return this.item.update({ "system.functions.needChange.organismDevelopment": current });
+  }
+
+  #onDeleteNeedChangeOrganismDevelopment(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteNeedChangeOrganismDevelopment);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const current = getNeedChangeOrganismDevelopment(this.item);
+    current.splice(index, 1);
+    return this.item.update({ "system.functions.needChange.organismDevelopment": current });
+  }
+
+  #onAddNeedChangeEffect(event) {
+    event.preventDefault();
+    const changes = [...(this.item.system?.functions?.needChange?.changes ?? [])];
+    changes.push({ key: "", type: "add", value: "0", phase: "initial", priority: null });
+    return this.item.update({ "system.functions.needChange.changes": changes });
+  }
+
+  #onDeleteNeedChangeEffect(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteNeedChangeEffect);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const changes = [...(this.item.system?.functions?.needChange?.changes ?? [])];
+    changes.splice(index, 1);
+    return this.item.update({ "system.functions.needChange.changes": changes });
   }
 
   #onAddOneTimeUseEffect(event) {
@@ -5642,6 +5742,29 @@ function abilityDurationPartsToSeconds(amount, unit) {
   return durationPartsToSeconds(amount, unit);
 }
 
+function preserveNeedChangeChangesOnSubmit(form = null, submitData = {}, item = null) {
+  const hasChangeInputs = Boolean(form?.querySelector?.("[name^=\"system.functions.needChange.changes.\"]"));
+  if (hasChangeInputs) return;
+  const existing = item?.system?.functions?.needChange?.changes;
+  if (!Array.isArray(existing) || !existing.length) return;
+  foundry.utils.setProperty(
+    submitData,
+    "system.functions.needChange.changes",
+    foundry.utils.deepClone(existing)
+  );
+}
+
+function normalizeSubmittedNeedChangeDurations(form = null, submitData = {}) {
+  const durationAmount = form?.querySelector?.("[data-need-change-duration-amount]");
+  if (durationAmount) {
+    foundry.utils.setProperty(
+      submitData,
+      "system.functions.needChange.durationSeconds",
+      durationPartsToSeconds(durationAmount.value, form.querySelector("[data-need-change-duration-unit]")?.value)
+    );
+  }
+}
+
 function normalizeSubmittedFirstAidDurations(form = null, submitData = {}) {
   const durationAmount = form?.querySelector?.("[data-first-aid-duration-amount]");
   if (durationAmount) {
@@ -7157,7 +7280,7 @@ function prepareCraftContext(item, skillSettings = [], selection = null, attachS
     ? links.findIndex(link => link.id === selection.id)
     : -1;
   const selectedLink = selectedLinkIndex >= 0
-    ? prepareCraftLinkForDisplay(links[selectedLinkIndex], selectedLinkIndex, nodes, skillSettings)
+    ? prepareCraftLinkForDisplay(links[selectedLinkIndex], selectedLinkIndex, nodes, skillSettings, mode)
     : null;
   const attachSourceNode = nodes.find(node => node.id === attachSourceNodeId) ?? null;
   return {
@@ -7585,16 +7708,20 @@ function getCraftBlockLimit(nodes = []) {
   return null;
 }
 
-function prepareCraftLinkForDisplay(link, index, nodes, skillSettings = []) {
+function prepareCraftLinkForDisplay(link, index, nodes, skillSettings = [], mode = CRAFT_MODE_CREATE) {
   const from = nodes.find(node => node.id === link.fromNodeId);
   const to = nodes.find(node => node.id === link.toNodeId);
   const skillKey = String(link.skillKey ?? getDefaultCraftSkillKey(skillSettings));
+  const failureResult = isCraftLinkFailureResult(link);
+  const canSetFailureResult = isCraftLinkConnectedToOutputResource(link, nodes, mode);
   return {
     ...link,
     index,
     title: `${from?.name ?? "?"} -> ${to?.name ?? "?"}`,
     difficulty: normalizeCraftLinkDifficulty(link.difficulty),
-    noCheck: Boolean(link.noCheck),
+    noCheck: failureResult || Boolean(link.noCheck),
+    failureResult,
+    canSetFailureResult,
     skillChoices: skillSettings.map((skill, skillIndex) => ({
       key: skill.key,
       label: skill.label,
@@ -7757,7 +7884,8 @@ function normalizeCraftLink(link = {}) {
     toNodeId: String(link.toNodeId ?? ""),
     skillKey: String(link.skillKey ?? "repair"),
     difficulty: normalizeCraftLinkDifficulty(link.difficulty),
-    noCheck: Boolean(link.noCheck),
+    noCheck: isCraftLinkNoCheck(link),
+    failureResult: isCraftLinkFailureResult(link),
     bendX,
     bendY,
     fromAnchorSide: normalizeCraftAnchorSide(link.fromAnchorSide),
@@ -7772,6 +7900,28 @@ function normalizeCraftLinkDifficulty(value, fallback = 60) {
   return Math.max(0, Number.isFinite(number) ? Math.trunc(number) : fallback);
 }
 
+function isCraftLinkFailureResult(link = {}) {
+  const value = link?.failureResult;
+  return value === true || value === "true" || value === 1 || value === "1" || value === "on";
+}
+
+function isCraftLinkNoCheck(link = {}) {
+  if (isCraftLinkFailureResult(link)) return true;
+  const value = link?.noCheck;
+  return value === true || value === "true" || value === 1 || value === "1" || value === "on";
+}
+
+function isCraftOutputResourceNode(node, mode = CRAFT_MODE_CREATE) {
+  if (!node || isCraftNodeToolRequirement(node)) return false;
+  return normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY ? !node.root : Boolean(node.root);
+}
+
+function isCraftLinkConnectedToOutputResource(link, nodes = [], mode = CRAFT_MODE_CREATE) {
+  const from = nodes.find(node => node.id === link.fromNodeId);
+  const to = nodes.find(node => node.id === link.toNodeId);
+  return isCraftOutputResourceNode(from, mode) || isCraftOutputResourceNode(to, mode);
+}
+
 function getCraftFallbackLinkId(link = {}) {
   return [
     "link",
@@ -7784,6 +7934,7 @@ function getCraftFallbackLinkId(link = {}) {
     String(link.toAnchorSide ?? ""),
     String(link.toAnchorOffset ?? ""),
     String(link.noCheck ?? false),
+    String(link.failureResult ?? false),
     String(link.bendX ?? ""),
     String(link.bendY ?? "")
   ].join(":");
@@ -9229,6 +9380,56 @@ function buildNeedChangeNeedRows(item) {
     value: toInteger(entry?.value),
     choiceGroups: selectNeedChoiceGroups(choiceGroups, String(entry?.needKey ?? ""))
   }));
+}
+
+function buildNeedChangeOrganismDevelopmentRows(item, characteristicSettings = getCharacteristicSettings()) {
+  const settings = Array.isArray(characteristicSettings) ? characteristicSettings : getCharacteristicSettings();
+  const source = getNeedChangeOrganismDevelopment(item);
+  return source.map((entry, index) => ({
+    index,
+    characteristicKey: String(entry?.characteristicKey ?? ""),
+    value: Number(entry?.value) || 0,
+    choices: settings.map(characteristic => ({
+      value: characteristic.key,
+      label: characteristic.label || characteristic.key,
+      selected: characteristic.key === entry.characteristicKey
+    }))
+  }));
+}
+
+function getNeedChangeOrganismDevelopment(item) {
+  const source = item.system?.functions?.needChange?.organismDevelopment ?? [];
+  return (Array.isArray(source) ? source : [])
+    .map(entry => ({
+      characteristicKey: String(entry?.characteristicKey ?? "").trim(),
+      value: Number(entry?.value)
+    }))
+    .filter(entry => entry.characteristicKey);
+}
+
+function buildNeedChangeDamageRows(item, damageTypeSettings = getDamageTypeSettings()) {
+  const settings = Array.isArray(damageTypeSettings) ? damageTypeSettings : getDamageTypeSettings();
+  const source = getNeedChangeDamages(item);
+  return source.map((entry, index) => ({
+    index,
+    damageTypeKey: String(entry?.damageTypeKey ?? ""),
+    value: Math.max(0, toInteger(entry?.value)),
+    choices: settings.map(damageType => ({
+      value: damageType.key,
+      label: damageType.label || damageType.key,
+      selected: damageType.key === entry.damageTypeKey
+    }))
+  }));
+}
+
+function getNeedChangeDamages(item) {
+  const source = item.system?.functions?.needChange?.damages ?? [];
+  return (Array.isArray(source) ? source : [])
+    .map(entry => ({
+      damageTypeKey: String(entry?.damageTypeKey ?? "").trim(),
+      value: Math.max(0, toInteger(entry?.value))
+    }))
+    .filter(entry => entry.damageTypeKey);
 }
 
 function getNeedChangeNeeds(item) {

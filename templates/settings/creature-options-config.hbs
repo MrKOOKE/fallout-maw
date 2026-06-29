@@ -135,6 +135,10 @@
             <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.ProficiencyPointsPerLevel"}}</span>
             <input type="text" name="race.progression.proficiencyPointsPerLevel" value="{{selectedRace.progression.proficiencyPointsPerLevel}}" data-formula-autocomplete="characteristics">
           </label>
+          <label>
+            <span>{{localize "FALLOUTMAW.Settings.CreatureOptions.OrganismDevelopmentThreshold"}}</span>
+            <input type="number" name="race.organismDevelopment.threshold" value="{{selectedRace.organismDevelopment.threshold}}" min="0.01" step="0.01">
+          </label>
         </div>
       </section>
 

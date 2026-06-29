@@ -1841,6 +1841,40 @@ body #prosemirror-dropdown {
   stroke: rgba(178, 211, 255, 0.98);
 }
 
+.fallout-maw-craft-link.failure-result .fallout-maw-craft-link-wall {
+  stroke: rgba(185, 36, 36, 0.95);
+}
+
+.fallout-maw-craft-link.failure-result .fallout-maw-craft-link-glass {
+  stroke: rgba(228, 42, 42, 0.42);
+}
+
+.fallout-maw-craft-link.failure-result .fallout-maw-craft-link-highlight {
+  stroke: rgba(255, 120, 120, 0.42);
+}
+
+.fallout-maw-craft-link.failure-result .fallout-maw-craft-link-socket {
+  fill: rgba(120, 24, 24, 0.9);
+  stroke: rgba(255, 150, 140, 0.92);
+}
+
+.fallout-maw-craft-link.failure-result.selected .fallout-maw-craft-link-glass {
+  filter: drop-shadow(0 0 6px rgba(228, 42, 42, 0.42));
+}
+
+.fallout-maw-craft-link.failure-result.selected .fallout-maw-craft-link-wall {
+  stroke: rgba(255, 72, 72, 0.98);
+}
+
+.fallout-maw-craft-link.failure-result.selected .fallout-maw-craft-link-highlight {
+  stroke: rgba(255, 180, 180, 0.72);
+}
+
+.fallout-maw-craft-link.failure-result.selected .fallout-maw-craft-link-socket {
+  fill: rgba(160, 32, 32, 0.94);
+  stroke: rgba(255, 196, 184, 0.98);
+}
+
 .fallout-maw-craft-link-preview {
   fill: none;
   pointer-events: none;
@@ -2198,6 +2232,53 @@ body #prosemirror-dropdown {
 .fallout-maw-effects-tab {
   min-height: 420px;
   padding-bottom: 4.25rem;
+}
+
+.fallout-maw-research-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.fallout-maw-organism-development-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.fallout-maw-organism-development-row {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(201, 162, 39, 0.28);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.fallout-maw-organism-development-threshold {
+  color: rgba(232, 206, 138, 0.88);
+  font-size: 0.92rem;
+}
+
+.fallout-maw-organism-development-main-header,
+.fallout-maw-organism-development-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.fallout-maw-organism-development-main-header strong {
+  color: rgba(245, 223, 160, 0.96);
+}
+
+.fallout-maw-organism-development-meta {
+  color: rgba(214, 194, 136, 0.82);
+  font-size: 0.88rem;
+}
+
+.fallout-maw-organism-development-progress-bar {
+  min-height: 1rem;
 }
 
 .fallout-maw-research-list {

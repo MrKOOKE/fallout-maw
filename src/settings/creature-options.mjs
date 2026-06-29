@@ -41,7 +41,8 @@ export function createRaceDefaults(characteristics = [], damageTypes = []) {
       skillPointsPerLevel: DEFAULT_SKILL_POINTS_PER_LEVEL_FORMULA,
       researchPointsPerLevel: DEFAULT_RESEARCH_POINTS_PER_LEVEL_FORMULA,
       proficiencyPointsPerLevel: DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
-    }
+    },
+    organismDevelopment: { threshold: 1 }
   };
 }
 
@@ -125,7 +126,8 @@ export function normalizeCreatureOptions(options = {}, characteristics = [], dam
             race.progression?.proficiencyPointsPerLevel,
             DEFAULT_PROFICIENCY_POINTS_PER_LEVEL_FORMULA
           )
-        }
+        },
+        organismDevelopment: normalizeOrganismDevelopmentSettings(race.organismDevelopment)
       };
     });
 
@@ -144,6 +146,13 @@ function normalizeRegeneration(value = {}) {
 
 function normalizeRaceCharacteristics(values = {}, characteristics = []) {
   return Object.fromEntries(characteristics.map(definition => [definition.key, toInteger(values?.[definition.key] ?? 1)]));
+}
+
+function normalizeOrganismDevelopmentSettings(value = {}) {
+  const threshold = Number(value?.threshold ?? 1);
+  return {
+    threshold: Number.isFinite(threshold) && threshold > 0 ? threshold : 1
+  };
 }
 
 function normalizeRaceNeedSettings(settings) {

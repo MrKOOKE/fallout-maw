@@ -1,7 +1,41 @@
 <section class="tab {{tabs.research.cssClass}} fallout-maw-research-tab" data-group="{{tabs.research.group}}" data-tab="{{tabs.research.id}}">
   <section class="fallout-maw-panel">
     <div class="fallout-maw-panel-header">
-      <h2>{{localize "FALLOUTMAW.Tabs.Research"}}</h2>
+      <h2>{{localize "FALLOUTMAW.OrganismDevelopment.Title"}}</h2>
+      <span class="fallout-maw-organism-development-threshold">
+        {{localize "FALLOUTMAW.OrganismDevelopment.Threshold"}}: {{organismDevelopment.thresholdLabel}}
+      </span>
+    </div>
+
+    <div class="fallout-maw-organism-development-list">
+      {{#each organismDevelopment.entries}}
+      <article class="fallout-maw-organism-development-row">
+        <div class="fallout-maw-organism-development-main-header">
+          <strong>{{label}}</strong>
+        </div>
+
+        <div
+          class="fallout-maw-resource-meter fallout-maw-organism-development-progress-bar"
+          style="{{meterStyle}}"
+          role="meter"
+          aria-valuemin="0"
+          aria-valuenow="{{progress}}"
+          aria-valuemax="{{target}}"
+        >
+          <span class="fallout-maw-resource-meter-fill" style="{{fillStyle}}"></span>
+        </div>
+
+        <div class="fallout-maw-organism-development-meta">
+          <span>{{localize "FALLOUTMAW.OrganismDevelopment.Progress"}}: {{progressLabel}} / {{targetLabel}}</span>
+        </div>
+      </article>
+      {{/each}}
+    </div>
+  </section>
+
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Research.Title"}}</h2>
       <button type="button" data-action="createResearch">
         <i class="fa-solid fa-flask"></i>
         {{localize "FALLOUTMAW.Research.Start"}}

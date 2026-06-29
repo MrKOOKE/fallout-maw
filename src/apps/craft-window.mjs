@@ -1675,6 +1675,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       outputs: validation.outputs,
       outputNodeIds: validation.outputNodeIds,
       outputPlan: validation.outputPlan,
+      failureOutputs: validation.failureOutputs,
+      failureOutputPlan: validation.failureOutputPlan,
       linkResults
     };
     this.#pendingOperation = operation;
@@ -1961,6 +1963,9 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
   const spendPlan = createCraftRequirementSpendPlan(actor, requirements);
   const outputPlan = await createCraftOutputPlan(actor, recipe, mode, outputs, spendPlan, recipeId);
   if (!outputPlan.valid) return outputPlan;
+  const failureOutputs = getCraftFailureOutputs(craft.nodes, craft.links, mode);
+  const failureOutputPlan = await createCraftFailureOutputPlan(actor, recipe, mode, failureOutputs, spendPlan, recipeId);
+  if (!failureOutputPlan.valid) return failureOutputPlan;
 
   return {
     valid: true,
@@ -1970,7 +1975,11 @@ async function validateCraftRequest(actor, recipe, mode = CRAFT_MODE_CREATE, too
     outputs,
     outputNodeIds: outputs.flatMap(output => Array.from(output.nodeIds ?? [])),
     outputPlan,
-    links: craft.links.map((link, index) => ({
+    failureOutputs,
+    failureOutputPlan,
+    links: craft.links
+      .filter(link => !isCraftLinkFailureResult(link))
+      .map((link, index) => ({
       id: link.id,
       key: getCraftResolvedLinkKey(link, craft.nodes),
       index,
@@ -1992,13 +2001,14 @@ async function applyCraftOperation(operation) {
   if (!toolSpendPlan.valid) throw new Error(toolSpendPlan.message);
   const outputPlan = operation.success
     ? (operation.outputPlan ?? await createCraftOutputPlan(actor, recipe, operation.mode, operation.outputs, spendPlan, operation.recipeId))
-    : { valid: true, updates: [], creates: [] };
+    : (operation.failureOutputPlan ?? await createCraftFailureOutputPlan(actor, recipe, operation.mode, operation.failureOutputs, spendPlan, operation.recipeId));
   if (!outputPlan.valid) throw new Error(outputPlan.message);
 
   await spendCraftRequirements(actor, operation.requirements, spendPlan);
   await spendCraftToolRequirements(actor, toolSpendPlan);
-  if (!operation.success) return;
-  await applyCraftOutputPlan(actor, outputPlan);
+  if (outputPlan.creates?.length || outputPlan.updates?.length) {
+    await applyCraftOutputPlan(actor, outputPlan);
+  }
 }
 
 async function spendCraftRequirements(actor, requirements = [], plan = null) {
@@ -2170,6 +2180,22 @@ function getCraftToolSelectionStoragePrefix(recipeUuid = "", mode = CRAFT_MODE_C
 
 function getCraftToolSelectionStorageKey(recipeUuid = "", mode = CRAFT_MODE_CREATE, requirementKey = "") {
   return `${getCraftToolSelectionStoragePrefix(recipeUuid, mode)}${String(requirementKey ?? "")}`;
+}
+
+async function createCraftFailureOutputPlan(actor, recipe, mode = CRAFT_MODE_CREATE, failureOutputs = [], spendPlan = null, recipeId = DEFAULT_CRAFT_RECIPE_ID) {
+  if (!failureOutputs?.length) return { valid: true, updates: [], creates: [] };
+  const specs = [];
+  for (const output of failureOutputs) {
+    const source = resolveWorldItemSync(output.sourceUuid);
+    if (!source) return { valid: false, message: "Результат при провале не найден." };
+    specs.push({
+      data: createCraftOutputItemData(source, { mode }),
+      quantity: Math.max(1, toInteger(output.quantity) || 1)
+    });
+  }
+  const outputSpecs = mergeCraftOutputSpecs(specs);
+  const projectedItems = projectCraftInventoryState(actor, spendPlan ?? { updates: [], deletes: [] });
+  return planCraftOutputPlacement(actor, outputSpecs, projectedItems);
 }
 
 async function createCraftOutputPlan(actor, recipe, mode = CRAFT_MODE_CREATE, outputs = [], spendPlan = null, recipeId = DEFAULT_CRAFT_RECIPE_ID) {
@@ -2458,7 +2484,7 @@ function getCraftCheckSummaries(links = []) {
   const skillLabels = new Map(getSkillSettings().map(skill => [skill.key, skill.label]));
   const byCheck = new Map();
   for (const link of links) {
-    if (isCraftLinkNoCheck(link)) continue;
+    if (isCraftLinkFailureResult(link) || isCraftLinkNoCheck(link)) continue;
     const skillKey = String(link.skillKey ?? "repair") || "repair";
     const skillLabel = skillLabels.get(skillKey) ?? skillKey;
     const difficulty = normalizeCraftLinkDifficulty(link.difficulty);
@@ -3283,6 +3309,7 @@ function normalizeCraftLink(link = {}) {
     skillKey: String(link.skillKey ?? "repair"),
     difficulty: normalizeCraftLinkDifficulty(link.difficulty),
     noCheck: isCraftLinkNoCheck(link),
+    failureResult: isCraftLinkFailureResult(link),
     bendX,
     bendY,
     fromAnchorSide: normalizeCraftAnchorSide(link.fromAnchorSide),
@@ -3298,8 +3325,48 @@ function normalizeCraftLinkDifficulty(value, fallback = 60) {
 }
 
 function isCraftLinkNoCheck(link = {}) {
+  if (isCraftLinkFailureResult(link)) return true;
   const value = link?.noCheck;
   return value === true || value === "true" || value === 1 || value === "1" || value === "on";
+}
+
+function isCraftLinkFailureResult(link = {}) {
+  const value = link?.failureResult;
+  return value === true || value === "true" || value === 1 || value === "1" || value === "on";
+}
+
+function isCraftOutputResourceNode(node, mode = CRAFT_MODE_CREATE) {
+  if (!node || isCraftNodeToolRequirement(node)) return false;
+  return normalizeCraftMode(mode) === CRAFT_MODE_DISASSEMBLY ? !node.root : Boolean(node.root);
+}
+
+function isCraftLinkConnectedToOutputResource(link, nodes = [], mode = CRAFT_MODE_CREATE) {
+  const from = nodes.find(node => node.id === link.fromNodeId);
+  const to = nodes.find(node => node.id === link.toNodeId);
+  return isCraftOutputResourceNode(from, mode) || isCraftOutputResourceNode(to, mode);
+}
+
+function getCraftFailureOutputs(nodes = [], links = [], mode = CRAFT_MODE_CREATE) {
+  mode = normalizeCraftMode(mode);
+  const nodeById = new Map(nodes.map(node => [node.id, node]));
+  const outputResourceIds = new Set(
+    nodes.filter(node => isCraftOutputResourceNode(node, mode)).map(node => node.id)
+  );
+  const failureNodeIds = new Set();
+  for (const link of links) {
+    if (!isCraftLinkFailureResult(link)) continue;
+    if (outputResourceIds.has(link.fromNodeId)) failureNodeIds.add(link.toNodeId);
+    if (outputResourceIds.has(link.toNodeId)) failureNodeIds.add(link.fromNodeId);
+  }
+  return Array.from(failureNodeIds)
+    .map(nodeId => nodeById.get(nodeId))
+    .filter(node => node && !node.root && !isCraftNodeToolRequirement(node))
+    .map(node => ({
+      sourceUuid: getCraftNodeSourceUuid(node),
+      quantity: Math.max(1, toInteger(node.quantity) || 1),
+      nodeIds: [node.id]
+    }))
+    .filter(output => output.sourceUuid);
 }
 
 function getCraftFallbackLinkId(link = {}) {
@@ -3314,6 +3381,7 @@ function getCraftFallbackLinkId(link = {}) {
     String(link.toAnchorSide ?? ""),
     String(link.toAnchorOffset ?? ""),
     String(link.noCheck ?? false),
+    String(link.failureResult ?? false),
     String(link.bendX ?? ""),
     String(link.bendY ?? "")
   ].join(":");

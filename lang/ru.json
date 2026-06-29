@@ -25,7 +25,7 @@
       "Effects": "Эффекты",
       "Indicators": "Показатели",
       "InventoryEquipment": "Инвентарь/Снаряжение",
-      "Research": "Исследования"
+      "Research": "Исследования/Развитие"
     },
     "Movement": {
       "Walk": "\u0425\u043e\u0434\u044c\u0431\u0430",
@@ -336,6 +336,9 @@
       "FirstAidCriticalFailureDamageMin": "Крит. провал: урон мин",
       "FirstAidCriticalFailureDamageMax": "Крит. провал: урон макс",
       "FirstAidNeeds": "Потребности",
+      "NeedChangeOrganismDevelopment": "Развитие организма",
+      "NeedChangeOrganismDevelopmentEmpty": "Развитие организма не настроено.",
+      "NeedChangeHealthRecovery": "Восстановление здоровья",
       "FirstAidNoNeeds": "Изменения потребностей не заданы.",
       "FirstAidLimbs": "Части тела",
       "FirstAidCharges": "Заряды",
@@ -594,6 +597,7 @@
       "ImmunityName": "Иммунитет от болезней: до {level} уровня"
     },
     "Research": {
+      "Title": "Исследования",
       "ApplyTime": "Применить время",
       "Completed": "Завершено",
       "CompletedChatMessage": "{actor} завершил исследование \"{name}\".",
@@ -611,6 +615,11 @@
       "ThirtyMinutes": "Добавить 30 минут",
       "TimeTitle": "Время исследования: {name}",
       "UnassignedSkill": "Навык не выбран"
+    },
+    "OrganismDevelopment": {
+      "Title": "Развитие организма",
+      "Threshold": "Порог для +1",
+      "Progress": "Прогресс"
     },
     "Advancement": {
       "Title": "Повышение уровня",
@@ -805,6 +814,7 @@
         "ResearchPointsPerLevel": "Очков исследований за уровень",
         "SignatureSkillPoints": "Очков коронных навыков",
         "SkillPointsPerLevel": "Очков навыков за уровень",
+        "OrganismDevelopmentThreshold": "Развитие организма: порог для +1",
         "Title": "Типы и расы существ",
         "TraitPoints": "Очков особенностей",
         "TypeNamePlaceholder": "Например, гуманоид",

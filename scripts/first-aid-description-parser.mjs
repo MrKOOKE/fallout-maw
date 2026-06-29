@@ -143,6 +143,23 @@ export function parseFirstAidDescription(description = "") {
   return parsed;
 }
 
+export function parseTimedBonusChanges(description = "") {
+  const cleanText = stripHtml(description);
+  if (!/Длительность бонуса:/i.test(cleanText)) {
+    return { durationSeconds: 0, changes: [] };
+  }
+  const durationPositions = parseDurationPositions(cleanText);
+  const changes = [];
+  appendTimedChanges(changes, cleanText, durationPositions, {
+    includeHealingPerTick: false,
+    scaleHealing: false
+  });
+  return {
+    durationSeconds: durationToSeconds(durationPositions[0]?.duration ?? 0, durationPositions[0]?.unit ?? "hours"),
+    changes
+  };
+}
+
 export function convertParsedFirstAidToFunction(parsed = null) {
   if (!parsed) return null;
 

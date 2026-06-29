@@ -2571,6 +2571,100 @@
       <p class="fallout-maw-empty-list">Изменения потребностей не настроены.</p>
       {{/each}}
     </div>
+    <div class="fallout-maw-panel-header">
+      <h3>Получение урона</h3>
+      <button type="button" data-add-need-change-damage><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.ConditionAddRecoveryMethod"}}</button>
+    </div>
+    <div class="fallout-maw-effect-change-list">
+      <div class="fallout-maw-first-aid-need-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span></span>
+      </div>
+      {{#each needChangeDamageRows}}
+      <div class="fallout-maw-first-aid-need-row">
+        <select name="system.functions.needChange.damages.{{index}}.damageTypeKey">
+          {{#each choices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="number" name="system.functions.needChange.damages.{{index}}.value" value="{{value}}" min="0" step="1">
+        <button type="button" class="fallout-maw-icon-delete-button" data-delete-need-change-damage="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">Урон при использовании не настроен.</p>
+      {{/each}}
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.NeedChangeOrganismDevelopment"}}</h3>
+      <button type="button" data-add-need-change-organism-development><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Item.ConditionAddRecoveryMethod"}}</button>
+    </div>
+    <div class="fallout-maw-effect-change-list">
+      <div class="fallout-maw-first-aid-need-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Label"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span></span>
+      </div>
+      {{#each needChangeOrganismDevelopmentRows}}
+      <div class="fallout-maw-first-aid-need-row">
+        <select name="system.functions.needChange.organismDevelopment.{{index}}.characteristicKey">
+          {{#each choices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="number" name="system.functions.needChange.organismDevelopment.{{index}}.value" value="{{value}}" min="0" step="0.01">
+        <button type="button" class="fallout-maw-icon-delete-button" data-delete-need-change-organism-development="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Item.NeedChangeOrganismDevelopmentEmpty"}}</p>
+      {{/each}}
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.FirstAidEffectChanges"}}</h3>
+      <button type="button" data-add-need-change-effect><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Effects.AddChange"}}</button>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label class="fallout-maw-split-number-field">
+        <span>{{localize "FALLOUTMAW.Item.FirstAidDuration"}}</span>
+        <div>
+          <input type="number" data-need-change-duration-amount value="{{needChangeDuration.amount}}" min="0" step="1">
+          <select data-need-change-duration-unit>
+            {{#each needChangeDuration.unitChoices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+        </div>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.FirstAidIntervalSeconds"}}</span>
+        <input type="number" name="system.functions.needChange.intervalSeconds" value="{{system.functions.needChange.intervalSeconds}}" min="1" step="1">
+      </label>
+    </div>
+    <div class="fallout-maw-effect-change-list">
+      <div class="fallout-maw-effect-change-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Path"}}</span>
+        <span>{{localize "FALLOUTMAW.Effects.Mode"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span>{{localize "FALLOUTMAW.Effects.Priority"}}</span>
+        <span></span>
+      </div>
+      {{#each needChangeEffectRows}}
+      <div class="fallout-maw-effect-change-row">
+        <input type="text" name="system.functions.needChange.changes.{{index}}.key" value="{{key}}" data-effect-key-autocomplete>
+        <select name="system.functions.needChange.changes.{{index}}.type">
+          {{#each typeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="hidden" name="system.functions.needChange.changes.{{index}}.phase" value="initial">
+        <input type="text" name="system.functions.needChange.changes.{{index}}.value" value="{{value}}" data-formula-autocomplete="all">
+        <input type="number" name="system.functions.needChange.changes.{{index}}.priority" value="{{priority}}" step="1">
+        <button type="button" data-delete-need-change-effect="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Effects.NoChanges"}}</p>
+      {{/each}}
+    </div>
   </section>
   {{/if}}
 
@@ -4158,6 +4252,13 @@
       <section class="fallout-maw-craft-popover-section">
         <h3>Связь</h3>
         <p>{{craft.selectedLink.title}}</p>
+        {{#if craft.selectedLink.canSetFailureResult}}
+        <label class="fallout-maw-inline-checkbox">
+          <span>Результат при провале</span>
+          <input type="checkbox" data-craft-link-failure-result="{{craft.selectedLink.id}}" {{checked craft.selectedLink.failureResult}}>
+        </label>
+        {{/if}}
+        {{#unless craft.selectedLink.failureResult}}
         <label>
           <span>Навык</span>
           <select data-craft-link-skill="{{craft.selectedLink.id}}">
@@ -4174,6 +4275,7 @@
           <span>Без проверок</span>
           <input type="checkbox" data-craft-link-no-check="{{craft.selectedLink.id}}" {{checked craft.selectedLink.noCheck}}>
         </label>
+        {{/unless}}
         <button type="button" data-craft-delete-link="{{craft.selectedLink.id}}">
           <i class="fa-solid fa-trash"></i> Удалить
         </button>

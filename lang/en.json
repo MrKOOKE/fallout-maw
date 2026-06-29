@@ -26,7 +26,7 @@
       "Effects": "Effects",
       "Indicators": "Indicators",
       "InventoryEquipment": "Inventory/Equipment",
-      "Research": "Research"
+      "Research": "Research/Development"
     },
     "Movement": {
       "Walk": "Walk",
@@ -324,6 +324,9 @@
       "FirstAidCriticalFailureDamageMin": "Critical Failure: Min Damage",
       "FirstAidCriticalFailureDamageMax": "Critical Failure: Max Damage",
       "FirstAidNeeds": "Needs",
+      "NeedChangeOrganismDevelopment": "Organism development",
+      "NeedChangeOrganismDevelopmentEmpty": "Organism development is not configured.",
+      "NeedChangeHealthRecovery": "Health recovery",
       "FirstAidNoNeeds": "No need changes configured.",
       "FirstAidLimbs": "Limbs",
       "FirstAidCharges": "Charges",
@@ -534,6 +537,7 @@
       "ImmunityName": "Disease Immunity: up to level {level}"
     },
     "Research": {
+      "Title": "Research",
       "ApplyTime": "Apply Time",
       "Completed": "Completed",
       "CompletedChatMessage": "{actor} completed research \"{name}\".",
@@ -551,6 +555,11 @@
       "ThirtyMinutes": "Add 30 minutes",
       "TimeTitle": "Research Time: {name}",
       "UnassignedSkill": "Skill not selected"
+    },
+    "OrganismDevelopment": {
+      "Title": "Organism Development",
+      "Threshold": "Threshold for +1",
+      "Progress": "Progress"
     },
     "Advancement": {
       "Title": "Level Up",
@@ -746,6 +755,7 @@
         "ResearchPointsPerLevel": "Research points per level",
         "SignatureSkillPoints": "Signature skill points",
         "SkillPointsPerLevel": "Skill points per level",
+        "OrganismDevelopmentThreshold": "Organism development threshold for +1",
         "Title": "Creature Types and Races",
         "TraitPoints": "Trait points",
         "TypeNamePlaceholder": "For example, humanoid",
