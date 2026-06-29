@@ -242,6 +242,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const hasFirstAidFunction = sheetHasItemFunction(ITEM_FUNCTIONS.firstAid);
     const hasLightSourceFunction = sheetHasItemFunction(ITEM_FUNCTIONS.lightSource);
     const hasNeedChangeFunction = sheetHasItemFunction(ITEM_FUNCTIONS.needChange);
+    const hasOneTimeUseFunction = sheetHasItemFunction(ITEM_FUNCTIONS.oneTimeUse);
     const hasTrapFunction = sheetHasItemFunction(ITEM_FUNCTIONS.trap);
     const hasWeaponFunction = sheetHasItemFunction(ITEM_FUNCTIONS.weapon);
     const hasToolFunction = sheetHasItemFunction(ITEM_FUNCTIONS.tool);
@@ -318,6 +319,11 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         value: ITEM_FUNCTIONS.needChange,
         label: "Изменение потребностей",
         disabled: hasNeedChangeFunction
+      },
+      {
+        value: ITEM_FUNCTIONS.oneTimeUse,
+        label: game.i18n.localize("FALLOUTMAW.Item.FunctionOneTimeUse"),
+        disabled: hasOneTimeUseFunction
       },
       {
         value: ITEM_FUNCTIONS.trap,
@@ -466,6 +472,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       hasFirstAidFunction,
       hasLightSourceFunction,
       hasNeedChangeFunction,
+      hasOneTimeUseFunction,
       hasTrapFunction,
       trapInstallationSkillChoices: buildSkillChoices(item.system?.functions?.trap?.installation?.skillKey ?? "traps", skillSettings),
       trapDetectionSkillChoices: buildSkillChoices(item.system?.functions?.trap?.detection?.skillKey ?? "naturalist", skillSettings),
@@ -487,6 +494,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       firstAidWithdrawalEffectRows: buildFirstAidWithdrawalEffectRows(item),
       firstAidNeedRows: buildFirstAidNeedRows(item),
       needChangeNeedRows: buildNeedChangeNeedRows(item),
+      oneTimeUseEffectRows: buildFirstAidEffectRowsFromChanges(item.system?.functions?.oneTimeUse?.changes),
       firstAidRemoveEffectRows: buildFirstAidRemoveEffectRows(item, damageTypeSettings),
       firstAidDuration: buildDurationPartsContext(item.system?.functions?.firstAid?.durationSeconds),
       firstAidWithdrawalDuration: buildDurationPartsContext(item.system?.functions?.firstAid?.withdrawalDurationSeconds),
@@ -927,6 +935,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelector("[data-add-need-change-need]")?.addEventListener("click", event => this.#onAddNeedChangeNeed(event));
     this.element?.querySelectorAll("[data-delete-need-change-need]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteNeedChangeNeed(event));
+    });
+    this.element?.querySelector("[data-add-one-time-use-effect]")?.addEventListener("click", event => this.#onAddOneTimeUseEffect(event));
+    this.element?.querySelectorAll("[data-delete-one-time-use-effect]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteOneTimeUseEffect(event));
     });
     this.element?.querySelectorAll("[data-need-change-charge-input]").forEach(input => {
       input.addEventListener("change", event => this.#onNeedChangeChargeInputChange(event));
@@ -2943,6 +2955,15 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       });
     }
 
+    if (functionKey === ITEM_FUNCTIONS.oneTimeUse) {
+      this.#functionPickerActive = false;
+      return this.item.update({
+        "system.functions.oneTimeUse.enabled": true,
+        "system.functions.oneTimeUse.repeatApplicationBlocked": false,
+        "system.functions.oneTimeUse.changes": []
+      });
+    }
+
     if (functionKey === ITEM_FUNCTIONS.trap) {
       this.#functionPickerActive = false;
       return this.item.update({
@@ -3244,6 +3265,13 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.needChange.charges.value": 1,
         "system.functions.needChange.charges.max": 1,
         "system.functions.needChange.needs": []
+      });
+    }
+    if (functionKey === ITEM_FUNCTIONS.oneTimeUse) {
+      return this.item.update({
+        "system.functions.oneTimeUse.enabled": false,
+        "system.functions.oneTimeUse.repeatApplicationBlocked": false,
+        "system.functions.oneTimeUse.changes": []
       });
     }
     if (functionKey === ITEM_FUNCTIONS.lightSource) {
@@ -3687,6 +3715,22 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const current = getNeedChangeNeeds(this.item);
     current.splice(index, 1);
     return this.item.update({ "system.functions.needChange.needs": current });
+  }
+
+  #onAddOneTimeUseEffect(event) {
+    event.preventDefault();
+    const changes = [...(this.item.system?.functions?.oneTimeUse?.changes ?? [])];
+    changes.push({ key: "", type: "add", value: "0", phase: "initial", priority: null });
+    return this.item.update({ "system.functions.oneTimeUse.changes": changes });
+  }
+
+  #onDeleteOneTimeUseEffect(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteOneTimeUseEffect);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const changes = [...(this.item.system?.functions?.oneTimeUse?.changes ?? [])];
+    changes.splice(index, 1);
+    return this.item.update({ "system.functions.oneTimeUse.changes": changes });
   }
 
   #onNeedChangeChargeInputChange(event) {
@@ -4607,6 +4651,7 @@ function getItemFunctionLabel(functionKey = "") {
   if (functionKey === ITEM_FUNCTIONS.firstAid) return game.i18n.localize("FALLOUTMAW.Item.FunctionFirstAid");
   if (functionKey === ITEM_FUNCTIONS.lightSource) return game.i18n.localize("FALLOUTMAW.Item.FunctionLightSource");
   if (functionKey === ITEM_FUNCTIONS.needChange) return "Изменение потребностей";
+  if (functionKey === ITEM_FUNCTIONS.oneTimeUse) return game.i18n.localize("FALLOUTMAW.Item.FunctionOneTimeUse");
   if (functionKey === ITEM_FUNCTIONS.trap) return game.i18n.localize("FALLOUTMAW.Item.FunctionTrap");
   if (functionKey === ITEM_FUNCTIONS.weapon) return game.i18n.localize("FALLOUTMAW.Item.FunctionWeapon");
   if (functionKey === ITEM_FUNCTIONS.module) return game.i18n.localize("FALLOUTMAW.Item.FunctionModule");
@@ -9137,7 +9182,11 @@ function buildConditionRecoveryMethodRows(item, toolSettings = []) {
 }
 
 function buildFirstAidEffectRows(item) {
-  return (item.system?.functions?.firstAid?.changes ?? []).map((change, index) => ({
+  return buildFirstAidEffectRowsFromChanges(item.system?.functions?.firstAid?.changes);
+}
+
+function buildFirstAidEffectRowsFromChanges(changes = []) {
+  return (changes ?? []).map((change, index) => ({
     index,
     key: String(change?.key ?? ""),
     type: String(change?.type ?? "add"),

@@ -99,6 +99,7 @@ import {
   getFirstAidFunction,
   getLightSourceFunction,
   getNeedChangeFunction,
+  getOneTimeUseFunction,
   getEnabledWeaponFunctions,
   getWeaponAttackPowerState,
   getWeaponFunctionModuleSlots,
@@ -168,6 +169,7 @@ import {
   normalizeRageSettings,
   normalizeWhereAreYouGoingSettings
 } from "../settings/abilities.mjs";
+import { findOneTimeUseStudiedEffect, isOneTimeUseRepeatBlocked } from "../items/one-time-use.mjs";
 import { canUseActiveItem, useActiveItem } from "../items/active-item-use.mjs";
 import { openItemInteractionDialog } from "../items/item-interaction-dialogs.mjs";
 import {
@@ -3540,7 +3542,8 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
 
 function isActorContainerUsableItem(itemOrData = null) {
   return hasItemFunction(itemOrData, ITEM_FUNCTIONS.firstAid)
-    || hasItemFunction(itemOrData, ITEM_FUNCTIONS.needChange);
+    || hasItemFunction(itemOrData, ITEM_FUNCTIONS.needChange)
+    || hasItemFunction(itemOrData, ITEM_FUNCTIONS.oneTimeUse);
 }
 
 function isTravelGroupCarrierActor(actor = null) {
@@ -4020,6 +4023,7 @@ function buildInventoryTooltipFunctionSections(item, actor, { activeWeaponIndex 
     buildConditionTooltipSection(item),
     buildFirstAidTooltipSection(item, actor),
     buildNeedChangeTooltipSection(item, actor),
+    buildOneTimeUseTooltipSection(item, actor),
     buildDamageMitigationTooltipSection(item, actor),
     buildDamageSourceTooltipSection(item, actor),
     buildEnergySourceTooltipSection(item),
@@ -4118,6 +4122,23 @@ function buildNeedChangeTooltipSection(item, actor = null) {
   ];
   rows.push(...getConfiguredNeedTooltipRows(needChange.needs, actor));
   return renderTooltipFunctionSection("Изменение потребностей", rows);
+}
+
+function buildOneTimeUseTooltipSection(item, actor = null) {
+  if (!hasItemFunction(item, ITEM_FUNCTIONS.oneTimeUse, { ignoreBroken: true })) return "";
+  const oneTimeUse = getOneTimeUseFunction(item);
+  const rows = [];
+  if (Boolean(oneTimeUse.repeatApplicationBlocked)) {
+    const studiedEffect = actor ? findOneTimeUseStudiedEffect(actor) : null;
+    const alreadyApplied = Boolean(actor) && isOneTimeUseRepeatBlocked(oneTimeUse, studiedEffect, item.name);
+    rows.push([
+      game.i18n.localize("FALLOUTMAW.Item.OneTimeUseAlreadyApplied"),
+      game.i18n.localize(alreadyApplied ? "FALLOUTMAW.Common.Yes" : "FALLOUTMAW.Common.No")
+    ]);
+  }
+  rows.push(...getFirstAidEffectChangeTooltipRows(oneTimeUse.changes, actor, "FALLOUTMAW.Item.OneTimeUseChanges"));
+  if (!rows.length) return "";
+  return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionOneTimeUse"), rows);
 }
 
 function getFirstAidNeedTooltipRows(firstAid = {}) {
@@ -4606,6 +4627,7 @@ function buildInstalledWeaponModuleTooltipSections(item, actor = null) {
     buildConditionTooltipSection(item),
     buildFirstAidTooltipSection(item, actor),
     buildNeedChangeTooltipSection(item, actor),
+    buildOneTimeUseTooltipSection(item, actor),
     buildDamageMitigationTooltipSection(item, actor),
     buildDamageSourceTooltipSection(item, actor),
     buildEnergySourceTooltipSection(item),

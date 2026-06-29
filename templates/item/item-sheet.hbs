@@ -2574,6 +2574,48 @@
   </section>
   {{/if}}
 
+  {{#if hasOneTimeUseFunction}}
+  <section class="fallout-maw-panel">
+    <div class="fallout-maw-panel-header">
+      <h2>{{localize "FALLOUTMAW.Item.FunctionOneTimeUse"}}</h2>
+      <button type="button" data-remove-item-function="oneTimeUse" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+    </div>
+    <label class="fallout-maw-checkbox-row">
+      <span>{{localize "FALLOUTMAW.Item.OneTimeUseRepeatBlocked"}}</span>
+      <input type="checkbox" name="system.functions.oneTimeUse.repeatApplicationBlocked" {{checked system.functions.oneTimeUse.repeatApplicationBlocked}}>
+    </label>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.OneTimeUseChanges"}}</h3>
+      <button type="button" data-add-one-time-use-effect><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Effects.AddChange"}}</button>
+    </div>
+    <div class="fallout-maw-effect-change-list">
+      <div class="fallout-maw-effect-change-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Path"}}</span>
+        <span>{{localize "FALLOUTMAW.Effects.Mode"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span>{{localize "FALLOUTMAW.Effects.Priority"}}</span>
+        <span></span>
+      </div>
+      {{#each oneTimeUseEffectRows}}
+      <div class="fallout-maw-effect-change-row">
+        <input type="text" name="system.functions.oneTimeUse.changes.{{index}}.key" value="{{key}}" data-effect-key-autocomplete>
+        <select name="system.functions.oneTimeUse.changes.{{index}}.type">
+          {{#each typeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="hidden" name="system.functions.oneTimeUse.changes.{{index}}.phase" value="initial">
+        <input type="text" name="system.functions.oneTimeUse.changes.{{index}}.value" value="{{value}}" data-formula-autocomplete="all">
+        <input type="number" name="system.functions.oneTimeUse.changes.{{index}}.priority" value="{{priority}}" step="1">
+        <button type="button" data-delete-one-time-use-effect="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Effects.NoChanges"}}</p>
+      {{/each}}
+    </div>
+  </section>
+  {{/if}}
+
   {{#if hasDamageSourceFunction}}
   <section class="fallout-maw-panel">
     <div class="fallout-maw-panel-header">

@@ -13,6 +13,7 @@ export const ITEM_FUNCTIONS = {
   firstAid: "firstAid",
   lightSource: "lightSource",
   needChange: "needChange",
+  oneTimeUse: "oneTimeUse",
   trap: "trap",
   weapon: "weapon",
   module: "module",
@@ -114,6 +115,10 @@ export function getNeedChangeFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.needChange] ?? {};
 }
 
+export function getOneTimeUseFunction(itemOrSystem = null) {
+  return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.oneTimeUse] ?? {};
+}
+
 export function getTrapFunction(itemOrSystem = null) {
   return getItemSystem(itemOrSystem).functions?.[ITEM_FUNCTIONS.trap] ?? {};
 }
@@ -196,6 +201,7 @@ export function isInstalledProsthesis(itemOrSystem = null, limbKey = "") {
 export function isActiveItem(itemOrSystem = null) {
   return hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.firstAid)
     || hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.needChange)
+    || hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.oneTimeUse)
     || hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.trap)
     || hasItemFunction(itemOrSystem, ITEM_FUNCTIONS.lightSource);
 }

@@ -1,6 +1,7 @@
 import { useFirstAidItem } from "./first-aid.mjs";
 import { openLightSourceEnergyDialog } from "./light-source.mjs";
 import { useNeedChangeItem } from "./need-change.mjs";
+import { useOneTimeUseItem } from "./one-time-use.mjs";
 import { startTrapPlacement } from "../canvas/traps.mjs";
 import { isActorUnableToAct, isReactionSystemLocked } from "../combat/reaction-hub.mjs";
 import { ITEM_FUNCTIONS, hasItemFunction, isActiveItem, resolveActorItemOrInstalledModule } from "../utils/item-functions.mjs";
@@ -45,6 +46,14 @@ export async function useActiveItem({ actor = null, token = null, item = null, a
   const target = targetActor
     ? { actor: targetActor, token: targetToken?.document ?? targetToken ?? null }
     : resolveActiveItemTarget(sourceActor, sourceToken);
+  if (hasItemFunction(freshItem, ITEM_FUNCTIONS.oneTimeUse)) {
+    const used = await useOneTimeUseItem({
+      actor: sourceActor,
+      item: freshItem
+    });
+    if (used) await application?.render?.({ force: true });
+    return used;
+  }
   const used = hasItemFunction(freshItem, ITEM_FUNCTIONS.firstAid)
     ? await useFirstAidItem({
       sourceActor,

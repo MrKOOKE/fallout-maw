@@ -90,6 +90,7 @@ export class GearDataModel extends BaseItemDataModel {
         }),
         firstAid: firstAidFunctionField(),
         needChange: needChangeFunctionField(),
+        oneTimeUse: oneTimeUseFunctionField(),
         tools: new TypedObjectField(toolFunctionField(), { required: true, initial: {} })
       }),
       container: new SchemaField({
@@ -918,6 +919,14 @@ function needChangeFunctionField() {
       max: new NumberField({ required: true, integer: true, min: 1, initial: 1 })
     }),
     needs: new ArrayField(needChangeEntryField(), { required: true, initial: [] })
+  });
+}
+
+function oneTimeUseFunctionField() {
+  return new SchemaField({
+    enabled: new BooleanField({ required: true, initial: false }),
+    repeatApplicationBlocked: new BooleanField({ required: true, initial: false }),
+    changes: new ArrayField(abilityChangeField(), { required: true, initial: [] })
   });
 }
 
