@@ -60,6 +60,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
       load: resourceField(0, 0, { required: true, persisted: false }),
       inventory: inventoryField(),
       limbs: new TypedObjectField(limbField(), { required: true, initial: {} }),
+      limbSilhouetteOverride: new BooleanField({ required: true, initial: false }),
+      limbSilhouette: new ObjectField({ required: true, nullable: true, initial: null }),
       currencies: new TypedObjectField(
         new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
         { required: true, initial: {} }
@@ -166,6 +168,8 @@ export class BaseActorDataModel extends foundry.abstract.TypeDataModel {
     this.needs ??= {};
     this.inventory ??= {};
     this.limbs ??= {};
+    this.limbSilhouetteOverride ??= false;
+    this.limbSilhouette ??= null;
     this.currencies ??= {};
     this.combat ??= {};
     this.healing ??= {};

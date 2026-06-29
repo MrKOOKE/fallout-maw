@@ -573,7 +573,10 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const tray = prepareTrayContext(this.#activeTray, skills, items, abilities, activeActions, systemActions, actionGroups, weaponActionRows, weaponSet, weaponSets, weaponEquipChoices, passengers);
     const meterSections = prepareMeterSectionStates(this.#editableMeterSections);
     const displayLimbs = prepareDisplayLimbs(actor, this.#limbDisplayLayer);
-    const limbSilhouette = createLimbSilhouetteHud(race?.limbSilhouette, displayLimbs);
+    const limbSilhouette = createLimbSilhouetteHud(
+      actor.system?.limbSilhouetteOverride ? (actor.system?.limbSilhouette ?? null) : race?.limbSilhouette,
+      displayLimbs
+    );
 
     return {
       ...context,

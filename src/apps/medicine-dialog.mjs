@@ -1576,7 +1576,9 @@ function buildTargetContext(actor, token = null) {
     tokenName: token?.name ?? "",
     incomingHealingPercent: getActorHealingModifierPercent(actor, "incoming"),
     limbs: snapshotActorLimbs(actor),
-    limbSilhouette: race?.limbSilhouette ?? null,
+    limbSilhouette: actor.system?.limbSilhouetteOverride
+      ? (actor.system?.limbSilhouette ?? null)
+      : (race?.limbSilhouette ?? null),
     implantItems: snapshotImplantItems(actor, "target"),
     prosthesisItems: snapshotProsthesisItems(actor, "target"),
     traumas: actor.items

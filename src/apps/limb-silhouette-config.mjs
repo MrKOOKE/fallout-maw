@@ -42,6 +42,7 @@ const EDITOR_COLORS = Object.freeze([
 
 export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(ApplicationV2) {
   #race = null;
+  #titleName = "";
   #saveCallback = null;
   #activeLimbKey = "";
   #draftPoints = [];
@@ -58,12 +59,13 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
   #gesturePreviewSvg = null;
   #suppressNextClick = false;
 
-  constructor({ race, onSave } = {}, options = {}) {
+  constructor({ race, silhouette, title, onSave } = {}, options = {}) {
     super(options);
     this.#race = race;
+    this.#titleName = String(title ?? race?.name ?? "").trim();
     this.#saveCallback = onSave;
     this.#activeLimbKey = race?.limbs?.[0]?.key ?? "";
-    this.#setSilhouette(race?.limbSilhouette);
+    this.#setSilhouette(silhouette === undefined ? race?.limbSilhouette : silhouette);
   }
 
   static DEFAULT_OPTIONS = {
@@ -97,7 +99,7 @@ export class LimbSilhouetteConfig extends HandlebarsApplicationMixin(Application
   };
 
   get title() {
-    return `Силуэт: ${this.#race?.name ?? ""}`;
+    return `Силуэт: ${this.#titleName}`;
   }
 
   _getHeaderControls() {

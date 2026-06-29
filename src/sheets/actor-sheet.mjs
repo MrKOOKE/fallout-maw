@@ -68,6 +68,7 @@ import {
   prepareInventoryContext as prepareDisplayInventoryContext
 } from "../utils/actor-display-data.mjs";
 import { createLimbSilhouetteHud } from "../utils/limb-silhouette.mjs";
+import { LimbSilhouetteConfig } from "../apps/limb-silhouette-config.mjs";
 import {
   getActorContainerFlag,
   hasActorContainer,
@@ -252,6 +253,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
         openConstructStructure: this.#onOpenConstructStructure,
         openTradeSettings: this.#onOpenTradeSettings,
         openFactionConfig: this.#onOpenFactionConfig,
+        openActorLimbSilhouette: this.#onOpenActorLimbSilhouette,
         openDevelopment: this.#onOpenDevelopment,
         toggleFreeEdit: this.#onToggleFreeEdit,
         editActorImage: this.#onEditActorImage,
@@ -348,6 +350,12 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       label: game.i18n.localize("FALLOUTMAW.Factions.ActorButton"),
       ownership: "OWNER"
     });
+    controls.unshift({
+      action: "openActorLimbSilhouette",
+      icon: "fa-solid fa-person",
+      label: "Индивидуальный силуэт",
+      ownership: "OWNER"
+    });
     controls.unshift(this.actor.type === "construct"
       ? {
         action: "openConstructStructure",
@@ -418,7 +426,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       inputName: `system.limbs.${key}.value`,
       active: key === activeLimbKey
     }));
-    const limbSilhouette = prepareSheetLimbSilhouette(race?.limbSilhouette, displayLimbs, activeLimbKey);
+    const limbSilhouette = prepareSheetLimbSilhouette(getActorConfiguredLimbSilhouette(actor, race), displayLimbs, activeLimbKey);
 
     this.#activeLimbKey = activeLimbKey;
 
@@ -853,6 +861,39 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
   static #onOpenFactionConfig(event) {
     event.preventDefault();
     return openActorFactionConfig(this.actor);
+  }
+
+  static #onOpenActorLimbSilhouette(event) {
+    event.preventDefault();
+    const actor = this.actor;
+    const limbEntries = Object.entries(actor.system?.limbs ?? {});
+    if (!limbEntries.length) {
+      ui.notifications.warn("У актера нет частей тела для настройки силуэта.");
+      return undefined;
+    }
+
+    const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
+    const editorRace = {
+      id: actor.id ?? "",
+      name: actor.name ?? "",
+      limbs: limbEntries.map(([key, limb]) => ({
+        key,
+        label: String(limb?.label ?? key)
+      }))
+    };
+    const silhouette = foundry.utils.deepClone(getActorConfiguredLimbSilhouette(actor, race));
+    return new LimbSilhouetteConfig({
+      race: editorRace,
+      silhouette,
+      title: actor.name,
+      onSave: async savedSilhouette => {
+        await actor.update({
+          "system.limbSilhouetteOverride": true,
+          "system.limbSilhouette": savedSilhouette
+        });
+        ui.notifications.info("Индивидуальный силуэт сохранен.");
+      }
+    }).render({ force: true });
   }
 
   static #onSelectLimb(event, target) {
@@ -6182,6 +6223,12 @@ function syncActorTokenIdentity(actor, submitData = {}) {
       foundry.utils.setProperty(submitData, tokenImagePath, img);
     }
   }
+}
+
+function getActorConfiguredLimbSilhouette(actor, race = null) {
+  return actor?.system?.limbSilhouetteOverride
+    ? (actor.system?.limbSilhouette ?? null)
+    : (race?.limbSilhouette ?? null);
 }
 
 function prepareSheetLimbSilhouette(silhouette, limbs = {}, activeLimbKey = "") {

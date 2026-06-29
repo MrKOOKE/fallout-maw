@@ -6,6 +6,14 @@ import {
   getConstructPartFunction,
   hasItemFunction
 } from "../utils/item-functions.mjs";
+import {
+  clipperDifference,
+  clipperIntersect,
+  getPathsArea,
+  getPathsBounds,
+  normalizeLimbSilhouette,
+  normalizePaths
+} from "../utils/limb-silhouette.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 
@@ -218,8 +226,9 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
   async #saveStructure() {
     if (this.actor.type !== "construct") return;
     const updates = [];
-    const creates = [];
+    const createPlans = [];
     const keptOwnedIds = new Set();
+    const previousEntries = getOwnedConstructPartEntries(this.actor);
 
     for (const [order, entry] of this.#entries.entries()) {
       if (entry.kind === "owned") {
@@ -231,27 +240,197 @@ export class ConstructStructureApplication extends FalloutMaWFormApplicationV2 {
       }
 
       const createData = createConstructPartCreateData(entry.itemData, order);
-      if (createData) creates.push(createData);
+      if (createData) createPlans.push({ entryId: entry.entryId, order, data: createData });
     }
 
-    const installedIds = getOwnedConstructPartEntries(this.actor).map(entry => entry.itemId);
+    const installedIds = previousEntries.map(entry => entry.itemId);
     const deletes = installedIds.filter(itemId => !keptOwnedIds.has(itemId));
     if (deletes.length) await this.actor.deleteEmbeddedDocuments("Item", deletes);
     if (updates.length) await this.actor.updateEmbeddedDocuments("Item", updates);
-    const createdItems = creates.length ? await this.actor.createEmbeddedDocuments("Item", creates) : [];
+    const createdItems = createPlans.length ? await this.actor.createEmbeddedDocuments("Item", createPlans.map(plan => plan.data)) : [];
+    const createdItemsByEntryId = new Map(createdItems.map((item, index) => [createPlans[index]?.entryId, item]));
     const createdUpdates = createdItems.map(item => ({
       _id: item.id,
       "system.placement.limbKey": item.id
     }));
     if (createdUpdates.length) await this.actor.updateEmbeddedDocuments("Item", createdUpdates);
 
-    await this.actor.update({ "system.creature.typeId": "", "system.creature.raceId": "", "system.creature.subtypeId": "" });
+    await this.actor.update({
+      "system.creature.typeId": "",
+      "system.creature.raceId": "",
+      "system.creature.subtypeId": "",
+      ...buildConstructSilhouetteUpdate(this.actor, {
+        previousEntries,
+        finalEntries: this.#entries,
+        createdItemsByEntryId
+      })
+    });
   }
 }
 
 export function openConstructStructure(actor) {
   if (!actor || actor.type !== "construct") return undefined;
   return new ConstructStructureApplication(actor).render(true);
+}
+
+function buildConstructSilhouetteUpdate(actor, {
+  previousEntries = [],
+  finalEntries = [],
+  createdItemsByEntryId = new Map()
+} = {}) {
+  if (actor?.type !== "construct" || !actor.system?.limbSilhouetteOverride) return {};
+
+  const source = normalizeLimbSilhouette(
+    actor.system?.limbSilhouette,
+    previousEntries.map(entry => ({
+      key: getConstructPartLimbKey(entry.itemId),
+      label: entry.item?.name ?? entry.itemId
+    }))
+  );
+  if (!source) return {};
+
+  const previousKeys = previousEntries.map(entry => getConstructPartLimbKey(entry.itemId));
+  const previousKeySet = new Set(previousKeys);
+  const previousKeyByOrder = new Map(previousKeys.map((key, index) => [index, key]));
+  const finalLimbs = finalEntries
+    .map(entry => ({
+      key: getConstructPartEntryFinalLimbKey(entry, createdItemsByEntryId),
+      label: getConstructPartEntryLabel(entry, createdItemsByEntryId)
+    }))
+    .filter(entry => entry.key);
+  const finalKeySet = new Set(finalLimbs.map(entry => entry.key));
+  const sourcePartsByKey = new Map(source.parts.map(part => [part.limbKey, {
+    limbKey: part.limbKey,
+    paths: normalizePaths(foundry.utils.deepClone(part.paths))
+  }]));
+
+  const mappedOldKeys = new Set();
+  const parts = [];
+  for (const key of previousKeys) {
+    if (!finalKeySet.has(key)) continue;
+    const sourcePart = sourcePartsByKey.get(key);
+    if (!sourcePart?.paths?.length) continue;
+    mappedOldKeys.add(key);
+    parts.push({
+      limbKey: key,
+      paths: normalizePaths(foundry.utils.deepClone(sourcePart.paths))
+    });
+  }
+
+  const replacementNewKeys = new Set();
+  for (const [order, entry] of finalEntries.entries()) {
+    const newKey = getConstructPartEntryFinalLimbKey(entry, createdItemsByEntryId);
+    if (!newKey || previousKeySet.has(newKey)) continue;
+    const replacedOldKey = previousKeyByOrder.get(order);
+    const replacedPart = sourcePartsByKey.get(replacedOldKey);
+    if (!replacedPart?.paths?.length || mappedOldKeys.has(replacedOldKey)) continue;
+    mappedOldKeys.add(replacedOldKey);
+    replacementNewKeys.add(newKey);
+    parts.push({
+      limbKey: newKey,
+      paths: normalizePaths(foundry.utils.deepClone(replacedPart.paths))
+    });
+  }
+
+  let outline = normalizePaths(source.outline);
+  const removedPaths = source.parts
+    .filter(part => previousKeySet.has(part.limbKey) && !mappedOldKeys.has(part.limbKey))
+    .flatMap(part => part.paths ?? []);
+  if (removedPaths.length) {
+    try {
+      outline = clipperDifference(outline, removedPaths);
+    } catch (error) {
+      console.warn(`Fallout MaW | Failed to remove deleted construct part from limb silhouette: ${error.message}`);
+    }
+  }
+
+  const additionalKeys = finalLimbs
+    .map(entry => entry.key)
+    .filter(key => key && !previousKeySet.has(key) && !replacementNewKeys.has(key));
+  for (const key of additionalKeys) splitAssignedConstructSilhouettePart(parts, key);
+
+  const silhouette = normalizeLimbSilhouette({
+    width: source.width,
+    height: source.height,
+    image: source.image,
+    outline,
+    parts
+  }, finalLimbs);
+  return { "system.limbSilhouette": silhouette };
+}
+
+function splitAssignedConstructSilhouettePart(parts, newLimbKey) {
+  if (!newLimbKey || parts.some(part => part.limbKey === newLimbKey)) return false;
+  const donorIndex = parts.reduce((bestIndex, part, index) => {
+    const bestArea = bestIndex >= 0 ? getPathsArea(parts[bestIndex].paths) : -1;
+    const area = getPathsArea(part.paths);
+    return area > bestArea ? index : bestIndex;
+  }, -1);
+  if (donorIndex < 0) return false;
+
+  const split = splitConstructSilhouettePaths(parts[donorIndex].paths);
+  if (!split) return false;
+  parts[donorIndex] = {
+    ...parts[donorIndex],
+    paths: split.remaining
+  };
+  parts.push({
+    limbKey: newLimbKey,
+    paths: split.assigned
+  });
+  return true;
+}
+
+function splitConstructSilhouettePaths(paths) {
+  const bounds = getPathsBounds(paths);
+  if (!bounds) return null;
+  return splitConstructSilhouettePathsByAxis(paths, bounds, "x")
+    ?? splitConstructSilhouettePathsByAxis(paths, bounds, "y");
+}
+
+function splitConstructSilhouettePathsByAxis(paths, bounds, axis) {
+  const width = Math.max(1, bounds.maxX - bounds.minX);
+  const height = Math.max(1, bounds.maxY - bounds.minY);
+  const clipPath = axis === "x"
+    ? createRectanglePath(bounds.minX, bounds.minY, bounds.minX + (width / 2), bounds.maxY)
+    : createRectanglePath(bounds.minX, bounds.minY, bounds.maxX, bounds.minY + (height / 2));
+
+  try {
+    const assigned = normalizePaths(clipperIntersect(paths, [clipPath]));
+    const remaining = normalizePaths(clipperDifference(paths, assigned));
+    if (!assigned.length || !remaining.length) return null;
+    if (getPathsArea(assigned) <= 0 || getPathsArea(remaining) <= 0) return null;
+    return { assigned, remaining };
+  } catch (error) {
+    console.warn(`Fallout MaW | Failed to split construct limb silhouette part: ${error.message}`);
+    return null;
+  }
+}
+
+function createRectanglePath(left, top, right, bottom) {
+  return [
+    { x: left, y: top },
+    { x: right, y: top },
+    { x: right, y: bottom },
+    { x: left, y: bottom }
+  ];
+}
+
+function getConstructPartEntryFinalLimbKey(entry, createdItemsByEntryId = new Map()) {
+  const itemId = entry?.kind === "owned"
+    ? entry.itemId
+    : createdItemsByEntryId.get(entry?.entryId)?.id;
+  return itemId ? getConstructPartLimbKey(itemId) : "";
+}
+
+function getConstructPartEntryLabel(entry, createdItemsByEntryId = new Map()) {
+  if (entry?.kind === "owned") return String(entry.item?.name ?? entry.itemId ?? "");
+  const item = createdItemsByEntryId.get(entry?.entryId);
+  return String(item?.name ?? entry?.itemData?.name ?? "");
+}
+
+function getConstructPartLimbKey(itemId = "") {
+  return itemId ? `constructPart:${itemId}` : "";
 }
 
 function getOwnedConstructPartEntries(actor) {
