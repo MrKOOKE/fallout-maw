@@ -142,6 +142,7 @@ import {
   resolveInventoryItemRotation
 } from "../utils/inventory-rotation.mjs";
 import { toInteger } from "../utils/numbers.mjs";
+import { formatDurationShort } from "../utils/duration-parts.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-layer.mjs";
 import { getNaturalWeaponSetContext, isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
@@ -4087,7 +4088,7 @@ function buildFirstAidTooltipSection(item, actor = null) {
   const changeRows = getFirstAidChangeTooltipRows(firstAid, actor);
   const durationSeconds = Math.max(0, toInteger(firstAid.durationSeconds));
   if (durationSeconds && changeRows.length) {
-    rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidDurationSeconds"), durationSeconds]);
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidDuration"), formatDurationShort(durationSeconds)]);
   }
   rows.push(...changeRows);
   const maxDistance = Number(firstAid.maxDistance) || 0;
@@ -4099,6 +4100,12 @@ function buildFirstAidTooltipSection(item, actor = null) {
   const criticalMin = Math.max(0, toInteger(firstAid.criticalFailureDamageMin));
   const criticalMax = Math.max(criticalMin, toInteger(firstAid.criticalFailureDamageMax));
   if (criticalMin || criticalMax) rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidCriticalFailureDamageMax"), `${criticalMin}-${criticalMax}`]);
+  const withdrawalChangeRows = getFirstAidWithdrawalChangeTooltipRows(firstAid, actor);
+  const withdrawalDurationSeconds = Math.max(0, toInteger(firstAid.withdrawalDurationSeconds));
+  if (withdrawalDurationSeconds) {
+    rows.push([game.i18n.localize("FALLOUTMAW.Item.FirstAidWithdrawalDuration"), formatDurationShort(withdrawalDurationSeconds)]);
+  }
+  rows.push(...withdrawalChangeRows);
   return renderTooltipFunctionSection(game.i18n.localize("FALLOUTMAW.Item.FunctionFirstAid"), rows);
 }
 
@@ -4152,6 +4159,14 @@ function getFirstAidRemoveEffectTooltipRows(firstAid = {}) {
 }
 
 function getFirstAidChangeTooltipRows(firstAid = {}, actor = null) {
+  return getFirstAidEffectChangeTooltipRows(firstAid.changes, actor, "FALLOUTMAW.Item.FirstAidEffectChanges");
+}
+
+function getFirstAidWithdrawalChangeTooltipRows(firstAid = {}, actor = null) {
+  return getFirstAidEffectChangeTooltipRows(firstAid.withdrawal, actor, "FALLOUTMAW.Item.FirstAidWithdrawalChanges");
+}
+
+function getFirstAidEffectChangeTooltipRows(changes = [], actor = null, labelKey = "FALLOUTMAW.Item.FirstAidEffectChanges") {
   const pathLabels = buildEffectPathLabelMap({
     characteristicSettings: getCharacteristicSettings(),
     resourceSettings: getResourceSettings(),
@@ -4164,10 +4179,10 @@ function getFirstAidChangeTooltipRows(firstAid = {}, actor = null) {
       label: limb?.label ?? key
     }))
   });
-  const rows = prepareTraumaEffectEntries(firstAid.changes, pathLabels)
+  const rows = prepareTraumaEffectEntries(changes, pathLabels)
     .map(entry => entry.summary)
     .filter(Boolean);
-  return rows.length ? [[game.i18n.localize("FALLOUTMAW.Item.FirstAidEffectChanges"), rows.join(", ")]] : [];
+  return rows.length ? [[game.i18n.localize(labelKey), rows.join(", ")]] : [];
 }
 
 function buildDamageMitigationTooltipSection(item, actor) {

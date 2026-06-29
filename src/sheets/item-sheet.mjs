@@ -85,6 +85,12 @@ import { isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { escapeHtml } from "../utils/dom.mjs";
 import { toInteger } from "../utils/numbers.mjs";
 import {
+  buildDurationPartsContext,
+  buildDurationUnitChoices,
+  durationPartsToSeconds,
+  splitDurationSeconds
+} from "../utils/duration-parts.mjs";
+import {
   getWeaponModuleSlots,
   getWeaponModuleSlotItemData,
   getWeaponModuleTechnicalName,
@@ -478,9 +484,12 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
       trapRegionDamageRows: buildVolleyRegionDamageRowsForData(item.system?.functions?.trap?.effect?.regionDamageEntries, damageTypeSettings),
       lightSourceResourceCosts: buildLightSourceResourceCostRows(item, hasConditionFunction, hasEnergyConsumerFunction),
       firstAidEffectRows: buildFirstAidEffectRows(item),
+      firstAidWithdrawalEffectRows: buildFirstAidWithdrawalEffectRows(item),
       firstAidNeedRows: buildFirstAidNeedRows(item),
       needChangeNeedRows: buildNeedChangeNeedRows(item),
       firstAidRemoveEffectRows: buildFirstAidRemoveEffectRows(item, damageTypeSettings),
+      firstAidDuration: buildDurationPartsContext(item.system?.functions?.firstAid?.durationSeconds),
+      firstAidWithdrawalDuration: buildDurationPartsContext(item.system?.functions?.firstAid?.withdrawalDurationSeconds),
       conditionRecoveryMethodRows: buildConditionRecoveryMethodRows(item, toolSettings),
       constructPartWeaponSetRows: buildConstructPartWeaponSetRows(item),
       constructPartLossEffectRows: buildConstructPartLossEffectRows(item),
@@ -606,6 +615,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     }
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
     normalizeSubmittedFixedAbilityFunctions(form, submitData);
+    normalizeSubmittedFirstAidDurations(form, submitData);
     return super._processSubmitData(event, form, submitData, options);
   }
 
@@ -614,6 +624,7 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     normalizeWeaponSpecialPropertiesInSubmitData(submitData);
     normalizeSubmittedAbilityItemUseConditions(form, submitData);
     normalizeSubmittedFixedAbilityFunctions(form, submitData);
+    normalizeSubmittedFirstAidDurations(form, submitData);
     return submitData;
   }
 
@@ -904,6 +915,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     this.element?.querySelector("[data-add-first-aid-effect]")?.addEventListener("click", event => this.#onAddFirstAidEffect(event));
     this.element?.querySelectorAll("[data-delete-first-aid-effect]").forEach(button => {
       button.addEventListener("click", event => this.#onDeleteFirstAidEffect(event));
+    });
+    this.element?.querySelector("[data-add-first-aid-withdrawal-effect]")?.addEventListener("click", event => this.#onAddFirstAidWithdrawalEffect(event));
+    this.element?.querySelectorAll("[data-delete-first-aid-withdrawal-effect]").forEach(button => {
+      button.addEventListener("click", event => this.#onDeleteFirstAidWithdrawalEffect(event));
     });
     this.element?.querySelector("[data-add-first-aid-need]")?.addEventListener("click", event => this.#onAddFirstAidNeed(event));
     this.element?.querySelectorAll("[data-delete-first-aid-need]").forEach(button => {
@@ -2904,7 +2919,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.firstAid.limbSelection.count": 0,
         "system.functions.firstAid.limbSelection.value": 0,
         "system.functions.firstAid.removeEffects": [],
-        "system.functions.firstAid.changes": []
+        "system.functions.firstAid.changes": [],
+        "system.functions.firstAid.withdrawalDurationSeconds": 0,
+        "system.functions.firstAid.withdrawalIntervalSeconds": 6,
+        "system.functions.firstAid.withdrawal": []
       });
     }
 
@@ -3214,7 +3232,10 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
         "system.functions.firstAid.limbSelection.count": 0,
         "system.functions.firstAid.limbSelection.value": 0,
         "system.functions.firstAid.removeEffects": [],
-        "system.functions.firstAid.changes": []
+        "system.functions.firstAid.changes": [],
+        "system.functions.firstAid.withdrawalDurationSeconds": 0,
+        "system.functions.firstAid.withdrawalIntervalSeconds": 6,
+        "system.functions.firstAid.withdrawal": []
       });
     }
     if (functionKey === ITEM_FUNCTIONS.needChange) {
@@ -3606,6 +3627,22 @@ export class FalloutMaWItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
     const changes = [...(this.item.system?.functions?.firstAid?.changes ?? [])];
     changes.splice(index, 1);
     return this.item.update({ "system.functions.firstAid.changes": changes });
+  }
+
+  #onAddFirstAidWithdrawalEffect(event) {
+    event.preventDefault();
+    const changes = [...(this.item.system?.functions?.firstAid?.withdrawal ?? [])];
+    changes.push({ key: "", type: "add", value: "0", phase: "initial", priority: null });
+    return this.item.update({ "system.functions.firstAid.withdrawal": changes });
+  }
+
+  #onDeleteFirstAidWithdrawalEffect(event) {
+    event.preventDefault();
+    const index = Number(event.currentTarget?.dataset?.deleteFirstAidWithdrawalEffect);
+    if (!Number.isInteger(index) || index < 0) return undefined;
+    const changes = [...(this.item.system?.functions?.firstAid?.withdrawal ?? [])];
+    changes.splice(index, 1);
+    return this.item.update({ "system.functions.firstAid.withdrawal": changes });
   }
 
   #onAddFirstAidNeed(event) {
@@ -5549,27 +5586,34 @@ function normalizeAbilityItemUseCategoryValues(value = []) {
 }
 
 function splitAbilityDurationSeconds(value) {
-  const seconds = Math.max(0, toInteger(value));
-  if (seconds > 0 && seconds % 3600 === 0) return { amount: seconds / 3600, unit: "hours" };
-  if (seconds > 0 && seconds % 60 === 0) return { amount: seconds / 60, unit: "minutes" };
-  return { amount: seconds, unit: "seconds" };
+  return splitDurationSeconds(value);
 }
 
 function buildAbilityDurationUnitChoices(selected = "seconds") {
-  return [
-    { value: "seconds", label: "секунды" },
-    { value: "minutes", label: "минуты" },
-    { value: "hours", label: "часы" }
-  ].map(choice => ({
-    ...choice,
-    selected: choice.value === selected
-  }));
+  return buildDurationUnitChoices(selected);
 }
 
 function abilityDurationPartsToSeconds(amount, unit) {
-  const multipliers = { seconds: 1, minutes: 60, hours: 3600 };
-  const multiplier = multipliers[String(unit ?? "seconds")] ?? 1;
-  return Math.max(0, toInteger(amount) * multiplier);
+  return durationPartsToSeconds(amount, unit);
+}
+
+function normalizeSubmittedFirstAidDurations(form = null, submitData = {}) {
+  const durationAmount = form?.querySelector?.("[data-first-aid-duration-amount]");
+  if (durationAmount) {
+    foundry.utils.setProperty(
+      submitData,
+      "system.functions.firstAid.durationSeconds",
+      durationPartsToSeconds(durationAmount.value, form.querySelector("[data-first-aid-duration-unit]")?.value)
+    );
+  }
+  const withdrawalAmount = form?.querySelector?.("[data-first-aid-withdrawal-duration-amount]");
+  if (withdrawalAmount) {
+    foundry.utils.setProperty(
+      submitData,
+      "system.functions.firstAid.withdrawalDurationSeconds",
+      durationPartsToSeconds(withdrawalAmount.value, form.querySelector("[data-first-aid-withdrawal-duration-unit]")?.value)
+    );
+  }
 }
 
 function prepareAbilityFunctionForDisplay(entry, characteristics, skills) {
@@ -9094,6 +9138,17 @@ function buildConditionRecoveryMethodRows(item, toolSettings = []) {
 
 function buildFirstAidEffectRows(item) {
   return (item.system?.functions?.firstAid?.changes ?? []).map((change, index) => ({
+    index,
+    key: String(change?.key ?? ""),
+    type: String(change?.type ?? "add"),
+    value: String(change?.value ?? "0"),
+    priority: change?.priority ?? "",
+    typeChoices: buildFirstAidEffectTypeChoices(change?.type)
+  }));
+}
+
+function buildFirstAidWithdrawalEffectRows(item) {
+  return (item.system?.functions?.firstAid?.withdrawal ?? []).map((change, index) => ({
     index,
     key: String(change?.key ?? ""),
     type: String(change?.type ?? "add"),

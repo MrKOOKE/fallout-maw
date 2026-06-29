@@ -3,7 +3,8 @@
   requestDamageApplication,
   requestFirstAidEffect,
   requestFirstAidNeedChanges,
-  requestFirstAidRemoveEffects
+  requestFirstAidRemoveEffects,
+  requestFirstAidWithdrawalEffect
 } from "../combat/damage-hub.mjs";
 import { canSpendCombatActionPoints, spendCombatActionPoints } from "../combat/reaction-resources.mjs";
 import { SYSTEM_ID } from "../constants.mjs";
@@ -84,13 +85,18 @@ export async function useFirstAidItem({ sourceActor = null, targetActor = null, 
   const normalizedChanges = normalizeFirstAidChanges(firstAid.changes, effectMultiplier, healingMultiplier);
   const healingPerTick = targetContext.isConstruct ? 0 : Math.max(0, normalizedChanges.healingPerTick);
   const changes = normalizedChanges.changes;
+  const normalizedWithdrawal = normalizeFirstAidWithdrawal(firstAid, effectMultiplier, healingMultiplier);
+  const withdrawalHealingPerTick = targetContext.isConstruct ? 0 : Math.max(0, normalizedWithdrawal.healingPerTick);
+  const withdrawalChanges = normalizedWithdrawal.changes;
+  const withdrawalDurationSeconds = Math.max(0, toInteger(firstAid.withdrawalDurationSeconds));
+  const hasWithdrawal = withdrawalChanges.length > 0 || withdrawalHealingPerTick > 0;
   const needs = normalizeFirstAidNeeds(firstAid.needs, effectMultiplier);
   const limbs = targetContext.isConstruct
     ? []
     : normalizeFirstAidLimbs(selectedLimbs, firstAid, effectMultiplier, healingMultiplier);
   const hasImmediateHealing = healing > 0;
   const hasTimedEffect = durationSeconds > 0 && (healingPerTick > 0 || changes.length);
-  if (!hasImmediateHealing && !hasTimedEffect && !needs.length && !limbs.length && !hasEffectRemoval) return false;
+  if (!hasImmediateHealing && !hasTimedEffect && !needs.length && !limbs.length && !hasEffectRemoval && !hasWithdrawal) return false;
 
   if (healing > 0) {
     await requestDamageApplication({
@@ -138,6 +144,26 @@ export async function useFirstAidItem({ sourceActor = null, targetActor = null, 
       durationSeconds,
       intervalSeconds: Math.max(1, toInteger(firstAid.intervalSeconds) || 6),
       changes,
+      withdrawal: hasWithdrawal ? buildFirstAidWithdrawalPayload({
+        itemName: item.name,
+        itemImg: item.img,
+        healingPerTick: withdrawalHealingPerTick,
+        durationSeconds: withdrawalDurationSeconds,
+        intervalSeconds: Math.max(1, toInteger(firstAid.withdrawalIntervalSeconds) || 6),
+        changes: withdrawalChanges,
+        source
+      }) : null,
+      source
+    });
+  } else if (hasWithdrawal) {
+    await requestFirstAidWithdrawalEffect({
+      actor: targetActor,
+      itemName: item.name,
+      itemImg: item.img,
+      healingPerTick: withdrawalHealingPerTick,
+      durationSeconds: withdrawalDurationSeconds,
+      intervalSeconds: Math.max(1, toInteger(firstAid.withdrawalIntervalSeconds) || 6),
+      changes: withdrawalChanges,
       source
     });
   }
@@ -165,6 +191,14 @@ function calculateHealingAmount(actor, firstAid = {}, multiplier = 1, targetCont
 }
 
 function normalizeFirstAidChanges(changes = [], multiplier = 1, healingMultiplier = multiplier) {
+  return normalizeFirstAidEffectChangeList(changes, multiplier, healingMultiplier);
+}
+
+function normalizeFirstAidWithdrawal(firstAid = {}, multiplier = 1, healingMultiplier = multiplier) {
+  return normalizeFirstAidEffectChangeList(firstAid.withdrawal, multiplier, healingMultiplier);
+}
+
+function normalizeFirstAidEffectChangeList(changes = [], multiplier = 1, healingMultiplier = multiplier) {
   const source = Array.isArray(changes) ? changes : Object.values(changes ?? {});
   let healingPerTick = 0;
   const normalized = source
@@ -189,6 +223,27 @@ function normalizeFirstAidChanges(changes = [], multiplier = 1, healingMultiplie
     .filter(Boolean)
     .filter(change => change.key);
   return { changes: normalized, healingPerTick };
+}
+
+function buildFirstAidWithdrawalPayload({
+  itemName = "",
+  itemImg = "",
+  healingPerTick = 0,
+  durationSeconds = 0,
+  intervalSeconds = 6,
+  changes = [],
+  source = {}
+} = {}) {
+  if (!changes.length && healingPerTick <= 0) return null;
+  return {
+    itemName,
+    itemImg,
+    healingPerTick,
+    durationSeconds,
+    intervalSeconds,
+    changes,
+    source
+  };
 }
 
 function normalizeFirstAidNeeds(needs = [], multiplier = 1) {

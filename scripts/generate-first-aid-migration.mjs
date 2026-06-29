@@ -1,0 +1,402 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  buildCraftData,
+  collectReferencedIds,
+  compareRu,
+  convertPoundsToKilograms,
+  extractDescription,
+  getFolderPath,
+  getOldItemSection,
+  migrateAssetPath,
+  readLevelDocuments,
+  resolveOldItemId,
+  toInteger,
+  toNumber
+} from "./generate-material-migration.mjs";
+import {
+  convertParsedFirstAidToFunction,
+  parseFirstAidDescription
+} from "./first-aid-description-parser.mjs";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const systemRoot = path.resolve(__dirname, "..");
+const dataRoot = path.resolve(systemRoot, "..", "..");
+const OLD_WORLD_ROOT = path.join(dataRoot, "fallout-old");
+const MACRO_OUTPUT_DIR = path.join(systemRoot, "scripts", "migration-macros", "first-aid");
+const MACRO_FILE = "01-import-first-aid-items.js";
+const ROOT_FOLDER = "MAW Импорт первой помощи";
+const OLD_ITEM_ID_ALIASES = {
+  "0cygJX1IKCzvWw1b": "x2VIpCSzghynU8c5"
+};
+
+async function main() {
+  const [items, folders] = await Promise.all([
+    readLevelDocuments(path.join(OLD_WORLD_ROOT, "data", "items")),
+    readLevelDocuments(path.join(OLD_WORLD_ROOT, "data", "folders"))
+  ]);
+  const folderById = new Map(folders.map(folder => [folder._id, folder]));
+  const itemById = new Map(items.filter(item => item?._id).map(item => [item._id, item]));
+
+  const candidates = [];
+  for (const item of itemById.values()) {
+    const description = extractDescription(item);
+    const parsed = parseFirstAidDescription(description);
+    if (!parsed) continue;
+    candidates.push({
+      item,
+      folderPath: getFolderPath(item.folder, folderById),
+      parsed
+    });
+  }
+
+  candidates.sort((left, right) => (
+    compareRu(left.folderPath, right.folderPath)
+    || compareRu(left.item.name, right.item.name)
+    || left.item._id.localeCompare(right.item._id)
+  ));
+
+  await fs.mkdir(MACRO_OUTPUT_DIR, { recursive: true });
+
+  const records = [];
+  for (const entry of candidates) {
+    records.push(await createFirstAidMigrationRecord(entry.item, entry.folderPath, entry.parsed, itemById));
+  }
+
+  const craftReferenceNames = buildCraftReferenceNames(records, itemById);
+  const unresolvedReferences = Array.from(collectReferencedIds(records))
+    .filter(id => !resolveOldItemId(itemById, id))
+    .map(id => `${id}\t(нет в старом мире)`);
+
+  const buildStamp = new Date().toISOString();
+  await fs.writeFile(
+    path.join(MACRO_OUTPUT_DIR, MACRO_FILE),
+    buildFirstAidMacro(records, craftReferenceNames, buildStamp),
+    "utf8"
+  );
+  await fs.writeFile(
+    path.join(MACRO_OUTPUT_DIR, "README.md"),
+    buildReadme(candidates.length, buildStamp),
+    "utf8"
+  );
+  await fs.writeFile(
+    path.join(MACRO_OUTPUT_DIR, "00-PASTE-INTO-FOUNDRY-MACRO.js"),
+    buildPasteMacro(),
+    "utf8"
+  );
+
+  console.log(`First aid items found: ${candidates.length}`);
+  console.log(`Craft ingredient names for lookup: ${Object.keys(craftReferenceNames).length}`);
+  console.log(`Missing in old world (need manual link): ${unresolvedReferences.length}`);
+  if (unresolvedReferences.length) console.log(unresolvedReferences.join("\n"));
+  console.log(`Macro written: ${path.join(MACRO_OUTPUT_DIR, MACRO_FILE)}`);
+}
+
+function buildBaseItemSystem(item, itemById, img) {
+  const oldCraft = item.flags?.["blok-upravleniya"]?.craft ?? null;
+  return {
+    description: "",
+    quantity: Math.max(1, toInteger(item.system?.quantity, 1)),
+    maxStack: 5,
+    itemCategory: getOldItemSection(item) || "Первая помощь",
+    weight: convertPoundsToKilograms(item.system?.weight?.value ?? item.system?.weight),
+    price: Math.max(0, toNumber(item.system?.price?.value ?? item.system?.price, 0)),
+    equipped: false,
+    locked: false,
+    placement: {
+      mode: "inventory",
+      equipmentSlot: "",
+      weaponSet: "",
+      weaponSlot: "",
+      limbKey: "",
+      constructPartOrder: 0,
+      x: 1,
+      y: 1,
+      width: 1,
+      height: 1,
+      rotated: false
+    },
+    craft: buildCraftData(item, img, oldCraft, itemById)
+  };
+}
+
+async function createFirstAidMigrationRecord(item, folderPath, parsed, itemById) {
+  const img = await migrateAssetPath(item.img);
+  const firstAid = convertParsedFirstAidToFunction(parsed);
+
+  return {
+    id: item._id,
+    name: item.name,
+    img,
+    folderPath: folderPath.split(" / "),
+    oldType: item.type,
+    oldFolderPath: folderPath,
+    oldImg: item.img ?? "",
+    system: {
+      ...buildBaseItemSystem(item, itemById, img),
+      functions: {
+        firstAid
+      }
+    }
+  };
+}
+
+function buildCraftReferenceNames(records, itemById) {
+  const names = {};
+  for (const oldId of collectReferencedIds(records)) {
+    const item = resolveOldItemId(itemById, oldId);
+    if (item?.name) names[oldId] = item.name;
+  }
+  return names;
+}
+
+function buildFirstAidMacro(records, craftReferenceNames, buildStamp) {
+  return `// Generated by systems/fallout-maw/scripts/generate-first-aid-migration.mjs
+// ${buildStamp}
+
+const FIRST_AID_ITEMS = ${JSON.stringify(records, null, 2)};
+
+const SYSTEM_ID = "fallout-maw";
+const ROOT_FOLDER = ${JSON.stringify(ROOT_FOLDER)};
+const FLAG_SCOPE = "fallout-maw";
+const FLAG_KEY = "firstAidMigration";
+const MATERIAL_FLAG_KEY = "materialMigration";
+const OLD_ITEM_ID_ALIASES = ${JSON.stringify(OLD_ITEM_ID_ALIASES)};
+const CRAFT_REFERENCE_NAMES = ${JSON.stringify(craftReferenceNames, null, 2)};
+
+const EMPTY_CRAFT = {
+  mode: "craft",
+  nodes: [],
+  links: [],
+  viewport: { x: 0, y: 0, zoom: 1 },
+  disassembly: { nodes: [], links: [], viewport: { x: 0, y: 0, zoom: 1 } },
+  recipes: []
+};
+
+const missingReferences = new Set();
+await runFirstAidImport();
+
+async function runFirstAidImport() {
+  if (game.system.id !== SYSTEM_ID) {
+    ui.notifications.error("Этот макрос рассчитан на систему fallout-maw.");
+    return;
+  }
+
+  const touched = [];
+  const idMap = new Map();
+  for (const entry of FIRST_AID_ITEMS) {
+    const folderId = await ensureFolderPath([ROOT_FOLDER, ...entry.folderPath]);
+    const existing = findExistingMigrationItem(entry);
+    const data = buildItemData(entry, folderId, { craft: EMPTY_CRAFT });
+    let item = existing;
+    if (item) {
+      const updateData = foundry.utils.deepClone(data);
+      delete updateData._id;
+      await item.update(updateData);
+    } else {
+      item = await createItemWithPreferredId(data);
+    }
+    idMap.set(entry.id, item.id);
+    touched.push({ entry, item, folderId });
+  }
+
+  for (const { entry, item, folderId } of touched) {
+    const craft = rewriteCraftReferences(entry.system.craft, idMap, item.id);
+    const data = buildItemData(entry, folderId, { craft });
+    delete data._id;
+    await item.update(data);
+  }
+
+  if (missingReferences.size) {
+    ui.notifications.warn(\`Импорт первой помощи: обработано \${touched.length}. Не удалось разрешить \${missingReferences.size} ссылок крафта.\`);
+    console.warn("First aid import unresolved craft references", Array.from(missingReferences));
+  } else {
+    ui.notifications.info(\`Импорт первой помощи: обработано \${touched.length}. Все ссылки крафта разрешены.\`);
+  }
+  console.log("First aid import", { touched: touched.length, missingReferences: Array.from(missingReferences) });
+}
+
+async function createItemWithPreferredId(data) {
+  try {
+    return await Item.create(data);
+  } catch (error) {
+    console.warn("Не удалось создать предмет с исходным id, создаю с новым id.", data._id, error);
+    const fallback = foundry.utils.deepClone(data);
+    delete fallback._id;
+    return Item.create(fallback);
+  }
+}
+
+function buildItemData(entry, folderId, { craft }) {
+  const system = foundry.utils.deepClone(entry.system);
+  system.craft = foundry.utils.deepClone(craft ?? EMPTY_CRAFT);
+  system.functions = foundry.utils.deepClone(entry.system.functions ?? {});
+  system.functions.firstAid = foundry.utils.deepClone(entry.system.functions?.firstAid ?? {});
+  system.functions.firstAid.enabled = true;
+  return {
+    _id: entry.id,
+    name: entry.name,
+    type: "gear",
+    img: entry.img,
+    folder: folderId,
+    system,
+    flags: {
+      [FLAG_SCOPE]: {
+        [FLAG_KEY]: {
+          oldId: entry.id,
+          oldType: entry.oldType,
+          oldFolderPath: entry.oldFolderPath,
+          oldImg: entry.oldImg,
+          sourceWorld: "fallout-old"
+        }
+      }
+    }
+  };
+}
+
+function findExistingMigrationItem(entry) {
+  const byFlag = game.items.find(item => item.getFlag(FLAG_SCOPE, FLAG_KEY)?.oldId === entry.id);
+  if (byFlag) return byFlag;
+  const byMaterialFlag = game.items.find(item => item.getFlag(FLAG_SCOPE, MATERIAL_FLAG_KEY)?.oldId === entry.id);
+  if (byMaterialFlag) return byMaterialFlag;
+  const byId = game.items.get(entry.id);
+  if (byId?.name === entry.name) return byId;
+  return null;
+}
+
+function resolveAlias(oldId) {
+  return OLD_ITEM_ID_ALIASES[oldId] ?? oldId;
+}
+
+function findItemByName(name) {
+  const trimmed = String(name ?? "").trim();
+  if (!trimmed) return null;
+  const matches = game.items.filter(item => item.name === trimmed);
+  if (!matches.length) return null;
+  if (matches.length === 1) return matches[0];
+  return matches.find(item => item.getFlag(FLAG_SCOPE, MATERIAL_FLAG_KEY))
+    ?? matches.find(item => item.getFlag(FLAG_SCOPE, FLAG_KEY))
+    ?? matches[0];
+}
+
+function resolveImportedItemId(oldId, idMap, hintName) {
+  const resolvedOldId = resolveAlias(oldId);
+  if (idMap.has(resolvedOldId)) return idMap.get(resolvedOldId);
+  if (idMap.has(oldId)) return idMap.get(oldId);
+
+  const byFirstAidFlag = game.items.find(item => item.getFlag(FLAG_SCOPE, FLAG_KEY)?.oldId === resolvedOldId)
+    ?? game.items.find(item => item.getFlag(FLAG_SCOPE, FLAG_KEY)?.oldId === oldId);
+  if (byFirstAidFlag) return byFirstAidFlag.id;
+
+  const byMaterialFlag = game.items.find(item => item.getFlag(FLAG_SCOPE, MATERIAL_FLAG_KEY)?.oldId === resolvedOldId)
+    ?? game.items.find(item => item.getFlag(FLAG_SCOPE, MATERIAL_FLAG_KEY)?.oldId === oldId);
+  if (byMaterialFlag) return byMaterialFlag.id;
+
+  const byId = game.items.get(resolvedOldId) ?? game.items.get(oldId);
+  if (byId) return byId.id;
+
+  const lookupName = hintName || CRAFT_REFERENCE_NAMES[oldId] || CRAFT_REFERENCE_NAMES[resolvedOldId];
+  const byName = findItemByName(lookupName);
+  if (byName) return byName.id;
+
+  missingReferences.add(oldId);
+  return oldId;
+}
+
+function rewriteCraftReferences(craft, idMap, selfId) {
+  const next = foundry.utils.deepClone(craft ?? EMPTY_CRAFT);
+  rewriteNodeList(next.nodes, idMap, selfId);
+  rewriteNodeList(next.disassembly?.nodes, idMap, selfId);
+  for (const recipe of next.recipes ?? []) {
+    rewriteNodeList(recipe.nodes, idMap, selfId);
+    rewriteNodeList(recipe.disassembly?.nodes, idMap, selfId);
+  }
+  return next;
+}
+
+function rewriteNodeList(nodes, idMap, selfId) {
+  if (!Array.isArray(nodes)) return;
+  for (const node of nodes) {
+    const oldId = String(node.itemUuid ?? "").replace(/^Item\\./, "");
+    if (!oldId) continue;
+    node.itemUuid = \`Item.\${node.root ? selfId : resolveImportedItemId(oldId, idMap, node.name)}\`;
+  }
+}
+
+async function ensureFolderPath(parts) {
+  let parentId = null;
+  for (const name of parts) {
+    let folder = game.folders.find(candidate => (
+      candidate.type === "Item"
+      && candidate.name === name
+      && getFolderParentId(candidate) === parentId
+    ));
+    if (!folder) folder = await Folder.create({ name, type: "Item", folder: parentId });
+    parentId = folder.id;
+  }
+  return parentId;
+}
+
+function getFolderParentId(folder) {
+  return folder.folder?.id ?? folder.folder ?? null;
+}
+`;
+}
+
+function buildReadme(firstAidCount, buildStamp) {
+  return `# Макросы миграции первой помощи
+
+Сгенерировано: \`${buildStamp}\`
+
+## Быстрый запуск
+
+1. Откройте мир на системе \`fallout-maw\`.
+2. Создайте макрос типа **Script**.
+3. Вставьте содержимое **\`00-PASTE-INTO-FOUNDRY-MACRO.js\`**.
+4. Запустите макрос от GM **повторно** — он обновит крафты уже созданных предметов.
+
+## Файлы
+
+- \`00-PASTE-INTO-FOUNDRY-MACRO.js\` — вставляйте это в макрос Foundry
+- \`${MACRO_FILE}\` — ${firstAidCount} предметов первой помощи
+
+Крафты ссылаются на уже импортированные материалы (флаг \`materialMigration.oldId\`, id или название). Дубликаты ингредиентов не создаются.
+`;
+}
+
+function buildPasteMacro() {
+  return `// Fallout-MaW first aid migration: one Foundry macro.
+// Вставьте весь этот скрипт в один макрос Foundry (Script) и запустите от GM.
+
+const SYSTEM_ID = "fallout-maw";
+const BASE_PATH = "systems/fallout-maw/scripts/migration-macros/first-aid";
+const FIRST_AID_IMPORT_FILE = "${MACRO_FILE}";
+
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+
+if (game.system.id !== SYSTEM_ID) {
+  ui.notifications.error("Этот макрос рассчитан только на систему fallout-maw.");
+  return;
+}
+
+ui.notifications.info("Импорт первой помощи: старт…");
+
+const url = \`\${BASE_PATH}/\${FIRST_AID_IMPORT_FILE}\`;
+const response = await fetch(url, { cache: "no-cache" });
+if (!response.ok) throw new Error(\`Не удалось загрузить \${url}: HTTP \${response.status}\`);
+const code = await response.text();
+await new AsyncFunction(code)();
+
+ui.notifications.info("Импорт первой помощи: завершён.");
+`;
+}
+
+const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (isDirectRun) {
+  main().catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

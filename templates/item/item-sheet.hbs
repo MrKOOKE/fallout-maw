@@ -2437,9 +2437,16 @@
       <button type="button" data-add-first-aid-effect><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Effects.AddChange"}}</button>
     </div>
     <div class="fallout-maw-list-grid three-columns">
-      <label>
-        <span>{{localize "FALLOUTMAW.Item.FirstAidDurationSeconds"}}</span>
-        <input type="number" name="system.functions.firstAid.durationSeconds" value="{{system.functions.firstAid.durationSeconds}}" min="0" step="1">
+      <label class="fallout-maw-split-number-field">
+        <span>{{localize "FALLOUTMAW.Item.FirstAidDuration"}}</span>
+        <div>
+          <input type="number" data-first-aid-duration-amount value="{{firstAidDuration.amount}}" min="0" step="1">
+          <select data-first-aid-duration-unit>
+            {{#each firstAidDuration.unitChoices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+        </div>
       </label>
       <label>
         <span>{{localize "FALLOUTMAW.Item.FirstAidIntervalSeconds"}}</span>
@@ -2466,6 +2473,52 @@
         <input type="text" name="system.functions.firstAid.changes.{{index}}.value" value="{{value}}" data-formula-autocomplete="all">
         <input type="number" name="system.functions.firstAid.changes.{{index}}.priority" value="{{priority}}" step="1">
         <button type="button" data-delete-first-aid-effect="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
+      </div>
+      {{else}}
+      <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Effects.NoChanges"}}</p>
+      {{/each}}
+    </div>
+    <div class="fallout-maw-panel-header">
+      <h3>{{localize "FALLOUTMAW.Item.FirstAidWithdrawalChanges"}}</h3>
+      <button type="button" data-add-first-aid-withdrawal-effect><i class="fa-solid fa-plus"></i> {{localize "FALLOUTMAW.Effects.AddChange"}}</button>
+    </div>
+    <div class="fallout-maw-list-grid three-columns">
+      <label class="fallout-maw-split-number-field">
+        <span>{{localize "FALLOUTMAW.Item.FirstAidWithdrawalDuration"}}</span>
+        <div>
+          <input type="number" data-first-aid-withdrawal-duration-amount value="{{firstAidWithdrawalDuration.amount}}" min="0" step="1">
+          <select data-first-aid-withdrawal-duration-unit>
+            {{#each firstAidWithdrawalDuration.unitChoices}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+            {{/each}}
+          </select>
+        </div>
+      </label>
+      <label>
+        <span>{{localize "FALLOUTMAW.Item.FirstAidWithdrawalIntervalSeconds"}}</span>
+        <input type="number" name="system.functions.firstAid.withdrawalIntervalSeconds" value="{{system.functions.firstAid.withdrawalIntervalSeconds}}" min="1" step="1">
+      </label>
+    </div>
+    <div class="fallout-maw-effect-change-list">
+      <div class="fallout-maw-effect-change-row fallout-maw-grid-header">
+        <span>{{localize "FALLOUTMAW.Common.Path"}}</span>
+        <span>{{localize "FALLOUTMAW.Effects.Mode"}}</span>
+        <span>{{localize "FALLOUTMAW.Common.Value"}}</span>
+        <span>{{localize "FALLOUTMAW.Effects.Priority"}}</span>
+        <span></span>
+      </div>
+      {{#each firstAidWithdrawalEffectRows}}
+      <div class="fallout-maw-effect-change-row">
+        <input type="text" name="system.functions.firstAid.withdrawal.{{index}}.key" value="{{key}}" data-effect-key-autocomplete>
+        <select name="system.functions.firstAid.withdrawal.{{index}}.type">
+          {{#each typeChoices}}
+          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+        <input type="hidden" name="system.functions.firstAid.withdrawal.{{index}}.phase" value="initial">
+        <input type="text" name="system.functions.firstAid.withdrawal.{{index}}.value" value="{{value}}" data-formula-autocomplete="all">
+        <input type="number" name="system.functions.firstAid.withdrawal.{{index}}.priority" value="{{priority}}" step="1">
+        <button type="button" data-delete-first-aid-withdrawal-effect="{{index}}" title="{{localize 'FALLOUTMAW.Common.Delete'}}"><i class="fa-solid fa-trash"></i></button>
       </div>
       {{else}}
       <p class="fallout-maw-empty-list">{{localize "FALLOUTMAW.Effects.NoChanges"}}</p>

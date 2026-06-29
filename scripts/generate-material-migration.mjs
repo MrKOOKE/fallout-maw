@@ -769,25 +769,29 @@ function decodePath(value) {
   }
 }
 
+function resolveOldItemId(itemById, id) {
+  const resolvedId = OLD_ITEM_ID_ALIASES.get(id) ?? id;
+  return itemById.get(resolvedId) ?? null;
+}
+
 function collectReferencedIds(records) {
   const ids = new Set();
   for (const record of records) {
-    for (const node of record.system?.craft?.disassembly?.nodes ?? []) {
-      const oldId = String(node.itemUuid ?? "").replace(/^Item\./, "");
-      if (oldId && oldId !== record.id) ids.add(oldId);
-    }
+    collectCraftNodeIds(record.system?.craft?.nodes, record.id, ids);
+    collectCraftNodeIds(record.system?.craft?.disassembly?.nodes, record.id, ids);
     for (const recipe of record.system?.craft?.recipes ?? []) {
-      for (const node of recipe.nodes ?? []) {
-        const oldId = String(node.itemUuid ?? "").replace(/^Item\./, "");
-        if (oldId && oldId !== record.id) ids.add(oldId);
-      }
-      for (const node of recipe.disassembly?.nodes ?? []) {
-        const oldId = String(node.itemUuid ?? "").replace(/^Item\./, "");
-        if (oldId && oldId !== record.id) ids.add(oldId);
-      }
+      collectCraftNodeIds(recipe.nodes, record.id, ids);
+      collectCraftNodeIds(recipe.disassembly?.nodes, record.id, ids);
     }
   }
   return ids;
+}
+
+function collectCraftNodeIds(nodes, recordId, ids) {
+  for (const node of nodes ?? []) {
+    const oldId = String(node.itemUuid ?? "").replace(/^Item\./, "");
+    if (oldId && oldId !== recordId) ids.add(oldId);
+  }
 }
 
 function buildFoundryMacro(label, records) {
@@ -1113,7 +1117,27 @@ function compareRu(left, right) {
   return String(left ?? "").localeCompare(String(right ?? ""), "ru");
 }
 
-main().catch(error => {
-  console.error(error);
-  process.exitCode = 1;
-});
+export {
+  buildCraftData,
+  buildFoundryMacro,
+  collectReferencedIds,
+  compareRu,
+  convertPoundsToKilograms,
+  extractDescription,
+  getFolderPath,
+  getOldItemSection,
+  migrateAssetPath,
+  readLevelDocuments,
+  resolveOldItemId,
+  roundNumber,
+  toInteger,
+  toNumber
+};
+
+const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (isDirectRun) {
+  main().catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

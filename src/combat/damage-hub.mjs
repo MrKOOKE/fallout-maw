@@ -38,6 +38,8 @@ const DAMAGE_EFFECT_FLAG_KEY = "damageEffect";
 const LIMB_LOSS_EFFECT_KIND = "limbLoss";
 const SHOCK_UNCONSCIOUS_FLAG_KEY = "shockUnconscious";
 const FIRST_AID_TEMPORARY_EFFECT_KIND = "firstAidTemporary";
+const FIRST_AID_WITHDRAWAL_EFFECT_KIND = "firstAidWithdrawal";
+const FIRST_AID_WITHDRAWAL_PAYLOAD_FLAG_KEY = "firstAidWithdrawal";
 const BLEEDING_DAMAGE_EFFECT_KIND = "bleedingDamage";
 const PERIODIC_DAMAGE_EFFECT_KIND = "periodicDamage";
 const DAMAGE_EFFECT_CHANGE_ROOT = "system.damageEffects";
@@ -309,6 +311,7 @@ export async function requestFirstAidEffect({
   durationSeconds = 0,
   intervalSeconds = ROUND_SECONDS,
   changes = [],
+  withdrawal = null,
   source = {}
 } = {}) {
   const resolvedActor = actor ?? await fromUuid(actorUuid);
@@ -322,6 +325,7 @@ export async function requestFirstAidEffect({
     durationSeconds,
     intervalSeconds,
     changes,
+    withdrawal,
     source
   });
 
@@ -337,6 +341,48 @@ export async function requestFirstAidEffect({
 
   return requestDamageSocketActionFromGM(gm, {
     action: "createFirstAidEffect",
+    request
+  });
+}
+
+export async function requestFirstAidWithdrawalEffect({
+  actor = null,
+  actorUuid = "",
+  itemName = "",
+  itemImg = "",
+  healingPerTick = 0,
+  durationSeconds = 0,
+  intervalSeconds = ROUND_SECONDS,
+  changes = [],
+  source = {}
+} = {}) {
+  const resolvedActor = actor ?? await fromUuid(actorUuid);
+  if (!resolvedActor) return [];
+
+  const request = normalizeFirstAidWithdrawalRequest({
+    actorUuid: resolvedActor.uuid,
+    itemName,
+    itemImg,
+    healingPerTick,
+    durationSeconds,
+    intervalSeconds,
+    changes,
+    source
+  });
+  if (!request.changes.length && request.healingPerTick <= 0) return [];
+
+  if (canApplyDamageLocally(resolvedActor)) {
+    return runDamageHubOperation(() => createFirstAidWithdrawalEffect(resolvedActor, request));
+  }
+
+  const gm = getResponsibleGM();
+  if (!gm) {
+    ui.notifications.warn("No active GM is available to create a first aid withdrawal effect.");
+    return [];
+  }
+
+  return requestDamageSocketActionFromGM(gm, {
+    action: "createFirstAidWithdrawalEffect",
     request
   });
 }
@@ -2770,6 +2816,8 @@ async function createFirstAidEffect(actor, request = {}) {
       [DAMAGE_EFFECT_FLAG_KEY]: damageEffect
     }
   };
+  const withdrawalPayload = normalizeStoredFirstAidWithdrawalPayload(request.withdrawal, request.itemName);
+  if (withdrawalPayload) flags[TRAUMA_FLAG_SCOPE][FIRST_AID_WITHDRAWAL_PAYLOAD_FLAG_KEY] = withdrawalPayload;
 
   const effectData = {
     type: "base",
@@ -2781,6 +2829,75 @@ async function createFirstAidEffect(actor, request = {}) {
     flags,
     system: { changes: data.changes }
   };
+  if (data.durationSeconds > 0) {
+    effectData.duration = {
+      seconds: data.durationSeconds,
+      startTime
+    };
+  }
+  return actor.createEmbeddedDocuments("ActiveEffect", [effectData], getDamageActiveEffectOperationOptions());
+}
+
+async function createFirstAidWithdrawalEffect(actor, request = {}) {
+  const data = normalizeFirstAidWithdrawalRequest(request);
+  if (!actor || !data.changes.length && data.healingPerTick <= 0) return [];
+  if (data.durationSeconds <= 0 && data.healingPerTick <= 0) return [];
+
+  const startTime = Number.isFinite(Number(data.source?.worldTime))
+    ? Number(data.source.worldTime)
+    : (Number(game.time?.worldTime) || 0);
+  const tickCount = data.healingPerTick > 0 && data.durationSeconds > 0
+    ? Math.max(1, Math.ceil(data.durationSeconds / data.intervalSeconds))
+    : 0;
+  const effectName = data.itemName ? `Отдача: ${data.itemName}` : "Отдача";
+  const description = [
+    data.healingPerTick > 0 ? `Заживление: ${data.healingPerTick > 0 ? "+" : ""}${data.healingPerTick}` : "",
+    data.durationSeconds > 0 ? `Длительность: ${data.durationSeconds} сек.` : ""
+  ].filter(Boolean).join("<br>");
+  const damageEffect = data.healingPerTick > 0 && data.durationSeconds > 0
+    ? {
+      kind: "periodicHealing",
+      amountPerTick: data.healingPerTick,
+      totalTicks: tickCount,
+      remainingTicks: tickCount,
+      intervalSeconds: data.intervalSeconds,
+      startTime,
+      endTime: startTime + data.durationSeconds,
+      nextTickTime: startTime + data.intervalSeconds,
+      source: data.source
+    }
+    : data.durationSeconds > 0
+      ? {
+        kind: FIRST_AID_WITHDRAWAL_EFFECT_KIND,
+        startTime,
+        endTime: startTime + data.durationSeconds,
+        source: data.source
+      }
+      : null;
+  const flags = damageEffect
+    ? {
+      [TRAUMA_FLAG_SCOPE]: {
+        kind: "temporary",
+        [DAMAGE_EFFECT_FLAG_KEY]: damageEffect
+      }
+    }
+    : {};
+  const effectData = {
+    type: "base",
+    name: effectName,
+    img: data.itemImg || "icons/svg/downgrade.svg",
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    description,
+    flags,
+    system: { changes: data.changes }
+  };
+  if (data.durationSeconds > 0) {
+    effectData.duration = {
+      seconds: data.durationSeconds,
+      startTime
+    };
+  }
   return actor.createEmbeddedDocuments("ActiveEffect", [effectData], getDamageActiveEffectOperationOptions());
 }
 
@@ -2793,8 +2910,43 @@ function normalizeFirstAidEffectRequest(request = {}) {
     durationSeconds: Math.max(0, toInteger(request.durationSeconds)),
     intervalSeconds: Math.max(1, toInteger(request.intervalSeconds || ROUND_SECONDS)),
     changes: normalizeEffectChanges(request.changes),
+    withdrawal: request.withdrawal && typeof request.withdrawal === "object"
+      ? foundry.utils.deepClone(request.withdrawal)
+      : null,
     source: request.source && typeof request.source === "object" ? foundry.utils.deepClone(request.source) : {}
   };
+}
+
+function normalizeFirstAidWithdrawalRequest(request = {}) {
+  return {
+    actorUuid: String(request.actorUuid ?? "").trim(),
+    itemName: String(request.itemName ?? "").trim(),
+    itemImg: String(request.itemImg ?? "").trim(),
+    healingPerTick: Math.max(0, toInteger(request.healingPerTick)),
+    durationSeconds: Math.max(0, toInteger(request.durationSeconds)),
+    intervalSeconds: Math.max(1, toInteger(request.intervalSeconds || ROUND_SECONDS)),
+    changes: normalizeEffectChanges(request.changes),
+    source: request.source && typeof request.source === "object" ? foundry.utils.deepClone(request.source) : {}
+  };
+}
+
+function normalizeStoredFirstAidWithdrawalPayload(withdrawal = null, itemName = "") {
+  if (!withdrawal || typeof withdrawal !== "object") return null;
+  const normalized = normalizeFirstAidWithdrawalRequest({
+    ...withdrawal,
+    itemName: String(withdrawal.itemName ?? itemName ?? "").trim()
+  });
+  if (!normalized.changes.length && normalized.healingPerTick <= 0) return null;
+  return normalized;
+}
+
+async function applyStoredFirstAidWithdrawalOnDelete(effect) {
+  if (!game.user?.isGM) return;
+  const payload = effect.getFlag?.(TRAUMA_FLAG_SCOPE, FIRST_AID_WITHDRAWAL_PAYLOAD_FLAG_KEY);
+  if (!payload) return;
+  const actor = effect.parent;
+  if (!actor) return;
+  await createFirstAidWithdrawalEffect(actor, payload);
 }
 
 function normalizeFirstAidNeedChangesRequest(request = {}) {
@@ -2995,6 +3147,27 @@ async function handleDamageSocketMessage(payload = {}) {
     });
     return;
   }
+  if (payload.action === "createFirstAidWithdrawalEffect") {
+    if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
+    let ok = true;
+    let result = [];
+    let error = "";
+    try {
+      const request = normalizeFirstAidWithdrawalRequest(payload.request);
+      const actor = await fromUuid(request.actorUuid);
+      if (actor) result = await runDamageHubOperation(() => createFirstAidWithdrawalEffect(actor, request));
+    } catch (caught) {
+      ok = false;
+      error = String(caught?.message ?? caught ?? "Damage hub socket request failed.");
+      console.error("Fallout MaW | First aid withdrawal effect socket request failed", caught);
+    }
+    respondDamageHubSocketAction(payload, {
+      ok,
+      error,
+      result: ok ? serializeEmbeddedDocumentSocketResults(result) : []
+    });
+    return;
+  }
   if (payload.action === "applyFirstAidNeedChanges") {
     if (!game.user?.isGM || payload.gmUserId !== game.user.id) return;
     let ok = true;
@@ -3045,6 +3218,9 @@ function registerDamageTimeHooks() {
   registerQueuedWorldTimeProcessor(processTimedDamageEffects, { priority: 100 });
   Hooks.on("preDeleteActiveEffect", preventIgnoredTimedDamageEffectDeletion);
   Hooks.on("preUpdateActiveEffect", preventManagedTimedDamageEffectExpiration);
+  Hooks.on("deleteActiveEffect", effect => {
+    void applyStoredFirstAidWithdrawalOnDelete(effect);
+  });
   damageTimeHooksRegistered = true;
 }
 
@@ -3412,7 +3588,7 @@ function buildIgnoredDamageEffectChangesUpdate(effect, damageChanges = [], elaps
 }
 
 function buildIgnoredTimedDamageEffectUpdate(effect, data, elapsed) {
-  if (data?.kind === "periodicHealing" || data?.kind === FIRST_AID_TEMPORARY_EFFECT_KIND) {
+  if (data?.kind === "periodicHealing" || data?.kind === FIRST_AID_TEMPORARY_EFFECT_KIND || data?.kind === FIRST_AID_WITHDRAWAL_EFFECT_KIND) {
     const updateData = {};
     const startTime = Number(data.startTime);
     const endTime = Number(data.endTime);
@@ -3461,7 +3637,8 @@ function isDamageHubManagedTimedEffect(data) {
 
 function isFlagManagedTimedEffect(data) {
   return data?.kind === "periodicHealing"
-    || data?.kind === FIRST_AID_TEMPORARY_EFFECT_KIND;
+    || data?.kind === FIRST_AID_TEMPORARY_EFFECT_KIND
+    || data?.kind === FIRST_AID_WITHDRAWAL_EFFECT_KIND;
 }
 
 function isLimbTimedDamageEffect(data) {
@@ -3516,7 +3693,9 @@ function collectDamageHubManagedTimedEffectTicks(effect, damageChanges, now) {
 
 function collectFlagManagedTimedEffectTicks(effect, data, now) {
   if (data.kind === "periodicHealing") return collectPeriodicHealingEffectTicks(effect, data, now);
-  if (data.kind === FIRST_AID_TEMPORARY_EFFECT_KIND) return collectFirstAidTemporaryEffectTicks(effect, data, now);
+  if (data.kind === FIRST_AID_TEMPORARY_EFFECT_KIND || data.kind === FIRST_AID_WITHDRAWAL_EFFECT_KIND) {
+    return collectFirstAidTemporaryEffectTicks(effect, data, now);
+  }
   return { entries: [], update: null, deleteEffectId: "" };
 }
 
@@ -3627,7 +3806,9 @@ function collectPeriodicHealingEffectTicks(effect, data, now) {
       }
     }]
     : [];
-  const shouldDelete = remainingTicks <= 0 || (Number(data.endTime) && now >= Number(data.endTime) && dueTicks === 0);
+  const hasFoundryDuration = Number(effect.duration?.seconds) > 0;
+  const shouldDelete = !hasFoundryDuration
+    && (remainingTicks <= 0 || (Number(data.endTime) && now >= Number(data.endTime) && dueTicks === 0));
   return {
     entries: entries.filter(entry => entry.amount > 0),
     update: !shouldDelete && dueTicks > 0
@@ -3643,14 +3824,8 @@ function collectPeriodicHealingEffectTicks(effect, data, now) {
   };
 }
 
-function collectFirstAidTemporaryEffectTicks(effect, data, now) {
-  const endTime = Number(data.endTime);
-  const shouldDelete = Number.isFinite(endTime) && endTime > 0 && now >= endTime;
-  return {
-    entries: [],
-    update: null,
-    deleteEffectId: shouldDelete ? effect.id : ""
-  };
+function collectFirstAidTemporaryEffectTicks(_effect, _data, _now) {
+  return { entries: [], update: null, deleteEffectId: "" };
 }
 
 async function updatePeriodicEffect(effect, updateData = {}) {

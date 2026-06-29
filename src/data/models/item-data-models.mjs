@@ -903,7 +903,10 @@ function firstAidFunctionField() {
     removeEffects: new ArrayField(new SchemaField({
       damageTypeKey: new StringField({ required: true, blank: true, initial: "" })
     }), { required: true, initial: [] }),
-    changes: new ArrayField(traumaEffectField(), { required: true, initial: [] })
+    changes: new ArrayField(traumaEffectField(), { required: true, initial: [] }),
+    withdrawalDurationSeconds: new NumberField({ required: true, integer: true, min: 0, initial: 0 }),
+    withdrawalIntervalSeconds: new NumberField({ required: true, integer: true, min: 1, initial: 6 }),
+    withdrawal: new ArrayField(traumaEffectField(), { required: true, initial: [] })
   });
 }
 
