@@ -171,7 +171,8 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static PARTS = {
     body: {
-      template: TEMPLATES.craftWindow
+      template: TEMPLATES.craftWindow,
+      templates: [TEMPLATES.craftWindowPanel]
     }
   };
 
@@ -253,15 +254,17 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     if (selectedRecipe) this.#rememberDefaultCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, craft.toolRequirements);
     const selectedRecipeSummary = recipes.find(recipe => recipe.uuid === this.#selectedRecipeUuid) ?? null;
 
+    const recipeCategories = prepareCraftRecipeCategories(recipes, this.#actor, {
+      expandedCategories: this.#expandedRecipeCategories,
+      mode: this.#craftMode,
+      search: this.#recipeSearch,
+      selectedRecipeUuid: this.#selectedRecipeUuid
+    });
+
     return {
       ...context,
       actor: actorContext,
-      recipeCategories: prepareCraftRecipeCategories(recipes, this.#actor, {
-        expandedCategories: this.#expandedRecipeCategories,
-        mode: this.#craftMode,
-        search: this.#recipeSearch,
-        selectedRecipeUuid: this.#selectedRecipeUuid
-      }),
+      recipeCategories,
       recipeSearch: this.#recipeSearch,
       recipe: selectedRecipe ? {
         uuid: selectedRecipe.uuid,
@@ -412,47 +415,58 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     });
   }
 
-  #activateControls() {
-    const search = this.element?.querySelector("[data-craft-recipe-search]");
-    search?.addEventListener("input", event => {
-      this.#recipeSearch = String(event.currentTarget?.value ?? "");
-      this.#filterRecipeList();
+  #syncRecipeSelectionDom() {
+    this.element?.querySelectorAll("[data-recipe-uuid]").forEach(element => {
+      element.classList.toggle("selected", element.dataset.recipeUuid === this.#selectedRecipeUuid);
     });
-    this.element?.querySelectorAll("[data-craft-recipe-category-toggle]").forEach(button => {
-      button.addEventListener("click", event => {
-        event.preventDefault();
-        const category = String(event.currentTarget?.dataset?.craftRecipeCategoryToggle ?? "");
-        if (!category) return;
-        if (this.#expandedRecipeCategories.has(category)) this.#expandedRecipeCategories.delete(category);
-        else this.#expandedRecipeCategories.add(category);
-        this.#captureScrollPositions();
-        void this.#renderPreservingWindowStack();
-      });
-      button.addEventListener("keydown", event => {
-        if (!["Enter", " "].includes(event.key)) return;
-        event.preventDefault();
-        event.currentTarget?.click();
-      });
-    });
-    this.element?.querySelectorAll("[data-recipe-uuid]").forEach(button => {
-      button.addEventListener("click", event => {
-        event.preventDefault();
-        if (this.#busy) return;
-        const recipeUuid = String(event.currentTarget?.dataset?.recipeUuid ?? "");
-        if (recipeUuid === this.#selectedRecipeUuid) return;
-        this.#captureScrollPositions();
-        this.#selectedRecipeUuid = recipeUuid;
-        this.#selectedRecipe = null;
-        this.#craftViewportOverride = null;
-        this.#craftToolPickerNodeId = "";
-        void this.#renderPreservingWindowStack();
-      });
-      button.addEventListener("keydown", event => {
-        if (!["Enter", " "].includes(event.key)) return;
-        event.preventDefault();
-        button.click();
-      });
-    });
+  }
+
+  async #prepareCraftPanelContext() {
+    this.#actor ??= await resolveActor(this.#actorUuid);
+    const recipes = await getCraftRecipeSummaries();
+    const selectedSelection = this.#selectedRecipeUuid ? resolveCraftRecipeSelection(this.#selectedRecipeUuid) : null;
+    const selectedRecipe = selectedSelection?.item ?? null;
+    this.#selectedRecipeId = selectedSelection?.recipeId ?? DEFAULT_CRAFT_RECIPE_ID;
+    this.#selectedRecipe = selectedRecipe;
+    const craft = selectedRecipe
+      ? prepareCraftContext(selectedRecipe, this.#actor, {
+        busy: this.#busy,
+        mode: this.#craftMode,
+        recipeId: this.#selectedRecipeId,
+        toolPickerNodeId: this.#craftToolPickerNodeId,
+        toolSelections: this.#getCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode)
+      })
+      : createEmptyCraftContext(this.#busy);
+    this.#craftLinkData = selectedRecipe ? { nodes: craft.nodes ?? [], links: craft.links ?? [] } : { nodes: [], links: [] };
+    if (selectedRecipe) this.#rememberDefaultCraftToolSelections(this.#selectedRecipeUuid, this.#craftMode, craft.toolRequirements);
+    const selectedRecipeSummary = recipes.find(recipe => recipe.uuid === this.#selectedRecipeUuid) ?? null;
+    return {
+      recipe: selectedRecipe ? {
+        uuid: selectedRecipe.uuid,
+        name: getCraftRecipeDisplayName(selectedRecipeSummary ?? selectedRecipe),
+        img: normalizeImagePath(selectedRecipe.img, FALLBACK_ICON)
+      } : null,
+      craft,
+      craftModes: getCraftModeChoices(this.#craftMode),
+      craftMode: this.#craftMode
+    };
+  }
+
+  async #updateCraftPanel() {
+    const context = await this.#prepareCraftPanelContext();
+    const html = await foundry.applications.handlebars.renderTemplate(TEMPLATES.craftWindowPanel, context);
+    const panel = this.element?.querySelector(".fallout-maw-craft-window-craft");
+    if (!panel) return;
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html.trim();
+    const replacement = wrapper.firstElementChild;
+    if (!replacement) return;
+    panel.replaceWith(replacement);
+    this.#activateCraftPanelControls();
+    this.#activateCraftViewer();
+  }
+
+  #activateCraftPanelControls() {
     this.element?.querySelectorAll("[data-craft-mode]").forEach(button => {
       button.addEventListener("click", event => {
         event.preventDefault();
@@ -468,7 +482,100 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       });
     });
     this.element?.querySelector('[data-action="craft"]')?.addEventListener("click", event => this.#onCraft(event));
+  }
+
+  #activateControls() {
+    const search = this.element?.querySelector("[data-craft-recipe-search]");
+    search?.addEventListener("input", event => {
+      this.#recipeSearch = String(event.currentTarget?.value ?? "");
+      this.#filterRecipeList();
+    });
+    this.element?.querySelectorAll("[data-craft-recipe-category-toggle]").forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        const category = String(event.currentTarget?.dataset?.craftRecipeCategoryToggle ?? "");
+        if (!category) return;
+        const expanding = !this.#expandedRecipeCategories.has(category);
+        if (expanding) this.#expandedRecipeCategories.add(category);
+        else this.#expandedRecipeCategories.delete(category);
+        const section = event.currentTarget?.closest("[data-craft-recipe-category]");
+        section?.classList.toggle("collapsed", !expanding);
+        const icon = event.currentTarget?.querySelector("i");
+        icon?.classList.toggle("fa-caret-right", !expanding);
+        icon?.classList.toggle("fa-caret-down", expanding);
+        event.currentTarget?.setAttribute("aria-expanded", expanding ? "true" : "false");
+        if (expanding) void this.#refreshCategoryMissingIndicators(category);
+      });
+      button.addEventListener("keydown", event => {
+        if (!["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        event.currentTarget?.click();
+      });
+    });
+    this.element?.querySelectorAll("[data-recipe-uuid]").forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        if (this.#busy) return;
+        const recipeUuid = String(event.currentTarget?.dataset?.recipeUuid ?? "");
+        if (recipeUuid === this.#selectedRecipeUuid) return;
+        this.#selectedRecipeUuid = recipeUuid;
+        this.#selectedRecipe = null;
+        this.#craftViewportOverride = null;
+        this.#craftToolPickerNodeId = "";
+        this.#syncRecipeSelectionDom();
+        const recipeElement = event.currentTarget;
+        void this.#updateCraftPanel().then(() => {
+          if (recipeElement?.isConnected) void this.#refreshRecipeMissingIndicator(recipeElement);
+        });
+      });
+      button.addEventListener("keydown", event => {
+        if (!["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        button.click();
+      });
+    });
+    this.#activateCraftPanelControls();
     this.#filterRecipeList();
+  }
+
+  async #refreshExpandedMissingIndicators() {
+    for (const categoryKey of this.#expandedRecipeCategories) {
+      await this.#refreshCategoryMissingIndicators(categoryKey);
+    }
+    const selectedUuid = this.#selectedRecipeUuid;
+    if (!selectedUuid) return;
+    const selectedEl = this.element?.querySelector(`[data-recipe-uuid="${CSS.escape(selectedUuid)}"]`);
+    if (!selectedEl) return;
+    const categoryKey = String(selectedEl.closest("[data-craft-recipe-category]")?.dataset?.craftRecipeCategory ?? "");
+    if (categoryKey && this.#expandedRecipeCategories.has(categoryKey)) return;
+    await this.#refreshRecipeMissingIndicator(selectedEl);
+  }
+
+  async #refreshCategoryMissingIndicators(categoryKey = "") {
+    const actor = this.#actor ?? await resolveActor(this.#actorUuid);
+    if (!actor || !categoryKey) return;
+    const categoryEl = this.element?.querySelector(`[data-craft-recipe-category="${CSS.escape(categoryKey)}"]`);
+    if (!categoryEl) return;
+    const recipes = await getCraftRecipeSummaries();
+    const availability = createCraftAvailabilityIndex(actor);
+    for (const recipeEl of categoryEl.querySelectorAll("[data-recipe-uuid]")) {
+      if (recipeEl.hidden) continue;
+      await this.#refreshRecipeMissingIndicator(recipeEl, { actor, recipes, availability });
+    }
+  }
+
+  async #refreshRecipeMissingIndicator(recipeEl, { actor = null, recipes = null, availability = null } = {}) {
+    if (!recipeEl) return;
+    const recipeUuid = String(recipeEl.dataset.recipeUuid ?? "");
+    if (!recipeUuid) return;
+    actor ??= this.#actor ?? await resolveActor(this.#actorUuid);
+    if (!actor) return;
+    recipes ??= await getCraftRecipeSummaries();
+    availability ??= createCraftAvailabilityIndex(actor);
+    const summary = recipes.find(recipe => recipe.uuid === recipeUuid);
+    if (!summary) return;
+    const missing = getCraftRecipeMissingCount(summary, actor, this.#craftMode, availability) > 0;
+    recipeEl.classList.toggle("missing", missing);
   }
 
   #filterRecipeList() {
@@ -518,14 +625,12 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
       event.stopPropagation();
       this.#craftToolPickerNodeId = String(toolNode.dataset.craftNodeId ?? "");
       this.#clearInventoryTooltip({ force: true });
-      this.#captureScrollPositions();
-      void this.#renderPreservingWindowStack();
+      void this.#updateCraftPanel();
       return;
     }
     if (!this.#craftToolPickerNodeId) return;
     this.#craftToolPickerNodeId = "";
-    this.#captureScrollPositions();
-    void this.#renderPreservingWindowStack();
+    void this.#updateCraftPanel();
   }
 
   #onCraftToolSelect(event) {
@@ -535,8 +640,7 @@ class CraftWindowApplication extends HandlebarsApplicationMixin(ApplicationV2) {
     const instrumentId = String(event.currentTarget?.dataset?.instrumentId ?? "");
     if (!requirementKey || !instrumentId || !this.#selectedRecipeUuid) return;
     this.#craftToolSelections.set(getCraftToolSelectionStorageKey(this.#selectedRecipeUuid, this.#craftMode, requirementKey), instrumentId);
-    this.#captureScrollPositions();
-    void this.#renderPreservingWindowStack();
+    void this.#updateCraftPanel();
   }
 
   #bindInventoryListeners() {
@@ -4009,13 +4113,19 @@ function prepareCraftRecipeCategories(recipes = [], actor = null, { selectedReci
   mode = normalizeCraftMode(mode);
   const normalizedSearch = normalizeCraftSearchText(search);
   const categories = new Map();
-  const availability = createCraftAvailabilityIndex(actor);
+  const availability = actor ? createCraftAvailabilityIndex(actor) : null;
   for (const recipe of recipes) {
     if (!hasCraftRecipeDataForMode(recipe.system?.craft, mode)) continue;
     const category = getCraftRecipeCategory(recipe);
     const displayName = getCraftRecipeDisplayName(recipe);
     if (normalizedSearch && !normalizeCraftSearchText(`${displayName} ${category}`).includes(normalizedSearch)) continue;
-    const missing = getCraftRecipeMissingCount(recipe, actor, mode, availability) > 0;
+    const shouldComputeMissing = Boolean(actor) && (
+      recipe.uuid === selectedRecipeUuid
+      || expandedCategories.has(category)
+    );
+    const missing = shouldComputeMissing
+      ? getCraftRecipeMissingCount(recipe, actor, mode, availability) > 0
+      : false;
     const entry = {
       ...recipe,
       displayName,
@@ -4032,7 +4142,7 @@ function prepareCraftRecipeCategories(recipes = [], actor = null, { selectedReci
     categories.get(category).recipes.push(entry);
   }
 
-  return Array.from(categories.values())
+  const result = Array.from(categories.values())
     .map(category => ({
       ...category,
       collapsed: !normalizedSearch && !expandedCategories.has(category.key),
@@ -4040,6 +4150,7 @@ function prepareCraftRecipeCategories(recipes = [], actor = null, { selectedReci
       recipes: category.recipes.sort((left, right) => left.displayName.localeCompare(right.displayName, game.i18n.lang))
     }))
     .sort((left, right) => left.label.localeCompare(right.label, game.i18n.lang));
+  return result;
 }
 
 function getCraftRecipeMissingCount(recipe, actor, mode = CRAFT_MODE_CREATE, availability = null) {

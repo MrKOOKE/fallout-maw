@@ -34,6 +34,7 @@ export const TEMPLATES = Object.freeze({
   stealthWindow: `systems/${SYSTEM_ID}/templates/actor/stealth-window.hbs`,
   searchInventory: `systems/${SYSTEM_ID}/templates/actor/search-inventory.hbs`,
   craftWindow: `systems/${SYSTEM_ID}/templates/actor/craft-window.hbs`,
+  craftWindowPanel: `systems/${SYSTEM_ID}/templates/actor/parts/craft-window-panel.hbs`,
   personalGenerator: `systems/${SYSTEM_ID}/templates/actor/personal-generator.hbs`,
   butcheringConfig: `systems/${SYSTEM_ID}/templates/actor/butchering-config.hbs`,
   actorTradeSettings: `systems/${SYSTEM_ID}/templates/actor/trade-settings.hbs`,
