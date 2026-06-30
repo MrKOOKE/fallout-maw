@@ -5,6 +5,8 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
+import { ENSURE_ITEM_CATEGORIES_MACRO } from "./migration-item-categories.mjs";
+
 const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -538,8 +540,16 @@ function layoutDisassemblyOutputNodes(outputs, blockId, blockLimit) {
   });
 }
 
+function extractCraftItemOldId(uuid) {
+  const raw = String(uuid ?? "").trim();
+  if (!raw) return "";
+  const itemMatch = raw.match(/(?:^|\.)(Item\.([A-Za-z0-9]+))$/);
+  if (itemMatch) return itemMatch[2];
+  return raw.replace(/^Item\./, "");
+}
+
 function normalizeResource(resource, itemById) {
-  const sourceOldId = String(resource?.uuid ?? "").replace(/^Item\./, "");
+  const sourceOldId = extractCraftItemOldId(resource?.uuid);
   const oldId = OLD_ITEM_ID_ALIASES.get(sourceOldId) ?? sourceOldId;
   if (!oldId) return null;
   const source = itemById.get(oldId);
@@ -789,7 +799,7 @@ function collectReferencedIds(records) {
 
 function collectCraftNodeIds(nodes, recordId, ids) {
   for (const node of nodes ?? []) {
-    const oldId = String(node.itemUuid ?? "").replace(/^Item\./, "");
+    const oldId = extractCraftItemOldId(node.itemUuid);
     if (oldId && oldId !== recordId) ids.add(oldId);
   }
 }
@@ -952,21 +962,7 @@ function getFolderParentId(folder) {
   return folder.folder?.id ?? folder.folder ?? null;
 }
 
-async function ensureItemCategories(labels) {
-  try {
-    const settings = foundry.utils.deepClone(game.settings.get(SYSTEM_ID, "itemCategories") ?? { categories: [] });
-    settings.categories ??= [];
-    const existing = new Set(settings.categories.map(category => String(category.label ?? "")));
-    for (const label of labels) {
-      if (!label || existing.has(label)) continue;
-      settings.categories.push({ label });
-      existing.add(label);
-    }
-    await game.settings.set(SYSTEM_ID, "itemCategories", settings);
-  } catch (error) {
-    console.warn("Не удалось обновить категории предметов.", error);
-  }
-}
+${ENSURE_ITEM_CATEGORIES_MACRO}
 `;
 }
 
@@ -1123,6 +1119,7 @@ export {
   collectReferencedIds,
   compareRu,
   convertPoundsToKilograms,
+  extractCraftItemOldId,
   extractDescription,
   getFolderPath,
   getOldItemSection,

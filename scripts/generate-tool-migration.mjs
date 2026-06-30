@@ -15,6 +15,7 @@ import {
   toInteger,
   toNumber
 } from "./generate-material-migration.mjs";
+import { ENSURE_ITEM_CATEGORIES_MACRO } from "./migration-item-categories.mjs";
 import {
   convertParsedToolToFunction,
   parseToolDescription
@@ -381,21 +382,7 @@ function getFolderParentId(folder) {
   return folder.folder?.id ?? folder.folder ?? null;
 }
 
-async function ensureItemCategories(labels) {
-  try {
-    const settings = foundry.utils.deepClone(game.settings.get(SYSTEM_ID, "itemCategories") ?? { categories: [] });
-    settings.categories ??= [];
-    const existing = new Set(settings.categories.map(category => String(category.label ?? "")));
-    for (const label of labels) {
-      if (!label || existing.has(label)) continue;
-      settings.categories.push({ label });
-      existing.add(label);
-    }
-    await game.settings.set(SYSTEM_ID, "itemCategories", settings);
-  } catch (error) {
-    console.warn("Не удалось обновить категории предметов.", error);
-  }
-}
+${ENSURE_ITEM_CATEGORIES_MACRO}
 `;
 }
 

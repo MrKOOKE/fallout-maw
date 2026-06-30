@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFoodDescription } from "./food-description-parser.mjs";
+import { ENSURE_ITEM_CATEGORIES_MACRO } from "./migration-item-categories.mjs";
 import {
   buildCraftData,
   collectReferencedIds,
@@ -877,29 +878,7 @@ function getFolderParentId(folder) {
   return typeof parent === "string" ? parent : parent.id ?? null;
 }
 
-async function ensureItemCategories(categories) {
-  const settingKey = "itemCategories";
-  const current = Array.from(game.settings.get(SYSTEM_ID, settingKey) ?? []);
-  const known = new Set(current.map(entry => String(entry?.key ?? entry).trim()));
-  let changed = false;
-  for (const label of categories) {
-    const key = slugifyCategory(label);
-    if (!key || known.has(key)) continue;
-    current.push({ key, label });
-    known.add(key);
-    changed = true;
-  }
-  if (changed) await game.settings.set(SYSTEM_ID, settingKey, current);
-}
-
-function slugifyCategory(label) {
-  return String(label ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9а-яё]+/gi, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64) || "food";
-}
+${ENSURE_ITEM_CATEGORIES_MACRO}
 `;
 }
 
