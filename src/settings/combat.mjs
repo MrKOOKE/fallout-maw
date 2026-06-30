@@ -24,6 +24,11 @@ export const DEFAULT_COMBAT_SETTINGS = Object.freeze({
     negativeDamageFormula: "damage",
     criticalDamageFormula: "damage * 2",
     stateMultiplierFormula: "1 + missingStateRatio"
+  }),
+  weaponSkillDamage: Object.freeze({
+    meleeCombat: "floor(str/3+dex/6)",
+    rangedCombat: "floor(wis/3+dex/6)",
+    throwing: "floor(dex/3+wis/6)"
   })
 });
 
@@ -67,6 +72,11 @@ export function normalizeCombatSettings(value = {}) {
       negativeDamageFormula: normalizeFormula(source.unconsciousness?.negativeDamageFormula, DEFAULT_COMBAT_SETTINGS.unconsciousness.negativeDamageFormula),
       criticalDamageFormula: normalizeFormula(source.unconsciousness?.criticalDamageFormula, DEFAULT_COMBAT_SETTINGS.unconsciousness.criticalDamageFormula),
       stateMultiplierFormula: normalizeFormula(source.unconsciousness?.stateMultiplierFormula, DEFAULT_COMBAT_SETTINGS.unconsciousness.stateMultiplierFormula)
+    },
+    weaponSkillDamage: {
+      meleeCombat: normalizeFormula(source.weaponSkillDamage?.meleeCombat, DEFAULT_COMBAT_SETTINGS.weaponSkillDamage.meleeCombat),
+      rangedCombat: normalizeFormula(source.weaponSkillDamage?.rangedCombat, DEFAULT_COMBAT_SETTINGS.weaponSkillDamage.rangedCombat),
+      throwing: normalizeFormula(source.weaponSkillDamage?.throwing, DEFAULT_COMBAT_SETTINGS.weaponSkillDamage.throwing)
     }
   };
 }

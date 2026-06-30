@@ -17,9 +17,10 @@ import {
 } from "./generate-material-migration.mjs";
 import {
   buildConditionFunction,
-  buildWeaponFunction,
   parseAmmoDamageSource,
+  parseEquipmentMigration,
   parseGearDescription,
+  parseWeaponMigration,
   resolveAmmoFolderPath,
   resolveEquipmentFolderPath,
   resolveWeaponFolderPath
@@ -224,36 +225,53 @@ async function createGearMigrationRecord(item, folderPath, categoryKey, config, 
 
   let folderParts = [];
   let functions = {};
+  let occupiedSlots = {};
+  let occupiedSlotMode = "all";
+  let weaponSlotRequirement = { mode: "oneOf", slots: {} };
 
   if (categoryKey === "ammo") {
     const damageSource = parseAmmoDamageSource(description, item.name);
     if (!damageSource) parseWarnings.push("не удалось распарсить источник урона");
-    folderParts = resolveAmmoFolderPath(parsedGear);
+    folderParts = resolveAmmoFolderPath(folderPath, parsedGear);
     functions = {
       damageSource: damageSource ?? { enabled: true, name: item.name }
     };
   } else if (categoryKey === "weapon") {
-    if (!parsedGear?.repairDifficulty) parseWarnings.push("нет сложности ремонта");
-    if (!parsedGear?.partClass) parseWarnings.push("нет класса деталей");
     const magazineSourceOldIds = parsedGear?.caliberKey
       ? (ammoByCaliber.get(parsedGear.caliberKey) ?? [])
       : [];
     if (parsedGear?.caliberKey && !magazineSourceOldIds.length) {
       parseWarnings.push(`нет патронов для калибра ${parsedGear.caliberKey}`);
     }
-    folderParts = resolveWeaponFolderPath(folderPath, parsedGear);
+    const weaponData = parseWeaponMigration(description, item.name, { magazineSourceOldIds });
+    parseWarnings.push(...weaponData.warnings);
+    folderParts = resolveWeaponFolderPath(folderPath, weaponData.parsedGear ?? parsedGear);
+    const additionalWeapons = Object.fromEntries(
+      weaponData.additionalWeapons.map(entry => [entry.id, entry])
+    );
     functions = {
-      weapon: buildWeaponFunction(parsedGear, { magazineSourceOldIds }),
-      condition: buildConditionFunction(parsedGear)
+      weapon: weaponData.primary,
+      additionalWeapons,
+      condition: buildConditionFunction(weaponData.parsedGear ?? parsedGear)
     };
+    occupiedSlots = {};
+    occupiedSlotMode = "all";
+    weaponSlotRequirement = weaponData.weaponSlotRequirement ?? { mode: "oneOf", slots: {} };
   } else {
-    if (!parsedGear?.repairDifficulty) parseWarnings.push("нет сложности ремонта");
-    if (!parsedGear?.partClass) parseWarnings.push("нет класса деталей");
-    folderParts = resolveEquipmentFolderPath(folderPath);
+    const equipmentData = parseEquipmentMigration(description);
+    if (!equipmentData.parsedGear?.repairDifficulty) parseWarnings.push("нет сложности ремонта");
+    if (!equipmentData.parsedGear?.partClass) parseWarnings.push("нет класса деталей");
+    folderParts = resolveEquipmentFolderPath(folderPath, equipmentData.parsedGear ?? parsedGear);
     functions = {
-      condition: buildConditionFunction(parsedGear),
-      damageMitigation: { enabled: true, mode: "defense" }
+      condition: buildConditionFunction(equipmentData.parsedGear ?? parsedGear),
+      damageMitigation: equipmentData.damageMitigation,
+      freeSettings: equipmentData.freeSettings
     };
+    if (!functions.damageMitigation?.enabled) delete functions.damageMitigation;
+    if (!functions.freeSettings?.enabled) delete functions.freeSettings;
+    occupiedSlots = equipmentData.occupiedSlots ?? {};
+    occupiedSlotMode = equipmentData.occupiedSlotMode ?? "all";
+    weaponSlotRequirement = { mode: "oneOf", slots: {} };
   }
 
   return {
@@ -274,6 +292,9 @@ async function createGearMigrationRecord(item, folderPath, categoryKey, config, 
       price: Math.max(0, toNumber(item.system?.price?.value ?? item.system?.price, 0)),
       equipped: false,
       locked: false,
+      occupiedSlots,
+      occupiedSlotMode,
+      weaponSlotRequirement,
       placement: {
         mode: "inventory",
         equipmentSlot: "",
@@ -595,8 +616,15 @@ function rewriteNodeList(nodes, idMap, selfId) {
 
 function rewriteGearFunctionReferences(system, idMap) {
   const next = foundry.utils.deepClone(system ?? {});
-  const weapon = next.functions?.weapon;
-  if (!weapon?.magazine) return next;
+  rewriteWeaponMagazineSources(next.functions?.weapon, idMap);
+  for (const additionalWeapon of Object.values(next.functions?.additionalWeapons ?? {})) {
+    rewriteWeaponMagazineSources(additionalWeapon, idMap);
+  }
+  return next;
+}
+
+function rewriteWeaponMagazineSources(weapon, idMap) {
+  if (!weapon?.magazine) return;
   const sourceUuids = (weapon.magazine.sourceItemUuids ?? [])
     .map(uuid => {
       const oldId = extractCraftItemOldId(uuid);
@@ -606,7 +634,6 @@ function rewriteGearFunctionReferences(system, idMap) {
     .filter(Boolean);
   weapon.magazine.sourceItemUuids = sourceUuids;
   weapon.magazine.sourceItemUuid = sourceUuids[0] ?? "";
-  return next;
 }
 
 async function ensureFolderPath(parts) {

@@ -1439,6 +1439,11 @@ export const SETTINGS_BASELINE = Object.freeze({
           "negativeDamageFormula": "damage",
           "criticalDamageFormula": "damage * 2",
           "stateMultiplierFormula": "1 + missingStateRatio"
+        },
+        "weaponSkillDamage": {
+          "meleeCombat": "floor(str/3+dex/6)",
+          "rangedCombat": "floor(wis/3+dex/6)",
+          "throwing": "floor(dex/3+wis/6)"
         }
       }
     },

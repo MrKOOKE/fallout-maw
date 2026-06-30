@@ -62,6 +62,28 @@
     </div>
 
     <header class="fallout-maw-panel-header">
+      <h2>Бонус урона от навыка оружия</h2>
+    </header>
+
+    <div class="fallout-maw-settings-grid">
+      <label>
+        <span>Ближний бой</span>
+        <input type="text" name="weaponSkillDamage.meleeCombat" value="{{settings.weaponSkillDamage.meleeCombat}}" data-formula-autocomplete="all">
+        <small>flat(str/3+dex/6) — как в blok-upravleniya</small>
+      </label>
+      <label>
+        <span>Дальний бой</span>
+        <input type="text" name="weaponSkillDamage.rangedCombat" value="{{settings.weaponSkillDamage.rangedCombat}}" data-formula-autocomplete="all">
+        <small>flat(wis/3+dex/6)</small>
+      </label>
+      <label>
+        <span>Метание</span>
+        <input type="text" name="weaponSkillDamage.throwing" value="{{settings.weaponSkillDamage.throwing}}" data-formula-autocomplete="all">
+        <small>flat(dex/3+wis/6)</small>
+      </label>
+    </div>
+
+    <header class="fallout-maw-panel-header">
       <h2>Потеря сознания</h2>
     </header>
 

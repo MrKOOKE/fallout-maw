@@ -26,7 +26,7 @@ import {
   hasWeaponSpecialPropertyData,
   parseModuleWeaponFunctionId
 } from "../utils/item-functions.mjs";
-import { getCoverSettings, getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
+import { getCoverSettings, getCombatSettings, getCreatureOptions, getDamageTypeSettings, getProficiencyInfluenceSettings, getProficiencySettings, getSkillSettings } from "../settings/accessors.mjs";
 import { ABILITY_FIXED_FUNCTION_KEYS } from "../settings/abilities.mjs";
 import { FALLOUT_MAW } from "../config/system-config.mjs";
 import { canSpendCombatActionPoints, getCombatActionPointState, spendCombatActionPoints } from "./reaction-resources.mjs";
@@ -5860,12 +5860,25 @@ function getWeaponDamage(weapon, weaponFunctionId = "", context = {}) {
   const weaponData = getEffectiveWeaponDamageData(weapon, weaponFunctionId);
   const formulaDamage = getWeaponDamagePercentBase(weapon, weaponFunctionId);
   const flatDamage = getContextualCombatValue(actor, "damageFlat", context);
+  const skillKey = String(getWeaponAttackData(weapon, weaponFunctionId)?.skillKey ?? "");
+  const skillDamageBonus = getWeaponSkillDamageBonus(actor, skillKey);
   const attackPowerDamagePercent = toInteger(weaponData?.attackPowerDamagePercent);
   const damagePercent = attackPowerDamagePercent
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "damage")
     + getContextualCombatValue(actor, "damagePercent", context);
-  const modifiedDamage = Math.round(formulaDamage * Math.max(0, 100 + damagePercent) / 100) + flatDamage;
+  const modifiedDamage = Math.round(formulaDamage * Math.max(0, 100 + damagePercent) / 100) + flatDamage + skillDamageBonus;
   return Math.max(0, Math.floor(modifiedDamage * getWeaponConditionWeakeningRatio(weapon)));
+}
+
+function getWeaponSkillDamageBonus(actor, skillKey = "") {
+  const key = String(skillKey ?? "").trim();
+  if (!key || !actor) return 0;
+  const formula = getCombatSettings()?.weaponSkillDamage?.[key];
+  if (!isFormulaTextConfigured(formula)) return 0;
+  return evaluateActorFormula(formula, actor, {
+    minimum: 0,
+    context: `weapon skill damage (${key})`
+  });
 }
 
 function getWeaponDamagePercentBase(weapon, weaponFunctionId = "") {
