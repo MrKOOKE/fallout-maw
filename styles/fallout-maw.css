@@ -2234,7 +2234,7 @@ body #prosemirror-dropdown {
   padding-bottom: 4.25rem;
 }
 
-.fallout-maw-research-tab {
+.fallout-maw-research-tab.active {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;

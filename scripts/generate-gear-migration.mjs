@@ -437,7 +437,10 @@ async function ${runFn}() {
   for (const entry of ${itemsConst}) {
     const folderId = await ensureFolderPath([ROOT_FOLDER, ...entry.folderPath]);
     const existing = findExistingMigrationItem(entry);
-    const data = buildItemData(entry, folderId, { craft: EMPTY_CRAFT });
+    const previewCraft = rewriteCraftReferences(entry.system.craft, idMap, entry.id);
+    const previewSystem = rewriteGearFunctionReferences(entry.system, idMap);
+    previewSystem.craft = previewCraft;
+    const data = buildItemData(entry, folderId, { system: previewSystem });
     let item = existing;
     if (item) {
       const updateData = foundry.utils.deepClone(data);
@@ -450,22 +453,34 @@ async function ${runFn}() {
     touched.push({ entry, item, folderId });
   }
 
-  for (const { entry, item, folderId } of touched) {
-    const craft = rewriteCraftReferences(entry.system.craft, idMap, item.id);
-    const system = rewriteGearFunctionReferences(entry.system, idMap);
-    system.craft = craft;
-    const data = buildItemData(entry, folderId, { system });
-    delete data._id;
-    await item.update(data);
+  let craftErrors = 0;
+  for (let craftIndex = 0; craftIndex < touched.length; craftIndex += 1) {
+    const { entry, item } = touched[craftIndex];
+    try {
+      const craft = rewriteCraftReferences(entry.system.craft, idMap, item.id);
+      const system = rewriteGearFunctionReferences(entry.system, idMap);
+      const updates = { "system.craft": craft };
+      if (system.functions?.weapon?.magazine) {
+        updates["system.functions.weapon.magazine.sourceItemUuids"] = system.functions.weapon.magazine.sourceItemUuids;
+        updates["system.functions.weapon.magazine.sourceItemUuid"] = system.functions.weapon.magazine.sourceItemUuid;
+      }
+      await item.update(updates);
+    } catch (error) {
+      craftErrors += 1;
+      console.error("${config.flagKey} craft update failed", entry.id, entry.name, error);
+    }
+    if ((craftIndex + 1) % 50 === 0) {
+      ui.notifications.info(\`Импорт ${config.importLabel}: крафты \${craftIndex + 1}/\${touched.length}\`);
+    }
   }
 
-  if (missingReferences.size) {
-    ui.notifications.warn(\`Импорт ${config.importLabel}: обработано \${touched.length}. Не удалось разрешить \${missingReferences.size} ссылок крафта.\`);
-    console.warn("${config.flagKey} unresolved craft references", Array.from(missingReferences));
+  if (missingReferences.size || craftErrors) {
+    ui.notifications.warn(\`Импорт ${config.importLabel}: \${touched.length} предметов. Ошибок крафта: \${craftErrors}. Неразрешённых ссылок: \${missingReferences.size}.\`);
+    console.warn("${config.flagKey} import", { touched: touched.length, craftErrors, missingReferences: Array.from(missingReferences) });
   } else {
-    ui.notifications.info(\`Импорт ${config.importLabel}: обработано \${touched.length}. Все ссылки крафта разрешены.\`);
+    ui.notifications.info(\`Импорт ${config.importLabel}: \${touched.length} предметов. Крафты применены.\`);
   }
-  console.log("${config.flagKey} import", { touched: touched.length, missingReferences: Array.from(missingReferences) });
+  console.log("${config.flagKey} import", { touched: touched.length, craftErrors, missingReferences: Array.from(missingReferences) });
 }
 
 async function createItemWithPreferredId(data) {
