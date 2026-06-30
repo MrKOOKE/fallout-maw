@@ -34,7 +34,6 @@ import { clampActorLimbValuesToCurrentCaps, handleActorDamageUpdate, prepareActo
 import { migrateActorData } from "../migrations/documents.mjs";
 import { expandActorEffectChangeKeys, prepareActorEffectChangeForApplication } from "../utils/active-effect-changes.mjs";
 import { stampPrototypeUuid } from "../utils/document-references.mjs";
-
 const actorLoadPreparationCache = new WeakMap();
 
 export class FalloutMaWActor extends Actor {

@@ -19,7 +19,7 @@ export function resolveWorldItemSync(value = "") {
   }
 
   return resolveWorldItemReference(uuid)
-    ?? (game.items?.contents ?? []).find(item => item.uuid === uuid || item.id === uuid)
+    ?? game.items?.contents?.find(item => item.uuid === uuid || item.id === uuid)
     ?? null;
 }
 

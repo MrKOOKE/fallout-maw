@@ -108,6 +108,7 @@ import {
   prepareIndicatorEntry,
   prepareInventoryContext
 } from "../utils/actor-display-data.mjs";
+import { getHudWeaponSetsForActor } from "../utils/hud-active-items.mjs";
 import {
   ROOT_CONTAINER_ID,
   createStoredPlacement,
@@ -547,8 +548,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     const context = await super._prepareContext(options);
     const actor = this.actor;
     const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
-    const inventory = prepareInventoryContext(actor, race);
-    const hudWeaponSets = getHudWeaponSets(inventory);
+    const hudWeaponSets = getHudWeaponSetsForActor(actor);
     const activeWeaponSetKey = getActiveHudWeaponSetKey(actor, hudWeaponSets);
     const selectedWeapon = getSelectedHudWeapon(actor, hudWeaponSets, activeWeaponSetKey);
     const hudIcons = getTokenActionHudIcons();
@@ -691,8 +691,7 @@ class TokenActionHud extends HandlebarsApplicationMixin(ApplicationV2) {
     await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_SET_FLAG, weaponSetKey);
 
     const race = getCreatureOptions().races.find(entry => entry.id === actor.system?.creature?.raceId);
-    const inventory = prepareInventoryContext(actor, race);
-    const set = getHudWeaponSets(inventory).find(entry => entry.key === weaponSetKey);
+    const set = getHudWeaponSetsForActor(actor).find(entry => entry.key === weaponSetKey);
     const firstWeaponId = getUniqueHudWeaponSlots(set?.slots ?? []).at(0)?.item?.id ?? "";
     if (firstWeaponId) await actor.setFlag(FALLOUT_MAW.id, SELECTED_HUD_WEAPON_FLAG, firstWeaponId);
     this.#activeTray = "";
@@ -2973,8 +2972,7 @@ function getHudWeaponPlacementSlotKeys(actor, item, weaponSetKey = "", weaponSlo
   if (!weaponSetKey || !weaponSlotKey) return [];
 
   if (isContainerWeaponSetKey(weaponSetKey)) {
-    const inventory = prepareInventoryContext(actor, race);
-    const set = getHudWeaponSets(inventory).find(entry => entry.key === weaponSetKey);
+    const set = getHudWeaponSetsForActor(actor).find(entry => entry.key === weaponSetKey);
     const slots = set?.slots ?? [];
     const primaryIndex = slots.findIndex(slot => slot.key === weaponSlotKey);
     if (primaryIndex < 0) return [];
@@ -2988,9 +2986,7 @@ function getHudWeaponPlacementSlotKeys(actor, item, weaponSetKey = "", weaponSlo
 }
 
 function getHudWeaponOccupiedItemIds(actor, weaponSetKey = "", slotKeys = []) {
-  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId) ?? null;
-  const inventory = prepareInventoryContext(actor, race);
-  const set = getHudWeaponSets(inventory).find(entry => entry.key === weaponSetKey);
+  const set = getHudWeaponSetsForActor(actor).find(entry => entry.key === weaponSetKey);
   const targetKeys = new Set(slotKeys);
   return Array.from(new Set((set?.slots ?? [])
     .filter(slot => targetKeys.has(slot.key))
@@ -3106,10 +3102,8 @@ function getHudInventoryContextDimensions(actor, parentId = ROOT_CONTAINER_ID) {
 }
 
 function isHudWeaponDisabled(actor, weapon) {
-  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId);
-  const inventory = actor ? prepareInventoryContext(actor, race) : { weaponSets: [] };
   const placement = weapon?.system?.placement ?? {};
-  const set = getHudWeaponSets(inventory).find(entry => entry.key === placement.weaponSet);
+  const set = getHudWeaponSetsForActor(actor).find(entry => entry.key === placement.weaponSet);
   const slot = (set?.slots ?? []).find(entry => entry.item?.id === weapon?.id && !entry.phantom);
   return Boolean(slot?.useDisabled);
 }
@@ -3157,17 +3151,13 @@ function resolveHudPushAction(actor, weaponSet = null, selectedWeapon = null, se
 }
 
 function resolveSelectedHudWeapon(actor) {
-  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId);
-  const inventory = actor ? prepareInventoryContext(actor, race) : { weaponSets: [] };
-  const hudWeaponSets = getHudWeaponSets(inventory);
+  const hudWeaponSets = getHudWeaponSetsForActor(actor);
   const activeWeaponSetKey = getActiveHudWeaponSetKey(actor, hudWeaponSets);
   return getSelectedHudWeapon(actor, hudWeaponSets, activeWeaponSetKey);
 }
 
 function resolveActivePreparedHudWeaponSet(actor) {
-  const race = getCreatureOptions().races.find(entry => entry.id === actor?.system?.creature?.raceId);
-  const inventory = actor ? prepareInventoryContext(actor, race) : { weaponSets: [] };
-  const hudWeaponSets = getHudWeaponSets(inventory);
+  const hudWeaponSets = getHudWeaponSetsForActor(actor);
   const activeWeaponSetKey = getActiveHudWeaponSetKey(actor, hudWeaponSets);
   const selectedWeapon = getSelectedHudWeapon(actor, hudWeaponSets, activeWeaponSetKey);
   return prepareHudWeaponSet(actor, hudWeaponSets, activeWeaponSetKey, selectedWeapon?.id ?? "", getTokenActionHudIcons());

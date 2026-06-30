@@ -448,7 +448,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       ? Math.max(0, Math.min(100, (currentExperience / nextThreshold) * 100))
       : 0;
 
-    return foundry.utils.mergeObject(context, {
+    const _mergedContext = foundry.utils.mergeObject(context, {
       actor,
       system: actor.system,
       sourceSystem,
@@ -562,6 +562,7 @@ export class FalloutMaWActorSheet extends HandlebarsApplicationMixin(ActorSheetV
       inventory,
       effectCategories: prepareEffectCategories(getActorEffectsForDisplay(actor))
     }, { inplace: false });
+    return _mergedContext;
   }
 
   async _onRender(context, options) {

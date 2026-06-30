@@ -15,7 +15,6 @@ import {
 } from "./aura-conditions.mjs";
 import { prepareEffectChangeForApplication } from "../utils/effect-change-values.mjs";
 import { deferAbilityEffectSync, deferAuraStateSync, registerBulkOperationFlusher } from "../utils/bulk-operation.mjs";
-
 const ABILITY_EFFECT_FLAG_KEY = "abilityEffect";
 const ITEM_EFFECT_FLAG_KEY = "itemEffect";
 const ACTIVE_EFFECT_SHOW_ICON_CONDITIONAL = 1;

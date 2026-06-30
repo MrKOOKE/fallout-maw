@@ -37,7 +37,6 @@ import {
   resolveActorInteractionToken
 } from "../items/item-interactions.mjs";
 import { toInteger } from "./numbers.mjs";
-
 export const FALLBACK_ICON = "icons/svg/d20-grey.svg";
 
 export function normalizeImagePath(path, fallback = FALLBACK_ICON) {
@@ -137,11 +136,15 @@ export function getActorRootInventoryGridOptions(actor, parentId = "") {
   };
 }
 
-export function prepareInventoryContext(actor, race, { includeLocked = true } = {}) {
+export function prepareHudWeaponSetsContext(actor, race, { includeLocked = true } = {}) {
+  const { weaponSets, naturalWeaponSet } = prepareWeaponSetsSlice(actor, race, { includeLocked });
+  return { weaponSets, naturalWeaponSet };
+}
+
+function prepareWeaponSetsSlice(actor, race, { includeLocked = true } = {}) {
   const currencies = getCurrencySettings();
   const actorInteractionToken = resolveActorInteractionToken(actor);
   const itemDisplayOptions = { actor, token: actorInteractionToken, weightMemo: new Map() };
-  const { columns, rows } = getActorInventoryGridDimensions(actor, race);
   const allItems = actor.items.contents.filter(item => (
     !["ability", "trauma", "disease"].includes(item.type)
     && !isNaturalRaceItem(item)
@@ -156,6 +159,27 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
   for (const item of topLevelItems) {
     if (item.placement?.mode === ITEM_FUNCTIONS.constructPart) assignedItemIds.add(item.id);
   }
+  const weaponSets = [
+    ...(race?.weaponSets ?? []).map(set => prepareWeaponSetContext(set, race, topLevelItems, assignedItemIds, actor)),
+    ...prepareConstructPartWeaponSets(actor, topLevelItems, assignedItemIds),
+    ...prepareContainerWeaponSets(actor, topLevelItems, assignedItemIds)
+  ];
+  return { weaponSets, naturalWeaponSet, assignedItemIds, topLevelItems, allItems, allItemData };
+}
+
+export function prepareInventoryContext(actor, race, { includeLocked = true } = {}) {
+  const currencies = getCurrencySettings();
+  const actorInteractionToken = resolveActorInteractionToken(actor);
+  const itemDisplayOptions = { actor, token: actorInteractionToken, weightMemo: new Map() };
+  const { columns, rows } = getActorInventoryGridDimensions(actor, race);
+  const {
+    weaponSets,
+    naturalWeaponSet,
+    assignedItemIds,
+    topLevelItems,
+    allItems,
+    allItemData
+  } = prepareWeaponSetsSlice(actor, race, { includeLocked });
 
   const equipmentSlots = [
     ...(race?.equipmentSlots ?? []).map(slot => {
@@ -205,12 +229,6 @@ export function prepareInventoryContext(actor, race, { includeLocked = true } = 
           };
         });
       });
-
-  const weaponSets = [
-    ...(race?.weaponSets ?? []).map(set => prepareWeaponSetContext(set, race, topLevelItems, assignedItemIds, actor)),
-    ...prepareConstructPartWeaponSets(actor, topLevelItems, assignedItemIds),
-    ...prepareContainerWeaponSets(actor, topLevelItems, assignedItemIds)
-  ];
 
   const inventoryItems = allItems.filter(item => (
     !assignedItemIds.has(item.id)

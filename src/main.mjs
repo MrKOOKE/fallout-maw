@@ -85,7 +85,6 @@ import {
 import { escapeHTML, getActorInventoryGridDimensions, getActorRootInventoryGridOptions } from "./utils/actor-display-data.mjs";
 import { toInteger } from "./utils/numbers.mjs";
 import { resolveWorldItemSync } from "./utils/world-items.mjs";
-
 const { DialogV2 } = foundry.applications.api;
 const { FormDataExtended } = foundry.applications.ux;
 const WORLD_REFERENCE_REPAIR_DELAY_MS = 250;
@@ -160,22 +159,107 @@ function registerWorldReferenceRepairHooks() {
     if (!foundry.utils.isEmpty(updates)) scene.updateSource(updates);
     return undefined;
   });
-  Hooks.on("createItem", (_item, options) => {
-    if (!options?.pack) queueWorldItemReferenceRepair();
+  Hooks.on("createItem", (item, options) => {
+    if (options?.pack) return undefined;
+    if (item?.actor) queueEmbeddedItemReferenceRepair(item);
+    else queueWorldItemReferenceRepair(item?.id);
+    return undefined;
   });
-  Hooks.on("createActor", (_actor, options) => {
+  Hooks.on("createActor", (actor, options) => {
     if (!options?.pack) {
-      queueWorldItemReferenceRepair();
+      queueActorItemReferenceRepair(actor?.id);
       queueWorldSceneReferenceRepair();
     }
+    return undefined;
   });
 }
 
-function queueWorldItemReferenceRepair() {
+const pendingEmbeddedItemRepairs = new Map();
+const pendingWorldItemRepairs = new Set();
+const pendingActorItemRepairs = new Set();
+let embeddedItemReferenceRepairTimeout = 0;
+let actorItemReferenceRepairTimeout = 0;
+
+function queueEmbeddedItemReferenceRepair(item) {
+  const actorId = item?.actor?.id;
+  if (!actorId || !item?.id) return;
+  const itemIds = pendingEmbeddedItemRepairs.get(actorId) ?? new Set();
+  itemIds.add(item.id);
+  pendingEmbeddedItemRepairs.set(actorId, itemIds);
+  window.clearTimeout(embeddedItemReferenceRepairTimeout);
+  embeddedItemReferenceRepairTimeout = window.setTimeout(() => {
+    void flushEmbeddedItemReferenceRepairs();
+  }, WORLD_REFERENCE_REPAIR_DELAY_MS);
+}
+
+function queueWorldItemReferenceRepair(itemId = "") {
+  if (itemId) pendingWorldItemRepairs.add(itemId);
   window.clearTimeout(worldItemReferenceRepairTimeout);
   worldItemReferenceRepairTimeout = window.setTimeout(() => {
-    void repairWorldItemReferences();
+    void flushWorldItemReferenceRepairs();
   }, WORLD_REFERENCE_REPAIR_DELAY_MS);
+}
+
+function queueActorItemReferenceRepair(actorId = "") {
+  if (!actorId) return;
+  pendingActorItemRepairs.add(actorId);
+  window.clearTimeout(actorItemReferenceRepairTimeout);
+  actorItemReferenceRepairTimeout = window.setTimeout(() => {
+    void flushActorItemReferenceRepairs();
+  }, WORLD_REFERENCE_REPAIR_DELAY_MS);
+}
+
+async function flushEmbeddedItemReferenceRepairs() {
+  if (!game.ready || !game.user?.isGM) return;
+  const pending = new Map(pendingEmbeddedItemRepairs);
+  pendingEmbeddedItemRepairs.clear();
+  for (const [actorId, itemIds] of pending) {
+    const actor = game.actors?.get(actorId);
+    if (!actor) continue;
+    const itemUpdates = [];
+    for (const itemId of itemIds) {
+      const item = actor.items?.get(itemId);
+      if (!item) continue;
+      const updates = rewriteItemReferenceData(item.system ?? {});
+      if (foundry.utils.isEmpty(updates)) continue;
+      itemUpdates.push({ _id: item.id, ...updates });
+    }
+    if (itemUpdates.length) {
+      await actor.updateEmbeddedDocuments("Item", itemUpdates, { render: false });
+    }
+  }
+}
+
+async function flushWorldItemReferenceRepairs() {
+  if (!game.ready || !game.user?.isGM) return;
+  const itemIds = [...pendingWorldItemRepairs];
+  pendingWorldItemRepairs.clear();
+  for (const itemId of itemIds) {
+    const item = game.items?.get(itemId);
+    if (!item) continue;
+    const updates = rewriteItemReferenceData(item.system ?? {});
+    if (foundry.utils.isEmpty(updates)) continue;
+    await item.update(updates, { render: false });
+  }
+}
+
+async function flushActorItemReferenceRepairs() {
+  if (!game.ready || !game.user?.isGM) return;
+  const actorIds = [...pendingActorItemRepairs];
+  pendingActorItemRepairs.clear();
+  for (const actorId of actorIds) {
+    const actor = game.actors?.get(actorId);
+    if (!actor) continue;
+    const itemUpdates = [];
+    for (const item of actor.items?.contents ?? []) {
+      const updates = rewriteItemReferenceData(item.system ?? {});
+      if (foundry.utils.isEmpty(updates)) continue;
+      itemUpdates.push({ _id: item.id, ...updates });
+    }
+    if (itemUpdates.length) {
+      await actor.updateEmbeddedDocuments("Item", itemUpdates, { render: false });
+    }
+  }
 }
 
 function queueWorldSceneReferenceRepair() {
@@ -187,19 +271,23 @@ function queueWorldSceneReferenceRepair() {
 
 async function repairWorldItemReferences() {
   if (!game.ready || !game.user?.isGM) return;
-  for (const item of game.items?.contents ?? []) {
+  const worldItems = game.items?.contents ?? [];
+  const actors = game.actors?.contents ?? [];
+  for (const item of worldItems) {
     const updates = rewriteItemReferenceData(item.system ?? {});
     if (foundry.utils.isEmpty(updates)) continue;
     await item.update(updates, { render: false });
   }
-  for (const actor of game.actors?.contents ?? []) {
+  for (const actor of actors) {
     const itemUpdates = [];
     for (const item of actor.items?.contents ?? []) {
       const updates = rewriteItemReferenceData(item.system ?? {});
       if (foundry.utils.isEmpty(updates)) continue;
       itemUpdates.push({ _id: item.id, ...updates });
     }
-    if (itemUpdates.length) await actor.updateEmbeddedDocuments("Item", itemUpdates, { render: false });
+    if (itemUpdates.length) {
+      await actor.updateEmbeddedDocuments("Item", itemUpdates, { render: false });
+    }
   }
 }
 
