@@ -1,3 +1,9 @@
+import {
+  applyWeaponMediaPatch,
+  migrateWeaponAnimationKey,
+  migrateWeaponSoundPath
+} from "./weapon-media-migration.mjs";
+
 function migrationRandomId() {
   return globalThis.crypto?.randomUUID?.().replace(/-/g, "").slice(0, 16)
     ?? `m${Math.random().toString(36).slice(2, 12)}`;
@@ -483,8 +489,8 @@ function parseWeaponSectionText(flatText = "", {
     pellets: String(pellets),
     damageTypeKey: damageInfo.primaryType,
     damageTypes: damageInfo.damageTypes,
-    attackAnimationKey: media.attackAnimationKey,
-    attackSoundPath: media.attackSoundPath,
+    attackAnimationKey: migrateWeaponAnimationKey(media.attackAnimationKey),
+    attackSoundPath: migrateWeaponSoundPath(media.attackSoundPath),
     attackAnimationDelayMs: 0,
     proficiencyKey: inferProficiencyKey(flatText, skillKey),
     skillKey,
@@ -527,8 +533,8 @@ function parseWeaponSectionText(flatText = "", {
       regionDurationSeconds: "0",
       regionDelaySeconds: "0",
       regionRadiusDeltaMeters: "0",
-      explosionAnimationKey: media.explosionAnimationKey,
-      explosionSoundPath: media.explosionSoundPath,
+      explosionAnimationKey: migrateWeaponAnimationKey(media.explosionAnimationKey),
+      explosionSoundPath: migrateWeaponSoundPath(media.explosionSoundPath),
       criticalFailureConsequences: []
     },
     meleeAttack: withActionCost({}, actions.costs.meleeAttack),
@@ -542,7 +548,7 @@ function parseWeaponSectionText(flatText = "", {
     weapon.name = String(sectionName || itemName).trim() || itemName;
   }
 
-  return weapon;
+  return applyWeaponMediaPatch(weapon);
 }
 
 function splitWeaponSections(html = "") {
@@ -606,10 +612,10 @@ function applySkillModeFields(weapon, mode) {
     };
     next.pellets = String(DEFAULT_EXPLOSION_PELLETS);
   }
-  if (mode.assets?.animationPath) next.attackAnimationKey = mode.assets.animationPath;
-  if (mode.assets?.soundPath) next.attackSoundPath = mode.assets.soundPath;
-  if (mode.assets?.explosionAnimationPath) next.volley.explosionAnimationKey = mode.assets.explosionAnimationPath;
-  if (mode.assets?.explosionSoundPath) next.volley.explosionSoundPath = mode.assets.explosionSoundPath;
+  if (mode.assets?.animationPath) next.attackAnimationKey = migrateWeaponAnimationKey(mode.assets.animationPath);
+  if (mode.assets?.soundPath) next.attackSoundPath = migrateWeaponSoundPath(mode.assets.soundPath);
+  if (mode.assets?.explosionAnimationPath) next.volley.explosionAnimationKey = migrateWeaponAnimationKey(mode.assets.explosionAnimationPath);
+  if (mode.assets?.explosionSoundPath) next.volley.explosionSoundPath = migrateWeaponSoundPath(mode.assets.explosionSoundPath);
   if (Array.isArray(mode.damageSets?.[0]) && mode.damageSets[0].length) {
     const damageTypes = mode.damageSets[0]
       .map(entry => ({
