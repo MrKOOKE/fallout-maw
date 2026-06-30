@@ -151,6 +151,7 @@ import { getOverlayBaseZIndex, reserveOverlayZIndex } from "../utils/overlay-lay
 import { getNaturalWeaponSetContext, isNaturalRaceItem, isNaturalRaceWeapon } from "../races/natural-items.mjs";
 import { getAbilityItemUseProgressEntries, getActorAtRandomActionPointCostReduction } from "../abilities/runtime-state.mjs";
 import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
+import { getWeaponSkillDamageBonuses } from "../combat/weapon-skill-damage.mjs";
 import { getFixedAbilityEnergyCost, getFixedAbilityFunctionProgressEntries, getFixedWeaponPreviewModifiers } from "../abilities/fixed-functions.mjs";
 import {
   ABILITY_FIXED_FUNCTION_KEYS,
@@ -5006,6 +5007,7 @@ function getWeaponTooltipCalculatedStats(item, data = {}, { actor = null, baseMo
     + toInteger(fixedModifiers.combatValues?.accuracy);
   const contextualCriticalChance = contextual ? getTooltipContextualCombatValue(actor, "criticalChance", contextual) : 0;
   const proficiencyDamage = baseMode ? 0 : getWeaponProficiencyInfluenceBonus(actor, data, "damage");
+  const skillDamageBonuses = baseMode ? { flat: 0, percent: 0 } : getWeaponSkillDamageBonuses(actor, data.skillKey);
   const baseDamageFormula = getEffectiveWeaponDamageData(item, data).damage;
   const formulaDamage = actor
     ? evaluateActorFormula(baseDamageFormula, actor, {
@@ -5014,8 +5016,10 @@ function getWeaponTooltipCalculatedStats(item, data = {}, { actor = null, baseMo
     })
     : Math.max(0, toInteger(baseDamageFormula));
   const attackPowerDamagePercent = baseMode ? 0 : toInteger(data.attackPowerDamagePercent);
-  const damagePercent = attackPowerDamagePercent + proficiencyDamage + contextualDamagePercent;
-  const modifiedDamage = Math.round(formulaDamage * Math.max(0, 100 + damagePercent) / 100) + contextualDamageFlat;
+  const damagePercent = attackPowerDamagePercent + proficiencyDamage + contextualDamagePercent + skillDamageBonuses.percent;
+  const modifiedDamage = Math.round(formulaDamage * Math.max(0, 100 + damagePercent) / 100)
+    + contextualDamageFlat
+    + skillDamageBonuses.flat;
   const weakening = baseMode ? { active: false, ratio: 1, steps: 0 } : getConditionWeakeningData(item, { minimumRatio: 0.1 });
   const conditionAccuracyPenalty = weakening.active ? weakening.steps * 10 : 0;
   const conditionCritPenalty = weakening.active ? weakening.steps * 3 : 0;

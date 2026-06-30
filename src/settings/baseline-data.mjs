@@ -1441,9 +1441,18 @@ export const SETTINGS_BASELINE = Object.freeze({
           "stateMultiplierFormula": "1 + missingStateRatio"
         },
         "weaponSkillDamage": {
-          "meleeCombat": "floor(str/3+dex/6)",
-          "rangedCombat": "floor(wis/3+dex/6)",
-          "throwing": "floor(dex/3+wis/6)"
+          "meleeCombat": {
+            "flat": "str+dex/2",
+            "percent": "str+dex/2"
+          },
+          "rangedCombat": {
+            "flat": "wis+dex/2",
+            "percent": "wis+dex/2"
+          },
+          "throwing": {
+            "flat": "dex+wis/2",
+            "percent": "dex+wis/2"
+          }
         }
       }
     },

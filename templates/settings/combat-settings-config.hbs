@@ -62,25 +62,30 @@
     </div>
 
     <header class="fallout-maw-panel-header">
-      <h2>Бонус урона от навыка оружия</h2>
+      <h2>Бонус к урону в зависимости от оружейного навыка</h2>
     </header>
 
-    <div class="fallout-maw-settings-grid">
-      <label>
+    <div class="fallout-maw-settings-table fallout-maw-combat-skill-damage-table">
+      <div class="fallout-maw-settings-row fallout-maw-grid-header">
+        <span></span>
+        <span>Плоский бонус</span>
+        <span>Процентный бонус</span>
+      </div>
+      <div class="fallout-maw-settings-row">
         <span>Ближний бой</span>
-        <input type="text" name="weaponSkillDamage.meleeCombat" value="{{settings.weaponSkillDamage.meleeCombat}}" data-formula-autocomplete="all">
-        <small>flat(str/3+dex/6) — как в blok-upravleniya</small>
-      </label>
-      <label>
+        <input type="text" name="weaponSkillDamage.meleeCombat.flat" value="{{settings.weaponSkillDamage.meleeCombat.flat}}" data-formula-autocomplete="all">
+        <input type="text" name="weaponSkillDamage.meleeCombat.percent" value="{{settings.weaponSkillDamage.meleeCombat.percent}}" data-formula-autocomplete="all">
+      </div>
+      <div class="fallout-maw-settings-row">
         <span>Дальний бой</span>
-        <input type="text" name="weaponSkillDamage.rangedCombat" value="{{settings.weaponSkillDamage.rangedCombat}}" data-formula-autocomplete="all">
-        <small>flat(wis/3+dex/6)</small>
-      </label>
-      <label>
+        <input type="text" name="weaponSkillDamage.rangedCombat.flat" value="{{settings.weaponSkillDamage.rangedCombat.flat}}" data-formula-autocomplete="all">
+        <input type="text" name="weaponSkillDamage.rangedCombat.percent" value="{{settings.weaponSkillDamage.rangedCombat.percent}}" data-formula-autocomplete="all">
+      </div>
+      <div class="fallout-maw-settings-row">
         <span>Метание</span>
-        <input type="text" name="weaponSkillDamage.throwing" value="{{settings.weaponSkillDamage.throwing}}" data-formula-autocomplete="all">
-        <small>flat(dex/3+wis/6)</small>
-      </label>
+        <input type="text" name="weaponSkillDamage.throwing.flat" value="{{settings.weaponSkillDamage.throwing.flat}}" data-formula-autocomplete="all">
+        <input type="text" name="weaponSkillDamage.throwing.percent" value="{{settings.weaponSkillDamage.throwing.percent}}" data-formula-autocomplete="all">
+      </div>
     </div>
 
     <header class="fallout-maw-panel-header">

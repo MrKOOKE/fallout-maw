@@ -42,6 +42,7 @@ import {
 } from "../canvas/posture-movement.mjs";
 import { evaluateActorEffectChangeNumber } from "../utils/active-effect-changes.mjs";
 import { evaluateActorFormula } from "../utils/actor-formulas.mjs";
+import { getWeaponSkillDamageBonuses } from "../combat/weapon-skill-damage.mjs";
 import {
   armDelayedVolleyWeapon,
   cancelWeaponAttack,
@@ -3852,7 +3853,9 @@ function getWeaponAttackPowerPreviewStats(actor = null, weapon = null, weaponDat
   const baseDamage = evaluateDialogFormula(weaponData.damage, actor, { minimum: 0, context: `${weapon?.name ?? "weapon"} attack power preview damage` });
   const attackPowerDamagePercent = toInteger(weaponData.attackPowerDamagePercent);
   const proficiencyDamage = getDialogWeaponProficiencyInfluenceBonus(actor, weaponData, "damage");
-  const modifiedDamage = Math.round(baseDamage * Math.max(0, 100 + attackPowerDamagePercent + proficiencyDamage) / 100);
+  const skillDamageBonuses = getWeaponSkillDamageBonuses(actor, weaponData.skillKey);
+  const modifiedDamage = Math.round(baseDamage * Math.max(0, 100 + attackPowerDamagePercent + proficiencyDamage + skillDamageBonuses.percent) / 100)
+    + skillDamageBonuses.flat;
   const weakening = getConditionWeakeningData(weapon, { minimumRatio: 0.1 });
   const conditionAccuracyPenalty = weakening.active ? weakening.steps * 10 : 0;
   const conditionCritPenalty = weakening.active ? weakening.steps * 3 : 0;

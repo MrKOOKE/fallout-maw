@@ -26,11 +26,22 @@ export const DEFAULT_COMBAT_SETTINGS = Object.freeze({
     stateMultiplierFormula: "1 + missingStateRatio"
   }),
   weaponSkillDamage: Object.freeze({
-    meleeCombat: "floor(str/3+dex/6)",
-    rangedCombat: "floor(wis/3+dex/6)",
-    throwing: "floor(dex/3+wis/6)"
+    meleeCombat: Object.freeze({
+      flat: "str+dex/2",
+      percent: "str+dex/2"
+    }),
+    rangedCombat: Object.freeze({
+      flat: "wis+dex/2",
+      percent: "wis+dex/2"
+    }),
+    throwing: Object.freeze({
+      flat: "dex+wis/2",
+      percent: "dex+wis/2"
+    })
   })
 });
+
+const WEAPON_SKILL_DAMAGE_KEYS = Object.freeze(["meleeCombat", "rangedCombat", "throwing"]);
 
 export function createDefaultCombatSettings() {
   return foundry.utils.deepClone(DEFAULT_COMBAT_SETTINGS);
@@ -73,11 +84,26 @@ export function normalizeCombatSettings(value = {}) {
       criticalDamageFormula: normalizeFormula(source.unconsciousness?.criticalDamageFormula, DEFAULT_COMBAT_SETTINGS.unconsciousness.criticalDamageFormula),
       stateMultiplierFormula: normalizeFormula(source.unconsciousness?.stateMultiplierFormula, DEFAULT_COMBAT_SETTINGS.unconsciousness.stateMultiplierFormula)
     },
-    weaponSkillDamage: {
-      meleeCombat: normalizeFormula(source.weaponSkillDamage?.meleeCombat, DEFAULT_COMBAT_SETTINGS.weaponSkillDamage.meleeCombat),
-      rangedCombat: normalizeFormula(source.weaponSkillDamage?.rangedCombat, DEFAULT_COMBAT_SETTINGS.weaponSkillDamage.rangedCombat),
-      throwing: normalizeFormula(source.weaponSkillDamage?.throwing, DEFAULT_COMBAT_SETTINGS.weaponSkillDamage.throwing)
-    }
+    weaponSkillDamage: Object.fromEntries(
+      WEAPON_SKILL_DAMAGE_KEYS.map(key => [
+        key,
+        normalizeWeaponSkillDamageEntry(source.weaponSkillDamage?.[key], DEFAULT_COMBAT_SETTINGS.weaponSkillDamage[key])
+      ])
+    )
+  };
+}
+
+function normalizeWeaponSkillDamageEntry(source, defaults = {}) {
+  if (typeof source === "string") {
+    return {
+      flat: normalizeFormula(source, defaults.flat),
+      percent: normalizeFormula(defaults.percent, defaults.percent)
+    };
+  }
+
+  return {
+    flat: normalizeFormula(source?.flat, defaults.flat),
+    percent: normalizeFormula(source?.percent, defaults.percent)
   };
 }
 

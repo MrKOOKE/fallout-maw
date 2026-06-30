@@ -44,6 +44,7 @@ import {
 } from "../abilities/runtime-state.mjs";
 import { getContextualAbilityChangeValue } from "../abilities/evaluation.mjs";
 import { getKnockbackMaximumStrength, resolveKnockback } from "./active-actions.mjs";
+import { getWeaponSkillDamageBonuses } from "./weapon-skill-damage.mjs";
 import { evaluateActorFormula, isFormulaTextConfigured } from "../utils/actor-formulas.mjs";
 import { resolveWorldItemSync } from "../utils/world-items.mjs";
 import {
@@ -5861,24 +5862,16 @@ function getWeaponDamage(weapon, weaponFunctionId = "", context = {}) {
   const formulaDamage = getWeaponDamagePercentBase(weapon, weaponFunctionId);
   const flatDamage = getContextualCombatValue(actor, "damageFlat", context);
   const skillKey = String(getWeaponAttackData(weapon, weaponFunctionId)?.skillKey ?? "");
-  const skillDamageBonus = getWeaponSkillDamageBonus(actor, skillKey);
+  const skillDamageBonuses = getWeaponSkillDamageBonuses(actor, skillKey);
   const attackPowerDamagePercent = toInteger(weaponData?.attackPowerDamagePercent);
   const damagePercent = attackPowerDamagePercent
     + getWeaponProficiencyInfluenceBonus(weapon, weaponFunctionId, "damage")
-    + getContextualCombatValue(actor, "damagePercent", context);
-  const modifiedDamage = Math.round(formulaDamage * Math.max(0, 100 + damagePercent) / 100) + flatDamage + skillDamageBonus;
+    + getContextualCombatValue(actor, "damagePercent", context)
+    + skillDamageBonuses.percent;
+  const modifiedDamage = Math.round(formulaDamage * Math.max(0, 100 + damagePercent) / 100)
+    + flatDamage
+    + skillDamageBonuses.flat;
   return Math.max(0, Math.floor(modifiedDamage * getWeaponConditionWeakeningRatio(weapon)));
-}
-
-function getWeaponSkillDamageBonus(actor, skillKey = "") {
-  const key = String(skillKey ?? "").trim();
-  if (!key || !actor) return 0;
-  const formula = getCombatSettings()?.weaponSkillDamage?.[key];
-  if (!isFormulaTextConfigured(formula)) return 0;
-  return evaluateActorFormula(formula, actor, {
-    minimum: 0,
-    context: `weapon skill damage (${key})`
-  });
 }
 
 function getWeaponDamagePercentBase(weapon, weaponFunctionId = "") {

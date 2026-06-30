@@ -9513,6 +9513,11 @@ html.fallout-maw-token-action-hud-open #hotbar {
   grid-template-columns: minmax(8rem, 1fr) minmax(8rem, 0.8fr) 2.5rem;
 }
 
+.fallout-maw-combat-skill-damage-table .fallout-maw-settings-row {
+  align-items: center;
+  grid-template-columns: minmax(8rem, 0.8fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
 .fallout-maw-stealth-settings-table .fallout-maw-settings-row > .fallout-maw-icon-button {
   height: 2.25rem;
   justify-self: center;
