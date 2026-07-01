@@ -1,33 +1,33 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { jb2aKeyToMawKey, loadJb2aDatabase } from "./jb2a-key-resolver.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SYSTEM_ID = "fallout-maw";
 const MAP_PATH = path.join(__dirname, "generated", "jb2a-animation-map.json");
 
-export const JB2A_MANUAL_OVERRIDES = {
-  "jb2a.bolt.physical.white02": "fallout-maw.generic.weapon_attacks.ranged.bolt01_01_regular_white_physical",
-  "jb2a.chain_lightning": "fallout-maw.6th_level.chain_lightning.chain_lightning_01_regular_blue_primary",
-  "jb2a.explosion.01": "fallout-maw.3rd_level.fireball.fireball_explosion_01_blue",
-  "jb2a.explosion.07.bluewhite": "fallout-maw.generic.explosion.explosion_07_blue_white",
-  "jb2a.hammer.melee": "fallout-maw.generic.weapon_attacks.melee.hammer01_01_regular_white",
-  "jb2a.hammer.throw": "fallout-maw.generic.weapon_attacks.ranged.hammer01_01_regular_white",
-  "jb2a.handaxe.throw.01": "fallout-maw.generic.weapon_attacks.ranged.handaxe01_01_regular_white",
-  "jb2a.impact.005.orange": "fallout-maw.generic.impact.impact_05_regular_orange",
-  "jb2a.impact.010.orange": "fallout-maw.generic.impact.impact_05_regular_orange",
-  "jb2a.lasershot.green": "fallout-maw.generic.weapon_attacks.ranged.laser_shot_01_regular_green"
-};
-
 let cachedMap = null;
+let cachedDatabase = null;
+
+export async function ensureJb2aAnimationMap() {
+  if (cachedMap) return cachedMap;
+  if (fs.existsSync(MAP_PATH)) {
+    cachedMap = JSON.parse(fs.readFileSync(MAP_PATH, "utf8"));
+    return cachedMap;
+  }
+  cachedDatabase ??= await loadJb2aDatabase();
+  cachedMap = {};
+  return cachedMap;
+}
 
 export function loadJb2aAnimationMap() {
   if (cachedMap) return cachedMap;
   if (fs.existsSync(MAP_PATH)) {
-    cachedMap = { ...JB2A_MANUAL_OVERRIDES, ...JSON.parse(fs.readFileSync(MAP_PATH, "utf8")) };
+    cachedMap = JSON.parse(fs.readFileSync(MAP_PATH, "utf8"));
     return cachedMap;
   }
-  cachedMap = { ...JB2A_MANUAL_OVERRIDES };
+  cachedMap = {};
   return cachedMap;
 }
 
@@ -53,14 +53,21 @@ export function migrateWeaponSoundPath(rawPath = "") {
   return pathValue;
 }
 
-export function migrateWeaponAnimationKey(rawKey, map = loadJb2aAnimationMap()) {
+export function migrateWeaponAnimationKey(rawKey, map = loadJb2aAnimationMap(), database = cachedDatabase) {
   const key = String(rawKey ?? "").trim();
   if (!key || key === "Путь") return "";
   if (key.startsWith(`${SYSTEM_ID}.`)) return key;
   if (key.startsWith("systems/")) return key;
 
   const lower = key.toLowerCase();
-  return map[lower] ?? JB2A_MANUAL_OVERRIDES[lower] ?? "";
+  if (map[lower]) return map[lower];
+
+  if (lower.startsWith("jb2a.")) {
+    const resolved = jb2aKeyToMawKey(lower, database);
+    if (resolved) return resolved;
+  }
+
+  return "";
 }
 
 export function patchWeaponMediaData(weapon = {}, map = loadJb2aAnimationMap()) {

@@ -988,6 +988,32 @@ export function buildWeaponActionPatch(description = "", itemName = "", options 
   };
 }
 
+export function buildWeaponMediaPatch(description = "", itemName = "", options = {}) {
+  const parsed = parseWeaponMigration(description, itemName, options);
+  return {
+    weapon: pickWeaponMediaPatchFields(parsed.primary),
+    additionalWeapons: parsed.additionalWeapons.map(pickWeaponMediaPatchFields)
+  };
+}
+
+function pickWeaponMediaPatchFields(weapon = {}) {
+  const magazineMax = Math.max(0, Number(weapon.magazine?.max) || 0);
+  const patch = {
+    name: String(weapon.name ?? "").trim(),
+    attackAnimationKey: String(weapon.attackAnimationKey ?? ""),
+    attackSoundPath: String(weapon.attackSoundPath ?? "")
+  };
+  const volley = weapon.volley ?? {};
+  if (volley.explosionAnimationKey || volley.explosionSoundPath) {
+    patch.volley = {
+      explosionAnimationKey: String(volley.explosionAnimationKey ?? ""),
+      explosionSoundPath: String(volley.explosionSoundPath ?? "")
+    };
+  }
+  if (magazineMax > 0) patch.magazine = { value: magazineMax };
+  return patch;
+}
+
 function pickWeaponActionPatchFields(weapon = {}) {
   return {
     name: String(weapon.name ?? "").trim(),
