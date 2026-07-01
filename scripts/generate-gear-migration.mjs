@@ -17,13 +17,15 @@ import {
 } from "./generate-material-migration.mjs";
 import {
   buildConditionFunction,
+  buildRangedConditionLossByRarity,
   parseAmmoDamageSource,
   parseEquipmentMigration,
   parseGearDescription,
   parseWeaponMigration,
   resolveAmmoFolderPath,
   resolveEquipmentFolderPath,
-  resolveWeaponFolderPath
+  resolveWeaponFolderPath,
+  stripGearHtml
 } from "./gear-description-parser.mjs";
 import { ENSURE_ITEM_CATEGORIES_MACRO } from "./migration-item-categories.mjs";
 
@@ -116,9 +118,17 @@ async function main() {
   const folderById = new Map(folders.map(folder => [folder._id, folder]));
   const itemById = new Map(items.filter(item => item?._id).map(item => [item._id, item]));
   const ammoByCaliber = buildAmmoCaliberIndex(items, folderById);
+  const rarityConditionLossByRarity = buildRangedConditionLossByRarity(
+    items
+      .filter(item => {
+        const folderPath = getFolderPath(item.folder, folderById);
+        return folderPath === "Оружие" || folderPath.startsWith("Оружие /");
+      })
+      .map(item => stripGearHtml(extractDescription(item)).replace(/\s+/g, " "))
+  );
 
   for (const [key, config] of categories) {
-    await generateCategoryMigration(key, config, items, folderById, itemById, ammoByCaliber);
+    await generateCategoryMigration(key, config, items, folderById, itemById, ammoByCaliber, rarityConditionLossByRarity);
   }
 
   if (!requested.length || requested.length === Object.keys(GEAR_CATEGORIES).length) {
@@ -126,7 +136,7 @@ async function main() {
   }
 }
 
-async function generateCategoryMigration(key, config, items, folderById, itemById, ammoByCaliber) {
+async function generateCategoryMigration(key, config, items, folderById, itemById, ammoByCaliber, rarityConditionLossByRarity) {
   const candidates = items
     .map(item => ({
       item,
@@ -151,7 +161,8 @@ async function generateCategoryMigration(key, config, items, folderById, itemByI
       key,
       config,
       itemById,
-      ammoByCaliber
+      ammoByCaliber,
+      rarityConditionLossByRarity
     );
     records.push(record);
     if (record.parseWarnings?.length) {
@@ -215,7 +226,7 @@ async function generateCategoryMigration(key, config, items, folderById, itemByI
   console.log(`[${key}] macro: ${path.join(macroOutputDir, config.macroFile)}`);
 }
 
-async function createGearMigrationRecord(item, folderPath, categoryKey, config, itemById, ammoByCaliber) {
+async function createGearMigrationRecord(item, folderPath, categoryKey, config, itemById, ammoByCaliber, rarityConditionLossByRarity) {
   const img = await migrateAssetPath(item.img);
   const description = extractDescription(item);
   const parsedGear = parseGearDescription(description);
@@ -243,7 +254,7 @@ async function createGearMigrationRecord(item, folderPath, categoryKey, config, 
     if (parsedGear?.caliberKey && !magazineSourceOldIds.length) {
       parseWarnings.push(`нет патронов для калибра ${parsedGear.caliberKey}`);
     }
-    const weaponData = parseWeaponMigration(description, item.name, { magazineSourceOldIds });
+    const weaponData = parseWeaponMigration(description, item.name, { magazineSourceOldIds, rarityConditionLossByRarity });
     parseWarnings.push(...weaponData.warnings);
     folderParts = resolveWeaponFolderPath(folderPath, weaponData.parsedGear ?? parsedGear);
     const additionalWeapons = Object.fromEntries(

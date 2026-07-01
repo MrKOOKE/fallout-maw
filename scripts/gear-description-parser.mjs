@@ -120,16 +120,46 @@ const CALIBER_ALIASES = new Map([
   ["22 lr", "22-LR"]
 ]);
 
-const ACTION_PATTERNS = [
-  { key: "aimedShot", pattern: /прицельн(?:ый|ая)\s+(?:выстрел|атака)/i, settingKey: "aimedShot" },
-  { key: "snapshot", pattern: /(?:одиночн(?:ый|ая)\s+выстрел|выстрел\s+на\s+вскидку|неприцельн(?:ый|ая)\s+выстрел)/i, settingKey: "snapshot" },
-  { key: "burst", pattern: /очеред/i, settingKey: "burst" },
-  { key: "volley", pattern: /залп/i, settingKey: "volley" },
-  { key: "aimedMeleeAttack", pattern: /прицельн(?:ый|ая)\s+атака/i, settingKey: "aimedMeleeAttack" },
-  { key: "meleeAttack", pattern: /(?:неприцельн(?:ый|ая)\s+атака|удар\s+прикладом)/i, settingKey: "meleeAttack" },
-  { key: "push", pattern: /толчок/i, settingKey: "push" },
-  { key: "reload", pattern: /перезаряд/i, settingKey: "reload" }
+const DEFAULT_ATTACK_ANIMATION_DELAY_MS = 200;
+
+const BINDING_KEY_TO_ACTION_KEY = Object.freeze({
+  "single-shot": "snapshot",
+  "aimed-shot": "aimedShot",
+  "non-aimed-attack": "meleeAttack",
+  "precise-attack": "aimedMeleeAttack",
+  burst: "burst",
+  volley: "volley",
+  reload: "reload",
+  push: "push"
+});
+
+const ACTION_LABEL_TO_BINDING_KEY = [
+  { bindingKey: "non-aimed-attack", pattern: /^неприцельн(?:ый|ая)\s+атака/i },
+  { bindingKey: "precise-attack", pattern: /^прицельн(?:ый|ая)\s+атака/i },
+  { bindingKey: "aimed-shot", pattern: /^прицельн(?:ый|ая)\s+выстрел|^прицельно\s+метнуть/i },
+  { bindingKey: "single-shot", pattern: /^(?:одиночн(?:ый|ая)\s+выстрел|выстрел\s+на\s+вскидку|неприцельн(?:ый|ая)\s+выстрел|метнуть)/i },
+  { bindingKey: "non-aimed-attack", pattern: /^удар\s+рукояткой/i },
+  { bindingKey: "burst", pattern: /^очеред/i },
+  { bindingKey: "volley", pattern: /^залп/i },
+  { bindingKey: "reload", pattern: /^перезаряд/i },
+  { bindingKey: "push", pattern: /^толчок/i }
 ];
+
+const ACTION_PATTERNS = [
+  { key: "meleeAttack", pattern: /^неприцельн(?:ый|ая)\s+атака|^удар\s+рукояткой/i, settingKey: "meleeAttack" },
+  { key: "aimedMeleeAttack", pattern: /^прицельн(?:ый|ая)\s+атака/i, settingKey: "aimedMeleeAttack" },
+  { key: "aimedShot", pattern: /^прицельн(?:ый|ая)\s+выстрел|^прицельно\s+метнуть/i, settingKey: "aimedShot" },
+  { key: "snapshot", pattern: /^(?:одиночн(?:ый|ая)\s+выстрел|выстрел\s+на\s+вскидку|неприцельн(?:ый|ая)\s+выстрел|метнуть)/i, settingKey: "snapshot" },
+  { key: "burst", pattern: /^очеред/i, settingKey: "burst" },
+  { key: "volley", pattern: /^залп/i, settingKey: "volley" },
+  { key: "push", pattern: /^толчок/i, settingKey: "push" },
+  { key: "reload", pattern: /^перезаряд/i, settingKey: "reload" }
+];
+
+const DEFAULT_THROW_ACTIONS = Object.freeze([
+  { bindingKey: "single-shot", label: "Метнуть", actionPointCost: 5 },
+  { bindingKey: "aimed-shot", label: "Прицельно метнуть", actionPointCost: 6 }
+]);
 
 export function stripGearHtml(value = "") {
   return String(value ?? "")
@@ -222,7 +252,10 @@ export function parseEquipmentMigration(description = "") {
   };
 }
 
-export function parseWeaponMigration(description = "", itemName = "", { magazineSourceOldIds = [] } = {}) {
+export function parseWeaponMigration(description = "", itemName = "", {
+  magazineSourceOldIds = [],
+  rarityConditionLossByRarity = null
+} = {}) {
   const html = String(description ?? "");
   const warnings = [];
   const parsedGear = parseGearDescription(description);
@@ -236,6 +269,12 @@ export function parseWeaponMigration(description = "", itemName = "", { magazine
     parsedGear
   });
   const weaponSlotRequirement = parseWeaponHandRequirement(primarySection.text, itemName);
+  const resourceCostContext = {
+    flatText: primarySection.text,
+    parsedGear,
+    rarity: parseRarityLabel(primarySection.text) || String(parsedGear?.rarity ?? "").trim(),
+    rarityConditionLossByRarity
+  };
 
   const additionalWeapons = [];
   for (const section of sections.slice(1)) {
@@ -248,18 +287,33 @@ export function parseWeaponMigration(description = "", itemName = "", { magazine
     }));
   }
 
-  const skillModes = parseSkillModeVariants(html);
-  if (skillModes.length === 1) {
+  const skillModes = parseSkillModeVariants(html, primarySection.text);
+  if (skillModes.length > 1) {
+    const built = buildWeaponsFromSkillModeBundle(primary, primarySection.text, skillModes, resourceCostContext);
+    primary = built.primary;
+    additionalWeapons.length = 0;
+    additionalWeapons.push(...built.additionalWeapons);
+  } else if (skillModes.length === 1) {
     primary = applySkillModeFields(primary, skillModes[0]);
-  } else if (skillModes.length > 1) {
-    primary = applySkillModeFields(primary, skillModes[0]);
-    for (let index = 1; index < skillModes.length; index += 1) {
-      const mode = skillModes[index];
-      additionalWeapons.push(buildAdditionalWeaponFromSkillMode(primary, mode, {
-        itemName,
-        index
-      }));
+    primary = applySimpleWeaponActionFixes(primary, primarySection.text);
+    applyWeaponResourceCosts(primary, resourceCostContext, skillModes[0]?.fields ?? null);
+  } else {
+    primary = applySimpleWeaponActionFixes(primary, primarySection.text);
+    applyWeaponResourceCosts(primary, resourceCostContext);
+  }
+
+  for (const additionalWeapon of additionalWeapons) {
+    if (skillModes.length <= 1) {
+      applyWeaponResourceCosts(additionalWeapon, {
+        ...resourceCostContext,
+        flatText: stripGearHtml(additionalWeapon.name ? primarySection.text : primarySection.text).replace(/\s+/g, " ").trim()
+      });
     }
+  }
+
+  applyWeaponProficiencies(primary, primarySection.text, weaponSlotRequirement);
+  for (const additionalWeapon of additionalWeapons) {
+    applyWeaponProficiencies(additionalWeapon, primarySection.text, weaponSlotRequirement);
   }
 
   if (!primary?.damage || primary.damage === "0") warnings.push("не удалось распарсить урон");
@@ -471,8 +525,8 @@ function parseWeaponSectionText(flatText = "", {
   const gearMeta = parsedGear ?? parseGearDescription(flatText);
   const sourceIds = Array.from(new Set((magazineSourceOldIds ?? []).filter(Boolean)));
   const damageInfo = parseWeaponDamageLine(flatText);
-  const actions = parseWeaponActions(flatText);
   const skillKey = resolveSkillKey(matchField(flatText, /Задействованный\s+навык:\s*([^]+?)(?=Максимальная|Эффективная|Точность|Урон|ДОСТУПНЫЕ|$)/i));
+  const actions = parseWeaponActions(flatText, { skillKey });
   const maxRangeFeet = parseNumber(matchField(flatText, /Максимальная\s+дистанция:\s*([+-]?\d+(?:[.,]\d+)?)/i));
   const effectiveRange = convertEffectiveRangeFeetToMeters(parseEffectiveRange(flatText, { convertFeet: false }));
   const penetration = scalePenetration(parseNumber(matchField(flatText, /Пробивная\s+сила:\s*([+-]?\d+(?:[.,]\d+)?)/i)));
@@ -491,7 +545,7 @@ function parseWeaponSectionText(flatText = "", {
     damageTypes: damageInfo.damageTypes,
     attackAnimationKey: migrateWeaponAnimationKey(media.attackAnimationKey),
     attackSoundPath: migrateWeaponSoundPath(media.attackSoundPath),
-    attackAnimationDelayMs: 0,
+    attackAnimationDelayMs: parseAttackAnimationDelayMs(flatText),
     proficiencyKey: inferProficiencyKey(flatText, skillKey),
     skillKey,
     accuracyBonus: formatStatNumber(matchField(flatText, /Точность:\s*([+-]?\d+(?:[.,]\d+)?%?)/i)),
@@ -548,7 +602,7 @@ function parseWeaponSectionText(flatText = "", {
     weapon.name = String(sectionName || itemName).trim() || itemName;
   }
 
-  return applyWeaponMediaPatch(weapon);
+  return sanitizeMigratedWeaponActions(applyWeaponMediaPatch(weapon));
 }
 
 function splitWeaponSections(html = "") {
@@ -570,19 +624,399 @@ function splitWeaponSections(html = "") {
   }).filter(entry => entry.text);
 }
 
-function parseSkillModeVariants(html = "") {
-  const raw = extractHiddenJson(html, "bu-skill-fields");
-  if (!raw?.fields) return [];
-  const assets = extractHiddenJson(html, "bu-skill-assets")?.assets ?? {};
-  const damageSets = extractHiddenJson(html, "bu-skill-damage")?.damageSets ?? {};
+function parseSkillModeBundle(html = "", flatText = "") {
+  const fieldsJson = extractHiddenJson(html, "bu-skill-fields") ?? findInlineJsonBlob(flatText, "fields");
+  if (!fieldsJson?.fields || !Object.keys(fieldsJson.fields).length) return null;
 
-  return Object.entries(raw.fields).map(([modeId, fields], index) => ({
-    id: modeId,
+  const assetsJson = extractHiddenJson(html, "bu-skill-assets") ?? findInlineJsonBlob(flatText, "assets");
+  const damageJson = extractHiddenJson(html, "bu-skill-damage") ?? findInlineJsonBlob(flatText, "damageSets");
+  const bindingsJson = extractHiddenJson(html, "bu-skill-bindings")
+    ?? findInlineJsonBlob(flatText, "bindings")
+    ?? extractInlineJsonBlobs(flatText).find(blob => Array.isArray(blob?.modes));
+
+  const fields = fieldsJson.fields;
+  const assets = assetsJson?.assets ?? {};
+  const damageSets = damageJson?.damageSets ?? {};
+  const modes = Array.isArray(bindingsJson?.modes) && bindingsJson.modes.length
+    ? bindingsJson.modes
+    : Object.keys(fields).map((id, index) => ({
+      id,
+      label: String(fields[id]?.weaponType ?? `Режим ${index + 1}`).trim()
+    }));
+  const bindings = bindingsJson?.bindings ?? {};
+  const selected = bindingsJson?.selected ?? modes[0]?.id ?? Object.keys(fields)[0];
+
+  return { modes, bindings, selected, fields, assets, damageSets };
+}
+
+function parseSkillModeVariants(html = "", flatText = "") {
+  const bundle = parseSkillModeBundle(html, flatText);
+  if (!bundle) return [];
+
+  return bundle.modes.map((mode, index) => ({
+    id: mode.id,
     index,
-    fields,
-    assets: assets[modeId] ?? {},
-    damageSets: damageSets[modeId] ?? []
+    label: String(mode.label ?? "").trim(),
+    fields: bundle.fields[mode.id] ?? {},
+    assets: bundle.assets[mode.id] ?? {},
+    damageSets: bundle.damageSets[mode.id] ?? [],
+    bundle
   }));
+}
+
+function buildWeaponsFromSkillModeBundle(baseWeapon, flatText, skillModes, resourceCostContext = null) {
+  const bundle = skillModes[0]?.bundle;
+  if (!bundle) return { primary: baseWeapon, additionalWeapons: [] };
+
+  const actionCatalog = parseWeaponActionCatalog(flatText, { skillKey: baseWeapon.skillKey });
+  const bindingToMode = resolveBindingToModeMap(bundle, actionCatalog);
+  const duplicateMeleeModes = countModeLabel(bundle.modes, "Ближний бой") > 1;
+
+  const throwModeMeta = bundle.modes.find(mode => normalizeModeLabel(mode.label) === "метание") ?? null;
+  const meleeModes = bundle.modes.filter(mode => normalizeModeLabel(mode.label) !== "метание");
+  const selectedMeleeId = bundle.selected && meleeModes.some(mode => mode.id === bundle.selected)
+    ? bundle.selected
+    : meleeModes[0]?.id;
+  const primaryModeMeta = meleeModes.find(mode => mode.id === selectedMeleeId) ?? meleeModes[0] ?? bundle.modes[0];
+  const primaryMode = skillModes.find(entry => entry.id === primaryModeMeta.id) ?? skillModes[0];
+
+  let primary = buildWeaponForSkillMode({
+    baseWeapon,
+    mode: primaryMode,
+    modeMeta: primaryModeMeta,
+    bundle,
+    bindingToMode,
+    actionCatalog,
+    duplicateMeleeModes,
+    resourceCostContext
+  });
+  delete primary.name;
+
+  const additionalWeapons = [];
+
+  if (throwModeMeta) {
+    const throwMode = skillModes.find(entry => entry.id === throwModeMeta.id);
+    if (throwMode) {
+      additionalWeapons.push(buildWeaponForSkillMode({
+        baseWeapon,
+        mode: throwMode,
+        modeMeta: throwModeMeta,
+        bundle,
+        bindingToMode,
+        actionCatalog,
+        duplicateMeleeModes,
+        fixedName: String(throwModeMeta.label ?? "Метание").trim() || "Метание",
+        asAdditional: true,
+        resourceCostContext
+      }));
+    }
+  }
+
+  for (const modeMeta of meleeModes) {
+    if (modeMeta.id === primaryModeMeta.id) continue;
+    const mode = skillModes.find(entry => entry.id === modeMeta.id);
+    if (!mode) continue;
+    additionalWeapons.push(buildWeaponForSkillMode({
+      baseWeapon,
+      mode,
+      modeMeta,
+      bundle,
+      bindingToMode,
+      actionCatalog,
+      duplicateMeleeModes,
+      fixedName: String(modeMeta.label ?? mode.fields?.weaponType ?? "Режим").trim() || "Режим",
+      asAdditional: true,
+      resourceCostContext
+    }));
+  }
+
+  return { primary, additionalWeapons };
+}
+
+function buildWeaponForSkillMode({
+  baseWeapon,
+  mode,
+  modeMeta,
+  bundle,
+  bindingToMode,
+  actionCatalog,
+  duplicateMeleeModes,
+  fixedName = "",
+  asAdditional = false,
+  resourceCostContext = null
+}) {
+  let weapon = structuredClone(baseWeapon);
+  if (asAdditional) delete weapon.id;
+
+  weapon = applySkillModeFields(weapon, mode);
+  weapon = resetWeaponActionSettings(weapon);
+  weapon.skillKey = resolveModeSkillKey(modeMeta, mode, weapon);
+  weapon = applyActionCatalogToWeapon(weapon, selectModeActionCatalog({
+    catalog: actionCatalog,
+    modeId: modeMeta.id,
+    bundle,
+    bindingToMode,
+    duplicateMeleeModes
+  }));
+  weapon.enabled = true;
+
+  if (resourceCostContext) {
+    applyWeaponResourceCosts(weapon, resourceCostContext, mode?.fields ?? null);
+  }
+
+  if (asAdditional) {
+    weapon.id = migrationRandomId();
+    weapon.name = fixedName;
+  }
+
+  return sanitizeMigratedWeaponActions(applyWeaponMediaPatch(weapon));
+}
+
+function selectModeActionCatalog({ catalog, modeId, bundle, bindingToMode, duplicateMeleeModes }) {
+  if (duplicateMeleeModes) {
+    return catalog.filter(action => action.bindingKey);
+  }
+
+  const assigned = catalog.filter(action => bindingToMode[action.bindingKey] === modeId);
+  if (assigned.length) return assigned;
+
+  const mode = bundle.modes.find(entry => entry.id === modeId);
+  const label = normalizeModeLabel(mode?.label);
+  if (label === "метание" && looksLikeThrowModeAssets(bundle.assets[modeId])) {
+    return [...DEFAULT_THROW_ACTIONS];
+  }
+
+  return assigned;
+}
+
+function resolveBindingToModeMap(bundle, actionCatalog) {
+  const map = { ...(bundle.bindings ?? {}) };
+  if (Object.keys(map).length) return map;
+
+  const modesByLabel = new Map(bundle.modes.map(mode => [normalizeModeLabel(mode.label), mode.id]));
+  const meleeModeId = modesByLabel.get("ближний бой") ?? bundle.modes[0]?.id;
+  const throwModeId = modesByLabel.get("метание");
+  const rangedModeId = modesByLabel.get("дальний бой") ?? throwModeId ?? meleeModeId;
+  const duplicateMeleeModes = countModeLabel(bundle.modes, "Ближний бой") > 1;
+
+  if (duplicateMeleeModes) return map;
+
+  const defaultModeByBinding = {
+    "non-aimed-attack": meleeModeId,
+    "precise-attack": meleeModeId,
+    push: meleeModeId,
+    "single-shot": throwModeId ?? rangedModeId,
+    "aimed-shot": throwModeId ?? rangedModeId,
+    burst: rangedModeId,
+    volley: rangedModeId,
+    reload: rangedModeId ?? meleeModeId
+  };
+
+  for (const action of actionCatalog) {
+    if (!action.bindingKey || map[action.bindingKey]) continue;
+    map[action.bindingKey] = defaultModeByBinding[action.bindingKey] ?? meleeModeId;
+  }
+
+  return map;
+}
+
+function applySimpleWeaponActionFixes(weapon, flatText = "") {
+  const catalog = parseWeaponActionCatalog(flatText, { skillKey: weapon.skillKey });
+  const next = applyActionCatalogToWeapon({ ...weapon }, catalog);
+  next.attackAnimationDelayMs = parseAttackAnimationDelayMs(flatText);
+  return sanitizeMigratedWeaponActions(applyWeaponMediaPatch(next));
+}
+
+function shouldImportWeaponAction(actionLabel = "", skillKey = "") {
+  if (/^удар\s+прикладом/i.test(actionLabel)) return false;
+  if (/^удар\s+рукояткой/i.test(actionLabel) && skillKey === "rangedCombat") return false;
+  return true;
+}
+
+function sanitizeMigratedWeaponActions(weapon = {}) {
+  const next = { ...weapon };
+  const meleeName = String(next.meleeAttack?.name ?? "").trim();
+  if (!/^удар\s+прикладом/i.test(meleeName)) return next;
+
+  next.availableActions = { ...(next.availableActions ?? createEmptyAvailableActions()), meleeAttack: false };
+  next.meleeAttack = withActionCost({ name: "" }, 0);
+  return next;
+}
+
+function applyActionCatalogToWeapon(weapon, catalog = []) {
+  const next = resetWeaponActionSettings({ ...weapon });
+  const availableActions = createEmptyAvailableActions();
+  const NAMED_ACTION_KEYS = new Set(["snapshot", "aimedShot", "meleeAttack", "aimedMeleeAttack", "burst", "volley", "push", "reload"]);
+
+  for (const action of catalog) {
+    if (action.bindingKey === "butt-strike") continue;
+    const actionKey = BINDING_KEY_TO_ACTION_KEY[action.bindingKey];
+    if (!actionKey) continue;
+    availableActions[actionKey] = true;
+    const actionSettings = withActionCost(next[actionKey] ?? {}, action.actionPointCost);
+    next[actionKey] = NAMED_ACTION_KEYS.has(actionKey) && action.label
+      ? { ...actionSettings, name: action.label }
+      : actionSettings;
+  }
+
+  next.availableActions = availableActions;
+  return next;
+}
+
+function resetWeaponActionSettings(weapon = {}) {
+  const next = {
+    ...weapon,
+    availableActions: createEmptyAvailableActions(),
+    aimedShot: withActionCost({}, 0),
+    snapshot: withActionCost({}, 0),
+    meleeAttack: withActionCost({}, 0),
+    aimedMeleeAttack: withActionCost({}, 0),
+    push: withActionCost({}, 0),
+    reload: withActionCost({ actionPointCost: 3 }, 0),
+    burst: {
+      ...withActionCost({}, 0),
+      attackConeDegrees: weapon.burst?.attackConeDegrees ?? 30,
+      count: weapon.burst?.count ?? 3,
+      difficultyPerShot: weapon.burst?.difficultyPerShot ?? 10,
+      criticalFailureConsequences: weapon.burst?.criticalFailureConsequences ?? []
+    },
+    volley: {
+      ...withActionCost({}, 0),
+      damageRadius: weapon.volley?.damageRadius ?? "0",
+      regionRadius: weapon.volley?.regionRadius ?? "0",
+      regionDamageEntries: weapon.volley?.regionDamageEntries ?? [],
+      regionDurationSeconds: weapon.volley?.regionDurationSeconds ?? "0",
+      regionDelaySeconds: weapon.volley?.regionDelaySeconds ?? "0",
+      regionRadiusDeltaMeters: weapon.volley?.regionRadiusDeltaMeters ?? "0",
+      explosionAnimationKey: weapon.volley?.explosionAnimationKey ?? "",
+      explosionSoundPath: weapon.volley?.explosionSoundPath ?? "",
+      criticalFailureConsequences: weapon.volley?.criticalFailureConsequences ?? []
+    }
+  };
+  return next;
+}
+
+function createEmptyAvailableActions() {
+  return {
+    aimedShot: false,
+    snapshot: false,
+    burst: false,
+    volley: false,
+    meleeAttack: false,
+    aimedMeleeAttack: false,
+    push: false,
+    reload: false
+  };
+}
+
+function parseWeaponActionCatalog(flatText = "", { skillKey = "" } = {}) {
+  const section = matchSection(flatText, /ДОСТУПНЫЕ\s+ДЕЙСТВИЯ:\s*([^]+?)(?=МОДУЛИ:|ДОП\.|ТРЕБОВАНИЯ:|ПРИМЕЧАНИЕ:|ОСОБЕННОСТИ:|ПУТИ|$)/i);
+  const catalog = [];
+
+  for (const chunk of section.split(/\)\s*/).filter(Boolean)) {
+    const label = chunk.replace(/^\s*\(/, "").trim();
+    if (!label) continue;
+    const costMatch = label.match(/(.+?)\s*\(\s*(\d+)\s*ОД\s*$/i) ?? label.match(/(.+?)\s*\(\s*(\d+)\s*ОД/i);
+    const actionLabel = String(costMatch?.[1] ?? label).trim();
+    if (!shouldImportWeaponAction(actionLabel, skillKey)) continue;
+    const actionPointCost = parseInteger(costMatch?.[2]);
+    const bindingKey = resolveActionBindingKey(actionLabel);
+    if (!bindingKey) continue;
+    catalog.push({ label: actionLabel, bindingKey, actionPointCost });
+  }
+
+  return catalog;
+}
+
+function resolveActionBindingKey(actionLabel = "") {
+  for (const entry of ACTION_LABEL_TO_BINDING_KEY) {
+    if (entry.pattern.test(actionLabel)) return entry.bindingKey;
+  }
+  return "";
+}
+
+function parseAttackAnimationDelayMs(flatText = "") {
+  const match = String(flatText ?? "").match(/Путь\s+звука\s+(?:выстрела|атаки(?:\s+модуля)?)\s*\((\d+)\)\s*:/i);
+  if (match) return Math.max(0, parseInteger(match[1]));
+  return DEFAULT_ATTACK_ANIMATION_DELAY_MS;
+}
+
+function resolveModeSkillKey(modeMeta, mode, weapon) {
+  const label = String(modeMeta?.label ?? "").trim();
+  if (SKILL_LABELS.has(label)) return SKILL_LABELS.get(label);
+  if (/метан/i.test(label)) return "throwing";
+  if (/ближн/i.test(label)) return "meleeCombat";
+  if (/дальн/i.test(label)) return "rangedCombat";
+  return weapon.skillKey ?? "meleeCombat";
+}
+
+function normalizeModeLabel(label = "") {
+  return String(label ?? "").trim().toLocaleLowerCase("ru-RU");
+}
+
+function countModeLabel(modes = [], label = "") {
+  const normalized = normalizeModeLabel(label);
+  return modes.filter(mode => normalizeModeLabel(mode.label) === normalized).length;
+}
+
+function looksLikeThrowModeAssets(assets = {}) {
+  const animationPath = String(assets?.animationPath ?? "").toLowerCase();
+  return animationPath.includes("throw") || animationPath.includes("metanut");
+}
+
+function extractInlineJsonBlobs(flatText = "") {
+  const blobs = [];
+  for (const match of String(flatText ?? "").matchAll(/\{"version":1,[\s\S]+?\}(?=\s*\{|\s*Путь|\s*ТРЕБОВАНИЯ|$)/g)) {
+    try {
+      blobs.push(JSON.parse(match[0]));
+    } catch {
+      // ignore malformed inline json
+    }
+  }
+  return blobs;
+}
+
+function findInlineJsonBlob(flatText = "", key = "") {
+  return extractInlineJsonBlobs(flatText).find(blob => blob?.[key] != null) ?? null;
+}
+
+export function buildWeaponActionPatch(description = "", itemName = "", options = {}) {
+  const parsed = parseWeaponMigration(description, itemName, options);
+  return {
+    weapon: pickWeaponActionPatchFields(parsed.primary),
+    additionalWeapons: parsed.additionalWeapons.map(pickWeaponActionPatchFields)
+  };
+}
+
+function pickWeaponActionPatchFields(weapon = {}) {
+  return {
+    name: String(weapon.name ?? "").trim(),
+    proficiencyKey: weapon.proficiencyKey,
+    attackAnimationDelayMs: weapon.attackAnimationDelayMs,
+    availableActions: weapon.availableActions,
+    skillKey: weapon.skillKey,
+    damage: weapon.damage,
+    pellets: weapon.pellets,
+    damageTypeKey: weapon.damageTypeKey,
+    damageTypes: weapon.damageTypes,
+    attackAnimationKey: weapon.attackAnimationKey,
+    attackSoundPath: weapon.attackSoundPath,
+    accuracyBonus: weapon.accuracyBonus,
+    criticalChanceModifier: weapon.criticalChanceModifier,
+    criticalDamagePercent: weapon.criticalDamagePercent,
+    maxRangeMeters: weapon.maxRangeMeters,
+    effectiveRange: weapon.effectiveRange,
+    penetration: weapon.penetration,
+    resourceCosts: weapon.resourceCosts,
+    aimedShot: weapon.aimedShot,
+    snapshot: weapon.snapshot,
+    burst: weapon.burst,
+    volley: weapon.volley,
+    meleeAttack: weapon.meleeAttack,
+    aimedMeleeAttack: weapon.aimedMeleeAttack,
+    push: weapon.push,
+    reload: weapon.reload
+  };
 }
 
 function applySkillModeFields(weapon, mode) {
@@ -631,16 +1065,6 @@ function applySkillModeFields(weapon, mode) {
   return next;
 }
 
-function buildAdditionalWeaponFromSkillMode(primary, mode, { itemName, index }) {
-  const clone = structuredClone(primary);
-  delete clone.id;
-  const applied = applySkillModeFields(clone, mode);
-  applied.id = migrationRandomId();
-  applied.name = String(mode.fields?.weaponType ?? `${itemName} · режим ${index + 1}`).trim();
-  applied.enabled = true;
-  return applied;
-}
-
 function parseWeaponDamageLine(flatText = "") {
   const match = flatText.match(/Урон:\s*(\d+)\s*-\s*([\s\S]+?)(?=ДОСТУПНЫЕ|МОДУЛИ:|ТРЕБОВАНИЯ:|ПРИМЕЧАНИЕ:|ПУТИ|$)/i);
   if (!match) {
@@ -675,31 +1099,16 @@ function parseWeaponDamageLine(flatText = "") {
   };
 }
 
-function parseWeaponActions(flatText = "") {
-  const section = matchSection(flatText, /ДОСТУПНЫЕ\s+ДЕЙСТВИЯ:\s*([^]+?)(?=МОДУЛИ:|ДОП\.|ТРЕБОВАНИЯ:|ПРИМЕЧАНИЕ:|ПУТИ|$)/i);
-  const availableActions = {
-    aimedShot: false,
-    snapshot: false,
-    burst: false,
-    volley: false,
-    meleeAttack: false,
-    aimedMeleeAttack: false,
-    push: false,
-    reload: false
-  };
+function parseWeaponActions(flatText = "", { skillKey = "" } = {}) {
+  const catalog = parseWeaponActionCatalog(flatText, { skillKey });
+  const availableActions = createEmptyAvailableActions();
   const costs = {};
 
-  for (const chunk of section.split(/\)\s*/).filter(Boolean)) {
-    const label = chunk.replace(/^\s*\(/, "").trim();
-    if (!label) continue;
-    const costMatch = label.match(/(.+?)\s*\(\s*(\d+)\s*ОД\s*$/i) ?? label.match(/(.+?)\s*\(\s*(\d+)\s*ОД/i);
-    const actionLabel = String(costMatch?.[1] ?? label).trim();
-    const actionPointCost = parseInteger(costMatch?.[2]);
-    for (const entry of ACTION_PATTERNS) {
-      if (!entry.pattern.test(actionLabel)) continue;
-      availableActions[entry.key] = true;
-      if (actionPointCost > 0) costs[entry.settingKey] = actionPointCost;
-    }
+  for (const action of catalog) {
+    const actionKey = BINDING_KEY_TO_ACTION_KEY[action.bindingKey];
+    if (!actionKey) continue;
+    availableActions[actionKey] = true;
+    if (action.actionPointCost > 0) costs[actionKey] = action.actionPointCost;
   }
 
   return { availableActions, costs };
@@ -725,9 +1134,11 @@ function parseWeaponMediaPaths(flatText = "", html = "") {
   const pick = (pattern) => String(flatText.match(pattern)?.[1] ?? "").trim();
   return {
     attackAnimationKey: pick(/Путь\s+анимации\s+(?:выстрела|атаки(?:\s+модуля)?):\s*([^\s]+)/i),
-    attackSoundPath: pick(/Путь\s+звука\s+(?:выстрела|атаки(?:\s+модуля)?):\s*([^\s]+)/i),
+    attackSoundPath: pick(/Путь\s+звука\s+(?:выстрела|атаки(?:\s+модуля)?)\s*(?:\(\d+\))?\s*:\s*([^\s]+)/i),
     explosionAnimationKey: pick(/Путь\s+анимации\s+взрыва(?:\s+модуля)?:\s*([^\s]+)/i),
-    explosionSoundPath: pick(/Путь\s+звука\s+взрыва(?:\s+модуля)?:\s*([^\s]+)/i)
+    explosionSoundPath: pick(/Путь\s+звука\s+взрыва(?:\s+модуля)?:\s*([^\s]+)/i),
+    buttAnimationKey: pick(/Путь\s+анимации\s+приклада:\s*([^\s]+)/i),
+    buttSoundPath: pick(/Путь\s+звука\s+приклада:\s*([^\s]+)/i)
   };
 }
 
@@ -880,17 +1291,73 @@ function parseWeaponHandRequirement(flatText = "", itemName = "") {
   return { mode: "oneOf", slots };
 }
 
-function buildWeaponResourceCosts(flatText = "", { skillKey = "", caliberKey = "", magazineMax = 0 } = {}) {
-  const costs = [];
-  const conditionLoss = parseInteger(matchField(flatText, /Потеря\s+прочности\s+за\s+выстрел:\s*(\d+)/i));
-  if (conditionLoss > 0) {
-    costs.push({ type: "condition", amount: conditionLoss });
+export function buildRangedConditionLossByRarity(weaponFlatTexts = []) {
+  const buckets = new Map();
+  for (const flatText of weaponFlatTexts) {
+    const rarity = parseRarityLabel(flatText);
+    const loss = parseInteger(matchField(flatText, /Потеря\s+прочности\s+за\s+выстрел:\s*(\d+)/i));
+    if (!rarity || loss <= 0) continue;
+    if (!buckets.has(rarity)) buckets.set(rarity, []);
+    buckets.get(rarity).push(loss);
   }
 
+  const result = new Map();
+  for (const [rarity, losses] of buckets) {
+    losses.sort((left, right) => left - right);
+    result.set(rarity, losses[Math.floor(losses.length / 2)]);
+  }
+  return result;
+}
+
+function resolveRarityConditionFallback(rarity = "", rarityConditionLossByRarity = null) {
+  const key = String(rarity ?? "").trim();
+  if (!key || !rarityConditionLossByRarity) return 0;
+  if (rarityConditionLossByRarity instanceof Map) return Math.max(0, parseInteger(rarityConditionLossByRarity.get(key)));
+  return Math.max(0, parseInteger(rarityConditionLossByRarity[key]));
+}
+
+function applyWeaponResourceCosts(weapon = {}, resourceCostContext = {}, modeFields = null) {
+  weapon.resourceCosts = buildWeaponResourceCosts(resourceCostContext.flatText ?? "", {
+    skillKey: weapon.skillKey,
+    caliberKey: resourceCostContext.parsedGear?.caliberKey,
+    magazineMax: weapon.magazine?.max ?? resourceCostContext.parsedGear?.magazineMax,
+    modeFields,
+    rarity: resourceCostContext.rarity,
+    rarityConditionLossByRarity: resourceCostContext.rarityConditionLossByRarity
+  });
+  return weapon;
+}
+
+function buildWeaponResourceCosts(flatText = "", {
+  skillKey = "",
+  caliberKey = "",
+  magazineMax = 0,
+  modeFields = null,
+  rarity = "",
+  rarityConditionLossByRarity = null
+} = {}) {
+  const costs = [];
+  const isThrow = skillKey === "throwing";
   const isRanged = skillKey === "rangedCombat"
     || Boolean(String(caliberKey ?? "").trim())
     || parseInteger(magazineMax) > 0
     || /калибр:|магазин:/i.test(flatText);
+
+  let conditionLoss = 0;
+
+  if (isRanged) {
+    conditionLoss = parseInteger(matchField(flatText, /Потеря\s+прочности\s+за\s+выстрел:\s*(\d+)/i));
+  } else if (isThrow) {
+    conditionLoss = parseInteger(modeFields?.durabilityLoss);
+    costs.push({ type: "quantity", amount: 1 });
+  } else {
+    conditionLoss = resolveRarityConditionFallback(rarity, rarityConditionLossByRarity);
+  }
+
+  if (conditionLoss > 0) {
+    costs.push({ type: "condition", amount: conditionLoss });
+  }
+
   if (isRanged) {
     costs.push({ type: "magazine", amount: 1 });
   }
@@ -1000,13 +1467,44 @@ function resolveSkillKey(label = "") {
     ?? "rangedCombat";
 }
 
-function inferProficiencyKey(flatText, skillKey) {
+function applyWeaponProficiencies(weapon, flatText, weaponSlotRequirement) {
+  weapon.proficiencyKey = inferProficiencyKey(flatText, weapon.skillKey, weapon, weaponSlotRequirement);
+  return weapon;
+}
+
+function resolvePhysicalDamageCategory(damageTypes = [], damageTypeKey = "") {
+  const types = Array.isArray(damageTypes) && damageTypes.length
+    ? damageTypes
+    : [{ key: damageTypeKey || "slashing", percent: 100 }];
+
+  for (const category of ["piercing", "slashing", "bludgeoning"]) {
+    if (types.some(entry => entry?.key === category && Number(entry.percent) > 0)) return category;
+  }
+
+  return "slashing";
+}
+
+function inferMeleeProficiencyKey(weapon = {}, weaponSlotRequirement = {}) {
+  const twoHanded = String(weaponSlotRequirement?.mode ?? "") === "all";
+  const category = resolvePhysicalDamageCategory(weapon.damageTypes, weapon.damageTypeKey);
+  const handedPrefix = twoHanded ? "twoHanded" : "oneHanded";
+  const categorySuffix = category.charAt(0).toUpperCase() + category.slice(1);
+  return `${handedPrefix}${categorySuffix}`;
+}
+
+function inferProficiencyKey(flatText, skillKey, weapon = {}, weaponSlotRequirement = {}) {
+  if (skillKey === "meleeCombat" || skillKey === "throwing") {
+    return inferMeleeProficiencyKey(weapon, weaponSlotRequirement);
+  }
+
   if (/пистолет|револьвер/i.test(flatText)) return "pistol";
   if (/дробов|shotgun|12\s*кал/i.test(flatText)) return "shotgun";
-  if (/автомат|штурм|пулем/i.test(flatText)) return "rifle";
+  if (/пулем[её]т|миниган/i.test(flatText)) return "machineGun";
+  if (/гранатом[её]т/i.test(flatText)) return "grenadeLauncher";
+  if (/огнем[её]т/i.test(flatText)) return "flamethrower";
+  if (/автомат|штурм|смг|пп\b/i.test(flatText)) return "automatic";
   if (/винтов/i.test(flatText)) return "rifle";
-  if (/гранат|ракет|взрыв/i.test(flatText)) return "heavy";
-  if (skillKey === "meleeCombat" || skillKey === "throwing") return "melee";
+  if (/гранат|ракет|взрыв/i.test(flatText)) return "grenadeLauncher";
   return "rifle";
 }
 
