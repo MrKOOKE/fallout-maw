@@ -10,6 +10,7 @@ function migrationRandomId() {
 }
 
 const FEET_TO_RANGE_METERS = 2.5;
+const FEET_TO_MELEE_RANGE_METERS = 5;
 const FEET_TO_RADIUS_METERS = 5;
 const WEAPON_DAMAGE_MULTIPLIER = 2;
 const WEAPON_PENETRATION_MULTIPLIER = 10;
@@ -216,7 +217,7 @@ export function parseAmmoDamageSource(description = "", itemName = "") {
     criticalChanceModifier: formatSignedPercent(matchField(flatText, /Шанс\s+на\s+крит:\s*([+-]?\d+(?:[.,]\d+)?%?)/i)),
     criticalDamagePercent: formatSignedPercent(matchField(flatText, /Крит\s+урон:\s*([+-]?\d+(?:[.,]\d+)?%?)/i)),
     maxRangeMeters: formatSignedNumber(convertFeetToRangeMeters(matchField(flatText, /Максимальная\s+дистанция:\s*([+-]?\d+(?:[.,]\d+)?)/i))),
-    effectiveRange: convertEffectiveRangeFeetToMeters(parseEffectiveRange(flatText, { convertFeet: false })),
+    effectiveRange: convertEffectiveRangeFeetToMeters(parseEffectiveRange(flatText, { convertFeet: false }), { skillKey: "" }),
     penetration: formatSignedNumber(matchField(flatText, /Пробивная\s+сила:\s*([+-]?\d+(?:[.,]\d+)?)/i)),
     volley: {
       damageRadius: "0",
@@ -261,6 +262,7 @@ export function parseWeaponMigration(description = "", itemName = "", {
   const parsedGear = parseGearDescription(description);
   const sections = splitWeaponSections(html);
   const primarySection = sections[0] ?? { text: stripGearHtml(html).replace(/\s+/g, " ").trim(), name: itemName };
+  const moduleSections = sections.slice(1);
   let primary = parseWeaponSectionText(primarySection.text, {
     itemName,
     sectionName: primarySection.name || itemName,
@@ -277,15 +279,11 @@ export function parseWeaponMigration(description = "", itemName = "", {
   };
 
   const additionalWeapons = [];
-  for (const section of sections.slice(1)) {
-    additionalWeapons.push(parseWeaponSectionText(section.text, {
-      itemName: section.name || `${itemName} · доп.`,
-      sectionName: section.name || `${itemName} · доп.`,
-      magazineSourceOldIds: [],
-      html: section.html ?? html,
-      named: true
-    }));
-  }
+  const embeddedModules = parseEmbeddedModuleSections(moduleSections, itemName, {
+    hostFlatText: primarySection.text,
+    magazineSourceOldIds,
+    img: ""
+  });
 
   const skillModes = parseSkillModeVariants(html, primarySection.text);
   if (skillModes.length > 1) {
@@ -316,6 +314,8 @@ export function parseWeaponMigration(description = "", itemName = "", {
     applyWeaponProficiencies(additionalWeapon, primarySection.text, weaponSlotRequirement);
   }
 
+  primary.moduleSlots = buildWeaponModuleSlots(embeddedModules);
+
   if (!primary?.damage || primary.damage === "0") warnings.push("не удалось распарсить урон");
   if (!parsedGear?.repairDifficulty) warnings.push("нет сложности ремонта");
 
@@ -323,6 +323,7 @@ export function parseWeaponMigration(description = "", itemName = "", {
     parsedGear,
     primary,
     additionalWeapons,
+    embeddedModules,
     warnings,
     weaponSlotRequirement
   };
@@ -500,6 +501,49 @@ export function resolveAmmoFolderPath(folderPath, parsed = null) {
   return resolveGearFolderParts(folderPath, "Боеприпасы", parsed?.rarity);
 }
 
+export function resolveModuleFolderPath(folderPath, parsed = null) {
+  return resolveGearFolderParts(folderPath, "Модули на оружие", parsed?.rarity);
+}
+
+export function parseModuleMigration(description = "", itemName = "", options = {}) {
+  const html = String(description ?? "");
+  const flatText = stripGearHtml(html).replace(/\s+/g, " ").trim();
+  const parsedGear = parseGearDescription(description);
+  const warnings = [];
+  const { headerText, weaponBlockText } = splitModuleDescriptionParts(flatText);
+  const moduleName = String(itemName ?? "").trim();
+  const weaponModifiers = parseModuleWeaponModifiers(headerText);
+
+  const additionalWeapons = {};
+  if (weaponBlockText && /ДОСТУПНЫЕ\s+ДЕЙСТВИЯ:/i.test(weaponBlockText)) {
+    const weaponFunction = parseModuleWeaponSectionText(weaponBlockText, {
+      itemName: moduleName,
+      html,
+      magazineSourceOldIds: options.magazineSourceOldIds ?? []
+    });
+    additionalWeapons[weaponFunction.id] = weaponFunction;
+  }
+
+  const lightSource = parseModuleLightSource(flatText, moduleName);
+  const condition = buildConditionFunction(parsedGear ?? parseGearDescription(weaponBlockText || description));
+  if (!moduleName) warnings.push("нет технического имени модуля");
+
+  return {
+    parsedGear,
+    module: {
+      enabled: true,
+      name: moduleName,
+      targetFunction: "weapon",
+      weapon: weaponModifiers,
+      additionalWeapons
+    },
+    lightSource,
+    condition,
+    installDifficulty: parseInteger(matchField(headerText, /Сложность\s+установки:\s*(\d+)/i)),
+    warnings
+  };
+}
+
 function resolveGearFolderParts(folderPath, rootPrefix, parsedRarity = "") {
   const parts = String(folderPath ?? "").split(" / ").filter(Boolean);
   if (parts[0] !== rootPrefix) {
@@ -528,7 +572,7 @@ function parseWeaponSectionText(flatText = "", {
   const skillKey = resolveSkillKey(matchField(flatText, /Задействованный\s+навык:\s*([^]+?)(?=Максимальная|Эффективная|Точность|Урон|ДОСТУПНЫЕ|$)/i));
   const actions = parseWeaponActions(flatText, { skillKey });
   const maxRangeFeet = parseNumber(matchField(flatText, /Максимальная\s+дистанция:\s*([+-]?\d+(?:[.,]\d+)?)/i));
-  const effectiveRange = convertEffectiveRangeFeetToMeters(parseEffectiveRange(flatText, { convertFeet: false }));
+  const effectiveRange = convertEffectiveRangeFeetToMeters(parseEffectiveRange(flatText, { convertFeet: false }), { skillKey });
   const penetration = scalePenetration(parseNumber(matchField(flatText, /Пробивная\s+сила:\s*([+-]?\d+(?:[.,]\d+)?)/i)));
   const pellets = resolveWeaponPellets(flatText, damageInfo, actions);
   const damageRadiusFeet = parseNumber(matchField(flatText, /Радиус\s+поражения:\s*([+-]?\d+(?:[.,]\d+)?)/i));
@@ -552,7 +596,7 @@ function parseWeaponSectionText(flatText = "", {
     criticalChanceModifier: formatStatNumber(matchField(flatText, /Шанс\s+на\s+крит:\s*([+-]?\d+(?:[.,]\d+)?%?)/i)),
     criticalDamagePercent: formatStatNumber(matchField(flatText, /Крит\s+урон:\s*([+-]?\d+(?:[.,]\d+)?%?)/i)) || "150",
     attackConeDegrees: 30,
-    maxRangeMeters: String(convertFeetToRangeMeters(maxRangeFeet)),
+    maxRangeMeters: String(convertFeetToRangeMeters(maxRangeFeet, { skillKey })),
     effectiveRange,
     penetration: String(penetration),
     magazine: {
@@ -615,13 +659,245 @@ function splitWeaponSections(html = "") {
 
   return chunks.map((chunk, index) => {
     const text = stripGearHtml(chunk).replace(/\s+/g, " ").trim();
-    const nameMatch = text.match(/"([^"]+)"/) ?? text.match(/(?:Модуль|Гранатомет)\s+([^]+?)\s+(?:Калибр:|Тип\s+боеприпаса:|Редкость:)/i);
+    const name = index === 0
+      ? ""
+      : resolveEmbeddedModuleName(text, null);
     return {
       text,
-      name: index === 0 ? "" : String(nameMatch?.[1] ?? "").trim(),
+      name,
       html: chunk
     };
   }).filter(entry => entry.text);
+}
+
+function parseEmbeddedModuleSections(sections = [], hostItemName = "", options = {}) {
+  const installs = parseWeaponModuleInstalls(options.hostFlatText ?? "");
+  const modules = [];
+
+  for (const [index, section] of sections.entries()) {
+    const moduleName = resolveEmbeddedModuleName(section.text, installs[index]) || section.name;
+    if (!moduleName || moduleName.toLowerCase() === "id=") continue;
+
+    const weaponFunction = parseModuleWeaponSectionText(section.text, {
+      itemName: moduleName,
+      html: section.html ?? "",
+      magazineSourceOldIds: options.magazineSourceOldIds ?? []
+    });
+    const additionalWeapons = { [weaponFunction.id]: weaponFunction };
+
+    modules.push({
+      moduleName,
+      slotKey: String(installs[index]?.slot ?? moduleName).trim(),
+      itemData: buildEmbeddedModuleItemData({
+        moduleName,
+        img: options.img ?? "",
+        additionalWeapons,
+        weaponModifiers: {}
+      })
+    });
+  }
+
+  return modules;
+}
+
+function buildWeaponModuleSlots(embeddedModules = []) {
+  return embeddedModules.map(entry => ({
+    id: migrationRandomId(),
+    moduleKey: String(entry.moduleName ?? "").trim(),
+    itemUuid: "",
+    itemData: entry.itemData ?? buildEmbeddedModuleItemData({
+      moduleName: entry.moduleName,
+      additionalWeapons: entry.additionalWeapons ?? {}
+    })
+  })).filter(slot => slot.moduleKey);
+}
+
+function parseModuleWeaponSectionText(flatText = "", { itemName = "", html = "", magazineSourceOldIds = [] } = {}) {
+  const media = parseModuleWeaponMediaPaths(flatText);
+  const weapon = parseWeaponSectionText(flatText, {
+    itemName,
+    sectionName: itemName,
+    magazineSourceOldIds,
+    html,
+    named: true
+  });
+
+  if (media.attackAnimationKey) weapon.attackAnimationKey = migrateWeaponAnimationKey(media.attackAnimationKey);
+  if (media.attackSoundPath) weapon.attackSoundPath = migrateWeaponSoundPath(media.attackSoundPath);
+  if (media.explosionAnimationKey || media.explosionSoundPath) {
+    weapon.volley = {
+      ...(weapon.volley ?? {}),
+      explosionAnimationKey: migrateWeaponAnimationKey(media.explosionAnimationKey),
+      explosionSoundPath: migrateWeaponSoundPath(media.explosionSoundPath)
+    };
+  }
+
+  weapon.name = itemName;
+  return applyWeaponMediaPatch(weapon);
+}
+
+function parseModuleWeaponMediaPaths(flatText = "") {
+  const pick = (pattern) => String(flatText.match(pattern)?.[1] ?? "").trim();
+  return {
+    attackAnimationKey: pick(/Путь\s+анимации\s+(?:атаки|выстрела)\s+модуля:\s*(\S+)/i),
+    attackSoundPath: pick(/Путь\s+звука\s+(?:атаки|выстрела)\s+модуля(?:\s*\(\d+\))?\s*:\s*(\S+)/i),
+    explosionAnimationKey: pick(/Путь\s+анимации\s+взрыва\s+модуля:\s*(\S+)/i),
+    explosionSoundPath: pick(/Путь\s+звука\s+взрыва\s+модуля:\s*(\S+)/i)
+  };
+}
+
+function parseWeaponModuleInstalls(flatText = "") {
+  const match = String(flatText ?? "").match(/\[\s*\{[\s\S]*?"slot"[\s\S]*?\}\s*\]/);
+  if (!match) return [];
+  try {
+    const parsed = JSON.parse(match[0]);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function splitModuleDescriptionParts(flatText = "") {
+  const parts = String(flatText ?? "").split(/———+/);
+  if (parts.length <= 1) {
+    const weaponStart = parts[0].search(/"Модуль"\s+/i);
+    if (weaponStart === -1) return { headerText: parts[0], weaponBlockText: "" };
+    return {
+      headerText: parts[0].slice(0, weaponStart).trim(),
+      weaponBlockText: parts[0].slice(weaponStart).trim()
+    };
+  }
+  return {
+    headerText: parts[0].trim(),
+    weaponBlockText: parts.slice(1).join(" ").trim()
+  };
+}
+
+const MODULE_ACTION_AP_LABELS = [
+  { actionKey: "aimedShot", pattern: /(?:^|\s)(?:ОД\s+)?(?:Прицельный\s+выстрел|Прицельно\s+метнуть)\s*:\s*([+-]?\d+)/i },
+  { actionKey: "snapshot", pattern: /(?:^|\s)(?:ОД\s+)?(?:Одиночный\s+выстрел|Выстрел\s+на\s+вскидку|Метнуть)\s*:\s*([+-]?\d+)/i },
+  { actionKey: "burst", pattern: /(?:^|\s)(?:ОД\s+)?Очеред(?:ь|и)\s*:\s*([+-]?\d+)/i },
+  { actionKey: "volley", pattern: /(?:^|\s)(?:ОД\s+)?Залп\s*:\s*([+-]?\d+)/i },
+  { actionKey: "reload", pattern: /(?:^|\s)(?:ОД\s+)?Перезаряд(?:ка|ить)\s*:\s*([+-]?\d+)/i },
+  { actionKey: "meleeAttack", pattern: /(?:^|\s)(?:ОД\s+)?(?:Неприцельная\s+атака|Удар\s+прикладом)\s*:\s*([+-]?\d+)/i },
+  { actionKey: "aimedMeleeAttack", pattern: /(?:^|\s)(?:ОД\s+)?Прицельная\s+атака\s*:\s*([+-]?\d+)/i },
+  { actionKey: "push", pattern: /(?:^|\s)(?:ОД\s+)?Толч(?:ок|ка)\s*:\s*([+-]?\d+)/i }
+];
+
+function parseModuleWeaponModifiers(flatText = "") {
+  const modifiers = createEmptyModuleWeaponModifiers();
+  const text = String(flatText ?? "");
+
+  applyModuleSignedDelta(modifiers, "damage", matchField(text, /Урон:\s*([+-]?\d+(?:[.,]\d+)?)/i), { integer: true });
+  applyModuleSignedDelta(modifiers, "accuracyBonus", matchField(text, /Точность:\s*([+-]?\d+(?:[.,]\d+)?%?)/i), { integer: true });
+  applyModuleSignedDelta(modifiers, "criticalChanceModifier", matchField(text, /Шанс\s+на\s+крит:\s*([+-]?\d+(?:[.,]\d+)?%?)/i), { integer: true });
+  applyModuleSignedDelta(modifiers, "criticalDamagePercent", matchField(text, /Крит\s+урон:\s*([+-]?\d+(?:[.,]\d+)?%?)/i), { integer: true });
+  applyModuleSignedDelta(modifiers, "penetration", matchField(text, /Пробивная\s+сила:\s*([+-]?\d+(?:[.,]\d+)?)/i), { integer: true });
+  applyModuleSignedDelta(modifiers, "magazineMax", matchField(text, /Магазин:\s*([+-]?\d+(?:[.,]\d+)?)/i), { integer: true });
+  applyModuleRangeDelta(modifiers, "maxRangeMeters", matchField(text, /Максимальная\s+дистанция:\s*([+-]?\d+(?:[.,]\d+)?)/i));
+
+  const effective = matchField(text, /Эффективная\s+дистанция:\s*([+-]?\d+(?:[.,]\d+)?(?:\/[+-]?\d+(?:[.,]\d+)?)?)/i);
+  if (effective.includes("/")) {
+    const [valuePart, maxPart] = effective.split("/");
+    applyModuleRangeDelta(modifiers.effectiveRange, "value", valuePart);
+    applyModuleRangeDelta(modifiers.effectiveRange, "max", maxPart);
+  } else if (effective) {
+    applyModuleRangeDelta(modifiers.effectiveRange, "max", effective);
+  }
+
+  for (const entry of MODULE_ACTION_AP_LABELS) {
+    const match = text.match(entry.pattern);
+    if (!match) continue;
+    modifiers.actionPointCosts[entry.actionKey] = parseInteger(match[1]);
+  }
+
+  return modifiers;
+}
+
+function parseModuleLightSource(flatText = "", itemName = "") {
+  const range = parseInteger(matchField(flatText, /Дальность\s+освещения:\s*(\d+)/i));
+  if (!range && !/Источник\s+света/i.test(flatText)) return null;
+
+  return {
+    enabled: true,
+    name: String(itemName ?? "").trim(),
+    dim: range,
+    bright: Math.max(0, Math.round(range * 0.5)),
+    angle: 360,
+    rotation: 0,
+    color: "",
+    resourceCosts: []
+  };
+}
+
+function buildEmbeddedModuleItemData({ moduleName = "", img = "", additionalWeapons = {}, weaponModifiers = {} } = {}) {
+  return {
+    name: String(moduleName ?? "").trim(),
+    type: "gear",
+    img: String(img ?? ""),
+    system: {
+      functions: {
+        module: {
+          enabled: true,
+          name: String(moduleName ?? "").trim(),
+          targetFunction: "weapon",
+          weapon: weaponModifiers,
+          additionalWeapons
+        }
+      }
+    }
+  };
+}
+
+function resolveEmbeddedModuleName(sectionText = "", install = null) {
+  const fromInstall = String(install?.moduleName ?? "").trim();
+  if (fromInstall) return fromInstall;
+
+  const fromHeader = String(sectionText ?? "").match(/^(?:[^\n]*?)(?:ДОП\.?\s*РАЗДЕЛ\s*МОДУЛЯ:\s*)?(.+?)\s+"?Модуль"?\s+/i)?.[1]?.trim();
+  if (fromHeader) return fromHeader;
+
+  return String(sectionText ?? "").match(/(?:Модуль|Гранатомет)\s+([^]+?)\s+(?:Калибр:|Тип\s+боеприпаса:|Редкость:)/i)?.[1]?.trim() || "";
+}
+
+function createEmptyModuleWeaponModifiers() {
+  return {
+    damage: 0,
+    accuracyBonus: 0,
+    criticalChanceModifier: 0,
+    criticalDamagePercent: 0,
+    attackConeDegrees: 0,
+    maxRangeMeters: 0,
+    effectiveRange: { value: 0, max: 0 },
+    penetration: 0,
+    magazineMax: 0,
+    actionPointCosts: {
+      aimedShot: 0,
+      snapshot: 0,
+      burst: 0,
+      volley: 0,
+      meleeAttack: 0,
+      aimedMeleeAttack: 0,
+      push: 0,
+      reload: 0
+    }
+  };
+}
+
+function applyModuleSignedDelta(target, key, rawValue, { integer = false } = {}) {
+  const value = integer ? parseInteger(rawValue) : parseNumber(rawValue);
+  if (!value) return;
+  target[key] = (Number(target[key]) || 0) + value;
+}
+
+function applyModuleRangeDelta(target, key, rawValue) {
+  const feet = parseNumber(rawValue);
+  if (!feet) return;
+  const meters = Math.round(feet / FEET_TO_RANGE_METERS);
+  if (typeof target === "object" && target !== null && Object.hasOwn(target, key)) {
+    target[key] = (Number(target[key]) || 0) + meters;
+    return;
+  }
+  target[key] = (Number(target[key]) || 0) + meters;
 }
 
 function parseSkillModeBundle(html = "", flatText = "") {
@@ -1047,14 +1323,15 @@ function pickWeaponActionPatchFields(weapon = {}) {
 
 function applySkillModeFields(weapon, mode) {
   const fields = mode?.fields ?? {};
+  const skillKey = resolveModeSkillKey({ label: mode?.label }, mode, weapon);
   const next = { ...weapon };
   if (fields.damageBase != null) next.damage = String(scaleWeaponDamage(fields.damageBase));
-  if (fields.rangeMax != null) next.maxRangeMeters = String(convertFeetToRangeMeters(fields.rangeMax));
+  if (fields.rangeMax != null) next.maxRangeMeters = String(convertFeetToRangeMeters(fields.rangeMax, { skillKey }));
   if (fields.rangeEffective) {
     next.effectiveRange = convertEffectiveRangeFeetToMeters({
       value: String(fields.rangeEffective.min ?? 0),
       max: String(fields.rangeEffective.max ?? fields.rangeEffective.min ?? 0)
-    });
+    }, { skillKey });
   }
   if (fields.accuracy != null) next.accuracyBonus = formatStatNumber(fields.accuracy);
   if (fields.critChance != null) next.criticalChanceModifier = formatStatNumber(fields.critChance);
@@ -1450,18 +1727,22 @@ function parseEffectiveRange(flatText, { convertFeet = true } = {}) {
   return convertEffectiveRangeFeetToMeters({ value: "0", max: formatStatNumber(rangeText) }, { convertFeet });
 }
 
-function convertEffectiveRangeFeetToMeters(range = {}, { convertFeet = true } = {}) {
+function convertEffectiveRangeFeetToMeters(range = {}, { convertFeet = true, skillKey = "" } = {}) {
   if (!convertFeet) return range;
   return {
-    value: String(convertFeetToRangeMeters(parseNumber(range.value))),
-    max: String(convertFeetToRangeMeters(parseNumber(range.max)))
+    value: String(convertFeetToRangeMeters(parseNumber(range.value), { skillKey })),
+    max: String(convertFeetToRangeMeters(parseNumber(range.max), { skillKey }))
   };
 }
 
-function convertFeetToRangeMeters(value) {
+function convertFeetToRangeMeters(value, { skillKey = "" } = {}) {
   const feet = parseNumber(value);
   if (!feet) return 0;
-  return Math.round(feet / FEET_TO_RANGE_METERS);
+  const divisor = skillKey === "meleeCombat" ? FEET_TO_MELEE_RANGE_METERS : FEET_TO_RANGE_METERS;
+  const meters = skillKey === "meleeCombat"
+    ? Math.floor(feet / divisor)
+    : Math.round(feet / divisor);
+  return skillKey === "meleeCombat" ? Math.max(1, meters) : meters;
 }
 
 function convertFeetToRadiusMeters(value) {

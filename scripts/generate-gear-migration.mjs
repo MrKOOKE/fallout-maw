@@ -21,9 +21,11 @@ import {
   parseAmmoDamageSource,
   parseEquipmentMigration,
   parseGearDescription,
+  parseModuleMigration,
   parseWeaponMigration,
   resolveAmmoFolderPath,
   resolveEquipmentFolderPath,
+  resolveModuleFolderPath,
   resolveWeaponFolderPath,
   stripGearHtml
 } from "./gear-description-parser.mjs";
@@ -65,6 +67,7 @@ const ALL_MIGRATION_FLAG_KEYS = [
   "toolMigration",
   "ammoMigration",
   "weaponMigration",
+  "moduleMigration",
   "equipmentMigration"
 ];
 
@@ -89,6 +92,16 @@ const GEAR_CATEGORIES = {
     itemCategoryFallback: "Оружие",
     resolveMaxStack: () => 1
   },
+  module: {
+    folderPrefix: "Модули на оружие",
+    rootFolder: "MAW Импорт модулей",
+    macroDir: "modules",
+    macroFile: "01-import-module-items.js",
+    flagKey: "moduleMigration",
+    importLabel: "модулей",
+    itemCategoryFallback: "Модули на оружие",
+    resolveMaxStack: () => 1
+  },
   equipment: {
     folderPrefix: "Снаряжение",
     rootFolder: "MAW Импорт снаряжения",
@@ -106,7 +119,7 @@ async function main() {
   const categories = requested.length
     ? requested.map(key => {
       const config = GEAR_CATEGORIES[key];
-      if (!config) throw new Error(`Unknown gear category "${key}". Use: ammo, weapon, equipment`);
+      if (!config) throw new Error(`Unknown gear category "${key}". Use: ammo, weapon, module, equipment`);
       return [key, config];
     })
     : Object.entries(GEAR_CATEGORIES);
@@ -260,6 +273,11 @@ async function createGearMigrationRecord(item, folderPath, categoryKey, config, 
     const additionalWeapons = Object.fromEntries(
       weaponData.additionalWeapons.map(entry => [entry.id, entry])
     );
+    if (weaponData.primary?.moduleSlots?.length) {
+      for (const slot of weaponData.primary.moduleSlots) {
+        if (slot?.itemData && !slot.itemData.img) slot.itemData.img = img;
+      }
+    }
     functions = {
       weapon: weaponData.primary,
       additionalWeapons,
@@ -268,6 +286,22 @@ async function createGearMigrationRecord(item, folderPath, categoryKey, config, 
     occupiedSlots = {};
     occupiedSlotMode = "all";
     weaponSlotRequirement = weaponData.weaponSlotRequirement ?? { mode: "oneOf", slots: {} };
+  } else if (categoryKey === "module") {
+    const blockGear = parseGearDescription(description.split(/———+/)[1] ?? description);
+    const caliberKey = blockGear?.caliberKey ?? parsedGear?.caliberKey;
+    const magazineSourceOldIds = caliberKey ? (ammoByCaliber.get(caliberKey) ?? []) : [];
+    const moduleData = parseModuleMigration(description, item.name, { magazineSourceOldIds });
+    parseWarnings.push(...moduleData.warnings);
+    folderParts = resolveModuleFolderPath(folderPath, moduleData.parsedGear ?? parsedGear);
+    functions = {
+      module: moduleData.module,
+      condition: moduleData.condition?.enabled === false ? undefined : moduleData.condition
+    };
+    if (moduleData.lightSource) functions.lightSource = moduleData.lightSource;
+    if (!functions.condition) delete functions.condition;
+    occupiedSlots = {};
+    occupiedSlotMode = "all";
+    weaponSlotRequirement = { mode: "oneOf", slots: {} };
   } else {
     const equipmentData = parseEquipmentMigration(description);
     if (!equipmentData.parsedGear?.repairDifficulty) parseWarnings.push("нет сложности ремонта");
@@ -677,7 +711,7 @@ function buildReadme(config, itemCount, buildStamp) {
 ## Быстрый запуск
 
 1. Сначала импортируйте **материалы** (и при необходимости хлам/инструменты).
-2. Для оружия и снаряжения рекомендуемый порядок: **боеприпасы → оружие → снаряжение**.
+2. Для оружия и снаряжения рекомендуемый порядок: **боеприпасы → модули → оружие → снаряжение**.
 3. Откройте мир на системе \`fallout-maw\`.
 4. Создайте макрос типа **Script**.
 5. Вставьте содержимое **\`00-PASTE-INTO-FOUNDRY-MACRO.js\`**.
@@ -688,7 +722,7 @@ function buildReadme(config, itemCount, buildStamp) {
 - ${itemCount} предметов из \`${config.folderPrefix} / …\` старого мира
 - Описания не переносятся — характеристики извлекаются парсером
 - Включены функции: ${describeFunctions(config)}
-- Оружие группируется по **калибру**, снаряжение — по **типу** (без сортировки по редкости)
+${config.flagKey === "moduleMigration" ? "- Модули группируются по **редкости** из старого мира" : "- Оружие группируется по **калибру**, снаряжение — по **типу** (без сортировки по редкости)"}
 - Крафты и разборы переносятся из \`flags["blok-upravleniya"].craft\`
 
 ## Файлы
@@ -700,7 +734,8 @@ function buildReadme(config, itemCount, buildStamp) {
 
 function describeFunctions(config) {
   if (config.flagKey === "ammoMigration") return "источник урона (из описания)";
-  if (config.flagKey === "weaponMigration") return "состояние + оружие с источниками урона по калибру";
+  if (config.flagKey === "weaponMigration") return "состояние + оружие с источниками урона по калибру и слотами модулей";
+  if (config.flagKey === "moduleMigration") return "модуль оружия (модификаторы, доп. функции, источник света)";
   return "состояние + защита";
 }
 
@@ -737,11 +772,12 @@ async function writeCombinedImportMacro() {
 
   const steps = [
     { dir: "ammo", file: GEAR_CATEGORIES.ammo.macroFile, label: "боеприпасы" },
+    { dir: "modules", file: GEAR_CATEGORIES.module.macroFile, label: "модули" },
     { dir: "weapons", file: GEAR_CATEGORIES.weapon.macroFile, label: "оружие" },
     { dir: "equipment", file: GEAR_CATEGORIES.equipment.macroFile, label: "снаряжение" }
   ];
 
-  const combinedMacro = `// Fallout-MaW gear migration: ammo → weapons → equipment
+  const combinedMacro = `// Fallout-MaW gear migration: ammo → modules → weapons → equipment
 // Вставьте весь этот скрипт в один макрос Foundry (Script) и запустите от GM.
 
 const SYSTEM_ID = "fallout-maw";
@@ -769,12 +805,12 @@ for (const step of STEPS) {
   await fs.writeFile(path.join(combinedDir, "00-ONE-MACRO-IMPORT-ALL-GEAR.js"), combinedMacro, "utf8");
   await fs.writeFile(
     path.join(combinedDir, "README.md"),
-    `# Миграция оружия, боеприпасов и снаряжения
+    `# Миграция оружия, модулей, боеприпасов и снаряжения
 
-Запускайте импорт в порядке: **боеприпасы → оружие → снаряжение**.
+Запускайте импорт в порядке: **боеприпасы → модули → оружие → снаряжение**.
 
 - \`00-ONE-MACRO-IMPORT-ALL-GEAR.js\` — один макрос на всё
-- или по отдельности из папок \`ammo/\`, \`weapons/\`, \`equipment/\`
+- или по отдельности из папок \`ammo/\`, \`modules/\`, \`weapons/\`, \`equipment/\`
 `,
     "utf8"
   );

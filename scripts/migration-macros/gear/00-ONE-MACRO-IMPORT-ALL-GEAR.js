@@ -1,4 +1,4 @@
-// Fallout-MaW gear migration: ammo → weapons → equipment
+// Fallout-MaW gear migration: ammo → modules → weapons → equipment
 // Вставьте весь этот скрипт в один макрос Foundry (Script) и запустите от GM.
 
 const SYSTEM_ID = "fallout-maw";
@@ -8,6 +8,11 @@ const STEPS = [
     "dir": "ammo",
     "file": "01-import-ammo-items.js",
     "label": "боеприпасы"
+  },
+  {
+    "dir": "modules",
+    "file": "01-import-module-items.js",
+    "label": "модули"
   },
   {
     "dir": "weapons",
