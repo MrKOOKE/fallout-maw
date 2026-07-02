@@ -5,6 +5,12 @@ import {
 import { SYSTEM_ID } from "../constants.mjs";
 import { isActorUnableToAct } from "../combat/reaction-hub.mjs";
 import {
+  INITIATIVE_ADVANTAGE_EFFECT_KEY,
+  INITIATIVE_DISADVANTAGE_EFFECT_KEY,
+  evaluateActorEffectChangeNumber
+} from "../utils/active-effect-changes.mjs";
+import { toInteger } from "../utils/numbers.mjs";
+import {
   BLOCK_TURN_STATE_FLAG,
   createBlockTurnState,
   getActiveBlockProgress,
@@ -25,7 +31,6 @@ export class FalloutMaWCombat extends Combat {
 
   async rollInitiative(ids, options = {}) {
     const surprisedIds = normalizeCombatantIdSet(options?.[SURPRISED_INITIATIVE_OPTION]);
-    if (!surprisedIds.size) return super.rollInitiative(ids, options);
 
     const {
       [SURPRISED_INITIATIVE_OPTION]: _surprised,
@@ -204,9 +209,9 @@ export class FalloutMaWCombat extends Combat {
       const combatant = this.combatants.get(id);
       if (!combatant?.isOwner) continue;
 
-      const rollFormula = surprisedIds.has(id)
-        ? buildSurprisedInitiativeFormula(formula || combatant._getInitiativeFormula?.())
-        : formula;
+      const rollFormula = buildInitiativeFormula(formula || combatant._getInitiativeFormula?.(), combatant.actor, {
+        surprised: surprisedIds.has(id)
+      });
       const roll = combatant.getInitiativeRoll(rollFormula);
       await roll.evaluate();
       updates.push({ _id: id, initiative: roll.total });
@@ -248,8 +253,46 @@ function normalizeCombatantId(value) {
   return String(value ?? "").trim();
 }
 
-function buildSurprisedInitiativeFormula(formula) {
+function buildInitiativeFormula(formula, actor, { surprised = false } = {}) {
   const source = String(formula || CONFIG.Combat.initiative.formula || game.system.initiative || "1d20");
-  const disadvantaged = source.replace(/\b1d20\b/i, "2d20kl");
-  return `(${disadvantaged}) - 10`;
+  const edge = calculateInitiativeEdge(actor, { surprised });
+  const edgeFormula = applyInitiativeRollMode(source, edge.rollMode);
+  const modifier = edge.skillModifier + (surprised ? -10 : 0);
+  return modifier ? `(${edgeFormula}) ${modifier >= 0 ? "+" : "-"} ${Math.abs(modifier)}` : edgeFormula;
+}
+
+function calculateInitiativeEdge(actor, { surprised = false } = {}) {
+  const advantageCount = getActorInitiativeEdgeCount(actor, INITIATIVE_ADVANTAGE_EFFECT_KEY);
+  const disadvantageCount = getActorInitiativeEdgeCount(actor, INITIATIVE_DISADVANTAGE_EFFECT_KEY) + (surprised ? 1 : 0);
+  const net = advantageCount - disadvantageCount;
+  if (net > 0) return {
+    rollMode: "advantage",
+    skillModifier: Math.max(0, net - 1) * 4
+  };
+  if (net < 0) return {
+    rollMode: "disadvantage",
+    skillModifier: Math.max(0, Math.abs(net) - 1) * -4
+  };
+  return {
+    rollMode: "normal",
+    skillModifier: 0
+  };
+}
+
+function getActorInitiativeEdgeCount(actor, effectKey = "") {
+  let total = 0;
+  for (const effect of actor?.allApplicableEffects?.() ?? actor?.effects ?? []) {
+    if (effect?.disabled || effect?.active === false) continue;
+    for (const change of effect?.system?.changes ?? []) {
+      if (String(change?.key ?? "").trim() !== effectKey) continue;
+      total += Math.max(0, toInteger(evaluateActorEffectChangeNumber(actor, { ...change, effect }, { fallback: 0 })));
+    }
+  }
+  return total;
+}
+
+function applyInitiativeRollMode(formula = "", rollMode = "normal") {
+  if (rollMode === "advantage") return String(formula).replace(/\b1d20\b/i, "2d20kh");
+  if (rollMode === "disadvantage") return String(formula).replace(/\b1d20\b/i, "2d20kl");
+  return String(formula);
 }

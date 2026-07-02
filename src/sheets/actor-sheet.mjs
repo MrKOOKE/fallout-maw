@@ -164,6 +164,7 @@ import {
   normalizeDisarmSettings,
   normalizeDoubleAttackSettings,
   normalizeFullForceSettings,
+  normalizeHeightenedConcentrationSettings,
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
   normalizeKeepAwaySettings,
@@ -3861,6 +3862,7 @@ function buildAbilityEnergyCostRows(item, actor = null) {
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.allOrNothing
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.lastChance
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
+      || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.disarm
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack
       || abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterSniper
@@ -3945,15 +3947,17 @@ function buildAbilityEnergyCostRows(item, actor = null) {
       ? normalizeLastChanceSettings(entry.fixedSettings)
       : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.luckyCoin
         ? normalizeLuckyCoinSettings(entry.fixedSettings)
-        : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
-          ? normalizeRageSettings(entry.fixedSettings)
-          : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
-            ? normalizeDoubleAttackSettings(entry.fixedSettings)
-            : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
-              ? normalizeFullForceSettings(entry.fixedSettings)
-              : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming
-                ? normalizeAimingSettings(entry.fixedSettings)
-                : normalizeCurseAndBlessingSettings(entry.fixedSettings);
+        : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration
+          ? normalizeHeightenedConcentrationSettings(entry.fixedSettings)
+          : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
+            ? normalizeRageSettings(entry.fixedSettings)
+            : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
+              ? normalizeDoubleAttackSettings(entry.fixedSettings)
+              : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.fullForce
+                ? normalizeFullForceSettings(entry.fixedSettings)
+                : entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.aiming
+                  ? normalizeAimingSettings(entry.fixedSettings)
+                  : normalizeCurseAndBlessingSettings(entry.fixedSettings);
   const multiplier = entry.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.doubleAttack
     ? Math.max(1, toInteger(settings.duplicateCount))
     : 1;

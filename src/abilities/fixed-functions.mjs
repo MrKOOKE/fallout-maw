@@ -22,6 +22,7 @@ import {
   normalizeFourLeafCloverSettings,
   normalizeFullControlSettings,
   normalizeFullForceSettings,
+  normalizeHeightenedConcentrationSettings,
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
   normalizeKeepAwaySettings,
@@ -142,6 +143,7 @@ const ALL_OR_NOTHING_EFFECT_FLAG_KEY = "allOrNothing";
 const LETHAL_ATTACK_EFFECT_FLAG_KEY = "lethalAttack";
 const AT_RANDOM_ACTION_BLOCK_EFFECT_FLAG_KEY = "atRandomActionBlock";
 const LUCKY_COIN_EFFECT_SOURCE = "luckyCoin";
+const HEIGHTENED_CONCENTRATION_EFFECT_SOURCE = "heightenedConcentration";
 const DEFENSIVE_TACTICS_EFFECT_FLAG_KEY = "defensiveTactics";
 const COMMAND_BASICS_DODGE_EFFECT_FLAG_KEY = "commandBasicsDodge";
 const RAGE_EFFECT_FLAG_KEY = "rage";
@@ -425,6 +427,15 @@ const FIXED_ABILITY_FUNCTIONS = Object.freeze([
     create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
       fixedKey: ABILITY_FIXED_FUNCTION_KEYS.commandBasics,
       fixedSettings: normalizeCommandBasicsSettings()
+    })
+  }),
+  Object.freeze({
+    key: ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration,
+    label: "Повышенная концентрация",
+    active: true,
+    create: () => createAbilityFunction(ABILITY_FUNCTION_TYPES.fixed, {
+      fixedKey: ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration,
+      fixedSettings: normalizeHeightenedConcentrationSettings()
     })
   })
 ]);
@@ -795,6 +806,12 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
     return true;
   }
 
+  if (abilityFunction.fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration) {
+    const used = await useHeightenedConcentration(actor, item, abilityFunction);
+    if (used) await application?.render?.({ force: true });
+    return true;
+  }
+
   if ([ABILITY_FIXED_FUNCTION_KEYS.lethalShot, ABILITY_FIXED_FUNCTION_KEYS.lethalStrike].includes(abilityFunction.fixedKey)) {
     const used = await useLethalAttack(actor, item, abilityFunction);
     if (used) await application?.render?.({ force: true });
@@ -802,6 +819,29 @@ export async function useFixedAbilityFunctionItem({ actor = null, item = null, a
   }
 
   ui.notifications.warn("Фиксированная функция пока не имеет обработчика применения.");
+  return true;
+}
+
+async function useHeightenedConcentration(actor, abilityItem, abilityFunction) {
+  const abilityName = getAbilityDisplayName(abilityItem);
+  const settings = normalizeHeightenedConcentrationSettings(abilityFunction.fixedSettings);
+  const energyCost = getAbilityEnergyCost(actor, abilityItem, abilityFunction, settings.energyCost);
+  if (hasActiveHeightenedConcentrationEffect(actor, abilityItem, abilityFunction)) {
+    ui.notifications.warn(`${abilityName}: эффект уже активен.`);
+    return false;
+  }
+  if (!hasEnergy(actor, energyCost)) {
+    ui.notifications.warn(`${abilityName}: недостаточно энергии (${getActorEnergy(actor)} / ${energyCost}).`);
+    return false;
+  }
+  if (!(await spendEnergy(actor, energyCost))) return false;
+  await applyAbilityOverloadEffect(actor, abilityItem, abilityFunction, {
+    name: getAbilityOverloadName(abilityItem),
+    energyCost: settings.overloadEnergyCost,
+    durationSeconds: settings.overloadDurationSeconds
+  });
+  await applyHeightenedConcentrationEffect(actor, abilityItem, abilityFunction, settings);
+  await createAbilityChatMessage(actor, abilityItem, `Следующие проверки: ${settings.checkCount}.`);
   return true;
 }
 
@@ -3893,7 +3933,7 @@ async function createLuckyCoinEffect(actor, abilityItem, abilityFunction, skill,
       [SYSTEM_ID]: {
         kind: "temporary",
         [ONE_TIME_SKILL_MODIFIER_FLAG_KEY]: {
-          pending: true,
+          remainingUses: 1,
           source: LUCKY_COIN_EFFECT_SOURCE,
           skillKey: skill.key,
           skillLabel: skill.label,
@@ -5073,6 +5113,63 @@ async function applyRageEffect(actor, abilityItem, abilityFunction, settings = {
     }
   }], { animate: false });
   return true;
+}
+
+async function applyHeightenedConcentrationEffect(actor, abilityItem, abilityFunction, settings = {}) {
+  if (!actor || (!game.user?.isGM && !actor.isOwner)) return false;
+  const normalized = normalizeHeightenedConcentrationSettings(settings);
+  const startTime = Number(game.time?.worldTime) || 0;
+  await actor.createEmbeddedDocuments("ActiveEffect", [{
+    type: "base",
+    name: getAbilityDisplayName(abilityItem),
+    img: abilityItem.img || "icons/svg/aura.svg",
+    origin: abilityItem.uuid,
+    transfer: false,
+    disabled: false,
+    showIcon: ACTIVE_EFFECT_SHOW_ICON_ALWAYS,
+    duration: {},
+    system: {
+      changes: [{
+        key: `system.skills.${normalized.skillKey}.advantage`,
+        type: "add",
+        value: String(normalized.advantageCount),
+        phase: "initial",
+        priority: null
+      }]
+    },
+    flags: {
+      [SYSTEM_ID]: {
+        kind: "temporary",
+        [ONE_TIME_SKILL_MODIFIER_FLAG_KEY]: {
+          source: HEIGHTENED_CONCENTRATION_EFFECT_SOURCE,
+          abilityItemId: abilityItem.id,
+          abilitySourceId: getAbilitySourceId(abilityItem),
+          functionId: abilityFunction.id,
+          fixedKey: abilityFunction.fixedKey,
+          skillKey: normalized.skillKey,
+          remainingUses: normalized.checkCount,
+          advantageCount: normalized.advantageCount,
+          createdAt: startTime
+        }
+      }
+    }
+  }], { animate: false });
+  return true;
+}
+
+function hasActiveHeightenedConcentrationEffect(actor, abilityItem, abilityFunction) {
+  if (!actor || !abilityItem) return false;
+  const abilityItemId = String(abilityItem.id ?? "").trim();
+  const abilitySourceId = getAbilitySourceId(abilityItem);
+  const functionId = String(abilityFunction?.id ?? "").trim();
+  return getPendingOneTimeSkillModifierEffects(actor, data => {
+    if (data?.source !== HEIGHTENED_CONCENTRATION_EFFECT_SOURCE) return false;
+    const dataFunctionId = String(data.functionId ?? "").trim();
+    if (functionId && dataFunctionId && functionId !== dataFunctionId) return false;
+    const dataSourceId = String(data.abilitySourceId ?? "").trim();
+    if (dataSourceId && abilitySourceId) return dataSourceId === abilitySourceId;
+    return String(data.abilityItemId ?? "").trim() === abilityItemId;
+  }).length > 0;
 }
 
 function hasActiveRageEffect(actor, abilityItem, abilityFunction) {

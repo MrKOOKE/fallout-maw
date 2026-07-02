@@ -244,6 +244,7 @@ export class CombatDock extends HandlebarsApplication {
         setTimeout(() => {
             this.element.classList.remove("hidden");
             if (!isVertical) this.centerCurrentCombatant();
+            this.trackBlockFrames(totalAnimationTime + duration + 100);
         }, 10);
     }
 
@@ -350,8 +351,8 @@ export class CombatDock extends HandlebarsApplication {
     _onRender(context, options) {
         if (this._closed) return this.close();
         super._onRender(context, options);
-        this.setupCombatants();
         this.appendHtml();
+        this.setupCombatants();
         this.element.querySelectorAll(".buttons-container button").forEach((i) => {
             i.addEventListener("click", async (e) => {
                 const action = e.currentTarget.dataset.action;
@@ -419,6 +420,10 @@ export class CombatDock extends HandlebarsApplication {
     }
 
     _onCombatTurn(combat, updates, update) {
+        if ("started" in updates) {
+            this.setupCombatants();
+            return;
+        }
         if (!("turn" in updates) && !("round" in updates) && isBlockTurnStateUpdate(updates)) {
             this.updateCombatants();
             return;
@@ -426,7 +431,7 @@ export class CombatDock extends HandlebarsApplication {
         if (!("turn" in updates) && !("round" in updates)) return;
         if ("round" in updates) this._onRoundChange();
         const combatantsContainer = this.element.querySelector("#combatants");
-        const filteredChildren = this.getCarouselItems();
+        const filteredChildren = this.getCarouselPortraitItems();
         const currentSize = combatantsContainer.getBoundingClientRect();
         combatantsContainer.style.minWidth = currentSize.width + "px";
         combatantsContainer.style.minHeight = currentSize.height + "px";
@@ -578,7 +583,10 @@ export class CombatDock extends HandlebarsApplication {
     }
 
     _onCombatStart(combat) {
-        if (combat === this.combat) this._playAnimation = true;
+        if (combat !== this.combat) return;
+        this._playAnimation = true;
+        if (!this.element) return;
+        this.setupCombatants();
     }
 
     _onUpdateActor(actor, updates = {}) {
@@ -618,6 +626,10 @@ export class CombatDock extends HandlebarsApplication {
         return Array.from(this.element?.querySelectorAll("#combatants > .combatant-portrait, #combatants > .separator") ?? []);
     }
 
+    getCarouselPortraitItems() {
+        return Array.from(this.element?.querySelectorAll("#combatants > .combatant-portrait") ?? []);
+    }
+
     scheduleBlockFrameUpdate() {
         if (this._blockFrameUpdate) cancelAnimationFrame(this._blockFrameUpdate);
         this._blockFrameUpdate = requestAnimationFrame(() => {
@@ -638,13 +650,17 @@ export class CombatDock extends HandlebarsApplication {
     updateBlockFrames() {
         const combatantsContainer = this.element?.querySelector("#combatants");
         if (!combatantsContainer) return;
-        combatantsContainer.querySelectorAll(".combatant-block-frame").forEach(frame => frame.remove());
-        if (!isBlockTurnOrderEnabled(this.combat)) return;
+        const existingFrames = new Map(Array.from(combatantsContainer.querySelectorAll(".combatant-block-frame"))
+            .map(frame => [frame.dataset.blockSignature, frame]));
+        if (!isBlockTurnOrderEnabled(this.combat)) {
+            existingFrames.forEach(frame => frame.remove());
+            return;
+        }
 
         const blocks = getRenderableCombatantBlocks(this.combat, this.sortedCombatants);
         const activeBlock = getActiveCombatTurnBlock(this.combat);
-        const containerRect = combatantsContainer.getBoundingClientRect();
         const pad = Math.max(3, parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--combatant-portrait-size")) * 0.04);
+        const renderedSignatures = new Set();
 
         for (const block of blocks) {
             const portraits = block.combatants
@@ -652,21 +668,38 @@ export class CombatDock extends HandlebarsApplication {
                 .filter(element => element?.isConnected && !element.classList.contains("hidden"));
             if (!portraits.length) continue;
 
-            const rects = portraits.map(element => element.getBoundingClientRect());
+            const rects = portraits
+                .map(element => ({
+                    left: element.offsetLeft,
+                    right: element.offsetLeft + element.offsetWidth,
+                    top: element.offsetTop,
+                    bottom: element.offsetTop + element.offsetHeight,
+                    width: element.offsetWidth,
+                    height: element.offsetHeight
+                }))
+                .filter(rect => rect.width > 1 && rect.height > 1);
+            if (!rects.length) continue;
+
             const left = Math.min(...rects.map(rect => rect.left));
             const right = Math.max(...rects.map(rect => rect.right));
             const top = Math.min(...rects.map(rect => rect.top));
             const bottom = Math.max(...rects.map(rect => rect.bottom));
 
-            const frame = document.createElement("div");
+            const frame = existingFrames.get(block.signature) ?? document.createElement("div");
+            frame.dataset.blockSignature = block.signature;
             frame.classList.add("combatant-block-frame");
             frame.classList.toggle("active-block", block.signature === activeBlock?.signature);
-            frame.style.left = `${left - containerRect.left + combatantsContainer.scrollLeft - pad}px`;
-            frame.style.top = `${top - containerRect.top + combatantsContainer.scrollTop - pad}px`;
+            frame.style.left = `${left - pad}px`;
+            frame.style.top = `${top - pad}px`;
             frame.style.width = `${right - left + (pad * 2)}px`;
             frame.style.height = `${bottom - top + (pad * 2)}px`;
-            combatantsContainer.appendChild(frame);
+            if (!frame.isConnected) combatantsContainer.appendChild(frame);
+            renderedSignatures.add(block.signature);
         }
+
+        existingFrames.forEach((frame, signature) => {
+            if (!renderedSignatures.has(signature)) frame.remove();
+        });
     }
 }
 

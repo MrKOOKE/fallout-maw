@@ -5,6 +5,7 @@ import {
   ABILITY_FIXED_FUNCTION_KEYS,
   createCommandBasicsAbilityCatalogEntry,
   createFullControlAbilityCatalogEntry,
+  createHeightenedConcentrationAbilityCatalogEntry,
   createTwoHandsAbilityCatalogEntry,
   normalizeAbilityCatalog
 } from "../settings/abilities.mjs";
@@ -21,6 +22,10 @@ const SETTING_MIGRATIONS = Object.freeze([
   {
     id: "2026-07-02-add-command-basics-ability",
     migrate: migrateCommandBasicsAbilityCatalog
+  },
+  {
+    id: "2026-07-02-add-heightened-concentration-ability",
+    migrate: migrateHeightenedConcentrationAbilityCatalog
   }
 ]);
 
@@ -99,6 +104,24 @@ async function migrateCommandBasicsAbilityCatalog() {
   const features = categories.find(category => category.id === "features") ?? categories[0];
   if (!features) return;
   features.abilities = [createCommandBasicsAbilityCatalogEntry(), ...(features.abilities ?? [])];
+
+  await game.settings.set(FALLOUT_MAW.id, ABILITIES_CATALOG_SETTING, {
+    ...catalog,
+    categories
+  });
+}
+
+async function migrateHeightenedConcentrationAbilityCatalog() {
+  const catalog = normalizeAbilityCatalog(
+    game.settings.get(FALLOUT_MAW.id, ABILITIES_CATALOG_SETTING),
+    getSkillSettings()
+  );
+  if (catalogHasFixedAbilityFunction(catalog, ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration)) return;
+
+  const categories = foundry.utils.deepClone(catalog.categories ?? []);
+  const features = categories.find(category => category.id === "features") ?? categories[0];
+  if (!features) return;
+  features.abilities = [createHeightenedConcentrationAbilityCatalogEntry(), ...(features.abilities ?? [])];
 
   await game.settings.set(FALLOUT_MAW.id, ABILITIES_CATALOG_SETTING, {
     ...catalog,

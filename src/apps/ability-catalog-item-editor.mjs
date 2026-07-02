@@ -45,6 +45,7 @@ import {
   normalizeDoubleAttackSettings,
   normalizeFullControlSettings,
   normalizeFullForceSettings,
+  normalizeHeightenedConcentrationSettings,
   normalizeTwoHandsSettings,
   normalizeWhirlwindSettings,
   normalizeWhereAreYouGoingSettings,
@@ -913,6 +914,19 @@ function readFixedFunctionSettings(row) {
       )
     };
   }
+  if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration) {
+    return {
+      energyCost: row.querySelector("[data-field='fixed.heightenedConcentration.energyCost']")?.value,
+      overloadEnergyCost: row.querySelector("[data-field='fixed.heightenedConcentration.overloadEnergyCost']")?.value,
+      overloadDurationSeconds: durationPartsToSeconds(
+        row.querySelector("[data-field='fixed.heightenedConcentration.overloadDurationAmount']")?.value,
+        row.querySelector("[data-field='fixed.heightenedConcentration.overloadDurationUnit']")?.value
+      ),
+      skillKey: row.querySelector("[data-field='fixed.heightenedConcentration.skillKey']")?.value,
+      checkCount: row.querySelector("[data-field='fixed.heightenedConcentration.checkCount']")?.value,
+      advantageCount: row.querySelector("[data-field='fixed.heightenedConcentration.advantageCount']")?.value
+    };
+  }
   if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.counterAttack) {
     return {
       reactionEnergyCost: row.querySelector("[data-field='fixed.counterAttack.reactionEnergyCost']")?.value,
@@ -1205,6 +1219,9 @@ function prepareFunctionForDisplay(entry) {
   const fixedCommandBasicsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.commandBasics
     ? prepareCommandBasicsSettingsForDisplay(normalized.fixedSettings)
     : null;
+  const fixedHeightenedConcentrationSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration
+    ? prepareHeightenedConcentrationSettingsForDisplay(normalized.fixedSettings)
+    : null;
   const fixedRageSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.rage
     ? prepareRageSettingsForDisplay(normalized.fixedSettings)
     : null;
@@ -1248,6 +1265,7 @@ function prepareFunctionForDisplay(entry) {
     fixedFullForceSettings,
     fixedTwoHandsSettings,
     fixedCommandBasicsSettings,
+    fixedHeightenedConcentrationSettings,
     fixedRageSettings,
     fixedDisarmSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
@@ -1443,6 +1461,17 @@ function prepareCommandBasicsSettingsForDisplay(settings = {}) {
     overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
     dodgeDurationAmount: dodgeDuration.amount,
     dodgeDurationUnitChoices: buildDurationUnitChoices(dodgeDuration.unit)
+  };
+}
+
+function prepareHeightenedConcentrationSettingsForDisplay(settings = {}) {
+  const normalized = normalizeHeightenedConcentrationSettings(settings);
+  const overloadDuration = splitDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildDurationUnitChoices(overloadDuration.unit),
+    skillChoices: buildSkillChoices(normalized.skillKey, getSkillSettings())
   };
 }
 

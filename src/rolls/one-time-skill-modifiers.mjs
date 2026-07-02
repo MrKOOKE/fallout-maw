@@ -24,7 +24,7 @@ export function getPendingOneTimeSkillModifierEffects(actor, predicate = null) {
   return Array.from(actor?.effects ?? []).filter(effect => {
     if (effect?.disabled || effectClaims.has(effect.id)) return false;
     const data = effect.getFlag?.(SYSTEM_ID, ONE_TIME_SKILL_MODIFIER_FLAG_KEY);
-    if (!data?.pending) return false;
+    if (getOneTimeSkillModifierRemainingUses(data) <= 0) return false;
     return typeof predicate !== "function" || predicate(data, effect);
   });
 }
@@ -38,7 +38,7 @@ function applyOneTimeSkillModifiers(check = {}) {
   const effects = Array.from(actor.effects ?? []).filter(effect => {
     if (effect?.disabled) return false;
     const data = effect.getFlag?.(SYSTEM_ID, ONE_TIME_SKILL_MODIFIER_FLAG_KEY);
-    if (!data?.pending || String(data.skillKey ?? "") !== skillKey) return false;
+    if (getOneTimeSkillModifierRemainingUses(data) <= 0 || String(data?.skillKey ?? "") !== skillKey) return false;
     const claim = effectClaims.get(effect.id);
     if (!claim) return true;
     return Boolean(weaponAttackId) && claim.weaponAttackId === weaponAttackId;
@@ -50,9 +50,10 @@ function applyOneTimeSkillModifiers(check = {}) {
   for (const effect of effects) {
     const change = (effect.system?.changes ?? [])
       .find(entry => String(entry?.key ?? "") === ONE_TIME_SKILL_MODIFIER_EFFECT_KEY);
-    if (!change) continue;
-    const value = toInteger(evaluateActorEffectChangeNumber(actor, { ...change, effect }, { fallback: 0 }));
-    modifier += value;
+    if (change) {
+      const value = toInteger(evaluateActorEffectChangeNumber(actor, { ...change, effect }, { fallback: 0 }));
+      modifier += value;
+    }
     effectIds.push(effect.id);
     if (!effectClaims.has(effect.id)) {
       effectClaims.set(effect.id, {
@@ -63,9 +64,9 @@ function applyOneTimeSkillModifiers(check = {}) {
   }
   if (!effectIds.length) return;
 
-  check.situationalModifier = toInteger(check.situationalModifier) + modifier;
+  if (modifier) check.situationalModifier = toInteger(check.situationalModifier) + modifier;
   check.oneTimeSkillModifierEffectIds = effectIds;
-  check.modifiers?.push?.({
+  if (modifier) check.modifiers?.push?.({
     key: ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
     label: "Одноразовый модификатор",
     value: modifier
@@ -81,11 +82,11 @@ async function consumeOneTimeSkillModifiers(outcome = {}) {
   if (!actor || !effectIds.length) return;
 
   try {
-    await actor.deleteEmbeddedDocuments("ActiveEffect", effectIds);
-    for (const effectId of effectIds) effectClaims.delete(effectId);
+    await consumeOneTimeSkillModifierEffectIds(actor, effectIds);
   } catch (error) {
-    for (const effectId of effectIds) effectClaims.delete(effectId);
     console.error("Fallout MaW | Failed to consume one-time skill modifiers", error);
+  } finally {
+    for (const effectId of effectIds) effectClaims.delete(effectId);
   }
 }
 
@@ -106,10 +107,37 @@ async function consumeOneTimeSkillModifiersForAttack(context = {}) {
   const existingEffectIds = claimedEffectIds.filter(effectId => actor.effects?.get?.(effectId));
 
   try {
-    if (existingEffectIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", existingEffectIds);
+    if (existingEffectIds.length) await consumeOneTimeSkillModifierEffectIds(actor, existingEffectIds);
   } catch (error) {
     console.error("Fallout MaW | Failed to consume attack-scoped skill modifiers", error);
   } finally {
     for (const effectId of claimedEffectIds) effectClaims.delete(effectId);
   }
+}
+
+async function consumeOneTimeSkillModifierEffectIds(actor, effectIds = []) {
+  const deleteIds = [];
+  for (const effectId of Array.from(new Set(effectIds))) {
+    const effect = actor.effects?.get?.(effectId);
+    const data = effect?.getFlag?.(SYSTEM_ID, ONE_TIME_SKILL_MODIFIER_FLAG_KEY);
+    if (!effect || getOneTimeSkillModifierRemainingUses(data) <= 0) continue;
+
+    const remainingUses = getOneTimeSkillModifierRemainingUses(data) - 1;
+    if (remainingUses <= 0) {
+      deleteIds.push(effect.id);
+    } else {
+      await effect.setFlag(SYSTEM_ID, ONE_TIME_SKILL_MODIFIER_FLAG_KEY, {
+        ...data,
+        remainingUses
+      });
+    }
+  }
+  if (deleteIds.length) await actor.deleteEmbeddedDocuments("ActiveEffect", deleteIds);
+}
+
+function getOneTimeSkillModifierRemainingUses(data = {}) {
+  if (!data || typeof data !== "object") return 0;
+  const remainingUses = toInteger(data.remainingUses ?? data.uses);
+  if (remainingUses > 0) return remainingUses;
+  return data.pending ? 1 : 0;
 }

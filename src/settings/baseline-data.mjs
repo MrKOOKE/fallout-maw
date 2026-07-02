@@ -85,6 +85,43 @@ export const SETTINGS_BASELINE = Object.freeze({
                 }
               },
               {
+                "id": "fixed-heightened-concentration",
+                "name": "Повышенная концентрация",
+                "img": "icons/svg/aura.svg",
+                "visible": true,
+                "description": "<p>Активная способность: за 20 энергии следующие 3 проверки Натуралиста получают преимущество. Перегрузка: +40 энергии на 1 час.</p>",
+                "system": {
+                  "cost": 0,
+                  "formula": "",
+                  "acquisition": {
+                    "onlyFree": false,
+                    "onlyManual": false,
+                    "skillKey": "naturalist",
+                    "difficulty": 60
+                  },
+                  "acquisitionRequirements": [],
+                  "functions": [
+                    {
+                      "id": "fixed-heightened-concentration-function",
+                      "type": "fixed",
+                      "fixedKey": "heightenedConcentration",
+                      "fixedSettings": {
+                        "energyCost": 20,
+                        "overloadEnergyCost": 40,
+                        "overloadDurationSeconds": 3600,
+                        "skillKey": "naturalist",
+                        "checkCount": 3,
+                        "advantageCount": 1
+                      },
+                      "changes": [],
+                      "conditions": [],
+                      "penalties": [],
+                      "sort": 0
+                    }
+                  ]
+                }
+              },
+              {
                 "id": "fixed-oversight",
                 "name": "Надзор",
                 "img": "icons/svg/eye.svg",

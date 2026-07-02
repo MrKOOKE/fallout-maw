@@ -44,7 +44,8 @@ export const ABILITY_FIXED_FUNCTION_KEYS = Object.freeze({
   whereAreYouGoing: "whereAreYouGoing",
   fullForce: "fullForce",
   twoHands: "twoHands",
-  commandBasics: "commandBasics"
+  commandBasics: "commandBasics",
+  heightenedConcentration: "heightenedConcentration"
 });
 
 export const ABILITY_CONDITION_TYPES = Object.freeze({
@@ -114,7 +115,7 @@ export function createDefaultAbilityCatalog(skillSettings = createDefaultSkillSe
         id: LOCKED_FEATURES_CATEGORY_ID,
         name: "Особенности",
         locked: true,
-        abilities: [createTwoHandsAbilityCatalogEntry(), createCommandBasicsAbilityCatalogEntry(), createOversightAbilityCatalogEntry(), createWatchOutAbilityCatalogEntry(), createDangerSenseAbilityCatalogEntry(), createFullControlAbilityCatalogEntry()]
+        abilities: [createTwoHandsAbilityCatalogEntry(), createCommandBasicsAbilityCatalogEntry(), createHeightenedConcentrationAbilityCatalogEntry(), createOversightAbilityCatalogEntry(), createWatchOutAbilityCatalogEntry(), createDangerSenseAbilityCatalogEntry(), createFullControlAbilityCatalogEntry()]
       }),
       createAbilityCategory({
         id: GENERAL_ABILITY_CATEGORY_ID,
@@ -780,6 +781,9 @@ function normalizeFixedFunctionSettings(fixedKey = "", value = {}) {
   if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.commandBasics) {
     return normalizeCommandBasicsSettings(value);
   }
+  if (normalizedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration) {
+    return normalizeHeightenedConcentrationSettings(value);
+  }
   return {};
 }
 
@@ -1020,6 +1024,29 @@ export function createFullControlAbilityCatalogEntry() {
   });
 }
 
+export function createHeightenedConcentrationAbilityCatalogEntry() {
+  return normalizeAbilityEntry({
+    id: "fixed-heightened-concentration",
+    name: "Повышенная концентрация",
+    img: "icons/svg/aura.svg",
+    visible: true,
+    description: "<p>Активная способность: за 20 энергии следующие 3 проверки Натуралиста получают преимущество. Перегрузка: +40 энергии на 1 час.</p>",
+    system: {
+      cost: 0,
+      formula: "",
+      acquisition: { onlyFree: false, onlyManual: false, skillKey: "naturalist", difficulty: 60 },
+      acquisitionRequirements: [],
+      functions: [{
+        id: "fixed-heightened-concentration-function",
+        type: ABILITY_FUNCTION_TYPES.fixed,
+        fixedKey: ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration,
+        fixedSettings: normalizeHeightenedConcentrationSettings(),
+        changes: [], conditions: [], penalties: []
+      }]
+    }
+  });
+}
+
 export function normalizeRicochetSettings(value = {}) {
   return {
     activationEnergyCost: Math.max(0, toInteger(value?.activationEnergyCost ?? 20)),
@@ -1150,6 +1177,17 @@ export function normalizeCommandBasicsSettings(value = {}) {
     targetLimitFormula: String(value?.targetLimitFormula ?? "2+speech/50").trim() || "2+speech/50",
     dodgeBonusFormula: String(value?.dodgeBonusFormula ?? "10+speech/10").trim() || "10+speech/10",
     dodgeDurationSeconds: Math.max(0, toInteger(value?.dodgeDurationSeconds ?? 12))
+  };
+}
+
+export function normalizeHeightenedConcentrationSettings(value = {}) {
+  return {
+    energyCost: Math.max(0, toInteger(value?.energyCost ?? 20)),
+    overloadEnergyCost: Math.max(0, toInteger(value?.overloadEnergyCost ?? 40)),
+    overloadDurationSeconds: Math.max(0, toInteger(value?.overloadDurationSeconds ?? 3600)),
+    skillKey: String(value?.skillKey ?? "naturalist").trim() || "naturalist",
+    checkCount: Math.max(1, toInteger(value?.checkCount ?? value?.checks ?? 3)),
+    advantageCount: Math.max(1, toInteger(value?.advantageCount ?? 1))
   };
 }
 

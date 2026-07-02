@@ -11,6 +11,8 @@ import {
   ALL_LIMB_MAX_BONUS_EFFECT_KEY,
   ALL_LIMB_IMPLANT_LIMIT_EFFECT_KEY,
   ABILITY_OVERLOAD_ENERGY_COST_EFFECT_KEY,
+  INITIATIVE_ADVANTAGE_EFFECT_KEY,
+  INITIATIVE_DISADVANTAGE_EFFECT_KEY,
   ONE_TIME_SKILL_MODIFIER_EFFECT_KEY,
   SMART_FUDGE_RESULT_EFFECT_KEYS
 } from "./active-effect-changes.mjs";
@@ -49,6 +51,8 @@ export function buildEffectKeyTokens({ includeFirstAidHealing = false } = {}) {
     buildAllSkillsDisadvantageEffectKeyToken(),
     ...buildResourceBonusEffectKeyTokens(),
     buildInitiativeBonusEffectKeyToken(),
+    buildInitiativeAdvantageEffectKeyToken(),
+    buildInitiativeDisadvantageEffectKeyToken(),
     createEffectKeyToken({
       code: "rea",
       key: "reactionPoints",
@@ -238,6 +242,28 @@ export function buildInitiativeBonusEffectKeyToken() {
     key: "initiative",
     label,
     path: "system.attributes.initiativeBonus",
+    group: label
+  });
+}
+
+export function buildInitiativeAdvantageEffectKeyToken() {
+  const label = localizeOrFallback("FALLOUTMAW.Actor.Initiative", "Initiative");
+  return createEffectKeyToken({
+    code: "init:adv",
+    key: "initiative.advantage",
+    label: `${label}: преимущество`,
+    path: INITIATIVE_ADVANTAGE_EFFECT_KEY,
+    group: label
+  });
+}
+
+export function buildInitiativeDisadvantageEffectKeyToken() {
+  const label = localizeOrFallback("FALLOUTMAW.Actor.Initiative", "Initiative");
+  return createEffectKeyToken({
+    code: "init:dis",
+    key: "initiative.disadvantage",
+    label: `${label}: помеха`,
+    path: INITIATIVE_DISADVANTAGE_EFFECT_KEY,
     group: label
   });
 }

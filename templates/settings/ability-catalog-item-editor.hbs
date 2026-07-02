@@ -755,6 +755,54 @@
       </div>
     </div>
     {{/if}}
+    {{#if fixedHeightenedConcentrationSettings}}
+    <div class="fallout-maw-ability-subsection">
+      <h3>Настройки: Повышенная концентрация</h3>
+      <div class="fallout-maw-fixed-settings">
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Активация</strong>
+          <label>
+            <span>Расход энергии</span>
+            <input type="number" data-field="fixed.heightenedConcentration.energyCost" value="{{fixedHeightenedConcentrationSettings.energyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Навык</span>
+            <select data-field="fixed.heightenedConcentration.skillKey">
+              {{#each fixedHeightenedConcentrationSettings.skillChoices}}
+              <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+              {{/each}}
+            </select>
+          </label>
+          <label>
+            <span>Проверок</span>
+            <input type="number" data-field="fixed.heightenedConcentration.checkCount" value="{{fixedHeightenedConcentrationSettings.checkCount}}" min="1" step="1">
+          </label>
+          <label>
+            <span>Преимуществ за проверку</span>
+            <input type="number" data-field="fixed.heightenedConcentration.advantageCount" value="{{fixedHeightenedConcentrationSettings.advantageCount}}" min="1" step="1">
+          </label>
+        </div>
+        <div class="fallout-maw-fixed-settings-row">
+          <strong>Перегрузка</strong>
+          <label>
+            <span>Доп. расход энергии</span>
+            <input type="number" data-field="fixed.heightenedConcentration.overloadEnergyCost" value="{{fixedHeightenedConcentrationSettings.overloadEnergyCost}}" min="0" step="1">
+          </label>
+          <label>
+            <span>Длительность</span>
+            <div class="fallout-maw-split-number-field-control">
+              <input type="number" data-field="fixed.heightenedConcentration.overloadDurationAmount" value="{{fixedHeightenedConcentrationSettings.overloadDurationAmount}}" min="0" step="1">
+              <select data-field="fixed.heightenedConcentration.overloadDurationUnit">
+                {{#each fixedHeightenedConcentrationSettings.overloadDurationUnitChoices}}
+                <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+    {{/if}}
     {{#if fixedCounterAttackSettings}}
     <div class="fallout-maw-ability-subsection">
       <h3>Настройки: Контр атака</h3>

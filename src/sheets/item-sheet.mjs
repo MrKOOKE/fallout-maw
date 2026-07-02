@@ -58,6 +58,7 @@ import {
   normalizeDoubleAttackSettings,
   normalizeFullControlSettings,
   normalizeFullForceSettings,
+  normalizeHeightenedConcentrationSettings,
   normalizeFourLeafCloverSettings,
   normalizeLastChanceSettings,
   normalizeLethalAttackSettings,
@@ -5007,6 +5008,9 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
   const fixedCommandBasicsSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.commandBasics
     ? prepareCommandBasicsSettingsForDisplay(entry?.fixedSettings)
     : null;
+  const fixedHeightenedConcentrationSettings = fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration
+    ? prepareHeightenedConcentrationSettingsForDisplay(entry?.fixedSettings)
+    : null;
   const conditions = (entry?.conditions ?? []).map((condition, index) => prepareAbilityConditionForDisplay(condition, functionIndex, index, {
     changeCount: entry?.changes?.length ?? 0,
     allowLimitedChanges: isEffectChanges,
@@ -5049,6 +5053,7 @@ function prepareAbilityFunctionRowsForDisplay(entry, functionIndex = 0, function
     fixedFullForceSettings,
     fixedTwoHandsSettings,
     fixedCommandBasicsSettings,
+    fixedHeightenedConcentrationSettings,
     typeLabel: isFixed ? getFixedAbilityFunctionLabel(fixedKey) : (isAcquisitionChanges ? "Разовое изменение при приобретении" : "Свободная настройка"),
     changes: (entry?.changes ?? []).map((change, index) => prepareAbilityChangeForDisplay(change, functionIndex, index, functionPath)),
     conditions,
@@ -5260,6 +5265,17 @@ function prepareCommandBasicsSettingsForDisplay(settings = {}) {
     overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
     dodgeDurationAmount: dodgeDuration.amount,
     dodgeDurationUnitChoices: buildAbilityDurationUnitChoices(dodgeDuration.unit)
+  };
+}
+
+function prepareHeightenedConcentrationSettingsForDisplay(settings = {}) {
+  const normalized = normalizeHeightenedConcentrationSettings(settings);
+  const overloadDuration = splitAbilityDurationSeconds(normalized.overloadDurationSeconds);
+  return {
+    ...normalized,
+    overloadDurationAmount: overloadDuration.amount,
+    overloadDurationUnitChoices: buildAbilityDurationUnitChoices(overloadDuration.unit),
+    skillChoices: buildSkillChoices(normalized.skillKey, getSkillSettings())
   };
 }
 
@@ -5982,6 +5998,15 @@ function normalizeSubmittedFixedAbilityFunctions(form = null, submitData = {}) {
       const durationSeconds = abilityDurationPartsToSeconds(
         row.querySelector("[data-fixed-lucky-coin-overload-duration-amount]")?.value,
         row.querySelector("[data-fixed-lucky-coin-overload-duration-unit]")?.value
+      );
+      foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, durationSeconds);
+      continue;
+    }
+
+    if (fixedKey === ABILITY_FIXED_FUNCTION_KEYS.heightenedConcentration) {
+      const durationSeconds = abilityDurationPartsToSeconds(
+        row.querySelector("[data-fixed-heightened-concentration-overload-duration-amount]")?.value,
+        row.querySelector("[data-fixed-heightened-concentration-overload-duration-unit]")?.value
       );
       foundry.utils.setProperty(submitData, `${functionPath}.${functionIndex}.fixedSettings.overloadDurationSeconds`, durationSeconds);
       continue;
