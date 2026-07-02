@@ -1439,7 +1439,10 @@ body #prosemirror-dropdown {
 }
 
 #token-hud:has(.status-effects.active) .fallout-maw-token-equipment-hud,
-#token-hud:has(.status-effects.active) .fallout-maw-token-equipment-hud-actions {
+#token-hud:has(.status-effects.active) .fallout-maw-token-equipment-hud-actions,
+#token-hud:has(.control-icon.active:not(.fallout-maw-token-equipment-hud-slot):not(.fallout-maw-token-equipment-hud-action)) .fallout-maw-token-equipment-hud,
+#token-hud:has(.control-icon.active:not(.fallout-maw-token-equipment-hud-slot):not(.fallout-maw-token-equipment-hud-action)) .fallout-maw-token-equipment-hud-actions {
+  display: none !important;
   z-index: -1;
   pointer-events: none;
 }
